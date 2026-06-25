@@ -1,9 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Play, Pause, Volume2, Download, LogIn, LogOut,
-  Clock, BookOpen, Building2, User, Radio,
+  Clock, BookOpen, Building2, User, Radio, Camera,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
+import { useTrialLock } from '@/hooks/useTrialLock'
+import { DEMO_NOW } from '../data/trainingMockData'
+import { formatCourseMeta } from '../data/trainingCourseMeta'
+import { getCourseRoomCamera, cameraDisplayLabel } from '../data/trainingCameras'
+import { CameraVideoFeed } from './CameraVideoFeed'
 import type { TrainingEvent, AttendanceStatus, AttendanceSession, CourseRecord } from './TrainingEventTable'
 import {
   getAttendanceBadges,
@@ -27,9 +33,8 @@ function timeToPct(time: string, start: string, end: string): number {
   return Math.max(0, Math.min(100, ((t - s) / (e - s)) * 100))
 }
 
-function nowHHmm(): string {
-  const n = new Date()
-  return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`
+function demoNowHHmm(): string {
+  return `${String(DEMO_NOW.hours).padStart(2, '0')}:${String(DEMO_NOW.minutes).padStart(2, '0')}`
 }
 
 function buildTicks(start: string, end: string): string[] {
@@ -43,8 +48,9 @@ function buildTicks(start: string, end: string): string[] {
 }
 
 function totalMinutes(sessions: AttendanceSession[], end: string, finished: boolean): number {
+  const now = demoNowHHmm()
   return sessions.reduce((sum, sess) => {
-    const out = sess.out ?? (finished ? end : nowHHmm())
+    const out = sess.out ?? (finished ? end : now)
     return sum + Math.max(0, toMin(out) - toMin(sess.in))
   }, 0)
 }
@@ -54,7 +60,10 @@ function wasLateArrival(sessions: AttendanceSession[], startTime: string): boole
   return !!firstIn && toMin(firstIn) > toMin(startTime)
 }
 
-/* ── Chronological event stream (matches Sự kiện semantics) ── */
+function requiredMinutes(start: string, end: string): number {
+  return Math.ceil((toMin(end) - toMin(start)) * 0.75)
+}
+
 type TimelineKind = 'course-start' | 'check-in' | 'check-out' | 'course-end' | 'outcome'
 
 interface TimelineItem {
@@ -162,7 +171,6 @@ function buildTimeline(rec: CourseRecord): TimelineItem[] {
 
 const SPEEDS = [0.5, 1, 1.5, 2, 4]
 
-/* ── Shared badge atoms (sync with Sự kiện) ── */
 function StatusBadge({ status, small }: { status: AttendanceStatus; small?: boolean }) {
   const cfg = attendanceStatusConfig[status]
   return (
@@ -213,38 +221,53 @@ function SessionBadge({ finished }: { finished: boolean }) {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────
-   MAIN
-───────────────────────────────────────────────────────────── */
 interface TrainingPlaybackProps {
   event: TrainingEvent | null
 }
 
 export function TrainingPlayback({ event }: TrainingPlaybackProps) {
   const [isPlaying, setIsPlaying] = useState(false)
-  const [progress, setProgress]     = useState(0)
-  const [speedIdx, setSpeedIdx]     = useState(1)
-  const [activeId, setActiveId]     = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [speedIdx, setSpeedIdx] = useState(1)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
 
-  const rec      = event?.courseRecord
-  const start    = rec?.startTime ?? '08:00'
-  const end      = rec?.endTime   ?? '17:00'
+  const rec = event?.courseRecord
+  const start = rec?.startTime ?? '08:00'
+  const end = rec?.endTime ?? '17:00'
   const sessions = rec?.sessions ?? []
   const finished = getSessionStatus(start, end) === 'finished'
-  const badges   = rec ? getAttendanceBadges(rec) : event ? [event.type] : []
-  const primary  = badges[0]
+  const badges = rec ? getAttendanceBadges(rec) : []
+  const primary = badges[0]
   const timeline = useMemo(() => (rec ? buildTimeline(rec) : []), [rec])
-  const ticks    = buildTicks(start, end)
-
-  const isoDate     = event?.time?.slice(0, 10) ?? ''
-  const displayDate = isoDate
-    ? `${isoDate.slice(8, 10)}/${isoDate.slice(5, 7)}/${isoDate.slice(0, 4)}`
+  const ticks = buildTicks(start, end)
+  const courseMeta = rec
+    ? formatCourseMeta(rec.startTime, rec.endTime, rec.sessionDate, rec.zone)
     : '—'
+  const camera = rec ? getCourseRoomCamera(rec.courseName, rec.zone) : undefined
 
-  const attended    = totalMinutes(sessions, end, finished)
-  const duration    = toMin(end) - toMin(start)
-  const pctAttended = duration > 0 ? Math.round((attended / duration) * 100) : 0
-  const barColor    = attendanceStatusConfig[primary]?.dot ?? 'bg-primary'
+  const attended = totalMinutes(sessions, end, finished)
+  const duration = toMin(end) - toMin(start)
+  const required = requiredMinutes(start, end)
+  const pctOfSession = duration > 0 ? Math.round((attended / duration) * 1000) / 10 : 0
+  const meetsRequirement = attended >= required
+  const shortfall = Math.max(0, required - attended)
+  const thresholdPct = duration > 0 ? Math.round((required / duration) * 1000) / 10 : 75
+  const barColor = primary ? attendanceStatusConfig[primary].dot : 'bg-primary'
+
+  useEffect(() => {
+    if (!rec) {
+      setProgress(0)
+      setActiveId(null)
+      setIsPlaying(false)
+      return
+    }
+    const anchor = rec.sessions[0]?.in ?? rec.startTime
+    setProgress(timeToPct(anchor, rec.startTime, rec.endTime))
+    setActiveId(rec.sessions[0] ? 'in-0' : 'course-start')
+    setIsPlaying(false)
+    setSpeedIdx(1)
+  }, [event?.id, rec])
 
   const seekTo = (time: string, id: string) => {
     if (time === '—' || time === '…') return
@@ -264,54 +287,83 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
     <div className="flex flex-col flex-1 min-h-0">
 
       {/* ── Identity bar ── */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0a0e1a]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0a0e1a]">
         <div className="flex items-center gap-1.5 min-w-0">
           <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           <span className="text-[11px] font-semibold text-foreground truncate">{event.workerName}</span>
           <span className="text-[9px] text-muted-foreground/50 shrink-0">{event.workerCode}</span>
+          {event.role && (
+            <span className="text-[9px] text-muted-foreground/60 truncate hidden sm:inline">· {event.role}</span>
+          )}
         </div>
-        <span className="text-[#1e2433]">|</span>
+        <span className="text-[#1e2433] hidden sm:inline">|</span>
         <div className="flex items-center gap-1.5 min-w-0">
           <Building2 className="w-3 h-3 text-muted-foreground shrink-0" />
           <span className="text-[10px] text-primary/80 truncate">{event.contractor}</span>
+          {event.companyCode && (
+            <span className="text-[9px] text-muted-foreground/50 shrink-0">{event.companyCode}</span>
+          )}
         </div>
-        <span className="text-[#1e2433]">|</span>
-        <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-[#1e2433] hidden sm:inline">|</span>
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <BookOpen className="w-3 h-3 text-muted-foreground shrink-0" />
-          <span className="text-[10px] text-foreground truncate">{event.course}</span>
-          <span className="text-[9px] text-muted-foreground/60 tabular-nums shrink-0">
-            {displayDate} · {start}–{end}
-          </span>
+          <span className="text-[10px] text-foreground truncate">{rec.courseName}</span>
+          <span className="text-[9px] text-muted-foreground/60 truncate shrink-0">{courseMeta}</span>
           <SessionBadge finished={finished} />
         </div>
-        <div className="ml-auto">
-          <button className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1a2235] border border-[#1e2433] hover:bg-[#222d42] transition-colors text-[10px] text-muted-foreground hover:text-foreground">
-            <Download className="w-3 h-3" />
-            Xuất clip
-          </button>
-        </div>
+        <button className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1a2235] border border-[#1e2433] hover:bg-[#222d42] transition-colors text-[10px] text-muted-foreground hover:text-foreground shrink-0">
+          <Download className="w-3 h-3" />
+          Xuất clip
+        </button>
       </div>
 
-      {/* ── Body: video | event stream ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* ── Body: video | event stream — stack on mobile ── */}
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
 
-        {/* Video column */}
-        <div className="flex-[62] flex flex-col min-h-0 border-r border-[#1e2433]">
-          <div className="relative flex-1 min-h-0 bg-[#060b14] flex items-center justify-center">
-            <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-            {!isPlaying ? (
+        {/* Video column — camera gắn phòng/khoá */}
+        <div className="shrink-0 lg:flex-[62] flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-[#1e2433]">
+          <div className="relative w-full aspect-video lg:aspect-auto lg:flex-1 lg:min-h-0 bg-[#060b14] overflow-hidden">
+            {camera?.streamUrl ? (
+              <>
+                <CameraVideoFeed
+                  src={camera.streamUrl}
+                  cameraId={camera.id}
+                  zone={camera.zone}
+                  courseName={camera.courseName}
+                  streamType={camera.streamType}
+                  playing={isPlaying}
+                />
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                  style={{
+                    backgroundImage:
+                      'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
+                  }}
+                />
+                <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 rounded bg-black/55 backdrop-blur-sm">
+                  <Camera className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-[9px] text-white/80 font-medium truncate">{cameraDisplayLabel(camera)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
+            )}
+
+            {!isPlaying && (
               <button
                 onClick={() => setIsPlaying(true)}
-                className="relative z-10 w-14 h-14 rounded-full bg-primary/85 hover:bg-primary flex items-center justify-center transition-colors shadow-lg shadow-primary/20"
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors"
               >
-                <Play className="w-6 h-6 text-white ml-0.5" />
+                <span className="w-14 h-14 rounded-full bg-primary/85 hover:bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+                  <Play className="w-6 h-6 text-white ml-0.5" />
+                </span>
               </button>
-            ) : (
+            )}
+            {isPlaying && (
               <button
                 onClick={() => setIsPlaying(false)}
-                className="relative z-10 w-14 h-14 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                className="absolute bottom-3 right-3 z-10 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
               >
-                <Pause className="w-6 h-6 text-white" />
+                <Pause className="w-4 h-4 text-white" />
               </button>
             )}
           </div>
@@ -328,7 +380,7 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
             >
               {sessions.map((sess, i) => {
                 const left = timeToPct(sess.in, start, end)
-                const outT = sess.out ?? (finished ? end : nowHHmm())
+                const outT = sess.out ?? (finished ? end : demoNowHHmm())
                 const right = timeToPct(outT, start, end)
                 return (
                   <div
@@ -367,57 +419,90 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
           </div>
         </div>
 
-        {/* Event stream column — sync with Sự kiện listing */}
-        <div className="flex-[38] flex flex-col min-h-0 bg-[#0b0f1a]">
+        {/* Event stream — sync listing row */}
+        <div className="flex-none lg:flex-[38] flex flex-col min-h-[260px] lg:min-h-0 bg-[#0b0f1a]">
 
-          {/* Summary card (mirrors listing row) */}
           <div className="px-3 py-2.5 border-b border-[#1e2433] shrink-0">
             <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
               Điểm danh
             </p>
             <StatusBadges badges={badges} small />
-            <p className={cn('text-[9px] mt-1 tabular-nums', attendanceStatusConfig[primary].color + '/80')}>
+            <p className={cn(
+              'text-[9px] mt-1 tabular-nums',
+              primary ? attendanceStatusConfig[primary].color + '/80' : 'text-muted-foreground',
+            )}>
               {formatRecordSessions(rec)}
             </p>
-            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[#1e2433]/60">
-              <div className="flex-1">
-                <p className="text-[8px] text-muted-foreground/50">Có mặt</p>
-                <p className="text-[10px] font-semibold tabular-nums">{attended}p</p>
+            {rec.minutesDelta > 0 && (
+              <p className="text-[9px] text-orange-400/80 mt-0.5 tabular-nums">
+                Lệch {rec.minutesDelta} phút so với quy định
+              </p>
+            )}
+            <div className="mt-2 pt-2 border-t border-[#1e2433]/60 space-y-2">
+              <p className="text-[8px] text-muted-foreground/60 leading-snug">
+                Quy định: có mặt tối thiểu <span className="text-foreground/80 font-semibold">75%</span> thời lượng ca
+                {' '}({required} / {duration} phút)
+              </p>
+
+              <div className="flex items-baseline justify-between gap-2">
+                <div>
+                  <p className="text-[8px] text-muted-foreground/50">Thời gian có mặt</p>
+                  <p className="text-[11px] font-bold tabular-nums text-foreground">
+                    {attended}
+                    <span className="text-[9px] font-normal text-muted-foreground/70"> / {duration} phút</span>
+                  </p>
+                  {!finished && sessions.some(s => s.out === null) && (
+                    <p className="text-[7px] text-muted-foreground/45 mt-0.5">Tính đến {demoNowHHmm()} · ca đang diễn ra</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[8px] text-muted-foreground/50">Ngưỡng 75%</p>
+                  <p className="text-[10px] font-semibold tabular-nums text-muted-foreground">{required} phút</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="text-[8px] text-muted-foreground/50">Tỷ lệ</p>
-                <p className={cn('text-[10px] font-bold tabular-nums', pctAttended >= 75 ? 'text-green-400' : 'text-red-400')}>
-                  {pctAttended}%
-                </p>
-              </div>
-              <div className="flex-[2]">
-                <div className="h-1 rounded-full bg-[#1e2433] overflow-hidden mt-1">
+
+              <div className="relative">
+                <div className="h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
                   <div
-                    className={cn('h-full rounded-full', pctAttended >= 75 ? 'bg-green-400' : 'bg-red-400')}
-                    style={{ width: `${pctAttended}%` }}
+                    className={cn('h-full rounded-full transition-all', meetsRequirement ? 'bg-green-400' : 'bg-red-400')}
+                    style={{ width: `${Math.min(pctOfSession, 100)}%` }}
                   />
                 </div>
-                <p className="text-[7px] text-muted-foreground/40 text-right mt-0.5">≥ 75%</p>
+                <div
+                  className="absolute top-0 h-1.5 w-px bg-yellow-400/80"
+                  style={{ left: `${Math.min(thresholdPct, 100)}%` }}
+                  title={`Ngưỡng 75% (${required} phút)`}
+                />
+                <div className="flex justify-between text-[7px] text-muted-foreground/45 tabular-nums mt-0.5">
+                  <span>{rec.startTime}</span>
+                  <span>{pctOfSession}% ca</span>
+                  <span>{rec.endTime}</span>
+                </div>
               </div>
+
+              <p className={cn(
+                'text-[9px] font-semibold tabular-nums',
+                meetsRequirement ? 'text-green-400' : 'text-red-400',
+              )}>
+                {meetsRequirement
+                  ? `Đủ quy định — ${attended} phút ≥ ${required} phút`
+                  : `Chưa đủ — thiếu ${shortfall} phút (có ${attended}, cần ${required})`}
+              </p>
             </div>
           </div>
 
-          {/* Timeline header */}
           <div className="px-3 py-1.5 border-b border-[#1e2433] shrink-0">
             <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
               Dòng sự kiện
             </span>
           </div>
 
-          {/* Scrollable event list */}
           <div className="flex-1 overflow-y-auto px-3 py-2">
             {timeline.length === 0 ? (
               <p className="text-[10px] text-muted-foreground/40 italic py-4 text-center">Không có sự kiện</p>
             ) : (
               <div className="relative">
-                {/* Vertical connector line */}
                 <div className="absolute left-[15px] top-2 bottom-2 w-px bg-[#1e2433]" />
-
                 <div className="space-y-0.5">
                   {timeline.map(item => {
                     const isActive = activeId === item.id
@@ -437,7 +522,6 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
                           isOutcome && 'bg-[#1a2235]/30 mt-1',
                         )}
                       >
-                        {/* Node */}
                         <div className={cn(
                           'relative z-10 w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 border-2',
                           isOutcome
@@ -450,8 +534,6 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
                         )}>
                           <TimelineIcon kind={item.kind} />
                         </div>
-
-                        {/* Content */}
                         <div className="flex-1 min-w-0 pt-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={cn(
@@ -481,14 +563,26 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
             )}
           </div>
 
-          {/* Action */}
-          <div className="px-3 py-2.5 border-t border-[#1e2433] shrink-0">
-            <button className="w-full py-1.5 rounded bg-yellow-500/15 text-yellow-400 text-[9px] font-bold hover:bg-yellow-500/25 transition-colors">
-              Y/c Giải trình
+          <div className="px-3 py-2.5 border-t border-[#1e2433] shrink-0 flex gap-2">
+            <button
+              type="button"
+              onClick={showTrial}
+              className="flex-1 py-1.5 rounded bg-yellow-500/15 text-yellow-400 text-[9px] font-bold hover:bg-yellow-500/25 transition-colors"
+            >
+              Yêu cầu giải trình
+            </button>
+            <button
+              type="button"
+              onClick={showTrial}
+              className="flex-1 py-1.5 rounded bg-primary/15 text-primary text-[9px] font-bold hover:bg-primary/25 transition-colors"
+            >
+              Xử lý
             </button>
           </div>
         </div>
       </div>
+
+      <TrialLockPopup visible={trialVisible} onDismiss={dismissTrial} />
     </div>
   )
 }

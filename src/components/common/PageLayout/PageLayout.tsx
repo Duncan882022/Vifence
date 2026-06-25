@@ -2,26 +2,28 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { useAppStore } from '@/store/app.store'
+import { useShellLayout } from '@/hooks/useShellLayout'
 
 interface LayoutProps {
   children: React.ReactNode
   className?: string
 }
 
-/** Root wrapper — fills exactly the viewport below the header */
+/** Root wrapper — fills viewport below the header */
 export function PageLayout({ children, className }: LayoutProps) {
-  const { sidebarCollapsed } = useAppStore()
-  const sidebarWidth = sidebarCollapsed ? 56 : 200
+  const { sidebarInset } = useShellLayout()
 
   return (
     <main
       className={cn('pt-header bg-[#060b14] transition-all duration-200', className)}
-      style={{ paddingLeft: sidebarWidth }}
+      style={{ paddingLeft: sidebarInset }}
     >
       <div
-        className="flex flex-col gap-3 p-4 overflow-hidden"
-        style={{ height: 'calc(100vh - 64px)' }}
+        className={cn(
+          'flex flex-col gap-3 p-3 sm:p-4',
+          'min-h-[calc(100vh-64px)] overflow-y-auto',
+          'lg:h-[calc(100vh-64px)] lg:overflow-hidden',
+        )}
       >
         {children}
       </div>
@@ -29,22 +31,24 @@ export function PageLayout({ children, className }: LayoutProps) {
   )
 }
 
-/** Row 1: KPI cards — shrinks to natural content height */
+/** Row 1: KPI cards */
 export function KPIRow({ children, className }: LayoutProps) {
   return (
-    <div className={cn('grid grid-cols-4 gap-3 shrink-0', className)}>
+    <div className={cn('grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0', className)}>
       {children}
     </div>
   )
 }
 
 /**
- * Row 2 & Row 3 share the same 58fr/42fr split.
- * grid-rows-[1fr] forces panels to fill flex-allocated height.
+ * Row 2 & Row 3 — stack on mobile/tablet, side-by-side on desktop.
  */
 export function CameraEventRow({ children, className }: LayoutProps) {
   return (
-    <div className={cn('grid grid-cols-[58fr_42fr] grid-rows-[1fr] gap-3 flex-[2] min-h-0', className)}>
+    <div className={cn(
+      'grid grid-cols-1 lg:grid-cols-[58fr_42fr] lg:grid-rows-[1fr] gap-3 flex-[2] min-h-0',
+      className,
+    )}>
       {children}
     </div>
   )
@@ -52,7 +56,10 @@ export function CameraEventRow({ children, className }: LayoutProps) {
 
 export function PlaybackRow({ children, className }: LayoutProps) {
   return (
-    <div className={cn('grid grid-cols-[58fr_42fr] grid-rows-[1fr] gap-3 flex-1 min-h-[200px]', className)}>
+    <div className={cn(
+      'grid grid-cols-1 lg:grid-cols-[58fr_42fr] lg:grid-rows-[1fr] gap-3 flex-1 min-h-[200px] lg:min-h-0',
+      className,
+    )}>
       {children}
     </div>
   )
@@ -73,10 +80,13 @@ interface PanelProps {
   fit?: boolean
   /** Show Maximize2 icon that opens the panel in a full-screen portal */
   expandable?: boolean
+  /** Nội dung riêng khi phóng to — mặc định dùng children */
+  expandedContent?: React.ReactNode
 }
 
 export function Panel({
   title, children, className, headerRight, noPadding, fit = false, expandable = false,
+  expandedContent,
 }: PanelProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -153,7 +163,7 @@ export function Panel({
               'flex-1 min-h-0 flex flex-col overflow-hidden',
               !noPadding && 'p-3',
             )}>
-              {children}
+              {expandedContent ?? children}
             </div>
           </div>
         </div>,

@@ -3,6 +3,8 @@ import { ArrowLeft, Play, BookOpen, Building2, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { DEMO_NOW } from '../data/trainingMockData'
 import { getAttendeeAvatarUrl } from '../data/trainingAvatars'
+import { formatCourseMeta, getCourseZone, type TrainingZone } from '../data/trainingCourseMeta'
+import { buildTrainingPlaybackEvent, buildTrainingPlaybackEventFromRecord } from '../services/trainingPlayback.service'
 
 /* ─────────────────────────────────────────────────────────────
    TYPES  (mirrors future API contract)
@@ -103,7 +105,7 @@ export interface CourseRecord {
   /** Scheduled start/end "HH:mm" */
   startTime: string
   endTime: string
-  location: string
+  zone: TrainingZone
   status: CourseStatus
   /**
    * Secondary violations alongside primary `status`.
@@ -165,6 +167,8 @@ export interface TrainingEvent {
   status: 'pending' | 'processed'
   /** Full attendance record with all sessions for timeline rendering */
   courseRecord?: CourseRecord
+  companyCode?: string
+  role?: string
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -192,7 +196,7 @@ const sessionStatusConfig: Record<SessionStatus, { label: string; color: string;
   'finished':   { label: 'Đã hoàn thành', color: 'text-gray-400',  bg: 'bg-gray-500/15',  pulse: false },
 }
 
-export type EventTabKey = AttendanceStatus | 'all' | 'exceptions'
+export type EventTabKey = AttendanceStatus | 'all'
 
 /** Ngoại lệ điểm danh — NCL / KPI (không gồm đang học, tạm vắng, hoàn thành) */
 export const EXCEPTION_ATTENDANCE_STATUSES: AttendanceStatus[] = [
@@ -205,7 +209,6 @@ export const EXCEPTION_ATTENDANCE_STATUSES: AttendanceStatus[] = [
 
 const TABS: { key: EventTabKey; label: string }[] = [
   { key: 'all',          label: 'Tất cả'    },
-  { key: 'exceptions',   label: 'Ngoại lệ'  },
   { key: 'attending',    label: 'Đang học'  },
   { key: 'away',         label: 'Tạm vắng' },
   { key: 'late',         label: 'Đi trễ'    },
@@ -218,24 +221,23 @@ const TABS: { key: EventTabKey; label: string }[] = [
 
 function matchesTab(s: TrainingAttendee, tab: EventTabKey): boolean {
   if (tab === 'all') return true
-  if (tab === 'exceptions') return attendeeHasException(s)
   return getAttendeeBadges(s).includes(tab)
 }
 
 /* ─────────────────────────────────────────────────────────────
    CANONICAL COURSE SCHEDULE  (single source of truth)
-   All course codes, names, zones, locations and times are
+   All course codes, names, zones and times are
    defined here and referenced consistently in every record.
 
-   TB-A  | Toolbox A          | OCP1-Zone A | Phòng Đào Tạo A1  | 07:30–09:30
-   CNTB  | Cọc nhồi B      | OCP1-Zone A | Phòng Đào Tạo A2  | 08:00–12:00
-   PCCC  | PCCC C         | OCP1-Zone B | Sân Thực Hành B1  | 08:00–12:00
-   DCE   | Điện cơ E      | OCP1-Zone B | Phòng Đào Tạo B2  | 11:30–13:30
-   VHMN  | Vận hành máy nâng             | OCP1-Zone B | Phòng Đào Tạo B1  | 13:00–17:00
-   KTXD  | KT xây dựng            | OCP1-Zone A | Phòng Đào Tạo A2  | 14:00–17:00
-   ATMT  | AT môi trường            | OCP1-Zone B | Phòng Đào Tạo B1  | 14:00–17:00
-   ATDC  | An toàn đầu ca (23/06)                | OCP1-Zone A | Phòng Đào Tạo A1  | 07:30–09:30
-   MHKT  | Máy hạng nặng (23/06) | OCP1-Zone B | Xưởng Thực Hành B | 08:00–12:00
+   TB-A  | Toolbox A         | OCP1-A | 07:30–09:30
+   CNTB  | Cọc nhồi B        | OCP1-A | 08:00–12:00
+   PCCC  | PCCC C            | OCP1-B | 08:00–12:00
+   DCE   | Điện cơ E         | OCP1-B | 11:30–13:30
+   VHMN  | Vận hành máy nâng | OCP1-B | 13:00–17:00
+   KTXD  | KT xây dựng       | OCP1-A | 14:00–17:00
+   ATMT  | AT môi trường     | OCP1-A | 14:00–17:00
+   ATDC  | An toàn đầu ca    | OCP1-A | 07:30–09:30
+   MHKT  | Máy hạng nặng     | OCP1-B | 08:00–12:00
 ───────────────────────────────────────────────────────────── */
 
 /* ─────────────────────────────────────────────────────────────
@@ -263,9 +265,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:15', exceptionMinutes: 15,
     courseHistory: [
-      { id: 'cr-001-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-001-2', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'left-early', sessions: [{in:'07:58', out:'11:30'}],                                       minutesDelta: 30 },
-      { id: 'cr-001-3', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'late',       sessions: [{in:'08:15', out:null}],                                       minutesDelta: 15 },
+      { id: 'cr-001-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-001-2', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'left-early', sessions: [{in:'07:58', out:'11:30'}],                                       minutesDelta: 30 },
+      { id: 'cr-001-3', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'late',       sessions: [{in:'08:15', out:null}],                                       minutesDelta: 15 },
     ],
   },
 
@@ -278,9 +280,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '08:55', exceptionMinutes: 35,
     courseHistory: [
-      { id: 'cr-002-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:25', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-002-2', courseCode: 'CNTB-2026-06-17',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'completed',  sessions: [{in:'07:55', out:'12:00'}],                                       minutesDelta: 0  },
-      { id: 'cr-002-3', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'left-early', sessions: [{in:'07:30', out:'08:55'}],                                       minutesDelta: 35 },
+      { id: 'cr-002-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:25', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-002-2', courseCode: 'CNTB-2026-06-17',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:55', out:'12:00'}],                                       minutesDelta: 0  },
+      { id: 'cr-002-3', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'left-early', sessions: [{in:'07:30', out:'08:55'}],                                       minutesDelta: 35 },
     ],
   },
 
@@ -293,9 +295,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '—', exceptionMinutes: 0,
     courseHistory: [
-      { id: 'cr-003-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0 },
-      { id: 'cr-003-2', courseCode: 'ATDC-2026-06-23',  courseName: 'An toàn đầu ca',   sessionDate: '2026-06-23', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
-      { id: 'cr-003-3', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-003-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0 },
+      { id: 'cr-003-2', courseCode: 'ATDC-2026-06-23',  courseName: 'An toàn đầu ca',   sessionDate: '2026-06-23', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-003-3', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
     ],
   },
 
@@ -310,8 +312,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:00', exceptionMinutes: 45,
     courseHistory: [
-      { id: 'cr-004-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:29', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-004-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'skipped',    sessions: [{in:'08:00', out:'08:45'}],                                       minutesDelta: 45 },
+      { id: 'cr-004-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:29', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-004-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'skipped',    sessions: [{in:'08:00', out:'08:45'}],                                       minutesDelta: 45 },
     ],
   },
 
@@ -324,9 +326,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '07:55', exceptionMinutes: 25,
     courseHistory: [
-      { id: 'cr-005-1', courseCode: 'VHMN-2026-06-10',  courseName: 'Vận hành máy nâng', sessionDate: '2026-06-10', startTime: '13:00', endTime: '17:00', location: 'Phòng Đào Tạo B1',  status: 'completed',  sessions: [{in:'13:00', out:'17:00'}],                                       minutesDelta: 0 },
-      { id: 'cr-005-2', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'completed',  sessions: [{in:'08:02', out:'12:00'}],                                       minutesDelta: 0 },
-      { id: 'cr-005-3', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'late',       sessions: [{in:'07:55', out:'09:30'}],                                       minutesDelta: 25 },
+      { id: 'cr-005-1', courseCode: 'VHMN-2026-06-10',  courseName: 'Vận hành máy nâng', sessionDate: '2026-06-10', startTime: '13:00', endTime: '17:00', zone: 'OCP1-B',   status: 'completed',  sessions: [{in:'13:00', out:'17:00'}],                                       minutesDelta: 0 },
+      { id: 'cr-005-2', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'completed',  sessions: [{in:'08:02', out:'12:00'}],                                       minutesDelta: 0 },
+      { id: 'cr-005-3', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'late',       sessions: [{in:'07:55', out:'09:30'}],                                       minutesDelta: 25 },
     ],
   },
 
@@ -339,9 +341,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '—', exceptionMinutes: 0,
     courseHistory: [
-      { id: 'cr-006-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:30', out:'09:30'}],                                       minutesDelta: 0 },
-      { id: 'cr-006-2', courseCode: 'MHKT-2026-06-23',  courseName: 'Máy hạng nặng',    sessionDate: '2026-06-23', startTime: '08:00', endTime: '12:00', location: 'Xưởng Thực Hành B', status: 'skipped',    sessions: [{in:'08:00', out:'08:20'}],                                       minutesDelta: 20 },
-      { id: 'cr-006-3', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-006-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:30', out:'09:30'}],                                       minutesDelta: 0 },
+      { id: 'cr-006-2', courseCode: 'MHKT-2026-06-23',  courseName: 'Máy hạng nặng',    sessionDate: '2026-06-23', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'skipped',    sessions: [{in:'08:00', out:'08:20'}],                                       minutesDelta: 20 },
+      { id: 'cr-006-3', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
     ],
   },
 
@@ -354,8 +356,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '08:22', exceptionMinutes: 52,
     courseHistory: [
-      { id: 'cr-007-1', courseCode: 'CNTB-2026-06-17',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'completed',  sessions: [{in:'07:55', out:'12:00'}],                                       minutesDelta: 0  },
-      { id: 'cr-007-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'late',       sessions: [{in:'08:22', out:'09:30'}],                                       minutesDelta: 52 },
+      { id: 'cr-007-1', courseCode: 'CNTB-2026-06-17',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:55', out:'12:00'}],                                       minutesDelta: 0  },
+      { id: 'cr-007-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'late',       sessions: [{in:'08:22', out:'09:30'}],                                       minutesDelta: 52 },
     ],
   },
 
@@ -368,8 +370,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '11:15', exceptionMinutes: 45,
     courseHistory: [
-      { id: 'cr-008-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-008-2', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'left-early', sessions: [{in:'07:58', out:'11:15'}],                                       minutesDelta: 45 },
+      { id: 'cr-008-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-008-2', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'left-early', sessions: [{in:'07:58', out:'11:15'}],                                       minutesDelta: 45 },
     ],
   },
 
@@ -383,9 +385,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '—', exceptionMinutes: 0,
     courseHistory: [
-      { id: 'cr-010-1', courseCode: 'CNTB-2026-06-10',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-10', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'completed',  sessions: [{in:'07:58', out:'12:00'}],                                       minutesDelta: 0 },
-      { id: 'cr-010-2', courseCode: 'ATDC-2026-06-23',  courseName: 'An toàn đầu ca',   sessionDate: '2026-06-23', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
-      { id: 'cr-010-3', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-010-1', courseCode: 'CNTB-2026-06-10',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-10', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:58', out:'12:00'}],                                       minutesDelta: 0 },
+      { id: 'cr-010-2', courseCode: 'ATDC-2026-06-23',  courseName: 'An toàn đầu ca',   sessionDate: '2026-06-23', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-010-3', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
     ],
   },
 
@@ -398,8 +400,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:18', exceptionMinutes: 18,
     courseHistory: [
-      { id: 'cr-011-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-011-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'late',       sessions: [{in:'08:18', out:null}],                                       minutesDelta: 18 },
+      { id: 'cr-011-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-011-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'late',       sessions: [{in:'08:18', out:null}],                                       minutesDelta: 18 },
     ],
   },
 
@@ -416,8 +418,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:00', exceptionMinutes: 30,
     courseHistory: [
-      { id: 'cr-012-1', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'late',          sessions: [{in:'08:12', out:'12:00'}],                                     minutesDelta: 12 },
-      { id: 'cr-012-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2', status: 'insufficient',  flags: ['late'], sessions: [{in:'08:12', out:'09:00'}, {in:'09:30', out:'11:00'}],          minutesDelta: 30 },
+      { id: 'cr-012-1', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'late',          sessions: [{in:'08:12', out:'12:00'}],                                     minutesDelta: 12 },
+      { id: 'cr-012-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A', status: 'insufficient',  flags: ['late'], sessions: [{in:'08:12', out:'09:00'}, {in:'09:30', out:'11:00'}],          minutesDelta: 30 },
     ],
   },
 
@@ -430,8 +432,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '08:31', exceptionMinutes: 61,
     courseHistory: [
-      { id: 'cr-013-1', courseCode: 'ATDC-2026-06-23',  courseName: 'An toàn đầu ca',   sessionDate: '2026-06-23', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:30', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-013-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'late',       sessions: [{in:'08:31', out:'09:30'}],                                       minutesDelta: 61 },
+      { id: 'cr-013-1', courseCode: 'ATDC-2026-06-23',  courseName: 'An toàn đầu ca',   sessionDate: '2026-06-23', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:30', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-013-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'late',       sessions: [{in:'08:31', out:'09:30'}],                                       minutesDelta: 61 },
     ],
   },
 
@@ -444,8 +446,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '—', exceptionMinutes: 0,
     courseHistory: [
-      { id: 'cr-014-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:25', out:'09:30'}],                                       minutesDelta: 0 },
-      { id: 'cr-014-2', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-014-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:25', out:'09:30'}],                                       minutesDelta: 0 },
+      { id: 'cr-014-2', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
     ],
   },
 
@@ -458,9 +460,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:20', exceptionMinutes: 70,
     courseHistory: [
-      { id: 'cr-015-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-015-2', courseCode: 'VHMN-2026-06-17',  courseName: 'Vận hành máy nâng', sessionDate: '2026-06-17', startTime: '13:00', endTime: '17:00', location: 'Phòng Đào Tạo B1',  status: 'completed',  sessions: [{in:'13:00', out:'17:00'}],                                       minutesDelta: 0  },
-      { id: 'cr-015-3', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'left-early', flags: ['late'], sessions: [{in:'08:20', out:'10:50'}],                                       minutesDelta: 70 },
+      { id: 'cr-015-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-015-2', courseCode: 'VHMN-2026-06-17',  courseName: 'Vận hành máy nâng', sessionDate: '2026-06-17', startTime: '13:00', endTime: '17:00', zone: 'OCP1-B',   status: 'completed',  sessions: [{in:'13:00', out:'17:00'}],                                       minutesDelta: 0  },
+      { id: 'cr-015-3', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'left-early', flags: ['late'], sessions: [{in:'08:20', out:'10:50'}],                                       minutesDelta: 70 },
     ],
   },
 
@@ -474,8 +476,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:25', exceptionMinutes: 55,
     courseHistory: [
-      { id: 'cr-016-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'late',       sessions: [{in:'07:48', out:'09:30'}],                                       minutesDelta: 18 },
-      { id: 'cr-016-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'skipped',    flags: ['late'], sessions: [{in:'08:25', out:'09:20'}],                                       minutesDelta: 55 },
+      { id: 'cr-016-1', courseCode: 'TB-A-2026-06-17',  courseName: 'Toolbox A',        sessionDate: '2026-06-17', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'late',       sessions: [{in:'07:48', out:'09:30'}],                                       minutesDelta: 18 },
+      { id: 'cr-016-2', courseCode: 'CNTB-2026-06-24',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'skipped',    flags: ['late'], sessions: [{in:'08:25', out:'09:20'}],                                       minutesDelta: 55 },
     ],
   },
 
@@ -489,8 +491,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '—', exceptionMinutes: 0,
     courseHistory: [
-      { id: 'cr-018-1', courseCode: 'CNTB-2026-06-10',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-10', startTime: '08:00', endTime: '12:00', location: 'Phòng Đào Tạo A2',  status: 'completed',  sessions: [{in:'08:00', out:'12:00'}],                                       minutesDelta: 0 },
-      { id: 'cr-018-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
+      { id: 'cr-018-1', courseCode: 'CNTB-2026-06-10',  courseName: 'Cọc nhồi B',       sessionDate: '2026-06-10', startTime: '08:00', endTime: '12:00', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'08:00', out:'12:00'}],                                       minutesDelta: 0 },
+      { id: 'cr-018-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'absent',     sessions: [],                                                                minutesDelta: 0 },
     ],
   },
 
@@ -503,9 +505,9 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
     actualTime: '08:44', exceptionMinutes: 44,
     courseHistory: [
-      { id: 'cr-019-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
-      { id: 'cr-019-2', courseCode: 'MHKT-2026-06-23',  courseName: 'Máy hạng nặng',    sessionDate: '2026-06-23', startTime: '08:00', endTime: '12:00', location: 'Xưởng Thực Hành B', status: 'left-early', sessions: [{in:'08:00', out:'10:30'}],                                       minutesDelta: 90 },
-      { id: 'cr-019-3', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'late',       sessions: [{in:'08:44', out:null}],                                       minutesDelta: 44 },
+      { id: 'cr-019-1', courseCode: 'TB-A-2026-06-10',  courseName: 'Toolbox A',        sessionDate: '2026-06-10', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'completed',  sessions: [{in:'07:28', out:'09:30'}],                                       minutesDelta: 0  },
+      { id: 'cr-019-2', courseCode: 'MHKT-2026-06-23',  courseName: 'Máy hạng nặng',    sessionDate: '2026-06-23', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'left-early', sessions: [{in:'08:00', out:'10:30'}],                                       minutesDelta: 90 },
+      { id: 'cr-019-3', courseCode: 'PCCC-2026-06-24',  courseName: 'PCCC C',           sessionDate: '2026-06-24', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'late',       sessions: [{in:'08:44', out:null}],                                       minutesDelta: 44 },
     ],
   },
 
@@ -518,8 +520,8 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
     actualTime: '09:00', exceptionMinutes: 30,
     courseHistory: [
-      { id: 'cr-020-1', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', location: 'Sân Thực Hành B1', status: 'completed',  sessions: [{in:'07:58', out:'12:00'}],                                       minutesDelta: 0  },
-      { id: 'cr-020-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', location: 'Phòng Đào Tạo A1',  status: 'left-early', sessions: [{in:'07:30', out:'09:00'}],                                       minutesDelta: 30 },
+      { id: 'cr-020-1', courseCode: 'PCCC-2026-06-17',  courseName: 'PCCC C',           sessionDate: '2026-06-17', startTime: '08:00', endTime: '12:00', zone: 'OCP1-B', status: 'completed',  sessions: [{in:'07:58', out:'12:00'}],                                       minutesDelta: 0  },
+      { id: 'cr-020-2', courseCode: 'TB-A-2026-06-24',  courseName: 'Toolbox A',        sessionDate: '2026-06-24', startTime: '07:30', endTime: '09:30', zone: 'OCP1-A',  status: 'left-early', sessions: [{in:'07:30', out:'09:00'}],                                       minutesDelta: 30 },
     ],
   },
 
@@ -527,63 +529,63 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
 
   /* ── C01 ── Nguyễn Thị Lan (Delta Corp) → Toolbox A ✓ */
   { id:'w-c01', employeeCode:'NV001101', name:'Nguyễn Thị Lan',    avatarColor:'#06B6D4', company:'Delta Corp',      companyCode:'DC-001', role:'Kỹ thuật viên',       currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:27', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c01-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', location:'Phòng Đào Tạo A1', status:'completed',  sessions:[{in:'07:27', out:'09:32'}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c01-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:27', out:'09:32'}], minutesDelta:0 }]},
   /* ── C02 ── Trần Quốc Bảo (XYZ JSC) → Toolbox A ✓ */
   { id:'w-c02', employeeCode:'NV001102', name:'Trần Quốc Bảo',     avatarColor:'#8B5CF6', company:'XYZ JSC',         companyCode:'XY-002', role:'Thợ hàn bậc 2',        currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:29', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c02-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', location:'Phòng Đào Tạo A1', status:'completed',  sessions:[{in:'07:29', out:'09:30'}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c02-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:29', out:'09:30'}], minutesDelta:0 }]},
   /* ── C03 ── Lê Thị Hương (ABC Construction) → Toolbox A ✓ */
   { id:'w-c03', employeeCode:'NV001103', name:'Lê Thị Hương',      avatarColor:'#F59E0B', company:'ABC Construction', companyCode:'AB-003', role:'Giám sát an toàn',     currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:25', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c03-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', location:'Phòng Đào Tạo A1', status:'completed',  sessions:[{in:'07:25', out:'09:31'}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c03-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:25', out:'09:31'}], minutesDelta:0 }]},
   /* ── C04 ── Phạm Minh Tuấn (Sunrise Const.) → Toolbox A ✓ */
   { id:'w-c04', employeeCode:'NV001104', name:'Phạm Minh Tuấn',    avatarColor:'#10B981', company:'Sunrise Const.',   companyCode:'SR-005', role:'Công nhân xây dựng',   currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:28', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c04-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', location:'Phòng Đào Tạo A1', status:'completed',  sessions:[{in:'07:28', out:'09:30'}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c04-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:28', out:'09:30'}], minutesDelta:0 }]},
   /* ── ATTENDING — ca đang diễn ra lúc 11:30 ────────────────── */
 
   /* ── C05–C08 Cọc nhồi B ● */
   { id:'w-c05', employeeCode:'NV001105', name:'Ngô Văn Tùng',      avatarColor:'#EC4899', company:'Minh Phát JSC',    companyCode:'MP-005', role:'Kỹ sư địa kỹ thuật',   currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:58', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c05-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Phòng Đào Tạo A2', status:'attending',  sessions:[{in:'07:58', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c05-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'07:58', out:null}], minutesDelta:0 }]},
   { id:'w-c06', employeeCode:'NV001106', name:'Đinh Thị Mai',      avatarColor:'#3B82F6', company:'Delta Corp',       companyCode:'DC-001', role:'Công nhân cơ khí',      currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:55', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c06-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Phòng Đào Tạo A2', status:'attending',  sessions:[{in:'07:55', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c06-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'07:55', out:null}], minutesDelta:0 }]},
   { id:'w-c07', employeeCode:'NV001107', name:'Hoàng Thị Ngọc',    avatarColor:'#F97316', company:'XYZ JSC',          companyCode:'XY-002', role:'Thợ hàn bậc 3',        currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:00', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c07-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Phòng Đào Tạo A2', status:'attending',  sessions:[{in:'08:00', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c07-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'08:00', out:null}], minutesDelta:0 }]},
   { id:'w-c08', employeeCode:'NV001108', name:'Bùi Văn Khoa',      avatarColor:'#14B8A6', company:'ABC Construction',  companyCode:'AB-003', role:'Kỹ thuật viên cơ khí', currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:57', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c08-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Phòng Đào Tạo A2', status:'attending',  sessions:[{in:'07:57', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c08-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'07:57', out:null}], minutesDelta:0 }]},
   { id:'w-att01', employeeCode:'NV001130', name:'Bùi Văn Thanh',   avatarColor:'#F59E0B', company:'Minh Phát JSC',    companyCode:'MP-005', role:'Thợ xây bậc 3',        currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:02', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-att01-1', courseCode:'CNTB-2026-06-24', courseName:'Cọc nhồi B', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Phòng Đào Tạo A2', status:'attending', sessions:[{in:'08:02', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-att01-1', courseCode:'CNTB-2026-06-24', courseName:'Cọc nhồi B', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending', sessions:[{in:'08:02', out:null}], minutesDelta:0 }]},
   { id:'w-att02', employeeCode:'NV001131', name:'Nguyễn Thị Xuân', avatarColor:'#E879F9', company:'Sunrise Const.',   companyCode:'SR-005', role:'Nhân viên hành chính', currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:05', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-att02-1', courseCode:'CNTB-2026-06-24', courseName:'Cọc nhồi B', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Phòng Đào Tạo A2', status:'attending', sessions:[{in:'08:05', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-att02-1', courseCode:'CNTB-2026-06-24', courseName:'Cọc nhồi B', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending', sessions:[{in:'08:05', out:null}], minutesDelta:0 }]},
 
   /* ── C09–C12 PCCC C ● */
   { id:'w-c09', employeeCode:'NV001109', name:'Vũ Thị Thu',        avatarColor:'#A78BFA', company:'Sunrise Const.',    companyCode:'SR-005', role:'Nhân viên an toàn',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:52', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c09-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Sân Thực Hành B1', status:'attending',  sessions:[{in:'07:52', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c09-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:52', out:null}], minutesDelta:0 }]},
   { id:'w-c10', employeeCode:'NV001110', name:'Lý Văn Nam',        avatarColor:'#F43F5E', company:'Minh Phát JSC',    companyCode:'MP-005', role:'Vận hành thiết bị',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:58', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c10-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Sân Thực Hành B1', status:'attending',  sessions:[{in:'07:58', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c10-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:58', out:null}], minutesDelta:0 }]},
   { id:'w-c11', employeeCode:'NV001111', name:'Trịnh Văn Hùng',    avatarColor:'#0EA5E9', company:'Delta Corp',       companyCode:'DC-001', role:'Công nhân điện',        currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:55', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c11-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Sân Thực Hành B1', status:'attending',  sessions:[{in:'07:55', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c11-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:55', out:null}], minutesDelta:0 }]},
   { id:'w-c12', employeeCode:'NV001112', name:'Đặng Thị Linh',     avatarColor:'#84CC16', company:'XYZ JSC',          companyCode:'XY-002', role:'Giám sát thi công',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:59', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-c12-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Sân Thực Hành B1', status:'attending',  sessions:[{in:'07:59', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-c12-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:59', out:null}], minutesDelta:0 }]},
   { id:'w-att03', employeeCode:'NV001132', name:'Phạm Văn An',     avatarColor:'#38BDF8', company:'XYZ JSC',          companyCode:'XY-002', role:'Thợ lắp đặt',          currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:01', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-att03-1', courseCode:'PCCC-2026-06-24', courseName:'PCCC C', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Sân Thực Hành B1', status:'attending', sessions:[{in:'08:01', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-att03-1', courseCode:'PCCC-2026-06-24', courseName:'PCCC C', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending', sessions:[{in:'08:01', out:null}], minutesDelta:0 }]},
   { id:'w-att04', employeeCode:'NV001133', name:'Trần Minh Khang', avatarColor:'#2DD4BF', company:'Sunrise Const.',   companyCode:'SR-005', role:'Vận hành máy',         currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:03', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-att04-1', courseCode:'PCCC-2026-06-24', courseName:'PCCC C', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', location:'Sân Thực Hành B1', status:'attending', sessions:[{in:'08:03', out:null}], minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-att04-1', courseCode:'PCCC-2026-06-24', courseName:'PCCC C', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending', sessions:[{in:'08:03', out:null}], minutesDelta:0 }]},
 
   /* ── Điện cơ E (11:30–13:30, vừa bắt đầu) ────── */
   /* ── A01 ── Cao Thị Bích (Delta Corp) → Điện cơ E ● */
   { id:'w-a01', employeeCode:'NV001201', name:'Cao Thị Bích',      avatarColor:'#06B6D4', company:'Delta Corp',       companyCode:'DC-001', role:'Kỹ thuật điện',         currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:28', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-a01-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', location:'Phòng Đào Tạo B2', status:'attending', sessions:[{in:'11:28', out:null}],                                          minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-a01-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'attending', sessions:[{in:'11:28', out:null}],                                          minutesDelta:0 }]},
   /* ── A02 ── Nguyễn Văn Phú (ABC Construction) → Điện cơ E ● */
   { id:'w-a02', employeeCode:'NV001202', name:'Nguyễn Văn Phú',    avatarColor:'#F59E0B', company:'ABC Construction', companyCode:'AB-003', role:'Thợ điện bậc 3',        currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:30', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-a02-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', location:'Phòng Đào Tạo B2', status:'attending', sessions:[{in:'11:30', out:null}],                                          minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-a02-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'attending', sessions:[{in:'11:30', out:null}],                                          minutesDelta:0 }]},
   /* ── A03 ── Trần Minh Đức (XYZ JSC) → Điện cơ E ● (late) */
   { id:'w-a03', employeeCode:'NV001203', name:'Trần Minh Đức',     avatarColor:'#F97316', company:'XYZ JSC',          companyCode:'XY-002', role:'Công nhân điện',         currentStatus:'late',      currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:47', exceptionMinutes:17,
-    courseHistory:[{ id:'cr-a03-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', location:'Phòng Đào Tạo B2', status:'late',      sessions:[{in:'11:47', out:null}],                                          minutesDelta:17}]},
+    courseHistory:[{ id:'cr-a03-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'late',      sessions:[{in:'11:47', out:null}],                                          minutesDelta:17}]},
   /* ── A04 ── Lê Thị Phương (Sunrise Const.) → Điện cơ E ● */
   { id:'w-a04', employeeCode:'NV001204', name:'Lê Thị Phương',     avatarColor:'#A78BFA', company:'Sunrise Const.',   companyCode:'SR-005', role:'Giám sát thi công',     currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:29', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-a04-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', location:'Phòng Đào Tạo B2', status:'attending', sessions:[{in:'11:29', out:null}],                                          minutesDelta:0 }]},
+    courseHistory:[{ id:'cr-a04-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'attending', sessions:[{in:'11:29', out:null}],                                          minutesDelta:0 }]},
   /* ── A05 ── Vũ Minh Khải (Minh Phát JSC) → Điện cơ E ↯ tạm vắng */
   /* Checked in 11:33, left 11:58, session still ongoing → outcome TBD */
   { id:'w-a05', employeeCode:'NV001205', name:'Vũ Minh Khải',      avatarColor:'#06B6D4', company:'Minh Phát JSC',   companyCode:'MP-005', role:'Kỹ thuật điện',          currentStatus:'away',      currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:33', exceptionMinutes:0,
-    courseHistory:[{ id:'cr-a05-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', location:'Phòng Đào Tạo B2', status:'away',      flags:['late'], sessions:[{in:'11:33', out:'11:58'}],                                       minutesDelta:3 }]},
+    courseHistory:[{ id:'cr-a05-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'away',      flags:['late'], sessions:[{in:'11:33', out:'11:58'}],                                       minutesDelta:3 }]},
 ]
 
 const INITIAL_COUNT = 8
@@ -682,9 +684,12 @@ export function formatRecordSessions(r: CourseRecord): string {
   return r.sessions.map(s => formatSessionTime(s, r.endTime, finished)).join(' · ')
 }
 
-function fmtDate(iso: string): string {
-  const [, m, d] = iso.split('-')
-  return `${d}/${m}`
+function attendeeCourseMeta(s: TrainingAttendee): string {
+  return formatCourseMeta(s.courseStart, s.courseEnd, s.courseDate, getCourseZone(s.currentCourse))
+}
+
+function recordCourseMeta(r: CourseRecord): string {
+  return formatCourseMeta(r.startTime, r.endTime, r.sessionDate, r.zone)
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -877,10 +882,8 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
 
             {/* Khoá học + trạng thái buổi học */}
             <div className="min-w-0">
-              <p className="text-[10px] text-foreground truncate leading-tight">{s.currentCourse}</p>
-              <p className="text-[9px] text-muted-foreground/60 truncate">
-                {s.courseDate} · {s.courseStart}–{s.courseEnd}
-              </p>
+              <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{s.currentCourse}</p>
+              <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{attendeeCourseMeta(s)}</p>
               <div className="mt-0.5">
                 <SessionBadge courseStart={s.courseStart} courseEnd={s.courseEnd} small />
               </div>
@@ -905,7 +908,8 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
             <button
               onClick={e => {
                 e.stopPropagation()
-                onPlayback({ id: s.id, time: `2026-06-24T${s.actualTime === '—' ? '08:00:00' : s.actualTime + ':00'}`, workerName: s.name, workerCode: s.employeeCode, contractor: s.company, course: s.currentCourse, type: s.currentStatus, status: 'pending', courseRecord: getCurrentRecord(s) })
+                const ev = buildTrainingPlaybackEvent(s)
+                if (ev) onPlayback(ev)
               }}
               className="p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition-colors opacity-0 group-hover:opacity-100"
               title="Xem lại video"
@@ -991,22 +995,20 @@ function CompletionStats({ records }: CompletionStatsProps) {
 /* ─────────────────────────────────────────────────────────────
    SHARED: course history table
 ───────────────────────────────────────────────────────────── */
-/* Columns: Khoá học | Ngày | Ca học | Địa điểm | Trạng thái+detail | play */
-const HIST_COLS = 'grid-cols-[minmax(0,1.6fr)_44px_70px_minmax(0,0.9fr)_minmax(0,1.2fr)_20px]'
+/* Columns: Khoá học | Trạng thái+detail | play */
+const HIST_COLS = 'grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_20px]'
 
 interface CourseHistoryTableProps {
   records: CourseRecord[]
-  workerName: string
-  workerCode: string
-  company: string
+  worker: Pick<TrainingAttendee, 'id' | 'name' | 'employeeCode' | 'company' | 'companyCode' | 'role'>
   onPlayback: (ev: TrainingEvent) => void
 }
-function CourseHistoryTable({ records, workerName, workerCode, company, onPlayback }: CourseHistoryTableProps) {
+function CourseHistoryTable({ records, worker, onPlayback }: CourseHistoryTableProps) {
   return (
     <div className="flex flex-col">
       {/* Header */}
       <div className={cn('grid gap-x-2 px-3 py-1.5 sticky top-0 z-10 bg-[#0b0f1a] border-b border-[#1e2433]', HIST_COLS)}>
-        {['Khoá học', 'Ngày', 'Ca học', 'Địa điểm', 'Trạng thái · Chi tiết', ''].map(h => (
+        {['Khoá học', 'Trạng thái · Chi tiết', ''].map(h => (
           <span key={h} className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide truncate">{h}</span>
         ))}
       </div>
@@ -1018,13 +1020,13 @@ function CourseHistoryTable({ records, workerName, workerCode, company, onPlayba
           const cfg = courseStatusConfig[primary]
           return (
             <div key={r.id} className={cn('grid gap-x-2 items-center px-3 py-2 group hover:bg-[#1a2235]/30 transition-colors', HIST_COLS)}>
-              <div className="min-w-0 flex items-center gap-1.5">
-                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusDot[primary])} />
-                <p className="text-[10px] text-foreground truncate">{r.courseName}</p>
+              <div className="min-w-0 flex items-start gap-1.5">
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-1', statusDot[primary])} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-foreground truncate leading-snug">{r.courseName}</p>
+                  <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{recordCourseMeta(r)}</p>
+                </div>
               </div>
-              <p className="text-[9px] text-muted-foreground/70 tabular-nums">{fmtDate(r.sessionDate)}</p>
-              <p className="text-[9px] text-muted-foreground/70 tabular-nums">{r.startTime}–{r.endTime}</p>
-              <p className="text-[9px] text-muted-foreground/70 truncate">{r.location}</p>
               <div className="min-w-0">
                 <StatusBadges badges={badges} small />
                 <p className={cn('text-[9px] mt-0.5 truncate', cfg.color, 'opacity-80')}>
@@ -1032,7 +1034,7 @@ function CourseHistoryTable({ records, workerName, workerCode, company, onPlayba
                 </p>
               </div>
               <button
-                onClick={() => onPlayback({ id: r.id, time: `${r.sessionDate}T${r.sessions[0]?.in ?? r.startTime}:00`, workerName, workerCode, contractor: company, course: r.courseName, type: r.status, status: 'pending', courseRecord: r })}
+                onClick={() => onPlayback(buildTrainingPlaybackEventFromRecord(r, worker))}
                 className="p-0.5 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition-colors opacity-0 group-hover:opacity-100"
               >
                 <Play className="w-2.5 h-2.5" />
@@ -1088,9 +1090,14 @@ function StudentDetail({ student, backLabel = 'Danh sách', onBack, onPlayback }
           </div>
           <CourseHistoryTable
             records={student.courseHistory}
-            workerName={student.name}
-            workerCode={student.employeeCode}
-            company={student.company}
+            worker={{
+              id: student.id,
+              name: student.name,
+              employeeCode: student.employeeCode,
+              company: student.company,
+              companyCode: student.companyCode,
+              role: student.role,
+            }}
             onPlayback={onPlayback}
           />
         </div>
@@ -1166,8 +1173,8 @@ function ContractorDetail({ company, onBack, onSelectStudent }: ContractorDetail
                 </div>
 
                 <div className="min-w-0">
-                  <p className="text-[10px] text-foreground truncate">{s.currentCourse}</p>
-                  <p className="text-[9px] text-muted-foreground/60">{s.courseDate} · {s.courseStart}–{s.courseEnd}</p>
+                  <p className="text-[10px] font-semibold text-foreground truncate">{s.currentCourse}</p>
+                  <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{attendeeCourseMeta(s)}</p>
                 </div>
 
                 <div className="shrink-0 text-right">

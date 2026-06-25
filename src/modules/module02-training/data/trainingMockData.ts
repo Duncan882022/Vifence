@@ -9,9 +9,8 @@ export type CourseGroup = 'upcoming' | 'active' | 'completed'
 
 export interface TrainingCourseMock {
   id: string
-  num: number
   title: string
-  location: string
+  zone: 'OCP1-A' | 'OCP1-B'
   sessionDate: string
   startTime: string
   endTime: string
@@ -150,8 +149,8 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
   const todayCourses: TrainingCourseMock[] = [
     courseFromAttendees(
       {
-        id: 'c-01', num: 1,
-        title: 'Toolbox A', location: 'Phòng Đào Tạo A1 · OCP1-Zone A',
+        id: 'c-01',
+        title: 'Toolbox A', zone: 'OCP1-A',
         sessionDate: '24/06/2026', startTime: '07:30', endTime: '09:30',
         group: 'completed',
       },
@@ -159,8 +158,8 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
     ),
     courseFromAttendees(
       {
-        id: 'c-02', num: 2,
-        title: 'Cọc nhồi B', location: 'Phòng Đào Tạo A2 · OCP1-Zone A',
+        id: 'c-02',
+        title: 'Cọc nhồi B', zone: 'OCP1-A',
         sessionDate: '24/06/2026', startTime: '08:00', endTime: '12:00',
         group: 'active', action: 'view',
       },
@@ -168,8 +167,8 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
     ),
     courseFromAttendees(
       {
-        id: 'c-03', num: 3,
-        title: 'PCCC C', location: 'Sân Thực Hành B1 · OCP1-Zone B',
+        id: 'c-03',
+        title: 'PCCC C', zone: 'OCP1-B',
         sessionDate: '24/06/2026', startTime: '08:00', endTime: '12:00',
         group: 'active', action: 'view',
       },
@@ -177,28 +176,28 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
     ),
     courseFromAttendees(
       {
-        id: 'c-09', num: 9,
-        title: 'Điện cơ E', location: 'Phòng Đào Tạo B2 · OCP1-Zone B',
+        id: 'c-09',
+        title: 'Điện cơ E', zone: 'OCP1-B',
         sessionDate: '24/06/2026', startTime: '11:30', endTime: '13:30',
         group: 'active', action: 'view',
       },
       byCourse('Điện cơ E'),
     ),
     upcomingCourse({
-      id: 'c-05', num: 5,
-      title: 'Vận hành máy nâng', location: 'Phòng Đào Tạo B1 · OCP1-Zone B',
+      id: 'c-05',
+      title: 'Vận hành máy nâng', zone: 'OCP1-B',
       sessionDate: '24/06/2026', startTime: '13:00', endTime: '17:00',
       group: 'upcoming',
     }),
     upcomingCourse({
-      id: 'c-06', num: 6,
-      title: 'KT xây dựng', location: 'Phòng Đào Tạo A2 · OCP1-Zone A',
+      id: 'c-06',
+      title: 'KT xây dựng', zone: 'OCP1-A',
       sessionDate: '24/06/2026', startTime: '14:00', endTime: '17:00',
       group: 'upcoming',
     }),
     upcomingCourse({
-      id: 'c-07', num: 7,
-      title: 'AT môi trường', location: 'Phòng Đào Tạo B1 · OCP1-Zone B',
+      id: 'c-07',
+      title: 'AT môi trường', zone: 'OCP1-A',
       sessionDate: '24/06/2026', startTime: '14:00', endTime: '17:00',
       group: 'upcoming',
     }),
@@ -207,8 +206,8 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
   const yesterdayCourses: TrainingCourseMock[] = [
     yesterdayCourse(
       {
-        id: 'c-04', num: 4,
-        title: 'An toàn đầu ca', location: 'Phòng Đào Tạo A1 · OCP1-Zone A',
+        id: 'c-04',
+        title: 'An toàn đầu ca', zone: 'OCP1-A',
         sessionDate: '23/06/2026', startTime: '07:30', endTime: '09:30',
         group: 'completed',
       },
@@ -218,8 +217,8 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
     ),
     yesterdayCourse(
       {
-        id: 'c-08', num: 8,
-        title: 'Máy hạng nặng', location: 'Xưởng Thực Hành B · OCP1-Zone B',
+        id: 'c-08',
+        title: 'Máy hạng nặng', zone: 'OCP1-B',
         sessionDate: '23/06/2026', startTime: '08:00', endTime: '12:00',
         group: 'completed',
       },

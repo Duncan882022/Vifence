@@ -22,9 +22,10 @@ function formatDelta(change: number, changeUnit?: string): string {
 interface DailyMetricCardProps {
   data: KPIData
   meta: typeof METRIC_META[number]
+  embedded?: boolean
 }
 
-function DailyMetricCard({ data, meta }: DailyMetricCardProps) {
+function DailyMetricCard({ data, meta, embedded }: DailyMetricCardProps) {
   const { icon: Icon, iconColor, iconBg, accent } = meta
   const {
     label, value, unit, detail, change, changeType,
@@ -40,34 +41,36 @@ function DailyMetricCard({ data, meta }: DailyMetricCardProps) {
 
   return (
     <div className={cn(
-      'bg-[#0d1117] border border-[#1e2433] border-l-2 rounded-lg p-3.5',
+      'border border-[#1e2433] border-l-2 rounded-lg',
       'hover:border-[#2a3855]/80 transition-colors',
+      'p-3 lg:py-2 lg:px-3',
+      embedded ? 'bg-[#0b0f1a]' : 'bg-[#0d1117]',
       accent,
     )}>
-      <div className="flex items-start gap-2.5">
-        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
-          <Icon className={cn('w-4 h-4', iconColor)} />
+      <div className="flex items-start gap-2.5 lg:items-center lg:gap-2">
+        <div className={cn('w-9 h-9 lg:w-7 lg:h-7 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
+          <Icon className={cn('w-4 h-4 lg:w-3.5 lg:h-3.5', iconColor)} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide leading-tight">
             {label}
           </p>
-          <div className="flex items-baseline gap-1 mt-1">
-            <span className="text-[26px] font-bold text-foreground leading-none tabular-nums tracking-tight">
+          <div className="flex items-baseline gap-1 mt-1 lg:mt-0">
+            <span className="text-[26px] lg:text-[22px] font-bold text-foreground leading-none tabular-nums tracking-tight">
               {value}
             </span>
             {unit && (
-              <span className="text-[11px] font-medium text-muted-foreground">{unit}</span>
+              <span className="text-[11px] lg:text-[10px] font-medium text-muted-foreground">{unit}</span>
             )}
           </div>
           {detail && (
-            <p className="text-[10px] text-muted-foreground/75 mt-1 leading-snug line-clamp-2">
+            <p className="text-[10px] text-muted-foreground/75 mt-1 lg:hidden leading-snug line-clamp-2">
               {detail}
             </p>
           )}
           {showCompare && (
             <div className={cn(
-              'flex items-center gap-1 text-[10px] font-medium mt-0.5',
+              'flex items-center gap-1 text-[10px] font-medium mt-0.5 lg:mt-0 lg:text-[9px]',
               isGood && 'text-green-400',
               isBad && 'text-red-400',
               isNeutral && 'text-muted-foreground',
@@ -75,7 +78,7 @@ function DailyMetricCard({ data, meta }: DailyMetricCardProps) {
               {isUp && <TrendingUp className="w-3 h-3 shrink-0" />}
               {isDown && <TrendingDown className="w-3 h-3 shrink-0" />}
               {isNeutral && <Minus className="w-3 h-3 shrink-0" />}
-              <span>
+              <span className="truncate">
                 {isNeutral
                   ? 'Không đổi so với hôm qua'
                   : `${formatDelta(change!, changeUnit)} so với hôm qua`}
@@ -90,15 +93,17 @@ function DailyMetricCard({ data, meta }: DailyMetricCardProps) {
 
 interface TrainingDailyDashboardProps {
   summary: TrainingDailySummary
+  /** KPI nằm trong Panel — tách nền card khỏi nền panel */
+  embedded?: boolean
 }
 
-export function TrainingDailyDashboard({ summary }: TrainingDailyDashboardProps) {
+export function TrainingDailyDashboard({ summary, embedded }: TrainingDailyDashboardProps) {
   const { metrics } = summary
 
   return (
-    <div className="shrink-0 grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
       {metrics.map((metric, i) => (
-        <DailyMetricCard key={metric.label} data={metric} meta={METRIC_META[i]} />
+        <DailyMetricCard key={metric.label} data={metric} meta={METRIC_META[i]} embedded={embedded} />
       ))}
     </div>
   )

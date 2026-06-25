@@ -23,19 +23,18 @@ export function PlaybackModal({ open, event, onClose }: PlaybackModalProps) {
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
       onClick={onClose}
     >
-      {/* Modal panel */}
+      {/* Modal panel — full screen mobile, centered card desktop */}
       <div
-        className="relative bg-[#0d1117] border border-[#1e2433] rounded-xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: '88vw', height: '78vh', maxWidth: 1200 }}
+        className="relative bg-[#0d1117] border-0 sm:border border-[#1e2433] rounded-none sm:rounded-xl shadow-2xl flex flex-col overflow-hidden w-full h-full sm:w-[88vw] sm:h-[78vh] sm:max-w-[1200px]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
           <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-            Xem lại · Playback
+            Playback
           </h2>
           <button
             onClick={onClose}

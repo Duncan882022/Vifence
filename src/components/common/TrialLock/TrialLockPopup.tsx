@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { Lock } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -9,7 +10,7 @@ interface TrialLockPopupProps {
 }
 
 export function TrialLockPopup({ visible, onDismiss }: TrialLockPopupProps) {
-  return (
+  return createPortal(
     <div
       className={cn(
         'fixed inset-0 z-[200] flex items-center justify-center transition-all duration-300',
@@ -31,6 +32,7 @@ export function TrialLockPopup({ visible, onDismiss }: TrialLockPopupProps) {
           <p className="text-sm font-semibold text-foreground">{TRIAL_LOCK_MESSAGE}</p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

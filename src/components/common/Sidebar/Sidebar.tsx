@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   ChevronLeft, ChevronRight, LayoutDashboard,
@@ -10,6 +11,7 @@ import { cn } from '@/utils/cn'
 import { useAppStore } from '@/store/app.store'
 import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import { useTrialLock } from '@/hooks/useTrialLock'
+import { useShellLayout } from '@/hooks/useShellLayout'
 
 interface NavItem {
   path: string
@@ -32,15 +34,35 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const location = useLocation()
-  const { sidebarCollapsed, toggleSidebar } = useAppStore()
+  const { sidebarCollapsed, toggleSidebar, closeMobileNav } = useAppStore()
+  const { isDesktop, mobileNavOpen } = useShellLayout()
   const { visible: trialVisible, show: showTrialToast, dismiss: dismissTrial } = useTrialLock()
+
+  const showLabels = isDesktop ? !sidebarCollapsed : true
+  const isDrawerOpen = !isDesktop && mobileNavOpen
+
+  useEffect(() => {
+    closeMobileNav()
+  }, [location.pathname, closeMobileNav])
 
   return (
     <>
+      {/* Mobile backdrop */}
+      {isDrawerOpen && (
+        <button
+          type="button"
+          aria-label="Đóng menu"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px] lg:hidden"
+          onClick={closeMobileNav}
+        />
+      )}
+
       <aside
         className={cn(
           'fixed left-0 top-0 h-full bg-[#0d1117] border-r border-[#1e2433] flex flex-col z-50 transition-all duration-200',
-          sidebarCollapsed ? 'w-[56px]' : 'w-[200px]',
+          isDesktop
+            ? sidebarCollapsed ? 'w-[56px]' : 'w-[200px]'
+            : cn('w-[220px]', isDrawerOpen ? 'translate-x-0' : '-translate-x-full'),
         )}
       >
         {/* Logo */}
@@ -49,7 +71,7 @@ export function Sidebar() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
               <LayoutDashboard className="w-4 h-4 text-primary-foreground" />
             </div>
-            {!sidebarCollapsed && (
+            {showLabels && (
               <span className="text-sm font-bold text-foreground">Vifence</span>
             )}
           </div>
@@ -66,7 +88,7 @@ export function Sidebar() {
                 return (
                   <li key={item.path}>
                     <button
-                      title={sidebarCollapsed ? item.label : undefined}
+                      title={!showLabels ? item.label : undefined}
                       onClick={showTrialToast}
                       className={cn(
                         'w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-md transition-colors group',
@@ -74,12 +96,12 @@ export function Sidebar() {
                       )}
                     >
                       <Icon className="w-4 h-4 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground/60" />
-                      {!sidebarCollapsed && (
+                      {showLabels && (
                         <span className="text-xs font-medium leading-snug whitespace-normal flex-1 text-left">
                           {item.label}
                         </span>
                       )}
-                      {!sidebarCollapsed && (
+                      {showLabels && (
                         <Lock className="w-2.5 h-2.5 shrink-0 text-muted-foreground/30" />
                       )}
                     </button>
@@ -91,7 +113,8 @@ export function Sidebar() {
                 <li key={item.path}>
                   <NavLink
                     to={item.path}
-                    title={sidebarCollapsed ? item.label : undefined}
+                    title={!showLabels ? item.label : undefined}
+                    onClick={closeMobileNav}
                     className={cn(
                       'flex items-center gap-2.5 px-2.5 py-2.5 rounded-md transition-colors group',
                       isActive
@@ -107,7 +130,7 @@ export function Sidebar() {
                           : 'text-muted-foreground group-hover:text-foreground',
                       )}
                     />
-                    {!sidebarCollapsed && (
+                    {showLabels && (
                       <span className="text-xs font-medium leading-snug whitespace-normal">
                         {item.label}
                       </span>
@@ -119,10 +142,10 @@ export function Sidebar() {
           </ul>
         </nav>
 
-        {/* Collapse toggle */}
+        {/* Collapse toggle — desktop only */}
         <button
           onClick={toggleSidebar}
-          className="flex items-center gap-2 px-4 py-3 border-t border-[#1e2433] text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          className="hidden lg:flex items-center gap-2 px-4 py-3 border-t border-[#1e2433] text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
         >
           {sidebarCollapsed
             ? <ChevronRight className="w-3.5 h-3.5" />

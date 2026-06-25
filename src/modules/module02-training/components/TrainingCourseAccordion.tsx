@@ -4,7 +4,6 @@ import { cn } from '@/utils/cn'
 import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import {
-  type TrainingAttendee,
   Avatar,
   SessionBadge,
   StatusBadges,
@@ -14,25 +13,12 @@ import {
   getAttendanceDetailLine,
 } from './TrainingEventTable'
 import { getAttendeeAvatarUrl } from '../data/trainingAvatars'
-import { buildTrainingCourses } from '../data/trainingMockData'
+import { buildTrainingCourses, type TrainingCourseMock } from '../data/trainingMockData'
+import { formatCourseMeta } from '../data/trainingCourseMeta'
 
 type CourseGroup = 'upcoming' | 'active' | 'completed'
 
-interface Course {
-  id: string
-  num: number
-  title: string
-  location: string
-  sessionDate: string
-  startTime: string
-  endTime: string
-  group: CourseGroup
-  present?: number
-  total: number
-  exceptions: number
-  attendees: TrainingAttendee[]
-  action?: 'notify' | 'view'
-}
+type Course = TrainingCourseMock
 
 export const TRAINING_COURSES: Course[] = buildTrainingCourses(TRAINING_ATTENDEES)
 
@@ -99,7 +85,7 @@ function CourseRow({ course, isOpen, showAllAtt, onToggle, onToggleAttendees, on
     ? course.attendees
     : course.attendees.slice(0, PREVIEW_COUNT)
   const extra = course.attendees.length - PREVIEW_COUNT
-  const timeLabel = `${course.startTime} – ${course.endTime} · ${course.sessionDate}`
+  const metaLabel = formatCourseMeta(course.startTime, course.endTime, course.sessionDate, course.zone)
 
   return (
     <div>
@@ -120,16 +106,10 @@ function CourseRow({ course, isOpen, showAllAtt, onToggle, onToggleAttendees, on
             : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
           }
           <div className="min-w-0">
-            <div className="flex items-baseline gap-1.5 min-w-0">
-              <span className="text-[9px] font-bold text-muted-foreground/70 shrink-0 tabular-nums">
-                {String(course.num).padStart(2, '0')}
-              </span>
-              <span className="text-[10px] font-semibold text-foreground truncate leading-snug">
-                {course.title}
-              </span>
-            </div>
-            <p className="text-[9px] text-muted-foreground/80 mt-0.5 truncate leading-snug">{timeLabel}</p>
-            <p className="text-[8px] text-muted-foreground/50 truncate">{course.location}</p>
+            <p className="text-[10px] font-semibold text-foreground truncate leading-snug">
+              {course.title}
+            </p>
+            <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{metaLabel}</p>
           </div>
         </div>
 
@@ -283,7 +263,7 @@ export function TrainingCourseAccordion() {
     .sort((a, b) => {
       const ga = GROUP_ORDER.indexOf(a.group)
       const gb = GROUP_ORDER.indexOf(b.group)
-      return ga !== gb ? ga - gb : a.num - b.num
+      return ga !== gb ? ga - gb : a.startTime.localeCompare(b.startTime)
     })
 
   const tabCount = (key: 'all' | CourseGroup) =>
