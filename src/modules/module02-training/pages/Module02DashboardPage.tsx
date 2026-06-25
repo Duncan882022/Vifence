@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { useShellLayout } from '@/hooks/useShellLayout'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { TrainingCameraPanel } from '../components/TrainingCameraPanel'
 import { TrainingEventTable, TRAINING_ATTENDEES } from '../components/TrainingEventTable'
 import { TrainingCourseAccordion, TRAINING_COURSES } from '../components/TrainingCourseAccordion'
@@ -23,7 +24,12 @@ export function Module02DashboardPage() {
   const [tier2Open, setTier2Open] = useState(true)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
   const { isDesktop } = useShellLayout()
+  const isLandscapeMobile = useMediaQuery('(max-width: 1023px) and (orientation: landscape)')
   const showCourses = coursesOpen || !isDesktop
+
+  useEffect(() => {
+    if (isLandscapeMobile) setTier1Open(false)
+  }, [isLandscapeMobile])
 
   const dailySummary = computeTrainingDailySummary(TRAINING_ATTENDEES, TRAINING_COURSES)
 
@@ -36,8 +42,8 @@ export function Module02DashboardPage() {
           expandable={tier1Open}
           noPadding
           className={cn(
-            'shrink-0 max-lg:landscape:max-h-[38dvh] max-lg:landscape:overflow-y-auto',
-            'max-lg:overflow-visible',
+            'shrink-0 max-lg:overflow-visible',
+            'max-lg:landscape:max-h-none',
             'max-lg:[&>div:first-child]:sticky max-lg:[&>div:first-child]:top-16 max-lg:[&>div:first-child]:z-20 max-lg:[&>div:first-child]:bg-[#0d1117]',
           )}
           expandedContent={
@@ -82,8 +88,8 @@ export function Module02DashboardPage() {
                 tier2Open && 'lg:flex-1 lg:min-h-0',
                 tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:overflow-visible max-lg:portrait:[&>div:last-child]:!h-auto',
                 tier2Open && 'max-lg:portrait:[&>div:last-child]:flex-none max-lg:portrait:[&>div:last-child]:overflow-visible',
-                tier2Open && 'max-lg:landscape:flex max-lg:landscape:flex-col max-lg:landscape:min-h-[200px] max-lg:landscape:max-h-[min(72dvh,calc(100dvh-64px-3rem))] max-lg:landscape:flex-1',
-                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-0 max-lg:landscape:[&>div:last-child]:overflow-hidden',
+                tier2Open && 'max-lg:landscape:flex max-lg:landscape:flex-col max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:overflow-hidden',
+                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-0 max-lg:landscape:[&>div:last-child]:flex max-lg:landscape:[&>div:last-child]:flex-col',
                 !tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:min-h-0',
               )}
               headerRight={
@@ -115,11 +121,11 @@ export function Module02DashboardPage() {
 
           <div className={cn(
             'flex flex-col lg:flex-row gap-3 min-h-0',
-            'max-lg:flex-none',
+            'max-lg:flex-none max-lg:landscape:hidden',
             tier2Open ? 'lg:flex-[9]' : 'lg:flex-1',
           )}>
             {showCourses && (
-              <div className="w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:min-h-[240px] lg:min-h-0 flex flex-col">
+              <div className="w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:hidden lg:min-h-0 flex flex-col">
                 <Panel title="Khóa Học" expandable noPadding className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto">
                   <TrainingCourseAccordion />
                 </Panel>

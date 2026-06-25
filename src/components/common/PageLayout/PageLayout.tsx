@@ -26,7 +26,7 @@ export function PageLayout({ children, className, scrollable = false }: LayoutPr
           'min-h-[calc(100vh-64px)] overflow-y-auto max-lg:overflow-y-visible',
           scrollable
             ? 'lg:min-h-[calc(100vh-64px)] lg:overflow-y-auto'
-            : 'lg:h-[calc(100vh-64px)] lg:overflow-hidden max-lg:landscape:min-h-[calc(100dvh-64px)]',
+            : 'lg:h-[calc(100vh-64px)] lg:overflow-hidden max-lg:landscape:h-[calc(100dvh-64px)] max-lg:landscape:overflow-hidden max-lg:landscape:min-h-0',
         )}
       >
         {children}
