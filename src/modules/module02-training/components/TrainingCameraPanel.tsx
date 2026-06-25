@@ -40,8 +40,8 @@ function CameraLiveFeed({ cam, playing = true, compact }: {
   )
 }
 
-function CameraThumb({ cam, selected, onClick, compact = false }: {
-  cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean
+function CameraThumb({ cam, selected, onClick, compact = false, strip = false }: {
+  cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean
 }) {
   const badge = streamTypeBadge(cam)
 
@@ -49,7 +49,8 @@ function CameraThumb({ cam, selected, onClick, compact = false }: {
     <div
       onClick={onClick}
       className={cn(
-        'relative w-full aspect-video overflow-hidden cursor-pointer border-2 transition-all shrink-0 group',
+        'relative aspect-video overflow-hidden cursor-pointer border-2 transition-all shrink-0 group',
+        strip ? 'w-[72px]' : 'w-full',
         compact ? 'rounded-sm' : 'rounded',
         selected
           ? 'border-primary shadow-[0_0_0_1px] shadow-primary/30'
@@ -184,22 +185,23 @@ function CameraCell({ cam, compact, onMaximize }: {
   )
 }
 
-function getGridCols(count: number, stackedPortrait: boolean): number {
-  if (count === 1) return 1
+function getGridCols(count: number, stackedPortrait: boolean, forceSingleCol = false): number {
+  if (forceSingleCol || count === 1) return 1
   if (stackedPortrait && count <= 4) return 1
   if (count <= 4) return 2
   if (count <= 9) return 3
   return 4
 }
 
-function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight }: {
+function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   stackedPortrait: boolean
   fillHeight: boolean
+  forceSingleCol?: boolean
 }) {
   const count = cams.length
-  const cols = getGridCols(count, stackedPortrait)
+  const cols = getGridCols(count, stackedPortrait, forceSingleCol)
   const compact = count > 2
 
   return (
@@ -294,13 +296,25 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     .filter((c): c is TrainingCamera => !!c)
   const fallback = MOCK_TRAINING_CAMERAS.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
-  const fillHeightMain = (isDesktop || isLandscapeMobile) && safeCams.length <= 2
+  const primaryCam = safeCams[0]
+  const fillHeightMain = isDesktop && safeCams.length <= 2
 
   useEffect(() => {
-    onStreamCountChange?.(safeCams.length)
-  }, [safeCams.length, onStreamCountChange])
+    if (!isLandscapeMobile) return
+    setSelectedIds(prev => (prev.length > 1 ? [prev[0]] : prev))
+  }, [isLandscapeMobile])
+
+  useEffect(() => {
+    const count = isLandscapeMobile ? 1 : safeCams.length
+    onStreamCountChange?.(count)
+  }, [safeCams.length, isLandscapeMobile, onStreamCountChange])
 
   const handleThumbClick = (cam: TrainingCamera) => {
+    if (isLandscapeMobile) {
+      setSelectedIds([cam.id])
+      onSelectCamera?.(cam)
+      return
+    }
     setSelectedIds(prev => {
       if (prev.includes(cam.id)) {
         return prev.length > 1 ? prev.filter(id => id !== cam.id) : prev
@@ -313,29 +327,73 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   return (
     <>
       <div className={cn(
-        'flex flex-col max-lg:landscape:flex-row lg:flex-row',
-        'flex-1 min-h-0 h-full max-lg:h-auto',
+        'flex flex-1 min-h-0 h-full',
+        isLandscapeMobile ? 'flex-col' : 'flex-col max-lg:landscape:flex-row lg:flex-row',
+        !isLandscapeMobile && 'max-lg:h-auto',
       )}>
         <div className={cn(
-          'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 p-2 max-lg:pb-1',
-          'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
+          'min-h-0 p-2',
+          isLandscapeMobile ? 'flex-1 min-w-0' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          !isLandscapeMobile && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
             'w-full min-h-0',
             stackedPortrait && 'max-lg:max-h-[38vh] max-lg:overflow-y-auto overscroll-y-contain',
-            !stackedPortrait && 'h-full',
-            !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
+            isLandscapeMobile && 'h-full flex flex-col',
+            !isLandscapeMobile && !stackedPortrait && 'h-full',
+            !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
-            <CameraGrid
-              cams={safeCams}
-              onMaximize={cam => setFocusedCam(cam)}
-              stackedPortrait={stackedPortrait}
-              fillHeight={fillHeightMain}
-            />
+            {isLandscapeMobile && primaryCam ? (
+              <div className="flex-1 min-h-0 w-full">
+                <CameraCell
+                  cam={primaryCam}
+                  onMaximize={() => setFocusedCam(primaryCam)}
+                />
+              </div>
+            ) : (
+              <CameraGrid
+                cams={safeCams}
+                onMaximize={cam => setFocusedCam(cam)}
+                stackedPortrait={stackedPortrait}
+                fillHeight={fillHeightMain}
+              />
+            )}
           </div>
         </div>
 
+        {isLandscapeMobile ? (
+          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14] max-h-[88px]">
+            <div className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-none border-b border-[#1e2433] shrink-0">
+              {CAMERA_FILTER_TABS.map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setFilterTab(tab)}
+                  className={cn(
+                    'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                    filterTab === tab
+                      ? 'bg-primary/20 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain">
+              {filtered.map(cam => (
+                <CameraThumb
+                  key={cam.id}
+                  cam={cam}
+                  selected={selectedIds.includes(cam.id)}
+                  onClick={() => handleThumbClick(cam)}
+                  compact
+                  strip
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className={cn(
           'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 overflow-hidden',
           'border-t lg:border-t-0 lg:border-l',
@@ -421,6 +479,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
             </div>
           )}
         </div>
+        )}
       </div>
 
       <FullscreenOverlay cam={focusedCam} onClose={() => setFocusedCam(null)} />
