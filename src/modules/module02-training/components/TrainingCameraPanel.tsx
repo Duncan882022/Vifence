@@ -351,25 +351,25 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
           : 'flex flex-1 min-h-0 h-full',
         !stackedPortrait && (isLandscapeMobile
-          ? 'flex-col'
+          ? 'flex-col justify-start'
           : 'flex-col max-lg:landscape:flex-row lg:flex-row'),
       )}>
         <div className={cn(
           'p-2',
-          isLandscapeMobile ? 'flex-1 min-w-0 min-h-0 flex flex-col' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          isLandscapeMobile ? 'shrink-0 w-full' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
           stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
           !isLandscapeMobile && !stackedPortrait && 'min-h-0 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
             'w-full',
             stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
-            isLandscapeMobile && 'flex-1 min-h-0 flex flex-col',
+            isLandscapeMobile && 'shrink-0',
             !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0',
             !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
-              <div className="flex-1 min-h-[40vh] w-full relative">
+              <div className="w-full max-w-[min(100%,calc(50dvh*16/9))] aspect-video mx-auto shrink-0 relative overflow-hidden rounded-lg">
                 <CameraCell
                   cam={primaryCam}
                   onMaximize={() => setFocusedCam(primaryCam)}
@@ -387,7 +387,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         </div>
 
         {isLandscapeMobile ? (
-          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14] max-h-[88px]">
+          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
             <div className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-none border-b border-[#1e2433] shrink-0">
               {CAMERA_FILTER_TABS.map(tab => (
                 <button
@@ -404,18 +404,35 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                 </button>
               ))}
             </div>
-            <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain">
-              {filtered.map(cam => (
-                <CameraThumb
-                  key={cam.id}
-                  cam={cam}
-                  selected={selectedIds.includes(cam.id)}
-                  onClick={() => handleThumbClick(cam)}
-                  compact
-                  strip
-                />
-              ))}
+            <div className="flex items-center justify-between px-2 py-0.5 border-b border-[#1e2433] shrink-0">
+              <span className="text-[8px] text-muted-foreground/60">
+                Đang xem <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+              </span>
+              <button
+                onClick={() => setSidebarOpen(open => !open)}
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                title={sidebarOpen ? 'Thu gọn' : 'Mở rộng'}
+              >
+                {sidebarOpen
+                  ? <ChevronRight className="w-3 h-3" />
+                  : <ChevronLeft className="w-3 h-3" />
+                }
+              </button>
             </div>
+            {sidebarOpen && (
+              <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain max-h-[72px]">
+                {filtered.map(cam => (
+                  <CameraThumb
+                    key={cam.id}
+                    cam={cam}
+                    selected={selectedIds.includes(cam.id)}
+                    onClick={() => handleThumbClick(cam)}
+                    compact
+                    strip
+                  />
+                ))}
+              </div>
+            )}
           </div>
         ) : (
         <div className={cn(
