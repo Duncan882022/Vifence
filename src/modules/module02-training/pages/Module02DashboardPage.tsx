@@ -57,14 +57,24 @@ export function Module02DashboardPage() {
           )}
         </Panel>
 
-        <div className="flex-1 min-h-0 flex flex-col gap-3 lg:overflow-hidden">
-          <div className={cn('flex flex-col min-h-0', tier2Open ? 'flex-[11]' : 'shrink-0')}>
+        <div className={cn(
+          'flex flex-col gap-3',
+          'max-lg:flex-none',
+          'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
+        )}>
+          <div className={cn(
+            'flex flex-col min-h-0',
+            tier2Open ? 'lg:flex-[11] max-lg:flex-none' : 'shrink-0',
+          )}>
             <Panel
               title="Camera"
               expandable={tier2Open}
               fit={!tier2Open}
               noPadding
-              className={tier2Open ? 'flex-1 min-h-0' : undefined}
+              className={cn(
+                tier2Open && 'lg:flex-1 lg:min-h-0',
+                tier2Open && 'max-lg:!h-auto max-lg:min-h-[300px] max-lg:landscape:min-h-[calc(100dvh-64px-7rem)]',
+              )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
                   {!tier2Open && (
@@ -92,10 +102,11 @@ export function Module02DashboardPage() {
 
           <div className={cn(
             'flex flex-col lg:flex-row gap-3 min-h-0',
-            tier2Open ? 'flex-[9]' : 'flex-1',
+            'max-lg:flex-none',
+            tier2Open ? 'lg:flex-[9]' : 'lg:flex-1',
           )}>
             {showCourses && (
-              <div className="w-full lg:flex-[42] min-w-0 min-h-[280px] lg:min-h-0 flex flex-col">
+              <div className="w-full lg:flex-[42] min-w-0 min-h-[280px] max-lg:landscape:min-h-[240px] lg:min-h-0 flex flex-col">
                 <Panel title="Khóa Học" expandable noPadding className="flex-1 min-h-0">
                   <TrainingCourseAccordion />
                 </Panel>

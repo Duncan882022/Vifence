@@ -197,14 +197,24 @@ function CameraGrid({ cams, onMaximize }: {
   const count = cams.length
   const cols = getGridCols(count)
   const compact = count > 2
+  const fillHeight = count <= 2
 
   return (
     <div
-      className="grid gap-1.5 w-full h-full content-start"
+      className={cn(
+        'grid gap-1.5 w-full h-full min-h-0',
+        fillHeight ? 'min-h-[140px] max-lg:landscape:min-h-0' : 'content-start',
+      )}
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {cams.map(cam => (
-        <div key={cam.id} className="relative w-full aspect-video min-w-0 min-h-0">
+        <div
+          key={cam.id}
+          className={cn(
+            'relative w-full min-w-0 min-h-0',
+            fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
+          )}
+        >
           <CameraCell cam={cam} compact={compact} onMaximize={() => onMaximize(cam)} />
         </div>
       ))}
@@ -296,9 +306,20 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row lg:items-stretch flex-1 min-h-0 h-full">
-        <div className="shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 p-2 max-lg:pb-1 overflow-hidden">
-          <div className="w-full h-full max-lg:min-h-[34vw] max-lg:max-h-[42vh] lg:overflow-y-auto lg:overflow-x-hidden overflow-hidden">
+      <div className={cn(
+        'flex flex-col max-lg:landscape:flex-row lg:flex-row',
+        'flex-1 min-h-0 h-full max-lg:h-auto',
+      )}>
+        <div className={cn(
+          'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 p-2 max-lg:pb-1',
+          'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
+        )}>
+          <div className={cn(
+            'w-full h-full',
+            'max-lg:min-h-[34vw] max-lg:max-h-[42vh] max-lg:overflow-y-auto',
+            'max-lg:landscape:min-h-0 max-lg:landscape:max-h-none max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
+            'lg:overflow-y-auto lg:overflow-x-hidden',
+          )}>
             <CameraGrid cams={safeCams} onMaximize={cam => setFocusedCam(cam)} />
           </div>
         </div>
@@ -306,7 +327,9 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         <div className={cn(
           'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 overflow-hidden',
           'border-t lg:border-t-0 lg:border-l',
+          'max-lg:landscape:border-t-0 max-lg:landscape:border-l',
           'max-lg:flex-1 max-lg:min-h-0',
+          'max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto',
           sidebarOpen
             ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
             : 'w-full lg:w-8 h-10 lg:h-full lg:min-h-0',
@@ -357,7 +380,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                           {cameras.length}
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 max-[360px]:grid-cols-2 gap-1 lg:flex lg:flex-col lg:gap-2">
+                      <div className="grid grid-cols-3 max-[360px]:grid-cols-2 gap-1 max-lg:landscape:flex max-lg:landscape:flex-col max-lg:landscape:gap-1.5 lg:flex lg:flex-col lg:gap-2">
                         {cameras.map(cam => (
                           <CameraThumb
                             key={cam.id}
