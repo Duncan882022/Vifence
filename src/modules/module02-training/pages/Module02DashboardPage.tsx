@@ -35,7 +35,7 @@ export function Module02DashboardPage() {
           fit
           expandable={tier1Open}
           noPadding
-          className="shrink-0"
+          className="shrink-0 max-lg:landscape:max-h-[38dvh] max-lg:landscape:overflow-y-auto"
           expandedContent={
             <TrainingDailyDetailDashboard summary={dailySummary} courses={TRAINING_COURSES} />
           }
@@ -58,13 +58,14 @@ export function Module02DashboardPage() {
         </Panel>
 
         <div className={cn(
-          'flex flex-col gap-3',
-          'max-lg:flex-none',
+          'flex flex-col gap-3 min-h-0',
+          'max-lg:portrait:flex-none',
+          'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:overflow-hidden',
           'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
         )}>
           <div className={cn(
             'flex flex-col min-h-0',
-            tier2Open ? 'lg:flex-[11] max-lg:flex-none max-lg:landscape:shrink-0' : 'shrink-0',
+            tier2Open ? 'lg:flex-[11] max-lg:flex-none max-lg:landscape:flex-1 max-lg:landscape:min-h-0' : 'shrink-0',
           )}>
             <Panel
               title="Camera"
@@ -75,9 +76,8 @@ export function Module02DashboardPage() {
                 tier2Open && 'lg:flex-1 lg:min-h-0',
                 tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:overflow-visible max-lg:portrait:[&>div:last-child]:!h-auto',
                 tier2Open && 'max-lg:portrait:[&>div:last-child]:flex-none max-lg:portrait:[&>div:last-child]:overflow-visible',
-                tier2Open && !tier1Open && 'max-lg:landscape:!h-[calc(100dvh-64px-3.5rem)] max-lg:landscape:max-h-[calc(100dvh-64px-3.5rem)] max-lg:landscape:min-h-0 max-lg:landscape:flex max-lg:landscape:flex-col',
-                tier2Open && tier1Open && 'max-lg:landscape:!h-[calc(100dvh-64px-8.5rem)] max-lg:landscape:max-h-[calc(100dvh-64px-8.5rem)] max-lg:landscape:min-h-0 max-lg:landscape:flex max-lg:landscape:flex-col',
-                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-0',
+                tier2Open && 'max-lg:landscape:flex max-lg:landscape:flex-col max-lg:landscape:min-h-[200px] max-lg:landscape:max-h-[min(72dvh,calc(100dvh-64px-3rem))] max-lg:landscape:flex-1',
+                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-0 max-lg:landscape:[&>div:last-child]:overflow-hidden',
                 !tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:min-h-0',
               )}
               headerRight={
@@ -96,7 +96,7 @@ export function Module02DashboardPage() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col min-h-0 h-full max-lg:landscape:flex-1 max-lg:landscape:justify-start max-lg:portrait:h-auto max-lg:portrait:flex-none">
+                <div className="flex flex-col min-h-0 h-full max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:portrait:h-auto max-lg:portrait:flex-none">
                   <TrainingCameraPanel
                     selectedId={selectedCamId}
                     onSelectCamera={cam => setSelectedCamId(cam.id)}
