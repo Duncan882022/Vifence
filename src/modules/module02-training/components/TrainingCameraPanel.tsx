@@ -284,10 +284,13 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const stackedPortrait = !isDesktop && !isLandscapeMobile
 
   useEffect(() => {
-    if (selectedId && !selectedIds.includes(selectedId)) {
-      setSelectedIds([selectedId])
-    }
-  }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!selectedId) return
+    setSelectedIds(prev => {
+      if (prev.includes(selectedId)) return prev
+      if (isLandscapeMobile) return [selectedId]
+      return [...prev, selectedId]
+    })
+  }, [selectedId, isLandscapeMobile])
 
   const filtered = filterCameras(filterTab)
   const sidebarGroups = groupCamerasForSidebar(filtered, filterTab)
@@ -301,9 +304,16 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const fillHeightMain = isDesktop && safeCams.length <= 2
 
   useEffect(() => {
-    if (!isLandscapeMobile) return
-    setSelectedIds(prev => (prev.length > 1 ? [prev[0]] : prev))
-  }, [isLandscapeMobile])
+    setSelectedIds(prev => {
+      if (isLandscapeMobile) {
+        if (prev.length > 1) return [prev[0]]
+        if (prev.length === 0) return [...defaultIds]
+        return prev
+      }
+      if (prev.length === 0) return [...defaultIds]
+      return prev
+    })
+  }, [isLandscapeMobile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Portrait mobile: always show thumb grid — collapse creates a flex-grow void + misplaced chevron */
   useEffect(() => {
@@ -323,11 +333,15 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     }
     setSelectedIds(prev => {
       if (prev.includes(cam.id)) {
-        return prev.length > 1 ? prev.filter(id => id !== cam.id) : prev
+        if (prev.length <= 1) return prev
+        const next = prev.filter(id => id !== cam.id)
+        const syncCam = MOCK_TRAINING_CAMERAS.find(c => c.id === next[0])
+        if (syncCam) onSelectCamera?.(syncCam)
+        return next
       }
+      onSelectCamera?.(cam)
       return [...prev, cam.id]
     })
-    onSelectCamera?.(cam)
   }
 
   return (
@@ -342,20 +356,20 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
       )}>
         <div className={cn(
           'p-2',
-          isLandscapeMobile ? 'flex-1 min-w-0 min-h-0' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          isLandscapeMobile ? 'flex-1 min-w-0 min-h-0 flex flex-col' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
           stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
           !isLandscapeMobile && !stackedPortrait && 'min-h-0 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
             'w-full',
             stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
-            isLandscapeMobile && 'h-full min-h-0 flex flex-col',
+            isLandscapeMobile && 'flex-1 min-h-0 flex flex-col',
             !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0',
             !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
-              <div className="flex-1 min-h-0 w-full">
+              <div className="flex-1 min-h-[40vh] w-full relative">
                 <CameraCell
                   cam={primaryCam}
                   onMaximize={() => setFocusedCam(primaryCam)}
