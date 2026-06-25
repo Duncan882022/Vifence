@@ -386,7 +386,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         </div>
 
         {isLandscapeMobile ? (
-          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
+          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14] max-lg:landscape:sticky max-lg:landscape:bottom-0 max-lg:landscape:z-10">
             <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-[#1e2433] shrink-0">
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -478,9 +478,12 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                   </span>
                   {isDesktop && (
                     <button
+                      type="button"
                       onClick={() => setSidebarOpen(false)}
                       className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                      title="Thu gọn"
+                      title="Thu gọn bộ lọc"
+                      aria-label="Thu gọn bộ lọc"
+                      aria-expanded={sidebarOpen}
                     >
                       <ChevronRight className="w-3 h-3" />
                     </button>
@@ -525,9 +528,12 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           ) : (
             <div className="flex flex-col items-center justify-center h-full min-h-[2.5rem]">
               <button
+                type="button"
                 onClick={() => setSidebarOpen(true)}
                 className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors"
-                title="Mở rộng"
+                title="Mở bộ lọc"
+                aria-label="Mở bộ lọc"
+                aria-expanded={sidebarOpen}
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>

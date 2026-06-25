@@ -35,7 +35,10 @@ export function Module02DashboardPage() {
           fit
           expandable={tier1Open}
           noPadding
-          className="shrink-0 max-lg:landscape:max-h-[38dvh] max-lg:landscape:overflow-y-auto"
+          className={cn(
+            'shrink-0 max-lg:landscape:max-h-[38dvh] max-lg:landscape:overflow-y-auto',
+            'max-lg:[&>div:first-child]:sticky max-lg:[&>div:first-child]:top-16 max-lg:[&>div:first-child]:z-20 max-lg:[&>div:first-child]:bg-[#0d1117]',
+          )}
           expandedContent={
             <TrainingDailyDetailDashboard summary={dailySummary} courses={TRAINING_COURSES} />
           }
@@ -73,6 +76,7 @@ export function Module02DashboardPage() {
               fit={!tier2Open}
               noPadding
               className={cn(
+                'max-lg:[&>div:first-child]:sticky max-lg:[&>div:first-child]:top-16 max-lg:[&>div:first-child]:z-20 max-lg:[&>div:first-child]:bg-[#0d1117]',
                 tier2Open && 'lg:flex-1 lg:min-h-0',
                 tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:overflow-visible max-lg:portrait:[&>div:last-child]:!h-auto',
                 tier2Open && 'max-lg:portrait:[&>div:last-child]:flex-none max-lg:portrait:[&>div:last-child]:overflow-visible',
