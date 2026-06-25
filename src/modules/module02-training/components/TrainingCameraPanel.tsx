@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Maximize2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { CameraVideoFeed } from './CameraVideoFeed'
 import {
   CAMERA_FILTER_TABS,
@@ -183,27 +184,29 @@ function CameraCell({ cam, compact, onMaximize }: {
   )
 }
 
-function getGridCols(count: number): number {
+function getGridCols(count: number, stackedPortrait: boolean): number {
   if (count === 1) return 1
+  if (stackedPortrait && count <= 4) return 1
   if (count <= 4) return 2
   if (count <= 9) return 3
   return 4
 }
 
-function CameraGrid({ cams, onMaximize }: {
+function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
+  stackedPortrait: boolean
+  fillHeight: boolean
 }) {
   const count = cams.length
-  const cols = getGridCols(count)
+  const cols = getGridCols(count, stackedPortrait)
   const compact = count > 2
-  const fillHeight = count <= 2
 
   return (
     <div
       className={cn(
-        'grid gap-1.5 w-full h-full min-h-0',
-        fillHeight ? 'min-h-[140px] max-lg:landscape:min-h-0' : 'content-start',
+        'grid gap-1.5 w-full min-h-0',
+        fillHeight ? 'h-full' : 'h-auto content-start',
       )}
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
@@ -211,7 +214,7 @@ function CameraGrid({ cams, onMaximize }: {
         <div
           key={cam.id}
           className={cn(
-            'relative w-full min-w-0 min-h-0',
+            'relative w-full min-w-0',
             fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
           )}
         >
@@ -274,6 +277,8 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const [filterTab, setFilterTab] = useState<CameraFilterTab>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const { isDesktop } = useShellLayout()
+  const isLandscapeMobile = useMediaQuery('(max-width: 1023px) and (orientation: landscape)')
+  const stackedPortrait = !isDesktop && !isLandscapeMobile
 
   useEffect(() => {
     if (selectedId && !selectedIds.includes(selectedId)) {
@@ -289,6 +294,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     .filter((c): c is TrainingCamera => !!c)
   const fallback = MOCK_TRAINING_CAMERAS.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
+  const fillHeightMain = (isDesktop || isLandscapeMobile) && safeCams.length <= 2
 
   useEffect(() => {
     onStreamCountChange?.(safeCams.length)
@@ -315,12 +321,18 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
-            'w-full h-full',
-            'max-lg:min-h-[34vw] max-lg:max-h-[42vh] max-lg:overflow-y-auto',
-            'max-lg:landscape:min-h-0 max-lg:landscape:max-h-none max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
+            'w-full min-h-0',
+            stackedPortrait && 'max-lg:max-h-[38vh] max-lg:overflow-y-auto overscroll-y-contain',
+            !stackedPortrait && 'h-full',
+            !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
-            <CameraGrid cams={safeCams} onMaximize={cam => setFocusedCam(cam)} />
+            <CameraGrid
+              cams={safeCams}
+              onMaximize={cam => setFocusedCam(cam)}
+              stackedPortrait={stackedPortrait}
+              fillHeight={fillHeightMain}
+            />
           </div>
         </div>
 
@@ -329,6 +341,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           'border-t lg:border-t-0 lg:border-l',
           'max-lg:landscape:border-t-0 max-lg:landscape:border-l',
           'max-lg:flex-1 max-lg:min-h-0',
+          stackedPortrait && 'max-lg:flex-none max-lg:min-h-[240px]',
           'max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto',
           sidebarOpen
             ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
