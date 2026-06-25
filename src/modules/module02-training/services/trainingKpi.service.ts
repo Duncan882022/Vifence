@@ -56,15 +56,6 @@ function delta(current: number, previous: number): Pick<KPIData, 'change' | 'cha
   return { change, changeType: change > 0 ? 'increase' : 'decrease' }
 }
 
-function courseGroupDetail(stats: Pick<TrainingDayStats, 'coursesCompleted' | 'coursesActive' | 'coursesUpcoming' | 'coursesCancelled'>): string {
-  const parts: string[] = []
-  if (stats.coursesCompleted > 0) parts.push(`${stats.coursesCompleted} đã hoàn thành`)
-  if (stats.coursesActive > 0) parts.push(`${stats.coursesActive} đang diễn ra`)
-  if (stats.coursesUpcoming > 0) parts.push(`${stats.coursesUpcoming} sắp diễn ra`)
-  if (stats.coursesCancelled > 0) parts.push(`${stats.coursesCancelled} huỷ`)
-  return parts.join(' · ')
-}
-
 function computeDayStats(
   courses: TrainingCourseKpiInput[],
   attendees: TrainingAttendee[],
@@ -130,7 +121,6 @@ function buildMetrics(today: TrainingDayStats, yesterday: TrainingDayStats): KPI
       label: 'Khoá học trong ngày',
       value: today.coursesTotal,
       unit: 'ca',
-      detail: courseGroupDetail(today),
       ...delta(today.coursesTotal, yesterday.coursesTotal),
       previousValue: yesterday.coursesTotal,
       higherIsBetter: true,
@@ -139,9 +129,6 @@ function buildMetrics(today: TrainingDayStats, yesterday: TrainingDayStats): KPI
       label: 'Học viên ghi nhận',
       value: today.recorded,
       unit: 'người',
-      detail: today.enrolledStarted > 0
-        ? `Trên ${today.enrolledStarted} học viên ca đã chạy`
-        : 'Chưa có ca nào bắt đầu',
       ...delta(today.recorded, yesterday.recorded),
       previousValue: yesterday.recorded,
       higherIsBetter: true,
@@ -150,9 +137,6 @@ function buildMetrics(today: TrainingDayStats, yesterday: TrainingDayStats): KPI
       label: 'Ngoại lệ trong ngày',
       value: today.exceptions,
       unit: 'người',
-      detail: today.enrolledStarted > 0
-        ? `${Math.round((today.exceptions / today.enrolledStarted) * 1000) / 10}% trên ca đã chạy`
-        : undefined,
       ...delta(today.exceptions, yesterday.exceptions),
       previousValue: yesterday.exceptions,
       higherIsBetter: false,
@@ -161,9 +145,6 @@ function buildMetrics(today: TrainingDayStats, yesterday: TrainingDayStats): KPI
       label: 'Tỷ lệ tuân thủ',
       value: today.attendanceRate,
       unit: '%',
-      detail: today.enrolledStarted > 0
-        ? `${today.recorded}/${today.enrolledStarted} học viên ca đã chạy`
-        : 'Chưa có ca nào bắt đầu',
       ...delta(today.attendanceRate, yesterday.attendanceRate),
       previousValue: yesterday.attendanceRate,
       higherIsBetter: true,
