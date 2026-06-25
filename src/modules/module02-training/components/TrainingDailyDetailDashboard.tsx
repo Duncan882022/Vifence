@@ -101,7 +101,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatTile label="Sắp diễn ra" value={today.coursesUpcoming} sub={`Hôm qua: ${yesterday.coursesUpcoming}`} />
-        <StatTile label="Huỷ" value={today.coursesCancelled} sub={`Hôm qua: ${yesterday.coursesCancelled}`} />
+        <StatTile label="Đã Huỷ" value={today.coursesCancelled} sub={`Hôm qua: ${yesterday.coursesCancelled}`} />
         <StatTile label="Đang diễn ra" value={today.coursesActive} sub={`${today.coursesLive} ca live`} />
         <StatTile label="Đã hoàn thành" value={today.coursesCompleted} sub={`Hôm qua: ${yesterday.coursesCompleted}`} />
         <StatTile label="Tổng ca" value={today.coursesTotal} sub={`Hôm qua: ${yesterday.coursesTotal}`} />
@@ -149,7 +149,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
 
       {started.length > 0 && (
         <p className="text-[10px] text-muted-foreground/60">
-          {started.length} ca đã/đang chạy · {today.coursesUpcoming} ca chưa bắt đầu · {today.coursesCancelled} ca huỷ
+          {started.length} ca đã/đang chạy · {today.coursesUpcoming} ca chưa bắt đầu · {today.coursesCancelled} ca đã Huỷ
         </p>
       )}
     </div>

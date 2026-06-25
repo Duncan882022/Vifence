@@ -61,7 +61,7 @@ function CourseBreakdownChips({ stats }: { stats: TrainingDayStats }) {
     },
     {
       value: stats.coursesCancelled,
-      label: 'huỷ',
+      label: 'đã huỷ',
       className: 'bg-red-500/10 text-red-400',
     },
     {
@@ -195,9 +195,9 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
       embedded ? 'bg-[#0b0f1a]' : 'bg-[#0d1117]',
       accent,
     )}>
-      <div className="flex items-start gap-2.5 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0">
         <div className={cn(
-          'w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
+          'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 self-center',
           iconBg,
         )}>
           <Icon className={cn('w-4 h-4', iconColor)} />
@@ -217,8 +217,10 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
               <span className="text-[11px] font-medium text-muted-foreground shrink-0">{unit}</span>
             )}
           </div>
-          <MetricInsight index={index} stats={stats} />
         </div>
+      </div>
+      <div className="pl-11 min-w-0">
+        <MetricInsight index={index} stats={stats} />
       </div>
 
       {showYesterdayRow && (

@@ -24,7 +24,7 @@ const GROUPS: { key: CourseGroup; label: string; color: string; dotColor: string
 const TABS: { key: 'all' | CourseGroup; label: string }[] = [
   { key: 'all',       label: 'Tất cả'        },
   { key: 'upcoming',  label: 'Sắp diễn ra'  },
-  { key: 'cancelled', label: 'Huỷ'           },
+  { key: 'cancelled', label: 'Đã Huỷ'        },
   { key: 'active',    label: 'Đang diễn ra'  },
   { key: 'completed', label: 'Đã hoàn thành' },
 ]

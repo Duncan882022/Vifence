@@ -77,7 +77,7 @@ const GROUP_LABEL: Record<TrainingCourseMock['group'], string> = {
   upcoming: 'Sắp diễn ra',
   active: 'Đang diễn ra',
   completed: 'Đã hoàn thành',
-  cancelled: 'Huỷ',
+  cancelled: 'Đã Huỷ',
 }
 
 export const COURSE_GROUP_DOT: Record<TrainingCourseMock['group'], string> = {
@@ -160,7 +160,7 @@ function buildAttendeeRows(courses: TrainingCourseMock[]): TrainingReportAttende
         statusDetail: c.group === 'upcoming'
           ? 'Chưa bắt đầu'
           : c.group === 'cancelled'
-            ? 'Đã huỷ'
+            ? 'Đã Huỷ'
             : (getAttendanceDetailLine(att) || attendanceStatusConfig[badges[0]].label),
         hasException: attendeeHasException(att),
       })
