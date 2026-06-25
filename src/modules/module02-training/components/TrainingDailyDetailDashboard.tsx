@@ -6,6 +6,8 @@ import {
 import { cn } from '@/utils/cn'
 import type { TrainingDailySummary } from '../services/trainingKpi.service'
 import type { TrainingCourseMock } from '../data/trainingMockData'
+import { courseGroupHasMetrics } from '../data/trainingMockData'
+import { COURSE_GROUP_STYLE, groupLabel } from '../services/trainingReport.service'
 import {
   attendanceStatusConfig,
   EXCEPTION_ATTENDANCE_STATUSES,
@@ -28,11 +30,7 @@ const TABS: {
   { key: 'compliance', label: 'Tỷ lệ tuân thủ', icon: ShieldCheck },
 ]
 
-const GROUP_LABEL: Record<TrainingCourseMock['group'], string> = {
-  upcoming: 'Sắp diễn ra',
-  active: 'Đang diễn ra',
-  completed: 'Đã hoàn thành',
-}
+const GROUP_LABEL = groupLabel
 
 interface TrainingDailyDetailDashboardProps {
   summary: TrainingDailySummary
@@ -87,7 +85,7 @@ function StatTile({ label, value, sub }: { label: string; value: string | number
 function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps) {
   const { today, yesterday, metrics } = summary
   const metric = metrics[0]
-  const started = courses.filter(c => c.group !== 'upcoming')
+  const started = courses.filter(c => courseGroupHasMetrics(c.group))
 
   return (
     <div className="space-y-4">
@@ -101,8 +99,9 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
         <CompareBadge {...metric} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatTile label="Sắp diễn ra" value={today.coursesUpcoming} sub={`Hôm qua: ${yesterday.coursesUpcoming}`} />
+        <StatTile label="Huỷ" value={today.coursesCancelled} sub={`Hôm qua: ${yesterday.coursesCancelled}`} />
         <StatTile label="Đang diễn ra" value={today.coursesActive} sub={`${today.coursesLive} ca live`} />
         <StatTile label="Đã hoàn thành" value={today.coursesCompleted} sub={`Hôm qua: ${yesterday.coursesCompleted}`} />
         <StatTile label="Tổng ca" value={today.coursesTotal} sub={`Hôm qua: ${yesterday.coursesTotal}`} />
@@ -128,11 +127,9 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
               </span>
               <span className={cn(
                 'text-[9px] font-bold px-1.5 py-0.5 rounded w-fit',
-                course.group === 'upcoming' && 'text-blue-400 bg-blue-500/15',
-                course.group === 'active' && 'text-green-400 bg-green-500/15',
-                course.group === 'completed' && 'text-gray-400 bg-gray-500/15',
+                COURSE_GROUP_STYLE[course.group],
               )}>
-                {GROUP_LABEL[course.group]}
+                {GROUP_LABEL(course.group)}
               </span>
               <span className="text-[10px] text-right tabular-nums">
                 {course.present !== undefined
@@ -143,7 +140,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
                 'text-[10px] text-right tabular-nums font-semibold',
                 course.exceptions > 0 ? 'text-orange-400' : 'text-muted-foreground',
               )}>
-                {course.group === 'upcoming' ? '—' : course.exceptions}
+                {courseGroupHasMetrics(course.group) ? course.exceptions : '—'}
               </span>
             </div>
           ))}
@@ -152,7 +149,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
 
       {started.length > 0 && (
         <p className="text-[10px] text-muted-foreground/60">
-          {started.length} ca đã/đang chạy · {today.coursesUpcoming} ca chưa bắt đầu
+          {started.length} ca đã/đang chạy · {today.coursesUpcoming} ca chưa bắt đầu · {today.coursesCancelled} ca huỷ
         </p>
       )}
     </div>
@@ -162,7 +159,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
 function AttendeesSection({ summary, courses }: TrainingDailyDetailDashboardProps) {
   const { today, yesterday, metrics } = summary
   const metric = metrics[1]
-  const started = courses.filter(c => c.group !== 'upcoming')
+  const started = courses.filter(c => courseGroupHasMetrics(c.group))
 
   return (
     <div className="space-y-4">
@@ -229,7 +226,7 @@ function AttendeesSection({ summary, courses }: TrainingDailyDetailDashboardProp
 function ExceptionsSection({ summary, courses }: TrainingDailyDetailDashboardProps) {
   const { today, metrics } = summary
   const metric = metrics[2]
-  const started = courses.filter(c => c.group !== 'upcoming')
+  const started = courses.filter(c => courseGroupHasMetrics(c.group))
 
   const exceptionAttendees = started.flatMap(c =>
     c.attendees
@@ -312,7 +309,7 @@ function ExceptionsSection({ summary, courses }: TrainingDailyDetailDashboardPro
 function ComplianceSection({ summary, courses }: TrainingDailyDetailDashboardProps) {
   const { today, yesterday, metrics } = summary
   const metric = metrics[3]
-  const started = courses.filter(c => c.group !== 'upcoming')
+  const started = courses.filter(c => courseGroupHasMetrics(c.group))
 
   return (
     <div className="space-y-4">

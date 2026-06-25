@@ -5,18 +5,18 @@ import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import { TRAINING_ATTENDEES } from './TrainingEventTable'
 import { buildTrainingCourses, type TrainingCourseMock } from '../data/trainingMockData'
+import { COURSE_GROUP_ORDER } from '../services/trainingReport.service'
 import { TrainingCourseListHeader, TrainingCourseListRow } from './TrainingCourseListRow'
 
-type CourseGroup = 'upcoming' | 'active' | 'completed'
+type CourseGroup = TrainingCourseMock['group']
 
 type Course = TrainingCourseMock
 
 export const TRAINING_COURSES: Course[] = buildTrainingCourses(TRAINING_ATTENDEES)
 
-const GROUP_ORDER: CourseGroup[] = ['upcoming', 'active', 'completed']
-
 const GROUPS: { key: CourseGroup; label: string; color: string; dotColor: string }[] = [
   { key: 'upcoming',  label: 'SẮP DIỄN RA',   color: 'text-blue-400',  dotColor: 'bg-blue-400'  },
+  { key: 'cancelled', label: 'ĐÃ HUỶ',        color: 'text-red-400',   dotColor: 'bg-red-400'   },
   { key: 'active',    label: 'ĐANG DIỄN RA',  color: 'text-green-400', dotColor: 'bg-green-400' },
   { key: 'completed', label: 'ĐÃ HOÀN THÀNH', color: 'text-gray-400',  dotColor: 'bg-gray-400'  },
 ]
@@ -24,13 +24,14 @@ const GROUPS: { key: CourseGroup; label: string; color: string; dotColor: string
 const TABS: { key: 'all' | CourseGroup; label: string }[] = [
   { key: 'all',       label: 'Tất cả'        },
   { key: 'upcoming',  label: 'Sắp diễn ra'  },
+  { key: 'cancelled', label: 'Huỷ'           },
   { key: 'active',    label: 'Đang diễn ra'  },
   { key: 'completed', label: 'Đã hoàn thành' },
 ]
 
 export function TrainingCourseAccordion() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(['active', 'upcoming', 'completed']),
+    new Set(['active', 'upcoming', 'cancelled', 'completed']),
   )
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set(['c-02']))
   const [expandedAttendees, setExpandedAttendees] = useState<Set<string>>(new Set())
@@ -64,8 +65,8 @@ export function TrainingCourseAccordion() {
   const filteredCourses = TRAINING_COURSES
     .filter(c => activeTab === 'all' || c.group === activeTab)
     .sort((a, b) => {
-      const ga = GROUP_ORDER.indexOf(a.group)
-      const gb = GROUP_ORDER.indexOf(b.group)
+      const ga = COURSE_GROUP_ORDER.indexOf(a.group)
+      const gb = COURSE_GROUP_ORDER.indexOf(b.group)
       return ga !== gb ? ga - gb : a.startTime.localeCompare(b.startTime)
     })
 
@@ -87,7 +88,6 @@ export function TrainingCourseAccordion() {
   return (
     <>
       <div className="flex flex-col flex-1 min-h-0">
-        {/* Filter tabs */}
         <div className="flex border-b border-[#1e2433] shrink-0 overflow-x-auto">
           {TABS.map(t => (
             <button
@@ -113,7 +113,6 @@ export function TrainingCourseAccordion() {
 
         <TrainingCourseListHeader />
 
-        {/* List */}
         <div className="flex-1 overflow-y-auto">
           {filteredCourses.length === 0 && (
             <div className="flex items-center justify-center h-20">

@@ -4,10 +4,10 @@ import { cn } from '@/utils/cn'
 import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import type { TrainingCourseMock } from '../data/trainingMockData'
-import { filterTrainingCourses } from '../services/trainingReport.service'
+import { filterTrainingCourses, COURSE_GROUP_ORDER } from '../services/trainingReport.service'
 import { TrainingCourseListHeader, TrainingCourseListRow } from './TrainingCourseListRow'
 
-const GROUP_ORDER: TrainingCourseMock['group'][] = ['upcoming', 'active', 'completed']
+const GROUP_ORDER = COURSE_GROUP_ORDER
 
 interface TrainingCourseListProps {
   courses: TrainingCourseMock[]

@@ -5,7 +5,12 @@ import { attendeeHasException } from '../components/TrainingEventTable'
 export const DEMO_NOW = { hours: 11, minutes: 30 }
 export const DEMO_TODAY_KEY = '24/06'
 
-export type CourseGroup = 'upcoming' | 'active' | 'completed'
+export type CourseGroup = 'upcoming' | 'active' | 'completed' | 'cancelled'
+
+/** Ca đã/đang chạy — có số liệu điểm danh */
+export function courseGroupHasMetrics(group: CourseGroup): boolean {
+  return group === 'active' || group === 'completed'
+}
 
 export interface TrainingCourseMock {
   id: string
@@ -74,7 +79,7 @@ function courseFromAttendees(
   const stats = statsFromAttendees(rows)
   return {
     ...meta,
-    present: meta.group === 'upcoming' ? undefined : stats.present,
+    present: courseGroupHasMetrics(meta.group) ? stats.present : undefined,
     total: stats.total,
     exceptions: stats.exceptions,
     attendees: rows,
@@ -129,6 +134,18 @@ function upcomingCourse(
     exceptions: 0,
     attendees,
     action: 'notify',
+  }
+}
+
+function cancelledCourse(
+  meta: Omit<TrainingCourseMock, 'present' | 'total' | 'exceptions' | 'attendees' | 'group'>,
+): TrainingCourseMock {
+  return {
+    ...meta,
+    group: 'cancelled',
+    total: UPCOMING_TOTAL[meta.title] ?? 0,
+    exceptions: 0,
+    attendees: [],
   }
 }
 
@@ -191,11 +208,10 @@ export function buildTrainingCourses(attendees: TrainingAttendee[]): TrainingCou
       sessionDate: '24/06/2026', startTime: '13:00', endTime: '17:00',
       group: 'upcoming',
     }),
-    upcomingCourse({
+    cancelledCourse({
       id: 'c-06',
       title: 'KT xây dựng', zone: 'OCP1-A',
       sessionDate: '24/06/2026', startTime: '14:00', endTime: '17:00',
-      group: 'upcoming',
     }),
     upcomingCourse({
       id: 'c-07',

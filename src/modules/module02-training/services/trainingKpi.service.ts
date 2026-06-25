@@ -6,8 +6,11 @@ import {
   type TrainingAttendee,
 } from '../components/TrainingEventTable'
 
+import type { CourseGroup } from '../data/trainingMockData'
+import { courseGroupHasMetrics } from '../data/trainingMockData'
+
 export interface TrainingCourseKpiInput {
-  group: 'upcoming' | 'active' | 'completed'
+  group: CourseGroup
   sessionDate: string
   startTime: string
   endTime: string
@@ -26,6 +29,7 @@ export interface TrainingDayStats {
   coursesTotal: number
   coursesActive: number
   coursesUpcoming: number
+  coursesCancelled: number
   coursesCompleted: number
   coursesLive: number
   recorded: number
@@ -52,11 +56,12 @@ function delta(current: number, previous: number): Pick<KPIData, 'change' | 'cha
   return { change, changeType: change > 0 ? 'increase' : 'decrease' }
 }
 
-function courseGroupDetail(stats: Pick<TrainingDayStats, 'coursesCompleted' | 'coursesActive' | 'coursesUpcoming'>): string {
+function courseGroupDetail(stats: Pick<TrainingDayStats, 'coursesCompleted' | 'coursesActive' | 'coursesUpcoming' | 'coursesCancelled'>): string {
   const parts: string[] = []
   if (stats.coursesCompleted > 0) parts.push(`${stats.coursesCompleted} đã hoàn thành`)
   if (stats.coursesActive > 0) parts.push(`${stats.coursesActive} đang diễn ra`)
   if (stats.coursesUpcoming > 0) parts.push(`${stats.coursesUpcoming} sắp diễn ra`)
+  if (stats.coursesCancelled > 0) parts.push(`${stats.coursesCancelled} huỷ`)
   return parts.join(' · ')
 }
 
@@ -68,9 +73,10 @@ function computeDayStats(
 ): TrainingDayStats {
   const dayCourses = courses.filter(c => dayPrefix(c.sessionDate) === dateKey)
   const upcoming = dayCourses.filter(c => c.group === 'upcoming')
+  const cancelled = dayCourses.filter(c => c.group === 'cancelled')
   const active = dayCourses.filter(c => c.group === 'active')
   const completed = dayCourses.filter(c => c.group === 'completed')
-  const started = dayCourses.filter(c => c.group !== 'upcoming')
+  const started = dayCourses.filter(c => courseGroupHasMetrics(c.group))
 
   const recorded = started.reduce((s, c) => s + (c.present ?? 0), 0)
   const enrolledStarted = started.reduce((s, c) => s + c.total, 0)
@@ -106,6 +112,7 @@ function computeDayStats(
     coursesTotal: dayCourses.length,
     coursesActive: active.length,
     coursesUpcoming: upcoming.length,
+    coursesCancelled: cancelled.length,
     coursesCompleted: completed.length,
     coursesLive,
     recorded,

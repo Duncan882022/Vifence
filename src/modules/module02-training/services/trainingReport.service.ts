@@ -1,5 +1,6 @@
 import { TRAINING_COURSES } from '@/modules/module02-training/components/TrainingCourseAccordion'
 import type { TrainingCourseMock } from '@/modules/module02-training/data/trainingMockData'
+import { courseGroupHasMetrics } from '@/modules/module02-training/data/trainingMockData'
 import { resolveCourseLocation } from '@/modules/module02-training/data/trainingCameras'
 import {
   attendanceStatusConfig,
@@ -76,7 +77,26 @@ const GROUP_LABEL: Record<TrainingCourseMock['group'], string> = {
   upcoming: 'Sắp diễn ra',
   active: 'Đang diễn ra',
   completed: 'Đã hoàn thành',
+  cancelled: 'Huỷ',
 }
+
+export const COURSE_GROUP_DOT: Record<TrainingCourseMock['group'], string> = {
+  upcoming: 'bg-blue-400',
+  active: 'bg-green-400',
+  completed: 'bg-gray-400',
+  cancelled: 'bg-red-400',
+}
+
+export const COURSE_GROUP_STYLE: Record<TrainingCourseMock['group'], string> = {
+  upcoming: 'text-blue-400 bg-blue-500/15',
+  active: 'text-green-400 bg-green-500/15',
+  completed: 'text-gray-400 bg-gray-500/15',
+  cancelled: 'text-red-400 bg-red-500/15',
+}
+
+export const COURSE_GROUP_ORDER: TrainingCourseMock['group'][] = [
+  'upcoming', 'cancelled', 'active', 'completed',
+]
 
 export function groupLabel(group: TrainingCourseMock['group']): string {
   return GROUP_LABEL[group]
@@ -139,7 +159,9 @@ function buildAttendeeRows(courses: TrainingCourseMock[]): TrainingReportAttende
         statusLabels: badges.map(b => attendanceStatusConfig[b].label).join(', '),
         statusDetail: c.group === 'upcoming'
           ? 'Chưa bắt đầu'
-          : (getAttendanceDetailLine(att) || attendanceStatusConfig[badges[0]].label),
+          : c.group === 'cancelled'
+            ? 'Đã huỷ'
+            : (getAttendanceDetailLine(att) || attendanceStatusConfig[badges[0]].label),
         hasException: attendeeHasException(att),
       })
     }
@@ -165,7 +187,7 @@ export function buildTrainingReport(
   const rows: TrainingReportRow[] = filtered.map(c => {
     const present = c.present ?? 0
     const total = c.total
-    const rate = total > 0 && c.group !== 'upcoming'
+    const rate = total > 0 && courseGroupHasMetrics(c.group)
       ? Math.round((present / total) * 1000) / 10
       : 0
     return {
@@ -184,7 +206,7 @@ export function buildTrainingReport(
     }
   })
 
-  const started = rows.filter(r => r.group !== 'upcoming')
+  const started = rows.filter(r => courseGroupHasMetrics(r.group))
   const recorded = started.reduce((s, r) => s + r.present, 0)
   const attendeeSlots = started.reduce((s, r) => s + r.total, 0)
   const exceptions = started.reduce((s, r) => s + r.exceptions, 0)
@@ -257,10 +279,10 @@ export async function exportTrainingReportExcel(
       r.startTime,
       r.endTime,
       groupLabel(r.group),
-      r.group === 'upcoming' ? '—' : r.present,
+      courseGroupHasMetrics(r.group) ? r.present : '—',
       r.total,
-      r.group === 'upcoming' ? '—' : r.exceptions,
-      r.group === 'upcoming' ? '—' : r.attendanceRate,
+      courseGroupHasMetrics(r.group) ? r.exceptions : '—',
+      courseGroupHasMetrics(r.group) ? r.attendanceRate : '—',
     ]),
   ]
 

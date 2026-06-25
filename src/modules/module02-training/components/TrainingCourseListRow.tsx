@@ -35,6 +35,13 @@ function CourseStatusCell({ course }: { course: TrainingCourseMock }) {
   if (course.group === 'upcoming') {
     return <UpcomingBadge small />
   }
+  if (course.group === 'cancelled') {
+    return (
+      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap text-red-400 bg-red-500/15">
+        Huỷ
+      </span>
+    )
+  }
   if (course.group === 'completed') {
     return (
       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap text-gray-400 bg-gray-500/15">
@@ -165,7 +172,9 @@ export function TrainingCourseListRow({
         <div className="bg-[#07090f] border-b border-[#1e2433]/60">
           {course.attendees.length === 0 ? (
             <p className="px-3 pl-7 py-3 text-[10px] text-muted-foreground/60">
-              Chưa có học viên đăng ký
+              {course.group === 'cancelled'
+                ? 'Ca đã huỷ — không có học viên'
+                : 'Chưa có học viên đăng ký'}
             </p>
           ) : (
             <>
@@ -209,6 +218,10 @@ export function TrainingCourseListRow({
                       {course.group === 'upcoming' ? (
                         <span className="text-[8px] font-bold px-1.5 py-0.5 rounded text-muted-foreground/60 bg-[#1a2235]">
                           Chưa bắt đầu
+                        </span>
+                      ) : course.group === 'cancelled' ? (
+                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded text-red-400/80 bg-red-500/10">
+                          Đã huỷ
                         </span>
                       ) : (
                         <>

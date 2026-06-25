@@ -7,21 +7,17 @@ import { cn } from '@/utils/cn'
 import { useTrainingCourseStore } from '@/store/trainingCourse.store'
 import {
   buildTrainingReport,
+  COURSE_GROUP_DOT,
   exportTrainingReportExcel,
   getAllTrainingCourses,
   groupLabel,
   type TrainingReportRow,
 } from '../services/trainingReport.service'
+import { courseGroupHasMetrics } from '../data/trainingMockData'
 import type { KPIData } from '@/types/api'
 
 const DEFAULT_FROM = '2026-06-17'
 const DEFAULT_TO = '2026-06-24'
-
-const GROUP_DOT: Record<string, string> = {
-  upcoming: 'bg-blue-400',
-  active: 'bg-green-400',
-  completed: 'bg-gray-400',
-}
 
 const TABLE_COLS = 'grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_64px_64px_64px_76px]'
 
@@ -45,24 +41,24 @@ function ReportTableRow({ row }: { row: TrainingReportRow }) {
         </p>
       </div>
       <p className="text-[10px] tabular-nums text-foreground">
-        {row.group === 'upcoming' ? '—' : `${row.present}/${row.total}`}
+        {courseGroupHasMetrics(row.group) ? `${row.present}/${row.total}` : '—'}
       </p>
       <p className={cn(
         'text-[10px] tabular-nums font-medium',
         row.exceptions > 0 ? 'text-orange-400' : 'text-muted-foreground/50',
       )}>
-        {row.group === 'upcoming' ? '—' : row.exceptions}
+        {courseGroupHasMetrics(row.group) ? row.exceptions : '—'}
       </p>
       <p className={cn(
         'text-[10px] tabular-nums font-semibold',
-        row.group === 'upcoming'
+        !courseGroupHasMetrics(row.group)
           ? 'text-muted-foreground/40'
           : row.attendanceRate >= 75 ? 'text-green-400' : 'text-red-400',
       )}>
-        {row.group === 'upcoming' ? '—' : `${row.attendanceRate}%`}
+        {courseGroupHasMetrics(row.group) ? `${row.attendanceRate}%` : '—'}
       </p>
       <span className="inline-flex items-center gap-1 text-[9px] font-bold text-muted-foreground">
-        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', GROUP_DOT[row.group])} />
+        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', COURSE_GROUP_DOT[row.group])} />
         {groupLabel(row.group)}
       </span>
     </div>
@@ -78,7 +74,7 @@ function ReportMobileCard({ row }: { row: TrainingReportRow }) {
           <p className="text-[10px] text-muted-foreground mt-0.5">{row.zone} · {row.location}</p>
         </div>
         <span className="inline-flex items-center gap-1 text-[9px] font-bold text-muted-foreground shrink-0">
-          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', GROUP_DOT[row.group])} />
+          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', COURSE_GROUP_DOT[row.group])} />
           {groupLabel(row.group)}
         </span>
       </div>
@@ -89,7 +85,7 @@ function ReportMobileCard({ row }: { row: TrainingReportRow }) {
         <div>
           <p className="text-[8px] text-muted-foreground/50">Có mặt</p>
           <p className="text-[10px] font-semibold tabular-nums">
-            {row.group === 'upcoming' ? '—' : `${row.present}/${row.total}`}
+            {courseGroupHasMetrics(row.group) ? `${row.present}/${row.total}` : '—'}
           </p>
         </div>
         <div>
@@ -98,18 +94,18 @@ function ReportMobileCard({ row }: { row: TrainingReportRow }) {
             'text-[10px] font-semibold tabular-nums',
             row.exceptions > 0 ? 'text-orange-400' : 'text-muted-foreground',
           )}>
-            {row.group === 'upcoming' ? '—' : row.exceptions}
+            {courseGroupHasMetrics(row.group) ? row.exceptions : '—'}
           </p>
         </div>
         <div>
           <p className="text-[8px] text-muted-foreground/50">Tuân thủ</p>
           <p className={cn(
             'text-[10px] font-semibold tabular-nums',
-            row.group === 'upcoming'
+            !courseGroupHasMetrics(row.group)
               ? 'text-muted-foreground/40'
               : row.attendanceRate >= 75 ? 'text-green-400' : 'text-red-400',
           )}>
-            {row.group === 'upcoming' ? '—' : `${row.attendanceRate}%`}
+            {courseGroupHasMetrics(row.group) ? `${row.attendanceRate}%` : '—'}
           </p>
         </div>
       </div>
