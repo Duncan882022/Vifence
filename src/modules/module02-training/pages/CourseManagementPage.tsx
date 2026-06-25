@@ -4,7 +4,6 @@ import { ArrowLeft, Plus } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { useTrainingCourseStore } from '@/store/trainingCourse.store'
 import { getAllTrainingCourses } from '../services/trainingReport.service'
-import { getTrainingLocationsByZone, defaultTrainingLocation } from '../data/trainingCameras'
 import { TrainingCourseList } from '../components/TrainingCourseList'
 import type { TrainingCourseMock } from '../data/trainingMockData'
 
@@ -13,7 +12,6 @@ const ZONES: TrainingCourseMock['zone'][] = ['OCP1-A', 'OCP1-B']
 interface FormState {
   title: string
   zone: TrainingCourseMock['zone']
-  location: string
   sessionDate: string
   startTime: string
   endTime: string
@@ -23,7 +21,6 @@ interface FormState {
 const INITIAL_FORM: FormState = {
   title: '',
   zone: 'OCP1-A',
-  location: defaultTrainingLocation('OCP1-A'),
   sessionDate: '2026-06-25',
   startTime: '08:00',
   endTime: '12:00',
@@ -42,31 +39,11 @@ export function CourseManagementPage() {
     [customCourses],
   )
 
-  const locationOptions = useMemo(
-    () => getTrainingLocationsByZone(form.zone),
-    [form.zone],
-  )
-
-  const handleZoneChange = (zone: TrainingCourseMock['zone']) => {
-    const locations = getTrainingLocationsByZone(zone)
-    setForm(f => ({
-      ...f,
-      zone,
-      location: locations.includes(f.location)
-        ? f.location
-        : defaultTrainingLocation(zone),
-    }))
-  }
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setSaved(false)
     if (!form.title.trim()) {
       setError('Vui lòng nhập tên khoá học')
-      return
-    }
-    if (!form.location) {
-      setError('Vui lòng chọn vị trí')
       return
     }
     const total = Number(form.total)
@@ -78,7 +55,6 @@ export function CourseManagementPage() {
     addCourse({
       title: form.title.trim(),
       zone: form.zone,
-      location: form.location,
       sessionDate: `${d}/${m}/${y}`,
       startTime: form.startTime,
       endTime: form.endTime,
@@ -123,35 +99,11 @@ export function CourseManagementPage() {
               </span>
               <select
                 value={form.zone}
-                onChange={e => handleZoneChange(e.target.value as TrainingCourseMock['zone'])}
+                onChange={e => setForm(f => ({ ...f, zone: e.target.value as TrainingCourseMock['zone'] }))}
                 className="w-full px-3 py-2 rounded-lg bg-[#0b0f1a] border border-[#1e2433] text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
               >
                 {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
               </select>
-            </label>
-
-            <label className="block space-y-1">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Vị trí <span className="text-red-400">*</span>
-              </span>
-              <select
-                id="course-location"
-                required
-                value={form.location}
-                onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-[#0b0f1a] border border-[#1e2433] text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-              >
-                {locationOptions.length === 0 ? (
-                  <option value="">— Chọn khu vực trước —</option>
-                ) : (
-                  locationOptions.map(loc => (
-                    <option key={loc} value={loc}>{loc}</option>
-                  ))
-                )}
-              </select>
-              <p className="text-[9px] text-muted-foreground/50">
-                Phòng / khu đào tạo thuộc {form.zone}
-              </p>
             </label>
 
             <label className="block space-y-1">
