@@ -1,6 +1,7 @@
 import type { KPIData } from '@/types/api'
 import {
   getSessionStatus,
+  attendeeHasException,
   type AttendanceStatus,
   type TrainingAttendee,
 } from '../components/TrainingEventTable'
@@ -75,6 +76,13 @@ function computeDayStats(
   const enrolledStarted = started.reduce((s, c) => s + c.total, 0)
   const upcomingEnrolled = upcoming.reduce((s, c) => s + c.total, 0)
   const exceptions = started.reduce((s, c) => s + c.exceptions, 0)
+
+  /** Đối chiếu: đếm trực tiếp HV có ngoại lệ trong ngày (đi trễ, về sớm, …) */
+  const exceptionsFromAttendees = includeLive
+    ? attendees.filter(
+      s => s.courseDate === dateKey && attendeeHasException(s),
+    ).length
+    : exceptions
   const attendanceRate = enrolledStarted > 0
     ? Math.round((recorded / enrolledStarted) * 1000) / 10
     : 0
@@ -84,11 +92,11 @@ function computeDayStats(
 
   if (includeLive) {
     coursesLive = active.filter(
-      c => getSessionStatus(c.endTime) === 'in-session',
+      c => getSessionStatus(c.startTime, c.endTime) === 'in-session',
     ).length
     studyingNow = attendees.filter(
       s => s.courseDate === dateKey
-        && getSessionStatus(s.courseEnd) === 'in-session'
+        && getSessionStatus(s.courseStart, s.courseEnd) === 'in-session'
         && LIVE_STATUSES.includes(s.currentStatus),
     ).length
   }
@@ -103,7 +111,7 @@ function computeDayStats(
     recorded,
     enrolledStarted,
     upcomingEnrolled,
-    exceptions,
+    exceptions: exceptionsFromAttendees,
     attendanceRate,
     studyingNow,
   }
@@ -146,9 +154,9 @@ function buildMetrics(today: TrainingDayStats, yesterday: TrainingDayStats): KPI
       label: 'Tỷ lệ tuân thủ',
       value: today.attendanceRate,
       unit: '%',
-      detail: today.upcomingEnrolled > 0
-        ? `+ ${today.upcomingEnrolled} HV ca chưa mở (chưa tính)`
-        : 'Ca đã chạy trong ngày',
+      detail: today.enrolledStarted > 0
+        ? `${today.recorded}/${today.enrolledStarted} học viên ca đã chạy`
+        : 'Chưa có ca nào bắt đầu',
       ...delta(today.attendanceRate, yesterday.attendanceRate),
       previousValue: yesterday.attendanceRate,
       higherIsBetter: true,

@@ -8,11 +8,15 @@ function pagesBase(mode: string): string {
   const repo = process.env.GITHUB_REPOSITORY?.split('/')[1]
   if (repo?.endsWith('.github.io')) return '/'
   if (repo) return `/${repo}/`
-  return '/Vifence-CMS/'
+  return '/Vifence/'
 }
 
 export default defineConfig(({ mode }) => ({
   base: pagesBase(mode),
+  build: {
+    outDir: mode === 'ghpages' ? 'docs' : 'dist',
+    emptyOutDir: true,
+  },
   plugins: [react()],
   resolve: {
     alias: {

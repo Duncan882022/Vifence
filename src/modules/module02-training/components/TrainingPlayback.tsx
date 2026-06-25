@@ -68,7 +68,7 @@ interface TimelineItem {
 }
 
 function buildTimeline(rec: CourseRecord): TimelineItem[] {
-  const finished = getSessionStatus(rec.endTime) === 'finished'
+  const finished = getSessionStatus(rec.startTime, rec.endTime) === 'finished'
   const allBadges = getAttendanceBadges(rec)
   const lateOnArrival = wasLateArrival(rec.sessions, rec.startTime)
   const outcomeBadges = allBadges.filter(b => !(b === 'late' && lateOnArrival))
@@ -230,7 +230,7 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
   const start    = rec?.startTime ?? '08:00'
   const end      = rec?.endTime   ?? '17:00'
   const sessions = rec?.sessions ?? []
-  const finished = getSessionStatus(end) === 'finished'
+  const finished = getSessionStatus(start, end) === 'finished'
   const badges   = rec ? getAttendanceBadges(rec) : event ? [event.type] : []
   const primary  = badges[0]
   const timeline = useMemo(() => (rec ? buildTimeline(rec) : []), [rec])

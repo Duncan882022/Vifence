@@ -1,0 +1,117 @@
+---
+description: Vifence CMS design system — status tokens, colors, icons, layout principles
+alwaysApply: true
+---
+
+# Vifence CMS — Design System
+
+## Core Principle
+Camera và Sự kiện đều **link tới Khoá học** — phải dùng chung token màu, trạng thái và icon.
+Không tự thêm màu/label mới ngoài bảng token bên dưới.
+
+---
+
+## Attendance Status Tokens
+
+Nguồn sự thật duy nhất: `AttendanceStatus` + `flags[]` trong `CourseRecord`.
+
+### Primary + Flags pattern
+Một buổi học có thể có **nhiều hành vi**. UI hiển thị **tất cả badge**:
+
+| Field | Ý nghĩa | Ví dụ |
+|---|---|---|
+| `status` | Kết quả primary (nghiêm trọng nhất) | `skipped` |
+| `flags[]` | Hành vi phụ, không trùng primary | `['late']` |
+
+**Listing:** `[Đi trễ] [Bỏ học]` + dòng giờ `08:25–09:20` — badge sort theo thời gian sự kiện (late trước vì xảy ra lúc check-in).  
+**Tab filter:** match nếu **bất kỳ** badge nào khớp tab.
+
+`late` trong `flags` khi `in > startTime` nhưng primary là `skipped` / `left-early` / `insufficient`.
+Nếu primary đã là `late` (ở đủ giờ) → chỉ 1 badge.
+
+### Real-time (session đang diễn ra)
+| Token | Label | Màu | Ý nghĩa |
+|---|---|---|---|
+| `attending` | Đang học | `sky-400` | Đã check-in đúng giờ, `out: null` |
+| `away` | Tạm vắng | `cyan-400` | Đã check-out, session chưa xong — outcome TBD |
+| `late` | Đi trễ | `orange-400` | Vào sau `startTime`, locked ngay lúc check-in |
+| `absent` | Vắng mặt | `gray-400` | Chưa check-in, session vẫn đang chạy |
+
+### Finalized (session đã kết thúc)
+| Token | Label | Màu | Ý nghĩa |
+|---|---|---|---|
+| `completed` | Hoàn thành | `green-400` | Đủ giờ, đúng quy định |
+| `left-early` | Về sớm | `red-400` | Ra trước `endTime`, không quay lại |
+| `skipped` | Bỏ học | `purple-400` | Ra giữa chừng, không quay lại, < 3/4 giờ |
+| `insufficient` | Thiếu giờ | `amber-400` | Tổng giờ dự < 3/4 thời lượng ca |
+
+> `late` có thể là cả real-time lẫn finalized. Sau khi session kết thúc backend có thể promote severity.
+> `attending`/`away` KHÔNG được dùng cho session đã kết thúc trong `CourseRecord.status`.
+
+---
+
+## Session Status Tokens
+
+Cột "Trạng thái" của Khoá học — tính động từ `courseEnd` vs thời gian hiện tại.
+
+| Token | Label | Màu | Điều kiện |
+|---|---|---|---|
+| `in-session` | Đang diễn ra | `green-400` + pulse dot | `now < courseEnd` |
+| `finished` | Đã hoàn thành | `gray-400` | `now >= courseEnd` |
+
+---
+
+## Icon Vocabulary
+
+Dùng icon từ `lucide-react`. Ưu tiên icon thay text khi không gian hẹp.
+
+| Hành động / Khái niệm | Icon | Khi nào dùng |
+|---|---|---|
+| Xem video playback | `Play` | Nút trong listing row |
+| Đang phát | `Pause` | Trong playback |
+| Check-in | `LogIn` | Timeline playback |
+| Check-out | `LogOut` | Timeline playback |
+| Học viên / người | `User` | Header, label |
+| Nhà thầu / công ty | `Building2` | Contractor view |
+| Khoá học | `BookOpen` | Course section |
+| Camera | `Camera` | Camera section |
+| Live / đang phát sóng | `Radio` (với pulse dot) | Camera tile LIVE badge |
+| Cảnh báo / ngoại lệ | `AlertTriangle` | Exception highlight |
+| Tải xuống / xuất | `Download` | Export actions |
+| Tìm kiếm | `Search` | Search input (locked → thêm `Lock`) |
+| Khoá tính năng trial | `Lock` | Bên cạnh locked input/button |
+| Mở rộng | `ChevronRight` / `ChevronDown` | Accordion toggle |
+| Thu gọn | `ChevronLeft` / `ChevronUp` | Accordion toggle |
+| Thông báo | `Bell` | Notification button |
+| Lọc | `Filter` | Filter dropdown |
+| Làm mới | `RefreshCw` | Refresh action |
+
+---
+
+## Spatial Rules
+
+- Badge: `text-[8px]` (small) hoặc `text-[9px]` (normal), `px-1–1.5 py-0.5`, `rounded`
+- Pulse dot: `w-1.5 h-1.5 rounded-full animate-pulse` — chỉ dùng cho `attending`, `away`, `in-session`
+- Icon size trong row: `w-3 h-3` hoặc `w-3.5 h-3.5`
+- Icon size standalone: `w-4 h-4` trở lên
+
+---
+
+## Shared Data Contract
+
+Camera và Sự kiện đều trỏ tới cùng `CourseRecord`:
+```
+Camera tile     → courseCode → CourseRecord (startTime, endTime, location)
+TrainingAttendee → currentCourse + courseDate → CourseRecord
+```
+Không được hardcode tên khoá học hay giờ trong Camera component — phải lấy từ `MOCK_CAMERAS[].courseCode`.
+
+---
+
+## Trial Lock Pattern
+
+Khi tính năng bị khoá (bản dùng thử):
+- Input: thêm `readOnly`, `onClick={showTrial}`, icon `Lock` bên trái
+- Button: `onClick={showTrial}`
+- Popup: tự tắt sau **2.8s**, không có nút X, hiển thị giữa màn hình
+- Text popup: `"Tính năng này không khả dụng ở bản dùng thử !!!"`

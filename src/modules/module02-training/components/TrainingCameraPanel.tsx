@@ -2,46 +2,70 @@ import { useState, useEffect, useRef } from 'react'
 import { Maximize2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { Camera } from '@/types/camera'
+import { getStreamUrlForCamera } from '../data/trainingCameraFeeds'
 
 interface TrainingCamera extends Camera {
   courseName?: string
 }
 
-const MOCK_CAMERAS: TrainingCamera[] = [
+function withStreamUrl(cam: TrainingCamera): TrainingCamera {
+  return { ...cam, streamUrl: getStreamUrlForCamera(cam.id) }
+}
+
+const MOCK_CAMERAS: TrainingCamera[] = ([
   /* ── OCP1-A ───────────────────────────────────────────────── */
-  { id: 'A-01', name: 'Cam 01', location: 'Cổng vào',          zone: 'OCP1-A', status: 'online' },
-  { id: 'A-02', name: 'Cam 02', location: 'Phòng Đào Tạo A1',  zone: 'OCP1-A', status: 'online', courseName: 'Toolbox A' },
-  { id: 'A-03', name: 'Cam 03', location: 'Phòng Đào Tạo A2',  zone: 'OCP1-A', status: 'online', courseName: 'Cọc nhồi B' },
-  { id: 'A-04', name: 'Cam 04', location: 'Sân Tập A',          zone: 'OCP1-A', status: 'online' },
-  { id: 'A-05', name: 'Cam 05', location: 'Hành Lang',          zone: 'OCP1-A', status: 'online' },
-  { id: 'A-06', name: 'Cam 06', location: 'Kho Vật Tư',         zone: 'OCP1-A', status: 'online' },
-  { id: 'A-07', name: 'Cam 07', location: 'Bãi Đỗ Xe',          zone: 'OCP1-A', status: 'online' },
-  { id: 'A-08', name: 'Cam 08', location: 'Phòng Giải Lao',     zone: 'OCP1-A', status: 'online' },
+  { id: 'A-01', name: 'Cam 01', location: 'Cổng vào',          zone: 'OCP1-A', status: 'online' as const },
+  { id: 'A-02', name: 'Cam 02', location: 'Phòng Đào Tạo A1',  zone: 'OCP1-A', status: 'online' as const, courseName: 'Toolbox A' },
+  { id: 'A-03', name: 'Cam 03', location: 'Phòng Đào Tạo A2',  zone: 'OCP1-A', status: 'online' as const, courseName: 'Cọc nhồi B' },
+  { id: 'A-04', name: 'Cam 04', location: 'Sân Tập A',          zone: 'OCP1-A', status: 'online' as const },
+  { id: 'A-05', name: 'Cam 05', location: 'Hành Lang',          zone: 'OCP1-A', status: 'online' as const },
+  { id: 'A-06', name: 'Cam 06', location: 'Kho Vật Tư',         zone: 'OCP1-A', status: 'online' as const },
+  { id: 'A-07', name: 'Cam 07', location: 'Bãi Đỗ Xe',          zone: 'OCP1-A', status: 'online' as const },
+  { id: 'A-08', name: 'Cam 08', location: 'Phòng Giải Lao',     zone: 'OCP1-A', status: 'online' as const },
   /* ── OCP1-B ───────────────────────────────────────────────── */
-  { id: 'B-01', name: 'Cam 01', location: 'Cổng vào',           zone: 'OCP1-B', status: 'online' },
-  { id: 'B-02', name: 'Cam 02', location: 'Sân Thực Hành B1',   zone: 'OCP1-B', status: 'online', courseName: 'PCCC C' },
-  { id: 'B-03', name: 'Cam 03', location: 'Phòng Đào Tạo B1',   zone: 'OCP1-B', status: 'online' },
-  { id: 'B-04', name: 'Cam 04', location: 'Xưởng Thực Hành B',  zone: 'OCP1-B', status: 'online', courseName: 'PCCC C' },
-  { id: 'B-05', name: 'Cam 05', location: 'Hành Lang',           zone: 'OCP1-B', status: 'online' },
-  { id: 'B-06', name: 'Cam 06', location: 'Khu Vực Máy Móc',    zone: 'OCP1-B', status: 'online' },
-  { id: 'B-07', name: 'Cam 07', location: 'Bãi Tập Kết',         zone: 'OCP1-B', status: 'online' },
-  { id: 'B-08', name: 'Cam 08', location: 'Phòng Y Tế',          zone: 'OCP1-B', status: 'online' },
-]
+  { id: 'B-01', name: 'Cam 01', location: 'Cổng vào',           zone: 'OCP1-B', status: 'online' as const },
+  { id: 'B-02', name: 'Cam 02', location: 'Sân Thực Hành B1',   zone: 'OCP1-B', status: 'online' as const, courseName: 'PCCC C' },
+  { id: 'B-03', name: 'Cam 03', location: 'Phòng Đào Tạo B2',   zone: 'OCP1-B', status: 'online' as const, courseName: 'Điện cơ E' },
+  { id: 'B-04', name: 'Cam 04', location: 'Phòng Đào Tạo B1',   zone: 'OCP1-B', status: 'online' as const },
+  { id: 'B-05', name: 'Cam 05', location: 'Hành Lang',           zone: 'OCP1-B', status: 'online' as const },
+  { id: 'B-06', name: 'Cam 06', location: 'Khu Vực Máy Móc',    zone: 'OCP1-B', status: 'online' as const },
+  { id: 'B-07', name: 'Cam 07', location: 'Bãi Tập Kết',         zone: 'OCP1-B', status: 'online' as const },
+  { id: 'B-08', name: 'Cam 08', location: 'Phòng Y Tế',          zone: 'OCP1-B', status: 'online' as const },
+] satisfies Omit<TrainingCamera, 'streamUrl'>[]).map(withStreamUrl)
 
 const ZONE_TABS = ['Tất cả', 'OCP1-A', 'OCP1-B'] as const
 type ZoneTab = typeof ZONE_TABS[number]
 
-/* ── Scene decoration ───────────────────────────────────────── */
-function SceneBars({ count = 4, heightClass = 'h-12', className }: {
-  count?: number; heightClass?: string; className?: string
-}) {
+const CCTV_SCANLINE = {
+  backgroundImage:
+    'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
+} as const
+
+/* ── Live video feed (local MP4 loop) ───────────────────────── */
+function CameraVideoFeed({ src, playing = true }: { src: string; playing?: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (playing) {
+      video.play().catch(() => {})
+    } else {
+      video.pause()
+    }
+  }, [src, playing])
+
   return (
-    <div className={cn('flex gap-1 items-end justify-center', className)}>
-      {[...Array(count)].map((_, i) => (
-        <div key={i} className={cn('w-4 rounded-sm bg-gray-400', heightClass)}
-          style={{ opacity: 0.08 + i * 0.04 }} />
-      ))}
-    </div>
+    <video
+      ref={videoRef}
+      src={src}
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      className="absolute inset-0 h-full w-full object-cover saturate-[0.75] contrast-[1.08] brightness-[0.88]"
+    />
   )
 }
 
@@ -60,7 +84,8 @@ function CameraThumb({ cam, selected, onClick }: {
       )}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <SceneBars count={3} heightClass="h-6" className="absolute inset-0 opacity-60" />
+      {cam.streamUrl && <CameraVideoFeed src={cam.streamUrl} />}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
       {/* LIVE indicator */}
       <span className="absolute top-1 left-1 flex items-center gap-0.5">
@@ -96,20 +121,10 @@ function CameraCell({ cam, compact, onMaximize }: {
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
+      {cam.streamUrl && <CameraVideoFeed src={cam.streamUrl} />}
 
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex gap-3 opacity-10">
-          {[...Array(compact ? 4 : 6)].map((_, i) => (
-            <div key={i} className="w-10 bg-gray-400 rounded-sm"
-              style={{ height: `${(compact ? 40 : 60) + i * 10}px`, opacity: 0.3 + i * 0.06 }} />
-          ))}
-        </div>
-      </div>
-
-      {/* Scanline */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
-        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
-      }} />
+      {/* Scanline overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
       {/* Top row */}
       <div className="absolute top-2 left-2 right-2 flex items-start justify-between">

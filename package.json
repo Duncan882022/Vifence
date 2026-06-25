@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:pages": "tsc -b && vite build --mode ghpages",
+    "build:pages": "tsc -b && vite build --mode ghpages && cp docs/index.html docs/404.html",
+    "pack:pages": "npm run build:pages && cd docs && zip -r ../vifence-pages.zip . && echo '→ Upload nội dung vifence-pages.zip lên root repo GitHub (duncan882022/Vifence)'",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -1,0 +1,57 @@
+---
+description: Vifence CMS coding standards — always apply
+alwaysApply: true
+---
+
+# Vifence CMS – Cursor Rules
+
+## Core
+- Target: Ban Tổng Giám đốc presentation quality
+- Priority: Understandable > Consistent > Traceable > Actionable > Performant
+
+## UI Consistency
+- Sidebar: 220px fixed, never modify per module
+- CameraGrid: single shared component, never create module-specific variants
+- PlaybackPanel: single shared component
+- EventList: single shared component
+- Layout: Tier1 (KPIs) → Tier2 (Camera | Events) → Tier3 (Playback | Business Panel)
+
+## Component Rules
+- Reuse > Extend > Create New
+- Never duplicate: CameraGrid, PlaybackPanel, EventList
+- All components must be: Typed, Reusable, Testable
+
+## Data Rules
+- No hardcoded data in components — use services/ hooks/ store/
+- All API responses must have TypeScript types
+- No `any` type
+- No direct API calls in UI components — always via service layer
+
+## Performance
+- React.memo for large components
+- useMemo for computed data
+- useCallback for event handlers
+- Lazy load: Playback, Chart, Large Table
+
+## UX
+- No dead whitespace — fill or shrink
+- No component overlapping Sidebar
+- No duplicate data display
+- Max 3 clicks per action
+- Actions must be verbs in Vietnamese: Thông báo, Xử lý, Xuất clip, Tải xuống
+- Lists > 20 records must have Search
+
+## File Structure
+src/
+  components/common/   ← shared components
+  modules/             ← module01 through module08
+  services/            ← API service layer
+  store/               ← Zustand stores
+  types/               ← TypeScript types
+  utils/               ← helpers
+  hooks/               ← custom hooks
+
+## Module Standard
+- Module 01 is the reference implementation
+- All other modules must follow Module 01 structure
+- Only change business data per module, not layout/camera/events

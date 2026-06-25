@@ -17,7 +17,7 @@ export const useAppStore = create<AppState>((set) => ({
     email: 'admin@vifence.vn',
     role: 'admin',
   },
-  sidebarCollapsed: true,
+  sidebarCollapsed: false,
   notifications: 3,
   setUser: (user) => set({ user }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),

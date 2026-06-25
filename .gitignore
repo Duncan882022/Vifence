@@ -1,0 +1,9 @@
+node_modules/
+dist/
+docs/
+github-pages/
+vifence-pages.zip
+.DS_Store
+*.local
+.env
+.env.*
