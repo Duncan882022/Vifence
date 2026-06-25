@@ -207,8 +207,9 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   return (
     <div
       className={cn(
-        'grid gap-1.5 w-full min-h-0',
-        fillHeight ? 'h-full' : 'h-auto content-start',
+        'grid gap-1.5 w-full',
+        fillHeight ? 'h-full min-h-0' : 'h-auto content-start',
+        stackedPortrait && 'max-lg:overflow-visible',
       )}
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
@@ -216,7 +217,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
         <div
           key={cam.id}
           className={cn(
-            'relative w-full min-w-0',
+            'relative w-full min-w-0 shrink-0',
             fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
           )}
         >
@@ -304,6 +305,11 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     setSelectedIds(prev => (prev.length > 1 ? [prev[0]] : prev))
   }, [isLandscapeMobile])
 
+  /* Portrait mobile: always show thumb grid — collapse creates a flex-grow void + misplaced chevron */
+  useEffect(() => {
+    if (stackedPortrait) setSidebarOpen(true)
+  }, [stackedPortrait])
+
   useEffect(() => {
     const count = isLandscapeMobile ? 1 : safeCams.length
     onStreamCountChange?.(count)
@@ -327,19 +333,22 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   return (
     <>
       <div className={cn(
-        'flex flex-1 min-h-0 h-full',
-        isLandscapeMobile ? 'flex-col' : 'flex-col max-lg:landscape:flex-row lg:flex-row',
-        stackedPortrait && 'max-lg:!h-auto max-lg:flex-none',
+        stackedPortrait
+          ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
+          : 'flex flex-1 min-h-0 h-full',
+        !stackedPortrait && (isLandscapeMobile
+          ? 'flex-col'
+          : 'flex-col max-lg:landscape:flex-row lg:flex-row'),
       )}>
         <div className={cn(
-          'min-h-0 p-2',
-          isLandscapeMobile ? 'flex-1 min-w-0' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
-          stackedPortrait && 'max-lg:flex-none',
-          !isLandscapeMobile && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
+          'p-2',
+          isLandscapeMobile ? 'flex-1 min-w-0 min-h-0' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
+          !isLandscapeMobile && !stackedPortrait && 'min-h-0 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
             'w-full',
-            stackedPortrait && 'max-lg:h-auto',
+            stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
             isLandscapeMobile && 'h-full min-h-0 flex flex-col',
             !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0',
             !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
@@ -396,15 +405,15 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           </div>
         ) : (
         <div className={cn(
-          'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 overflow-hidden',
+          'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200',
           'border-t lg:border-t-0 lg:border-l',
           'max-lg:landscape:border-t-0 max-lg:landscape:border-l',
-          'max-lg:flex-1 max-lg:min-h-0',
-          stackedPortrait && 'max-lg:flex-none max-lg:min-h-[240px]',
-          'max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto',
+          stackedPortrait && 'max-lg:flex-none max-lg:overflow-visible',
+          'max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto max-lg:landscape:overflow-hidden',
+          'lg:overflow-hidden',
           sidebarOpen
             ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
-            : 'w-full lg:w-8 h-10 lg:h-full lg:min-h-0',
+            : 'hidden lg:flex lg:w-8 lg:h-full lg:min-h-0',
         )}>
           {sidebarOpen ? (
             <>
@@ -429,17 +438,24 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                   <span className="text-[8px] lg:text-[9px] text-muted-foreground/60">
                     Đang xem <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
                   </span>
-                  <button
-                    onClick={() => setSidebarOpen(false)}
-                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                    title="Thu gọn"
-                  >
-                    <ChevronRight className="w-3 h-3" />
-                  </button>
+                  {isDesktop && (
+                    <button
+                      onClick={() => setSidebarOpen(false)}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                      title="Thu gọn"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto px-1.5 py-1.5 lg:px-2.5 lg:py-2.5">
+              <div className={cn(
+                'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5',
+                stackedPortrait
+                  ? 'shrink-0 max-h-[min(36vh,280px)] overflow-y-auto overscroll-y-contain'
+                  : 'flex-1 min-h-0 overflow-y-auto',
+              )}>
                 <div className="flex flex-col gap-2 lg:gap-3">
                   {sidebarGroups.map(({ key, cameras }) => (
                     <div key={key}>
