@@ -104,10 +104,18 @@ export function isDefaultCourseCamera(id: string): boolean {
 }
 
 export function getTrainingLocationsByZone(zone: TrainingZone): string[] {
-  const locations = MOCK_TRAINING_CAMERAS
-    .filter(c => c.streamType === 'fixed' && c.zone === zone)
-    .map(c => c.location)
-  return [...new Set(locations)]
+  const locations = [...new Set(
+    MOCK_TRAINING_CAMERAS
+      .filter(c => c.streamType === 'fixed' && c.zone === zone)
+      .map(c => c.location),
+  )]
+  const trainingRooms = locations.filter(l => /đào tạo|thực hành|sân tập|phòng họp|giải lao|y tế/i.test(l))
+  return (trainingRooms.length > 0 ? trainingRooms : locations).sort((a, b) => a.localeCompare(b, 'vi'))
+}
+
+export function defaultTrainingLocation(zone: TrainingZone): string {
+  const rooms = getTrainingLocationsByZone(zone)
+  return rooms.find(l => /đào tạo|thực hành/i.test(l)) ?? rooms[0] ?? ''
 }
 
 /** Vị trí phòng/khu đào tạo — ưu tiên phòng gắn khoá, fallback phòng đào tạo trong zone. */

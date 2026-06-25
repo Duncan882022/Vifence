@@ -4,7 +4,7 @@ import { ArrowLeft, Plus } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { useTrainingCourseStore } from '@/store/trainingCourse.store'
 import { getAllTrainingCourses } from '../services/trainingReport.service'
-import { getTrainingLocationsByZone } from '../data/trainingCameras'
+import { getTrainingLocationsByZone, defaultTrainingLocation } from '../data/trainingCameras'
 import { TrainingCourseList } from '../components/TrainingCourseList'
 import type { TrainingCourseMock } from '../data/trainingMockData'
 
@@ -23,7 +23,7 @@ interface FormState {
 const INITIAL_FORM: FormState = {
   title: '',
   zone: 'OCP1-A',
-  location: getTrainingLocationsByZone('OCP1-A')[0] ?? '',
+  location: defaultTrainingLocation('OCP1-A'),
   sessionDate: '2026-06-25',
   startTime: '08:00',
   endTime: '12:00',
@@ -52,7 +52,9 @@ export function CourseManagementPage() {
     setForm(f => ({
       ...f,
       zone,
-      location: locations.includes(f.location) ? f.location : (locations[0] ?? ''),
+      location: locations.includes(f.location)
+        ? f.location
+        : defaultTrainingLocation(zone),
     }))
   }
 
@@ -100,9 +102,9 @@ export function CourseManagementPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-3 shrink-0">
-        <Panel title="Tạo khoá học" fit className="shrink-0">
-          <form onSubmit={handleSubmit} className="space-y-3 p-1">
+      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-3 shrink-0 items-start">
+        <Panel title="Tạo khoá học" fit noPadding className="shrink-0 self-start xl:sticky xl:top-4 w-full">
+          <form onSubmit={handleSubmit} className="space-y-3 p-4 max-h-[calc(100dvh-10rem)] overflow-y-auto overscroll-y-contain">
             <label className="block space-y-1">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                 Tên khoá học
@@ -130,18 +132,26 @@ export function CourseManagementPage() {
 
             <label className="block space-y-1">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Vị trí
+                Vị trí <span className="text-red-400">*</span>
               </span>
               <select
+                id="course-location"
+                required
                 value={form.location}
                 onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg bg-[#0b0f1a] border border-[#1e2433] text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
               >
-                {locationOptions.map(loc => (
-                  <option key={loc} value={loc}>{loc}</option>
-                ))}
+                {locationOptions.length === 0 ? (
+                  <option value="">— Chọn khu vực trước —</option>
+                ) : (
+                  locationOptions.map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))
+                )}
               </select>
-              <p className="text-[9px] text-muted-foreground/50">Danh sách phòng theo khu vực {form.zone}</p>
+              <p className="text-[9px] text-muted-foreground/50">
+                Phòng / khu đào tạo thuộc {form.zone}
+              </p>
             </label>
 
             <label className="block space-y-1">
