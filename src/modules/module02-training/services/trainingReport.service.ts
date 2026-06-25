@@ -1,5 +1,12 @@
 import { TRAINING_COURSES } from '@/modules/module02-training/components/TrainingCourseAccordion'
 import type { TrainingCourseMock } from '@/modules/module02-training/data/trainingMockData'
+import { resolveCourseLocation } from '@/modules/module02-training/data/trainingCameras'
+import {
+  attendanceStatusConfig,
+  attendeeHasException,
+  getAttendanceDetailLine,
+  getAttendeeBadges,
+} from '@/modules/module02-training/components/TrainingEventTable'
 
 export function getAllTrainingCourses(customCourses: TrainingCourseMock[]): TrainingCourseMock[] {
   return [...TRAINING_COURSES, ...customCourses]
@@ -27,6 +34,7 @@ export interface TrainingReportRow {
   sessionDate: string
   title: string
   zone: string
+  location: string
   startTime: string
   endTime: string
   group: TrainingCourseMock['group']
@@ -36,6 +44,24 @@ export interface TrainingReportRow {
   attendanceRate: number
 }
 
+export interface TrainingReportAttendeeRow {
+  sessionDate: string
+  title: string
+  zone: string
+  location: string
+  startTime: string
+  endTime: string
+  courseGroup: TrainingCourseMock['group']
+  employeeCode: string
+  name: string
+  company: string
+  companyCode: string
+  role: string
+  statusLabels: string
+  statusDetail: string
+  hasException: boolean
+}
+
 export interface TrainingReportSummary {
   courseCount: number
   attendeeSlots: number
@@ -43,6 +69,7 @@ export interface TrainingReportSummary {
   exceptions: number
   complianceRate: number
   rows: TrainingReportRow[]
+  attendeeRows: TrainingReportAttendeeRow[]
 }
 
 const GROUP_LABEL: Record<TrainingCourseMock['group'], string> = {
@@ -55,9 +82,75 @@ export function groupLabel(group: TrainingCourseMock['group']): string {
   return GROUP_LABEL[group]
 }
 
+export function filterTrainingCourses(
+  courses: TrainingCourseMock[],
+  query: string,
+): TrainingCourseMock[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return courses
+  return courses.filter(c => {
+    const location = resolveCourseLocation(c.title, c.zone, c.location)
+    const haystack = [
+      c.title,
+      c.zone,
+      location,
+      c.sessionDate,
+      groupLabel(c.group),
+      c.startTime,
+      c.endTime,
+    ].join(' ').toLowerCase()
+    return haystack.includes(q)
+  })
+}
+
 function inDateRange(sessionDate: string, fromIso: string, toIso: string): boolean {
   const iso = sessionDateToIso(sessionDate)
   return iso >= fromIso && iso <= toIso
+}
+
+function displaySessionDate(sessionDate: string): string {
+  return sessionDate.includes('/') && sessionDate.length >= 10
+    ? sessionDate
+    : isoToDisplayDate(sessionDateToIso(sessionDate))
+}
+
+function buildAttendeeRows(courses: TrainingCourseMock[]): TrainingReportAttendeeRow[] {
+  const rows: TrainingReportAttendeeRow[] = []
+
+  for (const c of courses) {
+    const sessionDate = displaySessionDate(c.sessionDate)
+    const location = resolveCourseLocation(c.title, c.zone, c.location)
+
+    for (const att of c.attendees) {
+      const badges = getAttendeeBadges(att)
+      rows.push({
+        sessionDate,
+        title: c.title,
+        zone: c.zone,
+        location,
+        startTime: c.startTime,
+        endTime: c.endTime,
+        courseGroup: c.group,
+        employeeCode: att.employeeCode,
+        name: att.name,
+        company: att.company,
+        companyCode: att.companyCode,
+        role: att.role,
+        statusLabels: badges.map(b => attendanceStatusConfig[b].label).join(', '),
+        statusDetail: c.group === 'upcoming'
+          ? 'Chưa bắt đầu'
+          : (getAttendanceDetailLine(att) || attendanceStatusConfig[badges[0]].label),
+        hasException: attendeeHasException(att),
+      })
+    }
+  }
+
+  return rows.sort((a, b) => {
+    const byDate = sessionDateToIso(a.sessionDate).localeCompare(sessionDateToIso(b.sessionDate))
+    if (byDate !== 0) return byDate
+    const byCourse = a.title.localeCompare(b.title, 'vi')
+    return byCourse !== 0 ? byCourse : a.name.localeCompare(b.name, 'vi')
+  })
 }
 
 export function buildTrainingReport(
@@ -77,11 +170,10 @@ export function buildTrainingReport(
       : 0
     return {
       id: c.id,
-      sessionDate: c.sessionDate.includes('/') && c.sessionDate.length >= 10
-        ? c.sessionDate
-        : isoToDisplayDate(sessionDateToIso(c.sessionDate)),
+      sessionDate: displaySessionDate(c.sessionDate),
       title: c.title,
       zone: c.zone,
+      location: resolveCourseLocation(c.title, c.zone, c.location),
       startTime: c.startTime,
       endTime: c.endTime,
       group: c.group,
@@ -107,43 +199,113 @@ export function buildTrainingReport(
     exceptions,
     complianceRate,
     rows,
+    attendeeRows: buildAttendeeRows(filtered),
   }
 }
 
-export function exportTrainingReportCsv(summary: TrainingReportSummary, fromIso: string, toIso: string): void {
-  const header = [
-    'Ngày',
-    'Khoá học',
-    'Khu vực',
-    'Giờ bắt đầu',
-    'Giờ kết thúc',
-    'Trạng thái',
-    'Có mặt',
-    'Đăng ký',
-    'Ngoại lệ',
-    'Tuân thủ (%)',
-  ]
-  const lines = summary.rows.map(r => [
-    r.sessionDate,
-    r.title,
-    r.zone,
-    r.startTime,
-    r.endTime,
-    groupLabel(r.group),
-    String(r.present),
-    String(r.total),
-    String(r.exceptions),
-    r.group === 'upcoming' ? '—' : String(r.attendanceRate),
-  ])
-  const csv = [header, ...lines]
-    .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
-    .join('\n')
+export async function exportTrainingReportExcel(
+  summary: TrainingReportSummary,
+  fromIso: string,
+  toIso: string,
+): Promise<void> {
+  const XLSX = await import('xlsx')
+  const fromDisplay = isoToDisplayDate(fromIso)
+  const toDisplay = isoToDisplayDate(toIso)
 
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `bao-cao-dao-tao_${fromIso}_${toIso}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
+  const summarySheet: (string | number)[][] = [
+    ['BÁO CÁO ĐÀO TẠO'],
+    [`Khoảng thời gian: ${fromDisplay} – ${toDisplay}`],
+    [],
+    ['Chỉ tiêu', 'Giá trị', 'Ghi chú'],
+    ['Ca đào tạo', summary.courseCount, 'ca trong khoảng đã chọn'],
+    [
+      'Học viên ghi nhận',
+      summary.recorded,
+      summary.attendeeSlots > 0 ? `Trên ${summary.attendeeSlots} đăng ký ca đã chạy` : 'Chưa có ca đã chạy',
+    ],
+    [
+      'Ngoại lệ',
+      summary.exceptions,
+      summary.attendeeSlots > 0
+        ? `${Math.round((summary.exceptions / summary.attendeeSlots) * 1000) / 10}% trên ca đã chạy`
+        : '',
+    ],
+    [
+      'Tỷ lệ tuân thủ (%)',
+      summary.complianceRate,
+      summary.attendeeSlots > 0 ? `${summary.recorded}/${summary.attendeeSlots} học viên` : '',
+    ],
+    [],
+    [
+      'Ngày',
+      'Khoá học',
+      'Khu vực',
+      'Vị trí',
+      'Giờ bắt đầu',
+      'Giờ kết thúc',
+      'Trạng thái ca',
+      'Có mặt',
+      'Đăng ký',
+      'Ngoại lệ',
+      'Tuân thủ (%)',
+    ],
+    ...summary.rows.map(r => [
+      r.sessionDate,
+      r.title,
+      r.zone,
+      r.location,
+      r.startTime,
+      r.endTime,
+      groupLabel(r.group),
+      r.group === 'upcoming' ? '—' : r.present,
+      r.total,
+      r.group === 'upcoming' ? '—' : r.exceptions,
+      r.group === 'upcoming' ? '—' : r.attendanceRate,
+    ]),
+  ]
+
+  const attendeeSheet: (string | number)[][] = [
+    [
+      'Ngày',
+      'Khoá học',
+      'Khu vực',
+      'Vị trí',
+      'Giờ ca',
+      'Trạng thái ca',
+      'Mã NV',
+      'Họ tên',
+      'Nhà thầu',
+      'Mã NT',
+      'Chức danh',
+      'Điểm danh',
+      'Chi tiết giờ',
+      'Ngoại lệ',
+    ],
+    ...summary.attendeeRows.map(r => [
+      r.sessionDate,
+      r.title,
+      r.zone,
+      r.location,
+      `${r.startTime} – ${r.endTime}`,
+      groupLabel(r.courseGroup),
+      r.employeeCode,
+      r.name,
+      r.company,
+      r.companyCode,
+      r.role,
+      r.statusLabels,
+      r.statusDetail,
+      r.hasException ? 'Có' : 'Không',
+    ]),
+  ]
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summarySheet), 'Tổng hợp')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(attendeeSheet), 'Học viên')
+  XLSX.writeFile(workbook, `bao-cao-dao-tao_${fromIso}_${toIso}.xlsx`)
+}
+
+/** @deprecated use exportTrainingReportExcel */
+export function exportTrainingReportCsv(summary: TrainingReportSummary, fromIso: string, toIso: string): void {
+  void exportTrainingReportExcel(summary, fromIso, toIso)
 }

@@ -4,6 +4,7 @@ import type { TrainingCourseMock } from '@/modules/module02-training/data/traini
 export interface CreateCourseInput {
   title: string
   zone: TrainingCourseMock['zone']
+  location: string
   sessionDate: string
   startTime: string
   endTime: string
@@ -24,6 +25,7 @@ export const useTrainingCourseStore = create<TrainingCourseStore>((set) => ({
         id: `custom-${Date.now()}`,
         title: input.title.trim(),
         zone: input.zone,
+        location: input.location,
         sessionDate: input.sessionDate,
         startTime: input.startTime,
         endTime: input.endTime,

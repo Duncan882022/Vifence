@@ -30,6 +30,8 @@ export function formatCourseMeta(
   endTime: string,
   sessionDate: string,
   zone: TrainingZone,
+  location?: string,
 ): string {
-  return `${startTime} – ${endTime} · ${toDisplaySessionDate(sessionDate)} · ${zone}`
+  const loc = location ? ` · ${location}` : ''
+  return `${startTime} – ${endTime} · ${toDisplaySessionDate(sessionDate)} · ${zone}${loc}`
 }

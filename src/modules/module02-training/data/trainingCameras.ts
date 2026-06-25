@@ -1,5 +1,5 @@
 import type { Camera } from '@/types/camera'
-import { getCourseZone } from './trainingCourseMeta'
+import { getCourseZone, type TrainingZone } from './trainingCourseMeta'
 import { getStreamUrlForCamera } from './trainingCameraFeeds'
 
 export type CameraStreamType = 'fixed' | 'bodycam' | 'flycam'
@@ -101,6 +101,32 @@ export function groupCamerasForSidebar(
 
 export function isDefaultCourseCamera(id: string): boolean {
   return (DEFAULT_COURSE_CAMERA_IDS as readonly string[]).includes(id)
+}
+
+export function getTrainingLocationsByZone(zone: TrainingZone): string[] {
+  const locations = MOCK_TRAINING_CAMERAS
+    .filter(c => c.streamType === 'fixed' && c.zone === zone)
+    .map(c => c.location)
+  return [...new Set(locations)]
+}
+
+/** Vị trí phòng/khu đào tạo — ưu tiên phòng gắn khoá, fallback phòng đào tạo trong zone. */
+export function resolveCourseLocation(
+  courseName: string,
+  zone: TrainingZone,
+  explicit?: string,
+): string {
+  if (explicit) return explicit
+  const dedicated = MOCK_TRAINING_CAMERAS.find(
+    c => c.streamType === 'fixed' && c.courseName === courseName,
+  )
+  if (dedicated) return dedicated.location
+  const rooms = getTrainingLocationsByZone(zone)
+  return (
+    rooms.find(l => /đào tạo|thực hành|sân tập/i.test(l))
+    ?? rooms[0]
+    ?? zone
+  )
 }
 
 export function getCourseRoomCamera(courseName: string, zone?: string): TrainingCamera | undefined {

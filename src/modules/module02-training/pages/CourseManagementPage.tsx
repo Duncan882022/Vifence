@@ -1,27 +1,19 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Plus, BookOpen } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
-import { cn } from '@/utils/cn'
 import { useTrainingCourseStore } from '@/store/trainingCourse.store'
-import {
-  getAllTrainingCourses,
-  groupLabel,
-} from '../services/trainingReport.service'
-import { formatCourseMeta } from '../data/trainingCourseMeta'
+import { getAllTrainingCourses } from '../services/trainingReport.service'
+import { getTrainingLocationsByZone } from '../data/trainingCameras'
+import { TrainingCourseList } from '../components/TrainingCourseList'
 import type { TrainingCourseMock } from '../data/trainingMockData'
 
 const ZONES: TrainingCourseMock['zone'][] = ['OCP1-A', 'OCP1-B']
 
-const GROUP_STYLE: Record<TrainingCourseMock['group'], string> = {
-  upcoming: 'text-blue-400 bg-blue-500/15',
-  active: 'text-green-400 bg-green-500/15',
-  completed: 'text-gray-400 bg-gray-500/15',
-}
-
 interface FormState {
   title: string
   zone: TrainingCourseMock['zone']
+  location: string
   sessionDate: string
   startTime: string
   endTime: string
@@ -31,16 +23,11 @@ interface FormState {
 const INITIAL_FORM: FormState = {
   title: '',
   zone: 'OCP1-A',
+  location: getTrainingLocationsByZone('OCP1-A')[0] ?? '',
   sessionDate: '2026-06-25',
   startTime: '08:00',
   endTime: '12:00',
   total: '20',
-}
-
-function displayDate(sessionDate: string): string {
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(sessionDate)) return sessionDate
-  const [y, m, d] = sessionDate.split('-')
-  return y && m && d ? `${d}/${m}/${y}` : sessionDate
 }
 
 export function CourseManagementPage() {
@@ -55,11 +42,29 @@ export function CourseManagementPage() {
     [customCourses],
   )
 
+  const locationOptions = useMemo(
+    () => getTrainingLocationsByZone(form.zone),
+    [form.zone],
+  )
+
+  const handleZoneChange = (zone: TrainingCourseMock['zone']) => {
+    const locations = getTrainingLocationsByZone(zone)
+    setForm(f => ({
+      ...f,
+      zone,
+      location: locations.includes(f.location) ? f.location : (locations[0] ?? ''),
+    }))
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setSaved(false)
     if (!form.title.trim()) {
       setError('Vui lòng nhập tên khoá học')
+      return
+    }
+    if (!form.location) {
+      setError('Vui lòng chọn vị trí')
       return
     }
     const total = Number(form.total)
@@ -71,6 +76,7 @@ export function CourseManagementPage() {
     addCourse({
       title: form.title.trim(),
       zone: form.zone,
+      location: form.location,
       sessionDate: `${d}/${m}/${y}`,
       startTime: form.startTime,
       endTime: form.endTime,
@@ -83,7 +89,7 @@ export function CourseManagementPage() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout scrollable>
       <div className="flex items-center gap-3 shrink-0">
         <Link
           to="/module02"
@@ -94,8 +100,8 @@ export function CourseManagementPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-3 min-h-0 flex-1">
-        <Panel title="Tạo khoá học" className="shrink-0 xl:h-fit">
+      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-3 shrink-0">
+        <Panel title="Tạo khoá học" fit className="shrink-0">
           <form onSubmit={handleSubmit} className="space-y-3 p-1">
             <label className="block space-y-1">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -115,11 +121,27 @@ export function CourseManagementPage() {
               </span>
               <select
                 value={form.zone}
-                onChange={e => setForm(f => ({ ...f, zone: e.target.value as TrainingCourseMock['zone'] }))}
+                onChange={e => handleZoneChange(e.target.value as TrainingCourseMock['zone'])}
                 className="w-full px-3 py-2 rounded-lg bg-[#0b0f1a] border border-[#1e2433] text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
               >
                 {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
               </select>
+            </label>
+
+            <label className="block space-y-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Vị trí
+              </span>
+              <select
+                value={form.location}
+                onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-[#0b0f1a] border border-[#1e2433] text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+              >
+                {locationOptions.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+              <p className="text-[9px] text-muted-foreground/50">Danh sách phòng theo khu vực {form.zone}</p>
             </label>
 
             <label className="block space-y-1">
@@ -188,46 +210,14 @@ export function CourseManagementPage() {
         <Panel
           title="Danh sách khoá học"
           noPadding
-          className="flex-1 min-h-[320px] sm:min-h-[420px] flex flex-col"
+          fit
+          className="min-h-[320px] sm:min-h-[420px]"
         >
-          <div className="px-3 py-2 border-b border-[#1e2433] shrink-0">
-            <p className="text-[10px] text-muted-foreground">
-              {allCourses.length} ca · gồm ca hệ thống và ca vừa tạo
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-[#1e2433]">
-            {allCourses.map(course => (
-              <div key={course.id} className="px-3 py-3 flex items-start gap-3 hover:bg-[#1a2235]/30 transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <BookOpen className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-[11px] font-semibold text-foreground">{course.title}</p>
-                    <span className={cn(
-                      'text-[8px] font-bold px-1.5 py-0.5 rounded',
-                      GROUP_STYLE[course.group],
-                    )}>
-                      {groupLabel(course.group)}
-                    </span>
-                    {course.id.startsWith('custom-') && (
-                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-primary/15 text-primary">
-                        Mới tạo
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {formatCourseMeta(course.startTime, course.endTime, displayDate(course.sessionDate), course.zone)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground/70 mt-1 tabular-nums">
-                    {course.group === 'upcoming'
-                      ? `Đăng ký ${course.total} học viên`
-                      : `${course.present ?? 0}/${course.total} có mặt · ${course.exceptions} ngoại lệ`}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <TrainingCourseList
+            courses={allCourses}
+            showCustomBadge
+            emptyMessage="Không tìm thấy khoá học phù hợp"
+          />
         </Panel>
       </div>
     </PageLayout>

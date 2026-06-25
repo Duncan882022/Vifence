@@ -11,6 +11,8 @@ export interface TrainingCourseMock {
   id: string
   title: string
   zone: 'OCP1-A' | 'OCP1-B'
+  /** Phòng / khu đào tạo trong zone */
+  location?: string
   sessionDate: string
   startTime: string
   endTime: string

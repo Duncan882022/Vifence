@@ -7,13 +7,12 @@ import { cn } from '@/utils/cn'
 import { useTrainingCourseStore } from '@/store/trainingCourse.store'
 import {
   buildTrainingReport,
-  exportTrainingReportCsv,
+  exportTrainingReportExcel,
   getAllTrainingCourses,
   groupLabel,
+  type TrainingReportRow,
 } from '../services/trainingReport.service'
 import type { KPIData } from '@/types/api'
-
-import type { TrainingReportRow } from '../services/trainingReport.service'
 
 const DEFAULT_FROM = '2026-06-17'
 const DEFAULT_TO = '2026-06-24'
@@ -24,12 +23,20 @@ const GROUP_DOT: Record<string, string> = {
   completed: 'bg-gray-400',
 }
 
+const TABLE_COLS = 'grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_64px_64px_64px_76px]'
+
 function ReportTableRow({ row }: { row: TrainingReportRow }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_72px_72px_72px_80px] gap-x-2 items-center px-3 py-2.5 hover:bg-[#1a2235]/30 transition-colors">
+    <div className={cn(
+      'grid gap-x-2 items-center px-3 py-2.5 hover:bg-[#1a2235]/30 transition-colors',
+      TABLE_COLS,
+    )}>
       <div className="min-w-0">
         <p className="text-[10px] font-semibold text-foreground truncate">{row.title}</p>
         <p className="text-[9px] text-muted-foreground/60 truncate">{row.zone}</p>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] text-foreground truncate">{row.location}</p>
       </div>
       <div className="min-w-0">
         <p className="text-[10px] text-foreground tabular-nums">{row.sessionDate}</p>
@@ -58,6 +65,54 @@ function ReportTableRow({ row }: { row: TrainingReportRow }) {
         <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', GROUP_DOT[row.group])} />
         {groupLabel(row.group)}
       </span>
+    </div>
+  )
+}
+
+function ReportMobileCard({ row }: { row: TrainingReportRow }) {
+  return (
+    <div className="px-3 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold text-foreground">{row.title}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{row.zone} · {row.location}</p>
+        </div>
+        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-muted-foreground shrink-0">
+          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', GROUP_DOT[row.group])} />
+          {groupLabel(row.group)}
+        </span>
+      </div>
+      <p className="text-[10px] text-muted-foreground tabular-nums">
+        {row.sessionDate} · {row.startTime} – {row.endTime}
+      </p>
+      <div className="grid grid-cols-3 gap-2 pt-1">
+        <div>
+          <p className="text-[8px] text-muted-foreground/50">Có mặt</p>
+          <p className="text-[10px] font-semibold tabular-nums">
+            {row.group === 'upcoming' ? '—' : `${row.present}/${row.total}`}
+          </p>
+        </div>
+        <div>
+          <p className="text-[8px] text-muted-foreground/50">Ngoại lệ</p>
+          <p className={cn(
+            'text-[10px] font-semibold tabular-nums',
+            row.exceptions > 0 ? 'text-orange-400' : 'text-muted-foreground',
+          )}>
+            {row.group === 'upcoming' ? '—' : row.exceptions}
+          </p>
+        </div>
+        <div>
+          <p className="text-[8px] text-muted-foreground/50">Tuân thủ</p>
+          <p className={cn(
+            'text-[10px] font-semibold tabular-nums',
+            row.group === 'upcoming'
+              ? 'text-muted-foreground/40'
+              : row.attendanceRate >= 75 ? 'text-green-400' : 'text-red-400',
+          )}>
+            {row.group === 'upcoming' ? '—' : `${row.attendanceRate}%`}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -110,11 +165,11 @@ export function ExecutiveReportPage() {
   ]
 
   const handleExport = () => {
-    exportTrainingReportCsv(report, fromDate, toDate)
+    exportTrainingReportExcel(report, fromDate, toDate)
   }
 
   return (
-    <PageLayout>
+    <PageLayout scrollable>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
         <Link
           to="/module02"
@@ -131,11 +186,11 @@ export function ExecutiveReportPage() {
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
           <Download className="w-3.5 h-3.5" />
-          Xuất báo cáo
+          Xuất Excel
         </button>
       </div>
 
-      <Panel title="Khoảng thời gian" className="shrink-0">
+      <Panel title="Khoảng thời gian" fit className="shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           <label className="flex-1 space-y-1">
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -174,75 +229,36 @@ export function ExecutiveReportPage() {
         ))}
       </div>
 
-      <Panel title="Thống kê theo ca học" noPadding className="flex-1 min-h-[360px] flex flex-col">
+      <Panel title="Thống kê theo ca học" noPadding fit className="shrink-0">
         {report.rows.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-8">
             <p className="text-sm text-muted-foreground">Không có ca học trong khoảng thời gian này</p>
           </div>
         ) : (
           <>
-            {/* Desktop table */}
-            <div className="hidden lg:block flex-1 min-h-0 flex flex-col">
-              <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_72px_72px_72px_80px] gap-x-2 px-3 py-2 border-b border-[#1e2433] shrink-0 bg-[#0a0e1a]">
-                {['Khoá học', 'Thời gian', 'Có mặt', 'Ngoại lệ', 'Tuân thủ', 'Trạng thái'].map(h => (
+            {/* Desktop */}
+            <div className="hidden lg:block overflow-x-auto">
+              <div className={cn(
+                'grid gap-x-2 px-3 py-2 border-b border-[#1e2433] bg-[#0a0e1a] min-w-[720px]',
+                TABLE_COLS,
+              )}>
+                {['Khoá học', 'Vị trí', 'Thời gian', 'Có mặt', 'Ngoại lệ', 'Tuân thủ', 'Trạng thái'].map(h => (
                   <span key={h} className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
                     {h}
                   </span>
                 ))}
               </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-[#1e2433]">
+              <div className="divide-y divide-[#1e2433] min-w-[720px]">
                 {report.rows.map(row => (
                   <ReportTableRow key={row.id} row={row} />
                 ))}
               </div>
             </div>
 
-            {/* Mobile cards */}
-            <div className="lg:hidden flex-1 overflow-y-auto divide-y divide-[#1e2433]">
+            {/* Mobile / tablet */}
+            <div className="lg:hidden divide-y divide-[#1e2433]">
               {report.rows.map(row => (
-                <div key={row.id} className="px-3 py-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-foreground">{row.title}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{row.zone}</p>
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-[9px] font-bold text-muted-foreground shrink-0">
-                      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', GROUP_DOT[row.group])} />
-                      {groupLabel(row.group)}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground tabular-nums">
-                    {row.sessionDate} · {row.startTime} – {row.endTime}
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    <div>
-                      <p className="text-[8px] text-muted-foreground/50">Có mặt</p>
-                      <p className="text-[10px] font-semibold tabular-nums">
-                        {row.group === 'upcoming' ? '—' : `${row.present}/${row.total}`}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] text-muted-foreground/50">Ngoại lệ</p>
-                      <p className={cn(
-                        'text-[10px] font-semibold tabular-nums',
-                        row.exceptions > 0 ? 'text-orange-400' : 'text-muted-foreground',
-                      )}>
-                        {row.group === 'upcoming' ? '—' : row.exceptions}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] text-muted-foreground/50">Tuân thủ</p>
-                      <p className={cn(
-                        'text-[10px] font-semibold tabular-nums',
-                        row.group === 'upcoming'
-                          ? 'text-muted-foreground/40'
-                          : row.attendanceRate >= 75 ? 'text-green-400' : 'text-red-400',
-                      )}>
-                        {row.group === 'upcoming' ? '—' : `${row.attendanceRate}%`}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <ReportMobileCard key={row.id} row={row} />
               ))}
             </div>
           </>
