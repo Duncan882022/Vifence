@@ -329,20 +329,21 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
       <div className={cn(
         'flex flex-1 min-h-0 h-full',
         isLandscapeMobile ? 'flex-col' : 'flex-col max-lg:landscape:flex-row lg:flex-row',
-        !isLandscapeMobile && 'max-lg:h-auto',
+        stackedPortrait && 'max-lg:!h-auto max-lg:flex-none',
       )}>
         <div className={cn(
           'min-h-0 p-2',
           isLandscapeMobile ? 'flex-1 min-w-0' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          stackedPortrait && 'max-lg:flex-none',
           !isLandscapeMobile && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
-            'w-full min-h-0',
-            stackedPortrait && 'max-lg:max-h-[38vh] max-lg:overflow-y-auto overscroll-y-contain',
-            isLandscapeMobile && 'h-full flex flex-col',
-            !isLandscapeMobile && !stackedPortrait && 'h-full',
+            'w-full',
+            stackedPortrait && 'max-lg:h-auto',
+            isLandscapeMobile && 'h-full min-h-0 flex flex-col',
+            !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0',
             !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
-            'lg:overflow-y-auto lg:overflow-x-hidden',
+            'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
               <div className="flex-1 min-h-0 w-full">

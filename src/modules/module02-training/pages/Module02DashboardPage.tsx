@@ -73,7 +73,8 @@ export function Module02DashboardPage() {
               noPadding
               className={cn(
                 tier2Open && 'lg:flex-1 lg:min-h-0',
-                tier2Open && 'max-lg:min-h-[300px] max-lg:!h-auto',
+                tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:overflow-visible',
+                tier2Open && 'max-lg:portrait:[&>div:last-child]:flex-none max-lg:portrait:[&>div:last-child]:overflow-visible',
                 tier2Open && !tier1Open && 'max-lg:landscape:!h-[calc(100dvh-64px-3.5rem)] max-lg:landscape:max-h-[calc(100dvh-64px-3.5rem)] max-lg:landscape:min-h-0',
                 tier2Open && tier1Open && 'max-lg:landscape:!h-[calc(100dvh-64px-8.5rem)] max-lg:landscape:max-h-[calc(100dvh-64px-8.5rem)] max-lg:landscape:min-h-0',
               )}
