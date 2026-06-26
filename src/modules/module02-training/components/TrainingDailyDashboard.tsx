@@ -277,7 +277,7 @@ export function TrainingDailyDashboard({ summary, embedded }: TrainingDailyDashb
   const { metrics, today } = summary
 
   return (
-    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3 max-lg:landscape:gap-2">
+    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 max-lg:landscape:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3 max-lg:landscape:gap-1.5">
       {metrics.map((metric, i) => (
         <DailyMetricCard
           key={metric.label}

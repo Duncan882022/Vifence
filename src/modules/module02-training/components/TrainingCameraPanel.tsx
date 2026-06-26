@@ -369,7 +369,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
             'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
-              <div className="h-full max-h-full aspect-video w-auto max-w-full min-h-[120px] relative overflow-hidden rounded-lg border border-[#1e2433] bg-[#060b14] mx-auto">
+              <div className="w-full h-full min-h-0 relative overflow-hidden rounded-lg border border-[#1e2433] bg-[#060b14]">
                 <CameraCell
                   cam={primaryCam}
                   onMaximize={() => setFocusedCam(primaryCam)}
