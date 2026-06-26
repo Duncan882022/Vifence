@@ -315,11 +315,10 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     })
   }, [isLandscapeMobile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Portrait: always show thumbs. Landscape: collapse picker so video gets height. */
+  /* Portrait mobile: always show thumb grid — collapse creates a flex-grow void + misplaced chevron */
   useEffect(() => {
     if (stackedPortrait) setSidebarOpen(true)
-    else if (isLandscapeMobile) setSidebarOpen(false)
-  }, [stackedPortrait, isLandscapeMobile])
+  }, [stackedPortrait])
 
   useEffect(() => {
     const count = isLandscapeMobile ? 1 : safeCams.length
@@ -350,26 +349,27 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
       <div className={cn(
         stackedPortrait
           ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
-          : 'flex flex-1 min-h-0 h-full w-full',
-        isLandscapeMobile && 'grid min-h-[200px] h-full grid-rows-[minmax(160px,1fr)_auto]',
-        !stackedPortrait && !isLandscapeMobile && 'flex-col max-lg:landscape:flex-row lg:flex-row',
+          : 'flex flex-1 min-h-0 h-full',
+        !stackedPortrait && (isLandscapeMobile
+          ? 'flex-col justify-start'
+          : 'flex-col max-lg:landscape:flex-row lg:flex-row'),
       )}>
         <div className={cn(
-          'min-h-0 min-w-0',
-          isLandscapeMobile && 'row-start-1 overflow-hidden p-1',
-          !isLandscapeMobile && 'p-2 shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          'p-2',
+          isLandscapeMobile ? 'shrink-0 w-full' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
           stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
-          !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
+          !isLandscapeMobile && !stackedPortrait && 'min-h-0 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
-            'w-full min-h-0',
+            'w-full',
             stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
-            isLandscapeMobile && 'h-full',
-            !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0 max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
+            isLandscapeMobile && 'shrink-0',
+            !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0',
+            !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
-              <div className="w-full h-full min-h-[160px] relative overflow-hidden rounded-lg border border-[#1e2433] bg-[#060b14]">
+              <div className="w-full max-w-[min(100%,calc(50dvh*16/9))] aspect-video mx-auto shrink-0 relative overflow-hidden rounded-lg">
                 <CameraCell
                   cam={primaryCam}
                   onMaximize={() => setFocusedCam(primaryCam)}
@@ -387,59 +387,51 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         </div>
 
         {isLandscapeMobile ? (
-          <div className="row-start-2 shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
-            <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-[#1e2433] shrink-0">
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Chọn camera
-                </p>
-                <p className="text-[8px] text-muted-foreground/60 truncate">
-                  {primaryCam ? cameraDisplayLabel(primaryCam) : '—'} · {filterTab}
-                </p>
-              </div>
+          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
+            <div className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-none border-b border-[#1e2433] shrink-0">
+              {CAMERA_FILTER_TABS.map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setFilterTab(tab)}
+                  className={cn(
+                    'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                    filterTab === tab
+                      ? 'bg-primary/20 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between px-2 py-0.5 border-b border-[#1e2433] shrink-0">
+              <span className="text-[8px] text-muted-foreground/60">
+                Đang xem <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+              </span>
               <button
                 onClick={() => setSidebarOpen(open => !open)}
-                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                title={sidebarOpen ? 'Thu gọn bộ lọc' : 'Mở bộ lọc'}
-                aria-expanded={sidebarOpen}
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                title={sidebarOpen ? 'Thu gọn' : 'Mở rộng'}
               >
                 {sidebarOpen
-                  ? <ChevronRight className="w-3.5 h-3.5" />
-                  : <ChevronLeft className="w-3.5 h-3.5" />
+                  ? <ChevronRight className="w-3 h-3" />
+                  : <ChevronLeft className="w-3 h-3" />
                 }
               </button>
             </div>
             {sidebarOpen && (
-              <>
-                <div className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-none border-b border-[#1e2433] shrink-0">
-                  {CAMERA_FILTER_TABS.map(tab => (
-                    <button
-                      key={tab}
-                      onClick={() => setFilterTab(tab)}
-                      className={cn(
-                        'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
-                        filterTab === tab
-                          ? 'bg-primary/20 text-primary'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
-                      )}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain">
-                  {filtered.map(cam => (
-                    <CameraThumb
-                      key={cam.id}
-                      cam={cam}
-                      selected={selectedIds.includes(cam.id)}
-                      onClick={() => handleThumbClick(cam)}
-                      compact
-                      strip
-                    />
-                  ))}
-                </div>
-              </>
+              <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain max-h-[72px]">
+                {filtered.map(cam => (
+                  <CameraThumb
+                    key={cam.id}
+                    cam={cam}
+                    selected={selectedIds.includes(cam.id)}
+                    onClick={() => handleThumbClick(cam)}
+                    compact
+                    strip
+                  />
+                ))}
+              </div>
             )}
           </div>
         ) : (

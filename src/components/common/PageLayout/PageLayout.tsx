@@ -7,14 +7,12 @@ import { useShellLayout } from '@/hooks/useShellLayout'
 interface LayoutProps {
   children: React.ReactNode
   className?: string
-  /** Extra classes on the inner content wrapper */
-  contentClassName?: string
   /** Cho phép scroll dọc trên desktop — dùng cho trang form/báo cáo */
   scrollable?: boolean
 }
 
 /** Root wrapper — fills viewport below the header */
-export function PageLayout({ children, className, contentClassName, scrollable = false }: LayoutProps) {
+export function PageLayout({ children, className, scrollable = false }: LayoutProps) {
   const { sidebarInset } = useShellLayout()
 
   return (
@@ -28,8 +26,7 @@ export function PageLayout({ children, className, contentClassName, scrollable =
           'min-h-[calc(100vh-64px)] overflow-y-auto',
           scrollable
             ? 'lg:min-h-[calc(100vh-64px)] lg:overflow-y-auto'
-            : 'lg:h-[calc(100vh-64px)] lg:overflow-hidden',
-          contentClassName,
+            : 'lg:h-[calc(100vh-64px)] lg:overflow-hidden max-lg:landscape:min-h-[calc(100dvh-64px)]',
         )}
       >
         {children}
