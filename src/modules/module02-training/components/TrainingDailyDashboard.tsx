@@ -190,42 +190,43 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
   return (
     <div className={cn(
       'border border-[#1e2433] border-l-2 rounded-lg flex flex-col gap-2 min-h-[96px]',
-      'max-lg:landscape:min-h-[84px] max-lg:landscape:gap-1.5 max-lg:landscape:p-2.5',
+      'max-lg:landscape:min-h-0 max-lg:landscape:gap-1 max-lg:landscape:p-2',
       'hover:border-[#2a3855]/80 transition-colors',
       'p-3',
       embedded ? 'bg-[#0b0f1a]' : 'bg-[#0d1117]',
       accent,
     )}>
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0 max-lg:landscape:gap-1.5">
         <div className={cn(
           'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 self-center',
+          'max-lg:landscape:w-7 max-lg:landscape:h-7',
           iconBg,
         )}>
-          <Icon className={cn('w-4 h-4', iconColor)} />
+          <Icon className={cn('w-4 h-4 max-lg:landscape:w-3.5 max-lg:landscape:h-3.5', iconColor)} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide leading-tight truncate">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide leading-tight truncate max-lg:landscape:text-[8px]">
             {label}
           </p>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className={cn(
               'font-bold text-foreground leading-none tabular-nums tracking-tight',
-              index === 3 ? 'text-3xl' : 'text-2xl',
+              index === 3 ? 'text-3xl max-lg:landscape:text-xl' : 'text-2xl max-lg:landscape:text-lg',
             )}>
               {value}
             </span>
             {unit && (
-              <span className="text-[11px] font-medium text-muted-foreground shrink-0">{unit}</span>
+              <span className="text-[11px] font-medium text-muted-foreground shrink-0 max-lg:landscape:text-[9px]">{unit}</span>
             )}
           </div>
         </div>
       </div>
-      <div className="pl-11 min-w-0">
+      <div className="pl-11 min-w-0 max-lg:landscape:hidden">
         <MetricInsight index={index} stats={stats} />
       </div>
 
       {showYesterdayRow && (
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#1e2433]/70 mt-auto">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#1e2433]/70 mt-auto max-lg:landscape:hidden">
           <span className="text-[10px] text-muted-foreground whitespace-nowrap truncate min-w-0">
             Hôm qua{' '}
             <span className="font-semibold text-muted-foreground/90 tabular-nums">
@@ -249,6 +250,7 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
       {showCompare && !showYesterdayRow && (
         <div className={cn(
           'flex items-center gap-1 text-[10px] font-medium pt-2 border-t border-[#1e2433]/70 mt-auto',
+          'max-lg:landscape:hidden',
           isGood && 'text-green-400',
           isBad && 'text-red-400',
           isNeutral && 'text-muted-foreground',
@@ -277,7 +279,7 @@ export function TrainingDailyDashboard({ summary, embedded }: TrainingDailyDashb
   const { metrics, today } = summary
 
   return (
-    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 max-lg:landscape:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3 max-lg:landscape:gap-1.5">
+    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 max-lg:landscape:grid-cols-4 xl:grid-cols-4 gap-2.5 sm:gap-3 max-lg:landscape:gap-1.5">
       {metrics.map((metric, i) => (
         <DailyMetricCard
           key={metric.label}
