@@ -315,10 +315,11 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     })
   }, [isLandscapeMobile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Portrait mobile: always show thumb grid — collapse creates a flex-grow void + misplaced chevron */
+  /* Portrait: always show thumbs. Landscape: collapse picker so video gets height. */
   useEffect(() => {
     if (stackedPortrait) setSidebarOpen(true)
-  }, [stackedPortrait])
+    else if (isLandscapeMobile) setSidebarOpen(false)
+  }, [stackedPortrait, isLandscapeMobile])
 
   useEffect(() => {
     const count = isLandscapeMobile ? 1 : safeCams.length
@@ -350,25 +351,25 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         stackedPortrait
           ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
           : 'flex flex-1 min-h-0 h-full w-full',
-        isLandscapeMobile && 'flex-col min-h-0',
+        isLandscapeMobile && 'grid min-h-[200px] h-full grid-rows-[minmax(160px,1fr)_auto]',
         !stackedPortrait && !isLandscapeMobile && 'flex-col max-lg:landscape:flex-row lg:flex-row',
       )}>
         <div className={cn(
-          'p-2 min-h-0',
-          isLandscapeMobile && 'flex-1 flex items-center justify-center overflow-hidden',
-          !isLandscapeMobile && 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          'min-h-0 min-w-0',
+          isLandscapeMobile && 'row-start-1 overflow-hidden p-1',
+          !isLandscapeMobile && 'p-2 shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
           stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
           !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
             'w-full min-h-0',
             stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
-            isLandscapeMobile && 'h-full flex items-center justify-center',
+            isLandscapeMobile && 'h-full',
             !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0 max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
-              <div className="h-full max-h-full aspect-video w-auto max-w-full relative overflow-hidden rounded-lg border border-[#1e2433] shrink-0">
+              <div className="w-full h-full min-h-[160px] relative overflow-hidden rounded-lg border border-[#1e2433] bg-[#060b14]">
                 <CameraCell
                   cam={primaryCam}
                   onMaximize={() => setFocusedCam(primaryCam)}
@@ -386,7 +387,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         </div>
 
         {isLandscapeMobile ? (
-          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
+          <div className="row-start-2 shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
             <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-[#1e2433] shrink-0">
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
