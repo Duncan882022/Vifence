@@ -1,17 +1,12 @@
 import {
-  BookOpen, Users, AlertTriangle, ShieldCheck,
   TrendingUp, TrendingDown, Minus,
+  Clock, Radio, Ban, CheckCircle2,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { IconTooltip, IconTooltipBadge } from '@/components/common/IconTooltip/IconTooltip'
 import type { KPIData } from '@/types/api'
 import type { TrainingDailySummary, TrainingDayStats } from '../services/trainingKpi.service'
-
-const METRIC_META = [
-  { icon: BookOpen,      iconColor: 'text-green-400',  iconBg: 'bg-green-500/10',  accent: 'border-l-green-500/50' },
-  { icon: Users,         iconColor: 'text-sky-400',    iconBg: 'bg-sky-500/10',    accent: 'border-l-sky-500/50'    },
-  { icon: AlertTriangle, iconColor: 'text-orange-400', iconBg: 'bg-orange-500/10', accent: 'border-l-orange-500/50' },
-  { icon: ShieldCheck,   iconColor: 'text-blue-400',   iconBg: 'bg-blue-500/10',   accent: 'border-l-blue-500/50'   },
-] as const
+import { TRAINING_METRIC_META } from '../data/trainingMetricMeta'
 
 type MetricIndex = 0 | 1 | 2 | 3
 
@@ -21,52 +16,31 @@ function formatDelta(change: number, changeUnit?: string): string {
   return `${prefix}${change}${suffix}`
 }
 
-function StatChip({
-  value,
-  label,
-  className,
-  pulse,
-}: {
-  value: number
-  label: string
-  className: string
-  pulse?: boolean
-}) {
-  return (
-    <span className={cn(
-      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold tabular-nums',
-      className,
-    )}>
-      {pulse && (
-        <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current shrink-0" />
-      )}
-      <span>{value}</span>
-      <span className="font-medium opacity-80">{label}</span>
-    </span>
-  )
-}
-
 function CourseBreakdownChips({ stats }: { stats: TrainingDayStats }) {
   const chips = [
     {
       value: stats.coursesUpcoming,
-      label: 'sắp',
+      icon: Clock,
+      tip: 'Ca sắp diễn ra',
       className: 'bg-sky-500/10 text-sky-400',
     },
     {
       value: stats.coursesLive > 0 ? stats.coursesLive : stats.coursesActive,
-      label: 'đang',
+      icon: Radio,
+      tip: 'Ca đang diễn ra',
       className: 'bg-green-500/10 text-green-400',
       pulse: stats.coursesLive > 0,
     },
     {
       value: stats.coursesCancelled,
-      label: 'đã huỷ',
+      icon: Ban,
+      tip: 'Ca đã huỷ',
       className: 'bg-red-500/10 text-red-400',
     },
     {
       value: stats.coursesCompleted,
-      label: 'xong',
+      icon: CheckCircle2,
+      tip: 'Ca đã hoàn thành',
       className: 'bg-gray-500/10 text-gray-400',
     },
   ]
@@ -74,10 +48,12 @@ function CourseBreakdownChips({ stats }: { stats: TrainingDayStats }) {
   return (
     <div className="flex flex-wrap gap-1 mt-1">
       {chips.map(chip => (
-        <StatChip
-          key={chip.label}
+        <IconTooltipBadge
+          key={chip.tip}
+          icon={chip.icon}
+          label={chip.tip}
+          tip={chip.tip}
           value={chip.value}
-          label={chip.label}
           className={chip.className}
           pulse={chip.pulse}
         />
@@ -99,16 +75,21 @@ function AttendeeInsight({ stats }: { stats: TrainingDayStats }) {
 
   return (
     <div className="mt-1 space-y-0.5">
-      <p className="text-[10px] font-semibold text-sky-400 tabular-nums leading-snug">
-        {stats.recorded}/{stats.enrolledStarted} ca đã chạy
+      <p
+        className="text-[10px] font-semibold text-sky-400 tabular-nums leading-snug"
+        title={`${stats.recorded}/${stats.enrolledStarted} ca đã chạy (${coverage}%)`}
+      >
+        {stats.recorded}/{stats.enrolledStarted} ca
         <span className="text-muted-foreground/60 font-medium ml-1">({coverage}%)</span>
       </p>
       {stats.studyingNow > 0 && (
-        <p className="text-[9px] text-muted-foreground/70 leading-snug">
+        <p
+          className="text-[9px] text-muted-foreground/70 leading-snug"
+          title={`${stats.studyingNow} học viên đang học`}
+        >
           <span className="inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-sky-400 shrink-0" />
             <span className="font-semibold text-sky-400 tabular-nums">{stats.studyingNow}</span>
-            {' '}đang học
           </span>
         </p>
       )}
@@ -129,11 +110,17 @@ function ExceptionInsight({ stats }: { stats: TrainingDayStats }) {
 
   return (
     <div className="mt-1 space-y-0.5">
-      <p className="text-[10px] font-semibold text-orange-400 tabular-nums leading-snug">
-        {rate}% trên ca đã chạy
+      <p
+        className="text-[10px] font-semibold text-orange-400 tabular-nums leading-snug"
+        title={`${rate}% ngoại lệ trên ca đã chạy`}
+      >
+        {rate}%
       </p>
-      <p className="text-[9px] text-muted-foreground/70 leading-snug">
-        {stats.exceptions}/{stats.enrolledStarted} học viên
+      <p
+        className="text-[9px] text-muted-foreground/70 leading-snug"
+        title={`${stats.exceptions}/${stats.enrolledStarted} học viên ngoại lệ`}
+      >
+        {stats.exceptions}/{stats.enrolledStarted} HV
       </p>
     </div>
   )
@@ -149,8 +136,11 @@ function ComplianceInsight({ stats }: { stats: TrainingDayStats }) {
   }
 
   return (
-    <p className="text-[10px] font-semibold text-blue-400/90 tabular-nums mt-1 leading-snug">
-      {stats.recorded}/{stats.enrolledStarted} học viên ghi nhận
+    <p
+      className="text-[10px] font-semibold text-blue-400/90 tabular-nums mt-1 leading-snug"
+      title={`${stats.recorded}/${stats.enrolledStarted} học viên ghi nhận`}
+    >
+      {stats.recorded}/{stats.enrolledStarted} HV
     </p>
   )
 }
@@ -166,16 +156,16 @@ function MetricInsight({ index, stats }: { index: MetricIndex; stats: TrainingDa
 
 interface DailyMetricCardProps {
   data: KPIData
-  meta: typeof METRIC_META[number]
+  meta: typeof TRAINING_METRIC_META[number]
   stats: TrainingDayStats
   index: MetricIndex
   embedded?: boolean
 }
 
 function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCardProps) {
-  const { icon: Icon, iconColor, iconBg, accent } = meta
+  const { icon: Icon, iconColor, iconBg, accent, tip } = meta
   const {
-    label, value, unit, change, changeType,
+    value, unit, change, changeType,
     previousValue, higherIsBetter = true, changeUnit,
   } = data
 
@@ -200,13 +190,10 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
           'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 self-center',
           iconBg,
         )}>
-          <Icon className={cn('w-4 h-4', iconColor)} />
+          <IconTooltip icon={Icon} label={tip} iconClassName={iconColor} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide leading-tight truncate">
-            {label}
-          </p>
-          <div className="flex items-baseline gap-1 mt-0.5">
+          <div className="flex items-baseline gap-1">
             <span className={cn(
               'font-bold text-foreground leading-none tabular-nums tracking-tight',
               index === 3 ? 'text-3xl' : 'text-2xl',
@@ -224,10 +211,12 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
       </div>
 
       {showYesterdayRow && (
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#1e2433]/70 mt-auto">
-          <span className="text-[10px] text-muted-foreground whitespace-nowrap truncate min-w-0">
-            Hôm qua{' '}
-            <span className="font-semibold text-muted-foreground/90 tabular-nums">
+        <div
+          className="flex items-center justify-between gap-2 pt-2 border-t border-[#1e2433]/70 mt-auto"
+          title={`Hôm qua: ${previousValue}${unit ? ` ${unit}` : ''}`}
+        >
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap truncate min-w-0 tabular-nums">
+            <span className="font-semibold text-muted-foreground/90">
               {previousValue}{unit ? ` ${unit}` : ''}
             </span>
           </span>
@@ -240,7 +229,7 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
             {isUp && <TrendingUp className="w-3 h-3" />}
             {isDown && <TrendingDown className="w-3 h-3" />}
             {isNeutral && <Minus className="w-3 h-3" />}
-            {isNeutral ? 'Không đổi' : formatDelta(change!, changeUnit)}
+            {isNeutral ? '—' : formatDelta(change!, changeUnit)}
           </span>
         </div>
       )}
@@ -257,8 +246,8 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
           {isNeutral && <Minus className="w-3 h-3 shrink-0" />}
           <span className="truncate">
             {isNeutral
-              ? 'Không đổi so với hôm qua'
-              : `${formatDelta(change!, changeUnit)} so với hôm qua`}
+              ? 'Không đổi'
+              : formatDelta(change!, changeUnit)}
           </span>
         </div>
       )}
@@ -268,7 +257,6 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
 
 interface TrainingDailyDashboardProps {
   summary: TrainingDailySummary
-  /** KPI nằm trong Panel — tách nền card khỏi nền panel */
   embedded?: boolean
 }
 
@@ -281,7 +269,7 @@ export function TrainingDailyDashboard({ summary, embedded }: TrainingDailyDashb
         <DailyMetricCard
           key={metric.label}
           data={metric}
-          meta={METRIC_META[i]}
+          meta={TRAINING_METRIC_META[i]}
           stats={today}
           index={i as MetricIndex}
           embedded={embedded}

@@ -31,7 +31,7 @@ export function Module02DashboardPage() {
     <>
       <PageLayout>
         <Panel
-          title="Tổng Quan Ngày"
+          title="Tổng Quan"
           fit
           expandable={tier1Open}
           noPadding
@@ -45,7 +45,7 @@ export function Module02DashboardPage() {
               <TierCollapseButton
                 open={tier1Open}
                 onToggle={() => setTier1Open(open => !open)}
-                label="Tổng quan"
+                label="Tổng Quan"
               />
             </div>
           }
