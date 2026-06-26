@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { Maximize2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { CameraVideoFeed } from './CameraVideoFeed'
 import {
   CAMERA_FILTER_TABS,
@@ -280,17 +279,14 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const [filterTab, setFilterTab] = useState<CameraFilterTab>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const { isDesktop } = useShellLayout()
-  const isLandscapeMobile = useMediaQuery('(max-width: 1023px) and (orientation: landscape)')
-  const stackedPortrait = !isDesktop && !isLandscapeMobile
+  /** Mobile (portrait + landscape): stacked streams + thumb grid — same selection UX */
+  const stackedMobile = !isDesktop
+  const stackedPortrait = stackedMobile
 
   useEffect(() => {
     if (!selectedId) return
-    setSelectedIds(prev => {
-      if (prev.includes(selectedId)) return prev
-      if (isLandscapeMobile) return [selectedId]
-      return [...prev, selectedId]
-    })
-  }, [selectedId, isLandscapeMobile])
+    setSelectedIds(prev => (prev.includes(selectedId) ? prev : [...prev, selectedId]))
+  }, [selectedId])
 
   const filtered = filterCameras(filterTab)
   const sidebarGroups = groupCamerasForSidebar(filtered, filterTab)
@@ -300,37 +296,21 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     .filter((c): c is TrainingCamera => !!c)
   const fallback = MOCK_TRAINING_CAMERAS.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
-  const primaryCam = safeCams[0]
   const fillHeightMain = isDesktop && safeCams.length <= 2
 
   useEffect(() => {
-    setSelectedIds(prev => {
-      if (isLandscapeMobile) {
-        if (prev.length > 1) return [prev[0]]
-        if (prev.length === 0) return [...defaultIds]
-        return prev
-      }
-      if (prev.length === 0) return [...defaultIds]
-      return prev
-    })
-  }, [isLandscapeMobile]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* Portrait mobile: always show thumb grid — collapse creates a flex-grow void + misplaced chevron */
-  useEffect(() => {
-    if (stackedPortrait) setSidebarOpen(true)
-  }, [stackedPortrait])
+    setSelectedIds(prev => (prev.length === 0 ? [...defaultIds] : prev))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const count = isLandscapeMobile ? 1 : safeCams.length
-    onStreamCountChange?.(count)
-  }, [safeCams.length, isLandscapeMobile, onStreamCountChange])
+    if (stackedMobile) setSidebarOpen(true)
+  }, [stackedMobile])
+
+  useEffect(() => {
+    onStreamCountChange?.(safeCams.length)
+  }, [safeCams.length, onStreamCountChange])
 
   const handleThumbClick = (cam: TrainingCamera) => {
-    if (isLandscapeMobile) {
-      setSelectedIds([cam.id])
-      onSelectCamera?.(cam)
-      return
-    }
     setSelectedIds(prev => {
       if (prev.includes(cam.id)) {
         if (prev.length <= 1) return prev
@@ -347,100 +327,34 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   return (
     <>
       <div className={cn(
-        stackedPortrait
+        stackedMobile
           ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
-          : 'flex flex-1 min-h-0 h-full',
-        !stackedPortrait && (isLandscapeMobile
-          ? 'flex-col justify-start'
-          : 'flex-col max-lg:landscape:flex-row lg:flex-row'),
+          : 'flex flex-1 min-h-0 h-full flex-col max-lg:landscape:flex-row lg:flex-row',
       )}>
         <div className={cn(
-          'p-2',
-          isLandscapeMobile ? 'shrink-0 w-full' : 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
-          stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
-          !isLandscapeMobile && !stackedPortrait && 'min-h-0 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
+          'p-2 min-h-0',
+          stackedMobile && 'max-lg:flex-none max-lg:shrink-0',
+          !stackedMobile && 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
-            'w-full',
-            stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
-            isLandscapeMobile && 'shrink-0',
-            !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0',
-            !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
-            'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
+            'w-full min-h-0',
+            stackedMobile && 'max-lg:h-auto max-lg:overflow-visible',
+            !stackedMobile && 'h-full max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
-            {isLandscapeMobile && primaryCam ? (
-              <div className="w-full max-w-[min(100%,calc(50dvh*16/9))] aspect-video mx-auto shrink-0 relative overflow-hidden rounded-lg">
-                <CameraCell
-                  cam={primaryCam}
-                  onMaximize={() => setFocusedCam(primaryCam)}
-                />
-              </div>
-            ) : (
-              <CameraGrid
-                cams={safeCams}
-                onMaximize={cam => setFocusedCam(cam)}
-                stackedPortrait={stackedPortrait}
-                fillHeight={fillHeightMain}
-              />
-            )}
+            <CameraGrid
+              cams={safeCams}
+              onMaximize={cam => setFocusedCam(cam)}
+              stackedPortrait={stackedPortrait}
+              fillHeight={fillHeightMain}
+            />
           </div>
         </div>
 
-        {isLandscapeMobile ? (
-          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
-            <div className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-none border-b border-[#1e2433] shrink-0">
-              {CAMERA_FILTER_TABS.map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setFilterTab(tab)}
-                  className={cn(
-                    'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
-                    filterTab === tab
-                      ? 'bg-primary/20 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center justify-between px-2 py-0.5 border-b border-[#1e2433] shrink-0">
-              <span className="text-[8px] text-muted-foreground/60">
-                Đang xem <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
-              </span>
-              <button
-                onClick={() => setSidebarOpen(open => !open)}
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                title={sidebarOpen ? 'Thu gọn' : 'Mở rộng'}
-              >
-                {sidebarOpen
-                  ? <ChevronRight className="w-3 h-3" />
-                  : <ChevronLeft className="w-3 h-3" />
-                }
-              </button>
-            </div>
-            {sidebarOpen && (
-              <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain max-h-[72px]">
-                {filtered.map(cam => (
-                  <CameraThumb
-                    key={cam.id}
-                    cam={cam}
-                    selected={selectedIds.includes(cam.id)}
-                    onClick={() => handleThumbClick(cam)}
-                    compact
-                    strip
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
         <div className={cn(
           'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200',
           'border-t lg:border-t-0 lg:border-l',
-          'max-lg:landscape:border-t-0 max-lg:landscape:border-l',
-          stackedPortrait && 'max-lg:flex-none max-lg:overflow-visible',
-          'max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto max-lg:landscape:overflow-hidden',
+          stackedMobile && 'max-lg:flex-none max-lg:overflow-visible',
+          !stackedMobile && 'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto max-lg:landscape:overflow-hidden',
           'lg:overflow-hidden',
           sidebarOpen
             ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
@@ -483,7 +397,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
 
               <div className={cn(
                 'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5',
-                stackedPortrait
+                stackedMobile
                   ? 'shrink-0 max-h-[min(36vh,280px)] overflow-y-auto overscroll-y-contain'
                   : 'flex-1 min-h-0 overflow-y-auto',
               )}>
@@ -499,7 +413,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                           {cameras.length}
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 max-[360px]:grid-cols-2 gap-1 max-lg:landscape:flex max-lg:landscape:flex-col max-lg:landscape:gap-1.5 lg:flex lg:flex-col lg:gap-2">
+                      <div className="grid grid-cols-3 max-[360px]:grid-cols-2 gap-1 lg:flex lg:flex-col lg:gap-2">
                         {cameras.map(cam => (
                           <CameraThumb
                             key={cam.id}
@@ -527,7 +441,6 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
             </div>
           )}
         </div>
-        )}
       </div>
 
       <FullscreenOverlay cam={focusedCam} onClose={() => setFocusedCam(null)} />

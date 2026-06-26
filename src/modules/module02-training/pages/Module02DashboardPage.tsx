@@ -64,7 +64,7 @@ export function Module02DashboardPage() {
         )}>
           <div className={cn(
             'flex flex-col min-h-0',
-            tier2Open ? 'lg:flex-[11] max-lg:flex-none max-lg:landscape:shrink-0' : 'shrink-0',
+            tier2Open ? 'lg:flex-[11] max-lg:flex-none' : 'shrink-0',
           )}>
             <Panel
               title="Camera"
@@ -73,12 +73,9 @@ export function Module02DashboardPage() {
               noPadding
               className={cn(
                 tier2Open && 'lg:flex-1 lg:min-h-0',
-                tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:overflow-visible max-lg:portrait:[&>div:last-child]:!h-auto',
-                tier2Open && 'max-lg:portrait:[&>div:last-child]:flex-none max-lg:portrait:[&>div:last-child]:overflow-visible',
-                tier2Open && !tier1Open && 'max-lg:landscape:!h-[calc(100dvh-64px-3.5rem)] max-lg:landscape:max-h-[calc(100dvh-64px-3.5rem)] max-lg:landscape:min-h-0 max-lg:landscape:flex max-lg:landscape:flex-col',
-                tier2Open && tier1Open && 'max-lg:landscape:!h-[calc(100dvh-64px-8.5rem)] max-lg:landscape:max-h-[calc(100dvh-64px-8.5rem)] max-lg:landscape:min-h-0 max-lg:landscape:flex max-lg:landscape:flex-col',
-                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-0',
-                !tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:min-h-0',
+                tier2Open && 'max-lg:!h-auto max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
+                tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible',
+                !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -96,7 +93,7 @@ export function Module02DashboardPage() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col min-h-0 h-full max-lg:landscape:flex-1 max-lg:landscape:justify-start max-lg:portrait:h-auto max-lg:portrait:flex-none">
+                <div className="flex flex-col min-h-0 h-full max-lg:h-auto max-lg:flex-none">
                   <TrainingCameraPanel
                     selectedId={selectedCamId}
                     onSelectCamera={cam => setSelectedCamId(cam.id)}
