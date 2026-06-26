@@ -303,10 +303,6 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (stackedMobile) setSidebarOpen(true)
-  }, [stackedMobile])
-
-  useEffect(() => {
     onStreamCountChange?.(safeCams.length)
   }, [safeCams.length, onStreamCountChange])
 
@@ -358,7 +354,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           'lg:overflow-hidden',
           sidebarOpen
             ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
-            : 'hidden lg:flex lg:w-8 lg:h-full lg:min-h-0',
+            : 'w-full shrink-0 lg:flex lg:w-8 lg:h-full lg:min-h-0',
         )}>
           {sidebarOpen ? (
             <>
@@ -367,6 +363,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                   {CAMERA_FILTER_TABS.map(tab => (
                     <button
                       key={tab}
+                      type="button"
                       onClick={() => setFilterTab(tab)}
                       className={cn(
                         'px-1.5 lg:px-2 py-0.5 lg:py-1 text-[8px] lg:text-[9px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
@@ -379,19 +376,20 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] lg:text-[9px] text-muted-foreground/60">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[8px] lg:text-[9px] text-muted-foreground/60 truncate min-w-0">
                     Đang xem <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
                   </span>
-                  {isDesktop && (
-                    <button
-                      onClick={() => setSidebarOpen(false)}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                      title="Thu gọn"
-                    >
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                    title="Thu gọn danh sách camera"
+                    aria-expanded={sidebarOpen}
+                    aria-label="Thu gọn danh sách camera"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
 
@@ -430,11 +428,17 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[2.5rem]">
+            <div className="flex items-center justify-between gap-2 px-2 py-1.5 w-full lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem]">
+              <span className="text-[8px] text-muted-foreground/60 truncate min-w-0 lg:hidden">
+                Chọn camera · <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+              </span>
               <button
+                type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors"
-                title="Mở rộng"
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                title="Mở danh sách camera"
+                aria-expanded={sidebarOpen}
+                aria-label="Mở danh sách camera"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
