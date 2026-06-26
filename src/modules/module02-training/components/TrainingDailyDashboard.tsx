@@ -190,6 +190,7 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
   return (
     <div className={cn(
       'border border-[#1e2433] border-l-2 rounded-lg flex flex-col gap-2 min-h-[96px]',
+      'max-lg:landscape:min-h-[84px] max-lg:landscape:gap-1.5 max-lg:landscape:p-2.5',
       'hover:border-[#2a3855]/80 transition-colors',
       'p-3',
       embedded ? 'bg-[#0b0f1a]' : 'bg-[#0d1117]',
@@ -276,7 +277,7 @@ export function TrainingDailyDashboard({ summary, embedded }: TrainingDailyDashb
   const { metrics, today } = summary
 
   return (
-    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3">
+    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3 max-lg:landscape:gap-2">
       {metrics.map((metric, i) => (
         <DailyMetricCard
           key={metric.label}

@@ -1,3 +1,4 @@
+import { cn } from '@/utils/cn'
 import type { TrainingDailySummary } from '../services/trainingKpi.service'
 
 interface Tier1CollapsedSummaryProps {
@@ -33,16 +34,20 @@ function collapsedHint(index: number, summary: TrainingDailySummary): string | n
 
 export function Tier1CollapsedSummary({ summary }: Tier1CollapsedSummaryProps) {
   return (
-    <div className="flex items-center gap-3 text-[10px] text-muted-foreground tabular-nums overflow-x-auto scrollbar-none min-w-0">
+    <div className={cn(
+      'flex items-center gap-2 sm:gap-3 text-[10px] text-muted-foreground tabular-nums min-w-0',
+      'max-lg:landscape:flex-wrap max-lg:landscape:gap-x-2 max-lg:landscape:gap-y-0.5 max-lg:landscape:justify-end',
+      'max-lg:portrait:overflow-x-auto max-lg:portrait:scrollbar-none',
+    )}>
       {summary.metrics.map((metric, i) => {
         const hint = collapsedHint(i, summary)
         return (
-          <span key={metric.label} className="whitespace-nowrap shrink-0">
+          <span key={metric.label} className="whitespace-nowrap shrink-0 max-lg:landscape:text-[9px]">
             <span className="font-semibold text-foreground">{metric.value}{metric.unit ?? ''}</span>
             {hint && (
-              <span className="text-muted-foreground/70 ml-0.5">({hint})</span>
+              <span className="text-muted-foreground/70 ml-0.5 max-lg:landscape:hidden">({hint})</span>
             )}
-            <span className="text-muted-foreground/55 ml-1 hidden sm:inline">{metric.label}</span>
+            <span className="text-muted-foreground/55 ml-1 hidden lg:inline">{metric.label}</span>
           </span>
         )
       })}

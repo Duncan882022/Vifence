@@ -103,9 +103,15 @@ export function Panel({
   }, [expanded])
 
   const headerContent = (onToggle: () => void, isExpanded: boolean) => (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
-      <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">{title}</h2>
-      <div className="flex items-center gap-2">
+    <div className={cn(
+      'flex items-center justify-between gap-2 px-4 py-2.5 border-b border-[#1e2433] shrink-0',
+      'max-lg:landscape:flex-wrap max-lg:landscape:items-center',
+    )}>
+      <h2 className="text-xs font-bold text-foreground uppercase tracking-wide shrink-0">{title}</h2>
+      <div className={cn(
+        'flex items-center gap-2 min-w-0',
+        'max-lg:landscape:flex-1 max-lg:landscape:justify-end max-lg:landscape:flex-wrap',
+      )}>
         {headerRight}
         {expandable && (
           <button
