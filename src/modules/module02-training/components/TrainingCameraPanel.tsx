@@ -315,11 +315,10 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     })
   }, [isLandscapeMobile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Portrait: always show thumbs. Landscape: start collapsed so video gets height. */
+  /* Portrait mobile: always show thumb grid — collapse creates a flex-grow void + misplaced chevron */
   useEffect(() => {
     if (stackedPortrait) setSidebarOpen(true)
-    else if (isLandscapeMobile) setSidebarOpen(false)
-  }, [stackedPortrait, isLandscapeMobile])
+  }, [stackedPortrait])
 
   useEffect(() => {
     const count = isLandscapeMobile ? 1 : safeCams.length
@@ -351,25 +350,25 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         stackedPortrait
           ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
           : 'flex flex-1 min-h-0 h-full w-full',
-        isLandscapeMobile && 'grid min-h-0 h-full grid-rows-[1fr_auto]',
+        isLandscapeMobile && 'flex-col min-h-0',
         !stackedPortrait && !isLandscapeMobile && 'flex-col max-lg:landscape:flex-row lg:flex-row',
       )}>
         <div className={cn(
-          'min-h-0 min-w-0',
-          isLandscapeMobile && 'row-start-1 flex items-center justify-center overflow-hidden p-1',
-          !isLandscapeMobile && 'p-2 shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+          'p-2 min-h-0',
+          isLandscapeMobile && 'flex-1 flex items-center justify-center overflow-hidden',
+          !isLandscapeMobile && 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
           stackedPortrait && 'max-lg:flex-none max-lg:shrink-0',
           !isLandscapeMobile && !stackedPortrait && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
         )}>
           <div className={cn(
-            'min-h-0 min-w-0',
-            stackedPortrait && 'w-full max-lg:h-auto max-lg:overflow-visible',
-            isLandscapeMobile && 'h-full w-full flex items-center justify-center',
-            !isLandscapeMobile && !stackedPortrait && 'w-full h-full max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
+            'w-full min-h-0',
+            stackedPortrait && 'max-lg:h-auto max-lg:overflow-visible',
+            isLandscapeMobile && 'h-full flex items-center justify-center',
+            !isLandscapeMobile && !stackedPortrait && 'h-full min-h-0 max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
             'lg:min-h-0 lg:overflow-y-auto lg:overflow-x-hidden',
           )}>
             {isLandscapeMobile && primaryCam ? (
-              <div className="w-full h-full min-h-[160px] relative overflow-hidden rounded-lg border border-[#1e2433] bg-[#060b14]">
+              <div className="h-full max-h-full aspect-video w-auto max-w-full relative overflow-hidden rounded-lg border border-[#1e2433] shrink-0">
                 <CameraCell
                   cam={primaryCam}
                   onMaximize={() => setFocusedCam(primaryCam)}
@@ -387,7 +386,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         </div>
 
         {isLandscapeMobile ? (
-          <div className="row-start-2 shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
+          <div className="shrink-0 border-t border-[#1e2433] bg-[#0a0e14]">
             <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-[#1e2433] shrink-0">
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -398,12 +397,10 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                 </p>
               </div>
               <button
-                type="button"
                 onClick={() => setSidebarOpen(open => !open)}
                 className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
                 title={sidebarOpen ? 'Thu gọn bộ lọc' : 'Mở bộ lọc'}
                 aria-expanded={sidebarOpen}
-                aria-label={sidebarOpen ? 'Thu gọn bộ lọc' : 'Mở bộ lọc'}
               >
                 {sidebarOpen
                   ? <ChevronRight className="w-3.5 h-3.5" />
@@ -417,7 +414,6 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                   {CAMERA_FILTER_TABS.map(tab => (
                     <button
                       key={tab}
-                      type="button"
                       onClick={() => setFilterTab(tab)}
                       className={cn(
                         'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
@@ -430,7 +426,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain max-h-[76px]">
+                <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto scrollbar-none overscroll-x-contain">
                   {filtered.map(cam => (
                     <CameraThumb
                       key={cam.id}
@@ -482,12 +478,9 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                   </span>
                   {isDesktop && (
                     <button
-                      type="button"
                       onClick={() => setSidebarOpen(false)}
                       className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                      title="Thu gọn bộ lọc"
-                      aria-label="Thu gọn bộ lọc"
-                      aria-expanded={sidebarOpen}
+                      title="Thu gọn"
                     >
                       <ChevronRight className="w-3 h-3" />
                     </button>
@@ -532,12 +525,9 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           ) : (
             <div className="flex flex-col items-center justify-center h-full min-h-[2.5rem]">
               <button
-                type="button"
                 onClick={() => setSidebarOpen(true)}
                 className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors"
-                title="Mở bộ lọc"
-                aria-label="Mở bộ lọc"
-                aria-expanded={sidebarOpen}
+                title="Mở rộng"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>

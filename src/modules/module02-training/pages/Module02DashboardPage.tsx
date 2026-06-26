@@ -29,32 +29,19 @@ export function Module02DashboardPage() {
 
   return (
     <>
-      <PageLayout
-        contentClassName={cn(
-          'max-lg:landscape:h-[calc(100dvh-64px)] max-lg:landscape:max-h-[calc(100dvh-64px)]',
-          'max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden',
-        )}
-      >
+      <PageLayout>
         <Panel
           title="Tổng Quan Ngày"
           fit
           expandable={tier1Open}
           noPadding
-          className={cn(
-            'shrink-0 max-lg:portrait:overflow-visible',
-            'max-lg:portrait:[&>div:first-child]:sticky max-lg:portrait:[&>div:first-child]:top-16 max-lg:portrait:[&>div:first-child]:z-20 max-lg:portrait:[&>div:first-child]:bg-[#0d1117]',
-            'max-lg:landscape:[&>div:first-child]:shrink-0',
-          )}
+          className="shrink-0 max-lg:landscape:max-h-[38dvh] max-lg:landscape:overflow-y-auto"
           expandedContent={
             <TrainingDailyDetailDashboard summary={dailySummary} courses={TRAINING_COURSES} />
           }
           headerRight={
-            <div className="flex items-center gap-2 min-w-0 shrink-0">
-              {!tier1Open && (
-                <div className="max-lg:landscape:hidden min-w-0">
-                  <Tier1CollapsedSummary summary={dailySummary} />
-                </div>
-              )}
+            <div className="flex items-center gap-2 min-w-0">
+              {!tier1Open && <Tier1CollapsedSummary summary={dailySummary} />}
               <TierCollapseButton
                 open={tier1Open}
                 onToggle={() => setTier1Open(open => !open)}
@@ -63,13 +50,8 @@ export function Module02DashboardPage() {
             </div>
           }
         >
-          {!tier1Open && (
-            <div className="px-3 py-2 border-b border-[#1e2433]/50 max-lg:landscape:block hidden">
-              <Tier1CollapsedSummary summary={dailySummary} />
-            </div>
-          )}
           {tier1Open && (
-            <div className="p-2 sm:p-3 max-lg:landscape:p-2">
+            <div className="p-3">
               <TrainingDailyDashboard summary={dailySummary} embedded />
             </div>
           )}
@@ -78,11 +60,12 @@ export function Module02DashboardPage() {
         <div className={cn(
           'flex flex-col gap-3 min-h-0',
           'max-lg:portrait:flex-none',
+          'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:overflow-hidden',
           'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
         )}>
           <div className={cn(
             'flex flex-col min-h-0',
-            tier2Open ? 'lg:flex-[11]' : 'shrink-0',
+            tier2Open ? 'lg:flex-[11] max-lg:flex-none max-lg:landscape:flex-1 max-lg:landscape:min-h-0' : 'shrink-0',
           )}>
             <Panel
               title="Camera"
@@ -91,16 +74,14 @@ export function Module02DashboardPage() {
               noPadding
               className={cn(
                 tier2Open && 'lg:flex-1 lg:min-h-0',
-                tier2Open && 'max-lg:landscape:!h-[min(52dvh,300px)] max-lg:landscape:min-h-[min(52dvh,300px)] max-lg:landscape:flex max-lg:landscape:flex-col',
                 tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:overflow-visible max-lg:portrait:[&>div:last-child]:!h-auto',
                 tier2Open && 'max-lg:portrait:[&>div:last-child]:flex-none max-lg:portrait:[&>div:last-child]:overflow-visible',
-                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-[200px] max-lg:landscape:[&>div:last-child]:flex max-lg:landscape:[&>div:last-child]:flex-col max-lg:landscape:[&>div:last-child]:overflow-hidden',
-                'max-lg:portrait:[&>div:first-child]:sticky max-lg:portrait:[&>div:first-child]:top-16 max-lg:portrait:[&>div:first-child]:z-20 max-lg:portrait:[&>div:first-child]:bg-[#0d1117]',
-                'max-lg:landscape:[&>div:first-child]:shrink-0',
+                tier2Open && 'max-lg:landscape:flex max-lg:landscape:flex-col max-lg:landscape:min-h-[200px] max-lg:landscape:max-h-[min(72dvh,calc(100dvh-64px-3rem))] max-lg:landscape:flex-1',
+                tier2Open && 'max-lg:landscape:[&>div:last-child]:flex-1 max-lg:landscape:[&>div:last-child]:min-h-0 max-lg:landscape:[&>div:last-child]:overflow-hidden',
                 !tier2Open && 'max-lg:portrait:!h-auto max-lg:portrait:min-h-0',
               )}
               headerRight={
-                <div className="flex items-center gap-2 min-w-0 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
                   {!tier2Open && (
                     <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
                       <span className="text-primary font-semibold">{activeStreamCount}</span> luồng
@@ -115,7 +96,7 @@ export function Module02DashboardPage() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col min-h-[200px] h-full max-lg:landscape:flex-1 max-lg:landscape:min-h-[200px] max-lg:portrait:h-auto max-lg:portrait:min-h-0 max-lg:portrait:flex-none">
+                <div className="flex flex-col min-h-0 h-full max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:portrait:h-auto max-lg:portrait:flex-none">
                   <TrainingCameraPanel
                     selectedId={selectedCamId}
                     onSelectCamera={cam => setSelectedCamId(cam.id)}
@@ -132,7 +113,7 @@ export function Module02DashboardPage() {
             tier2Open ? 'lg:flex-[9]' : 'lg:flex-1',
           )}>
             {showCourses && (
-              <div className="w-full lg:flex-[42] min-w-0 min-h-0 lg:min-h-0 flex flex-col">
+              <div className="w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:min-h-[240px] lg:min-h-0 flex flex-col">
                 <Panel title="Khóa Học" expandable noPadding className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto">
                   <TrainingCourseAccordion />
                 </Panel>
