@@ -358,8 +358,8 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         )}>
           {sidebarOpen ? (
             <>
-              <div className="px-2 py-1.5 lg:px-2.5 lg:py-2.5 border-b border-[#1e2433] shrink-0 space-y-1.5 lg:space-y-2">
-                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+              <div className="flex items-center gap-1.5 px-2 py-1.5 lg:px-2.5 lg:py-2 border-b border-[#1e2433] shrink-0">
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1">
                   {CAMERA_FILTER_TABS.map(tab => (
                     <button
                       key={tab}
@@ -376,21 +376,19 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[8px] lg:text-[9px] text-muted-foreground/60 truncate min-w-0">
-                    Đang xem <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSidebarOpen(false)}
-                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                    title="Thu gọn danh sách camera"
-                    aria-expanded={sidebarOpen}
-                    aria-label="Thu gọn danh sách camera"
-                  >
-                    <ChevronRight className="w-3 h-3" />
-                  </button>
-                </div>
+                <span className="text-[8px] lg:text-[9px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums">
+                  <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                  title="Thu gọn danh sách camera"
+                  aria-expanded={sidebarOpen}
+                  aria-label="Thu gọn danh sách camera"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
               </div>
 
               <div className={cn(
@@ -428,19 +426,36 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-between gap-2 px-2 py-1.5 w-full lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem]">
-              <span className="text-[8px] text-muted-foreground/60 truncate min-w-0 lg:hidden">
-                Chọn camera · <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+            <div className="flex items-center gap-1.5 px-2 py-1.5 w-full lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0">
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
+                {CAMERA_FILTER_TABS.map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setFilterTab(tab)}
+                    className={cn(
+                      'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                      filterTab === tab
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[8px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums lg:hidden">
+                <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
               </span>
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0 lg:p-1.5"
                 title="Mở danh sách camera"
                 aria-expanded={sidebarOpen}
                 aria-label="Mở danh sách camera"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-3 h-3 lg:w-3.5 lg:h-3.5" />
               </button>
             </div>
           )}
