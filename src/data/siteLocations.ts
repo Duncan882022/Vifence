@@ -1,5 +1,115 @@
 /** Shared construction-site waypoints — reused across Module 01 (access) and Module 02 (training zones). */
 
+export interface SiteZonePolygon {
+  id: string
+  label: string
+  sublabel?: string
+  /** Polygon vertices in percent coords (0–100) */
+  polygon: { x: number; y: number }[]
+  /** Heat blob center */
+  cx: number
+  cy: number
+}
+
+/** Zone overlays aligned to aerial map — shared by safety/housekeeping heatmaps */
+export const SITE_ZONES: SiteZonePolygon[] = [
+  {
+    id: 'gate',
+    label: 'Cổng chính',
+    sublabel: 'Khu A',
+    polygon: [
+      { x: 66, y: 10 },
+      { x: 88, y: 10 },
+      { x: 88, y: 32 },
+      { x: 66, y: 32 },
+    ],
+    cx: 77,
+    cy: 21,
+  },
+  {
+    id: 'khu-a',
+    label: 'Khu A',
+    sublabel: 'Thi công',
+    polygon: [
+      { x: 30, y: 8 },
+      { x: 65, y: 8 },
+      { x: 65, y: 30 },
+      { x: 30, y: 30 },
+    ],
+    cx: 47,
+    cy: 19,
+  },
+  {
+    id: 'khu-b',
+    label: 'Khu B',
+    sublabel: 'Cơ điện',
+    polygon: [
+      { x: 8, y: 28 },
+      { x: 42, y: 28 },
+      { x: 42, y: 72 },
+      { x: 8, y: 72 },
+    ],
+    cx: 25,
+    cy: 50,
+  },
+  {
+    id: 'khu-c',
+    label: 'Khu C',
+    sublabel: 'Sân thi công',
+    polygon: [
+      { x: 55, y: 30 },
+      { x: 78, y: 30 },
+      { x: 78, y: 50 },
+      { x: 55, y: 50 },
+    ],
+    cx: 66,
+    cy: 40,
+  },
+  {
+    id: 'khu-d',
+    label: 'Khu D',
+    sublabel: 'Nguy hiểm',
+    polygon: [
+      { x: 55, y: 50 },
+      { x: 78, y: 50 },
+      { x: 78, y: 72 },
+      { x: 55, y: 72 },
+    ],
+    cx: 66,
+    cy: 61,
+  },
+  {
+    id: 'yard',
+    label: 'Bãi vật liệu',
+    sublabel: 'Khu C',
+    polygon: [
+      { x: 8, y: 55 },
+      { x: 32, y: 55 },
+      { x: 32, y: 78 },
+      { x: 8, y: 78 },
+    ],
+    cx: 20,
+    cy: 66,
+  },
+  {
+    id: 'crane',
+    label: 'Khu cần cẩu',
+    sublabel: 'Khu D',
+    polygon: [
+      { x: 34, y: 55 },
+      { x: 53, y: 55 },
+      { x: 53, y: 78 },
+      { x: 34, y: 78 },
+    ],
+    cx: 43,
+    cy: 66,
+  },
+]
+
+export function getSiteZone(id: string): SiteZonePolygon | undefined {
+  return SITE_ZONES.find(z => z.id === id)
+}
+
 export interface SiteWaypoint {
   id: number
   label: string
