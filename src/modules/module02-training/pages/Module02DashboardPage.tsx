@@ -40,8 +40,10 @@ export function Module02DashboardPage() {
             <TrainingDailyDetailDashboard summary={dailySummary} courses={TRAINING_COURSES} />
           }
           headerRight={
-            <div className="flex items-center gap-2 min-w-0">
-              {!tier1Open && <Tier1CollapsedSummary summary={dailySummary} />}
+            <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">
+              {!tier1Open && (
+                <Tier1CollapsedSummary summary={dailySummary} className="flex-1 min-w-0" />
+              )}
               <TierCollapseButton
                 open={tier1Open}
                 onToggle={() => setTier1Open(open => !open)}
@@ -51,7 +53,7 @@ export function Module02DashboardPage() {
           }
         >
           {tier1Open && (
-            <div className="p-3">
+            <div className="p-2 sm:p-3 max-lg:overflow-x-hidden">
               <TrainingDailyDashboard summary={dailySummary} embedded />
             </div>
           )}

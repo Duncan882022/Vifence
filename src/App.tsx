@@ -17,7 +17,7 @@ export default function App() {
       <div className="min-h-screen bg-background">
         <Sidebar />
         <Routes>
-          <Route path="/" element={<Navigate to="/module01" replace />} />
+          <Route path="/" element={<Navigate to="/module02" replace />} />
           <Route path="/module01/*" element={<Module01Page />} />
           <Route path="/module02/*" element={<Module02Page />} />
           <Route path="/module03/*" element={<Module03Page />} />

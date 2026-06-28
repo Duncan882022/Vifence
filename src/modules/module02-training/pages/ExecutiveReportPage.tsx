@@ -130,33 +130,33 @@ export function ExecutiveReportPage() {
 
   const kpis: KPIData[] = [
     {
-      label: 'Ca đào tạo',
+      label: 'Lớp đào tạo',
       value: report.courseCount,
-      unit: 'ca',
+      unit: 'lớp',
       detail: `${fromDate.split('-').reverse().join('/')} – ${toDate.split('-').reverse().join('/')}`,
     },
     {
-      label: 'Học viên ghi nhận',
+      label: 'Học viên',
       value: report.recorded,
-      unit: 'người',
-      detail: report.attendeeSlots > 0 ? `Trên ${report.attendeeSlots} đăng ký ca đã chạy` : 'Chưa có ca đã chạy',
+      unit: 'học viên',
+      detail: report.attendeeSlots > 0 ? `Trên ${report.attendeeSlots} đăng ký lớp đã chạy` : 'Chưa có lớp đã chạy',
     },
     {
       label: 'Ngoại lệ',
       value: report.exceptions,
-      unit: 'người',
+      unit: 'học viên',
       detail: report.attendeeSlots > 0
-        ? `${Math.round((report.exceptions / report.attendeeSlots) * 1000) / 10}% trên ca đã chạy`
+        ? `${Math.round((report.exceptions / report.attendeeSlots) * 1000) / 10}% trên lớp đã chạy`
         : undefined,
       higherIsBetter: false,
     },
     {
-      label: 'Tỷ lệ tuân thủ',
+      label: 'Tỷ lệ tham gia',
       value: report.complianceRate,
       unit: '%',
       detail: report.attendeeSlots > 0
         ? `${report.recorded}/${report.attendeeSlots} học viên`
-        : 'Chưa có ca đã chạy',
+        : 'Chưa có lớp đã chạy',
     },
   ]
 
@@ -214,7 +214,7 @@ export function ExecutiveReportPage() {
           </label>
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground pb-2">
             <CalendarRange className="w-3.5 h-3.5 shrink-0" />
-            {report.rows.length} ca trong khoảng đã chọn
+            {report.rows.length} lớp trong khoảng đã chọn
           </div>
         </div>
       </Panel>

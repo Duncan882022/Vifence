@@ -4,7 +4,12 @@ import {
   TrendingUp, TrendingDown, Minus,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import type { TrainingDailySummary } from '../services/trainingKpi.service'
+import { TruncateText } from '@/components/common/TruncateText/TruncateText'
+import {
+  complianceScoreColorClass,
+  formatComplianceBreakdown,
+  type TrainingDailySummary,
+} from '../services/trainingKpi.service'
 import type { TrainingCourseMock } from '../data/trainingMockData'
 import { courseGroupHasMetrics } from '../data/trainingMockData'
 import { COURSE_GROUP_STYLE, groupLabel } from '../services/trainingReport.service'
@@ -24,10 +29,10 @@ const TABS: {
   label: string
   icon: typeof BookOpen
 }[] = [
-  { key: 'courses', label: 'Khoá học trong ngày', icon: BookOpen },
-  { key: 'attendees', label: 'Học viên ghi nhận', icon: Users },
-  { key: 'exceptions', label: 'Ngoại lệ trong ngày', icon: AlertTriangle },
-  { key: 'compliance', label: 'Tỷ lệ tuân thủ', icon: ShieldCheck },
+  { key: 'courses', label: 'Lớp học', icon: BookOpen },
+  { key: 'attendees', label: 'Học viên', icon: Users },
+  { key: 'exceptions', label: 'Ngoại lệ', icon: AlertTriangle },
+  { key: 'compliance', label: 'Tuân thủ', icon: ShieldCheck },
 ]
 
 const GROUP_LABEL = groupLabel
@@ -57,27 +62,38 @@ function CompareBadge({
 
   return (
     <span className={cn(
-      'inline-flex items-center gap-1 text-[11px] font-medium',
+      'inline-flex items-center gap-1 text-[10px] max-lg:text-[9px] font-medium',
       isGood && 'text-green-400',
       isBad && 'text-red-400',
       changeType === 'neutral' && 'text-muted-foreground',
     )}>
-      {isUp && <TrendingUp className="w-3 h-3" />}
-      {isDown && <TrendingDown className="w-3 h-3" />}
-      {changeType === 'neutral' && <Minus className="w-3 h-3" />}
+      {isUp && <TrendingUp className="w-3 h-3 max-lg:w-2.5 max-lg:h-2.5" />}
+      {isDown && <TrendingDown className="w-3 h-3 max-lg:w-2.5 max-lg:h-2.5" />}
+      {changeType === 'neutral' && <Minus className="w-3 h-3 max-lg:w-2.5 max-lg:h-2.5" />}
       {changeType === 'neutral'
-        ? 'Không đổi so với hôm qua'
-        : `${prefix}${change}${changeUnit ? ` ${changeUnit}` : ''} so với hôm qua`}
+        ? (
+          <>
+            <span className="max-lg:hidden">Không đổi so với hôm qua</span>
+            <span className="hidden max-lg:inline">— H.qua</span>
+          </>
+        )
+        : (
+          <>
+            <span>{`${prefix}${change}${changeUnit ? ` ${changeUnit}` : ''}`}</span>
+            <span className="max-lg:hidden"> so với hôm qua</span>
+            <span className="hidden max-lg:inline text-muted-foreground"> H.qua</span>
+          </>
+        )}
     </span>
   )
 }
 
 function StatTile({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-[#0b0f1a] border border-[#1e2433] rounded-lg px-4 py-3">
-      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold text-foreground tabular-nums mt-1">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground/70 mt-1">{sub}</p>}
+    <div className="bg-[#0b0f1a] border border-[#1e2433] rounded-lg px-3 py-2 sm:px-4 sm:py-3">
+      <p className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+      <p className="text-lg sm:text-2xl font-bold text-foreground tabular-nums mt-0.5 sm:mt-1">{value}</p>
+      {sub && <p className="text-[8px] sm:text-[10px] text-muted-foreground/70 mt-0.5 sm:mt-1 truncate">{sub}</p>}
     </div>
   )
 }
@@ -91,10 +107,10 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-3xl font-bold text-foreground tabular-nums">
-            {today.coursesTotal}<span className="text-lg text-muted-foreground ml-1">ca</span>
+          <p className="text-xl sm:text-3xl font-bold text-foreground tabular-nums">
+            {today.coursesTotal}<span className="text-sm sm:text-lg text-muted-foreground ml-1">lớp</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">{today.dateLabel}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{today.dateLabel}</p>
         </div>
         <CompareBadge {...metric} />
       </div>
@@ -102,9 +118,9 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatTile label="Sắp diễn ra" value={today.coursesUpcoming} sub={`Hôm qua: ${yesterday.coursesUpcoming}`} />
         <StatTile label="Đã Huỷ" value={today.coursesCancelled} sub={`Hôm qua: ${yesterday.coursesCancelled}`} />
-        <StatTile label="Đang diễn ra" value={today.coursesActive} sub={`${today.coursesLive} ca live`} />
+        <StatTile label="Đang diễn ra" value={today.coursesActive} sub={`${today.coursesLive} lớp đang học`} />
         <StatTile label="Đã hoàn thành" value={today.coursesCompleted} sub={`Hôm qua: ${yesterday.coursesCompleted}`} />
-        <StatTile label="Tổng ca" value={today.coursesTotal} sub={`Hôm qua: ${yesterday.coursesTotal}`} />
+        <StatTile label="Tổng lớp" value={today.coursesTotal} sub={`Hôm qua: ${yesterday.coursesTotal}`} />
       </div>
 
       <div className="border border-[#1e2433] rounded-lg overflow-hidden">
@@ -113,7 +129,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
           <span>Thời gian · Zone</span>
           <span>Trạng thái</span>
           <span className="text-right">TG</span>
-          <span className="text-right">NCL</span>
+          <span className="text-right cursor-help" title="Ngoại lệ">NL</span>
         </div>
         <div className="divide-y divide-[#1e2433] max-h-[min(50vh,420px)] overflow-y-auto">
           {courses.map(course => (
@@ -121,10 +137,13 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
               key={course.id}
               className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_100px_80px_60px] gap-2 px-3 py-2.5 items-center hover:bg-[#1a2235]/30"
             >
-              <span className="text-[11px] font-semibold text-foreground truncate">{course.title}</span>
-              <span className="text-[10px] text-muted-foreground truncate">
+              <TruncateText className="text-[11px] font-semibold text-foreground">{course.title}</TruncateText>
+              <TruncateText
+                className="text-[10px] text-muted-foreground"
+                title={formatCourseMeta(course.startTime, course.endTime, course.sessionDate, course.zone)}
+              >
                 {formatCourseMeta(course.startTime, course.endTime, course.sessionDate, course.zone)}
-              </span>
+              </TruncateText>
               <span className={cn(
                 'text-[9px] font-bold px-1.5 py-0.5 rounded w-fit',
                 COURSE_GROUP_STYLE[course.group],
@@ -149,7 +168,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
 
       {started.length > 0 && (
         <p className="text-[10px] text-muted-foreground/60">
-          {started.length} ca đã/đang chạy · {today.coursesUpcoming} ca chưa bắt đầu · {today.coursesCancelled} ca đã Huỷ
+          {started.length} lớp đã/đang chạy · {today.coursesUpcoming} lớp chưa bắt đầu · {today.coursesCancelled} lớp đã Huỷ
         </p>
       )}
     </div>
@@ -157,7 +176,7 @@ function CoursesSection({ summary, courses }: TrainingDailyDetailDashboardProps)
 }
 
 function AttendeesSection({ summary, courses }: TrainingDailyDetailDashboardProps) {
-  const { today, yesterday, metrics } = summary
+  const { today, metrics } = summary
   const metric = metrics[1]
   const started = courses.filter(c => courseGroupHasMetrics(c.group))
 
@@ -165,20 +184,30 @@ function AttendeesSection({ summary, courses }: TrainingDailyDetailDashboardProp
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-3xl font-bold text-foreground tabular-nums">
-            {today.recorded}<span className="text-lg text-muted-foreground ml-1">người</span>
+          <p className="text-xl sm:text-3xl font-bold text-green-400 tabular-nums">
+            {today.recorded}<span className="text-sm sm:text-lg text-muted-foreground ml-1">HV</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Trên {today.enrolledStarted} học viên các ca đã chạy
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+            Trên {today.enrolledStarted} học viên các lớp đã chạy
+            {today.studyingNow > 0 && (
+              <span className={cn('font-medium ml-1', attendanceStatusConfig.attending.color)}>
+                · {attendanceStatusConfig.attending.label} {today.studyingNow}
+              </span>
+            )}
+            {today.absentLive > 0 && (
+              <span className={cn('font-medium ml-1', attendanceStatusConfig.absent.color)}>
+                · {attendanceStatusConfig.absent.label} {today.absentLive}
+              </span>
+            )}
           </p>
         </div>
         <CompareBadge {...metric} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatTile label="Đang học (live)" value={today.studyingNow} sub="HV đang trong ca" />
-        <StatTile label="Ca đã chạy" value={started.length} sub={`${today.enrolledStarted} HV đăng ký`} />
-        <StatTile label="Hôm qua" value={yesterday.recorded} sub={`/${yesterday.enrolledStarted} HV ca đã chạy`} />
+        <StatTile label="Đang học" value={today.studyingNow} sub="Đã check-in · kể cả đi trễ" />
+        <StatTile label={attendanceStatusConfig.absent.label} value={today.absentLive} sub="Lớp đang diễn ra" />
+        <StatTile label="Lớp đã chạy" value={started.length} sub={`${today.enrolledStarted} HV đăng ký`} />
       </div>
 
       <div className="border border-[#1e2433] rounded-lg overflow-hidden">
@@ -186,7 +215,7 @@ function AttendeesSection({ summary, courses }: TrainingDailyDetailDashboardProp
           <span>Khoá học</span>
           <span className="text-right">Ghi nhận</span>
           <span className="text-right">Tỷ lệ</span>
-          <span className="text-right">NCL</span>
+          <span className="text-right cursor-help" title="Ngoại lệ">NL</span>
         </div>
         <div className="divide-y divide-[#1e2433] max-h-[min(50vh,420px)] overflow-y-auto">
           {started.map(course => {
@@ -199,13 +228,13 @@ function AttendeesSection({ summary, courses }: TrainingDailyDetailDashboardProp
                 className="grid grid-cols-[minmax(0,1.2fr)_80px_80px_72px] gap-2 px-3 py-2.5 items-center hover:bg-[#1a2235]/30"
               >
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-foreground truncate">{course.title}</p>
-                  <p className="text-[9px] text-muted-foreground/70 truncate">{course.zone}</p>
+                  <TruncateText as="p" className="text-[11px] font-semibold text-foreground">{course.title}</TruncateText>
+                  <TruncateText as="p" className="text-[9px] text-muted-foreground/70">{course.zone}</TruncateText>
                 </div>
                 <span className="text-[10px] text-right tabular-nums">
                   {course.present ?? 0}<span className="text-muted-foreground/50">/{course.total}</span>
                 </span>
-                <span className="text-[10px] text-right tabular-nums text-sky-400">
+                <span className="text-[10px] text-right tabular-nums text-green-400">
                   {rate !== null ? `${rate}%` : '—'}
                 </span>
                 <span className={cn(
@@ -245,13 +274,15 @@ function ExceptionsSection({ summary, courses }: TrainingDailyDetailDashboardPro
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-3xl font-bold text-orange-400 tabular-nums">
-            {today.exceptions}<span className="text-lg text-muted-foreground ml-1">người</span>
+          <p className="text-xl sm:text-3xl font-bold text-orange-400 tabular-nums">
+            {today.exceptions}<span className="text-sm sm:text-lg text-muted-foreground ml-1">HV</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
             {today.enrolledStarted > 0
-              ? `${Math.round((today.exceptions / today.enrolledStarted) * 1000) / 10}% trên ca đã chạy`
-              : 'Chưa có ca nào bắt đầu'}
+              ? today.enrolledLive > 0
+                ? `${today.exceptionRate}% trên ${today.studyingNow} HV đang học`
+                : `${today.exceptionRate}% trên lớp đã chạy`
+              : 'Chưa có lớp nào bắt đầu'}
           </p>
         </div>
         <CompareBadge {...metric} />
@@ -291,11 +322,11 @@ function ExceptionsSection({ summary, courses }: TrainingDailyDetailDashboardPro
                 className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_120px] gap-2 px-3 py-2.5 items-center hover:bg-[#1a2235]/30"
               >
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-foreground truncate">{attendee.name}</p>
+                  <TruncateText as="p" className="text-[11px] font-semibold text-foreground">{attendee.name}</TruncateText>
                   <p className="text-[9px] text-muted-foreground/60">{attendee.companyCode}</p>
                 </div>
-                <span className="text-[10px] text-muted-foreground truncate">{attendee.company}</span>
-                <span className="text-[10px] text-muted-foreground truncate">{courseTitle}</span>
+                <TruncateText className="text-[10px] text-muted-foreground">{attendee.company}</TruncateText>
+                <TruncateText className="text-[10px] text-muted-foreground">{courseTitle}</TruncateText>
                 <StatusBadges badges={getAttendeeBadges(attendee)} small />
               </div>
             ))
@@ -307,7 +338,7 @@ function ExceptionsSection({ summary, courses }: TrainingDailyDetailDashboardPro
 }
 
 function ComplianceSection({ summary, courses }: TrainingDailyDetailDashboardProps) {
-  const { today, yesterday, metrics } = summary
+  const { today, metrics } = summary
   const metric = metrics[3]
   const started = courses.filter(c => courseGroupHasMetrics(c.group))
 
@@ -315,25 +346,33 @@ function ComplianceSection({ summary, courses }: TrainingDailyDetailDashboardPro
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-3xl font-bold text-sky-400 tabular-nums">
-            {today.attendanceRate}<span className="text-lg text-muted-foreground ml-1">%</span>
+          <p className={cn(
+            'text-xl sm:text-3xl font-bold tabular-nums',
+            complianceScoreColorClass(today.complianceScore),
+          )}>
+            {today.complianceScore}<span className="text-sm sm:text-lg text-muted-foreground ml-1">điểm</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {today.recorded}/{today.enrolledStarted} học viên ca đã chạy
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+            {formatComplianceBreakdown(today)}
           </p>
         </div>
         <CompareBadge {...metric} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatTile label="Hôm nay" value={`${today.attendanceRate}%`} sub={`${today.recorded} ghi nhận`} />
-        <StatTile label="Hôm qua" value={`${yesterday.attendanceRate}%`} sub={`${yesterday.recorded} ghi nhận`} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatTile label="Lớp vận hành" value={`${today.courseRunRate}%`} sub={`${today.coursesActive + today.coursesCompleted} lớp`} />
+        <StatTile label="Tham gia" value={`${today.attendanceRate}%`} sub={`${today.recorded} ghi nhận`} />
+        <StatTile label="Ngoại lệ" value={`${today.exceptionRate}%`} sub={`${today.exceptions} học viên`} />
         <StatTile
-          label="Ca đạt 100%"
+          label="Lớp đạt 100%"
           value={started.filter(c => c.present === c.total && c.total > 0).length}
-          sub={`/${started.length} ca đã chạy`}
+          sub={`/${started.length} lớp đã chạy`}
         />
       </div>
+
+      <p className="text-[10px] text-muted-foreground/60">
+        Tuân thủ = 35% lớp vận hành + 40% tham gia + 25% (100% − ngoại lệ)
+      </p>
 
       <div className="border border-[#1e2433] rounded-lg overflow-hidden">
         <div className="grid grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] gap-3 px-3 py-2 bg-[#0b0f1a] border-b border-[#1e2433] text-[9px] font-bold text-muted-foreground uppercase tracking-wide">
@@ -349,7 +388,7 @@ function ComplianceSection({ summary, courses }: TrainingDailyDetailDashboardPro
             return (
               <div key={course.id} className="px-3 py-3 hover:bg-[#1a2235]/30">
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <span className="text-[11px] font-semibold text-foreground truncate">{course.title}</span>
+                  <TruncateText className="text-[11px] font-semibold text-foreground">{course.title}</TruncateText>
                   <span className={cn(
                     'text-[11px] font-bold tabular-nums shrink-0',
                     rate >= 90 ? 'text-green-400' : rate >= 70 ? 'text-sky-400' : 'text-orange-400',
@@ -393,19 +432,19 @@ export function TrainingDailyDetailDashboard({ summary, courses }: TrainingDaily
             type="button"
             onClick={() => setTab(key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold whitespace-nowrap transition-colors border-b-2 -mb-px shrink-0',
+              'flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-[11px] font-semibold whitespace-nowrap transition-colors border-b-2 -mb-px shrink-0',
               tab === key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
-            <Icon className="w-3.5 h-3.5" />
+            <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             {label}
           </button>
         ))}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
         {tab === 'courses' && <CoursesSection {...props} />}
         {tab === 'attendees' && <AttendeesSection {...props} />}
         {tab === 'exceptions' && <ExceptionsSection {...props} />}

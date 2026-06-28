@@ -103,9 +103,9 @@ export function Panel({
   }, [expanded])
 
   const headerContent = (onToggle: () => void, isExpanded: boolean) => (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
-      <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">{title}</h2>
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between gap-2 px-4 py-2.5 max-lg:px-2 max-lg:py-2 border-b border-[#1e2433] shrink-0 min-w-0">
+      <h2 className="text-xs max-lg:text-[10px] font-bold text-foreground uppercase tracking-wide shrink-0">{title}</h2>
+      <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end overflow-hidden">
         {headerRight}
         {expandable && (
           <button
@@ -161,7 +161,7 @@ export function Panel({
             onClick={() => setExpanded(false)}
           />
           {/* Expanded panel */}
-          <div className="absolute inset-4 bg-[#0d1117] border border-[#1e2433] rounded-xl flex flex-col overflow-hidden shadow-2xl">
+          <div className="absolute inset-4 max-lg:inset-2 bg-[#0d1117] border border-[#1e2433] rounded-xl flex flex-col overflow-hidden shadow-2xl">
             {headerContent(() => setExpanded(false), true)}
             <div className={cn(
               'flex-1 min-h-0 flex flex-col overflow-hidden',

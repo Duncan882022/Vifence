@@ -42,7 +42,7 @@ const RAW_CAMERAS: Omit<TrainingCamera, 'streamUrl'>[] = [
   { id: 'FC-02', name: 'Fly 02', location: 'Toàn cảnh',         zone: '', status: 'online', streamType: 'flycam' },
 ]
 
-export const DEFAULT_COURSE_CAMERA_IDS = ['A-02', 'A-03'] as const
+export const DEFAULT_COURSE_CAMERA_IDS = ['A-06', 'A-03'] as const
 
 export const CAMERA_FILTER_TABS: CameraFilterTab[] = [
   'Tất cả', 'OCP1-A', 'OCP1-B', 'Body cam', 'Flycam',

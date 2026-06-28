@@ -9,7 +9,8 @@
     "build:pages": "tsc -b && vite build --mode ghpages && cp docs/index.html docs/404.html",
     "pack:pages": "npm run build:pages && cd docs && zip -r ../vifence-pages.zip . && echo '→ Upload nội dung vifence-pages.zip lên root repo GitHub (duncan882022/Vifence)'",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "extract-avatars": "node scripts/extract-clip-avatars.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",
@@ -24,6 +25,9 @@
     "@radix-ui/react-toast": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@tanstack/react-table": "^8.21.0",
+    "@tensorflow-models/blazeface": "^0.1.0",
+    "@tensorflow-models/coco-ssd": "^2.2.3",
+    "@tensorflow/tfjs": "^4.22.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.0",
@@ -39,6 +43,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.1",
     "@types/node": "^26.0.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

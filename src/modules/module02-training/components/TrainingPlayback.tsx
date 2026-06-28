@@ -332,6 +332,7 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
                   courseName={camera.courseName}
                   streamType={camera.streamType}
                   playing={isPlaying}
+                  aiOverlay
                 />
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
                   style={{

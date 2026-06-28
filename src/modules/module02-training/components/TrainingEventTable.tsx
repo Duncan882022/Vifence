@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ArrowLeft, Play, BookOpen, Building2, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { TruncateText } from '@/components/common/TruncateText/TruncateText'
 import { DEMO_NOW } from '../data/trainingMockData'
 import { getAttendeeAvatarUrl } from '../data/trainingAvatars'
 import { formatCourseMeta, getCourseZone, type TrainingZone } from '../data/trainingCourseMeta'
@@ -199,7 +200,7 @@ const sessionStatusConfig: Record<SessionStatus, { label: string; color: string;
 
 export type EventTabKey = AttendanceStatus | 'all'
 
-/** Ngoại lệ điểm danh — NCL / KPI (không gồm đang học, tạm vắng, hoàn thành) */
+/** Ngoại lệ điểm danh — NL / KPI (không gồm đang học, tạm vắng, hoàn thành) */
 export const EXCEPTION_ATTENDANCE_STATUSES: AttendanceStatus[] = [
   'late',
   'left-early',
@@ -842,8 +843,8 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
             <Avatar name={s.name} color={s.avatarColor} src={getAttendeeAvatarUrl(s.id, s.name)} size="sm" />
 
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{s.name}</p>
-              <p className="text-[9px] text-muted-foreground/60 truncate">{s.role}</p>
+              <TruncateText as="p" className="text-[10px] font-semibold text-foreground leading-tight">{s.name}</TruncateText>
+              <TruncateText as="p" className="text-[9px] text-muted-foreground/60">{s.role}</TruncateText>
             </div>
 
             <button
@@ -851,16 +852,18 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
               className="min-w-0 text-left"
               title={`${s.company} (${s.companyCode})`}
             >
-              <p className="text-[10px] text-primary/75 hover:text-primary truncate transition-colors hover:underline underline-offset-2 decoration-dotted">
+              <TruncateText as="p" className="text-[10px] text-primary/75 hover:text-primary transition-colors hover:underline underline-offset-2 decoration-dotted">
                 {s.company}
-              </p>
+              </TruncateText>
               <p className="text-[8px] text-muted-foreground/40">{s.companyCode}</p>
             </button>
 
             {/* Khoá học + trạng thái buổi học */}
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{s.currentCourse}</p>
-              <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{attendeeCourseMeta(s)}</p>
+              <TruncateText as="p" className="text-[10px] font-semibold text-foreground leading-tight">{s.currentCourse}</TruncateText>
+              <TruncateText as="p" className="text-[9px] text-muted-foreground/70 mt-0.5 leading-snug" title={attendeeCourseMeta(s)}>
+                {attendeeCourseMeta(s)}
+              </TruncateText>
               <div className="mt-0.5">
                 <SessionBadge courseStart={s.courseStart} courseEnd={s.courseEnd} small />
               </div>
@@ -874,9 +877,13 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
                 return (
                   <>
                     <StatusBadges badges={badges} small />
-                    <p className={cn('text-[9px] mt-0.5 truncate', statusConfig[primary].color + '/80')}>
+                    <TruncateText
+                      as="p"
+                      className={cn('text-[9px] mt-0.5', statusConfig[primary].color + '/80')}
+                      title={attendanceDetailLine(s)}
+                    >
                       {attendanceDetailLine(s)}
-                    </p>
+                    </TruncateText>
                   </>
                 )
               })()}
@@ -1000,15 +1007,21 @@ function CourseHistoryTable({ records, worker, onPlayback }: CourseHistoryTableP
               <div className="min-w-0 flex items-start gap-1.5">
                 <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-1', statusDot[primary])} />
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-foreground truncate leading-snug">{r.courseName}</p>
-                  <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{recordCourseMeta(r)}</p>
+                  <TruncateText as="p" className="text-[10px] font-semibold text-foreground leading-snug">{r.courseName}</TruncateText>
+                  <TruncateText as="p" className="text-[9px] text-muted-foreground/70 mt-0.5 leading-snug" title={recordCourseMeta(r)}>
+                    {recordCourseMeta(r)}
+                  </TruncateText>
                 </div>
               </div>
               <div className="min-w-0">
                 <StatusBadges badges={badges} small />
-                <p className={cn('text-[9px] mt-0.5 truncate', cfg.color, 'opacity-80')}>
+                <TruncateText
+                  as="p"
+                  className={cn('text-[9px] mt-0.5', cfg.color, 'opacity-80')}
+                  title={formatRecordSessions(r)}
+                >
                   {formatRecordSessions(r)}
-                </p>
+                </TruncateText>
               </div>
               <button
                 onClick={() => onPlayback(buildTrainingPlaybackEventFromRecord(r, worker))}
@@ -1145,13 +1158,15 @@ function ContractorDetail({ company, onBack, onSelectStudent }: ContractorDetail
                 <Avatar name={s.name} color={s.avatarColor} src={getAttendeeAvatarUrl(s.id, s.name)} size="sm" />
 
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-foreground truncate">{s.name}</p>
-                  <p className="text-[9px] text-muted-foreground/60 truncate">{s.role}</p>
+                  <TruncateText as="p" className="text-[10px] font-semibold text-foreground">{s.name}</TruncateText>
+                  <TruncateText as="p" className="text-[9px] text-muted-foreground/60">{s.role}</TruncateText>
                 </div>
 
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-foreground truncate">{s.currentCourse}</p>
-                  <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{attendeeCourseMeta(s)}</p>
+                  <TruncateText as="p" className="text-[10px] font-semibold text-foreground">{s.currentCourse}</TruncateText>
+                  <TruncateText as="p" className="text-[9px] text-muted-foreground/70 mt-0.5 leading-snug" title={attendeeCourseMeta(s)}>
+                    {attendeeCourseMeta(s)}
+                  </TruncateText>
                 </div>
 
                 <div className="shrink-0 text-right">

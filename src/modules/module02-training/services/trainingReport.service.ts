@@ -241,7 +241,7 @@ export async function exportTrainingReportExcel(
     ['Chỉ tiêu', 'Giá trị', 'Ghi chú'],
     ['Ca đào tạo', summary.courseCount, 'ca trong khoảng đã chọn'],
     [
-      'Học viên ghi nhận',
+      'Học viên',
       summary.recorded,
       summary.attendeeSlots > 0 ? `Trên ${summary.attendeeSlots} đăng ký ca đã chạy` : 'Chưa có ca đã chạy',
     ],

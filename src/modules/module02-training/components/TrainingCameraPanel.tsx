@@ -3,6 +3,7 @@ import { Maximize2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
   CAMERA_FILTER_TABS,
   DEFAULT_COURSE_CAMERA_IDS,
@@ -22,8 +23,8 @@ const CCTV_SCANLINE = {
     'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
 } as const
 
-function CameraLiveFeed({ cam, playing = true, compact }: {
-  cam: TrainingCamera; playing?: boolean; compact?: boolean
+function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
+  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean
 }) {
   if (!cam.streamUrl) return null
   return (
@@ -34,6 +35,7 @@ function CameraLiveFeed({ cam, playing = true, compact }: {
       courseName={cam.streamType === 'fixed' ? cam.courseName : undefined}
       streamType={cam.streamType}
       playing={playing}
+      aiOverlay={aiOverlay}
       compact={compact}
     />
   )
@@ -57,7 +59,7 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
       )}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact />
+      <CameraLiveFeed cam={cam} compact aiOverlay={false} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
       <span className="absolute top-0.5 left-0.5 flex items-center gap-0.5">
@@ -115,7 +117,7 @@ function CameraCell({ cam, compact, onMaximize }: {
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact={compact} />
+      <CameraLiveFeed cam={cam} compact={compact} aiOverlay />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
       <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
@@ -279,6 +281,10 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const [filterTab, setFilterTab] = useState<CameraFilterTab>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const { isDesktop } = useShellLayout()
+
+  useEffect(() => {
+    preloadFaceDetection()
+  }, [])
   /** Mobile (portrait + landscape): stacked streams + thumb grid — same selection UX */
   const stackedMobile = !isDesktop
   const stackedPortrait = stackedMobile

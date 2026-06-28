@@ -10,7 +10,9 @@ interface CameraVideoFeedProps {
   streamType?: 'fixed' | 'bodycam' | 'flycam'
   src: string
   playing?: boolean
-  /** Ẩn overlay AI trên thumbnail */
+  /** Bật AI detect + vẽ box — chỉ dùng trên luồng đang chọn (grid chính) */
+  aiOverlay?: boolean
+  /** Thu nhỏ label overlay — vẫn hiển thị detect */
   compact?: boolean
 }
 
@@ -21,10 +23,12 @@ export function CameraVideoFeed({
   streamType = 'fixed',
   src,
   playing = true,
+  aiOverlay = false,
   compact,
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const feedKey = getFeedKeyForCamera(cameraId)
+  const showOverlay = Boolean(aiOverlay && feedKey)
 
   useEffect(() => {
     const video = videoRef.current
@@ -37,7 +41,7 @@ export function CameraVideoFeed({
   }, [src, playing])
 
   return (
-    <>
+    <div className="absolute inset-0 overflow-hidden">
       <video
         ref={videoRef}
         src={src}
@@ -45,20 +49,24 @@ export function CameraVideoFeed({
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="auto"
         className={cn(
-          'absolute inset-0 h-full w-full object-cover',
-          'scale-[1.04] saturate-[0.82] contrast-[1.06] brightness-[0.9]',
+          'absolute inset-0 h-full w-full',
+          streamType === 'bodycam' ? 'object-contain bg-black' : 'object-cover',
+          'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
-      {feedKey && !compact && streamType === 'fixed' && (
+      {showOverlay && feedKey && (
         <CameraAiOverlay
           feedKey={feedKey}
           cameraId={cameraId}
           zone={zone}
           courseName={courseName}
+          compact={compact}
+          videoRef={videoRef}
+          enabled={playing && aiOverlay}
         />
       )}
-    </>
+    </div>
   )
 }

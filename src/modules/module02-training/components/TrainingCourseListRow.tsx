@@ -1,5 +1,6 @@
 import { ChevronRight, ChevronDown, Bell } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { TruncateText } from '@/components/common/TruncateText/TruncateText'
 import {
   Avatar,
   SessionBadge,
@@ -14,7 +15,7 @@ import { resolveCourseLocation } from '../data/trainingCameras'
 import type { TrainingCourseMock } from '../data/trainingMockData'
 
 export const COL_TG = 'w-[38px] shrink-0'
-export const COL_NCL = 'w-[24px] shrink-0'
+export const COL_NL = 'w-[24px] shrink-0'
 export const COL_STATUS = 'w-[74px] shrink-0'
 const ATT_COLS = 'grid-cols-[28px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
 const PREVIEW_COUNT = 4
@@ -64,8 +65,11 @@ export function TrainingCourseListHeader() {
       <span className={cn(COL_TG, 'text-[8px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-right leading-none')}>
         Tham gia
       </span>
-      <span className={cn(COL_NCL, 'text-[8px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-right leading-none')}>
-        NCL
+      <span
+        className={cn(COL_NL, 'text-[8px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-right leading-none cursor-help')}
+        title="Ngoại lệ"
+      >
+        NL
       </span>
       <span className={cn(COL_STATUS, 'text-[8px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-right leading-none')}>
         Trạng thái
@@ -125,15 +129,17 @@ export function TrainingCourseListRow({
             : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
           }
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold text-foreground truncate leading-snug">
+            <TruncateText as="p" className="text-[10px] font-semibold text-foreground leading-snug" title={course.title}>
               {course.title}
               {showCustomBadge && course.id.startsWith('custom-') && (
                 <span className="ml-1.5 text-[8px] font-bold px-1 py-0.5 rounded bg-primary/15 text-primary align-middle">
                   Mới tạo
                 </span>
               )}
-            </p>
-            <p className="text-[9px] text-muted-foreground/70 mt-0.5 truncate leading-snug">{metaLabel}</p>
+            </TruncateText>
+            <TruncateText as="p" className="text-[9px] text-muted-foreground/70 mt-0.5 leading-snug" title={metaLabel}>
+              {metaLabel}
+            </TruncateText>
           </div>
         </div>
 
@@ -144,9 +150,7 @@ export function TrainingCourseListRow({
           }
         </div>
 
-        <div className={cn(
-          COL_NCL,
-          'text-[10px] tabular-nums text-right font-medium',
+        <div className={cn(COL_NL, 'text-[10px] tabular-nums text-right font-medium',
           course.exceptions > 0 ? 'text-orange-400' : 'text-muted-foreground/50',
         )}>
           {course.exceptions}
@@ -205,12 +209,14 @@ export function TrainingCourseListRow({
                     <Avatar name={att.name} color={att.avatarColor} src={getAttendeeAvatarUrl(att.id, att.name)} size="sm" />
 
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{att.name}</p>
-                      <p className="text-[9px] text-muted-foreground/60 truncate">{att.role}</p>
+                      <TruncateText as="p" className="text-[10px] font-semibold text-foreground leading-tight">{att.name}</TruncateText>
+                      <TruncateText as="p" className="text-[9px] text-muted-foreground/60">{att.role}</TruncateText>
                     </div>
 
-                    <div className="min-w-0" title={`${att.company} (${att.companyCode})`}>
-                      <p className="text-[10px] text-primary/75 truncate leading-tight">{att.company}</p>
+                    <div className="min-w-0">
+                      <TruncateText as="p" className="text-[10px] text-primary/75 leading-tight" title={`${att.company} (${att.companyCode})`}>
+                        {att.company}
+                      </TruncateText>
                       <p className="text-[8px] text-muted-foreground/40">{att.companyCode}</p>
                     </div>
 
@@ -227,9 +233,13 @@ export function TrainingCourseListRow({
                         <>
                           <StatusBadges badges={badges} small />
                           {detail && (
-                            <p className={cn('text-[9px] mt-0.5 truncate', attendanceStatusConfig[primary].color + '/80')}>
+                            <TruncateText
+                              as="p"
+                              className={cn('text-[9px] mt-0.5', attendanceStatusConfig[primary].color + '/80')}
+                              title={detail}
+                            >
                               {detail}
-                            </p>
+                            </TruncateText>
                           )}
                         </>
                       )}
