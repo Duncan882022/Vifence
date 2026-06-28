@@ -4,7 +4,7 @@
  * - vn-worker-*.jpg: stock Pexels (fallback module khác / ID chưa map)
  */
 
-const AVATAR_BASE = '/avatars/'
+const AVATAR_BASE = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}avatars/`
 
 export const MALE_AVATARS = [
   'vn-worker-m-01.jpg',
