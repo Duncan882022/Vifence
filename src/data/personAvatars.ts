@@ -1,87 +1,88 @@
 /**
- * Ảnh chân dung demo — lưu local tại public/avatars/ (Pexels, miễn phí demo).
- * Nguồn dùng chung cho Module 02 (đào tạo) và Module 03 (an toàn).
+ * Ảnh chân dung công nhân công trường — lưu local tại public/avatars/ (Pexels, miễn phí demo).
+ * Nguồn dùng chung cho Module 01 (ra vào), 02 (đào tạo), 03 (an toàn), 04 (5S).
+ * Mỗi ảnh: công nhân xây dựng đội mũ/nón, áo phản quang — không dùng ảnh văn phòng.
  */
 
 const AVATAR_BASE = '/avatars/'
 
 export const MALE_AVATARS = [
-  'vn-m-01.jpg',
-  'vn-m-02.jpg',
-  'vn-m-03.jpg',
-  'vn-m-04.jpg',
-  'vn-m-05.jpg',
-  'vn-m-06.jpg',
-  'vn-m-07.jpg',
-  'vn-m-08.jpg',
+  'vn-worker-m-01.jpg',
+  'vn-worker-m-02.jpg',
+  'vn-worker-m-03.jpg',
+  'vn-worker-m-04.jpg',
+  'vn-worker-m-05.jpg',
+  'vn-worker-m-06.jpg',
+  'vn-worker-m-07.jpg',
+  'vn-worker-m-08.jpg',
 ] as const
 
 export const FEMALE_AVATARS = [
-  'vn-w-01.jpg',
-  'vn-w-02.jpg',
-  'vn-w-03.jpg',
-  'vn-w-04.jpg',
-  'vn-w-05.jpg',
-  'vn-w-06.jpg',
-  'vn-w-07.jpg',
-  'vn-w-08.jpg',
+  'vn-worker-w-01.jpg',
+  'vn-worker-w-02.jpg',
+  'vn-worker-w-03.jpg',
+  'vn-worker-w-04.jpg',
+  'vn-worker-w-05.jpg',
+  'vn-worker-w-06.jpg',
+  'vn-worker-w-07.jpg',
+  'vn-worker-w-08.jpg',
 ] as const
 
-/** Gán cố định cho nhân sự hiển thị thường xuyên (training + safety). */
+/** Gán cố định cho nhân sự hiển thị thường xuyên (training + safety + access). */
 export const PERSON_AVATAR_FILES: Record<string, string> = {
   /* ── Ngoại lệ đào tạo (w-001 … w-020) ── */
-  'w-001': 'vn-m-01.jpg',  // Phạm Văn Cường
-  'w-002': 'vn-m-02.jpg',  // Trần Văn Bình
-  'w-003': 'vn-m-03.jpg',  // Lê Văn Dũng
-  'w-004': 'vn-m-04.jpg',  // Hoàng Văn Em
-  'w-005': 'vn-w-01.jpg',  // Nguyễn Thị Phương
-  'w-006': 'vn-m-05.jpg',  // Vũ Minh Giang
-  'w-007': 'vn-m-06.jpg',  // Đinh Quốc Hùng
-  'w-008': 'vn-w-02.jpg',  // Bùi Thị Lan
-  'w-010': 'vn-m-07.jpg',  // Trương Văn Khoa
-  'w-011': 'vn-w-03.jpg',  // Lý Thị Mỹ Duyên
-  'w-012': 'vn-m-08.jpg',  // Phan Minh Tuấn
-  'w-013': 'vn-m-01.jpg',  // Cao Văn Nam
-  'w-014': 'vn-w-04.jpg',  // Đặng Thị Hoa
-  'w-015': 'vn-m-02.jpg',  // Hồ Quốc Việt
-  'w-016': 'vn-w-05.jpg',  // Kiều Thanh Thảo
-  'w-018': 'vn-m-03.jpg',  // Mai Xuân Trường
-  'w-019': 'vn-m-04.jpg',  // Nguyễn Văn Hoàng
-  'w-020': 'vn-m-05.jpg',  // Phùng Anh Tuấn
+  'w-001': 'vn-worker-m-01.jpg',  // Phạm Văn Cường
+  'w-002': 'vn-worker-m-02.jpg',  // Trần Văn Bình
+  'w-003': 'vn-worker-m-03.jpg',  // Lê Văn Dũng
+  'w-004': 'vn-worker-m-04.jpg',  // Hoàng Văn Em
+  'w-005': 'vn-worker-w-01.jpg',  // Nguyễn Thị Phương
+  'w-006': 'vn-worker-m-05.jpg',  // Vũ Minh Giang
+  'w-007': 'vn-worker-m-06.jpg',  // Đinh Quốc Hùng
+  'w-008': 'vn-worker-w-02.jpg',  // Bùi Thị Lan
+  'w-010': 'vn-worker-m-07.jpg',  // Trương Văn Khoa
+  'w-011': 'vn-worker-w-03.jpg',  // Lý Thị Mỹ Duyên
+  'w-012': 'vn-worker-m-08.jpg',  // Phan Minh Tuấn
+  'w-013': 'vn-worker-m-01.jpg',  // Cao Văn Nam
+  'w-014': 'vn-worker-w-04.jpg',  // Đặng Thị Hoa
+  'w-015': 'vn-worker-m-02.jpg',  // Hồ Quốc Việt
+  'w-016': 'vn-worker-w-05.jpg',  // Kiều Thanh Thảo
+  'w-018': 'vn-worker-m-03.jpg',  // Mai Xuân Trường
+  'w-019': 'vn-worker-m-04.jpg',  // Nguyễn Văn Hoàng
+  'w-020': 'vn-worker-m-05.jpg',  // Phùng Anh Tuấn
 
   /* ── Đang học / hoàn thành (w-c*, w-att*) ── */
-  'w-c01': 'vn-w-06.jpg',    // Nguyễn Thị Lan
-  'w-c02': 'vn-m-06.jpg',    // Trần Quốc Bảo
-  'w-c03': 'vn-w-07.jpg',    // Lê Thị Hương
-  'w-c04': 'vn-m-07.jpg',    // Phạm Minh Tuấn
-  'w-c05': 'vn-m-08.jpg',    // Ngô Văn Tùng
-  'w-c06': 'vn-w-08.jpg',    // Đinh Thị Mai
-  'w-c07': 'vn-w-01.jpg',    // Hoàng Thị Ngọc
-  'w-c08': 'vn-m-01.jpg',    // Bùi Văn Khoa
-  'w-c09': 'vn-w-02.jpg',    // Vũ Thị Thu
-  'w-c10': 'vn-m-02.jpg',    // Lý Văn Nam
-  'w-c11': 'vn-m-03.jpg',    // Trịnh Văn Hùng
-  'w-c12': 'vn-w-03.jpg',    // Đặng Thị Linh
-  'w-att01': 'vn-m-04.jpg',  // Bùi Văn Thanh
-  'w-att02': 'vn-w-04.jpg',  // Nguyễn Thị Xuân
-  'w-att03': 'vn-m-05.jpg',  // Phạm Văn An
-  'w-att04': 'vn-m-06.jpg',  // Trần Minh Khang
+  'w-c01': 'vn-worker-w-06.jpg',    // Nguyễn Thị Lan
+  'w-c02': 'vn-worker-m-06.jpg',    // Trần Quốc Bảo
+  'w-c03': 'vn-worker-w-07.jpg',    // Lê Thị Hương
+  'w-c04': 'vn-worker-m-07.jpg',    // Phạm Minh Tuấn
+  'w-c05': 'vn-worker-m-08.jpg',    // Ngô Văn Tùng
+  'w-c06': 'vn-worker-w-08.jpg',    // Đinh Thị Mai
+  'w-c07': 'vn-worker-w-01.jpg',    // Hoàng Thị Ngọc
+  'w-c08': 'vn-worker-m-01.jpg',    // Bùi Văn Khoa
+  'w-c09': 'vn-worker-w-02.jpg',    // Vũ Thị Thu
+  'w-c10': 'vn-worker-m-02.jpg',    // Lý Văn Nam
+  'w-c11': 'vn-worker-m-03.jpg',    // Trịnh Văn Hùng
+  'w-c12': 'vn-worker-w-03.jpg',    // Đặng Thị Linh
+  'w-att01': 'vn-worker-m-04.jpg',  // Bùi Văn Thanh
+  'w-att02': 'vn-worker-w-04.jpg',  // Nguyễn Thị Xuân
+  'w-att03': 'vn-worker-m-05.jpg',  // Phạm Văn An
+  'w-att04': 'vn-worker-m-06.jpg',  // Trần Minh Khang
 
   /* ── Điện cơ E (w-a*) ── */
-  'w-a01': 'vn-w-05.jpg',  // Cao Thị Bích
-  'w-a02': 'vn-m-07.jpg',  // Nguyễn Văn Phú
-  'w-a03': 'vn-m-08.jpg',  // Trần Minh Đức
-  'w-a04': 'vn-w-06.jpg',  // Lê Thị Phương
-  'w-a05': 'vn-m-01.jpg',  // Vũ Minh Khải
+  'w-a01': 'vn-worker-w-05.jpg',  // Cao Thị Bích
+  'w-a02': 'vn-worker-m-07.jpg',  // Nguyễn Văn Phú
+  'w-a03': 'vn-worker-m-08.jpg',  // Trần Minh Đức
+  'w-a04': 'vn-worker-w-06.jpg',  // Lê Thị Phương
+  'w-a05': 'vn-worker-m-01.jpg',  // Vũ Minh Khải
 
   /* ── Ca sắp diễn ra (e-*) ── */
-  'e-vhmn-1': 'vn-m-02.jpg',  // Ngô Thanh Sơn
-  'e-vhmn-2': 'vn-m-03.jpg',  // Lưu Đức Minh
-  'e-vhmn-3': 'vn-m-04.jpg',  // Đỗ Văn Long
-  'e-vhmn-4': 'vn-w-07.jpg',  // Võ Thị Hằng
-  'e-ktxd-1': 'vn-m-05.jpg',  // Hoàng Văn Phúc
-  'e-ktxd-2': 'vn-w-08.jpg',  // Lê Thị Thu Hà
-  'e-ktxd-3': 'vn-m-06.jpg',  // Trương Văn Dũng
+  'e-vhmn-1': 'vn-worker-m-02.jpg',  // Ngô Thanh Sơn
+  'e-vhmn-2': 'vn-worker-m-03.jpg',  // Lưu Đức Minh
+  'e-vhmn-3': 'vn-worker-m-04.jpg',  // Đỗ Văn Long
+  'e-vhmn-4': 'vn-worker-w-07.jpg',  // Võ Thị Hằng
+  'e-ktxd-1': 'vn-worker-m-05.jpg',  // Hoàng Văn Phúc
+  'e-ktxd-2': 'vn-worker-w-08.jpg',  // Lê Thị Thu Hà
+  'e-ktxd-3': 'vn-worker-m-06.jpg',  // Trương Văn Dũng
 }
 
 const AVATAR_COLOR_PALETTE = [
