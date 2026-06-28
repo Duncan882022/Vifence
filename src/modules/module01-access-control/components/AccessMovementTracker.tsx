@@ -1,15 +1,28 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, User, Truck } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { ACCESS_MOVEMENT_TRACKS, findMovementTrack } from '../data/accessMovements'
 import { AccessMovementMap } from './AccessMovementMap'
+import type { AccessEvent } from '@/types/access'
 
 type TrackTab = 'person' | 'vehicle'
 
-export function AccessMovementTracker() {
+interface AccessMovementTrackerProps {
+  selectedEvent?: AccessEvent | null
+}
+
+export function AccessMovementTracker({ selectedEvent }: AccessMovementTrackerProps) {
   const [tab, setTab] = useState<TrackTab>('person')
   const [query, setQuery] = useState('Nguyễn Văn An')
   const [activeWaypointId, setActiveWaypointId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (selectedEvent) {
+      setQuery(selectedEvent.name)
+      setTab(selectedEvent.subjectType === 'vehicle' ? 'vehicle' : 'person')
+      setActiveWaypointId(null)
+    }
+  }, [selectedEvent?.id, selectedEvent?.name, selectedEvent?.subjectType])
 
   const track = useMemo(() => {
     const found = findMovementTrack(query)
@@ -90,7 +103,7 @@ export function AccessMovementTracker() {
           </div>
         </div>
 
-        <div className="flex-1 min-h-[180px] relative">
+        <div className="flex-1 min-h-[140px] relative">
           <AccessMovementMap
             waypoints={track.waypoints}
             pathWaypointIds={track.pathWaypointIds}

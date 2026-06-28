@@ -44,7 +44,7 @@ export function AccessExceptionsPanel() {
           <div
             key={ex.id}
             className={cn(
-              'grid gap-x-2 gap-y-1 items-center px-3 py-2.5',
+              'grid gap-x-2 gap-y-1 items-center px-3 py-2',
               'grid-cols-[20px_1fr_auto] sm:grid-cols-[20px_minmax(0,1.2fr)_minmax(0,1fr)_48px_minmax(0,0.8fr)_72px]',
             )}
           >

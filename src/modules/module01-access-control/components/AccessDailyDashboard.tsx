@@ -39,7 +39,7 @@ function DailyMetricCard({ data, meta, embedded }: DailyMetricCardProps) {
   return (
     <div className={cn(
       'border border-[#1e2433] border-l-2 rounded-lg flex flex-col gap-1.5 sm:gap-2',
-      'min-h-[84px] sm:min-h-[96px]',
+      'min-h-[72px] sm:min-h-[84px]',
       'hover:border-[#2a3855]/80 transition-colors',
       'p-2.5 sm:p-3',
       embedded ? 'bg-[#0b0f1a]' : 'bg-[#0d1117]',

@@ -122,7 +122,7 @@ export function AccessEventTable({ selectedId, onSelectEvent }: AccessEventTable
               key={event.id}
               onClick={() => onSelectEvent?.(event)}
               className={cn(
-                'grid gap-x-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#1a2235]/50 transition-colors group',
+                'grid gap-x-2 items-center px-3 py-2 cursor-pointer hover:bg-[#1a2235]/50 transition-colors group',
                 'max-lg:grid-cols-[32px_1fr_auto]',
                 'lg:grid-cols-[32px_minmax(0,1.1fr)_minmax(0,0.9fr)_52px_52px_56px_minmax(0,0.7fr)_48px_40px]',
                 selectedId === event.id && 'bg-primary/10',
