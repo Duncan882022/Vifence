@@ -202,7 +202,7 @@ export function TrainingCourseListRow({
                       ATT_COLS,
                     )}
                   >
-                    <Avatar name={att.name} color={att.avatarColor} src={getAttendeeAvatarUrl(att.id)} size="sm" />
+                    <Avatar name={att.name} color={att.avatarColor} src={getAttendeeAvatarUrl(att.id, att.name)} size="sm" />
 
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{att.name}</p>

@@ -5,6 +5,7 @@ import { DEMO_NOW } from '../data/trainingMockData'
 import { getAttendeeAvatarUrl } from '../data/trainingAvatars'
 import { formatCourseMeta, getCourseZone, type TrainingZone } from '../data/trainingCourseMeta'
 import { buildTrainingPlaybackEvent, buildTrainingPlaybackEventFromRecord } from '../services/trainingPlayback.service'
+import { Avatar } from '@/components/common/Avatar/Avatar'
 
 /* ─────────────────────────────────────────────────────────────
    TYPES  (mirrors future API contract)
@@ -695,31 +696,7 @@ function recordCourseMeta(r: CourseRecord): string {
 /* ─────────────────────────────────────────────────────────────
    UI ATOMS
 ───────────────────────────────────────────────────────────── */
-export function Avatar({ name, color, src, size = 'md' }: {
-  name: string; color: string; src?: string; size?: 'sm' | 'md' | 'lg'
-}) {
-  const initials = name.split(' ').slice(-2).map(w => w[0]).join('').toUpperCase()
-  const sz = size === 'sm' ? 'w-7 h-7 text-[9px]' : size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-[11px]'
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={name}
-        loading="lazy"
-        className={cn('rounded-full object-cover shrink-0', sz)}
-        style={{ boxShadow: `0 0 0 2px ${color}55` }}
-      />
-    )
-  }
-  return (
-    <div
-      className={cn('rounded-full flex items-center justify-center font-bold shrink-0', sz)}
-      style={{ backgroundColor: color + '28', border: `2px solid ${color}55`, color }}
-    >
-      {initials}
-    </div>
-  )
-}
+export { Avatar }
 
 export function StatusBadge({ status, small }: { status: AttendanceStatus; small?: boolean }) {
   const cfg = statusConfig[status]
@@ -862,7 +839,7 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
             onClick={() => onSelect(s)}
             className={cn('grid gap-x-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#1a2235]/50 transition-colors group', LIST_COLS)}
           >
-            <Avatar name={s.name} color={s.avatarColor} src={getAttendeeAvatarUrl(s.id)} size="sm" />
+            <Avatar name={s.name} color={s.avatarColor} src={getAttendeeAvatarUrl(s.id, s.name)} size="sm" />
 
             <div className="min-w-0">
               <p className="text-[10px] font-semibold text-foreground truncate leading-tight">{s.name}</p>
@@ -1071,7 +1048,7 @@ function StudentDetail({ student, backLabel = 'Danh sách', onBack, onPlayback }
       <div className="flex-1 overflow-y-auto">
         {/* Identity card */}
         <div className="flex items-start gap-3 px-3 py-3 border-b border-[#1e2433]">
-          <Avatar name={student.name} color={student.avatarColor} src={getAttendeeAvatarUrl(student.id)} size="lg" />
+          <Avatar name={student.name} color={student.avatarColor} src={getAttendeeAvatarUrl(student.id, student.name)} size="lg" />
           <div className="flex-1 min-w-0">
             <p className="text-[13px] font-bold text-foreground leading-tight">{student.name}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{student.company} · {student.role}</p>
@@ -1165,7 +1142,7 @@ function ContractorDetail({ company, onBack, onSelectStudent }: ContractorDetail
                 onClick={() => onSelectStudent(s)}
                 className={cn('grid gap-x-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#1a2235]/50 transition-colors group', WORKER_COLS)}
               >
-                <Avatar name={s.name} color={s.avatarColor} src={getAttendeeAvatarUrl(s.id)} size="sm" />
+                <Avatar name={s.name} color={s.avatarColor} src={getAttendeeAvatarUrl(s.id, s.name)} size="sm" />
 
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold text-foreground truncate">{s.name}</p>

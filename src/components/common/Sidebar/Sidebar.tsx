@@ -22,10 +22,10 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/module01', label: 'Kiểm soát vào ra',    icon: DoorOpen,       available: false },
+  { path: '/module01', label: 'Kiểm soát vào ra',    icon: DoorOpen,       available: true },
   { path: '/module02', label: 'Đào tạo & Tuân thủ',  icon: GraduationCap,  available: true  },
-  { path: '/module03', label: 'Giám sát an toàn',     icon: ShieldAlert,    available: false },
-  { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
+  { path: '/module03', label: 'Giám sát an toàn',     icon: ShieldAlert,    available: true  },
+  { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: true  },
   { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: false },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
   { path: '/module07', label: 'Nghiệm thu',            icon: ClipboardCheck, available: false },

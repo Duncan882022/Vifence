@@ -4,6 +4,9 @@ export type ViolationType =
   | 'no-harness'
   | 'danger-zone'
   | 'work-at-height'
+  | 'fall'
+
+export type ViolationSeverity = 'high' | 'medium' | 'low'
 
 export type ViolationStatus = 'pending' | 'processed'
 
@@ -13,7 +16,9 @@ export interface SafetyViolation {
   description: string
   workerId?: string
   workerName?: string
+  employeeCode?: string
   contractorName?: string
+  teamName?: string
   location: string
   cameraId: string
   cameraName: string
@@ -26,11 +31,18 @@ export interface SafetyViolation {
   notes?: string
 }
 
+export interface SafetyViolatorRank {
+  name: string
+  contractorName?: string
+  teamName?: string
+  count: number
+}
+
 export interface SafetyStats {
   totalViolations: number
   pending: number
   processed: number
-  topViolators: { name: string; count: number }[]
+  topViolators: SafetyViolatorRank[]
   topContractors: { name: string; count: number }[]
   topZones: { name: string; count: number }[]
 }
