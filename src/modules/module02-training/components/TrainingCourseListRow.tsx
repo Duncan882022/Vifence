@@ -11,7 +11,6 @@ import {
 } from './TrainingEventTable'
 import { getAttendeeAvatarUrl } from '../data/trainingAvatars'
 import { formatCourseMeta } from '../data/trainingCourseMeta'
-import { resolveCourseLocation } from '../data/trainingCameras'
 import type { TrainingCourseMock } from '../data/trainingMockData'
 
 export const COL_TG = 'w-[38px] shrink-0'
@@ -101,13 +100,11 @@ export function TrainingCourseListRow({
     ? course.attendees
     : course.attendees.slice(0, PREVIEW_COUNT)
   const extra = course.attendees.length - PREVIEW_COUNT
-  const location = resolveCourseLocation(course.title, course.zone, course.location)
   const metaLabel = formatCourseMeta(
     course.startTime,
     course.endTime,
     course.sessionDate,
     course.zone,
-    location,
   )
 
   return (
