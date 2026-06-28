@@ -17,8 +17,8 @@ export interface TrainingCamera extends Camera {
 const RAW_CAMERAS: Omit<TrainingCamera, 'streamUrl'>[] = [
   /* ── OCP1-A — CCTV cố định ─────────────────────────────── */
   { id: 'A-01', name: 'Cam 01', location: 'Cổng vào',         zone: 'OCP1-A', status: 'online', streamType: 'fixed' },
-  { id: 'A-02', name: 'Cam 02', location: 'Phòng Đào Tạo A1', zone: 'OCP1-A', status: 'online', streamType: 'fixed', courseName: 'Toolbox A' },
-  { id: 'A-03', name: 'Cam 03', location: 'Phòng Đào Tạo A2', zone: 'OCP1-A', status: 'online', streamType: 'fixed', courseName: 'Cọc nhồi B' },
+  { id: 'A-02', name: 'Cam 02', location: 'Phòng họp A',       zone: 'OCP1-A', status: 'online', streamType: 'fixed', courseName: 'Toolbox A' },
+  { id: 'A-03', name: 'Cam 03', location: 'Sân Thực Hành A', zone: 'OCP1-A', status: 'online', streamType: 'fixed', courseName: 'Cọc nhồi B' },
   { id: 'A-04', name: 'Cam 04', location: 'Sân Tập A',         zone: 'OCP1-A', status: 'online', streamType: 'fixed' },
   { id: 'A-05', name: 'Cam 05', location: 'Hành Lang',         zone: 'OCP1-A', status: 'online', streamType: 'fixed' },
   { id: 'A-06', name: 'Cam 06', location: 'Kho Vật Tư',        zone: 'OCP1-A', status: 'online', streamType: 'fixed' },
@@ -27,7 +27,7 @@ const RAW_CAMERAS: Omit<TrainingCamera, 'streamUrl'>[] = [
   /* ── OCP1-B — CCTV cố định ─────────────────────────────── */
   { id: 'B-01', name: 'Cam 01', location: 'Cổng vào',          zone: 'OCP1-B', status: 'online', streamType: 'fixed' },
   { id: 'B-02', name: 'Cam 02', location: 'Sân Thực Hành B1',  zone: 'OCP1-B', status: 'online', streamType: 'fixed', courseName: 'PCCC C' },
-  { id: 'B-03', name: 'Cam 03', location: 'Phòng Đào Tạo B2',  zone: 'OCP1-B', status: 'online', streamType: 'fixed', courseName: 'Điện cơ E' },
+  { id: 'B-03', name: 'Cam 03', location: 'Xưởng Kỹ Thuật',   zone: 'OCP1-B', status: 'online', streamType: 'fixed', courseName: 'Điện cơ E' },
   { id: 'B-04', name: 'Cam 04', location: 'Phòng họp B',        zone: 'OCP1-B', status: 'online', streamType: 'fixed' },
   { id: 'B-05', name: 'Cam 05', location: 'Hành Lang',          zone: 'OCP1-B', status: 'online', streamType: 'fixed' },
   { id: 'B-06', name: 'Cam 06', location: 'Khu Vực Máy Móc',   zone: 'OCP1-B', status: 'online', streamType: 'fixed' },

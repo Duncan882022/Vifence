@@ -127,7 +127,7 @@ export const mockSafetyViolations: SafetyViolation[] = [
     id: 'sv-001', type: 'no-helmet', description: 'Không đội mũ bảo hộ tại phòng đào tạo Cọc nhồi B',
     workerId: 'w-001', workerName: 'Phạm Văn Cường', employeeCode: 'NV000789',
     contractorName: 'Delta Corp', teamName: 'Cọc nhồi B',
-    location: 'Phòng Đào Tạo A2', cameraId: 'A-03', cameraName: 'OCP1-A · Cam 03',
+    location: 'Sân Thực Hành A', cameraId: 'A-03', cameraName: 'OCP1-A · Cam 03',
     timestamp: '2026-06-24T08:30:00', status: 'pending',
   },
   {
@@ -141,7 +141,7 @@ export const mockSafetyViolations: SafetyViolation[] = [
     id: 'sv-003', type: 'no-vest', description: 'Không mặc áo phản quang',
     workerId: 'w-002', workerName: 'Trần Văn Bình', employeeCode: 'NV000456',
     contractorName: 'XYZ JSC', teamName: 'Toolbox A',
-    location: 'Phòng Đào Tạo A1', cameraId: 'A-02', cameraName: 'OCP1-A · Cam 02',
+    location: 'Phòng họp A', cameraId: 'A-02', cameraName: 'OCP1-A · Cam 02',
     timestamp: '2026-06-24T10:00:00', status: 'processed', processedBy: 'Nguyễn Thị Phương', processedAt: '2026-06-24T10:30:00',
   },
 ]
