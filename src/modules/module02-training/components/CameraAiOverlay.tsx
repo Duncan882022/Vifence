@@ -8,9 +8,6 @@ export type { AiOverlayBox } from '../data/cameraAiOverlayKeyframes'
 
 interface CameraAiOverlayProps {
   feedKey: CameraFeedKey
-  cameraId: string
-  zone: string
-  courseName?: string
   compact?: boolean
   videoRef: RefObject<HTMLVideoElement | null>
   enabled?: boolean
@@ -42,9 +39,6 @@ function DetectionBox({ box, compact }: { box: AiOverlayBox; compact?: boolean }
 
 export function CameraAiOverlay({
   feedKey,
-  cameraId,
-  zone,
-  courseName,
   compact,
   videoRef,
   enabled = true,
@@ -73,13 +67,7 @@ export function CameraAiOverlay({
       ))}
 
       {!compact && (
-        <>
-          <div className="absolute top-2 left-2 font-mono text-[8px] text-white/45 leading-tight z-[1]">
-            <div>{cameraId} · {zone}</div>
-            {courseName && <div className="text-emerald-400/60">{courseName}</div>}
-          </div>
-          <div className="absolute bottom-2 right-2 font-mono text-[8px] text-white/40 z-[1]">{time}</div>
-        </>
+        <div className="absolute bottom-2 right-2 font-mono text-[8px] text-white/40 z-[1]">{time}</div>
       )}
     </div>
   )

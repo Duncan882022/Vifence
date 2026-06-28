@@ -31,8 +31,6 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
     <CameraVideoFeed
       src={cam.streamUrl}
       cameraId={cam.id}
-      zone={cam.zone}
-      courseName={cam.streamType === 'fixed' ? cam.courseName : undefined}
       streamType={cam.streamType}
       playing={playing}
       aiOverlay={aiOverlay}

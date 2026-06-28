@@ -5,8 +5,6 @@ import { getFeedKeyForCamera } from '../data/trainingCameraFeeds'
 
 interface CameraVideoFeedProps {
   cameraId: string
-  zone: string
-  courseName?: string
   streamType?: 'fixed' | 'bodycam' | 'flycam'
   src: string
   playing?: boolean
@@ -18,8 +16,6 @@ interface CameraVideoFeedProps {
 
 export function CameraVideoFeed({
   cameraId,
-  zone,
-  courseName,
   streamType = 'fixed',
   src,
   playing = true,
@@ -59,9 +55,6 @@ export function CameraVideoFeed({
       {showOverlay && feedKey && (
         <CameraAiOverlay
           feedKey={feedKey}
-          cameraId={cameraId}
-          zone={zone}
-          courseName={courseName}
           compact={compact}
           videoRef={videoRef}
           enabled={playing && aiOverlay}

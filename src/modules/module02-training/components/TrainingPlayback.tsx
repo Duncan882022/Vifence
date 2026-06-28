@@ -328,8 +328,6 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
                 <CameraVideoFeed
                   src={camera.streamUrl}
                   cameraId={camera.id}
-                  zone={camera.zone}
-                  courseName={camera.courseName}
                   streamType={camera.streamType}
                   playing={isPlaying}
                   aiOverlay
