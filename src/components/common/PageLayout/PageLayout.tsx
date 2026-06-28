@@ -164,7 +164,7 @@ export function Panel({
           <div className="absolute inset-4 max-lg:inset-2 bg-[#0d1117] border border-[#1e2433] rounded-xl flex flex-col overflow-hidden shadow-2xl">
             {headerContent(() => setExpanded(false), true)}
             <div className={cn(
-              'flex-1 min-h-0 flex flex-col overflow-hidden',
+              'flex-1 min-h-0 flex flex-col overflow-hidden min-w-0',
               !noPadding && 'p-3',
             )}>
               {expandedContent ?? children}

@@ -201,6 +201,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
 }) {
   const count = cams.length
   const cols = getGridCols(count, stackedPortrait, forceSingleCol)
+  const rows = Math.ceil(count / cols)
   const compact = count > 2
 
   return (
@@ -208,9 +209,11 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
       className={cn(
         'grid gap-1.5 w-full',
         fillHeight ? 'h-full min-h-0' : 'h-auto content-start',
-        stackedPortrait && 'max-lg:overflow-visible',
       )}
-      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      style={{
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : {}),
+      }}
     >
       {cams.map(cam => (
         <div
@@ -300,7 +303,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     .filter((c): c is TrainingCamera => !!c)
   const fallback = MOCK_TRAINING_CAMERAS.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
-  const fillHeightMain = isDesktop && safeCams.length <= 2
+  const fillHeightMain = isDesktop
 
   useEffect(() => {
     setSelectedIds(prev => (prev.length === 0 ? [...defaultIds] : prev))
@@ -326,21 +329,9 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
 
   return (
     <>
-      <div className={cn(
-        stackedMobile
-          ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
-          : 'flex flex-1 min-h-0 h-full flex-col max-lg:landscape:flex-row lg:flex-row',
-      )}>
-        <div className={cn(
-          'p-2 min-h-0',
-          stackedMobile && 'max-lg:flex-none max-lg:shrink-0',
-          !stackedMobile && 'shrink-0 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1 max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
-        )}>
-          <div className={cn(
-            'w-full min-h-0',
-            stackedMobile && 'max-lg:h-auto max-lg:overflow-visible',
-            !stackedMobile && 'h-full max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden lg:overflow-y-auto lg:overflow-x-hidden',
-          )}>
+      <div className="flex flex-1 min-h-0 h-full w-full flex-col lg:flex-row max-lg:landscape:flex-row">
+        <div className="flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 max-lg:landscape:min-w-0">
+          <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain">
             <CameraGrid
               cams={safeCams}
               onMaximize={cam => setFocusedCam(cam)}
@@ -351,10 +342,9 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
         </div>
 
         <div className={cn(
-          'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200',
+          'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
           'border-t lg:border-t-0 lg:border-l',
-          stackedMobile && 'max-lg:flex-none max-lg:overflow-visible',
-          !stackedMobile && 'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:flex-none max-lg:landscape:w-[168px] max-lg:landscape:min-h-0 max-lg:landscape:h-auto max-lg:landscape:overflow-hidden',
+          'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
           'lg:overflow-hidden',
           sidebarOpen
             ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'

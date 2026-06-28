@@ -95,7 +95,7 @@ export function Module02DashboardPage() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col min-h-0 h-full max-lg:h-auto max-lg:flex-none">
+                <div className="flex flex-col flex-1 min-h-0 h-full w-full max-lg:min-h-0">
                   <TrainingCameraPanel
                     selectedId={selectedCamId}
                     onSelectCamera={cam => setSelectedCamId(cam.id)}
