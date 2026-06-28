@@ -57,6 +57,8 @@ export interface HousekeepingDetectionCard {
 export interface HousekeepingImprovementItem {
   id: string
   thumbnailUrl: string
+  categoryId: HousekeepingCategoryId
+  zoneId: string
   zoneLabel: string
   floorLabel?: string
   issueType: string

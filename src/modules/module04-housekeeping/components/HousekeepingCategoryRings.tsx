@@ -2,7 +2,7 @@ import { AlertCircle } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { getHousekeepingCategoryScores } from '../services/housekeepingKpi.service'
 import { SCORE_TIER_LABELS } from '../data/housekeepingScores'
-import type { ScoreTier } from '@/types/housekeeping'
+import type { HousekeepingCategoryId, ScoreTier } from '@/types/housekeeping'
 
 const TIER_RING_COLORS: Record<ScoreTier, string> = {
   good: '#38bdf8',
@@ -21,21 +21,35 @@ const PRIORITY_COLORS = {
   medium: 'text-orange-400',
 } as const
 
-function CategoryRing({
-  label, score, tier, violationCount,
-}: {
+interface CategoryRingProps {
+  id: HousekeepingCategoryId
   label: string
   score: number
   tier: ScoreTier
   violationCount: number
-}) {
+  selected: boolean
+  onSelect: (id: HousekeepingCategoryId) => void
+}
+
+function CategoryRing({
+  id, label, score, tier, violationCount, selected, onSelect,
+}: CategoryRingProps) {
   const pct = score
   const circumference = 2 * Math.PI * 28
   const offset = circumference - (pct / 100) * circumference
   const priorityColor = violationCount >= 4 ? PRIORITY_COLORS.high : PRIORITY_COLORS.medium
 
   return (
-    <div className="flex flex-col items-center gap-2 min-w-0 flex-1">
+    <button
+      type="button"
+      onClick={() => onSelect(id)}
+      className={cn(
+        'flex flex-col items-center gap-2 min-w-0 flex-1 rounded-lg p-1.5 transition-colors',
+        'hover:bg-[#1a2235]/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-500/50',
+        selected && 'bg-sky-500/10 ring-1 ring-sky-500/40',
+      )}
+      title={`Lọc danh sách theo ${label}`}
+    >
       <div className="relative w-16 h-16 sm:w-[72px] sm:h-[72px]">
         <svg viewBox="0 0 64 64" className="w-full h-full -rotate-90">
           <circle cx="32" cy="32" r="28" fill="none" stroke="#1e2433" strokeWidth="5" />
@@ -70,22 +84,37 @@ function CategoryRing({
           </span>
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 
-export function HousekeepingCategoryRings() {
+interface HousekeepingCategoryRingsProps {
+  selectedCategoryId?: HousekeepingCategoryId | null
+  onSelectCategory?: (id: HousekeepingCategoryId | null) => void
+}
+
+export function HousekeepingCategoryRings({
+  selectedCategoryId = null,
+  onSelectCategory,
+}: HousekeepingCategoryRingsProps) {
   const categories = getHousekeepingCategoryScores()
+
+  const handleSelect = (id: HousekeepingCategoryId) => {
+    onSelectCategory?.(selectedCategoryId === id ? null : id)
+  }
 
   return (
     <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-3 sm:gap-2 py-1">
       {categories.map(cat => (
         <CategoryRing
           key={cat.id}
+          id={cat.id}
           label={cat.label}
           score={cat.score}
           tier={cat.tier}
           violationCount={cat.violationCount}
+          selected={selectedCategoryId === cat.id}
+          onSelect={handleSelect}
         />
       ))}
     </div>

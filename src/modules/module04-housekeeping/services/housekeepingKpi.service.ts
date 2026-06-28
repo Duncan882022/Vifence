@@ -1,5 +1,6 @@
 import type { KPIData } from '@/types/api'
 import type {
+  HousekeepingCategoryId,
   HousekeepingCategoryScore,
   HousekeepingImprovementItem,
   HousekeepingIssue,
@@ -236,6 +237,33 @@ export function getHousekeepingZoneScores(): HousekeepingZoneScore[] {
 
 export function getHousekeepingImprovementList(): HousekeepingImprovementItem[] {
   return HOUSEKEEPING_IMPROVEMENT_LIST
+}
+
+export interface ImprovementListFilters {
+  categoryId?: HousekeepingCategoryId | null
+  zoneId?: string | null
+  severity?: 'all' | 'high' | 'medium'
+  search?: string
+}
+
+export function filterImprovementList(
+  items: HousekeepingImprovementItem[],
+  filters: ImprovementListFilters,
+): HousekeepingImprovementItem[] {
+  const query = filters.search?.trim().toLowerCase() ?? ''
+
+  return items.filter(item => {
+    if (filters.categoryId && item.categoryId !== filters.categoryId) return false
+    if (filters.zoneId && item.zoneId !== filters.zoneId) return false
+    if (filters.severity && filters.severity !== 'all' && item.priority !== filters.severity) return false
+    if (!query) return true
+
+    return (
+      item.issueType.toLowerCase().includes(query)
+      || item.zoneLabel.toLowerCase().includes(query)
+      || (item.floorLabel?.toLowerCase().includes(query) ?? false)
+    )
+  })
 }
 
 export function getHousekeepingScoreDelta(): number {

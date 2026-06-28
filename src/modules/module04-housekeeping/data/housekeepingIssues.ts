@@ -1,5 +1,4 @@
 import type { HousekeepingIssue, IssueSeverity, IssueType } from '@/types/housekeeping'
-import { getIssueFeedUrl } from './housekeepingIssueFeeds'
 
 export const DEMO_HOUSEKEEPING_TODAY = '2026-06-24'
 
@@ -307,10 +306,3 @@ export const HOUSEKEEPING_ISSUES: HousekeepingIssue[] = [
     status: 'pending',
   },
 ]
-
-export function withIssueVideoUrl(issue: HousekeepingIssue): HousekeepingIssue {
-  return {
-    ...issue,
-    videoUrl: issue.videoUrl ?? getIssueFeedUrl(issue.type),
-  }
-}

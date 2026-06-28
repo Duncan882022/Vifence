@@ -8,6 +8,7 @@ import type {
   ScoreTier,
 } from '@/types/housekeeping'
 import { DEMO_HOUSEKEEPING_TODAY } from './housekeepingIssues'
+import { getHousekeepingImageUrl } from './housekeepingImages'
 
 export const SCORE_TIER_LABELS: Record<ScoreTier, string> = {
   good: 'Tốt',
@@ -59,33 +60,33 @@ export const HOUSEKEEPING_DETECTION_CARDS: HousekeepingDetectionCard[] = [
   {
     categoryId: 'waste-pile',
     label: 'Rác thải tồn đọng',
-    violationImageUrl: '/housekeeping/waste-violation.jpg',
+    violationImageUrl: getHousekeepingImageUrl('waste-violation'),
     violationDetectedAt: `${DEMO_HOUSEKEEPING_TODAY}T09:15:23`,
-    improvedImageUrl: '/housekeeping/waste-fixed.jpg',
+    improvedImageUrl: getHousekeepingImageUrl('waste-improved'),
     improvedAt: `${DEMO_HOUSEKEEPING_TODAY}T11:30:12`,
   },
   {
     categoryId: 'misplaced-material',
     label: 'Vật tư lộn xộn',
-    violationImageUrl: '/housekeeping/material-violation.jpg',
+    violationImageUrl: getHousekeepingImageUrl('materials-violation'),
     violationDetectedAt: `${DEMO_HOUSEKEEPING_TODAY}T08:42:10`,
-    improvedImageUrl: '/housekeeping/material-fixed.jpg',
+    improvedImageUrl: getHousekeepingImageUrl('materials-improved'),
     improvedAt: `${DEMO_HOUSEKEEPING_TODAY}T10:05:44`,
   },
   {
     categoryId: 'standing-water',
     label: 'Nước đọng',
-    violationImageUrl: '/housekeeping/water-violation.jpg',
+    violationImageUrl: getHousekeepingImageUrl('water-violation'),
     violationDetectedAt: `${DEMO_HOUSEKEEPING_TODAY}T07:55:33`,
-    improvedImageUrl: '/housekeeping/water-fixed.jpg',
+    improvedImageUrl: getHousekeepingImageUrl('water-improved'),
     improvedAt: `${DEMO_HOUSEKEEPING_TODAY}T09:20:18`,
   },
   {
     categoryId: 'messy-area',
     label: 'Khu vực lộn xộn',
-    violationImageUrl: '/housekeeping/area-violation.jpg',
+    violationImageUrl: getHousekeepingImageUrl('clutter-violation'),
     violationDetectedAt: `${DEMO_HOUSEKEEPING_TODAY}T10:18:07`,
-    improvedImageUrl: '/housekeeping/area-fixed.jpg',
+    improvedImageUrl: getHousekeepingImageUrl('clutter-improved'),
     improvedAt: `${DEMO_HOUSEKEEPING_TODAY}T12:45:29`,
   },
 ]
@@ -93,7 +94,9 @@ export const HOUSEKEEPING_DETECTION_CARDS: HousekeepingDetectionCard[] = [
 export const HOUSEKEEPING_IMPROVEMENT_LIST: HousekeepingImprovementItem[] = [
   {
     id: 'imp-01',
-    thumbnailUrl: '/housekeeping/thumb-01.jpg',
+    thumbnailUrl: getHousekeepingImageUrl('thumb-phong-dao-tao-a2'),
+    categoryId: 'waste-pile',
+    zoneId: 'khu-c',
     zoneLabel: 'KHU C',
     floorLabel: 'TẦNG 3',
     issueType: 'Rác thải tồn đọng',
@@ -102,7 +105,9 @@ export const HOUSEKEEPING_IMPROVEMENT_LIST: HousekeepingImprovementItem[] = [
   },
   {
     id: 'imp-02',
-    thumbnailUrl: '/housekeeping/thumb-02.jpg',
+    thumbnailUrl: getHousekeepingImageUrl('thumb-san-thuc-hanh-b1'),
+    categoryId: 'standing-water',
+    zoneId: 'khu-b',
     zoneLabel: 'KHU B',
     floorLabel: 'TẦNG 2',
     issueType: 'Nước đọng sau mưa',
@@ -111,7 +116,9 @@ export const HOUSEKEEPING_IMPROVEMENT_LIST: HousekeepingImprovementItem[] = [
   },
   {
     id: 'imp-03',
-    thumbnailUrl: '/housekeeping/thumb-03.jpg',
+    thumbnailUrl: getHousekeepingImageUrl('thumb-phong-dao-tao-a1'),
+    categoryId: 'misplaced-material',
+    zoneId: 'khu-c',
     zoneLabel: 'KHU C',
     floorLabel: 'TẦNG 1',
     issueType: 'Vật tư lộn xộn',
@@ -120,7 +127,9 @@ export const HOUSEKEEPING_IMPROVEMENT_LIST: HousekeepingImprovementItem[] = [
   },
   {
     id: 'imp-04',
-    thumbnailUrl: '/housekeeping/thumb-04.jpg',
+    thumbnailUrl: getHousekeepingImageUrl('thumb-san-tap-a'),
+    categoryId: 'general-cleanliness',
+    zoneId: 'khu-b',
     zoneLabel: 'KHU B',
     floorLabel: 'SÂN TẬP',
     issueType: 'Khu vực mất vệ sinh',
@@ -129,7 +138,9 @@ export const HOUSEKEEPING_IMPROVEMENT_LIST: HousekeepingImprovementItem[] = [
   },
   {
     id: 'imp-05',
-    thumbnailUrl: '/housekeeping/thumb-05.jpg',
+    thumbnailUrl: getHousekeepingImageUrl('thumb-kho-vat-tu'),
+    categoryId: 'messy-area',
+    zoneId: 'khu-d',
     zoneLabel: 'KHU D',
     floorLabel: 'KHO VẬT TƯ',
     issueType: 'Lối đi bị chiếm dụng',

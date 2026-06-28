@@ -82,6 +82,10 @@ const ZONE_SCORE_MAP: Record<string, string> = {
   crane: 'khu-d',
 }
 
+export function resolveMainZoneId(zoneId: string): string {
+  return ZONE_SCORE_MAP[zoneId] ?? zoneId
+}
+
 function lookupZoneScore(zoneId: string, scores: HousekeepingZoneScore[]): HousekeepingZoneScore {
   const mainId = ZONE_SCORE_MAP[zoneId] ?? 'khu-b'
   return scores.find(z => z.id === mainId) ?? scores[0]
