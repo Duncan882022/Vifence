@@ -3,7 +3,6 @@ import type { ViolationType } from '@/types/safety'
 import type { SafetyDayStats } from '../services/safetyKpi.service'
 import { VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
 import { getViolationTypeIconConfig } from '../utils/safetyUiHelpers'
-import { ViolationTypeIcon } from './ViolationTypeIcon'
 
 /** Shared chip shell — matches PPE severity + penalty chips on dashboard */
 export const DASHBOARD_CHIP_CLASS =
@@ -31,19 +30,19 @@ export function ViolationTypeChips({ stats, className }: ViolationTypeChipsProps
 
   return (
     <div
-      className={cn('flex flex-wrap gap-1', className)}
+      className={cn('flex flex-wrap gap-1 min-w-0 overflow-hidden', className)}
       title={`Tổng ${chipTotal} vi phạm · ${chips.length} loại`}
       aria-label={`${chipTotal} vi phạm, ${chips.length} loại`}
     >
       {chips.map(([type, count]) => {
-        const { color, bg, border } = getViolationTypeIconConfig(type)
+        const { icon: Icon, color, bg, border } = getViolationTypeIconConfig(type)
         return (
           <span
             key={type}
             className={cn(DASHBOARD_CHIP_CLASS, bg, border, color)}
             title={`${VIOLATION_TYPE_LABELS[type]} · ${count}`}
           >
-            <ViolationTypeIcon type={type} size="xs" bare className="w-3.5 h-3.5" />
+            <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
             <span>{count}</span>
           </span>
         )

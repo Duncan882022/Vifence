@@ -190,7 +190,7 @@ function delta(current: number, previous: number): Pick<KPIData, 'change' | 'cha
 function buildMetrics(today: SafetyDayStats, yesterday: SafetyDayStats): KPIData[] {
   return [
     {
-      label: 'Tuân thủ PPE',
+      label: 'PPE',
       value: today.ppeCompliance,
       unit: '%',
       detail: 'OCP1',
@@ -200,7 +200,7 @@ function buildMetrics(today: SafetyDayStats, yesterday: SafetyDayStats): KPIData
       changeUnit: 'điểm %',
     },
     {
-      label: 'Vi phạm hôm nay',
+      label: 'Vi phạm',
       value: today.violationsToday,
       unit: 'vi phạm',
       detail: 'OCP1',
@@ -210,7 +210,7 @@ function buildMetrics(today: SafetyDayStats, yesterday: SafetyDayStats): KPIData
       changeUnit: 'vi phạm',
     },
     {
-      label: 'Camera hoạt động',
+      label: 'Camera',
       value: today.activeCameras,
       unit: 'cam',
       detail: `/${today.totalCameras} OCP1`,

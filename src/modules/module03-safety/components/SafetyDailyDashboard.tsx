@@ -88,7 +88,6 @@ function MetricInsight({ index, stats }: { index: MetricIndex; stats: SafetyDayS
       const levelChips = [
         { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', Icon: AlertCircle, tip: 'Mức cao · −5đ/vi phạm' },
         { count: stats.violationsMedium, label: 'TB', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', Icon: AlertTriangle, tip: 'Trung bình · −2đ/vi phạm' },
-        { count: stats.violationsLow, label: 'Thấp', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', Icon: Minus, tip: 'Mức thấp · −1đ/vi phạm' },
       ].filter(c => c.count > 0)
 
       const deductTotal = stats.violationsHigh + stats.violationsMedium + stats.violationsLow
