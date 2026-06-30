@@ -4,9 +4,11 @@ import type { SafetyDayStats } from '../services/safetyKpi.service'
 import { VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
 import { getViolationTypeIconConfig } from '../utils/safetyUiHelpers'
 
-/** Shared chip shell — matches PPE severity + penalty chips on dashboard */
+/** Shared chip shell — matches Camera `IconTooltipBadge` (no border, compact) */
 export const DASHBOARD_CHIP_CLASS =
-  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium tabular-nums'
+  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold tabular-nums'
+
+export const DASHBOARD_CHIP_ICON_CLASS = 'w-3 h-3 shrink-0 opacity-90'
 
 interface ViolationTypeChipsProps {
   stats: Pick<SafetyDayStats, 'violationsByType'>
@@ -35,14 +37,14 @@ export function ViolationTypeChips({ stats, className }: ViolationTypeChipsProps
       aria-label={`${chipTotal} vi phạm, ${chips.length} loại`}
     >
       {chips.map(([type, count]) => {
-        const { icon: Icon, color, bg, border } = getViolationTypeIconConfig(type)
+        const { icon: Icon, color, bg } = getViolationTypeIconConfig(type)
         return (
           <span
             key={type}
-            className={cn(DASHBOARD_CHIP_CLASS, bg, border, color)}
+            className={cn(DASHBOARD_CHIP_CLASS, bg, color)}
             title={`${VIOLATION_TYPE_LABELS[type]} · ${count}`}
           >
-            <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            <Icon className={DASHBOARD_CHIP_ICON_CLASS} aria-hidden />
             <span>{count}</span>
           </span>
         )

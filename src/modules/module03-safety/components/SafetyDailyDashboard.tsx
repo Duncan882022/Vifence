@@ -11,7 +11,7 @@ import type { SafetyDailySummary, SafetyDayStats } from '../services/safetyKpi.s
 import { SAFETY_METRIC_META } from '../data/safetyMetricMeta'
 import { getPpeLevel, formatPpeScore } from '../utils/safetyUiHelpers'
 import { PpeComplianceTooltip } from './PpeComplianceTooltip'
-import { DASHBOARD_CHIP_CLASS, ViolationTypeChips } from './ViolationTypeChips'
+import { DASHBOARD_CHIP_CLASS, DASHBOARD_CHIP_ICON_CLASS, ViolationTypeChips } from './ViolationTypeChips'
 
 type MetricIndex = 0 | 1 | 2 | 3
 
@@ -36,13 +36,13 @@ function PenaltyStatusChips({ stats }: { stats: SafetyDayStats }) {
       value: stats.penaltiesResolved,
       icon: CheckCircle2,
       tip: 'Đã xử lý',
-      colorCls: 'bg-green-500/10 text-green-400 border-green-500/30',
+      colorCls: 'bg-green-500/10 text-green-400',
     },
     {
       value: stats.penaltiesPending,
       icon: Clock,
       tip: 'Chưa xử lý',
-      colorCls: 'bg-red-500/10 text-red-400 border-red-500/30',
+      colorCls: 'bg-red-500/10 text-red-400',
       pulse: stats.penaltiesPending > 0,
     },
   ].filter(c => c.value > 0)
@@ -59,7 +59,7 @@ function PenaltyStatusChips({ stats }: { stats: SafetyDayStats }) {
           {chip.pulse && (
             <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current shrink-0" />
           )}
-          <chip.icon className="w-3.5 h-3.5 shrink-0 opacity-90" aria-hidden />
+          <chip.icon className={DASHBOARD_CHIP_ICON_CLASS} aria-hidden />
           <span>{chip.value}</span>
         </span>
       ))}
@@ -86,8 +86,8 @@ function MetricInsight({ index, stats }: { index: MetricIndex; stats: SafetyDayS
   switch (index) {
     case 0: {
       const levelChips = [
-        { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', Icon: AlertCircle, tip: 'Mức cao · −5đ/vi phạm' },
-        { count: stats.violationsMedium, label: 'TB', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', Icon: AlertTriangle, tip: 'Trung bình · −2đ/vi phạm' },
+        { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/10', Icon: AlertCircle, tip: 'Mức cao · −5đ/vi phạm' },
+        { count: stats.violationsMedium, label: 'TB', color: 'text-amber-400', bg: 'bg-amber-500/10', Icon: AlertTriangle, tip: 'Trung bình · −2đ/vi phạm' },
       ].filter(c => c.count > 0)
 
       const deductTotal = stats.violationsHigh + stats.violationsMedium + stats.violationsLow
@@ -109,9 +109,9 @@ function MetricInsight({ index, stats }: { index: MetricIndex; stats: SafetyDayS
               key={chip.label}
               title={chip.tip}
               aria-label={`${chip.label}: ${chip.count}`}
-              className={cn(DASHBOARD_CHIP_CLASS, chip.color, chip.bg, chip.border)}
+              className={cn(DASHBOARD_CHIP_CLASS, chip.color, chip.bg)}
             >
-              <chip.Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              <chip.Icon className={DASHBOARD_CHIP_ICON_CLASS} aria-hidden />
               <span>{chip.count}</span>
             </span>
           ))}
