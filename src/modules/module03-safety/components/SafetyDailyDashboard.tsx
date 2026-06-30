@@ -219,10 +219,10 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
             >
               <button
                 type="button"
-                className="inline-flex items-center justify-center cursor-help rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+                className="w-full h-full flex items-center justify-center p-0 cursor-help rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
                 aria-label={`Tuân thủ PPE · Mức ${ppeLevel!.label}`}
               >
-                <PpeIcon className={cn('w-4 h-4', ppeLevel!.color)} aria-hidden />
+                <PpeIcon className={cn('w-3.5 h-3.5', ppeLevel!.color)} aria-hidden />
               </button>
             </PpeComplianceTooltip>
           ) : (
