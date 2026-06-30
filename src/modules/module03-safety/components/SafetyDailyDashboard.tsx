@@ -1,6 +1,6 @@
 import {
   TrendingUp, TrendingDown, Minus,
-  Clock, CheckCircle2, Radio,
+  Clock, CheckCircle2, Radio, AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { IconTooltip, IconTooltipBadge } from '@/components/common/IconTooltip/IconTooltip'
@@ -83,12 +83,37 @@ function MetricInsight({ index, stats }: { index: MetricIndex; stats: SafetyDayS
   switch (index) {
     case 0: {
       const ppeLevel = getPpeLevel(stats.ppeCompliance)
+      const levelChips = [
+        { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/15', tip: 'Mức cao · −5đ/vi phạm' },
+        { count: stats.violationsMedium, label: 'TB', color: 'text-orange-400', bg: 'bg-orange-500/15', tip: 'Trung bình · −2đ/vi phạm' },
+        { count: stats.violationsLow, label: 'Thấp', color: 'text-amber-400', bg: 'bg-amber-500/15', tip: 'Mức thấp · −1đ/vi phạm' },
+      ].filter(c => c.count > 0)
+
       return (
-        <p className="text-[9px] text-muted-foreground/70 leading-snug truncate">
-          <span className={cn('font-semibold', ppeLevel.color)}>Mức {ppeLevel.label}</span>
-          <span className="mx-1">·</span>
-          {stats.dateLabel}
-        </p>
+        <div className="space-y-0.5">
+          <p className="text-[9px] text-muted-foreground/70 leading-snug truncate">
+            <span className={cn('font-semibold', ppeLevel.color)}>Mức {ppeLevel.label}</span>
+            <span className="mx-1">·</span>
+            {stats.dateLabel}
+          </p>
+          {levelChips.length > 0 && (
+            <div className="flex flex-wrap gap-0.5">
+              {levelChips.map(chip => (
+                <span
+                  key={chip.label}
+                  title={chip.tip}
+                  className={cn(
+                    'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold',
+                    chip.color, chip.bg,
+                  )}
+                >
+                  <AlertTriangle className="w-2.5 h-2.5" aria-hidden />
+                  ×{chip.count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       )
     }
     case 1:
@@ -195,7 +220,10 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
           isPpe && ppeLevel ? ppeLevel.bg : iconBg,
         )}>
           {isPpe && PpeIcon ? (
-            <PpeComplianceTooltip score={Number(value)}>
+            <PpeComplianceTooltip
+              score={Number(value)}
+              violationsByLevel={{ high: stats.violationsHigh, medium: stats.violationsMedium, low: stats.violationsLow }}
+            >
               <button
                 type="button"
                 className="inline-flex items-center justify-center cursor-help rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
@@ -214,7 +242,11 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
               {label}
             </p>
             {isPpe && (
-              <PpeComplianceTooltip score={Number(value)} iconClassName="w-2.5 h-2.5" />
+              <PpeComplianceTooltip
+                score={Number(value)}
+                violationsByLevel={{ high: stats.violationsHigh, medium: stats.violationsMedium, low: stats.violationsLow }}
+                iconClassName="w-2.5 h-2.5"
+              />
             )}
           </div>
           <div className="flex items-baseline gap-0.5 sm:gap-1 mt-0.5 flex-wrap">

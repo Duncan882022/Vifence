@@ -7,10 +7,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { buildPpeTooltipLines, getPpeLevel, PPE_LEVEL_HIGH_MIN, PPE_LEVEL_MEDIUM_MIN } from '../utils/safetyUiHelpers'
+import { formatPpeScore, getPpeLevel, PPE_LEVEL_HIGH_MIN, PPE_LEVEL_MEDIUM_MIN } from '../utils/safetyUiHelpers'
 
 interface PpeComplianceTooltipProps {
   score: number
+  violationsByLevel?: { high: number; medium: number; low: number }
   children?: ReactNode
   iconClassName?: string
   side?: 'top' | 'bottom' | 'left' | 'right'
@@ -18,13 +19,22 @@ interface PpeComplianceTooltipProps {
 
 export function PpeComplianceTooltip({
   score,
+  violationsByLevel,
   children,
   iconClassName,
   side = 'top',
 }: PpeComplianceTooltipProps) {
-  const lines = buildPpeTooltipLines(score)
-  const { color } = getPpeLevel(score)
+  const { color, fullLabel } = getPpeLevel(score)
   const mediumMax = PPE_LEVEL_HIGH_MIN - 1
+
+  const nHigh = violationsByLevel?.high ?? 0
+  const nMedium = violationsByLevel?.medium ?? 0
+  const nLow = violationsByLevel?.low ?? 0
+  const deductHigh = nHigh * 5
+  const deductMedium = nMedium * 2
+  const deductLow = nLow * 1
+  const totalDeduction = deductHigh + deductMedium + deductLow
+  const hasDeductions = violationsByLevel !== undefined && totalDeduction > 0
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -40,12 +50,38 @@ export function PpeComplianceTooltip({
             </button>
           )}
         </TooltipTrigger>
-        <TooltipContent side={side} className="max-w-[280px] space-y-1.5 whitespace-normal leading-relaxed">
-          {lines.slice(0, -1).map(line => (
-            <p key={line} className="text-slate-400">{line}</p>
-          ))}
+        <TooltipContent side={side} className="max-w-[300px] space-y-1.5 whitespace-normal leading-relaxed">
+          <p className="text-slate-400 text-[10px]">Điểm PPE = 100% − khấu trừ vi phạm</p>
+
+          {hasDeductions ? (
+            <div className="space-y-0.5 text-[10px] pt-0.5 border-t border-white/10">
+              {nHigh > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-red-400">Mức cao: {nHigh} vi phạm × (−5đ)</span>
+                  <span className="text-red-400 font-semibold tabular-nums">= −{deductHigh}</span>
+                </div>
+              )}
+              {nMedium > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-orange-400">Mức TB: {nMedium} vi phạm × (−2đ)</span>
+                  <span className="text-orange-400 font-semibold tabular-nums">= −{deductMedium}</span>
+                </div>
+              )}
+              {nLow > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-amber-400">Mức thấp: {nLow} vi phạm × (−1đ)</span>
+                  <span className="text-amber-400 font-semibold tabular-nums">= −{deductLow}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground/70">
+              Cao × (−5đ) · Trung bình × (−2đ) · Thấp × (−1đ)
+            </p>
+          )}
+
           <p className={cn('font-semibold pt-0.5 border-t border-white/10', color)}>
-            {lines[lines.length - 1]}
+            → {formatPpeScore(score)}% · {fullLabel}
           </p>
           <p className="text-[10px] text-muted-foreground/80">
             Ngưỡng: Cao ≥ {PPE_LEVEL_HIGH_MIN}% · Trung bình {PPE_LEVEL_MEDIUM_MIN}–{mediumMax}% · Thấp &lt; {PPE_LEVEL_MEDIUM_MIN}%

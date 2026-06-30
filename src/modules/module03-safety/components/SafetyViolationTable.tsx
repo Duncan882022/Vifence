@@ -190,6 +190,7 @@ interface RowActionsProps {
 }
 
 function RowActions({ v, onPlayback, showTrial, compact }: RowActionsProps) {
+  const hoverOnly = !compact
   return (
     <div className={cn('flex items-center gap-0.5', compact ? 'shrink-0' : 'justify-end')}>
       <button
@@ -198,7 +199,10 @@ function RowActions({ v, onPlayback, showTrial, compact }: RowActionsProps) {
           e.stopPropagation()
           onPlayback?.(violationToEvent(v))
         }}
-        className="p-1.5 lg:p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition-colors"
+        className={cn(
+          'p-1.5 lg:p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition-colors',
+          hoverOnly && 'lg:opacity-0 lg:group-hover:opacity-100',
+        )}
         title="Xem lại video"
       >
         <Play className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />
@@ -207,7 +211,10 @@ function RowActions({ v, onPlayback, showTrial, compact }: RowActionsProps) {
         <button
           type="button"
           onClick={e => { e.stopPropagation(); showTrial() }}
-          className="p-1.5 lg:p-1 rounded hover:bg-green-500/20 text-muted-foreground hover:text-green-400 transition-colors"
+          className={cn(
+            'p-1.5 lg:p-1 rounded hover:bg-green-500/20 text-muted-foreground hover:text-green-400 transition-colors',
+            hoverOnly && 'lg:opacity-0 lg:group-hover:opacity-100',
+          )}
           title="Xử lý"
         >
           <CheckCircle className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />
@@ -216,7 +223,10 @@ function RowActions({ v, onPlayback, showTrial, compact }: RowActionsProps) {
       <button
         type="button"
         onClick={e => { e.stopPropagation(); showTrial() }}
-        className="p-1.5 lg:p-1 rounded hover:bg-orange-500/20 text-muted-foreground hover:text-orange-400 transition-colors"
+        className={cn(
+          'p-1.5 lg:p-1 rounded hover:bg-orange-500/20 text-muted-foreground hover:text-orange-400 transition-colors',
+          hoverOnly && 'lg:opacity-0 lg:group-hover:opacity-100',
+        )}
         title="Thông báo"
       >
         <Bell className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />

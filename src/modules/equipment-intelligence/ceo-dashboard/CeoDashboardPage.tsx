@@ -37,9 +37,9 @@ export function CeoDashboardPage() {
 
   return (
     <>
-      <PageLayout scrollable className="gap-3">
+      <PageLayout className="gap-3">
         {/* Tier 1 — KPI */}
-        <motion.div custom={0} variants={TIER_VARIANTS} initial="hidden" animate="visible">
+        <motion.div custom={0} variants={TIER_VARIANTS} initial="hidden" animate="visible" className="shrink-0">
           <Panel
             title="Tổng Quan"
             fit
@@ -92,7 +92,7 @@ export function CeoDashboardPage() {
           variants={TIER_VARIANTS}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch"
+          className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch shrink-0"
         >
           <div className="lg:col-span-7 h-[420px]">
             <VietnamRegionMap
@@ -106,7 +106,7 @@ export function CeoDashboardPage() {
         </motion.div>
 
         {/* Tier 3 — MMTB table full width */}
-        <motion.div custom={2} variants={TIER_VARIANTS} initial="hidden" animate="visible">
+        <motion.div custom={2} variants={TIER_VARIANTS} initial="hidden" animate="visible" className="flex-1 min-h-[280px]">
           <MmtbDataTable
             data={filteredMachines}
             search={filters.search}
