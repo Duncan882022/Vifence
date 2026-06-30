@@ -41,7 +41,7 @@ export function CeoDashboardPage() {
         {/* Tier 1 — KPI */}
         <motion.div custom={0} variants={TIER_VARIANTS} initial="hidden" animate="visible" className="shrink-0">
           <Panel
-            title="Tổng Quan"
+            title="Tổng quan"
             fit
             noPadding
             headerRight={(

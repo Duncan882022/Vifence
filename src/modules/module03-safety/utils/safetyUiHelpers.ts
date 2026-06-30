@@ -5,7 +5,8 @@ import {
   Ban,
   ArrowUpFromLine,
   TrendingDown,
-  TrendingUp,
+  AlertCircle,
+  AlertTriangle,
   Minus,
   type LucideIcon,
 } from 'lucide-react'
@@ -15,6 +16,7 @@ export interface ViolationTypeIconConfig {
   icon: LucideIcon
   color: string
   bg: string
+  border: string
 }
 
 /** PPE compliance level thresholds (single source of truth) */
@@ -32,6 +34,7 @@ export interface PpeLevelConfig {
   icon: LucideIcon
   color: string
   bg: string
+  border: string
   ringColor: string
 }
 
@@ -42,9 +45,10 @@ export function getPpeLevel(score: number): PpeLevelConfig {
       level: 'high',
       label: 'Cao',
       fullLabel: 'Tuân thủ cao',
-      icon: TrendingUp,
+      icon: AlertCircle,
       color: 'text-green-400',
-      bg: 'bg-green-500/15',
+      bg: 'bg-green-500/10',
+      border: 'border-green-500/30',
       ringColor: '#4ade80',
     }
   }
@@ -53,9 +57,10 @@ export function getPpeLevel(score: number): PpeLevelConfig {
       level: 'medium',
       label: 'TB',
       fullLabel: 'Tuân thủ TB',
-      icon: Minus,
+      icon: AlertTriangle,
       color: 'text-amber-400',
-      bg: 'bg-amber-500/15',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/30',
       ringColor: '#fbbf24',
     }
   }
@@ -63,9 +68,10 @@ export function getPpeLevel(score: number): PpeLevelConfig {
     level: 'low',
     label: 'Thấp',
     fullLabel: 'Tuân thủ thấp',
-    icon: TrendingDown,
+    icon: Minus,
     color: 'text-red-400',
-    bg: 'bg-red-500/15',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/30',
     ringColor: '#ef4444',
   }
 }
@@ -89,32 +95,38 @@ export const VIOLATION_TYPE_ICON_CONFIG: Record<ViolationType, ViolationTypeIcon
   'no-helmet': {
     icon: HardHat,
     color: 'text-amber-400',
-    bg: 'bg-amber-500/15',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/30',
   },
   'no-vest': {
     icon: Shirt,
     color: 'text-cyan-400',
-    bg: 'bg-cyan-500/15',
+    bg: 'bg-cyan-500/10',
+    border: 'border-cyan-500/30',
   },
   'no-harness': {
     icon: Cable,
     color: 'text-red-400',
-    bg: 'bg-red-500/15',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/30',
   },
   'danger-zone': {
     icon: Ban,
     color: 'text-red-400',
-    bg: 'bg-red-500/15',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/30',
   },
   'work-at-height': {
     icon: ArrowUpFromLine,
     color: 'text-orange-400',
-    bg: 'bg-orange-500/15',
+    bg: 'bg-orange-500/10',
+    border: 'border-orange-500/30',
   },
   'fall': {
     icon: TrendingDown,
     color: 'text-red-400',
-    bg: 'bg-red-500/15',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/30',
   },
 }
 

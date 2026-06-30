@@ -114,6 +114,7 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
     } else {
       video.pause()
     }
+    return () => { video.pause() }
   }, [isPlaying])
 
   if (!event) {

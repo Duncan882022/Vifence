@@ -85,6 +85,17 @@ export function SafetyDashboardPage() {
     setWorkerSheetOpen(true)
   }
 
+  const handleDismissViolation = () => {
+    setSelectedViolation(null)
+    setSelectedViolationId(undefined)
+  }
+
+  const handleClosePlaybackModal = () => {
+    setPlaybackEvent(null)
+    setSelectedViolation(null)
+    setSelectedViolationId(undefined)
+  }
+
   return (
     <>
       <PageLayout>
@@ -179,6 +190,7 @@ export function SafetyDashboardPage() {
                   zoneFilter={selectedZoneId}
                   onSelectViolation={handleSelectViolation}
                   onPlayback={handlePlayback}
+                  onDismissViolation={handleDismissViolation}
                   onSelectWorker={handleSelectWorker}
                   onSelectContractor={handleSelectContractor}
                 />
@@ -216,7 +228,7 @@ export function SafetyDashboardPage() {
       <SafetyPlaybackModal
         open={playbackEvent !== null}
         event={playbackEvent}
-        onClose={() => setPlaybackEvent(null)}
+        onClose={handleClosePlaybackModal}
       />
 
       <SafetyWorkerDetailSheet

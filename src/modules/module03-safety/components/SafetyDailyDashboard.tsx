@@ -1,6 +1,6 @@
 import {
-  TrendingUp, TrendingDown, Minus,
-  Clock, CheckCircle2, Radio, AlertTriangle,
+  TrendingUp, TrendingDown,
+  Clock, CheckCircle2, Radio, AlertCircle, AlertTriangle, Minus,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { IconTooltip, IconTooltipBadge } from '@/components/common/IconTooltip/IconTooltip'
@@ -36,13 +36,13 @@ function PenaltyStatusChips({ stats }: { stats: SafetyDayStats }) {
       value: stats.penaltiesResolved,
       icon: CheckCircle2,
       tip: 'Đã xử lý',
-      className: 'bg-green-500/10 text-green-400',
+      colorCls: 'bg-green-500/10 text-green-400 border-green-500/30',
     },
     {
       value: stats.penaltiesPending,
       icon: Clock,
       tip: 'Chưa xử lý',
-      className: 'bg-red-500/10 text-red-400',
+      colorCls: 'bg-red-500/10 text-red-400 border-red-500/30',
       pulse: stats.penaltiesPending > 0,
     },
   ].filter(c => c.value > 0)
@@ -50,15 +50,22 @@ function PenaltyStatusChips({ stats }: { stats: SafetyDayStats }) {
   return (
     <div className="flex flex-wrap gap-1">
       {chips.map(chip => (
-        <IconTooltipBadge
+        <span
           key={chip.tip}
-          icon={chip.icon}
-          label={chip.tip}
-          tip={chip.tip}
-          value={chip.value}
-          className={chip.className}
-          pulse={chip.pulse}
-        />
+          title={chip.tip}
+          aria-label={`${chip.tip}: ${chip.value}`}
+          className={cn(
+            'inline-flex items-center gap-1 px-1.5 py-0.5 rounded',
+            'border text-[9px] font-medium tabular-nums',
+            chip.colorCls,
+          )}
+        >
+          {chip.pulse && (
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current shrink-0" />
+          )}
+          <chip.icon className="w-3.5 h-3.5 shrink-0 opacity-90" aria-hidden />
+          <span>{chip.value}</span>
+        </span>
       ))}
     </div>
   )
@@ -84,30 +91,29 @@ function MetricInsight({ index, stats }: { index: MetricIndex; stats: SafetyDayS
     case 0: {
       const ppeLevel = getPpeLevel(stats.ppeCompliance)
       const levelChips = [
-        { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/15', tip: 'Mức cao · −5đ/vi phạm' },
-        { count: stats.violationsMedium, label: 'TB', color: 'text-orange-400', bg: 'bg-orange-500/15', tip: 'Trung bình · −2đ/vi phạm' },
-        { count: stats.violationsLow, label: 'Thấp', color: 'text-amber-400', bg: 'bg-amber-500/15', tip: 'Mức thấp · −1đ/vi phạm' },
+        { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', Icon: AlertCircle, tip: 'Mức cao · −5đ/vi phạm' },
+        { count: stats.violationsMedium, label: 'TB', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', Icon: AlertTriangle, tip: 'Trung bình · −2đ/vi phạm' },
+        { count: stats.violationsLow, label: 'Thấp', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', Icon: Minus, tip: 'Mức thấp · −1đ/vi phạm' },
       ].filter(c => c.count > 0)
 
       return (
         <div className="space-y-0.5">
           <p className="text-[9px] text-muted-foreground/70 leading-snug truncate">
             <span className={cn('font-semibold', ppeLevel.color)}>Mức {ppeLevel.label}</span>
-            <span className="mx-1">·</span>
-            {stats.dateLabel}
           </p>
           {levelChips.length > 0 && (
-            <div className="flex flex-wrap gap-0.5">
+            <div className="flex flex-wrap gap-1">
               {levelChips.map(chip => (
                 <span
                   key={chip.label}
                   title={chip.tip}
                   className={cn(
-                    'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold',
-                    chip.color, chip.bg,
+                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded',
+                    'border text-[9px] font-medium tabular-nums',
+                    chip.color, chip.bg, chip.border,
                   )}
                 >
-                  <AlertTriangle className="w-2.5 h-2.5" aria-hidden />
+                  <chip.Icon className="w-3.5 h-3.5" aria-hidden />
                   ×{chip.count}
                 </span>
               ))}
@@ -302,13 +308,6 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
             )}
           </div>
           <div className="mt-0.5 sm:mt-1 min-w-0">
-            {isPenalties && (
-              <p className="text-[8px] sm:text-[9px] text-muted-foreground/70 leading-snug mb-0.5">
-                <span className="text-green-400/90">Đã xử lý</span>
-                <span className="mx-1">·</span>
-                <span className={stats.penaltiesPending > 0 ? 'text-red-400/90' : 'text-green-400/90'}>Chưa xử lý</span>
-              </p>
-            )}
             <MetricInsight index={index} stats={stats} />
           </div>
         </div>

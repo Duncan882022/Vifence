@@ -45,7 +45,7 @@ export function SafetyTier1CollapsedSummary({ summary }: SafetyTier1CollapsedSum
               {!isPpe && !isPenalties && metric.unit ? ` ${metric.unit}` : ''}
             </span>
             {isViolations && (
-              <ViolationTypeChips stats={summary.today} size="xs" />
+              <ViolationTypeChips stats={summary.today} />
             )}
           </span>
         )

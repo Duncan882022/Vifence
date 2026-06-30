@@ -41,7 +41,7 @@ function utilBarColor(pct: number): string {
 
 export function TopUsersPanel({ units }: { units: UsageUnitRow[] }) {
   return (
-    <Panel title="Top 10 Đơn Vị Sử Dụng MMTB" noPadding className="h-full min-h-0" expandable>
+    <Panel title="Top 10 đơn vị sử dụng MMTB" noPadding className="h-full min-h-0" expandable>
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
         <table className="w-full text-[10px]">
           <thead className="sticky top-0 z-10">

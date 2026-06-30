@@ -104,7 +104,7 @@ export function Panel({
 
   const headerContent = (onToggle: () => void, isExpanded: boolean) => (
     <div className="flex items-center justify-between gap-2 px-4 py-2.5 max-lg:px-2 max-lg:py-2 border-b border-[#1e2433] shrink-0 min-w-0">
-      <h2 className="text-xs max-lg:text-[10px] font-bold text-foreground uppercase tracking-wide shrink-0">{title}</h2>
+      <h2 className="text-xs max-lg:text-[10px] font-bold text-foreground tracking-wide shrink-0">{title}</h2>
       <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end overflow-hidden">
         {headerRight}
         {expandable && (

@@ -1,4 +1,4 @@
-import { Download, Film, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Download, Film, CheckCircle, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { useEffect, useState, type MouseEvent } from 'react'
 import { SafetyPlayback } from './SafetyPlayback'
 import { useTrialLock } from '@/hooks/useTrialLock'
@@ -25,6 +25,7 @@ interface SafetyViolationEventsPanelProps {
   zoneFilter?: string | null
   onSelectViolation: (v: SafetyViolation) => void
   onPlayback: (event: Event) => void
+  onDismissViolation?: () => void
   onSelectWorker?: (workerIdOrName: string) => void
   onSelectContractor?: (contractorName: string) => void
 }
@@ -35,6 +36,7 @@ export function SafetyViolationEventsPanel({
   zoneFilter,
   onSelectViolation,
   onPlayback,
+  onDismissViolation,
   onSelectWorker,
   onSelectContractor,
 }: SafetyViolationEventsPanelProps) {
@@ -72,19 +74,31 @@ export function SafetyViolationEventsPanel({
 
       {hasPlayback && (
         <div className="shrink-0 border-t border-[#1e2433] bg-[#0b0f1a] max-lg:landscape:max-h-[52vh]">
-          <button
-            type="button"
-            onClick={() => setPlaybackExpanded(v => !v)}
-            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-[#1a2235]/50 transition-colors"
-          >
-            <span className="truncate pr-2">
-              Playback · {selectedViolation!.workerName ?? 'Vi phạm'}
-            </span>
-            {playbackExpanded
-              ? <ChevronDown className="w-3.5 h-3.5 shrink-0" />
-              : <ChevronUp className="w-3.5 h-3.5 shrink-0" />
-            }
-          </button>
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setPlaybackExpanded(v => !v)}
+              className="flex-1 flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-[#1a2235]/50 transition-colors min-w-0"
+            >
+              <span className="truncate pr-2">
+                Playback · {selectedViolation!.workerName ?? 'Vi phạm'}
+              </span>
+              {playbackExpanded
+                ? <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                : <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+              }
+            </button>
+            {onDismissViolation && (
+              <button
+                type="button"
+                onClick={onDismissViolation}
+                className="shrink-0 p-2 text-muted-foreground hover:text-foreground hover:bg-[#1a2235]/50 transition-colors"
+                title="Đóng playback"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
           {playbackExpanded && (
             <div className="flex flex-col max-lg:landscape:flex-row min-h-0 max-h-[min(420px,50vh)] lg:max-h-[360px] border-t border-[#1e2433]/60 overflow-hidden">

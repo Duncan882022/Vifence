@@ -71,7 +71,7 @@ export function SafetyDailyDetailDashboard({
   onSelectContractor,
 }: SafetyDailyDetailDashboardProps) {
   const [tab, setTab] = useState<DetailTab>('all')
-  const { today, yesterday, current, previous, periodLabel } = summary
+  const { today, yesterday, periodLabel } = summary
 
   const violations = SAFETY_VIOLATIONS.filter(v => {
     if (tab === 'pending') return v.status === 'pending'
@@ -119,7 +119,7 @@ export function SafetyDailyDetailDashboard({
                 <div className="flex flex-col gap-1">
                   <span>{today.violationsToday}</span>
                   {today.violationsToday > 0 && (
-                    <ViolationTypeChips stats={today} size="xs" />
+                    <ViolationTypeChips stats={today} />
                   )}
                 </div>
               }
@@ -146,34 +146,13 @@ export function SafetyDailyDetailDashboard({
                   </span>
                 </span>
               }
-              sub="Đã xử lý / Chưa xử lý"
+              sub="Quyết định xử phạt"
               tone={today.penaltiesPending > 0 ? 'amber' : 'green'}
             />
           </div>
         </div>
       )}
 
-      {(tab === 'all' || tab === 'pending' || tab === 'processed') && (
-        <div className="shrink-0 px-3 py-2 border-b border-[#1e2433]/60">
-          <p className="text-[9px] text-muted-foreground mb-2">
-            Trạng thái xử lý · <span className="font-semibold text-foreground">{periodLabel}</span>
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <StatTile
-              label="Chưa xử lý"
-              value={current.pending}
-              sub={`Kỳ trước: ${previous.pending}`}
-              tone="orange"
-            />
-            <StatTile
-              label="Đã xử lý"
-              value={current.processed}
-              sub={`Kỳ trước: ${previous.processed}`}
-              tone="green"
-            />
-          </div>
-        </div>
-      )}
 
       <div className="flex border-b border-[#1e2433] shrink-0 overflow-x-auto">
         {TABS.map(t => {

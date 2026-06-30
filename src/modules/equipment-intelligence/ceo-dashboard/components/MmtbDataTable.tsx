@@ -192,7 +192,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
   }, [pageCount, currentPage])
 
   return (
-    <Panel title="Danh Sách MMTB" noPadding className="h-full min-h-0">
+    <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0">
       <div className="flex flex-col h-full min-h-0">
         <div className="flex flex-col sm:flex-row gap-2 px-3 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
           <div className="relative flex-1">

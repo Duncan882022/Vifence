@@ -2,15 +2,14 @@ import { cn } from '@/utils/cn'
 import type { ViolationType } from '@/types/safety'
 import type { SafetyDayStats } from '../services/safetyKpi.service'
 import { VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
-import { ViolationTypeIcon } from './ViolationTypeIcon'
+import { getViolationTypeIconConfig } from '../utils/safetyUiHelpers'
 
 interface ViolationTypeChipsProps {
   stats: Pick<SafetyDayStats, 'violationsByType'>
-  size?: 'xs' | 'sm'
   className?: string
 }
 
-export function ViolationTypeChips({ stats, size = 'sm', className }: ViolationTypeChipsProps) {
+export function ViolationTypeChips({ stats, className }: ViolationTypeChipsProps) {
   const chips = (Object.entries(stats.violationsByType) as [ViolationType, number][])
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1])
@@ -23,26 +22,25 @@ export function ViolationTypeChips({ stats, size = 'sm', className }: ViolationT
     )
   }
 
-  const iconSize = size === 'xs' ? 'xs' : 'sm'
-  const countClass = size === 'xs' ? 'text-[8px]' : 'text-[9px]'
-
   return (
     <div className={cn('flex flex-wrap gap-1', className)}>
-      {chips.map(([type, count]) => (
-        <span
-          key={type}
-          className={cn(
-            'inline-flex items-center gap-0.5 rounded px-1 py-0.5',
-            'bg-[#1a2235]/60 border border-[#1e2433]/80',
-            countClass,
-            'font-semibold tabular-nums',
-          )}
-          title={`${VIOLATION_TYPE_LABELS[type]} · ${count}`}
-        >
-          <ViolationTypeIcon type={type} size={iconSize} />
-          <span className="text-foreground">{count}</span>
-        </span>
-      ))}
+      {chips.map(([type, count]) => {
+        const { icon: Icon, color, bg, border } = getViolationTypeIconConfig(type)
+        return (
+          <span
+            key={type}
+            className={cn(
+              'inline-flex items-center gap-1 px-1.5 py-0.5 rounded',
+              'border text-[9px] font-medium tabular-nums',
+              bg, border, color,
+            )}
+            title={`${VIOLATION_TYPE_LABELS[type]} · ${count}`}
+          >
+            <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            <span>{count}</span>
+          </span>
+        )
+      })}
     </div>
   )
 }

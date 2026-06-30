@@ -329,7 +329,7 @@ export function VietnamRegionMap({ regions, getMachinesByRegion }: VietnamRegion
 
   return (
     <Panel
-      title="Phân Bổ Theo Khu Vực"
+      title="Phân bổ khu vực"
       noPadding
       expandable
       className="h-full min-h-0 relative"
