@@ -7,6 +7,7 @@ import { TRAINING_ATTENDEES } from './TrainingEventTable'
 import { buildTrainingCourses, type TrainingCourseMock } from '../data/trainingMockData'
 import { COURSE_GROUP_ORDER } from '../services/trainingReport.service'
 import { TrainingCourseListHeader, TrainingCourseListRow } from './TrainingCourseListRow'
+import { useTenantTrainingScope } from '@/hooks/useTenantTrainingScope'
 
 type CourseGroup = TrainingCourseMock['group']
 
@@ -37,6 +38,7 @@ export function TrainingCourseAccordion() {
   const [expandedAttendees, setExpandedAttendees] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<'all' | CourseGroup>('all')
   const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
+  const { courses: scopedCourses } = useTenantTrainingScope()
 
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
@@ -62,7 +64,7 @@ export function TrainingCourseAccordion() {
     })
   }
 
-  const filteredCourses = TRAINING_COURSES
+  const filteredCourses = scopedCourses
     .filter(c => activeTab === 'all' || c.group === activeTab)
     .sort((a, b) => {
       const ga = COURSE_GROUP_ORDER.indexOf(a.group)
@@ -71,7 +73,7 @@ export function TrainingCourseAccordion() {
     })
 
   const tabCount = (key: 'all' | CourseGroup) =>
-    key === 'all' ? TRAINING_COURSES.length : TRAINING_COURSES.filter(c => c.group === key).length
+    key === 'all' ? scopedCourses.length : scopedCourses.filter(c => c.group === key).length
 
   const renderCourse = (course: Course) => (
     <TrainingCourseListRow

@@ -3,14 +3,15 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { TrainingCameraPanel } from '../components/TrainingCameraPanel'
-import { TrainingEventTable, TRAINING_ATTENDEES } from '../components/TrainingEventTable'
-import { TrainingCourseAccordion, TRAINING_COURSES } from '../components/TrainingCourseAccordion'
+import { TrainingEventTable } from '../components/TrainingEventTable'
+import { TrainingCourseAccordion } from '../components/TrainingCourseAccordion'
 import { TrainingDailyDashboard } from '../components/TrainingDailyDashboard'
 import { TrainingDailyDetailDashboard } from '../components/TrainingDailyDetailDashboard'
 import { TierCollapseButton } from '../components/TierCollapseButton'
 import { Tier1CollapsedSummary } from '../components/Tier1CollapsedSummary'
 import { PlaybackModal } from '../components/PlaybackModal'
 import { computeTrainingDailySummary } from '../services/trainingKpi.service'
+import { useTenantTrainingScope } from '@/hooks/useTenantTrainingScope'
 import type { TrainingEvent } from '../components/TrainingEventTable'
 import { cn } from '@/utils/cn'
 
@@ -25,7 +26,8 @@ export function Module02DashboardPage() {
   const { isDesktop } = useShellLayout()
   const showCourses = coursesOpen || !isDesktop
 
-  const dailySummary = computeTrainingDailySummary(TRAINING_ATTENDEES, TRAINING_COURSES)
+  const { attendees, courses } = useTenantTrainingScope()
+  const dailySummary = computeTrainingDailySummary(attendees, courses)
 
   return (
     <>
@@ -37,7 +39,7 @@ export function Module02DashboardPage() {
           noPadding
           className="shrink-0"
           expandedContent={
-            <TrainingDailyDetailDashboard summary={dailySummary} courses={TRAINING_COURSES} />
+            <TrainingDailyDetailDashboard summary={dailySummary} courses={courses} />
           }
           headerRight={
             <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">

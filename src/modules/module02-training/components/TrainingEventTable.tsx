@@ -7,6 +7,7 @@ import { getAttendeeAvatarUrl } from '../data/trainingAvatars'
 import { formatCourseMeta, getCourseZone, type TrainingZone } from '../data/trainingCourseMeta'
 import { buildTrainingPlaybackEvent, buildTrainingPlaybackEventFromRecord } from '../services/trainingPlayback.service'
 import { Avatar } from '@/components/common/Avatar/Avatar'
+import { useTenantTrainingScope } from '@/hooks/useTenantTrainingScope'
 
 /* ─────────────────────────────────────────────────────────────
    TYPES  (mirrors future API contract)
@@ -751,6 +752,7 @@ const LIST_COLS = 'grid-cols-[28px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_m
 
 interface StudentListProps {
   students: TrainingAttendee[]
+  allAttendees: TrainingAttendee[]
   tab: EventTabKey
   onTabChange: (t: EventTabKey) => void
   onSelect: (s: TrainingAttendee) => void
@@ -758,7 +760,7 @@ interface StudentListProps {
   onPlayback: (ev: TrainingEvent) => void
 }
 
-function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor, onPlayback }: StudentListProps) {
+function StudentList({ students, allAttendees, tab, onTabChange, onSelect, onSelectContractor, onPlayback }: StudentListProps) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
   const [loading, setLoading]           = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -784,7 +786,7 @@ function StudentList({ students, tab, onTabChange, onSelect, onSelectContractor,
   }, [hasMore, loading])
 
   const counts = TABS.reduce<Record<string, number>>((acc, t) => {
-    acc[t.key] = TRAINING_ATTENDEES.filter(s => matchesTab(s, t.key)).length
+    acc[t.key] = allAttendees.filter(s => matchesTab(s, t.key)).length
     return acc
   }, {})
 
@@ -1101,12 +1103,13 @@ function StudentDetail({ student, backLabel = 'Danh sách', onBack, onPlayback }
 ───────────────────────────────────────────────────────────── */
 interface ContractorDetailProps {
   company: string
+  attendees: TrainingAttendee[]
   onBack: () => void
   onSelectStudent: (s: TrainingAttendee) => void
 }
 
-function ContractorDetail({ company, onBack, onSelectStudent }: ContractorDetailProps) {
-  const workers     = TRAINING_ATTENDEES.filter(s => s.company === company)
+function ContractorDetail({ company, attendees, onBack, onSelectStudent }: ContractorDetailProps) {
+  const workers     = attendees.filter(s => s.company === company)
   const allRecords  = workers.flatMap(s => s.courseHistory)
 
   /* Columns: avatar | học viên | khoá học hôm nay | ngoại lệ + giờ */
@@ -1211,8 +1214,9 @@ type View =
 export function TrainingEventTable({ onPlayback }: TrainingEventTableProps) {
   const [tab, setTab]   = useState<EventTabKey>('all')
   const [view, setView] = useState<View>({ kind: 'list' })
+  const { attendees } = useTenantTrainingScope()
 
-  const students = TRAINING_ATTENDEES
+  const students = attendees
     .filter(s => matchesTab(s, tab))
     .sort((a, b) => {
       const aLive = getSessionStatus(a.courseStart, a.courseEnd) === 'in-session' ? 0 : 1
@@ -1238,6 +1242,7 @@ export function TrainingEventTable({ onPlayback }: TrainingEventTableProps) {
     return (
       <ContractorDetail
         company={view.company}
+        attendees={attendees}
         onBack={() => setView({ kind: 'list' })}
         onSelectStudent={s => setView({ kind: 'student', student: s, from: 'contractor', company: view.company })}
       />
@@ -1247,6 +1252,7 @@ export function TrainingEventTable({ onPlayback }: TrainingEventTableProps) {
   return (
     <StudentList
       students={students}
+      allAttendees={attendees}
       tab={tab}
       onTabChange={setTab}
       onSelect={s => setView({ kind: 'student', student: s, from: 'list' })}

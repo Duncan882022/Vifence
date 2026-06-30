@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Maximize2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
+import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
@@ -282,6 +283,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const [filterTab, setFilterTab] = useState<CameraFilterTab>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const { isDesktop } = useShellLayout()
+  const { hasDemoData } = useActiveTenant()
 
   useEffect(() => {
     preloadFaceDetection()
@@ -325,6 +327,14 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
       onSelectCamera?.(cam)
       return [...prev, cam.id]
     })
+  }
+
+  if (!hasDemoData) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-[200px] p-6 text-center text-[11px] text-muted-foreground">
+        Chưa có dữ liệu camera cho công trường này
+      </div>
+    )
   }
 
   return (

@@ -2,6 +2,8 @@ import { TRAINING_COURSES } from '@/modules/module02-training/components/Trainin
 import type { TrainingCourseMock } from '@/modules/module02-training/data/trainingMockData'
 import { courseGroupHasMetrics } from '@/modules/module02-training/data/trainingMockData'
 import { resolveCourseLocation } from '@/modules/module02-training/data/trainingCameras'
+import { tenantHasDemoData } from '@/data/tenants'
+import { useTenantStore } from '@/store/tenant.store'
 import {
   attendanceStatusConfig,
   attendeeHasException,
@@ -10,6 +12,8 @@ import {
 } from '@/modules/module02-training/components/TrainingEventTable'
 
 export function getAllTrainingCourses(customCourses: TrainingCourseMock[]): TrainingCourseMock[] {
+  const tenantId = useTenantStore.getState().activeTenantId
+  if (!tenantHasDemoData(tenantId)) return []
   return [...TRAINING_COURSES, ...customCourses]
 }
 
