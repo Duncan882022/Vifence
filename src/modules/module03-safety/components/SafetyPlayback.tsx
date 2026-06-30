@@ -42,7 +42,22 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
   const markerSec = violationType ? getViolationClipMarker(violationType) : 0
   const speed = SPEEDS[speedIndex]
 
+  // Pause and release video source on unmount to prevent orphaned audio after modal close
   useEffect(() => {
+    return () => {
+      const video = videoRef.current
+      if (video) {
+        video.pause()
+        video.src = ''
+        video.load()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    // Pause the actual video element immediately when event changes, before state settles
+    const video = videoRef.current
+    if (video) video.pause()
     setIsPlaying(false)
     setProgress(0)
     setSpeedIndex(1)
