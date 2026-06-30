@@ -222,7 +222,7 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
                 className="inline-flex items-center justify-center cursor-help rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
                 aria-label={`Tuân thủ PPE · Mức ${ppeLevel!.label}`}
               >
-                <PpeIcon className={cn('w-3.5 h-3.5', ppeLevel!.color)} aria-hidden />
+                <PpeIcon className={cn('w-4 h-4', ppeLevel!.color)} aria-hidden />
               </button>
             </PpeComplianceTooltip>
           ) : (
@@ -259,14 +259,6 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
                     {unit}
                   </span>
                 )}
-                <span
-                  className={cn(
-                    'text-[9px] sm:text-[10px] font-semibold shrink-0 transition-colors duration-500',
-                    ppeLevel!.color,
-                  )}
-                >
-                  · Mức {ppeLevel!.label}
-                </span>
               </>
             ) : isPenalties ? (
               <>
