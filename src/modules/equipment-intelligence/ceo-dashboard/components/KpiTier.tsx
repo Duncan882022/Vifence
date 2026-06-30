@@ -5,6 +5,7 @@ import {
   TrendingUp, TrendingDown, Cpu, ClipboardList, Activity, Gem,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { MetricPercentRing } from '@/components/common/MetricPercentRing/MetricPercentRing'
 import type { AssetEfficiencyKpi, FleetKpi, PmComplianceKpi, ReliabilityKpi } from '../types'
 
 const STATUS_COLORS = {
@@ -14,14 +15,21 @@ const STATUS_COLORS = {
   stored: '#38bdf8',
 } as const
 
+const STATUS_LABELS: Record<keyof typeof STATUS_COLORS, string> = {
+  working: 'Hoạt động',
+  standby: 'Chờ việc',
+  breakdown: 'Hỏng hóc',
+  stored: 'Lưu kho',
+}
+
 const CARD_EASE = [0.22, 1, 0.36, 1] as const
 
 const CARD_VARIANTS = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 16 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.05, duration: 0.5, ease: CARD_EASE },
+    transition: { delay: i * 0.06, duration: 0.45, ease: CARD_EASE },
   }),
 }
 
@@ -35,30 +43,80 @@ function TrendPill({ value, suffix = '%', invert, label = 'so với tháng trư�
   const positive = invert ? value <= 0 : value >= 0
   return (
     <span className={cn(
-      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-semibold tabular-nums border',
+      'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[7px] sm:text-[8px] font-semibold tabular-nums border whitespace-nowrap',
       positive
         ? 'bg-green-500/10 text-green-400 border-green-500/25'
         : 'bg-red-500/10 text-red-400 border-red-500/25',
     )}>
-      {positive ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+      {positive ? <TrendingUp className="w-2 h-2 shrink-0" /> : <TrendingDown className="w-2 h-2 shrink-0" />}
       {value > 0 ? '+' : ''}{value}{suffix}
-      <span className="text-muted-foreground/60 font-normal hidden sm:inline">· {label}</span>
+      <span className="text-muted-foreground/50 font-normal hidden lg:inline">· {label}</span>
     </span>
   )
 }
 
-function KpiShell({
-  accent, accentGlow, hoverGlow, icon, iconBg, iconColor, title, children, footer, index,
-}: {
+interface CardTheme {
   accent: string
-  accentGlow: string
-  hoverGlow: string
-  icon: ReactNode
+  accentHover: string
+  glow: string
+  hoverShadow: string
   iconBg: string
+  iconRing: string
   iconColor: string
+  heroGradient: string
+}
+
+const THEMES = {
+  amber: {
+    accent: 'border-l-amber-400/80',
+    accentHover: 'hover:border-l-amber-400',
+    glow: 'bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgba(251,191,36,0.14),transparent_60%)]',
+    hoverShadow: 'hover:shadow-[0_8px_32px_rgba(251,191,36,0.1)]',
+    iconBg: 'bg-amber-500/15',
+    iconRing: 'ring-amber-400/35 shadow-[0_0_12px_rgba(251,191,36,0.25)]',
+    iconColor: 'text-amber-400',
+    heroGradient: 'from-white via-amber-50 to-amber-300/90',
+  },
+  emerald: {
+    accent: 'border-l-emerald-400/80',
+    accentHover: 'hover:border-l-emerald-400',
+    glow: 'bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgba(52,211,153,0.12),transparent_60%)]',
+    hoverShadow: 'hover:shadow-[0_8px_32px_rgba(52,211,153,0.1)]',
+    iconBg: 'bg-emerald-500/15',
+    iconRing: 'ring-emerald-400/35 shadow-[0_0_12px_rgba(52,211,153,0.25)]',
+    iconColor: 'text-emerald-400',
+    heroGradient: 'from-emerald-200 via-green-300 to-emerald-500',
+  },
+  sky: {
+    accent: 'border-l-sky-400/80',
+    accentHover: 'hover:border-l-sky-400',
+    glow: 'bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgba(56,189,248,0.12),transparent_60%)]',
+    hoverShadow: 'hover:shadow-[0_8px_32px_rgba(56,189,248,0.1)]',
+    iconBg: 'bg-sky-500/15',
+    iconRing: 'ring-sky-400/35 shadow-[0_0_12px_rgba(56,189,248,0.25)]',
+    iconColor: 'text-sky-400',
+    heroGradient: 'from-sky-200 via-sky-300 to-sky-500',
+  },
+  violet: {
+    accent: 'border-l-violet-400/80',
+    accentHover: 'hover:border-l-violet-400',
+    glow: 'bg-[radial-gradient(ellipse_80%_70%_at_100%_0%,rgba(167,139,250,0.12),transparent_60%)]',
+    hoverShadow: 'hover:shadow-[0_8px_32px_rgba(167,139,250,0.1)]',
+    iconBg: 'bg-violet-500/15',
+    iconRing: 'ring-violet-400/35 shadow-[0_0_12px_rgba(167,139,250,0.25)]',
+    iconColor: 'text-violet-400',
+    heroGradient: 'from-white via-violet-100 to-violet-300/90',
+  },
+} as const satisfies Record<string, CardTheme>
+
+function KpiShell({
+  theme, icon, title, headerRight, children, index,
+}: {
+  theme: CardTheme
+  icon: ReactNode
   title: string
+  headerRight?: ReactNode
   children: React.ReactNode
-  footer?: React.ReactNode
   index: number
 }) {
   return (
@@ -68,37 +126,35 @@ function KpiShell({
       initial="hidden"
       animate="visible"
       className={cn(
-        'relative overflow-hidden rounded-xl border border-[#1e2433]/80 border-l-[3px] flex flex-col',
+        'group relative overflow-hidden rounded-2xl border border-[#1e2433]/90 border-l-[3px]',
         'bg-gradient-to-br from-[#0d1117] via-[#0a0e1a] to-[#060b14]',
-        `transition-all duration-300 ${hoverGlow}`,
-        accent,
+        'transition-all duration-300',
+        theme.accent, theme.accentHover, theme.hoverShadow,
       )}
     >
-      {/* Per-card colored glow */}
-      <div className={cn('absolute inset-0 pointer-events-none', accentGlow)} />
+      <div className={cn('absolute inset-0 pointer-events-none', theme.glow)} />
+      <div className="absolute top-0 right-0 w-24 h-24 pointer-events-none opacity-40 group-hover:opacity-60 transition-opacity"
+        style={{ background: 'radial-gradient(circle at 100% 0%, rgba(255,255,255,0.04), transparent 70%)' }}
+      />
 
-      {/* Header */}
-      <div className="relative flex items-center gap-2.5 px-3 pt-3 pb-0">
-        <div className={cn(
-          'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
-          iconBg,
-        )}>
-          <span className={iconColor}>{icon}</span>
+      <div className="relative px-2.5 pt-2 pb-2.5 flex flex-col gap-2 min-h-0">
+        <div className="flex items-center justify-between gap-1.5 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className={cn(
+              'w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ring-1',
+              theme.iconBg, theme.iconRing,
+            )}>
+              <span className={theme.iconColor}>{icon}</span>
+            </div>
+            <p className="text-[8px] sm:text-[9px] font-bold text-muted-foreground uppercase tracking-widest truncate">
+              {title}
+            </p>
+          </div>
+          {headerRight && <div className="shrink-0">{headerRight}</div>}
         </div>
-        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">{title}</p>
+
+        {children}
       </div>
-
-      {/* Divider */}
-      <div className="relative mx-3 mt-2 h-px bg-gradient-to-r from-transparent via-[#1e2433] to-transparent" />
-
-      {/* Content */}
-      <div className="relative flex-1 px-3 pt-2 pb-0">{children}</div>
-
-      {/* Footer */}
-      {footer && (
-        <div className="relative mx-3 mb-3 mt-2 pt-2 border-t border-[#1e2433]/60">{footer}</div>
-      )}
-      {!footer && <div className="pb-3" />}
     </motion.div>
   )
 }
@@ -112,64 +168,62 @@ export function KpiTier({
   asset: AssetEfficiencyKpi
 }) {
   const total = fleet.totalMmtb
-  const pieData = useMemo(() => [
-    { name: 'Hoạt động', value: fleet.breakdown.working, key: 'working' as const },
-    { name: 'Chờ việc', value: fleet.breakdown.standby, key: 'standby' as const },
-    { name: 'Hỏng hóc', value: fleet.breakdown.breakdown, key: 'breakdown' as const },
-    { name: 'Lưu kho', value: fleet.breakdown.stored, key: 'stored' as const },
-  ], [fleet.breakdown])
+  const pieData = useMemo(() => (
+    (['working', 'standby', 'breakdown', 'stored'] as const).map(key => ({
+      name: STATUS_LABELS[key],
+      value: fleet.breakdown[key],
+      key,
+    }))
+  ), [fleet.breakdown])
+
+  const idlePct = Math.round((asset.idleAssetValueBillionVnd / asset.totalAssetValueBillionVnd) * 100)
+  const activePct = 100 - idlePct
+  const availability = reliability.availabilityPct ?? 94.2
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 items-stretch">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-2.5 items-stretch">
 
-      {/* ── Card 1: MMTB Fleet ───────────────────────────────────────── */}
+      {/* Card 1 — MMTB Fleet */}
       <KpiShell
         index={0}
-        accent="border-l-amber-400/70 hover:border-l-amber-400"
-        accentGlow="bg-[radial-gradient(ellipse_70%_55%_at_100%_0%,rgba(251,191,36,0.1),transparent_65%)]"
-        hoverGlow="hover:shadow-[0_0_32px_rgba(251,191,36,0.12)]"
-        iconBg="bg-amber-500/15 ring-1 ring-amber-400/30 shadow-[0_0_16px_rgba(251,191,36,0.2)]"
-        iconColor="text-amber-400"
-        icon={<Cpu className="w-3.5 h-3.5" />}
+        theme={THEMES.amber}
+        icon={<Cpu className="w-3 h-3" />}
         title="MMTB — Đội máy"
-        footer={(
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-[8px] uppercase tracking-wider text-muted-foreground mb-0.5">Fleet Utilization</p>
-              <span className="text-xl font-black bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent tabular-nums">
+        headerRight={<TrendPill value={fleet.fleetUtilizationTrendPct} />}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-1">
+              <span className={cn(
+                'font-black leading-none tabular-nums tracking-tight text-[1.65rem] sm:text-[1.85rem]',
+                'bg-gradient-to-br bg-clip-text text-transparent',
+                THEMES.amber.heroGradient,
+              )}>
+                {fleet.totalMmtb.toLocaleString('vi-VN')}
+              </span>
+              <span className="text-[9px] font-semibold text-amber-400/70">máy</span>
+            </div>
+            <div className="mt-1 flex items-center gap-1">
+              <span className="text-[8px] text-muted-foreground/60 uppercase tracking-wide">Utilization</span>
+              <span className="text-[11px] font-black tabular-nums bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">
                 {fleet.fleetUtilizationPct}%
               </span>
             </div>
-            <TrendPill value={fleet.fleetUtilizationTrendPct} />
           </div>
-        )}
-      >
-        {/* Hero number */}
-        <div className="flex items-baseline gap-2 mb-2.5">
-          <span className="font-black leading-none tabular-nums tracking-tight text-[2rem] bg-gradient-to-br from-white via-white to-amber-200/80 bg-clip-text text-transparent">
-            {fleet.totalMmtb.toLocaleString('vi-VN')}
-          </span>
-          <span className="text-[10px] font-semibold text-amber-400/80">máy</span>
-        </div>
 
-        {/* Donut + status pills */}
-        <div className="flex items-center gap-3">
-          {/* Donut with glow ring */}
-          <div className="relative w-[86px] h-[86px] shrink-0">
-            <div className="absolute inset-[-4px] rounded-full"
-              style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.08) 0%, transparent 70%)' }}
-            />
+          <div className="relative w-[68px] h-[68px] shrink-0">
+            <div className="absolute inset-[-3px] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.12)_0%,transparent_70%)]" />
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieData}
-                  innerRadius={26}
-                  outerRadius={40}
-                  paddingAngle={3}
+                  innerRadius={22}
+                  outerRadius={32}
+                  paddingAngle={2.5}
                   dataKey="value"
                   stroke="none"
-                  animationBegin={200}
-                  animationDuration={1000}
+                  animationBegin={150}
+                  animationDuration={900}
                 >
                   {pieData.map(entry => (
                     <Cell key={entry.key} fill={STATUS_COLORS[entry.key]} />
@@ -178,191 +232,205 @@ export function KpiTier({
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-[11px] font-black text-foreground tabular-nums leading-none">{fleet.fleetUtilizationPct}%</span>
-              <span className="text-[6px] text-muted-foreground/60 uppercase tracking-widest mt-0.5">util</span>
+              <span className="text-[10px] font-black text-foreground tabular-nums leading-none">
+                {fleet.fleetUtilizationPct}%
+              </span>
             </div>
           </div>
+        </div>
 
-          {/* Status pills */}
-          <div className="flex-1 grid grid-cols-2 gap-1">
-            {pieData.map(row => {
-              const pct = Math.round(row.value / total * 100)
-              const color = STATUS_COLORS[row.key]
-              return (
-                <div
-                  key={row.name}
-                  className="flex flex-col gap-0.5 px-1.5 py-1 rounded-lg border"
-                  style={{
-                    background: `${color}0d`,
-                    borderColor: `${color}33`,
-                  }}
-                >
-                  <span className="text-[7px] font-medium truncate" style={{ color: `${color}cc` }}>
-                    {row.name}
-                  </span>
-                  <span className="text-[11px] font-black tabular-nums leading-none" style={{ color }}>
-                    {row.value}
-                  </span>
-                  <span className="text-[7px] tabular-nums text-muted-foreground/50">{pct}%</span>
-                </div>
-              )
-            })}
-          </div>
+        <div className="grid grid-cols-4 gap-1">
+          {pieData.map(row => {
+            const pct = Math.round(row.value / total * 100)
+            const color = STATUS_COLORS[row.key]
+            return (
+              <div
+                key={row.key}
+                className="flex flex-col items-center gap-0 px-0.5 py-1 rounded-lg border border-[#1e2433]/60"
+                style={{ background: `${color}08` }}
+              >
+                <span className="w-1 h-1 rounded-full shrink-0 mb-0.5" style={{ background: color }} />
+                <span className="text-[11px] font-black tabular-nums leading-none" style={{ color }}>
+                  {row.value}
+                </span>
+                <span className="text-[6px] font-medium text-muted-foreground/60 truncate w-full text-center leading-tight">
+                  {row.name}
+                </span>
+                <span className="text-[6px] tabular-nums text-muted-foreground/40">{pct}%</span>
+              </div>
+            )
+          })}
         </div>
       </KpiShell>
 
-      {/* ── Card 2: PM Compliance ─────────────────────────────────────── */}
+      {/* Card 2 — PM Compliance */}
       <KpiShell
         index={1}
-        accent="border-l-emerald-400/70 hover:border-l-emerald-400"
-        accentGlow="bg-[radial-gradient(ellipse_70%_55%_at_100%_0%,rgba(52,211,153,0.09),transparent_65%)]"
-        hoverGlow="hover:shadow-[0_0_32px_rgba(52,211,153,0.12)]"
-        iconBg="bg-emerald-500/15 ring-1 ring-emerald-400/30 shadow-[0_0_16px_rgba(52,211,153,0.2)]"
-        iconColor="text-emerald-400"
-        icon={<ClipboardList className="w-3.5 h-3.5" />}
-        title="PM Compliance"
-        footer={<TrendPill value={pm.trendPct} label="so với tháng trước" />}
+        theme={THEMES.emerald}
+        icon={<ClipboardList className="w-3 h-3" />}
+        title="Tuân thủ PM"
+        headerRight={<TrendPill value={pm.trendPct} />}
       >
-        {/* Hero % + inline badge */}
-        <div className="flex items-baseline gap-2 mb-2.5 flex-wrap">
-          <span className="font-black leading-none tabular-nums tracking-tight text-[2.2rem] bg-gradient-to-br from-emerald-300 via-green-300 to-emerald-500 bg-clip-text text-transparent">
-            {pm.compliancePct}%
-          </span>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[9px] font-medium text-muted-foreground leading-none">đúng hạn</span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 whitespace-nowrap">
-              <TrendingUp className="w-2 h-2" />
-              +{pm.trendPct}% tháng trước
+        <div className="flex items-end justify-between gap-2">
+          <div className="flex items-baseline gap-1">
+            <span className={cn(
+              'font-black leading-none tabular-nums tracking-tight text-[1.85rem] sm:text-[2rem]',
+              'bg-gradient-to-br bg-clip-text text-transparent',
+              THEMES.emerald.heroGradient,
+            )}>
+              {pm.compliancePct}
             </span>
+            <span className="text-[14px] font-black text-emerald-400/80">%</span>
           </div>
+          <MetricPercentRing
+            percent={pm.compliancePct}
+            color="#34d399"
+            size={42}
+            title={`${pm.compliancePct}% tuân thủ PM`}
+          />
         </div>
 
-        {/* Glowing progress bar */}
-        <div className="relative h-2 rounded-full bg-[#1a2030] overflow-visible mb-3 ring-1 ring-inset ring-[#2a3855]/30">
+        <div className="relative h-1.5 rounded-full bg-[#1a2030] overflow-hidden ring-1 ring-inset ring-[#2a3855]/25">
           <motion.div
             className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-600 via-emerald-400 to-green-300"
             initial={{ width: 0 }}
             animate={{ width: `${pm.compliancePct}%` }}
-            transition={{ delay: 0.3, duration: 1.0, ease: CARD_EASE }}
-            style={{ boxShadow: '0 0 8px rgba(52,211,153,0.6), 0 0 16px rgba(52,211,153,0.2)' }}
+            transition={{ delay: 0.25, duration: 0.9, ease: CARD_EASE }}
+            style={{ boxShadow: '0 0 10px rgba(52,211,153,0.5)' }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none rounded-full" />
         </div>
 
-        {/* PM list with colored left border */}
-        <ul className="space-y-1 text-[10px]">
-          <PmRow color="#22c55e" label="Hoàn thành đúng hạn" value={pm.completedOnTime} />
-          <PmRow color="#fbbf24" label="Sắp tới hạn (&lt;50h)" value={pm.upcomingUnder50h} />
-          <PmRow color="#f87171" label="PM trễ hạn" value={pm.overdue} />
-          <PmRow color="#64748b" label="Tổng kế hoạch PM" value={pm.totalPlanned} />
-        </ul>
+        <div className="grid grid-cols-2 gap-1">
+          <PmChip color="#22c55e" label="Hoàn thành đúng hạn" value={pm.completedOnTime} />
+          <PmChip color="#fbbf24" label="Sắp tới hạn (&lt;50h)" value={pm.upcomingUnder50h} />
+          <PmChip color="#f87171" label="PM trễ hạn" value={pm.overdue} />
+          <PmChip color="#64748b" label="Tổng kế hoạch PM" value={pm.totalPlanned} muted />
+        </div>
       </KpiShell>
 
-      {/* ── Card 3: Reliability ───────────────────────────────────────── */}
+      {/* Card 3 — Reliability */}
       <KpiShell
         index={2}
-        accent="border-l-sky-400/70 hover:border-l-sky-400"
-        accentGlow="bg-[radial-gradient(ellipse_70%_55%_at_100%_0%,rgba(56,189,248,0.09),transparent_65%)]"
-        hoverGlow="hover:shadow-[0_0_32px_rgba(56,189,248,0.12)]"
-        iconBg="bg-sky-500/15 ring-1 ring-sky-400/30 shadow-[0_0_16px_rgba(56,189,248,0.2)]"
-        iconColor="text-sky-400"
-        icon={<Activity className="w-3.5 h-3.5" />}
+        theme={THEMES.sky}
+        icon={<Activity className="w-3 h-3" />}
         title="Độ tin cậy"
       >
-        <div className="grid grid-cols-3 gap-1.5 mt-0.5">
-          <MetricTile
+        <div className="grid grid-cols-3 gap-1">
+          <ReliabilityTile
             label="MTBF"
             value={`${reliability.mtbfHours}h`}
+            hint="Giờ giữa hỏng"
             trend={reliability.mtbfTrendPct}
             suffix="%"
-            accentColor="sky"
-            description="Giờ giữa hỏng"
+            color="sky"
           />
-          <MetricTile
+          <ReliabilityTile
             label="MTTR"
             value={`${reliability.mttrHours}h`}
+            hint="Thời gian sửa"
             trend={reliability.mttrTrendPct}
             suffix="h"
             invert
-            accentColor="amber"
-            description="Thời gian sửa"
+            color="amber"
           />
-          <MetricTile
+          <ReliabilityTile
             label="MTTF"
             value={`${reliability.mttfHours.toLocaleString('vi-VN')}h`}
+            hint="Tuổi thọ TB"
             trend={reliability.mttfTrendPct}
             suffix="%"
-            accentColor="emerald"
-            description="Tuổi thọ TB"
+            color="emerald"
           />
         </div>
 
-        {/* Availability score */}
-        <div className="mt-2 flex items-center justify-between px-2.5 py-2 rounded-lg bg-[#060b14]/90 border border-[#1e2433]/80"
-          style={{ boxShadow: 'inset 0 1px 0 rgba(56,189,248,0.06)' }}
-        >
-          <div>
-            <p className="text-[8px] uppercase tracking-wider text-muted-foreground">Availability Score</p>
-            <p className="text-[8px] text-muted-foreground/50 mt-0.5">Tỉ lệ khả dụng toàn đội</p>
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-[#060b14]/80 border border-[#1e2433]/70">
+          <div className="flex-1 min-w-0">
+            <p className="text-[7px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              Availability
+            </p>
+            <div className="mt-1 h-1 rounded-full bg-[#1a2030] overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-sky-600 to-sky-400"
+                initial={{ width: 0 }}
+                animate={{ width: `${availability}%` }}
+                transition={{ delay: 0.35, duration: 0.8, ease: CARD_EASE }}
+                style={{ boxShadow: '0 0 6px rgba(56,189,248,0.4)' }}
+              />
+            </div>
           </div>
-          <span className="text-[1.2rem] font-black bg-gradient-to-r from-sky-300 to-sky-400 bg-clip-text text-transparent tabular-nums leading-none">
-            {reliability.availabilityPct ?? 94.2}%
+          <span className="text-[1.1rem] font-black tabular-nums leading-none bg-gradient-to-r from-sky-300 to-sky-400 bg-clip-text text-transparent shrink-0">
+            {availability}%
           </span>
         </div>
       </KpiShell>
 
-      {/* ── Card 4: Asset Efficiency ──────────────────────────────────── */}
+      {/* Card 4 — Asset Efficiency */}
       <KpiShell
         index={3}
-        accent="border-l-violet-400/70 hover:border-l-violet-400"
-        accentGlow="bg-[radial-gradient(ellipse_70%_55%_at_100%_0%,rgba(167,139,250,0.09),transparent_65%)]"
-        hoverGlow="hover:shadow-[0_0_32px_rgba(167,139,250,0.12)]"
-        iconBg="bg-violet-500/15 ring-1 ring-violet-400/30 shadow-[0_0_16px_rgba(167,139,250,0.2)]"
-        iconColor="text-violet-400"
-        icon={<Gem className="w-3.5 h-3.5" />}
+        theme={THEMES.violet}
+        icon={<Gem className="w-3 h-3" />}
         title="Hiệu quả tài sản"
       >
-        <div className="space-y-0">
-          {/* Hero asset value */}
-          <div className="mb-2">
-            <p className="text-[8px] uppercase tracking-widest text-muted-foreground/70 mb-0.5">Tổng giá trị tài sản</p>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[1.75rem] font-black leading-none tabular-nums bg-gradient-to-r from-white via-white to-violet-200/80 bg-clip-text text-transparent tracking-tight">
-                {formatBillionVnd(asset.totalAssetValueBillionVnd)}
-              </span>
-              <span className="text-[10px] font-bold text-violet-400/70">tỷ VND</span>
-            </div>
+        <div>
+          <p className="text-[7px] uppercase tracking-widest text-muted-foreground/60 mb-0.5">
+            Tổng giá trị tài sản
+          </p>
+          <div className="flex items-baseline gap-1">
+            <span className={cn(
+              'text-[1.5rem] sm:text-[1.65rem] font-black leading-none tabular-nums tracking-tight',
+              'bg-gradient-to-br bg-clip-text text-transparent',
+              THEMES.violet.heroGradient,
+            )}>
+              {formatBillionVnd(asset.totalAssetValueBillionVnd)}
+            </span>
+            <span className="text-[9px] font-bold text-violet-400/60">tỷ VND</span>
           </div>
+        </div>
 
-          <div className="h-px bg-gradient-to-r from-transparent via-[#1e2433] to-transparent my-1.5" />
-
-          {/* Idle asset */}
-          <div className="mb-1.5">
-            <p className="text-[8px] uppercase tracking-widest text-muted-foreground/60 mb-0.5">Tài sản nhàn rỗi</p>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[1.1rem] font-black tabular-nums text-amber-400 leading-none">
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[7px] uppercase tracking-wider text-muted-foreground/60">Phân bổ tài sản</span>
+            <span className="text-[8px] tabular-nums text-muted-foreground/50">
+              <span className="text-green-400/80">{activePct}%</span>
+              {' · '}
+              <span className="text-amber-400/80">{idlePct}% idle</span>
+            </span>
+          </div>
+          <div className="flex h-2 rounded-full overflow-hidden bg-[#1a2030] ring-1 ring-inset ring-[#2a3855]/25">
+            <motion.div
+              className="h-full bg-gradient-to-r from-violet-600/80 to-violet-400/70"
+              initial={{ width: 0 }}
+              animate={{ width: `${activePct}%` }}
+              transition={{ delay: 0.3, duration: 0.8, ease: CARD_EASE }}
+            />
+            <motion.div
+              className="h-full bg-gradient-to-r from-amber-600/60 to-amber-400/50"
+              initial={{ width: 0 }}
+              animate={{ width: `${idlePct}%` }}
+              transition={{ delay: 0.45, duration: 0.8, ease: CARD_EASE }}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-1 text-[8px] tabular-nums">
+            <span className="text-muted-foreground/50 truncate">
+              Nhàn rỗi{' '}
+              <span className="font-bold text-amber-400">
                 {formatBillionVnd(asset.idleAssetValueBillionVnd)}
               </span>
-              <span className="text-[9px] font-medium text-muted-foreground">tỷ VND</span>
-            </div>
+              {' '}tỷ
+            </span>
           </div>
+        </div>
 
-          <div className="h-px bg-gradient-to-r from-transparent via-[#1e2433] to-transparent my-1.5" />
-
-          {/* ROI metric */}
-          <div>
-            <p className="text-[8px] uppercase tracking-widest text-muted-foreground/60 mb-0.5">Giờ phục vụ / Tỷ VND</p>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[1.3rem] font-black tabular-nums leading-none bg-gradient-to-r from-sky-300 to-sky-400 bg-clip-text text-transparent">
-                {asset.serviceHoursPerBillionVnd.toLocaleString('vi-VN')}
-              </span>
-              <span
-                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-bold border"
-                style={{ background: 'rgba(56,189,248,0.08)', borderColor: 'rgba(56,189,248,0.25)', color: '#38bdf8' }}
-              >
-                h / tỷ
-              </span>
-            </div>
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-xl border border-[#1e2433]/70 bg-[#060b14]/80">
+          <div className="min-w-0">
+            <p className="text-[7px] uppercase tracking-widest text-muted-foreground/60">Giờ phục vụ / Tỷ VND</p>
+            <p className="text-[8px] text-muted-foreground/40 mt-0.5 truncate">ROI vận hành</p>
+          </div>
+          <div className="flex items-baseline gap-1 shrink-0">
+            <span className="text-[1.15rem] font-black tabular-nums leading-none bg-gradient-to-r from-sky-300 to-cyan-400 bg-clip-text text-transparent">
+              {asset.serviceHoursPerBillionVnd.toLocaleString('vi-VN')}
+            </span>
+            <span className="text-[7px] font-bold text-sky-400/60">h/tỷ</span>
           </div>
         </div>
       </KpiShell>
@@ -370,47 +438,61 @@ export function KpiTier({
   )
 }
 
-function PmRow({ color, label, value }: { color: string; label: string; value: number }) {
+function PmChip({ color, label, value, muted }: {
+  color: string; label: string; value: number; muted?: boolean
+}) {
   return (
-    <li className="flex items-center justify-between gap-2 pl-2 border-l-2 rounded-sm" style={{ borderColor: color }}>
-      <span className="text-muted-foreground truncate">{label}</span>
-      <span className="font-bold text-foreground tabular-nums shrink-0">{value}</span>
-    </li>
+    <div
+      className={cn(
+        'flex items-center justify-between gap-1 px-1.5 py-1 rounded-lg border border-[#1e2433]/50',
+        muted ? 'bg-[#060b14]/50' : '',
+      )}
+      style={muted ? undefined : { background: `${color}0a`, borderColor: `${color}28` }}
+    >
+      <span className="flex items-center gap-1 min-w-0">
+        <span className="w-1 h-1 rounded-full shrink-0" style={{ background: color }} />
+        <span className="text-[7px] text-muted-foreground/70 truncate">{label}</span>
+      </span>
+      <span className="text-[10px] font-black tabular-nums shrink-0" style={{ color: muted ? undefined : color }}>
+        {value}
+      </span>
+    </div>
   )
 }
 
-function MetricTile({
-  label, value, trend, suffix, invert, accentColor, description,
+function ReliabilityTile({
+  label, value, hint, trend, suffix, invert, color,
 }: {
-  label: string; value: string; trend: number; suffix: string; invert?: boolean
-  accentColor: 'sky' | 'amber' | 'emerald'
-  description?: string
+  label: string
+  value: string
+  hint?: string
+  trend: number
+  suffix: string
+  invert?: boolean
+  color: 'sky' | 'amber' | 'emerald'
 }) {
   const positive = invert ? trend <= 0 : trend >= 0
-  const colorMap = {
-    sky: { text: 'text-sky-400', border: 'hover:border-sky-500/30', label: 'text-sky-400/70', bg: 'bg-sky-500/5' },
-    amber: { text: 'text-amber-400', border: 'hover:border-amber-500/30', label: 'text-amber-400/70', bg: 'bg-amber-500/5' },
-    emerald: { text: 'text-emerald-400', border: 'hover:border-emerald-500/30', label: 'text-emerald-400/70', bg: 'bg-emerald-500/5' },
-  }
-  const c = colorMap[accentColor]
+  const palette = {
+    sky: { value: 'text-sky-400', label: 'text-sky-400/60', bg: 'bg-sky-500/5 border-sky-500/15' },
+    amber: { value: 'text-amber-400', label: 'text-amber-400/60', bg: 'bg-amber-500/5 border-amber-500/15' },
+    emerald: { value: 'text-emerald-400', label: 'text-emerald-400/60', bg: 'bg-emerald-500/5 border-emerald-500/15' },
+  }[color]
 
   return (
     <div className={cn(
-      'flex flex-col items-center gap-0.5 p-2 rounded-lg bg-[#060b14]/90 border border-[#1e2433] transition-colors',
-      c.border, c.bg,
+      'flex flex-col items-center gap-0 px-1 py-1.5 rounded-lg border border-[#1e2433]/60',
+      palette.bg,
     )}>
-      <p className={cn('text-[7px] font-bold uppercase tracking-widest', c.label)}>{label}</p>
-      <p className={cn('text-[14px] font-black tabular-nums leading-tight mt-0.5', c.text)}>{value}</p>
-      {description && (
-        <p className="text-[6px] text-muted-foreground/40 text-center leading-tight">{description}</p>
-      )}
-      <p className={cn(
-        'inline-flex items-center gap-0.5 text-[8px] font-semibold mt-0.5 tabular-nums',
+      <p className={cn('text-[6px] font-bold uppercase tracking-widest', palette.label)}>{label}</p>
+      <p className={cn('text-[12px] font-black tabular-nums leading-none mt-0.5', palette.value)}>{value}</p>
+      {hint && <span className="text-[5px] text-muted-foreground/40 text-center leading-tight line-clamp-1">{hint}</span>}
+      <span className={cn(
+        'inline-flex items-center gap-0.5 text-[7px] font-semibold mt-0.5 tabular-nums',
         positive ? 'text-green-400' : 'text-red-400',
       )}>
-        {positive ? <TrendingUp className="w-2 h-2" /> : <TrendingDown className="w-2 h-2" />}
+        {positive ? <TrendingUp className="w-1.5 h-1.5" /> : <TrendingDown className="w-1.5 h-1.5" />}
         {trend > 0 ? '+' : ''}{trend}{suffix}
-      </p>
+      </span>
     </div>
   )
 }

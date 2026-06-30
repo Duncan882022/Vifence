@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useId } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MapPin, X } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
+import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { cn } from '@/utils/cn'
 import {
   VIETNAM_MAP_VIEWBOX,
@@ -39,6 +40,9 @@ function toSvgCoords(region: RegionAllocation): { cx: number; cy: number } {
 interface VietnamRegionMapProps {
   regions: RegionAllocation[]
   getMachinesByRegion: (regionId: string) => MmtbRow[]
+  /** Tier-level collapse — ẩn/hiện nội dung map */
+  open?: boolean
+  onToggleOpen?: () => void
 }
 
 function MapCanvas({
@@ -298,7 +302,12 @@ function MapCanvas({
   )
 }
 
-export function VietnamRegionMap({ regions, getMachinesByRegion }: VietnamRegionMapProps) {
+export function VietnamRegionMap({
+  regions,
+  getMachinesByRegion,
+  open = true,
+  onToggleOpen,
+}: VietnamRegionMapProps) {
   const [activeRegion, setActiveRegion] = useState<RegionAllocation | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
@@ -327,18 +336,46 @@ export function VietnamRegionMap({ regions, getMachinesByRegion }: VietnamRegion
     onSelect: handleSelect,
   }
 
+  const machineBadge = (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/25 text-[10px] font-bold text-primary tabular-nums whitespace-nowrap">
+      <MapPin className="w-3 h-3 shrink-0" />
+      {totalMachines.toLocaleString('vi-VN')} máy
+    </span>
+  )
+
+  const headerControls = (
+    <div className="flex items-center gap-1.5 min-w-0">
+      {machineBadge}
+      {onToggleOpen && (
+        <TierCollapseButton
+          open={open}
+          onToggle={onToggleOpen}
+          label="Phân bổ khu vực"
+        />
+      )}
+    </div>
+  )
+
+  if (!open) {
+    return (
+      <Panel
+        title="Phân bổ khu vực"
+        fit
+        className="shrink-0"
+        headerRight={headerControls}
+      >
+        {null}
+      </Panel>
+    )
+  }
+
   return (
     <Panel
       title="Phân bổ khu vực"
       noPadding
       expandable
       className="h-full min-h-0 relative"
-      headerRight={(
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/25 text-[10px] font-bold text-primary tabular-nums">
-          <MapPin className="w-3 h-3" />
-          {totalMachines.toLocaleString('vi-VN')} máy
-        </span>
-      )}
+      headerRight={headerControls}
       expandedContent={(
         <div className="flex flex-col flex-1 min-h-0 p-2 sm:p-3">
           <MapCanvas {...mapProps} />

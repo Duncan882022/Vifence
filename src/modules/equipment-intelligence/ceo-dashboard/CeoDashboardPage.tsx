@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { RefreshCw, Calendar, ChevronDown } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { KpiTier } from './components/KpiTier'
 import { MmtbDataTable } from './components/MmtbDataTable'
 import { VietnamRegionMap } from './components/VietnamRegionMap'
-import { TopUsersPanel } from './components/TopUsersPanel'
 import { EquipmentDetailDrawer } from './components/EquipmentDetailDrawer'
 import { useCeoDashboardData } from './hooks/useCeoDashboardData'
 import type { MmtbRow } from './types'
@@ -29,6 +29,7 @@ export function CeoDashboardPage() {
 
   const [selectedMachine, setSelectedMachine] = useState<MmtbRow | null>(null)
   const [machineDrawerOpen, setMachineDrawerOpen] = useState(false)
+  const [mapOpen, setMapOpen] = useState(true)
   const [, setRefreshKey] = useState(0)
 
   const handleRefresh = useCallback(() => {
@@ -86,36 +87,47 @@ export function CeoDashboardPage() {
           </Panel>
         </motion.div>
 
-        {/* Tier 2 — Map | Top 10 */}
+        {/* Tier 2 — Map | Danh sách Đội máy */}
         <motion.div
           custom={1}
           variants={TIER_VARIANTS}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch shrink-0"
+          className={cn(
+            'grid grid-cols-1 gap-3 min-h-0 flex-1',
+            mapOpen && 'lg:grid-cols-12 lg:grid-rows-[1fr]',
+          )}
         >
-          <div className="lg:col-span-6 min-h-[540px]">
+          <div
+            className={cn(
+              'min-h-0 flex flex-col',
+              mapOpen ? 'lg:col-span-5 min-h-[300px] lg:min-h-0' : 'shrink-0',
+            )}
+          >
             <VietnamRegionMap
               regions={data.regions}
               getMachinesByRegion={getMachinesByRegion}
+              open={mapOpen}
+              onToggleOpen={() => setMapOpen(open => !open)}
             />
           </div>
-          <div className="lg:col-span-6 min-h-[540px]">
-            <TopUsersPanel units={data.usageUnits} />
-          </div>
-        </motion.div>
 
-        {/* Tier 3 — MMTB table full width */}
-        <motion.div custom={2} variants={TIER_VARIANTS} initial="hidden" animate="visible" className="flex-1 min-h-[280px]">
-          <MmtbDataTable
-            data={filteredMachines}
-            search={filters.search}
-            onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
-            onRowClick={row => {
-              setSelectedMachine(row)
-              setMachineDrawerOpen(true)
-            }}
-          />
+          <div
+            className={cn(
+              'min-h-0 flex flex-col',
+              mapOpen ? 'lg:col-span-7 min-h-[320px]' : 'flex-1 min-h-[360px]',
+            )}
+          >
+            <MmtbDataTable
+              data={filteredMachines}
+              search={filters.search}
+              onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
+              onRowClick={row => {
+                setSelectedMachine(row)
+                setMachineDrawerOpen(true)
+              }}
+            />
+          </div>
         </motion.div>
       </PageLayout>
 

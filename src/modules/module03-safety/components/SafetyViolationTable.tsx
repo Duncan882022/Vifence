@@ -32,7 +32,7 @@ const TABS: { key: ViolationTabKey; label: string }[] = [
   { key: 'low', label: 'Thấp' },
 ]
 
-const DESKTOP_COLS = 'grid-cols-[28px_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_80px]'
+const DESKTOP_COLS = 'grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,0.75fr)_minmax(0,0.5fr)_minmax(0,0.5fr)_80px]'
 
 function ClickableWorkerAvatar({
   v,
@@ -354,16 +354,26 @@ function ViolationDesktopRow({
         isSelected ? 'bg-primary/10' : 'hover:bg-[#1a2235]/50',
       )}
     >
-      <ClickableWorkerAvatar v={v} onSelectWorker={onSelectWorker} />
-      <p className="text-[9px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDateTime(v.timestamp)}</p>
-      <div className="min-w-0">
-        <ClickableWorkerName
-          v={v}
-          onSelectWorker={onSelectWorker}
-          className="text-[10px] font-semibold text-foreground block w-full"
-        />
-        {v.employeeCode && <p className="text-[8px] text-muted-foreground/60 truncate">{v.employeeCode}</p>}
+      {/* Người vi phạm — avatar inline with name */}
+      <div className="min-w-0 flex items-center gap-2">
+        <ClickableWorkerAvatar v={v} onSelectWorker={onSelectWorker} />
+        <div className="min-w-0">
+          <ClickableWorkerName
+            v={v}
+            onSelectWorker={onSelectWorker}
+            className="text-[10px] font-semibold text-foreground block w-full"
+          />
+          {v.employeeCode && <p className="text-[8px] text-muted-foreground/60 truncate">{v.employeeCode}</p>}
+        </div>
       </div>
+      {/* Loại vi phạm */}
+      <div className="min-w-0 flex items-center gap-1.5">
+        <ViolationTypeIcon type={v.type} size="xs" />
+        <p className="text-[10px] text-foreground truncate">{VIOLATION_TYPE_LABELS[v.type]}</p>
+      </div>
+      {/* Vị trí */}
+      <p className="text-[10px] text-muted-foreground/70 truncate">{v.location || '—'}</p>
+      {/* Nhà thầu/Đội */}
       <div className="min-w-0">
         <ClickableContractorName
           contractorName={v.contractorName}
@@ -372,13 +382,13 @@ function ViolationDesktopRow({
         />
         {v.teamName && <p className="text-[8px] text-muted-foreground/60 truncate">{v.teamName}</p>}
       </div>
-      <div className="min-w-0 flex items-center gap-1.5">
-        <ViolationTypeIcon type={v.type} size="xs" />
-        <p className="text-[10px] text-foreground truncate">{VIOLATION_TYPE_LABELS[v.type]}</p>
-      </div>
+      {/* Thời gian */}
+      <p className="text-[9px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDateTime(v.timestamp)}</p>
+      {/* Mức */}
       <span className={cn('text-[8px] font-bold px-1 py-0.5 rounded whitespace-nowrap w-fit', sevCfg.color, sevCfg.bg)}>
         {VIOLATION_SEVERITY_LABELS[severity]}
       </span>
+      {/* TT */}
       <span className={cn(
         'text-[8px] font-bold px-1 py-0.5 rounded w-fit',
         v.status === 'pending' ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400',
@@ -493,7 +503,7 @@ export function SafetyViolationTable({
         'hidden lg:grid gap-x-2 px-3 py-2 border-b border-[#1e2433] shrink-0 sticky top-0 z-10 bg-[#0b0f1a]',
         DESKTOP_COLS,
       )}>
-        {['', 'Thời gian', 'Người vi phạm', 'Nhà thầu/Đội', 'Loại', 'Mức', 'TT', ''].map(h => (
+        {['Người vi phạm', 'Loại vi phạm', 'Vị trí', 'Nhà thầu/Đội', 'Thời gian', 'Mức', 'TT', ''].map(h => (
           <span key={h || 'actions'} className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</span>
         ))}
       </div>

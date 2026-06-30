@@ -11,7 +11,7 @@ import type { SafetyDailySummary, SafetyDayStats } from '../services/safetyKpi.s
 import { SAFETY_METRIC_META } from '../data/safetyMetricMeta'
 import { getPpeLevel, formatPpeScore } from '../utils/safetyUiHelpers'
 import { PpeComplianceTooltip } from './PpeComplianceTooltip'
-import { ViolationTypeChips } from './ViolationTypeChips'
+import { DASHBOARD_CHIP_CLASS, ViolationTypeChips } from './ViolationTypeChips'
 
 type MetricIndex = 0 | 1 | 2 | 3
 
@@ -54,11 +54,7 @@ function PenaltyStatusChips({ stats }: { stats: SafetyDayStats }) {
           key={chip.tip}
           title={chip.tip}
           aria-label={`${chip.tip}: ${chip.value}`}
-          className={cn(
-            'inline-flex items-center gap-1 px-1.5 py-0.5 rounded',
-            'border text-[9px] font-medium tabular-nums',
-            chip.colorCls,
-          )}
+          className={cn(DASHBOARD_CHIP_CLASS, chip.colorCls)}
         >
           {chip.pulse && (
             <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current shrink-0" />
@@ -89,36 +85,37 @@ function CameraInsight({ stats }: { stats: SafetyDayStats }) {
 function MetricInsight({ index, stats }: { index: MetricIndex; stats: SafetyDayStats }) {
   switch (index) {
     case 0: {
-      const ppeLevel = getPpeLevel(stats.ppeCompliance)
       const levelChips = [
         { count: stats.violationsHigh, label: 'Cao', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', Icon: AlertCircle, tip: 'Mức cao · −5đ/vi phạm' },
         { count: stats.violationsMedium, label: 'TB', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', Icon: AlertTriangle, tip: 'Trung bình · −2đ/vi phạm' },
         { count: stats.violationsLow, label: 'Thấp', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', Icon: Minus, tip: 'Mức thấp · −1đ/vi phạm' },
       ].filter(c => c.count > 0)
 
+      const deductTotal = stats.violationsHigh + stats.violationsMedium + stats.violationsLow
+
+      if (levelChips.length === 0) {
+        return (
+          <p className="text-[9px] text-muted-foreground/60 leading-snug">Không có vi phạm trừ điểm</p>
+        )
+      }
+
       return (
-        <div className="space-y-0.5">
-          <p className="text-[9px] text-muted-foreground/70 leading-snug truncate">
-            <span className={cn('font-semibold', ppeLevel.color)}>Mức {ppeLevel.label}</span>
-          </p>
-          {levelChips.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {levelChips.map(chip => (
-                <span
-                  key={chip.label}
-                  title={chip.tip}
-                  className={cn(
-                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded',
-                    'border text-[9px] font-medium tabular-nums',
-                    chip.color, chip.bg, chip.border,
-                  )}
-                >
-                  <chip.Icon className="w-3.5 h-3.5" aria-hidden />
-                  ×{chip.count}
-                </span>
-              ))}
-            </div>
-          )}
+        <div
+          className="flex flex-wrap gap-1"
+          title={`${deductTotal} vi phạm trừ điểm PPE hôm nay`}
+          aria-label={`${deductTotal} vi phạm trừ điểm PPE`}
+        >
+          {levelChips.map(chip => (
+            <span
+              key={chip.label}
+              title={chip.tip}
+              aria-label={`${chip.label}: ${chip.count}`}
+              className={cn(DASHBOARD_CHIP_CLASS, chip.color, chip.bg, chip.border)}
+            >
+              <chip.Icon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              <span>{chip.count}</span>
+            </span>
+          ))}
         </div>
       )
     }
@@ -146,16 +143,7 @@ function MetricRightVisual({ index, stats }: { index: MetricIndex; stats: Safety
       )
     }
     case 1:
-      if (stats.violationsToday <= 0) return null
-      return (
-        <MetricPercentRing
-          percent={Math.min(100, stats.violationsToday * 20)}
-          color={ringHeatColor(Math.max(0, 100 - stats.violationsToday * 15), true)}
-          size={46}
-          className="mt-0.5"
-          title={`${stats.violationsToday} vi phạm hôm nay`}
-        />
-      )
+      return null
     case 2:
       if (stats.totalCameras <= 0) return null
       return (
@@ -272,6 +260,14 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
                     {unit}
                   </span>
                 )}
+                <span
+                  className={cn(
+                    'text-[9px] sm:text-[10px] font-semibold shrink-0 transition-colors duration-500',
+                    ppeLevel!.color,
+                  )}
+                >
+                  · Mức {ppeLevel!.label}
+                </span>
               </>
             ) : isPenalties ? (
               <>
