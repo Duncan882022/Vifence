@@ -10,8 +10,8 @@ export function Module03Page() {
         element={(
           <>
             <Header
-              title="Giám Sát An Toàn"
-              subtitle="Phát hiện và xử lý vi phạm an toàn lao động"
+              title="An Toàn Lao Động"
+              subtitle="Giám sát, phát hiện vi phạm và quản lý an toàn lao động trên công trường"
             />
             <SafetyDashboardPage />
           </>

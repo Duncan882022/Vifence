@@ -1,13 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Cpu, MapPin, Wrench, FileBarChart, Sparkles,
-  Building2, Map, Settings, Download, ChevronDown,
+  Building2, Map, Settings, Download,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import type { DashboardFilters } from '../types'
 
 const NAV = [
-  { to: '/equipment', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/equipment', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/equipment', label: 'Thiết bị', icon: Cpu, end: false },
   { to: '/equipment', label: 'Dự án / Vị trí', icon: MapPin, end: false },
   { to: '/equipment', label: 'Bảo dưỡng', icon: Wrench, end: false },
@@ -18,121 +17,92 @@ const NAV = [
   { to: '/equipment', label: 'Cài đặt', icon: Settings, end: false },
 ] as const
 
-interface EquipmentSidebarProps {
-  filters: DashboardFilters
-  onFilterChange: (patch: Partial<DashboardFilters>) => void
-  projects: string[]
-  regions: string[]
-}
-
-export function EquipmentSidebar({ filters, onFilterChange, projects, regions }: EquipmentSidebarProps) {
+export function EquipmentSidebar() {
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-[260px] shrink-0 flex-col border-r border-white/10 bg-[#05101c]/90 backdrop-blur-xl">
-        <div className="px-5 py-5 border-b border-white/10">
-          <p className="text-lg font-bold tracking-tight text-white">VIFENCE</p>
-          <p className="text-[10px] text-sky-400/80 tracking-wide">Beyond the limit</p>
+      <aside className="ecc-sidebar hidden lg:flex w-[200px] shrink-0 flex-col">
+        {/* Logo — mirrors the main Sidebar header */}
+        <div className="h-[64px] flex items-center px-3 border-b border-[#1e2433] shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <LayoutDashboard className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white leading-none">MMTB</p>
+              <p className="text-[10px] text-emerald-500/60 mt-0.5 leading-none">Equipment Intel</p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto py-2 px-1.5 space-y-0.5">
           {NAV.map(item => {
             const Icon = item.icon
+            const isOverview = item.label === 'Tổng quan'
+            if (isOverview) {
+              return (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  end
+                  className={({ isActive }) => cn(
+                    'ecc-nav-item flex items-center gap-2.5 px-2.5 py-2.5 rounded-md text-xs font-medium',
+                    isActive && 'ecc-nav-active',
+                  )}
+                >
+                  <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                  {item.label}
+                </NavLink>
+              )
+            }
             return (
-              <NavLink
+              <button
                 key={item.label}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) => cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-colors',
-                  isActive
-                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200',
-                )}
+                type="button"
+                className="ecc-nav-item w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-md text-xs font-medium text-left"
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
                 {item.label}
-              </NavLink>
+              </button>
             )
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/10 space-y-3">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Quick Filters</p>
-          <FilterSelect
-            label="Dự án"
-            value={filters.project}
-            options={projects}
-            onChange={v => onFilterChange({ project: v })}
-          />
-          <FilterSelect
-            label="Vùng"
-            value={filters.region}
-            options={regions}
-            onChange={v => onFilterChange({ region: v })}
-          />
-          <FilterSelect
-            label="Trạng thái"
-            value={filters.status}
-            options={['Tất cả trạng thái', 'Working', 'Standby', 'Breakdown', 'Stored']}
-            onChange={v => onFilterChange({ status: v })}
-          />
+        <div className="px-2 py-3 border-t border-[#1e2433]">
           <button
             type="button"
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sky-500/15 border border-sky-500/25 text-sky-300 text-[11px] font-semibold hover:bg-sky-500/25 transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/15 transition-all"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
             Báo cáo nhanh
           </button>
-          <p className="text-[9px] text-slate-600 text-center">v1.0.0</p>
+          <p className="text-[10px] text-slate-600 text-center mt-2">© 2025 VIFENCE · v1.0.0</p>
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 flex border-t border-white/10 bg-[#05101c]/95 backdrop-blur-xl overflow-x-auto">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 flex border-t border-white/10 bg-[#060e1a]/98 backdrop-blur-xl">
         {NAV.slice(0, 5).map(item => {
           const Icon = item.icon
+          const isOverview = item.label === 'Tổng quan'
+          const cls = cn(
+            'flex flex-col items-center justify-center gap-0.5 flex-1 py-2.5 text-[9px] font-medium min-w-0',
+            isOverview ? 'text-emerald-400' : 'text-slate-500',
+          )
+          if (isOverview) {
+            return (
+              <NavLink key={item.label} to={item.to} end className={cls}>
+                <Icon className="w-4 h-4" strokeWidth={1.75} />
+                <span className="truncate max-w-full px-1">{item.label.split(' ')[0]}</span>
+              </NavLink>
+            )
+          }
           return (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => cn(
-                'flex flex-col items-center gap-0.5 px-3 py-2 min-w-[64px] text-[9px] font-medium',
-                isActive ? 'text-emerald-400' : 'text-slate-500',
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              {item.label.split(' ')[0]}
-            </NavLink>
+            <button key={item.label} type="button" className={cls}>
+              <Icon className="w-4 h-4" strokeWidth={1.75} />
+              <span className="truncate max-w-full px-1">{item.label.split(' ')[0]}</span>
+            </button>
           )
         })}
       </nav>
     </>
-  )
-}
-
-function FilterSelect({
-  label, value, options, onChange,
-}: {
-  label: string
-  value: string
-  options: string[]
-  onChange: (v: string) => void
-}) {
-  return (
-    <label className="block">
-      <span className="text-[9px] text-slate-500 mb-1 block">{label}</span>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500/40"
-        >
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
-      </div>
-    </label>
   )
 }

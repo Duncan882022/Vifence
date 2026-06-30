@@ -1,0 +1,139 @@
+/* CEO Dashboard — aligns with the main Vifence app theme while keeping
+   a premium "command center" feel. Key tokens mirror the global dark palette:
+   bg #060b14, card #0d1117, border #1e2433 */
+
+.ecc-root {
+  --ecc-bg: #060b14;           /* matches PageLayout bg-[#060b14] */
+  --ecc-bg-elevated: #0c1829;
+  --ecc-bg-card: #0d1117;      /* matches Panel bg-[#0d1117] */
+  --ecc-border: #1e2433;       /* matches global border-[#1e2433] */
+  --ecc-border-subtle: rgba(30, 36, 51, 0.7);
+  --ecc-text: #f1f5f9;
+  --ecc-text-muted: #8b9cb8;   /* matches sidebar muted text */
+  --ecc-text-dim: #64748b;
+  --ecc-accent: #34d399;       /* emerald — equipment domain colour */
+  --ecc-radius: 8px;           /* matches global rounded-lg */
+  background: var(--ecc-bg);
+  color: var(--ecc-text);
+}
+
+.ecc-card {
+  background: var(--ecc-bg-card);
+  border: 1px solid var(--ecc-border);
+  border-radius: var(--ecc-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.ecc-card-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ecc-text-dim);
+}
+
+.ecc-sidebar {
+  background: #0d1117;         /* matches global Sidebar bg */
+  border-right: 1px solid var(--ecc-border);
+}
+
+.ecc-nav-active {
+  background: rgba(52, 211, 153, 0.1);
+  border-left: 3px solid #34d399;
+  color: #6ee7b7;
+}
+
+.ecc-nav-item {
+  border-left: 3px solid transparent;
+  color: var(--ecc-text-muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.ecc-nav-item:hover {
+  background: #1a2235;         /* matches global Sidebar hover */
+  color: var(--ecc-text);
+}
+
+.ecc-header-bar {
+  background: #0d1117;         /* matches global Header bg-[#0d1117] */
+  border-bottom: 1px solid var(--ecc-border);
+}
+
+.ecc-control {
+  background: rgba(13, 17, 23, 0.9);
+  border: 1px solid var(--ecc-border);
+  border-radius: 8px;
+  color: var(--ecc-text-muted);
+  font-size: 11px;
+}
+
+.ecc-table-head {
+  background: rgba(15, 23, 42, 0.6);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ecc-text-dim);
+}
+
+.ecc-table-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ecc-badge-working {
+  background: rgba(52, 211, 153, 0.18);
+  color: #6ee7b7;
+  border: none;
+}
+
+.ecc-badge-standby {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fcd34d;
+  border: none;
+}
+
+.ecc-badge-breakdown {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+  border: none;
+}
+
+.ecc-badge-stored {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  border: none;
+}
+
+.ecc-pm-outline-amber {
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: transparent;
+}
+
+.ecc-pm-outline-red {
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: transparent;
+}
+
+.ecc-pm-outline-green {
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: transparent;
+}
+
+.ecc-kpi-value {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #fff;
+}
+
+.ecc-scroll-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.ecc-scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 4px;
+}

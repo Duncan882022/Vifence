@@ -62,6 +62,7 @@ export interface AiRecommendationRow {
   severity: AiSeverity
   machineCode: string
   recommendation: string
+  detail?: string
   riskScorePct: number
   ruleId: string
   confidencePct: number

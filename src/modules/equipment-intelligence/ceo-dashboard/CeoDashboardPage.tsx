@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import './ceo-dashboard.css'
 import { EquipmentSidebar } from './components/EquipmentSidebar'
 import { EquipmentTopHeader } from './components/EquipmentTopHeader'
 import { KpiTier } from './components/KpiTier'
@@ -24,20 +25,13 @@ export function CeoDashboardPage() {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const regions = ['Tất cả vùng', ...data.regions.map(r => r.name)]
-
   const handleRefresh = useCallback(() => {
     setRefreshKey(k => k + 1)
   }, [])
 
   return (
-    <div className="flex min-h-screen bg-[#07111F] text-slate-200 pb-16 lg:pb-0">
-      <EquipmentSidebar
-        filters={filters}
-        onFilterChange={patch => setFilters(f => ({ ...f, ...patch }))}
-        projects={data.projects}
-        regions={regions}
-      />
+    <div className="ecc-root flex min-h-screen text-slate-200 pb-16 lg:pb-0">
+      <EquipmentSidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
         <EquipmentTopHeader
@@ -54,7 +48,7 @@ export function CeoDashboardPage() {
           animate={{ opacity: 1 }}
           className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4"
         >
-          {/* Tier 1 */}
+          {/* Tier 1 — KPI cards */}
           <KpiTier
             fleet={data.fleet}
             pm={data.pm}
@@ -62,26 +56,15 @@ export function CeoDashboardPage() {
             asset={data.asset}
           />
 
-          {/* Tier 2 — MMTB table full width */}
-          <MmtbDataTable
-            data={filteredMachines}
-            search={filters.search}
-            onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
-            onRowClick={row => {
-              setSelectedMachine(row)
-              setMachineDrawerOpen(true)
-            }}
-          />
-
-          {/* Tier 3 — 25% | 25% | 50% on xl; stack on mobile */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <div className="md:col-span-1 xl:col-span-1">
+          {/* Tier 2 — Map | Top 10 | AI */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
+            <div className="md:col-span-1 xl:col-span-3">
               <VietnamRegionMap regions={data.regions} getMachinesByRegion={getMachinesByRegion} />
             </div>
-            <div className="md:col-span-1 xl:col-span-1">
+            <div className="md:col-span-1 xl:col-span-4">
               <TopUsersPanel units={data.usageUnits} />
             </div>
-            <div className="md:col-span-2 xl:col-span-2">
+            <div className="md:col-span-2 xl:col-span-5">
               <AiRecommendationsPanel
                 items={data.aiRecommendations}
                 onSelect={item => {
@@ -91,6 +74,17 @@ export function CeoDashboardPage() {
               />
             </div>
           </div>
+
+          {/* Tier 3 — MMTB table */}
+          <MmtbDataTable
+            data={filteredMachines}
+            search={filters.search}
+            onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
+            onRowClick={row => {
+              setSelectedMachine(row)
+              setMachineDrawerOpen(true)
+            }}
+          />
         </motion.main>
       </div>
 
