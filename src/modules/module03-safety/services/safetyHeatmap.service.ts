@@ -16,21 +16,23 @@ export interface HeatmapZoneCell {
 }
 
 const ZONE_LAYOUT: Omit<HeatmapZoneCell, 'count' | 'pending' | 'peakSeverity'>[] = [
-  { id: 'gate', label: 'Cổng chính', sublabel: 'Khu A', col: 1, row: 1 },
-  { id: 'khu-a', label: 'Khu A', sublabel: 'Thi công', col: 2, row: 1, colSpan: 2 },
-  { id: 'khu-b', label: 'Khu B', sublabel: 'Cơ điện', col: 1, row: 2, colSpan: 2, rowSpan: 2 },
-  { id: 'khu-c', label: 'Khu C', sublabel: 'Sân thi công', col: 3, row: 2 },
-  { id: 'khu-d', label: 'Khu D', sublabel: 'Nguy hiểm', col: 3, row: 3 },
-  { id: 'yard', label: 'Bãi vật liệu', sublabel: 'Khu C', col: 1, row: 3 },
-  { id: 'crane', label: 'Khu cần cẩu', sublabel: 'Khu D', col: 2, row: 3 },
+  { id: 'gate', label: 'Cổng Chính', sublabel: 'Kiểm soát vào ra', col: 1, row: 1 },
+  { id: 'khu-a', label: 'Khu A — Đóng Cọc', sublabel: 'Thi công móng', col: 2, row: 1, colSpan: 2 },
+  { id: 'khu-b', label: 'Khu B — Cơ Điện', sublabel: 'Hệ thống điện / cơ', col: 1, row: 2, colSpan: 2, rowSpan: 2 },
+  { id: 'khu-c', label: 'Khu C — Lối Vào', sublabel: 'Sân di chuyển HLX', col: 3, row: 2 },
+  { id: 'khu-d', label: 'Khu D — Nguy Hiểm', sublabel: 'Hầm & vùng hạn chế', col: 3, row: 3 },
+  { id: 'yard', label: 'Bãi Vật Liệu', sublabel: 'Tập kết vật tư HLX', col: 1, row: 3 },
+  { id: 'crane', label: 'Khu Cần Cẩu', sublabel: 'Vận hành cẩu tháp', col: 2, row: 3 },
 ]
 
 export function matchZoneId(location: string): string {
   const loc = location.toLowerCase()
-  if (loc.includes('ocp1-b') || loc.includes('sân thực hành') || loc.includes('máy móc') || loc.includes('bãi tập kết') || loc.includes('phòng họp b') || loc.includes('phòng y tế')) return 'khu-b'
-  if (loc.includes('ocp1-a') || loc.includes('phòng đào tạo a') || loc.includes('sân tập a') || loc.includes('kho vật tư') || loc.includes('phòng giải lao') || loc.includes('bãi đỗ xe')) return 'khu-a'
-  if (loc.includes('khu d') || loc.includes('hầm') || loc.includes('cần cẩu') || loc.includes('nguy hiểm')) return 'khu-d'
-  if (loc.includes('khu c') || loc.includes('bãi') || loc.includes('sân thi công')) return 'khu-c'
+  if (loc.includes('cần cẩu')) return 'crane'
+  if (loc.includes('ocp1-b') || loc.includes('sân thực hành b') || loc.includes('máy móc') || loc.includes('bãi tập kết') || loc.includes('phòng họp b') || loc.includes('phòng y tế') || loc.includes('cổng phụ')) return 'khu-b'
+  if (loc.includes('ocp1-a') || loc.includes('phòng đào tạo') || loc.includes('sân tập') || loc.includes('kho vật tư') || loc.includes('phòng giải lao') || loc.includes('bãi đỗ xe') || loc.includes('phòng họp a')) return 'khu-a'
+  if (loc.includes('khu d') || loc.includes('hầm') || loc.includes('nguy hiểm')) return 'khu-d'
+  if (loc.includes('bãi vật liệu') || loc.includes('hạ long xanh') || loc.includes('hlx')) return 'yard'
+  if (loc.includes('khu c') || loc.includes('sân thi công')) return 'khu-c'
   if (loc.includes('khu b') || loc.includes('tầng') || loc.includes('giàn') || loc.includes('xưởng')) return 'khu-b'
   if (loc.includes('khu a') || loc.includes('cổng') || loc.includes('hành lang')) return 'khu-a'
   if (loc.includes('cổng') || loc.includes('lối ra')) return 'gate'

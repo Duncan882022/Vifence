@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Sidebar } from '@/components/common/Sidebar/Sidebar'
 import { Module01Page } from '@/modules/module01-access-control/Module01Page'
 import { Module02Page } from '@/modules/module02-training/Module02Page'
@@ -10,19 +10,13 @@ import { Module07Page } from '@/modules/module07-inspection/Module07Page'
 import { Module08Page } from '@/modules/module08-reporting/Module08Page'
 import { EquipmentPage } from '@/modules/equipment-intelligence/EquipmentPage'
 
-const EQUIPMENT_PATH_PREFIX = '/equipment'
-
 function AppRoutes() {
-  const location = useLocation()
-  const hideSidebar = location.pathname.startsWith(EQUIPMENT_PATH_PREFIX)
-
   return (
     <div className="min-h-screen bg-background">
-      {!hideSidebar && <Sidebar />}
+      <Sidebar />
       <Routes>
         <Route path="/" element={<Navigate to="/module02" replace />} />
 
-        {/* Equipment Intelligence — standalone, không sidebar, chỉ truy cập bằng link */}
         <Route path="/equipment/*" element={<EquipmentPage />} />
 
         {/* Legacy redirects */}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type MouseEvent } from 'react'
 import {
   Play, Search, Bell, CheckCircle, Download,
   Building2, MapPin, Clock,
@@ -7,6 +7,8 @@ import { cn } from '@/utils/cn'
 import { formatDateTime } from '@/utils/format'
 import type { SafetyViolation, ViolationSeverity } from '@/types/safety'
 import type { Event } from '@/types/event'
+import { Avatar } from '@/components/common/Avatar/Avatar'
+import { getPersonAvatarColor, getPersonAvatarUrl } from '@/data/personAvatars'
 import {
   getViolationSeverity,
   SAFETY_VIOLATIONS,
@@ -18,8 +20,8 @@ import {
 import { getViolationFeedUrl } from '../data/safetyViolationFeeds'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import { matchZoneId } from '../services/safetyHeatmap.service'
-import { Avatar } from '@/components/common/Avatar/Avatar'
-import { getPersonAvatarUrl, getPersonAvatarColor } from '@/data/personAvatars'
+import { resolveWorkerClickTarget } from '../services/safetyEntity.service'
+import { ViolationTypeIcon } from './ViolationTypeIcon'
 
 export type ViolationTabKey = ViolationSeverity | 'all'
 
@@ -30,7 +32,114 @@ const TABS: { key: ViolationTabKey; label: string }[] = [
   { key: 'low', label: 'Thấp' },
 ]
 
-const DESKTOP_COLS = 'grid-cols-[minmax(0,0.85fr)_44px_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.75fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_80px]'
+const DESKTOP_COLS = 'grid-cols-[28px_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_80px]'
+
+function ClickableWorkerAvatar({
+  v,
+  onSelectWorker,
+}: {
+  v: SafetyViolation
+  onSelectWorker?: (workerIdOrName: string) => void
+}) {
+  const target = resolveWorkerClickTarget(v)
+  if (!target || !v.workerName) {
+    return <div className="w-7 h-7 shrink-0" />
+  }
+
+  const handleClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    onSelectWorker?.(target)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="rounded-full cursor-pointer hover:ring-2 hover:ring-primary/40 transition-shadow shrink-0"
+      title={`Xem hồ sơ ${v.workerName}`}
+    >
+      <Avatar
+        name={v.workerName}
+        color={getPersonAvatarColor(v.workerName)}
+        src={getPersonAvatarUrl(target, v.workerName)}
+        size="sm"
+      />
+    </button>
+  )
+}
+
+function ClickableWorkerName({
+  v,
+  onSelectWorker,
+  className,
+}: {
+  v: SafetyViolation
+  onSelectWorker?: (workerIdOrName: string) => void
+  className?: string
+}) {
+  const target = resolveWorkerClickTarget(v)
+  const name = v.workerName ?? '—'
+
+  if (!target || !onSelectWorker) {
+    return <p className={cn('truncate', className)}>{name}</p>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={e => {
+        e.stopPropagation()
+        onSelectWorker(target)
+      }}
+      className={cn(
+        'truncate text-left hover:text-primary hover:underline underline-offset-2 decoration-dotted transition-colors cursor-pointer',
+        className,
+      )}
+      title={`Xem hồ sơ ${name}`}
+    >
+      {name}
+    </button>
+  )
+}
+
+function ClickableContractorName({
+  contractorName,
+  teamName,
+  onSelectContractor,
+  className,
+}: {
+  contractorName?: string
+  teamName?: string
+  onSelectContractor?: (name: string) => void
+  className?: string
+}) {
+  const label = contractorName ?? '—'
+
+  if (!contractorName || !onSelectContractor) {
+    return (
+      <p className={cn('truncate', className)}>
+        {label}{teamName ? ` · ${teamName}` : ''}
+      </p>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={e => {
+        e.stopPropagation()
+        onSelectContractor(contractorName)
+      }}
+      className={cn(
+        'truncate text-left hover:text-primary hover:underline underline-offset-2 decoration-dotted transition-colors cursor-pointer',
+        className,
+      )}
+      title={`Xem nhà thầu ${contractorName}`}
+    >
+      {label}{teamName ? ` · ${teamName}` : ''}
+    </button>
+  )
+}
 
 export function violationToEvent(v: SafetyViolation): Event {
   const enriched = withViolationVideoUrl(v)
@@ -129,19 +238,20 @@ function ViolationMobileCard({
   isSelected,
   onSelect,
   onPlayback,
+  onSelectWorker,
+  onSelectContractor,
   showTrial,
 }: {
   v: SafetyViolation
   isSelected: boolean
   onSelect?: () => void
   onPlayback?: (event: Event) => void
+  onSelectWorker?: (workerIdOrName: string) => void
+  onSelectContractor?: (contractorName: string) => void
   showTrial: () => void
 }) {
   const severity = getViolationSeverity(v.type)
   const sevCfg = VIOLATION_SEVERITY_COLORS[severity]
-  const workerName = v.workerName ?? '—'
-  const avatarColor = getPersonAvatarColor(workerName)
-  const avatarSrc = v.workerId ? getPersonAvatarUrl(v.workerId, v.workerName) : undefined
 
   return (
     <div
@@ -152,11 +262,16 @@ function ViolationMobileCard({
       )}
     >
       <div className="flex items-start gap-2.5">
-        <Avatar name={workerName} color={avatarColor} src={avatarSrc} size="sm" />
+        <ClickableWorkerAvatar v={v} onSelectWorker={onSelectWorker} />
+        <ViolationTypeIcon type={v.type} size="sm" />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold text-foreground truncate">{v.workerName ?? '—'}</p>
+              <ClickableWorkerName
+                v={v}
+                onSelectWorker={onSelectWorker}
+                className="text-[11px] font-semibold text-foreground block w-full"
+              />
               {v.employeeCode && (
                 <p className="text-[9px] text-muted-foreground/60 truncate">{v.employeeCode}</p>
               )}
@@ -176,9 +291,14 @@ function ViolationMobileCard({
             </span>
           </div>
           <div className="mt-1.5 space-y-0.5 text-[9px] text-muted-foreground">
-            <p className="flex items-center gap-1 truncate">
+            <p className="flex items-center gap-1 truncate min-w-0">
               <Building2 className="w-2.5 h-2.5 shrink-0" />
-              <span className="truncate">{v.contractorName ?? '—'}{v.teamName ? ` · ${v.teamName}` : ''}</span>
+              <ClickableContractorName
+                contractorName={v.contractorName}
+                teamName={v.teamName}
+                onSelectContractor={onSelectContractor}
+                className="text-[9px] text-primary/75"
+              />
             </p>
             <p className="flex items-center gap-1 truncate">
               <MapPin className="w-2.5 h-2.5 shrink-0" />
@@ -200,19 +320,20 @@ function ViolationDesktopRow({
   isSelected,
   onSelect,
   onPlayback,
+  onSelectWorker,
+  onSelectContractor,
   showTrial,
 }: {
   v: SafetyViolation
   isSelected: boolean
   onSelect?: () => void
   onPlayback?: (event: Event) => void
+  onSelectWorker?: (workerIdOrName: string) => void
+  onSelectContractor?: (contractorName: string) => void
   showTrial: () => void
 }) {
   const severity = getViolationSeverity(v.type)
   const sevCfg = VIOLATION_SEVERITY_COLORS[severity]
-  const workerName = v.workerName ?? '—'
-  const avatarColor = getPersonAvatarColor(workerName)
-  const avatarSrc = v.workerId ? getPersonAvatarUrl(v.workerId, v.workerName) : undefined
 
   return (
     <div
@@ -223,17 +344,28 @@ function ViolationDesktopRow({
         isSelected ? 'bg-primary/10' : 'hover:bg-[#1a2235]/50',
       )}
     >
+      <ClickableWorkerAvatar v={v} onSelectWorker={onSelectWorker} />
       <p className="text-[9px] text-muted-foreground tabular-nums whitespace-nowrap">{formatDateTime(v.timestamp)}</p>
-      <Avatar name={workerName} color={avatarColor} src={avatarSrc} size="sm" />
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold text-foreground truncate">{v.workerName ?? '—'}</p>
+        <ClickableWorkerName
+          v={v}
+          onSelectWorker={onSelectWorker}
+          className="text-[10px] font-semibold text-foreground block w-full"
+        />
         {v.employeeCode && <p className="text-[8px] text-muted-foreground/60 truncate">{v.employeeCode}</p>}
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] text-primary/75 truncate">{v.contractorName ?? '—'}</p>
+        <ClickableContractorName
+          contractorName={v.contractorName}
+          onSelectContractor={onSelectContractor}
+          className="text-[10px] text-primary/75 block w-full"
+        />
         {v.teamName && <p className="text-[8px] text-muted-foreground/60 truncate">{v.teamName}</p>}
       </div>
-      <p className="text-[10px] text-foreground truncate">{VIOLATION_TYPE_LABELS[v.type]}</p>
+      <div className="min-w-0 flex items-center gap-1.5">
+        <ViolationTypeIcon type={v.type} size="xs" />
+        <p className="text-[10px] text-foreground truncate">{VIOLATION_TYPE_LABELS[v.type]}</p>
+      </div>
       <span className={cn('text-[8px] font-bold px-1 py-0.5 rounded whitespace-nowrap w-fit', sevCfg.color, sevCfg.bg)}>
         {VIOLATION_SEVERITY_LABELS[severity]}
       </span>
@@ -253,6 +385,8 @@ interface SafetyViolationTableProps {
   selectedId?: string
   onSelectViolation?: (v: SafetyViolation) => void
   onPlayback?: (event: Event) => void
+  onSelectWorker?: (workerIdOrName: string) => void
+  onSelectContractor?: (contractorName: string) => void
   contractorFilter?: string | null
   zoneFilter?: string | null
   compact?: boolean
@@ -263,6 +397,8 @@ export function SafetyViolationTable({
   selectedId,
   onSelectViolation,
   onPlayback,
+  onSelectWorker,
+  onSelectContractor,
   contractorFilter,
   zoneFilter,
   compact = false,
@@ -347,7 +483,7 @@ export function SafetyViolationTable({
         'hidden lg:grid gap-x-2 px-3 py-2 border-b border-[#1e2433] shrink-0 sticky top-0 z-10 bg-[#0b0f1a]',
         DESKTOP_COLS,
       )}>
-        {['Thời gian', 'Ảnh', 'Người vi phạm', 'Nhà thầu/Đội', 'Loại', 'Mức', 'TT', ''].map(h => (
+        {['', 'Thời gian', 'Người vi phạm', 'Nhà thầu/Đội', 'Loại', 'Mức', 'TT', ''].map(h => (
           <span key={h || 'actions'} className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</span>
         ))}
       </div>
@@ -371,6 +507,8 @@ export function SafetyViolationTable({
                 isSelected={isSelected}
                 onSelect={() => onSelectViolation?.(v)}
                 onPlayback={onPlayback}
+                onSelectWorker={onSelectWorker}
+                onSelectContractor={onSelectContractor}
                 showTrial={showTrial}
               />
               <ViolationDesktopRow
@@ -378,6 +516,8 @@ export function SafetyViolationTable({
                 isSelected={isSelected}
                 onSelect={() => onSelectViolation?.(v)}
                 onPlayback={onPlayback}
+                onSelectWorker={onSelectWorker}
+                onSelectContractor={onSelectContractor}
                 showTrial={showTrial}
               />
             </div>

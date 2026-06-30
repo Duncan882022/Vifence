@@ -33,6 +33,8 @@ export interface ReliabilityKpi {
   mttrTrendPct: number
   mttfHours: number
   mttfTrendPct: number
+  /** MTBF / (MTBF + MTTR) × 100 */
+  availabilityPct?: number
 }
 
 export interface AssetEfficiencyKpi {
@@ -57,6 +59,14 @@ export interface UsageUnitRow {
   utilizationPct: number
 }
 
+export interface AbnormalMetricDetail {
+  metric: string
+  current: string
+  threshold: string
+  deviation: string
+  direction: 'up' | 'down'
+}
+
 export interface AiRecommendationRow {
   id: string
   severity: AiSeverity
@@ -66,10 +76,17 @@ export interface AiRecommendationRow {
   riskScorePct: number
   ruleId: string
   confidencePct: number
+  ruleType?: string
   ruleLogic: string
   timeWindow: string
   context: string
   abnormalMetrics: string[]
+  metricDetails?: AbnormalMetricDetail[]
+  firstOccurrence?: string
+  lastOccurrence?: string
+  occurrenceCount?: number
+  connectionStatus?: 'Online' | 'Offline'
+  manufactureYear?: number
   explanation: string
   recommendationSteps: string[]
 }
@@ -91,6 +108,15 @@ export interface MmtbRow {
   pmStatusLabel: string
   usageUnit: string
   latestAiRecommendation?: string
+  /** Chi tiết thiết bị — optional, fallback trong UI helper */
+  serialNumber?: string
+  commissionDate?: string
+  warrantyUntil?: string
+  productionYear?: number
+  pmDaysUntilDue?: number
+  pmNextItem?: string
+  pmProgressPct?: number
+  imageUrl?: string
 }
 
 export interface CeoDashboardData {

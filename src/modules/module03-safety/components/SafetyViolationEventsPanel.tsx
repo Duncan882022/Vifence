@@ -1,9 +1,12 @@
 import { Download, Film, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { SafetyPlayback } from './SafetyPlayback'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { SafetyViolationTable, violationToEvent } from './SafetyViolationTable'
+import { ViolationTypeIcon } from './ViolationTypeIcon'
+import { Avatar } from '@/components/common/Avatar/Avatar'
+import { getPersonAvatarColor, getPersonAvatarUrl } from '@/data/personAvatars'
 import type { SafetyViolation } from '@/types/safety'
 import type { Event } from '@/types/event'
 import {
@@ -12,6 +15,7 @@ import {
   VIOLATION_SEVERITY_LABELS,
   VIOLATION_TYPE_LABELS,
 } from '../data/safetyViolations'
+import { resolveWorkerClickTarget } from '../services/safetyEntity.service'
 import { cn } from '@/utils/cn'
 import { formatDateTime } from '@/utils/format'
 
@@ -21,6 +25,8 @@ interface SafetyViolationEventsPanelProps {
   zoneFilter?: string | null
   onSelectViolation: (v: SafetyViolation) => void
   onPlayback: (event: Event) => void
+  onSelectWorker?: (workerIdOrName: string) => void
+  onSelectContractor?: (contractorName: string) => void
 }
 
 export function SafetyViolationEventsPanel({
@@ -29,6 +35,8 @@ export function SafetyViolationEventsPanel({
   zoneFilter,
   onSelectViolation,
   onPlayback,
+  onSelectWorker,
+  onSelectContractor,
 }: SafetyViolationEventsPanelProps) {
   const { isDesktop } = useShellLayout()
   const [playbackExpanded, setPlaybackExpanded] = useState(true)
@@ -55,6 +63,8 @@ export function SafetyViolationEventsPanel({
           selectedId={selectedId}
           onSelectViolation={onSelectViolation}
           onPlayback={onPlayback}
+          onSelectWorker={onSelectWorker}
+          onSelectContractor={onSelectContractor}
           zoneFilter={zoneFilter}
           compact={hasPlayback && playbackExpanded && !isDesktop}
         />
@@ -77,12 +87,12 @@ export function SafetyViolationEventsPanel({
           </button>
 
           {playbackExpanded && (
-            <div className="flex flex-col max-lg:landscape:flex-row min-h-0 border-t border-[#1e2433]/60">
+            <div className="flex flex-col max-lg:landscape:flex-row min-h-0 max-h-[min(420px,50vh)] lg:max-h-[360px] border-t border-[#1e2433]/60 overflow-hidden">
               <div className={cn(
-                'min-w-0',
+                'min-w-0 overflow-hidden',
                 'max-lg:min-h-[160px] max-lg:max-h-[220px]',
                 'max-lg:landscape:flex-1 max-lg:landscape:max-h-none max-lg:landscape:min-h-[140px]',
-                'lg:min-h-[200px] lg:max-h-[260px]',
+                'lg:min-h-[180px] lg:flex-1',
               )}>
                 <SafetyPlayback
                   event={playbackEvent}
@@ -100,26 +110,64 @@ export function SafetyViolationEventsPanel({
                   const sevCfg = VIOLATION_SEVERITY_COLORS[severity]
                   return (
                     <>
-                      <div className="flex flex-wrap gap-1">
-                        <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded', sevCfg.color, sevCfg.bg)}>
-                          {VIOLATION_SEVERITY_LABELS[severity]}
-                        </span>
-                        <span className={cn(
-                          'text-[8px] font-bold px-1.5 py-0.5 rounded',
-                          selectedViolation!.status === 'pending'
-                            ? 'bg-red-500/15 text-red-400'
-                            : 'bg-green-500/15 text-green-400',
-                        )}>
-                          {selectedViolation!.status === 'pending' ? 'Chưa xử lý' : 'Đã xử lý'}
-                        </span>
+                      <div className="flex items-start gap-2">
+                        {(() => {
+                          const workerTarget = resolveWorkerClickTarget(selectedViolation!)
+                          const workerName = selectedViolation!.workerName
+                          if (workerTarget && workerName && onSelectWorker) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={(e: MouseEvent) => {
+                                  e.stopPropagation()
+                                  onSelectWorker(workerTarget)
+                                }}
+                                className="rounded-full cursor-pointer hover:ring-2 hover:ring-primary/40 transition-shadow shrink-0"
+                                title={`Xem hồ sơ ${workerName}`}
+                              >
+                                <Avatar
+                                  name={workerName}
+                                  color={getPersonAvatarColor(workerName)}
+                                  src={getPersonAvatarUrl(workerTarget, workerName)}
+                                  size="sm"
+                                />
+                              </button>
+                            )
+                          }
+                          return <ViolationTypeIcon type={selectedViolation!.type} size="sm" />
+                        })()}
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex flex-wrap gap-1">
+                            <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded', sevCfg.color, sevCfg.bg)}>
+                              {VIOLATION_SEVERITY_LABELS[severity]}
+                            </span>
+                            <span className={cn(
+                              'text-[8px] font-bold px-1.5 py-0.5 rounded',
+                              selectedViolation!.status === 'pending'
+                                ? 'bg-red-500/15 text-red-400'
+                                : 'bg-green-500/15 text-green-400',
+                            )}>
+                              {selectedViolation!.status === 'pending' ? 'Chưa xử lý' : 'Đã xử lý'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] sm:text-[11px] font-semibold text-foreground leading-snug">
+                            {VIOLATION_TYPE_LABELS[selectedViolation!.type]}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[10px] sm:text-[11px] font-semibold text-foreground leading-snug">
-                        {VIOLATION_TYPE_LABELS[selectedViolation!.type]}
-                      </p>
                       <p className="text-[9px] text-muted-foreground tabular-nums">
                         {formatDateTime(selectedViolation!.timestamp)}
                       </p>
                       <p className="text-[9px] text-muted-foreground line-clamp-2">{selectedViolation!.location}</p>
+                      {selectedViolation!.contractorName && onSelectContractor && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectContractor(selectedViolation!.contractorName!)}
+                          className="text-[9px] text-primary/80 hover:text-primary hover:underline underline-offset-2 decoration-dotted transition-colors truncate block max-w-full text-left"
+                        >
+                          {selectedViolation!.contractorName}
+                        </button>
+                      )}
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         <button
                           type="button"
@@ -135,7 +183,7 @@ export function SafetyViolationEventsPanel({
                           className="inline-flex items-center gap-1 px-2 py-1.5 text-[9px] font-semibold rounded bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <Download className="w-3 h-3" />
-                          Tải
+                          Tải xuống
                         </button>
                         {selectedViolation!.status === 'pending' && (
                           <button

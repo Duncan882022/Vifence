@@ -1,13 +1,20 @@
-import { AlertCircle, AlertTriangle, Info, ChevronRight, ArrowRight } from 'lucide-react'
-import { GlassCard } from './GlassCard'
+import { motion } from 'framer-motion'
+import { AlertCircle, AlertTriangle, Info, ChevronRight, ArrowRight, Sparkles } from 'lucide-react'
+import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type { AiRecommendationRow, AiSeverity } from '../types'
 
-const SEV: Record<AiSeverity, { Icon: typeof AlertCircle; cls: string }> = {
-  critical: { Icon: AlertCircle, cls: 'text-red-400' },
-  high: { Icon: AlertTriangle, cls: 'text-amber-400' },
-  medium: { Icon: AlertTriangle, cls: 'text-yellow-400' },
-  info: { Icon: Info, cls: 'text-sky-400' },
+const SEV: Record<AiSeverity, { Icon: typeof AlertCircle; cls: string; bg: string; border: string }> = {
+  critical: { Icon: AlertCircle, cls: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/25' },
+  high: { Icon: AlertTriangle, cls: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/25' },
+  medium: { Icon: AlertTriangle, cls: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/25' },
+  info: { Icon: Info, cls: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/25' },
+}
+
+function riskColor(score: number): string {
+  if (score >= 75) return 'text-red-400'
+  if (score >= 60) return 'text-amber-400'
+  return 'text-muted-foreground'
 }
 
 interface AiRecommendationsPanelProps {
@@ -17,90 +24,89 @@ interface AiRecommendationsPanelProps {
 
 export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPanelProps) {
   return (
-    <GlassCard
-      title="AI RECOMMENDATIONS"
-      delay={0.35}
-      className="min-h-[320px]"
+    <Panel
+      title="AI Recommendations"
       noPadding
-      action={
+      expandable
+      className="h-full min-h-0"
+      headerRight={(
         <button
           type="button"
-          className="flex items-center gap-1 text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] text-primary hover:text-primary/80 hover:bg-primary/10 font-semibold transition-colors"
         >
           Xem tất cả
-          <ArrowRight className="w-3 h-3" strokeWidth={2} />
+          <ArrowRight className="w-3 h-3" />
         </button>
-      }
+      )}
     >
-      {/* Table header */}
-      <div className="grid grid-cols-[28px_72px_1fr_60px_20px] gap-x-2 px-3 py-2 ecc-table-head border-b border-white/[0.06]">
-        <span />
-        <span>MÁY</span>
-        <span>RECOMMENDATION</span>
-        <span className="text-right">RISK SCORE</span>
-        <span />
-      </div>
+      <div className="flex flex-col h-full min-h-0">
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#0b0f1a] border-b border-[#1e2433] shrink-0">
+          <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex-1">
+            Khuyến nghị thông minh
+          </span>
+          <span className="text-[9px] text-muted-foreground tabular-nums">{items.length} mục</span>
+        </div>
 
-      {/* Rows */}
-      <div className="divide-y divide-white/[0.04]">
-        {items.map(item => {
-          const { Icon, cls } = SEV[item.severity]
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelect(item)}
-              className="w-full grid grid-cols-[28px_72px_1fr_60px_20px] gap-x-2 px-3 py-2.5 text-left hover:bg-white/[0.035] transition-colors group"
-            >
-              {/* Severity icon */}
-              <div className="flex items-start pt-0.5">
-                <Icon className={cn('w-4 h-4 shrink-0', cls)} strokeWidth={1.75} />
-              </div>
-
-              {/* Machine code */}
-              <div className="flex items-start pt-0.5">
-                <span className="text-[11px] font-semibold text-sky-300 leading-tight">{item.machineCode}</span>
-              </div>
-
-              {/* Recommendation + detail */}
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium text-slate-200 leading-tight truncate">
-                  {item.recommendation}
-                </p>
-                {item.detail && (
-                  <p className="text-[10px] text-slate-500 leading-tight mt-0.5 truncate">
-                    {item.detail}
-                  </p>
-                )}
-              </div>
-
-              {/* Risk score */}
-              <div className="text-right flex items-start pt-0.5 justify-end">
-                <span className={cn(
-                  'text-[13px] font-bold tabular-nums',
-                  item.riskScorePct >= 75 ? 'text-red-400'
-                  : item.riskScorePct >= 60 ? 'text-amber-400'
-                  : 'text-slate-400',
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {items.map((item, i) => {
+            const { Icon, cls, bg, border } = SEV[item.severity]
+            return (
+              <motion.button
+                key={item.id}
+                type="button"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05, duration: 0.3 }}
+                onClick={() => onSelect(item)}
+                className="w-full flex items-start gap-3 px-3 py-3 text-left border-b border-[#1e2433]/60 hover:bg-[#1a2235]/50 transition-colors group"
+              >
+                <div className={cn(
+                  'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border',
+                  bg, border,
                 )}>
-                  {item.riskScorePct}%
-                </span>
-              </div>
+                  <Icon className={cn('w-4 h-4', cls)} />
+                </div>
 
-              {/* Chevron */}
-              <div className="flex items-start pt-0.5">
-                <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" strokeWidth={1.75} />
-              </div>
-            </button>
-          )
-        })}
-      </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] font-bold text-primary">{item.machineCode}</span>
+                    <span className={cn(
+                      'text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded border',
+                      bg, border, cls,
+                    )}>
+                      {item.severity}
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-medium text-foreground leading-snug line-clamp-1">
+                    {item.recommendation}
+                  </p>
+                  {item.detail && (
+                    <p className="text-[9px] text-muted-foreground leading-snug mt-0.5 line-clamp-1">
+                      {item.detail}
+                    </p>
+                  )}
+                </div>
 
-      {/* Footer count */}
-      <div className="px-3 py-2 border-t border-white/[0.06] mt-auto">
-        <p className="text-[10px] text-slate-600">
-          Hiển thị {items.length} trong tổng số 18 khuyến nghị
-        </p>
+                <div className="flex flex-col items-end gap-1 shrink-0 pt-0.5">
+                  <span className={cn('text-[13px] font-bold tabular-nums', riskColor(item.riskScorePct))}>
+                    {item.riskScorePct}%
+                  </span>
+                  <span className="text-[8px] text-muted-foreground uppercase">Risk</span>
+                </div>
+
+                <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0 mt-1" />
+              </motion.button>
+            )
+          })}
+        </div>
+
+        <div className="px-3 py-2.5 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/50">
+          <p className="text-[10px] text-muted-foreground">
+            Hiển thị {items.length} trong tổng số 18 khuyến nghị
+          </p>
+        </div>
       </div>
-    </GlassCard>
+    </Panel>
   )
 }

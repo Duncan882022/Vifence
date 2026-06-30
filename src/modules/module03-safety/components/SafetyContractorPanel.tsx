@@ -5,12 +5,14 @@ interface SafetyContractorPanelProps {
   stats: SafetyStats
   periodLabel?: string
   onSelectContractor?: (name: string) => void
+  onSelectWorker?: (workerIdOrName: string) => void
 }
 
 export function SafetyContractorPanel({
   stats,
   periodLabel = '7 ngày qua',
   onSelectContractor,
+  onSelectWorker,
 }: SafetyContractorPanelProps) {
   const maxContractor = stats.topContractors[0]?.count ?? 1
   const totalContractorViolations = stats.topContractors.reduce((sum, c) => sum + c.count, 0) || 1
@@ -38,16 +40,32 @@ export function SafetyContractorPanel({
               <p className="text-[11px] text-muted-foreground">Không có dữ liệu</p>
             )}
             {stats.topViolators.slice(0, 5).map((item, i) => (
-              <div key={item.name} className="flex items-center gap-2">
+              <div key={item.name} className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-[#1a2235]/50 transition-colors group">
                 <span className="text-[10px] text-muted-foreground w-4 shrink-0 tabular-nums">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between text-[10px] mb-0.5 gap-2">
-                    <span className="text-foreground font-medium truncate">{item.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectWorker?.(item.name)}
+                      className="text-foreground font-medium truncate text-left group-hover:text-primary transition-colors cursor-pointer hover:underline underline-offset-2 decoration-dotted"
+                    >
+                      {item.name}
+                    </button>
                     <span className="text-red-400 font-semibold shrink-0 tabular-nums">{item.count}</span>
                   </div>
-                  <p className="text-[8px] text-muted-foreground/70 truncate">
-                    {[item.contractorName, item.teamName].filter(Boolean).join(' · ')}
-                  </p>
+                  {item.contractorName ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectContractor?.(item.contractorName!)}
+                      className="text-[8px] text-muted-foreground/70 truncate block max-w-full text-left hover:text-primary hover:underline underline-offset-2 decoration-dotted transition-colors cursor-pointer"
+                    >
+                      {[item.contractorName, item.teamName].filter(Boolean).join(' · ')}
+                    </button>
+                  ) : (
+                    <p className="text-[8px] text-muted-foreground/70 truncate">
+                      {[item.contractorName, item.teamName].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
@@ -72,7 +90,7 @@ export function SafetyContractorPanel({
                   key={item.name}
                   type="button"
                   onClick={() => onSelectContractor?.(item.name)}
-                  className="w-full text-left group"
+                  className="w-full text-left group cursor-pointer rounded-md px-1 py-0.5 hover:bg-[#1a2235]/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-muted-foreground w-4 shrink-0 tabular-nums">{i + 1}</span>

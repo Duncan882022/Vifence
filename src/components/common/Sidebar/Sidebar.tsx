@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   ChevronLeft, ChevronRight, LayoutDashboard,
   DoorOpen, GraduationCap, ShieldAlert, Sparkles,
-  TrendingUp, Package, ClipboardCheck, BarChart3,
+  TrendingUp, Package, ClipboardCheck, BarChart3, Cpu,
   Lock,
   type LucideIcon,
 } from 'lucide-react'
@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { path: '/module01', label: 'Kiểm soát vào ra',    icon: DoorOpen,       available: false },
   { path: '/module02', label: 'Đào tạo & Tuân thủ',  icon: GraduationCap,  available: true  },
   { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: true  },
+  { path: '/equipment', label: 'Quản lý MMTB',         icon: Cpu,            available: true  },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
   { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: false },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },

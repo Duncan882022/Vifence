@@ -1,12 +1,23 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { SafetyPlayback } from './SafetyPlayback'
+import { SAFETY_VIOLATIONS, VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
+import { ViolationTypeIcon } from './ViolationTypeIcon'
 import type { Event } from '@/types/event'
+import type { ViolationType } from '@/types/safety'
 
 interface SafetyPlaybackModalProps {
   open: boolean
   event?: Event | null
   onClose: () => void
+}
+
+function resolveViolationType(event: Event | null | undefined): ViolationType | null {
+  if (!event) return null
+  const match = SAFETY_VIOLATIONS.find(v => v.id === event.id)
+  if (match) return match.type
+  const entry = Object.entries(VIOLATION_TYPE_LABELS).find(([, label]) => label === event.type)
+  return entry ? entry[0] as ViolationType : null
 }
 
 export function SafetyPlaybackModal({ open, event, onClose }: SafetyPlaybackModalProps) {
@@ -19,6 +30,8 @@ export function SafetyPlaybackModal({ open, event, onClose }: SafetyPlaybackModa
 
   if (!open) return null
 
+  const violationType = resolveViolationType(event)
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
@@ -29,9 +42,17 @@ export function SafetyPlaybackModal({ open, event, onClose }: SafetyPlaybackModa
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
-          <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-            Playback Vi Phạm
-          </h2>
+          <div className="flex items-center gap-2 min-w-0">
+            {violationType && <ViolationTypeIcon type={violationType} size="sm" />}
+            <div className="min-w-0">
+              <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Playback Vi Phạm
+              </h2>
+              {violationType && (
+                <p className="text-[10px] text-foreground truncate">{VIOLATION_TYPE_LABELS[violationType]}</p>
+              )}
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}

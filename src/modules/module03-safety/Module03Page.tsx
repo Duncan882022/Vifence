@@ -11,7 +11,7 @@ export function Module03Page() {
           <>
             <Header
               title="An Toàn Lao Động"
-              subtitle="Giám sát, phát hiện vi phạm và quản lý an toàn lao động trên công trường"
+              subtitle="Giám sát PPE thời gian thực · OCP1 · Hạ Long Xanh — phát hiện vi phạm, heatmap rủi ro và xử lý sự cố"
             />
             <SafetyDashboardPage />
           </>

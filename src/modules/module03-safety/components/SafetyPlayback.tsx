@@ -12,6 +12,7 @@ import {
 } from '../data/safetyViolationFeeds'
 import { SAFETY_VIOLATIONS, VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
 import type { ViolationType } from '@/types/safety'
+import { ViolationTypeIcon } from './ViolationTypeIcon'
 
 const SPEEDS = [0.5, 1, 1.5, 2]
 
@@ -34,6 +35,7 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
   const [duration, setDuration] = useState(0)
   const [speedIndex, setSpeedIndex] = useState(1)
   const [volume, setVolume] = useState(80)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const violationType = event ? resolveViolationType(event) : null
   const videoSrc = event?.videoUrl ?? (violationType ? getViolationFeedUrl(violationType) : undefined)
@@ -44,21 +46,37 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
     setIsPlaying(false)
     setProgress(0)
     setSpeedIndex(1)
+    setLoadError(null)
   }, [event?.id])
 
   useEffect(() => {
     const video = videoRef.current
     if (!video || !videoSrc) return
-    video.load()
-    const onLoaded = () => {
-      const seek = Math.min(markerSec, video.duration || markerSec)
+
+    const seekToMarker = () => {
+      const dur = video.duration
+      if (!Number.isFinite(dur) || dur <= 0) return
+      const seek = Math.min(markerSec, dur)
       video.currentTime = seek
-      setDuration(video.duration || 0)
-      setProgress(video.duration ? (seek / video.duration) * 100 : 0)
+      setDuration(dur)
+      setProgress((seek / dur) * 100)
     }
+
+    const onLoaded = () => seekToMarker()
+    const onError = () => setLoadError('Không tải được clip vi phạm')
+
     video.addEventListener('loadedmetadata', onLoaded)
-    return () => video.removeEventListener('loadedmetadata', onLoaded)
-  }, [videoSrc, markerSec])
+    video.addEventListener('error', onError)
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      seekToMarker()
+    }
+
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoaded)
+      video.removeEventListener('error', onError)
+    }
+  }, [videoSrc, markerSec, event?.id])
 
   useEffect(() => {
     const video = videoRef.current
@@ -70,6 +88,7 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
     const video = videoRef.current
     if (!video) return
     video.volume = volume / 100
+    video.muted = volume === 0
   }, [volume])
 
   useEffect(() => {
@@ -98,12 +117,19 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
   return (
     <div className={cn('flex flex-col h-full min-h-0 bg-[#0b0f1a]', className)}>
       <div className="relative flex-1 min-h-[140px] bg-gray-950 overflow-hidden">
-        {videoSrc ? (
+        {loadError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-900 to-gray-950 px-4 text-center">
+            <Play className="w-8 h-8 text-red-400/60" />
+            <p className="text-[10px] text-red-400/90">{loadError}</p>
+            <p className="text-[9px] text-muted-foreground/70 break-all">{videoSrc}</p>
+          </div>
+        ) : videoSrc ? (
           <>
             <video
+              key={event.id}
               ref={videoRef}
               src={videoSrc}
-              muted
+              muted={volume === 0}
               playsInline
               preload="metadata"
               className="absolute inset-0 h-full w-full object-cover saturate-[0.88] contrast-[1.05] brightness-[0.92]"
@@ -111,6 +137,7 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
                 const v = e.currentTarget
                 if (v.duration) setProgress((v.currentTime / v.duration) * 100)
               }}
+              onError={() => setLoadError('Không tải được clip vi phạm')}
             />
             <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-2 pointer-events-none">
               <div className="bg-black/65 rounded px-2 py-1 max-w-[70%]">
@@ -195,7 +222,15 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
       </div>
 
       <div className="shrink-0 px-3 pb-2 border-t border-[#1e2433] pt-2">
-        <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+        {violationType && (
+          <div className="flex items-center gap-2 mb-1">
+            <ViolationTypeIcon type={violationType} size="xs" />
+            <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+          </div>
+        )}
+        {!violationType && (
+          <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+        )}
         <p className="text-[9px] text-muted-foreground line-clamp-2">{event.description}</p>
       </div>
 

@@ -10,6 +10,8 @@ import { SafetyDailyDashboard } from '../components/SafetyDailyDashboard'
 import { SafetyDailyDetailDashboard } from '../components/SafetyDailyDetailDashboard'
 import { SafetyTier1CollapsedSummary } from '../components/SafetyTier1CollapsedSummary'
 import { SafetyPlaybackModal } from '../components/SafetyPlaybackModal'
+import { SafetyWorkerDetailSheet } from '../components/SafetyWorkerDetailSheet'
+import { SafetyContractorDetailSheet } from '../components/SafetyContractorDetailSheet'
 import { computeSafetyDailySummary } from '../services/safetyKpi.service'
 import { SAFETY_VIOLATIONS } from '../data/safetyViolations'
 import type { SafetyViolation } from '@/types/safety'
@@ -25,7 +27,11 @@ export function SafetyDashboardPage() {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
-  const [activeStreamCount, setActiveStreamCount] = useState(2)
+  const [activeStreamCount, setActiveStreamCount] = useState(12)
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
+  const [workerSheetOpen, setWorkerSheetOpen] = useState(false)
+  const [selectedContractorName, setSelectedContractorName] = useState<string | null>(null)
+  const [contractorSheetOpen, setContractorSheetOpen] = useState(false)
   const { isDesktop } = useShellLayout()
   const showHeatmap = heatmapOpen || !isDesktop
 
@@ -45,6 +51,40 @@ export function SafetyDashboardPage() {
     }
   }
 
+  const handleSelectWorker = (workerIdOrName: string) => {
+    setSelectedWorkerId(workerIdOrName)
+    setWorkerSheetOpen(true)
+  }
+
+  const handleSelectContractor = (contractorName: string) => {
+    setSelectedContractorName(contractorName)
+    setContractorSheetOpen(true)
+  }
+
+  const handleWorkerSheetOpenChange = (open: boolean) => {
+    setWorkerSheetOpen(open)
+    if (!open) setSelectedWorkerId(null)
+  }
+
+  const handleContractorSheetOpenChange = (open: boolean) => {
+    setContractorSheetOpen(open)
+    if (!open) setSelectedContractorName(null)
+  }
+
+  const handleOpenContractorFromWorker = (contractorName: string) => {
+    setWorkerSheetOpen(false)
+    setSelectedWorkerId(null)
+    setSelectedContractorName(contractorName)
+    setContractorSheetOpen(true)
+  }
+
+  const handleOpenWorkerFromContractor = (workerIdOrName: string) => {
+    setContractorSheetOpen(false)
+    setSelectedContractorName(null)
+    setSelectedWorkerId(workerIdOrName)
+    setWorkerSheetOpen(true)
+  }
+
   return (
     <>
       <PageLayout>
@@ -55,7 +95,11 @@ export function SafetyDashboardPage() {
           noPadding
           className="shrink-0"
           expandedContent={
-            <SafetyDailyDetailDashboard summary={summary} />
+            <SafetyDailyDetailDashboard
+              summary={summary}
+              onSelectWorker={handleSelectWorker}
+              onSelectContractor={handleSelectContractor}
+            />
           }
           headerRight={
             <div className="flex items-center gap-2 min-w-0">
@@ -135,6 +179,8 @@ export function SafetyDashboardPage() {
                   zoneFilter={selectedZoneId}
                   onSelectViolation={handleSelectViolation}
                   onPlayback={handlePlayback}
+                  onSelectWorker={handleSelectWorker}
+                  onSelectContractor={handleSelectContractor}
                 />
               </Panel>
             </div>
@@ -171,6 +217,22 @@ export function SafetyDashboardPage() {
         open={playbackEvent !== null}
         event={playbackEvent}
         onClose={() => setPlaybackEvent(null)}
+      />
+
+      <SafetyWorkerDetailSheet
+        workerIdOrName={selectedWorkerId}
+        open={workerSheetOpen}
+        onOpenChange={handleWorkerSheetOpenChange}
+        onPlayback={handlePlayback}
+        onSelectContractor={handleOpenContractorFromWorker}
+      />
+
+      <SafetyContractorDetailSheet
+        contractorName={selectedContractorName}
+        open={contractorSheetOpen}
+        onOpenChange={handleContractorSheetOpenChange}
+        onPlayback={handlePlayback}
+        onSelectWorker={handleOpenWorkerFromContractor}
       />
     </>
   )
