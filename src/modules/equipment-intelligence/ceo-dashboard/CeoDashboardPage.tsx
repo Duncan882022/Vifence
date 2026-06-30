@@ -94,13 +94,13 @@ export function CeoDashboardPage() {
           animate="visible"
           className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch shrink-0"
         >
-          <div className="lg:col-span-7 h-[420px]">
+          <div className="lg:col-span-6 min-h-[540px]">
             <VietnamRegionMap
               regions={data.regions}
               getMachinesByRegion={getMachinesByRegion}
             />
           </div>
-          <div className="lg:col-span-5 h-[420px]">
+          <div className="lg:col-span-6 min-h-[540px]">
             <TopUsersPanel units={data.usageUnits} />
           </div>
         </motion.div>

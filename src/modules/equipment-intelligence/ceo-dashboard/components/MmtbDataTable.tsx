@@ -3,7 +3,7 @@ import {
   flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel,
   getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { Search, Download, Filter } from 'lucide-react'
+import { Search, Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -262,35 +262,61 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
-          <span className="text-[10px] text-muted-foreground tabular-nums">
-            Hiển thị {startRow}–{endRow} trong tổng số {total} máy
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
+          {/* Row info */}
+          <span className="text-[10px] text-muted-foreground/70 tabular-nums whitespace-nowrap">
+            Hiển thị <span className="text-foreground/80 font-medium">{startRow}–{endRow}</span> / <span className="text-foreground/80 font-medium">{total}</span> thiết bị
           </span>
 
-          <div className="flex items-center gap-1.5">
+          {/* Pagination controls */}
+          <div className="flex items-center gap-1">
+            {/* Page size */}
+            <select
+              value={pagination.pageSize}
+              onChange={e => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), pageIndex: 0 }))}
+              className="mr-1.5 px-2 py-1 rounded-lg bg-[#060b14] border border-[#1e2433] text-[10px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/40 appearance-none"
+            >
+              {[10, 20, 50].map(n => <option key={n} value={n}>{n} / trang</option>)}
+            </select>
+
+            {/* Prev */}
+            <button
+              type="button"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="flex items-center justify-center w-7 h-7 rounded-lg border border-[#1e2433] text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-[#1a2235] hover:enabled:text-foreground hover:enabled:border-[#2a3855]"
+              aria-label="Trang trước"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Page numbers */}
             {pageNumbers.map(p => (
               <button
                 key={p}
                 type="button"
                 onClick={() => table.setPageIndex(p)}
                 className={cn(
-                  'min-w-[28px] h-7 rounded-lg text-[10px] font-bold tabular-nums px-1 transition-colors',
+                  'min-w-[28px] h-7 rounded-lg text-[10px] font-bold tabular-nums px-1.5 transition-colors',
                   p === currentPage
-                    ? 'bg-primary/20 text-primary border border-primary/30 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
-                    : 'text-muted-foreground hover:bg-[#1a2235] hover:text-foreground border border-transparent',
+                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.15)]'
+                    : 'text-muted-foreground hover:bg-[#1a2235] hover:text-foreground border border-transparent hover:border-[#1e2433]',
                 )}
               >
                 {p + 1}
               </button>
             ))}
 
-            <select
-              value={pagination.pageSize}
-              onChange={e => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), pageIndex: 0 }))}
-              className="ml-2 px-2 py-1 rounded-lg bg-[#060b14] border border-[#1e2433] text-[10px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/40"
+            {/* Next */}
+            <button
+              type="button"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="flex items-center justify-center w-7 h-7 rounded-lg border border-[#1e2433] text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-[#1a2235] hover:enabled:text-foreground hover:enabled:border-[#2a3855]"
+              aria-label="Trang sau"
             >
-              {[10, 20, 50].map(n => <option key={n} value={n}>{n} / trang</option>)}
-            </select>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
