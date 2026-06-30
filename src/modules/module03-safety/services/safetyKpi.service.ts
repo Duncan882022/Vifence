@@ -212,8 +212,8 @@ function buildMetrics(today: SafetyDayStats, yesterday: SafetyDayStats): KPIData
     {
       label: 'Camera',
       value: today.activeCameras,
-      unit: 'cam',
-      detail: `/${today.totalCameras} OCP1`,
+      unit: 'Camera',
+      detail: `/${today.totalCameras}`,
       ...delta(today.activeCameras, yesterday.activeCameras),
       previousValue: yesterday.activeCameras,
       higherIsBetter: true,

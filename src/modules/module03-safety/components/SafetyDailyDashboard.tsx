@@ -73,7 +73,7 @@ function CameraInsight({ stats }: { stats: SafetyDayStats }) {
       <IconTooltipBadge
         icon={Radio}
         label="Đang phát"
-        tip="Luồng live OCP1"
+        tip="Luồng live"
         value={stats.activeCameras}
         className="bg-cyan-500/10 text-cyan-400"
         pulse
@@ -151,7 +151,7 @@ function MetricRightVisual({ index, stats }: { index: MetricIndex; stats: Safety
           color={ringHeatColor(Math.round((stats.activeCameras / stats.totalCameras) * 100))}
           size={46}
           className="mt-0.5"
-          title={`${stats.activeCameras}/${stats.totalCameras} camera OCP1`}
+          title={`${stats.activeCameras}/${stats.totalCameras} camera`}
         />
       )
     case 3: {
