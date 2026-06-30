@@ -43,12 +43,9 @@ export function SafetyDashboardPage() {
   }
 
   const handlePlayback = (event: Event) => {
+    // Only open the modal — do NOT touch selectedViolation/inline panel.
+    // The inline playback is driven exclusively by handleSelectViolation (row click).
     setPlaybackEvent(event)
-    const match = SAFETY_VIOLATIONS.find(item => item.id === event.id)
-    if (match) {
-      setSelectedViolation(match)
-      setSelectedViolationId(match.id)
-    }
   }
 
   const handleSelectWorker = (workerIdOrName: string) => {
@@ -63,24 +60,23 @@ export function SafetyDashboardPage() {
 
   const handleWorkerSheetOpenChange = (open: boolean) => {
     setWorkerSheetOpen(open)
-    if (!open) setSelectedWorkerId(null)
+    // Keep selectedWorkerId non-null so Radix can animate the sheet closed
+    // before the component unmounts.
   }
 
   const handleContractorSheetOpenChange = (open: boolean) => {
     setContractorSheetOpen(open)
-    if (!open) setSelectedContractorName(null)
+    // Keep selectedContractorName non-null for the same reason.
   }
 
   const handleOpenContractorFromWorker = (contractorName: string) => {
     setWorkerSheetOpen(false)
-    setSelectedWorkerId(null)
     setSelectedContractorName(contractorName)
     setContractorSheetOpen(true)
   }
 
   const handleOpenWorkerFromContractor = (workerIdOrName: string) => {
     setContractorSheetOpen(false)
-    setSelectedContractorName(null)
     setSelectedWorkerId(workerIdOrName)
     setWorkerSheetOpen(true)
   }
@@ -91,9 +87,9 @@ export function SafetyDashboardPage() {
   }
 
   const handleClosePlaybackModal = () => {
+    // Only dismiss the modal; leave selectedViolation intact so the
+    // inline playback panel (opened via row click) stays visible.
     setPlaybackEvent(null)
-    setSelectedViolation(null)
-    setSelectedViolationId(undefined)
   }
 
   return (

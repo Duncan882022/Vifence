@@ -197,7 +197,6 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
   const isPpe = index === 0
   const isPenalties = index === 3
   const ppeLevel = isPpe ? getPpeLevel(Number(value)) : null
-  const PpeIcon = ppeLevel?.icon
 
   return (
     <div className={cn(
@@ -210,24 +209,9 @@ function DailyMetricCard({ data, meta, stats, index, embedded }: DailyMetricCard
       <div className="flex items-start gap-1.5 sm:gap-2 min-w-0">
         <div className={cn(
           'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
-          isPpe && ppeLevel ? ppeLevel.bg : iconBg,
+          iconBg,
         )}>
-          {isPpe && PpeIcon ? (
-            <PpeComplianceTooltip
-              score={Number(value)}
-              violationsByLevel={{ high: stats.violationsHigh, medium: stats.violationsMedium, low: stats.violationsLow }}
-            >
-              <button
-                type="button"
-                className="w-full h-full flex items-center justify-center p-0 cursor-help rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
-                aria-label={`Tuân thủ PPE · Mức ${ppeLevel!.label}`}
-              >
-                <PpeIcon className={cn('w-3.5 h-3.5', ppeLevel!.color)} aria-hidden />
-              </button>
-            </PpeComplianceTooltip>
-          ) : (
-            <IconTooltip icon={Icon} label={label} tip={tip} iconClassName={iconColor} size="sm" />
-          )}
+          <IconTooltip icon={Icon} label={label} tip={tip} iconClassName={iconColor} size="sm" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 min-w-0">
