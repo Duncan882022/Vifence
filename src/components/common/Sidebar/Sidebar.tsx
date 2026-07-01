@@ -108,7 +108,7 @@ export function Sidebar() {
 
               /* ── Group item with children ── */
               if (item.children) {
-                const isGroupActive = item.children.some(c => location.pathname.startsWith(c.path))
+                const isGroupActive = item.children.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
                 const isOpen = equipmentOpen
 
                 return (
@@ -146,7 +146,7 @@ export function Sidebar() {
                       <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-[#1e2433]/60 pl-2">
                         {item.children.map(child => {
                           const ChildIcon = child.icon
-                          const isChildActive = location.pathname.startsWith(child.path)
+                          const isChildActive = location.pathname === child.path || location.pathname.startsWith(child.path + '/')
 
                           return (
                             <li key={child.path}>
