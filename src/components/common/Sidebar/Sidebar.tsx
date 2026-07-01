@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  ChevronLeft, ChevronRight, LayoutDashboard,
+  ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard,
   DoorOpen, GraduationCap, ShieldAlert, Sparkles,
   TrendingUp, Package, ClipboardCheck, BarChart3, Cpu,
-  Lock,
+  Lock, Activity, Gauge,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -17,7 +17,14 @@ interface NavItem {
   path: string
   label: string
   icon: LucideIcon
-  /** false = locked in trial build */
+  available: boolean
+  children?: NavChild[]
+}
+
+interface NavChild {
+  path: string
+  label: string
+  icon: LucideIcon
   available: boolean
 }
 
@@ -25,7 +32,16 @@ const navItems: NavItem[] = [
   { path: '/module01', label: 'Kiểm soát vào ra',    icon: DoorOpen,       available: false },
   { path: '/module02', label: 'Đào tạo & Tuân thủ',  icon: GraduationCap,  available: true  },
   { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: true  },
-  { path: '/equipment', label: 'Quản lý MMTB',         icon: Cpu,            available: true  },
+  {
+    path: '/equipment-group',
+    label: 'Quản lý MMTB',
+    icon: Cpu,
+    available: true,
+    children: [
+      { path: '/equipmentpro', label: 'Năng suất vận hành', icon: Gauge,    available: true },
+      { path: '/equipment',    label: 'Độ tin cậy thiết bị', icon: Activity, available: true },
+    ],
+  },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
   { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: false },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
@@ -42,13 +58,19 @@ export function Sidebar() {
   const showLabels = isDesktop ? !sidebarCollapsed : true
   const isDrawerOpen = !isDesktop && mobileNavOpen
 
+  const isEquipmentActive = location.pathname.startsWith('/equipment') || location.pathname.startsWith('/equipmentpro')
+  const [equipmentOpen, setEquipmentOpen] = useState(isEquipmentActive)
+
   useEffect(() => {
     closeMobileNav()
   }, [location.pathname, closeMobileNav])
 
+  useEffect(() => {
+    if (isEquipmentActive) setEquipmentOpen(true)
+  }, [isEquipmentActive])
+
   return (
     <>
-      {/* Mobile backdrop */}
       {isDrawerOpen && (
         <button
           type="button"
@@ -82,9 +104,80 @@ export function Sidebar() {
         <nav className="flex-1 overflow-y-auto py-2">
           <ul className="space-y-0.5 px-1.5">
             {navItems.map((item) => {
-              const isActive = location.pathname.startsWith(item.path)
               const Icon = item.icon
 
+              /* ── Group item with children ── */
+              if (item.children) {
+                const isGroupActive = item.children.some(c => location.pathname.startsWith(c.path))
+                const isOpen = equipmentOpen
+
+                return (
+                  <li key={item.path}>
+                    <button
+                      type="button"
+                      title={!showLabels ? item.label : undefined}
+                      onClick={() => setEquipmentOpen(o => !o)}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-md transition-colors group',
+                        isGroupActive
+                          ? 'bg-[#1a2235] text-foreground'
+                          : 'text-[#8b9cb8] hover:bg-[#1a2235] hover:text-foreground',
+                      )}
+                    >
+                      <Icon className={cn(
+                        'w-4 h-4 shrink-0',
+                        isGroupActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                      )} />
+                      {showLabels && (
+                        <>
+                          <span className="text-xs font-medium leading-snug whitespace-normal flex-1 text-left">
+                            {item.label}
+                          </span>
+                          <ChevronDown className={cn(
+                            'w-3 h-3 shrink-0 text-muted-foreground/60 transition-transform duration-200',
+                            isOpen ? 'rotate-0' : '-rotate-90',
+                          )} />
+                        </>
+                      )}
+                    </button>
+
+                    {/* Children */}
+                    {showLabels && isOpen && (
+                      <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-[#1e2433]/60 pl-2">
+                        {item.children.map(child => {
+                          const ChildIcon = child.icon
+                          const isChildActive = location.pathname.startsWith(child.path)
+
+                          return (
+                            <li key={child.path}>
+                              <NavLink
+                                to={child.path}
+                                onClick={closeMobileNav}
+                                className={cn(
+                                  'flex items-center gap-2 px-2 py-2 rounded-md transition-colors group text-xs',
+                                  isChildActive
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'text-[#8b9cb8] hover:bg-[#1a2235] hover:text-foreground',
+                                )}
+                              >
+                                <ChildIcon className={cn(
+                                  'w-3.5 h-3.5 shrink-0',
+                                  isChildActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                                )} />
+                                <span className="font-medium leading-snug whitespace-normal text-[11px]">
+                                  {child.label}
+                                </span>
+                              </NavLink>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                )
+              }
+
+              /* ── Locked item ── */
               if (!item.available) {
                 return (
                   <li key={item.path}>
@@ -110,6 +203,8 @@ export function Sidebar() {
                 )
               }
 
+              /* ── Regular nav link ── */
+              const isActive = location.pathname.startsWith(item.path)
               return (
                 <li key={item.path}>
                   <NavLink

@@ -9,6 +9,7 @@ import { Module06Page } from '@/modules/module06-assets/Module06Page'
 import { Module07Page } from '@/modules/module07-inspection/Module07Page'
 import { Module08Page } from '@/modules/module08-reporting/Module08Page'
 import { EquipmentPage } from '@/modules/equipment-intelligence/EquipmentPage'
+import { EquipmentProductivityPage } from '@/modules/module01-equipment-productivity/EquipmentProductivityPage'
 
 function AppRoutes() {
   return (
@@ -18,6 +19,7 @@ function AppRoutes() {
         <Route path="/" element={<Navigate to="/module02" replace />} />
 
         <Route path="/equipment/*" element={<EquipmentPage />} />
+        <Route path="/equipmentpro" element={<EquipmentProductivityPage />} />
 
         {/* Legacy redirects */}
         <Route path="/module02/equipment-intelligence-center" element={<Navigate to="/equipment" replace />} />
