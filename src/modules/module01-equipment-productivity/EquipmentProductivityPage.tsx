@@ -28,18 +28,20 @@ export function EquipmentProductivityPage() {
         subtitle="Hiệu quả khai thác và năng suất thiết bị thi công"
       />
 
-      <PageLayout scrollable>
+      <PageLayout>
 
-        {/* Tier 1 — KPI Cards */}
-        <ProductivityKpiTier
-          fleet={FLEET_SUMMARY}
-          utilization={UTILIZATION_KPI}
-          output={OUTPUT_KPI}
-          fuel={FUEL_KPI}
-        />
+        {/* Tier 1 — KPI Cards (shrink-0: always visible, never scrolled away) */}
+        <div className="shrink-0">
+          <ProductivityKpiTier
+            fleet={FLEET_SUMMARY}
+            utilization={UTILIZATION_KPI}
+            output={OUTPUT_KPI}
+            fuel={FUEL_KPI}
+          />
+        </div>
 
-        {/* Tier 2 — Machine Table */}
-        <div className="min-h-[420px]">
+        {/* Tier 2 — Machine Table (flex-[5]: takes ~45% of remaining height) */}
+        <div className="flex flex-col flex-[5] min-h-0">
           <MachineProductivityTable
             data={MOCK_MACHINES}
             search={search}
@@ -47,8 +49,8 @@ export function EquipmentProductivityPage() {
           />
         </div>
 
-        {/* Tier 3 — Analytics Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[340px]">
+        {/* Tier 3 — Analytics Row (flex-[4]: takes ~36% of remaining height) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-[4] min-h-0">
           <OperationAnalyticsPanel
             fleet={FLEET_SUMMARY}
             trendData={TREND_DATA}
