@@ -33,7 +33,7 @@ export function EquipmentProductivityPage() {
           <ProductivityKpiTier
             machines={MACHINES}
             worksites={WORKSITES}
-            piles={PILE_ASSIGNMENTS}
+            projects={PROJECTS}
           />
         </div>
 

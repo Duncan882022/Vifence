@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
+import { Map } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type { Project, Worksite, PileAssignment, DelayReason } from '../types'
+import { ProjectMapModal } from './ProjectMapModal'
 
 type RiskLevel = 'Cao' | 'Trung bình' | 'Thấp'
 
@@ -64,6 +66,7 @@ const RISK_COLORS: Record<RiskLevel, { badge: string; row: string; bar: string }
 
 export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [mapProject, setMapProject] = useState<Project | null>(null)
 
   const rows = useMemo<ProjectRow[]>(() => {
     return projects
@@ -97,7 +100,8 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
   }
 
   return (
-    <Panel title="Rủi ro tiến độ dự án" className="h-full min-h-0" noPadding>
+    <>
+      <Panel title="Rủi ro tiến độ dự án" className="h-full min-h-0" noPadding>
       <div className="flex flex-col h-full min-h-0 overflow-y-auto p-2 gap-1.5">
         {rows.map(row => {
           const col = RISK_COLORS[row.risk]
@@ -114,10 +118,6 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
                 onClick={() => toggle(row.project.id)}
                 className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-white/5 transition-colors text-left"
               >
-                {isOpen
-                  ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
-                  : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
-                }
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] font-bold text-foreground truncate">{row.project.name}</span>
@@ -134,9 +134,20 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
                     <span className="text-[9px] text-foreground/80 tabular-nums shrink-0">{row.completedPct}%</span>
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-[8px] text-red-400 font-semibold">{row.delayedPiles + row.blockedPiles} cọc trễ/bị chặn</p>
-                  <p className="text-[7px] text-muted-foreground/50 truncate max-w-[80px]">{row.topReason}</p>
+                <div className="shrink-0 text-right flex items-center gap-1.5">
+                  <div>
+                    <p className="text-[8px] text-red-400 font-semibold">{row.delayedPiles + row.blockedPiles} cọc trễ/bị chặn</p>
+                    <p className="text-[7px] text-muted-foreground/50 truncate max-w-[80px]">{row.topReason}</p>
+                  </div>
+                  {/* Map button */}
+                  <button
+                    type="button"
+                    title="Xem bản đồ cọc"
+                    onClick={e => { e.stopPropagation(); setMapProject(row.project) }}
+                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10 transition-colors shrink-0"
+                  >
+                    <Map className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </button>
 
@@ -183,6 +194,18 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
           )
         })}
       </div>
-    </Panel>
+      </Panel>
+
+      <AnimatePresence>
+      {mapProject && (
+        <ProjectMapModal
+          key={mapProject.id}
+          project={mapProject}
+          worksites={worksites.filter(w => w.projectId === mapProject.id)}
+          onClose={() => setMapProject(null)}
+        />
+      )}
+      </AnimatePresence>
+    </>
   )
 }
