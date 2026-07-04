@@ -6,6 +6,7 @@ import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { EquipmentAiNotificationBell } from '@/modules/equipment-intelligence/components/EquipmentAiNotificationBell'
+import { AiOperationAlertsBell } from '@/modules/module01-equipment-productivity/components/AiOperationAlertsBell'
 import { UserMenu } from './UserMenu'
 
 interface HeaderProps {
@@ -16,6 +17,7 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps) {
   const { pathname } = useLocation()
   const isEquipment = pathname.startsWith('/equipment')
+  const isEquipmentPro = pathname.startsWith('/equipmentpro')
   const { notifications } = useAppStore()
   const { sidebarInset, openMobileNav } = useShellLayout()
   const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
@@ -44,7 +46,9 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 shrink-0">
-        {isEquipment ? (
+        {isEquipmentPro ? (
+          <AiOperationAlertsBell />
+        ) : isEquipment ? (
           <EquipmentAiNotificationBell />
         ) : (
           <button

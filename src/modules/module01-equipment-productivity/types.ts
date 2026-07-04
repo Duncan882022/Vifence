@@ -1,90 +1,100 @@
-export type MachineStatus = 'Working' | 'Standby' | 'Breakdown'
-export type DispatchStatus = 'On-time' | 'Delayed' | 'Pending'
-export type AiSeverity = 'Critical' | 'High' | 'Medium'
+export type MachineStatus = 'working' | 'idle' | 'breakdown' | 'stored'
+export type DispatchStatus = 'on-time' | 'delayed' | 'pending'
+export type PileStatus = 'not-started' | 'in-progress' | 'completed' | 'delayed' | 'blocked'
+export type DelayReason =
+  | 'machine-breakdown'
+  | 'lack-worker'
+  | 'lack-cement'
+  | 'lack-bentonite'
+  | 'lack-concrete'
+  | 'lack-steel-cage'
+  | 'site-not-ready'
+  | 'weather'
+  | 'inspection-waiting'
+export type AiSeverity = 'critical' | 'high' | 'medium'
 
-export interface ProductivityMachine {
+export interface Project {
   id: string
-  machineCode: string
-  equipmentType: string
-  projectLocation: string
+  code: string
+  name: string
+  region: string
+  plannedOutputM: number
+  actualOutputM: number
+  startDate: string
+  endDate: string
+}
+
+export interface Worksite {
+  id: string
+  projectId: string
+  code: string
+  name: string
+  plannedPiles: number
+  completedPiles: number
+  inProgressPiles: number
+  delayedPiles: number
+  blockedPiles: number
+  materialReadiness: {
+    laborPct: number
+    cementPct: number
+    bentonitePct: number
+    steelCagePct: number
+    concretePct: number
+  }
+}
+
+export interface PileAssignment {
+  id: string
+  pileCode: string
+  machineId: string
+  worksiteId: string
+  diameterMm: number
+  depthM: number
+  plannedStart: string
+  plannedEnd: string
+  plannedDurationH: number
+  actualStart?: string
+  actualEnd?: string
+  actualDurationH?: number
+  status: PileStatus
+  delayHours: number
+  delayReason?: DelayReason
+  fuelUsedLitres?: number
+}
+
+export interface Machine {
+  id: string
+  code: string
+  type: string
+  projectId: string
+  worksiteId: string
   status: MachineStatus
   workingHours: number
   idleHours: number
   downtimeHours: number
   utilizationPct: number
   outputPerHour: number
+  plannedOutputToday: number
+  actualOutputToday: number
   fuelLitresPerHour: number
-  fuelCostVndPerHour: number
+  fuelBaselineLitresPerHour: number
+  fuelCostVndPerLitre: number
   dispatchStatus: DispatchStatus
+  currentPileId?: string
 }
 
-export interface FleetSummary {
-  workingHours: number
-  idleHours: number
-  downtimeHours: number
-  availabilityPct: number
-  availabilityTrend: number
-}
-
-export interface UtilizationKpi {
-  fleetUtilizationPct: number
-  fleetUtilizationTrend: number
-  mobilizationRatePct: number
-  mobilizationTrend: number
-  dispatchCompletionPct: number
-  onTimeDispatchPct: number
-}
-
-export interface OutputKpi {
-  outputPerHour: number
-  outputPerHourTrend: number
-  outputPerShift: number
-  outputPerShiftTrend: number
-  outputPerDay: number
-  outputPerDayTrend: number
-  outputPerMonth: number
-  outputPerMonthTrend: number
-}
-
-export interface FuelKpi {
-  fuelPerHour: number
-  fuelPerHourTrend: number
-  fuelCostPerHour: number
-  fuelCostPerHourTrend: number
-  fuelVariancePct: number
-  fuelVarianceTrend: number
-  fuelLossRatePct: number
-  fuelLossRateTrend: number
-}
-
-export interface ProjectPerformance {
-  id: string
-  name: string
-  outputMCoc: number
-  utilizationPct: number
-  fuelEfficiency: number
-  rank: number
-}
-
-export interface TrendPoint {
-  day: string
-  utilizationPct: number
-}
-
-export interface ShiftData {
-  shift: string
-  outputPerHour: number
-}
-
-export interface AiInsight {
+export interface AiAlert {
   id: string
   severity: AiSeverity
-  machineOrProject: string
+  category: 'machine' | 'project' | 'fuel' | 'dispatch' | 'material'
+  subject: string
   title: string
-  shortDesc: string
+  summary: string
   reasoning: string
-  comparisonData: { label: string; current: string; benchmark: string }[]
+  evidence: { label: string; actual: string; expected: string }[]
   recommendations: string[]
-  expectedBenefit: string
+  benefit: string
   costSavingEstimate: string
+  createdAt: string
+  read: boolean
 }
