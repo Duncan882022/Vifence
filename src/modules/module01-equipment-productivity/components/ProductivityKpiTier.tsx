@@ -179,41 +179,73 @@ function FleetCard({ machines, index }: { machines: Machine[]; index: number }) 
   )
 }
 
-/* ── Card 2: KPI Cọc hôm nay ── */
+/* ── Card 2: Tiến độ cọc ── (PROJECT DELIVERY: bao nhiêu cọc đã xong so với kế hoạch dự án) */
 function PileCard({ worksites, piles, index }: { worksites: Worksite[]; piles: PileAssignment[]; index: number }) {
   const totalPlanned = worksites.reduce((s, w) => s + w.plannedPiles, 0)
-  const completed = worksites.reduce((s, w) => s + w.completedPiles, 0)
-  const inProgress = worksites.reduce((s, w) => s + w.inProgressPiles, 0)
-  const delayed = worksites.reduce((s, w) => s + w.delayedPiles, 0)
-  const blocked = worksites.reduce((s, w) => s + w.blockedPiles, 0)
-  const onPlanPct = pct(completed, totalPlanned)
+  const completed    = worksites.reduce((s, w) => s + w.completedPiles, 0)
+  const inProgress   = worksites.reduce((s, w) => s + w.inProgressPiles, 0)
+  const delayed      = worksites.reduce((s, w) => s + w.delayedPiles, 0)
+  const blocked      = worksites.reduce((s, w) => s + w.blockedPiles, 0)
+  const progressPct  = pct(completed, totalPlanned)
+
+  // today's activity from pile assignments
+  const todayDone = piles.filter(p => p.status === 'completed').length
+  const todayDelay = piles.filter(p => p.delayHours > 0).length
 
   const worstPile = piles
     .filter(p => p.delayHours > 0)
     .sort((a, b) => b.delayHours - a.delayHours)[0]
 
   const chips = [
-    { label: 'Hoàn thành', count: completed, color: 'text-green-400', bg: 'bg-green-500/10 ring-green-500/20' },
-    { label: 'Đang thi công', count: inProgress, color: 'text-sky-400', bg: 'bg-sky-500/10 ring-sky-500/20' },
-    { label: 'Trễ', count: delayed, color: 'text-red-400', bg: 'bg-red-500/10 ring-red-500/20' },
-    { label: 'Bị chặn', count: blocked, color: 'text-amber-400', bg: 'bg-amber-500/10 ring-amber-500/20' },
+    { label: 'Hoàn thành', count: completed, color: 'text-green-400',  bg: 'bg-green-500/10  ring-green-500/20' },
+    { label: 'Đang thi',   count: inProgress, color: 'text-sky-400',   bg: 'bg-sky-500/10    ring-sky-500/20' },
+    { label: 'Trễ KH',    count: delayed,    color: 'text-red-400',    bg: 'bg-red-500/10    ring-red-500/20' },
+    { label: 'Bị chặn',   count: blocked,    color: 'text-amber-400',  bg: 'bg-amber-500/10  ring-amber-500/20' },
   ]
 
   return (
     <KpiShell index={index} theme={THEMES.violet} icon={<HardHat className="w-3 h-3" />}
-      title="KPI Cọc hôm nay"
+      title="Tiến độ cọc"
+      headerRight={<span className="text-[8px] text-muted-foreground/60">Tổng dự án</span>}
     >
-      <div className="flex items-baseline gap-1">
-        <span className="text-[2rem] font-black tabular-nums leading-none bg-gradient-to-br from-violet-200 via-violet-300 to-violet-500 bg-clip-text text-transparent">
-          {completed}
-        </span>
-        <span className="text-[14px] font-black text-violet-400/50">/{totalPlanned}</span>
-        <span className="ml-2 text-[8px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded-full ring-1 ring-green-500/20 font-bold">
-          Đúng KH {onPlanPct}%
-        </span>
+      {/* Hero: completed / totalPlanned với progress % */}
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[2rem] font-black tabular-nums leading-none bg-gradient-to-br from-violet-200 via-violet-300 to-violet-500 bg-clip-text text-transparent">
+              {completed.toLocaleString('vi-VN')}
+            </span>
+            <span className="text-[13px] font-black text-violet-400/40">/{totalPlanned.toLocaleString('vi-VN')}</span>
+          </div>
+          <p className="text-[7px] text-muted-foreground/50 mt-0.5">cọc hoàn thành / tổng kế hoạch</p>
+        </div>
+        {/* Progress ring */}
+        <svg width="36" height="36" viewBox="0 0 36 36" className="shrink-0 -rotate-90">
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#1e2433" strokeWidth="3.5" />
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#a78bfa" strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeDasharray={`${2 * Math.PI * 14 * progressPct / 100} ${2 * Math.PI * 14}`}
+            style={{ filter: 'drop-shadow(0 0 4px #a78bfa66)' }}
+          />
+        </svg>
       </div>
 
-      {/* chips */}
+      {/* Progress bar */}
+      <div className="space-y-0.5">
+        <div className="flex justify-between text-[7px] text-muted-foreground/50">
+          <span>Tiến độ tổng thể</span>
+          <span className="text-violet-300 font-bold">{progressPct}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-[#1a2030] overflow-hidden">
+          <motion.div className="h-full rounded-full bg-gradient-to-r from-violet-600 to-violet-400"
+            initial={{ width: 0 }} animate={{ width: `${progressPct}%` }}
+            transition={{ delay: 0.3, duration: 0.8, ease: EASE }}
+            style={{ boxShadow: '0 0 8px rgba(167,139,250,0.4)' }}
+          />
+        </div>
+      </div>
+
+      {/* Status chips */}
       <div className="flex flex-wrap gap-1">
         {chips.map(c => (
           <span key={c.label} className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ring-1 text-[8px] font-semibold', c.color, c.bg)}>
@@ -222,47 +254,80 @@ function PileCard({ worksites, piles, index }: { worksites: Worksite[]; piles: P
         ))}
       </div>
 
-      {worstPile && (
-        <p className="text-[8px] text-muted-foreground/60 truncate border-t border-[#1e2433]/40 pt-1">
-          Chậm nhất:{' '}
-          <span className="text-red-400 font-semibold">SANY-021</span>
-          {' · '}
-          <span className="text-amber-300 font-semibold">{worstPile.pileCode}</span>
-          {' · '}
-          <span className="text-foreground/80">+{worstPile.delayHours}h</span>
-        </p>
-      )}
+      {/* Today footer */}
+      <p className="text-[8px] text-muted-foreground/50 border-t border-[#1e2433]/40 pt-1 truncate">
+        Hôm nay:{' '}
+        <span className="text-green-400 font-semibold">{todayDone} xong</span>
+        {' · '}
+        <span className="text-red-400 font-semibold">{todayDelay} trễ</span>
+        {worstPile && (
+          <> · <span className="text-amber-300">+{worstPile.delayHours}h ({worstPile.pileCode})</span></>
+        )}
+      </p>
     </KpiShell>
   )
 }
 
-/* ── Card 3: Năng suất cọc ── */
+/* ── Card 3: Tốc độ thi công ── (OPERATIONAL SPEED: máy đang khoan nhanh thế nào, m/giờ) */
 function OutputCard({ machines, index }: { machines: Machine[]; index: number }) {
-  const working = machines.filter(m => m.status === 'working')
-  const avgOutput = Math.round(avg(machines.filter(m => m.status !== 'stored').map(m => m.outputPerHour)) * 10) / 10
-  const perShift = Math.round(avgOutput * 7.5 * 10) / 10
-  const totalDay = machines.reduce((s, m) => s + m.actualOutputToday, 0)
+  // Only measure drilling speed on machines actively working (ép cọc types)
+  const activeDrillers = machines.filter(m =>
+    m.status === 'working' && (m.type.includes('SANY') || m.type.includes('XCMG') || m.type.includes('ép cọc'))
+  )
+  const allActive = machines.filter(m => m.status === 'working')
 
-  const best = working.reduce((b, m) => m.outputPerHour > (b?.outputPerHour ?? 0) ? m : b, working[0])
-  const worst = working.reduce((b, m) => m.outputPerHour < (b?.outputPerHour ?? Infinity) ? m : b, working[0])
+  const avgOutput = activeDrillers.length > 0
+    ? Math.round(avg(activeDrillers.map(m => m.outputPerHour)) * 10) / 10
+    : Math.round(avg(allActive.map(m => m.outputPerHour)) * 10) / 10
+
+  // per shift = avg output × 7.5h ca
+  const perShift = Math.round(avgOutput * 7.5 * 10) / 10
+  // total sản lượng hôm nay (sum across all machines)
+  const totalDayM = machines.reduce((s, m) => s + m.actualOutputToday, 0)
+  const totalPlannedM = machines.reduce((s, m) => s + m.plannedOutputToday, 0)
+  const completionPct = pct(totalDayM, totalPlannedM)
+
+  const best = allActive.reduce<Machine | undefined>((b, m) => !b || m.outputPerHour > b.outputPerHour ? m : b, undefined)
+  const worst = allActive.reduce<Machine | undefined>((b, m) => !b || m.outputPerHour < b.outputPerHour ? m : b, undefined)
 
   return (
     <KpiShell index={index} theme={THEMES.emerald} icon={<Gauge className="w-3 h-3" />}
-      title="Năng suất cọc"
-      headerRight={<span className="text-[8px] font-bold text-emerald-300">avg đội máy</span>}
+      title="Tốc độ thi công"
+      headerRight={<span className="text-[8px] text-muted-foreground/60">m/giờ avg</span>}
     >
+      {/* Hero: speed m/h */}
       <div className="flex items-baseline gap-1">
         <span className="text-[2rem] font-black tabular-nums leading-none bg-gradient-to-br from-emerald-200 via-green-300 to-emerald-500 bg-clip-text text-transparent">
           {fmtD(avgOutput)}
         </span>
         <span className="text-[11px] font-bold text-emerald-400/70">m/giờ</span>
+        <span className="ml-2 text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-full ring-1 ring-emerald-500/20 font-bold">
+          avg máy đang chạy
+        </span>
+      </div>
+
+      {/* Sản lượng hôm nay vs kế hoạch */}
+      <div className="space-y-0.5">
+        <div className="flex justify-between text-[7px] text-muted-foreground/50">
+          <span>Sản lượng hôm nay</span>
+          <span className={completionPct >= 100 ? 'text-green-400 font-bold' : 'text-amber-400 font-bold'}>
+            {completionPct}% KH
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-[#1a2030] overflow-hidden">
+          <motion.div
+            className={cn('h-full rounded-full', completionPct >= 100 ? 'bg-gradient-to-r from-green-600 to-emerald-400' : 'bg-gradient-to-r from-amber-600 to-amber-400')}
+            initial={{ width: 0 }} animate={{ width: `${Math.min(completionPct, 100)}%` }}
+            transition={{ delay: 0.3, duration: 0.8, ease: EASE }}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
         <MiniTile label="Sản lượng/ca" value={fmtD(perShift)} unit="m/ca" color="#34d399" />
-        <MiniTile label="Sản lượng/ngày" value={totalDay.toLocaleString('vi-VN')} unit="m" color="#6ee7b7" />
-        <MiniTile label="Tốt nhất" value={best ? `${best.code}` : '—'} color="#a7f3d0" />
-        <MiniTile label="Thấp nhất" value={worst && worst.code !== best?.code ? `${worst.code}` : '—'} color="#fbbf24" />
+        <MiniTile label="Tổng hôm nay" value={totalDayM.toLocaleString('vi-VN')} unit="m" color="#6ee7b7" />
+        <MiniTile label="Nhanh nhất" value={best ? best.code : '—'} color="#a7f3d0" />
+        <MiniTile label="Chậm nhất" value={worst && worst !== best ? worst.code : '—'} color="#fbbf24" />
       </div>
     </KpiShell>
   )
@@ -270,29 +335,40 @@ function OutputCard({ machines, index }: { machines: Machine[]; index: number })
 
 /* ── Card 4: Nhiên liệu & chi phí ── */
 function FuelCard({ machines, index }: { machines: Machine[]; index: number }) {
-  let totalWasteCost = 0
-  let totalSavingCost = 0
-  let totalFuelLitres = 0
-  let totalFuelCost = 0
+  /**
+   * Lãng phí NL hôm nay (per machine):
+   *   wasteVnd = max(0, fuelActual − fuelBaseline) × workingHours × fuelCostVndPerLitre
+   *
+   * Tiết kiệm NL hôm nay: chỉ tính máy tiêu thụ DƯỚI định mức
+   * VÀ hoàn thành >= kế hoạch sản lượng (tiết kiệm thực sự, không phải do không làm việc)
+   *   savingVnd = max(0, fuelBaseline − fuelActual) × workingHours × fuelCostVndPerLitre
+   */
+  let totalWasteVnd = 0
+  let totalSavingVnd = 0
+  let totalFuelLitresH = 0
+  let totalFuelCostH = 0
   let overCount = 0
+  const activeCount = machines.filter(m => m.status === 'working').length
 
   for (const m of machines) {
+    if (m.workingHours <= 0) continue  // stored / not running today
     const variance = m.fuelLitresPerHour - m.fuelBaselineLitresPerHour
-    const cost = m.fuelCostVndPerLitre * m.workingHours
-    totalFuelLitres += m.fuelLitresPerHour
-    totalFuelCost += m.fuelLitresPerHour * m.fuelCostVndPerLitre
+    totalFuelLitresH += m.fuelLitresPerHour
+    totalFuelCostH   += m.fuelLitresPerHour * m.fuelCostVndPerLitre
 
     if (variance > 0) {
-      totalWasteCost += variance * m.workingHours * m.fuelCostVndPerLitre
+      // excess fuel cost: vượt định mức → lãng phí
+      totalWasteVnd += variance * m.workingHours * m.fuelCostVndPerLitre
       overCount++
     } else if (m.actualOutputToday >= m.plannedOutputToday) {
-      totalSavingCost += Math.abs(variance) * m.workingHours * m.fuelCostVndPerLitre
+      // under-baseline AND hit output target → genuine saving
+      totalSavingVnd += Math.abs(variance) * m.workingHours * m.fuelCostVndPerLitre
     }
-    void cost
   }
 
-  const avgLitPerHour = Math.round((totalFuelLitres / machines.length) * 10) / 10
-  const avgCostPerHour = Math.round(totalFuelCost / machines.length)
+  const countForAvg = machines.filter(m => m.workingHours > 0).length || 1
+  const avgLitPerHour  = Math.round((totalFuelLitresH / countForAvg) * 10) / 10
+  const avgCostPerHour = Math.round(totalFuelCostH / countForAvg)
 
   return (
     <KpiShell index={index} theme={THEMES.amber} icon={<Fuel className="w-3 h-3" />}
@@ -304,20 +380,31 @@ function FuelCard({ machines, index }: { machines: Machine[]; index: number }) {
         </span>
       )}
     >
-      <div className="flex items-baseline gap-1">
-        <span className="text-[2rem] font-black tabular-nums leading-none bg-gradient-to-br from-amber-200 via-orange-300 to-amber-500 bg-clip-text text-transparent">
-          {fmtVnd(totalWasteCost)}
-        </span>
-        <span className="text-[9px] text-muted-foreground/60 ml-1">lãng phí</span>
+      {/* Hero: waste cost today */}
+      <div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[2rem] font-black tabular-nums leading-none bg-gradient-to-br from-amber-200 via-orange-300 to-amber-500 bg-clip-text text-transparent">
+            {fmtVnd(totalWasteVnd)}
+          </span>
+          <span className="text-[9px] text-red-400/80 font-semibold ml-1">lãng phí hôm nay</span>
+        </div>
+        <p className="text-[7px] text-muted-foreground/40 mt-0.5">
+          = Σ (thực tế − định mức) × giờ làm × giá NL · {overCount} máy vượt
+        </p>
       </div>
-      <p className="text-[8px] text-green-400 font-semibold -mt-1">
-        Tiết kiệm {fmtVnd(totalSavingCost)}
-      </p>
+
+      {/* Saving */}
+      <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-green-500/5 border border-green-500/15">
+        <span className="text-[8px] text-muted-foreground/60">Tiết kiệm hôm nay</span>
+        <span className="text-[11px] font-black text-green-400 tabular-nums">
+          {fmtVnd(totalSavingVnd)}
+        </span>
+      </div>
 
       <div className="grid grid-cols-3 gap-1">
         <MiniTile label="Lít/giờ avg" value={fmtD(avgLitPerHour)} unit="lít/h" color="#fbbf24" />
         <MiniTile label="Chi phí/giờ" value={fmtVnd(avgCostPerHour)} color="#fb923c" />
-        <MiniTile label="Vượt định mức" value={`${overCount}`} unit="máy" color="#f87171" />
+        <MiniTile label="Đang chạy" value={`${activeCount}`} unit="máy" color="#38bdf8" />
       </div>
     </KpiShell>
   )

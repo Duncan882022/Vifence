@@ -149,11 +149,17 @@ const WORKSITES_BY_PROJECT: Record<string, string[]> = {
 
 const PROJECT_IDS = ['ocp1', 'hnx', 'cg', 'hvb', 'va', 'olp']
 
+/**
+ * STATUS distribution designed to match Module 2 fleet:
+ * 16-slot pool → 62.5% working, 18.75% idle, 6.25% breakdown, 12.5% stored
+ * 1000 machines → ~625 working, ~187 idle, ~63 breakdown, ~125 stored
+ */
 const STATUS_POOL: MachineStatus[] = [
-  'working', 'working', 'working', 'working', 'working', 'working', 'working',
-  'idle', 'idle', 'idle',
-  'breakdown',
-  'stored',
+  'working', 'working', 'working', 'working', 'working',
+  'working', 'working', 'working', 'working', 'working',  // 10
+  'idle', 'idle', 'idle',                                  // 3
+  'breakdown',                                              // 1
+  'stored', 'stored',                                       // 2
 ]
 const DISPATCH_POOL: DispatchStatus[] = [
   'on-time', 'on-time', 'on-time', 'on-time',
@@ -169,15 +175,19 @@ interface MachineSpec {
   status: MachineStatus
 }
 
+/**
+ * 1000 machines total — same fleet size as Module 2 (Equipment Reliability)
+ * Distribution: SANY 600 / XCMG 160 / CCX 80 / PC3 80 / D9T 40 / TRK 40
+ */
 function buildSpecs(): MachineSpec[] {
   const specs: MachineSpec[] = []
   const groups: { prefix: string; count: number }[] = [
-    { prefix: 'SANY', count: 30 },
-    { prefix: 'XCMG', count: 8 },
-    { prefix: 'CCX',  count: 4 },
-    { prefix: 'PC3',  count: 4 },
-    { prefix: 'D9T',  count: 2 },
-    { prefix: 'TRK',  count: 2 },
+    { prefix: 'SANY', count: 600 },
+    { prefix: 'XCMG', count: 160 },
+    { prefix: 'CCX',  count: 80  },
+    { prefix: 'PC3',  count: 80  },
+    { prefix: 'D9T',  count: 40  },
+    { prefix: 'TRK',  count: 40  },
   ]
   let idx = 0
   for (const g of groups) {
@@ -195,18 +205,50 @@ function buildSpecs(): MachineSpec[] {
 
 const SPECS = buildSpecs()
 
+/**
+ * All hour values represent TODAY's working hours (max 12h shift).
+ * Utilization = workingHours / 12h (shift capacity) × 100
+ *
+ * Fuel waste formula (transparent):
+ *   wasteVnd = max(0, fuelActual − fuelBaseline) × workingHours × fuelCostVndPerLitre
+ * This is "excess fuel cost today" per machine.
+ */
 function makeMachine(spec: MachineSpec, index: number): Machine {
   const isEps = spec.prefix === 'SANY' || spec.prefix === 'XCMG'
-  const working = rand(40, 200)
-  const idle = rand(5, 60)
-  const downtime = spec.status === 'breakdown' ? rand(8, 40) : rand(0, 12)
-  const total = working + idle + downtime
-  const util = Math.round((working / total) * 100)
-  const outputPerHour = isEps ? rand(18, 34, 1) : rand(5, 18, 1)
+  const SHIFT_H = 12  // full shift capacity
+
+  let workingH: number, idleH: number, downtimeH: number
+  switch (spec.status) {
+    case 'stored':
+      workingH = 0; idleH = 0; downtimeH = 0
+      break
+    case 'breakdown':
+      workingH = 0; idleH = rand(0, 2); downtimeH = rand(6, 12)
+      break
+    case 'idle':
+      workingH = rand(0, 2); idleH = rand(5, 9); downtimeH = 0
+      break
+    default: // working
+      workingH = rand(7, 11); idleH = rand(0, 2); downtimeH = rand(0, 1)
+  }
+
+  // utilization = % of shift capacity actually working
+  const util = Math.round((workingH / SHIFT_H) * 100)
+
+  const outputPerHour = isEps
+    ? rand(18, 34, 1)
+    : spec.prefix === 'CCX' ? rand(8, 15, 1) : rand(3, 10, 1)
   const plannedOutput = Math.round(outputPerHour * 8)
-  const actualOutput = Math.round(plannedOutput * (rand(70, 105) / 100))
-  const fuelBase = isEps ? rand(18, 24, 1) : rand(12, 20, 1)
-  const fuelActual = Math.round((fuelBase + rand(-2, 3, 1)) * 10) / 10
+  const actualOutput = spec.status === 'working'
+    ? Math.round(plannedOutput * (rand(75, 108) / 100))
+    : Math.round(plannedOutput * (rand(20, 50) / 100))
+
+  const fuelBase = isEps ? rand(18, 24, 1) : rand(10, 18, 1)
+  // variance: mostly near-baseline, ~10% machines exceed, ~10% save
+  const varianceBias = index % 10 === 0 ? rand(1, 3, 1)     // over baseline
+    : index % 10 === 1  ? -rand(1, 2, 1)   // under baseline (saving)
+    : rand(-1, 1, 1)                         // near baseline
+  const fuelActual = Math.round((fuelBase + varianceBias) * 10) / 10
   const fuelCost = rand(22000, 28000)
 
   return {
@@ -216,9 +258,9 @@ function makeMachine(spec: MachineSpec, index: number): Machine {
     projectId: spec.projectId,
     worksiteId: spec.worksiteId,
     status: spec.status,
-    workingHours: working,
-    idleHours: idle,
-    downtimeHours: downtime,
+    workingHours: workingH,
+    idleHours: idleH,
+    downtimeHours: downtimeH,
     utilizationPct: util,
     outputPerHour,
     plannedOutputToday: plannedOutput,
