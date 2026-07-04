@@ -53,21 +53,28 @@ const PROJECTS = [
 type MachineStatus = 'Working' | 'Standby' | 'Breakdown'
 type DispatchStatus = 'On-time' | 'Delayed' | 'Pending'
 
+let mockSeed = 20260701
+
+function seededRandom(): number {
+  mockSeed = (mockSeed * 1664525 + 1013904223) % 4294967296
+  return mockSeed / 4294967296
+}
+
 function rand(min: number, max: number, decimals = 0): number {
-  const v = Math.random() * (max - min) + min
+  const v = seededRandom() * (max - min) + min
   return decimals > 0 ? Math.round(v * 10 ** decimals) / 10 ** decimals : Math.round(v)
 }
 
 function pickFrom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+  return arr[Math.floor(seededRandom() * arr.length)]
 }
 
-const SANY_CODES = Array.from({ length: 15 }, (_, i) => `SANY-${String(i + 1).padStart(3, '0')}`)
-const XCMG_CODES = Array.from({ length: 12 }, (_, i) => `XCMG-${String(i + 1).padStart(3, '0')}`)
-const CRANE_CODES = Array.from({ length: 8 }, (_, i) => `CCX-${String(i + 1).padStart(3, '0')}`)
-const EXCAV_CODES = Array.from({ length: 8 }, (_, i) => `PC3-${String(i + 1).padStart(3, '0')}`)
-const DOZER_CODES = Array.from({ length: 4 }, (_, i) => `D9T-${String(i + 1).padStart(3, '0')}`)
-const TRUCK_CODES = Array.from({ length: 3 }, (_, i) => `TRK-${String(i + 1).padStart(3, '0')}`)
+const SANY_CODES = Array.from({ length: 30 }, (_, i) => `SANY-${String(i + 1).padStart(3, '0')}`)
+const XCMG_CODES = Array.from({ length: 8 }, (_, i) => `XCMG-${String(i + 1).padStart(3, '0')}`)
+const CRANE_CODES = Array.from({ length: 4 }, (_, i) => `CCX-${String(i + 1).padStart(3, '0')}`)
+const EXCAV_CODES = Array.from({ length: 4 }, (_, i) => `PC3-${String(i + 1).padStart(3, '0')}`)
+const DOZER_CODES = Array.from({ length: 2 }, (_, i) => `D9T-${String(i + 1).padStart(3, '0')}`)
+const TRUCK_CODES = Array.from({ length: 2 }, (_, i) => `TRK-${String(i + 1).padStart(3, '0')}`)
 
 const ALL_CODES = [
   ...SANY_CODES, ...XCMG_CODES, ...CRANE_CODES,
@@ -131,6 +138,7 @@ export const MOCK_MACHINES: ProductivityMachine[] = ALL_CODES.map((code, i) => {
 const sany021 = MOCK_MACHINES.find(m => m.machineCode === 'SANY-021')
 if (sany021) {
   sany021.status = 'Standby'
+  sany021.projectLocation = 'Cần Giờ'
   sany021.idleHours = 23
   sany021.workingHours = 8
   sany021.downtimeHours = 0
@@ -147,6 +155,7 @@ if (xcmg007) {
 // Ensure SANY-030 has high productivity
 const sany030 = MOCK_MACHINES.find(m => m.machineCode === 'SANY-030')
 if (sany030) {
+  sany030.projectLocation = 'Hải Vân Bay'
   sany030.outputPerHour = 42.3
   sany030.utilizationPct = 94
   sany030.status = 'Working'
