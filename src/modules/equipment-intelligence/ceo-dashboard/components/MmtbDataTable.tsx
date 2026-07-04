@@ -22,11 +22,6 @@ const PM_BADGE = {
   ok: 'bg-green-500/10 text-green-400 border border-green-500/30',
 } as const
 
-function healthColor(score: number) {
-  if (score >= 70) return 'text-green-400'
-  if (score >= 40) return 'text-amber-400'
-  return 'text-red-400'
-}
 
 function utilGradient(pct: number): string {
   if (pct >= 70) return 'from-green-500 to-emerald-400'
@@ -79,13 +74,36 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
     },
     {
       accessorKey: 'healthScore',
-      header: 'Health Score',
+      header: 'Sức khỏe',
       cell: ({ getValue }) => {
         const v = getValue<number>()
+        const r = 10
+        const circ = 2 * Math.PI * r
+        const dash = circ * (v / 100)
+        const colorMap = v >= 70 ? '#4ade80' : v >= 40 ? '#fbbf24' : '#f87171'
         return (
-          <span className={cn('font-bold tabular-nums text-[10px]', healthColor(v))}>
-            {v} / 100
-          </span>
+          <div className="flex items-center gap-1.5">
+            <svg width="28" height="28" viewBox="0 0 28 28" className="shrink-0 -rotate-90">
+              <circle
+                cx="14" cy="14" r={r}
+                fill="none"
+                stroke="#1e2433"
+                strokeWidth="3"
+              />
+              <circle
+                cx="14" cy="14" r={r}
+                fill="none"
+                stroke={colorMap}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${dash} ${circ}`}
+                style={{ filter: `drop-shadow(0 0 3px ${colorMap}88)` }}
+              />
+            </svg>
+            <span className="font-bold tabular-nums text-[10px]" style={{ color: colorMap }}>
+              {v}%
+            </span>
+          </div>
         )
       },
     },
@@ -171,7 +189,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
       'Loại thiết bị': r.equipmentType,
       'Dự án / Vị trí': r.projectLocation,
       'Trạng thái': r.status,
-      'Health Score': r.healthScore,
+      'Sức khỏe (%)': r.healthScore,
       'Giờ máy (h)': r.engineHours,
       'Utilization': `${r.utilizationPct}%`,
       'MTBF (h)': r.mtbfHours,
