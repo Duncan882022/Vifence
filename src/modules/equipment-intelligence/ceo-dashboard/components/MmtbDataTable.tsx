@@ -10,16 +10,23 @@ import { cn } from '@/utils/cn'
 import type { EquipmentStatus, MmtbRow } from '../types'
 
 const STATUS_BADGE: Record<EquipmentStatus, string> = {
-  Working: 'bg-green-500/15 text-green-400 ring-1 ring-green-500/25',
-  Standby: 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/25',
+  Working:   'bg-green-500/15 text-green-400 ring-1 ring-green-500/25',
+  Standby:   'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/25',
   Breakdown: 'bg-red-500/15 text-red-400 ring-1 ring-red-500/25',
-  Stored: 'bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25',
+  Stored:    'bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25',
 }
 
-const PM_BADGE = {
-  overdue: 'bg-red-500/10 text-red-400 border border-red-500/30',
+const STATUS_VI: Record<EquipmentStatus, string> = {
+  Working:   'Đang hoạt động',
+  Standby:   'Chờ việc',
+  Breakdown: 'Hỏng hóc',
+  Stored:    'Lưu kho',
+}
+
+const PM_BADGE: Record<'on_time' | 'upcoming' | 'overdue', string> = {
+  overdue:  'bg-red-500/10 text-red-400 border border-red-500/30',
   upcoming: 'bg-amber-500/10 text-amber-400 border border-amber-500/30',
-  ok: 'bg-green-500/10 text-green-400 border border-green-500/30',
+  on_time:  'bg-green-500/10 text-green-400 border border-green-500/30',
 } as const
 
 
@@ -34,9 +41,34 @@ interface MmtbDataTableProps {
   search: string
   onSearchChange: (v: string) => void
   onRowClick: (row: MmtbRow) => void
+  open?: boolean
+  onToggle?: () => void
 }
 
-export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: MmtbDataTableProps) {
+export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open = true, onToggle }: MmtbDataTableProps) {
+  if (!open) {
+    return (
+      <div className="h-full flex flex-col items-center justify-between py-3 px-1.5 gap-2 bg-[#0d1117] border border-[#1e2433] rounded-lg overflow-hidden select-none">
+        <span
+          className="text-[8px] font-semibold text-muted-foreground/60 uppercase tracking-widest whitespace-nowrap"
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+        >
+          Danh sách đội máy
+        </span>
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="p-1.5 rounded-lg border border-[#1e2433] bg-[#060b14] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+            aria-label="Mở rộng danh sách đội máy"
+            title="Mở rộng danh sách đội máy"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    )
+  }
   const [sorting, setSorting] = useState<SortingState>([])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
 
@@ -67,7 +99,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
         const s = getValue<EquipmentStatus>()
         return (
           <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[9px] font-bold', STATUS_BADGE[s])}>
-            {s}
+            {STATUS_VI[s]}
           </span>
         )
       },
@@ -118,7 +150,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
     },
     {
       accessorKey: 'utilizationPct',
-      header: 'Utilization',
+      header: 'Sử dụng',
       cell: ({ getValue }) => {
         const v = getValue<number>()
         return (
@@ -141,20 +173,20 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
     },
     {
       accessorKey: 'mtbfHours',
-      header: 'MTBF (h)',
-      cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground text-[10px]">{getValue<number>()}</span>,
+      header: 'Giờ TB không hỏng (h)',
+      cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground text-[10px]">{getValue<number>()}h</span>,
     },
     {
       accessorKey: 'mttrHours',
-      header: 'MTTR (h)',
-      cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground text-[10px]">{getValue<number>()}</span>,
+      header: 'Giờ sửa TB',
+      cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground text-[10px]">{getValue<number>()}h</span>,
     },
     {
       accessorKey: 'pmStatusLabel',
-      header: 'PM Status',
+      header: 'Tình trạng BĐ',
       cell: ({ row }) => {
         const pm = row.original.pmStatus
-        const cls = pm === 'overdue' ? PM_BADGE.overdue : pm === 'upcoming' ? PM_BADGE.upcoming : PM_BADGE.ok
+        const cls = PM_BADGE[pm]
         return (
           <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[9px] font-semibold', cls)}>
             {row.original.pmStatusLabel}
@@ -188,13 +220,13 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
       'Mã máy': r.machineCode,
       'Loại thiết bị': r.equipmentType,
       'Dự án / Vị trí': r.projectLocation,
-      'Trạng thái': r.status,
+      'Trạng thái': STATUS_VI[r.status],
       'Sức khỏe (%)': r.healthScore,
       'Giờ máy (h)': r.engineHours,
-      'Utilization': `${r.utilizationPct}%`,
-      'MTBF (h)': r.mtbfHours,
-      'MTTR (h)': r.mttrHours,
-      'PM Status': r.pmStatusLabel,
+      'Sử dụng (%)': `${r.utilizationPct}%`,
+      'Giờ TB không hỏng (h)': r.mtbfHours,
+      'Giờ sửa TB (h)': r.mttrHours,
+      'Tình trạng BĐ': r.pmStatusLabel,
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -209,8 +241,20 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
     return Array.from({ length: max }, (_, i) => start + i)
   }, [pageCount, currentPage])
 
+  const collapseBtn = onToggle ? (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
+      aria-label="Thu gọn danh sách đội máy"
+      title="Thu gọn"
+    >
+      <ChevronLeft className="w-3.5 h-3.5" />
+    </button>
+  ) : undefined
+
   return (
-    <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0">
+    <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0" headerRight={collapseBtn}>
       <div className="flex flex-col h-full min-h-0">
         <div className="flex flex-col sm:flex-row gap-2 px-3 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
           <div className="relative flex-1">
@@ -224,7 +268,9 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick }: Mmtb
           </div>
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#060b14] border border-[#1e2433] text-[11px] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] hover:border-[#2a3855] transition-colors whitespace-nowrap"
+            title="Bộ lọc nâng cao — chưa triển khai"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#060b14] border border-[#1e2433] text-[11px] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] hover:border-[#2a3855] transition-colors whitespace-nowrap opacity-60 cursor-not-allowed"
+            disabled
           >
             <Filter className="w-3.5 h-3.5" />
             Bộ lọc

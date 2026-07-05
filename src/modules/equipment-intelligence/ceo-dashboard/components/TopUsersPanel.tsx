@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Trophy, Medal } from 'lucide-react'
+import { Trophy, Medal, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type { UsageUnitRow } from '../types'
@@ -39,17 +39,53 @@ function utilBarColor(pct: number): string {
   return 'from-amber-500 to-yellow-400'
 }
 
-export function TopUsersPanel({ units }: { units: UsageUnitRow[] }) {
+export function TopUsersPanel({ units, open = true, onToggle }: { units: UsageUnitRow[]; open?: boolean; onToggle?: () => void }) {
+  if (!open) {
+    return (
+      <div className="flex flex-col items-center justify-between py-3 px-1.5 gap-2 bg-[#0d1117] border border-[#1e2433] rounded-lg overflow-hidden select-none shrink-0">
+        <span
+          className="text-[8px] font-semibold text-muted-foreground/60 uppercase tracking-widest whitespace-nowrap"
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+        >
+          Top 10 đơn vị
+        </span>
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="p-1.5 rounded-lg border border-[#1e2433] bg-[#060b14] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+            aria-label="Mở rộng top 10 đơn vị"
+            title="Mở rộng top 10 đơn vị"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const collapseBtn = onToggle ? (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
+      aria-label="Thu gọn top 10 đơn vị"
+      title="Thu gọn"
+    >
+      <ChevronLeft className="w-3.5 h-3.5" />
+    </button>
+  ) : undefined
+
   return (
-    <Panel title="Top 10 đơn vị sử dụng MMTB" noPadding className="h-full min-h-0" expandable>
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
+    <Panel title="Top 10 đơn vị sử dụng MMTB" noPadding fit expandable headerRight={collapseBtn} className="shrink-0">
+      <div className="overflow-x-auto">
         <table className="w-full text-[10px]">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0b0f1a]/95 backdrop-blur-sm border-b border-[#1e2433]">
               <th className="px-3 py-2.5 text-left w-10 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">#</th>
               <th className="px-3 py-2.5 text-left text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Đơn vị sử dụng</th>
               <th className="px-3 py-2.5 text-right text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Tổng MMTB</th>
-              <th className="px-3 py-2.5 text-left min-w-[120px] pl-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Utilization</th>
+              <th className="px-3 py-2.5 text-left min-w-[120px] pl-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Sử dụng</th>
             </tr>
           </thead>
           <tbody>

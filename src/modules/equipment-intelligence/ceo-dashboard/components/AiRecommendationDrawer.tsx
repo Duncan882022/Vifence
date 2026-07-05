@@ -6,8 +6,11 @@ import {
   ExternalLink,
   Sparkles,
   Truck,
+  Wrench,
 } from 'lucide-react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
+import { useTrialLock } from '@/hooks/useTrialLock'
 import { cn } from '@/utils/cn'
 import type { AiRecommendationRow } from '../types'
 import {
@@ -39,6 +42,7 @@ interface AiRecommendationDrawerProps {
 
 export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommendationDrawerProps) {
   const [tab, setTab] = useState<TabId>('Tổng quan')
+  const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
 
   if (!item) return null
 
@@ -53,12 +57,12 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
       : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="center"
         className="overflow-hidden bg-[#0d1117] border border-[#1e2433] p-0 gap-0 shadow-2xl shadow-black/60"
-      >
-        <div className="flex flex-col max-h-[min(92vh,900px)]">
+      >        <div className="flex flex-col max-h-[min(92vh,900px)]">
           {/* Header */}
           <div className="shrink-0 px-5 pt-5 pb-4 border-b border-[#1e2433]">
             <div className="flex items-center gap-2 mb-4 pr-8">
@@ -266,14 +270,19 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
             </button>
             <button
               type="button"
-              className="flex-1 py-2.5 rounded-lg bg-green-600 hover:bg-green-500 text-[11px] font-bold text-white transition-colors"
+              onClick={showTrial}
+              className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-600 hover:bg-green-500 text-[11px] font-bold text-white transition-colors"
             >
+              <Wrench className="w-3.5 h-3.5" />
               Tạo yêu cầu bảo dưỡng
             </button>
           </div>
         </div>
       </SheetContent>
     </Sheet>
+
+    <TrialLockPopup visible={trialVisible} onDismiss={dismissTrial} />
+  </>
   )
 }
 

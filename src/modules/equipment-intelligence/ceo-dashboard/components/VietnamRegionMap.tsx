@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useId } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, X } from 'lucide-react'
+import { MapPin, X, ChevronRight } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { cn } from '@/utils/cn'
@@ -358,14 +358,36 @@ export function VietnamRegionMap({
 
   if (!open) {
     return (
-      <Panel
-        title="Phân bổ khu vực"
-        fit
-        className="shrink-0"
-        headerRight={headerControls}
-      >
-        {null}
-      </Panel>
+      <div className="h-full flex flex-col items-center justify-between py-3 px-1.5 gap-3 bg-[#0d1117] border border-[#1e2433] rounded-lg overflow-hidden select-none">
+        <div className="flex flex-col items-center gap-2.5">
+          <MapPin className="w-3.5 h-3.5 text-sky-400/70 shrink-0" />
+          <span
+            className="text-[8px] font-semibold text-muted-foreground/50 uppercase tracking-widest whitespace-nowrap"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            Phân bổ vùng
+          </span>
+        </div>
+
+        <span
+          className="text-[9px] font-bold text-primary/60 tabular-nums whitespace-nowrap"
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+        >
+          {totalMachines.toLocaleString('vi-VN')} máy
+        </span>
+
+        {onToggleOpen && (
+          <button
+            type="button"
+            onClick={onToggleOpen}
+            className="p-1.5 rounded-lg border border-[#1e2433] bg-[#060b14] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+            aria-label="Mở rộng bản đồ"
+            title="Mở rộng bản đồ"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
     )
   }
 

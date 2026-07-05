@@ -5,10 +5,13 @@ import { cn } from '@/utils/cn'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { KpiTier } from './components/KpiTier'
 import { MmtbDataTable } from './components/MmtbDataTable'
+import { TopUsersPanel } from './components/TopUsersPanel'
+import { AiRiskPanel } from './components/AiRiskPanel'
 import { VietnamRegionMap } from './components/VietnamRegionMap'
 import { EquipmentDetailDrawer } from './components/EquipmentDetailDrawer'
+import { AiRecommendationDrawer } from './components/AiRecommendationDrawer'
 import { useCeoDashboardData } from './hooks/useCeoDashboardData'
-import type { MmtbRow } from './types'
+import type { AiRecommendationRow, MmtbRow } from './types'
 
 const TIER_EASE = [0.22, 1, 0.36, 1] as const
 
@@ -29,7 +32,12 @@ export function CeoDashboardPage() {
 
   const [selectedMachine, setSelectedMachine] = useState<MmtbRow | null>(null)
   const [machineDrawerOpen, setMachineDrawerOpen] = useState(false)
+  const [selectedAi, setSelectedAi] = useState<AiRecommendationRow | null>(null)
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(true)
+  const [tableOpen, setTableOpen] = useState(true)
+  const [topOpen, setTopOpen] = useState(true)
+  const [aiRiskOpen, setAiRiskOpen] = useState(true)
   const [, setRefreshKey] = useState(0)
 
   const handleRefresh = useCallback(() => {
@@ -87,47 +95,67 @@ export function CeoDashboardPage() {
           </Panel>
         </motion.div>
 
-        {/* Tier 2 — Map | Danh sách Đội máy */}
+        {/* Tier 2+3 — all panels in one flex row */}
         <motion.div
           custom={1}
           variants={TIER_VARIANTS}
           initial="hidden"
           animate="visible"
-          className={cn(
-            'grid grid-cols-1 gap-3 min-h-0 flex-1',
-            mapOpen && 'lg:grid-cols-12 lg:grid-rows-[1fr]',
-          )}
+          className="flex gap-3 min-h-0 flex-1"
         >
-          <div
-            className={cn(
-              'min-h-0 flex flex-col',
-              mapOpen ? 'lg:col-span-5 min-h-[300px] lg:min-h-0' : 'shrink-0',
-            )}
+          {/* Map panel */}
+          <motion.div
+            layout
+            transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+            className={cn('flex flex-col min-h-0 shrink-0 overflow-hidden', mapOpen ? 'w-[25%] min-w-[200px]' : 'w-11')}
           >
             <VietnamRegionMap
               regions={data.regions}
               getMachinesByRegion={getMachinesByRegion}
               open={mapOpen}
-              onToggleOpen={() => setMapOpen(open => !open)}
+              onToggleOpen={() => setMapOpen(v => !v)}
             />
-          </div>
+          </motion.div>
 
-          <div
+          {/* Middle column: Top 10 + AI Risk stacked */}
+          <motion.div
+            layout
+            transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
             className={cn(
-              'min-h-0 flex flex-col',
-              mapOpen ? 'lg:col-span-7 min-h-[320px]' : 'flex-1 min-h-[360px]',
+              'flex flex-col gap-3 shrink-0 overflow-hidden min-h-0',
+              (topOpen || aiRiskOpen) ? 'w-[25%] min-w-[180px]' : 'w-11',
             )}
+          >
+            {/* Top 10 */}
+            <TopUsersPanel
+              units={data.usageUnits}
+              open={topOpen}
+              onToggle={() => setTopOpen(v => !v)}
+            />
+            {/* AI Risk Top 5 */}
+            <AiRiskPanel
+              recommendations={data.aiRecommendations}
+              open={aiRiskOpen}
+              onToggle={() => setAiRiskOpen(v => !v)}
+              onRowClick={(item) => { setSelectedAi(item); setAiDrawerOpen(true) }}
+            />
+          </motion.div>
+
+          {/* Machine list panel */}
+          <motion.div
+            layout
+            transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+            className={cn('flex flex-col min-h-0 overflow-hidden', tableOpen ? 'flex-1 min-w-0' : 'w-11 shrink-0')}
           >
             <MmtbDataTable
               data={filteredMachines}
               search={filters.search}
               onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
-              onRowClick={row => {
-                setSelectedMachine(row)
-                setMachineDrawerOpen(true)
-              }}
+              onRowClick={row => { setSelectedMachine(row); setMachineDrawerOpen(true) }}
+              open={tableOpen}
+              onToggle={() => setTableOpen(v => !v)}
             />
-          </div>
+          </motion.div>
         </motion.div>
       </PageLayout>
 
@@ -135,6 +163,12 @@ export function CeoDashboardPage() {
         machine={selectedMachine}
         open={machineDrawerOpen}
         onOpenChange={setMachineDrawerOpen}
+      />
+
+      <AiRecommendationDrawer
+        item={selectedAi}
+        open={aiDrawerOpen}
+        onOpenChange={setAiDrawerOpen}
       />
     </>
   )

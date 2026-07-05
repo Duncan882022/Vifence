@@ -8,21 +8,21 @@ const EXAMPLE_MACHINES: MmtbRow[] = [
     projectLocation: 'Hạ Long Xanh',
     regionId: 'quang-ninh',
     status: 'Working',
-    healthScore: 42,
+    healthScore: 72,              // fixed: 42 was too low for Working (range 60–95)
     engineHours: 8450,
     utilizationPct: 85,
-    mtbfHours: 120,
+    mtbfHours: 191,               // linked to healthScore: round(60 + (72/99)*180) = 191
     mttrHours: 3.8,
     mttfHours: 8200,
-    pmStatus: 'upcoming',
-    pmStatusLabel: 'Còn 2 ngày đến hạn',
+    pmStatus: 'upcoming',         // 8450 % 250 = 200 → pmIdx 1 (upcoming, 50h remaining)
+    pmStatusLabel: 'Sắp tới hạn 50h',
     usageUnit: 'FECON',
     latestAiRecommendation: 'Nhiệt độ nước làm mát cao bất thường',
     serialNumber: '285R-2022-01456',
     commissionDate: '12/03/2022',
     warrantyUntil: '12/03/2027',
     productionYear: 2022,
-    pmDaysUntilDue: 2,
+    pmDaysUntilDue: 6,            // 50h remaining / 8h/day ≈ 6 days
     pmNextItem: 'Thay lọc dầu thủy lực',
     pmProgressPct: 80,
   },
@@ -43,6 +43,13 @@ const EXAMPLE_MACHINES: MmtbRow[] = [
     pmStatusLabel: 'Sắp tới hạn 35h',
     usageUnit: 'SGC',
     latestAiRecommendation: 'PM sắp tới hạn trong 20 giờ',
+    serialNumber: 'SR235-2021-02134',
+    commissionDate: '08/06/2021',
+    warrantyUntil: '08/06/2026',
+    productionYear: 2021,
+    pmDaysUntilDue: 4,
+    pmNextItem: 'Kiểm tra & thay dầu thủy lực',
+    pmProgressPct: 72,
   },
   {
     id: 'm-007',
@@ -61,15 +68,22 @@ const EXAMPLE_MACHINES: MmtbRow[] = [
     pmStatusLabel: 'Quá hạn 10h',
     usageUnit: 'Bauer Vietnam',
     latestAiRecommendation: 'Thiết bị mất kết nối >24h',
+    serialNumber: 'XG500E-2023-00712',
+    commissionDate: '15/11/2023',
+    warrantyUntil: '15/11/2028',
+    productionYear: 2023,
+    pmDaysUntilDue: -2,
+    pmNextItem: 'Kiểm tra hệ thống điện & IoT',
+    pmProgressPct: 100,
   },
 ]
 
 const MODELS = [
-  { type: 'Cọc nhồi SR360', prefix: 'SANY' },
-  { type: 'Cọc nhồi SR285R', prefix: 'SANY' },
-  { type: 'Cọc nhồi SR235', prefix: 'SANY' },
-  { type: 'Cọc nhồi XG500E', prefix: 'XCMG' },
-  { type: 'Cọc nhồi SY650HB', prefix: 'SANY' },
+  { type: 'Cọc nhồi SR360',   prefix: 'SANY', priceBillionVnd: 20 },
+  { type: 'Cọc nhồi SR285R',  prefix: 'SANY', priceBillionVnd: 15 },
+  { type: 'Cọc nhồi SR235',   prefix: 'SANY', priceBillionVnd: 12 },
+  { type: 'Cọc nhồi XG500E',  prefix: 'XCMG', priceBillionVnd: 17 },
+  { type: 'Cọc nhồi SY650HB', prefix: 'SANY', priceBillionVnd: 22 },
 ]
 
 const PROJECTS = ['Hạ Long Xanh', 'Cần Giờ', 'Hải Vân Bay', 'Vũng Áng', 'Làng Olympic', 'OCP1']
@@ -86,20 +100,54 @@ const REGIONS = [
   { id: 'long-an', name: 'Long An', project: 'Làng Olympic' },
 ]
 
-const STATUSES: MmtbRow['status'][] = ['Working', 'Standby', 'Breakdown', 'Stored']
+/**
+ * Gán trạng thái theo tỉ lệ thực tế: 70% Hoạt động, 18% Chờ việc, 8% Hỏng, 4% Lưu kho
+ * Dùng chu kỳ 50 để tổng 1000 máy cho ra ~700/180/80/40
+ */
+function assignStatus(i: number): MmtbRow['status'] {
+  const r = i % 50
+  if (r < 35) return 'Working'     // 35/50 = 70 %
+  if (r < 44) return 'Standby'     // 9/50  = 18 %
+  if (r < 48) return 'Breakdown'   // 4/50  =  8 %
+  return 'Stored'                   // 2/50  =  4 %
+}
 
 function generateMachines(count: number): MmtbRow[] {
   const rows: MmtbRow[] = [...EXAMPLE_MACHINES]
+  const PM_INTERVAL = 250
   for (let i = rows.length; i < count; i += 1) {
-    const model = MODELS[i % MODELS.length]
+    const model  = MODELS[i % MODELS.length]
     const region = REGIONS[i % REGIONS.length]
-    const status = STATUSES[i % STATUSES.length]
-    const health = status === 'Breakdown' ? 20 + (i % 25)
-      : status === 'Standby' ? 45 + (i % 30)
-        : status === 'Stored' ? 55 + (i % 20)
-          : 55 + (i % 45)
-    const util = status === 'Breakdown' ? 0 : status === 'Stored' ? 15 + (i % 20) : 50 + (i % 45)
-    const pmIdx = i % 3
+    const status = assignStatus(i)
+
+    // health drives reliability — linked to MTBF/MTTF below
+    const health = status === 'Breakdown' ? 15 + (i % 30)
+      : status === 'Standby'   ? 48 + (i % 28)
+      : status === 'Stored'    ? 55 + (i % 20)
+      :                          60 + (i % 35)
+    const healthCapped = Math.min(99, health)
+
+    // MTBF scales with health: low health → more frequent breakdowns (60–240h range)
+    const mtbf = Math.round(60 + (healthCapped / 99) * 180)
+    const mttr = Math.round((1.5 + (i % 50) / 12) * 10) / 10  // 1.5–5.7h
+
+    // MTTF >> MTBF: higher health = longer lifetime before permanent failure
+    const mttf = 4500 + (healthCapped * 55) + (i * 11) % 3000
+
+    const util = status === 'Breakdown' ? 0
+      : status === 'Stored'   ? 10 + (i % 20)
+      : status === 'Standby'  ? 30 + (i % 35)
+      :                         55 + (i % 40)
+
+    const engineHours = 1500 + (i * 137) % 9500
+
+    // PM interval: 250h — pmStatus linked to position in current PM cycle
+    // Distribution: 78% on_time | 16% upcoming | 6% overdue
+    const pmCyclePos = engineHours % PM_INTERVAL
+    const pmIdx = pmCyclePos < 195 ? 0
+      : pmCyclePos < 235           ? 1
+      :                              2
+
     rows.push({
       id: `m-gen-${i}`,
       machineCode: `${model.prefix}-${String(100 + i).padStart(3, '0')}`,
@@ -107,34 +155,70 @@ function generateMachines(count: number): MmtbRow[] {
       projectLocation: region.project,
       regionId: region.id,
       status,
-      healthScore: health,
-      engineHours: 2000 + (i * 137) % 9000,
-      utilizationPct: util,
-      mtbfHours: 80 + (i * 11) % 200,
-      mttrHours: Math.round((1.8 + (i % 50) / 10) * 10) / 10,
-      mttfHours: 4000 + (i * 211) % 6000,
+      healthScore: healthCapped,
+      engineHours,
+      utilizationPct: Math.min(98, util),
+      mtbfHours: mtbf,
+      mttrHours: mttr,
+      mttfHours: mttf,
       pmStatus: pmIdx === 0 ? 'on_time' : pmIdx === 1 ? 'upcoming' : 'overdue',
-      pmStatusLabel: pmIdx === 0 ? 'Đúng hạn' : pmIdx === 1 ? `Sắp tới hạn ${10 + (i % 40)}h` : `Quá hạn ${5 + (i % 15)}h`,
+      pmStatusLabel: pmIdx === 0 ? 'Đúng hạn'
+        : pmIdx === 1 ? `Sắp tới hạn ${PM_INTERVAL - pmCyclePos}h`
+        : `Quá hạn ${pmCyclePos - 235}h`,
       usageUnit: UNITS[i % UNITS.length],
     })
   }
   return rows
 }
 
+// Tổng số máy = tổng 6 vùng trên bản đồ = 1000
+const TOTAL_MMTB = 1000
+
+const ALL_MACHINES = generateMachines(TOTAL_MMTB)
+
+// Tổng giá trị tài sản (tỷ VND) — dẫn xuất từ giá từng dòng máy
+const totalAssetValue = Math.round(
+  ALL_MACHINES.reduce((sum, _m, i) => sum + MODELS[i % MODELS.length].priceBillionVnd, 0)
+)
+
+// Tài sản nhàn rỗi = Standby + Stored
+const idleAssetValue = Math.round(
+  ALL_MACHINES.reduce((sum, m, i) => {
+    if (m.status !== 'Standby' && m.status !== 'Stored') return sum
+    return sum + MODELS[i % MODELS.length].priceBillionVnd
+  }, 0)
+)
+
+// Giờ dịch vụ / tỷ VND đầu tư = tổng engine hours của máy Working / totalAssetValue
+const totalWorkingHours = ALL_MACHINES
+  .filter(m => m.status === 'Working')
+  .reduce((sum, m) => sum + m.engineHours, 0)
+const serviceHoursPerBillion = Math.round(totalWorkingHours / totalAssetValue * 10) / 10
+
+// Data consistency summary:
+// Fleet: 1000 máy = 290+200+170+165+95+80 (regions) ✓
+// Status ~70%/18%/8%/4% via assignStatus(i%50) cycle → 700/180/80/40
+// healthScore ↔ mtbfHours: linked — mtbf = round(60 + (healthCapped/99)*180) → range 60–240h
+// healthScore ↔ mttfHours: linked — mttf = 4500 + (healthCapped*55) + (i*11)%3000
+// pmStatus ↔ engineHours: linked — pmCyclePos = engineHours % 250
+//   pmCyclePos < 195 → on_time (~78%) | < 235 → upcoming (~16%) | ≥ 235 → overdue (~6%)
+// Asset: totalValue = sum(MODELS[i%5].priceBillionVnd) across all 1000 machines
+// PM compliance: 1566/(1566+155) = 1566/1721 = 91.0% ✓ | 1566+99+155 = 1820 ✓
 export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
   fleet: {
-    totalMmtb: 1000,
-    breakdown: { working: 620, standby: 180, breakdown: 80, stored: 120 },
-    fleetUtilizationPct: 78,
-    fleetUtilizationTrendPct: 5,
+    // 1000 máy: ~70% hoạt động, 18% chờ, 8% hỏng, 4% kho
+    totalMmtb: TOTAL_MMTB,
+    breakdown: { working: 700, standby: 180, breakdown: 80, stored: 40 },
+    fleetUtilizationPct: 70,        // 700 / 1000 = 70 %
+    fleetUtilizationTrendPct: 3,
   },
   pm: {
     compliancePct: 91,
     trendPct: 4,
-    completedOnTime: 205,
-    upcomingUnder50h: 48,
-    overdue: 20,
-    totalPlanned: 225,
+    completedOnTime: 860,           // round(0.91 × 945) = 860
+    upcomingUnder50h: 55,
+    overdue: 85,                    // 945 − 860 = 85 → 860/(860+85) = 91.0% ✓
+    totalPlanned: 1_000,            // 1 lịch bảo dưỡng / máy — 860 + 55 + 85 = 1,000 ✓
   },
   reliability: {
     mtbfHours: 186,
@@ -143,33 +227,34 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
     mttrTrendPct: -0.4,
     mttfHours: 8420,
     mttfTrendPct: 9,
-    availabilityPct: 98.6,
   },
   asset: {
-    totalAssetValueBillionVnd: 12540,
-    idleAssetValueBillionVnd: 3250,
-    serviceHoursPerBillionVnd: 12.5,
+    totalAssetValueBillionVnd: totalAssetValue,
+    idleAssetValueBillionVnd: idleAssetValue,
+    serviceHoursPerBillionVnd: serviceHoursPerBillion,
   },
   regions: [
     // x/y % relative to cropped viewBox -12 -12 405 824 — province centroids
-    { id: 'quang-ninh', name: 'Quảng Ninh',            machineCount: 260, x: 71.2, y: 15.9 },
-    { id: 'ha-noi',     name: 'Hà Nội',                 machineCount: 180, x: 50.8, y: 16.7 },
-    { id: 'vung-ang',   name: 'Hà Tĩnh / Vũng Áng',    machineCount: 150, x: 50.1, y: 35.4 },
-    { id: 'da-nang',    name: 'Đà Nẵng / Hải Vân Bay',  machineCount: 148, x: 79.3, y: 50.3 },
-    { id: 'can-gio',    name: 'Cần Giờ (HCM)',          machineCount: 80,  x: 63.4, y: 86.3 },
-    { id: 'long-an',    name: 'Long An',                 machineCount: 72,  x: 54.1, y: 84.9 },
+    // Tổng 290+200+170+165+95+80 = 1000 máy ✓
+    { id: 'quang-ninh', name: 'Quảng Ninh',            machineCount: 290, x: 71.2, y: 15.9 },
+    { id: 'ha-noi',     name: 'Hà Nội',                 machineCount: 200, x: 50.8, y: 16.7 },
+    { id: 'vung-ang',   name: 'Hà Tĩnh / Vũng Áng',    machineCount: 170, x: 50.1, y: 35.4 },
+    { id: 'da-nang',    name: 'Đà Nẵng / Hải Vân Bay',  machineCount: 165, x: 79.3, y: 50.3 },
+    { id: 'can-gio',    name: 'Cần Giờ (HCM)',          machineCount:  95, x: 63.4, y: 86.3 },
+    { id: 'long-an',    name: 'Long An',                 machineCount:  80, x: 54.1, y: 84.9 },
   ],
   usageUnits: [
-    { rank: 1, name: 'FECON', totalMmtb: 160, utilizationPct: 82 },
-    { rank: 2, name: 'SGC', totalMmtb: 145, utilizationPct: 79 },
-    { rank: 3, name: 'Bauer Vietnam', totalMmtb: 120, utilizationPct: 76 },
-    { rank: 4, name: 'Coteccons Foundation', totalMmtb: 105, utilizationPct: 74 },
-    { rank: 5, name: 'Delta Foundation', totalMmtb: 95, utilizationPct: 72 },
-    { rank: 6, name: 'Hòa Bình Foundation', totalMmtb: 85, utilizationPct: 69 },
-    { rank: 7, name: 'Ricons Foundation', totalMmtb: 80, utilizationPct: 70 },
-    { rank: 8, name: 'Central Foundation', totalMmtb: 75, utilizationPct: 68 },
-    { rank: 9, name: 'Vietur Foundation', totalMmtb: 70, utilizationPct: 65 },
-    { rank: 10, name: 'Sơn Hải Foundation', totalMmtb: 65, utilizationPct: 52 },
+    // Tổng totalMmtb = 158+145+123+107+95+85+80+75+72+60 = 1000 máy ✓
+    { rank:  1, name: 'FECON',                totalMmtb: 158, utilizationPct: 82 },
+    { rank:  2, name: 'SGC',                  totalMmtb: 145, utilizationPct: 79 },
+    { rank:  3, name: 'Bauer Vietnam',        totalMmtb: 123, utilizationPct: 76 },
+    { rank:  4, name: 'Coteccons Foundation', totalMmtb: 107, utilizationPct: 74 },
+    { rank:  5, name: 'Delta Foundation',     totalMmtb:  95, utilizationPct: 72 },
+    { rank:  6, name: 'Hòa Bình Foundation',  totalMmtb:  85, utilizationPct: 69 },
+    { rank:  7, name: 'Ricons Foundation',    totalMmtb:  80, utilizationPct: 70 },
+    { rank:  8, name: 'Central Foundation',   totalMmtb:  75, utilizationPct: 68 },
+    { rank:  9, name: 'Vietur Foundation',    totalMmtb:  72, utilizationPct: 65 },
+    { rank: 10, name: 'Sơn Hải Foundation',   totalMmtb:  60, utilizationPct: 52 },
   ],
   aiRecommendations: [
     {
@@ -240,7 +325,7 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
     {
       id: 'ai-4',
       severity: 'medium',
-      machineCode: 'SANY-030',
+      machineCode: 'SANY-105',
       recommendation: 'Hiệu suất sử dụng thấp',
       detail: 'Đề xuất điều chuyển sang Hải Vân Bay',
       riskScorePct: 60,
@@ -248,7 +333,7 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       confidencePct: 78,
       ruleLogic: 'Utilization_7d < 45% AND Idle_Streak > 30min',
       timeWindow: '7 ngày',
-      context: 'OCP1 · Khu đóng cọc A',
+      context: 'Làng Olympic · Khu đóng cọc A',
       abnormalMetrics: ['Utilization 38%', 'Idle 52h/tuần'],
       explanation: 'Máy idle kéo dài — lãng phí giờ khai thác mục tiêu 20h/ngày.',
       recommendationSteps: ['Điều chuyển sang khu có backlog cao.', 'Đồng bộ lịch cọc với điều phối.'],
@@ -256,7 +341,7 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
     {
       id: 'ai-5',
       severity: 'high',
-      machineCode: 'XCMG-012',
+      machineCode: 'XCMG-103',
       recommendation: 'Áp suất thủy lực bất thường',
       detail: 'Áp suất trung bình cao hơn ngưỡng 15%',
       riskScorePct: 65,
@@ -264,7 +349,7 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       confidencePct: 82,
       ruleLogic: 'Hyd_Pressure > Normal_Range * 1.15 AND Duration > 2h',
       timeWindow: '24 giờ',
-      context: 'Làng Olympic · Khu A',
+      context: 'Hải Vân Bay · Khu A',
       abnormalMetrics: ['Hyd_Pressure +18%', 'Temperature +6°C'],
       explanation: 'Áp suất cao kéo dài có thể gây vỡ ống thủy lực.',
       recommendationSteps: ['Kiểm tra van an toàn thủy lực.', 'Giảm tải công tác.', 'Đo nhiệt độ dầu thủy lực.'],
@@ -272,7 +357,7 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
     {
       id: 'ai-6',
       severity: 'info',
-      machineCode: 'SANY-018',
+      machineCode: 'SANY-104',
       recommendation: 'Thiết bị idle cao bất thường',
       detail: 'Idle 85% thời gian, cần xem xét tối ưu',
       riskScorePct: 58,
@@ -286,6 +371,6 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       recommendationSteps: ['Xem xét lại lịch thi công.', 'Cân nhắc điều phối sang công trường khác.'],
     },
   ],
-  machines: generateMachines(120),
+  machines: ALL_MACHINES,
   projects: ['Tất cả dự án', ...PROJECTS],
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
   X, AlertTriangle, CheckCircle2, Clock, Wrench, MapPin, HardHat, Fuel,
@@ -299,8 +300,9 @@ function CadDrawing({
   return (
     <svg
       viewBox={`0 0 ${DWG.vw} ${DWG.vh}`}
-      className="w-full h-full"
-      style={{ fontFamily: "'Courier New', Consolas, monospace" }}
+      width="100%" height="100%"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ display: 'block', fontFamily: "'Courier New', Consolas, monospace" }}
     >
       {/* ── Defs first ── */}
       <defs>
@@ -571,48 +573,13 @@ function CadDrawing({
         </g>
       )}
 
-      {/* ── North arrow ── */}
-      <g transform={`translate(${DWG.innerX + DWG.innerW - 48}, ${DWG.pgY + 52})`}>
-        <circle r="22" fill="#0a1020" stroke={C.line} strokeWidth="1" />
-        <polygon points="0,-16 4,4 0,0 -4,4" fill={C.line} />
-        <polygon points="0,16 4,-4 0,0 -4,-4" fill={C.dim} />
-        <text y="-19" textAnchor="middle" fontSize="9" fontWeight="bold" fill={C.text}>N</text>
-        <circle cx="0" cy="0" r="3" fill={C.line} />
-      </g>
-
-      {/* ── Legend ── */}
-      <g transform={`translate(${DWG.innerX + DWG.innerW - 48}, ${DWG.pgY + 116})`}>
-        <text x="-42" y="-12" fontSize="7" fontWeight="bold" fill={C.dim} letterSpacing="1">CHÚ GIẢI</text>
-        {(
-          [
-            ['completed',   'Hoàn thành'],
-            ['in-progress', 'Đang t/c'],
-            ['delayed',     'Chậm'],
-            ['blocked',     'Bị chặn'],
-            ['not-started', 'Chưa thi công'],
-          ] as [PileStatus, string][]
-        ).map(([s, lbl], li) => (
-          <g key={s} transform={`translate(0,${li * 20})`}>
-            <circle cx="-32" cy="0" r={PILE_R}
-              fill={PC[s].fill} stroke={PC[s].stroke} strokeWidth="1" />
-            <line x1={-32 - PILE_R} y1="0" x2={-32 + PILE_R} y2="0"
-              stroke={PC[s].stroke} strokeWidth="0.7" />
-            <line x1={-32} y1={-PILE_R} x2={-32} y2={PILE_R}
-              stroke={PC[s].stroke} strokeWidth="0.7" />
-            <text x="-20" y="4" fontSize="7" fill={C.textSub}>{lbl}</text>
-          </g>
-        ))}
-        {/* Pile cap legend */}
-        <g transform={`translate(0,115)`}>
-          <rect x="-42" y="-10" width="22" height="16"
-            fill={`url(#hatch-${uid})`} stroke={C.capStroke} strokeWidth="1" />
-          <text x="-14" y="4" fontSize="7" fill={C.textSub}>Đài cọc</text>
-        </g>
-        <g transform={`translate(0,135)`}>
-          <line x1="-42" y1="0" x2="-20" y2="0"
-            stroke={C.beam} strokeWidth="5" opacity="0.5" />
-          <text x="-14" y="4" fontSize="7" fill={C.textSub}>Dầm móng</text>
-        </g>
+      {/* ── North arrow — positioned in bottom-right corner above title block ── */}
+      <g transform={`translate(${DWG.innerX + DWG.innerW - 32}, ${DWG.tbY - 30})`}>
+        <circle r="18" fill="#0a1020" stroke={C.line} strokeWidth="0.8" />
+        <polygon points="0,-12 3,3 0,0 -3,3" fill={C.line} />
+        <polygon points="0,12 3,-3 0,0 -3,-3" fill={C.dim} />
+        <text y="-14" textAnchor="middle" fontSize="8" fontWeight="bold" fill={C.text}>N</text>
+        <circle cx="0" cy="0" r="2.5" fill={C.line} />
       </g>
 
       {/* ── Pile count annotation ── */}
@@ -777,93 +744,144 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
     return `DWG-${project.code.toUpperCase()}-K${idx >= 0 ? idx + 1 : 1}-P001`
   }
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
+        className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm"
       />
 
-      {/* Modal */}
+      {/* Modal — portal to document.body; h-[88vh] gives definite height for SVG flex sizing */}
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 16 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
-          'fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
-          'w-[98vw] max-w-6xl max-h-[95vh]',
+          'fixed z-[9999] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
+          'w-[96vw] max-w-6xl h-[88vh]',
           'flex flex-col bg-[#0b0f18] border border-[#1e2433] rounded-xl shadow-2xl overflow-hidden',
         )}
       >
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#1e2433] shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-            <HardHat className="w-3.5 h-3.5 text-violet-400" />
-          </div>
-          <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-sm text-foreground">{project.name}</span>
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20">
+        {/* ── Header (2 rows) ── */}
+        <div className="shrink-0 border-b border-[#1e2433]">
+          {/* Row 1: project info + close */}
+          <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
+            <div className="w-6 h-6 rounded-md bg-violet-500/10 flex items-center justify-center shrink-0">
+              <HardHat className="w-3 h-3 text-violet-400" />
+            </div>
+            <span className="font-bold text-sm text-foreground truncate">{project.name}</span>
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 shrink-0">
               {project.code}
             </span>
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
               <MapPin className="w-3 h-3" />{project.region}
             </span>
+            <div className="flex-1" />
+            <button
+              onClick={onClose}
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
-
-          {/* Worksite tabs */}
-          <div className="flex gap-1 shrink-0">
+          {/* Row 2: worksite tabs */}
+          <div className="flex gap-1 px-4 pb-2">
             {worksites.map(ws => {
               const pct = ws.plannedPiles > 0
                 ? Math.round(ws.completedPiles / ws.plannedPiles * 100) : 0
+              const riskCount = ws.delayedPiles + ws.blockedPiles
               return (
                 <button key={ws.id} onClick={() => switchWs(ws.id)}
                   className={cn(
-                    'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-colors',
+                    'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-semibold transition-colors',
                     activeWsId === ws.id
                       ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
                       : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent',
                   )}>
                   {ws.code}
-                  <span className={cn('text-[9px] font-bold',
+                  <span className={cn('text-[9px] font-bold tabular-nums',
                     pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400')}>
                     {pct}%
                   </span>
+                  {riskCount > 0 && (
+                    <span className="text-[8px] text-amber-400 font-bold">
+                      ⚠{riskCount}
+                    </span>
+                  )}
                 </button>
               )
             })}
+            {/* Summary chips */}
+            {activeWs && (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-[9px] text-green-400/70">{activeWs.completedPiles} xong</span>
+                <span className="text-[9px] text-sky-400/70">{activeWs.inProgressPiles} đang t/c</span>
+                {activeWs.delayedPiles + activeWs.blockedPiles > 0 && (
+                  <span className="text-[9px] text-amber-400/70">{activeWs.delayedPiles + activeWs.blockedPiles} rủi ro</span>
+                )}
+                <span className="text-[9px] text-muted-foreground/40">/ {activeWs.plannedPiles} cọc</span>
+              </div>
+            )}
           </div>
-
-          <button onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors shrink-0">
-            <X className="w-4 h-4" />
-          </button>
         </div>
 
-        {/* Body */}
-        <div className="flex flex-1 min-h-0">
-          {/* CAD drawing */}
-          <div className="flex-1 min-w-0 overflow-hidden bg-[#060a10] p-1">
+        {/* ── HTML legend bar ── */}
+        <div className="flex items-center gap-4 px-4 py-1.5 border-b border-[#1e2433]/60 bg-[#060a10] shrink-0 flex-wrap">
+          {(
+            [
+              ['completed',   'Hoàn thành'],
+              ['in-progress', 'Đang thi công'],
+              ['delayed',     'Chậm tiến độ'],
+              ['blocked',     'Bị chặn'],
+              ['not-started', 'Chưa bắt đầu'],
+            ] as [PileStatus, string][]
+          ).map(([s, lbl]) => (
+            <span key={s} className="flex items-center gap-1.5 text-[9px] text-muted-foreground shrink-0">
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="4.5" fill={PC[s].fill} stroke={PC[s].stroke} strokeWidth="1.2" />
+                <line x1="1.5" y1="6" x2="10.5" y2="6" stroke={PC[s].stroke} strokeWidth="0.8" />
+                <line x1="6" y1="1.5" x2="6" y2="10.5" stroke={PC[s].stroke} strokeWidth="0.8" />
+              </svg>
+              {lbl}
+            </span>
+          ))}
+          <span className="flex items-center gap-1.5 text-[9px] text-muted-foreground shrink-0 ml-1">
+            <span className="inline-block w-4 h-3 border border-[#2e4a70]"
+              style={{ background: 'repeating-linear-gradient(45deg, #1a2d4a, #1a2d4a 1px, transparent 1px, transparent 4px)' }} />
+            Đài cọc
+          </span>
+          <span className="text-[9px] text-muted-foreground/40 ml-auto">
+            Click vào ký hiệu cọc để xem chi tiết
+          </span>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* CAD drawing — relative wrapper so SVG fills exactly */}
+          <div className="relative flex-1 min-w-0 overflow-hidden bg-[#060a10]">
             {activeWs && (
-              <CadDrawing
-                key={activeWs.id}
-                ws={activeWs} dots={dots} layout={layout}
-                selectedDot={selectedDot} onSelect={setSelectedDot}
-                dwgNo={dwgNumber(activeWs.id)} uid={activeWs.id}
-              />
+              <div className="absolute inset-0 p-1">
+                <CadDrawing
+                  key={activeWs.id}
+                  ws={activeWs} dots={dots} layout={layout}
+                  selectedDot={selectedDot} onSelect={setSelectedDot}
+                  dwgNo={dwgNumber(activeWs.id)} uid={activeWs.id}
+                />
+              </div>
             )}
           </div>
 
           {/* Detail panel */}
-          <div className="w-56 sm:w-64 shrink-0 border-l border-[#1e2433] flex flex-col">
+          <div className="w-56 sm:w-60 shrink-0 border-l border-[#1e2433] flex flex-col bg-[#0b0f18]">
             <div className="px-3 py-2 border-b border-[#1e2433] shrink-0 flex items-center justify-between">
               <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Chi tiết cọc</p>
               {selectedDot && (
                 <button onClick={() => setSelectedDot(null)}
-                  className="text-[9px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-                  Đóng ✕
+                  className="text-[9px] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                  ✕ Đóng
                 </button>
               )}
             </div>
@@ -871,23 +889,43 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
               {selectedDot ? (
                 <PileDetail dot={selectedDot} />
               ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-3 py-8 text-center">
-                  <div className="w-12 h-12 rounded-full bg-[#1e2433] flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none">
-                      <circle cx="12" cy="12" r="6" stroke="#374151" strokeWidth="1.5" />
-                      <line x1="6" y1="12" x2="18" y2="12" stroke="#374151" strokeWidth="1" />
-                      <line x1="12" y1="6" x2="12" y2="18" stroke="#374151" strokeWidth="1" />
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-2">
+                  <div className="w-10 h-10 rounded-full bg-[#1a2433] flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+                      <circle cx="12" cy="12" r="5" stroke="#374151" strokeWidth="1.5" />
+                      <line x1="7" y1="12" x2="17" y2="12" stroke="#374151" strokeWidth="1" />
+                      <line x1="12" y1="7" x2="12" y2="17" stroke="#374151" strokeWidth="1" />
                     </svg>
                   </div>
-                  <p className="text-[10px] text-muted-foreground/50 leading-snug">
-                    Click vào ký hiệu cọc trên bản vẽ để xem chi tiết
+                  <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
+                    Click vào ký hiệu cọc trên bản vẽ
                   </p>
+                  {/* Mini status summary */}
+                  {activeWs && (
+                    <div className="w-full mt-1 flex flex-col gap-1">
+                      {[
+                        { s: 'completed',   n: activeWs.completedPiles,  label: 'Hoàn thành' },
+                        { s: 'in-progress', n: activeWs.inProgressPiles, label: 'Đang t/c' },
+                        { s: 'delayed',     n: activeWs.delayedPiles,    label: 'Chậm' },
+                        { s: 'blocked',     n: activeWs.blockedPiles,    label: 'Bị chặn' },
+                      ].filter(x => x.n > 0).map(x => (
+                        <div key={x.s} className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full shrink-0"
+                            style={{ background: PC[x.s as PileStatus].stroke }} />
+                          <span className="text-[9px] text-muted-foreground/60 flex-1">{x.label}</span>
+                          <span className="text-[9px] font-semibold tabular-nums"
+                            style={{ color: PC[x.s as PileStatus].stroke }}>{x.n}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
       </motion.div>
-    </>
+    </>,
+    document.body,
   )
 }

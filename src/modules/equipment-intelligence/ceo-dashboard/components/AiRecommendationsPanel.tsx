@@ -4,11 +4,11 @@ import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type { AiRecommendationRow, AiSeverity } from '../types'
 
-const SEV: Record<AiSeverity, { Icon: typeof AlertCircle; cls: string; bg: string; border: string }> = {
-  critical: { Icon: AlertCircle, cls: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/25' },
-  high: { Icon: AlertTriangle, cls: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/25' },
-  medium: { Icon: AlertTriangle, cls: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/25' },
-  info: { Icon: Info, cls: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/25' },
+const SEV: Record<AiSeverity, { Icon: typeof AlertCircle; cls: string; bg: string; border: string; label: string }> = {
+  critical: { Icon: AlertCircle,   cls: 'text-red-400',    bg: 'bg-red-500/10',    border: 'border-red-500/25',    label: 'Nghiêm trọng' },
+  high:     { Icon: AlertTriangle, cls: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/25', label: 'Cao' },
+  medium:   { Icon: AlertTriangle, cls: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/25',  label: 'Trung bình' },
+  info:     { Icon: Info,          cls: 'text-sky-400',    bg: 'bg-sky-500/10',    border: 'border-sky-500/25',    label: 'Thông tin' },
 }
 
 function riskColor(score: number): string {
@@ -25,14 +25,16 @@ interface AiRecommendationsPanelProps {
 export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPanelProps) {
   return (
     <Panel
-      title="AI Recommendations"
+      title="Khuyến nghị AI"
       noPadding
       expandable
       className="h-full min-h-0"
       headerRight={(
         <button
           type="button"
-          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] text-primary hover:text-primary/80 hover:bg-primary/10 font-semibold transition-colors"
+          title="Xem tất cả — chưa triển khai"
+          disabled
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] text-primary/50 font-semibold cursor-not-allowed opacity-60"
         >
           Xem tất cả
           <ArrowRight className="w-3 h-3" />
@@ -43,7 +45,7 @@ export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPan
         <div className="flex items-center gap-2 px-3 py-2 bg-[#0b0f1a] border-b border-[#1e2433] shrink-0">
           <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
           <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex-1">
-            Khuyến nghị thông minh
+            Phân tích & đề xuất
           </span>
           <span className="text-[9px] text-muted-foreground tabular-nums">{items.length} mục</span>
         </div>
@@ -72,10 +74,10 @@ export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPan
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-[10px] font-bold text-primary">{item.machineCode}</span>
                     <span className={cn(
-                      'text-[8px] font-semibold uppercase px-1.5 py-0.5 rounded border',
+                      'text-[8px] font-semibold px-1.5 py-0.5 rounded border',
                       bg, border, cls,
                     )}>
-                      {item.severity}
+                      {SEV[item.severity].label}
                     </span>
                   </div>
                   <p className="text-[10px] font-medium text-foreground leading-snug line-clamp-1">
@@ -92,7 +94,7 @@ export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPan
                   <span className={cn('text-[13px] font-bold tabular-nums', riskColor(item.riskScorePct))}>
                     {item.riskScorePct}%
                   </span>
-                  <span className="text-[8px] text-muted-foreground uppercase">Risk</span>
+                  <span className="text-[8px] text-muted-foreground">Rủi ro</span>
                 </div>
 
                 <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0 mt-1" />
@@ -103,7 +105,7 @@ export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPan
 
         <div className="px-3 py-2.5 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/50">
           <p className="text-[10px] text-muted-foreground">
-            Hiển thị {items.length} trong tổng số 18 khuyến nghị
+            Hiển thị {items.length} trong tổng số 18 đề xuất
           </p>
         </div>
       </div>

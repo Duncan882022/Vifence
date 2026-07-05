@@ -33,7 +33,7 @@ export interface ReliabilityKpi {
   mttrTrendPct: number
   mttfHours: number
   mttfTrendPct: number
-  /** MTBF / (MTBF + MTTR) × 100 */
+  /** Độ sẵn sàng: MTBF / (MTBF + MTTR) × 100 */
   availabilityPct?: number
 }
 

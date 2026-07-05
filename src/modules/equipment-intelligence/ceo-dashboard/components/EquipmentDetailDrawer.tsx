@@ -41,11 +41,7 @@ export function EquipmentDetailDrawer({ machine, open, onOpenChange }: Equipment
   if (!machine || !detail) return null
 
   const ai = detail.aiRecommendation
-  const pmDueLabel = detail.pmDaysUntilDue < 0
-    ? `Quá hạn ${Math.abs(detail.pmDaysUntilDue)} ngày`
-    : detail.pmDaysUntilDue === 0
-      ? 'Đến hạn hôm nay'
-      : `Còn ${detail.pmDaysUntilDue} ngày đến hạn`
+  const pmDueLabel = machine.pmStatusLabel
 
   return (
     <>
@@ -172,7 +168,7 @@ export function EquipmentDetailDrawer({ machine, open, onOpenChange }: Equipment
                   <InfoCard title="PM Status">
                     <p className={cn(
                       'text-[12px] font-bold mb-2',
-                      detail.pmDaysUntilDue <= 0 ? 'text-red-400' : detail.pmDaysUntilDue <= 3 ? 'text-amber-400' : 'text-green-400',
+                      machine.pmStatus === 'overdue' ? 'text-red-400' : machine.pmStatus === 'upcoming' ? 'text-amber-400' : 'text-green-400',
                     )}>
                       {pmDueLabel}
                     </p>
