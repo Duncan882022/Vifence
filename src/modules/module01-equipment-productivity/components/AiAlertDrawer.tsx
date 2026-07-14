@@ -1,8 +1,6 @@
-import { AlertTriangle, CheckCircle2, DollarSign, Sparkles, TrendingUp, Truck } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Sparkles, TrendingUp } from 'lucide-react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { cn } from '@/utils/cn'
-import { useTrialLock } from '@/hooks/useTrialLock'
-import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import type { AiAlert, AiSeverity } from '../types'
 
 const SEV_CONFIG: Record<AiSeverity, { label: string; cls: string; dot: string }> = {
@@ -30,8 +28,6 @@ interface Props {
 }
 
 export function AiAlertDrawer({ alert, open, onOpenChange }: Props) {
-  const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
-
   if (!alert) return null
   const sev = SEV_CONFIG[alert.severity]
 
@@ -102,51 +98,11 @@ export function AiAlertDrawer({ alert, open, onOpenChange }: Props) {
                 </ol>
               </Section>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-1">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-400/70">Lợi ích kỳ vọng</p>
-                  <p className="text-[11px] text-foreground/90 leading-relaxed">{alert.benefit}</p>
-                </div>
-                <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <DollarSign className="w-3 h-3 text-yellow-400" />
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-yellow-400/70">Tiết kiệm chi phí</p>
-                  </div>
-                  <p className="text-[13px] font-black text-yellow-400 tabular-nums">{alert.costSavingEstimate}</p>
-                </div>
-              </div>
             </div>
 
-            {/* Footer */}
-            <div className="shrink-0 flex gap-3 px-5 py-4 border-t border-[#1e2433] bg-[#0b0f1a]/80">
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="flex-1 py-2.5 rounded-lg border border-[#1e2433] text-[11px] font-semibold text-foreground hover:bg-[#1a2235] transition-colors"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                onClick={showTrial}
-                className="flex-1 py-2.5 rounded-lg bg-sky-600/80 hover:bg-sky-600 text-[11px] font-bold text-white transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Truck className="w-3.5 h-3.5" />
-                Điều chuyển máy
-              </button>
-              <button
-                type="button"
-                onClick={showTrial}
-                className="flex-1 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-[11px] font-bold text-primary-foreground transition-colors"
-              >
-                Xuất báo cáo
-              </button>
-            </div>
           </div>
         </SheetContent>
       </Sheet>
-
-      <TrialLockPopup visible={trialVisible} onDismiss={dismissTrial} />
     </>
   )
 }

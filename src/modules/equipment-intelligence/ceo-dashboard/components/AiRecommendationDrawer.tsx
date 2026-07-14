@@ -3,14 +3,22 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  ExternalLink,
   Sparkles,
   Truck,
-  Wrench,
 } from 'lucide-react'
+
+const STATUS_VI: Record<string, string> = {
+  Working: 'Đang hoạt động',
+  Standby: 'Chờ việc',
+  Breakdown: 'Hỏng hóc',
+  Stored: 'Lưu kho',
+}
+
+const CONNECTION_VI: Record<string, string> = {
+  Online: 'Trực tuyến',
+  Offline: 'Mất kết nối',
+}
 import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
-import { useTrialLock } from '@/hooks/useTrialLock'
 import { cn } from '@/utils/cn'
 import type { AiRecommendationRow } from '../types'
 import {
@@ -25,8 +33,7 @@ import {
 
 const TABS = [
   'Tổng quan',
-  'Rule Dictionary',
-  'Logic kích hoạt',
+  'Logic AI',
   'Diễn giải',
   'Khuyến nghị',
   'Lịch sử',
@@ -42,7 +49,6 @@ interface AiRecommendationDrawerProps {
 
 export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommendationDrawerProps) {
   const [tab, setTab] = useState<TabId>('Tổng quan')
-  const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
 
   if (!item) return null
 
@@ -57,7 +63,6 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
       : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
 
   return (
-    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="center"
@@ -68,7 +73,7 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
             <div className="flex items-center gap-2 mb-4 pr-8">
               <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
               <h2 className="text-sm font-bold text-foreground uppercase tracking-wide">
-                CHI TIẾT AI RECOMMENDATION
+                CHI TIẾT KHUYẾN NGHỊ AI
               </h2>
             </div>
 
@@ -85,7 +90,7 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
                       'text-[9px] font-semibold px-2 py-0.5 rounded border uppercase',
                       statusBadgeCls,
                     )}>
-                      {machine.status}
+                      {STATUS_VI[machine.status] ?? machine.status}
                     </span>
                   )}
                 </div>
@@ -99,10 +104,10 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
             </div>
 
             <div className="grid grid-cols-3 gap-3 mt-4">
-              <KpiBox label="Risk Score" value={`${item.riskScorePct}%`} valueClass={aiRiskColor(item.riskScorePct)} />
-              <KpiBox label="Confidence" value={`${item.confidencePct}%`} valueClass="text-green-400" />
+              <KpiBox label="Điểm rủi ro" value={`${item.riskScorePct}%`} valueClass={aiRiskColor(item.riskScorePct)} />
+              <KpiBox label="Độ tin cậy" value={`${item.confidencePct}%`} valueClass="text-green-400" />
               <KpiBox
-                label="Severity"
+                label="Mức độ"
                 value={severityLabel(item.severity)}
                 valueClass={cls}
               />
@@ -136,7 +141,7 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
                   <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                     <InfoRow label="Máy" value={item.machineCode} />
                     <InfoRow
-                      label="Health Score"
+                      label="Sức khỏe máy"
                       value={machine ? `${machine.healthScore} / 100` : '—'}
                       valueClass={machine && machine.healthScore < 50 ? 'text-red-400' : undefined}
                     />
@@ -144,7 +149,7 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
                     <InfoRow label="Giờ máy" value={machine ? formatEngineHours(machine.engineHours) : '—'} />
                     <InfoRow label="Khu vực" value={machine ? getRegionName(machine.regionId) : '—'} />
                     <InfoRow label="Năm sản xuất" value={String(item.manufactureYear ?? '—')} />
-                    <InfoRow label="Trạng thái" value={machine?.status ?? '—'} />
+                    <InfoRow label="Trạng thái" value={machine ? (STATUS_VI[machine.status] ?? machine.status) : '—'} />
                     <InfoRow
                       label="Kết nối"
                       value={(
@@ -154,7 +159,7 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
                             ? 'bg-green-500/15 text-green-400 border-green-500/30'
                             : 'bg-red-500/15 text-red-400 border-red-500/30',
                         )}>
-                          {item.connectionStatus ?? 'Online'}
+                          {CONNECTION_VI[item.connectionStatus ?? 'Online'] ?? (item.connectionStatus ?? 'Online')}
                         </span>
                       )}
                     />
@@ -164,11 +169,11 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
                 <Section title="THÔNG TIN CẢNH BÁO">
                   <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                     <InfoRow label="Rule ID" value={item.ruleId} />
-                    <InfoRow label="First Occurrence" value={item.firstOccurrence ?? '—'} />
-                    <InfoRow label="Type" value={item.ruleType ?? 'COMBINE_METRIC'} />
-                    <InfoRow label="Last Occurrence" value={item.lastOccurrence ?? '—'} />
+                    <InfoRow label="Lần đầu xảy ra" value={item.firstOccurrence ?? '—'} />
+                    <InfoRow label="Loại quy tắc" value={item.ruleType ?? 'COMBINE_METRIC'} />
+                    <InfoRow label="Lần cuối xảy ra" value={item.lastOccurrence ?? '—'} />
                     <InfoRow
-                      label="Severity"
+                      label="Mức độ"
                       value={severityLabel(item.severity)}
                       valueClass={cls}
                     />
@@ -213,11 +218,11 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
               </div>
             )}
 
-            {(tab === 'Rule Dictionary' || tab === 'Logic kích hoạt') && (
-              <Section title={tab === 'Rule Dictionary' ? 'RULE DICTIONARY' : 'LOGIC KÍCH HOẠT'}>
+            {tab === 'Logic AI' && (
+              <Section title="LOGIC KÍCH HOẠT">
                 <p className="text-[11px] text-foreground font-mono leading-relaxed">{item.ruleLogic}</p>
                 <p className="text-[10px] text-muted-foreground mt-3">
-                  Time window: {item.timeWindow}
+                  Cửa sổ thời gian: {item.timeWindow}
                 </p>
               </Section>
             )}
@@ -258,31 +263,9 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
             )}
           </div>
 
-          {/* Footer */}
-          <div className="shrink-0 flex items-center gap-3 px-5 py-4 border-t border-[#1e2433] bg-[#0b0f1a]/80">
-            <button
-              type="button"
-              onClick={() => setTab('Lịch sử')}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[#1e2433] text-[11px] font-semibold text-foreground hover:bg-[#1a2235] transition-colors"
-            >
-              Xem lịch sử chi tiết
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={showTrial}
-              className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-600 hover:bg-green-500 text-[11px] font-bold text-white transition-colors"
-            >
-              <Wrench className="w-3.5 h-3.5" />
-              Tạo yêu cầu bảo dưỡng
-            </button>
-          </div>
         </div>
       </SheetContent>
     </Sheet>
-
-    <TrialLockPopup visible={trialVisible} onDismiss={dismissTrial} />
-  </>
   )
 }
 

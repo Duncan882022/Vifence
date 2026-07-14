@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { Bell, Sparkles, ArrowRight } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Bell, Sparkles, ChevronDown } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useEquipmentAiNotifications } from '../store/equipmentAiNotifications.store'
 import { AiRecommendationListItem } from './AiRecommendationListItem'
@@ -8,6 +8,7 @@ const DROPDOWN_PREVIEW = 5
 
 export function EquipmentAiNotificationBell() {
   const rootRef = useRef<HTMLDivElement>(null)
+  const [visibleCount, setVisibleCount] = useState(DROPDOWN_PREVIEW)
   const {
     items,
     unreadIds,
@@ -18,10 +19,14 @@ export function EquipmentAiNotificationBell() {
   } = useEquipmentAiNotifications()
 
   const count = unreadCount()
-  const preview = items.slice(0, DROPDOWN_PREVIEW)
+  const displayed = items.slice(0, visibleCount)
+  const remaining = items.length - visibleCount
 
   useEffect(() => {
-    if (!dropdownOpen) return
+    if (!dropdownOpen) {
+      setVisibleCount(DROPDOWN_PREVIEW)
+      return
+    }
     const onPointerDown = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setDropdownOpen(false)
     }
@@ -77,12 +82,12 @@ export function EquipmentAiNotificationBell() {
           </div>
 
           <div className="max-h-[min(420px,60vh)] overflow-y-auto">
-            {preview.length === 0 ? (
+            {displayed.length === 0 ? (
               <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">
                 Không có khuyến nghị mới
               </p>
             ) : (
-              preview.map(item => (
+              displayed.map(item => (
                 <AiRecommendationListItem
                   key={item.id}
                   item={item}
@@ -94,15 +99,15 @@ export function EquipmentAiNotificationBell() {
             )}
           </div>
 
-          {items.length > 0 && (
+          {remaining > 0 && (
             <div className="px-3 py-2 border-t border-[#1e2433] bg-[#0b0f1a]/80">
               <button
                 type="button"
-                onClick={() => items[0] && openDrawer(items[0])}
+                onClick={() => setVisibleCount(v => v + DROPDOWN_PREVIEW)}
                 className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-semibold text-primary hover:text-primary/80 hover:bg-primary/10 transition-colors"
               >
-                Xem tất cả
-                <ArrowRight className="w-3 h-3" />
+                Xem thêm ({remaining} còn lại)
+                <ChevronDown className="w-3 h-3" />
               </button>
             </div>
           )}

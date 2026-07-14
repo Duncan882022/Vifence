@@ -191,13 +191,13 @@ export function KpiTier({
         index={0}
         theme={THEMES.amber}
         icon={<Cpu className="w-3.5 h-3.5" />}
-        label="Đội máy MMTB"
+        label="Đội máy"
         hero={(
           <>
-            <SoLon className="text-green-400">{working.toLocaleString('vi-VN')}</SoLon>
+            <SoLon className="text-green-400">{(working + fleet.breakdown.standby).toLocaleString('vi-VN')}</SoLon>
             <DonVi>/</DonVi>
             <SoLon className="text-foreground">{total.toLocaleString('vi-VN')}</SoLon>
-            <DonVi>máy hoạt động</DonVi>
+            <DonVi>máy đang chạy</DonVi>
           </>
         )}
       >

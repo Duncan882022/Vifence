@@ -12,6 +12,7 @@ export type DelayReason =
   | 'weather'
   | 'inspection-waiting'
 export type AiSeverity = 'critical' | 'high' | 'medium'
+export type AiRiskType = 'machine-breakdown' | 'material-shortage' | 'geology' | 'labor' | 'weather'
 
 export interface Project {
   id: string
@@ -66,6 +67,7 @@ export interface Machine {
   id: string
   code: string
   type: string
+  operator?: string
   projectId: string
   worksiteId: string
   status: MachineStatus
@@ -86,10 +88,12 @@ export interface Machine {
 export interface AiAlert {
   id: string
   severity: AiSeverity
+  riskType: AiRiskType
   category: 'machine' | 'project' | 'fuel' | 'dispatch' | 'material'
   subject: string
   title: string
   summary: string
+  impactForecast: string
   reasoning: string
   evidence: { label: string; actual: string; expected: string }[]
   recommendations: string[]

@@ -27,8 +27,8 @@ export function EquipmentPage() {
         element={(
           <>
             <Header
-              title="Quản Lý MMTB"
-              subtitle="Tổng quan điều hành máy móc thiết bị"
+              title="Quản Lý Máy Móc"
+              subtitle="Theo dõi độ tin cậy, khả dụng và cảnh báo AI toàn bộ đội thiết bị"
             />
             <CeoDashboardPage />
           </>

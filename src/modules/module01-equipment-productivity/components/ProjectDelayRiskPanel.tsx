@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { Map } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
-import type { Project, Worksite, PileAssignment, DelayReason } from '../types'
+import type { Project, Worksite, PileAssignment } from '../types'
 import { ProjectMapModal } from './ProjectMapModal'
 
 type RiskLevel = 'Cao' | 'Trung bình' | 'Thấp'
@@ -65,7 +65,6 @@ const RISK_COLORS: Record<RiskLevel, { badge: string; row: string; bar: string }
 }
 
 export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [mapProject, setMapProject] = useState<Project | null>(null)
 
   const rows = useMemo<ProjectRow[]>(() => {
@@ -91,105 +90,59 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
       .sort((a, b) => RISK_ORDER[a.risk] - RISK_ORDER[b.risk])
   }, [projects, worksites, piles])
 
-  function toggle(id: string) {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
   return (
     <>
-      <Panel title="Rủi ro tiến độ dự án" className="h-full min-h-0" noPadding>
-      <div className="flex flex-col h-full min-h-0 overflow-y-auto p-2 gap-1.5">
+      <Panel title="Năng suất dự án" className="h-full min-h-0" noPadding>
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-2 gap-1.5">
         {rows.map(row => {
           const col = RISK_COLORS[row.risk]
-          const isOpen = expanded.has(row.project.id)
 
           return (
             <div key={row.project.id} className={cn(
-              'rounded-lg border border-[#1e2433] border-l-[3px] bg-[#0a0e1a] overflow-hidden transition-colors',
+              'rounded-lg border border-[#1e2433] border-l-[3px] bg-[#0a0e1a] overflow-hidden',
               row.risk === 'Cao' ? 'bg-red-500/5 border-l-red-500/60' : col.row,
             )}>
-              {/* Header row */}
-              <button
-                type="button"
-                onClick={() => toggle(row.project.id)}
-                className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-white/5 transition-colors text-left"
-              >
+              <div className="flex items-center gap-2 px-2.5 py-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] font-bold text-foreground truncate">{row.project.name}</span>
                     <span className="text-[8px] text-muted-foreground/50">({row.project.code})</span>
-                    <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[8px] font-bold ring-1', col.badge)}>
-                      {row.risk}
-                    </span>
+                    {row.completedPct > 100 ? (
+                      <span className="inline-flex px-1.5 py-0.5 rounded-full text-[8px] font-bold ring-1 bg-emerald-500/15 text-emerald-400 ring-emerald-500/25">
+                        Vượt KH
+                      </span>
+                    ) : (
+                      <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[8px] font-bold ring-1', col.badge)}>
+                        {row.risk}
+                      </span>
+                    )}
                   </div>
-                  {/* Progress bar */}
                   <div className="flex items-center gap-1.5 mt-1">
                     <div className="flex-1 h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${row.completedPct}%`, background: col.bar }} />
+                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, row.completedPct)}%`, background: row.completedPct > 100 ? '#10b981' : col.bar }} />
                     </div>
-                    <span className="text-[9px] text-foreground/80 tabular-nums shrink-0">{row.completedPct}%</span>
+                    <span className="text-[9px] tabular-nums shrink-0" style={{ color: row.completedPct > 100 ? '#34d399' : undefined }}>{row.completedPct}%</span>
                   </div>
+                  {row.completedPct > 100 && (
+                    <div className="text-[8px] text-emerald-400 mt-0.5">
+                      +{row.completedPct - 100}% so với kế hoạch
+                    </div>
+                  )}
                 </div>
-                <div className="shrink-0 text-right flex items-center gap-1.5">
-                  <div>
-                    <p className="text-[8px] text-red-400 font-semibold">{row.delayedPiles + row.blockedPiles} cọc trễ/bị chặn</p>
-                    <p className="text-[7px] text-muted-foreground/50 truncate max-w-[80px]">{row.topReason}</p>
-                  </div>
-                  {/* Map button */}
+                <div className="shrink-0 flex items-center gap-1.5">
+                  {row.completedPct <= 100 && (row.delayedPiles + row.blockedPiles) > 0 && (
+                    <span className="text-[8px] text-red-400 font-semibold">{row.delayedPiles + row.blockedPiles} cọc trễ</span>
+                  )}
                   <button
                     type="button"
                     title="Xem bản đồ cọc"
-                    onClick={e => { e.stopPropagation(); setMapProject(row.project) }}
-                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10 transition-colors shrink-0"
+                    onClick={() => setMapProject(row.project)}
+                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
                   >
                     <Map className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              </button>
-
-              {/* Accordion — worksite breakdown */}
-              {isOpen && (
-                <div className="border-t border-[#1e2433]/60 bg-[#060b14]/60 divide-y divide-[#1e2433]/30">
-                  {row.worksites.map(ws => {
-                    const wsTotal = ws.plannedPiles
-                    const wsComp = ws.completedPiles
-                    const wsDelay = ws.delayedPiles + ws.blockedPiles
-                    const matWorst = Math.min(
-                      ws.materialReadiness.bentonitePct,
-                      ws.materialReadiness.cementPct,
-                      ws.materialReadiness.concretePct,
-                    )
-                    return (
-                      <div key={ws.id} className="px-4 py-2 flex items-center gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[9px] font-semibold text-foreground/80 truncate">{ws.code}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <div className="flex-1 h-1 rounded-full bg-[#1e2433] overflow-hidden">
-                              <div className="h-full rounded-full bg-sky-400/60" style={{ width: `${wsTotal > 0 ? Math.round(wsComp / wsTotal * 100) : 0}%` }} />
-                            </div>
-                            <span className="text-[8px] text-muted-foreground/60 tabular-nums shrink-0">{wsComp}/{wsTotal}</span>
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          {wsDelay > 0 && (
-                            <span className="text-[8px] text-red-400 font-semibold">{wsDelay} trễ</span>
-                          )}
-                          <p className={cn(
-                            'text-[7px] tabular-nums',
-                            matWorst < 70 ? 'text-amber-400' : 'text-muted-foreground/50',
-                          )}>
-                            VL: {matWorst}%
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+              </div>
             </div>
           )
         })}

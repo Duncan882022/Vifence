@@ -23,8 +23,8 @@ export function EquipmentProductivityPage() {
   return (
     <>
       <Header
-        title="Năng Suất Vận Hành"
-        subtitle="Quản lý đội máy thi công cọc — theo dự án, công trường và cọc"
+        title="Hiệu Quả Vận Hành"
+        subtitle="Giám sát năng suất, tiến độ và nhiên liệu đội máy thi công cọc"
       />
 
       <PageLayout>
@@ -37,7 +37,18 @@ export function EquipmentProductivityPage() {
           />
         </div>
 
-        {/* Tier 2 — Machine Table */}
+        {/* Tier 2 — 3 panels: Năng suất dự án | Top 10 nguy cơ sự cố | Hiệu quả nhiên liệu */}
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1.5fr] gap-3 flex-[4] min-h-0">
+          <ProjectDelayRiskPanel
+            projects={PROJECTS}
+            worksites={WORKSITES}
+            piles={PILE_ASSIGNMENTS}
+          />
+          <AiOperationAlertsPanel alerts={AI_ALERTS} />
+          <FuelEfficiencyPanel machines={MACHINES} />
+        </div>
+
+        {/* Tier 3 — Danh sách thiết bị (full width) */}
         <div className="flex flex-col flex-[5] min-h-0">
           <MachineProductivityTable
             machines={MACHINES}
@@ -45,17 +56,6 @@ export function EquipmentProductivityPage() {
             worksites={WORKSITES}
             piles={PILE_ASSIGNMENTS}
           />
-        </div>
-
-        {/* Tier 3 — 3 panels */}
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_3fr_4fr] gap-3 flex-[4] min-h-0">
-          <ProjectDelayRiskPanel
-            projects={PROJECTS}
-            worksites={WORKSITES}
-            piles={PILE_ASSIGNMENTS}
-          />
-          <FuelEfficiencyPanel machines={MACHINES} />
-          <AiOperationAlertsPanel alerts={AI_ALERTS} />
         </div>
       </PageLayout>
 

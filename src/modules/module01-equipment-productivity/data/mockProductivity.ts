@@ -22,7 +22,7 @@ function pickFrom<T>(arr: T[]): T {
 ═══════════════════════════════════════════════ */
 export const PROJECTS: Project[] = [
   {
-    id: 'ocp1', code: 'OCP1', name: 'OCP1 (Hà Long Xanh)', region: 'Quảng Ninh',
+    id: 'ocp1', code: 'OCP1', name: 'OCP1', region: 'Quảng Ninh',
     plannedOutputM: 48000, actualOutputM: 31250,
     startDate: '2026-01-10', endDate: '2026-12-31',
   },
@@ -38,7 +38,7 @@ export const PROJECTS: Project[] = [
   },
   {
     id: 'hvb', code: 'HVB', name: 'Hải Vân Bay', region: 'Đà Nẵng',
-    plannedOutputM: 42000, actualOutputM: 38100,
+    plannedOutputM: 42000, actualOutputM: 46200,
     startDate: '2026-01-05', endDate: '2026-10-31',
   },
   {
@@ -90,16 +90,16 @@ export const WORKSITES: Worksite[] = [
     plannedPiles: 85, completedPiles: 30, inProgressPiles: 4, delayedPiles: 28, blockedPiles: 6,
     materialReadiness: { laborPct: 70, cementPct: 66, bentonitePct: 63, steelCagePct: 68, concretePct: 65 },
   },
-  // HVB
+  // HVB — vượt kế hoạch
   {
     id: 'hvb-1', projectId: 'hvb', code: 'HVB-Khu 1', name: 'Hải Vân Bay Khu 1',
-    plannedPiles: 130, completedPiles: 108, inProgressPiles: 14, delayedPiles: 4, blockedPiles: 0,
-    materialReadiness: { laborPct: 98, cementPct: 96, bentonitePct: 95, steelCagePct: 97, concretePct: 96 },
+    plannedPiles: 130, completedPiles: 144, inProgressPiles: 8, delayedPiles: 0, blockedPiles: 0,
+    materialReadiness: { laborPct: 99, cementPct: 98, bentonitePct: 97, steelCagePct: 99, concretePct: 98 },
   },
   {
     id: 'hvb-2', projectId: 'hvb', code: 'HVB-Khu 2', name: 'Hải Vân Bay Khu 2',
-    plannedPiles: 100, completedPiles: 82, inProgressPiles: 10, delayedPiles: 5, blockedPiles: 1,
-    materialReadiness: { laborPct: 90, cementPct: 88, bentonitePct: 86, steelCagePct: 89, concretePct: 87 },
+    plannedPiles: 100, completedPiles: 107, inProgressPiles: 6, delayedPiles: 0, blockedPiles: 0,
+    materialReadiness: { laborPct: 96, cementPct: 94, bentonitePct: 93, steelCagePct: 96, concretePct: 95 },
   },
   // VA
   {
@@ -115,8 +115,8 @@ export const WORKSITES: Worksite[] = [
   // OLP
   {
     id: 'olp-1', projectId: 'olp', code: 'OLP-Khu 1', name: 'Làng Olympic Khu 1',
-    plannedPiles: 90, completedPiles: 64, inProgressPiles: 8, delayedPiles: 7, blockedPiles: 1,
-    materialReadiness: { laborPct: 88, cementPct: 86, bentonitePct: 84, steelCagePct: 87, concretePct: 85 },
+    plannedPiles: 90, completedPiles: 93, inProgressPiles: 5, delayedPiles: 0, blockedPiles: 0,
+    materialReadiness: { laborPct: 94, cementPct: 92, bentonitePct: 91, steelCagePct: 93, concretePct: 92 },
   },
   {
     id: 'olp-2', projectId: 'olp', code: 'OLP-Khu 2', name: 'Làng Olympic Khu 2',
@@ -126,17 +126,16 @@ export const WORKSITES: Worksite[] = [
 ]
 
 /* ═══════════════════════════════════════════════
-   MACHINES  (50 total)
+   MACHINES  (100 total — diverse fleet)
 ═══════════════════════════════════════════════ */
 
-const TYPE_MAP: Record<string, string> = {
-  SANY: 'Máy ép cọc SANY SR285R',
-  XCMG: 'Máy ép cọc XCMG XG500E',
-  CCX:  'Cần trục bánh xích SCC800',
-  PC3:  'Máy đào PC300',
-  D9T:  'Máy ủi D9T',
-  TRK:  'Xe tải 20T',
-}
+const OPERATOR_NAMES: string[] = [
+  'Nguyễn Văn Hùng', 'Trần Minh Tuấn', 'Lê Quốc Bảo', 'Phạm Văn Đức',
+  'Hoàng Anh Tuấn', 'Vũ Đình Mạnh', 'Đặng Văn Long', 'Bùi Tiến Thành',
+  'Đinh Văn Kiên', 'Ngô Đức Hải', 'Cao Xuân Lâm', 'Lý Văn Phúc',
+  'Trịnh Quang Sơn', 'Dương Hữu Nghĩa', 'Phan Văn Tài', 'Võ Thành Trung',
+  'Lưu Đức Thắng', 'Tô Văn Minh', 'Chu Đình Khoa', 'Hà Văn Dũng',
+]
 
 const WORKSITES_BY_PROJECT: Record<string, string[]> = {
   ocp1: ['ocp1-1', 'ocp1-2'],
@@ -147,19 +146,15 @@ const WORKSITES_BY_PROJECT: Record<string, string[]> = {
   olp:  ['olp-1',  'olp-2'],
 }
 
-const PROJECT_IDS = ['ocp1', 'hnx', 'cg', 'hvb', 'va', 'olp']
-
 /**
- * STATUS distribution designed to match Module 2 fleet:
- * 16-slot pool → 62.5% working, 18.75% idle, 6.25% breakdown, 12.5% stored
- * 1000 machines → ~625 working, ~187 idle, ~63 breakdown, ~125 stored
+ * Status pool: 60% working / 20% idle / 10% breakdown / 10% stored
+ * Covers planned_idle as idle — no new status types needed.
  */
 const STATUS_POOL: MachineStatus[] = [
-  'working', 'working', 'working', 'working', 'working',
-  'working', 'working', 'working', 'working', 'working',  // 10
-  'idle', 'idle', 'idle',                                  // 3
-  'breakdown',                                              // 1
-  'stored', 'stored',                                       // 2
+  'working', 'working', 'working', 'working', 'working', 'working',  // 6
+  'idle', 'idle',                                                      // 2
+  'breakdown',                                                          // 1
+  'stored',                                                             // 1
 ]
 const DISPATCH_POOL: DispatchStatus[] = [
   'on-time', 'on-time', 'on-time', 'on-time',
@@ -170,36 +165,82 @@ const DISPATCH_POOL: DispatchStatus[] = [
 interface MachineSpec {
   code: string
   prefix: string
+  type: string
   projectId: string
   worksiteId: string
   status: MachineStatus
 }
 
+function getMachineCategory(prefix: string): 'drilling' | 'piledriver' | 'excavator' | 'pump' | 'roller' {
+  if (prefix === 'SANY' || prefix === 'BAUER' || prefix === 'XCMG') return 'drilling'
+  if (prefix === 'SWDM' || prefix === 'PM26') return 'piledriver'
+  if (prefix === 'PC3' || prefix === 'ZX3' || prefix === 'C336') return 'excavator'
+  if (prefix === 'S34S' || prefix === 'BSF3') return 'pump'
+  return 'roller'  // BW21, CA25
+}
+
 /**
- * 1000 machines total — same fleet size as Module 2 (Equipment Reliability)
- * Distribution: SANY 600 / XCMG 160 / CCX 80 / PC3 80 / D9T 40 / TRK 40
+ * 100 machines total across 6 projects:
+ *   OCP1 25 | HNX 20 | CG 20 | HVB 15 | VA 12 | OLP 8
+ *
+ * Fleet composition:
+ *   Drilling (SANY SR285R/SR235C, BAUER BG28, XCMG XR280D):  40
+ *   Excavator (Komatsu PC300, Hitachi ZX350, CAT 336):        20
+ *   Pile driver (Sunward SWDM22, Junttan PM26):               15
+ *   Concrete pump (Schwing S34SX, Putzmeister BSF36):         15
+ *   Roller / compactor (Bomag BW213, Dynapac CA250):          10
  */
 function buildSpecs(): MachineSpec[] {
   const specs: MachineSpec[] = []
-  const groups: { prefix: string; count: number }[] = [
-    { prefix: 'SANY', count: 600 },
-    { prefix: 'XCMG', count: 160 },
-    { prefix: 'CCX',  count: 80  },
-    { prefix: 'PC3',  count: 80  },
-    { prefix: 'D9T',  count: 40  },
-    { prefix: 'TRK',  count: 40  },
+
+  const groups: { prefix: string; type: string; count: number }[] = [
+    { prefix: 'SANY',  type: 'Máy khoan cọc nhồi SANY SR285R',          count: 15 },
+    { prefix: 'SANY',  type: 'Máy khoan cọc nhồi SANY SR235C',          count: 15 },
+    { prefix: 'BAUER', type: 'Máy khoan cọc nhồi BAUER BG28',           count: 3  },
+    { prefix: 'XCMG',  type: 'Máy khoan cọc nhồi XCMG XR280D',          count: 7  },
+    { prefix: 'PC3',   type: 'Máy đào Komatsu PC300',                    count: 7  },
+    { prefix: 'ZX3',   type: 'Máy đào Hitachi ZX350',                    count: 7  },
+    { prefix: 'C336',  type: 'Máy đào CAT 336',                          count: 6  },
+    { prefix: 'SWDM',  type: 'Máy ép cọc Sunward SWDM22',                count: 8  },
+    { prefix: 'PM26',  type: 'Máy ép cọc Junttan PM26',                  count: 7  },
+    { prefix: 'S34S',  type: 'Máy bơm bê tông Schwing S34SX',            count: 8  },
+    { prefix: 'BSF3',  type: 'Máy bơm bê tông Putzmeister BSF36',        count: 7  },
+    { prefix: 'BW21',  type: 'Máy lu Bomag BW213',                        count: 5  },
+    { prefix: 'CA25',  type: 'Máy đầm Dynapac CA250',                    count: 5  },
   ]
-  let idx = 0
-  for (const g of groups) {
-    for (let i = 0; i < g.count; i++) {
-      const code = `${g.prefix}-${String(i + 1).padStart(3, '0')}`
-      const projId = PROJECT_IDS[idx % PROJECT_IDS.length]
-      const wsArr = WORKSITES_BY_PROJECT[projId]
-      const wsId = wsArr[i % wsArr.length]
-      specs.push({ code, prefix: g.prefix, projectId: projId, worksiteId: wsId, status: pickFrom(STATUS_POOL) })
-      idx++
+  // Total: 15+15+3+7+7+7+6+8+7+8+7+5+5 = 100 ✓
+
+  // Build a flat project+worksite queue: 25 OCP1 | 20 HNX | 20 CG | 15 HVB | 12 VA | 8 OLP
+  const projectAlloc = [
+    { projectId: 'ocp1', count: 25 },
+    { projectId: 'hnx',  count: 20 },
+    { projectId: 'cg',   count: 20 },
+    { projectId: 'hvb',  count: 15 },
+    { projectId: 'va',   count: 12 },
+    { projectId: 'olp',  count: 8  },
+  ]
+  const queue: { projectId: string; worksiteId: string }[] = []
+  for (const { projectId, count } of projectAlloc) {
+    const wsArr = WORKSITES_BY_PROJECT[projectId]
+    for (let i = 0; i < count; i++) {
+      queue.push({ projectId, worksiteId: wsArr[i % wsArr.length] })
     }
   }
+
+  const prefixCounters: Record<string, number> = {}
+  let globalIdx = 0
+
+  for (const g of groups) {
+    const startNum = (prefixCounters[g.prefix] ?? 0) + 1
+    for (let i = 0; i < g.count; i++) {
+      const code = `${g.prefix}-${String(startNum + i).padStart(3, '0')}`
+      const { projectId, worksiteId } = queue[globalIdx]
+      specs.push({ code, prefix: g.prefix, type: g.type, projectId, worksiteId, status: pickFrom(STATUS_POOL) })
+      globalIdx++
+    }
+    prefixCounters[g.prefix] = (prefixCounters[g.prefix] ?? 0) + g.count
+  }
+
   return specs
 }
 
@@ -214,8 +255,8 @@ const SPECS = buildSpecs()
  * This is "excess fuel cost today" per machine.
  */
 function makeMachine(spec: MachineSpec, index: number): Machine {
-  const isEps = spec.prefix === 'SANY' || spec.prefix === 'XCMG'
-  const SHIFT_H = 12  // full shift capacity
+  const category = getMachineCategory(spec.prefix)
+  const SHIFT_H = 12
 
   let workingH: number, idleH: number, downtimeH: number
   switch (spec.status) {
@@ -232,29 +273,41 @@ function makeMachine(spec: MachineSpec, index: number): Machine {
       workingH = rand(7, 11); idleH = rand(0, 2); downtimeH = rand(0, 1)
   }
 
-  // utilization = % of shift capacity actually working
   const util = Math.round((workingH / SHIFT_H) * 100)
 
-  const outputPerHour = isEps
-    ? rand(18, 34, 1)
-    : spec.prefix === 'CCX' ? rand(8, 15, 1) : rand(3, 10, 1)
+  const outputPerHour =
+    category === 'drilling'   ? rand(18, 34, 1) :
+    category === 'piledriver' ? rand(12, 25, 1) :
+    category === 'excavator'  ? rand(35, 80, 1) :
+    category === 'pump'       ? rand(30, 55, 1) :
+    rand(5, 12, 1)  // roller
+
   const plannedOutput = Math.round(outputPerHour * 8)
-  const actualOutput = spec.status === 'working'
+  let actualOutput = spec.status === 'working'
     ? Math.round(plannedOutput * (rand(75, 108) / 100))
     : Math.round(plannedOutput * (rand(20, 50) / 100))
 
-  const fuelBase = isEps ? rand(18, 24, 1) : rand(10, 18, 1)
-  // variance: mostly near-baseline, ~10% machines exceed, ~10% save
-  const varianceBias = index % 10 === 0 ? rand(1, 3, 1)     // over baseline
-    : index % 10 === 1  ? -rand(1, 2, 1)   // under baseline (saving)
-    : rand(-1, 1, 1)                         // near baseline
+  const fuelBase =
+    category === 'drilling'   ? rand(18, 28, 1) :
+    category === 'piledriver' ? rand(15, 22, 1) :
+    category === 'excavator'  ? rand(12, 20, 1) :
+    category === 'pump'       ? rand(6, 12, 1) :
+    rand(5, 10, 1)  // roller
+
+  const varianceBias = index % 10 === 0 ? rand(1, 3, 1)
+    : index % 10 === 1  ? -rand(1, 2, 1)
+    : rand(-1, 1, 1)
   const fuelActual = Math.round((fuelBase + varianceBias) * 10) / 10
+  if (index % 10 === 1 && spec.status === 'working') {
+    actualOutput = Math.round(plannedOutput * (rand(100, 110) / 100))
+  }
   const fuelCost = rand(22000, 28000)
 
   return {
     id: `m-${index}`,
     code: spec.code,
-    type: TYPE_MAP[spec.prefix] ?? 'Thiết bị thi công',
+    type: spec.type,
+    operator: OPERATOR_NAMES[index % OPERATOR_NAMES.length],
     projectId: spec.projectId,
     worksiteId: spec.worksiteId,
     status: spec.status,
@@ -313,141 +366,143 @@ if (sany030) {
    PILE ASSIGNMENTS  (20 for today)
 ═══════════════════════════════════════════════ */
 
-const TODAY = '2026-07-04'
+const TODAY = '2026-07-06'
 
 function makeIso(h: number, m = 0): string {
   return `${TODAY}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
 }
 
 export const PILE_ASSIGNMENTS: PileAssignment[] = [
-  // SANY-001 — completed
+  // ── OCP1 – Khu 1 ─────────────────────────────────────
   {
-    id: 'p-001', pileCode: 'P-001', machineId: 'm-0', worksiteId: 'ocp1-1',
+    id: 'p-001', pileCode: 'OCP1-K1-001', machineId: 'm-0', worksiteId: 'ocp1-1',
     diameterMm: 800, depthM: 28, plannedStart: makeIso(6), plannedEnd: makeIso(9, 30),
     plannedDurationH: 3.5, actualStart: makeIso(6, 5), actualEnd: makeIso(9, 20),
     actualDurationH: 3.25, status: 'completed', delayHours: 0, fuelUsedLitres: 64,
   },
-  // SANY-002 — in-progress
   {
-    id: 'p-002', pileCode: 'P-002', machineId: 'm-1', worksiteId: 'ocp1-1',
+    id: 'p-002', pileCode: 'OCP1-K1-002', machineId: 'm-1', worksiteId: 'ocp1-1',
     diameterMm: 800, depthM: 30, plannedStart: makeIso(7), plannedEnd: makeIso(11),
     plannedDurationH: 4.0, actualStart: makeIso(7, 10),
     status: 'in-progress', delayHours: 0, fuelUsedLitres: 48,
   },
-  // SANY-003 — completed
+  // ── OCP1 – Khu 2 ─────────────────────────────────────
   {
-    id: 'p-003', pileCode: 'P-003', machineId: 'm-2', worksiteId: 'ocp1-2',
+    id: 'p-003', pileCode: 'OCP1-K2-001', machineId: 'm-2', worksiteId: 'ocp1-2',
     diameterMm: 1000, depthM: 35, plannedStart: makeIso(6), plannedEnd: makeIso(10, 30),
     plannedDurationH: 4.5, actualStart: makeIso(6), actualEnd: makeIso(10, 45),
     actualDurationH: 4.75, status: 'completed', delayHours: 0.25, fuelUsedLitres: 88,
   },
-  // SANY-004 — delayed
   {
-    id: 'p-004', pileCode: 'P-004', machineId: 'm-3', worksiteId: 'ocp1-2',
+    id: 'p-004', pileCode: 'OCP1-K2-002', machineId: 'm-3', worksiteId: 'ocp1-2',
     diameterMm: 800, depthM: 25, plannedStart: makeIso(6), plannedEnd: makeIso(9),
     plannedDurationH: 3.0, actualStart: makeIso(8, 30),
     status: 'delayed', delayHours: 2.5, delayReason: 'lack-worker', fuelUsedLitres: 22,
   },
-  // HNX machines — completed
+  // ── HNX – Khu 1 ──────────────────────────────────────
   {
-    id: 'p-005', pileCode: 'P-005', machineId: 'm-6', worksiteId: 'hnx-1',
+    id: 'p-005', pileCode: 'HNX-K1-001', machineId: 'm-6', worksiteId: 'hnx-1',
     diameterMm: 900, depthM: 32, plannedStart: makeIso(6), plannedEnd: makeIso(10),
     plannedDurationH: 4.0, actualStart: makeIso(6, 2), actualEnd: makeIso(9, 50),
     actualDurationH: 3.8, status: 'completed', delayHours: 0, fuelUsedLitres: 72,
   },
+  // Scheduled for afternoon shift — not yet started
   {
-    id: 'p-006', pileCode: 'P-006', machineId: 'm-7', worksiteId: 'hnx-1',
-    diameterMm: 900, depthM: 28, plannedStart: makeIso(7), plannedEnd: makeIso(10, 30),
-    plannedDurationH: 3.5, actualStart: makeIso(7), actualEnd: makeIso(10, 40),
-    actualDurationH: 3.67, status: 'completed', delayHours: 0, fuelUsedLitres: 66,
+    id: 'p-006', pileCode: 'HNX-K1-002', machineId: 'm-7', worksiteId: 'hnx-1',
+    diameterMm: 900, depthM: 28, plannedStart: makeIso(13), plannedEnd: makeIso(16, 30),
+    plannedDurationH: 3.5,
+    status: 'not-started', delayHours: 0,
   },
-  // CG — SANY-021 delayed (key story)
+  // ── CG – Khu 1 (key story: bentonite shortage) ────────
   {
-    id: 'p-083', pileCode: 'P-083', machineId: 'm-20', worksiteId: 'cg-1',
+    id: 'p-083', pileCode: 'CG-K1-001', machineId: 'm-20', worksiteId: 'cg-1',
     diameterMm: 800, depthM: 26, plannedStart: makeIso(6), plannedEnd: makeIso(9, 30),
     plannedDurationH: 3.5, actualStart: makeIso(8, 30),
     status: 'delayed', delayHours: 2.5, delayReason: 'lack-bentonite', fuelUsedLitres: 12,
   },
-  // CG — XCMG-007 blocked (key story)
   {
-    id: 'p-084', pileCode: 'P-084', machineId: 'm-30', worksiteId: 'cg-1',
+    id: 'p-084', pileCode: 'CG-K1-002', machineId: 'm-30', worksiteId: 'cg-1',
     diameterMm: 1000, depthM: 38, plannedStart: makeIso(6), plannedEnd: makeIso(11),
     plannedDurationH: 5.0,
     status: 'blocked', delayHours: 5.0, delayReason: 'machine-breakdown',
   },
-  // HVB — SANY-030 star performer
+  // ── HVB – Khu 1 (key story: SANY-030 star performer) ─
   {
-    id: 'p-120', pileCode: 'P-120', machineId: 'm-29', worksiteId: 'hvb-1',
+    id: 'p-120', pileCode: 'HVB-K1-001', machineId: 'm-29', worksiteId: 'hvb-1',
     diameterMm: 800, depthM: 24, plannedStart: makeIso(6), plannedEnd: makeIso(8, 30),
     plannedDurationH: 2.5, actualStart: makeIso(6), actualEnd: makeIso(8, 5),
     actualDurationH: 2.08, status: 'completed', delayHours: 0, fuelUsedLitres: 38,
   },
   {
-    id: 'p-121', pileCode: 'P-121', machineId: 'm-29', worksiteId: 'hvb-1',
+    id: 'p-121', pileCode: 'HVB-K1-002', machineId: 'm-29', worksiteId: 'hvb-1',
     diameterMm: 800, depthM: 24, plannedStart: makeIso(8, 30), plannedEnd: makeIso(11),
     plannedDurationH: 2.5, actualStart: makeIso(8, 10), actualEnd: makeIso(10, 15),
     actualDurationH: 2.08, status: 'completed', delayHours: 0, fuelUsedLitres: 36,
   },
-  // HVB more
+  // Third pile — started after SANY-030 finished, now in-progress with different machine
   {
-    id: 'p-122', pileCode: 'P-122', machineId: 'm-33', worksiteId: 'hvb-1',
-    diameterMm: 1000, depthM: 36, plannedStart: makeIso(6), plannedEnd: makeIso(10, 30),
-    plannedDurationH: 4.5, actualStart: makeIso(6, 5), actualEnd: makeIso(10, 25),
-    actualDurationH: 4.33, status: 'completed', delayHours: 0, fuelUsedLitres: 82,
+    id: 'p-122', pileCode: 'HVB-K1-003', machineId: 'm-33', worksiteId: 'hvb-1',
+    diameterMm: 1000, depthM: 36, plannedStart: makeIso(11), plannedEnd: makeIso(15, 30),
+    plannedDurationH: 4.5, actualStart: makeIso(11, 10),
+    status: 'in-progress', delayHours: 0, fuelUsedLitres: 28,
   },
-  // VA
+  // ── VA – Khu 1 ────────────────────────────────────────
+  // Afternoon slot — site prep still underway
   {
-    id: 'p-200', pileCode: 'P-200', machineId: 'm-36', worksiteId: 'va-1',
-    diameterMm: 900, depthM: 30, plannedStart: makeIso(6), plannedEnd: makeIso(10),
-    plannedDurationH: 4.0, actualStart: makeIso(7, 15),
-    status: 'delayed', delayHours: 1.25, delayReason: 'site-not-ready', fuelUsedLitres: 30,
+    id: 'p-200', pileCode: 'VA-K1-001', machineId: 'm-36', worksiteId: 'va-1',
+    diameterMm: 900, depthM: 30, plannedStart: makeIso(13), plannedEnd: makeIso(17),
+    plannedDurationH: 4.0,
+    status: 'not-started', delayHours: 0,
   },
+  // ── VA – Khu 2 ────────────────────────────────────────
   {
-    id: 'p-201', pileCode: 'P-201', machineId: 'm-37', worksiteId: 'va-2',
+    id: 'p-201', pileCode: 'VA-K2-001', machineId: 'm-37', worksiteId: 'va-2',
     diameterMm: 800, depthM: 28, plannedStart: makeIso(6), plannedEnd: makeIso(9, 30),
     plannedDurationH: 3.5,
-    status: 'not-started', delayHours: 0, delayReason: 'inspection-waiting',
+    status: 'not-started', delayHours: 0,
   },
-  // OLP
+  // ── OLP – Khu 1 ──────────────────────────────────────
   {
-    id: 'p-300', pileCode: 'P-300', machineId: 'm-42', worksiteId: 'olp-1',
+    id: 'p-300', pileCode: 'OLP-K1-001', machineId: 'm-42', worksiteId: 'olp-1',
     diameterMm: 800, depthM: 25, plannedStart: makeIso(6), plannedEnd: makeIso(9),
     plannedDurationH: 3.0, actualStart: makeIso(6), actualEnd: makeIso(9, 10),
     actualDurationH: 3.17, status: 'completed', delayHours: 0, fuelUsedLitres: 58,
   },
   {
-    id: 'p-301', pileCode: 'P-301', machineId: 'm-43', worksiteId: 'olp-1',
+    id: 'p-301', pileCode: 'OLP-K1-002', machineId: 'm-43', worksiteId: 'olp-1',
     diameterMm: 900, depthM: 32, plannedStart: makeIso(7), plannedEnd: makeIso(11),
     plannedDurationH: 4.0, actualStart: makeIso(7, 5),
     status: 'in-progress', delayHours: 0, fuelUsedLitres: 55,
   },
+  // ── OLP – Khu 2 ──────────────────────────────────────
   {
-    id: 'p-302', pileCode: 'P-302', machineId: 'm-44', worksiteId: 'olp-2',
+    id: 'p-302', pileCode: 'OLP-K2-001', machineId: 'm-44', worksiteId: 'olp-2',
     diameterMm: 800, depthM: 22, plannedStart: makeIso(6), plannedEnd: makeIso(8, 30),
     plannedDurationH: 2.5, actualStart: makeIso(6, 0), actualEnd: makeIso(8, 40),
     actualDurationH: 2.67, status: 'completed', delayHours: 0.17, fuelUsedLitres: 46,
   },
   {
-    id: 'p-303', pileCode: 'P-303', machineId: 'm-45', worksiteId: 'olp-2',
+    id: 'p-303', pileCode: 'OLP-K2-002', machineId: 'm-45', worksiteId: 'olp-2',
     diameterMm: 1000, depthM: 40, plannedStart: makeIso(6), plannedEnd: makeIso(12),
     plannedDurationH: 6.0, actualStart: makeIso(8, 0),
     status: 'delayed', delayHours: 2.0, delayReason: 'lack-steel-cage', fuelUsedLitres: 40,
   },
-  // More completed to fill
+  // ── HNX – Khu 2 ──────────────────────────────────────
   {
-    id: 'p-007', pileCode: 'P-007', machineId: 'm-8', worksiteId: 'hnx-2',
+    id: 'p-007', pileCode: 'HNX-K2-001', machineId: 'm-8', worksiteId: 'hnx-2',
     diameterMm: 800, depthM: 28, plannedStart: makeIso(6), plannedEnd: makeIso(9, 30),
     plannedDurationH: 3.5, actualStart: makeIso(6), actualEnd: makeIso(9, 30),
     actualDurationH: 3.5, status: 'completed', delayHours: 0, fuelUsedLitres: 62,
   },
   {
-    id: 'p-008', pileCode: 'P-008', machineId: 'm-9', worksiteId: 'hnx-2',
+    id: 'p-008', pileCode: 'HNX-K2-002', machineId: 'm-9', worksiteId: 'hnx-2',
     diameterMm: 800, depthM: 24, plannedStart: makeIso(9, 30), plannedEnd: makeIso(12, 30),
     plannedDurationH: 3.0, actualStart: makeIso(9, 30),
     status: 'in-progress', delayHours: 0, fuelUsedLitres: 44,
   },
+  // ── CG – Khu 2 ───────────────────────────────────────
   {
-    id: 'p-009', pileCode: 'P-009', machineId: 'm-10', worksiteId: 'cg-2',
+    id: 'p-009', pileCode: 'CG-K2-001', machineId: 'm-10', worksiteId: 'cg-2',
     diameterMm: 900, depthM: 30, plannedStart: makeIso(6), plannedEnd: makeIso(10),
     plannedDurationH: 4.0,
     status: 'blocked', delayHours: 4.0, delayReason: 'lack-concrete',
@@ -467,125 +522,271 @@ export const AI_ALERTS: AiAlert[] = [
   {
     id: 'ai-001',
     severity: 'critical',
+    riskType: 'machine-breakdown',
     category: 'machine',
-    subject: 'SANY-021',
-    title: 'Máy nhàn rỗi 23h liên tục tại Cần Giờ',
-    summary: 'Đề xuất điều chuyển sang Hải Vân Bay để tối ưu khai thác đội máy',
-    reasoning: 'SANY-021 đang ở trạng thái chờ việc trong 23 giờ liên tục tại CG-Khu 1. Dựa trên dữ liệu lịch thi công và khối lượng cọc còn lại, AI nhận định máy này không có kế hoạch sử dụng trong 72 giờ tới do thiếu bentonite và nhân công tại khu vực. Trong khi đó, dự án Hải Vân Bay đang thiếu 1 máy ép cọc SANY tương đương, ảnh hưởng trực tiếp đến tiến độ giai đoạn 2.',
+    subject: 'OCP1 – SANY-021',
+    title: 'SANY-021 có nguy cơ dừng đột ngột trong 2–4h tới',
+    summary: 'Cảm biến nhiệt độ động cơ vượt ngưỡng 108°C liên tục 3h — nguy cơ hỏng cụm bơm thủy lực',
+    impactForecast: 'Trễ 18–24 cọc, chậm tiến độ ~2 ngày',
+    reasoning: 'SANY-021 tại OCP1-Khu 3 ghi nhận nhiệt độ động cơ leo thang từ 92°C lên 108°C trong 3 giờ liên tục. AI phân tích pattern: đây là dấu hiệu điển hình của tắc nghẽn hệ thống làm mát (coolant blockage) kết hợp tải trọng cao. Nếu không can thiệp, xác suất dừng đột ngột trong 4 giờ tới là 87%. Máy đang phụ trách 6 cọc đường kính 1.2m — nếu dừng giữa chừng sẽ phải xử lý cọc hỏng tốn thêm 12–18h.',
     evidence: [
-      { label: 'Giờ nhàn rỗi (hôm nay)', actual: '23h', expected: '≤ 4h' },
-      { label: 'Utilization hiện tại', actual: '26%', expected: '≥ 75%' },
-      { label: 'Nhu cầu Hải Vân Bay', actual: '+1 máy thiếu', expected: 'Đủ từ 28/06' },
-      { label: 'Bentonite CG-Khu 1', actual: '58%', expected: '≥ 80%' },
+      { label: 'Nhiệt độ động cơ', actual: '108°C', expected: '≤ 90°C' },
+      { label: 'Áp suất làm mát', actual: '1.2 bar', expected: '≥ 2.5 bar' },
+      { label: 'Thời gian bất thường', actual: '3h liên tục', expected: '0' },
+      { label: 'Xác suất dừng đột ngột', actual: '87%', expected: '≤ 10%' },
     ],
     recommendations: [
-      'Lên kế hoạch vận chuyển SANY-021 từ CG-Khu 1 → HVB-Khu 2 trong vòng 24h tới.',
-      'Phối hợp điều phối viên dự án xác nhận slot cọc tại Hải Vân Bay.',
-      'Cập nhật lịch thi công Cần Giờ để tránh thiếu hụt nếu khối lượng tăng đột biến.',
-      'Theo dõi utilization sau khi chuyển, mục tiêu ≥ 80% trong 7 ngày đầu.',
+      'Dừng máy ngay để kiểm tra và xả két làm mát trước khi thi công cọc tiếp theo.',
+      'Cử kỹ thuật viên kiểm tra đường ống coolant và bơm nước làm mát.',
+      'Điều chuyển SANY-019 sang OCP1-Khu 3 để bù tiến độ trong thời gian sửa chữa.',
+      'Cập nhật lệnh dừng khẩn cấp vào hệ thống quản lý thiết bị.',
     ],
-    benefit: 'Tăng utilization fleet từ 72% → 78%. Đẩy nhanh tiến độ HVB giai đoạn 2 khoảng 3–4 ngày.',
-    costSavingEstimate: '~42 triệu VND/tháng từ tăng năng suất và giảm chi phí chờ máy.',
-    createdAt: '2026-07-04T07:15:00',
+    benefit: 'Tránh hỏng cụm bơm thủy lực trị giá ~180 triệu VND. Bảo toàn tiến độ gói cọc OCP1.',
+    costSavingEstimate: '~220 triệu VND từ tránh sửa chữa lớn và phạt chậm tiến độ.',
+    createdAt: '2026-07-06T05:48:00',
     read: false,
   },
   {
     id: 'ai-002',
-    severity: 'high',
-    category: 'fuel',
-    subject: 'XCMG-007',
-    title: 'Tiêu hao nhiên liệu vượt ngưỡng +8.5% so với định mức',
-    summary: 'Mức tiêu thụ 24.8 lít/h cao hơn baseline 22.8 lít/h — cần kiểm tra injector',
-    reasoning: 'XCMG-007 ghi nhận mức tiêu thụ 24.8 lít/h trong 7 ngày liên tiếp, vượt định mức 22.8 lít/h (+8.5%). Bất thường này không tương quan với tải trọng thi công — AI phát hiện pattern tiêu thụ cao kể cả khi máy chạy không tải. Nguyên nhân khả năng cao là vấn đề phun dầu (injector) hoặc rò rỉ hệ thống dẫn nhiên liệu.',
+    severity: 'critical',
+    riskType: 'material-shortage',
+    category: 'material',
+    subject: 'CG – CG-Khu 3',
+    title: 'Bentonite CG-Khu 3 sẽ cạn trong 4h — 5 máy phải dừng',
+    summary: 'Tồn kho chỉ còn 12m³, tiêu thụ 3.1m³/h — hết lúc 10:00 sáng nếu không bổ sung khẩn',
+    impactForecast: 'Chậm ~8h, trễ 22–28 cọc',
+    reasoning: 'Hệ thống giám sát kho vật liệu ghi nhận bentonite tại CG-Khu 3 còn 12m³, trong khi tốc độ tiêu thụ hiện tại là 3.1m³/h với 5 máy đang hoạt động. AI tính toán thời điểm hết tồn kho là khoảng 10:00 sáng hôm nay (sau ~4h). Nhà cung cấp gần nhất cách 2.5h vận chuyển — cần đặt hàng ngay bây giờ để tránh gián đoạn. Khu vực này đang trong giai đoạn thi công cọc đường kính lớn, tiêu thụ bentonite cao gấp đôi so với cọc thường.',
     evidence: [
-      { label: 'Tiêu thụ thực tế', actual: '24.8 lít/h', expected: '22.8 lít/h' },
-      { label: 'Fuel Variance', actual: '+8.5%', expected: '≤ 3%' },
-      { label: 'Chi phí NL/ngày', actual: '4.960.000 VND', expected: '4.560.000 VND' },
-      { label: 'Thời gian kéo dài', actual: '7 ngày', expected: '≤ 1 ngày' },
+      { label: 'Tồn kho bentonite', actual: '12 m³', expected: '≥ 40 m³' },
+      { label: 'Tốc độ tiêu thụ', actual: '3.1 m³/h', expected: '2.0 m³/h (bình thường)' },
+      { label: 'Thời gian còn lại', actual: '~3.9h', expected: '≥ 24h' },
+      { label: 'Máy bị ảnh hưởng', actual: '5 máy', expected: '0 máy' },
     ],
     recommendations: [
-      'Dừng máy để kiểm tra tổng thể hệ thống nhiên liệu trong vòng 4h tới.',
-      'Ưu tiên kiểm tra injector, seal cao su dẫn dầu và bộ lọc nhiên liệu.',
-      'Đo lại mức tiêu thụ sau sửa chữa để xác nhận hiệu quả.',
-      'Ghi nhận vào lịch sử bảo dưỡng để theo dõi xu hướng dài hạn.',
+      'Đặt hàng khẩn cấp 60m³ bentonite ngay lập tức, yêu cầu giao trước 09:30.',
+      'Liên hệ nhà cung cấp dự phòng tại Bình Dương nếu nhà cung cấp chính không đáp ứng.',
+      'Trong khi chờ, ưu tiên 2 máy cho cọc nhỏ <800mm tiêu thụ ít bentonite hơn.',
+      'Cập nhật quy trình cảnh báo tồn kho tối thiểu lên 30m³ thay vì 20m³ hiện tại.',
     ],
-    benefit: 'Giảm tiêu hao về mức chuẩn 22.8 lít/h. Loại bỏ nguy cơ cháy nổ từ rò rỉ dầu.',
-    costSavingEstimate: '~28 triệu VND/tháng nếu tiêu thụ về mức định mức.',
-    createdAt: '2026-07-04T08:30:00',
+    benefit: 'Tránh dừng toàn bộ 5 máy và mất ~8h thi công tại CG-Khu 3.',
+    costSavingEstimate: '~78 triệu VND từ tránh gián đoạn sản xuất và phạt hợp đồng.',
+    createdAt: '2026-07-06T06:02:00',
     read: false,
   },
   {
     id: 'ai-003',
-    severity: 'high',
-    category: 'material',
-    subject: 'CG-Khu 1',
-    title: '40% cọc bị chậm — Bentonite chỉ đạt 58%',
-    summary: 'Tình trạng thiếu bentonite đang ảnh hưởng nghiêm trọng đến tiến độ thi công Cần Giờ',
-    reasoning: 'CG-Khu 1 đang có 44/110 cọc ở trạng thái trễ (40%), cao gấp đôi ngưỡng cho phép. AI phát hiện mức độ sẵn sàng bentonite chỉ đạt 58%, thấp nhất trong tất cả các công trường. Pattern trễ tập trung vào các cọc đường kính lớn (≥1000mm) — những cọc đòi hỏi lượng bentonite cao nhất. Nếu không bổ sung trong 24h, nguy cơ toàn bộ hoạt động bị đình chỉ.',
+    severity: 'critical',
+    riskType: 'machine-breakdown',
+    category: 'machine',
+    subject: 'HVB – BAUER-003',
+    title: 'BAUER-003 rò rỉ thủy lực — nguy cơ dừng máy khẩn cấp',
+    summary: 'Áp suất hệ thống giảm 18% trong 2h — phát hiện vết rò ống dẫn số 4 cụm kelly bar',
+    impactForecast: 'Dừng máy 6–10h, trễ 8–12 cọc',
+    reasoning: 'BAUER-003 tại HVB-Khu 2 ghi nhận áp suất thủy lực giảm từ 280 bar xuống 229 bar trong 2 giờ (-18%). Camera IoT lắp trên máy phát hiện vết dầu thủy lực tại ống dẫn số 4 nối với cụm kelly bar. BAUER-003 đang xử lý cọc D1400mm sâu 52m — nếu dừng giữa cọc, chi phí xử lý cọc hỏng ước tính 45–60 triệu. Cần dừng máy kiểm soát ngay trước khi vào cọc tiếp theo.',
     evidence: [
-      { label: 'Cọc chậm / tổng', actual: '44/110 (40%)', expected: '≤ 10%' },
-      { label: 'Bentonite sẵn sàng', actual: '58%', expected: '≥ 80%' },
-      { label: 'Máy đang chờ việc', actual: '3 máy', expected: '0 máy' },
-      { label: 'Tác động tiến độ', actual: '-8 ngày ước tính', expected: '0' },
+      { label: 'Áp suất thủy lực', actual: '229 bar', expected: '≥ 260 bar' },
+      { label: 'Tốc độ sụt áp', actual: '-18% / 2h', expected: '< 2% / ngày' },
+      { label: 'Vị trí rò rỉ', actual: 'Ống số 4 – kelly bar', expected: 'Kín hoàn toàn' },
+      { label: 'Thể tích dầu mất', actual: '~4.5 lít', expected: '0' },
     ],
     recommendations: [
-      'Đặt hàng khẩn cấp bentonite cho CG-Khu 1, mục tiêu giao trong 12h.',
-      'Ưu tiên cọc nhỏ (<800mm) để duy trì nhịp thi công trong khi chờ vật liệu.',
-      'Điều chuyển tạm 1 máy sang CG-Khu 2 để cân bằng tiến độ.',
-      'Cập nhật báo cáo tiến độ hàng ngày cho PMC/CĐT.',
+      'Dừng BAUER-003 ngay sau khi hoàn thành cọc hiện tại, không bắt đầu cọc mới.',
+      'Cử đội bảo dưỡng thay thế ống dẫn số 4 và kiểm tra toàn bộ hệ thống thủy lực.',
+      'Điều chuyển BAUER-001 từ HVB-Khu 1 sang xử lý cọc ưu tiên tại HVB-Khu 2.',
+      'Đặt hàng phụ tùng ống thủy lực BAUER dự phòng để giảm thời gian dừng máy.',
     ],
-    benefit: 'Giảm cọc chậm từ 40% về <15%. Phục hồi nhịp thi công trong 3–5 ngày.',
-    costSavingEstimate: '~65 triệu VND từ tránh phạt chậm tiến độ hợp đồng.',
-    createdAt: '2026-07-04T06:45:00',
+    benefit: 'Tránh hỏng hoàn toàn bơm thủy lực trị giá ~350 triệu VND và rủi ro an toàn lao động.',
+    costSavingEstimate: '~410 triệu VND từ tránh sửa chữa lớn, cọc hỏng và tai nạn lao động.',
+    createdAt: '2026-07-06T06:25:00',
     read: false,
   },
   {
     id: 'ai-004',
-    severity: 'medium',
-    category: 'dispatch',
-    subject: 'VA-Khu 2',
-    title: 'Hiệu quả điều phối giảm 15% so với tháng trước',
-    summary: 'On-time dispatch tại Vũng Áng giảm từ 85% xuống 70.2% trong 2 tuần qua',
-    reasoning: 'VA-Khu 2 ghi nhận dispatch efficiency giảm liên tục từ ngày 17/06. Phân tích log cho thấy thời gian chờ xác nhận từ Site Manager tăng trung bình 2.3h/dispatch. Vào cao điểm gió ban đêm, các dispatch quan trọng thường bị trì hoãn do thiếu xác nhận real-time. Điều này dẫn đến mất 15% sản lượng ca đêm.',
+    severity: 'high',
+    riskType: 'material-shortage',
+    category: 'material',
+    subject: 'HNX – HNX-Khu 1',
+    title: 'Bê tông sẵn sàng chỉ 52% — nguy cơ gián đoạn đổ cọc',
+    summary: 'Trạm trộn cung cấp chậm 3.2h so với kế hoạch — 14 cọc đang chờ đổ bê tông',
+    impactForecast: 'Chậm 12–16h, trễ tiến độ 3–4 ngày',
+    reasoning: 'HNX-Khu 1 đang có 14 cọc đã khoan xong đang chờ đổ bê tông. Trạm trộn VICEM Hà Nam báo cung cấp chậm do tắc đường QL1A từ 04:00 sáng. Mức độ sẵn sàng bê tông chỉ đạt 52%, thấp hơn ngưỡng an toàn 80%. Nếu bê tông không đến trong 4h, các hố khoan có nguy cơ sụt thành vách do áp lực đất tại khu vực địa chất yếu HNX-Khu 1.',
     evidence: [
-      { label: 'On-time dispatch hiện tại', actual: '70.2%', expected: '85%' },
-      { label: 'Thời gian chờ xác nhận', actual: '3.8h', expected: '≤ 1.5h' },
-      { label: 'Dispatch bị hủy/shift', actual: '12%', expected: '≤ 3%' },
-      { label: 'Ảnh hưởng sản lượng', actual: '-15%', expected: '0' },
+      { label: 'Bê tông sẵn sàng', actual: '52%', expected: '≥ 80%' },
+      { label: 'Cọc chờ đổ BT', actual: '14 cọc', expected: '≤ 3 cọc' },
+      { label: 'Delay trạm trộn', actual: '3.2h', expected: '0' },
+      { label: 'Nguy cơ sụt vách', actual: 'Cao (địa chất yếu)', expected: 'Thấp' },
     ],
     recommendations: [
-      'Cấu hình thông báo tự động khi có dispatch chờ xác nhận > 30 phút.',
-      'Phân quyền xác nhận dispatch khẩn cấp cho Phó quản lý công trường.',
-      'Họp review quy trình dispatch với đội Vũng Áng vào cuối tuần.',
+      'Liên hệ trạm trộn VICEM dự phòng tại Phủ Lý để bổ sung bê tông trong vòng 2h.',
+      'Bơm bentonite gia cố vào 14 hố đang chờ để giảm nguy cơ sụt vách.',
+      'Ưu tiên đổ bê tông cho các cọc đã khoan quá 6h trước.',
+      'Báo cáo tình trạng cho PMC và đề xuất điều chỉnh kế hoạch ca tối.',
     ],
-    benefit: 'Khôi phục on-time dispatch về 85%+. Tăng sản lượng ca đêm 10–12%.',
-    costSavingEstimate: '~35 triệu VND/tháng từ loại bỏ tổn thất do dispatch trễ.',
-    createdAt: '2026-07-04T09:00:00',
-    read: true,
+    benefit: 'Tránh hỏng 14 cọc khoan sẵn, bảo toàn ~8h công thi công.',
+    costSavingEstimate: '~92 triệu VND từ tránh hỏng cọc và thi công lại.',
+    createdAt: '2026-07-06T05:30:00',
+    read: false,
   },
   {
     id: 'ai-005',
-    severity: 'medium',
-    category: 'machine',
-    subject: 'SANY-030',
-    title: 'Năng suất vượt trội — Mô hình điển hình cần nhân rộng',
-    summary: 'SANY-030 đạt 42.3 m/giờ, vượt 65% so với TB đội máy — đề xuất chuẩn hóa quy trình',
-    reasoning: 'SANY-030 tại HVB-Khu 1 đạt năng suất 42.3 m cọc/giờ trong 14 ngày liên tục, utilization 94%. AI phân tích pattern: ca đêm được tận dụng tối đa, thời gian setup cọc giảm 35% nhờ quy trình chuẩn hóa. Đây là mô hình vận hành xuất sắc có thể áp dụng cho toàn fleet SANY.',
+    severity: 'high',
+    riskType: 'geology',
+    category: 'project',
+    subject: 'CG – CG-Khu 3',
+    title: 'Địa chất cứng bất ngờ tại CG-K3 làm chậm 30% tiến độ',
+    summary: 'Phát hiện lớp đá cứng 18–24m không có trong báo cáo khảo sát địa chất ban đầu',
+    impactForecast: 'Chậm 6–9 giờ/cọc, nguy cơ trễ tiến độ 5–7 ngày',
+    reasoning: 'SANY-018 và XCMG-012 tại CG-Khu 3 ghi nhận tốc độ khoan giảm đột ngột từ 2.8m/h xuống 0.9m/h ở độ sâu 18–24m, tương ứng giảm 68% năng suất. Đây là dấu hiệu gặp lớp đá cứng (UCS >80 MPa) không xuất hiện trong hồ sơ địa chất khảo sát ban đầu. AI đối chiếu dữ liệu địa chấn vùng lân cận dự đoán lớp đá kéo dài 120–180m theo phương Đông-Tây, ảnh hưởng ít nhất 34 cọc còn lại.',
     evidence: [
-      { label: 'Năng suất SANY-030', actual: '42.3 m/h', expected: '25.6 m/h (TB)' },
-      { label: 'Utilization', actual: '94%', expected: '78% (TB fleet)' },
-      { label: 'Thời gian setup/cọc', actual: '3.2 phút', expected: '4.9 phút (TB)' },
-      { label: 'Ca đêm được dùng', actual: '100%', expected: '64%' },
+      { label: 'Tốc độ khoan thực tế', actual: '0.9 m/h', expected: '2.8 m/h' },
+      { label: 'Giảm năng suất', actual: '-68%', expected: '0' },
+      { label: 'Độ sâu gặp đá', actual: '18–24m', expected: 'Không có trong khảo sát' },
+      { label: 'Số cọc bị ảnh hưởng', actual: '~34 cọc', expected: '0' },
     ],
     recommendations: [
-      'Document quy trình vận hành của tổ máy SANY-030 thành SOP chuẩn.',
-      'Tổ chức buổi chia sẻ kỹ thuật với các đội máy SANY-001 → SANY-015.',
-      'Thử nghiệm áp dụng tại 3 máy pilot trong tuần tới.',
-      'Theo dõi KPI 30 ngày trước khi nhân rộng toàn fleet.',
+      'Điều chỉnh thông số khoan: giảm tốc độ quay, tăng lực ép để tránh gãy cần khoan.',
+      'Yêu cầu đơn vị khảo sát địa chất bổ sung điều tra khu vực CG-Khu 3 trong 48h.',
+      'Xem xét thay đổi thiết kế mũi khoan sang loại chuyên dụng cho đá cứng.',
+      'Cập nhật kế hoạch tiến độ tổng thể và thông báo CĐT về rủi ro chậm tiến độ.',
     ],
-    benefit: 'Nếu nhân rộng ra 10 máy SANY, sản lượng fleet tăng ước tính 18–22%.',
-    costSavingEstimate: '~185 triệu VND/tháng từ tăng doanh thu sản lượng cọc.',
-    createdAt: '2026-07-04T10:20:00',
+    benefit: 'Giảm nguy cơ gãy cần khoan (~120 triệu/lần). Điều chỉnh kịp thời kế hoạch dự án.',
+    costSavingEstimate: '~145 triệu VND từ tránh hư hỏng thiết bị và tối ưu lại lịch thi công.',
+    createdAt: '2026-07-06T04:55:00',
+    read: false,
+  },
+  {
+    id: 'ai-006',
+    severity: 'high',
+    riskType: 'labor',
+    category: 'project',
+    subject: 'HNX – HNX-Khu 2',
+    title: 'Thiếu nhân công ca đêm — chỉ đạt 62% công suất ca tối',
+    summary: '13/21 công nhân vận hành đăng ký nghỉ phép trong tuần tới — nguy cơ dừng ca đêm',
+    impactForecast: 'Mất 30–38% công suất ca đêm, chậm ~4 ngày tổng thể',
+    reasoning: 'HNX-Khu 2 đang có 13/21 công nhân vận hành đăng ký nghỉ phép từ ngày 07–13/07, trùng với đỉnh điểm thi công cọc tầng hầm. Với 8 người còn lại, công suất vận hành ca đêm (22:00–06:00) chỉ đạt 62% — không đủ để vận hành 5 máy theo kế hoạch. AI ước tính mất 38% sản lượng ca đêm, tương đương chậm 4 ngày so với tiến độ tổng thể gói HNX-T2.',
+    evidence: [
+      { label: 'Nhân công ca đêm có mặt', actual: '8/21 người', expected: '21/21 người' },
+      { label: 'Công suất dự báo', actual: '62%', expected: '100%' },
+      { label: 'Thời gian thiếu hụt', actual: '7 ngày (07–13/07)', expected: '0 ngày' },
+      { label: 'Máy không thể vận hành', actual: '2–3 máy', expected: '0 máy' },
+    ],
+    recommendations: [
+      'Liên hệ ngay nhà thầu cung ứng lao động để bổ sung 8 công nhân thay thế cho tuần 07–13/07.',
+      'Xem xét điều động nhân công từ VA-Khu 2 (đang dư thừa 4 người) sang HNX tạm thời.',
+      'Ưu tiên ca ngày cho các cọc có deadline gấp, giảm khối lượng ca đêm.',
+      'Cập nhật chính sách duyệt nghỉ phép để tránh tập trung vào giai đoạn cao điểm.',
+    ],
+    benefit: 'Duy trì công suất ca đêm ≥ 85%. Bảo toàn tiến độ gói HNX-T2 theo hợp đồng.',
+    costSavingEstimate: '~55 triệu VND từ tránh phạt chậm tiến độ và làm thêm giờ bù sau.',
+    createdAt: '2026-07-06T07:10:00',
+    read: false,
+  },
+  {
+    id: 'ai-007',
+    severity: 'high',
+    riskType: 'material-shortage',
+    category: 'material',
+    subject: 'OCP1 – OCP1-Khu 2',
+    title: 'Thép lồng OCP1-Khu 2 sắp hết — thiếu hụt dự kiến sau 6h',
+    summary: 'Tồn kho 42 lồng thép, tiêu thụ 8 lồng/h — cần đặt hàng ngay để tránh dừng dây chuyền',
+    impactForecast: 'Dừng 4 máy ~5h, chậm 16–20 cọc',
+    reasoning: 'OCP1-Khu 2 hiện có 42 lồng thép D1000 trong kho, tốc độ sử dụng 8 lồng/giờ với 4 máy đang hoạt động song song. Thời gian hết tồn kho ước tính vào lúc 14:30 hôm nay. Nhà cung cấp thép lồng (Cty Cơ khí Phú Thọ) cần 5h để xưởng gia công và vận chuyển đến công trường. Nếu không đặt hàng trước 09:30, dây chuyền thi công sẽ gián đoạn.',
+    evidence: [
+      { label: 'Tồn kho thép lồng', actual: '42 lồng', expected: '≥ 80 lồng' },
+      { label: 'Tốc độ tiêu thụ', actual: '8 lồng/h', expected: '5 lồng/h (kế hoạch)' },
+      { label: 'Thời gian còn lại', actual: '~5.3h', expected: '≥ 12h' },
+      { label: 'Lead time đặt hàng', actual: '5h', expected: 'Đặt trước 09:30' },
+    ],
+    recommendations: [
+      'Đặt hàng khẩn cấp 120 lồng thép D1000 từ Cty Cơ khí Phú Thọ trước 09:30.',
+      'Liên hệ nhà cung cấp dự phòng Cty Cơ khí Vĩnh Phúc nếu Phú Thọ không đáp ứng.',
+      'Giảm tạm số máy hoạt động song song xuống 2 để kéo dài thời gian tồn kho.',
+      'Đề xuất tăng mức tồn kho tối thiểu lên 60 lồng cho giai đoạn cao điểm.',
+    ],
+    benefit: 'Duy trì liên tục dây chuyền thi công 4 máy tại OCP1-Khu 2.',
+    costSavingEstimate: '~48 triệu VND từ tránh gián đoạn sản xuất và điều phối làm thêm giờ.',
+    createdAt: '2026-07-06T07:45:00',
+    read: false,
+  },
+  {
+    id: 'ai-008',
+    severity: 'medium',
+    riskType: 'weather',
+    category: 'project',
+    subject: 'VA – VA-Khu 1',
+    title: 'Dự báo gió cấp 6–7 từ 15:00 — nguy cơ phải dừng thi công cọc nước',
+    summary: 'NCHMF dự báo gió mạnh từ chiều nay tại Vũng Áng — ảnh hưởng 4 cọc trên sà lan nổi',
+    impactForecast: 'Dừng cưỡng bức 4–8h, trễ 3–5 cọc nước',
+    reasoning: 'Dự báo thời tiết từ NCHMF và đài khí tượng thủy văn Hà Tĩnh ghi nhận hướng gió Đông-Đông Nam cấp 6–7 (50–61 km/h) dự kiến từ 15:00–23:00 tại khu vực Vũng Áng. VA-Khu 1 đang có 4 cọc thi công trên sà lan nổi ngoài khơi 1.2km — quy định an toàn bắt buộc dừng khi gió ≥ cấp 6. Đây là lần thứ 3 trong tháng 7, ảnh hưởng tích lũy đến tiến độ giai đoạn 1B.',
+    evidence: [
+      { label: 'Tốc độ gió dự báo', actual: '50–61 km/h (cấp 6–7)', expected: '< 39 km/h (cấp 5)' },
+      { label: 'Thời gian ảnh hưởng', actual: '15:00–23:00', expected: 'Không có' },
+      { label: 'Cọc nước bị ảnh hưởng', actual: '4 cọc trên sà lan', expected: '0 cọc' },
+      { label: 'Số lần tháng 7', actual: '3 lần', expected: '≤ 1 lần/tuần' },
+    ],
+    recommendations: [
+      'Lên kế hoạch hoàn thành tối đa cọc ngoài khơi trước 14:30 hôm nay.',
+      'Di chuyển sà lan vào vị trí neo đậu an toàn trước khi gió mạnh đến.',
+      'Tập trung nhân lực và máy vào thi công cọc bờ trong ca chiều và tối.',
+      'Cập nhật kế hoạch dự phòng thời tiết xấu vào báo cáo tiến độ tuần.',
+    ],
+    benefit: 'Bảo toàn an toàn thiết bị và nhân công trên biển. Tối ưu ca thi công bờ.',
+    costSavingEstimate: '~22 triệu VND từ tối ưu lịch thi công và tránh rủi ro an toàn.',
+    createdAt: '2026-07-06T08:00:00',
+    read: true,
+  },
+  {
+    id: 'ai-009',
+    severity: 'medium',
+    riskType: 'labor',
+    category: 'project',
+    subject: 'HVB – HVB-Khu 3',
+    title: 'Thiếu kỹ thuật viên kiểm tra chất lượng — 9 cọc chưa được nghiệm thu',
+    summary: 'KTV chất lượng duy nhất tại HVB-Khu 3 đang ốm — 9 cọc hoàn thành đang chờ PIT test',
+    impactForecast: 'Ách tắc nghiệm thu 2–3 ngày, không thể thi công phần trên',
+    reasoning: 'HVB-Khu 3 chỉ có 1 kỹ thuật viên chất lượng được phân công (KTV Nguyễn Văn Minh) đang nghỉ ốm từ hôm qua. Hiện có 9 cọc hoàn thành đang chờ thực hiện PIT test (Pile Integrity Test) — yêu cầu bắt buộc trước khi thi công phần bê tông trên. Nếu không có KTV thay thế trong 24h, toàn bộ 4 máy tại HVB-Khu 3 sẽ không thể tiếp tục theo quy trình kiểm soát chất lượng hợp đồng.',
+    evidence: [
+      { label: 'KTV chất lượng có mặt', actual: '0/1 người', expected: '1 người' },
+      { label: 'Cọc chờ PIT test', actual: '9 cọc', expected: '≤ 2 cọc' },
+      { label: 'Thời gian ách tắc', actual: '> 24h nếu không can thiệp', expected: '< 4h' },
+      { label: 'Máy bị gián đoạn', actual: '4 máy', expected: '0 máy' },
+    ],
+    recommendations: [
+      'Điều động KTV chất lượng từ HVB-Khu 1 sang HVB-Khu 3 để thực hiện PIT test khẩn.',
+      'Liên hệ đơn vị kiểm tra độc lập (Vilas 001) để hỗ trợ PIT test ngay hôm nay.',
+      'Lên kế hoạch đào tạo ít nhất 2 KTV chất lượng/công trường để tránh rủi ro phụ thuộc 1 người.',
+      'Cập nhật quy trình quản lý nguồn lực chất lượng vào SOP dự án.',
+    ],
+    benefit: 'Giải phóng ách tắc nghiệm thu, cho phép 4 máy tiếp tục thi công liên tục.',
+    costSavingEstimate: '~38 triệu VND từ tránh ách tắc dây chuyền và chi phí lưu máy chờ.',
+    createdAt: '2026-07-06T08:30:00',
+    read: true,
+  },
+  {
+    id: 'ai-010',
+    severity: 'medium',
+    riskType: 'machine-breakdown',
+    category: 'machine',
+    subject: 'OCP1 – XCMG-015',
+    title: 'XCMG-015 đến hạn bảo dưỡng 500h — nguy cơ hỏng không lường trước',
+    summary: 'Đồng hồ giờ máy đạt 498h, vượt 500h hôm nay — chưa lên lịch bảo dưỡng định kỳ',
+    impactForecast: 'Nguy cơ hỏng bất ngờ trong 48h, dừng 12–24h nếu xảy ra',
+    reasoning: 'XCMG-015 tại OCP1-Khu 1 đạt 498 giờ hoạt động tính đến sáng nay — vượt mốc bảo dưỡng 500h theo khuyến nghị nhà sản xuất mà chưa được lên lịch. Dữ liệu lịch sử cho thấy các máy XCMG cùng model không được bảo dưỡng đúng hạn có xác suất hỏng filter nhớt và bơm thủy lực tăng 340% trong 48h tiếp theo. Máy đang thực hiện gói cọc quan trọng nhất giai đoạn 1 tại OCP1.',
+    evidence: [
+      { label: 'Giờ hoạt động hiện tại', actual: '498h', expected: 'Bảo dưỡng ≤ 500h' },
+      { label: 'Trạng thái lịch BT', actual: 'Chưa lên lịch', expected: 'Đã đặt lịch' },
+      { label: 'Nguy cơ hỏng filter', actual: '+340% (48h tới)', expected: 'Ngưỡng bình thường' },
+      { label: 'Thời gian bảo dưỡng', actual: '4–6h dự kiến', expected: 'Đã lên kế hoạch' },
+    ],
+    recommendations: [
+      'Lên lịch bảo dưỡng 500h cho XCMG-015 vào ca nghỉ đêm nay (22:00–04:00).',
+      'Chuẩn bị bộ phụ tùng bảo dưỡng: dầu nhớt 10W40, filter dầu, filter khí, dây curoa.',
+      'Điều XCMG-011 sang trực ca trong thời gian XCMG-015 bảo dưỡng.',
+      'Đăng ký cảnh báo tự động vào hệ thống khi máy đến 480h cho lần tiếp theo.',
+    ],
+    benefit: 'Phòng ngừa hỏng đột ngột giữa ca, bảo toàn tuổi thọ máy thêm 500–1000h.',
+    costSavingEstimate: '~85 triệu VND từ tránh sửa chữa lớn và gián đoạn sản xuất không kế hoạch.',
+    createdAt: '2026-07-06T09:00:00',
     read: true,
   },
 ]

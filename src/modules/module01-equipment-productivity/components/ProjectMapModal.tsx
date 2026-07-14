@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, AlertTriangle, CheckCircle2, Clock, Wrench, MapPin, HardHat, Fuel,
+  X, AlertTriangle, CheckCircle2, Clock, Wrench, MapPin, HardHat, Fuel, User,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { Project, Worksite, PileStatus, DelayReason } from '../types'
@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<PileStatus, string> = {
   'completed':   'Hoàn thành',
   'in-progress': 'Đang thi công',
   'delayed':     'Chậm tiến độ',
-  'blocked':     'Bị chặn',
+  'blocked':     'Đình trệ',
   'not-started': 'Chưa bắt đầu',
 }
 
@@ -41,6 +41,7 @@ interface PileDot {
   depthM: number
   machineCode?: string
   machineType?: string
+  operator?: string
   delayReason?: DelayReason
   plannedStart?: string
   plannedEnd?: string
@@ -227,7 +228,7 @@ function buildDots(ws: Worksite, layout: BuildingLayout): PileDot[] {
         pileCode: rp.pileCode, capId: pos.capId,
         status: rp.status,
         diameterMm: rp.diameterMm, depthM: rp.depthM,
-        machineCode: m?.code, machineType: m?.type,
+        machineCode: m?.code, machineType: m?.type, operator: m?.operator,
         delayReason: rp.delayReason,
         plannedStart: rp.plannedStart, plannedEnd: rp.plannedEnd,
         actualStart: rp.actualStart, actualEnd: rp.actualEnd,
@@ -632,14 +633,18 @@ function PileDetail({ dot }: { dot: PileDot }) {
           <MapPin className="w-2.5 h-2.5" /> Lịch thi công
         </p>
         <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
-          <span className="text-[9px] text-muted-foreground/70">Ngày thi công</span>
+          <span className="text-[9px] text-muted-foreground/70">Ngày</span>
           <span className="text-[9px] font-semibold text-foreground/90">
             {fmtDate(dot.actualStart ?? dot.plannedStart)}
           </span>
           <span className="text-[9px] text-muted-foreground/70">KH bắt đầu</span>
-          <span className="text-[9px] tabular-nums text-foreground/80">{fmtTime(dot.plannedStart)}</span>
+          <span className="text-[9px] tabular-nums text-foreground/80">
+            {fmtTime(dot.plannedStart)}
+          </span>
           <span className="text-[9px] text-muted-foreground/70">KH kết thúc</span>
-          <span className="text-[9px] tabular-nums text-foreground/80">{fmtTime(dot.plannedEnd)}</span>
+          <span className="text-[9px] tabular-nums text-foreground/80">
+            {fmtTime(dot.plannedEnd)}
+          </span>
           {dot.actualStart && <>
             <span className="text-[9px] text-muted-foreground/70">Bắt đầu TT</span>
             <span className="text-[9px] font-semibold text-sky-400 tabular-nums">{fmtTime(dot.actualStart)}</span>
@@ -649,7 +654,7 @@ function PileDetail({ dot }: { dot: PileDot }) {
             <span className="text-[9px] font-semibold text-sky-400 tabular-nums">{fmtTime(dot.actualEnd)}</span>
           </>}
           {dot.actualDurationH !== undefined && <>
-            <span className="text-[9px] text-muted-foreground/70">Thời gian</span>
+            <span className="text-[9px] text-muted-foreground/70">Thời lượng TT</span>
             <span className="text-[9px] font-semibold text-emerald-400 tabular-nums">{dot.actualDurationH}h</span>
           </>}
           {dot.delayHours !== undefined && <>
@@ -669,6 +674,12 @@ function PileDetail({ dot }: { dot: PileDot }) {
             <p className="text-xs font-bold text-sky-400">{dot.machineCode}</p>
             {dot.machineType && (
               <p className="text-[9px] text-muted-foreground/60 leading-snug">{dot.machineType}</p>
+            )}
+            {dot.operator && (
+              <p className="flex items-center gap-1 text-[9px] text-foreground/70 mt-0.5">
+                <User className="w-2.5 h-2.5 shrink-0 text-muted-foreground/50" />
+                {dot.operator}
+              </p>
             )}
           </>
         ) : (
@@ -745,34 +756,37 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
   }
 
   return createPortal(
-    <>
+    <AnimatePresence>
       {/* Backdrop */}
       <motion.div
+        key="backdrop"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
         className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm"
       />
 
-      {/* Modal — portal to document.body; h-[88vh] gives definite height for SVG flex sizing */}
+      {/* Modal wrapper — flex centering avoids framer-motion overriding CSS translate */}
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
       <motion.div
+        key="modal"
         initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 16 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
-          'fixed z-[9999] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
-          'w-[96vw] max-w-6xl h-[88vh]',
+          'pointer-events-auto',
+          'w-full max-w-6xl h-[88vh]',
           'flex flex-col bg-[#0b0f18] border border-[#1e2433] rounded-xl shadow-2xl overflow-hidden',
         )}
       >
         {/* ── Header (2 rows) ── */}
         <div className="shrink-0 border-b border-[#1e2433]">
           {/* Row 1: project info + close */}
-          <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
+          <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5 min-w-0">
             <div className="w-6 h-6 rounded-md bg-violet-500/10 flex items-center justify-center shrink-0">
               <HardHat className="w-3 h-3 text-violet-400" />
             </div>
-            <span className="font-bold text-sm text-foreground truncate">{project.name}</span>
+            <span className="font-bold text-sm text-foreground truncate min-w-0">{project.name}</span>
             <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 shrink-0">
               {project.code}
             </span>
@@ -787,55 +801,58 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          {/* Row 2: worksite tabs */}
-          <div className="flex gap-1 px-4 pb-2">
-            {worksites.map(ws => {
-              const pct = ws.plannedPiles > 0
-                ? Math.round(ws.completedPiles / ws.plannedPiles * 100) : 0
-              const riskCount = ws.delayedPiles + ws.blockedPiles
-              return (
-                <button key={ws.id} onClick={() => switchWs(ws.id)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-semibold transition-colors',
-                    activeWsId === ws.id
-                      ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent',
-                  )}>
-                  {ws.code}
-                  <span className={cn('text-[9px] font-bold tabular-nums',
-                    pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400')}>
-                    {pct}%
-                  </span>
-                  {riskCount > 0 && (
-                    <span className="text-[8px] text-amber-400 font-bold">
-                      ⚠{riskCount}
+          {/* Row 2: worksite tabs + summary chips */}
+          <div className="flex items-center gap-2 px-4 pb-2 min-w-0">
+            {/* Scrollable tabs area */}
+            <div className="flex gap-1 overflow-x-auto flex-nowrap flex-1 min-w-0">
+              {worksites.map(ws => {
+                const pct = ws.plannedPiles > 0
+                  ? Math.round(ws.completedPiles / ws.plannedPiles * 100) : 0
+                const riskCount = ws.delayedPiles + ws.blockedPiles
+                return (
+                  <button key={ws.id} onClick={() => switchWs(ws.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-semibold transition-colors shrink-0',
+                      activeWsId === ws.id
+                        ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent',
+                    )}>
+                    {ws.code}
+                    <span className={cn('text-[9px] font-bold tabular-nums',
+                      pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400')}>
+                      {pct}%
                     </span>
-                  )}
-                </button>
-              )
-            })}
-            {/* Summary chips */}
+                    {riskCount > 0 && (
+                      <span className="text-[8px] text-amber-400 font-bold">
+                        ⚠{riskCount}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {/* Summary chips — fixed to the right, outside overflow zone */}
             {activeWs && (
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-[9px] text-green-400/70">{activeWs.completedPiles} xong</span>
-                <span className="text-[9px] text-sky-400/70">{activeWs.inProgressPiles} đang t/c</span>
+              <div className="flex items-center gap-2 shrink-0 pl-1 border-l border-[#1e2433]">
+                <span className="text-[9px] text-green-400/70 tabular-nums">{activeWs.completedPiles} xong</span>
+                <span className="text-[9px] text-sky-400/70 tabular-nums">{activeWs.inProgressPiles} t/c</span>
                 {activeWs.delayedPiles + activeWs.blockedPiles > 0 && (
-                  <span className="text-[9px] text-amber-400/70">{activeWs.delayedPiles + activeWs.blockedPiles} rủi ro</span>
+                  <span className="text-[9px] text-amber-400/70 tabular-nums">{activeWs.delayedPiles + activeWs.blockedPiles} rủi ro</span>
                 )}
-                <span className="text-[9px] text-muted-foreground/40">/ {activeWs.plannedPiles} cọc</span>
+                <span className="text-[9px] text-muted-foreground/40 tabular-nums">/{activeWs.plannedPiles}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* ── HTML legend bar ── */}
-        <div className="flex items-center gap-4 px-4 py-1.5 border-b border-[#1e2433]/60 bg-[#060a10] shrink-0 flex-wrap">
+        <div className="flex items-center gap-4 px-4 py-1.5 border-b border-[#1e2433]/60 bg-[#060a10] shrink-0 overflow-x-auto flex-nowrap">
           {(
             [
               ['completed',   'Hoàn thành'],
               ['in-progress', 'Đang thi công'],
               ['delayed',     'Chậm tiến độ'],
-              ['blocked',     'Bị chặn'],
+              ['blocked',     'Đình trệ'],
               ['not-started', 'Chưa bắt đầu'],
             ] as [PileStatus, string][]
           ).map(([s, lbl]) => (
@@ -853,7 +870,7 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
               style={{ background: 'repeating-linear-gradient(45deg, #1a2d4a, #1a2d4a 1px, transparent 1px, transparent 4px)' }} />
             Đài cọc
           </span>
-          <span className="text-[9px] text-muted-foreground/40 ml-auto">
+          <span className="text-[9px] text-muted-foreground/40 shrink-0 ml-4">
             Click vào ký hiệu cọc để xem chi tiết
           </span>
         </div>
@@ -875,7 +892,7 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
           </div>
 
           {/* Detail panel */}
-          <div className="w-56 sm:w-60 shrink-0 border-l border-[#1e2433] flex flex-col bg-[#0b0f18]">
+          <div className="w-56 sm:w-60 shrink-0 border-l border-[#1e2433] flex flex-col min-h-0 bg-[#0b0f18]">
             <div className="px-3 py-2 border-b border-[#1e2433] shrink-0 flex items-center justify-between">
               <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Chi tiết cọc</p>
               {selectedDot && (
@@ -907,7 +924,7 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
                         { s: 'completed',   n: activeWs.completedPiles,  label: 'Hoàn thành' },
                         { s: 'in-progress', n: activeWs.inProgressPiles, label: 'Đang t/c' },
                         { s: 'delayed',     n: activeWs.delayedPiles,    label: 'Chậm' },
-                        { s: 'blocked',     n: activeWs.blockedPiles,    label: 'Bị chặn' },
+                        { s: 'blocked',     n: activeWs.blockedPiles,    label: 'Đình trệ' },
                       ].filter(x => x.n > 0).map(x => (
                         <div key={x.s} className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full shrink-0"
@@ -925,7 +942,8 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
           </div>
         </div>
       </motion.div>
-    </>,
+      </div>
+    </AnimatePresence>,
     document.body,
   )
 }

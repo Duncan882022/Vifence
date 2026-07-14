@@ -35,7 +35,7 @@ export function CeoDashboardPage() {
   const [selectedAi, setSelectedAi] = useState<AiRecommendationRow | null>(null)
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(true)
-  const [tableOpen, setTableOpen] = useState(true)
+  const [tableExpanded, setTableExpanded] = useState(false)
   const [topOpen, setTopOpen] = useState(true)
   const [aiRiskOpen, setAiRiskOpen] = useState(true)
   const [, setRefreshKey] = useState(0)
@@ -103,57 +103,67 @@ export function CeoDashboardPage() {
           animate="visible"
           className="flex gap-3 min-h-0 flex-1"
         >
-          {/* Map panel */}
-          <motion.div
-            layout
-            transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-            className={cn('flex flex-col min-h-0 shrink-0 overflow-hidden', mapOpen ? 'w-[25%] min-w-[200px]' : 'w-11')}
-          >
-            <VietnamRegionMap
-              regions={data.regions}
-              getMachinesByRegion={getMachinesByRegion}
-              open={mapOpen}
-              onToggleOpen={() => setMapOpen(v => !v)}
-            />
-          </motion.div>
-
-          {/* Middle column: Top 10 + AI Risk stacked */}
+          {/* Left panels wrapper — hidden when table is expanded */}
           <motion.div
             layout
             transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
             className={cn(
-              'flex flex-col gap-3 shrink-0 overflow-hidden min-h-0',
-              (topOpen || aiRiskOpen) ? 'w-[25%] min-w-[180px]' : 'w-11',
+              'flex gap-3 min-h-0 overflow-hidden',
+              tableExpanded ? 'w-0 opacity-0 flex-none' : 'flex-[2] opacity-100',
             )}
           >
-            {/* Top 10 */}
-            <TopUsersPanel
-              units={data.usageUnits}
-              open={topOpen}
-              onToggle={() => setTopOpen(v => !v)}
-            />
-            {/* AI Risk Top 5 */}
-            <AiRiskPanel
-              recommendations={data.aiRecommendations}
-              open={aiRiskOpen}
-              onToggle={() => setAiRiskOpen(v => !v)}
-              onRowClick={(item) => { setSelectedAi(item); setAiDrawerOpen(true) }}
-            />
+            {/* Map panel */}
+            <motion.div
+              layout
+              transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+              className={cn('flex flex-col min-h-0 overflow-hidden', mapOpen ? 'flex-1 min-w-[200px]' : 'w-11 shrink-0')}
+            >
+              <VietnamRegionMap
+                regions={data.regions}
+                getMachinesByRegion={getMachinesByRegion}
+                open={mapOpen}
+                onToggleOpen={() => setMapOpen(v => !v)}
+              />
+            </motion.div>
+
+            {/* Middle column: Top 10 + AI Risk stacked */}
+            <motion.div
+              layout
+              transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+              className={cn(
+                'flex flex-col gap-3 overflow-hidden min-h-0',
+                (topOpen || aiRiskOpen) ? 'flex-1 min-w-[180px]' : 'w-11 shrink-0',
+              )}
+            >
+              {/* Top 10 */}
+              <TopUsersPanel
+                units={data.usageUnits}
+                open={topOpen}
+                onToggle={() => setTopOpen(v => !v)}
+              />
+              {/* AI Risk Top 5 */}
+              <AiRiskPanel
+                recommendations={data.aiRecommendations}
+                open={aiRiskOpen}
+                onToggle={() => setAiRiskOpen(v => !v)}
+                onRowClick={(item) => { setSelectedAi(item); setAiDrawerOpen(true) }}
+              />
+            </motion.div>
           </motion.div>
 
           {/* Machine list panel */}
           <motion.div
             layout
             transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-            className={cn('flex flex-col min-h-0 overflow-hidden', tableOpen ? 'flex-1 min-w-0' : 'w-11 shrink-0')}
+            className={cn('flex flex-col min-h-0 overflow-hidden', tableExpanded ? 'flex-1' : 'flex-[3]')}
           >
             <MmtbDataTable
               data={filteredMachines}
               search={filters.search}
               onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
               onRowClick={row => { setSelectedMachine(row); setMachineDrawerOpen(true) }}
-              open={tableOpen}
-              onToggle={() => setTableOpen(v => !v)}
+              expanded={tableExpanded}
+              onToggle={() => setTableExpanded(v => !v)}
             />
           </motion.div>
         </motion.div>

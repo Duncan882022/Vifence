@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertCircle, AlertTriangle, Info, ChevronRight, ArrowRight, Sparkles } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Info, ChevronRight, Sparkles } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type { AiRecommendationRow, AiSeverity } from '../types'
@@ -22,24 +23,19 @@ interface AiRecommendationsPanelProps {
   onSelect: (item: AiRecommendationRow) => void
 }
 
+const PAGE_SIZE = 6
+
 export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPanelProps) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const displayed = items.slice(0, visibleCount)
+  const hasMore = visibleCount < items.length
+
   return (
     <Panel
       title="Khuyến nghị AI"
       noPadding
       expandable
       className="h-full min-h-0"
-      headerRight={(
-        <button
-          type="button"
-          title="Xem tất cả — chưa triển khai"
-          disabled
-          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] text-primary/50 font-semibold cursor-not-allowed opacity-60"
-        >
-          Xem tất cả
-          <ArrowRight className="w-3 h-3" />
-        </button>
-      )}
     >
       <div className="flex flex-col h-full min-h-0">
         <div className="flex items-center gap-2 px-3 py-2 bg-[#0b0f1a] border-b border-[#1e2433] shrink-0">
@@ -51,7 +47,7 @@ export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPan
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
-          {items.map((item, i) => {
+          {displayed.map((item, i) => {
             const { Icon, cls, bg, border } = SEV[item.severity]
             return (
               <motion.button
@@ -103,9 +99,27 @@ export function AiRecommendationsPanel({ items, onSelect }: AiRecommendationsPan
           })}
         </div>
 
-        <div className="px-3 py-2.5 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/50">
+        <div className="px-3 pt-2 pb-2.5 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/50 flex flex-col gap-2">
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount(c => Math.min(c + PAGE_SIZE, items.length))}
+              className="w-full py-1.5 text-[10px] font-semibold text-primary/70 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors border border-dashed border-primary/20 hover:border-primary/40"
+            >
+              Xem thêm ({items.length - visibleCount} còn lại)
+            </button>
+          )}
+          {!hasMore && items.length > PAGE_SIZE && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount(PAGE_SIZE)}
+              className="w-full py-1.5 text-[10px] font-semibold text-muted-foreground/50 hover:text-muted-foreground hover:bg-[#1a2030] rounded-lg transition-colors"
+            >
+              Thu gọn
+            </button>
+          )}
           <p className="text-[10px] text-muted-foreground">
-            Hiển thị {items.length} trong tổng số 18 đề xuất
+            Hiển thị {displayed.length} / {items.length} đề xuất
           </p>
         </div>
       </div>

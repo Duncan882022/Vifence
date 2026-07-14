@@ -12,13 +12,13 @@ const STATUS_BADGE: Record<MachineStatus, string> = {
   working:   'bg-green-500/15 text-green-400 ring-1 ring-green-500/25',
   idle:      'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/25',
   breakdown: 'bg-red-500/15 text-red-400 ring-1 ring-red-500/25',
-  stored:    'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25',
+  stored:    'bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25',
 }
 
 const STATUS_LABELS: Record<MachineStatus, string> = {
-  working:   'Đang chạy',
+  working:   'Đang hoạt động',
   idle:      'Chờ việc',
-  breakdown: 'Hỏng',
+  breakdown: 'Hỏng hóc',
   stored:    'Lưu kho',
 }
 
@@ -152,7 +152,7 @@ export function MachineProductivityTable({ machines, projects, worksites, piles 
       },
     },
     {
-      accessorKey: 'utilizationPct', header: 'Hiệu suất',
+      accessorKey: 'utilizationPct', header: 'Sử dụng',
       cell: ({ getValue }) => {
         const v = getValue<number>()
         return (
@@ -205,13 +205,6 @@ export function MachineProductivityTable({ machines, projects, worksites, piles 
         )
       },
     },
-    {
-      accessorKey: 'dispatchStatus', header: 'Điều phối',
-      cell: ({ getValue }) => {
-        const d = getValue<DispatchStatus>()
-        return <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[9px] font-semibold', DISPATCH_BADGE[d])}>{DISPATCH_LABELS[d]}</span>
-      },
-    },
   ], [])
 
   const table = useReactTable({
@@ -254,9 +247,10 @@ export function MachineProductivityTable({ machines, projects, worksites, piles 
             />
           </div>
           <div className="flex items-center gap-2 text-[9px] text-muted-foreground/60">
-            <span className="w-2 h-2 rounded-full bg-green-400" /> Đang chạy
+            <span className="w-2 h-2 rounded-full bg-green-400" /> Đang hoạt động
             <span className="w-2 h-2 rounded-full bg-amber-400" /> Chờ việc
-            <span className="w-2 h-2 rounded-full bg-red-400" /> Hỏng
+            <span className="w-2 h-2 rounded-full bg-red-400" /> Hỏng hóc
+            <span className="w-2 h-2 rounded-full bg-sky-400" /> Lưu kho
           </div>
         </div>
 

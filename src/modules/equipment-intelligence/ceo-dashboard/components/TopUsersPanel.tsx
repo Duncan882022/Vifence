@@ -77,7 +77,7 @@ export function TopUsersPanel({ units, open = true, onToggle }: { units: UsageUn
   ) : undefined
 
   return (
-    <Panel title="Top 10 đơn vị sử dụng MMTB" noPadding fit expandable headerRight={collapseBtn} className="shrink-0">
+    <Panel title="Top 10 đơn vị sử dụng" noPadding fit expandable headerRight={collapseBtn} className="shrink-0">
       <div className="overflow-x-auto">
         <table className="w-full text-[10px]">
           <thead className="sticky top-0 z-10">

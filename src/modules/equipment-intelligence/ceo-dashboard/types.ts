@@ -117,6 +117,8 @@ export interface MmtbRow {
   pmNextItem?: string
   pmProgressPct?: number
   imageUrl?: string
+  /** Độ sẵn sàng: MTBF / (MTBF + MTTR) × 100 */
+  availabilityPct?: number
 }
 
 export interface CeoDashboardData {

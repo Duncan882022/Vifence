@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { BarChart3, ExternalLink, History, Wrench } from 'lucide-react'
+import { BarChart3, Wrench } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
@@ -216,22 +216,6 @@ export function EquipmentDetailDrawer({ machine, open, onOpenChange }: Equipment
 
             {/* Footer actions */}
             <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/50">
-              <button
-                type="button"
-                onClick={showTrial}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a3855] bg-transparent text-[11px] font-semibold text-foreground hover:bg-[#1a2235] transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Xem chi tiết
-              </button>
-              <button
-                type="button"
-                onClick={showTrial}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a3855] bg-transparent text-[11px] font-semibold text-foreground hover:bg-[#1a2235] transition-colors"
-              >
-                <History className="w-3.5 h-3.5" />
-                Lịch sử thiết bị
-              </button>
               <button
                 type="button"
                 onClick={showTrial}

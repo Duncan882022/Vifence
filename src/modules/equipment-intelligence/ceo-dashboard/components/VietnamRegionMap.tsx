@@ -430,6 +430,13 @@ export function VietnamRegionMap({
   )
 }
 
+const STATUS_VI_MAP: Record<string, string> = {
+  Working: 'Đang hoạt động',
+  Standby: 'Chờ việc',
+  Breakdown: 'Hỏng hóc',
+  Stored: 'Lưu kho',
+}
+
 function RegionDetailPopup({
   region,
   machines,
@@ -483,7 +490,7 @@ function RegionDetailPopup({
                 : m.status === 'Breakdown' ? 'text-red-400'
                   : m.status === 'Standby' ? 'text-amber-400' : 'text-sky-400',
             )}>
-              {m.status}
+              {STATUS_VI_MAP[m.status] ?? m.status}
             </span>
           </li>
         ))}

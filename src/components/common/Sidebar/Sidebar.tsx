@@ -34,12 +34,12 @@ const navItems: NavItem[] = [
   { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: true  },
   {
     path: '/equipment-group',
-    label: 'Quản lý MMTB',
+    label: 'Quản lý máy móc',
     icon: Cpu,
     available: true,
     children: [
-      { path: '/equipmentpro', label: 'Năng suất vận hành', icon: Gauge,    available: true },
-      { path: '/equipment',    label: 'Độ tin cậy thiết bị', icon: Activity, available: true },
+      { path: '/equipmentpro', label: 'Hiệu quả vận hành', icon: Gauge,    available: true },
+      { path: '/equipment',    label: 'Quản lý máy móc', icon: Activity, available: true },
     ],
   },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },

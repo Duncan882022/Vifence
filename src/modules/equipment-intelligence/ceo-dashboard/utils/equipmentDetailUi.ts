@@ -45,6 +45,6 @@ export const RELIABILITY_SPARKLINE = [
 ] as const
 
 export function aiSeverityLabel(severity: AiRecommendationRow['severity']): string {
-  const map = { critical: 'Critical', high: 'High', medium: 'Medium', info: 'Info' } as const
+  const map = { critical: 'Nghiêm trọng', high: 'Cao', medium: 'Trung bình', info: 'Thông tin' } as const
   return map[severity]
 }

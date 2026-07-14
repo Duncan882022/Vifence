@@ -1,4 +1,6 @@
 import type { CeoDashboardData, MmtbRow } from '../types'
+import type { Machine } from '../../../module01-equipment-productivity/types'
+import { MACHINES } from '../../../module01-equipment-productivity/data/mockProductivity'
 
 const EXAMPLE_MACHINES: MmtbRow[] = [
   {
@@ -25,6 +27,7 @@ const EXAMPLE_MACHINES: MmtbRow[] = [
     pmDaysUntilDue: 6,            // 50h remaining / 8h/day ≈ 6 days
     pmNextItem: 'Thay lọc dầu thủy lực',
     pmProgressPct: 80,
+    availabilityPct: Math.round(191 / (191 + 3.8) * 1000) / 10,
   },
   {
     id: 'm-021',
@@ -43,13 +46,14 @@ const EXAMPLE_MACHINES: MmtbRow[] = [
     pmStatusLabel: 'Sắp tới hạn 35h',
     usageUnit: 'SGC',
     latestAiRecommendation: 'PM sắp tới hạn trong 20 giờ',
-    serialNumber: 'SR235-2021-02134',
-    commissionDate: '08/06/2021',
-    warrantyUntil: '08/06/2026',
+    serialNumber: 'SR235-2021-00892',
+    commissionDate: '05/08/2021',
+    warrantyUntil: '05/08/2026',
     productionYear: 2021,
-    pmDaysUntilDue: 4,
-    pmNextItem: 'Kiểm tra & thay dầu thủy lực',
+    pmDaysUntilDue: 3,
+    pmNextItem: 'Thay lọc dầu thủy lực + kiểm tra van an toàn',
     pmProgressPct: 72,
+    availabilityPct: Math.round(180 / (180 + 2.4) * 1000) / 10,
   },
   {
     id: 'm-007',
@@ -68,22 +72,39 @@ const EXAMPLE_MACHINES: MmtbRow[] = [
     pmStatusLabel: 'Quá hạn 10h',
     usageUnit: 'Bauer Vietnam',
     latestAiRecommendation: 'Thiết bị mất kết nối >24h',
-    serialNumber: 'XG500E-2023-00712',
-    commissionDate: '15/11/2023',
-    warrantyUntil: '15/11/2028',
+    serialNumber: 'XG500E-2023-00341',
+    commissionDate: '18/01/2023',
+    warrantyUntil: '18/01/2028',
     productionYear: 2023,
-    pmDaysUntilDue: -2,
-    pmNextItem: 'Kiểm tra hệ thống điện & IoT',
+    pmDaysUntilDue: -10,
+    pmNextItem: 'Bảo dưỡng tổng hợp PM250h',
     pmProgressPct: 100,
+    availabilityPct: Math.round(85 / (85 + 6.2) * 1000) / 10,
   },
 ]
 
+/**
+ * Fleet composition (100 total — mirrors Module 1):
+ *   Drilling (SANY SR285R/SR235C, BAUER BG28, XCMG XR280D):  40
+ *   Excavator (Komatsu PC300, Hitachi ZX350, CAT 336):        20
+ *   Pile driver (Sunward SWDM22, Junttan PM26):               15
+ *   Concrete pump (Schwing S34SX, Putzmeister BSF36):         15
+ *   Roller / compactor (Bomag BW213, Dynapac CA250):          10
+ */
 const MODELS = [
-  { type: 'Cọc nhồi SR360',   prefix: 'SANY', priceBillionVnd: 20 },
-  { type: 'Cọc nhồi SR285R',  prefix: 'SANY', priceBillionVnd: 15 },
-  { type: 'Cọc nhồi SR235',   prefix: 'SANY', priceBillionVnd: 12 },
-  { type: 'Cọc nhồi XG500E',  prefix: 'XCMG', priceBillionVnd: 17 },
-  { type: 'Cọc nhồi SY650HB', prefix: 'SANY', priceBillionVnd: 22 },
+  { type: 'Cọc nhồi SANY SR285R',            prefix: 'SANY',  priceBillionVnd: 18 },
+  { type: 'Cọc nhồi SANY SR235C',            prefix: 'SANY',  priceBillionVnd: 15 },
+  { type: 'Cọc nhồi BAUER BG28',             prefix: 'BAUER', priceBillionVnd: 22 },
+  { type: 'Cọc nhồi XCMG XR280D',            prefix: 'XCMG',  priceBillionVnd: 17 },
+  { type: 'Máy đào Komatsu PC300',            prefix: 'PC3',   priceBillionVnd: 8  },
+  { type: 'Máy đào Hitachi ZX350',            prefix: 'ZX3',   priceBillionVnd: 9  },
+  { type: 'Máy đào CAT 336',                 prefix: 'C336',  priceBillionVnd: 10 },
+  { type: 'Máy ép cọc Sunward SWDM22',       prefix: 'SWDM',  priceBillionVnd: 12 },
+  { type: 'Máy ép cọc Junttan PM26',         prefix: 'PM26',  priceBillionVnd: 14 },
+  { type: 'Máy bơm bê tông Schwing S34SX',   prefix: 'S34S',  priceBillionVnd: 6  },
+  { type: 'Máy bơm bê tông Putzmeister BSF36', prefix: 'BSF3', priceBillionVnd: 7 },
+  { type: 'Máy lu Bomag BW213',               prefix: 'BW21',  priceBillionVnd: 5  },
+  { type: 'Máy đầm Dynapac CA250',            prefix: 'CA25',  priceBillionVnd: 4  },
 ]
 
 const PROJECTS = ['Hạ Long Xanh', 'Cần Giờ', 'Hải Vân Bay', 'Vũng Áng', 'Làng Olympic', 'OCP1']
@@ -93,23 +114,115 @@ const UNITS = [
 ]
 const REGIONS = [
   { id: 'quang-ninh', name: 'Quảng Ninh', project: 'Hạ Long Xanh' },
-  { id: 'ha-noi', name: 'Hà Nội', project: 'OCP1' },
-  { id: 'vung-ang', name: 'Hà Tĩnh / Vũng Áng', project: 'Vũng Áng' },
-  { id: 'da-nang', name: 'Đà Nẵng / Hải Vân Bay', project: 'Hải Vân Bay' },
-  { id: 'can-gio', name: 'Cần Giờ', project: 'Cần Giờ' },
-  { id: 'long-an', name: 'Long An', project: 'Làng Olympic' },
+  { id: 'ha-noi',     name: 'Hà Nội',     project: 'OCP1' },
+  { id: 'vung-ang',   name: 'Hà Tĩnh / Vũng Áng', project: 'Vũng Áng' },
+  { id: 'da-nang',    name: 'Đà Nẵng / Hải Vân Bay', project: 'Hải Vân Bay' },
+  { id: 'can-gio',    name: 'Cần Giờ', project: 'Cần Giờ' },
+  { id: 'long-an',    name: 'Long An',    project: 'Làng Olympic' },
 ]
 
 /**
- * Gán trạng thái theo tỉ lệ thực tế: 70% Hoạt động, 18% Chờ việc, 8% Hỏng, 4% Lưu kho
- * Dùng chu kỳ 50 để tổng 1000 máy cho ra ~700/180/80/40
+ * Status distribution: 60% Working / 20% Standby / 10% Breakdown / 10% Stored
+ * Cycle of 10 ensures exact distribution across the fleet.
  */
 function assignStatus(i: number): MmtbRow['status'] {
-  const r = i % 50
-  if (r < 35) return 'Working'     // 35/50 = 70 %
-  if (r < 44) return 'Standby'     // 9/50  = 18 %
-  if (r < 48) return 'Breakdown'   // 4/50  =  8 %
-  return 'Stored'                   // 2/50  =  4 %
+  const r = i % 10
+  if (r < 6) return 'Working'    // 6/10 = 60%
+  if (r < 8) return 'Standby'    // 2/10 = 20%
+  if (r < 9) return 'Breakdown'  // 1/10 = 10%
+  return 'Stored'                 // 1/10 = 10%
+}
+
+function getMtbfOffset(prefix: string): number {
+  // Simpler machines (rollers, pumps) have higher baseline MTBF than complex drilling rigs
+  if (prefix === 'BW21' || prefix === 'CA25') return 40   // rollers: simpler mechanics
+  if (prefix === 'S34S' || prefix === 'BSF3') return 20   // pumps: moderate complexity
+  return 0  // drilling / excavators / pile drivers: standard range
+}
+
+function getMttrBase(prefix: string, i: number): number {
+  // Simpler machines repair faster
+  if (prefix === 'BW21' || prefix === 'CA25') return 1.2 + (i % 30) / 20   // 1.2–2.7h
+  if (prefix === 'S34S' || prefix === 'BSF3') return 1.4 + (i % 40) / 15   // 1.4–4.1h
+  return 1.5 + (i % 50) / 12  // 1.5–5.7h (drilling / excavators)
+}
+
+// ── Adapter: Machine (module01) → MmtbRow (equipment-intelligence) ───────────
+
+const PROJECT_LOCATION_MAP: Record<string, string> = {
+  ocp1: 'OCP1',
+  hnx:  'Hạ Long Xanh',
+  cg:   'Cần Giờ',
+  hvb:  'Hải Vân Bay',
+  va:   'Vũng Áng',
+  olp:  'Làng Olympic',
+}
+
+const PROJECT_REGION_MAP: Record<string, string> = {
+  ocp1: 'ha-noi',
+  hnx:  'quang-ninh',
+  cg:   'can-gio',
+  hvb:  'da-nang',
+  va:   'vung-ang',
+  olp:  'long-an',
+}
+
+const MACHINE_STATUS_MAP: Record<string, MmtbRow['status']> = {
+  working:   'Working',
+  idle:      'Standby',
+  breakdown: 'Breakdown',
+  stored:    'Stored',
+}
+
+export function machineToMmtbRow(m: Machine, idx: number): MmtbRow {
+  const prefix = m.code.split('-')[0]
+  const status = MACHINE_STATUS_MAP[m.status] ?? 'Standby'
+
+  // healthScore: driven by operational status + today's utilisation
+  const rawHealth = m.status === 'breakdown' ? 15 + (idx % 30)
+    : m.status === 'idle'   ? 48 + (idx % 28)
+    : m.status === 'stored' ? 55 + (idx % 20)
+    : Math.min(95, 60 + Math.round(m.utilizationPct * 0.35) + (idx % 12))
+  const healthCapped = Math.min(99, rawHealth)
+
+  // Cumulative engine hours estimated from today's shift hours
+  const engineHours = Math.max(500, m.workingHours * 100 + (idx * 137) % 5000)
+
+  const mtbf = Math.round(60 + getMtbfOffset(prefix) + (healthCapped / 99) * 180)
+  const mttr = Math.round(getMttrBase(prefix, idx) * 10) / 10
+  const mttf = 4500 + (healthCapped * 55) + (idx * 11) % 3000
+
+  // PM compliance (250h interval)
+  const PM_INTERVAL = 250
+  const pmCyclePos = engineHours % PM_INTERVAL
+  const pmIdx = pmCyclePos < 195 ? 0 : pmCyclePos < 235 ? 1 : 2
+
+  const availabilityPct = m.status === 'breakdown'
+    ? Math.round((5  + (idx % 15)) * 10) / 10
+    : m.status === 'stored'
+      ? Math.round((45 + (idx % 20)) * 10) / 10
+      : Math.round(mtbf / (mtbf + mttr) * 1000) / 10
+
+  return {
+    id: m.id,
+    machineCode: m.code,
+    equipmentType: m.type,
+    projectLocation: PROJECT_LOCATION_MAP[m.projectId] ?? m.projectId,
+    regionId: PROJECT_REGION_MAP[m.projectId] ?? 'ha-noi',
+    status,
+    healthScore: healthCapped,
+    engineHours,
+    utilizationPct: m.utilizationPct,
+    mtbfHours: mtbf,
+    mttrHours: mttr,
+    mttfHours: mttf,
+    pmStatus:      pmIdx === 0 ? 'on_time' : pmIdx === 1 ? 'upcoming' : 'overdue',
+    pmStatusLabel: pmIdx === 0 ? 'Đúng hạn'
+      : pmIdx === 1 ? `Sắp tới hạn ${PM_INTERVAL - pmCyclePos}h`
+      : `Quá hạn ${pmCyclePos - 235}h`,
+    usageUnit: UNITS[idx % UNITS.length],
+    availabilityPct,
+  }
 }
 
 function generateMachines(count: number): MmtbRow[] {
@@ -127,9 +240,10 @@ function generateMachines(count: number): MmtbRow[] {
       :                          60 + (i % 35)
     const healthCapped = Math.min(99, health)
 
-    // MTBF scales with health: low health → more frequent breakdowns (60–240h range)
-    const mtbf = Math.round(60 + (healthCapped / 99) * 180)
-    const mttr = Math.round((1.5 + (i % 50) / 12) * 10) / 10  // 1.5–5.7h
+    // MTBF: health-driven + type offset → higher for simpler machines
+    const mtbfOffset = getMtbfOffset(model.prefix)
+    const mtbf = Math.round(60 + mtbfOffset + (healthCapped / 99) * 180)
+    const mttr = Math.round(getMttrBase(model.prefix, i) * 10) / 10
 
     // MTTF >> MTBF: higher health = longer lifetime before permanent failure
     const mttf = 4500 + (healthCapped * 55) + (i * 11) % 3000
@@ -142,12 +256,13 @@ function generateMachines(count: number): MmtbRow[] {
     const engineHours = 1500 + (i * 137) % 9500
 
     // PM interval: 250h — pmStatus linked to position in current PM cycle
-    // Distribution: 78% on_time | 16% upcoming | 6% overdue
+    // Distribution: ~78% on_time | ~16% upcoming | ~6% overdue
     const pmCyclePos = engineHours % PM_INTERVAL
     const pmIdx = pmCyclePos < 195 ? 0
       : pmCyclePos < 235           ? 1
       :                              2
 
+    // availabilityPct = MTBF / (MTBF + MTTR) × 100 — standard formula for all types
     rows.push({
       id: `m-gen-${i}`,
       machineCode: `${model.prefix}-${String(100 + i).padStart(3, '0')}`,
@@ -166,15 +281,20 @@ function generateMachines(count: number): MmtbRow[] {
         : pmIdx === 1 ? `Sắp tới hạn ${PM_INTERVAL - pmCyclePos}h`
         : `Quá hạn ${pmCyclePos - 235}h`,
       usageUnit: UNITS[i % UNITS.length],
+      availabilityPct: status === 'Breakdown'
+        ? Math.round((5 + (i % 15)) * 10) / 10   // 5–19% khi đang hỏng
+        : status === 'Stored'
+          ? Math.round((45 + (i % 20)) * 10) / 10  // 45–64% khi lưu kho
+          : Math.round(mtbf / (mtbf + mttr) * 1000) / 10,
     })
   }
   return rows
 }
 
-// Tổng số máy = tổng 6 vùng trên bản đồ = 1000
-const TOTAL_MMTB = 1000
+// Tổng số máy — dẫn xuất trực tiếp từ MACHINES (module01)
+const TOTAL_MMTB = MACHINES.length
 
-const ALL_MACHINES = generateMachines(TOTAL_MMTB)
+const ALL_MACHINES = MACHINES.map((m, i) => machineToMmtbRow(m, i))
 
 // Tổng giá trị tài sản (tỷ VND) — dẫn xuất từ giá từng dòng máy
 const totalAssetValue = Math.round(
@@ -196,29 +316,31 @@ const totalWorkingHours = ALL_MACHINES
 const serviceHoursPerBillion = Math.round(totalWorkingHours / totalAssetValue * 10) / 10
 
 // Data consistency summary:
-// Fleet: 1000 máy = 290+200+170+165+95+80 (regions) ✓
-// Status ~70%/18%/8%/4% via assignStatus(i%50) cycle → 700/180/80/40
-// healthScore ↔ mtbfHours: linked — mtbf = round(60 + (healthCapped/99)*180) → range 60–240h
-// healthScore ↔ mttfHours: linked — mttf = 4500 + (healthCapped*55) + (i*11)%3000
-// pmStatus ↔ engineHours: linked — pmCyclePos = engineHours % 250
-//   pmCyclePos < 195 → on_time (~78%) | < 235 → upcoming (~16%) | ≥ 235 → overdue (~6%)
-// Asset: totalValue = sum(MODELS[i%5].priceBillionVnd) across all 1000 machines
-// PM compliance: 1566/(1566+155) = 1566/1721 = 91.0% ✓ | 1566+99+155 = 1820 ✓
+// Fleet: 100 máy = 20+25+20+15+12+8 (regions HNX+OCP1+CG+HVB+VA+OLP) ✓
+// Status 60%/20%/10%/10% via assignStatus(i%10) cycle → 60/20/10/10
+// healthScore ↔ mtbfHours: linked — mtbf = round(60 + offset + (healthCapped/99)*180)
+// availabilityPct: MTBF / (MTBF + MTTR) × 100 applied consistently to all machine types
+// PM compliance: 86/(86+8) = 91.5% ≈ 91% ✓ | 86+8+6 = 100 ✓
 export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
   fleet: {
-    // 1000 máy: ~70% hoạt động, 18% chờ, 8% hỏng, 4% kho
+    // 100 máy: 60% hoạt động, 20% chờ, 10% hỏng, 10% kho
     totalMmtb: TOTAL_MMTB,
-    breakdown: { working: 700, standby: 180, breakdown: 80, stored: 40 },
-    fleetUtilizationPct: 70,        // 700 / 1000 = 70 %
+    breakdown: {
+      working:   ALL_MACHINES.filter(m => m.status === 'Working').length,
+      standby:   ALL_MACHINES.filter(m => m.status === 'Standby').length,
+      breakdown: ALL_MACHINES.filter(m => m.status === 'Breakdown').length,
+      stored:    ALL_MACHINES.filter(m => m.status === 'Stored').length,
+    },
+    fleetUtilizationPct: 60,        // 60 / 100 = 60%
     fleetUtilizationTrendPct: 3,
   },
   pm: {
     compliancePct: 91,
     trendPct: 4,
-    completedOnTime: 860,           // round(0.91 × 945) = 860
-    upcomingUnder50h: 55,
-    overdue: 85,                    // 945 − 860 = 85 → 860/(860+85) = 91.0% ✓
-    totalPlanned: 1_000,            // 1 lịch bảo dưỡng / máy — 860 + 55 + 85 = 1,000 ✓
+    completedOnTime: 86,           // round(0.91 × 94) = 86
+    upcomingUnder50h: 6,
+    overdue: 8,                    // 94 − 86 = 8 → 86/(86+8) = 91.5% ≈ 91% ✓
+    totalPlanned: 100,             // 1 lịch bảo dưỡng / máy — 86+6+8 = 100 ✓
   },
   reliability: {
     mtbfHours: 186,
@@ -235,26 +357,26 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
   },
   regions: [
     // x/y % relative to cropped viewBox -12 -12 405 824 — province centroids
-    // Tổng 290+200+170+165+95+80 = 1000 máy ✓
-    { id: 'quang-ninh', name: 'Quảng Ninh',            machineCount: 290, x: 71.2, y: 15.9 },
-    { id: 'ha-noi',     name: 'Hà Nội',                 machineCount: 200, x: 50.8, y: 16.7 },
-    { id: 'vung-ang',   name: 'Hà Tĩnh / Vũng Áng',    machineCount: 170, x: 50.1, y: 35.4 },
-    { id: 'da-nang',    name: 'Đà Nẵng / Hải Vân Bay',  machineCount: 165, x: 79.3, y: 50.3 },
-    { id: 'can-gio',    name: 'Cần Giờ (HCM)',          machineCount:  95, x: 63.4, y: 86.3 },
-    { id: 'long-an',    name: 'Long An',                 machineCount:  80, x: 54.1, y: 84.9 },
+    // Tổng 20+25+12+15+20+8 = 100 máy ✓
+    { id: 'quang-ninh', name: 'Quảng Ninh',            machineCount:  20, x: 71.2, y: 15.9 },
+    { id: 'ha-noi',     name: 'Hà Nội',                 machineCount:  25, x: 50.8, y: 16.7 },
+    { id: 'vung-ang',   name: 'Hà Tĩnh / Vũng Áng',    machineCount:  12, x: 50.1, y: 35.4 },
+    { id: 'da-nang',    name: 'Đà Nẵng / Hải Vân Bay',  machineCount:  15, x: 79.3, y: 50.3 },
+    { id: 'can-gio',    name: 'Cần Giờ (HCM)',          machineCount:  20, x: 63.4, y: 86.3 },
+    { id: 'long-an',    name: 'Long An',                 machineCount:   8, x: 54.1, y: 84.9 },
   ],
   usageUnits: [
-    // Tổng totalMmtb = 158+145+123+107+95+85+80+75+72+60 = 1000 máy ✓
-    { rank:  1, name: 'FECON',                totalMmtb: 158, utilizationPct: 82 },
-    { rank:  2, name: 'SGC',                  totalMmtb: 145, utilizationPct: 79 },
-    { rank:  3, name: 'Bauer Vietnam',        totalMmtb: 123, utilizationPct: 76 },
-    { rank:  4, name: 'Coteccons Foundation', totalMmtb: 107, utilizationPct: 74 },
-    { rank:  5, name: 'Delta Foundation',     totalMmtb:  95, utilizationPct: 72 },
-    { rank:  6, name: 'Hòa Bình Foundation',  totalMmtb:  85, utilizationPct: 69 },
-    { rank:  7, name: 'Ricons Foundation',    totalMmtb:  80, utilizationPct: 70 },
-    { rank:  8, name: 'Central Foundation',   totalMmtb:  75, utilizationPct: 68 },
-    { rank:  9, name: 'Vietur Foundation',    totalMmtb:  72, utilizationPct: 65 },
-    { rank: 10, name: 'Sơn Hải Foundation',   totalMmtb:  60, utilizationPct: 52 },
+    // Tổng totalMmtb = 16+14+12+11+10+9+9+8+6+5 = 100 máy ✓
+    { rank:  1, name: 'FECON',                totalMmtb: 16, utilizationPct: 82 },
+    { rank:  2, name: 'SGC',                  totalMmtb: 14, utilizationPct: 79 },
+    { rank:  3, name: 'Bauer Vietnam',        totalMmtb: 12, utilizationPct: 76 },
+    { rank:  4, name: 'Coteccons Foundation', totalMmtb: 11, utilizationPct: 74 },
+    { rank:  5, name: 'Delta Foundation',     totalMmtb: 10, utilizationPct: 72 },
+    { rank:  6, name: 'Hòa Bình Foundation',  totalMmtb:  9, utilizationPct: 69 },
+    { rank:  7, name: 'Ricons Foundation',    totalMmtb:  9, utilizationPct: 70 },
+    { rank:  8, name: 'Central Foundation',   totalMmtb:  8, utilizationPct: 68 },
+    { rank:  9, name: 'Vietur Foundation',    totalMmtb:  6, utilizationPct: 65 },
+    { rank: 10, name: 'Sơn Hải Foundation',   totalMmtb:  5, utilizationPct: 52 },
   ],
   aiRecommendations: [
     {
@@ -303,6 +425,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '24 giờ',
       context: 'Cần Giờ · ca kế tiếp',
       abnormalMetrics: ['PM_Remaining 20h'],
+      metricDetails: [
+        { metric: 'PM Remaining Hours', current: '20 h', threshold: '≤ 20 h', deviation: '-92%', direction: 'down' as const },
+        { metric: 'Engine Hours', current: '6.120 h', threshold: 'PM due: 6.230 h', deviation: '-110 h', direction: 'down' as const },
+      ],
+      firstOccurrence: '30/05/2025 06:00',
+      lastOccurrence: '01/06/2025 06:00',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Máy sắp vượt ngưỡng bảo dưỡng định kỳ — rủi ro hỏng hóc tăng.',
       recommendationSteps: ['Lên lịch PM trong ca hiện tại.', 'Chuẩn bị phụ tùng lọc dầu/hydraulic.'],
     },
@@ -319,6 +450,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '48 giờ',
       context: 'Hải Vân Bay',
       abnormalMetrics: ['Signal_Gap 26h'],
+      metricDetails: [
+        { metric: 'Signal Gap', current: '26 h', threshold: '≤ 24 h', deviation: '+8%', direction: 'up' as const },
+        { metric: 'Last Heartbeat', current: '26 h trước', threshold: '< 1 h', deviation: '+2500%', direction: 'up' as const },
+        { metric: 'Packet Loss Rate', current: '100 %', threshold: '≤ 5 %', deviation: '+1900%', direction: 'up' as const },
+      ],
+      firstOccurrence: '31/05/2025 08:30',
+      lastOccurrence: '01/06/2025 10:00',
+      occurrenceCount: 2,
+      connectionStatus: 'Offline' as const,
+      manufactureYear: 2023,
       explanation: 'Mất telemetry — không giám sát được trạng thái vận hành.',
       recommendationSteps: ['Kiểm tra antena IoT.', 'Xác minh nguồn điện tủ điều khiển.'],
     },
@@ -335,6 +476,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '7 ngày',
       context: 'Làng Olympic · Khu đóng cọc A',
       abnormalMetrics: ['Utilization 38%', 'Idle 52h/tuần'],
+      metricDetails: [
+        { metric: 'Utilization 7d', current: '38 %', threshold: '≥ 45 %', deviation: '-15.5%', direction: 'down' as const },
+        { metric: 'Idle Hours / Week', current: '52 h', threshold: '< 30 h', deviation: '+73%', direction: 'up' as const },
+        { metric: 'Penetration Rate', current: '1.4 m/h', threshold: '≥ 2.5 m/h', deviation: '-44%', direction: 'down' as const },
+      ],
+      firstOccurrence: '25/05/2025 07:00',
+      lastOccurrence: '01/06/2025 17:00',
+      occurrenceCount: 7,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Máy idle kéo dài — lãng phí giờ khai thác mục tiêu 20h/ngày.',
       recommendationSteps: ['Điều chuyển sang khu có backlog cao.', 'Đồng bộ lịch cọc với điều phối.'],
     },
@@ -351,6 +502,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '24 giờ',
       context: 'Hải Vân Bay · Khu A',
       abnormalMetrics: ['Hyd_Pressure +18%', 'Temperature +6°C'],
+      metricDetails: [
+        { metric: 'Hyd Pressure', current: '295 bar', threshold: '≤ 250 bar', deviation: '+18%', direction: 'up' as const },
+        { metric: 'Oil Temperature', current: '91°C', threshold: '≤ 85°C', deviation: '+7%', direction: 'up' as const },
+        { metric: 'Pressure Duration', current: '2.5 h', threshold: '< 2 h', deviation: '+25%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 07:45',
+      lastOccurrence: '01/06/2025 10:15',
+      occurrenceCount: 4,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Áp suất cao kéo dài có thể gây vỡ ống thủy lực.',
       recommendationSteps: ['Kiểm tra van an toàn thủy lực.', 'Giảm tải công tác.', 'Đo nhiệt độ dầu thủy lực.'],
     },
@@ -367,6 +528,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '7 ngày',
       context: 'Cần Giờ',
       abnormalMetrics: ['Idle 85%', 'Engine_Hours thấp'],
+      metricDetails: [
+        { metric: 'Idle Percent 7d', current: '85 %', threshold: '≤ 80 %', deviation: '+6%', direction: 'up' as const },
+        { metric: 'Engine Hours 7d', current: '11.2 h', threshold: '≥ 70 h', deviation: '-84%', direction: 'down' as const },
+        { metric: 'Penetration Rate', current: '0.3 m/h', threshold: '≥ 2.0 m/h', deviation: '-85%', direction: 'down' as const },
+      ],
+      firstOccurrence: '26/05/2025 08:00',
+      lastOccurrence: '01/06/2025 17:00',
+      occurrenceCount: 6,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2023,
       explanation: 'Máy chạy không tải 85% thời gian — cần rà soát kế hoạch sản xuất.',
       recommendationSteps: ['Xem xét lại lịch thi công.', 'Cân nhắc điều phối sang công trường khác.'],
     },
@@ -386,6 +557,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '6 giờ gần nhất',
       context: 'Vũng Áng · Khu khoan cọc C2',
       abnormalMetrics: ['Oil_Pressure -32%', 'Engine_Temp +4°C'],
+      metricDetails: [
+        { metric: 'Engine Oil Pressure', current: '2.1 bar', threshold: '≥ 2.5 bar', deviation: '-16%', direction: 'down' as const },
+        { metric: 'Engine Temperature', current: '93°C', threshold: '< 90°C', deviation: '+3%', direction: 'up' as const },
+      ],
+      firstOccurrence: '31/05/2025 14:20',
+      lastOccurrence: '01/06/2025 09:45',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Áp suất dầu thấp kéo dài có thể gây mài mòn trục khuỷu và ổ bi động cơ.',
       recommendationSteps: [
         'Kiểm tra mức dầu bằng que thăm dầu.',
@@ -409,6 +589,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '2 giờ gần nhất',
       context: 'Cần Giờ · Khu cọc D1 — ca chiều',
       abnormalMetrics: ['Coolant_Temp 112°C (+8°C)', 'Fan_Speed -22%'],
+      metricDetails: [
+        { metric: 'Coolant Temperature', current: '112°C', threshold: '≤ 108°C', deviation: '+4%', direction: 'up' as const },
+        { metric: 'Fan Speed', current: '1.560 rpm', threshold: '≥ 2.000 rpm', deviation: '-22%', direction: 'down' as const },
+      ],
+      firstOccurrence: '01/06/2025 13:10',
+      lastOccurrence: '01/06/2025 14:55',
+      occurrenceCount: 2,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2020,
       explanation: 'Nhiệt độ nước làm mát 112°C vượt ngưỡng 108°C — nguy cơ nứt nắp máy và cong trục cam.',
       recommendationSteps: [
         'Dừng máy ngay, để nguội tự nhiên tối thiểu 20 phút.',
@@ -433,6 +622,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '4 giờ gần nhất',
       context: 'Hải Vân Bay · Khu A3 — khoan địa tầng đá',
       abnormalMetrics: ['Hyd_Oil_Temp 94°C (+9°C)', 'Hyd_Pressure +12%'],
+      metricDetails: [
+        { metric: 'Hyd Oil Temperature', current: '94°C', threshold: '≤ 85°C', deviation: '+11%', direction: 'up' as const },
+        { metric: 'Hyd Pressure', current: '280 bar', threshold: '≤ 250 bar', deviation: '+12%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 07:30',
+      lastOccurrence: '01/06/2025 11:20',
+      occurrenceCount: 4,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Dầu thủy lực quá nhiệt làm giảm độ nhớt, tăng nguy cơ mài mòn bơm và motor thủy lực.',
       recommendationSteps: [
         'Giảm tải công tác 30% trong 30 phút.',
@@ -455,6 +653,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '7 ngày gần nhất',
       context: 'Làng Olympic · Zone B — đất nền cứng',
       abnormalMetrics: ['Fuel_Rate +25%', 'Engine_Load ổn định 65%'],
+      metricDetails: [
+        { metric: 'Fuel Rate', current: '50 L/h', threshold: '≤ 40 L/h', deviation: '+25%', direction: 'up' as const },
+        { metric: 'Engine Load', current: '65 %', threshold: 'Stable baseline', deviation: '±0%', direction: 'up' as const },
+        { metric: 'Fuel Consumption Delta 7d', current: '+25 %', threshold: '≤ +10 %', deviation: '+150%', direction: 'up' as const },
+      ],
+      firstOccurrence: '25/05/2025 08:00',
+      lastOccurrence: '01/06/2025 08:00',
+      occurrenceCount: 6,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Tiêu hao nhiên liệu tăng không tương ứng với tải — nghi ngờ kim phun bị rỉ hoặc lọc cặn.',
       recommendationSteps: [
         'Kiểm tra lọc nhiên liệu — thay nếu quá hạn.',
@@ -477,6 +685,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '12 giờ gần nhất',
       context: 'OCP1 · Khu khoan móng block A',
       abnormalMetrics: ['RPM_Deviation ±200 RPM', 'Hunting_Count 8 lần/ca'],
+      metricDetails: [
+        { metric: 'RPM Deviation', current: '±200 rpm', threshold: '≤ ±150 rpm', deviation: '+33%', direction: 'up' as const },
+        { metric: 'Hunting Count', current: '8 lần/ca', threshold: '≤ 3 lần/ca', deviation: '+167%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 06:20',
+      lastOccurrence: '01/06/2025 16:40',
+      occurrenceCount: 8,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Dao động tốc độ quay (hunting) liên tục có thể do bộ điều tốc điện tử lỗi hoặc cảm biến CKP bẩn.',
       recommendationSteps: [
         'Kiểm tra cảm biến tốc độ trục khuỷu (CKP).',
@@ -499,6 +716,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '24 giờ gần nhất',
       context: 'Hạ Long Xanh · Bãi đỗ máy đêm',
       abnormalMetrics: ['Battery_Voltage 11.4V (-0.6V)', 'Charge_Rate thấp'],
+      metricDetails: [
+        { metric: 'Battery Voltage', current: '11.4 V', threshold: '≥ 11.8 V', deviation: '-3%', direction: 'down' as const },
+        { metric: 'Charge Rate Voltage', current: '12.8 V', threshold: '13.8–14.5 V', deviation: '-7%', direction: 'down' as const },
+      ],
+      firstOccurrence: '30/05/2025 18:00',
+      lastOccurrence: '01/06/2025 06:30',
+      occurrenceCount: 2,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2020,
       explanation: 'Ắc quy yếu có thể dẫn đến máy không nổ được, làm gián đoạn ca khởi đầu buổi sáng.',
       recommendationSteps: [
         'Đo điện áp ắc quy lúc khởi động nguội.',
@@ -521,6 +747,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '48 giờ gần nhất',
       context: 'Vũng Áng · Môi trường nhiều bụi đất',
       abnormalMetrics: ['Air_Filter_dP 6.8 kPa (+13%)', 'Hours_Since_Replace 215h'],
+      metricDetails: [
+        { metric: 'Air Filter dP', current: '6.8 kPa', threshold: '≤ 6.0 kPa', deviation: '+13%', direction: 'up' as const },
+        { metric: 'Hours Since Replace', current: '215 h', threshold: '≤ 200 h', deviation: '+7.5%', direction: 'up' as const },
+      ],
+      firstOccurrence: '30/05/2025 10:00',
+      lastOccurrence: '01/06/2025 10:00',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2023,
       explanation: 'Lọc khí tắc nghẽn làm giảm lưu lượng khí nạp, tăng tiêu hao nhiên liệu và giảm công suất.',
       recommendationSteps: [
         'Thay lọc khí ngay trong PM lần tới.',
@@ -543,6 +778,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '24 giờ',
       context: 'Làng Olympic · PM250 đến hạn',
       abnormalMetrics: ['Hours_Since_Oil_Change 258h (+3.2%)'],
+      metricDetails: [
+        { metric: 'Hours Since Oil Change', current: '258 h', threshold: '≤ 250 h', deviation: '+3.2%', direction: 'up' as const },
+        { metric: 'Oil Viscosity Index', current: '82', threshold: '≥ 95', deviation: '-14%', direction: 'down' as const },
+      ],
+      firstOccurrence: '01/06/2025 07:00',
+      lastOccurrence: '01/06/2025 07:00',
+      occurrenceCount: 1,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Dầu động cơ quá hạn thay làm giảm khả năng bôi trơn, tăng nhiệt độ và mài mòn động cơ.',
       recommendationSteps: [
         'Xả dầu cũ khi máy còn ấm.',
@@ -566,6 +810,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '48 giờ',
       context: 'OCP1 · PM500 sắp đến hạn',
       abnormalMetrics: ['Hyd_Oil_Hours 498h', 'Hyd_Oil_Contamination tăng nhẹ'],
+      metricDetails: [
+        { metric: 'Hyd Oil Hours', current: '498 h', threshold: '< 500 h', deviation: '+0%', direction: 'up' as const },
+        { metric: 'Oil Contamination NAS', current: '18 NAS', threshold: '≤ 12 NAS', deviation: '+50%', direction: 'up' as const },
+        { metric: 'Oil Acid Number', current: '1.8 mgKOH/g', threshold: '≤ 1.0 mgKOH/g', deviation: '+80%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 07:00',
+      lastOccurrence: '01/06/2025 07:00',
+      occurrenceCount: 1,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Dầu thủy lực lão hóa làm giảm hiệu suất truyền lực, tăng rủi ro hỏng bơm và motor thủy lực.',
       recommendationSteps: [
         'Xả toàn bộ dầu thủy lực cũ.',
@@ -589,6 +843,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '48 giờ',
       context: 'Cần Giờ · PM250 lọc khí',
       abnormalMetrics: ['Air_Filter_Hours 252h', 'Air_Filter_dP 5.7 kPa'],
+      metricDetails: [
+        { metric: 'Air Filter Hours', current: '252 h', threshold: '≤ 250 h', deviation: '+0.8%', direction: 'up' as const },
+        { metric: 'Air Filter dP', current: '5.7 kPa', threshold: '≤ 5.5 kPa', deviation: '+3.6%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 07:00',
+      lastOccurrence: '01/06/2025 07:00',
+      occurrenceCount: 1,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2023,
       explanation: 'Lọc khí quá hạn theo giờ hoặc chênh áp — đặc biệt quan trọng ở môi trường cát, muối biển.',
       recommendationSteps: [
         'Thay lọc khí chính và lọc an toàn.',
@@ -610,6 +873,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '72 giờ',
       context: 'Hạ Long Xanh · Kelly bar SR360',
       abnormalMetrics: ['Kelly_Cable_Hours 510h'],
+      metricDetails: [
+        { metric: 'Kelly Cable Hours', current: '510 h', threshold: '≤ 500 h', deviation: '+2%', direction: 'up' as const },
+        { metric: 'Wire Breaks Detected', current: '2 sợi', threshold: '0 sợi', deviation: '+200%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 07:00',
+      lastOccurrence: '01/06/2025 07:00',
+      occurrenceCount: 1,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Dây cáp Kelly bar chịu tải trọng xoắn cao — kiểm tra mòn và gãy sợi theo chu kỳ để tránh đứt cáp đột ngột.',
       recommendationSteps: [
         'Kiểm tra toàn bộ chiều dài cáp — đếm sợi gãy theo tiêu chuẩn ISO 4309.',
@@ -634,6 +906,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '12 giờ gần nhất',
       context: 'Vũng Áng · Khu cảng công nghiệp',
       abnormalMetrics: ['GPS_Loss_Duration 6.2h', 'GPS_Fix 0/10 lần thử'],
+      metricDetails: [
+        { metric: 'GPS Loss Duration', current: '6.2 h', threshold: '≤ 2 h', deviation: '+210%', direction: 'up' as const },
+        { metric: 'GPS Fix Rate', current: '0/10', threshold: '≥ 8/10', deviation: '-100%', direction: 'down' as const },
+      ],
+      firstOccurrence: '01/06/2025 04:30',
+      lastOccurrence: '01/06/2025 10:45',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Mất GPS liên tục dẫn đến không theo dõi được vị trí máy — ảnh hưởng điều phối và an toàn.',
       recommendationSteps: [
         'Kiểm tra cáp antena GPS — đứt, lỏng hay oxy hóa.',
@@ -656,6 +937,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '24 giờ gần nhất',
       context: 'Vũng Áng · Vùng lõm sóng 4G',
       abnormalMetrics: ['Packet_Loss 22%', 'RSSI -101 dBm'],
+      metricDetails: [
+        { metric: 'Packet Loss', current: '22 %', threshold: '≤ 15 %', deviation: '+47%', direction: 'up' as const },
+        { metric: 'RSSI', current: '-101 dBm', threshold: '> -95 dBm', deviation: '-6 dBm', direction: 'down' as const },
+      ],
+      firstOccurrence: '31/05/2025 15:00',
+      lastOccurrence: '01/06/2025 11:00',
+      occurrenceCount: 5,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Packet loss cao làm gián đoạn telemetry — dữ liệu vận hành không đầy đủ, khó phát hiện sự cố sớm.',
       recommendationSteps: [
         'Kiểm tra SIM — hạn dùng và gói cước còn đủ.',
@@ -679,6 +969,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '8 giờ (ca hôm nay)',
       context: 'Cần Giờ · Ca sáng — chờ vật liệu bê tông',
       abnormalMetrics: ['Idle_Duration 4.5h', 'Fuel_Wasted ~18L'],
+      metricDetails: [
+        { metric: 'Idle Duration', current: '4.5 h', threshold: '≤ 4 h', deviation: '+12.5%', direction: 'up' as const },
+        { metric: 'Fuel Wasted', current: '~18 L', threshold: '≤ 12 L', deviation: '+50%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 08:00',
+      lastOccurrence: '01/06/2025 12:30',
+      occurrenceCount: 1,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2020,
       explanation: 'Máy chạy không tải >4h lãng phí nhiên liệu và tích lũy giờ động cơ không sản xuất.',
       recommendationSteps: [
         'Tắt máy nếu chờ >30 phút — tiết kiệm nhiên liệu.',
@@ -700,6 +999,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '7 ngày liên tiếp',
       context: 'Hải Vân Bay · Mục tiêu 75% — thực tế 52%',
       abnormalMetrics: ['Utilization_Avg 52% (target 75%)', 'Deficit -23%'],
+      metricDetails: [
+        { metric: 'Utilization 7d Avg', current: '52 %', threshold: '≥ 75 %', deviation: '-31%', direction: 'down' as const },
+        { metric: 'Performance Deficit', current: '-23 %', threshold: '0 %', deviation: '-23 pts', direction: 'down' as const },
+        { metric: 'Consecutive Below-Target Days', current: '7 ngày', threshold: '≤ 3 ngày', deviation: '+133%', direction: 'up' as const },
+      ],
+      firstOccurrence: '26/05/2025 07:00',
+      lastOccurrence: '01/06/2025 18:00',
+      occurrenceCount: 7,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Hiệu suất thực tế thấp hơn mục tiêu 7 ngày liên tiếp — ảnh hưởng tiến độ dự án.',
       recommendationSteps: [
         'Rà soát nguyên nhân: thiếu nhân công, bê tông, thiết kế chậm?',
@@ -721,6 +1030,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '3 ngày gần nhất',
       context: 'Làng Olympic · Chạy gia tốc tiến độ',
       abnormalMetrics: ['Daily_Hours 15.2h (+8.6%)', 'Consecutive_Overtime 3 ngày'],
+      metricDetails: [
+        { metric: 'Daily Engine Hours', current: '15.2 h', threshold: '≤ 14 h', deviation: '+8.6%', direction: 'up' as const },
+        { metric: 'Consecutive Overtime Days', current: '3 ngày', threshold: '≤ 1 ngày', deviation: '+200%', direction: 'up' as const },
+      ],
+      firstOccurrence: '30/05/2025 20:10',
+      lastOccurrence: '01/06/2025 21:05',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Vận hành liên tục >14h/ngày làm tăng mài mòn, giảm tuổi thọ thiết bị và tăng rủi ro hỏng đột ngột.',
       recommendationSteps: [
         'Xác nhận với Ban điều hành về kế hoạch tăng tốc.',
@@ -744,6 +1062,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '6 giờ gần nhất',
       context: 'OCP1 · Khoan qua lớp đất cứng xen kẽ',
       abnormalMetrics: ['Hyd_Pressure_StdDev 38 bar', 'Peak_Surge +45%'],
+      metricDetails: [
+        { metric: 'Hyd Pressure StdDev', current: '38 bar', threshold: '≤ 30 bar', deviation: '+27%', direction: 'up' as const },
+        { metric: 'Peak Pressure Surge', current: '+45 %', threshold: '≤ +20 %', deviation: '+125%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 09:00',
+      lastOccurrence: '01/06/2025 14:30',
+      occurrenceCount: 5,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Dao động áp suất thủy lực cao bất thường nghi ngờ van điều áp bị mòn hoặc kẹt bi.',
       recommendationSteps: [
         'Kiểm tra van điều áp chính (main relief valve).',
@@ -766,6 +1093,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '72 giờ gần nhất',
       context: 'Hạ Long Xanh · Zone A — nền đất mềm',
       abnormalMetrics: ['Hyd_Level -2.3L/ngày', 'Hyd_Pressure -8%', 'Vết dầu mặt đất'],
+      metricDetails: [
+        { metric: 'Hyd Level Drop', current: '-2.3 L/ngày', threshold: '≤ 0.5 L/ngày', deviation: '+360%', direction: 'up' as const },
+        { metric: 'Hyd Pressure Drop', current: '-8 %', threshold: '< -3 %', deviation: '+167%', direction: 'down' as const },
+        { metric: 'Ground Oil Trace', current: 'Phát hiện', threshold: 'Không có', deviation: '+100%', direction: 'up' as const },
+      ],
+      firstOccurrence: '30/05/2025 07:00',
+      lastOccurrence: '01/06/2025 07:00',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2020,
       explanation: 'Giảm mức dầu liên tục không rõ nguyên nhân kết hợp vết dầu nền đất — xác nhận rò rỉ.',
       recommendationSteps: [
         'Vệ sinh toàn bộ hệ thống thủy lực và để khô.',
@@ -789,6 +1126,16 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '30 ngày gần nhất',
       context: 'Vũng Áng · Vận hành địa tầng đá cứng',
       abnormalMetrics: ['Metal_Particles 42 ppm (+20%)', 'Seal_Wear_Index 0.78'],
+      metricDetails: [
+        { metric: 'Metal Particles', current: '42 ppm', threshold: '≤ 35 ppm', deviation: '+20%', direction: 'up' as const },
+        { metric: 'Seal Wear Index', current: '0.78', threshold: '≤ 0.5', deviation: '+56%', direction: 'up' as const },
+        { metric: 'Oil Analysis Interval', current: '30 ngày', threshold: 'Lấy mẫu định kỳ', deviation: '+0%', direction: 'up' as const },
+      ],
+      firstOccurrence: '03/05/2025 08:00',
+      lastOccurrence: '01/06/2025 08:00',
+      occurrenceCount: 4,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2023,
       explanation: 'Hàm lượng mạt kim loại trong dầu tăng dần — dấu hiệu phớt xi lanh bắt đầu mài mòn.',
       recommendationSteps: [
         'Lấy mẫu dầu thủy lực gửi phòng lab phân tích.',
@@ -813,6 +1160,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '2 giờ gần nhất',
       context: 'Làng Olympic · Nghỉ trưa ca 1',
       abnormalMetrics: ['Idle_Duration 45min', 'Fuel_Wasted ~3L'],
+      metricDetails: [
+        { metric: 'Idle Duration', current: '45 min', threshold: '≤ 30 min', deviation: '+50%', direction: 'up' as const },
+        { metric: 'Fuel Wasted', current: '~3 L', threshold: '≤ 2 L', deviation: '+50%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 11:45',
+      lastOccurrence: '01/06/2025 12:30',
+      occurrenceCount: 1,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Chạy không tải >30 phút lãng phí ~3L nhiên liệu, tăng khí thải và tích lũy giờ máy không sinh lời.',
       recommendationSteps: [
         'Nhắc operator: tắt máy khi nghỉ >5 phút.',
@@ -835,6 +1191,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '7 ngày gần nhất',
       context: 'OCP1 · Khu C — địa chất đồng nhất',
       abnormalMetrics: ['Drilling_Rate -30%', 'Penetration_Rate 2.1m/h (target 3.0m/h)'],
+      metricDetails: [
+        { metric: 'Drilling Rate Delta 7d', current: '-30 %', threshold: '< -15 %', deviation: '+100%', direction: 'down' as const },
+        { metric: 'Penetration Rate', current: '2.1 m/h', threshold: '≥ 3.0 m/h', deviation: '-30%', direction: 'down' as const },
+      ],
+      firstOccurrence: '26/05/2025 07:00',
+      lastOccurrence: '01/06/2025 17:00',
+      occurrenceCount: 5,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Năng suất khoan giảm trên nền địa chất ổn định — nghi ngờ mũi khoan mòn hoặc áp thủy lực yếu.',
       recommendationSteps: [
         'Kiểm tra độ mòn mũi khoan (bucket auger hoặc core barrel).',
@@ -857,6 +1222,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '4 giờ gần nhất',
       context: 'Cần Giờ · Gặp lớp sỏi đá bất ngờ ở -12m',
       abnormalMetrics: ['Kelly_Torque 98% max design', 'Vibration +35%'],
+      metricDetails: [
+        { metric: 'Kelly Torque % Max', current: '98 % max', threshold: '≤ 95 % max', deviation: '+3%', direction: 'up' as const },
+        { metric: 'Vibration Level', current: '+35 %', threshold: '≤ +15 %', deviation: '+133%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 10:30',
+      lastOccurrence: '01/06/2025 14:05',
+      occurrenceCount: 4,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2023,
       explanation: 'Mô-men xoắn gần giới hạn thiết kế liên tục có thể gây nứt gãy Kelly bar hoặc hỏng hộp số xoay.',
       recommendationSteps: [
         'Giảm tốc độ quay Kelly bar 30%.',
@@ -881,6 +1255,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '1 giờ gần nhất',
       context: 'Hạ Long Xanh · Khu B — vướng đá tảng tại -8m',
       abnormalMetrics: ['Kelly_Torque 107% max design (+7%)', 'Overload_Count 3 lần'],
+      metricDetails: [
+        { metric: 'Kelly Torque % Max', current: '107 % max', threshold: '≤ 100 % max', deviation: '+7%', direction: 'up' as const },
+        { metric: 'Overload Events', current: '3 lần', threshold: '0 lần', deviation: '+300%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 15:20',
+      lastOccurrence: '01/06/2025 16:05',
+      occurrenceCount: 3,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2021,
       explanation: 'Vượt quá mô-men thiết kế 7% — nguy cơ gãy cần Kelly bar và hỏng hộp số xoay nghiêm trọng.',
       recommendationSteps: [
         'DỪNG KHOAN NGAY — kéo cần khoan lên.',
@@ -904,6 +1287,15 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
       timeWindow: '30 phút gần nhất',
       context: 'Vũng Áng · Nền đất yếu — sau trận mưa lớn',
       abnormalMetrics: ['Tilt_Angle 6.2° (max 5°)', 'Ground_Settlement cảm biến kích hoạt'],
+      metricDetails: [
+        { metric: 'Tilt Angle', current: '6.2°', threshold: '≤ 5°', deviation: '+24%', direction: 'up' as const },
+        { metric: 'Ground Settlement Sensor', current: 'Kích hoạt', threshold: 'Bình thường', deviation: '+100%', direction: 'up' as const },
+      ],
+      firstOccurrence: '01/06/2025 09:55',
+      lastOccurrence: '01/06/2025 10:25',
+      occurrenceCount: 2,
+      connectionStatus: 'Online' as const,
+      manufactureYear: 2022,
       explanation: 'Góc nghiêng 6.2° vượt ngưỡng an toàn 5°, nền đất bị yếu sau mưa — nguy cơ lật máy cao.',
       recommendationSteps: [
         'DỪNG MÁY NGAY và kéo cần khoan lên vị trí an toàn.',

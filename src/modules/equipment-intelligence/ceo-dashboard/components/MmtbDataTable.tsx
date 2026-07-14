@@ -3,7 +3,7 @@ import {
   flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel,
   getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { Search, Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Download, Filter, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -36,41 +36,50 @@ function utilGradient(pct: number): string {
   return 'from-amber-500 to-yellow-400'
 }
 
+function availColor(pct: number): string {
+  if (pct >= 70) return 'text-green-400'
+  if (pct >= 50) return 'text-amber-400'
+  return 'text-red-400'
+}
+
+function availBarColor(pct: number): string {
+  if (pct >= 70) return 'bg-green-500'
+  if (pct >= 50) return 'bg-amber-400'
+  return 'bg-red-500'
+}
+
+interface InsightChip {
+  label: string
+  count: number
+  dotColor: string
+  textColor: string
+}
+
 interface MmtbDataTableProps {
   data: MmtbRow[]
   search: string
   onSearchChange: (v: string) => void
   onRowClick: (row: MmtbRow) => void
-  open?: boolean
+  expanded?: boolean
   onToggle?: () => void
 }
 
-export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open = true, onToggle }: MmtbDataTableProps) {
-  if (!open) {
-    return (
-      <div className="h-full flex flex-col items-center justify-between py-3 px-1.5 gap-2 bg-[#0d1117] border border-[#1e2433] rounded-lg overflow-hidden select-none">
-        <span
-          className="text-[8px] font-semibold text-muted-foreground/60 uppercase tracking-widest whitespace-nowrap"
-          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-        >
-          Danh sách đội máy
-        </span>
-        {onToggle && (
-          <button
-            type="button"
-            onClick={onToggle}
-            className="p-1.5 rounded-lg border border-[#1e2433] bg-[#060b14] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-            aria-label="Mở rộng danh sách đội máy"
-            title="Mở rộng danh sách đội máy"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-    )
-  }
+export function MmtbDataTable({ data, search, onSearchChange, onRowClick, expanded = false, onToggle }: MmtbDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
+
+  const insight = useMemo<InsightChip[]>(() => {
+    const working   = data.filter(d => d.status === 'Working').length
+    const standby   = data.filter(d => d.status === 'Standby').length
+    const breakdown = data.filter(d => d.status === 'Breakdown').length
+    const stored    = data.filter(d => d.status === 'Stored').length
+    return [
+      { label: 'Đang chạy',      count: working,   dotColor: 'bg-green-400', textColor: 'text-green-400' },
+      { label: 'Chờ việc',       count: standby,   dotColor: 'bg-amber-400', textColor: 'text-amber-400' },
+      { label: 'Dừng kỹ thuật',  count: breakdown, dotColor: 'bg-red-400',   textColor: 'text-red-400'   },
+      { label: 'Mất tín hiệu',   count: stored,    dotColor: 'bg-sky-400',   textColor: 'text-sky-400'   },
+    ]
+  }, [data])
 
   const columns = useMemo<ColumnDef<MmtbRow>[]>(() => [
     {
@@ -116,12 +125,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
         return (
           <div className="flex items-center gap-1.5">
             <svg width="28" height="28" viewBox="0 0 28 28" className="shrink-0 -rotate-90">
-              <circle
-                cx="14" cy="14" r={r}
-                fill="none"
-                stroke="#1e2433"
-                strokeWidth="3"
-              />
+              <circle cx="14" cy="14" r={r} fill="none" stroke="#1e2433" strokeWidth="3" />
               <circle
                 cx="14" cy="14" r={r}
                 fill="none"
@@ -166,6 +170,26 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
               v >= 70 ? 'text-green-400' : v >= 40 ? 'text-sky-400' : 'text-amber-400',
             )}>
               {v}%
+            </span>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'availabilityPct',
+      header: 'Khả dụng',
+      cell: ({ getValue }) => {
+        const v = getValue<number | undefined>() ?? 0
+        return (
+          <div className="flex items-center gap-2 min-w-[90px]">
+            <div className="flex-1 h-2 rounded-full bg-[#1e2433] overflow-hidden">
+              <div
+                className={cn('h-full rounded-full transition-all', availBarColor(v))}
+                style={{ width: `${Math.min(v, 100)}%` }}
+              />
+            </div>
+            <span className={cn('text-[10px] tabular-nums w-10 text-right font-bold', availColor(v))}>
+              {v.toFixed(1)}%
             </span>
           </div>
         )
@@ -224,6 +248,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
       'Sức khỏe (%)': r.healthScore,
       'Giờ máy (h)': r.engineHours,
       'Sử dụng (%)': `${r.utilizationPct}%`,
+      'Khả dụng (%)': r.availabilityPct != null ? `${r.availabilityPct.toFixed(1)}%` : '',
       'Giờ TB không hỏng (h)': r.mtbfHours,
       'Giờ sửa TB (h)': r.mttrHours,
       'Tình trạng BĐ': r.pmStatusLabel,
@@ -241,21 +266,39 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
     return Array.from({ length: max }, (_, i) => start + i)
   }, [pageCount, currentPage])
 
-  const collapseBtn = onToggle ? (
+  /** Insight summary bar — always visible in both open and collapsed states */
+  const insightBar = (
+    <div className="flex items-center gap-1 flex-wrap px-3 py-1.5 bg-[#060b14]/60 border-b border-[#1e2433] shrink-0">
+      {insight.map(chip => (
+        <div
+          key={chip.label}
+          className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#0d1117] border border-[#1e2433]"
+        >
+          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', chip.dotColor)} />
+          <span className="text-[9px] text-muted-foreground">{chip.label}</span>
+          <span className={cn('text-[9px] font-bold tabular-nums', chip.textColor)}>{chip.count}</span>
+        </div>
+      ))}
+    </div>
+  )
+
+  const headerRight = onToggle ? (
     <button
       type="button"
       onClick={onToggle}
       className="p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
-      aria-label="Thu gọn danh sách đội máy"
-      title="Thu gọn"
+      aria-label={expanded ? 'Thu nhỏ danh sách đội máy' : 'Phóng to danh sách đội máy'}
+      title={expanded ? 'Thu nhỏ' : 'Phóng to'}
     >
-      <ChevronLeft className="w-3.5 h-3.5" />
+      {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
     </button>
   ) : undefined
 
   return (
-    <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0" headerRight={collapseBtn}>
+    <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0" headerRight={headerRight}>
       <div className="flex flex-col h-full min-h-0">
+        {insightBar}
+
         <div className="flex flex-col sm:flex-row gap-2 px-3 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
@@ -286,7 +329,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
-          <table className="w-full min-w-[960px] text-[10px]">
+          <table className="w-full min-w-[1060px] text-[10px]">
             <thead className="sticky top-0 z-10">
               {table.getHeaderGroups().map(hg => (
                 <tr key={hg.id} className="bg-[#0b0f1a]/95 backdrop-blur-sm border-b border-[#1e2433]">
@@ -327,14 +370,11 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
         </div>
 
         <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
-          {/* Row info */}
           <span className="text-[10px] text-muted-foreground/70 tabular-nums whitespace-nowrap">
             Hiển thị <span className="text-foreground/80 font-medium">{startRow}–{endRow}</span> / <span className="text-foreground/80 font-medium">{total}</span> thiết bị
           </span>
 
-          {/* Pagination controls */}
           <div className="flex items-center gap-1">
-            {/* Page size */}
             <select
               value={pagination.pageSize}
               onChange={e => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), pageIndex: 0 }))}
@@ -343,7 +383,6 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
               {[10, 20, 50].map(n => <option key={n} value={n}>{n} / trang</option>)}
             </select>
 
-            {/* Prev */}
             <button
               type="button"
               onClick={() => table.previousPage()}
@@ -354,7 +393,6 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
 
-            {/* Page numbers */}
             {pageNumbers.map(p => (
               <button
                 key={p}
@@ -371,7 +409,6 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, open =
               </button>
             ))}
 
-            {/* Next */}
             <button
               type="button"
               onClick={() => table.nextPage()}
