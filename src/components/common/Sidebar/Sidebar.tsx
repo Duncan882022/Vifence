@@ -3,8 +3,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard,
   DoorOpen, GraduationCap, ShieldAlert, Sparkles,
-  TrendingUp, Package, ClipboardCheck, BarChart3,
-  Lock,
+  TrendingUp, Package, ClipboardCheck, BarChart3, Cpu,
+  Lock, Activity, Gauge,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -32,18 +32,17 @@ interface NavChild {
 const navItems: NavItem[] = [
   { path: '/module01', label: 'Kiểm soát vào ra',    icon: DoorOpen,       available: false },
   { path: '/dttt', label: 'Đào tạo & Tuân thủ',  icon: GraduationCap,  available: true  },
-  { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: false },
-  // Tạm ẩn Quản lý MMTB — bật lại khi sẵn sàng demo
-  // {
-  //   path: '/equipment-group',
-  //   label: 'Quản lý MMTB',
-  //   icon: Cpu,
-  //   available: true,
-  //   children: [
-  //     { path: '/equipmentpro', label: 'Năng suất vận hành', icon: Gauge,    available: true },
-  //     { path: '/equipment',    label: 'Độ tin cậy thiết bị', icon: Activity, available: true },
-  //   ],
-  // },
+  { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: true  },
+  {
+    path: '/equipment-group',
+    label: 'Quản lý máy móc',
+    icon: Cpu,
+    available: true,
+    children: [
+      { path: '/equipmentpro', label: 'Hiệu quả vận hành', icon: Gauge,    available: true },
+      { path: '/equipment',    label: 'Quản lý máy móc', icon: Activity, available: true },
+    ],
+  },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
   { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: false },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
