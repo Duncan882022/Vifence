@@ -20,6 +20,8 @@ export function Module02DashboardPage() {
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>()
   const [playbackEvent, setPlaybackEvent] = useState<TrainingEvent | null>(null)
   const [coursesOpen, setCoursesOpen] = useState(true)
+  const [coursesPanelOpen, setCoursesPanelOpen] = useState(true)
+  const [eventsPanelOpen, setEventsPanelOpen] = useState(true)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
@@ -114,9 +116,35 @@ export function Module02DashboardPage() {
             tier2Open ? 'lg:flex-[9]' : 'lg:flex-1',
           )}>
             {showCourses && (
-              <div className="w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:min-h-[240px] lg:min-h-0 flex flex-col gap-3">
-                <Panel title="Khóa Học" expandable noPadding className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto">
-                  <TrainingCourseAccordion />
+              <div className={cn(
+                'w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:min-h-[240px] lg:min-h-0 flex flex-col gap-3',
+                !coursesPanelOpen && 'lg:min-h-0',
+              )}>
+                <Panel
+                  title="Danh Sách Khóa Học"
+                  fit={!coursesPanelOpen}
+                  noPadding
+                  className={cn(
+                    coursesPanelOpen
+                      ? 'flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto'
+                      : 'shrink-0',
+                  )}
+                  headerRight={
+                    <div className="flex items-center gap-2 min-w-0">
+                      {!coursesPanelOpen && (
+                        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                          <span className="text-primary font-semibold">{courses.length}</span> khoá
+                        </span>
+                      )}
+                      <TierCollapseButton
+                        open={coursesPanelOpen}
+                        onToggle={() => setCoursesPanelOpen(open => !open)}
+                        label="Danh Sách Khóa Học"
+                      />
+                    </div>
+                  }
+                >
+                  {coursesPanelOpen && <TrainingCourseAccordion />}
                 </Panel>
               </div>
             )}
@@ -134,13 +162,37 @@ export function Module02DashboardPage() {
               </button>
             </div>
 
-            <div className="w-full lg:flex-[58] min-w-0 min-h-[320px] lg:min-h-0 flex flex-col">
-              <Panel title="Sự Kiện Đào Tạo" expandable noPadding className="flex-1 min-h-0">
-                <TrainingEventTable
-                  selectedId={selectedEventId}
-                  onSelectEvent={ev => setSelectedEventId(ev.id)}
-                  onPlayback={ev => setPlaybackEvent(ev)}
-                />
+            <div className={cn(
+              'w-full lg:flex-[58] min-w-0 flex flex-col',
+              eventsPanelOpen ? 'min-h-[320px] lg:min-h-0' : 'min-h-0',
+            )}>
+              <Panel
+                title="Sự Kiện Đào Tạo"
+                fit={!eventsPanelOpen}
+                noPadding
+                className={cn(eventsPanelOpen ? 'flex-1 min-h-0' : 'shrink-0')}
+                headerRight={
+                  <div className="flex items-center gap-2 min-w-0">
+                    {!eventsPanelOpen && (
+                      <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                        <span className="text-primary font-semibold">{attendees.length}</span> học viên
+                      </span>
+                    )}
+                    <TierCollapseButton
+                      open={eventsPanelOpen}
+                      onToggle={() => setEventsPanelOpen(open => !open)}
+                      label="Sự Kiện Đào Tạo"
+                    />
+                  </div>
+                }
+              >
+                {eventsPanelOpen && (
+                  <TrainingEventTable
+                    selectedId={selectedEventId}
+                    onSelectEvent={ev => setSelectedEventId(ev.id)}
+                    onPlayback={ev => setPlaybackEvent(ev)}
+                  />
+                )}
               </Panel>
             </div>
           </div>
