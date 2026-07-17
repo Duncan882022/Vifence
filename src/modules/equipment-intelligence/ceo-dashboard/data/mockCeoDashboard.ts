@@ -2,87 +2,6 @@ import type { CeoDashboardData, MmtbRow } from '../types'
 import type { Machine } from '../../../module01-equipment-productivity/types'
 import { MACHINES } from '../../../module01-equipment-productivity/data/mockProductivity'
 
-const EXAMPLE_MACHINES: MmtbRow[] = [
-  {
-    id: 'm-014',
-    machineCode: 'SANY-014',
-    equipmentType: 'Cọc nhồi SR285R',
-    projectLocation: 'Hạ Long Xanh',
-    regionId: 'quang-ninh',
-    status: 'Working',
-    healthScore: 72,              // fixed: 42 was too low for Working (range 60–95)
-    engineHours: 8450,
-    utilizationPct: 85,
-    mtbfHours: 191,               // linked to healthScore: round(60 + (72/99)*180) = 191
-    mttrHours: 3.8,
-    mttfHours: 8200,
-    pmStatus: 'upcoming',         // 8450 % 250 = 200 → pmIdx 1 (upcoming, 50h remaining)
-    pmStatusLabel: 'Sắp tới hạn 50h',
-    usageUnit: 'FECON',
-    latestAiRecommendation: 'Nhiệt độ nước làm mát cao bất thường',
-    serialNumber: '285R-2022-01456',
-    commissionDate: '12/03/2022',
-    warrantyUntil: '12/03/2027',
-    productionYear: 2022,
-    pmDaysUntilDue: 6,            // 50h remaining / 8h/day ≈ 6 days
-    pmNextItem: 'Thay lọc dầu thủy lực',
-    pmProgressPct: 80,
-    availabilityPct: Math.round(191 / (191 + 3.8) * 1000) / 10,
-  },
-  {
-    id: 'm-021',
-    machineCode: 'SANY-021',
-    equipmentType: 'Cọc nhồi SR235',
-    projectLocation: 'Cần Giờ',
-    regionId: 'can-gio',
-    status: 'Standby',
-    healthScore: 65,
-    engineHours: 6120,
-    utilizationPct: 62,
-    mtbfHours: 180,
-    mttrHours: 2.4,
-    mttfHours: 9100,
-    pmStatus: 'upcoming',
-    pmStatusLabel: 'Sắp tới hạn 35h',
-    usageUnit: 'SGC',
-    latestAiRecommendation: 'PM sắp tới hạn trong 20 giờ',
-    serialNumber: 'SR235-2021-00892',
-    commissionDate: '05/08/2021',
-    warrantyUntil: '05/08/2026',
-    productionYear: 2021,
-    pmDaysUntilDue: 3,
-    pmNextItem: 'Thay lọc dầu thủy lực + kiểm tra van an toàn',
-    pmProgressPct: 72,
-    availabilityPct: Math.round(180 / (180 + 2.4) * 1000) / 10,
-  },
-  {
-    id: 'm-007',
-    machineCode: 'XCMG-007',
-    equipmentType: 'Cọc nhồi XG500E',
-    projectLocation: 'Hải Vân Bay',
-    regionId: 'da-nang',
-    status: 'Breakdown',
-    healthScore: 25,
-    engineHours: 3210,
-    utilizationPct: 0,
-    mtbfHours: 85,
-    mttrHours: 6.2,
-    mttfHours: 4200,
-    pmStatus: 'overdue',
-    pmStatusLabel: 'Quá hạn 10h',
-    usageUnit: 'Bauer Vietnam',
-    latestAiRecommendation: 'Thiết bị mất kết nối >24h',
-    serialNumber: 'XG500E-2023-00341',
-    commissionDate: '18/01/2023',
-    warrantyUntil: '18/01/2028',
-    productionYear: 2023,
-    pmDaysUntilDue: -10,
-    pmNextItem: 'Bảo dưỡng tổng hợp PM250h',
-    pmProgressPct: 100,
-    availabilityPct: Math.round(85 / (85 + 6.2) * 1000) / 10,
-  },
-]
-
 /**
  * Fleet composition (100 total — mirrors Module 1):
  *   Drilling (SANY SR285R/SR235C, BAUER BG28, XCMG XR280D):  40
@@ -112,26 +31,6 @@ const UNITS = [
   'FECON', 'SGC', 'Bauer Vietnam', 'Coteccons Foundation', 'Delta Foundation',
   'Hòa Bình Foundation', 'Ricons Foundation', 'Central Foundation', 'Vietur Foundation', 'Sơn Hải Foundation',
 ]
-const REGIONS = [
-  { id: 'quang-ninh', name: 'Quảng Ninh', project: 'Hạ Long Xanh' },
-  { id: 'ha-noi',     name: 'Hà Nội',     project: 'OCP1' },
-  { id: 'vung-ang',   name: 'Hà Tĩnh / Vũng Áng', project: 'Vũng Áng' },
-  { id: 'da-nang',    name: 'Đà Nẵng / Hải Vân Bay', project: 'Hải Vân Bay' },
-  { id: 'can-gio',    name: 'Cần Giờ', project: 'Cần Giờ' },
-  { id: 'long-an',    name: 'Long An',    project: 'Làng Olympic' },
-]
-
-/**
- * Status distribution: 60% Working / 20% Standby / 10% Breakdown / 10% Stored
- * Cycle of 10 ensures exact distribution across the fleet.
- */
-function assignStatus(i: number): MmtbRow['status'] {
-  const r = i % 10
-  if (r < 6) return 'Working'    // 6/10 = 60%
-  if (r < 8) return 'Standby'    // 2/10 = 20%
-  if (r < 9) return 'Breakdown'  // 1/10 = 10%
-  return 'Stored'                 // 1/10 = 10%
-}
 
 function getMtbfOffset(prefix: string): number {
   // Simpler machines (rollers, pumps) have higher baseline MTBF than complex drilling rigs
@@ -223,72 +122,6 @@ export function machineToMmtbRow(m: Machine, idx: number): MmtbRow {
     usageUnit: UNITS[idx % UNITS.length],
     availabilityPct,
   }
-}
-
-function generateMachines(count: number): MmtbRow[] {
-  const rows: MmtbRow[] = [...EXAMPLE_MACHINES]
-  const PM_INTERVAL = 250
-  for (let i = rows.length; i < count; i += 1) {
-    const model  = MODELS[i % MODELS.length]
-    const region = REGIONS[i % REGIONS.length]
-    const status = assignStatus(i)
-
-    // health drives reliability — linked to MTBF/MTTF below
-    const health = status === 'Breakdown' ? 15 + (i % 30)
-      : status === 'Standby'   ? 48 + (i % 28)
-      : status === 'Stored'    ? 55 + (i % 20)
-      :                          60 + (i % 35)
-    const healthCapped = Math.min(99, health)
-
-    // MTBF: health-driven + type offset → higher for simpler machines
-    const mtbfOffset = getMtbfOffset(model.prefix)
-    const mtbf = Math.round(60 + mtbfOffset + (healthCapped / 99) * 180)
-    const mttr = Math.round(getMttrBase(model.prefix, i) * 10) / 10
-
-    // MTTF >> MTBF: higher health = longer lifetime before permanent failure
-    const mttf = 4500 + (healthCapped * 55) + (i * 11) % 3000
-
-    const util = status === 'Breakdown' ? 0
-      : status === 'Stored'   ? 10 + (i % 20)
-      : status === 'Standby'  ? 30 + (i % 35)
-      :                         55 + (i % 40)
-
-    const engineHours = 1500 + (i * 137) % 9500
-
-    // PM interval: 250h — pmStatus linked to position in current PM cycle
-    // Distribution: ~78% on_time | ~16% upcoming | ~6% overdue
-    const pmCyclePos = engineHours % PM_INTERVAL
-    const pmIdx = pmCyclePos < 195 ? 0
-      : pmCyclePos < 235           ? 1
-      :                              2
-
-    // availabilityPct = MTBF / (MTBF + MTTR) × 100 — standard formula for all types
-    rows.push({
-      id: `m-gen-${i}`,
-      machineCode: `${model.prefix}-${String(100 + i).padStart(3, '0')}`,
-      equipmentType: model.type,
-      projectLocation: region.project,
-      regionId: region.id,
-      status,
-      healthScore: healthCapped,
-      engineHours,
-      utilizationPct: Math.min(98, util),
-      mtbfHours: mtbf,
-      mttrHours: mttr,
-      mttfHours: mttf,
-      pmStatus: pmIdx === 0 ? 'on_time' : pmIdx === 1 ? 'upcoming' : 'overdue',
-      pmStatusLabel: pmIdx === 0 ? 'Đúng hạn'
-        : pmIdx === 1 ? `Sắp tới hạn ${PM_INTERVAL - pmCyclePos}h`
-        : `Quá hạn ${pmCyclePos - 235}h`,
-      usageUnit: UNITS[i % UNITS.length],
-      availabilityPct: status === 'Breakdown'
-        ? Math.round((5 + (i % 15)) * 10) / 10   // 5–19% khi đang hỏng
-        : status === 'Stored'
-          ? Math.round((45 + (i % 20)) * 10) / 10  // 45–64% khi lưu kho
-          : Math.round(mtbf / (mtbf + mttr) * 1000) / 10,
-    })
-  }
-  return rows
 }
 
 // Tổng số máy — dẫn xuất trực tiếp từ MACHINES (module01)

@@ -6,7 +6,7 @@ import {
 import { AlertTriangle, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
-import type { Machine, MachineStatus, DispatchStatus, Project, Worksite, PileAssignment } from '../types'
+import type { Machine, MachineStatus, Project, Worksite, PileAssignment } from '../types'
 
 const STATUS_BADGE: Record<MachineStatus, string> = {
   working:   'bg-green-500/15 text-green-400 ring-1 ring-green-500/25',
@@ -20,18 +20,6 @@ const STATUS_LABELS: Record<MachineStatus, string> = {
   idle:      'Chờ việc',
   breakdown: 'Hỏng hóc',
   stored:    'Lưu kho',
-}
-
-const DISPATCH_BADGE: Record<DispatchStatus, string> = {
-  'on-time': 'bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25',
-  'delayed': 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/25',
-  'pending': 'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25',
-}
-
-const DISPATCH_LABELS: Record<DispatchStatus, string> = {
-  'on-time': 'Đúng hạn',
-  'delayed': 'Trễ',
-  'pending': 'Chờ',
 }
 
 function utilGradient(p: number): string {

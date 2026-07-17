@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Cpu, Fuel, HardHat, TrendingUp } from 'lucide-react'
+import { Cpu, Fuel, HardHat, TrendingUp } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
   DASHBOARD_CHIP_CLASS,
@@ -132,18 +132,8 @@ function pct(part: number, total: number): number {
   return Math.round((part / total) * 100)
 }
 
-function avg(arr: number[]): number {
-  if (arr.length === 0) return 0
-  return arr.reduce((s, v) => s + v, 0) / arr.length
-}
-
 function fmtD(v: number, d = 1): string {
   return v.toLocaleString('vi-VN', { minimumFractionDigits: d, maximumFractionDigits: d })
-}
-
-function fmtVnd(v: number): string {
-  if (v >= 1_000_000) return `${fmtD(v / 1_000_000, 0)} triệu`
-  return `${Math.round(v / 1_000).toLocaleString('vi-VN')}K`
 }
 
 function projectBarClass(p: number): string {
@@ -280,7 +270,7 @@ function PileCard({ projects, worksites, index }: {
 function TodayProgressCard({ projects, worksites, index }: {
   projects: Project[]; worksites: Worksite[]; index: number
 }) {
-  const { portfolioPct, onTrackCount, totalCompleted, totalInProgress, totalDelayed, totalBlocked, totalDelayedBlocked, bottomRows } = useMemo(() => {
+  const { portfolioPct, totalCompleted, totalInProgress, totalDelayed, totalBlocked, bottomRows } = useMemo(() => {
     const totalPlanned = worksites.reduce((s, w) => s + w.plannedPiles, 0)
     const _totalCompleted = worksites.reduce((s, w) => s + w.completedPiles, 0)
     const _totalDelayed = worksites.reduce((s, w) => s + w.delayedPiles, 0)

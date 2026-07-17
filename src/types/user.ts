@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'manager' | 'safety' | 'contractor' | 'supervisor'
+export type UserRole = 'admin' | 'manager' | 'safety' | 'contractor' | 'supervisor' | 'super' | 'user'
 
 export interface User {
   id: string
@@ -7,6 +7,21 @@ export interface User {
   role: UserRole
   avatar?: string
   contractorId?: string
+  
+  username?: string
+  fullName?: string
+  phone?: string | null
+  avatarUrl?: string | null
+  roleId?: string
+  roleDetail?: {
+    id: string
+    name: string
+    code: string
+    createdAt?: string
+    updatedAt?: string
+  } | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface Contractor {

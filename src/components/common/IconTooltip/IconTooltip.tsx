@@ -102,3 +102,40 @@ export function IconTooltipBadge({
     </span>
   )
 }
+
+interface TagTooltipProps {
+  content: string
+  children: ReactNode
+  className?: string
+  tooltipClassName?: string
+}
+
+export function TagTooltip({
+  content,
+  children,
+  className,
+  tooltipClassName,
+}: TagTooltipProps) {
+  return (
+    <span className={cn('relative inline-flex group/tag-tip cursor-default', className)}>
+      {children}
+      
+      {/* Tooltip box */}
+      <span
+        className={cn(
+          'pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50',
+          'px-2.5 py-1.5 rounded-lg bg-[#0e1320] border border-[#2a3855] shadow-2xl',
+          'text-[10px] font-semibold text-foreground whitespace-nowrap',
+          'opacity-0 scale-90 origin-bottom transition-all duration-200 ease-out',
+          'group-hover/tag-tip:opacity-100 group-hover/tag-tip:scale-100',
+          tooltipClassName
+        )}
+      >
+        {content}
+        {/* Little arrow at the bottom center */}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[5px] border-4 border-transparent border-t-[#0e1320] z-50" />
+        <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[6px] border-4 border-transparent border-t-[#2a3855] -z-10" />
+      </span>
+    </span>
+  )
+}

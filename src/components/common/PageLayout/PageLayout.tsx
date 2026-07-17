@@ -86,11 +86,13 @@ interface PanelProps {
   expandable?: boolean
   /** Nội dung riêng khi phóng to — mặc định dùng children */
   expandedContent?: React.ReactNode
+  /** Tuỳ chọn cho phép nội dung tràn ra ngoài (ví dụ dropdown) */
+  overflowVisible?: boolean
 }
 
 export function Panel({
   title, children, className, headerRight, noPadding, fit = false, expandable = false,
-  expandedContent,
+  expandedContent, overflowVisible = false,
 }: PanelProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -124,7 +126,8 @@ export function Panel({
   )
 
   const bodyClass = cn(
-    'flex flex-col overflow-hidden',
+    'flex flex-col',
+    !overflowVisible && 'overflow-hidden',
     fit ? '' : 'flex-1 min-h-0',
     !noPadding && 'p-3',
   )
@@ -132,7 +135,8 @@ export function Panel({
   /* ── Normal panel ── */
   const normalPanel = (
     <div className={cn(
-      'bg-[#0d1117] border border-[#1e2433] rounded-lg flex flex-col overflow-hidden',
+      'bg-[#0d1117] border border-[#1e2433] rounded-lg flex flex-col',
+      !overflowVisible && 'overflow-hidden',
       fit ? '' : 'h-full',
       className,
     )}>
@@ -161,10 +165,11 @@ export function Panel({
             onClick={() => setExpanded(false)}
           />
           {/* Expanded panel */}
-          <div className="absolute inset-4 max-lg:inset-2 bg-[#0d1117] border border-[#1e2433] rounded-xl flex flex-col overflow-hidden shadow-2xl">
+          <div className="absolute inset-4 bg-[#0d1117] border border-[#1e2433] rounded-xl flex flex-col overflow-hidden shadow-2xl">
             {headerContent(() => setExpanded(false), true)}
             <div className={cn(
-              'flex-1 min-h-0 flex flex-col overflow-hidden min-w-0',
+              'flex-1 min-h-0 flex flex-col',
+              !overflowVisible && 'overflow-hidden',
               !noPadding && 'p-3',
             )}>
               {expandedContent ?? children}

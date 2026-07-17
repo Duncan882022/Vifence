@@ -116,9 +116,9 @@ function SoLon({ children, className }: { children: ReactNode; className?: strin
   )
 }
 
-function DonVi({ children }: { children: ReactNode }) {
+function DonVi({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span className="text-[8px] sm:text-[10px] font-medium text-muted-foreground shrink-0">
+    <span className={cn('text-[8px] sm:text-[10px] font-medium text-muted-foreground shrink-0', className)}>
       {children}
     </span>
   )

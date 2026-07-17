@@ -3,8 +3,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard,
   DoorOpen, GraduationCap, ShieldAlert, Sparkles,
-  TrendingUp, Package, ClipboardCheck, BarChart3, Cpu,
-  Lock, Activity, Gauge,
+  TrendingUp, Package, ClipboardCheck, BarChart3,
+  Lock,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -12,6 +12,7 @@ import { useAppStore } from '@/store/app.store'
 import { TrialLockPopup } from '@/components/common/TrialLock/TrialLockPopup'
 import { useTrialLock } from '@/hooks/useTrialLock'
 import { useShellLayout } from '@/hooks/useShellLayout'
+import { APP_VERSION } from '@/config'
 
 interface NavItem {
   path: string
@@ -30,18 +31,19 @@ interface NavChild {
 
 const navItems: NavItem[] = [
   { path: '/module01', label: 'Kiểm soát vào ra',    icon: DoorOpen,       available: false },
-  { path: '/module02', label: 'Đào tạo & Tuân thủ',  icon: GraduationCap,  available: true  },
-  { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: true  },
-  {
-    path: '/equipment-group',
-    label: 'Quản lý máy móc',
-    icon: Cpu,
-    available: true,
-    children: [
-      { path: '/equipmentpro', label: 'Hiệu quả vận hành', icon: Gauge,    available: true },
-      { path: '/equipment',    label: 'Quản lý máy móc', icon: Activity, available: true },
-    ],
-  },
+  { path: '/dttt', label: 'Đào tạo & Tuân thủ',  icon: GraduationCap,  available: true  },
+  { path: '/module03', label: 'An toàn lao động',      icon: ShieldAlert,    available: false },
+  // Tạm ẩn Quản lý MMTB — bật lại khi sẵn sàng demo
+  // {
+  //   path: '/equipment-group',
+  //   label: 'Quản lý MMTB',
+  //   icon: Cpu,
+  //   available: true,
+  //   children: [
+  //     { path: '/equipmentpro', label: 'Năng suất vận hành', icon: Gauge,    available: true },
+  //     { path: '/equipment',    label: 'Độ tin cậy thiết bị', icon: Activity, available: true },
+  //   ],
+  // },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
   { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: false },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
@@ -101,7 +103,7 @@ export function Sidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav className="flex-1 overflow-y-auto py-2 flex flex-col justify-between">
           <ul className="space-y-0.5 px-1.5">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -236,6 +238,13 @@ export function Sidebar() {
               )
             })}
           </ul>
+
+          {/* Footer version badge - pushed to bottom by justify-between in nav */}
+          {showLabels && (
+            <div className="px-4 text-[10px] text-muted-foreground mt-4">
+              v{APP_VERSION}
+            </div>
+          )}
         </nav>
 
         {/* Collapse toggle — desktop only */}

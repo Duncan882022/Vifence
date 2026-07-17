@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { Map } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
-import type { Project, Worksite, PileAssignment } from '../types'
+import type { Project, Worksite, PileAssignment, DelayReason } from '../types'
 import { ProjectMapModal } from './ProjectMapModal'
 
 type RiskLevel = 'Cao' | 'Trung bình' | 'Thấp'

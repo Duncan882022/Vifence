@@ -7,13 +7,14 @@ const DESKTOP_QUERY = '(min-width: 1024px)'
 export function useShellLayout() {
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const {
+    user,
     sidebarCollapsed,
     mobileNavOpen,
     setMobileNavOpen,
     closeMobileNav,
   } = useAppStore()
 
-  const sidebarInset = isDesktop ? (sidebarCollapsed ? 56 : 200) : 0
+  const sidebarInset = user && isDesktop ? (sidebarCollapsed ? 56 : 200) : 0
 
   useEffect(() => {
     if (isDesktop && mobileNavOpen) closeMobileNav()
