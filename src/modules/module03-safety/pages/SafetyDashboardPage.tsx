@@ -4,7 +4,6 @@ import {
   CameraModeToggle,
   type CameraPanelMode,
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
-import { useShellLayout } from '@/hooks/useShellLayout'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
@@ -58,6 +57,9 @@ const DEFAULT_FILTERS: SafetyDashboardFilters = {
   contractorId: null,
 }
 
+/** Tạm ẩn tier Sự Kiện Vi Phạm trên dashboard tổng quan */
+const SHOW_VIOLATION_EVENTS_PANEL = false
+
 type LowerPanel = 'none' | 'camera' | 'events'
 
 export function SafetyDashboardPage() {
@@ -71,7 +73,6 @@ export function SafetyDashboardPage() {
   const [activeStreamCount, setActiveStreamCount] = useState(12)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
-  const { isDesktop } = useShellLayout()
 
   const allRecords = useMemo(
     () => mergeViolationStatusOverrides(getAllSafetyRecords(), statusOverrides),
@@ -79,12 +80,7 @@ export function SafetyDashboardPage() {
   )
 
   const tier2Open = lowerPanel === 'camera'
-  const eventsPanelOpen = lowerPanel === 'events'
-
-  const filtered = useMemo(
-    () => filterViolations(allRecords, filters),
-    [allRecords, filters],
-  )
+  const eventsPanelOpen = SHOW_VIOLATION_EVENTS_PANEL && lowerPanel === 'events'
 
   /** Pool chung Nhóm ATLĐ + Cảnh báo — không bị cắt bởi filter nhóm đang chọn */
   const alertScope = useMemo(
@@ -115,10 +111,6 @@ export function SafetyDashboardPage() {
 
   const handleToggleCamera = () => {
     setLowerPanel(prev => (prev === 'camera' ? 'none' : 'camera'))
-  }
-
-  const handleToggleEvents = () => {
-    setLowerPanel(prev => (prev === 'events' ? 'none' : 'events'))
   }
 
   const handleHandleRequest = (v: SafetyViolationRecord) => {
@@ -246,7 +238,7 @@ export function SafetyDashboardPage() {
             </Panel>
           </div>
 
-          {/* Cảnh báo + Nhóm ATLĐ — mobile: cảnh báo trước; desktop: nhóm trái */}
+          {/* Nhóm ATLĐ + Cảnh báo — mobile & desktop: nhóm trước */}
           <div className={cn(
             'flex flex-col lg:flex-row gap-3 min-h-0',
             'max-lg:flex-none',
@@ -259,7 +251,26 @@ export function SafetyDashboardPage() {
                   : 'lg:flex-1',
           )}>
             <div className={cn(
-              'w-full lg:flex-[42] min-w-0 flex flex-col order-1 lg:order-2',
+              'w-full lg:flex-[58] min-w-0 flex flex-col',
+              bothLowerCollapsed
+                ? 'lg:min-h-0 lg:flex-1'
+                : 'max-lg:min-h-0 lg:min-h-0',
+            )}>
+              <Panel
+                title="Nhóm ATLĐ"
+                noPadding
+                className="flex-1 min-h-0 max-lg:!h-auto overflow-hidden"
+              >
+                <SafetyGroupGrid
+                  stats={groupStats}
+                  selectedGroupId={filters.groupId}
+                  onSelectGroup={handleGroupSelect}
+                />
+              </Panel>
+            </div>
+
+            <div className={cn(
+              'w-full lg:flex-[42] min-w-0 flex flex-col',
               bothLowerCollapsed
                 ? 'lg:min-h-0 lg:flex-1'
                 : 'max-lg:min-h-[320px] lg:min-h-0',
@@ -281,27 +292,9 @@ export function SafetyDashboardPage() {
                 />
               </Panel>
             </div>
-
-            <div className={cn(
-              'w-full lg:flex-[58] min-w-0 flex flex-col order-2 lg:order-1',
-              bothLowerCollapsed
-                ? 'lg:min-h-0 lg:flex-1'
-                : 'max-lg:min-h-0 lg:min-h-0',
-            )}>
-              <Panel
-                title="Nhóm ATLĐ"
-                noPadding
-                className="flex-1 min-h-0 max-lg:!h-auto overflow-hidden"
-              >
-                <SafetyGroupGrid
-                  stats={groupStats}
-                  selectedGroupId={filters.groupId}
-                  onSelectGroup={handleGroupSelect}
-                />
-              </Panel>
-            </div>
           </div>
 
+          {SHOW_VIOLATION_EVENTS_PANEL && (
           <div className={cn(
             'w-full flex flex-col min-h-0',
             eventsPanelOpen
@@ -310,7 +303,7 @@ export function SafetyDashboardPage() {
           )}>
             <Panel
               title="Sự Kiện Vi Phạm"
-              fit={!eventsPanelOpen || !isDesktop}
+              fit={!eventsPanelOpen}
               noPadding
               className={cn(
                 eventsPanelOpen
@@ -322,13 +315,13 @@ export function SafetyDashboardPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   {!eventsPanelOpen && (
                     <SafetyEventsCollapsedSummary
-                      count={filtered.length}
+                      count={filterViolations(allRecords, filters).length}
                       criticalCount={kpis.criticalCount}
                     />
                   )}
                   <TierCollapseButton
                     open={eventsPanelOpen}
-                    onToggle={handleToggleEvents}
+                    onToggle={() => setLowerPanel(prev => (prev === 'events' ? 'none' : 'events'))}
                     label="Sự Kiện Vi Phạm"
                   />
                 </div>
@@ -336,7 +329,7 @@ export function SafetyDashboardPage() {
             >
               {eventsPanelOpen && (
                 <SafetyViolationTable
-                  records={filtered}
+                  records={filterViolations(allRecords, filters)}
                   selectedId={selectedId}
                   onSelect={v => setSelectedId(v.id)}
                   onPlayback={handlePlayback}
@@ -344,6 +337,7 @@ export function SafetyDashboardPage() {
               )}
             </Panel>
           </div>
+          )}
         </div>
       </PageLayout>
 

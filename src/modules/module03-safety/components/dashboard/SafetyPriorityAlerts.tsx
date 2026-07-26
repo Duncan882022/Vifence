@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, Gavel, Play } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, Gavel, Loader2, Play } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type {
   AlertSeverity,
@@ -50,6 +50,9 @@ const FILTER_TABS: { key: AlertFilterTab; label: string }[] = [
   { key: 'handled', label: 'Đã xử lý' },
   { key: 'unhandled', label: 'Chưa xử lý' },
 ]
+
+const INITIAL_COUNT = 10
+const BATCH_SIZE = 6
 
 function GroupTag({ groupId }: { groupId: SafetyGroupId }) {
   const Icon = GROUP_ICONS[groupId]
@@ -196,6 +199,9 @@ export function SafetyPriorityAlerts({
   const [filterTab, setFilterTab] = useState<AlertFilterTab>('all')
   const [groupQuickFilters, setGroupQuickFilters] = useState<Set<SafetyGroupId>>(new Set())
   const [quickOpen, setQuickOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
+  const [loading, setLoading] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const groupFilter = selectedGroupId ?? null
 
@@ -251,6 +257,34 @@ export function SafetyPriorityAlerts({
       return true
     })
   }, [filterPool, groupFilter, groupQuickFilters])
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_COUNT)
+  }, [filterTab, groupFilter, groupQuickFilters, activeItems.length])
+
+  const visibleItems = useMemo(
+    () => activeItems.slice(0, visibleCount),
+    [activeItems, visibleCount],
+  )
+  const hasMore = visibleCount < activeItems.length
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || loading) return
+        setLoading(true)
+        setTimeout(() => {
+          setVisibleCount(c => c + BATCH_SIZE)
+          setLoading(false)
+        }, 350)
+      },
+      { threshold: 0.1 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, loading])
 
   const empty = all.length === 0
 
@@ -361,9 +395,25 @@ export function SafetyPriorityAlerts({
           </p>
         ) : (
           <div className="space-y-1.5">
-            {activeItems.map(v => (
+            {visibleItems.map(v => (
               <AlertCard key={v.id} v={v} onPlayback={onPlayback} onSelect={onSelect} onHandle={onHandle} />
             ))}
+
+            {hasMore && (
+              <div ref={sentinelRef} className="flex items-center justify-center py-3">
+                {loading
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  : <div className="h-3.5" />}
+              </div>
+            )}
+
+            {!hasMore && (
+              <div className="flex items-center justify-center py-3">
+                <span className="text-[9px] text-muted-foreground/35">
+                  — {activeItems.length} cảnh báo —
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

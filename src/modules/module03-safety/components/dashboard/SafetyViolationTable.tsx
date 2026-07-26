@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Play, Send, ShieldCheck } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Play, Send, ShieldCheck } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../../types/safety.types'
 import { getScenarioName, SAFETY_SCENARIO_MAP } from '../../data/safetyScenarios'
@@ -52,6 +52,9 @@ const SORTABLE_COLUMNS: { key: SortKey | null; label: string }[] = [
   { key: null, label: 'SLA' },
   { key: null, label: '' },
 ]
+
+const INITIAL_COUNT = 10
+const BATCH_SIZE = 6
 
 function compareRecords(a: SafetyViolationRecord, b: SafetyViolationRecord, key: SortKey, dir: SortDir): number {
   let cmp = 0
@@ -127,11 +130,42 @@ export function SafetyViolationTable({
 }: SafetyViolationTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('detectedAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
+  const [loading, setLoading] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const sortedRecords = useMemo(
     () => [...records].sort((a, b) => compareRecords(a, b, sortKey, sortDir)),
     [records, sortKey, sortDir],
   )
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_COUNT)
+  }, [records, sortKey, sortDir])
+
+  const visibleRecords = useMemo(
+    () => sortedRecords.slice(0, visibleCount),
+    [sortedRecords, visibleCount],
+  )
+  const hasMore = visibleCount < sortedRecords.length
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || loading) return
+        setLoading(true)
+        setTimeout(() => {
+          setVisibleCount(c => c + BATCH_SIZE)
+          setLoading(false)
+        }, 350)
+      },
+      { threshold: 0.1 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, loading])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -167,7 +201,7 @@ export function SafetyViolationTable({
                   Không có sự kiện phù hợp bộ lọc
                 </td>
               </tr>
-            ) : sortedRecords.map((v, index) => {
+            ) : visibleRecords.map((v, index) => {
               const scenario = SAFETY_SCENARIO_MAP.get(v.scenarioId)
               const sla = formatSla(v)
               const selected = selectedId === v.id
@@ -242,6 +276,22 @@ export function SafetyViolationTable({
             })}
           </tbody>
         </table>
+
+        {sortedRecords.length > 0 && hasMore && (
+          <div ref={sentinelRef} className="flex items-center justify-center py-3">
+            {loading
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+              : <div className="h-3.5" />}
+          </div>
+        )}
+
+        {sortedRecords.length > 0 && !hasMore && (
+          <div className="flex items-center justify-center py-3">
+            <span className="text-[9px] text-muted-foreground/35">
+              — {sortedRecords.length} sự kiện —
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )
