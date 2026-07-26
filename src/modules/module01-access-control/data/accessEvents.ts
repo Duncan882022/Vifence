@@ -4,12 +4,12 @@ import { DEMO_ACCESS_DATE } from './accessCameras'
 export const ACCESS_EVENTS: AccessEvent[] = [
   {
     id: 'ae-001', subjectType: 'person', name: 'Nguyễn Văn An', subjectId: 'NV000123',
-    contractorOrType: 'ABC Construction', timeIn: '07:45', timeOut: null, presence: 'inside',
+    contractorOrType: 'Vincons', timeIn: '07:45', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '3h 45p', avatarPersonId: 'w-att03', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-002', subjectType: 'person', name: 'Trần Văn Bình', subjectId: 'NV000456',
-    contractorOrType: 'XYZ JSC', timeIn: '07:52', timeOut: null, presence: 'inside',
+    contractorOrType: 'Alpha', timeIn: '07:52', timeOut: null, presence: 'inside',
     gate: 'Cổng phụ 1', gateId: 'gate-side1', duration: '3h 38p', avatarPersonId: 'w-002', date: DEMO_ACCESS_DATE,
   },
   {
@@ -24,22 +24,22 @@ export const ACCESS_EVENTS: AccessEvent[] = [
   },
   {
     id: 'ae-005', subjectType: 'person', name: 'Lê Thị Hương', subjectId: 'NV001103',
-    contractorOrType: 'ABC Construction', timeIn: '07:25', timeOut: null, presence: 'inside',
+    contractorOrType: 'Vincons', timeIn: '07:25', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '4h 05p', avatarPersonId: 'w-c03', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-006', subjectType: 'person', name: 'Phạm Văn An', subjectId: 'NV001132',
-    contractorOrType: 'XYZ JSC', timeIn: '08:01', timeOut: null, presence: 'inside',
+    contractorOrType: 'Alpha', timeIn: '08:01', timeOut: null, presence: 'inside',
     gate: 'Cổng phụ 1', gateId: 'gate-side1', duration: '3h 29p', avatarPersonId: 'w-att03', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-007', subjectType: 'person', name: 'Hoàng Thị Ngọc', subjectId: 'NV001107',
-    contractorOrType: 'XYZ JSC', timeIn: '08:00', timeOut: null, presence: 'inside',
+    contractorOrType: 'Alpha', timeIn: '08:00', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '3h 30p', avatarPersonId: 'w-c07', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-008', subjectType: 'person', name: 'Bùi Văn Khoa', subjectId: 'NV001108',
-    contractorOrType: 'ABC Construction', timeIn: '07:57', timeOut: null, presence: 'inside',
+    contractorOrType: 'Vincons', timeIn: '07:57', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '3h 33p', avatarPersonId: 'w-c08', date: DEMO_ACCESS_DATE,
   },
   {
@@ -49,22 +49,22 @@ export const ACCESS_EVENTS: AccessEvent[] = [
   },
   {
     id: 'ae-010', subjectType: 'person', name: 'Đặng Thị Linh', subjectId: 'NV001112',
-    contractorOrType: 'XYZ JSC', timeIn: '07:59', timeOut: null, presence: 'inside',
+    contractorOrType: 'Alpha', timeIn: '07:59', timeOut: null, presence: 'inside',
     gate: 'Cổng phụ 1', gateId: 'gate-side1', duration: '3h 31p', avatarPersonId: 'w-c12', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-011', subjectType: 'person', name: 'Trần Quốc Bảo', subjectId: 'NV001102',
-    contractorOrType: 'XYZ JSC', timeIn: '07:29', timeOut: '11:15', presence: 'outside',
+    contractorOrType: 'Alpha', timeIn: '07:29', timeOut: '11:15', presence: 'outside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '3h 46p', avatarPersonId: 'w-c02', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-012', subjectType: 'person', name: 'Nguyễn Văn Phú', subjectId: 'NV001202',
-    contractorOrType: 'ABC Construction', timeIn: '11:30', timeOut: null, presence: 'inside',
+    contractorOrType: 'Vincons', timeIn: '11:30', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '0h 00p', avatarPersonId: 'w-a02', date: DEMO_ACCESS_DATE,
   },
   {
     id: 'ae-013', subjectType: 'person', name: 'Trần Minh Đức', subjectId: 'NV001203',
-    contractorOrType: 'XYZ JSC', timeIn: '11:47', timeOut: null, presence: 'inside',
+    contractorOrType: 'Alpha', timeIn: '11:47', timeOut: null, presence: 'inside',
     gate: 'Cổng phụ 2', gateId: 'gate-side2', duration: '0h 00p', avatarPersonId: 'w-a03', date: DEMO_ACCESS_DATE,
   },
   {
@@ -84,7 +84,7 @@ export const ACCESS_EVENTS: AccessEvent[] = [
   },
   {
     id: 'ae-017', subjectType: 'person', name: 'Lý Thị Mỹ Duyên', subjectId: 'NV001111',
-    contractorOrType: 'ABC Construction', timeIn: '08:12', timeOut: null, presence: 'inside',
+    contractorOrType: 'Vincons', timeIn: '08:12', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '3h 18p', avatarPersonId: 'w-011', date: DEMO_ACCESS_DATE,
   },
   {
@@ -124,7 +124,7 @@ export const ACCESS_EVENTS: AccessEvent[] = [
   },
   {
     id: 'ae-025', subjectType: 'person', name: 'Cao Thị Bích', subjectId: 'NV001201',
-    contractorOrType: 'ABC Construction', timeIn: '11:28', timeOut: null, presence: 'inside',
+    contractorOrType: 'Vincons', timeIn: '11:28', timeOut: null, presence: 'inside',
     gate: 'Cổng chính', gateId: 'gate-main', duration: '0h 02p', avatarPersonId: 'w-a01', date: DEMO_ACCESS_DATE,
   },
 ]

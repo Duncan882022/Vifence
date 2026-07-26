@@ -54,7 +54,7 @@ export const ACCESS_AI_OVERLAYS: Record<AccessGateId, AccessAiDetection[]> = {
       x: 28, y: 30, w: 14, h: 42,
       kind: 'person',
       label: 'Nguyễn Văn An',
-      sublabel: 'ABC Construction · NV000123',
+      sublabel: 'Vincons · NV000123',
     },
   ],
   'gate-side1': [
@@ -62,7 +62,7 @@ export const ACCESS_AI_OVERLAYS: Record<AccessGateId, AccessAiDetection[]> = {
       x: 32, y: 28, w: 13, h: 40,
       kind: 'person',
       label: 'Trần Văn Bình',
-      sublabel: 'XYZ JSC · NV000456',
+      sublabel: 'Alpha · NV000456',
     },
   ],
   'gate-truck': [

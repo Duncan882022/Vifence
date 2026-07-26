@@ -102,19 +102,19 @@ function enrolledStub(
 /** Ca chiều chưa mở — đăng ký, chưa có trong Sự kiện */
 const UPCOMING_ENROLLED: Record<string, TrainingAttendee[]> = {
   'Vận hành máy nâng': [
-    enrolledStub({ id: 'e-vhmn-1', employeeCode: 'NV000556', name: 'Ngô Thanh Sơn', avatarColor: '#34D399', company: 'Delta Corp', companyCode: 'DC-001', role: 'Kỹ sư kết cấu', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
-    enrolledStub({ id: 'e-vhmn-2', employeeCode: 'NV001089', name: 'Lưu Đức Minh', avatarColor: '#C084FC', company: 'Minh Phát JSC', companyCode: 'MP-004', role: 'Kỹ thuật viên điện', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
-    enrolledStub({ id: 'e-vhmn-3', employeeCode: 'NV001140', name: 'Đỗ Văn Long', avatarColor: '#38BDF8', company: 'XYZ JSC', companyCode: 'XY-002', role: 'Vận hành thiết bị', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
-    enrolledStub({ id: 'e-vhmn-4', employeeCode: 'NV001141', name: 'Võ Thị Hằng', avatarColor: '#F472B6', company: 'Sunrise Const.', companyCode: 'SR-005', role: 'Nhân viên an toàn', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-vhmn-1', employeeCode: 'NV000556', name: 'Ngô Thanh Sơn', avatarColor: '#34D399', company: 'SGC', companyCode: 'SGC-001', role: 'Kỹ sư kết cấu', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-vhmn-2', employeeCode: 'NV001089', name: 'Lưu Đức Minh', avatarColor: '#C084FC', company: 'SGC', companyCode: 'SGC-002', role: 'Kỹ thuật viên điện', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-vhmn-3', employeeCode: 'NV001140', name: 'Đỗ Văn Long', avatarColor: '#38BDF8', company: 'Alpha', companyCode: 'AL-001', role: 'Vận hành thiết bị', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-vhmn-4', employeeCode: 'NV001141', name: 'Võ Thị Hằng', avatarColor: '#F472B6', company: 'Alpha', companyCode: 'AL-002', role: 'Nhân viên an toàn', currentCourse: 'Vận hành máy nâng', courseStart: '13:00', courseEnd: '17:00' }),
   ],
   'KT xây dựng': [
-    enrolledStub({ id: 'e-ktxd-1', employeeCode: 'NV001150', name: 'Hoàng Văn Phúc', avatarColor: '#10B981', company: 'ABC Construction', companyCode: 'AB-003', role: 'Giám sát thi công', currentCourse: 'KT xây dựng', courseStart: '14:00', courseEnd: '17:00' }),
-    enrolledStub({ id: 'e-ktxd-2', employeeCode: 'NV001151', name: 'Lê Thị Thu Hà', avatarColor: '#EC4899', company: 'Delta Corp', companyCode: 'DC-001', role: 'Kế toán công trường', currentCourse: 'KT xây dựng', courseStart: '14:00', courseEnd: '17:00' }),
-    enrolledStub({ id: 'e-ktxd-3', employeeCode: 'NV001152', name: 'Trương Văn Dũng', avatarColor: '#F97316', company: 'XYZ JSC', companyCode: 'XY-002', role: 'Thợ hàn bậc 2', currentCourse: 'KT xây dựng', courseStart: '14:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-ktxd-1', employeeCode: 'NV001150', name: 'Hoàng Văn Phúc', avatarColor: '#10B981', company: 'Vincons', companyCode: 'VC-001', role: 'Giám sát thi công', currentCourse: 'KT xây dựng', courseStart: '14:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-ktxd-2', employeeCode: 'NV001151', name: 'Lê Thị Thu Hà', avatarColor: '#EC4899', company: 'SGC', companyCode: 'SGC-001', role: 'Kế toán công trường', currentCourse: 'KT xây dựng', courseStart: '14:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-ktxd-3', employeeCode: 'NV001152', name: 'Trương Văn Dũng', avatarColor: '#F97316', company: 'Alpha', companyCode: 'AL-001', role: 'Thợ hàn bậc 2', currentCourse: 'KT xây dựng', courseStart: '14:00', courseEnd: '17:00' }),
   ],
   'AT môi trường': [
-    enrolledStub({ id: 'e-atmt-1', employeeCode: 'NV001160', name: 'Bùi Văn Thanh', avatarColor: '#F59E0B', company: 'Minh Phát JSC', companyCode: 'MP-005', role: 'Thợ xây bậc 3', currentCourse: 'AT môi trường', courseStart: '14:00', courseEnd: '17:00' }),
-    enrolledStub({ id: 'e-atmt-2', employeeCode: 'NV001161', name: 'Nguyễn Thị Xuân', avatarColor: '#A78BFA', company: 'Sunrise Const.', companyCode: 'SR-005', role: 'Nhân viên hành chính', currentCourse: 'AT môi trường', courseStart: '14:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-atmt-1', employeeCode: 'NV001160', name: 'Bùi Văn Thanh', avatarColor: '#F59E0B', company: 'SGC', companyCode: 'SGC-003', role: 'Thợ xây bậc 3', currentCourse: 'AT môi trường', courseStart: '14:00', courseEnd: '17:00' }),
+    enrolledStub({ id: 'e-atmt-2', employeeCode: 'NV001161', name: 'Nguyễn Thị Xuân', avatarColor: '#A78BFA', company: 'Alpha', companyCode: 'AL-002', role: 'Nhân viên hành chính', currentCourse: 'AT môi trường', courseStart: '14:00', courseEnd: '17:00' }),
   ],
 }
 

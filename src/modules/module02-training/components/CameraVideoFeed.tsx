@@ -29,9 +29,35 @@ export function CameraVideoFeed({
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    if (playing) {
+
+    let visible = true
+
+    const tryPlay = () => {
+      if (!playing || !visible) {
+        video.pause()
+        return
+      }
+      video.muted = true
       video.play().catch(() => {})
-    } else {
+    }
+
+    const observer = new IntersectionObserver(
+      entries => {
+        visible = entries.some(e => e.isIntersecting)
+        tryPlay()
+      },
+      { threshold: 0.08 },
+    )
+    observer.observe(video)
+
+    video.addEventListener('canplay', tryPlay)
+    video.addEventListener('loadeddata', tryPlay)
+    tryPlay()
+
+    return () => {
+      observer.disconnect()
+      video.removeEventListener('canplay', tryPlay)
+      video.removeEventListener('loadeddata', tryPlay)
       video.pause()
     }
   }, [src, playing])
@@ -45,7 +71,7 @@ export function CameraVideoFeed({
         muted
         loop
         playsInline
-        preload="auto"
+        preload={playing ? 'auto' : 'metadata'}
         className={cn(
           'absolute inset-0 h-full w-full',
           streamType === 'bodycam' ? 'object-contain bg-black' : 'object-cover',

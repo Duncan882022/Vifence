@@ -17,18 +17,18 @@ export const mockCameras: Camera[] = [
 ]
 
 export const mockWorkers: Worker[] = [
-  { id: 'w-01', name: 'Nguyễn Văn An', code: 'NV001', contractorId: 'ct-01', contractorName: 'Công ty Xây dựng ABC', role: 'Công nhân' },
-  { id: 'w-02', name: 'Trần Thị Bình', code: 'NV002', contractorId: 'ct-01', contractorName: 'Công ty Xây dựng ABC', role: 'Tổ trưởng' },
-  { id: 'w-03', name: 'Lê Văn Cường', code: 'NV003', contractorId: 'ct-02', contractorName: 'Công ty Cơ Điện DEF', role: 'Kỹ thuật' },
-  { id: 'w-04', name: 'Phạm Minh Đức', code: 'NV004', contractorId: 'ct-02', contractorName: 'Công ty Cơ Điện DEF', role: 'Công nhân' },
-  { id: 'w-05', name: 'Hoàng Thị Em', code: 'NV005', contractorId: 'ct-03', contractorName: 'Công ty Hoàn Thiện GHI', role: 'Công nhân' },
-  { id: 'w-06', name: 'Vũ Quốc Hùng', code: 'NV006', contractorId: 'ct-03', contractorName: 'Công ty Hoàn Thiện GHI', role: 'Giám sát' },
+  { id: 'w-01', name: 'Nguyễn Văn An', code: 'NV001', contractorId: 'ct-01', contractorName: 'Vincons', role: 'Công nhân' },
+  { id: 'w-02', name: 'Trần Thị Bình', code: 'NV002', contractorId: 'ct-01', contractorName: 'Vincons', role: 'Tổ trưởng' },
+  { id: 'w-03', name: 'Lê Văn Cường', code: 'NV003', contractorId: 'ct-02', contractorName: 'SGC', role: 'Kỹ thuật' },
+  { id: 'w-04', name: 'Phạm Minh Đức', code: 'NV004', contractorId: 'ct-02', contractorName: 'SGC', role: 'Công nhân' },
+  { id: 'w-05', name: 'Hoàng Thị Em', code: 'NV005', contractorId: 'ct-03', contractorName: 'Alpha', role: 'Công nhân' },
+  { id: 'w-06', name: 'Vũ Quốc Hùng', code: 'NV006', contractorId: 'ct-03', contractorName: 'Alpha', role: 'Giám sát' },
 ]
 
 export const mockContractors: Contractor[] = [
-  { id: 'ct-01', name: 'Công ty Xây dựng ABC', code: 'ABC', totalWorkers: 45, presentWorkers: 38 },
-  { id: 'ct-02', name: 'Công ty Cơ Điện DEF', code: 'DEF', totalWorkers: 20, presentWorkers: 17 },
-  { id: 'ct-03', name: 'Công ty Hoàn Thiện GHI', code: 'GHI', totalWorkers: 15, presentWorkers: 12 },
+  { id: 'ct-01', name: 'Vincons', code: 'VC', totalWorkers: 45, presentWorkers: 38 },
+  { id: 'ct-02', name: 'SGC', code: 'SGC', totalWorkers: 20, presentWorkers: 17 },
+  { id: 'ct-03', name: 'Alpha', code: 'AL', totalWorkers: 15, presentWorkers: 12 },
 ]
 
 export const mockAccessControlKPIs: KPIData[] = [
@@ -71,25 +71,25 @@ export const mockEvents: Event[] = [
     id: 'ev-001', type: 'Check-in', description: 'Nguyễn Văn An vào công trường',
     timestamp: '2026-06-24T07:15:00', cameraId: 'cam-01', cameraName: 'Camera Cổng Chính',
     location: 'Cổng Chính', workerId: 'w-01', workerName: 'Nguyễn Văn An',
-    contractorName: 'Công ty Xây dựng ABC', status: 'processed', severity: 'info', module: 'access-control',
+    contractorName: 'Vincons', status: 'processed', severity: 'info', module: 'access-control',
   },
   {
     id: 'ev-002', type: 'Vi phạm an toàn', description: 'Không đội mũ bảo hộ tại Tầng 3',
     timestamp: '2026-06-24T08:30:00', cameraId: 'cam-05', cameraName: 'Camera Tầng 3 Khu B',
     location: 'Tầng 3 Khu B', workerId: 'w-03', workerName: 'Lê Văn Cường',
-    contractorName: 'Công ty Cơ Điện DEF', status: 'pending', severity: 'critical', module: 'safety',
+    contractorName: 'SGC', status: 'pending', severity: 'critical', module: 'safety',
   },
   {
     id: 'ev-003', type: 'Vi phạm an toàn', description: 'Vào khu vực nguy hiểm không phép',
     timestamp: '2026-06-24T09:00:00', cameraId: 'cam-07', cameraName: 'Camera Khu Nguy Hiểm',
     location: 'Khu D', workerId: 'w-04', workerName: 'Phạm Minh Đức',
-    contractorName: 'Công ty Cơ Điện DEF', status: 'pending', severity: 'critical', module: 'safety',
+    contractorName: 'SGC', status: 'pending', severity: 'critical', module: 'safety',
   },
   {
     id: 'ev-004', type: 'Đi muộn', description: 'Vắng mặt buổi đào tạo An toàn',
     timestamp: '2026-06-24T08:05:00', cameraId: 'cam-04', cameraName: 'Camera Sân Tập',
     location: 'Sân Tập', workerId: 'w-05', workerName: 'Hoàng Thị Em',
-    contractorName: 'Công ty Hoàn Thiện GHI', status: 'pending', severity: 'warning', module: 'training',
+    contractorName: 'Alpha', status: 'pending', severity: 'warning', module: 'training',
   },
   {
     id: 'ev-005', type: 'Rác tồn đọng', description: 'Rác vật liệu chưa dọn tại Tầng 1',
@@ -100,7 +100,7 @@ export const mockEvents: Event[] = [
     id: 'ev-006', type: 'Check-out', description: 'Trần Thị Bình rời công trường',
     timestamp: '2026-06-24T11:30:00', cameraId: 'cam-01', cameraName: 'Camera Cổng Chính',
     location: 'Cổng Chính', workerId: 'w-02', workerName: 'Trần Thị Bình',
-    contractorName: 'Công ty Xây dựng ABC', status: 'processed', severity: 'info', module: 'access-control',
+    contractorName: 'Vincons', status: 'processed', severity: 'info', module: 'access-control',
   },
 ]
 
@@ -124,23 +124,23 @@ export const mockTrainingSessions: TrainingSession[] = [
 
 export const mockSafetyViolations: SafetyViolation[] = [
   {
-    id: 'sv-001', type: 'no-helmet', description: 'Không đội mũ bảo hộ tại phòng đào tạo Cọc nhồi B',
+    id: 'sv-001', type: 'ppe', scenario: 'Không đội mũ bảo hộ', description: 'Không đội mũ bảo hộ tại phòng đào tạo Cọc nhồi B',
     workerId: 'w-001', workerName: 'Phạm Văn Cường', employeeCode: 'NV000789',
-    contractorName: 'Delta Corp', teamName: 'Cọc nhồi B',
+    contractorName: 'SGC', teamName: 'Cọc nhồi B',
     location: 'Sân Thực Hành A', cameraId: 'A-03', cameraName: 'OCP1-A · Cam 03',
     timestamp: '2026-06-24T08:30:00', status: 'pending',
   },
   {
-    id: 'sv-002', type: 'fall', description: 'Công nhân té ngã tại sân tập — không có dây hãm',
+    id: 'sv-002', type: 'work-at-height', scenario: 'Không móc dây an toàn', description: 'Làm việc gần mép sàn cao không móc dây an toàn',
     workerId: 'w-004', workerName: 'Hoàng Văn Em', employeeCode: 'NV000654',
-    contractorName: 'XYZ JSC', teamName: 'Cọc nhồi B',
+    contractorName: 'Alpha', teamName: 'Cọc nhồi B',
     location: 'Sân Tập A', cameraId: 'A-04', cameraName: 'OCP1-A · Cam 04',
     timestamp: '2026-06-24T09:00:00', status: 'pending',
   },
   {
-    id: 'sv-003', type: 'no-vest', description: 'Không mặc áo phản quang',
+    id: 'sv-003', type: 'ppe', scenario: 'Không mặc áo bảo hộ', description: 'Không mặc áo bảo hộ',
     workerId: 'w-002', workerName: 'Trần Văn Bình', employeeCode: 'NV000456',
-    contractorName: 'XYZ JSC', teamName: 'Toolbox A',
+    contractorName: 'Alpha', teamName: 'Toolbox A',
     location: 'Phòng họp A', cameraId: 'A-02', cameraName: 'OCP1-A · Cam 02',
     timestamp: '2026-06-24T10:00:00', status: 'processed', processedBy: 'Nguyễn Thị Phương', processedAt: '2026-06-24T10:30:00',
   },

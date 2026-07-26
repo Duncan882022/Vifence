@@ -13,6 +13,12 @@ export interface Event {
   workerId?: string
   workerName?: string
   contractorName?: string
+  vehiclePlate?: string
+  vehicleType?: string
+  trafficRole?: string
+  trafficSubject?: string
+  scenario?: string
+  violationCategory?: string
   imageUrl?: string
   videoUrl?: string
   status: EventStatus

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Play, Pause, Volume2, Download, SkipBack, SkipForward,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Car, User, MapPin, Camera,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { Event } from '@/types/event'
@@ -10,11 +10,18 @@ import {
   getViolationClipMarker,
   getViolationFeedUrl,
 } from '../data/safetyViolationFeeds'
-import { SAFETY_VIOLATIONS, VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
+import { groupIdToFeedType, groupIdToViolationType } from '../utils/groupToViolationType'
+import { VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
 import type { ViolationType } from '@/types/safety'
 import { ViolationTypeIcon } from './ViolationTypeIcon'
+import { getSafetyCameraDisplayName } from '../utils/safetyCameraBridge'
 
 const SPEEDS = [0.5, 1, 1.5, 2]
+
+const CCTV_SCANLINE = {
+  backgroundImage:
+    'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
+} as const
 
 interface SafetyPlaybackProps {
   event: Event | null
@@ -22,8 +29,9 @@ interface SafetyPlaybackProps {
 }
 
 function resolveViolationType(event: Event): ViolationType | null {
-  const match = SAFETY_VIOLATIONS.find(v => v.id === event.id)
-  if (match) return match.type
+  if (event.violationCategory) {
+    return groupIdToViolationType(event.violationCategory)
+  }
   const entry = Object.entries(VIOLATION_TYPE_LABELS).find(([, label]) => label === event.type)
   return entry ? entry[0] as ViolationType : null
 }
@@ -34,13 +42,17 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [speedIndex, setSpeedIndex] = useState(1)
-  const [volume, setVolume] = useState(80)
+  const [volume, setVolume] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const violationType = event ? resolveViolationType(event) : null
-  const videoSrc = event?.videoUrl ?? (violationType ? getViolationFeedUrl(violationType) : undefined)
-  const markerSec = violationType ? getViolationClipMarker(violationType) : 0
+  const feedType = event?.violationCategory ? groupIdToFeedType(event.violationCategory) : violationType
+  const videoSrc = event?.videoUrl ?? (feedType ? getViolationFeedUrl(feedType) : undefined)
+  const markerSec = feedType ? getViolationClipMarker(feedType) : 0
   const speed = SPEEDS[speedIndex]
+  const cameraLabel = event
+    ? getSafetyCameraDisplayName(event.cameraId, event.cameraName)
+    : undefined
 
   // Pause and release video source on unmount to prevent orphaned audio after modal close
   useEffect(() => {
@@ -75,6 +87,17 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
       video.currentTime = seek
       setDuration(dur)
       setProgress((seek / dur) * 100)
+      /* Autoplay policy: start muted, then restore volume if allowed */
+      video.muted = true
+      video.play()
+        .then(() => {
+          setIsPlaying(true)
+          if (volume > 0) {
+            video.volume = volume / 100
+            video.muted = false
+          }
+        })
+        .catch(() => setIsPlaying(false))
     }
 
     const onLoaded = () => seekToMarker()
@@ -91,7 +114,7 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
       video.removeEventListener('loadedmetadata', onLoaded)
       video.removeEventListener('error', onError)
     }
-  }, [videoSrc, markerSec, event?.id])
+  }, [videoSrc, markerSec, event?.id]) // volume chỉ dùng lúc autoplay khởi tạo — không re-seek khi chỉnh volume
 
   useEffect(() => {
     const video = videoRef.current
@@ -114,7 +137,6 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
     } else {
       video.pause()
     }
-    return () => { video.pause() }
   }, [isPlaying])
 
   if (!event) {
@@ -132,35 +154,40 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
 
   return (
     <div className={cn('flex flex-col h-full min-h-0 bg-[#0b0f1a]', className)}>
-      <div className="relative flex-1 min-h-[140px] bg-gray-950 overflow-hidden">
+      <div className="relative flex-1 min-h-[140px] bg-[#060b14] overflow-hidden">
         {loadError ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-900 to-gray-950 px-4 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14] px-4 text-center">
             <Play className="w-8 h-8 text-red-400/60" />
             <p className="text-[10px] text-red-400/90">{loadError}</p>
             <p className="text-[9px] text-muted-foreground/70 break-all">{videoSrc}</p>
           </div>
         ) : videoSrc ? (
           <>
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
             <video
               key={event.id}
               ref={videoRef}
               src={videoSrc}
               muted={volume === 0}
               playsInline
-              preload="metadata"
-              className="absolute inset-0 h-full w-full object-cover saturate-[0.88] contrast-[1.05] brightness-[0.92]"
+              preload="auto"
+              className={cn(
+                'absolute inset-0 h-full w-full object-cover',
+                'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
+              )}
               onTimeUpdate={e => {
                 const v = e.currentTarget
                 if (v.duration) setProgress((v.currentTime / v.duration) * 100)
               }}
               onError={() => setLoadError('Không tải được clip vi phạm')}
             />
-            <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-2 pointer-events-none">
-              <div className="bg-black/65 rounded px-2 py-1 max-w-[70%]">
-                <p className="text-[10px] text-white font-medium truncate">{event.cameraName}</p>
-                <p className="text-[9px] text-white/60 tabular-nums">{formatDateTime(event.timestamp)}</p>
-              </div>
-              <span className="shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded bg-red-500/90 text-white">
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
+            <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 rounded bg-black/55 backdrop-blur-sm pointer-events-none">
+              <Camera className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[9px] text-white/80 font-medium truncate">{cameraLabel}</span>
+            </div>
+            <div className="absolute top-2 right-2 pointer-events-none">
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-red-500/90 text-white">
                 AI PHÁT HIỆN
               </span>
             </div>
@@ -169,9 +196,12 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
                 {event.type}
               </span>
             </div>
+            <p className="absolute bottom-2 left-2 text-[9px] text-white/60 tabular-nums pointer-events-none">
+              {formatDateTime(event.timestamp)}
+            </p>
           </>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-950">
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]">
             <Play className="w-10 h-10 text-gray-700" />
           </div>
         )}
@@ -239,15 +269,97 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
 
       <div className="shrink-0 px-3 pb-2 border-t border-[#1e2433] pt-2">
         {violationType && (
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-start gap-2 mb-1">
             <ViolationTypeIcon type={violationType} size="xs" />
-            <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+            <div className="min-w-0">
+              {event.scenario ? (
+                <>
+                  <p className="text-[10px] font-semibold text-foreground leading-snug">{event.scenario}</p>
+                  <p className="text-[8px] text-muted-foreground uppercase tracking-wide mt-0.5">{event.type}</p>
+                </>
+              ) : (
+                <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+              )}
+            </div>
           </div>
         )}
         {!violationType && (
-          <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+          <div className="mb-1">
+            {event.scenario ? (
+              <>
+                <p className="text-[10px] font-semibold text-foreground leading-snug">{event.scenario}</p>
+                {event.violationCategory && (
+                  <p className="text-[8px] text-muted-foreground uppercase tracking-wide mt-0.5">{event.violationCategory}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-[10px] font-medium text-foreground">{event.type}</p>
+            )}
+          </div>
         )}
         <p className="text-[9px] text-muted-foreground line-clamp-2">{event.description}</p>
+        {(() => {
+          const showSite = event.trafficSubject === 'site'
+          const showPerson = event.trafficSubject
+            ? event.trafficSubject === 'person' || event.trafficSubject === 'both'
+            : Boolean(event.workerName)
+          const showVehicle = event.trafficSubject
+            ? event.trafficSubject === 'vehicle' || event.trafficSubject === 'both'
+            : Boolean(event.vehiclePlate)
+
+          if (!showSite && !showPerson && !showVehicle) return null
+
+          return (
+            <div className="mt-1.5 space-y-1">
+              {showSite && (
+                <div>
+                  <p className="text-[7px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-0.5">Hiện trường</p>
+                  <p className="text-[9px] text-foreground/90 flex items-start gap-1 truncate">
+                    <MapPin className="w-2.5 h-2.5 shrink-0 text-amber-400/80 mt-0.5" aria-hidden />
+                    <span className="truncate">
+                      {event.location}
+                      {event.contractorName && (
+                        <span className="text-muted-foreground"> · {event.contractorName}</span>
+                      )}
+                    </span>
+                  </p>
+                </div>
+              )}
+              {showPerson && event.workerName && (
+                <div>
+                  {event.trafficSubject === 'both' && (
+                    <p className="text-[7px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-0.5">Người</p>
+                  )}
+                  <p className="text-[9px] text-foreground/90 flex items-center gap-1 truncate">
+                    <User className="w-2.5 h-2.5 shrink-0 text-muted-foreground/70" aria-hidden />
+                    <span className="truncate">
+                      {event.workerName}
+                      {event.trafficRole && (
+                        <span className="text-muted-foreground"> · {event.trafficRole}</span>
+                      )}
+                    </span>
+                  </p>
+                </div>
+              )}
+              {showVehicle && event.vehiclePlate && (
+                <div>
+                  {event.trafficSubject === 'both' && (
+                    <p className="text-[7px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-0.5">Xe</p>
+                  )}
+                  <p className="text-[9px] text-cyan-400/90 flex items-center gap-1 truncate tabular-nums">
+                    <Car className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                    <span className="truncate">
+                      <span className="font-semibold">{event.vehiclePlate}</span>
+                      {event.vehicleType && (
+                        <span className="text-muted-foreground"> · {event.vehicleType}</span>
+                      )}
+                    </span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       <div className="shrink-0 px-3 pb-3 flex items-center gap-1.5">

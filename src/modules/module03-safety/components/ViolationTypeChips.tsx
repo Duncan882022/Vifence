@@ -2,6 +2,7 @@ import { cn } from '@/utils/cn'
 import type { ViolationType } from '@/types/safety'
 import type { SafetyDayStats } from '../services/safetyKpi.service'
 import { VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
+import { getMonitoringCategory } from '../data/safetyMonitoringDictionary'
 import { getViolationTypeIconConfig } from '../utils/safetyUiHelpers'
 
 /** Shared chip shell — matches Camera `IconTooltipBadge` (no border, compact) */
@@ -42,7 +43,7 @@ export function ViolationTypeChips({ stats, className }: ViolationTypeChipsProps
           <span
             key={type}
             className={cn(DASHBOARD_CHIP_CLASS, bg, color)}
-            title={`${VIOLATION_TYPE_LABELS[type]} · ${count}`}
+            title={`${VIOLATION_TYPE_LABELS[type]} · ${count} · ${getMonitoringCategory(type).goal}`}
           >
             <Icon className={DASHBOARD_CHIP_ICON_CLASS} aria-hidden />
             <span>{count}</span>

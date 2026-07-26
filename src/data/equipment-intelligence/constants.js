@@ -280,10 +280,9 @@ export const WORKER_ROLES = [
 ]
 
 export const CONTRACTORS = [
-  { id: 'ctr-sany-vn', name: 'SANY Việt Nam', code: 'SNY' },
-  { id: 'ctr-pcc1', name: 'PCC1', code: 'PC1' },
-  { id: 'ctr-cotec', name: 'Coteccons', code: 'CTC' },
-  { id: 'ctr-hoa-binh', name: 'Hòa Bình Corp', code: 'HBC' },
+  { id: 'ctr-vincons', name: 'Vincons', code: 'VC' },
+  { id: 'ctr-sgc', name: 'SGC', code: 'SGC' },
+  { id: 'ctr-alpha', name: 'Alpha', code: 'AL' },
 ]
 
 export const PILE_STATUSES = ['planned', 'drilling', 'reinforcement', 'concreting', 'completed', 'on_hold']

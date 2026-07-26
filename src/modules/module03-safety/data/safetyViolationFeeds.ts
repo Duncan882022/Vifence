@@ -2,15 +2,16 @@ import type { ViolationType } from '@/types/safety'
 
 /**
  * Violation detection clips — cắt từ YouTube Unicons Safety Supervisors (Js-1FbF-7yU).
- * Mỗi clip 10s, 1280×720, map 1:1 theo loại hành vi AI phát hiện.
+ * Mỗi clip 10s, 1280×720 — map theo clip có sẵn, gán vào 6 nhóm Safety Monitoring Dictionary.
  */
 export type SafetyViolationFeedKey =
-  | 'no-helmet'
-  | 'no-vest'
-  | 'no-harness'
-  | 'danger-zone'
+  | 'ppe-helmet'
+  | 'ppe-vest'
   | 'work-at-height'
-  | 'fall'
+  | 'danger-zone'
+  | 'traffic'
+  | 'method-statement'
+  | 'fire-hot-work'
 
 export interface ViolationClipManifest {
   src: string
@@ -24,47 +25,32 @@ export interface ViolationClipManifest {
 }
 
 const FEED_FILES: Record<SafetyViolationFeedKey, string> = {
-  'no-helmet': 'violation-no-helmet.mp4',
-  'no-vest': 'violation-no-vest.mp4',
-  'no-harness': 'violation-no-harness.mp4',
-  'danger-zone': 'violation-danger-zone.mp4',
+  'ppe-helmet': 'violation-no-helmet.mp4',
+  'ppe-vest': 'violation-no-vest.mp4',
   'work-at-height': 'violation-work-height.mp4',
-  'fall': 'violation-fall.mp4',
+  'danger-zone': 'violation-danger-zone.mp4',
+  traffic: 'violation-danger-zone.mp4',
+  'method-statement': 'violation-work-height.mp4',
+  'fire-hot-work': 'violation-fall.mp4',
 }
 
 /** Nguồn: https://youtu.be/Js-1FbF-7yU — Life at Unicons S01 · GSAT An toàn */
 export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationClipManifest> = {
-  'no-helmet': {
-    src: FEED_FILES['no-helmet'],
+  'ppe-helmet': {
+    src: FEED_FILES['ppe-helmet'],
     markerSec: 3,
     sourceStartSec: 208,
     sourceEndSec: 218,
-    label: 'Không đội mũ',
+    label: 'PPE — Không đội mũ',
     description: 'Công nhân không đội mũ bảo hộ khi huấn luyện dây an toàn',
   },
-  'no-vest': {
-    src: FEED_FILES['no-vest'],
+  'ppe-vest': {
+    src: FEED_FILES['ppe-vest'],
     markerSec: 2,
     sourceStartSec: 172,
     sourceEndSec: 182,
-    label: 'Không áo phản quang',
-    description: 'Công nhân không mặc áo phản quang tại khu huấn luyện',
-  },
-  'no-harness': {
-    src: FEED_FILES['no-harness'],
-    markerSec: 4,
-    sourceStartSec: 195,
-    sourceEndSec: 205,
-    label: 'Không dây an toàn',
-    description: 'Huấn luyện móc cáp — công nhân chưa đeo dây an toàn đầy đủ',
-  },
-  'danger-zone': {
-    src: FEED_FILES['danger-zone'],
-    markerSec: 5,
-    sourceStartSec: 260,
-    sourceEndSec: 270,
-    label: 'Vào vùng nguy hiểm',
-    description: 'Đứng gần lồng thang máy / miệng hố chưa che chắn',
+    label: 'PPE — Không áo bảo hộ',
+    description: 'Công nhân không mặc áo bảo hộ tại khu huấn luyện',
   },
   'work-at-height': {
     src: FEED_FILES['work-at-height'],
@@ -72,25 +58,49 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     sourceStartSec: 248,
     sourceEndSec: 258,
     label: 'Làm việc trên cao',
-    description: 'Thi công trên sàn cao — kiểm tra PPE và dây an toàn',
+    description: 'Thi công trên sàn cao — kiểm tra dây an toàn và mép biên',
   },
-  'fall': {
-    src: FEED_FILES['fall'],
+  'danger-zone': {
+    src: FEED_FILES['danger-zone'],
+    markerSec: 5,
+    sourceStartSec: 260,
+    sourceEndSec: 270,
+    label: 'Khu vực nguy hiểm',
+    description: 'Đứng gần lồng thang máy / miệng hố chưa che chắn',
+  },
+  traffic: {
+    src: FEED_FILES.traffic,
+    markerSec: 5,
+    sourceStartSec: 260,
+    sourceEndSec: 270,
+    label: 'An toàn giao thông',
+    description: 'Phương tiện di chuyển trong công trường — giám sát tốc độ và điều hướng',
+  },
+  'method-statement': {
+    src: FEED_FILES['method-statement'],
+    markerSec: 4,
+    sourceStartSec: 248,
+    sourceEndSec: 258,
+    label: 'Biện pháp thi công',
+    description: 'Thi công trên cao — kiểm tra lan can, lưới chống rơi theo biện pháp',
+  },
+  'fire-hot-work': {
+    src: FEED_FILES['fire-hot-work'],
     markerSec: 3,
     sourceStartSec: 252,
     sourceEndSec: 262,
-    label: 'Bị ngã / té ngã',
-    description: 'Sitewalk sàn mái — công nhân gần mép / vùng nguy cơ té ngã',
+    label: 'PCCC & CV nóng',
+    description: 'Phát hiện hàn cắt, khói hoặc nguồn lửa tại hiện trường',
   },
 }
 
 const TYPE_TO_FEED: Record<ViolationType, SafetyViolationFeedKey> = {
-  'no-helmet': 'no-helmet',
-  'no-vest': 'no-vest',
-  'no-harness': 'no-harness',
-  'danger-zone': 'danger-zone',
+  ppe: 'ppe-helmet',
   'work-at-height': 'work-at-height',
-  'fall': 'fall',
+  'danger-zone': 'danger-zone',
+  'traffic-safety': 'traffic',
+  'method-statement': 'method-statement',
+  'fire-hot-work': 'fire-hot-work',
 }
 
 export function getViolationFeedUrl(type: ViolationType): string {
@@ -101,12 +111,13 @@ export function getViolationFeedUrl(type: ViolationType): string {
 
 /** Timestamp offset (seconds) to seek near the violation moment in each clip */
 export const VIOLATION_CLIP_MARKERS: Record<SafetyViolationFeedKey, number> = {
-  'no-helmet': VIOLATION_CLIP_MANIFEST['no-helmet'].markerSec,
-  'no-vest': VIOLATION_CLIP_MANIFEST['no-vest'].markerSec,
-  'no-harness': VIOLATION_CLIP_MANIFEST['no-harness'].markerSec,
-  'danger-zone': VIOLATION_CLIP_MANIFEST['danger-zone'].markerSec,
+  'ppe-helmet': VIOLATION_CLIP_MANIFEST['ppe-helmet'].markerSec,
+  'ppe-vest': VIOLATION_CLIP_MANIFEST['ppe-vest'].markerSec,
   'work-at-height': VIOLATION_CLIP_MANIFEST['work-at-height'].markerSec,
-  'fall': VIOLATION_CLIP_MANIFEST['fall'].markerSec,
+  'danger-zone': VIOLATION_CLIP_MANIFEST['danger-zone'].markerSec,
+  traffic: VIOLATION_CLIP_MANIFEST.traffic.markerSec,
+  'method-statement': VIOLATION_CLIP_MANIFEST['method-statement'].markerSec,
+  'fire-hot-work': VIOLATION_CLIP_MANIFEST['fire-hot-work'].markerSec,
 }
 
 export function getViolationClipMarker(type: ViolationType): number {

@@ -17,6 +17,10 @@ export function formatTime(date: string | Date): string {
   return dayjs(date).format('HH:mm:ss')
 }
 
+export function formatTimeShort(date: string | Date): string {
+  return dayjs(date).format('HH:mm')
+}
+
 export function formatRelative(date: string | Date): string {
   return dayjs(date).fromNow()
 }

@@ -260,7 +260,7 @@ export function KpiTier({
           <>
             <SoLon className="text-sky-400">{khadung}</SoLon>
             <DonVi>%</DonVi>
-            <DonVi className="ml-0.5">khả dụng</DonVi>
+            <span className="ml-0.5 text-[10px] text-muted-foreground">khả dụng</span>
           </>
         )}
       >

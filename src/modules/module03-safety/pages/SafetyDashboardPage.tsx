@@ -1,96 +1,137 @@
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
+import {
+  CameraModeToggle,
+  type CameraPanelMode,
+} from '@/components/common/CameraModeToggle/CameraModeToggle'
 import { useShellLayout } from '@/hooks/useShellLayout'
-import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
-import { SafetyViolationEventsPanel } from '../components/SafetyViolationEventsPanel'
-import { SafetyZoneHeatmap } from '../components/SafetyZoneHeatmap'
-import { SafetyDailyDashboard } from '../components/SafetyDailyDashboard'
-import { SafetyDailyDetailDashboard } from '../components/SafetyDailyDetailDashboard'
-import { SafetyTier1CollapsedSummary } from '../components/SafetyTier1CollapsedSummary'
-import { SafetyPlaybackModal } from '../components/SafetyPlaybackModal'
-import { SafetyWorkerDetailSheet } from '../components/SafetyWorkerDetailSheet'
-import { SafetyContractorDetailSheet } from '../components/SafetyContractorDetailSheet'
-import { computeSafetyDailySummary } from '../services/safetyKpi.service'
-import { SAFETY_VIOLATIONS } from '../data/safetyViolations'
-import type { SafetyViolation } from '@/types/safety'
+import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
+import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import {
+  filterSafetyCameras,
+  groupSafetyCamerasForSidebar,
+  DEFAULT_SAFETY_CAMERA_IDS,
+  SAFETY_CAMERA_FILTER_TABS,
+  SAFETY_CAMERAS,
+} from '../data/safetyCameras'
+import { SafetyKpiStrip } from '../components/dashboard/SafetyKpiStrip'
+import { SafetyOverviewCollapsedSummary } from '../components/dashboard/SafetyOverviewCollapsedSummary'
+import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
+import { SafetyPriorityAlerts } from '../components/dashboard/SafetyPriorityAlerts'
+import { SafetyGroupGrid } from '../components/dashboard/SafetyGroupGrid'
+import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
+import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
+import { SafetyHandleConfirmDialog } from '../components/SafetyHandleConfirmDialog'
+import type { SafetyDashboardFilters, SafetyViolationRecord, ViolationStatus } from '../types/safety.types'
+import {
+  computeDashboardKpis,
+  computeGroupStats,
+  filterViolations,
+  getAllSafetyRecords,
+  getPriorityAlerts,
+  mergeViolationStatusOverrides,
+} from '../services/safetyDashboard.service'
+import { violationRecordToEvent } from '../utils/violationAdapter'
+import { resolveTrainingCameraId } from '../utils/safetyCameraBridge'
+import {
+  fetchSafetyCameraRecords,
+  fetchSafetyRecordDetections,
+  getSafetyDefaultPlaybackDate,
+} from '../services/safetyCameraPlayback.service'
 import type { Event } from '@/types/event'
 import { cn } from '@/utils/cn'
 
+const DEFAULT_FILTERS: SafetyDashboardFilters = {
+  dateRange: 'today',
+  zoneId: null,
+  groupId: null,
+  scenarioId: null,
+  status: null,
+  searchQuery: undefined,
+  quickFilter: null,
+  eventSubjectType: null,
+  deviceType: null,
+  responsibleUnit: null,
+  severity: null,
+  advancedStatus: null,
+  contractorId: null,
+}
+
+type LowerPanel = 'none' | 'camera' | 'events'
+
 export function SafetyDashboardPage() {
-  const [selectedCamId, setSelectedCamId] = useState<string | undefined>()
-  const [selectedViolationId, setSelectedViolationId] = useState<string | undefined>()
-  const [selectedViolation, setSelectedViolation] = useState<SafetyViolation | null>(null)
-  const [playbackEvent, setPlaybackEvent] = useState<Event | null>(null)
-  const [heatmapOpen, setHeatmapOpen] = useState(true)
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
+  const [filters, setFilters] = useState<SafetyDashboardFilters>(DEFAULT_FILTERS)
   const [tier1Open, setTier1Open] = useState(true)
-  const [tier2Open, setTier2Open] = useState(true)
+  const [lowerPanel, setLowerPanel] = useState<LowerPanel>('camera')
+  const [selectedId, setSelectedId] = useState<string | undefined>()
+  const [selectedCamId, setSelectedCamId] = useState<string | undefined>()
+  const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
+  const [playbackEvent, setPlaybackEvent] = useState<Event | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(12)
-  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
-  const [workerSheetOpen, setWorkerSheetOpen] = useState(false)
-  const [selectedContractorName, setSelectedContractorName] = useState<string | null>(null)
-  const [contractorSheetOpen, setContractorSheetOpen] = useState(false)
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
+  const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
   const { isDesktop } = useShellLayout()
-  const showHeatmap = heatmapOpen || !isDesktop
 
-  const summary = computeSafetyDailySummary(SAFETY_VIOLATIONS)
+  const allRecords = useMemo(
+    () => mergeViolationStatusOverrides(getAllSafetyRecords(), statusOverrides),
+    [statusOverrides],
+  )
 
-  const handleSelectViolation = (v: SafetyViolation) => {
-    setSelectedViolationId(v.id)
-    setSelectedViolation(v)
+  const tier2Open = lowerPanel === 'camera'
+  const eventsPanelOpen = lowerPanel === 'events'
+
+  const filtered = useMemo(
+    () => filterViolations(allRecords, filters),
+    [allRecords, filters],
+  )
+
+  /** Pool chung Nhóm ATLĐ + Cảnh báo — không bị cắt bởi filter nhóm đang chọn */
+  const alertScope = useMemo(
+    () => filterViolations(allRecords, { ...filters, groupId: null, scenarioId: null }),
+    [allRecords, filters],
+  )
+
+  const kpis = useMemo(() => computeDashboardKpis(alertScope), [alertScope])
+  const groupStats = useMemo(() => computeGroupStats(alertScope), [alertScope])
+  const alerts = useMemo(() => getPriorityAlerts(alertScope), [alertScope])
+
+  const handleGroupSelect = (groupId: typeof filters.groupId) => {
+    setFilters(f => ({ ...f, groupId, scenarioId: null }))
   }
 
-  const handlePlayback = (event: Event) => {
-    // Only open the modal — do NOT touch selectedViolation/inline panel.
-    // The inline playback is driven exclusively by handleSelectViolation (row click).
-    setPlaybackEvent(event)
+  const handlePlayback = (v: SafetyViolationRecord) => {
+    setPlaybackEvent(violationRecordToEvent(v))
+    setSelectedId(v.id)
+    const camId = resolveTrainingCameraId(v.sourceDeviceId, v.sourceType)
+    if (camId) setSelectedCamId(camId)
+    setCameraMode('playback')
+    setLowerPanel('camera')
   }
 
-  const handleSelectWorker = (workerIdOrName: string) => {
-    setSelectedWorkerId(workerIdOrName)
-    setWorkerSheetOpen(true)
+  const handleSelectCamera = (cam: TrainingCamera) => {
+    setSelectedCamId(cam.id)
   }
 
-  const handleSelectContractor = (contractorName: string) => {
-    setSelectedContractorName(contractorName)
-    setContractorSheetOpen(true)
+  const handleToggleCamera = () => {
+    setLowerPanel(prev => (prev === 'camera' ? 'none' : 'camera'))
   }
 
-  const handleWorkerSheetOpenChange = (open: boolean) => {
-    setWorkerSheetOpen(open)
-    // Keep selectedWorkerId non-null so Radix can animate the sheet closed
-    // before the component unmounts.
+  const handleToggleEvents = () => {
+    setLowerPanel(prev => (prev === 'events' ? 'none' : 'events'))
   }
 
-  const handleContractorSheetOpenChange = (open: boolean) => {
-    setContractorSheetOpen(open)
-    // Keep selectedContractorName non-null for the same reason.
+  const handleHandleRequest = (v: SafetyViolationRecord) => {
+    setHandleTarget(v)
   }
 
-  const handleOpenContractorFromWorker = (contractorName: string) => {
-    setWorkerSheetOpen(false)
-    setSelectedContractorName(contractorName)
-    setContractorSheetOpen(true)
+  const confirmHandled = () => {
+    if (!handleTarget) return
+    setStatusOverrides(prev => ({ ...prev, [handleTarget.id]: 'CLOSED' }))
+    setHandleTarget(null)
   }
 
-  const handleOpenWorkerFromContractor = (workerIdOrName: string) => {
-    setContractorSheetOpen(false)
-    setSelectedWorkerId(workerIdOrName)
-    setWorkerSheetOpen(true)
-  }
-
-  const handleDismissViolation = () => {
-    setSelectedViolation(null)
-    setSelectedViolationId(undefined)
-  }
-
-  const handleClosePlaybackModal = () => {
-    // Only dismiss the modal; leave selectedViolation intact so the
-    // inline playback panel (opened via row click) stays visible.
-    setPlaybackEvent(null)
-  }
+  const bothLowerCollapsed = lowerPanel === 'none'
 
   return (
     <>
@@ -101,16 +142,14 @@ export function SafetyDashboardPage() {
           expandable={tier1Open}
           noPadding
           className="shrink-0"
-          expandedContent={
-            <SafetyDailyDetailDashboard
-              summary={summary}
-              onSelectWorker={handleSelectWorker}
-              onSelectContractor={handleSelectContractor}
-            />
-          }
           headerRight={
             <div className="flex items-center gap-2 min-w-0">
-              {!tier1Open && <SafetyTier1CollapsedSummary summary={summary} />}
+              {!tier1Open && (
+                <SafetyOverviewCollapsedSummary
+                  kpis={kpis}
+                  groupTotal={groupStats.reduce((sum, g) => sum + g.total, 0)}
+                />
+              )}
               <TierCollapseButton
                 open={tier1Open}
                 onToggle={() => setTier1Open(open => !open)}
@@ -120,8 +159,8 @@ export function SafetyDashboardPage() {
           }
         >
           {tier1Open && (
-            <div className="p-2 sm:p-3">
-              <SafetyDailyDashboard summary={summary} embedded />
+            <div className="p-2 sm:p-3 max-lg:overflow-x-hidden">
+              <SafetyKpiStrip kpis={kpis} groupStats={groupStats} embedded />
             </div>
           )}
         </Panel>
@@ -131,9 +170,15 @@ export function SafetyDashboardPage() {
           'max-lg:flex-none',
           'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
         )}>
+          {/* Camera — ưu tiên chiều cao khi mở (LIVE phải thấy rõ, giống Module 02) */}
           <div className={cn(
             'flex flex-col min-h-0',
-            tier2Open ? 'lg:flex-[11] max-lg:flex-none' : 'shrink-0',
+            tier2Open
+              ? cn(
+                'max-lg:flex-none max-lg:min-h-[280px]',
+                cameraMode === 'playback' ? 'lg:flex-[13]' : 'lg:flex-[11]',
+              )
+              : 'shrink-0',
           )}>
             <Panel
               title="Camera"
@@ -141,106 +186,171 @@ export function SafetyDashboardPage() {
               fit={!tier2Open}
               noPadding
               className={cn(
-                tier2Open && 'lg:flex-1 lg:min-h-0',
-                tier2Open && 'max-lg:!h-auto max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
-                tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible',
+                tier2Open && 'lg:flex-1 lg:min-h-[260px]',
+                tier2Open && 'max-lg:!h-auto max-lg:min-h-[280px] max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
+                tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible max-lg:[&>div:last-child]:min-h-[240px]',
                 !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
-                  {!tier2Open && (
+                  {tier2Open && (
+                    <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
+                  )}
+                  {!tier2Open && cameraMode === 'live' && (
                     <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
                       <span className="text-primary font-semibold">{activeStreamCount}</span> luồng
                     </span>
                   )}
                   <TierCollapseButton
                     open={tier2Open}
-                    onToggle={() => setTier2Open(open => !open)}
+                    onToggle={handleToggleCamera}
                     label="Camera"
                   />
                 </div>
               }
             >
               {tier2Open && (
-                <div className="flex flex-col min-h-0 h-full max-lg:h-auto max-lg:flex-none">
-                  <TrainingCameraPanel
-                    selectedId={selectedCamId}
-                    onSelectCamera={cam => setSelectedCamId(cam.id)}
-                    onStreamCountChange={setActiveStreamCount}
-                  />
+                <div className={cn(
+                  'flex flex-col flex-1 min-h-0 h-full w-full max-lg:min-h-[240px]',
+                  cameraMode === 'live' && 'max-lg:h-auto max-lg:flex-none',
+                  cameraMode === 'playback' && 'max-lg:h-auto max-lg:flex-none',
+                )}>
+                  {cameraMode === 'live' ? (
+                    <TrainingCameraPanel
+                      selectedId={selectedCamId}
+                      onSelectCamera={handleSelectCamera}
+                      onStreamCountChange={setActiveStreamCount}
+                      cameras={SAFETY_CAMERAS}
+                      defaultCameraIds={DEFAULT_SAFETY_CAMERA_IDS}
+                      filterTabs={[...SAFETY_CAMERA_FILTER_TABS]}
+                      filterFn={tab => filterSafetyCameras(tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
+                      groupFn={(cams, tab) => groupSafetyCamerasForSidebar(cams, tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
+                    />
+                  ) : (
+                    <CameraPlaybackPanel
+                      cameras={SAFETY_CAMERAS}
+                      selectedCameraId={selectedCamId}
+                      onSelectCamera={handleSelectCamera}
+                      defaultDate={getSafetyDefaultPlaybackDate()}
+                      maxDate={getSafetyDefaultPlaybackDate()}
+                      initialRecordId={playbackEvent?.id}
+                      filterTabs={[...SAFETY_CAMERA_FILTER_TABS]}
+                      filterFn={tab => filterSafetyCameras(tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
+                      groupFn={(cams, tab) => groupSafetyCamerasForSidebar(cams, tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
+                      fetchRecords={fetchSafetyCameraRecords}
+                      fetchDetections={fetchSafetyRecordDetections}
+                    />
+                  )}
                 </div>
               )}
             </Panel>
           </div>
 
+          {/* Cảnh báo + Nhóm ATLĐ — mobile: cảnh báo trước; desktop: nhóm trái */}
           <div className={cn(
             'flex flex-col lg:flex-row gap-3 min-h-0',
             'max-lg:flex-none',
-            tier2Open ? 'lg:flex-[9]' : 'lg:flex-1',
+            bothLowerCollapsed
+              ? 'lg:flex-1 lg:min-h-0'
+              : tier2Open
+                ? cameraMode === 'playback' ? 'lg:flex-[7]' : 'lg:flex-[9]'
+                : eventsPanelOpen
+                  ? 'lg:flex-[5]'
+                  : 'lg:flex-1',
           )}>
-            <div className="w-full lg:flex-[58] min-w-0 min-h-[320px] max-lg:landscape:min-h-[260px] lg:min-h-0 flex flex-col">
-              <Panel title="Sự Kiện Vi Phạm" expandable noPadding className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto">
-                <SafetyViolationEventsPanel
-                  selectedId={selectedViolationId}
-                  selectedViolation={selectedViolation}
-                  zoneFilter={selectedZoneId}
-                  onSelectViolation={handleSelectViolation}
+            <div className={cn(
+              'w-full lg:flex-[42] min-w-0 flex flex-col order-1 lg:order-2',
+              bothLowerCollapsed
+                ? 'lg:min-h-0 lg:flex-1'
+                : 'max-lg:min-h-[320px] lg:min-h-0',
+            )}>
+              <Panel
+                title="Cảnh báo"
+                noPadding
+                className="flex-1 min-h-0 max-lg:!h-auto max-lg:min-h-[320px] overflow-hidden"
+              >
+                <SafetyPriorityAlerts
+                  all={alerts.all}
+                  warning={alerts.warning}
+                  violation={alerts.violation}
+                  critical={alerts.critical}
+                  selectedGroupId={filters.groupId}
                   onPlayback={handlePlayback}
-                  onDismissViolation={handleDismissViolation}
-                  onSelectWorker={handleSelectWorker}
-                  onSelectContractor={handleSelectContractor}
+                  onSelect={v => setSelectedId(v.id)}
+                  onHandle={handleHandleRequest}
                 />
               </Panel>
             </div>
 
-            <div className="hidden lg:flex items-center justify-center w-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => setHeatmapOpen(c => !c)}
-                className="h-10 w-3 flex items-center justify-center rounded text-muted-foreground/50 hover:text-foreground hover:bg-[#1a2235] transition-colors border border-[#1e2433]/60"
-                title={heatmapOpen ? 'Thu gọn Heatmap' : 'Mở rộng Heatmap'}
+            <div className={cn(
+              'w-full lg:flex-[58] min-w-0 flex flex-col order-2 lg:order-1',
+              bothLowerCollapsed
+                ? 'lg:min-h-0 lg:flex-1'
+                : 'max-lg:min-h-0 lg:min-h-0',
+            )}>
+              <Panel
+                title="Nhóm ATLĐ"
+                noPadding
+                className="flex-1 min-h-0 max-lg:!h-auto overflow-hidden"
               >
-                {heatmapOpen
-                  ? <ChevronRight className="w-2.5 h-2.5" />
-                  : <ChevronLeft className="w-2.5 h-2.5" />
-                }
-              </button>
+                <SafetyGroupGrid
+                  stats={groupStats}
+                  selectedGroupId={filters.groupId}
+                  onSelectGroup={handleGroupSelect}
+                />
+              </Panel>
             </div>
+          </div>
 
-            {showHeatmap && (
-              <div className="w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:min-h-[200px] lg:min-h-0 flex flex-col">
-                <Panel title="Heatmap Vi Phạm" expandable noPadding className="flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto">
-                  <SafetyZoneHeatmap
-                    selectedZoneId={selectedZoneId}
-                    onSelectZone={setSelectedZoneId}
+          <div className={cn(
+            'w-full flex flex-col min-h-0',
+            eventsPanelOpen
+              ? 'max-lg:flex-none max-lg:min-h-[320px] lg:flex-[14] lg:min-h-0'
+              : 'shrink-0',
+          )}>
+            <Panel
+              title="Sự Kiện Vi Phạm"
+              fit={!eventsPanelOpen || !isDesktop}
+              noPadding
+              className={cn(
+                eventsPanelOpen
+                  ? 'flex-1 min-h-0 max-lg:!h-auto max-lg:min-h-[320px] lg:min-h-0'
+                  : 'shrink-0',
+                eventsPanelOpen && 'max-lg:[&>div:last-child]:!h-auto max-lg:[&>div:last-child]:min-h-[280px]',
+              )}
+              headerRight={
+                <div className="flex items-center gap-2 min-w-0">
+                  {!eventsPanelOpen && (
+                    <SafetyEventsCollapsedSummary
+                      count={filtered.length}
+                      criticalCount={kpis.criticalCount}
+                    />
+                  )}
+                  <TierCollapseButton
+                    open={eventsPanelOpen}
+                    onToggle={handleToggleEvents}
+                    label="Sự Kiện Vi Phạm"
                   />
-                </Panel>
-              </div>
-            )}
+                </div>
+              }
+            >
+              {eventsPanelOpen && (
+                <SafetyViolationTable
+                  records={filtered}
+                  selectedId={selectedId}
+                  onSelect={v => setSelectedId(v.id)}
+                  onPlayback={handlePlayback}
+                />
+              )}
+            </Panel>
           </div>
         </div>
       </PageLayout>
 
-      <SafetyPlaybackModal
-        open={playbackEvent !== null}
-        event={playbackEvent}
-        onClose={handleClosePlaybackModal}
-      />
-
-      <SafetyWorkerDetailSheet
-        workerIdOrName={selectedWorkerId}
-        open={workerSheetOpen}
-        onOpenChange={handleWorkerSheetOpenChange}
-        onPlayback={handlePlayback}
-        onSelectContractor={handleOpenContractorFromWorker}
-      />
-
-      <SafetyContractorDetailSheet
-        contractorName={selectedContractorName}
-        open={contractorSheetOpen}
-        onOpenChange={handleContractorSheetOpenChange}
-        onPlayback={handlePlayback}
-        onSelectWorker={handleOpenWorkerFromContractor}
+      <SafetyHandleConfirmDialog
+        record={handleTarget}
+        onClose={() => setHandleTarget(null)}
+        onConfirm={confirmHandled}
       />
     </>
   )

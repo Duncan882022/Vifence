@@ -1,10 +1,10 @@
 import {
   HardHat,
-  Shirt,
-  Cable,
-  Ban,
   ArrowUpFromLine,
-  TrendingDown,
+  Ban,
+  Car,
+  ClipboardCheck,
+  Flame,
   AlertCircle,
   AlertTriangle,
   Minus,
@@ -85,36 +85,18 @@ export function buildPpeTooltipLines(score: number): string[] {
   const { fullLabel } = getPpeLevel(score)
   return [
     'Điểm PPE = số lần tuân thủ ÷ tổng số phát hiện × 100',
-    'Bao gồm: mũ bảo hộ, áo phản quang, dây an toàn (trọng số đồng đều)',
+    'Bao gồm 6 nhóm giám sát: PPE, làm việc trên cao, khu vực nguy hiểm, giao thông, biện pháp thi công, PCCC',
     `Điểm hiện tại: ${formatPpeScore(score)}% · ${fullLabel}`,
   ]
 }
 
 /** Single source of truth: violation type → icon + accent colors */
 export const VIOLATION_TYPE_ICON_CONFIG: Record<ViolationType, ViolationTypeIconConfig> = {
-  'no-helmet': {
+  ppe: {
     icon: HardHat,
     color: 'text-amber-400',
     bg: 'bg-amber-500/10',
     border: 'border-amber-500/30',
-  },
-  'no-vest': {
-    icon: Shirt,
-    color: 'text-cyan-400',
-    bg: 'bg-cyan-500/10',
-    border: 'border-cyan-500/30',
-  },
-  'no-harness': {
-    icon: Cable,
-    color: 'text-red-400',
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/30',
-  },
-  'danger-zone': {
-    icon: Ban,
-    color: 'text-red-400',
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/30',
   },
   'work-at-height': {
     icon: ArrowUpFromLine,
@@ -122,8 +104,26 @@ export const VIOLATION_TYPE_ICON_CONFIG: Record<ViolationType, ViolationTypeIcon
     bg: 'bg-orange-500/10',
     border: 'border-orange-500/30',
   },
-  'fall': {
-    icon: TrendingDown,
+  'danger-zone': {
+    icon: Ban,
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/30',
+  },
+  'traffic-safety': {
+    icon: Car,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/10',
+    border: 'border-cyan-500/30',
+  },
+  'method-statement': {
+    icon: ClipboardCheck,
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/30',
+  },
+  'fire-hot-work': {
+    icon: Flame,
     color: 'text-red-400',
     bg: 'bg-red-500/10',
     border: 'border-red-500/30',

@@ -1,6 +1,7 @@
 export type TenantId =
   | 'ocp1'
   | 'ocp2'
+  | 'giang-vo'
   | 'ha-long-xanh'
   | 'lang-olympic'
   | 'can-gio'
@@ -15,6 +16,7 @@ export interface Tenant {
 
 export const TENANTS: Tenant[] = [
   { id: 'ocp1', name: 'OCP1', hasDemoData: true },
+  { id: 'giang-vo', name: 'Giảng Võ', hasDemoData: true },
   { id: 'ocp2', name: 'OCP2', hasDemoData: false },
   { id: 'ha-long-xanh', name: 'Hạ Long Xanh', hasDemoData: false },
   { id: 'lang-olympic', name: 'Làng Olympic', hasDemoData: false },

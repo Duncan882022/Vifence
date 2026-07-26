@@ -199,17 +199,9 @@ export const CEO_DASHBOARD_MOCK: CeoDashboardData = {
     { id: 'long-an',    name: 'Long An',                 machineCount:   8, x: 54.1, y: 84.9 },
   ],
   usageUnits: [
-    // Tổng totalMmtb = 16+14+12+11+10+9+9+8+6+5 = 100 máy ✓
-    { rank:  1, name: 'FECON',                totalMmtb: 16, utilizationPct: 82 },
-    { rank:  2, name: 'SGC',                  totalMmtb: 14, utilizationPct: 79 },
-    { rank:  3, name: 'Bauer Vietnam',        totalMmtb: 12, utilizationPct: 76 },
-    { rank:  4, name: 'Coteccons Foundation', totalMmtb: 11, utilizationPct: 74 },
-    { rank:  5, name: 'Delta Foundation',     totalMmtb: 10, utilizationPct: 72 },
-    { rank:  6, name: 'Hòa Bình Foundation',  totalMmtb:  9, utilizationPct: 69 },
-    { rank:  7, name: 'Ricons Foundation',    totalMmtb:  9, utilizationPct: 70 },
-    { rank:  8, name: 'Central Foundation',   totalMmtb:  8, utilizationPct: 68 },
-    { rank:  9, name: 'Vietur Foundation',    totalMmtb:  6, utilizationPct: 65 },
-    { rank: 10, name: 'Sơn Hải Foundation',   totalMmtb:  5, utilizationPct: 52 },
+    { rank: 1, name: 'Vincons', totalMmtb: 38, utilizationPct: 82 },
+    { rank: 2, name: 'SGC', totalMmtb: 35, utilizationPct: 79 },
+    { rank: 3, name: 'Alpha', totalMmtb: 27, utilizationPct: 76 },
   ],
   aiRecommendations: [
     {

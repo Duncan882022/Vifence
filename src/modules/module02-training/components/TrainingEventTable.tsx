@@ -259,10 +259,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
      For skipped / insufficient: actualTime = first check-in time
   ──────────────────────────────────────────────────────────────────── */
 
-  /* ── 1 ── Phạm Văn Cường (Delta Corp) → CNTB late ─────── */
+  /* ── 1 ── Phạm Văn Cường (SGC) → CNTB late ─────── */
   {
     id: 'w-001', employeeCode: 'NV000789', name: 'Phạm Văn Cường',
-    avatarColor: '#3B82F6', company: 'Delta Corp', companyCode: 'DC-001',
+    avatarColor: '#3B82F6', company: 'SGC', companyCode: 'SGC-001',
     role: 'Công nhân cơ khí',
     currentStatus: 'late', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -274,10 +274,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 2 ── Trần Văn Bình (XYZ JSC) → TB-A left-early ─── */
+  /* ── 2 ── Trần Văn Bình (Alpha) → TB-A left-early ─── */
   {
     id: 'w-002', employeeCode: 'NV000456', name: 'Trần Văn Bình',
-    avatarColor: '#F97316', company: 'XYZ JSC', companyCode: 'XY-002',
+    avatarColor: '#F97316', company: 'Alpha', companyCode: 'AL-001',
     role: 'Thợ hàn bậc 3',
     currentStatus: 'left-early', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -289,10 +289,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 3 ── Lê Văn Dũng (ABC Construction) → PCCC absent ── */
+  /* ── 3 ── Lê Văn Dũng (Vincons) → PCCC absent ── */
   {
     id: 'w-003', employeeCode: 'NV000321', name: 'Lê Văn Dũng',
-    avatarColor: '#10B981', company: 'ABC Construction', companyCode: 'AB-003',
+    avatarColor: '#10B981', company: 'Vincons', companyCode: 'VC-001',
     role: 'Giám sát thi công',
     currentStatus: 'absent', currentCourse: 'PCCC C',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -304,12 +304,12 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 4 ── Hoàng Văn Em (XYZ JSC) → CNTB skipped
+  /* ── 4 ── Hoàng Văn Em (Alpha) → CNTB skipped
      Vào 08:00, rời 08:45, không quay lại.
      actualTime = check-in, exceptionMinutes = minutes attended before walkout */
   {
     id: 'w-004', employeeCode: 'NV000654', name: 'Hoàng Văn Em',
-    avatarColor: '#8B5CF6', company: 'XYZ JSC', companyCode: 'XY-002',
+    avatarColor: '#8B5CF6', company: 'Alpha', companyCode: 'AL-001',
     role: 'Vận hành máy',
     currentStatus: 'skipped', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -320,10 +320,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 5 ── Nguyễn Thị Phương (Delta Corp) → TB-A late ──── */
+  /* ── 5 ── Nguyễn Thị Phương (SGC) → TB-A late ──── */
   {
     id: 'w-005', employeeCode: 'NV000112', name: 'Nguyễn Thị Phương',
-    avatarColor: '#EC4899', company: 'Delta Corp', companyCode: 'DC-001',
+    avatarColor: '#EC4899', company: 'SGC', companyCode: 'SGC-001',
     role: 'Nhân viên ATLD',
     currentStatus: 'late', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -335,10 +335,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 6 ── Vũ Minh Giang (ABC Construction) → CNTB absent  */
+  /* ── 6 ── Vũ Minh Giang (Vincons) → CNTB absent  */
   {
     id: 'w-006', employeeCode: 'NV000223', name: 'Vũ Minh Giang',
-    avatarColor: '#06B6D4', company: 'ABC Construction', companyCode: 'AB-003',
+    avatarColor: '#06B6D4', company: 'Vincons', companyCode: 'VC-001',
     role: 'Thợ điện công trình',
     currentStatus: 'absent', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -350,10 +350,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 7 ── Đinh Quốc Hùng (Minh Phát JSC) → TB-A late ─── */
+  /* ── 7 ── Đinh Quốc Hùng (SGC) → TB-A late ─── */
   {
     id: 'w-007', employeeCode: 'NV001045', name: 'Đinh Quốc Hùng',
-    avatarColor: '#F59E0B', company: 'Minh Phát JSC', companyCode: 'MP-004',
+    avatarColor: '#F59E0B', company: 'SGC', companyCode: 'SGC-002',
     role: 'Thợ xây bậc 4',
     currentStatus: 'late', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -364,10 +364,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 8 ── Bùi Thị Lan (Sunrise Const.) → PCCC left-early  */
+  /* ── 8 ── Bùi Thị Lan (Alpha) → PCCC left-early  */
   {
     id: 'w-008', employeeCode: 'NV000887', name: 'Bùi Thị Lan',
-    avatarColor: '#A78BFA', company: 'Sunrise Const.', companyCode: 'SR-005',
+    avatarColor: '#A78BFA', company: 'Alpha', companyCode: 'AL-002',
     role: 'Nhân viên an toàn',
     currentStatus: 'left-early', currentCourse: 'PCCC C',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -379,10 +379,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
   },
 
 
-  /* ── 10 ── Trương Văn Khoa (XYZ JSC) → TB-A absent ────── */
+  /* ── 10 ── Trương Văn Khoa (Alpha) → TB-A absent ────── */
   {
     id: 'w-010', employeeCode: 'NV000771', name: 'Trương Văn Khoa',
-    avatarColor: '#FB923C', company: 'XYZ JSC', companyCode: 'XY-002',
+    avatarColor: '#FB923C', company: 'Alpha', companyCode: 'AL-001',
     role: 'Thợ lắp đặt cơ điện',
     currentStatus: 'absent', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -394,10 +394,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 11 ── Lý Thị Mỹ Duyên (ABC Construction) → CNTB late */
+  /* ── 11 ── Lý Thị Mỹ Duyên (Vincons) → CNTB late */
   {
     id: 'w-011', employeeCode: 'NV000334', name: 'Lý Thị Mỹ Duyên',
-    avatarColor: '#F472B6', company: 'ABC Construction', companyCode: 'AB-003',
+    avatarColor: '#F472B6', company: 'Vincons', companyCode: 'VC-001',
     role: 'Giám sát chất lượng',
     currentStatus: 'late', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -408,14 +408,14 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 12 ── Phan Minh Tuấn (Minh Phát JSC) → CNTB insufficient
+  /* ── 12 ── Phan Minh Tuấn (SGC) → CNTB insufficient
      Ca: 08:00–12:00 (240p).
      Vào 08:00 → Ra 09:00 · Vào 09:30 → Ra 11:00
      Tổng dự: 60p + 90p = 150p / 240p = 62.5% < 75% (=180p) → thiếu 30p
      actualTime = first check-in                                           */
   {
     id: 'w-012', employeeCode: 'NV001199', name: 'Phan Minh Tuấn',
-    avatarColor: '#60A5FA', company: 'Minh Phát JSC', companyCode: 'MP-004',
+    avatarColor: '#60A5FA', company: 'SGC', companyCode: 'SGC-002',
     role: 'Công nhân xây dựng',
     currentStatus: 'insufficient', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -426,10 +426,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 13 ── Cao Văn Nam (Sunrise Const.) → TB-A late ────── */
+  /* ── 13 ── Cao Văn Nam (Alpha) → TB-A late ────── */
   {
     id: 'w-013', employeeCode: 'NV001210', name: 'Cao Văn Nam',
-    avatarColor: '#E879F9', company: 'Sunrise Const.', companyCode: 'SR-005',
+    avatarColor: '#E879F9', company: 'Alpha', companyCode: 'AL-002',
     role: 'Thợ ốp lát',
     currentStatus: 'late', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -440,10 +440,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 14 ── Đặng Thị Hoa (XYZ JSC) → PCCC absent ───────── */
+  /* ── 14 ── Đặng Thị Hoa (Alpha) → PCCC absent ───────── */
   {
     id: 'w-014', employeeCode: 'NV000990', name: 'Đặng Thị Hoa',
-    avatarColor: '#38BDF8', company: 'XYZ JSC', companyCode: 'XY-002',
+    avatarColor: '#38BDF8', company: 'Alpha', companyCode: 'AL-001',
     role: 'Kế toán công trường',
     currentStatus: 'absent', currentCourse: 'PCCC C',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -454,10 +454,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 15 ── Hồ Quốc Việt (Delta Corp) → CNTB left-early ── */
+  /* ── 15 ── Hồ Quốc Việt (SGC) → CNTB left-early ── */
   {
     id: 'w-015', employeeCode: 'NV001301', name: 'Hồ Quốc Việt',
-    avatarColor: '#4ADE80', company: 'Delta Corp', companyCode: 'DC-001',
+    avatarColor: '#4ADE80', company: 'SGC', companyCode: 'SGC-001',
     role: 'Thợ mộc công trình',
     currentStatus: 'left-early', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -469,11 +469,11 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 16 ── Kiều Thanh Thảo (ABC Construction) → CNTB skipped + late
+  /* ── 16 ── Kiều Thanh Thảo (Vincons) → CNTB skipped + late
      Vào 08:25 (trễ 25p), rời 09:20, không quay lại. */
   {
     id: 'w-016', employeeCode: 'NV000412', name: 'Kiều Thanh Thảo',
-    avatarColor: '#FCD34D', company: 'ABC Construction', companyCode: 'AB-003',
+    avatarColor: '#FCD34D', company: 'Vincons', companyCode: 'VC-001',
     role: 'Nhân viên hành chính',
     currentStatus: 'skipped', currentCourse: 'Cọc nhồi B',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -485,10 +485,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
   },
 
 
-  /* ── 18 ── Mai Xuân Trường (Delta Corp) → TB-A absent ──── */
+  /* ── 18 ── Mai Xuân Trường (SGC) → TB-A absent ──── */
   {
     id: 'w-018', employeeCode: 'NV000678', name: 'Mai Xuân Trường',
-    avatarColor: '#FB7185', company: 'Delta Corp', companyCode: 'DC-001',
+    avatarColor: '#FB7185', company: 'SGC', companyCode: 'SGC-001',
     role: 'Công nhân sắt thép',
     currentStatus: 'absent', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -499,10 +499,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 19 ── Nguyễn Văn Hoàng (XYZ JSC) → PCCC late ──────  */
+  /* ── 19 ── Nguyễn Văn Hoàng (Alpha) → PCCC late ──────  */
   {
     id: 'w-019', employeeCode: 'NV001155', name: 'Nguyễn Văn Hoàng',
-    avatarColor: '#A3E635', company: 'XYZ JSC', companyCode: 'XY-002',
+    avatarColor: '#A3E635', company: 'Alpha', companyCode: 'AL-001',
     role: 'Giám sát an toàn',
     currentStatus: 'late', currentCourse: 'PCCC C',
     courseDate: '24/06', courseStart: '08:00', courseEnd: '12:00',
@@ -514,10 +514,10 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
     ],
   },
 
-  /* ── 20 ── Phùng Anh Tuấn (Sunrise Const.) → TB-A left-early */
+  /* ── 20 ── Phùng Anh Tuấn (Alpha) → TB-A left-early */
   {
     id: 'w-020', employeeCode: 'NV001320', name: 'Phùng Anh Tuấn',
-    avatarColor: '#2DD4BF', company: 'Sunrise Const.', companyCode: 'SR-005',
+    avatarColor: '#2DD4BF', company: 'Alpha', companyCode: 'AL-002',
     role: 'Thợ cốt pha',
     currentStatus: 'left-early', currentCourse: 'Toolbox A',
     courseDate: '24/06', courseStart: '07:30', courseEnd: '09:30',
@@ -530,64 +530,64 @@ export const TRAINING_ATTENDEES: TrainingAttendee[] = [
 
   /* ── COMPLETED attendees (today's sessions) ────────────────── */
 
-  /* ── C01 ── Nguyễn Thị Lan (Delta Corp) → Toolbox A ✓ */
-  { id:'w-c01', employeeCode:'NV001101', name:'Nguyễn Thị Lan',    avatarColor:'#06B6D4', company:'Delta Corp',      companyCode:'DC-001', role:'Kỹ thuật viên',       currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:27', exceptionMinutes:0,
+  /* ── C01 ── Nguyễn Thị Lan (SGC) → Toolbox A ✓ */
+  { id:'w-c01', employeeCode:'NV001101', name:'Nguyễn Thị Lan',    avatarColor:'#06B6D4', company:'SGC',      companyCode:'SGC-001', role:'Kỹ thuật viên',       currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:27', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c01-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:27', out:'09:32'}], minutesDelta:0 }]},
-  /* ── C02 ── Trần Quốc Bảo (XYZ JSC) → Toolbox A ✓ */
-  { id:'w-c02', employeeCode:'NV001102', name:'Trần Quốc Bảo',     avatarColor:'#8B5CF6', company:'XYZ JSC',         companyCode:'XY-002', role:'Thợ hàn bậc 2',        currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:29', exceptionMinutes:0,
+  /* ── C02 ── Trần Quốc Bảo (Alpha) → Toolbox A ✓ */
+  { id:'w-c02', employeeCode:'NV001102', name:'Trần Quốc Bảo',     avatarColor:'#8B5CF6', company:'Alpha',         companyCode:'AL-001', role:'Thợ hàn bậc 2',        currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:29', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c02-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:29', out:'09:30'}], minutesDelta:0 }]},
-  /* ── C03 ── Lê Thị Hương (ABC Construction) → Toolbox A ✓ */
-  { id:'w-c03', employeeCode:'NV001103', name:'Lê Thị Hương',      avatarColor:'#F59E0B', company:'ABC Construction', companyCode:'AB-003', role:'Giám sát an toàn',     currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:25', exceptionMinutes:0,
+  /* ── C03 ── Lê Thị Hương (Vincons) → Toolbox A ✓ */
+  { id:'w-c03', employeeCode:'NV001103', name:'Lê Thị Hương',      avatarColor:'#F59E0B', company:'Vincons', companyCode:'VC-001', role:'Giám sát an toàn',     currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:25', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c03-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:25', out:'09:31'}], minutesDelta:0 }]},
-  /* ── C04 ── Phạm Minh Tuấn (Sunrise Const.) → Toolbox A ✓ */
-  { id:'w-c04', employeeCode:'NV001104', name:'Phạm Minh Tuấn',    avatarColor:'#10B981', company:'Sunrise Const.',   companyCode:'SR-005', role:'Công nhân xây dựng',   currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:28', exceptionMinutes:0,
+  /* ── C04 ── Phạm Minh Tuấn (Alpha) → Toolbox A ✓ */
+  { id:'w-c04', employeeCode:'NV001104', name:'Phạm Minh Tuấn',    avatarColor:'#10B981', company:'Alpha',   companyCode:'AL-002', role:'Công nhân xây dựng',   currentStatus:'completed', currentCourse:'Toolbox A',     courseDate:'24/06', courseStart:'07:30', courseEnd:'09:30', actualTime:'07:28', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c04-1', courseCode:'TB-A-2026-06-24',  courseName:'Toolbox A',    sessionDate:'2026-06-24', startTime:'07:30', endTime:'09:30', zone:'OCP1-A', status:'completed',  sessions:[{in:'07:28', out:'09:30'}], minutesDelta:0 }]},
   /* ── ATTENDING — ca đang diễn ra lúc 11:30 ────────────────── */
 
   /* ── C05–C08 Cọc nhồi B ● */
-  { id:'w-c05', employeeCode:'NV001105', name:'Ngô Văn Tùng',      avatarColor:'#EC4899', company:'Minh Phát JSC',    companyCode:'MP-005', role:'Kỹ sư địa kỹ thuật',   currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:58', exceptionMinutes:0,
+  { id:'w-c05', employeeCode:'NV001105', name:'Ngô Văn Tùng',      avatarColor:'#EC4899', company:'SGC',    companyCode:'SGC-003', role:'Kỹ sư địa kỹ thuật',   currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:58', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c05-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'07:58', out:null}], minutesDelta:0 }]},
-  { id:'w-c06', employeeCode:'NV001106', name:'Đinh Thị Mai',      avatarColor:'#3B82F6', company:'Delta Corp',       companyCode:'DC-001', role:'Công nhân cơ khí',      currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:55', exceptionMinutes:0,
+  { id:'w-c06', employeeCode:'NV001106', name:'Đinh Thị Mai',      avatarColor:'#3B82F6', company:'SGC',       companyCode:'SGC-001', role:'Công nhân cơ khí',      currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:55', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c06-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'07:55', out:null}], minutesDelta:0 }]},
-  { id:'w-c07', employeeCode:'NV001107', name:'Hoàng Thị Ngọc',    avatarColor:'#F97316', company:'XYZ JSC',          companyCode:'XY-002', role:'Thợ hàn bậc 3',        currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:00', exceptionMinutes:0,
+  { id:'w-c07', employeeCode:'NV001107', name:'Hoàng Thị Ngọc',    avatarColor:'#F97316', company:'Alpha',          companyCode:'AL-001', role:'Thợ hàn bậc 3',        currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:00', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c07-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'08:00', out:null}], minutesDelta:0 }]},
-  { id:'w-c08', employeeCode:'NV001108', name:'Bùi Văn Khoa',      avatarColor:'#14B8A6', company:'ABC Construction',  companyCode:'AB-003', role:'Kỹ thuật viên cơ khí', currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:57', exceptionMinutes:0,
+  { id:'w-c08', employeeCode:'NV001108', name:'Bùi Văn Khoa',      avatarColor:'#14B8A6', company:'Vincons',  companyCode:'VC-001', role:'Kỹ thuật viên cơ khí', currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:57', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c08-1', courseCode:'CNTB-2026-06-24',  courseName:'Cọc nhồi B',   sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending',  sessions:[{in:'07:57', out:null}], minutesDelta:0 }]},
-  { id:'w-att01', employeeCode:'NV001130', name:'Bùi Văn Thanh',   avatarColor:'#F59E0B', company:'Minh Phát JSC',    companyCode:'MP-005', role:'Thợ xây bậc 3',        currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:02', exceptionMinutes:0,
+  { id:'w-att01', employeeCode:'NV001130', name:'Bùi Văn Thanh',   avatarColor:'#F59E0B', company:'SGC',    companyCode:'SGC-003', role:'Thợ xây bậc 3',        currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:02', exceptionMinutes:0,
     courseHistory:[{ id:'cr-att01-1', courseCode:'CNTB-2026-06-24', courseName:'Cọc nhồi B', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending', sessions:[{in:'08:02', out:null}], minutesDelta:0 }]},
-  { id:'w-att02', employeeCode:'NV001131', name:'Nguyễn Thị Xuân', avatarColor:'#E879F9', company:'Sunrise Const.',   companyCode:'SR-005', role:'Nhân viên hành chính', currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:05', exceptionMinutes:0,
+  { id:'w-att02', employeeCode:'NV001131', name:'Nguyễn Thị Xuân', avatarColor:'#E879F9', company:'Alpha',   companyCode:'AL-002', role:'Nhân viên hành chính', currentStatus:'attending', currentCourse:'Cọc nhồi B',    courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:05', exceptionMinutes:0,
     courseHistory:[{ id:'cr-att02-1', courseCode:'CNTB-2026-06-24', courseName:'Cọc nhồi B', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-A', status:'attending', sessions:[{in:'08:05', out:null}], minutesDelta:0 }]},
 
   /* ── C09–C12 PCCC C ● */
-  { id:'w-c09', employeeCode:'NV001109', name:'Vũ Thị Thu',        avatarColor:'#A78BFA', company:'Sunrise Const.',    companyCode:'SR-005', role:'Nhân viên an toàn',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:52', exceptionMinutes:0,
+  { id:'w-c09', employeeCode:'NV001109', name:'Vũ Thị Thu',        avatarColor:'#A78BFA', company:'Alpha',    companyCode:'AL-002', role:'Nhân viên an toàn',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:52', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c09-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:52', out:null}], minutesDelta:0 }]},
-  { id:'w-c10', employeeCode:'NV001110', name:'Lý Văn Nam',        avatarColor:'#F43F5E', company:'Minh Phát JSC',    companyCode:'MP-005', role:'Vận hành thiết bị',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:58', exceptionMinutes:0,
+  { id:'w-c10', employeeCode:'NV001110', name:'Lý Văn Nam',        avatarColor:'#F43F5E', company:'SGC',    companyCode:'SGC-003', role:'Vận hành thiết bị',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:58', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c10-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:58', out:null}], minutesDelta:0 }]},
-  { id:'w-c11', employeeCode:'NV001111', name:'Trịnh Văn Hùng',    avatarColor:'#0EA5E9', company:'Delta Corp',       companyCode:'DC-001', role:'Công nhân điện',        currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:55', exceptionMinutes:0,
+  { id:'w-c11', employeeCode:'NV001111', name:'Trịnh Văn Hùng',    avatarColor:'#0EA5E9', company:'SGC',       companyCode:'SGC-001', role:'Công nhân điện',        currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:55', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c11-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:55', out:null}], minutesDelta:0 }]},
-  { id:'w-c12', employeeCode:'NV001112', name:'Đặng Thị Linh',     avatarColor:'#84CC16', company:'XYZ JSC',          companyCode:'XY-002', role:'Giám sát thi công',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:59', exceptionMinutes:0,
+  { id:'w-c12', employeeCode:'NV001112', name:'Đặng Thị Linh',     avatarColor:'#84CC16', company:'Alpha',          companyCode:'AL-001', role:'Giám sát thi công',    currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'07:59', exceptionMinutes:0,
     courseHistory:[{ id:'cr-c12-1', courseCode:'PCCC-2026-06-24',  courseName:'PCCC C',        sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending',  sessions:[{in:'07:59', out:null}], minutesDelta:0 }]},
-  { id:'w-att03', employeeCode:'NV001132', name:'Phạm Văn An',     avatarColor:'#38BDF8', company:'XYZ JSC',          companyCode:'XY-002', role:'Thợ lắp đặt',          currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:01', exceptionMinutes:0,
+  { id:'w-att03', employeeCode:'NV001132', name:'Phạm Văn An',     avatarColor:'#38BDF8', company:'Alpha',          companyCode:'AL-001', role:'Thợ lắp đặt',          currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:01', exceptionMinutes:0,
     courseHistory:[{ id:'cr-att03-1', courseCode:'PCCC-2026-06-24', courseName:'PCCC C', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending', sessions:[{in:'08:01', out:null}], minutesDelta:0 }]},
-  { id:'w-att04', employeeCode:'NV001133', name:'Trần Minh Khang', avatarColor:'#2DD4BF', company:'Sunrise Const.',   companyCode:'SR-005', role:'Vận hành máy',         currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:03', exceptionMinutes:0,
+  { id:'w-att04', employeeCode:'NV001133', name:'Trần Minh Khang', avatarColor:'#2DD4BF', company:'Alpha',   companyCode:'AL-002', role:'Vận hành máy',         currentStatus:'attending', currentCourse:'PCCC C',        courseDate:'24/06', courseStart:'08:00', courseEnd:'12:00', actualTime:'08:03', exceptionMinutes:0,
     courseHistory:[{ id:'cr-att04-1', courseCode:'PCCC-2026-06-24', courseName:'PCCC C', sessionDate:'2026-06-24', startTime:'08:00', endTime:'12:00', zone:'OCP1-B', status:'attending', sessions:[{in:'08:03', out:null}], minutesDelta:0 }]},
 
   /* ── Điện cơ E (11:30–13:30, vừa bắt đầu) ────── */
-  /* ── A01 ── Cao Thị Bích (Delta Corp) → Điện cơ E ● */
-  { id:'w-a01', employeeCode:'NV001201', name:'Cao Thị Bích',      avatarColor:'#06B6D4', company:'Delta Corp',       companyCode:'DC-001', role:'Kỹ thuật điện',         currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:28', exceptionMinutes:0,
+  /* ── A01 ── Cao Thị Bích (SGC) → Điện cơ E ● */
+  { id:'w-a01', employeeCode:'NV001201', name:'Cao Thị Bích',      avatarColor:'#06B6D4', company:'SGC',       companyCode:'SGC-001', role:'Kỹ thuật điện',         currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:28', exceptionMinutes:0,
     courseHistory:[{ id:'cr-a01-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'attending', sessions:[{in:'11:28', out:null}],                                          minutesDelta:0 }]},
-  /* ── A02 ── Nguyễn Văn Phú (ABC Construction) → Điện cơ E ● */
-  { id:'w-a02', employeeCode:'NV001202', name:'Nguyễn Văn Phú',    avatarColor:'#F59E0B', company:'ABC Construction', companyCode:'AB-003', role:'Thợ điện bậc 3',        currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:30', exceptionMinutes:0,
+  /* ── A02 ── Nguyễn Văn Phú (Vincons) → Điện cơ E ● */
+  { id:'w-a02', employeeCode:'NV001202', name:'Nguyễn Văn Phú',    avatarColor:'#F59E0B', company:'Vincons', companyCode:'VC-001', role:'Thợ điện bậc 3',        currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:30', exceptionMinutes:0,
     courseHistory:[{ id:'cr-a02-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'attending', sessions:[{in:'11:30', out:null}],                                          minutesDelta:0 }]},
-  /* ── A03 ── Trần Minh Đức (XYZ JSC) → Điện cơ E ● (late) */
-  { id:'w-a03', employeeCode:'NV001203', name:'Trần Minh Đức',     avatarColor:'#F97316', company:'XYZ JSC',          companyCode:'XY-002', role:'Công nhân điện',         currentStatus:'late',      currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:47', exceptionMinutes:17,
+  /* ── A03 ── Trần Minh Đức (Alpha) → Điện cơ E ● (late) */
+  { id:'w-a03', employeeCode:'NV001203', name:'Trần Minh Đức',     avatarColor:'#F97316', company:'Alpha',          companyCode:'AL-001', role:'Công nhân điện',         currentStatus:'late',      currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:47', exceptionMinutes:17,
     courseHistory:[{ id:'cr-a03-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'late',      sessions:[{in:'11:47', out:null}],                                          minutesDelta:17}]},
-  /* ── A04 ── Lê Thị Phương (Sunrise Const.) → Điện cơ E ● */
-  { id:'w-a04', employeeCode:'NV001204', name:'Lê Thị Phương',     avatarColor:'#A78BFA', company:'Sunrise Const.',   companyCode:'SR-005', role:'Giám sát thi công',     currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:29', exceptionMinutes:0,
+  /* ── A04 ── Lê Thị Phương (Alpha) → Điện cơ E ● */
+  { id:'w-a04', employeeCode:'NV001204', name:'Lê Thị Phương',     avatarColor:'#A78BFA', company:'Alpha',   companyCode:'AL-002', role:'Giám sát thi công',     currentStatus:'attending', currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:29', exceptionMinutes:0,
     courseHistory:[{ id:'cr-a04-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'attending', sessions:[{in:'11:29', out:null}],                                          minutesDelta:0 }]},
-  /* ── A05 ── Vũ Minh Khải (Minh Phát JSC) → Điện cơ E ↯ tạm vắng */
+  /* ── A05 ── Vũ Minh Khải (SGC) → Điện cơ E ↯ tạm vắng */
   /* Checked in 11:33, left 11:58, session still ongoing → outcome TBD */
-  { id:'w-a05', employeeCode:'NV001205', name:'Vũ Minh Khải',      avatarColor:'#06B6D4', company:'Minh Phát JSC',   companyCode:'MP-005', role:'Kỹ thuật điện',          currentStatus:'away',      currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:33', exceptionMinutes:0,
+  { id:'w-a05', employeeCode:'NV001205', name:'Vũ Minh Khải',      avatarColor:'#06B6D4', company:'SGC',   companyCode:'SGC-003', role:'Kỹ thuật điện',          currentStatus:'away',      currentCourse:'Điện cơ E',     courseDate:'24/06', courseStart:'11:30', courseEnd:'13:30', actualTime:'11:33', exceptionMinutes:0,
     courseHistory:[{ id:'cr-a05-1', courseCode:'DCE-2026-06-24',   courseName:'Điện cơ E',    sessionDate:'2026-06-24', startTime:'11:30', endTime:'13:30', zone:'OCP1-B', status:'away',      flags:['late'], sessions:[{in:'11:33', out:'11:58'}],                                       minutesDelta:3 }]},
 ]
 

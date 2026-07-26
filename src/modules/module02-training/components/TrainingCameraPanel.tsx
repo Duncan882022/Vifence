@@ -58,7 +58,7 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
       )}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact aiOverlay={false} />
+      <CameraLiveFeed cam={cam} playing={false} compact aiOverlay={false} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
       <span className="absolute top-0.5 left-0.5 flex items-center gap-0.5">
@@ -272,15 +272,38 @@ interface TrainingCameraPanelProps {
   onSelectCamera?: (cam: TrainingCamera) => void
   selectedId?: string
   onStreamCountChange?: (count: number) => void
+  /** Catalog camera tùy module — mặc định Module 02 OCP1 */
+  cameras?: TrainingCamera[]
+  /** Luồng mặc định khi mở panel — Module 03 truyền DEFAULT_SAFETY_CAMERA_IDS */
+  defaultCameraIds?: readonly string[]
+  filterTabs?: string[]
+  filterFn?: (tab: string) => TrainingCamera[]
+  groupFn?: (cameras: TrainingCamera[], tab: string) => { key: string; cameras: TrainingCamera[] }[]
 }
 
-export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountChange }: TrainingCameraPanelProps) {
-  const defaultIds = [...DEFAULT_COURSE_CAMERA_IDS]
+export function TrainingCameraPanel({
+  onSelectCamera,
+  selectedId,
+  onStreamCountChange,
+  cameras,
+  defaultCameraIds,
+  filterTabs,
+  filterFn,
+  groupFn,
+}: TrainingCameraPanelProps) {
+  const catalog = cameras ?? MOCK_TRAINING_CAMERAS
+  const tabs = filterTabs ?? CAMERA_FILTER_TABS
+  const resolveFilter = filterFn
+    ?? ((tab: string) => filterCameras(tab as CameraFilterTab))
+  const resolveGroup = groupFn
+    ?? ((list: TrainingCamera[], tab: string) => groupCamerasForSidebar(list, tab as CameraFilterTab))
+
+  const defaultIds = [...(defaultCameraIds ?? DEFAULT_COURSE_CAMERA_IDS)]
   const [selectedIds, setSelectedIds] = useState<string[]>(
     selectedId ? [selectedId] : defaultIds,
   )
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [filterTab, setFilterTab] = useState<CameraFilterTab>('Tất cả')
+  const [filterTab, setFilterTab] = useState<string>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const { isDesktop } = useShellLayout()
   const { hasDemoData } = useActiveTenant()
@@ -297,13 +320,15 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     setSelectedIds(prev => (prev.includes(selectedId) ? prev : [...prev, selectedId]))
   }, [selectedId])
 
-  const filtered = filterCameras(filterTab)
-  const sidebarGroups = groupCamerasForSidebar(filtered, filterTab)
+  const filtered = resolveFilter(filterTab)
+  const sidebarGroups = resolveGroup(filtered, filterTab)
 
   const displayedCams = selectedIds
-    .map(id => MOCK_TRAINING_CAMERAS.find(c => c.id === id))
+    .map(id => catalog.find(c => c.id === id))
     .filter((c): c is TrainingCamera => !!c)
-  const fallback = MOCK_TRAINING_CAMERAS.filter(c => isDefaultCourseCamera(c.id))
+  const fallback = defaultCameraIds
+    ? catalog.filter(c => (defaultCameraIds as readonly string[]).includes(c.id))
+    : catalog.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
   const fillHeightMain = isDesktop
 
@@ -320,7 +345,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
       if (prev.includes(cam.id)) {
         if (prev.length <= 1) return prev
         const next = prev.filter(id => id !== cam.id)
-        const syncCam = MOCK_TRAINING_CAMERAS.find(c => c.id === next[0])
+        const syncCam = catalog.find(c => c.id === next[0])
         if (syncCam) onSelectCamera?.(syncCam)
         return next
       }
@@ -329,7 +354,8 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
     })
   }
 
-  if (!hasDemoData) {
+  /* Catalog tùy module (vd. Module 03 SAFETY_CAMERAS) luôn hiện — không phụ thuộc tenant demo */
+  if (!hasDemoData && cameras === undefined) {
     return (
       <div className="flex flex-1 items-center justify-center min-h-[200px] p-6 text-center text-[11px] text-muted-foreground">
         Chưa có dữ liệu camera cho công trường này
@@ -364,7 +390,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
             <>
               <div className="flex items-center gap-1.5 px-2 py-1.5 lg:px-2.5 lg:py-2 border-b border-[#1e2433] shrink-0">
                 <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1">
-                  {CAMERA_FILTER_TABS.map(tab => (
+                  {tabs.map(tab => (
                     <button
                       key={tab}
                       type="button"
@@ -432,7 +458,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           ) : (
             <div className="flex items-center gap-1.5 px-2 py-1.5 w-full lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0">
               <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
-                {CAMERA_FILTER_TABS.map(tab => (
+                {tabs.map(tab => (
                   <button
                     key={tab}
                     type="button"

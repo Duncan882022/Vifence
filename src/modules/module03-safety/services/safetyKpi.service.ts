@@ -45,11 +45,11 @@ export interface SafetyDailySummary {
 
 /** Demo targets when period slice is empty */
 export const DEMO_SAFETY_7DAY_CURRENT: SafetyPeriodCounts = {
-  total: 21,
-  high: 9,
-  medium: 6,
-  low: 6,
-  processed: 17,
+  total: 22,
+  high: 10,
+  medium: 2,
+  low: 10,
+  processed: 18,
   pending: 4,
 }
 
@@ -71,7 +71,14 @@ export const DEMO_SAFETY_TODAY_STATS: SafetyDayStats = {
   violationsHigh: 4,
   violationsMedium: 1,
   violationsLow: 1,
-  violationsByType: { 'no-harness': 1, 'no-helmet': 1, 'no-vest': 1, 'danger-zone': 1, 'work-at-height': 1, 'fall': 1 },
+  violationsByType: {
+    ppe: 1,
+    'work-at-height': 1,
+    'danger-zone': 1,
+    'traffic-safety': 1,
+    'method-statement': 1,
+    'fire-hot-work': 1,
+  },
   activeCameras: 12,
   totalCameras: 14,
   penaltiesResolved: 24,
@@ -80,14 +87,21 @@ export const DEMO_SAFETY_TODAY_STATS: SafetyDayStats = {
 
 export const DEMO_SAFETY_YESTERDAY_STATS: SafetyDayStats = {
   dateLabel: '30/06/2026',
-  ppeCompliance: 86,
-  violationsToday: 5,
+  ppeCompliance: 84,
+  violationsToday: 6,
   violationsPending: 1,
-  violationsProcessed: 4,
-  violationsHigh: 2,
-  violationsMedium: 1,
+  violationsProcessed: 5,
+  violationsHigh: 4,
+  violationsMedium: 0,
   violationsLow: 2,
-  violationsByType: { 'danger-zone': 1, 'work-at-height': 1, 'no-helmet': 1, 'no-vest': 1, 'fall': 1 },
+  violationsByType: {
+    'danger-zone': 1,
+    'work-at-height': 2,
+    ppe: 2,
+    'method-statement': 1,
+    'fire-hot-work': 0,
+    'traffic-safety': 0,
+  },
   activeCameras: 12,
   totalCameras: 14,
   penaltiesResolved: 22,
