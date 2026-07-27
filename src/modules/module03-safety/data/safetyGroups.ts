@@ -1,6 +1,6 @@
 import type { SafetyGroup, SafetyGroupId } from '../types/safety.types'
 import type { ViolationType } from '@/types/safety'
-import { SAFETY_MONITORING_DICTIONARY } from './safetyMonitoringDictionary'
+import { SAFETY_MONITORING_DICTIONARY, formatMonitoringGroupTooltip } from './safetyMonitoringDictionary'
 
 /** Map mã nhóm dashboard ↔ ViolationType trong SAFETY MONITORING DICTIONARY */
 export const GROUP_TO_VIOLATION_TYPE: Record<SafetyGroupId, ViolationType> = {
@@ -44,4 +44,10 @@ export const SAFETY_GROUP_MAP = new Map(SAFETY_GROUPS.map(g => [g.id, g]))
 
 export function getDictionaryCategoryForGroup(groupId: SafetyGroupId) {
   return SAFETY_MONITORING_DICTIONARY.find(c => c.id === GROUP_TO_VIOLATION_TYPE[groupId])
+}
+
+/** Tooltip nhóm — tiêu đề + mục tiêu giám sát từ dictionary */
+export function getGroupDictionaryTooltip(groupId: SafetyGroupId): string {
+  const violationType = GROUP_TO_VIOLATION_TYPE[groupId]
+  return formatMonitoringGroupTooltip(violationType)
 }

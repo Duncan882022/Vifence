@@ -1,12 +1,14 @@
 import axios from 'axios';
 import { API_BASE_URL } from '@/config';
+import { IS_DEMO_AUTH } from '@/modules/dao-tao-tuan-thu/services/ghpagesDemo.service';
 
 export function logout() {
+  if (IS_DEMO_AUTH) return
+
   localStorage.removeItem('vifence_access_token');
   localStorage.removeItem('vifence_refresh_token');
   localStorage.removeItem('vifence_user');
   
-  // Redirect to signin
   const path = window.location.pathname;
   if (!path.endsWith('/signin')) {
     const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '';
@@ -32,6 +34,8 @@ function onRefreshed(token: string) {
 
 axiosInstance.interceptors.request.use(
   async (config) => {
+    if (IS_DEMO_AUTH) return config
+
     // Skip token validation for signin and refresh endpoints
     if (config.url?.includes('/auth/signin') || config.url?.includes('/auth/refresh')) {
       return config;
@@ -56,6 +60,8 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (IS_DEMO_AUTH) return Promise.reject(error)
+
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (originalRequest.url?.includes('/auth/signin') || originalRequest.url?.includes('/auth/refresh')) {

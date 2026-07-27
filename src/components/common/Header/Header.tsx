@@ -34,7 +34,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         <div className="min-w-0">
           <h1 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wide leading-tight truncate">{title}</h1>
           {subtitle && (
-            <p className="hidden md:block text-[11px] text-muted-foreground leading-tight truncate">{subtitle}</p>
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground leading-tight truncate">{subtitle}</p>
           )}
         </div>
       </div>

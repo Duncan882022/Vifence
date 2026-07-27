@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { User } from '@/types/user'
-import { IS_GHPAGES } from '@/modules/dao-tao-tuan-thu/services/ghpagesDemo.service'
+import { IS_DEMO_AUTH } from '@/modules/dao-tao-tuan-thu/services/ghpagesDemo.service'
 
 const GHPAGES_DEMO_USER: User = {
   id: 'demo-ghpages',
@@ -24,7 +24,7 @@ interface AppState {
 }
 
 const getInitialUser = (): User | null => {
-  if (IS_GHPAGES) return GHPAGES_DEMO_USER
+  if (IS_DEMO_AUTH) return GHPAGES_DEMO_USER
 
   try {
     const savedUser = localStorage.getItem('vifence_user')
@@ -57,7 +57,7 @@ export const useAppStore = create<AppState>((set) => ({
   mobileNavOpen: false,
   notifications: 3,
   setUser: (user) => {
-    if (IS_GHPAGES) {
+    if (IS_DEMO_AUTH) {
       set({ user: GHPAGES_DEMO_USER })
       return
     }

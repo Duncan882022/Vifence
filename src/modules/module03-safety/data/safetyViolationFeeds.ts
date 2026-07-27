@@ -1,4 +1,8 @@
 import type { ViolationType } from '@/types/safety'
+import {
+  formatMonitoringScenarioLabel,
+  getMonitoringCategory,
+} from './safetyMonitoringDictionary'
 
 /**
  * Violation detection clips — cắt từ YouTube Unicons Safety Supervisors (Js-1FbF-7yU).
@@ -41,7 +45,7 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 3,
     sourceStartSec: 208,
     sourceEndSec: 218,
-    label: 'PPE — Không đội mũ',
+    label: formatMonitoringScenarioLabel('ppe', 0),
     description: 'Công nhân không đội mũ bảo hộ khi huấn luyện dây an toàn',
   },
   'ppe-vest': {
@@ -49,7 +53,7 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 2,
     sourceStartSec: 172,
     sourceEndSec: 182,
-    label: 'PPE — Không áo bảo hộ',
+    label: formatMonitoringScenarioLabel('ppe', 1),
     description: 'Công nhân không mặc áo bảo hộ tại khu huấn luyện',
   },
   'work-at-height': {
@@ -57,7 +61,7 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 4,
     sourceStartSec: 248,
     sourceEndSec: 258,
-    label: 'Làm việc trên cao',
+    label: getMonitoringCategory('work-at-height').shortTitle,
     description: 'Thi công trên sàn cao — kiểm tra dây an toàn và mép biên',
   },
   'danger-zone': {
@@ -65,7 +69,7 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 5,
     sourceStartSec: 260,
     sourceEndSec: 270,
-    label: 'Khu vực nguy hiểm',
+    label: getMonitoringCategory('danger-zone').shortTitle,
     description: 'Đứng gần lồng thang máy / miệng hố chưa che chắn',
   },
   traffic: {
@@ -73,7 +77,7 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 5,
     sourceStartSec: 260,
     sourceEndSec: 270,
-    label: 'An toàn giao thông',
+    label: getMonitoringCategory('traffic-safety').shortTitle,
     description: 'Phương tiện di chuyển trong công trường — giám sát tốc độ và điều hướng',
   },
   'method-statement': {
@@ -81,7 +85,7 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 4,
     sourceStartSec: 248,
     sourceEndSec: 258,
-    label: 'Biện pháp thi công',
+    label: getMonitoringCategory('method-statement').shortTitle,
     description: 'Thi công trên cao — kiểm tra lan can, lưới chống rơi theo biện pháp',
   },
   'fire-hot-work': {
@@ -89,8 +93,8 @@ export const VIOLATION_CLIP_MANIFEST: Record<SafetyViolationFeedKey, ViolationCl
     markerSec: 3,
     sourceStartSec: 252,
     sourceEndSec: 262,
-    label: 'PCCC & CV nóng',
-    description: 'Phát hiện hàn cắt, khói hoặc nguồn lửa tại hiện trường',
+    label: formatMonitoringScenarioLabel('fire-hot-work', 0),
+    description: 'Phát hiện hút thuốc ngoài khu vực cho phép',
   },
 }
 

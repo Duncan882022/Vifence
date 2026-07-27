@@ -1,181 +1,163 @@
 import { TrendingDown, TrendingUp } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
-import type { SafetyGroupId, SafetyGroupStats } from '../../types/safety.types'
-import { SAFETY_GROUP_MAP } from '../../data/safetyGroups'
-import { getScenariosForGroup } from '../../data/safetyScenarios'
-import { GROUP_BADGE, GROUP_BAR_COLORS, GROUP_COLORS, GROUP_ICONS } from '../../utils/safetyDashboardUi'
+import type { AlertSeverity, SafetyGroupStats } from '../../types/safety.types'
+import { SAFETY_GROUP_MAP, getGroupDictionaryTooltip } from '../../data/safetyGroups'
+import {
+  GROUP_BADGE,
+  GROUP_BORDER_ACCENT,
+  GROUP_COLORS,
+  GROUP_ICONS,
+  getScenarioIcon,
+  SEVERITY_BADGE,
+  SEVERITY_ICONS,
+  SEVERITY_LABELS_UI,
+} from '../../utils/safetyDashboardUi'
 
 interface SafetyGroupGridProps {
   stats: SafetyGroupStats[]
-  selectedGroupId?: SafetyGroupId | null
-  onSelectGroup?: (groupId: SafetyGroupId | null) => void
 }
 
-function KpiCell({
-  value,
-  label,
-  max,
-  barClassName,
-  valueClassName,
-}: {
-  value: number
-  label: string
-  max: number
-  barClassName: string
-  valueClassName?: string
-}) {
-  return (
-    <div className="flex-1 min-w-0 text-center px-0.5 py-1 rounded bg-[#111827]/80 border border-[#1e2433]/60">
-      <p className={cn('text-[11px] font-bold tabular-nums leading-none', valueClassName ?? 'text-foreground')}>
-        {value}
-      </p>
-      <p className="text-[7px] text-muted-foreground leading-tight mt-0.5 truncate">{label}</p>
-      <div className="mt-1 h-1 rounded-full bg-[#1e2433] overflow-hidden">
-        <div
-          className={cn('h-full rounded-full', barClassName)}
-          style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function GroupScenarioChart({ s }: { s: SafetyGroupStats }) {
-  const catalog = getScenariosForGroup(s.groupId)
-  const activeScenarioCount = s.scenarioBreakdown.filter(item => item.count > 0).length
-  const maxScenario = Math.max(...s.scenarioBreakdown.map(item => item.count), 1)
-  const barColor = GROUP_BAR_COLORS[s.groupId]
+function GroupScenarioTable({ s }: { s: SafetyGroupStats }) {
+  const rows = [...s.scenarioBreakdown].sort((a, b) => {
+    if (a.count > 0 !== b.count > 0) return a.count > 0 ? -1 : 1
+    return b.count - a.count
+  })
 
   return (
-    <div className="flex-1 min-h-0 mt-1.5 flex flex-col overflow-hidden">
-      <p className="text-[7px] font-bold uppercase tracking-wider text-muted-foreground/70 shrink-0 mb-0.5">
-        Kịch bản · {activeScenarioCount}/{catalog.length}
-      </p>
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-0.5 pr-0.5 scrollbar-thin">
-        {s.scenarioBreakdown.map(item => (
-          <div key={item.scenarioId} className="flex items-center gap-1 min-w-0">
-            <div className="w-[26%] shrink-0 h-1 rounded-full bg-[#1e2433] overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all', item.count > 0 ? barColor : 'bg-[#1e2433]')}
-                style={{ width: `${item.count > 0 ? (item.count / maxScenario) * 100 : 0}%` }}
-              />
-            </div>
-            <span
-              className={cn(
-                'text-[7px] truncate flex-1 min-w-0 leading-snug',
-                item.count > 0 ? 'text-muted-foreground' : 'text-muted-foreground/45',
-              )}
-              title={item.name}
+    <div className="flex-1 min-h-0 mt-2 flex flex-col overflow-hidden rounded-md border border-[#1e2433]/80 bg-[#080c14]/60">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-thin">
+        {rows.map(item => {
+          const ScenarioIcon = getScenarioIcon(item.scenarioId)
+          const active = item.count > 0
+          const severity = item.severity as AlertSeverity
+          const SeverityIcon = SEVERITY_ICONS[severity]
+          const countTip = active ? `${item.count} sự kiện` : 'Không có sự kiện'
+
+          return (
+            <div
+              key={item.scenarioId}
+              className="flex items-center gap-1 px-2 py-1.5 border-b border-[#1e2433]/50 last:border-b-0 min-w-0"
             >
-              {item.name}
-            </span>
-            <span className={cn(
-              'text-[7px] font-semibold tabular-nums shrink-0 w-3 text-right',
-              item.count > 0 ? 'text-foreground' : 'text-muted-foreground/40',
-            )}>
-              {item.count}
-            </span>
-          </div>
-        ))}
+              <TagTooltip content={item.name} multiline className="flex items-center gap-1.5 flex-1 min-w-0">
+                {ScenarioIcon && (
+                  <span
+                    className={cn(
+                      'w-5 h-5 rounded-full border flex items-center justify-center shrink-0',
+                      active ? GROUP_BADGE[s.groupId] : 'border-[#1e2433]/60 bg-[#0b0f1a]/80',
+                    )}
+                  >
+                    <ScenarioIcon
+                      className={cn(
+                        'w-2.5 h-2.5',
+                        active ? GROUP_COLORS[s.groupId] : 'text-muted-foreground/35',
+                      )}
+                      aria-hidden
+                    />
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    'text-[8px] leading-snug truncate',
+                    active ? 'text-foreground/95' : 'text-muted-foreground/40',
+                  )}
+                >
+                  {item.name}
+                </span>
+              </TagTooltip>
+
+              <TagTooltip content={countTip} className="shrink-0">
+                <span
+                  className={cn(
+                    'w-7 text-center text-[10px] font-bold tabular-nums',
+                    active ? 'text-foreground' : 'text-muted-foreground/35',
+                  )}
+                >
+                  {item.count}
+                </span>
+              </TagTooltip>
+
+              <span className="w-px h-4 bg-[#1e2433]/90 shrink-0" aria-hidden />
+
+              <TagTooltip content={SEVERITY_LABELS_UI[severity]} className="shrink-0 flex justify-end">
+                <span
+                  className={cn(
+                    'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5',
+                    active
+                      ? SEVERITY_BADGE[severity]
+                      : 'bg-[#1a2235]/30 text-muted-foreground/35 border-[#1e2433]/50',
+                  )}
+                >
+                  <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                  {SEVERITY_LABELS_UI[severity]}
+                </span>
+              </TagTooltip>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function GroupCard({
-  s,
-  selected,
-  onSelect,
-}: {
-  s: SafetyGroupStats
-  selected: boolean
-  onSelect?: (groupId: SafetyGroupId | null) => void
-}) {
+function GroupCard({ s }: { s: SafetyGroupStats }) {
   const group = SAFETY_GROUP_MAP.get(s.groupId)!
   const Icon = GROUP_ICONS[s.groupId]
-  const severityMax = Math.max(s.critical, s.violation, s.warning, 1)
+  const groupTip = getGroupDictionaryTooltip(s.groupId)
+  const trendLabel = s.trend > 0 ? `Tăng ${s.trend} so với hôm qua` : s.trend < 0 ? `Giảm ${Math.abs(s.trend)} so với hôm qua` : 'Không đổi so với hôm qua'
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect?.(selected ? null : s.groupId)}
-      title={group.description}
+    <div
       className={cn(
-        'flex flex-col h-full min-h-0 text-left border rounded-lg p-2 transition-colors overflow-hidden',
-        'bg-[#0b0f1a] hover:border-[#2a3855]',
-        selected ? 'border-primary ring-1 ring-primary/30' : 'border-[#1e2433]',
+        'flex flex-col h-full min-h-0 text-left border border-l-2 rounded-lg p-2 overflow-hidden',
+        'bg-[#0b0f1a] border-[#1e2433]',
+        GROUP_BORDER_ACCENT[s.groupId],
       )}
     >
-      <div className="flex items-start gap-1.5 shrink-0 min-w-0">
-        <Link
-          to={`/module03/group/${s.groupId}`}
-          onClick={e => e.stopPropagation()}
-          title={`Xem chi tiết ${group.name}`}
+      <TagTooltip content={groupTip} multiline className="flex items-start gap-1.5 shrink-0 min-w-0 w-full">
+        <div
           className={cn(
-            'w-7 h-7 rounded-md flex items-center justify-center shrink-0 border transition-colors',
-            'hover:brightness-125 hover:ring-1 hover:ring-primary/40',
+            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border',
             GROUP_BADGE[s.groupId],
           )}
         >
-          <Icon className={cn('w-3.5 h-3.5', GROUP_COLORS[s.groupId])} aria-hidden />
-        </Link>
+          <Icon className={cn('w-4 h-4', GROUP_COLORS[s.groupId])} aria-hidden />
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
-            <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">{s.groupId}</span>
-            <span className={cn(
-              'inline-flex items-center gap-0.5 text-[7px] tabular-nums ml-auto shrink-0',
-              s.trend > 0 ? 'text-red-400' : s.trend < 0 ? 'text-green-400' : 'text-muted-foreground/60',
-            )}>
-              {s.trend > 0 && <TrendingUp className="w-2.5 h-2.5" />}
-              {s.trend < 0 && <TrendingDown className="w-2.5 h-2.5" />}
-              {s.trend > 0 ? `+${s.trend}` : s.trend}
+            <span className="text-[10px] font-bold text-foreground tracking-wide">
+              {s.groupId}
             </span>
+            <TagTooltip content={trendLabel} className="ml-auto shrink-0">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-0.5 text-[8px] font-semibold tabular-nums',
+                  s.trend > 0 ? 'text-red-400' : s.trend < 0 ? 'text-green-400' : 'text-muted-foreground/60',
+                )}
+              >
+                {s.trend > 0 && <TrendingUp className="w-3 h-3" aria-hidden />}
+                {s.trend < 0 && <TrendingDown className="w-3 h-3" aria-hidden />}
+                {s.trend > 0 ? `+${s.trend}` : s.trend}
+              </span>
+            </TagTooltip>
           </div>
-          <p className="text-[9px] font-semibold text-foreground leading-snug line-clamp-2 mt-0.5">{group.name}</p>
+          <p className="text-[8px] text-muted-foreground leading-snug truncate mt-0.5">
+            {group.name}
+          </p>
         </div>
-      </div>
+      </TagTooltip>
 
-      <div className="flex gap-1 mt-auto pt-1.5 shrink-0">
-        <KpiCell
-          value={s.critical}
-          label="Khẩn cấp"
-          max={severityMax}
-          valueClassName="text-red-400"
-          barClassName="bg-red-400/80"
-        />
-        <KpiCell
-          value={s.violation}
-          label="Vi phạm"
-          max={severityMax}
-          valueClassName="text-orange-400"
-          barClassName="bg-orange-400/80"
-        />
-        <KpiCell
-          value={s.warning}
-          label="Cảnh báo"
-          max={severityMax}
-          valueClassName="text-amber-400"
-          barClassName="bg-amber-400/80"
-        />
-      </div>
-
-      <GroupScenarioChart s={s} />
-    </button>
+      <GroupScenarioTable s={s} />
+    </div>
   )
 }
 
-export function SafetyGroupGrid({ stats, selectedGroupId, onSelectGroup }: SafetyGroupGridProps) {
+export function SafetyGroupGrid({ stats }: SafetyGroupGridProps) {
   return (
     <div className="h-full min-h-0 p-2 max-lg:h-auto max-lg:min-h-0 max-lg:overflow-visible lg:overflow-hidden">
       <div className="grid h-full min-h-0 max-lg:h-auto max-lg:grid-flow-row max-lg:auto-rows-min grid-cols-1 min-[480px]:max-lg:grid-cols-2 lg:grid-cols-3 lg:grid-rows-2 gap-2 lg:auto-rows-fr">
         {stats.map(s => (
-          <GroupCard
-            key={s.groupId}
-            s={s}
-            selected={selectedGroupId === s.groupId}
-            onSelect={onSelectGroup}
-          />
+          <GroupCard key={s.groupId} s={s} />
         ))}
       </div>
     </div>

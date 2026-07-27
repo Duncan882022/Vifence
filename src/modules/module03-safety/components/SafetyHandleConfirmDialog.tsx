@@ -20,12 +20,12 @@ export function SafetyHandleConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="w-full max-w-sm rounded-t-xl rounded-b-none sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60 pb-[env(safe-area-inset-bottom)]"
+        className="w-full max-w-sm rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -65,7 +65,7 @@ export function SafetyHandleConfirmDialog({
           </p>
         </div>
 
-        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 px-4 pb-4">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 px-4 pb-4 pt-1">
           <button
             type="button"
             onClick={onClose}

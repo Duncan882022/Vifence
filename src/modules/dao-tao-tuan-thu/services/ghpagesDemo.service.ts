@@ -5,6 +5,9 @@ import type { CameraWithWorker } from '../store/cameraStore.types'
 
 export const IS_GHPAGES = import.meta.env.MODE === 'ghpages'
 
+/** Demo CMS — không yêu cầu đăng nhập (GitHub Pages + dev local) */
+export const IS_DEMO_AUTH = true
+
 export function getGhpagesDemoCameras(): CameraWithWorker[] {
   return MOCK_TRAINING_CAMERAS.map(cam => ({
     id: cam.id,

@@ -19,7 +19,7 @@ import { cn } from '@/utils/cn'
 import { IconTooltip, IconTooltipBadge } from '@/components/common/IconTooltip/IconTooltip'
 import { MetricPercentRing } from '@/components/common/MetricPercentRing/MetricPercentRing'
 import type { SafetyDashboardKpis, SafetyGroupStats } from '../../types/safety.types'
-import { SAFETY_GROUP_MAP } from '../../data/safetyGroups'
+import { getGroupDictionaryTooltip } from '../../data/safetyGroups'
 import { GROUP_BADGE, GROUP_ICONS, SEVERITY_ICONS, SEVERITY_LABELS_UI } from '../../utils/safetyDashboardUi'
 
 interface SafetyKpiStripProps {
@@ -211,13 +211,12 @@ function GroupInsight({ groupStats }: { groupStats: SafetyGroupStats[] }) {
     <div className="flex flex-wrap gap-1">
       {active.map(stat => {
         const Icon = GROUP_ICONS[stat.groupId]
-        const group = SAFETY_GROUP_MAP.get(stat.groupId)
         return (
           <IconTooltipBadge
             key={stat.groupId}
             icon={Icon}
             label={stat.groupId}
-            tip={group?.name ?? stat.groupId}
+            tip={getGroupDictionaryTooltip(stat.groupId)}
             value={stat.total}
             className={GROUP_BADGE[stat.groupId]}
           />

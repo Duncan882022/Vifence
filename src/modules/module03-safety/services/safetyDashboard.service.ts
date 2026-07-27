@@ -1,4 +1,5 @@
 import type {
+  AlertSeverity,
   SafetyDashboardFilters,
   SafetyDashboardKpis,
   SafetyGroupId,
@@ -207,6 +208,21 @@ export function computeDashboardKpis(records: SafetyViolationRecord[]): SafetyDa
 }
 
 /** Thống kê nhóm — cùng nguồn sự kiện hôm nay với `getPriorityAlerts` (Severity + Scenario) */
+function scenarioSeverityForGroup(
+  groupToday: SafetyViolationRecord[],
+  scenarioId: string,
+  fallback: AlertSeverity,
+): AlertSeverity {
+  const items = groupToday.filter(v => v.scenarioId === scenarioId)
+  if (items.length === 0) return fallback
+
+  const rank: Record<AlertSeverity, number> = { CRITICAL: 0, VIOLATION: 1, WARNING: 2 }
+  return items.reduce<AlertSeverity>(
+    (worst, v) => (rank[v.severity] < rank[worst] ? v.severity : worst),
+    items[0].severity,
+  )
+}
+
 export function computeGroupStats(records: SafetyViolationRecord[]): SafetyGroupStats[] {
   const { all: today } = getPriorityAlerts(records)
   const yesterday = records.filter(v => v.detectedAt.startsWith(SAFETY_DEMO_YESTERDAY))
@@ -224,6 +240,7 @@ export function computeGroupStats(records: SafetyViolationRecord[]): SafetyGroup
       scenarioId: sc.id,
       name: sc.name,
       count: scenarioCounts.get(sc.id) ?? 0,
+      severity: scenarioSeverityForGroup(groupToday, sc.id, sc.defaultSeverity),
     }))
 
     return {

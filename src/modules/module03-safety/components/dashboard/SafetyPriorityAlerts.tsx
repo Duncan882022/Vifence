@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Gavel, Loader2, Play } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Clock, Gavel, Loader2, Play, User } from 'lucide-react'
+import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type {
   AlertSeverity,
   SafetyGroupId,
   SafetyViolationRecord,
 } from '../../types/safety.types'
-import { SAFETY_GROUPS } from '../../data/safetyGroups'
+import { SAFETY_GROUPS, getGroupDictionaryTooltip } from '../../data/safetyGroups'
 import { getScenarioName } from '../../data/safetyScenarios'
-import { formatDate, formatTimeShort } from '@/utils/format'
-import { getMonitoringDeviceLabel } from '../../data/monitoringDevices'
+import { formatEventDateTime } from '@/utils/format'
+import { getEventCapturePlace } from '../../utils/safetyCameraBridge'
 import {
   GROUP_BADGE,
+  GROUP_BORDER_ACCENT,
   GROUP_COLORS,
   GROUP_ICONS,
   getAlertCardStatusDisplay,
@@ -20,15 +23,15 @@ import {
   isManualUnhandled,
   AI_AUTO_STATUS_LABEL,
   SEVERITY_BADGE,
+  SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
 } from '../../utils/safetyDashboardUi'
 import {
   getAlertSubjectLabel,
-  getResponsiblePartyLabel,
 } from '../../utils/eventSubject'
-import { ViolationSnapshotThumb } from '../violations/EventSubjectCell'
+import { AlertEventSnapshot } from '../violations/EventSubjectCell'
 
-interface SafetyPriorityAlertsProps {
+interface SafetyEventsPanelProps {
   all: SafetyViolationRecord[]
   warning: SafetyViolationRecord[]
   violation: SafetyViolationRecord[]
@@ -56,16 +59,111 @@ const BATCH_SIZE = 6
 
 function GroupTag({ groupId }: { groupId: SafetyGroupId }) {
   const Icon = GROUP_ICONS[groupId]
-  const group = SAFETY_GROUPS.find(g => g.id === groupId)
 
   return (
     <span
       className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', GROUP_BADGE[groupId])}
-      title={group?.name}
+      title={getGroupDictionaryTooltip(groupId)}
     >
       <Icon className={cn('w-2.5 h-2.5 shrink-0', GROUP_COLORS[groupId])} aria-hidden />
       {groupId}
     </span>
+  )
+}
+
+function SeverityTag({ severity }: { severity: AlertSeverity }) {
+  const Icon = SEVERITY_ICONS[severity]
+
+  return (
+    <span
+      className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', SEVERITY_BADGE[severity])}
+    >
+      <Icon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+      {SEVERITY_LABELS_UI[severity]}
+    </span>
+  )
+}
+
+function StatusTag({
+  label,
+  badgeClassName,
+  icon: StatusIcon,
+}: {
+  label: string
+  badgeClassName: string
+  icon: LucideIcon
+}) {
+  return (
+    <span
+      className={cn(
+        'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5 font-medium max-w-full',
+        badgeClassName,
+      )}
+    >
+      <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+      <span className="truncate">{label}</span>
+    </span>
+  )
+}
+
+function AlertCardActions({
+  aiAutoHandled,
+  handled,
+  handleDisabled,
+  onPlayback,
+  onHandle,
+  v,
+  compact,
+}: {
+  aiAutoHandled: boolean
+  handled: boolean
+  handleDisabled: boolean
+  onPlayback?: (v: SafetyViolationRecord) => void
+  onHandle?: (v: SafetyViolationRecord) => void
+  v: SafetyViolationRecord
+  compact?: boolean
+}) {
+  return (
+    <div className={cn('flex items-center gap-0.5 shrink-0', compact ? 'gap-1' : '')}>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); onPlayback?.(v) }}
+        className={cn(
+          'flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-[#1e2433]/80 transition-colors',
+          compact ? 'min-h-[32px] flex-1 px-2 gap-1.5 border border-[#1e2433]/60' : 'w-7 h-7',
+        )}
+        title="Xem lại"
+      >
+        <Play className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />
+        {compact && <span className="text-[10px] font-medium">Xem lại</span>}
+      </button>
+      <button
+        type="button"
+        disabled={handleDisabled}
+        onClick={e => {
+          e.stopPropagation()
+          if (!handleDisabled) onHandle?.(v)
+        }}
+        className={cn(
+          'flex items-center justify-center rounded-md transition-colors border sm:border-0',
+          compact ? 'min-h-[32px] flex-1 px-2 gap-1.5' : 'w-7 h-7',
+          handleDisabled
+            ? 'opacity-25 cursor-not-allowed pointer-events-none grayscale border-[#1e2433]/40 text-muted-foreground'
+            : 'hover:bg-[#1e2433]/80 text-muted-foreground hover:text-amber-400 border-[#1e2433]/60',
+        )}
+        title={
+          aiAutoHandled
+            ? AI_AUTO_STATUS_LABEL
+            : handled
+              ? 'Đã xử lý'
+              : 'Xử lý'
+        }
+        aria-disabled={handleDisabled}
+      >
+        <Gavel className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />
+        {compact && <span className="text-[10px] font-medium">Xử lý</span>}
+      </button>
+    </div>
   )
 }
 
@@ -84,121 +182,83 @@ function AlertCard({
   const handled = v.status === 'CLOSED'
   const handleDisabled = aiAutoHandled || handled
   const statusDisplay = getAlertCardStatusDisplay(v)
-  const captureDeviceLabel = getMonitoringDeviceLabel(v.sourceDeviceId)
   const confidencePct = v.confidence != null ? Math.round(v.confidence * 100) : null
+  const eventDateTime = formatEventDateTime(v.detectedAt)
+  const eventPlace = getEventCapturePlace(v.sourceDeviceId, v.sourceType, v.zoneId)
 
   return (
-    <div
-      className="flex flex-col sm:flex-row gap-2 p-2.5 sm:p-2 rounded-lg border border-[#1e2433] bg-[#0a0e17] hover:border-[#2a3855] transition-colors cursor-pointer"
+    <article
+      role="button"
+      tabIndex={0}
+      className={cn(
+        'group relative flex flex-col overflow-hidden rounded-lg border border-[#1e2433] border-l-[3px] bg-[#0a0e17]',
+        'hover:border-[#2a3855] hover:bg-[#0c1019] transition-colors cursor-pointer',
+        GROUP_BORDER_ACCENT[v.groupId],
+      )}
       onClick={() => onSelect?.(v)}
       onKeyDown={e => e.key === 'Enter' && onSelect?.(v)}
     >
-      <div className="flex gap-2 sm:contents min-w-0">
-      <div className="flex flex-col items-stretch gap-0.5 shrink-0 w-16 sm:w-14">
-        <ViolationSnapshotThumb record={v} compact className="w-16 h-10 sm:w-14 sm:h-9" />
-        {confidencePct != null && (
-          <p className="text-[7px] text-muted-foreground tabular-nums text-center leading-tight">
-            <span className="text-muted-foreground/70">Độ tin cậy </span>
-            <span className="font-semibold text-foreground/80">{confidencePct}%</span>
-          </p>
-        )}
-      </div>
+      <div className="flex gap-3 p-2.5 min-w-0 items-stretch">
+        <AlertEventSnapshot
+          record={v}
+          confidencePct={confidencePct ?? undefined}
+          className="self-stretch"
+        />
 
-      <div className="min-w-0 flex-1 flex flex-col gap-1">
-        <div className="flex items-center gap-1">
-          <GroupTag groupId={v.groupId} />
-          <span className={cn('text-[8px] px-1 py-0.5 rounded border', SEVERITY_BADGE[v.severity])}>
-            {SEVERITY_LABELS_UI[v.severity]}
-          </span>
-        </div>
+        <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-1 min-w-0">
+              <GroupTag groupId={v.groupId} />
+              <SeverityTag severity={v.severity} />
+              <StatusTag
+                label={statusDisplay.label}
+                badgeClassName={statusDisplay.badgeClassName}
+                icon={statusDisplay.icon}
+              />
+            </div>
+            <AlertCardActions
+              v={v}
+              aiAutoHandled={aiAutoHandled}
+              handled={handled}
+              handleDisabled={handleDisabled}
+              onPlayback={onPlayback}
+              onHandle={onHandle}
+            />
+          </div>
 
-        <p className="text-[10px] font-medium text-foreground leading-snug line-clamp-2">
-          {getScenarioName(v.scenarioId)}
-        </p>
+          <h3 className="text-[11px] font-semibold text-foreground leading-snug line-clamp-2 pr-1">
+            {getScenarioName(v.scenarioId)}
+          </h3>
 
-        <p className="text-[8px] text-muted-foreground leading-tight">
-          <span className="text-muted-foreground/70">Đối tượng </span>
-          <span className="text-foreground/90 font-medium">{getAlertSubjectLabel(v)}</span>
-        </p>
-
-        <p className="text-[8px] text-muted-foreground leading-snug">
-          <span className="sm:hidden block">
-            {formatDate(v.detectedAt)}
-            <span className="text-muted-foreground/40 mx-1">·</span>
-            {formatTimeShort(v.detectedAt)}
-          </span>
-          <span className="hidden sm:inline">
-            {formatDate(v.detectedAt)}
-            <span className="text-muted-foreground/40 mx-1">·</span>
-            {formatTimeShort(v.detectedAt)}
-            <span className="text-muted-foreground/40 mx-1">·</span>
-            <span className="text-foreground/80">{captureDeviceLabel}</span>
-          </span>
-          <span className="sm:hidden block text-foreground/80 truncate">{captureDeviceLabel}</span>
-        </p>
-
-        <p className="text-[8px] text-muted-foreground leading-tight">
-          <span className="text-muted-foreground/70">Đơn vị </span>
-          <span className="text-foreground/90">{getResponsiblePartyLabel(v)}</span>
-        </p>
-
-        <div className="flex items-center gap-1.5 flex-wrap pt-1 mt-0.5 border-t border-[#1e2433]/80">
-          <span className="text-[7px] text-muted-foreground/70 uppercase tracking-wider">Trạng thái</span>
-          <span className={cn('text-[8px] px-1 py-0.5 rounded', statusDisplay.badgeClassName)}>
-            {statusDisplay.label}
-          </span>
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <User className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
+              <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
+                {getAlertSubjectLabel(v)}
+              </p>
+            </div>
+            <div className="flex items-start gap-1.5 min-w-0">
+              <Clock className="w-2.5 h-2.5 shrink-0 mt-px text-muted-foreground/45" aria-hidden />
+              <p className="text-[8px] min-w-0 leading-snug">
+                <span className="tabular-nums text-foreground/80">{eventDateTime}</span>
+                <span className="text-muted-foreground/30 mx-1">·</span>
+                <span className="text-foreground/70">{eventPlace}</span>
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-      </div>
-
-      <div className="flex sm:flex-col gap-1.5 sm:gap-1 shrink-0 sm:shrink-0 border-t sm:border-t-0 border-[#1e2433]/80 pt-2 sm:pt-0 sm:self-start">
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); onPlayback?.(v) }}
-          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-0 min-h-[36px] sm:min-h-0 p-2 sm:p-1 rounded-lg sm:rounded hover:bg-[#1e2433] text-muted-foreground hover:text-primary border border-[#1e2433]/60 sm:border-0"
-          title="Xem lại"
-        >
-          <Play className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-          <span className="text-[10px] font-medium sm:hidden">Xem lại</span>
-        </button>
-        <button
-          type="button"
-          disabled={handleDisabled}
-          onClick={e => {
-            e.stopPropagation()
-            if (!handleDisabled) onHandle?.(v)
-          }}
-          className={cn(
-            'flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-0 min-h-[36px] sm:min-h-0 p-2 sm:p-1 rounded-lg sm:rounded transition-opacity border sm:border-0',
-            handleDisabled
-              ? 'opacity-25 cursor-not-allowed pointer-events-none grayscale border-[#1e2433]/40'
-              : 'hover:bg-[#1e2433] text-muted-foreground hover:text-amber-400 border-[#1e2433]/60',
-          )}
-          title={
-            aiAutoHandled
-              ? AI_AUTO_STATUS_LABEL
-              : handled
-                ? 'Đã xử lý'
-                : 'Xử lý'
-          }
-          aria-disabled={handleDisabled}
-        >
-          <Gavel className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-          <span className="text-[10px] font-medium sm:hidden">Xử lý</span>
-        </button>
-      </div>
-    </div>
+    </article>
   )
 }
 
-export function SafetyPriorityAlerts({
+export function SafetyEventsPanel({
   all, warning, violation, critical,
   selectedGroupId = null,
   onPlayback, onSelect, onHandle,
-}: SafetyPriorityAlertsProps) {
+}: SafetyEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<AlertFilterTab>('all')
   const [groupQuickFilters, setGroupQuickFilters] = useState<Set<SafetyGroupId>>(new Set())
-  const [quickOpen, setQuickOpen] = useState(false)
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
   const [loading, setLoading] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -297,9 +357,46 @@ export function SafetyPriorityAlerts({
     })
   }
 
-  const clearGroupQuick = () => setGroupQuickFilters(new Set())
+  const groupFilterBar = (
+    <div className="flex flex-wrap gap-1 px-2 py-1.5 border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none">
+      {SAFETY_GROUPS.map(g => {
+        const Icon = GROUP_ICONS[g.id]
+        const active = groupQuickFilters.has(g.id)
+        const count = groupCounts[g.id]
+
+        return (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => toggleGroupQuick(g.id)}
+            title={getGroupDictionaryTooltip(g.id)}
+            disabled={count === 0 && !active}
+            className={cn(
+              'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-colors tabular-nums shrink-0',
+              active
+                ? GROUP_BADGE[g.id]
+                : count > 0
+                  ? 'border-[#1e2433] text-muted-foreground hover:border-[#2a3855] hover:text-foreground'
+                  : 'border-[#1e2433]/50 text-muted-foreground/40 cursor-default',
+            )}
+            aria-pressed={active}
+          >
+            <Icon className={cn('w-2.5 h-2.5 shrink-0', active || count > 0 ? GROUP_COLORS[g.id] : 'opacity-40')} aria-hidden />
+            {g.id}
+            {count > 0 && <span>{count}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
 
   return (
+    <Panel
+      title="Sự kiện"
+      noPadding
+      expandable
+      className="flex-1 min-h-0 max-lg:!h-auto max-lg:min-h-[320px] overflow-hidden h-full"
+    >
     <div className="flex flex-col h-full min-h-0">
       <div className="flex border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none overscroll-x-contain snap-x snap-mandatory">
         {FILTER_TABS.map(t => {
@@ -327,74 +424,17 @@ export function SafetyPriorityAlerts({
         })}
       </div>
 
-      <div className="px-2 py-1 border-b border-[#1e2433] shrink-0">
-        <button
-          type="button"
-          onClick={() => setQuickOpen(o => !o)}
-          className="flex items-center gap-1 text-[8px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          Quick Filter · Nhóm ATLĐ
-          {groupQuickFilters.size > 0 && (
-            <span className="normal-case tracking-normal font-bold text-primary tabular-nums">{groupQuickFilters.size}</span>
-          )}
-          <ChevronDown className={cn('w-3 h-3 transition-transform', quickOpen && 'rotate-180')} />
-        </button>
-        {quickOpen && (
-          <div className="flex flex-wrap gap-1 mt-1.5 pb-0.5">
-            <button
-              type="button"
-              onClick={clearGroupQuick}
-              className={cn(
-                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-colors tabular-nums',
-                groupQuickFilters.size === 0
-                  ? 'bg-primary/15 text-primary border-primary/40'
-                  : 'border-[#1e2433] text-muted-foreground hover:border-[#2a3855] hover:text-foreground',
-              )}
-              aria-pressed={groupQuickFilters.size === 0}
-            >
-              Tất cả
-            </button>
-            {SAFETY_GROUPS.map(g => {
-              const Icon = GROUP_ICONS[g.id]
-              const active = groupQuickFilters.has(g.id)
-              const count = groupCounts[g.id]
-
-              return (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => toggleGroupQuick(g.id)}
-                  title={g.name}
-                  disabled={count === 0 && !active}
-                  className={cn(
-                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-colors tabular-nums',
-                    active
-                      ? GROUP_BADGE[g.id]
-                      : count > 0
-                        ? 'border-[#1e2433] text-muted-foreground hover:border-[#2a3855] hover:text-foreground'
-                        : 'border-[#1e2433]/50 text-muted-foreground/40 cursor-default',
-                  )}
-                  aria-pressed={active}
-                >
-                  <Icon className={cn('w-2.5 h-2.5 shrink-0', active || count > 0 ? GROUP_COLORS[g.id] : 'opacity-40')} aria-hidden />
-                  {g.id}
-                  {count > 0 && <span>{count}</span>}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      {groupFilterBar}
 
       <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3">
         {empty ? (
-          <p className="text-[10px] text-muted-foreground text-center py-8">Không có cảnh báo</p>
+          <p className="text-[10px] text-muted-foreground text-center py-8">Không có sự kiện</p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
             Không có mục phù hợp bộ lọc
           </p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {visibleItems.map(v => (
               <AlertCard key={v.id} v={v} onPlayback={onPlayback} onSelect={onSelect} onHandle={onHandle} />
             ))}
@@ -410,7 +450,7 @@ export function SafetyPriorityAlerts({
             {!hasMore && (
               <div className="flex items-center justify-center py-3">
                 <span className="text-[9px] text-muted-foreground/35">
-                  — {activeItems.length} cảnh báo —
+                  — {activeItems.length} sự kiện —
                 </span>
               </div>
             )}
@@ -418,5 +458,9 @@ export function SafetyPriorityAlerts({
         )}
       </div>
     </div>
+    </Panel>
   )
 }
+
+/** @deprecated — dùng SafetyEventsPanel */
+export const SafetyPriorityAlerts = SafetyEventsPanel

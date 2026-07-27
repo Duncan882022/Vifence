@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  AlertTriangle, ArrowUpFromLine, Bell, Car, Construction, Flame, HardHat,
-  ShieldX, Siren,
+  AlertTriangle, ArrowUpFromLine, Bell, Bot, Car, CircleCheck, Clock, Construction, Flame, HardHat, ShieldX, Siren, Volume2,
 } from 'lucide-react'
-import type { SafetyGroupId, SafetyViolationRecord, ZoneRiskLevel } from '../types/safety.types'
+import type { AlertSeverity, SafetyGroupId, SafetyViolationRecord, ZoneRiskLevel } from '../types/safety.types'
+
+export { SCENARIO_ICONS, getScenarioIcon } from '../data/safetyScenarioIcons'
 
 export const GROUP_ICONS: Record<SafetyGroupId, LucideIcon> = {
   PPE: HardHat,
@@ -41,6 +42,21 @@ export const GROUP_BADGE: Record<SafetyGroupId, string> = {
   PCCC: 'bg-red-500/10 text-red-400 border-red-500/30',
 }
 
+export const GROUP_BORDER_ACCENT: Record<SafetyGroupId, string> = {
+  PPE: 'border-l-sky-500/50',
+  WAH: 'border-l-orange-500/50',
+  DZ: 'border-l-amber-500/50',
+  ATGT: 'border-l-cyan-500/50',
+  BPTC: 'border-l-violet-500/50',
+  PCCC: 'border-l-red-500/50',
+}
+
+export const SEVERITY_BORDER_ACCENT: Record<AlertSeverity, string> = {
+  WARNING: 'border-l-amber-500/55',
+  VIOLATION: 'border-l-orange-500/55',
+  CRITICAL: 'border-l-red-500/55',
+}
+
 export const ZONE_RISK_COLORS: Record<ZoneRiskLevel, { fill: string; stroke: string; label: string }> = {
   NORMAL: { fill: '#22c55e', stroke: '#4ade80', label: 'Bình thường' },
   WARNING: { fill: '#eab308', stroke: '#facc15', label: 'Có cảnh báo' },
@@ -59,6 +75,19 @@ export const SEVERITY_LABELS_UI: Record<string, string> = {
   WARNING: 'Cảnh báo',
   VIOLATION: 'Vi phạm',
   CRITICAL: 'Khẩn cấp',
+}
+
+/** Nhãn cột Mức độ — uppercase giống mock BOD */
+export const SEVERITY_LABELS_UPPER: Record<AlertSeverity, string> = {
+  WARNING: 'Cảnh báo',
+  VIOLATION: 'Vi phạm',
+  CRITICAL: 'Khẩn cấp',
+}
+
+export const SEVERITY_DOT: Record<AlertSeverity, string> = {
+  WARNING: 'bg-amber-400',
+  VIOLATION: 'bg-orange-400',
+  CRITICAL: 'bg-red-400',
 }
 
 export const SEVERITY_ICONS: Record<'CRITICAL' | 'VIOLATION' | 'WARNING', LucideIcon> = {
@@ -96,6 +125,22 @@ export const AUTOMATION_BADGE: Record<string, string> = {
   HSE_VERIFICATION: 'bg-violet-500/15 text-violet-400 border-violet-500/30',
 }
 
+export type AlertHandlingBucket = 'ai_auto' | 'ai_speaker' | 'handled' | 'unhandled'
+
+export const ALERT_HANDLING_ICONS: Record<AlertHandlingBucket, LucideIcon> = {
+  ai_auto: Bot,
+  ai_speaker: Volume2,
+  handled: CircleCheck,
+  unhandled: Clock,
+}
+
+export const ALERT_HANDLING_BADGE: Record<AlertHandlingBucket, string> = {
+  ai_auto: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  ai_speaker: 'bg-red-500/10 text-red-400 border-red-500/30',
+  handled: 'bg-green-500/10 text-green-400 border-green-500/30',
+  unhandled: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+}
+
 /** PPE + Hút thuốc — AI tự xử lý, không giao HSE thủ công */
 export const SMOKING_SCENARIO_ID = 'PCCC-001'
 export const AI_AUTO_STATUS_LABEL = 'AI xử lý tự động'
@@ -110,8 +155,6 @@ export const UNHANDLED_STATUS_BADGE = 'bg-amber-500/15 text-amber-400'
 export const AI_SPEAKER_STATUS_LABEL = 'AI xử lý qua Loa'
 export const AI_SPEAKER_STATUS_BADGE = 'bg-red-500/15 text-red-400'
 /** @deprecated */ export const CRITICAL_SPEAKER_ALERT_LABEL = AI_SPEAKER_STATUS_LABEL
-
-export type AlertHandlingBucket = 'ai_auto' | 'ai_speaker' | 'handled' | 'unhandled'
 
 export function isAiAutoHandled(
   record: Pick<SafetyViolationRecord, 'groupId' | 'scenarioId'>,
@@ -140,16 +183,18 @@ export function getAlertHandlingStatus(
 
 export function getAlertCardStatusDisplay(
   record: Pick<SafetyViolationRecord, 'groupId' | 'scenarioId' | 'severity' | 'status'>,
-): { label: string; badgeClassName: string } {
-  switch (getAlertHandlingStatus(record)) {
-    case 'ai_auto':
-      return { label: AI_AUTO_STATUS_LABEL, badgeClassName: AI_AUTO_STATUS_BADGE }
-    case 'ai_speaker':
-      return { label: AI_SPEAKER_STATUS_LABEL, badgeClassName: AI_SPEAKER_STATUS_BADGE }
-    case 'handled':
-      return { label: HANDLED_STATUS_LABEL, badgeClassName: HANDLED_STATUS_BADGE }
-    case 'unhandled':
-      return { label: UNHANDLED_STATUS_LABEL, badgeClassName: UNHANDLED_STATUS_BADGE }
+): { label: string; badgeClassName: string; icon: LucideIcon } {
+  const bucket = getAlertHandlingStatus(record)
+  const labels: Record<AlertHandlingBucket, string> = {
+    ai_auto: AI_AUTO_STATUS_LABEL,
+    ai_speaker: AI_SPEAKER_STATUS_LABEL,
+    handled: HANDLED_STATUS_LABEL,
+    unhandled: UNHANDLED_STATUS_LABEL,
+  }
+  return {
+    label: labels[bucket],
+    badgeClassName: ALERT_HANDLING_BADGE[bucket],
+    icon: ALERT_HANDLING_ICONS[bucket],
   }
 }
 

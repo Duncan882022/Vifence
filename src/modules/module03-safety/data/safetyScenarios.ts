@@ -1,12 +1,15 @@
-import type { SafetyScenario } from '../types/safety.types'
+import type { SafetyGroupId, SafetyScenario } from '../types/safety.types'
+import { getDictionaryCategoryForGroup, GROUP_TO_VIOLATION_TYPE } from './safetyGroups'
+import { getDictionaryScenarioName } from './safetyMonitoringDictionary'
 import { SCENARIO_EVENT_SUBJECT } from './scenarioEventSubjects'
 
-/** 19 kịch bản — mức mặc định: 8 Khẩn cấp, 11 Vi phạm, 0 Cảnh báo (Cảnh báo = Pre-Alert AI, ngoài catalog) */
-const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
+/** Metadata kịch bản — tên hiển thị lấy từ `SAFETY_MONITORING_DICTIONARY.scenarios` */
+type RawScenarioDef = Omit<SafetyScenario, 'eventSubjectType' | 'name'>
+
+const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   {
     id: 'PPE-001',
     groupId: 'PPE',
-    name: 'Không đội mũ bảo hộ',
     description: 'Phát hiện người lao động không đội mũ bảo hộ trong vùng bắt buộc',
     monitoringModes: ['CONTINUOUS'],
     automationLevel: 'AUTOMATIC',
@@ -16,7 +19,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'PPE-002',
     groupId: 'PPE',
-    name: 'Không mặc áo bảo hộ',
     description: 'Phát hiện không mặc áo phản quang hoặc áo bảo hộ',
     monitoringModes: ['CONTINUOUS'],
     automationLevel: 'AUTOMATIC',
@@ -26,7 +28,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'PPE-003',
     groupId: 'PPE',
-    name: 'Không mang giày bảo hộ',
     description: 'Phát hiện giày không đạt hoặc không mang giày bảo hộ',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
@@ -36,7 +37,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'WAH-001',
     groupId: 'WAH',
-    name: 'Không sử dụng dây an toàn tại mép biên',
     description: 'Người lao động làm việc gần mép biên không có dây an toàn',
     monitoringModes: ['CONTINUOUS', 'HYBRID'],
     automationLevel: 'HSE_VERIFICATION',
@@ -46,7 +46,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'WAH-002',
     groupId: 'WAH',
-    name: 'Quăng, ném vật liệu từ trên cao',
     description: 'Phát hiện ném hoặc thả vật liệu từ cao độ',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
@@ -56,7 +55,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'WAH-003',
     groupId: 'WAH',
-    name: 'Không đeo hoặc không móc dây an toàn khi làm việc trên cao',
     description: 'Có dây nhưng không móc vào điểm neo hoặc không đeo',
     monitoringModes: ['CONTINUOUS', 'HYBRID'],
     automationLevel: 'HSE_VERIFICATION',
@@ -66,7 +64,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'DZ-001',
     groupId: 'DZ',
-    name: 'Đất đào hoặc vật tư cách mép hố < 0,5 m',
     description: 'Vật tư hoặc đất đào vi phạm khoảng cách an toàn mép hố',
     monitoringModes: ['SCHEDULED_PATROL', 'CHANGE_DETECTION'],
     automationLevel: 'AI_ASSISTED',
@@ -76,7 +73,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'DZ-002',
     groupId: 'DZ',
-    name: 'Không bố trí biển báo hoặc cờ cảnh báo hố sâu',
     description: 'Khu vực hố sâu thiếu biển báo hoặc cờ cảnh báo',
     monitoringModes: ['SCHEDULED_PATROL', 'CHANGE_DETECTION'],
     automationLevel: 'AI_ASSISTED',
@@ -86,7 +82,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'ATGT-001',
     groupId: 'ATGT',
-    name: 'Không bố trí người điều hướng giao thông',
     description: 'Phương tiện vào vùng yêu cầu nhưng không có người điều hướng',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
@@ -96,7 +91,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'ATGT-002',
     groupId: 'ATGT',
-    name: 'Phương tiện vượt tốc độ quy định',
     description: 'Radar hoặc AI phát hiện vượt tốc độ nội bộ',
     monitoringModes: ['CONTINUOUS'],
     automationLevel: 'AUTOMATIC',
@@ -106,7 +100,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'ATGT-003',
     groupId: 'ATGT',
-    name: 'Không bố trí đèn đỏ, biển báo hoặc cảnh báo giao thông',
     description: 'Khu vực giao thông nội bộ thiếu đèn đỏ, biển báo hoặc cảnh báo',
     monitoringModes: ['SCHEDULED_PATROL', 'CHANGE_DETECTION'],
     automationLevel: 'AI_ASSISTED',
@@ -116,7 +109,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'ATGT-004',
     groupId: 'ATGT',
-    name: 'Không tổ chức phân làn, phân luồng giao thông',
     description: 'Hiện trường chưa phân làn, phân luồng theo phương án được phê duyệt',
     monitoringModes: ['SCHEDULED_PATROL', 'CHANGE_DETECTION'],
     automationLevel: 'AI_ASSISTED',
@@ -126,7 +118,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'BPTC-001',
     groupId: 'BPTC',
-    name: 'Giáo hoặc lưới bao che không đúng quy định',
     description: 'Lưới bao che chưa đủ hoặc hở — lỗi hiện trạng công trường',
     monitoringModes: ['SCHEDULED_PATROL', 'CHANGE_DETECTION'],
     automationLevel: 'AI_ASSISTED',
@@ -136,7 +127,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'BPTC-002',
     groupId: 'BPTC',
-    name: 'Cẩu vật tư trực tiếp lên ban công, không có sàn tiếp nhận',
     description: 'Vật liệu được cẩu thẳng lên cao không qua sàn tiếp liệu',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AI_ASSISTED',
@@ -146,7 +136,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'BPTC-003',
     groupId: 'BPTC',
-    name: 'Sàn tiếp liệu trên cao ≥ 6 m không đúng biện pháp',
     description: 'Sàn tiếp liệu từ cao độ 6 m trở lên không đúng biện pháp treo',
     monitoringModes: ['PRE_WORK_INSPECTION', 'SCHEDULED_PATROL'],
     automationLevel: 'HSE_VERIFICATION',
@@ -156,7 +145,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'BPTC-004',
     groupId: 'BPTC',
-    name: 'Hàn, cắt không có che chắn',
     description: 'Công việc hàn cắt thiếu màn che tia lửa',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AI_ASSISTED',
@@ -166,7 +154,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'BPTC-005',
     groupId: 'BPTC',
-    name: 'Thi công kết cấu thép, lợp mái không có lưới chống rơi',
     description: 'Thiếu lưới chống rơi tại khu vực thi công thép/mái',
     monitoringModes: ['PRE_WORK_INSPECTION', 'SCHEDULED_PATROL'],
     automationLevel: 'AI_ASSISTED',
@@ -176,7 +163,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'BPTC-006',
     groupId: 'BPTC',
-    name: 'Thi công trên cao không có dây cứu sinh, lan can hoặc sàn thao tác',
     description: 'Thiếu lan can, dây cứu sinh hoặc sàn thao tác — lỗi hiện trạng',
     monitoringModes: ['PRE_WORK_INSPECTION', 'SCHEDULED_PATROL'],
     automationLevel: 'HSE_VERIFICATION',
@@ -186,7 +172,6 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   {
     id: 'PCCC-001',
     groupId: 'PCCC',
-    name: 'Hút thuốc không đúng nơi quy định',
     description: 'Phát hiện hút thuốc ngoài khu vực cho phép',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
@@ -195,10 +180,43 @@ const RAW_SCENARIOS: Omit<SafetyScenario, 'eventSubjectType'>[] = [
   },
 ]
 
-export const SAFETY_SCENARIOS: SafetyScenario[] = RAW_SCENARIOS.map(s => ({
-  ...s,
-  eventSubjectType: SCENARIO_EVENT_SUBJECT[s.id] ?? 'PERSON',
-}))
+function buildScenariosFromDictionary(defs: RawScenarioDef[]): SafetyScenario[] {
+  const indexByGroup = new Map<SafetyGroupId, number>()
+
+  return defs.map(def => {
+    const index = indexByGroup.get(def.groupId) ?? 0
+    indexByGroup.set(def.groupId, index + 1)
+
+    const violationType = GROUP_TO_VIOLATION_TYPE[def.groupId]
+    const dictName = getDictionaryScenarioName(violationType, index)
+
+    if (import.meta.env.DEV && !dictName) {
+      console.warn(`[safetyScenarios] Thiếu tên dictionary cho ${def.id} (${def.groupId}[${index}])`)
+    }
+
+    return {
+      ...def,
+      name: dictName ?? def.id,
+      eventSubjectType: SCENARIO_EVENT_SUBJECT[def.id] ?? 'PERSON',
+      description: def.description,
+    }
+  })
+}
+
+if (import.meta.env.DEV) {
+  const GROUP_IDS: SafetyGroupId[] = ['PPE', 'WAH', 'DZ', 'ATGT', 'BPTC', 'PCCC']
+  for (const groupId of GROUP_IDS) {
+    const cat = getDictionaryCategoryForGroup(groupId)
+    const count = RAW_SCENARIO_DEFS.filter(d => d.groupId === groupId).length
+    if (cat && count !== cat.scenarios.length) {
+      console.error(
+        `[safetyScenarios] ${groupId}: ${count} kịch bản code ≠ ${cat.scenarios.length} trong dictionary`,
+      )
+    }
+  }
+}
+
+export const SAFETY_SCENARIOS: SafetyScenario[] = buildScenariosFromDictionary(RAW_SCENARIO_DEFS)
 
 export const SAFETY_SCENARIO_MAP = new Map(SAFETY_SCENARIOS.map(s => [s.id, s]))
 

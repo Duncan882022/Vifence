@@ -177,3 +177,27 @@ export const SAFETY_MONITORING_BY_TYPE: Record<ViolationType, SafetyMonitoringCa
 export function getMonitoringCategory(type: ViolationType): SafetyMonitoringCategory {
   return SAFETY_MONITORING_BY_TYPE[type]
 }
+
+/** Tên kịch bản theo thứ tự trong dictionary (0-based) */
+export function getDictionaryScenarioName(
+  violationType: ViolationType,
+  index: number,
+): string | undefined {
+  return SAFETY_MONITORING_BY_TYPE[violationType]?.scenarios[index]
+}
+
+/** Nhãn hiển thị: `{shortTitle} — {kịch bản}` */
+export function formatMonitoringScenarioLabel(
+  violationType: ViolationType,
+  scenarioIndex: number,
+): string {
+  const cat = getMonitoringCategory(violationType)
+  const scenario = getDictionaryScenarioName(violationType, scenarioIndex) ?? cat.shortTitle
+  return `${cat.shortTitle} — ${scenario}`
+}
+
+/** Tooltip nhóm: `{title} — {goal}` */
+export function formatMonitoringGroupTooltip(violationType: ViolationType): string {
+  const cat = getMonitoringCategory(violationType)
+  return `${cat.title} — ${cat.goal}`
+}

@@ -2,16 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { User, ChevronDown, BookOpen, FileBarChart, Users, Building2, Camera, UserCog, Shield, Check, Lock } from 'lucide-react'
 import { useAppStore } from '@/store/app.store'
+import { TENANTS } from '@/data/tenants'
+import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
+import { useTenantStore } from '@/store/tenant.store'
+import { IS_DEMO_AUTH } from '@/modules/dao-tao-tuan-thu/services/ghpagesDemo.service'
 import { cn } from '@/utils/cn'
-
-const SITES = [
-  { id: 'ocp1', label: 'OCP1', active: false },
-  { id: 'ocp2', label: 'OCP2', active: true },
-  { id: 'halong', label: 'Hạ Long Xanh', active: false },
-  { id: 'olympic', label: 'Làng Olympic', active: false },
-  { id: 'cangio', label: 'Cần Giờ', active: false },
-  { id: 'vungang', label: 'Vũng Áng', active: false },
-]
 
 const MENU_ITEMS = [
   {
@@ -53,6 +48,8 @@ const MENU_ITEMS = [
 
 export function UserMenu() {
   const { user } = useAppStore()
+  const { activeTenantId, tenantName } = useActiveTenant()
+  const setActiveTenant = useTenantStore(s => s.setActiveTenant)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -90,7 +87,7 @@ export function UserMenu() {
         <div className="hidden sm:block min-w-0 text-left">
           <p className="text-xs font-semibold text-foreground leading-tight truncate">{user?.name || 'Nguyễn Quản Lý'}</p>
           <p className="text-[10px] text-muted-foreground leading-tight truncate">
-            OCP2
+            {tenantName}
           </p>
         </div>
         <ChevronDown className={cn(
@@ -130,29 +127,41 @@ export function UserMenu() {
             Công trường
           </div>
           <div className="space-y-0.5 mt-1">
-            {SITES.map(site => (
+            {TENANTS.map(site => {
+              const enabled = site.hasDemoData
+              const selected = site.id === activeTenantId
+
+              return (
               <button
                 key={site.id}
                 type="button"
-                disabled={!site.active}
+                disabled={!enabled}
+                onClick={() => {
+                  if (!enabled) return
+                  setActiveTenant(site.id)
+                  setOpen(false)
+                }}
                 className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-medium transition-colors",
-                  site.active 
-                    ? "text-foreground hover:bg-[#1a2235]" 
-                    : "text-muted-foreground/35 cursor-not-allowed"
+                  'w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-medium transition-colors',
+                  enabled
+                    ? selected
+                      ? 'text-foreground bg-[#1a2235]/60'
+                      : 'text-foreground hover:bg-[#1a2235]'
+                    : 'text-muted-foreground/35 cursor-not-allowed',
                 )}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                  <span>{site.label}</span>
+                  <span className="truncate">{site.name}</span>
                 </div>
-                {site.active ? (
+                {selected ? (
                   <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                ) : (
+                ) : enabled ? null : (
                   <Lock className="w-3 h-3 text-muted-foreground/20 shrink-0" />
                 )}
               </button>
-            ))}
+              )
+            })}
           </div>
 
           <div className="h-px bg-[#1e2433] my-2" />
@@ -179,33 +188,36 @@ export function UserMenu() {
             ))}
           </div>
           
-          <div className="h-px bg-[#1e2433] my-2" />
-          
-          <button
-            type="button"
-            role="menuitem"
-            onClick={async () => {
-              setOpen(false)
-              try {
-                const axiosInstance = (await import('@/utils/axios')).default
-                await axiosInstance.post('/auth/signout')
-              } catch (e) {
-                console.error('Signout failed, clearing session locally', e)
-              } finally {
-                localStorage.removeItem('vifence_access_token')
-                localStorage.removeItem('vifence_refresh_token')
-                const { useAppStore } = await import('@/store/app.store')
-                useAppStore.getState().setUser(null)
-                navigate('/signin')
-              }
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[11px] font-medium text-status-danger hover:bg-[#1a2235] transition-colors"
-          >
-            <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-log-out"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            </span>
-            Đăng xuất
-          </button>
+          {!IS_DEMO_AUTH && (
+            <>
+              <div className="h-px bg-[#1e2433] my-2" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={async () => {
+                  setOpen(false)
+                  try {
+                    const axiosInstance = (await import('@/utils/axios')).default
+                    await axiosInstance.post('/auth/signout')
+                  } catch (e) {
+                    console.error('Signout failed, clearing session locally', e)
+                  } finally {
+                    localStorage.removeItem('vifence_access_token')
+                    localStorage.removeItem('vifence_refresh_token')
+                    const { useAppStore } = await import('@/store/app.store')
+                    useAppStore.getState().setUser(null)
+                    navigate('/signin')
+                  }
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[11px] font-medium text-status-danger hover:bg-[#1a2235] transition-colors"
+              >
+                <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-log-out"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                </span>
+                Đăng xuất
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

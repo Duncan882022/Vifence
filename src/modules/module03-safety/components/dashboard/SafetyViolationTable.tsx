@@ -7,6 +7,8 @@ import { getZoneName } from '../../data/safetyZones'
 import { DEVICE_TYPE_LABELS } from '../../data/monitoringDevices'
 import {
   AUTOMATION_BADGE, formatSla, getAlertCardStatusDisplay, isAiAutoHandled, SEVERITY_BADGE,
+  SEVERITY_ICONS,
+  SEVERITY_LABELS_UI,
 } from '../../utils/safetyDashboardUi'
 import { formatDateTime } from '@/utils/format'
 import { EventSubjectCell } from '../violations/EventSubjectCell'
@@ -207,6 +209,8 @@ export function SafetyViolationTable({
               const selected = selectedId === v.id
               const statusDisplay = getAlertCardStatusDisplay(v)
               const aiAutoHandled = isAiAutoHandled(v)
+              const StatusIcon = statusDisplay.icon
+              const SeverityIcon = SEVERITY_ICONS[v.severity]
               const contractor = getSubject(v).contractorName ?? getSubject(v).siteContractor ?? v.contractorName
 
               return (
@@ -230,12 +234,14 @@ export function SafetyViolationTable({
                   <td className="px-2 py-1.5 text-[9px] text-foreground max-w-[130px] truncate align-top">{getScenarioName(v.scenarioId)}</td>
                   <td className="px-2 py-1.5 text-[9px] text-muted-foreground whitespace-nowrap align-top">{DEVICE_TYPE_LABELS[v.sourceType]}</td>
                   <td className="px-2 py-1.5 align-top">
-                    <span className={cn('text-[8px] px-1 py-0.5 rounded border', SEVERITY_BADGE[v.severity])}>
-                      {v.severity === 'CRITICAL' ? 'Khẩn cấp' : v.severity === 'VIOLATION' ? 'Vi phạm' : 'Cảnh báo'}
+                    <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', SEVERITY_BADGE[v.severity])}>
+                      <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                      {SEVERITY_LABELS_UI[v.severity]}
                     </span>
                   </td>
                   <td className="px-2 py-1.5 align-top">
-                    <span className={cn('text-[8px] px-1 py-0.5 rounded', statusDisplay.badgeClassName)}>
+                    <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', statusDisplay.badgeClassName)}>
+                      <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
                       {statusDisplay.label}
                     </span>
                     {scenario && (

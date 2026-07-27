@@ -221,6 +221,7 @@ function buildTodayCatalog(): SafetyViolationRecord[] {
       status,
       dueAt,
       deviceIdx: i,
+      ...(scenario.id === 'PPE-002' ? { severity: 'WARNING' as const } : {}),
       confidence: scenario.automationLevel === 'HSE_VERIFICATION' ? 0.62 + (i % 10) * 0.03 : undefined,
       ...subjectOpts(scenario.id, i),
     })
@@ -279,7 +280,7 @@ const PRE_ALERT_TODAY: GenOpts[] = [
 
 /** Bổ sung panel Cảnh báo — đủ workflow filter, quick filter, PPE AI tự động */
 const ALERTS_PANEL_TODAY: GenOpts[] = [
-  { scenarioId: 'PPE-002', zoneId: 'ZONE-A01', hour: 8, minute: 48, status: 'DETECTED', workerIdx: 2, deviceIdx: 2 },
+  { scenarioId: 'PPE-002', zoneId: 'ZONE-A01', hour: 8, minute: 48, severity: 'WARNING', status: 'DETECTED', workerIdx: 2, deviceIdx: 2 },
   { scenarioId: 'PPE-003', zoneId: 'ZONE-A02', hour: 9, minute: 5, status: 'DETECTED', workerIdx: 6 },
   { scenarioId: 'PPE-001', zoneId: 'ZONE-B02', hour: 10, minute: 15, status: 'CLOSED', workerIdx: 0 },
   { scenarioId: 'WAH-003', zoneId: 'ZONE-A02', hour: 11, minute: 20, severity: 'CRITICAL', status: 'CONFIRMED', workerIdx: 3 },

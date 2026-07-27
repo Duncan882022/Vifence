@@ -1,4 +1,4 @@
-import type { SafetyZone } from '../types/safety.types'
+import type { SafetySiteCode, SafetyZone } from '../types/safety.types'
 
 export const SAFETY_PROJECT_ID = 'OCP1-PILOT'
 
@@ -7,6 +7,7 @@ export const SAFETY_ZONES: SafetyZone[] = [
   {
     id: 'ZONE-A01',
     name: 'Block phía Bắc',
+    siteCode: 'TTDV-A',
     type: 'BUILDING',
     projectId: SAFETY_PROJECT_ID,
     mapShapeId: 'zone-a01',
@@ -19,6 +20,7 @@ export const SAFETY_ZONES: SafetyZone[] = [
   {
     id: 'ZONE-A02',
     name: 'Block trung tâm phía Bắc',
+    siteCode: 'TTDV-A',
     type: 'BUILDING',
     projectId: SAFETY_PROJECT_ID,
     mapShapeId: 'zone-a02',
@@ -31,6 +33,7 @@ export const SAFETY_ZONES: SafetyZone[] = [
   {
     id: 'ZONE-B01',
     name: 'Đường nội bộ giữa hai block',
+    siteCode: 'TTDV-A',
     type: 'ROAD',
     projectId: SAFETY_PROJECT_ID,
     mapShapeId: 'zone-b01',
@@ -43,6 +46,7 @@ export const SAFETY_ZONES: SafetyZone[] = [
   {
     id: 'ZONE-B02',
     name: 'Nút giao phía Tây',
+    siteCode: 'TTDV-A',
     type: 'INTERSECTION',
     projectId: SAFETY_PROJECT_ID,
     mapShapeId: 'zone-b02',
@@ -55,6 +59,7 @@ export const SAFETY_ZONES: SafetyZone[] = [
   {
     id: 'ZONE-B03',
     name: 'Nút giao phía Đông',
+    siteCode: 'TMDV-C',
     type: 'INTERSECTION',
     projectId: SAFETY_PROJECT_ID,
     mapShapeId: 'zone-b03',
@@ -67,6 +72,7 @@ export const SAFETY_ZONES: SafetyZone[] = [
   {
     id: 'ZONE-C01',
     name: 'Block phía Nam',
+    siteCode: 'TMDV-B',
     type: 'BUILDING',
     projectId: SAFETY_PROJECT_ID,
     mapShapeId: 'zone-c01',
@@ -82,4 +88,8 @@ export const SAFETY_ZONE_MAP = new Map(SAFETY_ZONES.map(z => [z.id, z]))
 
 export function getZoneName(zoneId: string): string {
   return SAFETY_ZONE_MAP.get(zoneId)?.name ?? zoneId
+}
+
+export function getZoneSiteCode(zoneId: string): SafetySiteCode | string {
+  return SAFETY_ZONE_MAP.get(zoneId)?.siteCode ?? zoneId
 }

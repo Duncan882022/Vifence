@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -108,6 +109,8 @@ interface TagTooltipProps {
   children: ReactNode
   className?: string
   tooltipClassName?: string
+  /** Bật khi nội dung dài (dictionary goal, tên kịch bản) */
+  multiline?: boolean
 }
 
 export function TagTooltip({
@@ -115,27 +118,120 @@ export function TagTooltip({
   children,
   className,
   tooltipClassName,
+  multiline = false,
 }: TagTooltipProps) {
-  return (
-    <span className={cn('relative inline-flex group/tag-tip cursor-default', className)}>
-      {children}
-      
-      {/* Tooltip box */}
-      <span
-        className={cn(
-          'pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50',
-          'px-2.5 py-1.5 rounded-lg bg-[#0e1320] border border-[#2a3855] shadow-2xl',
-          'text-[10px] font-semibold text-foreground whitespace-nowrap',
-          'opacity-0 scale-90 origin-bottom transition-all duration-200 ease-out',
-          'group-hover/tag-tip:opacity-100 group-hover/tag-tip:scale-100',
-          tooltipClassName
-        )}
-      >
-        {content}
-        {/* Little arrow at the bottom center */}
-        <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[5px] border-4 border-transparent border-t-[#0e1320] z-50" />
-        <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[6px] border-4 border-transparent border-t-[#2a3855] -z-10" />
-      </span>
+  const [open, setOpen] = useState(false)
+  const [anchor, setAnchor] = useState<{ x: number; y: number; placeBelow: boolean } | null>(null)
+  const rootRef = useRef<HTMLSpanElement>(null)
+
+  const updateAnchor = () => {
+    const node = rootRef.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    const placeBelow = window.innerWidth < 1024 || rect.top < 72
+    setAnchor({
+      x: rect.left + rect.width / 2,
+      y: placeBelow ? rect.bottom + 8 : rect.top - 8,
+      placeBelow,
+    })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    updateAnchor()
+    const onOutside = (event: MouseEvent | TouchEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return
+      setOpen(false)
+    }
+    const onReposition = () => updateAnchor()
+    document.addEventListener('mousedown', onOutside)
+    document.addEventListener('touchstart', onOutside, { passive: true })
+    window.addEventListener('scroll', onReposition, true)
+    window.addEventListener('resize', onReposition)
+    return () => {
+      document.removeEventListener('mousedown', onOutside)
+      document.removeEventListener('touchstart', onOutside)
+      window.removeEventListener('scroll', onReposition, true)
+      window.removeEventListener('resize', onReposition)
+    }
+  }, [open])
+
+  const toggleOpen = (event: React.MouseEvent | React.TouchEvent) => {
+    event.stopPropagation()
+    setOpen(prev => {
+      const next = !prev
+      if (next) updateAnchor()
+      return next
+    })
+  }
+
+  const floatingTip = open && anchor ? (
+    <span
+      className={cn(
+        'fixed z-[9999] px-2.5 py-1.5 rounded-lg bg-[#0e1320] border border-[#2a3855] shadow-2xl',
+        'text-[10px] font-semibold text-foreground pointer-events-none',
+        multiline
+          ? 'max-w-[min(260px,85vw)] whitespace-normal text-left leading-snug'
+          : 'whitespace-nowrap max-w-[85vw] truncate',
+        tooltipClassName,
+      )}
+      style={{
+        left: anchor.x,
+        top: anchor.y,
+        transform: anchor.placeBelow ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+      }}
+      role="tooltip"
+    >
+      {content}
     </span>
+  ) : null
+
+  return (
+    <>
+      <span
+        ref={rootRef}
+        className={cn(
+          'relative inline-flex group/tag-tip min-w-0',
+          'max-lg:cursor-pointer lg:cursor-help',
+          className,
+        )}
+        onClick={toggleOpen}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setOpen(prev => {
+              const next = !prev
+              if (next) updateAnchor()
+              return next
+            })
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={content}
+        aria-expanded={open}
+      >
+        {children}
+
+        <span
+          className={cn(
+            'pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 max-lg:hidden',
+            'bottom-full mb-2 px-2.5 py-1.5 rounded-lg bg-[#0e1320] border border-[#2a3855] shadow-2xl',
+            'text-[10px] font-semibold text-foreground',
+            multiline
+              ? 'max-w-[min(260px,85vw)] whitespace-normal text-left leading-snug'
+              : 'whitespace-nowrap',
+            'opacity-0 scale-90 origin-bottom transition-all duration-200 ease-out',
+            'lg:group-hover/tag-tip:opacity-100 lg:group-hover/tag-tip:scale-100',
+            tooltipClassName,
+          )}
+        >
+          {content}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[5px] border-4 border-transparent border-t-[#0e1320] z-50" />
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[6px] border-4 border-transparent border-t-[#2a3855] -z-10" />
+        </span>
+      </span>
+      {floatingTip && typeof document !== 'undefined' ? createPortal(floatingTip, document.body) : null}
+    </>
   )
 }

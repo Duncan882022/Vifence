@@ -17,11 +17,13 @@ import {
 import { SafetyKpiStrip } from '../components/dashboard/SafetyKpiStrip'
 import { SafetyOverviewCollapsedSummary } from '../components/dashboard/SafetyOverviewCollapsedSummary'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
-import { SafetyPriorityAlerts } from '../components/dashboard/SafetyPriorityAlerts'
+import { SafetyEventsPanel } from '../components/dashboard/SafetyPriorityAlerts'
 import { SafetyGroupGrid } from '../components/dashboard/SafetyGroupGrid'
+import { SafetyGroupCollapsedSummary } from '../components/dashboard/SafetyGroupCollapsedSummary'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import { SafetyHandleConfirmDialog } from '../components/SafetyHandleConfirmDialog'
+import { SafetyPlaybackModal } from '../components/SafetyPlaybackModal'
 import type { SafetyDashboardFilters, SafetyViolationRecord, ViolationStatus } from '../types/safety.types'
 import {
   computeDashboardKpis,
@@ -32,13 +34,13 @@ import {
   mergeViolationStatusOverrides,
 } from '../services/safetyDashboard.service'
 import { violationRecordToEvent } from '../utils/violationAdapter'
-import { resolveTrainingCameraId } from '../utils/safetyCameraBridge'
 import {
   fetchSafetyCameraRecords,
   fetchSafetyRecordDetections,
   getSafetyDefaultPlaybackDate,
 } from '../services/safetyCameraPlayback.service'
 import type { Event } from '@/types/event'
+import { useShellLayout } from '@/hooks/useShellLayout'
 import { cn } from '@/utils/cn'
 
 const DEFAULT_FILTERS: SafetyDashboardFilters = {
@@ -63,13 +65,15 @@ const SHOW_VIOLATION_EVENTS_PANEL = false
 type LowerPanel = 'none' | 'camera' | 'events'
 
 export function SafetyDashboardPage() {
-  const [filters, setFilters] = useState<SafetyDashboardFilters>(DEFAULT_FILTERS)
+  const { isDesktop } = useShellLayout()
+  const [filters] = useState<SafetyDashboardFilters>(DEFAULT_FILTERS)
   const [tier1Open, setTier1Open] = useState(true)
+  const [groupPanelOpen, setGroupPanelOpen] = useState(true)
   const [lowerPanel, setLowerPanel] = useState<LowerPanel>('camera')
   const [selectedId, setSelectedId] = useState<string | undefined>()
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>()
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
-  const [playbackEvent, setPlaybackEvent] = useState<Event | null>(null)
+  const [playbackModalEvent, setPlaybackModalEvent] = useState<Event | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(12)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
@@ -82,7 +86,7 @@ export function SafetyDashboardPage() {
   const tier2Open = lowerPanel === 'camera'
   const eventsPanelOpen = SHOW_VIOLATION_EVENTS_PANEL && lowerPanel === 'events'
 
-  /** Pool chung Nhóm ATLĐ + Cảnh báo — không bị cắt bởi filter nhóm đang chọn */
+  /** Pool chung Nhóm ATLĐ + Sự kiện — không bị cắt bởi filter nhóm đang chọn */
   const alertScope = useMemo(
     () => filterViolations(allRecords, { ...filters, groupId: null, scenarioId: null }),
     [allRecords, filters],
@@ -92,17 +96,9 @@ export function SafetyDashboardPage() {
   const groupStats = useMemo(() => computeGroupStats(alertScope), [alertScope])
   const alerts = useMemo(() => getPriorityAlerts(alertScope), [alertScope])
 
-  const handleGroupSelect = (groupId: typeof filters.groupId) => {
-    setFilters(f => ({ ...f, groupId, scenarioId: null }))
-  }
-
   const handlePlayback = (v: SafetyViolationRecord) => {
-    setPlaybackEvent(violationRecordToEvent(v))
+    setPlaybackModalEvent(violationRecordToEvent(v))
     setSelectedId(v.id)
-    const camId = resolveTrainingCameraId(v.sourceDeviceId, v.sourceType)
-    if (camId) setSelectedCamId(camId)
-    setCameraMode('playback')
-    setLowerPanel('camera')
   }
 
   const handleSelectCamera = (cam: TrainingCamera) => {
@@ -124,6 +120,7 @@ export function SafetyDashboardPage() {
   }
 
   const bothLowerCollapsed = lowerPanel === 'none'
+  const groupPanelExpanded = isDesktop || groupPanelOpen
 
   return (
     <>
@@ -225,7 +222,7 @@ export function SafetyDashboardPage() {
                       onSelectCamera={handleSelectCamera}
                       defaultDate={getSafetyDefaultPlaybackDate()}
                       maxDate={getSafetyDefaultPlaybackDate()}
-                      initialRecordId={playbackEvent?.id}
+                      initialRecordId={undefined}
                       filterTabs={[...SAFETY_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterSafetyCameras(tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
                       groupFn={(cams, tab) => groupSafetyCamerasForSidebar(cams, tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
@@ -238,7 +235,7 @@ export function SafetyDashboardPage() {
             </Panel>
           </div>
 
-          {/* Nhóm ATLĐ + Cảnh báo — mobile & desktop: nhóm trước */}
+          {/* Nhóm ATLĐ + Sự kiện — mobile & desktop: nhóm trước */}
           <div className={cn(
             'flex flex-col lg:flex-row gap-3 min-h-0',
             'max-lg:flex-none',
@@ -259,13 +256,28 @@ export function SafetyDashboardPage() {
               <Panel
                 title="Nhóm ATLĐ"
                 noPadding
-                className="flex-1 min-h-0 max-lg:!h-auto overflow-hidden"
+                expandable={groupPanelExpanded}
+                fit={!isDesktop || !groupPanelOpen}
+                className={cn(
+                  isDesktop && 'flex-1 min-h-0 overflow-hidden',
+                  !isDesktop && 'shrink-0 max-lg:!h-auto',
+                )}
+                headerRight={
+                  !isDesktop ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      {!groupPanelOpen && (
+                        <SafetyGroupCollapsedSummary groupStats={groupStats} />
+                      )}
+                      <TierCollapseButton
+                        open={groupPanelOpen}
+                        onToggle={() => setGroupPanelOpen(open => !open)}
+                        label="Nhóm ATLĐ"
+                      />
+                    </div>
+                  ) : undefined
+                }
               >
-                <SafetyGroupGrid
-                  stats={groupStats}
-                  selectedGroupId={filters.groupId}
-                  onSelectGroup={handleGroupSelect}
-                />
+                {groupPanelExpanded && <SafetyGroupGrid stats={groupStats} />}
               </Panel>
             </div>
 
@@ -275,22 +287,16 @@ export function SafetyDashboardPage() {
                 ? 'lg:min-h-0 lg:flex-1'
                 : 'max-lg:min-h-[320px] lg:min-h-0',
             )}>
-              <Panel
-                title="Cảnh báo"
-                noPadding
-                className="flex-1 min-h-0 max-lg:!h-auto max-lg:min-h-[320px] overflow-hidden"
-              >
-                <SafetyPriorityAlerts
-                  all={alerts.all}
-                  warning={alerts.warning}
-                  violation={alerts.violation}
-                  critical={alerts.critical}
-                  selectedGroupId={filters.groupId}
-                  onPlayback={handlePlayback}
-                  onSelect={v => setSelectedId(v.id)}
-                  onHandle={handleHandleRequest}
-                />
-              </Panel>
+              <SafetyEventsPanel
+                all={alerts.all}
+                warning={alerts.warning}
+                violation={alerts.violation}
+                critical={alerts.critical}
+                selectedGroupId={filters.groupId}
+                onPlayback={handlePlayback}
+                onSelect={v => setSelectedId(v.id)}
+                onHandle={handleHandleRequest}
+              />
             </div>
           </div>
 
@@ -345,6 +351,12 @@ export function SafetyDashboardPage() {
         record={handleTarget}
         onClose={() => setHandleTarget(null)}
         onConfirm={confirmHandled}
+      />
+
+      <SafetyPlaybackModal
+        open={playbackModalEvent != null}
+        event={playbackModalEvent}
+        onClose={() => setPlaybackModalEvent(null)}
       />
     </>
   )

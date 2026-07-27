@@ -1,4 +1,6 @@
+import { getMonitoringDeviceShortName } from '../data/monitoringDevices'
 import { SAFETY_CAMERAS } from '../data/safetyCameras'
+import { getZoneSiteCode } from '../data/safetyZones'
 import type { MonitoringDeviceType } from '../types/safety.types'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { cameraDisplayLabel } from '@/modules/module02-training/data/trainingCameras'
@@ -49,4 +51,31 @@ export function getSafetyCameraDisplayName(id: string | undefined, fallback?: st
   const cam = getSafetyCamera(id)
   if (cam) return cameraDisplayLabel(cam)
   return fallback ?? id ?? '—'
+}
+
+/** Vị trí ghi hình trên thẻ sự kiện — vd. TTDV-A - Cam 03 */
+export function getEventCapturePlace(
+  sourceDeviceId: string,
+  sourceType?: MonitoringDeviceType,
+  zoneId?: string,
+): string {
+  const trainingId = resolveTrainingCameraId(sourceDeviceId, sourceType)
+  const cam = getSafetyCamera(trainingId)
+
+  if (cam?.streamType === 'fixed' && cam.zone) {
+    return `${cam.zone} - ${cam.name}`
+  }
+
+  if (cam?.streamType === 'bodycam') {
+    const site = zoneId ? getZoneSiteCode(zoneId) : cam.zone
+    return site ? `${site} - ${cam.name}` : (cam.assignee ?? cam.name)
+  }
+
+  if (cam?.streamType === 'flycam') {
+    const site = zoneId ? getZoneSiteCode(zoneId) : ''
+    return site ? `${site} - ${cam.name}` : cam.name
+  }
+
+  const site = zoneId ? getZoneSiteCode(zoneId) : '—'
+  return `${site} - ${getMonitoringDeviceShortName(sourceDeviceId)}`
 }

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Play, X } from 'lucide-react'
 import { SafetyPlayback } from './SafetyPlayback'
 import type { Event } from '@/types/event'
 
@@ -9,10 +10,7 @@ interface SafetyPlaybackModalProps {
   onClose: () => void
 }
 
-/**
- * Shell playback kế thừa Module 02 `PlaybackModal`
- * (layout / Escape / fullscreen mobile) — nội dung = clip vi phạm ATLĐ + camera Giảng Võ.
- */
+/** Popup xem lại clip vi phạm — căn giữa mobile & desktop */
 export function SafetyPlaybackModal({ open, event, onClose }: SafetyPlaybackModalProps) {
   useEffect(() => {
     if (!open) return
@@ -25,34 +23,50 @@ export function SafetyPlaybackModal({ open, event, onClose }: SafetyPlaybackModa
     }
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || !event) return null
 
-  return (
+  const scenarioName = event.scenario ?? event.type
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-stretch sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
+      role="presentation"
     >
       <div
-        className="relative bg-[#0d1117] border-0 sm:border border-[#1e2433] rounded-none sm:rounded-xl shadow-2xl flex flex-col overflow-hidden w-full h-full sm:w-[88vw] sm:h-[78vh] sm:max-w-[1200px]"
+        className="relative flex flex-col overflow-hidden w-full max-w-lg sm:max-w-[960px] sm:w-[92vw] max-h-[85vh] sm:max-h-[78vh] rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="safety-playback-dialog-title"
       >
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
-          <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-            Playback
-          </h2>
+        <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-2 border-b border-[#1e2433] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+              <Play className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p id="safety-playback-dialog-title" className="text-sm font-semibold text-foreground">
+                Xem lại
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">{scenarioName}</p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1 rounded hover:bg-[#1e2433] text-muted-foreground hover:text-foreground shrink-0"
+            aria-label="Đóng"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <SafetyPlayback event={event ?? null} />
+          <SafetyPlayback event={event} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

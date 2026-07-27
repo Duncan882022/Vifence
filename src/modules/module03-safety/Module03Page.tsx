@@ -27,7 +27,7 @@ export function Module03Page() {
           <>
             <Header
               title="Giám Sát An Toàn Lao Động"
-              subtitle="Công trường Giảng Võ · Theo dõi rủi ro, vi phạm và tình trạng xử lý"
+              subtitle="Theo dõi rủi ro, vi phạm và tình trạng xử lý"
             />
             <SafetyDashboardPage />
           </>
@@ -37,7 +37,7 @@ export function Module03Page() {
         path="group/:groupId"
         element={(
           <>
-            <Header title="Chi Tiết Nhóm An Toàn" subtitle="Công trường Giảng Võ · Giám sát theo nhóm và kịch bản" />
+            <Header title="Chi Tiết Nhóm An Toàn" subtitle="Giám sát theo nhóm và kịch bản" />
             <SafetyGroupPage />
           </>
         )}
@@ -46,7 +46,7 @@ export function Module03Page() {
         path="zones/:zoneId"
         element={(
           <>
-            <Header title="Chi Tiết Khu Vực" subtitle="Công trường Giảng Võ · Thiết bị, profile và sự kiện theo zone" />
+            <Header title="Chi Tiết Khu Vực" subtitle="Thiết bị, profile và sự kiện theo zone" />
             <SafetyZonePage />
           </>
         )}

@@ -128,9 +128,14 @@ export interface SafetyEventSubject {
   responsibleUnit?: ResponsibleUnitType
 }
 
+/** Mã khu vực hiện trường — khớp tab camera Module 03 (TTDV-A / TMDV-B / TMDV-C) */
+export type SafetySiteCode = 'TTDV-A' | 'TMDV-B' | 'TMDV-C'
+
 export interface SafetyZone {
   id: string
   name: string
+  /** Mã khu vực trên sơ đồ camera — vd. TTDV-A */
+  siteCode: SafetySiteCode
   type: SafetyZoneType
   projectId: string
   /** SVG polygon points for site map */
@@ -271,7 +276,7 @@ export interface SafetyGroupStats {
   /** Workflow — chưa đóng */
   open: number
   trend: number
-  scenarioBreakdown: { scenarioId: string; name: string; count: number }[]
+  scenarioBreakdown: { scenarioId: string; name: string; count: number; severity: AlertSeverity }[]
 }
 
 export interface SafetyWorkflowStats {

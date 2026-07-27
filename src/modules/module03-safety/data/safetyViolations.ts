@@ -1,5 +1,5 @@
 import type { SafetyViolation, ViolationSeverity, ViolationType } from '@/types/safety'
-import { getMonitoringCategory } from './safetyMonitoringDictionary'
+import { getMonitoringCategory, getDictionaryScenarioName } from './safetyMonitoringDictionary'
 import { getViolationFeedUrl } from './safetyViolationFeeds'
 
 /** Demo anchor — violations "hôm nay" use 2026-07-01 (CEO demo) */
@@ -48,6 +48,11 @@ export function getViolationScenario(v: SafetyViolation): string {
   return v.scenario
 }
 
+/** Kịch bản chuẩn từ SAFETY_MONITORING_DICTIONARY */
+function dictScenario(type: ViolationType, index: number): string {
+  return getDictionaryScenarioName(type, index) ?? ''
+}
+
 /**
  * OCP1 · Hạ Long Xanh — vi phạm 7 ngày qua.
  * Hôm nay (01/07): 6 vi phạm — đủ 6 nhóm Safety Monitoring Dictionary.
@@ -57,7 +62,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-001',
     type: 'work-at-height',
-    scenario: 'Không sử dụng dây an toàn',
+    scenario: dictScenario('work-at-height', 0),
     description: 'Không buộc dây an toàn khi leo giàn giáo tại khu cần cẩu',
     workerId: 'w-019',
     workerName: 'Nguyễn Văn Hoàng',
@@ -73,7 +78,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-002',
     type: 'ppe',
-    scenario: 'Không đội mũ bảo hộ',
+    scenario: dictScenario('ppe', 0),
     description: 'Không đội mũ bảo hộ tại sân thi công OCP1-A',
     workerId: 'w-001',
     workerName: 'Phạm Văn Cường',
@@ -89,7 +94,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-003',
     type: 'ppe',
-    scenario: 'Không mặc áo bảo hộ',
+    scenario: dictScenario('ppe', 1),
     description: 'Không mặc áo bảo hộ tại cổng chính dự án',
     workerId: 'w-005',
     workerName: 'Nguyễn Thị Phương',
@@ -107,7 +112,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-019',
     type: 'danger-zone',
-    scenario: 'Người đi vào vùng nguy hiểm',
+    scenario: dictScenario('danger-zone', 0),
     description: 'Người đi vào vùng cần cẩy đang vận hành không có giám sát ATL',
     workerId: 'w-008',
     workerName: 'Bùi Thị Lan',
@@ -123,7 +128,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-020',
     type: 'method-statement',
-    scenario: 'Không có lan can',
+    scenario: dictScenario('method-statement', 5),
     description: 'Thi công tầng 12 không có lan can và lưới chống rơi theo biện pháp thi công',
     workerId: 'w-003',
     workerName: 'Lê Văn Dũng',
@@ -141,7 +146,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-021',
     type: 'fire-hot-work',
-    scenario: 'Hàn cắt',
+    scenario: dictScenario('fire-hot-work', 0),
     description: 'Hàn cắt tại tầng hầm B1 không có che chắn — phát hiện tia lửa',
     workerId: 'w-014',
     workerName: 'Trịnh Minh Khoa',
@@ -159,7 +164,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-022',
     type: 'traffic-safety',
-    scenario: 'Phương tiện vượt tốc độ',
+    scenario: dictScenario('traffic-safety', 1),
     trafficSubject: 'both',
     description: 'Xe tải 30H-582.14 chạy 28 km/h — vượt giới hạn 15 km/h tại đường nội bộ',
     workerId: 'w-010',
@@ -180,7 +185,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-023',
     type: 'traffic-safety',
-    scenario: 'Không có người điều hướng',
+    scenario: dictScenario('traffic-safety', 0),
     trafficSubject: 'vehicle',
     description: 'Xe ben vào khu thi công không có người điều hướng tại cổng B',
     vehicle: { plate: '51C-778.21', type: 'Xe ben' },
@@ -196,7 +201,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-004',
     type: 'danger-zone',
-    scenario: 'Vật tư sát mép hố',
+    scenario: dictScenario('danger-zone', 0),
     description: 'Vật tư đặt sát mép hố đào — không có cờ cảnh báo',
     workerId: 'w-008',
     workerName: 'Bùi Thị Lan',
@@ -214,7 +219,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-005',
     type: 'work-at-height',
-    scenario: 'Không móc dây an toàn',
+    scenario: dictScenario('work-at-height', 2),
     description: 'Làm việc gần mép sàn cao không móc dây an toàn',
     workerId: 'w-003',
     workerName: 'Lê Văn Dũng',
@@ -232,7 +237,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-006',
     type: 'ppe',
-    scenario: 'Không mang giày bảo hộ',
+    scenario: dictScenario('ppe', 2),
     description: 'Không mang giày bảo hộ khi di chuyển trong công trường',
     workerId: 'w-012',
     workerName: 'Phan Minh Tuấn',
@@ -248,7 +253,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-007',
     type: 'method-statement',
-    scenario: 'Giáo bao che không đúng',
+    scenario: dictScenario('method-statement', 0),
     description: 'Giáo bao che không đúng biện pháp thi công đã phê duyệt',
     workerId: 'w-016',
     workerName: 'Kiều Thanh Thảo',
@@ -266,7 +271,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-008',
     type: 'work-at-height',
-    scenario: 'Quăng, ném vật liệu từ trên cao',
+    scenario: dictScenario('work-at-height', 1),
     description: 'Quăng vật liệu từ trên cao xuống sân tập — không có rào chắn',
     workerId: 'w-004',
     workerName: 'Hoàng Văn Em',
@@ -285,7 +290,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-009',
     type: 'work-at-height',
-    scenario: 'Không sử dụng dây an toàn',
+    scenario: dictScenario('work-at-height', 0),
     description: 'Treo trên dầm không có dây an toàn',
     workerId: 'w-002',
     workerName: 'Trần Văn Bình',
@@ -303,7 +308,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-010',
     type: 'method-statement',
-    scenario: 'Không có sàn thao tác',
+    scenario: dictScenario('method-statement', 5),
     description: 'Không có sàn thao tác theo biện pháp thi công đã duyệt',
     workerId: 'w-001',
     workerName: 'Phạm Văn Cường',
@@ -321,7 +326,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-011',
     type: 'danger-zone',
-    scenario: 'Phương tiện đi vào vùng nguy hiểm',
+    scenario: dictScenario('danger-zone', 0),
     description: 'Phương tiện đi vào vùng nguy hiểm — bãi tập kết vật liệu',
     workerId: 'w-015',
     workerName: 'Hồ Quốc Việt',
@@ -339,7 +344,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-012',
     type: 'ppe',
-    scenario: 'Không đội mũ bảo hộ',
+    scenario: dictScenario('ppe', 0),
     description: 'Không đội mũ bảo hộ tại phòng đào tạo an toàn',
     workerId: 'w-013',
     workerName: 'Cao Văn Nam',
@@ -357,7 +362,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-013',
     type: 'fire-hot-work',
-    scenario: 'Hút thuốc',
+    scenario: dictScenario('fire-hot-work', 0),
     description: 'Phát hiện hút thuốc tại khu vực cấm lửa',
     workerId: 'w-006',
     workerName: 'Vũ Minh Giang',
@@ -375,7 +380,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-014',
     type: 'traffic-safety',
-    scenario: 'Không phân làn',
+    scenario: dictScenario('traffic-safety', 3),
     trafficSubject: 'site',
     description: 'Khu điều phối bãi tập kết chưa phân làn tách xe máy và xe tải',
     contractorName: 'SGC',
@@ -391,7 +396,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-015',
     type: 'work-at-height',
-    scenario: 'Không móc dây an toàn',
+    scenario: dictScenario('work-at-height', 2),
     description: 'Không buộc dây an toàn trên sàn tạm',
     workerId: 'w-007',
     workerName: 'Đinh Quốc Hùng',
@@ -409,7 +414,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-016',
     type: 'ppe',
-    scenario: 'Không mặc áo bảo hộ',
+    scenario: dictScenario('ppe', 1),
     description: 'Không mặc áo bảo hộ tại sân thực hành PCCC',
     workerId: 'w-019',
     workerName: 'Nguyễn Văn Hoàng',
@@ -427,7 +432,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-017',
     type: 'fire-hot-work',
-    scenario: 'Khói',
+    scenario: dictScenario('fire-hot-work', 0),
     description: 'Phát hiện khói tại khu vực không có permit hot work',
     workerId: 'w-002',
     workerName: 'Trần Văn Bình',
@@ -445,7 +450,7 @@ export const SAFETY_VIOLATIONS: SafetyViolation[] = [
   {
     id: 'sv-018',
     type: 'danger-zone',
-    scenario: 'Hố đào không có biển báo',
+    scenario: dictScenario('danger-zone', 1),
     description: 'Hố đào không có biển báo — đất đào sát mép hố',
     workerId: 'w-011',
     workerName: 'Lý Thị Mỹ Duyên',
