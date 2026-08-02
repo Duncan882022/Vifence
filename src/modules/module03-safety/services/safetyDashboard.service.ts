@@ -55,7 +55,16 @@ export function mergeViolationStatusOverrides(
   })
 }
 
-function matchesDateRange(detectedAt: string, range?: SafetyDashboardFilters['dateRange']): boolean {
+function isLiveAiSafetyRecord(record: SafetyViolationRecord): boolean {
+  return record.id.startsWith('ai-')
+}
+
+function matchesDateRange(
+  detectedAt: string,
+  range?: SafetyDashboardFilters['dateRange'],
+  record?: SafetyViolationRecord,
+): boolean {
+  if (record && isLiveAiSafetyRecord(record)) return true
   if (range === 'today') return detectedAt.startsWith(TODAY)
   if (range === 'week') return detectedAt >= SAFETY_DEMO_WEEK_START
   if (range === 'month') return detectedAt >= SAFETY_DEMO_MONTH_START
@@ -109,7 +118,7 @@ export function filterViolations(
     if (statusFilter && statusFilter !== 'OPEN' && v.status !== statusFilter) return false
 
     if (!matchesQuickFilter(v, filters.quickFilter)) return false
-    if (!matchesDateRange(v.detectedAt, filters.dateRange)) return false
+    if (!matchesDateRange(v.detectedAt, filters.dateRange, v)) return false
     if (filters.searchQuery && !matchesEventSearch(v, filters.searchQuery)) return false
 
     return true
@@ -312,7 +321,7 @@ export function getPriorityAlerts(records: SafetyViolationRecord[]): {
   critical: SafetyViolationRecord[]
 } {
   const today = records
-    .filter(v => v.detectedAt.startsWith(TODAY))
+    .filter(v => v.detectedAt.startsWith(TODAY) || isLiveAiSafetyRecord(v))
     .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))
 
   return {
