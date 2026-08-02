@@ -7,6 +7,12 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class MobileFramePayload(BaseModel):
+    type: str = "frame"
+    camera_id: str = "mobile"
+    image: str
+
+
 class Detection(BaseModel):
     """Một bbox detect được trong 1 frame (khớp tinh thần với
     { type: 'detections', detections: [...] } mà CameraJsmpegFeed.tsx bên

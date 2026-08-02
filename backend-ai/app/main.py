@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -15,11 +19,31 @@ from .camera_stream import CameraStream
 from .config import settings
 from .detection_engine import DetectionEngine
 from .events import SNAPSHOT_DIR
+from .schemas import MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+_analyze_executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _decode_frame(image_b64: str) -> Optional[np.ndarray]:
+    raw = base64.b64decode(image_b64)
+    arr = np.frombuffer(raw, dtype=np.uint8)
+    return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+
+def _analyze_mobile_frame(frame: np.ndarray, camera_id: str) -> dict:
+    detections, new_events = engine.process_remote_frame(frame, camera_id)
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": frame.shape[1],
+        "height": frame.shape[0],
+        "detections": [d.model_dump() for d in detections],
+        "events": [e.model_dump() for e in new_events],
+    }
 
 camera = CameraStream(settings.camera_source_value)
 engine = DetectionEngine(camera)
@@ -35,6 +59,7 @@ async def lifespan(app: FastAPI):
     yield
     engine.stop()
     camera.stop()
+    _analyze_executor.shutdown(wait=False)
 
 
 app = FastAPI(title="Vifence Safety AI — local POC", lifespan=lifespan)
@@ -123,6 +148,31 @@ def debug_frame():
     return Response(content=buf.tobytes(), media_type="image/jpeg")
 
 
+@app.post("/analyze/frame")
+async def analyze_frame(payload: MobileFramePayload):
+    """Nhận frame JPEG (base64) qua HTTP — dùng cho mobile qua ngrok (fetch gửi được
+    header ngrok-skip-browser-warning, WebSocket từ trình duyệt thì không)."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "mobile"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_mobile_frame,
+        frame,
+        camera_id,
+    )
+
+
 @app.websocket("/ws/analyze")
 async def ws_analyze(websocket: WebSocket):
     """Nhận frame JPEG (base64) từ trình duyệt mobile, chạy AI, trả detections."""
@@ -141,9 +191,7 @@ async def ws_analyze(websocket: WebSocket):
                 continue
 
             try:
-                raw = base64.b64decode(image_b64)
-                arr = np.frombuffer(raw, dtype=np.uint8)
-                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                frame = _decode_frame(image_b64)
             except Exception as exc:  # noqa: BLE001
                 await websocket.send_json({"type": "error", "message": f"decode_failed: {exc}"})
                 continue
@@ -152,17 +200,14 @@ async def ws_analyze(websocket: WebSocket):
                 await websocket.send_json({"type": "error", "message": "invalid_image"})
                 continue
 
-            detections, new_events = engine.process_remote_frame(frame, camera_id)
-            await websocket.send_json(
-                {
-                    "type": "result",
-                    "camera_id": camera_id,
-                    "width": frame.shape[1],
-                    "height": frame.shape[0],
-                    "detections": [d.model_dump() for d in detections],
-                    "events": [e.model_dump() for e in new_events],
-                }
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                _analyze_executor,
+                _analyze_mobile_frame,
+                frame,
+                camera_id,
             )
+            await websocket.send_json(result)
     except WebSocketDisconnect:
         logger.info("Client mobile WS /ws/analyze ngắt kết nối.")
 

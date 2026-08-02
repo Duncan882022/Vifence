@@ -1,6 +1,11 @@
 /** URL backend AI local (ngrok/Cloudflare Tunnel) — lưu runtime, không hardcode lúc build. */
 const STORAGE_KEY = 'vifence_mobile_ai_backend_url'
 
+/** Header bắt buộc khi gọi ngrok free từ trình duyệt (WebSocket không gửi được header này). */
+const TUNNEL_HEADERS: Record<string, string> = {
+  'ngrok-skip-browser-warning': 'true',
+}
+
 export interface MobileAiDetection {
   behavior: 'smoking' | 'fire'
   label: string
@@ -41,34 +46,29 @@ export function setMobileAiBackendUrl(url: string): void {
   else localStorage.removeItem(STORAGE_KEY)
 }
 
-/** Chuyển URL ngrok/https thành WebSocket /ws/analyze */
-export function buildAnalyzeWsUrl(baseUrl: string): string {
+function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/$/, '')
   if (!trimmed) return ''
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
+  return `https://${trimmed}`
+}
 
-  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
-    return trimmed.includes('/ws/') ? trimmed : `${trimmed}/ws/analyze`
-  }
-
-  const withProto = trimmed.startsWith('http://') || trimmed.startsWith('https://')
-    ? trimmed
-    : `https://${trimmed}`
-
-  const url = new URL(withProto)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  url.pathname = '/ws/analyze'
-  url.search = ''
-  url.hash = ''
-  return url.toString()
+export function buildAnalyzeHttpUrl(baseUrl: string): string {
+  return `${normalizeBaseUrl(baseUrl)}/analyze/frame`
 }
 
 export function buildHealthUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/$/, '')
-  if (!trimmed) return ''
-  const withProto = trimmed.startsWith('http://') || trimmed.startsWith('https://')
-    ? trimmed
-    : `https://${trimmed}`
-  return `${withProto.replace(/\/$/, '')}/health`
+  return `${normalizeBaseUrl(baseUrl)}/health`
+}
+
+/** @deprecated Dùng buildAnalyzeHttpUrl — giữ cho tương thích debug */
+export function buildAnalyzeWsUrl(baseUrl: string): string {
+  const base = normalizeBaseUrl(baseUrl)
+  if (!base) return ''
+  const url = new URL(base)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.pathname = '/ws/analyze'
+  return url.toString()
 }
 
 export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
@@ -77,15 +77,10 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
   try {
     const res = await fetch(healthUrl, {
       method: 'GET',
+      headers: TUNNEL_HEADERS,
       signal: AbortSignal.timeout(8000),
-      headers: {
-        // ngrok free hiện trang cảnh báo trình duyệt — header này bỏ qua để /health trả JSON
-        'ngrok-skip-browser-warning': '1',
-      },
     })
     if (!res.ok) return false
-    const contentType = res.headers.get('content-type') ?? ''
-    if (!contentType.includes('application/json')) return false
     const data = await res.json() as { status?: string }
     return data.status === 'ok'
   } catch {
@@ -93,7 +88,6 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
   }
 }
 
-/** Chụp 1 frame từ video, resize nếu quá lớn, trả base64 JPEG (không prefix data:). */
 export function captureVideoFrameBase64(
   video: HTMLVideoElement,
   maxWidth = 1280,
@@ -129,7 +123,48 @@ export interface MobileAiAnalyzeClientOptions {
   intervalMs?: number
 }
 
-/** WebSocket client: gửi frame định kỳ, nhận detections từ backend local. */
+async function postAnalyzeFrame(
+  backendUrl: string,
+  cameraId: string,
+  image: string,
+): Promise<MobileAiAnalyzeResult> {
+  const res = await fetch(buildAnalyzeHttpUrl(backendUrl), {
+    method: 'POST',
+    headers: {
+      ...TUNNEL_HEADERS,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ type: 'frame', camera_id: cameraId, image }),
+    signal: AbortSignal.timeout(90000),
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  const data = await res.json() as {
+    type?: string
+    message?: string
+    width?: number
+    height?: number
+    detections?: MobileAiDetection[]
+    events?: MobileAiViolationEvent[]
+    camera_id?: string
+  }
+  if (data.type === 'error') {
+    throw new Error(data.message ?? 'Lỗi backend.')
+  }
+  if (data.type !== 'result' || !data.width || !data.height) {
+    throw new Error('Phản hồi backend không hợp lệ.')
+  }
+  return {
+    camera_id: data.camera_id ?? cameraId,
+    width: data.width,
+    height: data.height,
+    detections: data.detections ?? [],
+    events: data.events ?? [],
+  }
+}
+
+/** Gửi frame định kỳ qua HTTP POST (tương thích ngrok free trên mobile). */
 export function createMobileAiAnalyzeClient(
   video: HTMLVideoElement,
   options: MobileAiAnalyzeClientOptions,
@@ -139,99 +174,61 @@ export function createMobileAiAnalyzeClient(
     backendUrl,
     onResult,
     onStatusChange,
-    intervalMs = 1800,
+    intervalMs = 2000,
   } = options
 
-  const wsUrl = buildAnalyzeWsUrl(backendUrl)
-  if (!wsUrl) {
+  if (!normalizeBaseUrl(backendUrl)) {
     onStatusChange('error', 'Chưa cấu hình URL backend.')
     return { stop: () => {} }
   }
 
-  let ws: WebSocket | null = null
   let stopped = false
-  let sending = false
+  let inFlight = false
   let timerId = 0
+  let connectedOnce = false
 
   const scheduleNext = (delay = intervalMs) => {
     if (stopped) return
-    timerId = window.setTimeout(() => { void sendFrame() }, delay)
+    timerId = window.setTimeout(() => { void tick() }, delay)
   }
 
-  const sendFrame = async () => {
-    if (stopped || !ws || ws.readyState !== WebSocket.OPEN || sending) {
-      scheduleNext()
-      return
-    }
-    const image = captureVideoFrameBase64(video)
-    if (!image) {
+  const tick = async () => {
+    if (stopped || inFlight) {
       scheduleNext(400)
       return
     }
-    sending = true
+
+    const image = captureVideoFrameBase64(video)
+    if (!image) {
+      scheduleNext(500)
+      return
+    }
+
+    if (!connectedOnce) onStatusChange('connecting')
+    inFlight = true
     try {
-      ws.send(JSON.stringify({ type: 'frame', camera_id: cameraId, image }))
-    } catch {
-      onStatusChange('error', 'Mất kết nối backend.')
+      const result = await postAnalyzeFrame(backendUrl, cameraId, image)
+      if (stopped) return
+      connectedOnce = true
+      onStatusChange('connected')
+      onResult(result)
+      scheduleNext()
+    } catch (err) {
+      if (stopped) return
+      const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'
+      onStatusChange('error', msg)
+      scheduleNext(3000)
     } finally {
-      sending = false
+      inFlight = false
     }
   }
 
-  onStatusChange('connecting')
-  ws = new WebSocket(wsUrl)
-
-  ws.onopen = () => {
-    if (stopped) return
-    onStatusChange('connected')
-    void sendFrame()
-  }
-
-  ws.onmessage = (ev) => {
-    if (stopped) return
-    try {
-      const data = JSON.parse(String(ev.data)) as {
-        type?: string
-        message?: string
-        width?: number
-        height?: number
-        detections?: MobileAiDetection[]
-        events?: MobileAiViolationEvent[]
-        camera_id?: string
-      }
-      if (data.type === 'error') {
-        onStatusChange('error', data.message ?? 'Lỗi backend.')
-        return
-      }
-      if (data.type === 'result' && data.width && data.height) {
-        onResult({
-          camera_id: data.camera_id ?? cameraId,
-          width: data.width,
-          height: data.height,
-          detections: data.detections ?? [],
-          events: data.events ?? [],
-        })
-        scheduleNext()
-      }
-    } catch {
-      /* ignore malformed */
-    }
-  }
-
-  ws.onerror = () => {
-    if (!stopped) onStatusChange('error', 'Không kết nối được backend.')
-  }
-
-  ws.onclose = () => {
-    if (!stopped) onStatusChange('error', 'Backend đã ngắt kết nối.')
-  }
+  void tick()
 
   return {
     stop: () => {
       stopped = true
       window.clearTimeout(timerId)
-      ws?.close()
-      ws = null
     },
   }
 }

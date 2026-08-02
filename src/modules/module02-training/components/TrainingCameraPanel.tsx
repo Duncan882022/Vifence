@@ -35,7 +35,7 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, onMax
         label={cam.assignee ?? cam.name}
         playing={playing}
         compact={compact}
-        aiEnabled={aiOverlay && !compact}
+        aiEnabled={aiOverlay}
         onMaximize={onMaximize}
       />
     )
