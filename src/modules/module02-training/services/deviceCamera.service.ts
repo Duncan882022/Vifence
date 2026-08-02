@@ -41,6 +41,39 @@ export async function resolveMobileCameraDevice(cameraId: string): Promise<strin
   return devices[idx]?.deviceId ?? devices[0]?.deviceId
 }
 
+export type CameraFacing = 'user' | 'environment'
+
+export function isHandheldDevice(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
+}
+
+export async function buildMobileCaptureConstraints(
+  cameraId: string,
+  facing: CameraFacing,
+  deviceCycleIndex?: number,
+): Promise<MediaTrackConstraints> {
+  await ensureCameraPermission()
+  const devices = await listVideoInputDevices()
+
+  if (isHandheldDevice()) {
+    return { facingMode: { ideal: facing } }
+  }
+
+  if (devices.length > 1 && deviceCycleIndex !== undefined) {
+    const idx = deviceCycleIndex % devices.length
+    return { deviceId: { exact: devices[idx].deviceId } }
+  }
+
+  const deviceId = await resolveMobileCameraDevice(cameraId)
+  if (deviceId) return { deviceId: { exact: deviceId } }
+  return { facingMode: { ideal: facing } }
+}
+
+export function getFacingLabel(facing: CameraFacing): string {
+  return facing === 'user' ? 'Trước' : 'Sau'
+}
+
 export function getResolvedDeviceLabel(
   cameraId: string,
   devices: MediaDeviceInfo[],

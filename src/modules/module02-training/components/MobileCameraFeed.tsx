@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, Circle, Wifi } from 'lucide-react'
+import { Camera, Circle, SwitchCamera, Wifi } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
+  buildMobileCaptureConstraints,
+  getFacingLabel,
   getResolvedDeviceLabel,
   isDeviceCameraSupported,
+  isHandheldDevice,
   listVideoInputDevices,
-  resolveMobileCameraDevice,
+  type CameraFacing,
 } from '../services/deviceCamera.service'
 import {
   createMobileAiAnalyzeClient,
@@ -24,7 +27,7 @@ interface MobileCameraFeedProps {
   label: string
   playing?: boolean
   compact?: boolean
-  /** Bật gửi frame lên backend AI (cần URL ngrok đã cấu hình) */
+  /** Bật gửi frame lên backend AI (chỉ khung hình chính, không thumbnail) */
   aiEnabled?: boolean
 }
 
@@ -43,9 +46,10 @@ export function MobileCameraFeed({
   const [errorMsg, setErrorMsg] = useState<string>()
   const [backendUrl, setBackendUrl] = useState(() => getMobileAiBackendUrl())
   const [aiStatus, setAiStatus] = useState<MobileAiConnectionStatus>('idle')
-  const [aiStatusMsg, setAiStatusMsg] = useState<string>()
   const [detections, setDetections] = useState<MobileAiDetection[]>([])
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
+  const facingRef = useRef<CameraFacing>('environment')
+  const deviceIndexRef = useRef(0)
 
   const stopAiClient = useCallback(() => {
     aiClientRef.current?.stop()
@@ -74,14 +78,19 @@ export function MobileCameraFeed({
         setDetections(result.detections)
         setFrameSize({ width: result.width, height: result.height })
       },
-      onStatusChange: (next, message) => {
+      onStatusChange: (next) => {
         setAiStatus(next)
-        setAiStatusMsg(message)
       },
     })
   }, [aiEnabled, cameraId, status, stopAiClient])
 
-  const startCapture = useCallback(async () => {
+  const startCapture = useCallback(async (
+    nextFacing?: CameraFacing,
+    nextDeviceIndex?: number,
+  ) => {
+    const useFacing = nextFacing ?? facingRef.current
+    const useDeviceIndex = nextDeviceIndex ?? deviceIndexRef.current
+
     if (!isDeviceCameraSupported()) {
       setStatus('error')
       setErrorMsg('Trình duyệt không hỗ trợ camera thiết bị.')
@@ -93,12 +102,20 @@ export function MobileCameraFeed({
     stopCapture()
 
     try {
-      const deviceId = await resolveMobileCameraDevice(cameraId)
+      const videoConstraints = await buildMobileCaptureConstraints(
+        cameraId,
+        useFacing,
+        isHandheldDevice() ? undefined : useDeviceIndex,
+      )
       const devices = await listVideoInputDevices()
-      setDeviceLabel(getResolvedDeviceLabel(cameraId, devices))
+      setDeviceLabel(
+        isHandheldDevice()
+          ? getFacingLabel(useFacing)
+          : getResolvedDeviceLabel(cameraId, devices),
+      )
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' },
+        video: videoConstraints,
         audio: false,
       })
 
@@ -108,6 +125,8 @@ export function MobileCameraFeed({
         video.srcObject = stream
         await video.play()
       }
+      facingRef.current = useFacing
+      deviceIndexRef.current = useDeviceIndex
       setStatus('live')
     } catch (err) {
       setStatus('error')
@@ -122,6 +141,15 @@ export function MobileCameraFeed({
     }
   }, [cameraId, stopCapture])
 
+  const flipCamera = useCallback(() => {
+    if (isHandheldDevice()) {
+      const next = facingRef.current === 'user' ? 'environment' : 'user'
+      void startCapture(next)
+    } else {
+      void startCapture(undefined, deviceIndexRef.current + 1)
+    }
+  }, [startCapture])
+
   useEffect(() => {
     if (playing) {
       void startCapture()
@@ -130,7 +158,8 @@ export function MobileCameraFeed({
       setStatus('idle')
     }
     return stopCapture
-  }, [playing, startCapture, stopCapture])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ restart khi playing/cameraId đổi
+  }, [playing, cameraId])
 
   useEffect(() => {
     if (status === 'live' && aiEnabled && backendUrl) {
@@ -165,17 +194,7 @@ export function MobileCameraFeed({
         )}
       />
 
-      {playing && aiEnabled && (
-        <MobileAiBackendConfig
-          compact={compact}
-          autoOpen={!backendUrl}
-          onSaved={() => {
-            setBackendUrl(getMobileAiBackendUrl())
-          }}
-        />
-      )}
-
-      {status === 'live' && aiEnabled && backendUrl && (
+      {status === 'live' && aiEnabled && (
         <>
           <MobileAiOverlay
             detections={detections}
@@ -232,41 +251,61 @@ export function MobileCameraFeed({
       )}
 
       {status === 'live' && (
-        <div className={cn(
-          'absolute left-2 flex items-center gap-1 rounded bg-black/55 border border-red-500/40 text-red-300 font-bold',
-          compact ? 'top-1 px-1 py-0.5 text-[7px]' : 'top-2 px-1.5 py-0.5 text-[9px]',
-        )}>
-          <Circle className={cn(compact ? 'w-1.5 h-1.5' : 'w-2 h-2', 'fill-red-500 text-red-500 animate-pulse')} />
-          REC
-        </div>
-      )}
+        <>
+          <div className={cn(
+            'absolute left-2 top-2 z-[4] flex items-center gap-1',
+            compact && 'top-1 left-1 gap-0.5',
+          )}>
+            <span className={cn(
+              'flex items-center gap-1 rounded bg-black/55 border border-red-500/40 text-red-300 font-bold',
+              compact ? 'px-1 py-0.5 text-[7px]' : 'px-1.5 py-0.5 text-[9px]',
+            )}>
+              <Circle className={cn(compact ? 'w-1.5 h-1.5' : 'w-2 h-2', 'fill-red-500 text-red-500 animate-pulse')} />
+              REC
+            </span>
+            {aiEnabled && aiStatus === 'connected' && (
+              <span className={cn(
+                'flex items-center gap-0.5 rounded bg-black/55 border border-green-500/35 text-green-300/90 font-bold',
+                compact ? 'px-1 py-0.5 text-[6px]' : 'px-1.5 py-0.5 text-[8px]',
+              )}>
+                <Wifi className={cn(compact ? 'w-2 h-2' : 'w-2.5 h-2.5')} />
+                AI
+              </span>
+            )}
+          </div>
 
-      {status === 'live' && aiEnabled && aiStatus === 'connected' && (
-        <div className={cn(
-          'absolute flex items-center gap-1 rounded bg-black/55 border border-green-500/35 text-green-300/90',
-          compact ? 'bottom-1 left-2 px-1 py-0.5 text-[6px]' : 'bottom-2 left-2 px-1.5 py-0.5 text-[8px]',
-        )}>
-          <Wifi className={cn(compact ? 'w-2 h-2' : 'w-2.5 h-2.5')} />
-          AI
-        </div>
-      )}
+          <div className={cn(
+            'absolute z-[5] flex items-center gap-1',
+            compact ? 'top-1 right-1' : 'top-2 right-2',
+          )}>
+            <button
+              type="button"
+              onClick={flipCamera}
+              className={cn(
+                'rounded bg-black/55 border border-white/20 text-white/80 hover:bg-black/70 transition-colors shrink-0',
+                compact ? 'p-0.5' : 'p-1',
+              )}
+              title={isHandheldDevice() ? 'Đổi camera trước/sau' : 'Đổi camera'}
+            >
+              <SwitchCamera className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
+            </button>
+            {aiEnabled && (
+              <MobileAiBackendConfig
+                compact={compact}
+                onSaved={() => setBackendUrl(getMobileAiBackendUrl())}
+              />
+            )}
+          </div>
 
-      {status === 'live' && aiEnabled && aiStatus === 'error' && aiStatusMsg && (
-        <div className={cn(
-          'absolute inset-x-2 rounded bg-red-950/80 border border-red-500/30 text-red-200 text-center',
-          compact ? 'bottom-1 px-1 py-0.5 text-[6px]' : 'bottom-2 px-2 py-1 text-[8px]',
-        )}>
-          {aiStatusMsg}
-        </div>
-      )}
-
-      {status === 'live' && deviceLabel && (
-        <div className={cn(
-          'absolute right-2 rounded bg-black/55 text-white/70 truncate max-w-[55%]',
-          compact ? 'bottom-1 px-1 py-0.5 text-[6px]' : 'bottom-2 px-1.5 py-0.5 text-[9px]',
-        )}>
-          {deviceLabel}
-        </div>
+          {deviceLabel && (
+            <div className={cn(
+              'absolute right-2 rounded bg-black/55 text-white/70 truncate max-w-[45%] z-[3]',
+              compact ? 'bottom-1 px-1 py-0.5 text-[6px]' : 'bottom-2 px-1.5 py-0.5 text-[9px]',
+            )}>
+              {deviceLabel}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
