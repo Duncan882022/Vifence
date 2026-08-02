@@ -35,7 +35,7 @@ export function MobileAiBackendConfig({ compact, onSaved }: MobileAiBackendConfi
     setChecking(false)
     setCheckOk(ok)
     if (!ok) {
-      setErrorMsg('Không kết nối được backend. Kiểm tra URL tunnel và server đang chạy.')
+      setErrorMsg('Không kết nối được backend. Kiểm tra máy tính đang bật backend + ngrok, rồi thử lại.')
       return
     }
     setMobileAiBackendUrl(url)

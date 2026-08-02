@@ -71,17 +71,29 @@ export function buildAnalyzeWsUrl(baseUrl: string): string {
   return url.toString()
 }
 
+function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+    return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+  }
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+    window.clearTimeout(timer)
+  })
+}
+
 export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
   const healthUrl = buildHealthUrl(baseUrl)
   if (!healthUrl) return false
   try {
-    const res = await fetch(healthUrl, {
+    const res = await fetchWithTimeout(healthUrl, {
       method: 'GET',
       headers: TUNNEL_HEADERS,
-      signal: AbortSignal.timeout(8000),
-    })
+      mode: 'cors',
+    }, 12000)
     if (!res.ok) return false
-    const data = await res.json() as { status?: string }
+    const text = await res.text()
+    const data = JSON.parse(text) as { status?: string }
     return data.status === 'ok'
   } catch {
     return false
@@ -128,15 +140,15 @@ async function postAnalyzeFrame(
   cameraId: string,
   image: string,
 ): Promise<MobileAiAnalyzeResult> {
-  const res = await fetch(buildAnalyzeHttpUrl(backendUrl), {
+  const res = await fetchWithTimeout(buildAnalyzeHttpUrl(backendUrl), {
     method: 'POST',
     headers: {
       ...TUNNEL_HEADERS,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ type: 'frame', camera_id: cameraId, image }),
-    signal: AbortSignal.timeout(90000),
-  })
+    mode: 'cors',
+  }, 90000)
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }
