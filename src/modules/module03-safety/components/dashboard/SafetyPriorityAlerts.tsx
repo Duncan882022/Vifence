@@ -182,7 +182,6 @@ function AlertCard({
   const handled = v.status === 'CLOSED'
   const handleDisabled = aiAutoHandled || handled
   const statusDisplay = getAlertCardStatusDisplay(v)
-  const confidencePct = v.confidence != null ? Math.round(v.confidence * 100) : null
   const eventDateTime = formatEventDateTime(v.detectedAt)
   const eventPlace = getEventCapturePlace(v.sourceDeviceId, v.sourceType, v.zoneId)
 
@@ -201,7 +200,6 @@ function AlertCard({
       <div className="flex gap-3 p-2.5 min-w-0 items-stretch">
         <AlertEventSnapshot
           record={v}
-          confidencePct={confidencePct ?? undefined}
           className="self-stretch"
         />
 

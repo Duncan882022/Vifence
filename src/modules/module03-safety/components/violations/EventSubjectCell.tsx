@@ -50,24 +50,6 @@ function subjectTitle(record: SafetyViolationRecord): string {
   }
 }
 
-function subjectTypeLabel(record: SafetyViolationRecord): string {
-  const type = getEventSubjectType(record)
-  switch (type) {
-    case 'PERSON':
-      return 'Người'
-    case 'VEHICLE':
-      return 'Xe'
-    case 'SITE_CONDITION':
-      return 'Hiện trường'
-    case 'CONSTRUCTION_ACTIVITY':
-      return 'Thi công'
-    case 'MANAGEMENT':
-      return 'Điều hành'
-    default:
-      return 'Sự kiện'
-  }
-}
-
 /** Snapshot nhỏ — bảng / listing chung */
 export function ViolationSnapshotThumb({
   record,
@@ -90,30 +72,22 @@ export function ViolationSnapshotThumb({
     >
       <RemoteViolationSnapshotImage
         src={snapshotUrl}
-        alt={`Snapshot vi phạm ${record.id}`}
+        alt=""
         className="w-full h-full object-cover"
       />
-      <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-1 py-0.5">
-        <span className="text-[6px] font-bold uppercase tracking-wider text-white/90 truncate block">
-          {subjectTypeLabel(record)}
-        </span>
-      </span>
     </div>
   )
 }
 
-/** Snapshot thẻ Sự kiện — mã SV, loại đối tượng, độ tin cậy overlay */
+/** Snapshot thẻ Sự kiện — chỉ ảnh, không overlay */
 export function AlertEventSnapshot({
   record,
-  confidencePct,
   className,
 }: {
   record: SafetyViolationRecord
-  confidencePct?: number
   className?: string
 }) {
   const snapshotUrl = resolveViolationSnapshotUrl(record)
-  const subjectLabel = subjectTypeLabel(record)
 
   return (
     <div
@@ -124,32 +98,9 @@ export function AlertEventSnapshot({
     >
       <RemoteViolationSnapshotImage
         src={snapshotUrl}
-        alt={`Snapshot vi phạm ${record.id}`}
+        alt=""
         className="absolute inset-0 w-full h-full object-cover"
       />
-
-      <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 bg-gradient-to-b from-black/75 via-black/35 to-transparent px-1 pt-1 pb-3">
-        <span className="text-[6px] font-mono font-medium text-white/75 tracking-tight truncate max-w-[52%]">
-          {record.id}
-        </span>
-        {confidencePct != null && (
-          <span
-            className="shrink-0 rounded px-1 py-px bg-black/50 backdrop-blur-[1px] border border-white/10"
-            title={`Độ tin cậy ${confidencePct}%`}
-          >
-            <span className="block text-[5px] leading-none text-white/55 text-center">ĐT</span>
-            <span className="block text-[7px] font-bold tabular-nums leading-none text-white/95 text-center">
-              {confidencePct}%
-            </span>
-          </span>
-        )}
-      </div>
-
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-1.5 pt-3 pb-1">
-        <span className="text-[6px] font-bold uppercase tracking-wider text-white/90">
-          {subjectLabel}
-        </span>
-      </div>
     </div>
   )
 }
