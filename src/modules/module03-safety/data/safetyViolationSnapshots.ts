@@ -24,6 +24,7 @@ const SCENARIO_SNAPSHOTS: Record<string, string> = {
   'BPTC-005': `${BASE}avatars/clip-w-c05.jpg`,
   'BPTC-006': `${BASE}avatars/clip-w-c06.jpg`,
   'PCCC-001': `${BASE}avatars/clip-w-015.jpg`,
+  'PCCC-002': `${BASE}avatars/clip-w-015.jpg`,
 }
 
 const GROUP_FALLBACK: Record<SafetyGroupId, string> = {

@@ -6,8 +6,11 @@ import cv2
 import numpy as np
 
 from ..schemas import Detection
+from .face_guard import detect_faces
 
 logger = logging.getLogger("detector")
+_SKIN_HSV_LOWER = np.array([0, 30, 60], dtype=np.uint8)
+_SKIN_HSV_UPPER = np.array([25, 170, 255], dtype=np.uint8)
 
 # Bước 1 — định vị: dải màu xanh dương rộng (bật lửa khò/torch lighter, mỏ
 # hàn gas...). Không trùng tông da người/ánh đèn ấm nên an toàn hơn hẳn so
@@ -24,7 +27,16 @@ _BLUE_LOCATE_UPPER = np.array([130, 255, 255], dtype=np.uint8)
 # đạt ngưỡng dưới) trong khi lửa thật có 15-20 pixel lõi đạt ngưỡng.
 _HOT_CORE_LOWER = np.array([95, 80, 235], dtype=np.uint8)
 _HOT_CORE_UPPER = np.array([130, 255, 255], dtype=np.uint8)
-_MIN_HOT_CORE_PIXELS = 5
+_MIN_HOT_CORE_PIXELS = 12
+_MIN_BLUE_FILL_RATIO = 0.18
+_MIN_HOT_IN_BLUE_RATIO = 0.14
+_MAX_GLARE_TOP_RATIO = 0.22
+_MAX_GLARE_AREA_RATIO = 0.005
+_MAX_SKIN_IN_BLUE_RATIO = 0.32
+# Chỉ chặn flare trán — không chặn vùng miệng/tay (bật lửa khi hút thuốc).
+_FACE_FOREHEAD_RATIO = 0.28
+_STRONG_BLUE_HOT_PIXELS = 16
+_STRONG_BLUE_HOT_RATIO = 0.17
 
 _MIN_AREA = 8
 _MAX_AREA_RATIO = 0.06  # blob lửa nhỏ so với cả khung hình (tránh match đèn/cửa sổ lớn)
@@ -75,6 +87,33 @@ class FlameBlobDetector:
         self._error: str | None = None
         self._prev_hot_mask: np.ndarray | None = None
 
+    def _face_forehead_zones(self, frame: np.ndarray) -> list[tuple[float, float, float, float]]:
+        ok, faces = detect_faces(frame)
+        if not ok or faces is None or len(faces) == 0:
+            return []
+        zones: list[tuple[float, float, float, float]] = []
+        for face in faces:
+            x, y, fw, fh = float(face[0]), float(face[1]), float(face[2]), float(face[3])
+            zones.append((x, y, x + fw, y + fh * _FACE_FOREHEAD_RATIO))
+        return zones
+
+    @staticmethod
+    def _is_strong_blue_flame(hot_pixels: int, blue_pixels: int) -> bool:
+        return (
+            hot_pixels >= _STRONG_BLUE_HOT_PIXELS
+            and hot_pixels / max(blue_pixels, 1) >= _STRONG_BLUE_HOT_RATIO
+        )
+
+    @staticmethod
+    def _skin_ratio(hsv_roi: np.ndarray) -> float:
+        mask = cv2.inRange(hsv_roi, _SKIN_HSV_LOWER, _SKIN_HSV_UPPER)
+        return float(cv2.countNonZero(mask)) / max(mask.size, 1)
+
+    @staticmethod
+    def _center_in_zones(bbox: list[float], zones: list[tuple[float, float, float, float]]) -> bool:
+        cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+        return any(zx1 <= cx <= zx2 and zy1 <= cy <= zy2 for zx1, zy1, zx2, zy2 in zones)
+
     def load(self) -> None:
         logger.info(
             "[fire-heuristic] Sẵn sàng (dò lửa xanh dương theo màu + lõi cháy trắng, "
@@ -94,6 +133,7 @@ class FlameBlobDetector:
     def _detect_blue(self, frame: np.ndarray, hsv: np.ndarray) -> list[Detection]:
         h, w = frame.shape[:2]
         frame_area = h * w
+        face_forehead_zones = self._face_forehead_zones(frame)
 
         mask = cv2.inRange(hsv, _BLUE_LOCATE_LOWER, _BLUE_LOCATE_UPPER)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
@@ -107,20 +147,40 @@ class FlameBlobDetector:
             x, y, bw, bh = cv2.boundingRect(cnt)
 
             roi_hsv = hsv[y : y + bh, x : x + bw]
+            blue_mask = cv2.inRange(roi_hsv, _BLUE_LOCATE_LOWER, _BLUE_LOCATE_UPPER)
+            blue_pixels = cv2.countNonZero(blue_mask)
+            if blue_pixels / max(roi_hsv.size, 1) < _MIN_BLUE_FILL_RATIO:
+                continue
+
             hot_mask = cv2.inRange(roi_hsv, _HOT_CORE_LOWER, _HOT_CORE_UPPER)
             hot_pixels = cv2.countNonZero(hot_mask)
             if hot_pixels < _MIN_HOT_CORE_PIXELS:
-                continue  # không có lõi cháy trắng -> không phải lửa thật
+                continue
+            hot_in_blue = hot_pixels / max(blue_pixels, 1)
+            if hot_in_blue < _MIN_HOT_IN_BLUE_RATIO:
+                continue
 
-            confidence = min(0.3 + hot_pixels / 40 * 0.6, 0.95)
-            if confidence < self.conf_threshold:
+            strong = self._is_strong_blue_flame(hot_pixels, blue_pixels)
+            bbox = [float(x), float(y), float(x + bw), float(y + bh)]
+
+            if not strong:
+                if self._skin_ratio(roi_hsv) > _MAX_SKIN_IN_BLUE_RATIO:
+                    continue
+                if face_forehead_zones and self._center_in_zones(bbox, face_forehead_zones):
+                    continue
+                if y < h * _MAX_GLARE_TOP_RATIO and area < frame_area * _MAX_GLARE_AREA_RATIO:
+                    continue
+
+            confidence = min(0.38 + hot_pixels / 45 * 0.52, 0.92)
+            min_conf = self.conf_threshold if strong else max(self.conf_threshold, 0.52)
+            if confidence < min_conf:
                 continue
             detections.append(
                 Detection(
                     behavior=self.behavior,
                     label="flame-blue",
                     confidence=confidence,
-                    bbox=[float(x), float(y), float(x + bw), float(y + bh)],
+                    bbox=bbox,
                 )
             )
         return detections

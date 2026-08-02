@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -11,6 +12,11 @@ class MobileFramePayload(BaseModel):
     type: str = "frame"
     camera_id: str = "mobile"
     image: str
+
+
+class MobileAiConfigPayload(BaseModel):
+    backend_url: str
+    source: str = "mobile-fe"
 
 
 class Detection(BaseModel):
@@ -53,11 +59,21 @@ class ViolationEvent(BaseModel):
     confidence: float
     bbox: list[float]
     created_at: float = Field(default_factory=time.time)
+    event_date: Optional[str] = None
+    camera_id: str = "LOCAL-CAM"
     snapshot_file: Optional[str] = None
 
     @classmethod
-    def from_detection(cls, detection: Detection, snapshot_file: Optional[str]) -> "ViolationEvent":
+    def from_detection(
+        cls,
+        detection: Detection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "LOCAL-CAM",
+    ) -> "ViolationEvent":
         meta = SCENARIO_META[detection.behavior]
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],
@@ -66,5 +82,8 @@ class ViolationEvent(BaseModel):
             group=meta["group"],
             confidence=detection.confidence,
             bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
             snapshot_file=snapshot_file,
         )

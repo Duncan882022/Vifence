@@ -18,8 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from .camera_stream import CameraStream
 from .config import settings
 from .detection_engine import DetectionEngine
-from .events import SNAPSHOT_DIR
-from .schemas import MobileFramePayload
+from .mobile_config_store import MobileAiConfigStore
+from .schemas import MobileAiConfigPayload, MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -34,8 +34,29 @@ def _decode_frame(image_b64: str) -> Optional[np.ndarray]:
     return cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
 
+def _downscale_for_mobile(frame: np.ndarray, max_width: int = 480) -> np.ndarray:
+    h, w = frame.shape[:2]
+    if w <= max_width:
+        return frame
+    scale = max_width / w
+    return cv2.resize(frame, (max_width, int(h * scale)), interpolation=cv2.INTER_AREA)
+
+
 def _analyze_mobile_frame(frame: np.ndarray, camera_id: str) -> dict:
-    detections, new_events = engine.process_remote_frame(frame, camera_id)
+    small = _downscale_for_mobile(frame)
+    detections, new_events = engine.process_remote_frame(small, camera_id)
+    # Scale bbox về kích thước frame gốc (FE vẽ overlay theo frame gửi lên)
+    sw, sh = small.shape[1], small.shape[0]
+    ow, oh = frame.shape[1], frame.shape[0]
+    if sw != ow or sh != oh:
+        sx, sy = ow / sw, oh / sh
+        scaled = []
+        for d in detections:
+            x1, y1, x2, y2 = d.bbox
+            scaled.append(d.model_copy(update={
+                "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy],
+            }))
+        detections = scaled
     return {
         "type": "result",
         "camera_id": camera_id,
@@ -47,6 +68,7 @@ def _analyze_mobile_frame(frame: np.ndarray, camera_id: str) -> dict:
 
 camera = CameraStream(settings.camera_source_value)
 engine = DetectionEngine(camera)
+mobile_config_store = MobileAiConfigStore()
 
 
 @asynccontextmanager
@@ -82,15 +104,44 @@ def health():
     return {"status": "ok", **engine.status()}
 
 
+@app.get("/config/mobile-ai")
+def get_mobile_ai_config():
+    record = mobile_config_store.get()
+    if not record:
+        return {"configured": False}
+    return {"configured": True, **record}
+
+
+@app.put("/config/mobile-ai")
+def put_mobile_ai_config(payload: MobileAiConfigPayload):
+    url = payload.backend_url.strip()
+    if not url:
+        return {"error": "missing_url"}
+    record = mobile_config_store.save(url, source=payload.source)
+    return {"ok": True, **record}
+
+
+@app.get("/config/mobile-ai/history")
+def get_mobile_ai_config_history(date: str | None = None, limit: int = 50):
+    return mobile_config_store.list_history(date=date, limit=limit)
+
+
 @app.get("/events")
-def list_events(limit: int = 50):
-    return [e.model_dump() for e in engine.store.list_events(limit=limit)]
+def list_events(limit: int = 50, date: str | None = None):
+    return [e.model_dump() for e in engine.store.list_events(limit=limit, date=date)]
+
+
+@app.get("/events/dates")
+def list_event_dates():
+    return engine.store.list_event_dates()
 
 
 @app.get("/events/{event_id}/snapshot")
 def event_snapshot(event_id: str):
-    path = SNAPSHOT_DIR / f"{event_id}.jpg"
-    if not path.exists():
+    events = engine.store.list_events(limit=200)
+    snapshot_file = next((e.snapshot_file for e in events if e.id == event_id), None)
+    path = engine.store.resolve_snapshot_path(event_id, snapshot_file)
+    if path is None or not path.exists():
         return {"error": "not_found"}
     return FileResponse(path)
 
@@ -216,7 +267,7 @@ async def ws_analyze(websocket: WebSocket):
 async def ws_live(websocket: WebSocket):
     await websocket.accept()
     interval = 1.0 / max(settings.stream_fps, 1.0)
-    last_event_count = 0
+    last_event_head_id: str | None = None
     try:
         while True:
             frame = camera.get_frame()
@@ -235,8 +286,9 @@ async def ws_live(websocket: WebSocket):
                     )
 
             events = engine.store.list_events(limit=10)
-            if len(events) != last_event_count:
-                last_event_count = len(events)
+            head_id = engine.store.newest_id()
+            if head_id != last_event_head_id:
+                last_event_head_id = head_id
                 await websocket.send_json(
                     {"type": "events", "events": [e.model_dump() for e in events]}
                 )

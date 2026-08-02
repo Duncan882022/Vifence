@@ -8,7 +8,7 @@ from .camera_stream import CameraStream
 from .config import settings
 from .detectors import FireDetector, SmokingDetector
 from .detectors.flame_blob_detector import FlameBlobDetector
-from .events import Debouncer, EventStore
+from .events import EventStore, PersistenceDebouncer
 from .schemas import Detection, ViolationEvent
 
 logger = logging.getLogger("detection_engine")
@@ -35,6 +35,11 @@ def _bboxes_overlap(a: tuple[float, float, float, float], b: list[float]) -> boo
     return not (bx2 < ax1 or bx1 > ax2 or by2 < ay1 or by1 > ay2)
 
 
+# Mobile gửi frame qua ngrok — bỏ YOLO fire (chậm + hay FP đèn trần), giữ
+# heuristic lửa + smoking YOLO (đã có lọc vùng miệng).
+_MOBILE_DETECTOR_NAMES = frozenset({"smoking-yolo", "fire-heuristic"})
+
+
 class DetectionEngine:
     def __init__(self, camera: CameraStream):
         self.camera = camera
@@ -58,7 +63,7 @@ class DetectionEngine:
         # phải mỗi detector, để không đếm trùng/gãy cửa sổ debounce.
         behaviors = {d.behavior for d in self.detectors}
         self.debouncers = self._make_debouncers()
-        self._remote_debouncers: dict[str, dict[str, Debouncer]] = {}
+        self._remote_debouncers: dict[str, dict[str, PersistenceDebouncer]] = {}
         self.store = EventStore()
 
         self._latest_detections: list[Detection] = []
@@ -82,13 +87,27 @@ class DetectionEngine:
         if self._thread:
             self._thread.join(timeout=2)
 
-    def _make_debouncers(self) -> dict[str, Debouncer]:
+    def _make_debouncers(
+        self,
+        *,
+        min_duration_seconds: float | None = None,
+        cooldown_seconds: float | None = None,
+    ) -> dict[str, PersistenceDebouncer]:
         behaviors = {d.behavior for d in self.detectors}
+        duration = (
+            min_duration_seconds
+            if min_duration_seconds is not None
+            else settings.event_min_duration_seconds
+        )
+        cooldown = (
+            cooldown_seconds
+            if cooldown_seconds is not None
+            else settings.event_cooldown_seconds
+        )
         return {
-            behavior: Debouncer(
-                hits=settings.debounce_hits,
-                window=settings.debounce_window,
-                cooldown_seconds=settings.event_cooldown_seconds,
+            behavior: PersistenceDebouncer(
+                min_duration_seconds=duration,
+                cooldown_seconds=cooldown,
             )
             for behavior in behaviors
         }
@@ -96,14 +115,19 @@ class DetectionEngine:
     def _analyze_frame(
         self,
         frame,
-        debouncers: dict[str, Debouncer],
+        debouncers: dict[str, PersistenceDebouncer],
         *,
         persist_events: bool = True,
+        detector_names: frozenset[str] | None = None,
+        camera_id: str | None = None,
     ) -> tuple[list[Detection], list[ViolationEvent]]:
-        """Chạy toàn bộ detector trên 1 frame, trả về detections + events mới."""
+        """Chạy detector trên 1 frame, trả về detections + events mới."""
         all_detections: list[Detection] = []
         for detector in self.detectors:
             if not detector.ready:
+                continue
+            name = getattr(detector, "name", detector.behavior)
+            if detector_names is not None and name not in detector_names:
                 continue
             all_detections.extend(detector.predict(frame))
 
@@ -115,6 +139,8 @@ class DetectionEngine:
         fire_dets = by_behavior.get("fire", [])
 
         cigarette_zones = [_expand_bbox(d.bbox, _SMOKE_PROXIMITY_MARGIN) for d in raw_cigarette_dets]
+        # Chỉ loại khói gần điếu — KHÔNG loại flame-blue/flame-orange (bật lửa
+        # khi hút thuốc phải log cả smoking lẫn fire).
         by_behavior["fire"] = [
             d
             for d in fire_dets
@@ -124,6 +150,10 @@ class DetectionEngine:
             )
         ]
 
+        filtered: list[Detection] = []
+        for dets in by_behavior.values():
+            filtered.extend(dets)
+
         new_events: list[ViolationEvent] = []
         for behavior, debouncer in debouncers.items():
             dets = by_behavior.get(behavior, [])
@@ -132,9 +162,11 @@ class DetectionEngine:
             if confirmed:
                 top_detection = max(dets, key=lambda d: d.confidence)
                 if persist_events:
-                    new_events.append(self.store.add(top_detection, frame))
+                    new_events.append(
+                        self.store.add(top_detection, frame, camera_id=camera_id or "LOCAL-CAM")
+                    )
 
-        return all_detections, new_events
+        return filtered, new_events
 
     def process_remote_frame(
         self, frame, camera_id: str
@@ -144,7 +176,12 @@ class DetectionEngine:
             self._remote_debouncers = {}
         if camera_id not in self._remote_debouncers:
             self._remote_debouncers[camera_id] = self._make_debouncers()
-        return self._analyze_frame(frame, self._remote_debouncers[camera_id])
+        return self._analyze_frame(
+            frame,
+            self._remote_debouncers[camera_id],
+            detector_names=_MOBILE_DETECTOR_NAMES,
+            camera_id=camera_id,
+        )
 
     def _run(self) -> None:
         interval = 1.0 / max(settings.detection_fps, 0.1)

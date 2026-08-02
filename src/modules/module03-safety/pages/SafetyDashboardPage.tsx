@@ -33,6 +33,8 @@ import {
   getPriorityAlerts,
   mergeViolationStatusOverrides,
 } from '../services/safetyDashboard.service'
+import { mergeSafetyRecordsWithAi } from '../services/safetyAiEvents.service'
+import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { violationRecordToEvent } from '../utils/violationAdapter'
 import {
   fetchSafetyCameraRecords,
@@ -77,10 +79,14 @@ export function SafetyDashboardPage() {
   const [activeStreamCount, setActiveStreamCount] = useState(12)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
+  const aiLiveRecords = useSafetyAiEvents(5000)
 
   const allRecords = useMemo(
-    () => mergeViolationStatusOverrides(getAllSafetyRecords(), statusOverrides),
-    [statusOverrides],
+    () => mergeViolationStatusOverrides(
+      mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
+      statusOverrides,
+    ),
+    [statusOverrides, aiLiveRecords],
   )
 
   const tier2Open = lowerPanel === 'camera'

@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from ..schemas import Detection
+from .face_guard import detect_faces
 from .base import BaseDetector
 
 logger = logging.getLogger("detector")
@@ -79,14 +80,9 @@ class SmokingDetector(BaseDetector):
     def _post_filter(self, frame: np.ndarray, detections: list[Detection]) -> list[Detection]:
         if not detections:
             return detections
-        detector = self._get_face_detector()
-        if detector is None:
-            return detections
 
-        h, w = frame.shape[:2]
-        detector.setInputSize((w, h))
-        ok, faces = detector.detect(frame)
-        if faces is None or len(faces) == 0:
+        ok, faces = detect_faces(frame, score_threshold=_FACE_SCORE_THRESHOLD)
+        if not ok or faces is None or len(faces) == 0:
             return detections  # không thấy mặt nào -> không đủ căn cứ loại, giữ nguyên
 
         zones = [self._mouth_zone(f) for f in faces]

@@ -178,6 +178,15 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
     defaultSeverity: 'VIOLATION',
     devices: [{ type: 'FIXED_CAMERA', role: 'PRIMARY' }, { type: 'BODY_CAMERA', role: 'SUPPORT' }],
   },
+  {
+    id: 'PCCC-002',
+    groupId: 'PCCC',
+    description: 'Phát hiện dấu hiệu cháy nổ',
+    monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
+    automationLevel: 'AI_ASSISTED',
+    defaultSeverity: 'CRITICAL',
+    devices: [{ type: 'MOBILE', role: 'PRIMARY' }, { type: 'FIXED_CAMERA', role: 'SUPPORT' }],
+  },
 ]
 
 function buildScenariosFromDictionary(defs: RawScenarioDef[]): SafetyScenario[] {

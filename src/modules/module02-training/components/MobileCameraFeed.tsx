@@ -39,6 +39,10 @@ export function MobileCameraFeed({
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const aiClientRef = useRef<{ stop: () => void } | null>(null)
+  const detectionHoldRef = useRef<{ until: number; items: MobileAiDetection[] }>({
+    until: 0,
+    items: [],
+  })
   const [status, setStatus] = useState<MobileFeedStatus>('idle')
   const [errorMsg, setErrorMsg] = useState<string>()
   const [backendUrl, setBackendUrl] = useState(() => getMobileAiBackendUrl())
@@ -72,7 +76,21 @@ export function MobileCameraFeed({
       cameraId,
       backendUrl: url,
       onResult: (result: MobileAiAnalyzeResult) => {
-        setDetections(result.detections)
+        const minConf = (d: MobileAiDetection) => {
+          if (d.behavior === 'fire' && d.label.startsWith('flame')) return d.confidence >= 0.52
+          if (d.behavior === 'smoking') return d.confidence >= 0.42
+          return d.confidence >= 0.5
+        }
+        const filtered = result.detections.filter(minConf)
+        const now = Date.now()
+        if (filtered.length > 0) {
+          detectionHoldRef.current = { until: now + 1800, items: filtered }
+          setDetections(filtered)
+        } else if (now < detectionHoldRef.current.until) {
+          setDetections(detectionHoldRef.current.items)
+        } else {
+          setDetections([])
+        }
         setFrameSize({ width: result.width, height: result.height })
       },
       onStatusChange: (next) => {

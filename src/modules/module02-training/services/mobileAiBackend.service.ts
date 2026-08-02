@@ -1,5 +1,12 @@
-/** URL backend AI local (ngrok/Cloudflare Tunnel) — lưu runtime, không hardcode lúc build. */
+/** URL backend AI local (ngrok/Cloudflare Tunnel) — cache trình duyệt + sync JSON backend. */
 const STORAGE_KEY = 'vifence_mobile_ai_backend_url'
+
+export interface MobileAiBackendConfigRecord {
+  backend_url: string
+  updated_at: number
+  date: string
+  source: string
+}
 
 /** Header bắt buộc khi gọi ngrok free từ trình duyệt (WebSocket không gửi được header này). */
 const TUNNEL_HEADERS: Record<string, string> = {
@@ -23,6 +30,8 @@ export interface MobileAiViolationEvent {
   confidence: number
   bbox: number[]
   created_at: number
+  camera_id?: string
+  event_date?: string
   snapshot_file?: string | null
 }
 
@@ -44,6 +53,56 @@ export function setMobileAiBackendUrl(url: string): void {
   const trimmed = url.trim()
   if (trimmed) localStorage.setItem(STORAGE_KEY, trimmed)
   else localStorage.removeItem(STORAGE_KEY)
+}
+
+export function buildMobileAiConfigUrl(baseUrl: string): string {
+  return `${normalizeBaseUrl(baseUrl)}/config/mobile-ai`
+}
+
+/** Lưu localStorage + ghi JSON trên backend (theo ngày). */
+export async function saveMobileAiBackendUrl(url: string): Promise<void> {
+  const trimmed = url.trim()
+  setMobileAiBackendUrl(trimmed)
+  if (!trimmed) return
+  try {
+    await fetchWithTimeout(buildMobileAiConfigUrl(trimmed), {
+      method: 'PUT',
+      headers: {
+        ...TUNNEL_HEADERS,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ backend_url: trimmed, source: 'mobile-fe' }),
+      mode: 'cors',
+    }, 12000)
+  } catch {
+    // Offline hoặc backend cũ — vẫn giữ localStorage
+  }
+}
+
+/** Đọc cấu hình mới nhất từ JSON backend (nếu có). */
+export async function fetchMobileAiBackendConfig(
+  baseUrl: string,
+): Promise<MobileAiBackendConfigRecord | null> {
+  const configUrl = buildMobileAiConfigUrl(baseUrl)
+  if (!configUrl) return null
+  try {
+    const res = await fetchWithTimeout(configUrl, {
+      method: 'GET',
+      headers: TUNNEL_HEADERS,
+      mode: 'cors',
+    }, 12000)
+    if (!res.ok) return null
+    const data = await res.json() as { configured?: boolean; backend_url?: string }
+    if (!data.configured || !data.backend_url) return null
+    return {
+      backend_url: data.backend_url,
+      updated_at: (data as MobileAiBackendConfigRecord).updated_at ?? Date.now() / 1000,
+      date: (data as MobileAiBackendConfigRecord).date ?? '',
+      source: (data as MobileAiBackendConfigRecord).source ?? 'backend',
+    }
+  } catch {
+    return null
+  }
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -102,8 +161,8 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
 
 export function captureVideoFrameBase64(
   video: HTMLVideoElement,
-  maxWidth = 1280,
-  quality = 0.72,
+  maxWidth = 480,
+  quality = 0.52,
 ): string | null {
   const w = video.videoWidth
   const h = video.videoHeight
@@ -186,7 +245,7 @@ export function createMobileAiAnalyzeClient(
     backendUrl,
     onResult,
     onStatusChange,
-    intervalMs = 2000,
+    intervalMs = 450,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
@@ -224,7 +283,7 @@ export function createMobileAiAnalyzeClient(
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext()
+      scheduleNext(120)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

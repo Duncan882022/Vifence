@@ -2,6 +2,11 @@
 __pycache__/
 *.pyc
 .env
-data/snapshots/*.jpg
+data/snapshots/**/*.jpg
+data/events/**/*.jsonl
+data/config/*.json
+data/config/*.jsonl
 data/events.jsonl
 !data/snapshots/.gitkeep
+!data/events/.gitkeep
+!data/config/.gitkeep

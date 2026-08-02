@@ -1,0 +1,40 @@
+import { useEffect, useState } from 'react'
+import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { fetchSafetyAiEvents } from '../services/safetyAiEvents.service'
+import type { SafetyViolationRecord } from '../types/safety.types'
+
+/** Poll sự kiện AI từ backend JSON — ghép vào panel PCCC Module 03. */
+export function useSafetyAiEvents(pollMs = 5000): SafetyViolationRecord[] {
+  const [records, setRecords] = useState<SafetyViolationRecord[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    let timerId = 0
+
+    const tick = async () => {
+      const url = getMobileAiBackendUrl()
+      if (!url) {
+        if (!cancelled) setRecords([])
+        return
+      }
+      const next = await fetchSafetyAiEvents(url)
+      if (!cancelled) setRecords(next)
+    }
+
+    void tick()
+    timerId = window.setInterval(() => { void tick() }, pollMs)
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'vifence_mobile_ai_backend_url') void tick()
+    }
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timerId)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [pollMs])
+
+  return records
+}

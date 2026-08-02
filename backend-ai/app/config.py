@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     debounce_hits: int = 3
     debounce_window: int = 5
     event_cooldown_seconds: float = 30.0
+    # Chỉ ghi sự kiện khi hành vi được detect liên tục đủ N giây.
+    event_min_duration_seconds: float = 5.0
 
     @property
     def camera_source_value(self) -> Union[int, str]:

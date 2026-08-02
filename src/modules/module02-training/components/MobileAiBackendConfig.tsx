@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom'
 import { Settings2, Wifi, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
+  fetchMobileAiBackendConfig,
   getMobileAiBackendUrl,
   pingMobileAiBackend,
-  setMobileAiBackendUrl,
+  saveMobileAiBackendUrl,
 } from '../services/mobileAiBackend.service'
 
 interface MobileAiBackendConfigProps {
@@ -19,6 +20,15 @@ export function MobileAiBackendConfig({ compact, onSaved }: MobileAiBackendConfi
   const [checking, setChecking] = useState(false)
   const [checkOk, setCheckOk] = useState<boolean | null>(null)
   const [errorMsg, setErrorMsg] = useState<string>()
+
+  useEffect(() => {
+    if (!open) return
+    const cached = getMobileAiBackendUrl()
+    if (!cached) return
+    void fetchMobileAiBackendConfig(cached).then((record) => {
+      if (record?.backend_url) setUrl(record.backend_url)
+    })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -38,7 +48,7 @@ export function MobileAiBackendConfig({ compact, onSaved }: MobileAiBackendConfi
       setErrorMsg('Không kết nối được backend. Kiểm tra máy tính đang bật backend + ngrok, rồi thử lại.')
       return
     }
-    setMobileAiBackendUrl(url)
+    await saveMobileAiBackendUrl(url)
     setOpen(false)
     onSaved?.()
   }, [url, onSaved])

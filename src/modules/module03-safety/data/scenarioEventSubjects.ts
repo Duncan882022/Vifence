@@ -21,4 +21,5 @@ export const SCENARIO_EVENT_SUBJECT: Record<string, EventSubjectType> = {
   'BPTC-005': 'SITE_CONDITION',
   'BPTC-006': 'SITE_CONDITION',
   'PCCC-001': 'PERSON',
+  'PCCC-002': 'PERSON',
 }

@@ -42,6 +42,7 @@
   </div>
   <div class="sidebar">
     <h2>Sự kiện đã xác nhận</h2>
+    <p class="empty" style="margin-bottom:10px">Sự kiện chỉ ghi sau khi hành vi giữ liên tục ≥ 5 giây (bbox hiện sớm hơn).</p>
     <div id="events"><p class="empty">Chưa có sự kiện nào...</p></div>
   </div>
 
@@ -53,11 +54,21 @@ const eventsEl = document.getElementById('events');
 
 const BEHAVIOR_LABEL = { smoking: 'Hút thuốc', fire: 'Cháy nổ' };
 
+function loadEvents() {
+  fetch('/events?limit=10')
+    .then(r => r.json())
+    .then(events => renderEvents(events))
+    .catch(() => {});
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
 
-  ws.onopen = () => { dotWs.className = 'dot ok'; };
+  ws.onopen = () => {
+    dotWs.className = 'dot ok';
+    loadEvents();
+  };
   ws.onclose = () => { dotWs.className = 'dot bad'; setTimeout(connect, 1500); };
   ws.onerror = () => ws.close();
 
@@ -103,7 +114,7 @@ function renderEvents(events) {
       <img src="/events/${e.id}/snapshot" alt="snapshot" />
       <span class="badge ${e.behavior}">${BEHAVIOR_LABEL[e.behavior] || e.behavior}</span>
       <div class="meta">${e.scenario_name}</div>
-      <div class="meta">${new Date(e.created_at * 1000).toLocaleString('vi-VN')} · ${(e.confidence * 100).toFixed(0)}%</div>
+      <div class="meta">${new Date(e.created_at * 1000).toLocaleString('vi-VN')} · ${(e.confidence * 100).toFixed(0)}%${e.event_date ? ` · ${e.event_date}` : ''}</div>
     </div>
   `).join('');
 }
