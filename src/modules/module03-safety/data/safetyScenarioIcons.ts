@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Fence, Flag, Footprints,
+  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Fence, Flag, Flame, Footprints,
   Forklift, Gauge, Grid3x3, Link2Off, OctagonX, PanelTop, PersonStanding, Scissors, Shirt,
   Shovel, Waypoints,
 } from 'lucide-react'
@@ -27,6 +27,7 @@ export const SCENARIO_ICONS: Record<string, LucideIcon> = {
   'BPTC-005': Fence,            // Thiếu lưới chống rơi
   'BPTC-006': Cable,            // Thiếu dây cứu sinh/lan can
   'PCCC-001': Cigarette,        // Hút thuốc sai nơi quy định
+  'PCCC-002': Flame,            // Dấu hiệu cháy nổ
 }
 
 const iconRefs = Object.values(SCENARIO_ICONS)

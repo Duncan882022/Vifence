@@ -2,6 +2,7 @@ import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../../types/safety.types'
 import { getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS } from '../../utils/eventSubject'
 import { resolveViolationSnapshotUrl } from '../../data/safetyViolationSnapshots'
+import { RemoteViolationSnapshotImage } from './RemoteViolationSnapshotImage'
 
 interface EventSubjectCellProps {
   record: SafetyViolationRecord
@@ -87,11 +88,10 @@ export function ViolationSnapshotThumb({
         className,
       )}
     >
-      <img
+      <RemoteViolationSnapshotImage
         src={snapshotUrl}
         alt={`Snapshot vi phạm ${record.id}`}
         className="w-full h-full object-cover"
-        loading="lazy"
       />
       <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-1 py-0.5">
         <span className="text-[6px] font-bold uppercase tracking-wider text-white/90 truncate block">
@@ -122,11 +122,10 @@ export function AlertEventSnapshot({
         className,
       )}
     >
-      <img
+      <RemoteViolationSnapshotImage
         src={snapshotUrl}
         alt={`Snapshot vi phạm ${record.id}`}
         className="absolute inset-0 w-full h-full object-cover"
-        loading="lazy"
       />
 
       <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 bg-gradient-to-b from-black/75 via-black/35 to-transparent px-1 pt-1 pb-3">

@@ -181,7 +181,7 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   {
     id: 'PCCC-002',
     groupId: 'PCCC',
-    description: 'Phát hiện dấu hiệu cháy nổ',
+    description: 'Dấu hiệu cháy nổ',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AI_ASSISTED',
     defaultSeverity: 'CRITICAL',

@@ -151,7 +151,7 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     goal: 'Giám sát các hành vi có nguy cơ gây cháy nổ và đảm bảo tuân thủ quy định phòng cháy chữa cháy.',
     scenarios: [
       'Hút thuốc không đúng nơi quy định',
-      'Phát hiện dấu hiệu cháy nổ',
+      'Dấu hiệu cháy nổ',
     ],
     monitoringMethods: ['Giám sát liên tục', 'Theo Permit Hot Work'],
     devices: ['Camera AI', 'Body Camera'],

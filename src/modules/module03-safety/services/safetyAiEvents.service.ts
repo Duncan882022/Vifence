@@ -6,6 +6,7 @@ import type {
   AlertSeverity,
   SafetyViolationRecord,
 } from '../types/safety.types'
+import { getScenarioName } from '../data/safetyScenarios'
 
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
@@ -48,10 +49,11 @@ export function mapBackendEventToSafetyRecord(
   backendUrl: string,
 ): SafetyViolationRecord {
   const cameraId = event.camera_id ?? 'MOB-01'
+  const scenarioId = BEHAVIOR_TO_SCENARIO[event.behavior] ?? event.scenario_id ?? 'PCCC-001'
 
   return {
     id: `ai-${event.id}`,
-    scenarioId: BEHAVIOR_TO_SCENARIO[event.behavior] ?? event.scenario_id ?? 'PCCC-001',
+    scenarioId,
     groupId: 'PCCC',
     zoneId: 'ZONE-A01',
     sourceDeviceId: cameraId,
@@ -66,7 +68,7 @@ export function mapBackendEventToSafetyRecord(
       workerName: 'Unknown',
     },
     verificationRequired: true,
-    description: event.scenario_name,
+    description: getScenarioName(scenarioId),
     snapshotUrl: buildSnapshotUrl(backendUrl, event.id),
   }
 }
