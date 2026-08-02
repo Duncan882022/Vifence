@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, Circle, SwitchCamera, Wifi } from 'lucide-react'
+import { Camera, Circle, Maximize2, SwitchCamera, Wifi } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
   buildMobileCaptureConstraints,
-  getFacingLabel,
-  getResolvedDeviceLabel,
   isDeviceCameraSupported,
   isHandheldDevice,
-  listVideoInputDevices,
   type CameraFacing,
 } from '../services/deviceCamera.service'
 import {
@@ -27,8 +24,8 @@ interface MobileCameraFeedProps {
   label: string
   playing?: boolean
   compact?: boolean
-  /** Bật gửi frame lên backend AI (chỉ khung hình chính, không thumbnail) */
   aiEnabled?: boolean
+  onMaximize?: () => void
 }
 
 export function MobileCameraFeed({
@@ -37,12 +34,12 @@ export function MobileCameraFeed({
   playing = true,
   compact,
   aiEnabled = false,
+  onMaximize,
 }: MobileCameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const aiClientRef = useRef<{ stop: () => void } | null>(null)
   const [status, setStatus] = useState<MobileFeedStatus>('idle')
-  const [deviceLabel, setDeviceLabel] = useState<string>()
   const [errorMsg, setErrorMsg] = useState<string>()
   const [backendUrl, setBackendUrl] = useState(() => getMobileAiBackendUrl())
   const [aiStatus, setAiStatus] = useState<MobileAiConnectionStatus>('idle')
@@ -107,12 +104,6 @@ export function MobileCameraFeed({
         useFacing,
         isHandheldDevice() ? undefined : useDeviceIndex,
       )
-      const devices = await listVideoInputDevices()
-      setDeviceLabel(
-        isHandheldDevice()
-          ? getFacingLabel(useFacing)
-          : getResolvedDeviceLabel(cameraId, devices),
-      )
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: videoConstraints,
@@ -169,6 +160,11 @@ export function MobileCameraFeed({
     }
     return stopAiClient
   }, [status, aiEnabled, backendUrl, startAiClient, stopAiClient])
+
+  const toolbarBtn = cn(
+    'rounded bg-black/55 border border-white/20 text-white/85 hover:bg-black/75 transition-colors shrink-0',
+    compact ? 'p-0.5' : 'p-1',
+  )
 
   if (!playing) {
     return (
@@ -274,35 +270,35 @@ export function MobileCameraFeed({
             )}
           </div>
 
-          <div className={cn(
-            'absolute z-[5] flex items-center gap-1',
-            compact ? 'top-1 right-1' : 'top-2 right-2',
-          )}>
-            <button
-              type="button"
-              onClick={flipCamera}
-              className={cn(
-                'rounded bg-black/55 border border-white/20 text-white/80 hover:bg-black/70 transition-colors shrink-0',
-                compact ? 'p-0.5' : 'p-1',
-              )}
-              title={isHandheldDevice() ? 'Đổi camera trước/sau' : 'Đổi camera'}
-            >
-              <SwitchCamera className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
-            </button>
-            {aiEnabled && (
-              <MobileAiBackendConfig
-                compact={compact}
-                onSaved={() => setBackendUrl(getMobileAiBackendUrl())}
-              />
-            )}
-          </div>
-
-          {deviceLabel && (
+          {!compact && (
             <div className={cn(
-              'absolute right-2 rounded bg-black/55 text-white/70 truncate max-w-[45%] z-[3]',
-              compact ? 'bottom-1 px-1 py-0.5 text-[6px]' : 'bottom-2 px-1.5 py-0.5 text-[9px]',
+              'absolute z-[5] flex flex-col gap-1',
+              compact ? 'top-1 right-1' : 'top-2 right-2',
             )}>
-              {deviceLabel}
+              {onMaximize && (
+                <button
+                  type="button"
+                  onClick={onMaximize}
+                  className={toolbarBtn}
+                  title="Phóng to"
+                >
+                  <Maximize2 className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={flipCamera}
+                className={toolbarBtn}
+                title={isHandheldDevice() ? 'Đổi camera trước/sau' : 'Đổi camera'}
+              >
+                <SwitchCamera className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
+              </button>
+              {aiEnabled && (
+                <MobileAiBackendConfig
+                  compact={compact}
+                  onSaved={() => setBackendUrl(getMobileAiBackendUrl())}
+                />
+              )}
             </div>
           )}
         </>

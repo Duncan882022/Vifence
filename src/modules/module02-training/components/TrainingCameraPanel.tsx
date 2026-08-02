@@ -25,8 +25,8 @@ const CCTV_SCANLINE = {
     'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
 } as const
 
-function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
-  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean
+function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, onMaximize }: {
+  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; onMaximize?: () => void
 }) {
   if (cam.streamType === 'mobile') {
     return (
@@ -36,6 +36,7 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
         playing={playing}
         compact={compact}
         aiEnabled={aiOverlay && !compact}
+        onMaximize={onMaximize}
       />
     )
   }
@@ -107,7 +108,7 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
         )}>
           {cameraDisplayLabel(cam)}
         </p>
-        {cameraMetaLabel(cam) && (
+        {cameraMetaLabel(cam) && cam.streamType !== 'mobile' && (
           <p className={cn(
             'text-blue-300/80 truncate leading-tight',
             compact ? 'text-[5.5px]' : 'text-[7.5px]',
@@ -125,41 +126,44 @@ function CameraCell({ cam, compact, onMaximize }: {
 }) {
   const badge = streamTypeBadge(cam)
 
+  const isMobile = cam.streamType === 'mobile'
+
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact={compact} aiOverlay />
+      <CameraLiveFeed cam={cam} compact={compact} aiOverlay onMaximize={onMaximize} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
-      <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
-        <div className="flex items-center gap-1 min-w-0">
-          <span className={cn(
-            'bg-red-500/90 text-white font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0',
-            compact ? 'text-[8px]' : 'text-[10px]',
-          )}>
-            <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
-            LIVE
-          </span>
-          {badge && (
+      {!isMobile && (
+        <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
+          <div className="flex items-center gap-1 min-w-0">
             <span className={cn(
-              'shrink-0 font-bold px-1.5 py-0.5 rounded border',
-              cam.streamType === 'flycam' && 'bg-violet-500/25 border-violet-500/40 text-violet-200',
-              cam.streamType === 'mobile' && 'bg-sky-500/25 border-sky-500/40 text-sky-200',
-              cam.streamType === 'bodycam' && 'bg-amber-500/25 border-amber-500/40 text-amber-200',
-              compact ? 'text-[7px]' : 'text-[8px]',
+              'bg-red-500/90 text-white font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0',
+              compact ? 'text-[8px]' : 'text-[10px]',
             )}>
-              {badge}
+              <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
+              LIVE
             </span>
-          )}
+            {badge && (
+              <span className={cn(
+                'shrink-0 font-bold px-1.5 py-0.5 rounded border',
+                cam.streamType === 'flycam' && 'bg-violet-500/25 border-violet-500/40 text-violet-200',
+                cam.streamType === 'bodycam' && 'bg-amber-500/25 border-amber-500/40 text-amber-200',
+                compact ? 'text-[7px]' : 'text-[8px]',
+              )}>
+                {badge}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onMaximize}
+            className="p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0"
+            title="Phóng to"
+          >
+            <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
+          </button>
         </div>
-        <button
-          onClick={onMaximize}
-          className="p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0"
-          title="Phóng to"
-        >
-          <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
-        </button>
-      </div>
+      )}
 
       <div className={cn(
         'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent',
@@ -180,11 +184,10 @@ function CameraCell({ cam, compact, onMaximize }: {
               {cameraMetaLabel(cam)}
             </span>
           )}
-          {cameraMetaLabel(cam) && cam.streamType !== 'fixed' && (
+          {cameraMetaLabel(cam) && cam.streamType !== 'fixed' && cam.streamType !== 'mobile' && (
             <span className={cn(
               'shrink-0 rounded-full font-medium border text-muted-foreground/80',
               cam.streamType === 'flycam' && 'bg-violet-500/15 border-violet-500/30',
-              cam.streamType === 'mobile' && 'bg-sky-500/15 border-sky-500/30',
               cam.streamType === 'bodycam' && 'bg-amber-500/15 border-amber-500/30',
               compact ? 'text-[7px] px-1.5 py-0.5' : 'text-[9px] px-2.5 py-0.5',
             )}>
@@ -263,7 +266,7 @@ function FullscreenOverlay({ cam, onClose }: { cam: TrainingCamera | null; onClo
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
             </span>
             <span className="text-sm font-semibold text-white truncate">{cameraDisplayLabel(cam)}</span>
-            {cameraMetaLabel(cam) && (
+            {cameraMetaLabel(cam) && cam.streamType !== 'mobile' && (
               <span className="text-xs text-white/60 truncate">— {cameraMetaLabel(cam)}</span>
             )}
           </div>
