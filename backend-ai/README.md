@@ -26,6 +26,7 @@ Webcam (cv2.VideoCapture)
         GET  /events               danh sách sự kiện đã xác nhận
         GET  /events/{id}/snapshot ảnh chụp lúc vi phạm
         WS   /ws/live               stream frame (base64 JPEG) + bbox + event mới
+        WS   /ws/analyze            nhận frame từ mobile browser → trả detections
         GET  /                      trang test viewer (canvas + sidebar)
         GET  /debug/frame.jpg           [debug] frame hiện tại camera đang giữ
         GET  /debug/raw_detections      [debug] confidence thật mọi detector (conf=0.05), kể cả dưới ngưỡng báo động
@@ -206,6 +207,48 @@ Test thực tế phát hiện 2 vấn đề với bật lửa khò (torch lighte
    hành vi tạo 2 sự kiện cùng lúc. Khói không nằm gần vật giống điếu thuốc vẫn
    tính là cháy nổ bình thường. Xử lý ống hút/bật lửa bị nhận nhầm vẫn dựa vào
    `SMOKING_CONF_THRESHOLD` + khuyến nghị duyệt snapshot trước khi xử lý.
+
+## Mobile camera → backend máy cá nhân (GitHub Pages)
+
+Luồng dùng khi mở **https://duncan882022.github.io/Vifence/module03** trên điện
+thoại:
+
+```
+Điện thoại (GitHub Pages)
+  → getUserMedia (camera điện thoại)
+  → chụp frame JPEG ~1.8s/lần
+  → WSS /ws/analyze qua ngrok/Cloudflare Tunnel
+      → Máy tính cá nhân (backend-ai)
+          → YOLO + heuristic
+          → trả detections + events
+  → FE vẽ bbox + badge "Hút thuốc" / "Cháy nổ"
+```
+
+### Cách chạy demo
+
+**Trên máy tính:**
+
+```bash
+cd backend-ai
+source .venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Terminal khác:
+ngrok http 8000
+# Copy URL dạng https://xxxx.ngrok-free.app
+```
+
+**Trên điện thoại:**
+
+1. Mở `https://duncan882022.github.io/Vifence/module03`
+2. Chọn camera **Mobile** (vd Duncan IPhone) → cho phép camera
+3. Bấm icon ⚙ trên khung hình → dán URL ngrok → **Lưu & kết nối**
+4. Giữ điện thoại quay hiện trường — AI chạy trên máy tính, kết quả hiện trên
+   màn hình điện thoại (badge AI xanh khi kết nối OK)
+
+> URL ngrok lưu trong `localStorage` (`vifence_mobile_ai_backend_url`) — không
+> hardcode lúc build GitHub Pages. Mỗi lần restart ngrok free cần dán URL mới.
+
+> Trang GitHub Pages là HTTPS → backend phải lộ qua **HTTPS/WSS** (ngrok tự lo).
 
 ## Bước tích hợp tiếp theo (chưa làm trong POC này)
 

@@ -57,14 +57,8 @@ class DetectionEngine:
         # heuristic) -> chỉ tạo 1 debouncer duy nhất cho mỗi behavior, không
         # phải mỗi detector, để không đếm trùng/gãy cửa sổ debounce.
         behaviors = {d.behavior for d in self.detectors}
-        self.debouncers = {
-            behavior: Debouncer(
-                hits=settings.debounce_hits,
-                window=settings.debounce_window,
-                cooldown_seconds=settings.event_cooldown_seconds,
-            )
-            for behavior in behaviors
-        }
+        self.debouncers = self._make_debouncers()
+        self._remote_debouncers: dict[str, dict[str, Debouncer]] = {}
         self.store = EventStore()
 
         self._latest_detections: list[Detection] = []
@@ -88,56 +82,77 @@ class DetectionEngine:
         if self._thread:
             self._thread.join(timeout=2)
 
+    def _make_debouncers(self) -> dict[str, Debouncer]:
+        behaviors = {d.behavior for d in self.detectors}
+        return {
+            behavior: Debouncer(
+                hits=settings.debounce_hits,
+                window=settings.debounce_window,
+                cooldown_seconds=settings.event_cooldown_seconds,
+            )
+            for behavior in behaviors
+        }
+
+    def _analyze_frame(
+        self,
+        frame,
+        debouncers: dict[str, Debouncer],
+        *,
+        persist_events: bool = True,
+    ) -> tuple[list[Detection], list[ViolationEvent]]:
+        """Chạy toàn bộ detector trên 1 frame, trả về detections + events mới."""
+        all_detections: list[Detection] = []
+        for detector in self.detectors:
+            if not detector.ready:
+                continue
+            all_detections.extend(detector.predict(frame))
+
+        by_behavior: dict[str, list[Detection]] = {}
+        for det in all_detections:
+            by_behavior.setdefault(det.behavior, []).append(det)
+
+        raw_cigarette_dets = by_behavior.get("smoking", [])
+        fire_dets = by_behavior.get("fire", [])
+
+        cigarette_zones = [_expand_bbox(d.bbox, _SMOKE_PROXIMITY_MARGIN) for d in raw_cigarette_dets]
+        by_behavior["fire"] = [
+            d
+            for d in fire_dets
+            if not (
+                d.label.lower() == "smoke"
+                and any(_bboxes_overlap(zone, d.bbox) for zone in cigarette_zones)
+            )
+        ]
+
+        new_events: list[ViolationEvent] = []
+        for behavior, debouncer in debouncers.items():
+            dets = by_behavior.get(behavior, [])
+            best = max((d.confidence for d in dets), default=0.0)
+            confirmed = debouncer.register(best > 0)
+            if confirmed:
+                top_detection = max(dets, key=lambda d: d.confidence)
+                if persist_events:
+                    new_events.append(self.store.add(top_detection, frame))
+
+        return all_detections, new_events
+
+    def process_remote_frame(
+        self, frame, camera_id: str
+    ) -> tuple[list[Detection], list[ViolationEvent]]:
+        """Frame gửi từ mobile qua WebSocket — debounce riêng theo camera_id."""
+        if not hasattr(self, "_remote_debouncers"):
+            self._remote_debouncers = {}
+        if camera_id not in self._remote_debouncers:
+            self._remote_debouncers[camera_id] = self._make_debouncers()
+        return self._analyze_frame(frame, self._remote_debouncers[camera_id])
+
     def _run(self) -> None:
         interval = 1.0 / max(settings.detection_fps, 0.1)
         while self._running:
             cycle_start = time.time()
             frame = self.camera.get_frame()
             if frame is not None:
-                all_detections: list[Detection] = []
-                for detector in self.detectors:
-                    if not detector.ready:
-                        continue
-                    all_detections.extend(detector.predict(frame))
-
-                by_behavior: dict[str, list[Detection]] = {}
-                for det in all_detections:
-                    by_behavior.setdefault(det.behavior, []).append(det)
-
-                # "hút thuốc" xác nhận trực tiếp theo model cigarette (như ban
-                # đầu) — KHÔNG bắt buộc phải có khói mới tính, vì model `smoke`
-                # không đủ nhạy bắt khói thuốc lá thật (đã kiểm chứng thực tế:
-                # 0/38 lần đo trong 1 phiên hút thật). Yêu cầu smoke sẽ gây
-                # false-negative, tệ hơn nhiều so với thỉnh thoảng báo nhầm ống
-                # hút/bật lửa (đã có thể duyệt qua snapshot trước khi xử lý).
-                raw_cigarette_dets = by_behavior.get("smoking", [])
-                fire_dets = by_behavior.get("fire", [])
-
-                # Khói THỰC SỰ xuất hiện gần đầu điếu thì KHÔNG được tính thêm là
-                # "cháy nổ" độc lập nữa — về bản chất, khói đầu điếu thuốc là dấu
-                # hiệu của hành vi hút thuốc, không phải sự cố cháy nổ. Nếu không
-                # loại trừ, mỗi lần hút thuốc có khói sẽ tạo ĐỒNG THỜI 2 sự kiện
-                # (hút thuốc + cháy nổ) cho cùng 1 hành vi, sai bản chất vi phạm.
-                # Khói KHÔNG nằm gần vật giống điếu thuốc (đứng riêng, quy mô lớn
-                # hơn...) vẫn được tính là dấu hiệu cháy nổ như bình thường.
-                cigarette_zones = [_expand_bbox(d.bbox, _SMOKE_PROXIMITY_MARGIN) for d in raw_cigarette_dets]
-                by_behavior["fire"] = [
-                    d
-                    for d in fire_dets
-                    if not (
-                        d.label.lower() == "smoke"
-                        and any(_bboxes_overlap(zone, d.bbox) for zone in cigarette_zones)
-                    )
-                ]
-
-                for behavior, debouncer in self.debouncers.items():
-                    dets = by_behavior.get(behavior, [])
-                    best = max((d.confidence for d in dets), default=0.0)
-                    confirmed = debouncer.register(best > 0)
-                    if confirmed:
-                        top_detection = max(dets, key=lambda d: d.confidence)
-                        self.store.add(top_detection, frame)
-
+                all_detections, _ = self._analyze_frame(frame, self.debouncers)
                 with self._lock:
                     self._latest_detections = all_detections
 

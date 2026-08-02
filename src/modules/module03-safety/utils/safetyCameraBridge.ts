@@ -71,6 +71,10 @@ export function getEventCapturePlace(
     return site ? `${site} - ${cam.name}` : (cam.assignee ?? cam.name)
   }
 
+  if (cam?.streamType === 'mobile') {
+    return cam.assignee ?? cam.name
+  }
+
   if (cam?.streamType === 'flycam') {
     const site = zoneId ? getZoneSiteCode(zoneId) : ''
     return site ? `${site} - ${cam.name}` : cam.name

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import cv2
+import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -120,6 +121,50 @@ def debug_frame():
     if not ok:
         return {"error": "encode_failed"}
     return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
+@app.websocket("/ws/analyze")
+async def ws_analyze(websocket: WebSocket):
+    """Nhận frame JPEG (base64) từ trình duyệt mobile, chạy AI, trả detections."""
+    await websocket.accept()
+    logger.info("Client mobile WS /ws/analyze kết nối.")
+    try:
+        while True:
+            payload = await websocket.receive_json()
+            if payload.get("type") != "frame":
+                continue
+
+            camera_id = str(payload.get("camera_id") or "mobile")
+            image_b64 = payload.get("image")
+            if not image_b64:
+                await websocket.send_json({"type": "error", "message": "missing_image"})
+                continue
+
+            try:
+                raw = base64.b64decode(image_b64)
+                arr = np.frombuffer(raw, dtype=np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            except Exception as exc:  # noqa: BLE001
+                await websocket.send_json({"type": "error", "message": f"decode_failed: {exc}"})
+                continue
+
+            if frame is None:
+                await websocket.send_json({"type": "error", "message": "invalid_image"})
+                continue
+
+            detections, new_events = engine.process_remote_frame(frame, camera_id)
+            await websocket.send_json(
+                {
+                    "type": "result",
+                    "camera_id": camera_id,
+                    "width": frame.shape[1],
+                    "height": frame.shape[0],
+                    "detections": [d.model_dump() for d in detections],
+                    "events": [e.model_dump() for e in new_events],
+                }
+            )
+    except WebSocketDisconnect:
+        logger.info("Client mobile WS /ws/analyze ngắt kết nối.")
 
 
 @app.websocket("/ws/live")

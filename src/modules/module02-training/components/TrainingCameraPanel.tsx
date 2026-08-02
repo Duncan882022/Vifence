@@ -4,6 +4,7 @@ import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
   CAMERA_FILTER_TABS,
@@ -27,6 +28,17 @@ const CCTV_SCANLINE = {
 function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
   cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean
 }) {
+  if (cam.streamType === 'mobile') {
+    return (
+      <MobileCameraFeed
+        cameraId={cam.id}
+        label={cam.assignee ?? cam.name}
+        playing={playing}
+        compact={compact}
+        aiEnabled={aiOverlay}
+      />
+    )
+  }
   if (!cam.streamUrl) return null
   return (
     <CameraVideoFeed
@@ -131,9 +143,9 @@ function CameraCell({ cam, compact, onMaximize }: {
           {badge && (
             <span className={cn(
               'shrink-0 font-bold px-1.5 py-0.5 rounded border',
-              cam.streamType === 'flycam'
-                ? 'bg-violet-500/25 border-violet-500/40 text-violet-200'
-                : 'bg-amber-500/25 border-amber-500/40 text-amber-200',
+              cam.streamType === 'flycam' && 'bg-violet-500/25 border-violet-500/40 text-violet-200',
+              cam.streamType === 'mobile' && 'bg-sky-500/25 border-sky-500/40 text-sky-200',
+              cam.streamType === 'bodycam' && 'bg-amber-500/25 border-amber-500/40 text-amber-200',
               compact ? 'text-[7px]' : 'text-[8px]',
             )}>
               {badge}
@@ -171,9 +183,9 @@ function CameraCell({ cam, compact, onMaximize }: {
           {cameraMetaLabel(cam) && cam.streamType !== 'fixed' && (
             <span className={cn(
               'shrink-0 rounded-full font-medium border text-muted-foreground/80',
-              cam.streamType === 'flycam'
-                ? 'bg-violet-500/15 border-violet-500/30'
-                : 'bg-amber-500/15 border-amber-500/30',
+              cam.streamType === 'flycam' && 'bg-violet-500/15 border-violet-500/30',
+              cam.streamType === 'mobile' && 'bg-sky-500/15 border-sky-500/30',
+              cam.streamType === 'bodycam' && 'bg-amber-500/15 border-amber-500/30',
               compact ? 'text-[7px] px-1.5 py-0.5' : 'text-[9px] px-2.5 py-0.5',
             )}>
               {cameraMetaLabel(cam)}

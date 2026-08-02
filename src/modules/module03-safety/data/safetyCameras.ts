@@ -9,6 +9,33 @@ export type SafetyCameraFilterTab =
   | SafetyCameraZone
   | 'Body cam'
   | 'Flycam'
+  | 'Mobile'
+
+/**
+ * Camera Mobile — luồng trực tiếp từ camera thiết bị (getUserMedia), không dùng
+ * clip mock. MOB-01 ưu tiên thiết bị iPhone/Continuity; MOB-02 ưu tiên iMac/
+ * FaceTime HD.
+ */
+const MOBILE_CAMERAS: TrainingCamera[] = [
+  {
+    id: 'MOB-01',
+    name: 'Duncan IPhone',
+    location: 'Di động — Hiện trường',
+    zone: '',
+    status: 'online',
+    streamType: 'mobile',
+    assignee: 'Duncan IPhone',
+  },
+  {
+    id: 'MOB-02',
+    name: 'Duncan Imac',
+    location: 'Di động — Hiện trường',
+    zone: '',
+    status: 'online',
+    streamType: 'mobile',
+    assignee: 'Duncan Imac',
+  },
+]
 
 interface SafetyCameraOverride {
   zone: SafetyCameraZone
@@ -35,34 +62,37 @@ const GIANG_VO_FIXED: Record<string, SafetyCameraOverride> = {
   'B-08': { zone: 'TMDV-C', location: 'Khu PCCC / CV nóng' },
 }
 
-/** Camera mặc định hiển thị khi mở Module 03 */
-export const DEFAULT_SAFETY_CAMERA_IDS = ['A-03', 'A-06'] as const
+/** Camera mặc định hiển thị khi mở Module 03 — Cam 03 + Duncan IPhone (bỏ Cam 06) */
+export const DEFAULT_SAFETY_CAMERA_IDS = ['A-03', 'MOB-01'] as const
 
-/** Camera live Module 03 — reuse feed Module 02, đổi zone/location → Giảng Võ */
-export const SAFETY_CAMERAS: TrainingCamera[] = MOCK_TRAINING_CAMERAS.map(cam => {
-  if (cam.streamType !== 'fixed') {
+/** Camera live Module 03 — reuse feed Module 02, đổi zone/location → Giảng Võ, + Mobile riêng */
+export const SAFETY_CAMERAS: TrainingCamera[] = [
+  ...MOCK_TRAINING_CAMERAS.map(cam => {
+    if (cam.streamType !== 'fixed') {
+      return {
+        ...cam,
+        courseName: undefined,
+      }
+    }
+    const ov = GIANG_VO_FIXED[cam.id]
+    if (!ov) return { ...cam, courseName: undefined }
     return {
       ...cam,
+      zone: ov.zone,
+      location: ov.location,
       courseName: undefined,
     }
-  }
-  const ov = GIANG_VO_FIXED[cam.id]
-  if (!ov) return { ...cam, courseName: undefined }
-  return {
-    ...cam,
-    zone: ov.zone,
-    location: ov.location,
-    courseName: undefined,
-  }
-})
-
-export const SAFETY_CAMERA_FILTER_TABS: SafetyCameraFilterTab[] = [
-  'Tất cả', 'TTDV-A', 'TMDV-B', 'TMDV-C', 'Body cam', 'Flycam',
+  }),
+  ...MOBILE_CAMERAS,
 ]
 
-export type SafetyCameraGroupKey = SafetyCameraZone | 'Body cam' | 'Flycam'
+export const SAFETY_CAMERA_FILTER_TABS: SafetyCameraFilterTab[] = [
+  'Tất cả', 'TTDV-A', 'TMDV-B', 'TMDV-C', 'Body cam', 'Flycam', 'Mobile',
+]
 
-const GROUP_ORDER: SafetyCameraGroupKey[] = ['TTDV-A', 'TMDV-B', 'TMDV-C', 'Body cam', 'Flycam']
+export type SafetyCameraGroupKey = SafetyCameraZone | 'Body cam' | 'Flycam' | 'Mobile'
+
+const GROUP_ORDER: SafetyCameraGroupKey[] = ['TTDV-A', 'TMDV-B', 'TMDV-C', 'Body cam', 'Flycam', 'Mobile']
 
 export function filterSafetyCameras(tab: SafetyCameraFilterTab): TrainingCamera[] {
   switch (tab) {
@@ -76,6 +106,8 @@ export function filterSafetyCameras(tab: SafetyCameraFilterTab): TrainingCamera[
       return SAFETY_CAMERAS.filter(c => c.streamType === 'bodycam')
     case 'Flycam':
       return SAFETY_CAMERAS.filter(c => c.streamType === 'flycam')
+    case 'Mobile':
+      return SAFETY_CAMERAS.filter(c => c.streamType === 'mobile')
   }
 }
 
@@ -93,11 +125,13 @@ export function groupSafetyCamerasForSidebar(
     'TMDV-C': [],
     'Body cam': [],
     Flycam: [],
+    Mobile: [],
   }
 
   for (const cam of cameras) {
     if (cam.streamType === 'bodycam') buckets['Body cam'].push(cam)
     else if (cam.streamType === 'flycam') buckets.Flycam.push(cam)
+    else if (cam.streamType === 'mobile') buckets.Mobile.push(cam)
     else if (cam.zone === 'TTDV-A' || cam.zone === 'TMDV-B' || cam.zone === 'TMDV-C') {
       buckets[cam.zone].push(cam)
     }

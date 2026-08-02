@@ -2,7 +2,7 @@ import type { Camera } from '@/types/camera'
 import { getCourseZone, type TrainingZone } from './trainingCourseMeta'
 import { getStreamUrlForCamera } from './trainingCameraFeeds'
 
-export type CameraStreamType = 'fixed' | 'bodycam' | 'flycam'
+export type CameraStreamType = 'fixed' | 'bodycam' | 'flycam' | 'mobile'
 
 export type CameraFilterTab = 'Tất cả' | 'OCP1-A' | 'OCP1-B' | 'Body cam' | 'Flycam'
 
@@ -10,7 +10,7 @@ export interface TrainingCamera extends Camera {
   streamType: CameraStreamType
   /** Chỉ CCTV cố định — phòng lắp cam gắn khoá học */
   courseName?: string
-  /** Người mang body cam — không gắn khoá cố định */
+  /** Người mang body cam / dùng app Mobile HSE — không gắn khoá cố định */
   assignee?: string
 }
 
@@ -150,6 +150,7 @@ export function getCourseRoomCamera(courseName: string, zone?: string): Training
 
 export function cameraDisplayLabel(cam: TrainingCamera): string {
   if (cam.streamType === 'bodycam') return cam.assignee ?? cam.name
+  if (cam.streamType === 'mobile') return cam.assignee ?? cam.name
   if (cam.streamType === 'flycam') return cam.name
   return `${cam.zone} · ${cam.name}`
 }
@@ -157,6 +158,7 @@ export function cameraDisplayLabel(cam: TrainingCamera): string {
 /** Dòng phụ trên tile — chỉ fixed CCTV mới hiện khoá học. */
 export function cameraMetaLabel(cam: TrainingCamera): string | undefined {
   if (cam.streamType === 'bodycam') return cam.location
+  if (cam.streamType === 'mobile') return cam.location
   if (cam.streamType === 'flycam') return cam.location
   if (cam.streamType === 'fixed' && cam.courseName) return cam.courseName
   return undefined
@@ -164,6 +166,7 @@ export function cameraMetaLabel(cam: TrainingCamera): string | undefined {
 
 export function streamTypeBadge(cam: TrainingCamera): string | null {
   if (cam.streamType === 'bodycam') return 'BODY'
+  if (cam.streamType === 'mobile') return 'MOBILE'
   if (cam.streamType === 'flycam') return 'FLY'
   return null
 }

@@ -5,7 +5,7 @@ import { getFeedKeyForCamera } from '../data/trainingCameraFeeds'
 
 interface CameraVideoFeedProps {
   cameraId: string
-  streamType?: 'fixed' | 'bodycam' | 'flycam'
+  streamType?: 'fixed' | 'bodycam' | 'flycam' | 'mobile'
   src: string
   playing?: boolean
   /** Bật AI detect + vẽ box — chỉ dùng trên luồng đang chọn (grid chính) */
@@ -74,7 +74,7 @@ export function CameraVideoFeed({
         preload={playing ? 'auto' : 'metadata'}
         className={cn(
           'absolute inset-0 h-full w-full',
-          streamType === 'bodycam' ? 'object-contain bg-black' : 'object-cover',
+          streamType === 'bodycam' || streamType === 'mobile' ? 'object-contain bg-black' : 'object-cover',
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
