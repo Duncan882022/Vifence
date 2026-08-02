@@ -35,7 +35,7 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
         label={cam.assignee ?? cam.name}
         playing={playing}
         compact={compact}
-        aiEnabled={aiOverlay}
+        aiEnabled={playing}
       />
     )
   }

@@ -75,8 +75,17 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
   const healthUrl = buildHealthUrl(baseUrl)
   if (!healthUrl) return false
   try {
-    const res = await fetch(healthUrl, { method: 'GET', signal: AbortSignal.timeout(8000) })
+    const res = await fetch(healthUrl, {
+      method: 'GET',
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        // ngrok free hiện trang cảnh báo trình duyệt — header này bỏ qua để /health trả JSON
+        'ngrok-skip-browser-warning': '1',
+      },
+    })
     if (!res.ok) return false
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) return false
     const data = await res.json() as { status?: string }
     return data.status === 'ok'
   } catch {

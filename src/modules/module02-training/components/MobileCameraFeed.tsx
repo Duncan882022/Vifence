@@ -165,7 +165,17 @@ export function MobileCameraFeed({
         )}
       />
 
-      {status === 'live' && aiEnabled && (
+      {playing && aiEnabled && (
+        <MobileAiBackendConfig
+          compact={compact}
+          autoOpen={!backendUrl}
+          onSaved={() => {
+            setBackendUrl(getMobileAiBackendUrl())
+          }}
+        />
+      )}
+
+      {status === 'live' && aiEnabled && backendUrl && (
         <>
           <MobileAiOverlay
             detections={detections}
@@ -174,12 +184,6 @@ export function MobileCameraFeed({
             compact={compact}
           />
           <MobileAiAlertBadge detections={detections} compact={compact} />
-          <MobileAiBackendConfig
-            compact={compact}
-            onSaved={() => {
-              setBackendUrl(getMobileAiBackendUrl())
-            }}
-          />
         </>
       )}
 
