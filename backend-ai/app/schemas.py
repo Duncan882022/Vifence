@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import time
+import uuid
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+
+class Detection(BaseModel):
+    """Một bbox detect được trong 1 frame (khớp tinh thần với
+    { type: 'detections', detections: [...] } mà CameraJsmpegFeed.tsx bên
+    frontend Vifence-CMS đã hỗ trợ)."""
+
+    behavior: str  # "smoking" | "fire"
+    label: str  # tên class gốc trả về từ model (vd "cigarette", "fire", "smoke")
+    confidence: float
+    bbox: list[float]  # [x1, y1, x2, y2] toạ độ pixel trên frame gốc
+
+
+# Metadata tĩnh mô tả kịch bản, ăn khớp với nhóm PCCC trong
+# src/modules/module03-safety/data/safetyMonitoringDictionary.ts (frontend).
+# PCCC-001 đã tồn tại sẵn ở frontend. PCCC-002 là đề xuất bổ sung khi tích hợp.
+SCENARIO_META = {
+    "smoking": {
+        "scenario_id": "PCCC-001",
+        "scenario_name": "Phát hiện hút thuốc ngoài khu vực cho phép",
+        "violation_type": "fire-hot-work",
+        "group": "PCCC",
+    },
+    "fire": {
+        "scenario_id": "PCCC-002",
+        "scenario_name": "Phát hiện dấu hiệu cháy nổ",
+        "violation_type": "fire-hot-work",
+        "group": "PCCC",
+    },
+}
+
+
+class ViolationEvent(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    behavior: str  # "smoking" | "fire"
+    scenario_id: str
+    scenario_name: str
+    violation_type: str
+    group: str
+    confidence: float
+    bbox: list[float]
+    created_at: float = Field(default_factory=time.time)
+    snapshot_file: Optional[str] = None
+
+    @classmethod
+    def from_detection(cls, detection: Detection, snapshot_file: Optional[str]) -> "ViolationEvent":
+        meta = SCENARIO_META[detection.behavior]
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            snapshot_file=snapshot_file,
+        )

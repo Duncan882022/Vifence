@@ -8,3 +8,4 @@ vifence-pages.zip
 *.local
 .env
 .env.*
+!.env.example

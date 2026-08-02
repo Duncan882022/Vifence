@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<title>Vifence Safety AI — Local Test Viewer</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; font-family: -apple-system, "Inter", sans-serif;
+    background: #0b0f14; color: #e5e7eb; display: flex; height: 100vh;
+  }
+  .main { flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 12px; }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  .status { font-size: 12px; display: flex; gap: 14px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; margin-right: 5px; }
+  .dot.ok { background: #22c55e; } .dot.bad { background: #6b7280; }
+  .stage { position: relative; background: #000; border-radius: 10px; overflow: hidden; flex: 1; display: flex; align-items: center; justify-content: center; }
+  canvas { max-width: 100%; max-height: 100%; }
+  .sidebar { width: 320px; border-left: 1px solid #1f2937; padding: 16px; overflow-y: auto; }
+  .sidebar h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #9ca3af; margin: 0 0 10px; }
+  .event-card { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+  .event-card img { width: 100%; border-radius: 6px; margin-bottom: 6px; display: block; }
+  .badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .badge.smoking { background: rgba(251,146,60,.15); color: #fb923c; }
+  .badge.fire { background: rgba(239,68,68,.15); color: #ef4444; }
+  .meta { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+  .empty { font-size: 12px; color: #6b7280; }
+</style>
+</head>
+<body>
+  <div class="main">
+    <header>
+      <h1>Vifence Safety AI — Local Test Viewer</h1>
+      <div class="status" id="status">
+        <span><span class="dot bad" id="dot-ws"></span>WebSocket</span>
+      </div>
+    </header>
+    <div class="stage">
+      <canvas id="stage"></canvas>
+    </div>
+  </div>
+  <div class="sidebar">
+    <h2>Sự kiện đã xác nhận</h2>
+    <div id="events"><p class="empty">Chưa có sự kiện nào...</p></div>
+  </div>
+
+<script>
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const dotWs = document.getElementById('dot-ws');
+const eventsEl = document.getElementById('events');
+
+const BEHAVIOR_LABEL = { smoking: 'Hút thuốc', fire: 'Cháy nổ' };
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
+
+  ws.onopen = () => { dotWs.className = 'dot ok'; };
+  ws.onclose = () => { dotWs.className = 'dot bad'; setTimeout(connect, 1500); };
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    if (data.type === 'frame') renderFrame(data);
+    if (data.type === 'events') renderEvents(data.events);
+  };
+}
+
+function renderFrame(data) {
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = data.width;
+    canvas.height = data.height;
+    ctx.drawImage(img, 0, 0);
+    (data.detections || []).forEach(d => drawBox(d));
+  };
+  img.src = `data:image/jpeg;base64,${data.image}`;
+}
+
+function drawBox(d) {
+  const [x1, y1, x2, y2] = d.bbox;
+  ctx.strokeStyle = d.behavior === 'smoking' ? '#fb923c' : '#ef4444';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  const label = `${BEHAVIOR_LABEL[d.behavior] || d.behavior} ${(d.confidence * 100).toFixed(0)}%`;
+  ctx.font = '13px sans-serif';
+  const textWidth = ctx.measureText(label).width;
+  ctx.fillStyle = d.behavior === 'smoking' ? '#fb923c' : '#ef4444';
+  ctx.fillRect(x1, Math.max(y1 - 18, 0), textWidth + 8, 18);
+  ctx.fillStyle = '#0b0f14';
+  ctx.fillText(label, x1 + 4, Math.max(y1 - 5, 13));
+}
+
+function renderEvents(events) {
+  if (!events.length) {
+    eventsEl.innerHTML = '<p class="empty">Chưa có sự kiện nào...</p>';
+    return;
+  }
+  eventsEl.innerHTML = events.map(e => `
+    <div class="event-card">
+      <img src="/events/${e.id}/snapshot" alt="snapshot" />
+      <span class="badge ${e.behavior}">${BEHAVIOR_LABEL[e.behavior] || e.behavior}</span>
+      <div class="meta">${e.scenario_name}</div>
+      <div class="meta">${new Date(e.created_at * 1000).toLocaleString('vi-VN')} · ${(e.confidence * 100).toFixed(0)}%</div>
+    </div>
+  `).join('');
+}
+
+connect();
+</script>
+</body>
+</html>

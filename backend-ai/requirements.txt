@@ -1,0 +1,11 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+opencv-python>=4.9
+ultralytics>=8.3
+huggingface_hub>=0.24
+hf_xet>=1.0  # bắt buộc để tải file từ repo HF dùng Xet storage (vd model cháy nổ/hút thuốc ở trên)
+pydantic>=2.7
+pydantic-settings>=2.4
+eval_type_backport>=0.2  # cho phép pydantic hiểu cú pháp "X | None" trên Python < 3.10
+python-dotenv>=1.0
+numpy>=1.26
