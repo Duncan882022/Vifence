@@ -14,11 +14,18 @@ from .schemas import RoadDetection
 
 logger = logging.getLogger("road_analyzer")
 
-# Ngưỡng % diện tích ROI (khớp housekeepingAi.types defaults)
-MUD_THRESHOLD_PERCENT = 8.0
+# Ngưỡng % diện tích patch lớn nhất trong ROI (khớp housekeepingAi.types defaults)
+MUD_THRESHOLD_PERCENT = 5.0
 WATER_THRESHOLD_PERCENT = 5.0
-MIN_OBJECT_AREA_RATIO = 0.004
-MAX_OBJECT_AREA_RATIO = 0.22
+MIN_OBJECT_AREA_RATIO = 0.003
+MAX_OBJECT_AREA_RATIO = 0.12
+MAX_OBJECT_WIDTH_RATIO = 0.62
+
+SCENARIO_LABELS = {
+    "mud": "Đường nội bộ bùn bẩn",
+    "water": "Nước đọng trên đường",
+    "object": "Vật liệu rơi vãi trên đường",
+}
 
 
 @dataclass
@@ -38,12 +45,24 @@ def _polygon_to_mask(polygon: list[dict], width: int, height: int) -> np.ndarray
     return mask
 
 
-def _mask_percent(mask: np.ndarray, roi_mask: np.ndarray) -> float:
-    roi_pixels = int(np.count_nonzero(roi_mask))
+def _roi_pixel_count(roi_mask: np.ndarray) -> int:
+    return int(np.count_nonzero(roi_mask))
+
+
+def _largest_contour_area(mask: np.ndarray, roi_mask: np.ndarray) -> float:
+    combined = cv2.bitwise_and(mask, roi_mask)
+    contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return 0.0
+    return float(max(cv2.contourArea(c) for c in contours))
+
+
+def _patch_percent(mask: np.ndarray, roi_mask: np.ndarray) -> float:
+    roi_pixels = _roi_pixel_count(roi_mask)
     if roi_pixels <= 0:
         return 0.0
-    hit = int(np.count_nonzero(cv2.bitwise_and(mask, roi_mask)))
-    return round(100.0 * hit / roi_pixels, 2)
+    patch_area = _largest_contour_area(mask, roi_mask)
+    return round(100.0 * patch_area / roi_pixels, 2)
 
 
 def _contour_boxes(
@@ -52,68 +71,128 @@ def _contour_boxes(
     min_area_ratio: float,
     max_area_ratio: float,
     frame_area: int,
+    frame_width: int,
+    *,
+    limit: int = 1,
+    max_width_ratio: Optional[float] = None,
+    min_compactness: float = 0.12,
 ) -> list[tuple[int, int, int, int]]:
     combined = cv2.bitwise_and(mask, roi_mask)
     contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     min_area = frame_area * min_area_ratio
     max_area = frame_area * max_area_ratio
-    boxes: list[tuple[int, int, int, int]] = []
+    ranked: list[tuple[float, tuple[int, int, int, int]]] = []
+
     for cnt in contours:
         area = cv2.contourArea(cnt)
         if area < min_area or area > max_area:
             continue
         x, y, w, h = cv2.boundingRect(cnt)
-        boxes.append((x, y, x + w, y + h))
-    return boxes
+        if w <= 0 or h <= 0:
+            continue
+        if max_width_ratio is not None and w > frame_width * max_width_ratio:
+            continue
+        compactness = area / float(w * h)
+        if compactness < min_compactness:
+            continue
+        ranked.append((area, (x, y, x + w, y + h)))
+
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [box for _, box in ranked[:limit]]
 
 
-def _analyze_mud(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int) -> tuple[float, list[tuple[int, int, int, int]]]:
-    # Nâu / bùn đất trong ROI
-    mud_mask = cv2.inRange(hsv, np.array([8, 35, 35]), np.array([28, 200, 180]))
+def _analyze_mud(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int, frame_width: int) -> tuple[float, list[tuple[int, int, int, int]]]:
+    # Nâu đất ẩm — hẹp để tránh nhầm bê tông xám ướt
+    mud_mask = cv2.inRange(hsv, np.array([8, 70, 35]), np.array([22, 200, 130]))
     mud_mask = cv2.medianBlur(mud_mask, 5)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
-    pct = _mask_percent(mud_mask, roi_mask)
-    boxes = _contour_boxes(mud_mask, roi_mask, 0.002, 0.18, frame_area)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_CLOSE, kernel, iterations=3)
+    pct = _patch_percent(mud_mask, roi_mask)
+    boxes = _contour_boxes(
+        mud_mask, roi_mask, 0.002, 0.10, frame_area, frame_width,
+        limit=1, min_compactness=0.10,
+    )
     return pct, boxes
 
 
-def _analyze_water(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int) -> tuple[float, list[tuple[int, int, int, int]]]:
-    # Nước đọng: xanh lam / xám phản chiếu
-    blue = cv2.inRange(hsv, np.array([85, 25, 60]), np.array([130, 180, 220]))
-    gray_reflect = cv2.inRange(hsv, np.array([0, 0, 120]), np.array([179, 45, 210]))
-    water_mask = cv2.bitwise_or(blue, gray_reflect)
+def _analyze_water(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int, frame_width: int) -> tuple[float, list[tuple[int, int, int, int]]]:
+    water_mask = cv2.inRange(hsv, np.array([95, 50, 60]), np.array([125, 200, 190]))
     water_mask = cv2.medianBlur(water_mask, 7)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-    water_mask = cv2.morphologyEx(water_mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    pct = _mask_percent(water_mask, roi_mask)
-    boxes = _contour_boxes(water_mask, roi_mask, 0.003, 0.25, frame_area)
+    water_mask = cv2.morphologyEx(water_mask, cv2.MORPH_OPEN, kernel, iterations=2)
+    water_mask = cv2.morphologyEx(water_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+    pct = _patch_percent(water_mask, roi_mask)
+    boxes = _contour_boxes(
+        water_mask, roi_mask, 0.004, 0.10, frame_area, frame_width,
+        limit=1, min_compactness=0.12,
+    )
     return pct, boxes
+
+
+def _foreground_mask(height: int, width: int, *, top_ratio: float = 0.28) -> np.ndarray:
+    fg = np.zeros((height, width), dtype=np.uint8)
+    fg[int(height * top_ratio):, :] = 255
+    return fg
 
 
 def _analyze_objects(
+    frame: np.ndarray,
+    hsv: np.ndarray,
     gray: np.ndarray,
     roi_mask: np.ndarray,
     mud_mask: np.ndarray,
     water_mask: np.ndarray,
     frame_area: int,
 ) -> list[tuple[int, int, int, int]]:
-    # Vật thể / vật liệu: cạnh mạnh, loại trừ vùng bùn/nước đã gán
-    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 40, 120)
-    obj_mask = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=2)
+    h, w = frame.shape[:2]
     exclude = cv2.bitwise_or(mud_mask, water_mask)
-    obj_mask = cv2.bitwise_and(obj_mask, roi_mask)
-    obj_mask = cv2.bitwise_and(obj_mask, cv2.bitwise_not(exclude))
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    obj_mask = cv2.morphologyEx(obj_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-    return _contour_boxes(obj_mask, roi_mask, MIN_OBJECT_AREA_RATIO, MAX_OBJECT_AREA_RATIO, frame_area)
+    fg = _foreground_mask(h, w, top_ratio=0.30)
+
+    # Thép / coppha gỉ — cụm màu nâu cam nổi bật trên nền bê tông
+    rust_mask = cv2.inRange(hsv, np.array([5, 60, 40]), np.array([25, 255, 210]))
+    rust_mask = cv2.bitwise_and(rust_mask, roi_mask)
+    rust_mask = cv2.bitwise_and(rust_mask, fg)
+    rust_mask = cv2.bitwise_and(rust_mask, cv2.bitwise_not(exclude))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    rust_mask = cv2.morphologyEx(rust_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    rust_mask = cv2.morphologyEx(rust_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    boxes = _contour_boxes(
+        rust_mask, roi_mask,
+        MIN_OBJECT_AREA_RATIO, MAX_OBJECT_AREA_RATIO,
+        frame_area, w,
+        limit=1,
+        max_width_ratio=MAX_OBJECT_WIDTH_RATIO,
+        min_compactness=0.08,
+    )
+    if boxes:
+        return boxes
+
+    # Fallback: cụm cạnh dày (vật thể có biên rõ), loại nền đường rộng
+    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 50, 140)
+    edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    edge_mask = cv2.bitwise_and(edges, roi_mask)
+    edge_mask = cv2.bitwise_and(edge_mask, fg)
+    edge_mask = cv2.bitwise_and(edge_mask, cv2.bitwise_not(exclude))
+    edge_mask = cv2.morphologyEx(
+        edge_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)), cv2.MORPH_CLOSE, iterations=2,
+    )
+    return _contour_boxes(
+        edge_mask, roi_mask,
+        MIN_OBJECT_AREA_RATIO, MAX_OBJECT_AREA_RATIO,
+        frame_area, w,
+        limit=1,
+        max_width_ratio=MAX_OBJECT_WIDTH_RATIO,
+        min_compactness=0.06,
+    )
 
 
 def _confidence_from_percent(pct: float, threshold: float) -> float:
-    if pct <= 0:
+    if pct < threshold:
         return 0.0
-    ratio = pct / max(threshold, 1.0)
-    return round(min(0.95, 0.45 + ratio * 0.35), 3)
+    ratio = (pct - threshold) / max(threshold, 1.0)
+    return round(min(0.92, 0.55 + ratio * 0.25), 3)
 
 
 def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
@@ -146,56 +225,54 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
 
     for zone in road_zones:
         roi_mask = _polygon_to_mask(zone["polygon"], w, h)
-        mud_pct, mud_boxes = _analyze_mud(hsv, roi_mask, frame_area)
-        water_pct, water_boxes = _analyze_water(hsv, roi_mask, frame_area)
+        mud_pct, mud_boxes = _analyze_mud(hsv, roi_mask, frame_area, w)
+        water_pct, water_boxes = _analyze_water(hsv, roi_mask, frame_area, w)
 
-        mud_mask = cv2.inRange(hsv, np.array([8, 35, 35]), np.array([28, 200, 180]))
-        water_mask = cv2.inRange(hsv, np.array([85, 25, 60]), np.array([130, 180, 220]))
+        mud_mask = cv2.inRange(hsv, np.array([8, 70, 35]), np.array([22, 200, 130]))
+        water_mask = cv2.inRange(hsv, np.array([95, 50, 60]), np.array([125, 200, 190]))
         mud_combined = cv2.bitwise_or(mud_combined, cv2.bitwise_and(mud_mask, roi_mask))
         water_combined = cv2.bitwise_or(water_combined, cv2.bitwise_and(water_mask, roi_mask))
 
         total_mud = max(total_mud, mud_pct)
         total_water = max(total_water, water_pct)
 
-        if mud_pct >= MUD_THRESHOLD_PERCENT * 0.5:
+        if mud_pct >= MUD_THRESHOLD_PERCENT and mud_boxes:
             conf = _confidence_from_percent(mud_pct, MUD_THRESHOLD_PERCENT)
-            for box in mud_boxes[:3]:
-                all_detections.append(
-                    RoadDetection(
-                        behavior="mud",
-                        label="bùn đất",
-                        scenario_id="HK-01",
-                        confidence=conf,
-                        bbox=[float(v) for v in box],
-                        area_percent=mud_pct,
-                    )
+            all_detections.append(
+                RoadDetection(
+                    behavior="mud",
+                    label=SCENARIO_LABELS["mud"],
+                    scenario_id="BPTC-007",
+                    confidence=conf,
+                    bbox=[float(v) for v in mud_boxes[0]],
+                    area_percent=mud_pct,
                 )
+            )
 
-        if water_pct >= WATER_THRESHOLD_PERCENT * 0.5:
+        if water_pct >= WATER_THRESHOLD_PERCENT and water_boxes:
             conf = _confidence_from_percent(water_pct, WATER_THRESHOLD_PERCENT)
-            for box in water_boxes[:3]:
-                all_detections.append(
-                    RoadDetection(
-                        behavior="water",
-                        label="nước đọng",
-                        scenario_id="HK-02",
-                        confidence=conf,
-                        bbox=[float(v) for v in box],
-                        area_percent=water_pct,
-                    )
+            all_detections.append(
+                RoadDetection(
+                    behavior="water",
+                    label=SCENARIO_LABELS["water"],
+                    scenario_id="BPTC-008",
+                    confidence=conf,
+                    bbox=[float(v) for v in water_boxes[0]],
+                    area_percent=water_pct,
                 )
+            )
 
-        obj_boxes = _analyze_objects(gray, roi_mask, mud_combined, water_combined, frame_area)
+        obj_boxes = _analyze_objects(frame, hsv, gray, roi_mask, mud_combined, water_combined, frame_area)
         object_count += len(obj_boxes)
-        for box in obj_boxes[:4]:
+        for box in obj_boxes[:1]:
             x1, y1, x2, y2 = box
             area_ratio = ((x2 - x1) * (y2 - y1)) / frame_area
-            conf = round(min(0.92, 0.5 + area_ratio * 8), 3)
+            conf = round(min(0.92, 0.58 + area_ratio * 6), 3)
             all_detections.append(
                 RoadDetection(
                     behavior="object",
-                    label="vật thể trên đường",
-                    scenario_id="HK-03",
+                    label=SCENARIO_LABELS["object"],
+                    scenario_id="BPTC-009",
                     confidence=conf,
                     bbox=[float(v) for v in box],
                 )

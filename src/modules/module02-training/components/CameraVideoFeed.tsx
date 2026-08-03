@@ -3,7 +3,7 @@ import { cn } from '@/utils/cn'
 import { CameraAiOverlay } from './CameraAiOverlay'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
 import { isRoadAnalysisCamera } from '@/modules/module04-housekeeping/data/roadAnalysisCameras'
-import { getFeedKeyForCamera } from '../data/trainingCameraFeeds'
+import { getFeedKeyForCamera, getVideoObjectFitForCamera } from '../data/trainingCameraFeeds'
 
 interface CameraVideoFeedProps {
   cameraId: string
@@ -27,6 +27,7 @@ export function CameraVideoFeed({
   const videoRef = useRef<HTMLVideoElement>(null)
   const feedKey = getFeedKeyForCamera(cameraId)
   const roadAnalysis = isRoadAnalysisCamera(cameraId)
+  const videoFit = getVideoObjectFitForCamera(cameraId, streamType)
   const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis)
   const showRoadOverlay = Boolean(aiOverlay && roadAnalysis)
 
@@ -78,7 +79,7 @@ export function CameraVideoFeed({
         preload={playing ? 'auto' : 'metadata'}
         className={cn(
           'absolute inset-0 h-full w-full',
-          streamType === 'bodycam' || streamType === 'mobile' ? 'object-contain bg-black' : 'object-cover',
+          videoFit === 'contain' ? 'object-contain bg-black' : 'object-cover',
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
@@ -95,6 +96,7 @@ export function CameraVideoFeed({
           cameraId={cameraId}
           compact={compact}
           videoRef={videoRef}
+          videoFit={videoFit}
           enabled={playing && aiOverlay}
         />
       )}

@@ -19,7 +19,7 @@ from .camera_stream import CameraStream
 from .config import settings
 from .detection_engine import DetectionEngine
 from .mobile_config_store import MobileAiConfigStore
-from .road_analyzer import analyze_road_frame
+from .road_analysis_engine import RoadAnalysisEngine
 from .schemas import MobileAiConfigPayload, MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -69,6 +69,7 @@ def _analyze_mobile_frame(frame: np.ndarray, camera_id: str) -> dict:
 
 camera = CameraStream(settings.camera_source_value)
 engine = DetectionEngine(camera)
+road_engine = RoadAnalysisEngine(engine.store)
 mobile_config_store = MobileAiConfigStore()
 
 
@@ -212,7 +213,7 @@ def debug_frame():
 
 def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     small = _downscale_for_mobile(frame, max_width=640)
-    result = analyze_road_frame(small, camera_id)
+    result, _ = road_engine.process_frame(small, camera_id)
     sw, sh = small.shape[1], small.shape[0]
     ow, oh = frame.shape[1], frame.shape[0]
     if sw != ow or sh != oh:
@@ -222,6 +223,11 @@ def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             x1, y1, x2, y2 = d["bbox"]
             scaled.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
         result["detections"] = scaled
+        scaled_events = []
+        for e in result.get("events", []):
+            x1, y1, x2, y2 = e["bbox"]
+            scaled_events.append({**e, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
+        result["events"] = scaled_events
         result["width"] = ow
         result["height"] = oh
     return result

@@ -1,5 +1,11 @@
 /** URL backend AI local (ngrok/Cloudflare Tunnel) — cache trình duyệt + sync JSON backend. */
-const STORAGE_KEY = 'vifence_mobile_ai_backend_url'
+export const MOBILE_AI_BACKEND_STORAGE_KEY = 'vifence_mobile_ai_backend_url'
+const STORAGE_KEY = MOBILE_AI_BACKEND_STORAGE_KEY
+
+export function notifyMobileAiBackendUrlChanged(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('vifence-mobile-ai-backend-changed'))
+}
 
 export interface MobileAiBackendConfigRecord {
   backend_url: string
@@ -53,6 +59,7 @@ export function setMobileAiBackendUrl(url: string): void {
   const trimmed = url.trim()
   if (trimmed) localStorage.setItem(STORAGE_KEY, trimmed)
   else localStorage.removeItem(STORAGE_KEY)
+  notifyMobileAiBackendUrlChanged()
 }
 
 export function buildMobileAiConfigUrl(baseUrl: string): string {

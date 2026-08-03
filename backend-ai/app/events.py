@@ -10,7 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .schemas import Detection, ViolationEvent
+from .schemas import Detection, RoadDetection, ViolationEvent
 
 logger = logging.getLogger("events")
 
@@ -208,6 +208,59 @@ class EventStore:
             event.confidence,
         )
         return event
+
+    def add_road(
+        self,
+        detection: RoadDetection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-03",
+    ) -> ViolationEvent:
+        event_date = _event_date()
+        event = ViolationEvent.from_road_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        snapshot_name = f"{event_date}/{event.id}.jpg"
+        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        annotated = self._draw_road_bbox(frame, detection)
+        cv2.imwrite(str(snapshot_path), annotated)
+        event.snapshot_file = snapshot_name
+
+        with self._lock:
+            self._events.appendleft(event)
+        self._append_to_disk(event)
+        logger.info(
+            "Sự kiện road [%s]: %s (%s) conf=%.2f",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+        )
+        return event
+
+    @staticmethod
+    def _draw_road_bbox(frame: np.ndarray, detection: RoadDetection) -> np.ndarray:
+        annotated = frame.copy()
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        colors = {
+            "mud": (0, 180, 255),
+            "water": (255, 160, 0),
+            "object": (0, 140, 255),
+        }
+        color = colors.get(detection.behavior, (0, 255, 0))
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+        label = f"{detection.label} {detection.confidence:.2f}"
+        cv2.putText(
+            annotated, label, (x1, max(y1 - 8, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
+        )
+        return annotated
 
     @staticmethod
     def _draw_bbox(frame: np.ndarray, detection: Detection) -> np.ndarray:

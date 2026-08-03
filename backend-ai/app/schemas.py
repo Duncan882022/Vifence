@@ -58,10 +58,31 @@ SCENARIO_META = {
     },
 }
 
+ROAD_SCENARIO_META = {
+    "mud": {
+        "scenario_id": "BPTC-007",
+        "scenario_name": "Đường nội bộ bùn bẩn",
+        "violation_type": "method-statement",
+        "group": "BPTC",
+    },
+    "water": {
+        "scenario_id": "BPTC-008",
+        "scenario_name": "Nước đọng trên đường",
+        "violation_type": "method-statement",
+        "group": "BPTC",
+    },
+    "object": {
+        "scenario_id": "BPTC-009",
+        "scenario_name": "Vật liệu rơi vãi trên đường",
+        "violation_type": "method-statement",
+        "group": "BPTC",
+    },
+}
+
 
 class ViolationEvent(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    behavior: str  # "smoking" | "fire"
+    behavior: str  # "smoking" | "fire" | "mud" | "water" | "object"
     scenario_id: str
     scenario_name: str
     violation_type: str
@@ -82,6 +103,31 @@ class ViolationEvent(BaseModel):
         camera_id: str = "LOCAL-CAM",
     ) -> "ViolationEvent":
         meta = SCENARIO_META[detection.behavior]
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
+            snapshot_file=snapshot_file,
+        )
+
+    @classmethod
+    def from_road_detection(
+        cls,
+        detection: RoadDetection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "A-03",
+    ) -> "ViolationEvent":
+        meta = ROAD_SCENARIO_META[detection.behavior]
         created = time.time()
         day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
         return cls(

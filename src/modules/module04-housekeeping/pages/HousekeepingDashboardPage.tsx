@@ -19,6 +19,8 @@ import {
 } from '../services/housekeepingDashboard.service'
 import { getAllHousekeepingEventRecords } from '../data/housekeepingEventRecords'
 import { HOUSEKEEPING_AI_CONFIG, HOUSEKEEPING_ROI_ZONES } from '../data/housekeepingRoiConfig'
+import { mergeHousekeepingRecordsWithAi } from '../services/housekeepingAiEvents.service'
+import { useHousekeepingAiEvents } from '../hooks/useHousekeepingAiEvents'
 import type { HousekeepingCategoryId } from '@/types/housekeeping'
 import type { HousekeepingAiGroupId, HousekeepingDashboardFilters } from '../types/housekeepingAi.types'
 import { cn } from '@/utils/cn'
@@ -39,7 +41,12 @@ export function HousekeepingDashboardPage() {
   const [selectedGroupId, setSelectedGroupId] = useState<HousekeepingAiGroupId | null>(null)
   const [filters] = useState(DEFAULT_FILTERS)
 
-  const allEvents = useMemo(() => getAllHousekeepingEventRecords(), [])
+  const aiLiveRecords = useHousekeepingAiEvents(5000)
+
+  const allEvents = useMemo(
+    () => mergeHousekeepingRecordsWithAi(getAllHousekeepingEventRecords(), aiLiveRecords),
+    [aiLiveRecords],
+  )
   const scopedEvents = useMemo(
     () => filterHousekeepingEvents(allEvents, filters),
     [allEvents, filters],

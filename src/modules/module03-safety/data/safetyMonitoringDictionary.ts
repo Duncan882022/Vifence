@@ -125,6 +125,9 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
       'Hàn, cắt không có che chắn',
       'Thi công kết cấu thép, lợp mái không có lưới chống rơi',
       'Thi công trên cao không có dây cứu sinh, lan can hoặc sàn thao tác',
+      'Đường nội bộ bùn bẩn',
+      'Nước đọng trên đường',
+      'Vật liệu rơi vãi trên đường',
     ],
     monitoringMethods: [
       'Kiểm tra trước thi công',

@@ -100,7 +100,20 @@ export const CAMERA_FEED_BY_ID: Record<string, CameraFeedKey> = {
 }
 
 export function getOverlayFitForFeed(feedKey: CameraFeedKey): 'cover' | 'contain' {
-  return feedKey.startsWith('bodycam-') ? 'contain' : 'cover'
+  if (feedKey.startsWith('bodycam-')) return 'contain'
+  /** Test.mp4 TTDV-A Cam 03 — 640×640 vuông, không crop */
+  if (feedKey === 'ocp1-a-03') return 'contain'
+  return 'cover'
+}
+
+export function getVideoObjectFitForCamera(
+  cameraId: string,
+  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'fixed',
+): 'cover' | 'contain' {
+  if (streamType === 'bodycam' || streamType === 'mobile') return 'contain'
+  const feedKey = getFeedKeyForCamera(cameraId)
+  if (feedKey) return getOverlayFitForFeed(feedKey)
+  return 'cover'
 }
 
 export function getFeedKeyForCamera(cameraId: string): CameraFeedKey | undefined {

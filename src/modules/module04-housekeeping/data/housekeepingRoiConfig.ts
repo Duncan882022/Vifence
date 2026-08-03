@@ -4,7 +4,7 @@ import type { HousekeepingAiConfig, HousekeepingRoiZone } from '../types/houseke
 export const HOUSEKEEPING_AI_CONFIG: HousekeepingAiConfig = {
   roadOccupancyMinutes: 30,
   trashDwellMinutes: 30,
-  mudThresholdPercent: 8,
+  mudThresholdPercent: 5,
   waterThresholdPercent: 5,
   checkIntervalSeconds: 5,
   snapshotEnabled: true,
@@ -22,11 +22,22 @@ export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
     label: 'Lòng đường — TTDV-A Cam 03',
     type: 'ROAD',
     cameraId: 'A-03',
+    /**
+     * Lòng đường Cam 03 — trace theo đường đỏ user (lề trái + hàng rào phải),
+     * áp cho ttdv-a-cam03-test.mp4 (640×640, cùng framing).
+     */
     polygon: [
-      { x: 0.08, y: 0.45 },
-      { x: 0.92, y: 0.42 },
-      { x: 0.95, y: 0.88 },
-      { x: 0.05, y: 0.90 },
+      { x: 0.0000, y: 1.0000 },
+      { x: 0.0800, y: 0.9000 },
+      { x: 0.1400, y: 0.7800 },
+      { x: 0.2400, y: 0.6600 },
+      { x: 0.3600, y: 0.5800 },
+      { x: 0.5000, y: 0.5400 },
+      { x: 0.6400, y: 0.5800 },
+      { x: 0.7600, y: 0.6600 },
+      { x: 0.8800, y: 0.7600 },
+      { x: 0.9600, y: 0.8800 },
+      { x: 1.0000, y: 1.0000 },
     ],
   },
   {

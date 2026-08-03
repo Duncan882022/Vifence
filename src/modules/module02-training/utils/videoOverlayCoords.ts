@@ -48,3 +48,18 @@ export function mapVideoRectToOverlay(
     fit,
   )
 }
+
+/** Map điểm chuẩn hoá 0–1 trên khung video → % overlay (object-cover/contain). */
+export function mapVideoPointToOverlay(
+  nx: number,
+  ny: number,
+  video: HTMLVideoElement,
+  fit: 'cover' | 'contain' = 'cover',
+): { x: number; y: number } {
+  const pt = mapVideoRectToOverlay(
+    { x: nx * video.videoWidth, y: ny * video.videoHeight, width: 1, height: 1 },
+    video,
+    fit,
+  )
+  return { x: pt.x, y: pt.y }
+}

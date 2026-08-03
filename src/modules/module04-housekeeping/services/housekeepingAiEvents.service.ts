@@ -2,41 +2,40 @@ import {
   getMobileAiBackendUrl,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import type {
-  AlertSeverity,
-  SafetyGroupId,
-  SafetyViolationRecord,
-} from '../types/safety.types'
-import { getScenarioName } from '../data/safetyScenarios'
+  HousekeepingAlertSeverity,
+  HousekeepingEventRecord,
+  HousekeepingEventSubjectType,
+} from '../types/housekeepingAi.types'
+import { getHousekeepingScenarioName } from '../data/housekeepingScenarios'
 
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
 
-const BEHAVIOR_TO_SCENARIO: Record<string, string> = {
-  smoking: 'PCCC-001',
-  fire: 'PCCC-002',
-  mud: 'BPTC-007',
-  water: 'BPTC-008',
-  object: 'BPTC-009',
+/** Backend BPTC road scenarios → Module 04 HK catalog */
+const BACKEND_TO_HK_SCENARIO: Record<string, string> = {
+  'BPTC-007': 'HK-01',
+  'BPTC-008': 'HK-02',
+  'BPTC-009': 'HK-03',
 }
 
-const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
-  smoking: 'PCCC',
-  fire: 'PCCC',
-  mud: 'BPTC',
-  water: 'BPTC',
-  object: 'BPTC',
+const BEHAVIOR_TO_HK: Record<string, string> = {
+  mud: 'HK-01',
+  water: 'HK-02',
+  object: 'HK-03',
 }
 
-const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
-  smoking: 'VIOLATION',
-  fire: 'CRITICAL',
+const BEHAVIOR_TO_SEVERITY: Record<string, HousekeepingAlertSeverity> = {
   mud: 'WARNING',
   water: 'WARNING',
   object: 'VIOLATION',
 }
 
-const ROAD_BEHAVIORS = new Set(['mud', 'water', 'object'])
+const BEHAVIOR_TO_SUBJECT: Record<string, HousekeepingEventSubjectType> = {
+  mud: 'SITE_CONDITION',
+  water: 'SITE_CONDITION',
+  object: 'CONSTRUCTION_ACTIVITY',
+}
 
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/$/, '')
@@ -55,59 +54,51 @@ function buildSnapshotUrl(backendUrl: string, eventId: string): string {
   return `${normalizeBaseUrl(backendUrl)}/events/${eventId}/snapshot`
 }
 
-export interface BackendViolationEvent {
+export interface BackendRoadEvent {
   id: string
   behavior: string
   confidence: number
   bbox: number[]
   created_at: number
   camera_id?: string
-  event_date?: string
   scenario_id?: string
   scenario_name?: string
-  group?: string
-  violation_type?: string
 }
 
-export function mapBackendEventToSafetyRecord(
-  event: BackendViolationEvent,
+export function mapBackendEventToHousekeepingRecord(
+  event: BackendRoadEvent,
   backendUrl: string,
-): SafetyViolationRecord {
-  const cameraId = event.camera_id ?? 'MOB-01'
-  const scenarioId = BEHAVIOR_TO_SCENARIO[event.behavior] ?? event.scenario_id ?? 'PCCC-001'
-  const groupId = BEHAVIOR_TO_GROUP[event.behavior] ?? (event.group as SafetyGroupId | undefined) ?? 'PCCC'
-  const isRoad = ROAD_BEHAVIORS.has(event.behavior)
+): HousekeepingEventRecord | null {
+  const scenarioId = BEHAVIOR_TO_HK[event.behavior]
+    ?? BACKEND_TO_HK_SCENARIO[event.scenario_id ?? '']
+  if (!scenarioId) return null
+
+  const cameraId = event.camera_id ?? 'A-03'
 
   return {
-    id: `ai-${event.id}`,
+    id: `ai-hk-${event.id}`,
     scenarioId,
-    groupId,
-    zoneId: isRoad ? 'ZONE-A01' : 'ZONE-A01',
+    groupId: 'HK',
+    zoneId: 'khu-a',
+    roiType: 'ROAD',
     sourceDeviceId: cameraId,
-    sourceType: isRoad ? 'FIXED_CAMERA' : 'MOBILE',
     detectedAt: toIsoLocalTimestamp(event.created_at),
-    severity: BEHAVIOR_TO_SEVERITY[event.behavior] ?? 'VIOLATION',
+    severity: BEHAVIOR_TO_SEVERITY[event.behavior] ?? 'WARNING',
     status: 'DETECTED',
     confidence: event.confidence,
-    eventSubjectType: isRoad
-      ? (event.behavior === 'object' ? 'CONSTRUCTION_ACTIVITY' : 'SITE_CONDITION')
-      : 'PERSON',
-    subject: isRoad
-      ? { type: 'SITE_CONDITION' }
-      : {
-          type: 'PERSON',
-          workerName: 'Unknown',
-        },
-    verificationRequired: true,
-    description: event.scenario_name ?? getScenarioName(scenarioId),
+    eventSubjectType: BEHAVIOR_TO_SUBJECT[event.behavior] ?? 'SITE_CONDITION',
+    description: event.scenario_name ?? getHousekeepingScenarioName(scenarioId),
     snapshotUrl: buildSnapshotUrl(backendUrl, event.id),
+    evidence: {
+      annotatedUrl: buildSnapshotUrl(backendUrl, event.id),
+    },
   }
 }
 
-export async function fetchSafetyAiEvents(
+export async function fetchHousekeepingAiEvents(
   backendUrl?: string,
   date?: string,
-): Promise<SafetyViolationRecord[]> {
+): Promise<HousekeepingEventRecord[]> {
   const base = normalizeBaseUrl(backendUrl ?? getMobileAiBackendUrl())
   if (!base) return []
 
@@ -120,17 +111,19 @@ export async function fetchSafetyAiEvents(
       mode: 'cors',
     })
     if (!res.ok) return []
-    const rows = await res.json() as BackendViolationEvent[]
-    return rows.map(row => mapBackendEventToSafetyRecord(row, base))
+    const rows = await res.json() as BackendRoadEvent[]
+    return rows
+      .map(row => mapBackendEventToHousekeepingRecord(row, base))
+      .filter((row): row is HousekeepingEventRecord => row != null)
   } catch {
     return []
   }
 }
 
-export function mergeSafetyRecordsWithAi(
-  mockRecords: SafetyViolationRecord[],
-  aiRecords: SafetyViolationRecord[],
-): SafetyViolationRecord[] {
+export function mergeHousekeepingRecordsWithAi(
+  mockRecords: HousekeepingEventRecord[],
+  aiRecords: HousekeepingEventRecord[],
+): HousekeepingEventRecord[] {
   const aiIds = new Set(aiRecords.map(r => r.id))
   const filteredMock = mockRecords.filter(r => !aiIds.has(r.id))
   return [...aiRecords, ...filteredMock].sort(

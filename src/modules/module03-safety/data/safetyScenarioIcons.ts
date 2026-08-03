@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Fence, Flag, Flame, Footprints,
-  Forklift, Gauge, Grid3x3, Link2Off, OctagonX, PanelTop, PersonStanding, Scissors, Shirt,
+  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Droplets, Fence, Flag, Flame, Footprints,
+  Forklift, Gauge, Grid3x3, Link2Off, OctagonX, Package, PanelTop, PersonStanding, Pickaxe, Scissors, Shirt,
   Shovel, Waypoints,
 } from 'lucide-react'
 import { SAFETY_SCENARIOS } from './safetyScenarios'
@@ -26,6 +26,9 @@ export const SCENARIO_ICONS: Record<string, LucideIcon> = {
   'BPTC-004': Scissors,         // Hàn/cắt thiếu che chắn
   'BPTC-005': Fence,            // Thiếu lưới chống rơi
   'BPTC-006': Cable,            // Thiếu dây cứu sinh/lan can
+  'BPTC-007': Pickaxe,           // Bùn đất trên đường nội bộ
+  'BPTC-008': Droplets,          // Nước đọng trên đường
+  'BPTC-009': Package,           // Vật liệu rơi vãi trên đường
   'PCCC-001': Cigarette,        // Hút thuốc sai nơi quy định
   'PCCC-002': Flame,            // Dấu hiệu cháy nổ
 }
