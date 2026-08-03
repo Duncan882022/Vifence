@@ -12,6 +12,16 @@ class MobileFramePayload(BaseModel):
     type: str = "frame"
     camera_id: str = "mobile"
     image: str
+    mode: Optional[str] = None  # "road" → phân tích lòng đường (Module 04)
+
+
+class RoadDetection(BaseModel):
+    behavior: str  # mud | water | object
+    label: str
+    scenario_id: str
+    confidence: float
+    bbox: list[float]
+    area_percent: Optional[float] = None
 
 
 class MobileAiConfigPayload(BaseModel):

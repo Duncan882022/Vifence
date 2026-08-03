@@ -19,6 +19,7 @@ from .camera_stream import CameraStream
 from .config import settings
 from .detection_engine import DetectionEngine
 from .mobile_config_store import MobileAiConfigStore
+from .road_analyzer import analyze_road_frame
 from .schemas import MobileAiConfigPayload, MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -209,6 +210,23 @@ def debug_frame():
     return Response(content=buf.tobytes(), media_type="image/jpeg")
 
 
+def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
+    small = _downscale_for_mobile(frame, max_width=640)
+    result = analyze_road_frame(small, camera_id)
+    sw, sh = small.shape[1], small.shape[0]
+    ow, oh = frame.shape[1], frame.shape[0]
+    if sw != ow or sh != oh:
+        sx, sy = ow / sw, oh / sh
+        scaled = []
+        for d in result.get("detections", []):
+            x1, y1, x2, y2 = d["bbox"]
+            scaled.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
+        result["detections"] = scaled
+        result["width"] = ow
+        result["height"] = oh
+    return result
+
+
 @app.post("/analyze/frame")
 async def analyze_frame(payload: MobileFramePayload):
     """Nhận frame JPEG (base64) qua HTTP — dùng cho mobile qua ngrok (fetch gửi được
@@ -226,9 +244,40 @@ async def analyze_frame(payload: MobileFramePayload):
 
     camera_id = payload.camera_id or "mobile"
     loop = asyncio.get_event_loop()
+    if payload.mode == "road":
+        return await loop.run_in_executor(
+            _analyze_executor,
+            _analyze_road_frame,
+            frame,
+            camera_id,
+        )
     return await loop.run_in_executor(
         _analyze_executor,
         _analyze_mobile_frame,
+        frame,
+        camera_id,
+    )
+
+
+@app.post("/analyze/road/frame")
+async def analyze_road_frame_endpoint(payload: MobileFramePayload):
+    """Phân tích lòng đường (bùn / nước / vật thể trong ROI) — Cam cố định Module 04."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-03"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_road_frame,
         frame,
         camera_id,
     )

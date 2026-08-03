@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/utils/cn'
 import { CameraAiOverlay } from './CameraAiOverlay'
+import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
+import { isRoadAnalysisCamera } from '@/modules/module04-housekeeping/data/roadAnalysisCameras'
 import { getFeedKeyForCamera } from '../data/trainingCameraFeeds'
 
 interface CameraVideoFeedProps {
@@ -24,7 +26,9 @@ export function CameraVideoFeed({
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const feedKey = getFeedKeyForCamera(cameraId)
-  const showOverlay = Boolean(aiOverlay && feedKey)
+  const roadAnalysis = isRoadAnalysisCamera(cameraId)
+  const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis)
+  const showRoadOverlay = Boolean(aiOverlay && roadAnalysis)
 
   useEffect(() => {
     const video = videoRef.current
@@ -78,9 +82,17 @@ export function CameraVideoFeed({
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
-      {showOverlay && feedKey && (
+      {showFaceOverlay && feedKey && (
         <CameraAiOverlay
           feedKey={feedKey}
+          compact={compact}
+          videoRef={videoRef}
+          enabled={playing && aiOverlay}
+        />
+      )}
+      {showRoadOverlay && (
+        <RoadAnalysisOverlay
+          cameraId={cameraId}
           compact={compact}
           videoRef={videoRef}
           enabled={playing && aiOverlay}

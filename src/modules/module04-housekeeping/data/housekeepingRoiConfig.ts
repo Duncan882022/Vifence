@@ -18,6 +18,30 @@ export const HOUSEKEEPING_AI_CONFIG: HousekeepingAiConfig = {
  */
 export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
   {
+    id: 'roi-road-a03',
+    label: 'Lòng đường — TTDV-A Cam 03',
+    type: 'ROAD',
+    cameraId: 'A-03',
+    polygon: [
+      { x: 0.08, y: 0.45 },
+      { x: 0.92, y: 0.42 },
+      { x: 0.95, y: 0.88 },
+      { x: 0.05, y: 0.90 },
+    ],
+  },
+  {
+    id: 'roi-buffer-a03',
+    label: 'Lề đường — TTDV-A Cam 03',
+    type: 'BUFFER',
+    cameraId: 'A-03',
+    polygon: [
+      { x: 0.02, y: 0.38 },
+      { x: 0.08, y: 0.45 },
+      { x: 0.05, y: 0.90 },
+      { x: 0.0, y: 0.82 },
+    ],
+  },
+  {
     id: 'roi-road-a04',
     label: 'Lòng đường — Sân Tập A',
     type: 'ROAD',
