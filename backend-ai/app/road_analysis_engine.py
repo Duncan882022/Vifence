@@ -14,10 +14,11 @@ from .schemas import RoadDetection, ViolationEvent
 
 logger = logging.getLogger("road_analysis_engine")
 
+# Xác nhận detect liên tục trước khi log lần đầu
 _ROAD_DEBOUNCE_SECONDS = 2.5
-_ROAD_COOLDOWN_SECONDS = 45.0
 _ROAD_MAX_GAP_SECONDS = 3.0
-_ROAD_REPEAT_MIN_SECONDS = 60.0
+# Chỉ log lại cùng loại (mud/water/object) sau 30 phút — khớp dwell Module 04
+_ROAD_EVENT_COOLDOWN_SECONDS = 30 * 60
 
 
 class RoadAnalysisEngine:
@@ -34,7 +35,7 @@ class RoadAnalysisEngine:
             self._debouncers[camera_id] = {
                 behavior: PersistenceDebouncer(
                     min_duration_seconds=_ROAD_DEBOUNCE_SECONDS,
-                    cooldown_seconds=_ROAD_COOLDOWN_SECONDS,
+                    cooldown_seconds=_ROAD_EVENT_COOLDOWN_SECONDS,
                     max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
                     one_event_per_episode=True,
                 )
@@ -47,7 +48,7 @@ class RoadAnalysisEngine:
         last_at = self._last_event_at.get(key)
         if last_at is None:
             return False
-        return time.time() - last_at < _ROAD_REPEAT_MIN_SECONDS
+        return time.time() - last_at < _ROAD_EVENT_COOLDOWN_SECONDS
 
     def process_frame(self, frame: np.ndarray, camera_id: str) -> tuple[dict, list[ViolationEvent]]:
         result = analyze_road_frame(frame, camera_id)
