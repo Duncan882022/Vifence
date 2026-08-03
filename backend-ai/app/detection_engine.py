@@ -35,6 +35,25 @@ def _bboxes_overlap(a: tuple[float, float, float, float], b: list[float]) -> boo
     return not (bx2 < ax1 or bx1 > ax2 or by2 < ay1 or by1 > ay2)
 
 
+def _bbox_iou(a: list[float], b: list[float]) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+# Tránh spam sự kiện cùng vùng / cùng camera (FP lặp mỗi cooldown).
+_FIRE_SIMILAR_IOU = 0.35
+_FIRE_SIMILAR_CENTER_PX = 48.0
+
+
 # Mobile gửi frame qua ngrok — bỏ YOLO fire (chậm + hay FP đèn trần), giữ
 # heuristic lửa + smoking YOLO (đã có lọc vùng miệng).
 _MOBILE_DETECTOR_NAMES = frozenset({"smoking-yolo", "fire-heuristic"})
@@ -50,7 +69,7 @@ _BEHAVIOR_DEBOUNCE: dict[str, dict] = {
         "min_duration": lambda: settings.fire_event_min_duration_seconds,
         "max_gap": lambda: settings.fire_event_max_gap_seconds,
         "cooldown": lambda: settings.fire_event_cooldown_seconds,
-        "one_event_per_episode": False,
+        "one_event_per_episode": True,
     },
 }
 
@@ -80,6 +99,12 @@ class DetectionEngine:
         self.debouncers = self._make_debouncers()
         self._remote_debouncers: dict[str, dict[str, PersistenceDebouncer]] = {}
         self.store = EventStore()
+        # Frame + detection tốt nhất trong phiên debounce (snapshot đúng lúc lửa rõ nhất).
+        self._episode_best: dict[str, dict] = {}
+        # Thời điểm log gần nhất theo camera + behavior (chống lặp 3 phút).
+        self._last_event_at: dict[str, float] = {}
+        # Fire: bbox lần log gần nhất — so khớp vùng tương tự (IoU / khoảng cách tâm).
+        self._last_fire_by_camera: dict[str, tuple[list[float], float]] = {}
 
         self._latest_detections: list[Detection] = []
         self._lock = threading.Lock()
@@ -185,18 +210,97 @@ class DetectionEngine:
             filtered.extend(dets)
 
         new_events: list[ViolationEvent] = []
+        cam_key = camera_id or "LOCAL-CAM"
         for behavior, debouncer in debouncers.items():
             dets = by_behavior.get(behavior, [])
             best = max((d.confidence for d in dets), default=0.0)
+            episode_key = f"{cam_key}:{behavior}"
+            was_active = debouncer.snapshot()["active"]
             confirmed = debouncer.register(best > 0)
+
+            if best > 0:
+                top_det = max(dets, key=lambda d: d.confidence)
+                pending = self._episode_best.get(episode_key)
+                if pending is None or top_det.confidence > pending["confidence"]:
+                    self._episode_best[episode_key] = {
+                        "confidence": top_det.confidence,
+                        "detection": top_det,
+                        "frame": frame.copy(),
+                    }
+
             if confirmed:
-                top_detection = max(dets, key=lambda d: d.confidence)
-                if persist_events:
-                    new_events.append(
-                        self.store.add(top_detection, frame, camera_id=camera_id or "LOCAL-CAM")
+                pending = self._episode_best.pop(episode_key, None)
+                if pending:
+                    top_detection = pending["detection"]
+                    snap_frame = pending["frame"]
+                elif dets:
+                    top_detection = max(dets, key=lambda d: d.confidence)
+                    snap_frame = frame
+                else:
+                    continue
+
+                if self._should_skip_repeat_event(cam_key, behavior, top_detection):
+                    logger.info(
+                        "Bỏ qua %s trùng/lặp [%s] conf=%.2f label=%s",
+                        behavior,
+                        cam_key,
+                        top_detection.confidence,
+                        top_detection.label,
                     )
+                    continue
+
+                if persist_events:
+                    event = self.store.add(
+                        top_detection, snap_frame, camera_id=cam_key,
+                    )
+                    new_events.append(event)
+                    self._mark_event_logged(cam_key, behavior, top_detection)
+            elif was_active and not debouncer.snapshot()["active"]:
+                self._episode_best.pop(episode_key, None)
 
         return filtered, new_events
+
+    @staticmethod
+    def _bbox_similar(a: list[float], b: list[float]) -> bool:
+        if _bbox_iou(a, b) >= _FIRE_SIMILAR_IOU:
+            return True
+        acx = (a[0] + a[2]) / 2
+        acy = (a[1] + a[3]) / 2
+        bcx = (b[0] + b[2]) / 2
+        bcy = (b[1] + b[3]) / 2
+        dist = ((acx - bcx) ** 2 + (acy - bcy) ** 2) ** 0.5
+        ref = max(a[2] - a[0], a[3] - a[1], b[2] - b[0], b[3] - b[1], 20.0)
+        return dist <= max(_FIRE_SIMILAR_CENTER_PX, ref * 1.2)
+
+    def _should_skip_repeat_event(
+        self,
+        camera_id: str,
+        behavior: str,
+        detection: Detection,
+    ) -> bool:
+        now = time.time()
+        min_gap = settings.event_repeat_min_seconds
+        key = f"{camera_id}:{behavior}"
+        last_at = self._last_event_at.get(key)
+        if last_at is not None and now - last_at < min_gap:
+            return True
+        if behavior == "fire":
+            last_fire = self._last_fire_by_camera.get(camera_id)
+            if last_fire is not None:
+                last_bbox, fire_at = last_fire
+                if now - fire_at < min_gap and self._bbox_similar(last_bbox, detection.bbox):
+                    return True
+        return False
+
+    def _mark_event_logged(
+        self,
+        camera_id: str,
+        behavior: str,
+        detection: Detection,
+    ) -> None:
+        self._last_event_at[f"{camera_id}:{behavior}"] = time.time()
+        if behavior == "fire":
+            self._last_fire_by_camera[camera_id] = (list(detection.bbox), time.time())
 
     def process_remote_frame(
         self, frame, camera_id: str
@@ -241,4 +345,31 @@ class DetectionEngine:
                 }
                 for d in self.detectors
             },
+            "debounce": self.debouncer_config(),
         }
+
+    def debouncer_config(self) -> dict:
+        from .config import settings
+
+        return {
+            "smoking": {
+                "min_duration_seconds": settings.smoking_event_min_duration_seconds,
+                "max_gap_seconds": settings.smoking_event_max_gap_seconds,
+                "one_event_per_episode": True,
+                "repeat_min_seconds": settings.event_repeat_min_seconds,
+            },
+            "fire": {
+                "min_duration_seconds": settings.fire_event_min_duration_seconds,
+                "max_gap_seconds": settings.fire_event_max_gap_seconds,
+                "cooldown_seconds": settings.fire_event_cooldown_seconds,
+                "one_event_per_episode": True,
+                "repeat_min_seconds": settings.event_repeat_min_seconds,
+            },
+        }
+
+    def debouncer_snapshots(self) -> dict:
+        local = {b: d.snapshot() for b, d in self.debouncers.items()}
+        remote: dict[str, dict] = {}
+        for camera_id, debouncers in self._remote_debouncers.items():
+            remote[camera_id] = {b: d.snapshot() for b, d in debouncers.items()}
+        return {"local": local, "remote": remote}

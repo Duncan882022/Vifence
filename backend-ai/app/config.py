@@ -39,8 +39,11 @@ class Settings(BaseSettings):
 
     # Cháy nổ — chờ lâu hơn (~6s), có thể nhắc lại sau cooldown nếu vẫn phát hiện.
     fire_event_min_duration_seconds: float = 6.0
-    fire_event_max_gap_seconds: float = 3.0
+    fire_event_max_gap_seconds: float = 15.0
     fire_event_cooldown_seconds: float = 60.0
+
+    # Không log lại cùng behavior trên cùng camera trong N giây (trừ khi đã qua phiên mới + đủ thời gian).
+    event_repeat_min_seconds: float = 180.0
 
     @property
     def camera_source_value(self) -> Union[int, str]:

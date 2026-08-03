@@ -146,6 +146,16 @@ def event_snapshot(event_id: str):
     return FileResponse(path)
 
 
+@app.get("/debug/debouncers")
+def debug_debouncers():
+    """Trạng thái debounce realtime — test timing smoking (~2.5s) vs fire (~6s)."""
+    return {
+        "config": engine.debouncer_config(),
+        "state": engine.debouncer_snapshots(),
+        "events_today": len(engine.store.list_events(limit=200)),
+    }
+
+
 @app.get("/debug/raw_detections")
 def debug_raw_detections():
     """Chẩn đoán: lấy 1 frame TRỰC TIẾP từ camera mà server đang giữ (không mở

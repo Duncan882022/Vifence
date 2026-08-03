@@ -55,7 +55,7 @@ _HOT_LOCATE_LOWER = np.array([0, 0, 250], dtype=np.uint8)
 _HOT_LOCATE_UPPER = np.array([179, 130, 255], dtype=np.uint8)
 _MIN_ORANGE_AREA_RATIO = 0.0015  # lọc bớt đốm sáng nhỏ/phản chiếu vặt (đã verify < ngưỡng này toàn nhiễu)
 _MAX_ORANGE_AREA_RATIO = 0.03
-_MIN_FLICKER_RATIO = 0.12  # % pixel lõi sáng đổi khác giữa 2 khung liên tiếp
+_MIN_FLICKER_RATIO = 0.17  # tăng từ 0.12 — nhiễu cảm biến/đèn nhấp nháy dễ vượt ngưỡng cũ trên vật tĩnh
 _MIN_WARM_HALO_RATIO = 0.15  # quanh lõi phải có màu ấm (cam/vàng) bao quanh, không phải đèn trắng trung tính
 _ORANGE_EXPAND_MARGIN = 0.25
 
@@ -206,6 +206,12 @@ class FlameBlobDetector:
             if area < frame_area * _MIN_ORANGE_AREA_RATIO or area > frame_area * _MAX_ORANGE_AREA_RATIO:
                 continue
             x, y, bw, bh = cv2.boundingRect(cnt)
+            y2 = y + bh
+            # Clutter/ét mép dưới khung (hộp sản phẩm, chữ đỏ trên nền trắng) hay FP flame-orange.
+            if y2 > h * 0.88:
+                aspect = bw / max(bh, 1)
+                if aspect > 1.8 and area < frame_area * 0.004:
+                    continue
 
             roi_diff = diff_mask[y : y + bh, x : x + bw]
             flicker_ratio = cv2.countNonZero(roi_diff) / roi_diff.size

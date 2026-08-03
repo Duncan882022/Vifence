@@ -92,6 +92,34 @@ class PersistenceDebouncer:
             self._logged_this_episode = True
         return True
 
+    def snapshot(self, now: Optional[float] = None) -> dict:
+        """Trạng thái debounce — dùng khi test timing sự kiện."""
+        ts = now if now is not None else time.time()
+        active_for = (ts - self._active_since) if self._active_since is not None else 0.0
+        since_last_hit = (ts - self._last_hit_at) if self._last_hit_at is not None else None
+        since_confirm = ts - self._last_confirmed_at if self._last_confirmed_at else None
+        return {
+            "min_duration_seconds": self.min_duration_seconds,
+            "max_gap_seconds": self.max_gap_seconds,
+            "cooldown_seconds": self.cooldown_seconds,
+            "one_event_per_episode": self.one_event_per_episode,
+            "active": self._active_since is not None,
+            "active_for_seconds": round(active_for, 2),
+            "logged_this_episode": self._logged_this_episode,
+            "seconds_since_last_hit": round(since_last_hit, 2) if since_last_hit is not None else None,
+            "seconds_since_last_confirm": round(since_confirm, 2) if since_confirm is not None else None,
+            "ready_to_confirm": (
+                self._active_since is not None
+                and active_for >= self.min_duration_seconds
+                and not (self.one_event_per_episode and self._logged_this_episode)
+                and (
+                    self.one_event_per_episode
+                    or since_confirm is None
+                    or since_confirm >= self.cooldown_seconds
+                )
+            ),
+        }
+
 
 class Debouncer:
     """Legacy hit-window debouncer — giữ cho tương thích test."""
@@ -185,6 +213,9 @@ class EventStore:
     def _draw_bbox(frame: np.ndarray, detection: Detection) -> np.ndarray:
         annotated = frame.copy()
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
         label = f"{detection.label} {detection.confidence:.2f}"

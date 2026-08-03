@@ -1,6 +1,7 @@
 /**
  * Local MP4 feeds — cắt từ YouTube Unicons Safety Supervisors (Js-1FbF-7yU).
  * OCP1-A/B: CCTV 16:9 · Body cam: 9:16 · Flycam: 16:9 toàn cảnh.
+ * A-03 (TTDV-A · Cam 03): mock từ public/camera-feeds/ttdv-a-cam03-test.mp4
  *
  * Mốc cắt (giây): OCP1-A 170,188,205,212,218,238,248,252 ·
  * Body 163,209,169 · Fly 174,177
@@ -39,7 +40,7 @@ export type CameraFeedKey =
 const FEED_FILES: Record<CameraFeedKey, string> = {
   'ocp1-a-01': 'ocp1-a-01.mp4',
   'ocp1-a-02': 'ocp1-a-02.mp4',
-  'ocp1-a-03': 'ocp1-a-03.mp4',
+  'ocp1-a-03': 'ttdv-a-cam03-test.mp4',
   'ocp1-a-04': 'ocp1-a-04.mp4',
   'ocp1-a-05': 'ocp1-a-05.mp4',
   'ocp1-a-06': 'ocp1-a-06.mp4',
