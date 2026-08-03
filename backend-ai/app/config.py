@@ -30,8 +30,17 @@ class Settings(BaseSettings):
     debounce_hits: int = 3
     debounce_window: int = 5
     event_cooldown_seconds: float = 30.0
-    # Chỉ ghi sự kiện khi hành vi được detect liên tục đủ N giây.
+    # Fallback khi behavior không có cấu hình riêng.
     event_min_duration_seconds: float = 5.0
+
+    # Hút thuốc — bắt nhanh (~2.5s), 1 sự kiện/phiên (chỉ log lại khi mất detect đủ lâu).
+    smoking_event_min_duration_seconds: float = 2.5
+    smoking_event_max_gap_seconds: float = 12.0
+
+    # Cháy nổ — chờ lâu hơn (~6s), có thể nhắc lại sau cooldown nếu vẫn phát hiện.
+    fire_event_min_duration_seconds: float = 6.0
+    fire_event_max_gap_seconds: float = 3.0
+    fire_event_cooldown_seconds: float = 60.0
 
     @property
     def camera_source_value(self) -> Union[int, str]:

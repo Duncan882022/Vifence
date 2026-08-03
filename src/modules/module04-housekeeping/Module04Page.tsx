@@ -10,8 +10,8 @@ export function Module04Page() {
         element={(
           <>
             <Header
-              title="04 Vệ Sinh Công Trường"
-              subtitle="Giám sát vệ sinh – Chấm điểm tự động – Cải thiện liên tục"
+              title="04 Vệ Sinh & Logistics"
+              subtitle="Giám sát Housekeeping & Logistics bằng AI — ROI đường nội bộ · LOG-01 · HK-01–04"
             />
             <HousekeepingDashboardPage />
           </>

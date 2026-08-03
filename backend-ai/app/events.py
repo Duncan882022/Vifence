@@ -37,20 +37,33 @@ def _daily_snapshot_dir(date: str) -> Path:
 
 
 class PersistenceDebouncer:
-    """Chỉ xác nhận sự kiện khi hành vi được detect liên tục đủ min_duration."""
+    """Xác nhận sự kiện khi hành vi detect liên tục đủ min_duration.
+
+    one_event_per_episode=True: mỗi phiên (liên tục, gap <= max_gap) chỉ log 1 lần;
+    phiên mới bắt đầu khi mất detect > max_gap (vd hút điếu mới).
+    """
 
     def __init__(
         self,
         min_duration_seconds: float,
         cooldown_seconds: float,
         max_gap_seconds: float = 2.5,
+        *,
+        one_event_per_episode: bool = False,
     ):
         self.min_duration_seconds = min_duration_seconds
         self.cooldown_seconds = cooldown_seconds
         self.max_gap_seconds = max_gap_seconds
+        self.one_event_per_episode = one_event_per_episode
         self._active_since: Optional[float] = None
         self._last_hit_at: Optional[float] = None
         self._last_confirmed_at: float = 0.0
+        self._logged_this_episode: bool = False
+
+    def _reset_episode(self) -> None:
+        self._active_since = None
+        self._last_hit_at = None
+        self._logged_this_episode = False
 
     def register(self, hit: bool) -> bool:
         now = time.time()
@@ -60,19 +73,23 @@ class PersistenceDebouncer:
                 self._active_since = now
             self._last_hit_at = now
         elif self._last_hit_at is not None and now - self._last_hit_at > self.max_gap_seconds:
-            self._active_since = None
-            self._last_hit_at = None
+            self._reset_episode()
 
         if not hit or self._active_since is None:
+            return False
+
+        if self.one_event_per_episode and self._logged_this_episode:
             return False
 
         if now - self._active_since < self.min_duration_seconds:
             return False
 
-        if now - self._last_confirmed_at < self.cooldown_seconds:
+        if not self.one_event_per_episode and now - self._last_confirmed_at < self.cooldown_seconds:
             return False
 
         self._last_confirmed_at = now
+        if self.one_event_per_episode:
+            self._logged_this_episode = True
         return True
 
 

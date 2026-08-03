@@ -1,0 +1,73 @@
+import type { HousekeepingAiConfig, HousekeepingRoiZone } from '../types/housekeepingAi.types'
+
+/** Cấu hình mặc định theo spec */
+export const HOUSEKEEPING_AI_CONFIG: HousekeepingAiConfig = {
+  roadOccupancyMinutes: 30,
+  trashDwellMinutes: 30,
+  mudThresholdPercent: 8,
+  waterThresholdPercent: 5,
+  checkIntervalSeconds: 5,
+  snapshotEnabled: true,
+  playbackEnabled: true,
+  evidenceRetentionDays: 90,
+}
+
+/**
+ * ROI demo — polygon chuẩn hoá 0–1 trên khung camera.
+ * STORAGE exempt: không sinh cảnh báo chiếm dụng.
+ */
+export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
+  {
+    id: 'roi-road-a04',
+    label: 'Lòng đường — Sân Tập A',
+    type: 'ROAD',
+    cameraId: 'A-04',
+    polygon: [
+      { x: 0.12, y: 0.42 },
+      { x: 0.88, y: 0.38 },
+      { x: 0.92, y: 0.72 },
+      { x: 0.08, y: 0.78 },
+    ],
+  },
+  {
+    id: 'roi-buffer-a04',
+    label: 'Lề đường — Sân Tập A',
+    type: 'BUFFER',
+    cameraId: 'A-04',
+    polygon: [
+      { x: 0.05, y: 0.35 },
+      { x: 0.12, y: 0.42 },
+      { x: 0.08, y: 0.78 },
+      { x: 0.02, y: 0.68 },
+    ],
+  },
+  {
+    id: 'roi-storage-b02',
+    label: 'Khu tập kết — Kho vật tư B',
+    type: 'STORAGE',
+    cameraId: 'B-02',
+    exemptFromOccupancy: true,
+    polygon: [
+      { x: 0.18, y: 0.22 },
+      { x: 0.82, y: 0.18 },
+      { x: 0.85, y: 0.65 },
+      { x: 0.15, y: 0.68 },
+    ],
+  },
+  {
+    id: 'roi-road-b05',
+    label: 'Lòng đường — Hành lang B',
+    type: 'ROAD',
+    cameraId: 'B-05',
+    polygon: [
+      { x: 0.1, y: 0.5 },
+      { x: 0.9, y: 0.48 },
+      { x: 0.88, y: 0.85 },
+      { x: 0.12, y: 0.88 },
+    ],
+  },
+]
+
+export function getRoiZonesForCamera(cameraId: string): HousekeepingRoiZone[] {
+  return HOUSEKEEPING_ROI_ZONES.filter(z => z.cameraId === cameraId)
+}

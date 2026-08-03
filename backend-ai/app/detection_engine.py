@@ -39,6 +39,21 @@ def _bboxes_overlap(a: tuple[float, float, float, float], b: list[float]) -> boo
 # heuristic lửa + smoking YOLO (đã có lọc vùng miệng).
 _MOBILE_DETECTOR_NAMES = frozenset({"smoking-yolo", "fire-heuristic"})
 
+_BEHAVIOR_DEBOUNCE: dict[str, dict] = {
+    "smoking": {
+        "min_duration": lambda: settings.smoking_event_min_duration_seconds,
+        "max_gap": lambda: settings.smoking_event_max_gap_seconds,
+        "cooldown": lambda: settings.event_cooldown_seconds,
+        "one_event_per_episode": True,
+    },
+    "fire": {
+        "min_duration": lambda: settings.fire_event_min_duration_seconds,
+        "max_gap": lambda: settings.fire_event_max_gap_seconds,
+        "cooldown": lambda: settings.fire_event_cooldown_seconds,
+        "one_event_per_episode": False,
+    },
+}
+
 
 class DetectionEngine:
     def __init__(self, camera: CameraStream):
@@ -104,13 +119,28 @@ class DetectionEngine:
             if cooldown_seconds is not None
             else settings.event_cooldown_seconds
         )
-        return {
-            behavior: PersistenceDebouncer(
-                min_duration_seconds=duration,
-                cooldown_seconds=cooldown,
+        debouncers: dict[str, PersistenceDebouncer] = {}
+        for behavior in behaviors:
+            cfg = _BEHAVIOR_DEBOUNCE.get(behavior, {})
+            debouncers[behavior] = PersistenceDebouncer(
+                min_duration_seconds=(
+                    cfg["min_duration"]()
+                    if "min_duration" in cfg
+                    else duration
+                ),
+                cooldown_seconds=(
+                    cfg["cooldown"]()
+                    if "cooldown" in cfg
+                    else cooldown
+                ),
+                max_gap_seconds=(
+                    cfg["max_gap"]()
+                    if "max_gap" in cfg
+                    else 2.5
+                ),
+                one_event_per_episode=cfg.get("one_event_per_episode", False),
             )
-            for behavior in behaviors
-        }
+        return debouncers
 
     def _analyze_frame(
         self,
