@@ -22,6 +22,7 @@ from .detection_engine import DetectionEngine
 from .mobile_config_store import MobileAiConfigStore
 from .road_analysis_engine import RoadAnalysisEngine
 from .road_detection_catalog import analyze_road_catalog, render_road_catalog, save_road_catalog_snapshot
+from .crane_detection_catalog import analyze_crane_catalog, render_crane_catalog, save_crane_catalog_snapshot
 from .schemas import MobileAiConfigPayload, MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -394,6 +395,65 @@ async def analyze_road_catalog_endpoint(payload: MobileFramePayload):
         png_bytes, meta = await loop.run_in_executor(
             _analyze_executor,
             _render_road_catalog_frame,
+            frame,
+            camera_id,
+        )
+    except RuntimeError as exc:
+        return {"type": "error", "message": str(exc)}
+
+    return {
+        "type": "catalog",
+        **meta,
+        "image_png_base64": base64.b64encode(png_bytes).decode("ascii"),
+    }
+
+
+def _render_crane_catalog_frame(frame: np.ndarray, camera_id: str) -> tuple[bytes, dict]:
+    detections, zone_polys = analyze_crane_catalog(frame, camera_id)
+    rendered = render_crane_catalog(frame, detections, zone_polys, camera_id=camera_id)
+    ok, buf = cv2.imencode(".png", rendered)
+    if not ok:
+        raise RuntimeError("encode_failed")
+    core = [d for d in detections if d.behavior != "crane_proximity"]
+    meta = {
+        "camera_id": camera_id,
+        "count": len(core),
+        "detections": [
+            {
+                "kind": d.kind,
+                "label": d.label,
+                "behavior": d.behavior,
+                "confidence": round(d.confidence, 3),
+                "bbox": list(d.bbox),
+                "distance_m": d.distance_m,
+                "nearest_machine": d.nearest_machine,
+            }
+            for d in core
+        ],
+    }
+    return buf.tobytes(), meta
+
+
+@app.post("/analyze/crane/catalog")
+async def analyze_crane_catalog_endpoint(payload: MobileFramePayload):
+    """Catalog ROI Cam A-04 — máy khoan, cẩu tháp, máy xúc, người. Trả PNG + metadata."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-04"
+    loop = asyncio.get_event_loop()
+    try:
+        png_bytes, meta = await loop.run_in_executor(
+            _analyze_executor,
+            _render_crane_catalog_frame,
             frame,
             camera_id,
         )
