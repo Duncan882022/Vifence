@@ -111,19 +111,19 @@ ROAD_SCENARIO_META = {
 CRANE_SCENARIO_META = {
     "crane_proximity": {
         "scenario_id": "DZ-003",
-        "scenario_name": "Làm việc gần máy cẩu",
+        "scenario_name": "Làm việc trong vùng nguy hiểm",
         "violation_type": "danger-zone",
         "group": "DZ",
     },
     "person": {
         "scenario_id": "DZ-003",
-        "scenario_name": "Làm việc gần máy cẩu",
+        "scenario_name": "Làm việc trong vùng nguy hiểm",
         "violation_type": "danger-zone",
         "group": "DZ",
     },
     "crane": {
         "scenario_id": "DZ-003",
-        "scenario_name": "Làm việc gần máy cẩu",
+        "scenario_name": "Làm việc trong vùng nguy hiểm",
         "violation_type": "danger-zone",
         "group": "DZ",
     },

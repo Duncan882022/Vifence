@@ -23,7 +23,7 @@ logger = logging.getLogger("crane_proximity_analyzer")
 
 _person_detector: PersonDetector | None = None
 
-SCENARIO_LABEL = "Làm việc gần máy cẩu"
+SCENARIO_LABEL = "Làm việc trong vùng nguy hiểm"
 SCENARIO_ID = "DZ-003"
 
 
@@ -76,7 +76,7 @@ class _MachineryUnit:
 
 MACHINERY_LABELS = {
     "crane_green": "Máy xúc (xanh)",
-    "sany_drill": "Máy khoan SANY",
+    "sany_drill": "Máy khoan",
     "tower_crane": "Máy cẩu tháp",
     "machinery_yellow": "Máy thi công (vàng)",
 }

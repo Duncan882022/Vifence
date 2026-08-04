@@ -36,10 +36,10 @@ const BEHAVIOR_STYLE: Record<
     bg: 'bg-amber-500/35',
   },
   crane_green: {
-    border: 'border-lime-400/90',
-    fill: 'bg-lime-400/10',
-    label: 'text-lime-200',
-    bg: 'bg-lime-600/35',
+    border: 'border-fuchsia-400',
+    fill: 'bg-fuchsia-500/20',
+    label: 'text-white',
+    bg: 'bg-black/80',
   },
   sany_drill: {
     border: 'border-orange-400/95',
@@ -107,8 +107,18 @@ function DetectionBox({
   const style = resolveDetectionStyle(detection)
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
+  const isGreenExcavator = detection.machine_kind === 'crane_green'
   const isPending = detection.behavior === 'crane' && detection.confidence < EVENT_MIN_CONFIDENCE
   const isMachinery = detection.behavior === 'crane' && Boolean(detection.machine_kind)
+  const layerZ = detection.behavior === 'crane_proximity'
+    ? 7
+    : isGreenExcavator
+      ? 6
+      : detection.machine_kind === 'sany_drill'
+        ? 5
+        : detection.machine_kind === 'tower_crane'
+          ? 4
+          : 3
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
@@ -129,16 +139,25 @@ function DetectionBox({
   return (
     <div
       className="absolute pointer-events-none"
-      style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
+      style={{
+        left: `${box.x}%`,
+        top: `${box.y}%`,
+        width: `${box.w}%`,
+        height: `${box.h}%`,
+        zIndex: layerZ,
+      }}
     >
       <div
         className={cn(
-          'absolute inset-0 border rounded-sm',
+          'absolute inset-0 rounded-sm',
           style.border,
           style.fill,
-          isMachinery && 'border-2',
-          isPending && 'border-dashed opacity-60',
+          isGreenExcavator ? 'border-[3px]' : isMachinery ? 'border-2' : 'border',
+          isPending && !isGreenExcavator && 'border-dashed opacity-60',
         )}
+        style={isGreenExcavator ? {
+          boxShadow: '0 0 0 2px rgba(255,255,255,0.95), 0 0 10px rgba(232,121,249,0.85)',
+        } : undefined}
       />
       <span
         className={cn(
@@ -241,9 +260,9 @@ function useCraneProximityState(
           .sort((a, b) => {
             const rank = (d: CraneProximityDetection) => {
               if (d.behavior === 'crane') {
-                if (d.machine_kind === 'sany_drill') return 0
-                if (d.machine_kind === 'crane_green') return 1
-                if (d.machine_kind === 'tower_crane') return 2
+                if (d.machine_kind === 'tower_crane') return 0
+                if (d.machine_kind === 'sany_drill') return 1
+                if (d.machine_kind === 'crane_green') return 2
                 return 3
               }
               if (d.behavior === 'person') return 4
@@ -324,7 +343,7 @@ export function CraneProximityOverlay({
           )}
           {hasViolation && (
             <span className="text-[7px] font-mono px-1 py-px rounded bg-red-500/25 text-red-200 border border-red-500/40">
-              Vi phạm gần máy cẩu
+              Vi phạm vùng nguy hiểm
             </span>
           )}
         </div>

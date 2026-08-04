@@ -73,7 +73,7 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     scenarios: [
       'Đất đào hoặc vật tư cách mép hố < 0,5 m',
       'Không bố trí biển báo hoặc cờ cảnh báo hố sâu',
-      'Làm việc gần máy cẩu (≤ 1 m)',
+      'Làm việc trong vùng nguy hiểm',
     ],
     monitoringMethods: [
       'Tuần tra định kỳ (Scheduled Patrol)',

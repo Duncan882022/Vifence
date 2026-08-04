@@ -82,7 +82,7 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   {
     id: 'DZ-003',
     groupId: 'DZ',
-    description: 'Công nhân đứng hoặc làm việc trong phạm vi ≤ 1 m quanh thân máy cẩu',
+    description: 'Công nhân đứng hoặc làm việc trong vùng nguy hiểm quanh thiết bị thi công (≤ 1 m)',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
     defaultSeverity: 'CRITICAL',
