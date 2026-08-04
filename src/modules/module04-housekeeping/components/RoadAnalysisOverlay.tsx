@@ -16,11 +16,14 @@ import {
 } from '../services/roadAnalysisBackend.service'
 
 const EVENT_MIN_CONFIDENCE = 0.80
+// Vẫn vẽ bbox khi AI phát hiện nhưng chưa đủ ngưỡng ghi sự kiện — giúp giám sát
+// biết đã detect được (viền đứt nét), chỉ ẩn nhiễu quá yếu dưới mốc này.
+const DISPLAY_MIN_CONFIDENCE = 0.32
 
 const BEHAVIOR_MIN_CONFIDENCE: Partial<Record<RoadAnalysisDetection['behavior'], number>> = {
-  mud: EVENT_MIN_CONFIDENCE,
-  water: EVENT_MIN_CONFIDENCE,
-  object: EVENT_MIN_CONFIDENCE,
+  mud: DISPLAY_MIN_CONFIDENCE,
+  water: DISPLAY_MIN_CONFIDENCE,
+  object: DISPLAY_MIN_CONFIDENCE,
 }
 
 const TRACK_IOU_MATCH = 0.28
@@ -253,6 +256,7 @@ function DetectionBox({
   const style = BEHAVIOR_STYLE[detection.behavior] ?? BEHAVIOR_STYLE.unknown
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
+  const isPending = detection.confidence < EVENT_MIN_CONFIDENCE
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
@@ -278,16 +282,24 @@ function DetectionBox({
       className="absolute pointer-events-none"
       style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
     >
-      <div className={cn('absolute inset-0 border rounded-sm', style.border, style.fill)} />
+      <div
+        className={cn(
+          'absolute inset-0 border rounded-sm',
+          style.border,
+          style.fill,
+          isPending && 'border-dashed opacity-60',
+        )}
+      />
       <span
         className={cn(
           'absolute -top-3 left-0 px-0.5 py-px font-mono whitespace-nowrap rounded-sm',
           style.bg,
           style.label,
           compact ? 'text-[5px]' : 'text-[7px]',
+          isPending && 'opacity-70',
         )}
       >
-        {detection.label} {(detection.confidence * 100).toFixed(0)}%
+        {detection.label} {(detection.confidence * 100).toFixed(0)}%{isPending ? ' · chưa đủ ngưỡng' : ''}
       </span>
     </div>
   )

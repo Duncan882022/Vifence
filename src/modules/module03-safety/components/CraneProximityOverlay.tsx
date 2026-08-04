@@ -107,6 +107,7 @@ function DetectionBox({
   const style = resolveDetectionStyle(detection)
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
+  const isPending = detection.behavior === 'crane' && detection.confidence < EVENT_MIN_CONFIDENCE
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
@@ -129,16 +130,24 @@ function DetectionBox({
       className="absolute pointer-events-none"
       style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
     >
-      <div className={cn('absolute inset-0 border rounded-sm', style.border, style.fill)} />
+      <div
+        className={cn(
+          'absolute inset-0 border rounded-sm',
+          style.border,
+          style.fill,
+          isPending && 'border-dashed opacity-60',
+        )}
+      />
       <span
         className={cn(
           'absolute -top-3 left-0 px-0.5 py-px font-mono whitespace-nowrap rounded-sm',
           style.bg,
           style.label,
           compact ? 'text-[5px]' : 'text-[7px]',
+          isPending && 'opacity-70',
         )}
       >
-        {detection.label} {(detection.confidence * 100).toFixed(0)}%{distLabel}
+        {detection.label} {(detection.confidence * 100).toFixed(0)}%{distLabel}{isPending ? ' · chưa đủ ngưỡng' : ''}
       </span>
     </div>
   )
@@ -222,7 +231,9 @@ function useCraneProximityState(
             return d.confidence >= UNKNOWN_MIN_CONFIDENCE
           }
           if (d.behavior === 'person') return d.confidence >= UNKNOWN_MIN_CONFIDENCE
-          return d.confidence >= 0.50
+          // Máy móc (crane/crane_green/sany_drill/tower_crane): vẫn vẽ bbox khi
+          // AI phát hiện được nhưng chưa đủ ngưỡng — giúp giám sát biết đã detect.
+          return d.confidence >= 0.40
         })
         setDetections(visible)
         setFrameSize({ width: result.width, height: result.height })

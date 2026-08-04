@@ -186,11 +186,11 @@ def _machinery_box_valid(
     if area_ratio > 0.42:
         return False
     if kind == "crane_green":
-        if cy > frame_height * 0.72:
+        if cy > frame_height * 0.82:
             return False
-        if area_ratio < 0.008:
+        if area_ratio < 0.0035:
             return False
-        if bw < frame_width * 0.12:
+        if bw < frame_width * 0.06:
             return False
     if kind == "sany_drill":
         if cy < frame_height * 0.22:
@@ -239,8 +239,8 @@ def _refine_green_excavator_bbox(
     """Mở rộng bbox máy xúc xanh — gộp thân + cần, không tràn lưới phải."""
     h, w = hsv.shape[:2]
     x1, y1, x2, y2 = [int(v) for v in box]
-    ex1 = max(0, int(w * 0.30))
-    ex2 = min(w, int(w * 0.94))
+    ex1 = max(0, min(int(w * 0.16), x1 - int(w * 0.02)))
+    ex2 = min(w, int(w * 0.98))
     ey1 = max(0, y1 - int(h * 0.05))
     ey2 = min(h, y2 + int(h * 0.03))
     patch = hsv[ey1:ey2, ex1:ex2]
@@ -287,12 +287,12 @@ def _clamp_green_bbox(
     frame_height: int,
 ) -> tuple[int, int, int, int]:
     x1, y1, x2, y2 = [int(v) for v in box]
-    min_x = int(frame_width * 0.32)
-    max_x = int(frame_width * 0.92)
+    min_x = int(frame_width * min(0.32, x1 / max(frame_width, 1) + 0.02))
+    max_x = int(frame_width * 0.96)
     x1 = max(min_x, x1)
-    x2 = min(max_x, max(x1 + int(frame_width * 0.12), x2))
-    y1 = max(int(frame_height * 0.22), y1)
-    y2 = min(int(frame_height * 0.88), max(y1 + int(frame_height * 0.10), y2))
+    x2 = min(max_x, max(x1 + int(frame_width * 0.08), x2))
+    y1 = max(int(frame_height * 0.12), y1)
+    y2 = min(int(frame_height * 0.92), max(y1 + int(frame_height * 0.06), y2))
     return x1, y1, x2, y2
 
 
@@ -411,6 +411,44 @@ def _detect_sany_drill(
     return best[1] if best else None
 
 
+def _green_excavator_candidates(
+    hsv: np.ndarray,
+    search_mask: np.ndarray,
+    frame_width: int,
+    frame_height: int,
+    *,
+    band_box: tuple[float, float, float, float],
+    green_lo: tuple[int, int, int],
+    green_hi: tuple[int, int, int],
+    min_area_ratio: float,
+    min_width_ratio: float,
+    min_height_ratio: float,
+    max_width_ratio: float,
+    max_height_ratio: float,
+    min_x_ratio: float,
+) -> list[tuple[int, int, int, int]]:
+    h, w = hsv.shape[:2]
+    by0, bx0, by1, bx1 = band_box
+    band = np.zeros((h, w), dtype=np.uint8)
+    band[int(h * by0) : int(h * by1), int(w * bx0) : int(w * bx1)] = 255
+    green = cv2.inRange(hsv, np.array(green_lo), np.array(green_hi))
+    mesh = cv2.inRange(hsv, np.array([40, 88, 48]), np.array([88, 255, 188]))
+    mask = cv2.bitwise_and(green, band)
+    mask = cv2.bitwise_and(mask, search_mask)
+    mask = cv2.bitwise_and(mask, cv2.bitwise_not(mesh))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=min_area_ratio)
+    return [
+        b for b in raw
+        if b[0] >= int(w * min_x_ratio)
+        and (b[2] - b[0]) >= int(w * min_width_ratio)
+        and (b[2] - b[0]) <= int(w * max_width_ratio)
+        and (b[3] - b[1]) >= int(h * min_height_ratio)
+        and (b[3] - b[1]) <= int(h * max_height_ratio)
+    ]
+
+
 def _detect_green_excavator(
     hsv: np.ndarray,
     search_mask: np.ndarray,
@@ -419,50 +457,53 @@ def _detect_green_excavator(
     *,
     exclude_boxes: list[tuple[int, int, int, int]] | None = None,
 ) -> tuple[int, int, int, int] | None:
-    """Máy xúc xanh bên phải — tách khỏi cẩu tháp / lưới xanh."""
+    """Máy xúc xanh — tách khỏi cẩu tháp / lưới xanh; fallback nới lỏng nếu detect chặt thất bại."""
     h, w = hsv.shape[:2]
-    band = np.zeros((h, w), dtype=np.uint8)
-    band[int(h * 0.26) : int(h * 0.92), int(w * 0.36) : int(w * 0.96)] = 255
-    green = cv2.inRange(hsv, np.array([32, 38, 50]), np.array([96, 255, 235]))
-    mesh = cv2.inRange(hsv, np.array([40, 88, 48]), np.array([88, 255, 188]))
-    mask = cv2.bitwise_and(green, band)
-    mask = cv2.bitwise_and(mask, search_mask)
-    mask = cv2.bitwise_and(mask, cv2.bitwise_not(mesh))
-    if exclude_boxes:
-        ex = np.zeros((h, w), dtype=np.uint8)
-        for box in exclude_boxes:
-            x1, y1, x2, y2 = box
-            pad_x = int((x2 - x1) * 0.02)
-            pad_y = int((y2 - y1) * 0.02)
-            cv2.rectangle(
-                ex,
-                (max(0, x1 - pad_x), max(0, y1 - pad_y)),
-                (min(w, x2 + pad_x), min(h, y2 + pad_y)),
-                255,
-                -1,
-            )
-        mask = cv2.bitwise_and(mask, cv2.bitwise_not(ex))
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.0009)
-    raw = [
-        b for b in raw
-        if b[0] >= int(w * 0.28)
-        and (b[2] - b[0]) <= int(w * 0.58)
-        and (b[3] - b[1]) >= int(h * 0.05)
-        and (b[3] - b[1]) <= int(h * 0.52)
-    ]
-    if not raw:
-        return None
-    merged = _merge_machinery_boxes(raw, w, gap_px=max(56, int(w * 0.12)))
-    merged = [b for b in merged if _machinery_box_valid(b, w, h, "crane_green")]
-    if not merged:
-        return None
-    best = max(merged, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
-    x1, y1, x2, y2 = best
-    if (y2 - y1) < h * 0.10 or (x2 - x1) < w * 0.10:
-        return None
-    return _refine_green_excavator_bbox(hsv, best, w, h)
+
+    def finalize(raw: list[tuple[int, int, int, int]], *, gap_ratio: float) -> tuple[int, int, int, int] | None:
+        if not raw:
+            return None
+        if exclude_boxes:
+            filtered = []
+            for box in raw:
+                if all(_bbox_iou_machinery(box, ex) < 0.25 for ex in exclude_boxes):
+                    filtered.append(box)
+            raw = filtered or raw
+        merged = _merge_machinery_boxes(raw, w, gap_px=max(56, int(w * gap_ratio)))
+        merged = [b for b in merged if _machinery_box_valid(b, w, h, "crane_green")]
+        if not merged:
+            return None
+        best = max(merged, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+        x1, y1, x2, y2 = best
+        if (y2 - y1) < h * 0.06 or (x2 - x1) < w * 0.06:
+            return None
+        return _refine_green_excavator_bbox(hsv, best, w, h)
+
+    strict = _green_excavator_candidates(
+        hsv, search_mask, frame_width, frame_height,
+        band_box=(0.26, 0.36, 0.92, 0.96),
+        green_lo=(32, 38, 50), green_hi=(96, 255, 235),
+        min_area_ratio=0.0009,
+        min_width_ratio=0.0, min_height_ratio=0.05,
+        max_width_ratio=0.58, max_height_ratio=0.52,
+        min_x_ratio=0.28,
+    )
+    result = finalize(strict, gap_ratio=0.12)
+    if result is not None:
+        return result
+
+    # Fallback — nới lỏng dải màu/vị trí, luôn cố tìm 1 box để giám sát biết đã detect
+    # (bbox này có confidence thấp hơn, FE sẽ vẽ viền đứt nét "chưa đủ ngưỡng").
+    lenient = _green_excavator_candidates(
+        hsv, search_mask, frame_width, frame_height,
+        band_box=(0.16, 0.18, 0.96, 0.98),
+        green_lo=(26, 22, 30), green_hi=(102, 255, 248),
+        min_area_ratio=0.00035,
+        min_width_ratio=0.05, min_height_ratio=0.035,
+        max_width_ratio=0.66, max_height_ratio=0.60,
+        min_x_ratio=0.16,
+    )
+    return finalize(lenient, gap_ratio=0.14)
 
 
 def _detect_machinery_units(

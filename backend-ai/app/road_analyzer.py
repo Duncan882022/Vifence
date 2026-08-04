@@ -20,6 +20,9 @@ MIN_OBJECT_AREA_RATIO = 0.008
 MAX_OBJECT_AREA_RATIO = 0.12
 MIN_OBJECT_EPISODE_AREA_RATIO = 0.012
 EVENT_MIN_CONFIDENCE = 0.80
+# Sàng lọc hiển thị overlay — thấp hơn EVENT_MIN_CONFIDENCE để vẫn vẽ bbox
+# khi phát hiện chưa đủ mạnh để ghi sự kiện (chỉ event debounce mới cần 0.80).
+DISPLAY_MIN_CONFIDENCE = 0.32
 
 SCENARIO_LABELS = {
     "mud": "Đường nội bộ bùn bẩn",
@@ -728,9 +731,9 @@ def _trim_box_overlap(
 
 
 def _mud_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
-    """Bùn trên mặt đường — chỉ lề trái, loại vùng vật tư giữa/phải."""
+    """Bùn trên mặt đường — lề trái + vùng cạnh vũng nước, loại phần vật tư xa phải."""
     band = _road_band_mask(roi_mask, width, height)
-    band[:, int(width * 0.40) :] = 0
+    band[:, int(width * 0.58) :] = 0
     return band
 
 
@@ -747,7 +750,7 @@ def _clamp_mud_box(
 
 
 def _score_mud_box(box: tuple[int, int, int, int], frame_width: int, frame_height: int) -> float:
-    """Ưu tiên mảng bùn gọn ở lề trái — không bao vật tư giữa/phải."""
+    """Ưu tiên mảng bùn gọn ở lề trái / cạnh vũng nước — không bao vật tư xa phải."""
     x1, y1, x2, y2 = box
     bw, bh = x2 - x1, y2 - y1
     if bw < 20 or bh < 12:
@@ -757,19 +760,19 @@ def _score_mud_box(box: tuple[int, int, int, int], frame_width: int, frame_heigh
     area = bw * bh
     x_norm = cx / max(frame_width, 1)
     y_norm = cy / max(frame_height, 1)
-    if x_norm > 0.38:
+    if x_norm > 0.54:
         return -1.0
-    if x2 > frame_width * 0.42:
+    if x2 > frame_width * 0.60:
         return -1.0
     if y_norm < 0.38:
         return -1.0
-    if bw > frame_width * 0.34:
+    if bw > frame_width * 0.42:
         return -1.0
     compact = area / max(float(bw * bh), 1.0)
     if compact < 0.10:
         return -1.0
-    cx_target = frame_width * 0.22
-    return area * compact * (0.55 + y_norm * 0.45) - abs(cx - cx_target) * 2.0
+    cx_target = frame_width * 0.24
+    return area * compact * (0.55 + y_norm * 0.45) - abs(cx - cx_target) * 1.6
 
 
 def _trim_mud_from_objects(
@@ -820,8 +823,10 @@ def _analyze_mud(
     asphalt = cv2.inRange(hsv, np.array([8, 0, 95]), np.array([30, 48, 255]))
     green_gear = cv2.inRange(hsv, np.array([32, 35, 40]), np.array([95, 255, 230]))
     white_mat = cv2.inRange(hsv, np.array([0, 0, 175]), np.array([180, 45, 255]))
-    orange_gear = cv2.inRange(hsv, np.array([8, 90, 100]), np.array([28, 255, 255]))
-    rust_metal = cv2.inRange(hsv, np.array([5, 50, 35]), np.array([26, 255, 200]))
+    orange_gear = cv2.inRange(hsv, np.array([8, 110, 150]), np.array([28, 255, 255]))
+    # Chỉ loại kim loại gỉ sáng rõ (bão hoà cao, sáng) — không trùng dải bùn/đất tối.
+    # Vùng chồng vật tư thật sẽ được cắt riêng bởi _trim_mud_from_objects (bbox thật).
+    rust_metal = cv2.inRange(hsv, np.array([5, 150, 90]), np.array([22, 255, 190]))
     blue_vest = cv2.inRange(hsv, np.array([85, 50, 80]), np.array([130, 255, 255]))
     rel_dark = (local_v - v_f > 6).astype(np.uint8) * 255
 
@@ -839,8 +844,8 @@ def _analyze_mud(
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(blue_vest))
     mud_mask = cv2.medianBlur(mud_mask, 5)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_OPEN, kernel, iterations=1)
     mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_OPEN, kernel, iterations=1)
     mud_mask = cv2.dilate(mud_mask, kernel, iterations=1)
 
     roi_pixels = max(_roi_pixel_count(search), 1)
@@ -861,7 +866,7 @@ def _analyze_mud(
         if geo < 0:
             continue
         pct = 100.0 * area / roi_pixels
-        if pct < MUD_THRESHOLD_PERCENT * 0.55:
+        if pct < MUD_THRESHOLD_PERCENT * 0.32:
             continue
         ranked.append((geo + area * 0.015, area, box))
 
@@ -1001,7 +1006,7 @@ def _analyze_water(
             if _score_water_box(box, w, h) < 0:
                 continue
             pct = 100.0 * area / roi_pixels
-            if pct < WATER_THRESHOLD_PERCENT * 0.55:
+            if pct < WATER_THRESHOLD_PERCENT * 0.32:
                 continue
             ranked.append((adjusted + geo * 0.15, area, box, roi_pixels))
 
@@ -1375,12 +1380,14 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             if trimmed is None:
                 continue
             clipped = _clip_box_to_roi(trimmed, roi_mask, w, h)
-            if clipped is None or pct < MUD_THRESHOLD_PERCENT:
+            if clipped is None:
                 continue
             conf = _confidence_for_detection(
                 "mud", clipped, w, h, frame_area, area_percent=pct, contour_area=pct * roi_pixels / 100.0,
             )
-            if conf < EVENT_MIN_CONFIDENCE:
+            # Vẫn vẽ bbox khi chưa đủ ngưỡng ghi sự kiện (EVENT_MIN_CONFIDENCE) —
+            # chỉ loại nhiễu quá yếu (dưới DISPLAY_MIN_CONFIDENCE).
+            if conf < DISPLAY_MIN_CONFIDENCE:
                 continue
             all_detections.append(
                 RoadDetection(
@@ -1395,12 +1402,12 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
 
         for pct, box in water_patches:
             clipped = _clip_box_to_roi(box, roi_mask, w, h)
-            if clipped is None or pct < WATER_THRESHOLD_PERCENT:
+            if clipped is None:
                 continue
             conf = _confidence_for_detection(
                 "water", clipped, w, h, frame_area, area_percent=pct, contour_area=pct * roi_pixels / 100.0,
             )
-            if conf < EVENT_MIN_CONFIDENCE:
+            if conf < DISPLAY_MIN_CONFIDENCE:
                 continue
             all_detections.append(
                 RoadDetection(
@@ -1427,9 +1434,11 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             kind_label = OBJECT_KIND_LABELS.get(object_kind, SCENARIO_LABELS["object"])
             label = object_display_label(object_kind, conf, kind_label)
             behavior = "object" if label != UNKNOWN_LABEL else "unknown"
-            if conf < EVENT_MIN_CONFIDENCE and label == UNKNOWN_LABEL:
+            if label == UNKNOWN_LABEL:
+                if conf < DISPLAY_MIN_CONFIDENCE:
+                    continue
                 conf = max(conf, 0.52)
-            elif conf < EVENT_MIN_CONFIDENCE:
+            elif conf < DISPLAY_MIN_CONFIDENCE:
                 continue
             all_detections.append(
                 RoadDetection(
