@@ -108,6 +108,7 @@ function DetectionBox({
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
   const isPending = detection.behavior === 'crane' && detection.confidence < EVENT_MIN_CONFIDENCE
+  const isMachinery = detection.behavior === 'crane' && Boolean(detection.machine_kind)
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
@@ -135,6 +136,7 @@ function DetectionBox({
           'absolute inset-0 border rounded-sm',
           style.border,
           style.fill,
+          isMachinery && 'border-2',
           isPending && 'border-dashed opacity-60',
         )}
       />
@@ -221,7 +223,8 @@ function useCraneProximityState(
       cameraId,
       backendUrl,
       onResult: result => {
-        const visible = result.detections.filter(d => {
+        const visible = result.detections
+          .filter(d => {
           if (d.behavior === 'crane_proximity') return d.confidence >= EVENT_MIN_CONFIDENCE
           if (
             d.behavior === 'unknown'
@@ -235,6 +238,20 @@ function useCraneProximityState(
           // AI phát hiện được nhưng chưa đủ ngưỡng — giúp giám sát biết đã detect.
           return d.confidence >= 0.40
         })
+          .sort((a, b) => {
+            const rank = (d: CraneProximityDetection) => {
+              if (d.behavior === 'crane') {
+                if (d.machine_kind === 'sany_drill') return 0
+                if (d.machine_kind === 'crane_green') return 1
+                if (d.machine_kind === 'tower_crane') return 2
+                return 3
+              }
+              if (d.behavior === 'person') return 4
+              if (d.behavior === 'crane_proximity') return 5
+              return 6
+            }
+            return rank(a) - rank(b)
+          })
         setDetections(visible)
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)

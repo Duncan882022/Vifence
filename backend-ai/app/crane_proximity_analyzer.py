@@ -351,6 +351,25 @@ def _detect_tower_crane(
     return (x1, y1, x2, y2)
 
 
+def _sany_box_valid(box: tuple[int, int, int, int], frame_width: int, frame_height: int) -> bool:
+    x1, y1, x2, y2 = box
+    bw, bh = x2 - x1, y2 - y1
+    if bh < frame_height * 0.08 or bw < frame_width * 0.04:
+        return False
+    if bh > frame_height * 0.78 or bw > frame_width * 0.42:
+        return False
+    cy = (y1 + y2) / 2.0
+    if cy > frame_height * 0.82 or x2 > frame_width * 0.52:
+        return False
+    return True
+
+
+def _score_sany_box(box: tuple[int, int, int, int], frame_width: int, frame_height: int) -> float:
+    x1, y1, x2, y2 = box
+    bw, bh = x2 - x1, y2 - y1
+    return bh * 1.8 + bw * 0.35 - abs((x1 + x2) / 2 - frame_width * 0.19) * 2.2
+
+
 def _detect_sany_drill(
     hsv: np.ndarray,
     search_mask: np.ndarray,
@@ -359,56 +378,91 @@ def _detect_sany_drill(
 ) -> tuple[int, int, int, int] | None:
     """Máy khoan SANY (cam/vàng) bên trái — gộp thân + boom cao."""
     h, w = hsv.shape[:2]
-    left = np.zeros((h, w), dtype=np.uint8)
-    left[:, : int(w * 0.48)] = 255
-    ground = np.zeros((h, w), dtype=np.uint8)
-    ground[: int(h * 0.86), :] = 255
-    orange = cv2.inRange(hsv, np.array([6, 80, 85]), np.array([26, 255, 255]))
-    yellow = cv2.inRange(hsv, np.array([14, 65, 95]), np.array([36, 255, 255]))
-    mask = cv2.bitwise_or(orange, yellow)
-    mask = cv2.bitwise_and(mask, search_mask)
-    mask = cv2.bitwise_and(mask, left)
-    mask = cv2.bitwise_and(mask, ground)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
-    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.00045)
-    raw = [
-        b for b in raw
-        if b[3] < h * 0.82
-        and (b[2] - b[0]) < w * 0.22
-        and (b[3] - b[1]) > h * 0.03
-        and (b[0] + b[2]) / 2 < w * 0.44
-    ]
-    stacks = _merge_vertical_stack(raw, gap_px=max(28, int(h * 0.08)))
-    if len(stacks) >= 2:
+
+    def run_pass(
+        orange_lo: tuple[int, int, int],
+        orange_hi: tuple[int, int, int],
+        yellow_lo: tuple[int, int, int],
+        yellow_hi: tuple[int, int, int],
+        left_ratio: float,
+        *,
+        max_piece_width: float,
+        min_area_ratio: float,
+    ) -> tuple[int, int, int, int] | None:
+        left = np.zeros((h, w), dtype=np.uint8)
+        left[:, : int(w * left_ratio)] = 255
+        ground = np.zeros((h, w), dtype=np.uint8)
+        ground[: int(h * 0.88), :] = 255
+        orange = cv2.inRange(hsv, np.array(orange_lo), np.array(orange_hi))
+        yellow = cv2.inRange(hsv, np.array(yellow_lo), np.array(yellow_hi))
+        mask = cv2.bitwise_or(orange, yellow)
+        mask = cv2.bitwise_and(mask, search_mask)
+        mask = cv2.bitwise_and(mask, left)
+        mask = cv2.bitwise_and(mask, ground)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=min_area_ratio)
+        raw = [
+            b for b in raw
+            if b[3] < h * 0.86
+            and (b[2] - b[0]) < w * max_piece_width
+            and (b[2] - b[0]) > w * 0.04
+            and (b[3] - b[1]) > h * 0.025
+            and (b[0] + b[2]) / 2 < w * 0.46
+            and (b[2] - b[0]) < w * 0.55
+        ]
+        stacks = _merge_vertical_stack(raw, gap_px=max(28, int(h * 0.08)))
+        if not stacks:
+            return None
+
         stacks.sort(key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), reverse=True)
         primary = stacks[0]
+        merged = primary
         for extra in stacks[1:]:
-            if extra[0] > w * 0.38:
+            if extra[0] > w * 0.36:
                 continue
-            dx = max(extra[0] - primary[2], primary[0] - extra[2], 0)
-            dy = max(extra[1] - primary[3], primary[1] - extra[3], 0)
-            if dx < w * 0.12 and dy < h * 0.12:
-                primary = (
-                    min(primary[0], extra[0]), min(primary[1], extra[1]),
-                    max(primary[2], extra[2]), max(primary[3], extra[3]),
-                )
-        stacks = [primary]
-    best: tuple[float, tuple[int, int, int, int]] | None = None
-    for box in stacks:
-        x1, y1, x2, y2 = box
-        bw, bh = x2 - x1, y2 - y1
-        if bh < h * 0.10 or bw < w * 0.035:
-            continue
-        if bh > h * 0.62 or bw > w * 0.28:
-            continue
-        cy = (y1 + y2) / 2.0
-        if cy > h * 0.78 or x2 > w * 0.50:
-            continue
-        score = bh * 1.8 + bw * 0.35 - abs((x1 + x2) / 2 - w * 0.19) * 2.2
-        if best is None or score > best[0]:
-            best = (score, box)
-    return best[1] if best else None
+            dx = max(extra[0] - merged[2], merged[0] - extra[2], 0)
+            dy = max(extra[1] - merged[3], merged[1] - extra[3], 0)
+            if dx >= w * 0.10 or dy >= h * 0.14:
+                continue
+            candidate = (
+                min(merged[0], extra[0]), min(merged[1], extra[1]),
+                max(merged[2], extra[2]), max(merged[3], extra[3]),
+            )
+            if _sany_box_valid(candidate, w, h):
+                merged = candidate
+
+        candidates = [primary, merged] + stacks[1:]
+        best: tuple[float, tuple[int, int, int, int]] | None = None
+        seen: set[tuple[int, int, int, int]] = set()
+        for box in candidates:
+            if box in seen:
+                continue
+            seen.add(box)
+            if not _sany_box_valid(box, w, h):
+                continue
+            score = _score_sany_box(box, w, h)
+            if best is None or score > best[0]:
+                best = (score, box)
+        return best[1] if best else None
+
+    strict = run_pass(
+        (6, 80, 85), (26, 255, 255),
+        (14, 65, 95), (36, 255, 255),
+        0.48,
+        max_piece_width=0.34,
+        min_area_ratio=0.00045,
+    )
+    if strict is not None:
+        return strict
+
+    return run_pass(
+        (4, 45, 60), (30, 255, 255),
+        (10, 35, 70), (40, 255, 255),
+        0.55,
+        max_piece_width=0.38,
+        min_area_ratio=0.00030,
+    )
 
 
 def _green_excavator_candidates(
@@ -542,7 +596,9 @@ def _detect_machinery_units(
         )
 
     exclude: list[tuple[int, int, int, int]] = []
-    green_box = _detect_green_excavator(hsv, search_mask, w, h, exclude_boxes=None)
+    if tower_box:
+        exclude.append(_tower_core_exclude_box(tower_box, w))
+    green_box = _detect_green_excavator(hsv, search_mask, w, h, exclude_boxes=exclude or None)
     if green_box:
         conf = _machinery_confidence(green_box, frame_area, "crane_green")
         units.append(
@@ -567,11 +623,11 @@ def _detect_machinery_units(
         for unit in units:
             replaced = False
             for idx, prev in enumerate(deduped):
+                if unit.kind != prev.kind:
+                    continue
                 if _bbox_iou_machinery(unit.bbox, prev.bbox) < 0.35:
                     continue
-                unit_pri = MACHINERY_KIND_PRIORITY.get(unit.kind, 0)
-                prev_pri = MACHINERY_KIND_PRIORITY.get(prev.kind, 0)
-                if unit_pri >= prev_pri:
+                if unit.confidence >= prev.confidence:
                     deduped[idx] = unit
                 replaced = True
                 break
