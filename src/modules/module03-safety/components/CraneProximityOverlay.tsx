@@ -41,6 +41,12 @@ const BEHAVIOR_STYLE: Record<
     label: 'text-lime-200',
     bg: 'bg-lime-600/35',
   },
+  sany_drill: {
+    border: 'border-orange-400/95',
+    fill: 'bg-orange-400/12',
+    label: 'text-orange-200',
+    bg: 'bg-orange-600/40',
+  },
   excavator_orange: {
     border: 'border-orange-400/95',
     fill: 'bg-orange-400/12',

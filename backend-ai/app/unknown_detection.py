@@ -13,8 +13,9 @@ OBJECT_RECOGNIZED_MIN_CONF = 0.80
 
 MACHINERY_KIND_LABELS: dict[str, str] = {
     "crane_green": "Máy xúc (xanh)",
-    "excavator_orange": "Máy xúc / cẩu (cam)",
-    "tower_crane": "Cẩu tháp (vàng)",
+    "sany_drill": "Máy khoan SANY",
+    "tower_crane": "Máy cẩu tháp",
+    "excavator_orange": "Máy khoan SANY",
 }
 
 

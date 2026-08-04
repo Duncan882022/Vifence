@@ -295,6 +295,7 @@ class EventStore:
             "unknown": (160, 160, 160),
         }
         kind_colors = {
+            "sany_drill": (0, 140, 255),
             "excavator_orange": (0, 140, 255),
             "crane_green": (0, 200, 80),
             "tower_crane": (0, 230, 255),

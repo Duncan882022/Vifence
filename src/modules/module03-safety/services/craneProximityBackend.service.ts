@@ -17,7 +17,7 @@ export interface CraneProximityDetection {
   confidence: number
   bbox: [number, number, number, number]
   distance_m?: number
-  machine_kind?: 'crane_green' | 'excavator_orange' | 'tower_crane' | 'machinery_yellow' | 'machinery'
+  machine_kind?: 'crane_green' | 'sany_drill' | 'excavator_orange' | 'tower_crane' | 'machinery_yellow' | 'machinery'
 }
 
 export interface CraneProximityRoiZone {

@@ -76,15 +76,15 @@ class _MachineryUnit:
 
 MACHINERY_LABELS = {
     "crane_green": "Máy xúc (xanh)",
-    "excavator_orange": "Máy xúc / cẩu (cam)",
-    "tower_crane": "Cẩu tháp (vàng)",
+    "sany_drill": "Máy khoan SANY",
+    "tower_crane": "Máy cẩu tháp",
     "machinery_yellow": "Máy thi công (vàng)",
 }
 
 MACHINERY_KIND_PRIORITY: dict[str, int] = {
     "tower_crane": 4,
     "crane_green": 3,
-    "excavator_orange": 3,
+    "sany_drill": 3,
     "machinery_yellow": 1,
 }
 
@@ -144,7 +144,7 @@ def _machinery_confidence(box: tuple[int, int, int, int], frame_area: int, kind:
     x1, y1, x2, y2 = box
     area_ratio = ((x2 - x1) * (y2 - y1)) / frame_area
     base = 0.58 + min(area_ratio * 5.0, 0.28)
-    if kind == "excavator_orange":
+    if kind == "sany_drill":
         base += 0.04
     if kind == "crane_green":
         base += 0.03
@@ -192,7 +192,7 @@ def _machinery_box_valid(
             return False
         if bw < frame_width * 0.12:
             return False
-    if kind == "excavator_orange":
+    if kind == "sany_drill":
         if cy < frame_height * 0.28:
             return False
         if area_ratio > 0.08:
@@ -264,16 +264,23 @@ def _detect_tower_crane(
         cx = (x1 + x2) // 2
         half = int(w * 0.085)
         x1, x2 = max(0, cx - half), min(w, cx + half)
+    # Mở rộng nhẹ lên trên / sang trái để gồm cần cẩu ngang
+    yellow_top = cv2.inRange(hsv, np.array([12, 55, 90]), np.array([38, 255, 255]))
+    top_roi = yellow_top[max(0, y1 - int(h * 0.12)) : y1 + int(h * 0.08), max(0, x1 - int(w * 0.18)) : min(w, x2 + int(w * 0.12))]
+    ys, xs = np.where(top_roi > 0)
+    if len(xs) >= 12:
+        x1 = min(x1, int(xs.min()) + max(0, x1 - int(w * 0.18)))
+        y1 = min(y1, int(ys.min()) + max(0, y1 - int(h * 0.12)))
     return (x1, y1, x2, y2)
 
 
-def _detect_left_rig(
+def _detect_sany_drill(
     hsv: np.ndarray,
     search_mask: np.ndarray,
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int] | None:
-    """Máy xúc / cẩu cam bên trái — gộp thân + boom cao."""
+    """Máy khoan SANY bên trái — gộp thân + boom cao."""
     h, w = hsv.shape[:2]
     left = np.zeros((h, w), dtype=np.uint8)
     left[:, : int(w * 0.44)] = 255
@@ -329,20 +336,50 @@ def _detect_green_excavator(
     search_mask: np.ndarray,
     frame_width: int,
     frame_height: int,
+    *,
+    exclude_boxes: list[tuple[int, int, int, int]] | None = None,
 ) -> tuple[int, int, int, int] | None:
-    """Máy xúc xanh bên phải — gộp thân + cần cao."""
+    """Máy xúc xanh bên phải — tách khỏi cẩu tháp / lưới xanh."""
     h, w = hsv.shape[:2]
-    right = np.zeros((h, w), dtype=np.uint8)
-    right[:, int(w * 0.34) :] = 255
+    band = np.zeros((h, w), dtype=np.uint8)
+    band[int(h * 0.30) : int(h * 0.92), int(w * 0.44) : int(w * 0.95)] = 255
     green = cv2.inRange(hsv, np.array([34, 45, 55]), np.array([92, 255, 230]))
-    mask = cv2.bitwise_and(green, search_mask)
-    mask = cv2.bitwise_and(mask, right)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=3)
-    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.0015)
+    mesh = cv2.inRange(hsv, np.array([40, 85, 45]), np.array([88, 255, 195]))
+    mask = cv2.bitwise_and(green, band)
+    mask = cv2.bitwise_and(mask, search_mask)
+    mask = cv2.bitwise_and(mask, cv2.bitwise_not(mesh))
+    if exclude_boxes:
+        ex = np.zeros((h, w), dtype=np.uint8)
+        for x1, y1, x2, y2 in exclude_boxes:
+            pad_x = int((x2 - x1) * 0.06)
+            pad_y = int((y2 - y1) * 0.04)
+            cv2.rectangle(
+                ex,
+                (max(0, x1 - pad_x), max(0, y1 - pad_y)),
+                (min(w, x2 + pad_x), min(h, y2 + pad_y)),
+                255,
+                -1,
+            )
+        mask = cv2.bitwise_and(mask, cv2.bitwise_not(ex))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.0018)
+    raw = [
+        b for b in raw
+        if b[0] >= int(w * 0.42)
+        and (b[2] - b[0]) <= int(w * 0.40)
+        and (b[3] - b[1]) >= int(h * 0.10)
+        and (b[3] - b[1]) <= int(h * 0.42)
+    ]
     if not raw:
         return None
-    merged = _merge_machinery_boxes(raw, w, gap_px=max(20, int(w * 0.04)))
+    merged = _merge_machinery_boxes(raw, w, gap_px=max(28, int(w * 0.05)))
+    merged = [
+        b for b in merged
+        if _machinery_box_valid(b, w, h, "crane_green")
+    ]
+    if not merged:
+        return None
     best = max(merged, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
     x1, y1, x2, y2 = best
     if (y2 - y1) < h * 0.12 or (x2 - x1) < w * 0.10:
@@ -372,20 +409,21 @@ def _detect_machinery_units(
             )
         )
 
-    left_box = _detect_left_rig(hsv, search_mask, w, h)
+    left_box = _detect_sany_drill(hsv, search_mask, w, h)
     if left_box:
-        conf = _machinery_confidence(left_box, frame_area, "excavator_orange")
+        conf = _machinery_confidence(left_box, frame_area, "sany_drill")
         units.append(
             _MachineryUnit(
                 bbox=left_box,
                 confidence=conf,
-                kind="excavator_orange",
-                label=MACHINERY_LABELS["excavator_orange"],
+                kind="sany_drill",
+                label=MACHINERY_LABELS["sany_drill"],
                 source="color_detect",
             )
         )
 
-    green_box = _detect_green_excavator(hsv, search_mask, w, h)
+    exclude = [u.bbox for u in units]
+    green_box = _detect_green_excavator(hsv, search_mask, w, h, exclude_boxes=exclude)
     if green_box:
         conf = _machinery_confidence(green_box, frame_area, "crane_green")
         units.append(

@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 
 import numpy as np
 
 from .events import EventStore, PersistenceDebouncer
 from .road_analyzer import (
     EVENT_MIN_CONFIDENCE,
-    _bbox_iou,
     analyze_road_frame,
     episode_snapshot_score,
 )
@@ -30,60 +28,51 @@ _BEHAVIOR_MIN_CONFIDENCE: dict[str, float] = {
     "water": EVENT_MIN_CONFIDENCE,
     "object": EVENT_MIN_CONFIDENCE,
 }
-_TRACK_IOU_MATCH = 0.32
 _TRACK_EXPIRE_SECONDS = 4.0
 _MAX_TRACKS = 12
 
 
 class _TrackState:
-    __slots__ = ("debouncer", "episode_best", "last_bbox", "last_seen", "behavior", "object_kind")
+    __slots__ = ("episode_best", "last_bbox", "last_seen", "behavior", "object_kind")
 
     def __init__(self, behavior: str, object_kind: str | None = None):
         self.behavior = behavior
         self.object_kind = object_kind
-        self.debouncer = PersistenceDebouncer(
-            min_duration_seconds=_ROAD_CONFIRM_SECONDS,
-            cooldown_seconds=_ROAD_REPEAT_SECONDS,
-            max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
-            one_event_per_episode=False,
-        )
         self.episode_best: dict | None = None
         self.last_bbox: list[float] = []
         self.last_seen: float = time.time()
 
 
 class RoadAnalysisEngine:
-    """Phân tích lòng đường + debounce theo từng vùng detect (track)."""
+    """Phân tích lòng đường + debounce theo từng loại detect (ổn định, 10 phút/lần)."""
 
     def __init__(self, store: EventStore):
         self.store = store
         self._tracks: dict[str, dict[str, _TrackState]] = {}
+        self._gates: dict[str, dict[str, PersistenceDebouncer]] = {}
 
     def _tracks_for(self, camera_id: str) -> dict[str, _TrackState]:
         if camera_id not in self._tracks:
             self._tracks[camera_id] = {}
         return self._tracks[camera_id]
 
-    def _match_track(
-        self,
-        tracks: dict[str, _TrackState],
-        det: RoadDetection,
-    ) -> str:
-        best_id: str | None = None
-        best_iou = _TRACK_IOU_MATCH
-        for track_id, state in tracks.items():
-            if state.behavior != det.behavior or not state.last_bbox:
-                continue
-            if det.behavior == "object" and det.object_kind and state.object_kind != det.object_kind:
-                continue
-            iou = _bbox_iou(state.last_bbox, det.bbox)
-            if iou > best_iou:
-                best_iou = iou
-                best_id = track_id
-        if best_id:
-            return best_id
-        suffix = f"-{det.object_kind}" if det.behavior == "object" and det.object_kind else ""
-        return f"{det.behavior}{suffix}-{uuid.uuid4().hex[:8]}"
+    def _gate_for(self, camera_id: str, track_id: str) -> PersistenceDebouncer:
+        if camera_id not in self._gates:
+            self._gates[camera_id] = {}
+        if track_id not in self._gates[camera_id]:
+            self._gates[camera_id][track_id] = PersistenceDebouncer(
+                min_duration_seconds=_ROAD_CONFIRM_SECONDS,
+                cooldown_seconds=_ROAD_REPEAT_SECONDS,
+                max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
+                one_event_per_episode=False,
+            )
+        return self._gates[camera_id][track_id]
+
+    def _stable_track_id(self, det: RoadDetection) -> str:
+        """Một debouncer / loại — tránh log trùng khi bbox nhảy hoặc đổi nhãn phụ."""
+        if det.behavior == "object":
+            return "object"
+        return det.behavior
 
     def _expire_stale_tracks(self, tracks: dict[str, _TrackState], now: float) -> None:
         stale = [
@@ -117,7 +106,8 @@ class RoadAnalysisEngine:
             dets = dets[:_MAX_TRACKS]
 
         for det in dets:
-            track_id = self._match_track(tracks, det)
+            track_id = self._stable_track_id(det)
+            gate = self._gate_for(camera_id, track_id)
             if track_id not in tracks:
                 if len(tracks) >= _MAX_TRACKS:
                     continue
@@ -136,8 +126,8 @@ class RoadAnalysisEngine:
                         "frame": frame.copy(),
                     }
 
-            was_active = state.debouncer.snapshot()["active"]
-            confirmed = state.debouncer.register(True)
+            was_active = gate.snapshot()["active"]
+            confirmed = gate.register(True)
 
             if confirmed and state.episode_best:
                 pending = state.episode_best
@@ -156,15 +146,16 @@ class RoadAnalysisEngine:
                     event.confidence,
                     [int(v) for v in top_det.bbox],
                 )
-            elif was_active and not state.debouncer.snapshot()["active"]:
+            elif was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
 
         for track_id, state in list(tracks.items()):
             if track_id in matched_ids:
                 continue
-            was_active = state.debouncer.snapshot()["active"]
-            state.debouncer.register(False)
-            if was_active and not state.debouncer.snapshot()["active"]:
+            gate = self._gate_for(camera_id, track_id)
+            was_active = gate.snapshot()["active"]
+            gate.register(False)
+            if was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
 
         self._expire_stale_tracks(tracks, now)
