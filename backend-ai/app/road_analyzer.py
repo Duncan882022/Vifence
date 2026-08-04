@@ -359,65 +359,259 @@ def _bbox_containment(
     return inter / inner_area
 
 
+def _green_steel_mask(hsv: np.ndarray) -> np.ndarray:
+    tan = cv2.inRange(hsv, np.array([15, 25, 120]), np.array([35, 180, 255]))
+    green = cv2.inRange(hsv, np.array([32, 28, 45]), np.array([95, 255, 230]))
+    return cv2.bitwise_and(green, cv2.bitwise_not(tan))
+
+
+def _tighten_steel_pile_bbox(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Siết bbox vật tư thép — bám đống sắt xanh, bỏ vệt gỉ trải ngang mặt đường."""
+    h, w = hsv.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in box]
+    bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
+    if bw <= int(w * 0.34):
+        return box
+
+    pad_x = max(10, int(bw * 0.06))
+    pad_y = max(8, int(bh * 0.05))
+    ex1 = max(0, x1 - pad_x)
+    ex2 = min(w, x2 + pad_x)
+    ey1 = max(0, y1 - pad_y)
+    ey2 = min(h, y2 + pad_y)
+    patch = hsv[ey1:ey2, ex1:ex2]
+    green = _green_steel_mask(patch)
+    if int(green.sum()) < 100:
+        return _trim_object_bbox_by_density(hsv, box)
+
+    num, _, stats, _ = cv2.connectedComponentsWithStats(green, connectivity=8)
+    comps: list[tuple[int, tuple[int, int, int, int]]] = []
+    for lbl in range(1, num):
+        lx, ly, lbw, lbh, area = stats[lbl]
+        if area < 36:
+            continue
+        comps.append((area, (lx + ex1, ly + ey1, lx + lbw + ex1, ly + lbh + ey1)))
+    if not comps:
+        return _trim_object_bbox_by_density(hsv, box)
+
+    comps.sort(key=lambda row: row[0], reverse=True)
+    primary = comps[0][1]
+    px1, py1, px2, py2 = primary
+    cluster = [primary]
+    gap_x = max(12, int(w * 0.02))
+    for _, cb in comps[1:]:
+        ox1 = max(cb[0], px1)
+        ox2 = min(cb[2], px2)
+        if ox2 <= ox1:
+            horiz_gap = min(abs(cb[0] - px2), abs(cb[2] - px1))
+            if horiz_gap > gap_x:
+                continue
+        cluster.append(cb)
+        px1 = min(px1, cb[0])
+        py1 = min(py1, cb[1])
+        px2 = max(px2, cb[2])
+        py2 = max(py2, cb[3])
+
+    tx1, ty1, tx2, ty2 = px1, py1, px2, py2
+    pw = max(10, int((tx2 - tx1) * 0.14))
+    tx1 = max(x1 - int(bw * 0.04), tx1 - pw)
+    tx2 = min(x2 + int(bw * 0.04), tx2 + pw)
+    # Giữ chiều cao bbox gốc — thân thép tối không có sơn xanh.
+    ty1, ty2 = y1, y2
+
+    if tx2 - tx1 < 20 or ty2 - ty1 < 14:
+        return box
+    if _score_object_box((tx1, ty1, tx2, ty2), frame_width, frame_height) < 0:
+        return box
+    return tx1, ty1, tx2, ty2
+
+
+def _trim_object_bbox_by_density(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Cắt hai bên bbox theo mật độ vật liệu — loại vệt mảnh."""
+    x1, y1, x2, y2 = [int(v) for v in box]
+    patch = hsv[y1:y2, x1:x2]
+    if patch.size == 0 or x2 - x1 < 48:
+        return box
+    material = _pile_material_mask(patch)
+    ph, pw = material.shape[:2]
+    row1, row2 = int(ph * 0.12), int(ph * 0.88)
+    band = material[row1:row2]
+    if band.size == 0:
+        return box
+    col = band.sum(axis=0) / 255.0
+    peak = float(col.max()) if col.size else 0.0
+    if peak < 4.0:
+        return box
+    thresh = max(peak * 0.28, (row2 - row1) * 0.07)
+    active = np.where(col >= thresh)[0]
+    if len(active) < 8:
+        return box
+    ax1 = int(active.min())
+    ax2 = int(active.max()) + 1
+    if ax2 - ax1 < pw * 0.12:
+        return box
+    pad = max(4, int((ax2 - ax1) * 0.06))
+    return x1 + max(0, ax1 - pad), y1, x1 + min(pw, ax2 + pad), y2
+
+
+def _pile_material_mask(hsv: np.ndarray) -> np.ndarray:
+    """Mask vật liệu đống thép / kim loại — gộp nhiều sắc độ gỉ + thân tối."""
+    tan = cv2.inRange(hsv, np.array([15, 25, 120]), np.array([35, 180, 255]))
+    rust = cv2.inRange(hsv, np.array([5, 45, 35]), np.array([28, 255, 220]))
+    rust = cv2.bitwise_and(rust, cv2.bitwise_not(tan))
+    brown = cv2.inRange(hsv, np.array([8, 35, 30]), np.array([24, 255, 210]))
+    green = cv2.inRange(hsv, np.array([32, 25, 40]), np.array([95, 255, 230]))
+    dark = cv2.inRange(hsv, np.array([0, 0, 22]), np.array([180, 90, 115]))
+    return cv2.bitwise_or(rust, cv2.bitwise_or(brown, cv2.bitwise_or(green, dark)))
+
+
+def _expand_object_bbox_to_pile(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Mở rộng bbox ôm trọn cả đống vật — gộp các mảnh mask liền nhau."""
+    h, w = hsv.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in box]
+    bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
+    mx = max(24, int(bw * 0.18))
+    my = max(16, int(bh * 0.12))
+    ex1, ey1 = max(0, x1 - mx), max(0, y1 - my)
+    ex2, ey2 = min(w, x2 + mx), min(h, y2 + my)
+    patch = hsv[ey1:ey2, ex1:ex2]
+    if patch.size == 0:
+        return box
+
+    material = _pile_material_mask(patch)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
+    material = cv2.morphologyEx(material, cv2.MORPH_CLOSE, kernel, iterations=3)
+    wet = cv2.inRange(patch, np.array([0, 0, 75]), np.array([180, 42, 210]))
+    ph = patch.shape[0]
+    wet[: max(0, int(ph * 0.52)), :] = 0
+    material = cv2.bitwise_and(material, cv2.bitwise_not(wet))
+
+    cx = (x1 + x2) // 2 - ex1
+    cy = (y1 + y2) // 2 - ey1
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(material, connectivity=8)
+    best_label = 0
+    best_area = 0
+    for lbl in range(1, num):
+        lx, ly, lbw, lbh, area = stats[lbl]
+        if area < 40:
+            continue
+        if lx <= cx < lx + lbw and ly <= cy < ly + lbh:
+            best_label = lbl
+            break
+        if area > best_area:
+            best_area = area
+            best_label = lbl
+
+    if best_label <= 0:
+        return box
+
+    comp = labels == best_label
+    ys, xs = np.where(comp)
+    if len(xs) < 16:
+        return box
+
+    tx1 = int(xs.min()) + ex1
+    ty1 = int(ys.min()) + ey1
+    tx2 = int(xs.max()) + 1 + ex1
+    ty2 = int(ys.max()) + 1 + ey1
+    tx1, ty1 = min(tx1, x1), min(ty1, y1)
+    tx2, ty2 = max(tx2, x2), max(ty2, y2)
+    if _score_object_box((tx1, ty1, tx2, ty2), frame_width, frame_height) < 0:
+        return box
+    return tx1, ty1, tx2, ty2
+
+
+def _trim_wet_bottom_from_bbox(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Chỉ cắt hàng nhựa ướt phía dưới — không thu hai bên đống vật."""
+    x1, y1, x2, y2 = [int(v) for v in box]
+    patch = hsv[y1:y2, x1:x2]
+    if patch.size == 0 or y2 - y1 < 16:
+        return box
+    material = _pile_material_mask(patch)
+    wet = cv2.inRange(patch, np.array([0, 0, 75]), np.array([180, 38, 205]))
+    ty2 = y2
+    for row in range(patch.shape[0] - 1, max(patch.shape[0] // 3, 0), -1):
+        mat_cnt = int(material[row].sum() // 255)
+        wet_cnt = int(wet[row].sum() // 255)
+        row_w = patch.shape[1]
+        if mat_cnt >= max(8, row_w * 0.04):
+            break
+        if wet_cnt >= row_w * 0.35 and mat_cnt < row_w * 0.06:
+            ty2 = y1 + row
+            continue
+        break
+    if ty2 - y1 < 12:
+        return box
+    return x1, y1, x2, ty2
+
+
+def _finalize_object_bbox(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+    *,
+    kind: str = "generic",
+) -> tuple[int, int, int, int]:
+    """Ôm trọn đống vật tư — mở rộng theo mask, siết theo thép xanh nếu cần."""
+    if kind in ("steel", "rust_metal"):
+        trimmed = _trim_wet_bottom_from_bbox(hsv, box)
+        return _tighten_steel_pile_bbox(hsv, trimmed, frame_width, frame_height)
+
+    expanded = _expand_object_bbox_to_pile(hsv, box, frame_width, frame_height)
+    trimmed = _trim_wet_bottom_from_bbox(hsv, expanded)
+    bw = trimmed[2] - trimmed[0]
+    if bw > frame_width * 0.42:
+        return _trim_object_bbox_by_density(hsv, trimmed)
+    return trimmed
+
+
+def _clip_object_box_to_roi(
+    box: tuple[int, int, int, int],
+    roi_mask: np.ndarray,
+    width: int,
+    height: int,
+) -> tuple[int, int, int, int] | None:
+    """Clip ROI cho vật tư — không thu bbox quá mạnh so với detect gốc."""
+    clipped = _clip_box_to_roi(box, roi_mask, width, height, min_overlap=0.78)
+    if clipped is None:
+        cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+        if _point_in_roi(cx, cy, roi_mask, width, height):
+            return box
+        return None
+    orig_area = max((box[2] - box[0]) * (box[3] - box[1]), 1)
+    clip_area = max((clipped[2] - clipped[0]) * (clipped[3] - clipped[1]), 1)
+    if clip_area < orig_area * 0.82:
+        cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+        if _point_in_roi(cx, cy, roi_mask, width, height):
+            return box
+    return clipped
+
+
 def _tighten_object_bbox(
     hsv: np.ndarray,
     box: tuple[int, int, int, int],
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int]:
-    """Thu bbox sát vật thật — bỏ vũng nước / nhựa ướt dưới đống vật tư."""
-    h, w = hsv.shape[:2]
-    x1, y1, x2, y2 = [int(v) for v in box]
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w, x2), min(h, y2)
-    if x2 - x1 < 12 or y2 - y1 < 12:
-        return box
-
-    patch = hsv[y1:y2, x1:x2]
-    green = cv2.inRange(patch, np.array([32, 28, 45]), np.array([95, 255, 230]))
-    rust = cv2.inRange(patch, np.array([5, 55, 40]), np.array([25, 255, 210]))
-    brown = cv2.inRange(patch, np.array([8, 40, 35]), np.array([22, 255, 210]))
-    white_bag = cv2.inRange(patch, np.array([0, 0, 155]), np.array([180, 55, 255]))
-    wet_asphalt = cv2.inRange(patch, np.array([0, 0, 75]), np.array([180, 38, 205]))
-    material = cv2.bitwise_or(green, cv2.bitwise_or(rust, cv2.bitwise_or(brown, white_bag)))
-    material = cv2.bitwise_and(material, cv2.bitwise_not(wet_asphalt))
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    material = cv2.morphologyEx(material, cv2.MORPH_OPEN, kernel, iterations=1)
-
-    ys, xs = np.where(material > 0)
-    if len(xs) < 24:
-        return box
-
-    row_counts = material.sum(axis=1)
-    col_counts = material.sum(axis=0)
-    row_thr = max(float(row_counts.max()) * 0.14, 6.0)
-    col_thr = max(float(col_counts.max()) * 0.14, 6.0)
-    valid_rows = np.where(row_counts >= row_thr)[0]
-    valid_cols = np.where(col_counts >= col_thr)[0]
-    if len(valid_rows) < 2 or len(valid_cols) < 2:
-        return box
-
-    tx1 = int(valid_cols.min()) + x1
-    tx2 = int(valid_cols.max()) + 1 + x1
-    ty1 = int(valid_rows.min()) + y1
-    ty2 = int(valid_rows.max()) + 1 + y1
-
-    orig_area = max((x2 - x1) * (y2 - y1), 1)
-    tight_area = max((tx2 - tx1) * (ty2 - ty1), 1)
-    if tight_area / orig_area < 0.28:
-        return box
-
-    # Không mở rộng quá bbox gốc — chỉ thu hoặc giữ nguyên cạnh sát vật
-    tx1 = max(x1, tx1 - 2)
-    ty1 = max(y1, ty1 - 2)
-    tx2 = min(x2, tx2 + 2)
-    ty2 = min(y2, ty2 + 2)
-
-    if tx2 - tx1 < 12 or ty2 - ty1 < 12:
-        return box
-    if _score_object_box((tx1, ty1, tx2, ty2), frame_width, frame_height) < 0:
-        return box
-    return tx1, ty1, tx2, ty2
+    """Alias — giữ tương thích test cũ."""
+    return _finalize_object_bbox(hsv, box, frame_width, frame_height)
 
 
 def _bbox_iou(a: tuple[int, int, int, int] | list[float], b: tuple[int, int, int, int] | list[float]) -> float:
@@ -534,9 +728,9 @@ def _trim_box_overlap(
 
 
 def _mud_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
-    """Bùn trên mặt đường — ưu tiên lề trái/giữa, loại vùng vật tư bên phải."""
+    """Bùn trên mặt đường — chỉ lề trái, loại vùng vật tư giữa/phải."""
     band = _road_band_mask(roi_mask, width, height)
-    band[:, int(width * 0.56) :] = 0
+    band[:, int(width * 0.40) :] = 0
     return band
 
 
@@ -556,24 +750,57 @@ def _score_mud_box(box: tuple[int, int, int, int], frame_width: int, frame_heigh
     """Ưu tiên mảng bùn gọn ở lề trái — không bao vật tư giữa/phải."""
     x1, y1, x2, y2 = box
     bw, bh = x2 - x1, y2 - y1
-    if bw < 16 or bh < 10:
+    if bw < 20 or bh < 12:
         return -1.0
     cx = (x1 + x2) / 2
     cy = (y1 + y2) / 2
     area = bw * bh
     x_norm = cx / max(frame_width, 1)
     y_norm = cy / max(frame_height, 1)
-    if x_norm > 0.48:
+    if x_norm > 0.38:
+        return -1.0
+    if x2 > frame_width * 0.42:
         return -1.0
     if y_norm < 0.38:
         return -1.0
-    if bw > frame_width * 0.40:
+    if bw > frame_width * 0.34:
         return -1.0
     compact = area / max(float(bw * bh), 1.0)
     if compact < 0.10:
         return -1.0
-    cx_target = frame_width * 0.26
+    cx_target = frame_width * 0.22
     return area * compact * (0.55 + y_norm * 0.45) - abs(cx - cx_target) * 2.0
+
+
+def _trim_mud_from_objects(
+    box: tuple[int, int, int, int],
+    obj_boxes: list[tuple[int, int, int, int]],
+    frame_width: int,
+) -> tuple[int, int, int, int] | None:
+    """Loại/cắt bbox bùn chồng vật tư — không để thành vệt mảnh."""
+    x1, y1, x2, y2 = box
+    trimmed = box
+    for obj in obj_boxes:
+        if _bbox_iou(trimmed, obj) < 0.10:
+            continue
+        if _bbox_containment(trimmed, obj) > 0.45:
+            return None
+        ox1, _, ox2, _ = obj
+        mcx = (trimmed[0] + trimmed[2]) / 2
+        if mcx >= ox1 and _bbox_containment(trimmed, obj) > 0.22:
+            return None
+        if trimmed[0] < ox1 and mcx < ox1:
+            nx2 = max(trimmed[0] + 24, int(ox1 - 8))
+            if nx2 <= trimmed[0] + 20:
+                return None
+            trimmed = (trimmed[0], trimmed[1], min(trimmed[2], nx2), trimmed[3])
+    tw = trimmed[2] - trimmed[0]
+    th = trimmed[3] - trimmed[1]
+    if tw < 28 or th < 14:
+        return None
+    if (trimmed[0] + trimmed[2]) / 2 > frame_width * 0.38:
+        return None
+    return trimmed
 
 
 def _analyze_mud(
@@ -594,6 +821,7 @@ def _analyze_mud(
     green_gear = cv2.inRange(hsv, np.array([32, 35, 40]), np.array([95, 255, 230]))
     white_mat = cv2.inRange(hsv, np.array([0, 0, 175]), np.array([180, 45, 255]))
     orange_gear = cv2.inRange(hsv, np.array([8, 90, 100]), np.array([28, 255, 255]))
+    rust_metal = cv2.inRange(hsv, np.array([5, 50, 35]), np.array([26, 255, 200]))
     blue_vest = cv2.inRange(hsv, np.array([85, 50, 80]), np.array([130, 255, 255]))
     rel_dark = (local_v - v_f > 6).astype(np.uint8) * 255
 
@@ -607,6 +835,7 @@ def _analyze_mud(
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(green_gear))
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(white_mat))
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(orange_gear))
+    mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(rust_metal))
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(blue_vest))
     mud_mask = cv2.medianBlur(mud_mask, 5)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -943,15 +1172,9 @@ def _dedupe_object_kinds(
                 continue
             prev_pri = OBJECT_KIND_PRIORITY.get(prev_kind, 0)
             new_pri = OBJECT_KIND_PRIORITY.get(kind, 0)
-            prev_area = max((prev_box[2] - prev_box[0]) * (prev_box[3] - prev_box[1]), 1)
-            new_area = max((box[2] - box[0]) * (box[3] - box[1]), 1)
-            if new_pri > prev_pri:
-                use_box = prev_box if prev_area < new_area * 0.92 else box
-                kept[idx] = (kind, use_box)
-            elif new_pri == prev_pri and new_area < prev_area * 0.92:
-                kept[idx] = (kind, box)
-            elif new_pri >= prev_pri and iou >= 0.55 and new_area < prev_area * 0.85:
-                kept[idx] = (kind, box)
+            union_box = _union_box(box, prev_box)
+            best_kind = kind if new_pri >= prev_pri else prev_kind
+            kept[idx] = (best_kind, union_box)
             replaced = True
             break
         if not replaced:
@@ -1061,7 +1284,7 @@ def _analyze_objects(
     # Kim loại gỉ / nâu đỏ
     rust_mask = cv2.inRange(hsv, np.array([5, 55, 40]), np.array([25, 255, 210]))
     rust_mask = cv2.bitwise_and(rust_mask, cv2.bitwise_not(tan))
-    rust_boxes = boxes_for_mask(rust_mask, max_ratio=0.12, min_compactness=0.05, max_width_ratio=0.62)
+    rust_boxes = boxes_for_mask(rust_mask, max_ratio=0.12, min_compactness=0.04, max_width_ratio=0.68, close_iter=3)
     rust_boxes = _merge_adjacent_boxes(rust_boxes, w)
     for box in rust_boxes:
         if _score_object_box(box, w, h) >= 0:
@@ -1092,7 +1315,7 @@ def _analyze_objects(
         deduped = _dedupe_object_kinds(by_kind, hsv, w, h)
         merged = _merge_same_kind_clusters(deduped, w)
         return [
-            (kind, _tighten_object_bbox(hsv, box, w, h))
+            (kind, _finalize_object_bbox(hsv, box, w, h, kind=kind))
             for kind, box in merged
         ]
 
@@ -1148,9 +1371,9 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
         roi_pixels = max(_roi_pixel_count(roi_mask), 1)
 
         for pct, box in mud_patches:
-            trimmed = box
-            for obj in obj_boxes:
-                trimmed = _trim_box_overlap(trimmed, obj, w, h)
+            trimmed = _trim_mud_from_objects(box, obj_boxes, w)
+            if trimmed is None:
+                continue
             clipped = _clip_box_to_roi(trimmed, roi_mask, w, h)
             if clipped is None or pct < MUD_THRESHOLD_PERCENT:
                 continue
@@ -1191,7 +1414,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             )
 
         for object_kind, box in obj_items:
-            clipped = _clip_box_to_roi(box, roi_mask, w, h)
+            clipped = _clip_object_box_to_roi(box, roi_mask, w, h)
             if clipped is None:
                 continue
             x1, y1, x2, y2 = clipped

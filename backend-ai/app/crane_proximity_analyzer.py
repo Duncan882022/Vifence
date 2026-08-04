@@ -145,9 +145,9 @@ def _machinery_confidence(box: tuple[int, int, int, int], frame_area: int, kind:
     area_ratio = ((x2 - x1) * (y2 - y1)) / frame_area
     base = 0.58 + min(area_ratio * 5.0, 0.28)
     if kind == "sany_drill":
-        base += 0.04
+        base += 0.12
     if kind == "crane_green":
-        base += 0.03
+        base += 0.06
     if kind == "tower_crane":
         base += 0.05
     return round(min(0.96, base), 3)
@@ -193,11 +193,11 @@ def _machinery_box_valid(
         if bw < frame_width * 0.12:
             return False
     if kind == "sany_drill":
-        if cy < frame_height * 0.28:
+        if cy < frame_height * 0.22:
             return False
-        if area_ratio > 0.08:
+        if area_ratio > 0.10:
             return False
-        if bw > frame_width * 0.22:
+        if bw > frame_width * 0.30:
             return False
     return True
 
@@ -217,6 +217,83 @@ def _boxes_from_color_mask(
         x, y, bw, bh = cv2.boundingRect(cnt)
         boxes.append((x, y, x + bw, y + bh))
     return boxes
+
+
+def _tower_core_exclude_box(
+    tower_box: tuple[int, int, int, int],
+    frame_width: int,
+) -> tuple[int, int, int, int]:
+    """Chỉ loại cột cẩu tháp hẹp — không cắt cần máy xúc xanh."""
+    x1, y1, x2, y2 = tower_box
+    cx = (x1 + x2) // 2
+    half = max(12, int((x2 - x1) * 0.32))
+    return max(0, cx - half), y1, min(frame_width, cx + half), y2
+
+
+def _refine_green_excavator_bbox(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Mở rộng bbox máy xúc xanh — gộp thân + cần, không tràn lưới phải."""
+    h, w = hsv.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in box]
+    ex1 = max(0, int(w * 0.30))
+    ex2 = min(w, int(w * 0.94))
+    ey1 = max(0, y1 - int(h * 0.05))
+    ey2 = min(h, y2 + int(h * 0.03))
+    patch = hsv[ey1:ey2, ex1:ex2]
+    if patch.size == 0:
+        return _clamp_green_bbox(box, w, h)
+    green = cv2.inRange(patch, np.array([32, 38, 50]), np.array([96, 255, 235]))
+    mesh = cv2.inRange(patch, np.array([40, 90, 50]), np.array([88, 255, 190]))
+    material = cv2.bitwise_and(green, cv2.bitwise_not(mesh))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    material = cv2.morphologyEx(material, cv2.MORPH_CLOSE, kernel, iterations=1)
+    cx = (x1 + x2) // 2 - ex1
+    cy = (y1 + y2) // 2 - ey1
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(material, connectivity=8)
+    best_label = 0
+    best_area = 0
+    for lbl in range(1, num):
+        lx, ly, lbw, lbh, area = stats[lbl]
+        if area < 80:
+            continue
+        if lx <= cx < lx + lbw and ly <= cy < ly + lbh:
+            best_label = lbl
+            break
+        if area > best_area:
+            best_area = area
+            best_label = lbl
+    if best_label <= 0:
+        return _clamp_green_bbox(box, w, h)
+    comp = labels == best_label
+    ys, xs = np.where(comp)
+    if len(xs) < 20:
+        return _clamp_green_bbox(box, w, h)
+    tx1 = int(xs.min()) + ex1
+    ty1 = int(ys.min()) + ey1
+    tx2 = int(xs.max()) + 1 + ex1
+    ty2 = int(ys.max()) + 1 + ey1
+    tx1, ty1 = min(tx1, x1), min(ty1, y1)
+    tx2, ty2 = max(tx2, x2), max(ty2, y2)
+    return _clamp_green_bbox((tx1, ty1, tx2, ty2), w, h)
+
+
+def _clamp_green_bbox(
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = [int(v) for v in box]
+    min_x = int(frame_width * 0.32)
+    max_x = int(frame_width * 0.92)
+    x1 = max(min_x, x1)
+    x2 = min(max_x, max(x1 + int(frame_width * 0.12), x2))
+    y1 = max(int(frame_height * 0.22), y1)
+    y2 = min(int(frame_height * 0.88), max(y1 + int(frame_height * 0.10), y2))
+    return x1, y1, x2, y2
 
 
 def _detect_tower_crane(
@@ -280,12 +357,12 @@ def _detect_sany_drill(
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int] | None:
-    """Máy khoan SANY bên trái — gộp thân + boom cao."""
+    """Máy khoan SANY (cam/vàng) bên trái — gộp thân + boom cao."""
     h, w = hsv.shape[:2]
     left = np.zeros((h, w), dtype=np.uint8)
-    left[:, : int(w * 0.44)] = 255
+    left[:, : int(w * 0.48)] = 255
     ground = np.zeros((h, w), dtype=np.uint8)
-    ground[: int(h * 0.80), :] = 255
+    ground[: int(h * 0.86), :] = 255
     orange = cv2.inRange(hsv, np.array([6, 80, 85]), np.array([26, 255, 255]))
     yellow = cv2.inRange(hsv, np.array([14, 65, 95]), np.array([36, 255, 255]))
     mask = cv2.bitwise_or(orange, yellow)
@@ -297,7 +374,10 @@ def _detect_sany_drill(
     raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.00045)
     raw = [
         b for b in raw
-        if b[3] < h * 0.80 and (b[2] - b[0]) < w * 0.22 and (b[3] - b[1]) > h * 0.03
+        if b[3] < h * 0.82
+        and (b[2] - b[0]) < w * 0.22
+        and (b[3] - b[1]) > h * 0.03
+        and (b[0] + b[2]) / 2 < w * 0.44
     ]
     stacks = _merge_vertical_stack(raw, gap_px=max(28, int(h * 0.08)))
     if len(stacks) >= 2:
@@ -318,14 +398,14 @@ def _detect_sany_drill(
     for box in stacks:
         x1, y1, x2, y2 = box
         bw, bh = x2 - x1, y2 - y1
-        if bh < h * 0.12 or bw < w * 0.04:
+        if bh < h * 0.10 or bw < w * 0.035:
             continue
-        if bh > h * 0.58 or bw > w * 0.24:
+        if bh > h * 0.62 or bw > w * 0.28:
             continue
         cy = (y1 + y2) / 2.0
-        if cy > h * 0.74 or x2 > w * 0.46:
+        if cy > h * 0.78 or x2 > w * 0.50:
             continue
-        score = bh * 1.6 + bw * 0.4 - abs((x1 + x2) / 2 - w * 0.20) * 2.5
+        score = bh * 1.8 + bw * 0.35 - abs((x1 + x2) / 2 - w * 0.19) * 2.2
         if best is None or score > best[0]:
             best = (score, box)
     return best[1] if best else None
@@ -342,17 +422,18 @@ def _detect_green_excavator(
     """Máy xúc xanh bên phải — tách khỏi cẩu tháp / lưới xanh."""
     h, w = hsv.shape[:2]
     band = np.zeros((h, w), dtype=np.uint8)
-    band[int(h * 0.30) : int(h * 0.92), int(w * 0.44) : int(w * 0.95)] = 255
-    green = cv2.inRange(hsv, np.array([34, 45, 55]), np.array([92, 255, 230]))
-    mesh = cv2.inRange(hsv, np.array([40, 85, 45]), np.array([88, 255, 195]))
+    band[int(h * 0.26) : int(h * 0.92), int(w * 0.36) : int(w * 0.96)] = 255
+    green = cv2.inRange(hsv, np.array([32, 38, 50]), np.array([96, 255, 235]))
+    mesh = cv2.inRange(hsv, np.array([40, 88, 48]), np.array([88, 255, 188]))
     mask = cv2.bitwise_and(green, band)
     mask = cv2.bitwise_and(mask, search_mask)
     mask = cv2.bitwise_and(mask, cv2.bitwise_not(mesh))
     if exclude_boxes:
         ex = np.zeros((h, w), dtype=np.uint8)
-        for x1, y1, x2, y2 in exclude_boxes:
-            pad_x = int((x2 - x1) * 0.06)
-            pad_y = int((y2 - y1) * 0.04)
+        for box in exclude_boxes:
+            x1, y1, x2, y2 = box
+            pad_x = int((x2 - x1) * 0.02)
+            pad_y = int((y2 - y1) * 0.02)
             cv2.rectangle(
                 ex,
                 (max(0, x1 - pad_x), max(0, y1 - pad_y)),
@@ -363,28 +444,25 @@ def _detect_green_excavator(
         mask = cv2.bitwise_and(mask, cv2.bitwise_not(ex))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.0018)
+    raw = _boxes_from_color_mask(mask, w * h, min_area_ratio=0.0009)
     raw = [
         b for b in raw
-        if b[0] >= int(w * 0.42)
-        and (b[2] - b[0]) <= int(w * 0.40)
-        and (b[3] - b[1]) >= int(h * 0.10)
-        and (b[3] - b[1]) <= int(h * 0.42)
+        if b[0] >= int(w * 0.28)
+        and (b[2] - b[0]) <= int(w * 0.58)
+        and (b[3] - b[1]) >= int(h * 0.05)
+        and (b[3] - b[1]) <= int(h * 0.52)
     ]
     if not raw:
         return None
-    merged = _merge_machinery_boxes(raw, w, gap_px=max(28, int(w * 0.05)))
-    merged = [
-        b for b in merged
-        if _machinery_box_valid(b, w, h, "crane_green")
-    ]
+    merged = _merge_machinery_boxes(raw, w, gap_px=max(56, int(w * 0.12)))
+    merged = [b for b in merged if _machinery_box_valid(b, w, h, "crane_green")]
     if not merged:
         return None
     best = max(merged, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
     x1, y1, x2, y2 = best
-    if (y2 - y1) < h * 0.12 or (x2 - x1) < w * 0.10:
+    if (y2 - y1) < h * 0.10 or (x2 - x1) < w * 0.10:
         return None
-    return best
+    return _refine_green_excavator_bbox(hsv, best, w, h)
 
 
 def _detect_machinery_units(
@@ -422,8 +500,8 @@ def _detect_machinery_units(
             )
         )
 
-    exclude = [u.bbox for u in units]
-    green_box = _detect_green_excavator(hsv, search_mask, w, h, exclude_boxes=exclude)
+    exclude: list[tuple[int, int, int, int]] = []
+    green_box = _detect_green_excavator(hsv, search_mask, w, h, exclude_boxes=None)
     if green_box:
         conf = _machinery_confidence(green_box, frame_area, "crane_green")
         units.append(

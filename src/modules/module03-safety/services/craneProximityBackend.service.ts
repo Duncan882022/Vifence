@@ -130,7 +130,7 @@ export function createCraneProximityClient(
     backendUrl = getMobileAiBackendUrl(),
     onResult,
     onStatusChange,
-    intervalMs = 800,
+    intervalMs = 450,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {

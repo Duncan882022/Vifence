@@ -7,6 +7,7 @@ import numpy as np
 from typing import Optional
 
 UNKNOWN_LABEL = "Unknown"
+PERSON_UNKNOWN_LABEL = "person_unknown"
 
 MACHINERY_RECOGNIZED_MIN_CONF = 0.72
 OBJECT_RECOGNIZED_MIN_CONF = 0.80
@@ -26,7 +27,7 @@ def machinery_display_label(kind: str, confidence: float, source: str) -> str:
 
 
 def person_display_label(_confidence: float) -> str:
-    return UNKNOWN_LABEL
+    return PERSON_UNKNOWN_LABEL
 
 
 def object_display_label(object_kind: str | None, confidence: float, fallback: str) -> str:

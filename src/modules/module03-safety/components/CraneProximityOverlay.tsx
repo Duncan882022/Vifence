@@ -24,7 +24,7 @@ const BOX_STYLE = {
 } as const
 
 const BEHAVIOR_STYLE: Record<
-  CraneProximityDetection['behavior'],
+  string,
   { border: string; fill: string; label: string; bg: string }
 > = {
   person: BOX_STYLE,
@@ -76,7 +76,11 @@ interface CraneProximityOverlayProps {
 }
 
 function resolveDetectionStyle(detection: CraneProximityDetection) {
-  if (detection.label === 'Unknown' || detection.behavior === 'unknown') {
+  if (
+    detection.label === 'Unknown'
+    || detection.label === 'person_unknown'
+    || detection.behavior === 'unknown'
+  ) {
     return BOX_STYLE
   }
   if (detection.behavior === 'crane' && detection.machine_kind) {
@@ -122,7 +126,7 @@ function DetectionBox({
 
   return (
     <div
-      className="absolute pointer-events-none transition-[left,top,width,height] duration-500 ease-out"
+      className="absolute pointer-events-none"
       style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
     >
       <div className={cn('absolute inset-0 border rounded-sm', style.border, style.fill)} />
@@ -171,12 +175,15 @@ function useCraneProximityState(
     const video = videoRef.current
     if (!video || !enabled) return
     const bump = () => setLayoutTick(t => t + 1)
+    const clearOverlay = () => setDetections([])
     const observer = new ResizeObserver(bump)
     observer.observe(video)
     video.addEventListener('loadedmetadata', bump)
+    video.addEventListener('seeked', clearOverlay)
     return () => {
       observer.disconnect()
       video.removeEventListener('loadedmetadata', bump)
+      video.removeEventListener('seeked', clearOverlay)
     }
   }, [enabled, videoRef])
 
@@ -207,7 +214,11 @@ function useCraneProximityState(
       onResult: result => {
         const visible = result.detections.filter(d => {
           if (d.behavior === 'crane_proximity') return d.confidence >= EVENT_MIN_CONFIDENCE
-          if (d.behavior === 'unknown' || d.label === 'Unknown') {
+          if (
+            d.behavior === 'unknown'
+            || d.label === 'Unknown'
+            || d.label === 'person_unknown'
+          ) {
             return d.confidence >= UNKNOWN_MIN_CONFIDENCE
           }
           if (d.behavior === 'person') return d.confidence >= UNKNOWN_MIN_CONFIDENCE

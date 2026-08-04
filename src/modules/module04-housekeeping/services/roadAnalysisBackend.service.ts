@@ -130,7 +130,7 @@ export function createRoadAnalysisClient(
     backendUrl = getMobileAiBackendUrl(),
     onResult,
     onStatusChange,
-    intervalMs = 700,
+    intervalMs = 450,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
