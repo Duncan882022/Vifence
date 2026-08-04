@@ -9,9 +9,11 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from .auto_train import inference as auto_train_inference
 from .crane_roi_config import (
     DEFAULT_PIXELS_PER_METER,
     EVENT_MIN_CONFIDENCE,
+    GREEN_EXCAVATOR_ROI,
     PERSON_MIN_CONFIDENCE,
     PROXIMITY_THRESHOLD_METERS,
 )
@@ -23,7 +25,7 @@ logger = logging.getLogger("crane_proximity_analyzer")
 
 _person_detector: PersonDetector | None = None
 
-SCENARIO_LABEL = "Làm việc trong vùng nguy hiểm"
+SCENARIO_LABEL = "DZ"
 SCENARIO_ID = "DZ-003"
 
 
@@ -75,7 +77,7 @@ class _MachineryUnit:
 
 
 MACHINERY_LABELS = {
-    "crane_green": "Máy xúc (xanh)",
+    "crane_green": "Máy xúc",
     "sany_drill": "Máy khoan",
     "tower_crane": "Máy cẩu tháp",
     "machinery_yellow": "Máy thi công (vàng)",
@@ -219,15 +221,26 @@ def _boxes_from_color_mask(
     return boxes
 
 
-def _tower_core_exclude_box(
-    tower_box: tuple[int, int, int, int],
+def _is_green_excavator_plausible(
+    box: tuple[int, int, int, int],
     frame_width: int,
-) -> tuple[int, int, int, int]:
-    """Chỉ loại cột cẩu tháp hẹp — không cắt cần máy xúc xanh."""
-    x1, y1, x2, y2 = tower_box
-    cx = (x1 + x2) // 2
-    half = max(12, int((x2 - x1) * 0.32))
-    return max(0, cx - half), y1, min(frame_width, cx + half), y2
+    frame_height: int,
+) -> bool:
+    """Loại bbox dẹt/sai vị trí — thường do JPEG q55 làm lệch màu xanh."""
+    x1, y1, x2, y2 = box
+    bw, bh = x2 - x1, y2 - y1
+    if bh < frame_height * 0.18 or bw < frame_width * 0.14:
+        return False
+    if bh / max(bw, 1) < 0.38:
+        return False
+    cx = (x1 + x2) / 2.0
+    if cx < frame_width * 0.40:
+        return False
+    return True
+
+
+def _green_excavator_fallback_bbox(frame_width: int, frame_height: int) -> tuple[int, int, int, int]:
+    return _zone_bbox(GREEN_EXCAVATOR_ROI, frame_width, frame_height)
 
 
 def _refine_green_excavator_bbox(
@@ -239,10 +252,10 @@ def _refine_green_excavator_bbox(
     """Mở rộng bbox máy xúc xanh — gộp thân + cần, không tràn lưới phải."""
     h, w = hsv.shape[:2]
     x1, y1, x2, y2 = [int(v) for v in box]
-    ex1 = max(0, min(int(w * 0.16), x1 - int(w * 0.02)))
+    ex1 = max(0, min(int(w * 0.28), x1 - int(w * 0.04)))
     ex2 = min(w, int(w * 0.98))
-    ey1 = max(0, y1 - int(h * 0.05))
-    ey2 = min(h, y2 + int(h * 0.03))
+    ey1 = max(0, y1 - int(h * 0.02))
+    ey2 = min(h, max(y2 + int(h * 0.10), int(h * 0.80)))
     patch = hsv[ey1:ey2, ex1:ex2]
     if patch.size == 0:
         return _clamp_green_bbox(box, w, h)
@@ -286,14 +299,62 @@ def _clamp_green_bbox(
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int]:
+    """Giới hạn bbox máy xúc trong ROI fallback — không ép hẹp còn 8% khung."""
     x1, y1, x2, y2 = [int(v) for v in box]
-    min_x = int(frame_width * min(0.32, x1 / max(frame_width, 1) + 0.02))
-    max_x = int(frame_width * 0.96)
-    x1 = max(min_x, x1)
-    x2 = min(max_x, max(x1 + int(frame_width * 0.08), x2))
-    y1 = max(int(frame_height * 0.12), y1)
-    y2 = min(int(frame_height * 0.92), max(y1 + int(frame_height * 0.06), y2))
+    rx1, ry1, rx2, ry2 = _green_excavator_fallback_bbox(frame_width, frame_height)
+    x1 = max(rx1, x1)
+    y1 = max(ry1, y1)
+    x2 = min(rx2, max(x2, x1 + int(frame_width * 0.20)))
+    y2 = min(ry2, max(y2, y1 + int(frame_height * 0.16)))
     return x1, y1, x2, y2
+
+
+def _finalize_green_excavator_bbox(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Mở rộng bbox máy xúc — gộp thân, cần, gầu và bệ xích trong ROI."""
+    h, w = hsv.shape[:2]
+    seed = tuple(int(v) for v in box)
+    refined = _refine_green_excavator_bbox(hsv, seed, w, h)
+    seed_box = _union_boxes([seed, refined]) or seed
+    sx1, sy1, sx2, sy2 = seed_box
+    rx1, ry1, rx2, ry2 = _green_excavator_fallback_bbox(w, h)
+
+    band = np.zeros((h, w), dtype=np.uint8)
+    band[ry1:ry2, rx1:rx2] = 255
+    green = cv2.inRange(hsv, np.array([26, 22, 28]), np.array([102, 255, 248]))
+    mesh = cv2.inRange(hsv, np.array([40, 88, 48]), np.array([88, 255, 188]))
+    mask = cv2.bitwise_and(green, band)
+    mask = cv2.bitwise_and(mask, cv2.bitwise_not(mesh))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    pieces: list[tuple[int, int, int, int]] = [seed_box]
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for cnt in contours:
+        if cv2.contourArea(cnt) < 120:
+            continue
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        bx1, by1, bx2, by2 = x, y, x + bw, y + bh
+        ix1, ix2 = max(bx1, sx1 - int(w * 0.08)), min(bx2, sx2 + int(w * 0.08))
+        if ix2 - ix1 <= 0:
+            continue
+        if by2 < sy1 - int(h * 0.10) or by1 > ry2:
+            continue
+        pieces.append((bx1, by1, bx2, by2))
+
+    united = _union_boxes(pieces) or seed_box
+    ux1, uy1, ux2, uy2 = united
+    cx = (ux1 + ux2) / 2.0
+    if cx >= w * 0.42:
+        # Gầu / bệ xích thường nằm trên nền nâu — mở thêm trong ROI máy xúc.
+        uy2 = max(uy2, min(ry2, int(h * 0.80)))
+        ux2 = max(ux2, min(rx2, sx2 + int(w * 0.04)))
+        united = (ux1, uy1, ux2, uy2)
+    return _clamp_green_bbox(united, w, h)
 
 
 def _detect_tower_crane(
@@ -508,21 +569,13 @@ def _detect_green_excavator(
     search_mask: np.ndarray,
     frame_width: int,
     frame_height: int,
-    *,
-    exclude_boxes: list[tuple[int, int, int, int]] | None = None,
 ) -> tuple[int, int, int, int] | None:
-    """Máy xúc xanh — tách khỏi cẩu tháp / lưới xanh; fallback nới lỏng nếu detect chặt thất bại."""
+    """Máy xúc xanh — cho phép đè ROI cẩu tháp; fallback nới lỏng nếu detect chặt thất bại."""
     h, w = hsv.shape[:2]
 
     def finalize(raw: list[tuple[int, int, int, int]], *, gap_ratio: float) -> tuple[int, int, int, int] | None:
         if not raw:
             return None
-        if exclude_boxes:
-            filtered = []
-            for box in raw:
-                if all(_bbox_iou_machinery(box, ex) < 0.25 for ex in exclude_boxes):
-                    filtered.append(box)
-            raw = filtered or raw
         merged = _merge_machinery_boxes(raw, w, gap_px=max(56, int(w * gap_ratio)))
         merged = [b for b in merged if _machinery_box_valid(b, w, h, "crane_green")]
         if not merged:
@@ -531,7 +584,10 @@ def _detect_green_excavator(
         x1, y1, x2, y2 = best
         if (y2 - y1) < h * 0.06 or (x2 - x1) < w * 0.06:
             return None
-        return _refine_green_excavator_bbox(hsv, best, w, h)
+        refined = _refine_green_excavator_bbox(hsv, best, w, h)
+        if not _is_green_excavator_plausible(refined, w, h):
+            return None
+        return refined
 
     strict = _green_excavator_candidates(
         hsv, search_mask, frame_width, frame_height,
@@ -560,6 +616,22 @@ def _detect_green_excavator(
     return finalize(lenient, gap_ratio=0.14)
 
 
+def _auto_train_boxes_by_kind(frame: np.ndarray) -> dict[str, tuple[float, float, float, float, float]]:
+    """Hỏi model tự train (Cam 04) — nếu đã có checkpoint được promote và đủ
+    tin cậy (>= runtime_conf_threshold), dùng box của model thay cho rule
+    màu bên dưới. Trả {} khi chưa có model — lúc đó dùng rule-based như cũ,
+    không có rủi ro thoái lui."""
+    by_kind: dict[str, tuple[float, float, float, float, float]] = {}
+    try:
+        preds = auto_train_inference.predict_boxes("crane_machinery", frame)
+    except Exception:  # noqa: BLE001
+        return by_kind
+    for kind, x1, y1, x2, y2, conf in preds:
+        if kind not in by_kind or conf > by_kind[kind][4]:
+            by_kind[kind] = (x1, y1, x2, y2, conf)
+    return by_kind
+
+
 def _detect_machinery_units(
     frame: np.ndarray,
     search_mask: np.ndarray,
@@ -568,48 +640,91 @@ def _detect_machinery_units(
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     frame_area = h * w
     units: list[_MachineryUnit] = []
+    model_boxes = _auto_train_boxes_by_kind(frame)
 
-    tower_box = _detect_tower_crane(hsv, search_mask, w, h)
-    if tower_box:
-        conf = _machinery_confidence(tower_box, frame_area, "tower_crane")
+    if "tower_crane" in model_boxes:
+        x1, y1, x2, y2, conf = model_boxes["tower_crane"]
         units.append(
             _MachineryUnit(
-                bbox=tower_box,
-                confidence=conf,
+                bbox=(x1, y1, x2, y2),
+                confidence=round(conf, 3),
                 kind="tower_crane",
                 label=MACHINERY_LABELS["tower_crane"],
-                source="color_detect",
+                source="auto_train_model",
             )
         )
+    else:
+        tower_box = _detect_tower_crane(hsv, search_mask, w, h)
+        if tower_box:
+            conf = _machinery_confidence(tower_box, frame_area, "tower_crane")
+            units.append(
+                _MachineryUnit(
+                    bbox=tower_box,
+                    confidence=conf,
+                    kind="tower_crane",
+                    label=MACHINERY_LABELS["tower_crane"],
+                    source="color_detect",
+                )
+            )
 
-    left_box = _detect_sany_drill(hsv, search_mask, w, h)
-    if left_box:
-        conf = _machinery_confidence(left_box, frame_area, "sany_drill")
+    if "sany_drill" in model_boxes:
+        x1, y1, x2, y2, conf = model_boxes["sany_drill"]
         units.append(
             _MachineryUnit(
-                bbox=left_box,
-                confidence=conf,
+                bbox=(x1, y1, x2, y2),
+                confidence=round(conf, 3),
                 kind="sany_drill",
                 label=MACHINERY_LABELS["sany_drill"],
-                source="color_detect",
+                source="auto_train_model",
             )
         )
+    else:
+        left_box = _detect_sany_drill(hsv, search_mask, w, h)
+        if left_box:
+            conf = _machinery_confidence(left_box, frame_area, "sany_drill")
+            units.append(
+                _MachineryUnit(
+                    bbox=left_box,
+                    confidence=conf,
+                    kind="sany_drill",
+                    label=MACHINERY_LABELS["sany_drill"],
+                    source="color_detect",
+                )
+            )
 
-    exclude: list[tuple[int, int, int, int]] = []
-    if tower_box:
-        exclude.append(_tower_core_exclude_box(tower_box, w))
-    green_box = _detect_green_excavator(hsv, search_mask, w, h, exclude_boxes=exclude or None)
-    if green_box:
-        conf = _machinery_confidence(green_box, frame_area, "crane_green")
+    if "crane_green" in model_boxes:
+        x1, y1, x2, y2, conf = model_boxes["crane_green"]
+        final_box = _finalize_green_excavator_bbox(hsv, (x1, y1, x2, y2), w, h)
         units.append(
             _MachineryUnit(
-                bbox=green_box,
-                confidence=conf,
+                bbox=final_box,
+                confidence=round(conf, 3),
                 kind="crane_green",
                 label=MACHINERY_LABELS["crane_green"],
-                source="color_detect",
+                source="auto_train_model",
             )
         )
+    else:
+        green_box = _detect_green_excavator(hsv, search_mask, w, h)
+        green_source = "color_detect"
+        if not green_box:
+            green_box = _green_excavator_fallback_bbox(w, h)
+            green_source = "roi_fallback"
+        if green_box:
+            if green_source != "roi_fallback":
+                green_box = _finalize_green_excavator_bbox(hsv, green_box, w, h)
+            conf = _machinery_confidence(green_box, frame_area, "crane_green")
+            if green_source == "roi_fallback":
+                conf = round(min(conf, 0.72), 3)
+            units.append(
+                _MachineryUnit(
+                    bbox=green_box,
+                    confidence=conf,
+                    kind="crane_green",
+                    label=MACHINERY_LABELS["crane_green"],
+                    source=green_source,
+                )
+            )
 
     if units:
         units.sort(
@@ -715,6 +830,27 @@ def _bbox_edge_distance_px(
     return math.hypot(dx, dy)
 
 
+def _person_to_machinery_distance_px(
+    person_box: tuple[int, int, int, int],
+    machine_box: tuple[int, int, int, int],
+) -> float:
+    """Chân người → mép máy (inset nhẹ) — tránh ROI lớn cho 0.0 m."""
+    px, py = _person_anchor(person_box)
+    x1, y1, x2, y2 = machine_box
+    inset_x = (x2 - x1) * 0.18
+    inset_y = (y2 - y1) * 0.14
+    mx1, my1 = x1 + inset_x, y1 + inset_y
+    mx2, my2 = x2 - inset_x, y2 - inset_y
+    nx = min(max(px, mx1), mx2)
+    ny = min(max(py, my1), my2)
+    dist = math.hypot(px - nx, py - ny)
+    if dist < 10:
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        dist = math.hypot(px - cx, py - cy) * 0.40
+    return max(dist, 12.0)
+
+
 def _person_anchor(box: tuple[int, int, int, int]) -> tuple[float, float]:
     x1, y1, x2, y2 = box
     return (x1 + x2) / 2.0, float(y2)
@@ -775,7 +911,7 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
         nearest_unit: _MachineryUnit | None = None
         nearest_dist_m = float("inf")
         for unit in machinery_units:
-            dist_px = _bbox_edge_distance_px(box, unit.bbox)
+            dist_px = _person_to_machinery_distance_px(box, unit.bbox)
             dist_m = dist_px / px_per_m
             if dist_m < nearest_dist_m:
                 nearest_dist_m = dist_m
@@ -795,15 +931,14 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
             continue
 
         violations += 1
-        machine_label = nearest_unit.label
         all_detections.append(
             CraneProximityDetection(
                 behavior="crane_proximity",
-                label=f"{SCENARIO_LABEL} · {machine_label}",
+                label=SCENARIO_LABEL,
                 scenario_id=SCENARIO_ID,
                 confidence=conf,
                 bbox=[float(v) for v in box],
-                distance_m=round(nearest_dist_m, 2),
+                distance_m=round(nearest_dist_m, 1),
                 machine_kind=nearest_unit.kind,
             )
         )
@@ -816,7 +951,7 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
         "roi_zones": [],
         "metrics": {
             "person_count": len(persons),
-            "min_distance_m": round(min_distance, 2) if min_distance is not None else None,
+            "min_distance_m": round(min_distance, 1) if min_distance is not None else None,
             "proximity_violations": violations,
             "proximity_threshold_m": PROXIMITY_THRESHOLD_METERS,
         },

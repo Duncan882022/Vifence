@@ -10,6 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from .crane_detection_catalog import CRANE_CATALOG_STYLES
 from .schemas import Detection, RoadDetection, CraneProximityDetection, ViolationEvent
 
 logger = logging.getLogger("events")
@@ -288,23 +289,14 @@ class EventStore:
         h, w = frame.shape[:2]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
-        colors = {
-            "person": (180, 180, 180),
-            "crane": (0, 200, 255),
-            "crane_proximity": (0, 80, 255),
-            "unknown": (160, 160, 160),
-        }
-        kind_colors = {
-            "sany_drill": (0, 140, 255),
-            "excavator_orange": (0, 140, 255),
-            "crane_green": (255, 40, 255),
-            "tower_crane": (0, 230, 255),
-            "machinery_yellow": (0, 220, 255),
-        }
         if detection.behavior == "crane" and detection.machine_kind:
-            color = kind_colors.get(detection.machine_kind, colors["crane"])
+            color = CRANE_CATALOG_STYLES.get(detection.machine_kind, CRANE_CATALOG_STYLES["person"])["color"]
+        elif detection.behavior == "crane_proximity":
+            color = CRANE_CATALOG_STYLES["crane_proximity"]["color"]
+        elif detection.behavior == "person":
+            color = CRANE_CATALOG_STYLES["person"]["color"]
         else:
-            color = colors.get(detection.behavior, (160, 160, 160))
+            color = CRANE_CATALOG_STYLES.get(detection.behavior, CRANE_CATALOG_STYLES["person"])["color"]
         thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness)
         dist = f" · {detection.distance_m:.2f}m" if detection.distance_m is not None else ""

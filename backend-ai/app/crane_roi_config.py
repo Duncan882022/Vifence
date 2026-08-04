@@ -19,6 +19,14 @@ class CraneRoiZone(TypedDict, total=False):
     pixels_per_meter: float
 
 
+# ROI máy xúc (bên phải) — fallback khi JPEG nén làm lệch màu detect
+GREEN_EXCAVATOR_ROI: list[RoiPoint] = [
+    {"x": 0.34, "y": 0.30},
+    {"x": 0.97, "y": 0.32},
+    {"x": 0.97, "y": 0.82},
+    {"x": 0.30, "y": 0.78},
+]
+
 CRANE_ROI_ZONES: list[CraneRoiZone] = [
     {
         "id": "roi-crane-body-a04",

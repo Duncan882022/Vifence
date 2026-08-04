@@ -9,3 +9,5 @@ vifence-pages.zip
 .env
 .env.*
 !.env.example
+backend-ai/data/auto_train/
+backend-ai/.venv/

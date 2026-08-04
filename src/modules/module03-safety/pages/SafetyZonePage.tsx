@@ -11,6 +11,8 @@ import {
   getZoneOpenCount,
   getZoneViolationsToday,
 } from '../services/safetyDashboard.service'
+import { mergeSafetyRecordsWithAi } from '../services/safetyAiEvents.service'
+import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { SafetySiteMap } from '../components/dashboard/SafetySiteMap'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
@@ -20,7 +22,11 @@ export function SafetyZonePage() {
   const { zoneId } = useParams<{ zoneId: string }>()
   const [eventsOpen, setEventsOpen] = useState(true)
   const zone = zoneId ? SAFETY_ZONE_MAP.get(zoneId) : null
-  const allRecords = useMemo(() => getAllSafetyRecords(), [])
+  const aiLiveRecords = useSafetyAiEvents(5000)
+  const allRecords = useMemo(
+    () => mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
+    [aiLiveRecords],
+  )
 
   const records = useMemo(
     () => (zoneId ? getZoneViolationsToday(zoneId, allRecords) : []),

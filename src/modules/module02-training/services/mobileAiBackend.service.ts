@@ -49,9 +49,22 @@ export interface MobileAiAnalyzeResult {
   events: MobileAiViolationEvent[]
 }
 
+const DEFAULT_LOCAL_BACKEND = 'http://localhost:8000'
+
+function isRunningOnLocalCms(): boolean {
+  if (typeof window === 'undefined') return false
+  const h = window.location.hostname
+  return h === 'localhost' || h === '127.0.0.1'
+}
+
 export function getMobileAiBackendUrl(): string {
   if (typeof window === 'undefined') return ''
-  return localStorage.getItem(STORAGE_KEY)?.trim() ?? ''
+  const stored = localStorage.getItem(STORAGE_KEY)?.trim() ?? ''
+  // URL đã lưu (ngrok / tunnel / localhost) luôn được tôn trọng — kể cả khi mở CMS trên localhost.
+  if (stored) return stored
+  // Chưa cấu hình: dev trên localhost CMS → mặc định backend cùng máy.
+  if (isRunningOnLocalCms()) return DEFAULT_LOCAL_BACKEND
+  return ''
 }
 
 export function setMobileAiBackendUrl(url: string): void {

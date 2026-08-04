@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # Không log lại cùng behavior trên cùng camera trong N giây (trừ khi đã qua phiên mới + đủ thời gian).
     event_repeat_min_seconds: float = 180.0
 
+    # Tạm tắt thu thập + train tự động khi chưa đủ video đa dạng (bật lại
+    # bằng AUTO_TRAIN_ENABLED=true trong .env khi đã có thêm dữ liệu).
+    auto_train_enabled: bool = False
+
     @property
     def camera_source_value(self) -> Union[int, str]:
         """cv2.VideoCapture chấp nhận cả index webcam (int) lẫn URL/path (str)."""

@@ -36,10 +36,10 @@ const BEHAVIOR_STYLE: Record<
     bg: 'bg-amber-500/35',
   },
   crane_green: {
-    border: 'border-fuchsia-400',
-    fill: 'bg-fuchsia-500/20',
-    label: 'text-white',
-    bg: 'bg-black/80',
+    border: 'border-emerald-400/95',
+    fill: 'bg-emerald-400/12',
+    label: 'text-emerald-100',
+    bg: 'bg-emerald-700/45',
   },
   sany_drill: {
     border: 'border-orange-400/95',
@@ -65,6 +65,17 @@ const BEHAVIOR_STYLE: Record<
     label: 'text-red-200',
     bg: 'bg-red-600/40',
   },
+}
+
+function formatDetectionLabel(detection: CraneProximityDetection): string {
+  if (detection.behavior === 'crane_proximity') return 'DZ'
+  if (detection.machine_kind === 'crane_green') return 'Máy xúc'
+  return detection.label
+}
+
+function formatDistanceLabel(distanceM: number | undefined): string {
+  if (distanceM == null || distanceM <= 0) return ''
+  return ` · ${distanceM.toFixed(1)}m`
 }
 
 interface CraneProximityOverlayProps {
@@ -134,7 +145,8 @@ function DetectionBox({
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
-  const distLabel = detection.distance_m != null ? ` · ${detection.distance_m.toFixed(2)}m` : ''
+  const displayLabel = formatDetectionLabel(detection)
+  const distLabel = formatDistanceLabel(detection.distance_m)
 
   return (
     <div
@@ -152,12 +164,9 @@ function DetectionBox({
           'absolute inset-0 rounded-sm',
           style.border,
           style.fill,
-          isGreenExcavator ? 'border-[3px]' : isMachinery ? 'border-2' : 'border',
+          isGreenExcavator ? 'border-2' : isMachinery ? 'border-2' : 'border',
           isPending && !isGreenExcavator && 'border-dashed opacity-60',
         )}
-        style={isGreenExcavator ? {
-          boxShadow: '0 0 0 2px rgba(255,255,255,0.95), 0 0 10px rgba(232,121,249,0.85)',
-        } : undefined}
       />
       <span
         className={cn(
@@ -168,7 +177,7 @@ function DetectionBox({
           isPending && 'opacity-70',
         )}
       >
-        {detection.label} {(detection.confidence * 100).toFixed(0)}%{distLabel}{isPending ? ' · chưa đủ ngưỡng' : ''}
+        {displayLabel} {(detection.confidence * 100).toFixed(0)}%{distLabel}{isPending ? ' · chưa đủ ngưỡng' : ''}
       </span>
     </div>
   )
@@ -316,7 +325,7 @@ export function CraneProximityOverlay({
 
       {frameSize.width > 0 && detections.map(d => (
         <DetectionBox
-          key={`${d.behavior}-${Math.round(d.bbox[0])}-${Math.round(d.bbox[1])}-${layoutTick}`}
+          key={`${d.behavior}-${d.machine_kind ?? 'none'}-${Math.round(d.bbox[0])}-${Math.round(d.bbox[1])}-${layoutTick}`}
           detection={d}
           frameWidth={frameSize.width}
           frameHeight={frameSize.height}
@@ -338,12 +347,12 @@ export function CraneProximityOverlay({
                 ? 'bg-red-500/20 text-red-200'
                 : 'bg-emerald-500/15 text-emerald-200',
             )}>
-              K/c gần nhất: {metrics.min_distance_m.toFixed(2)}m
+              K/c gần nhất: {metrics.min_distance_m.toFixed(1)}m
             </span>
           )}
           {hasViolation && (
             <span className="text-[7px] font-mono px-1 py-px rounded bg-red-500/25 text-red-200 border border-red-500/40">
-              Vi phạm vùng nguy hiểm
+              DZ
             </span>
           )}
         </div>

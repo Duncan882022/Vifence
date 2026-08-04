@@ -6,6 +6,8 @@ import { TierCollapseButton } from '@/modules/module02-training/components/TierC
 import type { SafetyGroupId } from '../types/safety.types'
 import { SAFETY_GROUP_MAP } from '../data/safetyGroups'
 import { getScenarioForGroup, getAllSafetyRecords } from '../services/safetyDashboard.service'
+import { mergeSafetyRecordsWithAi } from '../services/safetyAiEvents.service'
+import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
 import { GROUP_COLORS, GROUP_ICONS } from '../utils/safetyDashboardUi'
@@ -21,12 +23,18 @@ export function SafetyGroupPage() {
   const group = SAFETY_GROUP_MAP.get(validId)!
   const Icon = GROUP_ICONS[validId]
   const scenarios = getScenarioForGroup(validId)
+  const aiLiveRecords = useSafetyAiEvents(5000)
+  const allRecords = useMemo(
+    () => mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
+    [aiLiveRecords],
+  )
 
   const records = useMemo(
-    () => getAllSafetyRecords().filter(
-      v => v.groupId === validId && v.detectedAt.startsWith(SAFETY_DEMO_TODAY),
+    () => allRecords.filter(
+      v => v.groupId === validId
+        && (v.detectedAt.startsWith(SAFETY_DEMO_TODAY) || v.id.startsWith('ai-')),
     ),
-    [validId],
+    [validId, allRecords],
   )
 
   const automationStats = useMemo(() => {

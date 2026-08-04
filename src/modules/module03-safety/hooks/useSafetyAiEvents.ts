@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
+import {
+  getMobileAiBackendUrl,
+  MOBILE_AI_BACKEND_STORAGE_KEY,
+} from '@/modules/module02-training/services/mobileAiBackend.service'
 import { fetchSafetyAiEvents } from '../services/safetyAiEvents.service'
 import type { SafetyViolationRecord } from '../types/safety.types'
 
@@ -25,14 +28,16 @@ export function useSafetyAiEvents(pollMs = 5000): SafetyViolationRecord[] {
     timerId = window.setInterval(() => { void tick() }, pollMs)
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'vifence_mobile_ai_backend_url') void tick()
+      if (e.key === MOBILE_AI_BACKEND_STORAGE_KEY) void tick()
     }
     window.addEventListener('storage', onStorage)
+    window.addEventListener('vifence-mobile-ai-backend-changed', tick)
 
     return () => {
       cancelled = true
       window.clearInterval(timerId)
       window.removeEventListener('storage', onStorage)
+      window.removeEventListener('vifence-mobile-ai-backend-changed', tick)
     }
   }, [pollMs])
 

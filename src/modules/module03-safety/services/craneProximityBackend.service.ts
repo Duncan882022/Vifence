@@ -154,7 +154,8 @@ export function createCraneProximityClient(
       return
     }
 
-    const image = captureVideoFrameBase64(video, 640, 0.55)
+    // q≥0.72 — q55 làm lệch màu xanh máy xúc, bbox detect sai vị trí
+    const image = captureVideoFrameBase64(video, 640, 0.72)
     if (!image) {
       scheduleNext(500)
       return

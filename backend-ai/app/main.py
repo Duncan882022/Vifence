@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .auto_train import collector as auto_train_collector
+from .auto_train.scheduler import scheduler as auto_train_scheduler
 from .camera_stream import CameraStream
 from .config import settings
 from .crane_proximity_engine import CraneProximityEngine
@@ -83,10 +85,16 @@ async def lifespan(app: FastAPI):
     engine.load_models()
     camera.start()
     engine.start()
+    if settings.auto_train_enabled:
+        auto_train_scheduler.start()
+    else:
+        logger.info("Auto-train tắt — chỉ chạy detect rule-based / model gốc.")
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     yield
     engine.stop()
     camera.stop()
+    if settings.auto_train_enabled:
+        auto_train_scheduler.stop()
     _analyze_executor.shutdown(wait=False)
 
 
@@ -158,6 +166,21 @@ def event_snapshot(event_id: str):
     return FileResponse(path)
 
 
+@app.get("/training/status")
+def training_status():
+    """Trạng thái cơ chế tự train — số sample đã thu thập, model đang chạy
+    (version + mAP50), lần train gần nhất mỗi task (Cam 03/04, lửa, hút
+    thuốc)."""
+    return auto_train_scheduler.status()
+
+
+@app.post("/training/trigger")
+def training_trigger(task: str):
+    """Bắt buộc train ngay 1 task (không cần chờ đủ ngưỡng dữ liệu/thời
+    gian) — dùng để test hoặc ép train ngay khi vừa nạp thêm dữ liệu."""
+    return auto_train_scheduler.trigger(task, background=True)
+
+
 @app.get("/debug/debouncers")
 def debug_debouncers():
     """Trạng thái debounce realtime — test timing smoking (~2.5s) vs fire (~6s)."""
@@ -221,9 +244,30 @@ def debug_frame():
     return Response(content=buf.tobytes(), media_type="image/jpeg")
 
 
+_ROAD_AUTO_TRAIN_CLASS_BY_KIND = {"material": "material"}
+
+
+def _collect_road_auto_train_sample(small: np.ndarray, result: dict) -> None:
+    if not settings.auto_train_enabled:
+        return
+    boxes: list[tuple[str, float, float, float, float]] = []
+    for d in result.get("detections", []):
+        behavior = d.get("behavior")
+        cls_name: str | None = None
+        if behavior in ("mud", "water"):
+            cls_name = behavior
+        elif behavior == "object":
+            cls_name = _ROAD_AUTO_TRAIN_CLASS_BY_KIND.get(d.get("object_kind"))
+        if cls_name:
+            x1, y1, x2, y2 = d["bbox"]
+            boxes.append((cls_name, x1, y1, x2, y2))
+    auto_train_collector.collect("road_material", small, boxes)
+
+
 def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     small = _downscale_for_mobile(frame, max_width=640)
     result, _ = road_engine.process_frame(small, camera_id)
+    _collect_road_auto_train_sample(small, result)
     sw, sh = small.shape[1], small.shape[0]
     ow, oh = frame.shape[1], frame.shape[0]
     if sw != ow or sh != oh:
@@ -243,9 +287,21 @@ def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     return result
 
 
+def _collect_crane_auto_train_sample(small: np.ndarray, result: dict) -> None:
+    if not settings.auto_train_enabled:
+        return
+    boxes: list[tuple[str, float, float, float, float]] = []
+    for d in result.get("detections", []):
+        if d.get("behavior") == "crane" and d.get("machine_kind"):
+            x1, y1, x2, y2 = d["bbox"]
+            boxes.append((d["machine_kind"], x1, y1, x2, y2))
+    auto_train_collector.collect("crane_machinery", small, boxes)
+
+
 def _analyze_crane_frame(frame: np.ndarray, camera_id: str) -> dict:
     small = _downscale_for_mobile(frame, max_width=640)
     result, _ = crane_engine.process_frame(small, camera_id)
+    _collect_crane_auto_train_sample(small, result)
     sw, sh = small.shape[1], small.shape[0]
     ow, oh = frame.shape[1], frame.shape[0]
     if sw != ow or sh != oh:

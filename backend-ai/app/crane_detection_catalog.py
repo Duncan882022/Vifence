@@ -36,7 +36,7 @@ CRANE_CATALOG_STYLES: dict[str, dict[str, Any]] = {
         "scenario": "DZ-003",
     },
     "crane_green": {
-        "label": "Máy xúc (xanh)",
+        "label": "Máy xúc",
         "color": (80, 220, 80),
         "scenario": "DZ-003",
     },
@@ -46,7 +46,7 @@ CRANE_CATALOG_STYLES: dict[str, dict[str, Any]] = {
         "scenario": "DZ-003",
     },
     "crane_proximity": {
-        "label": "Làm việc trong vùng nguy hiểm",
+        "label": "DZ",
         "color": (80, 80, 255),
         "scenario": "DZ-003",
     },

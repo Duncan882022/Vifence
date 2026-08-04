@@ -4,12 +4,20 @@ import logging
 import threading
 import time
 
+from .auto_train import collector as auto_train_collector
+from .auto_train import inference as auto_train_inference
 from .camera_stream import CameraStream
 from .config import settings
 from .detectors import FireDetector, SmokingDetector
 from .detectors.flame_blob_detector import FlameBlobDetector
 from .events import EventStore, PersistenceDebouncer
 from .schemas import Detection, ViolationEvent
+
+# Ngưỡng tin cậy tối thiểu để 1 box do model auto-train sinh ra được CỘNG
+# THÊM vào kết quả detect hiện tại (không thay thế) — chỉ tăng recall, không
+# bao giờ làm mất detection model gốc/heuristic đang có sẵn.
+_AUTO_TRAIN_MERGE_CONF = 0.55
+_AUTO_TRAIN_MERGE_IOU = 0.4
 
 logger = logging.getLogger("detection_engine")
 
@@ -72,6 +80,31 @@ _BEHAVIOR_DEBOUNCE: dict[str, dict] = {
         "one_event_per_episode": True,
     },
 }
+
+
+_AUTO_TRAIN_TASK_BY_BEHAVIOR = {"fire": "fire", "smoking": "smoking"}
+
+
+def _augment_with_auto_train_model(frame, all_detections: list[Detection]) -> list[Detection]:
+    """Hỏi thêm model tự train (nếu đã có checkpoint được promote) cho lửa +
+    hút thuốc — CHỈ CỘNG THÊM box mới (không trùng box đã có), không bao giờ
+    xoá/thay box của model gốc. Nhờ vậy model tự train chỉ có thể tăng
+    recall theo thời gian, không có rủi ro làm tệ hơn detection hiện tại."""
+    extra: list[Detection] = []
+    for behavior, task_id in _AUTO_TRAIN_TASK_BY_BEHAVIOR.items():
+        try:
+            preds = auto_train_inference.predict_boxes(task_id, frame, conf_threshold=_AUTO_TRAIN_MERGE_CONF)
+        except Exception:  # noqa: BLE001 - không để lỗi model phụ ảnh hưởng luồng chính
+            continue
+        if not preds:
+            continue
+        existing = [d.bbox for d in all_detections if d.behavior == behavior]
+        for label, x1, y1, x2, y2, conf in preds:
+            box = [x1, y1, x2, y2]
+            if any(_bbox_iou(box, e) >= _AUTO_TRAIN_MERGE_IOU for e in existing):
+                continue
+            extra.append(Detection(behavior=behavior, label=label, confidence=conf, bbox=box))
+    return all_detections + extra if extra else all_detections
 
 
 class DetectionEngine:
@@ -186,6 +219,8 @@ class DetectionEngine:
                 continue
             all_detections.extend(detector.predict(frame))
 
+        all_detections = _augment_with_auto_train_model(frame, all_detections)
+
         by_behavior: dict[str, list[Detection]] = {}
         for det in all_detections:
             by_behavior.setdefault(det.behavior, []).append(det)
@@ -208,6 +243,14 @@ class DetectionEngine:
         filtered: list[Detection] = []
         for dets in by_behavior.values():
             filtered.extend(dets)
+
+        if settings.auto_train_enabled:
+            auto_train_collector.collect(
+                "fire", frame, [(d.label.lower(), *d.bbox) for d in by_behavior.get("fire", [])],
+            )
+            auto_train_collector.collect(
+                "smoking", frame, [("cigarette", *d.bbox) for d in raw_cigarette_dets],
+            )
 
         new_events: list[ViolationEvent] = []
         cam_key = camera_id or "LOCAL-CAM"

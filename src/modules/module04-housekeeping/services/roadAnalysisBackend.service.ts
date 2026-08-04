@@ -154,7 +154,7 @@ export function createRoadAnalysisClient(
       return
     }
 
-    const image = captureVideoFrameBase64(video, 640, 0.55)
+    const image = captureVideoFrameBase64(video, 640, 0.72)
     if (!image) {
       scheduleNext(500)
       return

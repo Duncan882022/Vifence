@@ -345,7 +345,9 @@ export function getScenarioForGroup(groupId: SafetyGroupId) {
 }
 
 export function getZoneViolationsToday(zoneId: string, records: SafetyViolationRecord[]) {
-  return records.filter(v => v.zoneId === zoneId && v.detectedAt.startsWith(TODAY))
+  return records.filter(v =>
+    v.zoneId === zoneId && (v.detectedAt.startsWith(TODAY) || isLiveAiSafetyRecord(v)),
+  )
 }
 
 export function getZoneOpenCount(zoneId: string, records: SafetyViolationRecord[]) {

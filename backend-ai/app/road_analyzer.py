@@ -8,11 +8,61 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from .auto_train import inference as auto_train_inference
 from .road_roi_config import get_roi_zones_for_camera
 from .schemas import RoadDetection
 from .unknown_detection import UNKNOWN_LABEL, object_display_label
 
 logger = logging.getLogger("road_analyzer")
+
+_AUTO_TRAIN_SCENARIO_ID = {"mud": "BPTC-007", "water": "BPTC-008", "material": "BPTC-009"}
+_AUTO_TRAIN_MERGE_IOU = 0.35
+
+
+def _bbox_iou(a: list[float], b: list[float]) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _augment_with_auto_train_model(frame: np.ndarray, all_detections: list[RoadDetection]) -> list[RoadDetection]:
+    """Hỏi thêm model tự train (nếu đã có checkpoint được promote cho Cam 03)
+    — chỉ CỘNG THÊM detection mới (không trùng vùng đã phát hiện bằng rule
+    màu), không thay/xoá gì — an toàn, chỉ tăng recall theo thời gian khi
+    model học được thêm từ dữ liệu thực tế."""
+    try:
+        preds = auto_train_inference.predict_boxes("road_material", frame)
+    except Exception:  # noqa: BLE001
+        return all_detections
+    if not preds:
+        return all_detections
+
+    extra: list[RoadDetection] = []
+    for cls_name, x1, y1, x2, y2, conf in preds:
+        behavior = "object" if cls_name == "material" else cls_name
+        existing = [d.bbox for d in all_detections if d.behavior == behavior]
+        box = [x1, y1, x2, y2]
+        if any(_bbox_iou(box, e) >= _AUTO_TRAIN_MERGE_IOU for e in existing):
+            continue
+        extra.append(
+            RoadDetection(
+                behavior=behavior,
+                label=SCENARIO_LABELS.get(cls_name, OBJECT_KIND_LABEL) if behavior != "object" else OBJECT_KIND_LABEL,
+                scenario_id=_AUTO_TRAIN_SCENARIO_ID.get(cls_name, "BPTC-009"),
+                confidence=round(conf, 3),
+                bbox=box,
+                object_kind="material" if behavior == "object" else None,
+            )
+        )
+    return all_detections + extra if extra else all_detections
 
 MUD_THRESHOLD_PERCENT = 4.0
 WATER_THRESHOLD_PERCENT = 0.28
@@ -20,22 +70,24 @@ MIN_OBJECT_AREA_RATIO = 0.008
 MAX_OBJECT_AREA_RATIO = 0.12
 MIN_OBJECT_EPISODE_AREA_RATIO = 0.012
 EVENT_MIN_CONFIDENCE = 0.80
-# Sàng lọc hiển thị overlay — thấp hơn EVENT_MIN_CONFIDENCE để vẫn vẽ bbox
-# khi phát hiện chưa đủ mạnh để ghi sự kiện (chỉ event debounce mới cần 0.80).
-DISPLAY_MIN_CONFIDENCE = 0.32
+# Overlay Cam A-03: không lọc theo ngưỡng — trả mọi bbox detect được.
+DISPLAY_MIN_CONFIDENCE = 0.0
 
 SCENARIO_LABELS = {
     "mud": "Đường nội bộ bùn bẩn",
     "water": "Đường nội bộ đọng nước",
-    "object": "Vật tư chiếm dụng lòng đường",
+    "object": "Vật tư",
 }
 
+OBJECT_KIND_LABEL = "Vật tư"
+
 OBJECT_KIND_LABELS: dict[str, str] = {
-    "steel": "Vật tư — thép / dầm",
-    "cement_bag": "Vật tư — bao xi măng",
-    "brick": "Vật tư — gạch / block",
-    "rust_metal": "Vật tư — kim loại gỉ",
-    "generic": SCENARIO_LABELS["object"],
+    "steel": OBJECT_KIND_LABEL,
+    "cement_bag": OBJECT_KIND_LABEL,
+    "brick": OBJECT_KIND_LABEL,
+    "rust_metal": OBJECT_KIND_LABEL,
+    "generic": OBJECT_KIND_LABEL,
+    "material": OBJECT_KIND_LABEL,
 }
 
 OBJECT_KIND_PRIORITY: dict[str, int] = {
@@ -564,6 +616,111 @@ def _trim_wet_bottom_from_bbox(
     return x1, y1, x2, ty2
 
 
+def _balance_pile_bbox_to_seed(
+    seed: tuple[int, int, int, int],
+    enveloped: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+    *,
+    max_pad_x_ratio: float = 0.36,
+    max_pad_y_ratio: float = 0.14,
+) -> tuple[int, int, int, int]:
+    """Giới hạn mở rộng quanh bbox gốc — tránh phình to cả vùng lòng đường."""
+    x1, y1, x2, y2 = [int(v) for v in seed]
+    ex1, ey1, ex2, ey2 = [int(v) for v in enveloped]
+    bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
+    lim_x1 = max(0, x1 - int(bw * max_pad_x_ratio))
+    lim_x2 = min(frame_width, x2 + int(bw * max_pad_x_ratio))
+    lim_y1 = max(0, y1 - int(bh * max_pad_y_ratio))
+    lim_y2 = min(frame_height, y2 + int(bh * max_pad_y_ratio))
+    tx1 = max(min(ex1, x1), lim_x1)
+    ty1 = max(min(ey1, y1), lim_y1)
+    tx2 = min(max(ex2, x2), lim_x2)
+    ty2 = min(max(ey2, y2), lim_y2)
+    if tx2 - tx1 < 20 or ty2 - ty1 < 14:
+        return seed
+    return tx1, ty1, tx2, ty2
+
+
+def _envelope_material_pile_bbox(
+    hsv: np.ndarray,
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+    *,
+    roi_mask: np.ndarray | None = None,
+) -> tuple[int, int, int, int]:
+    """Mở rộng bbox ôm trọn ụ sắt — gỉ + thân tối + sơn xanh, không chỉ mảng xanh."""
+    h, w = hsv.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in box]
+    bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
+    mx = max(32, int(w * 0.20))
+    ex1 = max(0, x1 - mx)
+    ex2 = min(w, x2 + max(20, int(w * 0.05)))
+    ey1 = max(0, min(y1 - int(bh * 0.08), int(h * 0.54)))
+    ey2 = min(h, y2 + max(10, int(bh * 0.04)))
+
+    patch_hsv = hsv[ey1:ey2, ex1:ex2]
+    if patch_hsv.size == 0:
+        return box
+
+    material = _pile_material_mask(patch_hsv)
+    if roi_mask is not None:
+        material = cv2.bitwise_and(material, roi_mask[ey1:ey2, ex1:ex2])
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
+    material = cv2.morphologyEx(material, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    cx = min(max((x1 + x2) // 2 - ex1, 0), material.shape[1] - 1)
+    cy = min(max((y1 + y2) // 2 - ey1, 0), material.shape[0] - 1)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(material, connectivity=8)
+    seed_lbl = int(labels[cy, cx]) if num > 1 else 0
+
+    if seed_lbl <= 0:
+        return _expand_object_bbox_to_pile(hsv, box, frame_width, frame_height)
+
+    comps: list[dict] = []
+    for lbl in range(1, num):
+        lx, ly, lbw, lbh, area = stats[lbl]
+        if area < 60:
+            continue
+        comps.append({
+            "lbl": lbl,
+            "box": (lx + ex1, ly + ey1, lx + lbw + ex1, ly + lbh + ey1),
+        })
+
+    cluster = [c for c in comps if c["lbl"] == seed_lbl]
+    gap_x = max(12, int(w * 0.035))
+    changed = True
+    while changed:
+        changed = False
+        for c in comps:
+            if any(item["lbl"] == c["lbl"] for item in cluster):
+                continue
+            for cb in cluster:
+                bx1, by1, bx2, by2 = c["box"]
+                cx1, cy1, cx2, cy2 = cb["box"]
+                vert = max(0, min(by2, cy2) - max(by1, cy1))
+                min_h = max(min(by2 - by1, cy2 - cy1), 1)
+                if vert / min_h < 0.40:
+                    continue
+                if max(bx1 - cx2, cx1 - bx2, 0) <= gap_x:
+                    cluster.append(c)
+                    changed = True
+                    break
+
+    tx1 = min(c["box"][0] for c in cluster)
+    ty1 = min(c["box"][1] for c in cluster)
+    tx2 = max(c["box"][2] for c in cluster)
+    ty2 = max(c["box"][3] for c in cluster)
+    tx1, ty1 = min(tx1, x1), min(ty1, y1)
+    tx2, ty2 = max(tx2, x2), max(ty2, y2)
+
+    if _score_object_box((tx1, ty1, tx2, ty2), frame_width, frame_height) < 0:
+        return box
+    return tx1, ty1, tx2, ty2
+
+
 def _finalize_object_bbox(
     hsv: np.ndarray,
     box: tuple[int, int, int, int],
@@ -571,18 +728,14 @@ def _finalize_object_bbox(
     frame_height: int,
     *,
     kind: str = "generic",
+    roi_mask: np.ndarray | None = None,
 ) -> tuple[int, int, int, int]:
-    """Ôm trọn đống vật tư — mở rộng theo mask, siết theo thép xanh nếu cần."""
-    if kind in ("steel", "rust_metal"):
-        trimmed = _trim_wet_bottom_from_bbox(hsv, box)
-        return _tighten_steel_pile_bbox(hsv, trimmed, frame_width, frame_height)
-
-    expanded = _expand_object_bbox_to_pile(hsv, box, frame_width, frame_height)
-    trimmed = _trim_wet_bottom_from_bbox(hsv, expanded)
-    bw = trimmed[2] - trimmed[0]
-    if bw > frame_width * 0.42:
-        return _trim_object_bbox_by_density(hsv, trimmed)
-    return trimmed
+    """Ôm trọn đống vật tư — envelope có giới hạn quanh detect gốc."""
+    enveloped = _envelope_material_pile_bbox(
+        hsv, box, frame_width, frame_height, roi_mask=roi_mask,
+    )
+    balanced = _balance_pile_bbox_to_seed(box, enveloped, frame_width, frame_height)
+    return _trim_wet_bottom_from_bbox(hsv, balanced)
 
 
 def _clip_object_box_to_roi(
@@ -732,9 +885,82 @@ def _trim_box_overlap(
 
 def _mud_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
     """Bùn trên mặt đường — lề trái + vùng cạnh vũng nước, loại phần vật tư xa phải."""
-    band = _road_band_mask(roi_mask, width, height)
+    # Giữ lề trái (bùn/đất cạnh mép đường) — không cắt 10% như road_band.
+    band = roi_mask.copy()
+    band[: int(height * 0.32), :] = 0
     band[:, int(width * 0.58) :] = 0
     return band
+
+
+def _mud_shoulder_mask(width: int, height: int) -> np.ndarray:
+    """Góc dưới-trái — bùn lẫn cỏ/đất cạnh lề, thường bị loại bởi lọc xanh."""
+    mask = np.zeros((height, width), dtype=np.uint8)
+    mask[int(height * 0.74) :, : int(width * 0.14)] = 255
+    return mask
+
+
+def _analyze_mud_shoulder(
+    hsv: np.ndarray,
+    roi_mask: np.ndarray,
+    search: np.ndarray,
+    frame_area: int,
+    frame_width: int,
+    frame_height: int,
+) -> list[tuple[float, tuple[int, int, int, int]]]:
+    """Bùn/đất cạnh lề trái — tách riêng để không dính vùng vật tư / lòng đường."""
+    h, w = hsv.shape[:2]
+    shoulder = cv2.bitwise_and(_mud_shoulder_mask(w, h), search)
+    if cv2.countNonZero(shoulder) < 40:
+        return []
+
+    brown = cv2.inRange(hsv, np.array([8, 45, 22]), np.array([30, 220, 135]))
+    dark_soil = cv2.inRange(hsv, np.array([5, 25, 12]), np.array([35, 170, 90]))
+    muddy_edge = cv2.inRange(hsv, np.array([26, 24, 20]), np.array([72, 155, 125]))
+    green_vivid = cv2.inRange(hsv, np.array([40, 110, 95]), np.array([92, 255, 255]))
+    white_mat = cv2.inRange(hsv, np.array([0, 0, 175]), np.array([180, 45, 255]))
+
+    mud_mask = cv2.bitwise_or(brown, cv2.bitwise_or(dark_soil, muddy_edge))
+    mud_mask = cv2.bitwise_and(mud_mask, shoulder)
+    mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(green_vivid))
+    mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(white_mat))
+    mud_mask = cv2.medianBlur(mud_mask, 5)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    roi_pixels = max(_roi_pixel_count(search), 1)
+    min_area = frame_area * 0.00030
+    max_area = frame_area * 0.024
+    max_w = int(frame_width * 0.22)
+    max_h = int(frame_height * 0.24)
+    contours, _ = cv2.findContours(mud_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    ranked: list[tuple[float, float, tuple[int, int, int, int]]] = []
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < min_area or area > max_area:
+            continue
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        if bw > max_w or bh > max_h:
+            continue
+        tight = _tight_bbox_from_contour(cnt, shoulder, h, w)
+        if tight is None:
+            continue
+        box = _clamp_mud_box(tight, w)
+        geo = _score_mud_box(box, w, h)
+        if geo < 0:
+            continue
+        pct = 100.0 * area / roi_pixels
+        if pct < 0.015:
+            continue
+        ranked.append((geo + area * 0.02, area, box))
+
+    if not ranked:
+        return []
+    ranked.sort(key=lambda row: row[0], reverse=True)
+    boxes = _dedupe_boxes([row[2] for row in ranked[:2]])
+    area_map = {row[2]: row[1] for row in ranked}
+    return [(round(100.0 * area_map.get(box, 0) / roi_pixels, 2), box) for box in boxes]
 
 
 def _clamp_mud_box(
@@ -753,10 +979,13 @@ def _score_mud_box(box: tuple[int, int, int, int], frame_width: int, frame_heigh
     """Ưu tiên mảng bùn gọn ở lề trái / cạnh vũng nước — không bao vật tư xa phải."""
     x1, y1, x2, y2 = box
     bw, bh = x2 - x1, y2 - y1
-    if bw < 20 or bh < 12:
-        return -1.0
     cx = (x1 + x2) / 2
     cy = (y1 + y2) / 2
+    shoulder = cx / max(frame_width, 1) < 0.16 and cy / max(frame_height, 1) > 0.68
+    min_bw = 14 if shoulder else 20
+    min_bh = 10 if shoulder else 12
+    if bw < min_bw or bh < min_bh:
+        return -1.0
     area = bw * bh
     x_norm = cx / max(frame_width, 1)
     y_norm = cy / max(frame_height, 1)
@@ -821,7 +1050,8 @@ def _analyze_mud(
     brown = cv2.inRange(hsv, np.array([8, 55, 28]), np.array([28, 210, 130]))
     dark_soil = cv2.inRange(hsv, np.array([5, 30, 14]), np.array([32, 160, 82]))
     asphalt = cv2.inRange(hsv, np.array([8, 0, 95]), np.array([30, 48, 255]))
-    green_gear = cv2.inRange(hsv, np.array([32, 35, 40]), np.array([95, 255, 230]))
+    # Chỉ loại cây/lưới xanh tươi — giữ bùn lẫn cỏ olive ở lề trái.
+    green_vivid = cv2.inRange(hsv, np.array([38, 95, 90]), np.array([92, 255, 255]))
     white_mat = cv2.inRange(hsv, np.array([0, 0, 175]), np.array([180, 45, 255]))
     orange_gear = cv2.inRange(hsv, np.array([8, 110, 150]), np.array([28, 255, 255]))
     # Chỉ loại kim loại gỉ sáng rõ (bão hoà cao, sáng) — không trùng dải bùn/đất tối.
@@ -837,7 +1067,7 @@ def _analyze_mud(
         cv2.bitwise_and(mud_base, cv2.bitwise_not(asphalt)),
     )
     mud_mask = cv2.bitwise_and(mud_mask, search)
-    mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(green_gear))
+    mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(green_vivid))
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(white_mat))
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(orange_gear))
     mud_mask = cv2.bitwise_and(mud_mask, cv2.bitwise_not(rust_metal))
@@ -866,8 +1096,16 @@ def _analyze_mud(
         if geo < 0:
             continue
         pct = 100.0 * area / roi_pixels
-        if pct < MUD_THRESHOLD_PERCENT * 0.32:
+        if pct < 0.05:
             continue
+        ranked.append((geo + area * 0.015, area, box))
+
+    shoulder_patches = _analyze_mud_shoulder(hsv, roi_mask, search, frame_area, w, h)
+    for pct, box in shoulder_patches:
+        geo = _score_mud_box(box, w, h)
+        if geo < 0:
+            continue
+        area = pct * roi_pixels / 100.0
         ranked.append((geo + area * 0.015, area, box))
 
     if not ranked:
@@ -1006,7 +1244,7 @@ def _analyze_water(
             if _score_water_box(box, w, h) < 0:
                 continue
             pct = 100.0 * area / roi_pixels
-            if pct < WATER_THRESHOLD_PERCENT * 0.32:
+            if pct < 0.03:
                 continue
             ranked.append((adjusted + geo * 0.15, area, box, roi_pixels))
 
@@ -1319,9 +1557,14 @@ def _analyze_objects(
     if by_kind:
         deduped = _dedupe_object_kinds(by_kind, hsv, w, h)
         merged = _merge_same_kind_clusters(deduped, w)
+        all_boxes = [box for _, box in merged]
+        pile_boxes = _merge_adjacent_boxes(all_boxes, w, gap_ratio=0.09)
         return [
-            (kind, _finalize_object_bbox(hsv, box, w, h, kind=kind))
-            for kind, box in merged
+            (
+                "material",
+                _finalize_object_bbox(hsv, box, w, h, kind="material", roi_mask=roi_mask),
+            )
+            for box in pile_boxes
         ]
 
     return []
@@ -1385,9 +1628,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             conf = _confidence_for_detection(
                 "mud", clipped, w, h, frame_area, area_percent=pct, contour_area=pct * roi_pixels / 100.0,
             )
-            # Vẫn vẽ bbox khi chưa đủ ngưỡng ghi sự kiện (EVENT_MIN_CONFIDENCE) —
-            # chỉ loại nhiễu quá yếu (dưới DISPLAY_MIN_CONFIDENCE).
-            if conf < DISPLAY_MIN_CONFIDENCE:
+            if conf <= 0:
                 continue
             all_detections.append(
                 RoadDetection(
@@ -1407,7 +1648,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             conf = _confidence_for_detection(
                 "water", clipped, w, h, frame_area, area_percent=pct, contour_area=pct * roi_pixels / 100.0,
             )
-            if conf < DISPLAY_MIN_CONFIDENCE:
+            if conf <= 0:
                 continue
             all_detections.append(
                 RoadDetection(
@@ -1431,27 +1672,28 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             conf = _confidence_for_detection(
                 "object", clipped, w, h, frame_area, contour_area=area_ratio * frame_area * 0.75,
             )
-            kind_label = OBJECT_KIND_LABELS.get(object_kind, SCENARIO_LABELS["object"])
-            label = object_display_label(object_kind, conf, kind_label)
+            label = object_display_label(object_kind, conf, OBJECT_KIND_LABEL)
             behavior = "object" if label != UNKNOWN_LABEL else "unknown"
             if label == UNKNOWN_LABEL:
-                if conf < DISPLAY_MIN_CONFIDENCE:
+                if conf <= 0:
                     continue
                 conf = max(conf, 0.52)
-            elif conf < DISPLAY_MIN_CONFIDENCE:
+            elif conf <= 0:
                 continue
             all_detections.append(
                 RoadDetection(
                     behavior=behavior,
-                    label=label,
+                    label=OBJECT_KIND_LABEL if behavior == "object" else label,
                     scenario_id="BPTC-009",
                     confidence=conf,
                     bbox=[float(v) for v in clipped],
-                    object_kind=object_kind if behavior == "object" else "unknown",
+                    object_kind="material" if behavior == "object" else "unknown",
                 )
             )
 
     # Cam A-03: không vẽ vùng Unknown — edge toàn khung gây bbox nhảy trên overlay.
+
+    all_detections = _augment_with_auto_train_model(frame, all_detections)
 
     fe_zones = [
         {

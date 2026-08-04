@@ -13,7 +13,7 @@ MACHINERY_RECOGNIZED_MIN_CONF = 0.72
 OBJECT_RECOGNIZED_MIN_CONF = 0.80
 
 MACHINERY_KIND_LABELS: dict[str, str] = {
-    "crane_green": "Máy xúc (xanh)",
+    "crane_green": "Máy xúc",
     "sany_drill": "Máy khoan",
     "tower_crane": "Máy cẩu tháp",
     "excavator_orange": "Máy khoan",
@@ -33,9 +33,9 @@ def person_display_label(_confidence: float) -> str:
 def object_display_label(object_kind: str | None, confidence: float, fallback: str) -> str:
     if confidence < OBJECT_RECOGNIZED_MIN_CONF:
         return UNKNOWN_LABEL
-    if not object_kind or object_kind in ("generic", "unknown"):
+    if not object_kind or object_kind in ("unknown",):
         return UNKNOWN_LABEL
-    return fallback
+    return fallback or "Vật tư"
 
 
 def _masks_from_boxes(
