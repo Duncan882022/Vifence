@@ -149,17 +149,38 @@ def _object_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.nda
     return band
 
 
+def _masks_from_boxes(
+    height: int,
+    width: int,
+    boxes: list[tuple[int, int, int, int]],
+    *,
+    pad_ratio: float = 0.06,
+) -> np.ndarray:
+    mask = np.zeros((height, width), dtype=np.uint8)
+    for x1, y1, x2, y2 in boxes:
+        pad_x = int((x2 - x1) * pad_ratio)
+        pad_y = int((y2 - y1) * pad_ratio)
+        cv2.rectangle(
+            mask,
+            (max(0, x1 - pad_x), max(0, y1 - pad_y)),
+            (min(width - 1, x2 + pad_x), min(height - 1, y2 + pad_y)),
+            255,
+            -1,
+        )
+    return mask
+
+
 def _analyze_objects(
     frame: np.ndarray,
     hsv: np.ndarray,
     gray: np.ndarray,
     roi_mask: np.ndarray,
-    mud_mask: np.ndarray,
-    water_mask: np.ndarray,
+    mud_boxes: list[tuple[int, int, int, int]],
+    water_boxes: list[tuple[int, int, int, int]],
     frame_area: int,
 ) -> list[tuple[int, int, int, int]]:
     h, w = frame.shape[:2]
-    exclude = cv2.bitwise_or(mud_mask, water_mask)
+    exclude = _masks_from_boxes(h, w, mud_boxes + water_boxes)
     search = _object_search_mask(roi_mask, w, h)
 
     # Loại túi vật liệu màu be/kem
@@ -244,18 +265,10 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     total_water = 0.0
     object_count = 0
 
-    mud_combined = np.zeros((h, w), dtype=np.uint8)
-    water_combined = np.zeros((h, w), dtype=np.uint8)
-
     for zone in road_zones:
         roi_mask = _polygon_to_mask(zone["polygon"], w, h)
         mud_pct, mud_boxes = _analyze_mud(hsv, roi_mask, frame_area, w, h)
         water_pct, water_boxes = _analyze_water(hsv, roi_mask, frame_area, w)
-
-        mud_mask = cv2.inRange(hsv, np.array([8, 70, 35]), np.array([22, 200, 130]))
-        water_mask = cv2.inRange(hsv, np.array([95, 50, 60]), np.array([125, 200, 190]))
-        mud_combined = cv2.bitwise_or(mud_combined, cv2.bitwise_and(mud_mask, roi_mask))
-        water_combined = cv2.bitwise_or(water_combined, cv2.bitwise_and(water_mask, roi_mask))
 
         total_mud = max(total_mud, mud_pct)
         total_water = max(total_water, water_pct)
@@ -286,7 +299,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
                 )
             )
 
-        obj_boxes = _analyze_objects(frame, hsv, gray, roi_mask, mud_combined, water_combined, frame_area)
+        obj_boxes = _analyze_objects(frame, hsv, gray, roi_mask, mud_boxes, water_boxes, frame_area)
         object_count += len(obj_boxes)
         for box in obj_boxes[:1]:
             x1, y1, x2, y2 = box
