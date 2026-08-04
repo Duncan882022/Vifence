@@ -1,4 +1,4 @@
-"""Debounced crane-proximity events — Cam A-04 (≥ 3s, lặp 10 phút)."""
+"""Debounced crane-proximity events — Cam A-04 (≥ 3s, lặp 2 giờ)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 
+from .config import settings
 from .crane_proximity_analyzer import analyze_crane_proximity_frame
 from .crane_roi_config import EVENT_MIN_CONFIDENCE
 from .events import EventStore, PersistenceDebouncer
@@ -15,7 +16,7 @@ from .schemas import CraneProximityDetection, ViolationEvent
 logger = logging.getLogger("crane_proximity_engine")
 
 _CONFIRM_SECONDS = 3.0
-_REPEAT_SECONDS = 600.0
+_REPEAT_SECONDS = settings.crane_event_repeat_seconds
 _MAX_GAP_SECONDS = 3.0
 _TRACK_EXPIRE_SECONDS = 4.0
 

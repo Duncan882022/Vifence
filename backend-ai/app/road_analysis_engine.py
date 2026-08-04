@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 
+from .config import settings
 from .events import EventStore, PersistenceDebouncer
 from .road_analyzer import (
     EVENT_MIN_CONFIDENCE,
@@ -18,9 +19,9 @@ from .unknown_detection import UNKNOWN_LABEL
 
 logger = logging.getLogger("road_analysis_engine")
 
-# Xác nhận sau 3s detect liên tục; lặp snapshot mỗi 10 phút nếu vẫn phát hiện
+# Xác nhận sau 3s detect liên tục; lặp snapshot mỗi 2 giờ nếu vẫn phát hiện
 _ROAD_CONFIRM_SECONDS = 3.0
-_ROAD_REPEAT_SECONDS = 600.0
+_ROAD_REPEAT_SECONDS = settings.road_event_repeat_seconds
 _ROAD_MAX_GAP_SECONDS = 3.0
 _ROAD_MIN_CONFIDENCE = EVENT_MIN_CONFIDENCE
 _BEHAVIOR_MIN_CONFIDENCE: dict[str, float] = {
@@ -44,7 +45,7 @@ class _TrackState:
 
 
 class RoadAnalysisEngine:
-    """Phân tích lòng đường + debounce theo từng loại detect (ổn định, 10 phút/lần)."""
+    """Phân tích lòng đường + debounce theo từng loại detect (ổn định, 2 giờ/lần)."""
 
     def __init__(self, store: EventStore):
         self.store = store

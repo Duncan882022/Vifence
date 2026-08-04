@@ -70,8 +70,8 @@ _BEHAVIOR_DEBOUNCE: dict[str, dict] = {
     "smoking": {
         "min_duration": lambda: settings.smoking_event_min_duration_seconds,
         "max_gap": lambda: settings.smoking_event_max_gap_seconds,
-        "cooldown": lambda: settings.event_cooldown_seconds,
-        "one_event_per_episode": True,
+        "cooldown": lambda: settings.smoking_event_cooldown_seconds,
+        "one_event_per_episode": False,
     },
     "fire": {
         "min_duration": lambda: settings.fire_event_min_duration_seconds,
@@ -322,7 +322,10 @@ class DetectionEngine:
         detection: Detection,
     ) -> bool:
         now = time.time()
-        min_gap = settings.event_repeat_min_seconds
+        if behavior == "smoking":
+            min_gap = settings.smoking_event_repeat_min_seconds
+        else:
+            min_gap = settings.event_repeat_min_seconds
         key = f"{camera_id}:{behavior}"
         last_at = self._last_event_at.get(key)
         if last_at is not None and now - last_at < min_gap:
@@ -398,8 +401,8 @@ class DetectionEngine:
             "smoking": {
                 "min_duration_seconds": settings.smoking_event_min_duration_seconds,
                 "max_gap_seconds": settings.smoking_event_max_gap_seconds,
-                "one_event_per_episode": True,
-                "repeat_min_seconds": settings.event_repeat_min_seconds,
+                "cooldown_seconds": settings.smoking_event_cooldown_seconds,
+                "repeat_min_seconds": settings.smoking_event_repeat_min_seconds,
             },
             "fire": {
                 "min_duration_seconds": settings.fire_event_min_duration_seconds,

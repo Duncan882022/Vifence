@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     # Không log lại cùng behavior trên cùng camera trong N giây (trừ khi đã qua phiên mới + đủ thời gian).
     event_repeat_min_seconds: float = 180.0
 
+    # Cam A-03 / A-04 — lặp snapshot sự kiện (bùn/nước/vật tư / cẩn gần người).
+    road_event_repeat_seconds: float = 7200.0
+    crane_event_repeat_seconds: float = 7200.0
+
+    # Hút thuốc — lặp snapshot mỗi 30 phút nếu vẫn phát hiện.
+    smoking_event_cooldown_seconds: float = 1800.0
+    smoking_event_repeat_min_seconds: float = 1800.0
+
     # Tạm tắt thu thập + train tự động khi chưa đủ video đa dạng (bật lại
     # bằng AUTO_TRAIN_ENABLED=true trong .env khi đã có thêm dữ liệu).
     auto_train_enabled: bool = False
