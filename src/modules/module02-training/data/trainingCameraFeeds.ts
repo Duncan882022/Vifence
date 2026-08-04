@@ -2,6 +2,7 @@
  * Local MP4 feeds — cắt từ YouTube Unicons Safety Supervisors (Js-1FbF-7yU).
  * OCP1-A/B: CCTV 16:9 · Body cam: 9:16 · Flycam: 16:9 toàn cảnh.
  * A-03 (TTDV-A · Cam 03): mock từ public/camera-feeds/ttdv-a-cam03-test.mp4
+ * A-04 (TTDV-A · Cam 04): mock từ public/camera-feeds/ttdv-a-cam04-test.mp4 (ảnh hiện trường 5s)
  *
  * Mốc cắt (giây): OCP1-A 170,188,205,212,218,238,248,252 ·
  * Body 163,209,169 · Fly 174,177
@@ -41,7 +42,7 @@ const FEED_FILES: Record<CameraFeedKey, string> = {
   'ocp1-a-01': 'ocp1-a-01.mp4',
   'ocp1-a-02': 'ocp1-a-02.mp4',
   'ocp1-a-03': 'ttdv-a-cam03-test.mp4',
-  'ocp1-a-04': 'ocp1-a-04.mp4',
+  'ocp1-a-04': 'ttdv-a-cam04-test.mp4',
   'ocp1-a-05': 'ocp1-a-05.mp4',
   'ocp1-a-06': 'ocp1-a-06.mp4',
   'ocp1-a-07': 'ocp1-a-07.mp4',
@@ -101,8 +102,8 @@ export const CAMERA_FEED_BY_ID: Record<string, CameraFeedKey> = {
 
 export function getOverlayFitForFeed(feedKey: CameraFeedKey): 'cover' | 'contain' {
   if (feedKey.startsWith('bodycam-')) return 'contain'
-  /** Test.mp4 TTDV-A Cam 03 — 640×640 vuông, không crop */
-  if (feedKey === 'ocp1-a-03') return 'contain'
+  /** TTDV-A Cam 03/04 — khung dọc/vuông demo, không crop */
+  if (feedKey === 'ocp1-a-03' || feedKey === 'ocp1-a-04') return 'contain'
   return 'cover'
 }
 

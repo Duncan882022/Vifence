@@ -21,6 +21,9 @@ const BEHAVIOR_TO_SCENARIO: Record<string, string> = {
   mesh_missing: 'BPTC-001',
   mesh_torn: 'BPTC-001',
   mesh_dirty: 'BPTC-001',
+  crane_proximity: 'DZ-003',
+  person: 'DZ-003',
+  crane: 'DZ-003',
 }
 
 const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
@@ -32,6 +35,9 @@ const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
   mesh_missing: 'BPTC',
   mesh_torn: 'BPTC',
   mesh_dirty: 'BPTC',
+  crane_proximity: 'DZ',
+  person: 'DZ',
+  crane: 'DZ',
 }
 
 const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
@@ -43,11 +49,16 @@ const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
   mesh_missing: 'VIOLATION',
   mesh_torn: 'VIOLATION',
   mesh_dirty: 'WARNING',
+  crane_proximity: 'CRITICAL',
+  person: 'WARNING',
+  crane: 'WARNING',
 }
 
 const CAM03_BEHAVIORS = new Set([
   'mud', 'water', 'object', 'mesh_missing', 'mesh_torn', 'mesh_dirty',
 ])
+
+const CAM04_BEHAVIORS = new Set(['crane_proximity', 'person', 'crane'])
 
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/$/, '')
@@ -88,28 +99,32 @@ export function mapBackendEventToSafetyRecord(
   const scenarioId = BEHAVIOR_TO_SCENARIO[event.behavior] ?? event.scenario_id ?? 'PCCC-001'
   const groupId = BEHAVIOR_TO_GROUP[event.behavior] ?? (event.group as SafetyGroupId | undefined) ?? 'PCCC'
   const isCam03Ai = CAM03_BEHAVIORS.has(event.behavior)
+  const isCam04Ai = CAM04_BEHAVIORS.has(event.behavior)
+  const isFixedCamAi = isCam03Ai || isCam04Ai
 
   return {
     id: `ai-${event.id}`,
     scenarioId,
     groupId,
-    zoneId: isCam03Ai ? 'ZONE-A01' : 'ZONE-A01',
+    zoneId: isCam04Ai ? 'ZONE-A02' : 'ZONE-A01',
     sourceDeviceId: cameraId,
-    sourceType: isCam03Ai ? 'FIXED_CAMERA' : 'MOBILE',
+    sourceType: isFixedCamAi ? 'FIXED_CAMERA' : 'MOBILE',
     detectedAt: toIsoLocalTimestamp(event.created_at),
     severity: BEHAVIOR_TO_SEVERITY[event.behavior] ?? 'VIOLATION',
     status: 'DETECTED',
     confidence: event.confidence,
     eventSubjectType: isCam03Ai
       ? (event.behavior === 'object' ? 'CONSTRUCTION_ACTIVITY' : 'SITE_CONDITION')
-      : 'PERSON',
+      : isCam04Ai
+        ? 'PERSON'
+        : 'PERSON',
     subject: isCam03Ai
       ? { type: 'SITE_CONDITION' }
       : {
           type: 'PERSON',
-          workerName: 'Unknown',
+          workerName: isCam04Ai ? 'Unknown' : 'Unknown',
         },
-    verificationRequired: true,
+    verificationRequired: !isCam04Ai || event.behavior === 'crane_proximity',
     description: event.scenario_name ?? getScenarioName(scenarioId),
     snapshotUrl: buildSnapshotUrl(backendUrl, event.id),
   }

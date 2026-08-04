@@ -62,8 +62,8 @@ const GIANG_VO_FIXED: Record<string, SafetyCameraOverride> = {
   'B-08': { zone: 'TMDV-C', location: 'Khu PCCC / CV nóng' },
 }
 
-/** Camera mặc định hiển thị khi mở Module 03 — Cam 03 + Duncan IPhone (bỏ Cam 06) */
-export const DEFAULT_SAFETY_CAMERA_IDS = ['A-03', 'MOB-01'] as const
+/** Camera mặc định hiển thị khi mở Module 03 — Cam 03 + Cam 04 (TTDV-A) */
+export const DEFAULT_SAFETY_CAMERA_IDS = ['A-03', 'A-04'] as const
 
 /** Camera live Module 03 — reuse feed Module 02, đổi zone/location → Giảng Võ, + Mobile riêng */
 export const SAFETY_CAMERAS: TrainingCamera[] = [

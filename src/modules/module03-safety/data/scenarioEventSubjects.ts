@@ -10,6 +10,7 @@ export const SCENARIO_EVENT_SUBJECT: Record<string, EventSubjectType> = {
   'WAH-003': 'PERSON',
   'DZ-001': 'SITE_CONDITION',
   'DZ-002': 'SITE_CONDITION',
+  'DZ-003': 'PERSON',
   'ATGT-001': 'MANAGEMENT',
   'ATGT-002': 'VEHICLE',
   'ATGT-003': 'SITE_CONDITION',

@@ -8,44 +8,39 @@ const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
 
-export type RoadAnalysisBehavior =
-  | 'mud'
-  | 'water'
-  | 'object'
-  | 'unknown'
-  | 'mesh_missing'
-  | 'mesh_torn'
-  | 'mesh_dirty'
+export type CraneProximityBehavior = 'person' | 'crane' | 'crane_proximity' | 'unknown'
 
-export interface RoadAnalysisDetection {
-  behavior: RoadAnalysisBehavior
+export interface CraneProximityDetection {
+  behavior: CraneProximityBehavior
   label: string
   scenario_id: string
   confidence: number
   bbox: [number, number, number, number]
-  area_percent?: number
+  distance_m?: number
+  machine_kind?: 'crane_green' | 'excavator_orange' | 'tower_crane' | 'machinery_yellow' | 'machinery'
 }
 
-export interface RoadAnalysisRoiZone {
+export interface CraneProximityRoiZone {
   id: string
   label: string
-  type: 'ROAD' | 'BUFFER' | 'STORAGE' | 'MESH'
+  type: 'CRANE_BODY' | 'CRANE_WORK'
   polygon: Array<{ x: number; y: number }>
 }
 
-export interface RoadAnalysisMetrics {
-  mud_percent: number
-  water_percent: number
-  object_count: number
+export interface CraneProximityMetrics {
+  person_count: number
+  min_distance_m: number | null
+  proximity_violations: number
+  proximity_threshold_m: number
 }
 
-export interface RoadAnalysisResult {
+export interface CraneProximityResult {
   camera_id: string
   width: number
   height: number
-  roi_zones: RoadAnalysisRoiZone[]
-  metrics: RoadAnalysisMetrics
-  detections: RoadAnalysisDetection[]
+  roi_zones: CraneProximityRoiZone[]
+  metrics: CraneProximityMetrics
+  detections: CraneProximityDetection[]
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -55,8 +50,8 @@ function normalizeBaseUrl(baseUrl: string): string {
   return `https://${trimmed}`
 }
 
-export function buildRoadAnalyzeUrl(baseUrl: string): string {
-  return `${normalizeBaseUrl(baseUrl)}/analyze/road/frame`
+export function buildCraneAnalyzeUrl(baseUrl: string): string {
+  return `${normalizeBaseUrl(baseUrl)}/analyze/crane/frame`
 }
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -70,12 +65,12 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
   })
 }
 
-export async function postRoadAnalyzeFrame(
+export async function postCraneAnalyzeFrame(
   backendUrl: string,
   cameraId: string,
   image: string,
-): Promise<RoadAnalysisResult> {
-  const res = await fetchWithTimeout(buildRoadAnalyzeUrl(backendUrl), {
+): Promise<CraneProximityResult> {
+  const res = await fetchWithTimeout(buildCraneAnalyzeUrl(backendUrl), {
     method: 'POST',
     headers: {
       ...TUNNEL_HEADERS,
@@ -93,9 +88,9 @@ export async function postRoadAnalyzeFrame(
     width?: number
     height?: number
     camera_id?: string
-    roi_zones?: RoadAnalysisRoiZone[]
-    metrics?: RoadAnalysisMetrics
-    detections?: RoadAnalysisDetection[]
+    roi_zones?: CraneProximityRoiZone[]
+    metrics?: CraneProximityMetrics
+    detections?: CraneProximityDetection[]
   }
 
   if (data.type === 'error') throw new Error(data.message ?? 'Lỗi backend.')
@@ -108,29 +103,34 @@ export async function postRoadAnalyzeFrame(
     width: data.width,
     height: data.height,
     roi_zones: data.roi_zones ?? [],
-    metrics: data.metrics ?? { mud_percent: 0, water_percent: 0, object_count: 0 },
+    metrics: data.metrics ?? {
+      person_count: 0,
+      min_distance_m: null,
+      proximity_violations: 0,
+      proximity_threshold_m: 1.0,
+    },
     detections: data.detections ?? [],
   }
 }
 
-export interface RoadAnalysisClientOptions {
+export interface CraneProximityClientOptions {
   cameraId: string
   backendUrl?: string
-  onResult: (result: RoadAnalysisResult) => void
+  onResult: (result: CraneProximityResult) => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
   intervalMs?: number
 }
 
-export function createRoadAnalysisClient(
+export function createCraneProximityClient(
   video: HTMLVideoElement,
-  options: RoadAnalysisClientOptions,
+  options: CraneProximityClientOptions,
 ): { stop: () => void } {
   const {
     cameraId,
     backendUrl = getMobileAiBackendUrl(),
     onResult,
     onStatusChange,
-    intervalMs = 700,
+    intervalMs = 800,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
@@ -163,12 +163,12 @@ export function createRoadAnalysisClient(
     if (!connectedOnce) onStatusChange('connecting')
     inFlight = true
     try {
-      const result = await postRoadAnalyzeFrame(backendUrl, cameraId, image)
+      const result = await postCraneAnalyzeFrame(backendUrl, cameraId, image)
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(150)
+      scheduleNext(200)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

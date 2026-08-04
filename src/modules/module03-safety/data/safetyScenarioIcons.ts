@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Droplets, Fence, Flag, Flame, Footprints,
+  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Construction, Droplets, Fence, Flag, Flame, Footprints,
   Forklift, Gauge, Grid3x3, Link2Off, OctagonX, Package, PanelTop, PersonStanding, Pickaxe, Scissors, Shirt,
   Shovel, Waypoints,
 } from 'lucide-react'
@@ -16,6 +16,7 @@ export const SCENARIO_ICONS: Record<string, LucideIcon> = {
   'WAH-003': Link2Off,          // Có dây nhưng không móc neo
   'DZ-001': Shovel,             // Đất đào sát mép hố
   'DZ-002': Flag,               // Thiếu cờ/biển cảnh báo
+  'DZ-003': Construction,       // Làm việc gần máy cẩu
   'ATGT-001': PersonStanding,   // Thiếu người điều hướng
   'ATGT-002': Gauge,            // Vượt tốc độ
   'ATGT-003': OctagonX,         // Thiếu đèn đỏ / biển dừng
@@ -27,8 +28,8 @@ export const SCENARIO_ICONS: Record<string, LucideIcon> = {
   'BPTC-005': Fence,            // Thiếu lưới chống rơi
   'BPTC-006': Cable,            // Thiếu dây cứu sinh/lan can
   'BPTC-007': Pickaxe,           // Bùn đất trên đường nội bộ
-  'BPTC-008': Droplets,          // Nước đọng trên đường
-  'BPTC-009': Package,           // Vật liệu rơi vãi trên đường
+  'BPTC-008': Droplets,          // Đường nội bộ đọng nước
+  'BPTC-009': Package,           // Vật tư chiếm dụng lòng đường
   'PCCC-001': Cigarette,        // Hút thuốc sai nơi quy định
   'PCCC-002': Flame,            // Dấu hiệu cháy nổ
 }

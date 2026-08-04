@@ -24,8 +24,8 @@ export const HOUSEKEEPING_AI_SCENARIOS: HousekeepingAiScenario[] = [
   {
     id: 'HK-02',
     groupId: 'HK',
-    name: 'Nước đọng trên đường',
-    description: 'Nước đọng trên lòng đường ảnh hưởng giao thông nội bộ.',
+    name: 'Đường nội bộ đọng nước',
+    description: 'Nước đọng trên lòng đường nội bộ ảnh hưởng giao thông.',
     eventSubjectType: 'SITE_CONDITION',
     defaultSeverity: 'WARNING',
     dwellMinutes: 0,
@@ -34,8 +34,8 @@ export const HOUSEKEEPING_AI_SCENARIOS: HousekeepingAiScenario[] = [
   {
     id: 'HK-03',
     groupId: 'HK',
-    name: 'Vật liệu rơi vãi trên đường',
-    description: 'Vật liệu xây dựng rơi vãi trong ROI lòng đường gây cản trở lưu thông.',
+    name: 'Vật tư chiếm dụng lòng đường',
+    description: 'Vật tư hoặc thiết bị chiếm dụng ROI lòng đường, gây cản trở lưu thông.',
     eventSubjectType: 'CONSTRUCTION_ACTIVITY',
     defaultSeverity: 'VIOLATION',
     dwellMinutes: 0,

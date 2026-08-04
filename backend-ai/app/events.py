@@ -10,7 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .schemas import Detection, RoadDetection, ViolationEvent
+from .schemas import Detection, RoadDetection, CraneProximityDetection, ViolationEvent
 
 logger = logging.getLogger("events")
 
@@ -241,6 +241,94 @@ class EventStore:
         )
         return event
 
+    def add_crane(
+        self,
+        detection: CraneProximityDetection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-04",
+        context: Optional[list[CraneProximityDetection]] = None,
+    ) -> ViolationEvent:
+        event_date = _event_date()
+        event = ViolationEvent.from_crane_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        snapshot_name = f"{event_date}/{event.id}.jpg"
+        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        annotated = self._draw_crane_snapshot(frame, detection, context)
+        cv2.imwrite(str(snapshot_path), annotated)
+        event.snapshot_file = snapshot_name
+
+        with self._lock:
+            self._events.appendleft(event)
+        self._append_to_disk(event)
+        logger.info(
+            "Sự kiện crane [%s]: %s (%s) conf=%.2f dist=%s",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+            getattr(detection, "distance_m", None),
+        )
+        return event
+
+    @staticmethod
+    def _draw_crane_bbox(
+        frame: np.ndarray,
+        detection: CraneProximityDetection,
+        *,
+        emphasis: bool = True,
+        copy_frame: bool = True,
+    ) -> np.ndarray:
+        annotated = frame.copy() if copy_frame else frame
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        colors = {
+            "person": (180, 180, 180),
+            "crane": (0, 200, 255),
+            "crane_proximity": (0, 80, 255),
+            "unknown": (160, 160, 160),
+        }
+        kind_colors = {
+            "excavator_orange": (0, 140, 255),
+            "crane_green": (0, 200, 80),
+            "tower_crane": (0, 230, 255),
+            "machinery_yellow": (0, 220, 255),
+        }
+        if detection.behavior == "crane" and detection.machine_kind:
+            color = kind_colors.get(detection.machine_kind, colors["crane"])
+        else:
+            color = colors.get(detection.behavior, (160, 160, 160))
+        thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness)
+        dist = f" · {detection.distance_m:.2f}m" if detection.distance_m is not None else ""
+        label = f"{detection.label} {detection.confidence * 100:.0f}%{dist}"
+        cv2.putText(
+            annotated, label, (x1, max(y1 - 8, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
+        )
+        return annotated
+
+    @classmethod
+    def _draw_crane_snapshot(
+        cls,
+        frame: np.ndarray,
+        primary: CraneProximityDetection,
+        context: Optional[list[CraneProximityDetection]] = None,
+    ) -> np.ndarray:
+        annotated = frame.copy()
+        for det in context or []:
+            if det.behavior == primary.behavior and det.bbox == primary.bbox:
+                continue
+            cls._draw_crane_bbox(annotated, det, emphasis=False, copy_frame=False)
+        cls._draw_crane_bbox(annotated, primary, emphasis=True, copy_frame=False)
+        return annotated
+
     @staticmethod
     def _draw_road_bbox(frame: np.ndarray, detection: RoadDetection) -> np.ndarray:
         annotated = frame.copy()
@@ -252,6 +340,7 @@ class EventStore:
             "mud": (0, 180, 255),
             "water": (255, 160, 0),
             "object": (0, 140, 255),
+            "unknown": (160, 160, 160),
             "mesh_missing": (0, 220, 120),
             "mesh_torn": (0, 180, 80),
             "mesh_dirty": (40, 180, 40),
@@ -311,6 +400,39 @@ class EventStore:
     def newest_id(self) -> Optional[str]:
         with self._lock:
             return self._events[0].id if self._events else None
+
+    def clear_all(self) -> dict[str, int]:
+        """Xóa toàn bộ sự kiện trong RAM và trên đĩa (JSONL + snapshot)."""
+        removed_memory = 0
+        removed_files = 0
+        with self._lock:
+            removed_memory = len(self._events)
+            self._events.clear()
+
+        if LEGACY_EVENTS_FILE.exists():
+            LEGACY_EVENTS_FILE.unlink(missing_ok=True)
+            removed_files += 1
+
+        if EVENTS_DIR.exists():
+            for day_dir in EVENTS_DIR.iterdir():
+                if not day_dir.is_dir():
+                    continue
+                events_file = day_dir / "events.jsonl"
+                if events_file.exists():
+                    events_file.unlink(missing_ok=True)
+                    removed_files += 1
+
+        if SNAPSHOT_DIR.exists():
+            for jpg in SNAPSHOT_DIR.rglob("*.jpg"):
+                jpg.unlink(missing_ok=True)
+                removed_files += 1
+
+        logger.info(
+            "Đã xóa sự kiện: %d trong RAM, %d file trên đĩa",
+            removed_memory,
+            removed_files,
+        )
+        return {"memory": removed_memory, "files": removed_files}
 
     def resolve_snapshot_path(self, event_id: str, snapshot_file: Optional[str] = None) -> Optional[Path]:
         if snapshot_file:

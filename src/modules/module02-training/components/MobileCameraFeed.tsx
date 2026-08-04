@@ -23,6 +23,8 @@ interface MobileCameraFeedProps {
   cameraId: string
   label: string
   playing?: boolean
+  /** Chỉ gọi getUserMedia khi true — luồng mobile đang được chọn hiển thị chính */
+  autoStartCapture?: boolean
   compact?: boolean
   aiEnabled?: boolean
   onMaximize?: () => void
@@ -32,6 +34,7 @@ export function MobileCameraFeed({
   cameraId,
   label,
   playing = true,
+  autoStartCapture = false,
   compact,
   aiEnabled = false,
   onMaximize,
@@ -160,15 +163,20 @@ export function MobileCameraFeed({
   }, [startCapture])
 
   useEffect(() => {
-    if (playing) {
+    if (!playing) {
+      stopCapture()
+      setStatus('idle')
+      return stopCapture
+    }
+    if (autoStartCapture) {
       void startCapture()
     } else {
       stopCapture()
       setStatus('idle')
     }
     return stopCapture
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ restart khi playing/cameraId đổi
-  }, [playing, cameraId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ restart khi playing/cameraId/autoStartCapture đổi
+  }, [playing, cameraId, autoStartCapture])
 
   useEffect(() => {
     if (status === 'live' && aiEnabled && backendUrl) {

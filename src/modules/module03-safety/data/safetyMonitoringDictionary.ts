@@ -73,6 +73,7 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     scenarios: [
       'Đất đào hoặc vật tư cách mép hố < 0,5 m',
       'Không bố trí biển báo hoặc cờ cảnh báo hố sâu',
+      'Làm việc gần máy cẩu (≤ 1 m)',
     ],
     monitoringMethods: [
       'Tuần tra định kỳ (Scheduled Patrol)',
@@ -126,8 +127,8 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
       'Thi công kết cấu thép, lợp mái không có lưới chống rơi',
       'Thi công trên cao không có dây cứu sinh, lan can hoặc sàn thao tác',
       'Đường nội bộ bùn bẩn',
-      'Nước đọng trên đường',
-      'Vật liệu rơi vãi trên đường',
+      'Đường nội bộ đọng nước',
+      'Vật tư chiếm dụng lòng đường',
     ],
     monitoringMethods: [
       'Kiểm tra trước thi công',
@@ -143,6 +144,9 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
       'Barrier Detection',
       'Platform Detection',
       'Comparison Detection',
+      'Person Detection',
+      'Crane Detection',
+      'Distance Estimation',
     ],
     alerts: ['Dashboard', 'Mobile App', 'HSE', 'Phiếu khắc phục', 'Dừng thi công'],
   },

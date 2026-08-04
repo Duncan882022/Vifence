@@ -15,6 +15,138 @@ import {
   type RoadAnalysisRoiZone,
 } from '../services/roadAnalysisBackend.service'
 
+const EVENT_MIN_CONFIDENCE = 0.80
+
+const BEHAVIOR_MIN_CONFIDENCE: Partial<Record<RoadAnalysisDetection['behavior'], number>> = {
+  mud: EVENT_MIN_CONFIDENCE,
+  water: EVENT_MIN_CONFIDENCE,
+  object: EVENT_MIN_CONFIDENCE,
+}
+
+const TRACK_IOU_MATCH = 0.28
+const TRACK_HOLD_MS = 3500
+const MIN_HITS_TO_SHOW = 2
+const MIN_HITS_OBJECT = 3
+const EMA_ALPHA = 0.35
+const EMA_ALPHA_OBJECT = 0.16
+const MAX_VISIBLE_TRACKS = 9
+
+function bboxIoU(a: number[], b: number[]): number {
+  const ax1 = a[0], ay1 = a[1], ax2 = a[2], ay2 = a[3]
+  const bx1 = b[0], by1 = b[1], bx2 = b[2], by2 = b[3]
+  const ix1 = Math.max(ax1, bx1)
+  const iy1 = Math.max(ay1, by1)
+  const ix2 = Math.min(ax2, bx2)
+  const iy2 = Math.min(ay2, by2)
+  if (ix2 <= ix1 || iy2 <= iy1) return 0
+  const inter = (ix2 - ix1) * (iy2 - iy1)
+  const aa = Math.max((ax2 - ax1) * (ay2 - ay1), 1)
+  const bb = Math.max((bx2 - bx1) * (by2 - by1), 1)
+  return inter / (aa + bb - inter)
+}
+
+function smoothBbox(
+  prev: [number, number, number, number],
+  next: number[],
+  behavior: RoadAnalysisDetection['behavior'],
+): [number, number, number, number] {
+  const a = behavior === 'object' ? EMA_ALPHA_OBJECT : EMA_ALPHA
+  return [
+    prev[0] * (1 - a) + next[0] * a,
+    prev[1] * (1 - a) + next[1] * a,
+    prev[2] * (1 - a) + next[2] * a,
+    prev[3] * (1 - a) + next[3] * a,
+  ]
+}
+
+interface StableTrack {
+  id: string
+  behavior: RoadAnalysisDetection['behavior']
+  label: string
+  scenario_id: string
+  confidence: number
+  bbox: [number, number, number, number]
+  area_percent: number
+  hits: number
+  lastSeen: number
+  objectKind?: string
+}
+
+function updateStableTracks(
+  prev: Map<string, StableTrack>,
+  incoming: RoadAnalysisDetection[],
+  now: number,
+): StableTrack[] {
+  const matched = new Set<string>()
+  const next = new Map(prev)
+
+  for (const det of incoming) {
+    let bestId: string | null = null
+    let bestIou = TRACK_IOU_MATCH
+    for (const [id, track] of next) {
+      if (track.behavior !== det.behavior) continue
+      if (
+        det.behavior === 'object'
+        && track.label
+        && det.label
+        && track.label !== det.label
+        && track.label !== 'Unknown'
+        && det.label !== 'Unknown'
+      ) {
+        continue
+      }
+      const iou = bboxIoU(track.bbox, det.bbox)
+      if (iou > bestIou) {
+        bestIou = iou
+        bestId = id
+      }
+    }
+
+    const id = bestId ?? `${det.behavior}-${det.label}-${Math.round(det.bbox[0] / 40)}-${Math.round(det.bbox[1] / 40)}`
+    const existing = next.get(id)
+    const bbox = existing
+      ? smoothBbox(existing.bbox, det.bbox, det.behavior)
+      : [det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3]] as [number, number, number, number]
+
+    next.set(id, {
+      id,
+      behavior: det.behavior,
+      label: det.label,
+      scenario_id: det.scenario_id,
+      confidence: existing ? existing.confidence * 0.6 + det.confidence * 0.4 : det.confidence,
+      bbox,
+      area_percent: det.area_percent ?? existing?.area_percent ?? 0,
+      hits: (existing?.hits ?? 0) + 1,
+      lastSeen: now,
+      objectKind: det.label,
+    })
+    matched.add(id)
+  }
+
+  for (const [id, track] of next) {
+    if (matched.has(id)) continue
+    if (now - track.lastSeen > TRACK_HOLD_MS) {
+      next.delete(id)
+    }
+  }
+
+  return [...next.values()]
+    .filter(t => {
+      const minHits = t.behavior === 'object' ? MIN_HITS_OBJECT : MIN_HITS_TO_SHOW
+      return t.hits >= minHits || now - t.lastSeen < 400
+    })
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, MAX_VISIBLE_TRACKS)
+}
+
+function passesConfidenceThreshold(det: RoadAnalysisDetection): boolean {
+  if (det.behavior === 'unknown' || det.label === 'Unknown') {
+    return false
+  }
+  const minConf = BEHAVIOR_MIN_CONFIDENCE[det.behavior] ?? EVENT_MIN_CONFIDENCE
+  return det.confidence >= minConf
+}
+
 const BEHAVIOR_STYLE: Record<
   RoadAnalysisDetection['behavior'],
   { border: string; fill: string; label: string; bg: string }
@@ -36,6 +168,12 @@ const BEHAVIOR_STYLE: Record<
     fill: 'bg-orange-400/12',
     label: 'text-orange-200',
     bg: 'bg-orange-500/35',
+  },
+  unknown: {
+    border: 'border-gray-400/80',
+    fill: 'bg-gray-400/10',
+    label: 'text-gray-200',
+    bg: 'bg-gray-600/35',
   },
   mesh_missing: {
     border: 'border-lime-400/90',
@@ -100,7 +238,7 @@ function DetectionBox({
   compact?: boolean
   videoFit: 'cover' | 'contain'
 }) {
-  const style = BEHAVIOR_STYLE[detection.behavior]
+  const style = BEHAVIOR_STYLE[detection.behavior] ?? BEHAVIOR_STYLE.unknown
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
 
@@ -125,7 +263,7 @@ function DetectionBox({
 
   return (
     <div
-      className="absolute pointer-events-none transition-all duration-300 ease-out"
+      className="absolute pointer-events-none transition-[left,top,width,height] duration-700 ease-out"
       style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
     >
       <div className={cn('absolute inset-0 border rounded-sm', style.border, style.fill)} />
@@ -137,7 +275,7 @@ function DetectionBox({
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
-        {detection.label} {detection.confidence.toFixed(2)}
+        {detection.label} {(detection.confidence * 100).toFixed(0)}%
       </span>
     </div>
   )
@@ -186,7 +324,7 @@ function useRoadAnalysisState(
   enabled: boolean,
 ) {
   const clientRef = useRef<{ stop: () => void } | null>(null)
-  const holdRef = useRef<{ until: number; items: RoadAnalysisDetection[] }>({ until: 0, items: [] })
+  const tracksRef = useRef<Map<string, StableTrack>>(new Map())
   const [status, setStatus] = useState<MobileAiConnectionStatus>('idle')
   const [statusMsg, setStatusMsg] = useState<string>()
   const [detections, setDetections] = useState<RoadAnalysisDetection[]>([])
@@ -238,6 +376,7 @@ function useRoadAnalysisState(
 
   useEffect(() => {
     stopClient()
+    tracksRef.current = new Map()
     if (!enabled) {
       setStatus('idle')
       setDetections([])
@@ -256,18 +395,20 @@ function useRoadAnalysisState(
       cameraId,
       backendUrl,
       onResult: result => {
-        const filtered = result.detections
-          .filter(d => d.confidence >= 0.55)
-          .slice(0, 3)
+        const filtered = result.detections.filter(passesConfidenceThreshold)
         const now = Date.now()
-        if (filtered.length > 0) {
-          holdRef.current = { until: now + 1200, items: filtered }
-          setDetections(filtered)
-        } else if (now < holdRef.current.until) {
-          setDetections(holdRef.current.items)
-        } else {
-          setDetections([])
-        }
+        const stable = updateStableTracks(tracksRef.current, filtered, now)
+        tracksRef.current = new Map(stable.map(t => [t.id, t]))
+        setDetections(
+          stable.map(t => ({
+            behavior: t.behavior,
+            label: t.label,
+            scenario_id: t.scenario_id,
+            confidence: t.confidence,
+            bbox: t.bbox,
+            area_percent: t.area_percent,
+          })),
+        )
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
       },
@@ -316,9 +457,9 @@ export function RoadAnalysisOverlay({
         )}
       </div>
 
-      {frameSize.width > 0 && detections.map((d, i) => (
+      {frameSize.width > 0 && detections.map(d => (
         <DetectionBox
-          key={`${d.behavior}-${i}-${Math.round(d.bbox[0])}-${layoutTick}`}
+          key={d.behavior + '-' + Math.round(d.bbox[0]) + '-' + Math.round(d.bbox[1]) + '-' + Math.round(d.bbox[2])}
           detection={d}
           frameWidth={frameSize.width}
           frameHeight={frameSize.height}

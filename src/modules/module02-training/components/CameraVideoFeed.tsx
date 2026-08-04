@@ -1,8 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/utils/cn'
 import { CameraAiOverlay } from './CameraAiOverlay'
+import { CraneProximityOverlay } from '@/modules/module03-safety/components/CraneProximityOverlay'
+import { isCraneProximityCamera } from '@/modules/module03-safety/data/craneProximityCameras'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
-import { isRoadAnalysisCamera } from '@/modules/module04-housekeeping/data/roadAnalysisCameras'
+import {
+  isAiOverlayDisabledCamera,
+  isRoadAnalysisOverlayCamera,
+} from '@/modules/module04-housekeeping/data/roadAnalysisCameras'
 import { getFeedKeyForCamera, getVideoObjectFitForCamera } from '../data/trainingCameraFeeds'
 
 interface CameraVideoFeedProps {
@@ -26,10 +31,13 @@ export function CameraVideoFeed({
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const feedKey = getFeedKeyForCamera(cameraId)
-  const roadAnalysis = isRoadAnalysisCamera(cameraId)
+  const overlayDisabled = isAiOverlayDisabledCamera(cameraId)
+  const roadAnalysis = isRoadAnalysisOverlayCamera(cameraId)
+  const craneProximity = isCraneProximityCamera(cameraId)
   const videoFit = getVideoObjectFitForCamera(cameraId, streamType)
-  const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis)
-  const showRoadOverlay = Boolean(aiOverlay && roadAnalysis)
+  const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis && !craneProximity && !overlayDisabled)
+  const showRoadOverlay = Boolean(aiOverlay && roadAnalysis && !overlayDisabled)
+  const showCraneOverlay = Boolean(aiOverlay && craneProximity && !overlayDisabled)
 
   useEffect(() => {
     const video = videoRef.current
@@ -93,6 +101,15 @@ export function CameraVideoFeed({
       )}
       {showRoadOverlay && (
         <RoadAnalysisOverlay
+          cameraId={cameraId}
+          compact={compact}
+          videoRef={videoRef}
+          videoFit={videoFit}
+          enabled={playing && aiOverlay}
+        />
+      )}
+      {showCraneOverlay && (
+        <CraneProximityOverlay
           cameraId={cameraId}
           compact={compact}
           videoRef={videoRef}

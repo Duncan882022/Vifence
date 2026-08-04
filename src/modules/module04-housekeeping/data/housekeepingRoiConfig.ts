@@ -64,19 +64,21 @@ export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
   },
   {
     id: 'roi-road-a04',
-    label: 'Lòng đường — Sân Tập A',
+    label: 'Lòng đường — TTDV-A Cam 04',
     type: 'ROAD',
     cameraId: 'A-04',
+    /** Lòng đường đất/bùn phía trước — ttdv-a-cam04-test.mp4 (785×1024) */
     polygon: [
-      { x: 0.12, y: 0.42 },
-      { x: 0.88, y: 0.38 },
-      { x: 0.92, y: 0.72 },
-      { x: 0.08, y: 0.78 },
+      { x: 0.02, y: 1.0000 },
+      { x: 0.98, y: 1.0000 },
+      { x: 0.88, y: 0.52 },
+      { x: 0.12, y: 0.48 },
+      { x: 0.02, y: 0.72 },
     ],
   },
   {
     id: 'roi-buffer-a04',
-    label: 'Lề đường — Sân Tập A',
+    label: 'Lề đường — TTDV-A Cam 04',
     type: 'BUFFER',
     cameraId: 'A-04',
     polygon: [

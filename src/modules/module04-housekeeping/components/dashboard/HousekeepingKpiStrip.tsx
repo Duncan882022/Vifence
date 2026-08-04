@@ -146,7 +146,7 @@ export function HousekeepingKpiStrip({ kpis, embedded }: HousekeepingKpiStripPro
           embedded={embedded}
         />
         <KpiCard
-          title="Vật liệu rơi vãi"
+          title="Vật tư chiếm dụng"
           value={housekeeping.scatteredMaterialLocations}
           unit="vị trí"
           icon={MapPin}

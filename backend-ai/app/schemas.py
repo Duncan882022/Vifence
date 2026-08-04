@@ -22,6 +22,17 @@ class RoadDetection(BaseModel):
     confidence: float
     bbox: list[float]
     area_percent: Optional[float] = None
+    object_kind: Optional[str] = None  # steel | cement_bag | brick | rust_metal | generic
+
+
+class CraneProximityDetection(BaseModel):
+    behavior: str  # person | crane | crane_proximity
+    label: str
+    scenario_id: str
+    confidence: float
+    bbox: list[float]
+    distance_m: Optional[float] = None
+    machine_kind: Optional[str] = None  # crane_green | excavator_orange | machinery
 
 
 class MobileAiConfigPayload(BaseModel):
@@ -67,13 +78,13 @@ ROAD_SCENARIO_META = {
     },
     "water": {
         "scenario_id": "BPTC-008",
-        "scenario_name": "Nước đọng trên đường",
+        "scenario_name": "Đường nội bộ đọng nước",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
     "object": {
         "scenario_id": "BPTC-009",
-        "scenario_name": "Vật liệu rơi vãi trên đường",
+        "scenario_name": "Vật tư chiếm dụng lòng đường",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
@@ -94,6 +105,27 @@ ROAD_SCENARIO_META = {
         "scenario_name": "Lưới bao che bẩn",
         "violation_type": "method-statement",
         "group": "BPTC",
+    },
+}
+
+CRANE_SCENARIO_META = {
+    "crane_proximity": {
+        "scenario_id": "DZ-003",
+        "scenario_name": "Làm việc gần máy cẩu",
+        "violation_type": "danger-zone",
+        "group": "DZ",
+    },
+    "person": {
+        "scenario_id": "DZ-003",
+        "scenario_name": "Làm việc gần máy cẩu",
+        "violation_type": "danger-zone",
+        "group": "DZ",
+    },
+    "crane": {
+        "scenario_id": "DZ-003",
+        "scenario_name": "Làm việc gần máy cẩu",
+        "violation_type": "danger-zone",
+        "group": "DZ",
     },
 }
 
@@ -153,6 +185,39 @@ class ViolationEvent(BaseModel):
                 "violation_type": "method-statement",
                 "group": "BPTC",
             }
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
+            snapshot_file=snapshot_file,
+        )
+
+    @classmethod
+    def from_crane_detection(
+        cls,
+        detection: CraneProximityDetection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "A-04",
+    ) -> "ViolationEvent":
+        meta = CRANE_SCENARIO_META.get(
+            detection.behavior,
+            {
+                "scenario_id": detection.scenario_id,
+                "scenario_name": detection.label,
+                "violation_type": "danger-zone",
+                "group": "DZ",
+            },
+        )
         created = time.time()
         day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
         return cls(

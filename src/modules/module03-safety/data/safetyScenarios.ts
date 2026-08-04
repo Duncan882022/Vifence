@@ -80,6 +80,15 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
     devices: [{ type: 'DRONE_RTK', role: 'PRIMARY' }, { type: 'MOBILE', role: 'VERIFICATION' }],
   },
   {
+    id: 'DZ-003',
+    groupId: 'DZ',
+    description: 'Công nhân đứng hoặc làm việc trong phạm vi ≤ 1 m quanh thân máy cẩu',
+    monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
+    automationLevel: 'AUTOMATIC',
+    defaultSeverity: 'CRITICAL',
+    devices: [{ type: 'FIXED_CAMERA', role: 'PRIMARY' }, { type: 'PTZ_CAMERA', role: 'SUPPORT' }],
+  },
+  {
     id: 'ATGT-001',
     groupId: 'ATGT',
     description: 'Phương tiện vào vùng yêu cầu nhưng không có người điều hướng',
@@ -181,7 +190,7 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   {
     id: 'BPTC-008',
     groupId: 'BPTC',
-    description: 'Nước đọng trên lòng đường ảnh hưởng giao thông nội bộ',
+    description: 'Nước đọng trên lòng đường nội bộ ảnh hưởng giao thông',
     monitoringModes: ['CONTINUOUS', 'CHANGE_DETECTION'],
     automationLevel: 'AUTOMATIC',
     defaultSeverity: 'WARNING',
@@ -190,7 +199,7 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   {
     id: 'BPTC-009',
     groupId: 'BPTC',
-    description: 'Vật liệu xây dựng rơi vãi trong ROI lòng đường gây cản trở lưu thông',
+    description: 'Vật tư hoặc thiết bị chiếm dụng ROI lòng đường gây cản trở lưu thông',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
     defaultSeverity: 'VIOLATION',
