@@ -39,7 +39,10 @@ class RoadAnalysisEngine:
                     max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
                     one_event_per_episode=True,
                 )
-                for behavior in ("mud", "water", "object")
+                for behavior in (
+                    "mud", "water", "object",
+                    "mesh_missing", "mesh_torn", "mesh_dirty",
+                )
             }
         return self._debouncers[camera_id]
 

@@ -25,6 +25,8 @@ const BEHAVIOR_TO_HK: Record<string, string> = {
   object: 'HK-03',
 }
 
+const MESH_BEHAVIORS = new Set(['mesh_missing', 'mesh_torn', 'mesh_dirty'])
+
 const BEHAVIOR_TO_SEVERITY: Record<string, HousekeepingAlertSeverity> = {
   mud: 'WARNING',
   water: 'WARNING',
@@ -71,7 +73,7 @@ export function mapBackendEventToHousekeepingRecord(
 ): HousekeepingEventRecord | null {
   const scenarioId = BEHAVIOR_TO_HK[event.behavior]
     ?? BACKEND_TO_HK_SCENARIO[event.scenario_id ?? '']
-  if (!scenarioId) return null
+  if (!scenarioId && !MESH_BEHAVIORS.has(event.behavior)) return null
 
   const cameraId = event.camera_id ?? 'A-03'
 

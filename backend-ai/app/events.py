@@ -252,6 +252,9 @@ class EventStore:
             "mud": (0, 180, 255),
             "water": (255, 160, 0),
             "object": (0, 140, 255),
+            "mesh_missing": (0, 220, 120),
+            "mesh_torn": (0, 180, 80),
+            "mesh_dirty": (40, 180, 40),
         }
         color = colors.get(detection.behavior, (0, 255, 0))
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)

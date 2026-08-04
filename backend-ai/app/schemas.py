@@ -77,6 +77,24 @@ ROAD_SCENARIO_META = {
         "violation_type": "method-statement",
         "group": "BPTC",
     },
+    "mesh_missing": {
+        "scenario_id": "BPTC-001",
+        "scenario_name": "Lưới bao che thiếu/hở",
+        "violation_type": "method-statement",
+        "group": "BPTC",
+    },
+    "mesh_torn": {
+        "scenario_id": "BPTC-001",
+        "scenario_name": "Lưới bao che bị rách",
+        "violation_type": "method-statement",
+        "group": "BPTC",
+    },
+    "mesh_dirty": {
+        "scenario_id": "BPTC-001",
+        "scenario_name": "Lưới bao che bẩn",
+        "violation_type": "method-statement",
+        "group": "BPTC",
+    },
 }
 
 
@@ -127,7 +145,14 @@ class ViolationEvent(BaseModel):
         event_date: Optional[str] = None,
         camera_id: str = "A-03",
     ) -> "ViolationEvent":
-        meta = ROAD_SCENARIO_META[detection.behavior]
+        meta = ROAD_SCENARIO_META.get(detection.behavior)
+        if meta is None:
+            meta = {
+                "scenario_id": detection.scenario_id,
+                "scenario_name": detection.label,
+                "violation_type": "method-statement",
+                "group": "BPTC",
+            }
         created = time.time()
         day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
         return cls(

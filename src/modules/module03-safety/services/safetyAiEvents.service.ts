@@ -18,6 +18,9 @@ const BEHAVIOR_TO_SCENARIO: Record<string, string> = {
   mud: 'BPTC-007',
   water: 'BPTC-008',
   object: 'BPTC-009',
+  mesh_missing: 'BPTC-001',
+  mesh_torn: 'BPTC-001',
+  mesh_dirty: 'BPTC-001',
 }
 
 const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
@@ -26,6 +29,9 @@ const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
   mud: 'BPTC',
   water: 'BPTC',
   object: 'BPTC',
+  mesh_missing: 'BPTC',
+  mesh_torn: 'BPTC',
+  mesh_dirty: 'BPTC',
 }
 
 const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
@@ -34,9 +40,14 @@ const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
   mud: 'WARNING',
   water: 'WARNING',
   object: 'VIOLATION',
+  mesh_missing: 'VIOLATION',
+  mesh_torn: 'VIOLATION',
+  mesh_dirty: 'WARNING',
 }
 
-const ROAD_BEHAVIORS = new Set(['mud', 'water', 'object'])
+const CAM03_BEHAVIORS = new Set([
+  'mud', 'water', 'object', 'mesh_missing', 'mesh_torn', 'mesh_dirty',
+])
 
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/$/, '')
@@ -76,23 +87,23 @@ export function mapBackendEventToSafetyRecord(
   const cameraId = event.camera_id ?? 'MOB-01'
   const scenarioId = BEHAVIOR_TO_SCENARIO[event.behavior] ?? event.scenario_id ?? 'PCCC-001'
   const groupId = BEHAVIOR_TO_GROUP[event.behavior] ?? (event.group as SafetyGroupId | undefined) ?? 'PCCC'
-  const isRoad = ROAD_BEHAVIORS.has(event.behavior)
+  const isCam03Ai = CAM03_BEHAVIORS.has(event.behavior)
 
   return {
     id: `ai-${event.id}`,
     scenarioId,
     groupId,
-    zoneId: isRoad ? 'ZONE-A01' : 'ZONE-A01',
+    zoneId: isCam03Ai ? 'ZONE-A01' : 'ZONE-A01',
     sourceDeviceId: cameraId,
-    sourceType: isRoad ? 'FIXED_CAMERA' : 'MOBILE',
+    sourceType: isCam03Ai ? 'FIXED_CAMERA' : 'MOBILE',
     detectedAt: toIsoLocalTimestamp(event.created_at),
     severity: BEHAVIOR_TO_SEVERITY[event.behavior] ?? 'VIOLATION',
     status: 'DETECTED',
     confidence: event.confidence,
-    eventSubjectType: isRoad
+    eventSubjectType: isCam03Ai
       ? (event.behavior === 'object' ? 'CONSTRUCTION_ACTIVITY' : 'SITE_CONDITION')
       : 'PERSON',
-    subject: isRoad
+    subject: isCam03Ai
       ? { type: 'SITE_CONDITION' }
       : {
           type: 'PERSON',

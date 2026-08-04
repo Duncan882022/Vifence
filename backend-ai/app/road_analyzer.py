@@ -9,6 +9,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from .mesh_analyzer import analyze_mesh_zones
 from .road_roi_config import RoiZone, get_roi_zones_for_camera
 from .schemas import RoadDetection
 
@@ -101,16 +102,17 @@ def _contour_boxes(
     return [box for _, box in ranked[:limit]]
 
 
-def _analyze_mud(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int, frame_width: int) -> tuple[float, list[tuple[int, int, int, int]]]:
-    # Nâu đất ẩm — hẹp để tránh nhầm bê tông xám ướt
+def _analyze_mud(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int, frame_width: int, frame_height: int) -> tuple[float, list[tuple[int, int, int, int]]]:
+    surface = _road_surface_mask(roi_mask, frame_width, frame_height)
     mud_mask = cv2.inRange(hsv, np.array([8, 70, 35]), np.array([22, 200, 130]))
+    mud_mask = cv2.bitwise_and(mud_mask, surface)
     mud_mask = cv2.medianBlur(mud_mask, 5)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_OPEN, kernel, iterations=1)
     mud_mask = cv2.morphologyEx(mud_mask, cv2.MORPH_CLOSE, kernel, iterations=3)
-    pct = _patch_percent(mud_mask, roi_mask)
+    pct = _patch_percent(mud_mask, surface)
     boxes = _contour_boxes(
-        mud_mask, roi_mask, 0.002, 0.10, frame_area, frame_width,
+        mud_mask, surface, 0.002, 0.10, frame_area, frame_width,
         limit=1, min_compactness=0.10,
     )
     return pct, boxes
@@ -130,10 +132,21 @@ def _analyze_water(hsv: np.ndarray, roi_mask: np.ndarray, frame_area: int, frame
     return pct, boxes
 
 
-def _foreground_mask(height: int, width: int, *, top_ratio: float = 0.28) -> np.ndarray:
-    fg = np.zeros((height, width), dtype=np.uint8)
-    fg[int(height * top_ratio):, :] = 255
-    return fg
+def _road_surface_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Mặt đường thực — loại lề trái đất đá và phần xa."""
+    band = roi_mask.copy()
+    band[:, : int(width * 0.18)] = 0
+    band[: int(height * 0.52), :] = 0
+    return band
+
+
+def _object_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Vùng tìm vật liệu trên lòng đường — giữa khung, loại túi/vật bên lề."""
+    band = roi_mask.copy()
+    band[:, : int(width * 0.24)] = 0
+    band[:, int(width * 0.78) :] = 0
+    band[: int(height * 0.40), :] = 0
+    return band
 
 
 def _analyze_objects(
@@ -147,44 +160,55 @@ def _analyze_objects(
 ) -> list[tuple[int, int, int, int]]:
     h, w = frame.shape[:2]
     exclude = cv2.bitwise_or(mud_mask, water_mask)
-    fg = _foreground_mask(h, w, top_ratio=0.30)
+    search = _object_search_mask(roi_mask, w, h)
 
-    # Thép / coppha gỉ — cụm màu nâu cam nổi bật trên nền bê tông
+    # Loại túi vật liệu màu be/kem
+    tan = cv2.inRange(hsv, np.array([15, 25, 120]), np.array([35, 180, 255]))
+
     rust_mask = cv2.inRange(hsv, np.array([5, 60, 40]), np.array([25, 255, 210]))
-    rust_mask = cv2.bitwise_and(rust_mask, roi_mask)
-    rust_mask = cv2.bitwise_and(rust_mask, fg)
+    rust_mask = cv2.bitwise_and(rust_mask, search)
     rust_mask = cv2.bitwise_and(rust_mask, cv2.bitwise_not(exclude))
+    rust_mask = cv2.bitwise_and(rust_mask, cv2.bitwise_not(tan))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     rust_mask = cv2.morphologyEx(rust_mask, cv2.MORPH_OPEN, kernel, iterations=1)
     rust_mask = cv2.morphologyEx(rust_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     boxes = _contour_boxes(
-        rust_mask, roi_mask,
-        MIN_OBJECT_AREA_RATIO, MAX_OBJECT_AREA_RATIO,
+        rust_mask, search,
+        MIN_OBJECT_AREA_RATIO, 0.10,
         frame_area, w,
-        limit=1,
-        max_width_ratio=MAX_OBJECT_WIDTH_RATIO,
-        min_compactness=0.08,
+        limit=3,
+        max_width_ratio=0.56,
+        min_compactness=0.05,
     )
     if boxes:
-        return boxes
+        # Ưu tiên cụm ngang (dầm thép) gần giữa đường
+        cx_target = w * 0.48
 
-    # Fallback: cụm cạnh dày (vật thể có biên rõ), loại nền đường rộng
+        def score(box: tuple[int, int, int, int]) -> float:
+            x1, y1, x2, y2 = box
+            bw, bh = x2 - x1, y2 - y1
+            area = bw * bh
+            ar = bw / max(bh, 1)
+            center_x = (x1 + x2) / 2
+            return area * (1 + min(ar, 4) * 0.15) - abs(center_x - cx_target) * 2
+
+        return [max(boxes, key=score)]
+
     edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 50, 140)
     edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
-    edge_mask = cv2.bitwise_and(edges, roi_mask)
-    edge_mask = cv2.bitwise_and(edge_mask, fg)
+    edge_mask = cv2.bitwise_and(edges, search)
     edge_mask = cv2.bitwise_and(edge_mask, cv2.bitwise_not(exclude))
     edge_mask = cv2.morphologyEx(
-        edge_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)), cv2.MORPH_CLOSE, iterations=2,
+        edge_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)), iterations=2,
     )
     return _contour_boxes(
-        edge_mask, roi_mask,
-        MIN_OBJECT_AREA_RATIO, MAX_OBJECT_AREA_RATIO,
+        edge_mask, search,
+        MIN_OBJECT_AREA_RATIO, 0.10,
         frame_area, w,
         limit=1,
-        max_width_ratio=MAX_OBJECT_WIDTH_RATIO,
-        min_compactness=0.06,
+        max_width_ratio=0.56,
+        min_compactness=0.05,
     )
 
 
@@ -225,7 +249,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
 
     for zone in road_zones:
         roi_mask = _polygon_to_mask(zone["polygon"], w, h)
-        mud_pct, mud_boxes = _analyze_mud(hsv, roi_mask, frame_area, w)
+        mud_pct, mud_boxes = _analyze_mud(hsv, roi_mask, frame_area, w, h)
         water_pct, water_boxes = _analyze_water(hsv, roi_mask, frame_area, w)
 
         mud_mask = cv2.inRange(hsv, np.array([8, 70, 35]), np.array([22, 200, 130]))
@@ -277,6 +301,9 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
                     bbox=[float(v) for v in box],
                 )
             )
+
+    mesh_zones = [z for z in zones if z["type"] == "MESH"]
+    all_detections.extend(analyze_mesh_zones(frame, mesh_zones))
 
     fe_zones = [
         {

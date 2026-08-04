@@ -37,10 +37,29 @@ const BEHAVIOR_STYLE: Record<
     label: 'text-orange-200',
     bg: 'bg-orange-500/35',
   },
+  mesh_missing: {
+    border: 'border-lime-400/90',
+    fill: 'bg-lime-400/12',
+    label: 'text-lime-200',
+    bg: 'bg-lime-500/35',
+  },
+  mesh_torn: {
+    border: 'border-green-400/90',
+    fill: 'bg-green-400/12',
+    label: 'text-green-200',
+    bg: 'bg-green-600/35',
+  },
+  mesh_dirty: {
+    border: 'border-emerald-400/90',
+    fill: 'bg-emerald-400/12',
+    label: 'text-emerald-200',
+    bg: 'bg-emerald-600/35',
+  },
 }
 
 const ROI_STROKE: Record<string, { stroke: string; fill: string }> = {
   ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.18)' },
+  MESH: { stroke: 'rgba(132, 204, 22, 0.85)', fill: 'rgba(34, 197, 94, 0.10)' },
   BUFFER: { stroke: 'rgba(134, 239, 172, 0.55)', fill: 'none' },
   STORAGE: { stroke: 'rgba(167, 139, 250, 0.5)', fill: 'none' },
 }

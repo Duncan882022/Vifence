@@ -2,7 +2,7 @@
 
 export type HousekeepingAiGroupId = 'LOG' | 'HK'
 
-export type HousekeepingRoiType = 'ROAD' | 'BUFFER' | 'STORAGE'
+export type HousekeepingRoiType = 'ROAD' | 'BUFFER' | 'STORAGE' | 'MESH'
 
 export type HousekeepingAlertSeverity = 'WARNING' | 'VIOLATION' | 'CRITICAL'
 

@@ -8,7 +8,13 @@ const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
 
-export type RoadAnalysisBehavior = 'mud' | 'water' | 'object'
+export type RoadAnalysisBehavior =
+  | 'mud'
+  | 'water'
+  | 'object'
+  | 'mesh_missing'
+  | 'mesh_torn'
+  | 'mesh_dirty'
 
 export interface RoadAnalysisDetection {
   behavior: RoadAnalysisBehavior
@@ -22,7 +28,7 @@ export interface RoadAnalysisDetection {
 export interface RoadAnalysisRoiZone {
   id: string
   label: string
-  type: 'ROAD' | 'BUFFER' | 'STORAGE'
+  type: 'ROAD' | 'BUFFER' | 'STORAGE' | 'MESH'
   polygon: Array<{ x: number; y: number }>
 }
 
