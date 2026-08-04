@@ -83,8 +83,14 @@ export function getScenarioIcon(scenarioId: string): LucideIcon | undefined {
   return SCENARIO_ICONS[scenarioId]
 }
 
-function isToday(iso: string, date = HOUSEKEEPING_DEMO_TODAY): boolean {
-  return iso.startsWith(date)
+function isLiveAiHousekeepingRecord(record: HousekeepingEventRecord): boolean {
+  return record.id.startsWith('ai-hk-')
+}
+
+/** Mock demo dùng HOUSEKEEPING_DEMO_TODAY; sự kiện AI live luôn hiển thị (ngày thật từ backend). */
+function isToday(record: HousekeepingEventRecord, date = HOUSEKEEPING_DEMO_TODAY): boolean {
+  if (isLiveAiHousekeepingRecord(record)) return true
+  return record.detectedAt.startsWith(date)
 }
 
 export function filterHousekeepingEvents(
@@ -93,7 +99,7 @@ export function filterHousekeepingEvents(
 ): HousekeepingEventRecord[] {
   const q = filters.searchQuery?.trim().toLowerCase() ?? ''
   return records.filter(r => {
-    if (filters.dateRange === 'today' && !isToday(r.detectedAt)) return false
+    if (filters.dateRange === 'today' && !isToday(r)) return false
     if (filters.groupId && r.groupId !== filters.groupId) return false
     if (filters.scenarioId && r.scenarioId !== filters.scenarioId) return false
     if (filters.status && r.status !== filters.status) return false
@@ -116,7 +122,7 @@ export function isUnhandledEvent(r: HousekeepingEventRecord): boolean {
 export function computeHousekeepingDashboardKpis(
   records: HousekeepingEventRecord[],
 ): HousekeepingDashboardKpis {
-  const today = records.filter(r => isToday(r.detectedAt))
+  const today = records.filter(r => isToday(r))
   const logEvents = today.filter(r => r.groupId === 'LOG' && r.roiType === 'ROAD')
   const hkEvents = today.filter(r => r.groupId === 'HK')
 
@@ -164,7 +170,7 @@ export function computeHousekeepingDashboardKpis(
 export function computeHousekeepingGroupStats(
   records: HousekeepingEventRecord[],
 ): HousekeepingGroupStats[] {
-  const today = records.filter(r => isToday(r.detectedAt))
+  const today = records.filter(r => isToday(r))
 
   return (['LOG', 'HK'] as const).map(groupId => {
     const groupRecords = today.filter(r => r.groupId === groupId)
@@ -192,7 +198,7 @@ export function computeHousekeepingGroupStats(
 export function getPriorityHousekeepingEvents(
   records: HousekeepingEventRecord[],
 ): HousekeepingEventRecord[] {
-  return records.filter(r => isToday(r.detectedAt) && isUnhandledEvent(r))
+  return records.filter(r => isToday(r) && isUnhandledEvent(r))
 }
 
 export { HOUSEKEEPING_AI_CONFIG, HOUSEKEEPING_SCENARIO_MAP }

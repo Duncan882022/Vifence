@@ -193,7 +193,9 @@ function useRoadAnalysisState(
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const [metrics, setMetrics] = useState<RoadAnalysisResult['metrics']>()
   const roiZones = useMemo<RoadAnalysisRoiZone[]>(() =>
-    getRoiZonesForCamera(cameraId).map(z => ({
+    getRoiZonesForCamera(cameraId)
+      .filter(z => z.type !== 'MESH')
+      .map(z => ({
       id: z.id,
       label: z.label,
       type: z.type,
