@@ -173,7 +173,7 @@ function RoiPolygons({
   const video = videoRef.current
   if (!video?.videoWidth || !video.videoHeight) return null
 
-  const visible = zones.filter(z => z.type === 'ROAD')
+  const visible = zones.filter(z => z.type === 'ROAD' || z.type === 'MESH')
 
   return (
     <svg
@@ -211,7 +211,7 @@ function useRoadAnalysisState(
   const [metrics, setMetrics] = useState<RoadAnalysisResult['metrics']>()
   const roiZones = useMemo<RoadAnalysisRoiZone[]>(() =>
     getRoiZonesForCamera(cameraId)
-      .filter(z => z.type !== 'MESH')
+      .filter(z => z.type === 'ROAD' || z.type === 'MESH' || z.type === 'BUFFER')
       .map(z => ({
       id: z.id,
       label: z.label,
