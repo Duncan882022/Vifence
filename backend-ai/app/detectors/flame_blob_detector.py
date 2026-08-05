@@ -32,7 +32,7 @@ _MIN_BLUE_FILL_RATIO = 0.18
 _MIN_HOT_IN_BLUE_RATIO = 0.14
 _MAX_GLARE_TOP_RATIO = 0.22
 _MAX_GLARE_AREA_RATIO = 0.005
-_MAX_SKIN_IN_BLUE_RATIO = 0.32
+_MAX_SKIN_IN_BLUE_RATIO = 0.24
 # Chỉ chặn flare trán — không chặn vùng miệng/tay (bật lửa khi hút thuốc).
 _FACE_FOREHEAD_RATIO = 0.28
 _STRONG_BLUE_HOT_PIXELS = 16
@@ -55,8 +55,9 @@ _HOT_LOCATE_LOWER = np.array([0, 0, 250], dtype=np.uint8)
 _HOT_LOCATE_UPPER = np.array([179, 130, 255], dtype=np.uint8)
 _MIN_ORANGE_AREA_RATIO = 0.0015  # lọc bớt đốm sáng nhỏ/phản chiếu vặt (đã verify < ngưỡng này toàn nhiễu)
 _MAX_ORANGE_AREA_RATIO = 0.03
-_MIN_FLICKER_RATIO = 0.17  # tăng từ 0.12 — nhiễu cảm biến/đèn nhấp nháy dễ vượt ngưỡng cũ trên vật tĩnh
-_MIN_WARM_HALO_RATIO = 0.15  # quanh lõi phải có màu ấm (cam/vàng) bao quanh, không phải đèn trắng trung tính
+_MIN_FLICKER_RATIO = 0.22  # tăng — giảm FP đèn/vật sáng tĩnh nhấp nháy nhẹ
+_MIN_WARM_HALO_RATIO = 0.22  # quanh lõi phải có màu ấm rõ, không phải đèn trắng
+_MIN_ORANGE_SATURATION_RATIO = 0.42  # đèn trắng/vàng nhạt (S thấp) -> loại
 _ORANGE_EXPAND_MARGIN = 0.25
 
 
@@ -108,6 +109,10 @@ class FlameBlobDetector:
     def _skin_ratio(hsv_roi: np.ndarray) -> float:
         mask = cv2.inRange(hsv_roi, _SKIN_HSV_LOWER, _SKIN_HSV_UPPER)
         return float(cv2.countNonZero(mask)) / max(mask.size, 1)
+
+    @staticmethod
+    def _saturation_ratio(hsv_roi: np.ndarray) -> float:
+        return float((hsv_roi[:, :, 1] >= 55).mean())
 
     @staticmethod
     def _center_in_zones(bbox: list[float], zones: list[tuple[float, float, float, float]]) -> bool:
@@ -172,7 +177,7 @@ class FlameBlobDetector:
                     continue
 
             confidence = min(0.38 + hot_pixels / 45 * 0.52, 0.92)
-            min_conf = self.conf_threshold if strong else max(self.conf_threshold, 0.52)
+            min_conf = self.conf_threshold if strong else max(self.conf_threshold, 0.58)
             if confidence < min_conf:
                 continue
             detections.append(
@@ -228,6 +233,8 @@ class FlameBlobDetector:
             warm_ratio = float(warm_mask.sum()) / warm_mask.size
             if warm_ratio < _MIN_WARM_HALO_RATIO:
                 continue  # không có quầng màu ấm bao quanh -> nhiều khả năng là đèn trắng/phản chiếu
+            if self._saturation_ratio(roi_hsv) < _MIN_ORANGE_SATURATION_RATIO:
+                continue  # ánh đèn trắng/vàng nhạt — không đủ bão hoà màu lửa
 
             confidence = min(0.4 + flicker_ratio * 1.0, 0.92)
             if confidence < self.conf_threshold:

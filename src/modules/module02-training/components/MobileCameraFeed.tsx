@@ -80,7 +80,8 @@ export function MobileCameraFeed({
       backendUrl: url,
       onResult: (result: MobileAiAnalyzeResult) => {
         const minConf = (d: MobileAiDetection) => {
-          if (d.behavior === 'fire' && d.label.startsWith('flame')) return d.confidence >= 0.52
+          if (d.behavior === 'fire' && d.label.startsWith('flame')) return d.confidence >= 0.58
+          if (d.behavior === 'fire') return d.confidence >= 0.62
           if (d.behavior === 'smoking') return d.confidence >= 0.42
           return d.confidence >= 0.5
         }

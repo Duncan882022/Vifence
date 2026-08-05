@@ -18,10 +18,10 @@ class Settings(BaseSettings):
 
     fire_model_repo: str = "SalahALHaismawi/yolov26-fire-detection"
     fire_model_file: str = "best.pt"
-    fire_conf_threshold: float = 0.5
+    _fire_conf_threshold: float = 0.62
     # Detector heuristic (màu sắc + độ sáng) bổ sung, bắt lửa nhỏ/cận cảnh mà
     # YOLO model bỏ sót (vd bật lửa, diêm, lửa xanh dương của bật lửa khò).
-    flame_heuristic_conf_threshold: float = 0.35
+    flame_heuristic_conf_threshold: float = 0.48
 
     smoking_model_repo: str = "Enos-123/smoking-detection"
     smoking_model_file: str = "best.pt"
@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     # Tạm tắt thu thập + train tự động khi chưa đủ video đa dạng (bật lại
     # bằng AUTO_TRAIN_ENABLED=true trong .env khi đã có thêm dữ liệu).
     auto_train_enabled: bool = False
+
+    # Tắt vòng lặp detect nền (webcam) khi chỉ dùng FE gửi frame qua ngrok —
+    # giảm RAM, tránh backend bị kill khi chạy đồng thời road + crane.
+    detection_loop_enabled: bool = True
+
+    # Tắt inference YOLO auto-train (road/crane) — chỉ rule/demo; tiết kiệm RAM.
+    auto_train_inference_enabled: bool = True
 
     @property
     def camera_source_value(self) -> Union[int, str]:

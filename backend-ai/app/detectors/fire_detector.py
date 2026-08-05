@@ -11,7 +11,7 @@ from .base import BaseDetector
 # ánh đèn vàng/ấm rất giống màu lửa (cam/đỏ, độ bão hoà trung bình).
 _SKIN_HSV_LOWER = np.array([0, 30, 60], dtype=np.uint8)
 _SKIN_HSV_UPPER = np.array([25, 170, 255], dtype=np.uint8)
-_MAX_SKIN_RATIO = 0.45  # bbox có > 45% diện tích là da -> coi là false-positive
+_MAX_SKIN_RATIO = 0.32  # bbox có > 32% diện tích là da -> coi là false-positive
 
 # Đèn trần/ánh sáng hắt qua cửa (bóng đèn trắng/vàng nhạt) là nguồn false-
 # positive khác của nhãn "fire": rất sáng (V cao) nhưng gần như KHÔNG màu
@@ -20,8 +20,8 @@ _MAX_SKIN_RATIO = 0.45  # bbox có > 45% diện tích là da -> coi là false-po
 # 1 sự kiện báo nhầm đèn hành lang có chỉ 10.9% pixel bbox đạt S>=50, trong
 # khi lửa bật lửa thật cùng điều kiện đạt 87%. CHỈ áp dụng cho nhãn "fire" —
 # không áp dụng cho "smoke" vì khói thật vốn dĩ xám/trắng, ít bão hoà màu.
-_MIN_FIRE_SATURATION_RATIO = 0.35
-_SATURATION_THRESHOLD = 50
+_MIN_FIRE_SATURATION_RATIO = 0.48
+_SATURATION_THRESHOLD = 58
 
 
 class FireDetector(BaseDetector):
