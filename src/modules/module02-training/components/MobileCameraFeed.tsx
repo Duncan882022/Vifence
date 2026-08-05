@@ -51,6 +51,7 @@ export function MobileCameraFeed({
   const [aiStatus, setAiStatus] = useState<MobileAiConnectionStatus>('idle')
   const [detections, setDetections] = useState<MobileAiDetection[]>([])
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
+  const [layoutTick, setLayoutTick] = useState(0)
   const facingRef = useRef<CameraFacing>('environment')
   const deviceIndexRef = useRef(0)
 
@@ -186,6 +187,22 @@ export function MobileCameraFeed({
     return stopAiClient
   }, [status, aiEnabled, backendUrl, startAiClient, stopAiClient])
 
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || status !== 'live') return
+    const bump = () => setLayoutTick(t => t + 1)
+    const observer = new ResizeObserver(bump)
+    observer.observe(video)
+    video.addEventListener('loadedmetadata', bump)
+    video.addEventListener('resize', bump)
+    bump()
+    return () => {
+      observer.disconnect()
+      video.removeEventListener('loadedmetadata', bump)
+      video.removeEventListener('resize', bump)
+    }
+  }, [status])
+
   const toolbarBtn = cn(
     'rounded bg-black/55 border border-white/20 text-white/85 hover:bg-black/75 transition-colors shrink-0',
     compact ? 'p-0.5' : 'p-1',
@@ -227,6 +244,7 @@ export function MobileCameraFeed({
             frameWidth={frameSize.width}
             frameHeight={frameSize.height}
             videoRef={videoRef}
+            layoutTick={layoutTick}
             compact={compact}
           />
           <MobileAiAlertBadge detections={detections} compact={compact} />

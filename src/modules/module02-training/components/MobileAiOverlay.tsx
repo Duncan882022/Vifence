@@ -8,6 +8,7 @@ interface MobileAiOverlayProps {
   frameWidth: number
   frameHeight: number
   videoRef: RefObject<HTMLVideoElement | null>
+  layoutTick?: number
   compact?: boolean
 }
 
@@ -81,6 +82,7 @@ export function MobileAiOverlay({
   frameWidth,
   frameHeight,
   videoRef,
+  layoutTick = 0,
   compact,
 }: MobileAiOverlayProps) {
   if (detections.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
@@ -89,7 +91,7 @@ export function MobileAiOverlay({
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[3]">
       {detections.map((det, i) => (
         <DetectionBox
-          key={`${det.behavior}-${det.label}-${i}-${det.bbox.join('-')}`}
+          key={`${det.behavior}-${det.label}-${i}-${Math.round(det.bbox[0])}-${layoutTick}`}
           det={det}
           frameWidth={frameWidth}
           frameHeight={frameHeight}

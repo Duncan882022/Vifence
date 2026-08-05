@@ -289,7 +289,7 @@ export function createMobileAiAnalyzeClient(
       return
     }
 
-    const image = captureVideoFrameBase64(video)
+    const image = captureVideoFrameBase64(video, 640, 0.72)
     if (!image) {
       scheduleNext(500)
       return
