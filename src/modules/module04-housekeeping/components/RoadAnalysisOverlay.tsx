@@ -17,14 +17,17 @@ import {
 
 function visibleDetections(detections: RoadAnalysisDetection[]): RoadAnalysisDetection[] {
   return detections.filter(
-    d => d.behavior !== 'unknown' && d.label !== 'Unknown',
+    d =>
+      d.behavior !== 'unknown'
+      && d.label !== 'Unknown'
+      && !d.behavior.startsWith('mesh_'),
   )
 }
 
-const BEHAVIOR_STYLE: Record<
+const BEHAVIOR_STYLE: Partial<Record<
   RoadAnalysisDetection['behavior'],
   { border: string; fill: string; label: string; bg: string }
-> = {
+>> = {
   mud: {
     border: 'border-amber-400/90',
     fill: 'bg-amber-400/12',
@@ -49,29 +52,10 @@ const BEHAVIOR_STYLE: Record<
     label: 'text-gray-200',
     bg: 'bg-gray-600/35',
   },
-  mesh_missing: {
-    border: 'border-lime-400/90',
-    fill: 'bg-lime-400/12',
-    label: 'text-lime-200',
-    bg: 'bg-lime-500/35',
-  },
-  mesh_torn: {
-    border: 'border-green-400/90',
-    fill: 'bg-green-400/12',
-    label: 'text-green-200',
-    bg: 'bg-green-600/35',
-  },
-  mesh_dirty: {
-    border: 'border-emerald-400/90',
-    fill: 'bg-emerald-400/12',
-    label: 'text-emerald-200',
-    bg: 'bg-emerald-600/35',
-  },
 }
 
 const ROI_STROKE: Record<string, { stroke: string; fill: string }> = {
   ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.18)' },
-  MESH: { stroke: 'rgba(132, 204, 22, 0.85)', fill: 'rgba(34, 197, 94, 0.10)' },
   BUFFER: { stroke: 'rgba(134, 239, 172, 0.55)', fill: 'none' },
   STORAGE: { stroke: 'rgba(167, 139, 250, 0.5)', fill: 'none' },
 }
@@ -112,7 +96,12 @@ function DetectionBox({
   compact?: boolean
   videoFit: 'cover' | 'contain'
 }) {
-  const style = BEHAVIOR_STYLE[detection.behavior] ?? BEHAVIOR_STYLE.unknown
+  const style = BEHAVIOR_STYLE[detection.behavior] ?? BEHAVIOR_STYLE.unknown ?? {
+    border: 'border-gray-400/80',
+    fill: 'bg-gray-400/10',
+    label: 'text-gray-200',
+    bg: 'bg-gray-600/35',
+  }
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
 
@@ -173,7 +162,7 @@ function RoiPolygons({
   const video = videoRef.current
   if (!video?.videoWidth || !video.videoHeight) return null
 
-  const visible = zones.filter(z => z.type === 'ROAD' || z.type === 'MESH')
+  const visible = zones.filter(z => z.type === 'ROAD')
 
   return (
     <svg
@@ -211,7 +200,7 @@ function useRoadAnalysisState(
   const [metrics, setMetrics] = useState<RoadAnalysisResult['metrics']>()
   const roiZones = useMemo<RoadAnalysisRoiZone[]>(() =>
     getRoiZonesForCamera(cameraId)
-      .filter(z => z.type === 'ROAD' || z.type === 'MESH' || z.type === 'BUFFER')
+      .filter(z => z.type === 'ROAD' || z.type === 'BUFFER')
       .map(z => ({
       id: z.id,
       label: z.label,

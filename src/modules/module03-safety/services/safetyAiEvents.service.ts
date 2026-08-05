@@ -24,6 +24,12 @@ const BEHAVIOR_TO_SCENARIO: Record<string, string> = {
   crane_proximity: 'DZ-003',
   person: 'DZ-003',
   crane: 'DZ-003',
+  no_helmet: 'PPE-001',
+  no_vest: 'PPE-002',
+  no_shoes: 'PPE-003',
+  hard_hat: 'PPE-001',
+  safety_vest: 'PPE-002',
+  safety_shoes: 'PPE-003',
 }
 
 const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
@@ -38,6 +44,12 @@ const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
   crane_proximity: 'DZ',
   person: 'DZ',
   crane: 'DZ',
+  no_helmet: 'PPE',
+  no_vest: 'PPE',
+  no_shoes: 'PPE',
+  hard_hat: 'PPE',
+  safety_vest: 'PPE',
+  safety_shoes: 'PPE',
 }
 
 const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
@@ -52,13 +64,22 @@ const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
   crane_proximity: 'CRITICAL',
   person: 'WARNING',
   crane: 'WARNING',
+  no_helmet: 'VIOLATION',
+  no_vest: 'WARNING',
+  no_shoes: 'WARNING',
+  hard_hat: 'WARNING',
+  safety_vest: 'WARNING',
+  safety_shoes: 'WARNING',
 }
 
 const CAM03_BEHAVIORS = new Set([
   'mud', 'water', 'object', 'mesh_missing', 'mesh_torn', 'mesh_dirty',
 ])
 
-const CAM04_BEHAVIORS = new Set(['crane_proximity', 'person', 'crane'])
+const CAM04_BEHAVIORS = new Set([
+  'crane_proximity', 'person', 'crane',
+  'no_helmet', 'no_vest', 'no_shoes', 'hard_hat', 'safety_vest', 'safety_shoes',
+])
 
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/$/, '')

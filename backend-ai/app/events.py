@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 from .crane_detection_catalog import CRANE_CATALOG_STYLES
-from .schemas import Detection, RoadDetection, CraneProximityDetection, ViolationEvent
+from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
 
 logger = logging.getLogger("events")
 
@@ -275,6 +275,85 @@ class EventStore:
             getattr(detection, "distance_m", None),
         )
         return event
+
+    def add_ppe(
+        self,
+        detection: PpeDetection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-04",
+        person_bbox: Optional[list[float]] = None,
+    ) -> ViolationEvent:
+        event_date = _event_date()
+        event = ViolationEvent.from_ppe_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        snapshot_name = f"{event_date}/{event.id}.jpg"
+        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        annotated = self._draw_ppe_snapshot(frame, detection, person_bbox)
+        cv2.imwrite(str(snapshot_path), annotated)
+        event.snapshot_file = snapshot_name
+
+        with self._lock:
+            self._events.appendleft(event)
+        self._append_to_disk(event)
+        logger.info(
+            "Sự kiện PPE [%s]: %s (%s) conf=%.2f",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+        )
+        return event
+
+    @classmethod
+    def _draw_ppe_snapshot(
+        cls,
+        frame: np.ndarray,
+        detection: PpeDetection,
+        person_bbox: Optional[list[float]] = None,
+    ) -> np.ndarray:
+        annotated = frame.copy()
+        if person_bbox and len(person_bbox) >= 4:
+            px1, py1, px2, py2 = [int(v) for v in person_bbox]
+            h, w = frame.shape[:2]
+            px1, py1 = max(0, px1), max(0, py1)
+            px2, py2 = min(w - 1, px2), min(h - 1, py2)
+            cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 200, 80), 1)
+        return cls._draw_ppe_bbox(annotated, detection, copy_frame=False)
+
+    @staticmethod
+    def _draw_ppe_bbox(
+        frame: np.ndarray,
+        detection: PpeDetection,
+        *,
+        copy_frame: bool = True,
+    ) -> np.ndarray:
+        annotated = frame.copy() if copy_frame else frame
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        colors = {
+            "no_helmet": (80, 80, 255),
+            "no_vest": (0, 140, 255),
+            "no_shoes": (0, 190, 255),
+            "hard_hat": (80, 255, 80),
+            "safety_vest": (100, 255, 100),
+            "safety_shoes": (120, 255, 120),
+            "person": (255, 200, 80),
+        }
+        color = colors.get(detection.behavior, (0, 255, 0))
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+        label = f"{detection.label} {detection.confidence * 100:.0f}%"
+        cv2.putText(
+            annotated, label, (x1, max(y1 - 8, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
+        )
+        return annotated
 
     @staticmethod
     def _draw_crane_bbox(

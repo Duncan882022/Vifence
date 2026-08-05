@@ -37,20 +37,6 @@ ROAD_ROI_ZONES: list[RoiZone] = [
         "exempt_from_occupancy": False,
     },
     {
-        "id": "roi-mesh-a03",
-        "label": "Lưới bao che xanh — TTDV-A Cam 03",
-        "type": "MESH",
-        "camera_id": "A-03",
-        "polygon": [
-            {"x": 0.0000, "y": 0.20},
-            {"x": 0.3200, "y": 0.18},
-            {"x": 0.3400, "y": 0.55},
-            {"x": 0.3000, "y": 0.88},
-            {"x": 0.0000, "y": 0.90},
-        ],
-        "exempt_from_occupancy": True,
-    },
-    {
         "id": "roi-buffer-a03",
         "label": "Lề đường — TTDV-A Cam 03",
         "type": "BUFFER",

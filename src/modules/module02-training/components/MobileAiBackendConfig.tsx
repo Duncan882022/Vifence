@@ -12,9 +12,10 @@ import {
 interface MobileAiBackendConfigProps {
   compact?: boolean
   onSaved?: () => void
+  className?: string
 }
 
-export function MobileAiBackendConfig({ compact, onSaved }: MobileAiBackendConfigProps) {
+export function MobileAiBackendConfig({ compact, onSaved, className }: MobileAiBackendConfigProps) {
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState(() => getMobileAiBackendUrl())
   const [checking, setChecking] = useState(false)
@@ -55,6 +56,7 @@ export function MobileAiBackendConfig({ compact, onSaved }: MobileAiBackendConfi
 
   return (
     <>
+      <div className={className}>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -66,6 +68,7 @@ export function MobileAiBackendConfig({ compact, onSaved }: MobileAiBackendConfi
       >
         <Settings2 className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
       </button>
+      </div>
 
       {open && createPortal(
         <div

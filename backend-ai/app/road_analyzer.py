@@ -9,7 +9,6 @@ import cv2
 import numpy as np
 
 from .auto_train import inference as auto_train_inference
-from .mesh_analyzer import analyze_mesh_zones
 from .road_roi_config import get_roi_zones_for_camera
 from .schemas import RoadDetection
 from .unknown_detection import UNKNOWN_LABEL, object_display_label
@@ -1696,10 +1695,6 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
 
     all_detections = _augment_with_auto_train_model(frame, all_detections)
 
-    mesh_zones = [z for z in zones if z["type"] == "MESH"]
-    if mesh_zones:
-        all_detections.extend(analyze_mesh_zones(frame, mesh_zones))
-
     fe_zones = [
         {
             "id": z["id"],
@@ -1708,7 +1703,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             "polygon": z["polygon"],
         }
         for z in zones
-        if z["type"] in ("ROAD", "MESH", "BUFFER")
+        if z["type"] in ("ROAD", "BUFFER")
     ]
 
     return {

@@ -22,7 +22,7 @@ export function SafetyZonePage() {
   const { zoneId } = useParams<{ zoneId: string }>()
   const [eventsOpen, setEventsOpen] = useState(true)
   const zone = zoneId ? SAFETY_ZONE_MAP.get(zoneId) : null
-  const aiLiveRecords = useSafetyAiEvents(5000)
+  const aiLiveRecords = useSafetyAiEvents(15000)
   const allRecords = useMemo(
     () => mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
     [aiLiveRecords],

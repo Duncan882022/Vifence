@@ -2,7 +2,8 @@
  * Local MP4 feeds — cắt từ YouTube Unicons Safety Supervisors (Js-1FbF-7yU).
  * OCP1-A/B: CCTV 16:9 · Body cam: 9:16 · Flycam: 16:9 toàn cảnh.
  * A-03 (TTDV-A · Cam 03): mock từ public/camera-feeds/ttdv-a-cam03-test.mp4
- * A-04 (TTDV-A · Cam 04): mock từ public/camera-feeds/ttdv-a-cam04-test.mp4 (ảnh hiện trường 5s)
+ * A-04 (TTDV-A · Cam 04): mock từ public/camera-feeds/ttdv-a-cam04-test.mp4
+ *   (10s hiện trường cẩu + 5s PPE workers trước frame cuối — cam04-ppe-workers.jpg)
  *
  * Mốc cắt (giây): OCP1-A 170,188,205,212,218,238,248,252 ·
  * Body 163,209,169 · Fly 174,177

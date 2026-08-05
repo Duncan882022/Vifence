@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react'
 import { cn } from '@/utils/cn'
 import { CameraAiOverlay } from './CameraAiOverlay'
 import { CraneProximityOverlay } from '@/modules/module03-safety/components/CraneProximityOverlay'
+import { PpeOverlay } from '@/modules/module03-safety/components/PpeOverlay'
 import { isCraneProximityCamera } from '@/modules/module03-safety/data/craneProximityCameras'
+import { isPpeCamera } from '@/modules/module03-safety/data/ppeCameras'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
 import {
   isAiOverlayDisabledCamera,
@@ -34,10 +36,12 @@ export function CameraVideoFeed({
   const overlayDisabled = isAiOverlayDisabledCamera(cameraId)
   const roadAnalysis = isRoadAnalysisOverlayCamera(cameraId)
   const craneProximity = isCraneProximityCamera(cameraId)
+  const ppeAnalysis = isPpeCamera(cameraId)
   const videoFit = getVideoObjectFitForCamera(cameraId, streamType)
-  const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis && !craneProximity && !overlayDisabled)
+  const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis && !craneProximity && !ppeAnalysis && !overlayDisabled)
   const showRoadOverlay = Boolean(aiOverlay && roadAnalysis && !overlayDisabled)
   const showCraneOverlay = Boolean(aiOverlay && craneProximity && !overlayDisabled)
+  const showPpeOverlay = Boolean(aiOverlay && ppeAnalysis && !overlayDisabled)
 
   useEffect(() => {
     const video = videoRef.current
@@ -110,6 +114,15 @@ export function CameraVideoFeed({
       )}
       {showCraneOverlay && (
         <CraneProximityOverlay
+          cameraId={cameraId}
+          compact={compact}
+          videoRef={videoRef}
+          videoFit={videoFit}
+          enabled={playing && aiOverlay}
+        />
+      )}
+      {showPpeOverlay && (
+        <PpeOverlay
           cameraId={cameraId}
           compact={compact}
           videoRef={videoRef}

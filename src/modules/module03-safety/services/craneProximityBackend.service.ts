@@ -118,6 +118,8 @@ export interface CraneProximityClientOptions {
   backendUrl?: string
   onResult: (result: CraneProximityResult) => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
+  /** Chỉ gửi frame khi hàm trả true. */
+  shouldAnalyze?: () => boolean
   intervalMs?: number
 }
 
@@ -130,7 +132,8 @@ export function createCraneProximityClient(
     backendUrl = getMobileAiBackendUrl(),
     onResult,
     onStatusChange,
-    intervalMs = 450,
+    shouldAnalyze = () => true,
+    intervalMs = 1500,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
@@ -150,7 +153,17 @@ export function createCraneProximityClient(
 
   const tick = async () => {
     if (stopped || inFlight) {
-      scheduleNext(400)
+      scheduleNext(1200)
+      return
+    }
+
+    if (typeof document !== 'undefined' && document.hidden) {
+      scheduleNext(2000)
+      return
+    }
+
+    if (!shouldAnalyze()) {
+      scheduleNext(600)
       return
     }
 
@@ -169,7 +182,7 @@ export function createCraneProximityClient(
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(200)
+      scheduleNext(1200)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

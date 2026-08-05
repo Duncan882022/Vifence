@@ -8,44 +8,34 @@ const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
 
-export type RoadAnalysisBehavior =
-  | 'mud'
-  | 'water'
-  | 'object'
-  | 'unknown'
-  | 'mesh_missing'
-  | 'mesh_torn'
-  | 'mesh_dirty'
+export type PpeBehavior =
+  | 'person'
+  | 'hard_hat'
+  | 'no_helmet'
+  | 'safety_vest'
+  | 'no_vest'
+  | 'safety_shoes'
+  | 'no_shoes'
 
-export interface RoadAnalysisDetection {
-  behavior: RoadAnalysisBehavior
+export interface PpeDetection {
+  behavior: PpeBehavior
   label: string
   scenario_id: string
   confidence: number
   bbox: [number, number, number, number]
-  area_percent?: number
 }
 
-export interface RoadAnalysisRoiZone {
-  id: string
-  label: string
-  type: 'ROAD' | 'BUFFER' | 'STORAGE' | 'MESH'
-  polygon: Array<{ x: number; y: number }>
+export interface PpeMetrics {
+  person_count: number
+  ppe_violations: number
 }
 
-export interface RoadAnalysisMetrics {
-  mud_percent: number
-  water_percent: number
-  object_count: number
-}
-
-export interface RoadAnalysisResult {
+export interface PpeResult {
   camera_id: string
   width: number
   height: number
-  roi_zones: RoadAnalysisRoiZone[]
-  metrics: RoadAnalysisMetrics
-  detections: RoadAnalysisDetection[]
+  metrics: PpeMetrics
+  detections: PpeDetection[]
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -55,8 +45,8 @@ function normalizeBaseUrl(baseUrl: string): string {
   return `https://${trimmed}`
 }
 
-export function buildRoadAnalyzeUrl(baseUrl: string): string {
-  return `${normalizeBaseUrl(baseUrl)}/analyze/road/frame`
+export function buildPpeAnalyzeUrl(baseUrl: string): string {
+  return `${normalizeBaseUrl(baseUrl)}/analyze/ppe/frame`
 }
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -70,12 +60,12 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
   })
 }
 
-export async function postRoadAnalyzeFrame(
+export async function postPpeAnalyzeFrame(
   backendUrl: string,
   cameraId: string,
   image: string,
-): Promise<RoadAnalysisResult> {
-  const res = await fetchWithTimeout(buildRoadAnalyzeUrl(backendUrl), {
+): Promise<PpeResult> {
+  const res = await fetchWithTimeout(buildPpeAnalyzeUrl(backendUrl), {
     method: 'POST',
     headers: {
       ...TUNNEL_HEADERS,
@@ -93,9 +83,8 @@ export async function postRoadAnalyzeFrame(
     width?: number
     height?: number
     camera_id?: string
-    roi_zones?: RoadAnalysisRoiZone[]
-    metrics?: RoadAnalysisMetrics
-    detections?: RoadAnalysisDetection[]
+    metrics?: PpeMetrics
+    detections?: PpeDetection[]
   }
 
   if (data.type === 'error') throw new Error(data.message ?? 'Lỗi backend.')
@@ -107,30 +96,32 @@ export async function postRoadAnalyzeFrame(
     camera_id: data.camera_id ?? cameraId,
     width: data.width,
     height: data.height,
-    roi_zones: data.roi_zones ?? [],
-    metrics: data.metrics ?? { mud_percent: 0, water_percent: 0, object_count: 0 },
+    metrics: data.metrics ?? { person_count: 0, ppe_violations: 0 },
     detections: data.detections ?? [],
   }
 }
 
-export interface RoadAnalysisClientOptions {
+export interface PpeClientOptions {
   cameraId: string
   backendUrl?: string
-  onResult: (result: RoadAnalysisResult) => void
+  onResult: (result: PpeResult) => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
+  /** Chỉ gửi frame khi hàm trả true (vd đoạn PPE trong video). */
+  shouldAnalyze?: () => boolean
   intervalMs?: number
 }
 
-export function createRoadAnalysisClient(
+export function createPpeClient(
   video: HTMLVideoElement,
-  options: RoadAnalysisClientOptions,
+  options: PpeClientOptions,
 ): { stop: () => void } {
   const {
     cameraId,
     backendUrl = getMobileAiBackendUrl(),
     onResult,
     onStatusChange,
-    intervalMs = 1200,
+    shouldAnalyze = () => true,
+    intervalMs = 1400,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
@@ -150,7 +141,17 @@ export function createRoadAnalysisClient(
 
   const tick = async () => {
     if (stopped || inFlight) {
-      scheduleNext(900)
+      scheduleNext(1200)
+      return
+    }
+
+    if (typeof document !== 'undefined' && document.hidden) {
+      scheduleNext(2000)
+      return
+    }
+
+    if (!shouldAnalyze()) {
+      scheduleNext(600)
       return
     }
 
@@ -163,12 +164,12 @@ export function createRoadAnalysisClient(
     if (!connectedOnce) onStatusChange('connecting')
     inFlight = true
     try {
-      const result = await postRoadAnalyzeFrame(backendUrl, cameraId, image)
+      const result = await postPpeAnalyzeFrame(backendUrl, cameraId, image)
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(900)
+      scheduleNext(1200)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

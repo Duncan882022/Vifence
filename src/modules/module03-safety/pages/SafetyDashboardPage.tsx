@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, lazy, Suspense } from 'react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import {
   CameraModeToggle,
@@ -23,7 +23,9 @@ import { SafetyGroupCollapsedSummary } from '../components/dashboard/SafetyGroup
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import { SafetyHandleConfirmDialog } from '../components/SafetyHandleConfirmDialog'
-import { SafetyPlaybackModal } from '../components/SafetyPlaybackModal'
+const SafetyPlaybackModal = lazy(() =>
+  import('../components/SafetyPlaybackModal').then(m => ({ default: m.SafetyPlaybackModal })),
+)
 import type { SafetyDashboardFilters, SafetyViolationRecord, ViolationStatus } from '../types/safety.types'
 import {
   computeDashboardKpis,
@@ -79,7 +81,7 @@ export function SafetyDashboardPage() {
   const [activeStreamCount, setActiveStreamCount] = useState(12)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
-  const aiLiveRecords = useSafetyAiEvents(5000)
+  const aiLiveRecords = useSafetyAiEvents(15000)
 
   const allRecords = useMemo(
     () => mergeViolationStatusOverrides(
@@ -359,11 +361,13 @@ export function SafetyDashboardPage() {
         onConfirm={confirmHandled}
       />
 
-      <SafetyPlaybackModal
-        open={playbackModalEvent != null}
-        event={playbackModalEvent}
-        onClose={() => setPlaybackModalEvent(null)}
-      />
+      <Suspense fallback={null}>
+        <SafetyPlaybackModal
+          open={playbackModalEvent != null}
+          event={playbackModalEvent}
+          onClose={() => setPlaybackModalEvent(null)}
+        />
+      </Suspense>
     </>
   )
 }

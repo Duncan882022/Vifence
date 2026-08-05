@@ -143,10 +143,17 @@ class DetectionEngine:
         self._lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._models_loaded = False
 
     def load_models(self) -> None:
         for detector in self.detectors:
             detector.load()
+        self._models_loaded = True
+
+    def ensure_models_loaded(self) -> None:
+        if not self._models_loaded:
+            logger.info("Lazy-load model smoking/fire…")
+            self.load_models()
 
     def start(self) -> None:
         if self._running:
@@ -352,6 +359,7 @@ class DetectionEngine:
         self, frame, camera_id: str
     ) -> tuple[list[Detection], list[ViolationEvent]]:
         """Frame gửi từ mobile qua WebSocket — debounce riêng theo camera_id."""
+        self.ensure_models_loaded()
         if not hasattr(self, "_remote_debouncers"):
             self._remote_debouncers = {}
         if camera_id not in self._remote_debouncers:
@@ -402,6 +410,7 @@ class DetectionEngine:
                 "min_duration_seconds": settings.smoking_event_min_duration_seconds,
                 "max_gap_seconds": settings.smoking_event_max_gap_seconds,
                 "cooldown_seconds": settings.smoking_event_cooldown_seconds,
+                "one_event_per_episode": False,
                 "repeat_min_seconds": settings.smoking_event_repeat_min_seconds,
             },
             "fire": {

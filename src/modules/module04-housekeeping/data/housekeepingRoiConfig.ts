@@ -37,20 +37,6 @@ export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
     ],
   },
   {
-    id: 'roi-mesh-a03',
-    label: 'Lưới bao che xanh — TTDV-A Cam 03',
-    type: 'MESH',
-    cameraId: 'A-03',
-    exemptFromOccupancy: true,
-    polygon: [
-      { x: 0.0000, y: 0.20 },
-      { x: 0.3200, y: 0.18 },
-      { x: 0.3400, y: 0.55 },
-      { x: 0.3000, y: 0.88 },
-      { x: 0.0000, y: 0.90 },
-    ],
-  },
-  {
     id: 'roi-buffer-a03',
     label: 'Lề đường — TTDV-A Cam 03',
     type: 'BUFFER',

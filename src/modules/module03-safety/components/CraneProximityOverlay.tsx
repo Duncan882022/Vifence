@@ -12,6 +12,7 @@ import {
   type CraneProximityDetection,
   type CraneProximityMetrics,
 } from '../services/craneProximityBackend.service'
+import { isInPpeVideoSegment, isPpeCamera } from '../data/ppeCameras'
 
 const EVENT_MIN_CONFIDENCE = 0.80
 const UNKNOWN_MIN_CONFIDENCE = 0.45
@@ -248,6 +249,8 @@ function useCraneProximityState(
     clientRef.current = createCraneProximityClient(video, {
       cameraId,
       backendUrl,
+      shouldAnalyze: () =>
+        !isPpeCamera(cameraId) || !isInPpeVideoSegment(video.currentTime),
       onResult: result => {
         const visible = result.detections
           .filter(d => {

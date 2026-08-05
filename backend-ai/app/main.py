@@ -24,7 +24,8 @@ from .detection_engine import DetectionEngine
 from .mobile_config_store import MobileAiConfigStore
 from .road_analysis_engine import RoadAnalysisEngine
 from .road_detection_catalog import analyze_road_catalog, render_road_catalog, save_road_catalog_snapshot
-from .crane_detection_catalog import analyze_crane_catalog, render_crane_catalog, save_crane_catalog_snapshot
+from .crane_detection_catalog import analyze_crane_catalog, render_crane_catalog
+from .ppe_engine import PpeEngine
 from .schemas import MobileAiConfigPayload, MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -76,23 +77,32 @@ camera = CameraStream(settings.camera_source_value)
 engine = DetectionEngine(camera)
 road_engine = RoadAnalysisEngine(engine.store)
 crane_engine = CraneProximityEngine(engine.store)
+ppe_engine = PpeEngine(engine.store)
 mobile_config_store = MobileAiConfigStore()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Đang load model detection...")
-    engine.load_models()
-    camera.start()
-    engine.start()
+    logger.info("Đang khởi động backend AI…")
+    if settings.detection_loop_enabled:
+        engine.ensure_models_loaded()
+        camera.start()
+        engine.start()
+        logger.info("Smoking/fire detection loop đang chạy (webcam).")
+    else:
+        logger.info(
+            "Detection loop tắt — smoking/fire lazy-load khi mobile gửi frame; "
+            "road/crane nhận frame từ FE."
+        )
     if settings.auto_train_enabled:
         auto_train_scheduler.start()
     else:
         logger.info("Auto-train tắt — chỉ chạy detect rule-based / model gốc.")
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     yield
-    engine.stop()
-    camera.stop()
+    if settings.detection_loop_enabled:
+        engine.stop()
+        camera.stop()
     if settings.auto_train_enabled:
         auto_train_scheduler.stop()
     _analyze_executor.shutdown(wait=False)
@@ -321,6 +331,52 @@ def _analyze_crane_frame(frame: np.ndarray, camera_id: str) -> dict:
     return result
 
 
+def _analyze_ppe_frame(frame: np.ndarray, camera_id: str) -> dict:
+    small = _downscale_for_mobile(frame, max_width=640)
+    result, _ = ppe_engine.process_frame(small, camera_id)
+    sw, sh = small.shape[1], small.shape[0]
+    ow, oh = frame.shape[1], frame.shape[0]
+    if sw != ow or sh != oh:
+        sx, sy = ow / sw, oh / sh
+        scaled = []
+        for d in result.get("detections", []):
+            x1, y1, x2, y2 = d["bbox"]
+            scaled.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
+        result["detections"] = scaled
+        scaled_events = []
+        for e in result.get("events", []):
+            x1, y1, x2, y2 = e["bbox"]
+            scaled_events.append({**e, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
+        result["events"] = scaled_events
+        result["width"] = ow
+        result["height"] = oh
+    return result
+
+
+@app.post("/analyze/ppe/frame")
+async def analyze_ppe_frame_endpoint(payload: MobileFramePayload):
+    """Phát hiện PPE — mũ / áo phản quang / giày (Cam A-04)."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-04"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_ppe_frame,
+        frame,
+        camera_id,
+    )
+
+
 @app.post("/analyze/frame")
 async def analyze_frame(payload: MobileFramePayload):
     """Nhận frame JPEG (base64) qua HTTP — dùng cho mobile qua ngrok (fetch gửi được
@@ -349,6 +405,13 @@ async def analyze_frame(payload: MobileFramePayload):
         return await loop.run_in_executor(
             _analyze_executor,
             _analyze_crane_frame,
+            frame,
+            camera_id,
+        )
+    if payload.mode == "ppe":
+        return await loop.run_in_executor(
+            _analyze_executor,
+            _analyze_ppe_frame,
             frame,
             camera_id,
         )

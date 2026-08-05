@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     fire_model_repo: str = "SalahALHaismawi/yolov26-fire-detection"
     fire_model_file: str = "best.pt"
-    _fire_conf_threshold: float = 0.62
+    fire_conf_threshold: float = 0.62
     # Detector heuristic (màu sắc + độ sáng) bổ sung, bắt lửa nhỏ/cận cảnh mà
     # YOLO model bỏ sót (vd bật lửa, diêm, lửa xanh dương của bật lửa khò).
     flame_heuristic_conf_threshold: float = 0.48
@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Cam A-03 / A-04 — lặp snapshot sự kiện (bùn/nước/vật tư / cẩn gần người).
     road_event_repeat_seconds: float = 7200.0
     crane_event_repeat_seconds: float = 7200.0
+    ppe_event_repeat_seconds: float = 60.0
 
     # Hút thuốc — lặp snapshot mỗi 30 phút nếu vẫn phát hiện.
     smoking_event_cooldown_seconds: float = 1800.0

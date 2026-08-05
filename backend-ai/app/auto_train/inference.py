@@ -22,11 +22,20 @@ _lock = threading.Lock()
 _RECHECK_SECONDS = 60.0
 
 
+def _is_manual_promoted(task_id: str) -> bool:
+    if registry.get_active_weights(task_id) is None:
+        return False
+    return task_id == "crane_machinery" or task_id.startswith("ppe_")
+
+
 def get_model(task_id: str):
     """Trả về `ultralytics.YOLO` đã auto-train cho task, tự reload khi
     registry đổi active_weights (model mới được promote). Trả None nếu chưa
     có checkpoint nào — lúc đó caller tự fallback."""
-    if not settings.auto_train_enabled:
+    manual = _is_manual_promoted(task_id)
+    if not settings.auto_train_inference_enabled and not manual:
+        return None
+    if not settings.auto_train_enabled and not manual:
         return None
     with _lock:
         entry = _cache.get(task_id)
@@ -66,7 +75,10 @@ def predict_boxes(
 ) -> list[tuple[str, float, float, float, float, float]]:
     """Trả [(class_name, x1, y1, x2, y2, confidence), ...] từ model tự train,
     hoặc [] nếu chưa có model / model lỗi (fail-safe, không raise)."""
-    if not settings.auto_train_enabled:
+    manual = _is_manual_promoted(task_id)
+    if not settings.auto_train_inference_enabled and not manual:
+        return []
+    if not settings.auto_train_enabled and not manual:
         return []
     model = get_model(task_id)
     if model is None:

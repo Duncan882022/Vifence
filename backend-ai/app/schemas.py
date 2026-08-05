@@ -35,6 +35,14 @@ class CraneProximityDetection(BaseModel):
     machine_kind: Optional[str] = None  # crane_green | excavator_orange | machinery
 
 
+class PpeDetection(BaseModel):
+    behavior: str  # person | hard_hat | no_helmet | safety_vest | no_vest | safety_shoes | no_shoes
+    label: str
+    scenario_id: str
+    confidence: float
+    bbox: list[float]
+
+
 class MobileAiConfigPayload(BaseModel):
     backend_url: str
     source: str = "mobile-fe"
@@ -129,6 +137,45 @@ CRANE_SCENARIO_META = {
     },
 }
 
+PPE_SCENARIO_META = {
+    "no_helmet": {
+        "scenario_id": "PPE-001",
+        "scenario_name": "Không đội mũ bảo hộ",
+        "violation_type": "ppe",
+        "group": "PPE",
+    },
+    "no_vest": {
+        "scenario_id": "PPE-002",
+        "scenario_name": "Không mặc áo phản quang/áo bảo hộ",
+        "violation_type": "ppe",
+        "group": "PPE",
+    },
+    "no_shoes": {
+        "scenario_id": "PPE-003",
+        "scenario_name": "Không mang giày BHLD",
+        "violation_type": "ppe",
+        "group": "PPE",
+    },
+    "hard_hat": {
+        "scenario_id": "PPE-001",
+        "scenario_name": "Mũ bảo hộ",
+        "violation_type": "ppe",
+        "group": "PPE",
+    },
+    "safety_vest": {
+        "scenario_id": "PPE-002",
+        "scenario_name": "Áo phản quang",
+        "violation_type": "ppe",
+        "group": "PPE",
+    },
+    "safety_shoes": {
+        "scenario_id": "PPE-003",
+        "scenario_name": "Giày BHLD",
+        "violation_type": "ppe",
+        "group": "PPE",
+    },
+}
+
 
 class ViolationEvent(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -216,6 +263,39 @@ class ViolationEvent(BaseModel):
                 "scenario_name": detection.label,
                 "violation_type": "danger-zone",
                 "group": "DZ",
+            },
+        )
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
+            snapshot_file=snapshot_file,
+        )
+
+    @classmethod
+    def from_ppe_detection(
+        cls,
+        detection: PpeDetection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "A-04",
+    ) -> "ViolationEvent":
+        meta = PPE_SCENARIO_META.get(
+            detection.behavior,
+            {
+                "scenario_id": detection.scenario_id,
+                "scenario_name": detection.label,
+                "violation_type": "ppe",
+                "group": "PPE",
             },
         )
         created = time.time()
