@@ -118,6 +118,7 @@ export interface RoadAnalysisClientOptions {
   backendUrl?: string
   onResult: (result: RoadAnalysisResult) => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
+  shouldAnalyze?: () => boolean
   intervalMs?: number
 }
 
@@ -130,6 +131,7 @@ export function createRoadAnalysisClient(
     backendUrl = getMobileAiBackendUrl(),
     onResult,
     onStatusChange,
+    shouldAnalyze = () => true,
     intervalMs = 1200,
   } = options
 
@@ -151,6 +153,11 @@ export function createRoadAnalysisClient(
   const tick = async () => {
     if (stopped || inFlight) {
       scheduleNext(900)
+      return
+    }
+
+    if (!shouldAnalyze()) {
+      scheduleNext(600)
       return
     }
 

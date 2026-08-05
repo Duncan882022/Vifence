@@ -1,13 +1,16 @@
 import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../../types/safety.types'
 import { getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS } from '../../utils/eventSubject'
-import { resolveViolationSnapshotUrl } from '../../data/safetyViolationSnapshots'
+import { resolveStaticViolationSnapshotUrl, resolveViolationSnapshotUrl } from '../../data/safetyViolationSnapshots'
+import { displayUnknown, joinDisplayUnknown } from '../../utils/displayUnknown'
+import { resolveVehiclePlate } from '../../utils/vehiclePlate'
 import { RemoteViolationSnapshotImage } from './RemoteViolationSnapshotImage'
 
 interface EventSubjectCellProps {
   record: SafetyViolationRecord
   compact?: boolean
   showCaption?: boolean
+  onSnapshotClick?: (record: SafetyViolationRecord) => void
 }
 
 function subjectCaption(record: SafetyViolationRecord): string {
@@ -16,17 +19,17 @@ function subjectCaption(record: SafetyViolationRecord): string {
 
   switch (type) {
     case 'PERSON':
-      return [s.workerName, s.employeeCode, s.contractorName].filter(Boolean).join(' · ')
+      return joinDisplayUnknown([s.workerName, s.employeeCode, s.contractorName])
     case 'VEHICLE':
-      return [s.vehiclePlate, s.vehicleType, s.driverName].filter(Boolean).join(' · ')
+      return joinDisplayUnknown([s.vehiclePlate, s.vehicleType, s.driverName])
     case 'SITE_CONDITION':
-      return [s.block, s.floor, s.workItem].filter(Boolean).join(' · ')
+      return joinDisplayUnknown([s.block, s.floor, s.workItem])
     case 'CONSTRUCTION_ACTIVITY':
-      return [s.workActivity, s.constructionUnit].filter(Boolean).join(' · ')
+      return joinDisplayUnknown([s.workActivity, s.constructionUnit])
     case 'MANAGEMENT':
-      return [s.managementUnit, s.responsibleRole].filter(Boolean).join(' · ')
+      return joinDisplayUnknown([s.managementUnit, s.responsibleRole])
     default:
-      return EVENT_SUBJECT_LABELS[type] ?? '—'
+      return displayUnknown(EVENT_SUBJECT_LABELS[type])
   }
 }
 
@@ -36,17 +39,17 @@ function subjectTitle(record: SafetyViolationRecord): string {
 
   switch (type) {
     case 'PERSON':
-      return s.workerName ?? EVENT_SUBJECT_LABELS.PERSON
+      return displayUnknown(s.workerName)
     case 'VEHICLE':
-      return s.vehiclePlate ?? EVENT_SUBJECT_LABELS.VEHICLE
+      return resolveVehiclePlate(s.vehiclePlate)
     case 'SITE_CONDITION':
       return EVENT_SUBJECT_LABELS.SITE_CONDITION
     case 'CONSTRUCTION_ACTIVITY':
-      return s.workActivity ?? EVENT_SUBJECT_LABELS.CONSTRUCTION_ACTIVITY
+      return displayUnknown(s.workActivity ?? s.workItem)
     case 'MANAGEMENT':
-      return s.managementUnit ?? s.responsibleRole ?? 'Ban điều hành'
+      return displayUnknown(s.managementUnit ?? s.responsibleRole)
     default:
-      return EVENT_SUBJECT_LABELS[type] ?? 'Sự kiện'
+      return displayUnknown(EVENT_SUBJECT_LABELS[type])
   }
 }
 
@@ -55,27 +58,48 @@ export function ViolationSnapshotThumb({
   record,
   compact,
   className,
+  onClick,
 }: {
   record: SafetyViolationRecord
   compact?: boolean
   className?: string
+  onClick?: (record: SafetyViolationRecord) => void
 }) {
   const snapshotUrl = resolveViolationSnapshotUrl(record)
+  const fallbackUrl = resolveStaticViolationSnapshotUrl(record)
+  const frameClass = cn(
+    'relative shrink-0 overflow-hidden rounded-md border border-[#1e2433] bg-[#0a0e17]',
+    compact ? 'w-[72px] h-[44px]' : 'w-[88px] h-[52px]',
+    className,
+  )
+  const image = (
+    <RemoteViolationSnapshotImage
+      src={snapshotUrl}
+      fallbackSrc={fallbackUrl !== snapshotUrl ? fallbackUrl : undefined}
+      alt=""
+      className="w-full h-full object-cover"
+    />
+  )
+
+  if (!onClick) {
+    return <div className={frameClass}>{image}</div>
+  }
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={e => {
+        e.stopPropagation()
+        onClick(record)
+      }}
       className={cn(
-        'relative shrink-0 overflow-hidden rounded-md border border-[#1e2433] bg-[#0a0e17]',
-        compact ? 'w-[72px] h-[44px]' : 'w-[88px] h-[52px]',
-        className,
+        frameClass,
+        'hover:border-primary/40 hover:ring-1 hover:ring-primary/25 transition-colors cursor-zoom-in',
       )}
+      title="Xem chi tiết sự kiện"
     >
-      <RemoteViolationSnapshotImage
-        src={snapshotUrl}
-        alt=""
-        className="w-full h-full object-cover"
-      />
-    </div>
+      {image}
+    </button>
   )
 }
 
@@ -83,35 +107,56 @@ export function ViolationSnapshotThumb({
 export function AlertEventSnapshot({
   record,
   className,
+  onClick,
 }: {
   record: SafetyViolationRecord
   className?: string
+  onClick?: (record: SafetyViolationRecord) => void
 }) {
   const snapshotUrl = resolveViolationSnapshotUrl(record)
+  const fallbackUrl = resolveStaticViolationSnapshotUrl(record)
+  const frameClass = cn(
+    'relative shrink-0 w-[80px] min-h-[76px] overflow-hidden rounded-lg border border-[#1e2433]/90 bg-black shadow-inner',
+    className,
+  )
+  const image = (
+    <RemoteViolationSnapshotImage
+      src={snapshotUrl}
+      fallbackSrc={fallbackUrl !== snapshotUrl ? fallbackUrl : undefined}
+      alt=""
+      className="absolute inset-0 w-full h-full object-cover"
+    />
+  )
+
+  if (!onClick) {
+    return <div className={frameClass}>{image}</div>
+  }
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={e => {
+        e.stopPropagation()
+        onClick(record)
+      }}
       className={cn(
-        'relative shrink-0 w-[80px] min-h-[76px] overflow-hidden rounded-lg border border-[#1e2433]/90 bg-black shadow-inner',
-        className,
+        frameClass,
+        'hover:border-primary/40 hover:ring-1 hover:ring-primary/25 transition-colors cursor-zoom-in',
       )}
+      title="Xem chi tiết sự kiện"
     >
-      <RemoteViolationSnapshotImage
-        src={snapshotUrl}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover"
-      />
-    </div>
+      {image}
+    </button>
   )
 }
 
-export function EventSubjectCell({ record, compact, showCaption = true }: EventSubjectCellProps) {
+export function EventSubjectCell({ record, compact, showCaption = true, onSnapshotClick }: EventSubjectCellProps) {
   const caption = subjectCaption(record)
   const title = subjectTitle(record)
 
   return (
     <div className="flex items-start gap-2 min-w-0">
-      <ViolationSnapshotThumb record={record} compact={compact} />
+      <ViolationSnapshotThumb record={record} compact={compact} onClick={onSnapshotClick} />
       {showCaption && (
         <div className="min-w-0 flex-1 pt-0.5">
           <p className={cn(

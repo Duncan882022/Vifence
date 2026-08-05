@@ -4,6 +4,7 @@ import { getZoneSiteCode } from '../data/safetyZones'
 import type { MonitoringDeviceType } from '../types/safety.types'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { cameraDisplayLabel } from '@/modules/module02-training/data/trainingCameras'
+import { displayUnknown, joinDisplayUnknown } from './displayUnknown'
 
 const BODY_DEVICE_TO_CAMERA: Record<string, string> = {
   'BODY-01': 'BC-01',
@@ -50,36 +51,101 @@ export function getSafetyCamera(id: string | undefined): TrainingCamera | undefi
 export function getSafetyCameraDisplayName(id: string | undefined, fallback?: string): string {
   const cam = getSafetyCamera(id)
   if (cam) return cameraDisplayLabel(cam)
-  return fallback ?? id ?? '—'
+  return displayUnknown(fallback ?? id)
 }
 
-/** Vị trí ghi hình trên thẻ sự kiện — vd. TTDV-A - Cam 03 */
+/** Chuẩn hoá camera_id từ backend — mobile / LOCAL-CAM → MOB-01 */
+export function normalizeEventCameraId(cameraId: string | undefined): string {
+  const id = (cameraId ?? '').trim()
+  if (!id || id === 'mobile' || id === 'LOCAL-CAM') return 'MOB-01'
+  return id
+}
+
+/** Suy luận nguồn sự kiện từ camera_id thực tế */
+export function inferEventSourceMeta(
+  cameraId: string | undefined,
+  fallbackType: MonitoringDeviceType = 'FIXED_CAMERA',
+): { sourceDeviceId: string; sourceType: MonitoringDeviceType } {
+  const sourceDeviceId = normalizeEventCameraId(cameraId)
+  const cam = getSafetyCamera(sourceDeviceId)
+
+  if (cam?.streamType === 'mobile') {
+    return { sourceDeviceId, sourceType: 'MOBILE' }
+  }
+  if (cam?.streamType === 'bodycam') {
+    return { sourceDeviceId, sourceType: 'BODY_CAMERA' }
+  }
+  if (cam?.streamType === 'flycam') {
+    return { sourceDeviceId, sourceType: 'DRONE' }
+  }
+  if (cam?.streamType === 'fixed') {
+    return { sourceDeviceId, sourceType: 'FIXED_CAMERA' }
+  }
+
+  const trainingId = resolveTrainingCameraId(sourceDeviceId, fallbackType)
+  if (trainingId) {
+    const resolved = getSafetyCamera(trainingId)
+    if (resolved) {
+      if (resolved.streamType === 'mobile') return { sourceDeviceId: trainingId, sourceType: 'MOBILE' }
+      if (resolved.streamType === 'bodycam') return { sourceDeviceId: trainingId, sourceType: 'BODY_CAMERA' }
+      if (resolved.streamType === 'flycam') return { sourceDeviceId: trainingId, sourceType: 'DRONE' }
+      if (resolved.streamType === 'fixed') return { sourceDeviceId: trainingId, sourceType: 'FIXED_CAMERA' }
+    }
+  }
+
+  return { sourceDeviceId, sourceType: fallbackType }
+}
+
+/** Khu vực hiển thị — TTDV-A, Di động, … */
+export function getEventAreaLabel(
+  sourceDeviceId: string,
+  sourceType?: MonitoringDeviceType,
+  zoneId?: string,
+): string {
+  const { sourceDeviceId: camId, sourceType: resolvedType } = inferEventSourceMeta(
+    sourceDeviceId,
+    sourceType ?? 'FIXED_CAMERA',
+  )
+  const cam = getSafetyCamera(camId)
+
+  if (resolvedType === 'MOBILE' || cam?.streamType === 'mobile') return 'Di động'
+  if (resolvedType === 'BODY_CAMERA' || cam?.streamType === 'bodycam') return 'Di động'
+  if (cam?.zone) return cam.zone
+  if (zoneId) {
+    const site = getZoneSiteCode(zoneId)
+    if (site && site !== zoneId) return site
+  }
+  return displayUnknown(undefined)
+}
+
+/** Nguồn ghi hình — Cam 03, Bodycam, … */
+export function getEventSourceLabel(
+  sourceDeviceId: string,
+  sourceType?: MonitoringDeviceType,
+): string {
+  const { sourceDeviceId: camId, sourceType: resolvedType } = inferEventSourceMeta(
+    sourceDeviceId,
+    sourceType ?? 'FIXED_CAMERA',
+  )
+  const cam = getSafetyCamera(camId)
+
+  if (resolvedType === 'MOBILE' || cam?.streamType === 'mobile') return 'Bodycam'
+  if (resolvedType === 'BODY_CAMERA' || cam?.streamType === 'bodycam') return 'Bodycam'
+  if (resolvedType === 'DRONE' || resolvedType === 'DRONE_RTK' || cam?.streamType === 'flycam') {
+    return cam?.name ?? 'Flycam'
+  }
+  if (cam?.streamType === 'fixed') return cam.name
+  return displayUnknown(getMonitoringDeviceShortName(sourceDeviceId) || undefined)
+}
+
+/** Vị trí ghi hình trên thẻ sự kiện — vd. TTDV-A · Cam 03 */
 export function getEventCapturePlace(
   sourceDeviceId: string,
   sourceType?: MonitoringDeviceType,
   zoneId?: string,
 ): string {
-  const trainingId = resolveTrainingCameraId(sourceDeviceId, sourceType)
-  const cam = getSafetyCamera(trainingId)
-
-  if (cam?.streamType === 'fixed' && cam.zone) {
-    return `${cam.zone} - ${cam.name}`
-  }
-
-  if (cam?.streamType === 'bodycam') {
-    const site = zoneId ? getZoneSiteCode(zoneId) : cam.zone
-    return site ? `${site} - ${cam.name}` : (cam.assignee ?? cam.name)
-  }
-
-  if (cam?.streamType === 'mobile') {
-    return cam.assignee ?? cam.name
-  }
-
-  if (cam?.streamType === 'flycam') {
-    const site = zoneId ? getZoneSiteCode(zoneId) : ''
-    return site ? `${site} - ${cam.name}` : cam.name
-  }
-
-  const site = zoneId ? getZoneSiteCode(zoneId) : '—'
-  return `${site} - ${getMonitoringDeviceShortName(sourceDeviceId)}`
+  return joinDisplayUnknown([
+    getEventAreaLabel(sourceDeviceId, sourceType, zoneId),
+    getEventSourceLabel(sourceDeviceId, sourceType),
+  ])
 }

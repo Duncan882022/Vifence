@@ -1,26 +1,23 @@
 import type { MonitoringProfile } from '../types/safety.types'
 
+/** Profile giám sát — chỉ gắn kịch bản đã có pipeline AI */
 export const MONITORING_PROFILES: MonitoringProfile[] = [
   {
-    id: 'PROFILE-BUILDING-WAH',
-    name: 'Giám sát an toàn block thi công',
-    groups: ['PPE', 'WAH', 'BPTC'],
+    id: 'PROFILE-CAM-A04-SAFETY',
+    name: 'Cam A-04 · PPE + WAH + DZ + PCCC',
+    groups: ['PPE', 'WAH', 'DZ', 'PCCC'],
     scenarios: [
-      'PPE-001', 'PPE-002', 'WAH-001', 'WAH-002', 'WAH-003',
-      'BPTC-001', 'BPTC-005', 'BPTC-006',
+      'PPE-001', 'PPE-002', 'PPE-003',
+      'WAH-001',
+      'DZ-003',
+      'PCCC-001', 'PCCC-002',
     ],
   },
   {
-    id: 'PROFILE-INTERNAL-ROAD',
-    name: 'Giám sát giao thông nội bộ',
-    groups: ['ATGT', 'PPE', 'DZ'],
-    scenarios: ['ATGT-001', 'ATGT-002', 'ATGT-003', 'DZ-002'],
-  },
-  {
-    id: 'PROFILE-EXCAVATION',
-    name: 'Giám sát hố đào và khu nguy hiểm',
-    groups: ['DZ', 'BPTC', 'PCCC'],
-    scenarios: ['DZ-001', 'BPTC-004', 'PCCC-001'],
+    id: 'PROFILE-CAM-A03-ROAD-ATGT',
+    name: 'Cam A-03 · ATGT + lòng đường',
+    groups: ['ATGT', 'BPTC'],
+    scenarios: ['ATGT-002', 'ATGT-004', 'BPTC-007', 'BPTC-008', 'BPTC-009'],
   },
 ]
 

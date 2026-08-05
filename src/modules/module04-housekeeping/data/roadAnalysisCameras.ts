@@ -1,3 +1,9 @@
+import {
+  isAiOverlayDisabledCamera as isAiOverlayDisabledCameraRuntime,
+  isRoadAnalysisCamera as isRoadAnalysisCameraRuntime,
+  isRoadAnalysisOverlayCamera as isRoadAnalysisOverlayCameraRuntime,
+} from '@/modules/module02-training/data/cameraAiRuntime'
+
 /** Camera bật phân tích lòng đường backend (Module 04 AI). */
 export const ROAD_ANALYSIS_CAMERA_IDS = ['A-03'] as const
 
@@ -8,13 +14,13 @@ export const ROAD_ANALYSIS_OVERLAY_CAMERA_IDS = ['A-03'] as const
 export const AI_OVERLAY_DISABLED_CAMERA_IDS = [] as const
 
 export function isRoadAnalysisCamera(cameraId: string): boolean {
-  return (ROAD_ANALYSIS_CAMERA_IDS as readonly string[]).includes(cameraId)
+  return isRoadAnalysisCameraRuntime(cameraId)
 }
 
 export function isRoadAnalysisOverlayCamera(cameraId: string): boolean {
-  return (ROAD_ANALYSIS_OVERLAY_CAMERA_IDS as readonly string[]).includes(cameraId)
+  return isRoadAnalysisOverlayCameraRuntime(cameraId)
 }
 
 export function isAiOverlayDisabledCamera(cameraId: string): boolean {
-  return (AI_OVERLAY_DISABLED_CAMERA_IDS as readonly string[]).includes(cameraId)
+  return isAiOverlayDisabledCameraRuntime(cameraId)
 }

@@ -26,6 +26,10 @@ from .road_analysis_engine import RoadAnalysisEngine
 from .road_detection_catalog import analyze_road_catalog, render_road_catalog, save_road_catalog_snapshot
 from .crane_detection_catalog import analyze_crane_catalog, render_crane_catalog
 from .ppe_engine import PpeEngine
+from .pccc_engine import PcccEngine
+from .wah_engine import WahEngine
+from .atgt_engine import AtgtEngine
+from .mobile_frame_utils import analyze_engine_frame, downscale_for_mobile
 from .schemas import MobileAiConfigPayload, MobileFramePayload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -42,11 +46,7 @@ def _decode_frame(image_b64: str) -> Optional[np.ndarray]:
 
 
 def _downscale_for_mobile(frame: np.ndarray, max_width: int = 480) -> np.ndarray:
-    h, w = frame.shape[:2]
-    if w <= max_width:
-        return frame
-    scale = max_width / w
-    return cv2.resize(frame, (max_width, int(h * scale)), interpolation=cv2.INTER_AREA)
+    return downscale_for_mobile(frame, max_width=max_width)
 
 
 def _analyze_mobile_frame(frame: np.ndarray, camera_id: str) -> dict:
@@ -78,6 +78,9 @@ engine = DetectionEngine(camera)
 road_engine = RoadAnalysisEngine(engine.store)
 crane_engine = CraneProximityEngine(engine.store)
 ppe_engine = PpeEngine(engine.store)
+pccc_engine = PcccEngine(engine.store)
+wah_engine = WahEngine(engine.store)
+atgt_engine = AtgtEngine(engine.store)
 mobile_config_store = MobileAiConfigStore()
 
 
@@ -274,29 +277,6 @@ def _collect_road_auto_train_sample(small: np.ndarray, result: dict) -> None:
     auto_train_collector.collect("road_material", small, boxes)
 
 
-def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
-    small = _downscale_for_mobile(frame, max_width=640)
-    result, _ = road_engine.process_frame(small, camera_id)
-    _collect_road_auto_train_sample(small, result)
-    sw, sh = small.shape[1], small.shape[0]
-    ow, oh = frame.shape[1], frame.shape[0]
-    if sw != ow or sh != oh:
-        sx, sy = ow / sw, oh / sh
-        scaled = []
-        for d in result.get("detections", []):
-            x1, y1, x2, y2 = d["bbox"]
-            scaled.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
-        result["detections"] = scaled
-        scaled_events = []
-        for e in result.get("events", []):
-            x1, y1, x2, y2 = e["bbox"]
-            scaled_events.append({**e, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
-        result["events"] = scaled_events
-        result["width"] = ow
-        result["height"] = oh
-    return result
-
-
 def _collect_crane_auto_train_sample(small: np.ndarray, result: dict) -> None:
     if not settings.auto_train_enabled:
         return
@@ -308,49 +288,38 @@ def _collect_crane_auto_train_sample(small: np.ndarray, result: dict) -> None:
     auto_train_collector.collect("crane_machinery", small, boxes)
 
 
+def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
+    return analyze_engine_frame(
+        frame,
+        camera_id,
+        road_engine.process_frame,
+        after_process=_collect_road_auto_train_sample,
+    )
+
+
 def _analyze_crane_frame(frame: np.ndarray, camera_id: str) -> dict:
-    small = _downscale_for_mobile(frame, max_width=640)
-    result, _ = crane_engine.process_frame(small, camera_id)
-    _collect_crane_auto_train_sample(small, result)
-    sw, sh = small.shape[1], small.shape[0]
-    ow, oh = frame.shape[1], frame.shape[0]
-    if sw != ow or sh != oh:
-        sx, sy = ow / sw, oh / sh
-        scaled = []
-        for d in result.get("detections", []):
-            x1, y1, x2, y2 = d["bbox"]
-            scaled.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
-        result["detections"] = scaled
-        scaled_events = []
-        for e in result.get("events", []):
-            x1, y1, x2, y2 = e["bbox"]
-            scaled_events.append({**e, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
-        result["events"] = scaled_events
-        result["width"] = ow
-        result["height"] = oh
-    return result
+    return analyze_engine_frame(
+        frame,
+        camera_id,
+        crane_engine.process_frame,
+        after_process=_collect_crane_auto_train_sample,
+    )
 
 
 def _analyze_ppe_frame(frame: np.ndarray, camera_id: str) -> dict:
-    small = _downscale_for_mobile(frame, max_width=640)
-    result, _ = ppe_engine.process_frame(small, camera_id)
-    sw, sh = small.shape[1], small.shape[0]
-    ow, oh = frame.shape[1], frame.shape[0]
-    if sw != ow or sh != oh:
-        sx, sy = ow / sw, oh / sh
-        scaled = []
-        for d in result.get("detections", []):
-            x1, y1, x2, y2 = d["bbox"]
-            scaled.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
-        result["detections"] = scaled
-        scaled_events = []
-        for e in result.get("events", []):
-            x1, y1, x2, y2 = e["bbox"]
-            scaled_events.append({**e, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
-        result["events"] = scaled_events
-        result["width"] = ow
-        result["height"] = oh
-    return result
+    return analyze_engine_frame(frame, camera_id, ppe_engine.process_frame)
+
+
+def _analyze_pccc_frame(frame: np.ndarray, camera_id: str) -> dict:
+    return analyze_engine_frame(frame, camera_id, pccc_engine.process_frame)
+
+
+def _analyze_wah_frame(frame: np.ndarray, camera_id: str) -> dict:
+    return analyze_engine_frame(frame, camera_id, wah_engine.process_frame)
+
+
+def _analyze_atgt_frame(frame: np.ndarray, camera_id: str) -> dict:
+    return analyze_engine_frame(frame, camera_id, atgt_engine.process_frame)
 
 
 @app.post("/analyze/ppe/frame")
@@ -372,6 +341,78 @@ async def analyze_ppe_frame_endpoint(payload: MobileFramePayload):
     return await loop.run_in_executor(
         _analyze_executor,
         _analyze_ppe_frame,
+        frame,
+        camera_id,
+    )
+
+
+@app.post("/analyze/pccc/frame")
+async def analyze_pccc_frame_endpoint(payload: MobileFramePayload):
+    """Phát hiện PCCC — hút thuốc / cháy nổ (Cam A-04), log sự kiện ngay."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-04"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_pccc_frame,
+        frame,
+        camera_id,
+    )
+
+
+@app.post("/analyze/atgt/frame")
+async def analyze_atgt_frame_endpoint(payload: MobileFramePayload):
+    """Phát hiện ATGT — vượt tốc độ + làn phân cách cứng (Cam A-03)."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-03"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_atgt_frame,
+        frame,
+        camera_id,
+    )
+
+
+@app.post("/analyze/wah/frame")
+async def analyze_wah_frame_endpoint(payload: MobileFramePayload):
+    """Phát hiện WAH — làm việc mép biên không dây an toàn (Cam A-04)."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-04"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_wah_frame,
         frame,
         camera_id,
     )

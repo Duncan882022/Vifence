@@ -2,17 +2,17 @@ import { useLayoutEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Header } from '@/components/common/Header/Header'
 import { useTenantStore } from '@/store/tenant.store'
+import type { TenantId } from '@/data/tenants'
 import { SafetyDashboardPage } from './pages/SafetyDashboardPage'
 import { SafetyGroupPage } from './pages/SafetyGroupPage'
 import { SafetyZonePage } from './pages/SafetyZonePage'
 
-const SAFETY_TENANT_ID = 'giang-vo' as const
+const DEFAULT_SAFETY_TENANT_ID: TenantId = 'ocp1'
 
 function useSafetyTenant() {
   const setActiveTenant = useTenantStore(s => s.setActiveTenant)
-  /* useLayoutEffect: đồng bộ tenant trước paint để camera/demo data sẵn sàng */
   useLayoutEffect(() => {
-    setActiveTenant(SAFETY_TENANT_ID)
+    setActiveTenant(DEFAULT_SAFETY_TENANT_ID)
   }, [setActiveTenant])
 }
 

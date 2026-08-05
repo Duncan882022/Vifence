@@ -23,6 +23,7 @@ import { SafetyGroupCollapsedSummary } from '../components/dashboard/SafetyGroup
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import { SafetyHandleConfirmDialog } from '../components/SafetyHandleConfirmDialog'
+import { SafetyViolationDetailModal } from '../components/SafetyViolationDetailModal'
 const SafetyPlaybackModal = lazy(() =>
   import('../components/SafetyPlaybackModal').then(m => ({ default: m.SafetyPlaybackModal })),
 )
@@ -31,11 +32,9 @@ import {
   computeDashboardKpis,
   computeGroupStats,
   filterViolations,
-  getAllSafetyRecords,
   getPriorityAlerts,
   mergeViolationStatusOverrides,
 } from '../services/safetyDashboard.service'
-import { mergeSafetyRecordsWithAi } from '../services/safetyAiEvents.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { violationRecordToEvent } from '../utils/violationAdapter'
 import {
@@ -78,16 +77,14 @@ export function SafetyDashboardPage() {
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>()
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
   const [playbackModalEvent, setPlaybackModalEvent] = useState<Event | null>(null)
-  const [activeStreamCount, setActiveStreamCount] = useState(12)
+  const [activeStreamCount, setActiveStreamCount] = useState(2)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
+  const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
   const aiLiveRecords = useSafetyAiEvents(15000)
 
   const allRecords = useMemo(
-    () => mergeViolationStatusOverrides(
-      mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
-      statusOverrides,
-    ),
+    () => mergeViolationStatusOverrides(aiLiveRecords, statusOverrides),
     [statusOverrides, aiLiveRecords],
   )
 
@@ -100,8 +97,11 @@ export function SafetyDashboardPage() {
     [allRecords, filters],
   )
 
-  const kpis = useMemo(() => computeDashboardKpis(alertScope), [alertScope])
-  const groupStats = useMemo(() => computeGroupStats(alertScope), [alertScope])
+  const kpis = useMemo(() => computeDashboardKpis(allRecords), [allRecords])
+  const groupStats = useMemo(
+    () => computeGroupStats(alertScope, allRecords),
+    [alertScope, allRecords],
+  )
   const alerts = useMemo(() => getPriorityAlerts(alertScope), [alertScope])
 
   const handlePlayback = (v: SafetyViolationRecord) => {
@@ -304,6 +304,7 @@ export function SafetyDashboardPage() {
                 onPlayback={handlePlayback}
                 onSelect={v => setSelectedId(v.id)}
                 onHandle={handleHandleRequest}
+                onSnapshotClick={setDetailRecord}
               />
             </div>
           </div>
@@ -347,6 +348,7 @@ export function SafetyDashboardPage() {
                   selectedId={selectedId}
                   onSelect={v => setSelectedId(v.id)}
                   onPlayback={handlePlayback}
+                  onSnapshotClick={setDetailRecord}
                 />
               )}
             </Panel>
@@ -359,6 +361,12 @@ export function SafetyDashboardPage() {
         record={handleTarget}
         onClose={() => setHandleTarget(null)}
         onConfirm={confirmHandled}
+      />
+
+      <SafetyViolationDetailModal
+        record={detailRecord}
+        onClose={() => setDetailRecord(null)}
+        onPlayback={handlePlayback}
       />
 
       <Suspense fallback={null}>

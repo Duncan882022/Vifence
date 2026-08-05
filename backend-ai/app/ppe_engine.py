@@ -11,6 +11,7 @@ from .config import settings
 from .events import EventStore, PersistenceDebouncer
 from .ppe_analyzer import analyze_ppe_frame
 from .schemas import PpeDetection, ViolationEvent
+from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("ppe_engine")
 
@@ -18,7 +19,7 @@ _CONFIRM_SECONDS = 3.0
 _REPEAT_SECONDS = settings.ppe_event_repeat_seconds
 _MAX_GAP_SECONDS = 3.0
 _TRACK_EXPIRE_SECONDS = 4.0
-_VIOLATION_MIN_CONF = 0.55
+_VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _EVENT_BEHAVIORS = frozenset({"no_helmet", "no_vest", "no_shoes"})
 _MAX_TRACKS = 24
 

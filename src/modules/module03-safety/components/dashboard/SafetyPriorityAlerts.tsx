@@ -41,6 +41,7 @@ interface SafetyEventsPanelProps {
   onPlayback?: (v: SafetyViolationRecord) => void
   onSelect?: (v: SafetyViolationRecord) => void
   onHandle?: (v: SafetyViolationRecord) => void
+  onSnapshotClick?: (v: SafetyViolationRecord) => void
 }
 
 type AlertFilterTab = 'all' | AlertSeverity | 'handled' | 'unhandled'
@@ -172,11 +173,13 @@ function AlertCard({
   onPlayback,
   onSelect,
   onHandle,
+  onSnapshotClick,
 }: {
   v: SafetyViolationRecord
   onPlayback?: (v: SafetyViolationRecord) => void
   onSelect?: (v: SafetyViolationRecord) => void
   onHandle?: (v: SafetyViolationRecord) => void
+  onSnapshotClick?: (v: SafetyViolationRecord) => void
 }) {
   const aiAutoHandled = isAiAutoHandled(v)
   const handled = v.status === 'CLOSED'
@@ -201,6 +204,7 @@ function AlertCard({
         <AlertEventSnapshot
           record={v}
           className="self-stretch"
+          onClick={onSnapshotClick}
         />
 
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
@@ -253,7 +257,7 @@ function AlertCard({
 export function SafetyEventsPanel({
   all, warning, violation, critical,
   selectedGroupId = null,
-  onPlayback, onSelect, onHandle,
+  onPlayback, onSelect, onHandle, onSnapshotClick,
 }: SafetyEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<AlertFilterTab>('all')
   const [groupQuickFilters, setGroupQuickFilters] = useState<Set<SafetyGroupId>>(new Set())
@@ -434,7 +438,7 @@ export function SafetyEventsPanel({
         ) : (
           <div className="space-y-2">
             {visibleItems.map(v => (
-              <AlertCard key={v.id} v={v} onPlayback={onPlayback} onSelect={onSelect} onHandle={onHandle} />
+              <AlertCard key={v.id} v={v} onPlayback={onPlayback} onSelect={onSelect} onHandle={onHandle} onSnapshotClick={onSnapshotClick} />
             ))}
 
             {hasMore && (

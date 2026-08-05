@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     road_event_repeat_seconds: float = 7200.0
     crane_event_repeat_seconds: float = 7200.0
     ppe_event_repeat_seconds: float = 60.0
+    # PCCC Cam A-04 — lặp snapshot tối đa 10 phút/lần cho cùng loại vi phạm.
+    pccc_event_repeat_seconds: float = 600.0
+    # WAH Cam A-04 — lặp snapshot tối đa 10 phút/lần.
+    wah_event_repeat_seconds: float = 600.0
+    # ATGT Cam A-03 — lặp snapshot tối đa 45s/lần (demo loop ~15s).
+    atgt_event_repeat_seconds: float = 45.0
 
     # Hút thuốc — lặp snapshot mỗi 30 phút nếu vẫn phát hiện.
     smoking_event_cooldown_seconds: float = 1800.0

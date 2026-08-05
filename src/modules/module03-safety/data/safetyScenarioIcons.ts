@@ -1,43 +1,24 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  Anchor, ArrowDownFromLine, Cable, Cigarette, CircleSlash, Construction, Droplets, Fence, Flag, Flame, Footprints,
-  Forklift, Gauge, Grid3x3, Link2Off, OctagonX, Package, PanelTop, PersonStanding, Pickaxe, Scissors, Shirt,
-  Shovel, Waypoints,
+  Anchor, Cigarette, CircleSlash, Construction, Droplets, Flame, Footprints,
+  Gauge, Package, Pickaxe, Shirt, Waypoints,
 } from 'lucide-react'
 import { SAFETY_SCENARIOS } from './safetyScenarios'
 
-/** 19 icon — mỗi kịch bản một icon, không trùng component */
+/** 12 icon — mỗi kịch bản triển khai một icon */
 export const SCENARIO_ICONS: Record<string, LucideIcon> = {
-  'PPE-001': CircleSlash,       // Không đội mũ (≠ HardHat header nhóm)
-  'PPE-002': Shirt,             // Không mặc áo phản quang
-  'PPE-003': Footprints,        // Không mang giày BHLD
-  'WAH-001': Anchor,            // Không dùng dây tại mép biên
-  'WAH-002': ArrowDownFromLine, // Quăng/ném từ trên cao
-  'WAH-003': Link2Off,          // Có dây nhưng không móc neo
-  'DZ-001': Shovel,             // Đất đào sát mép hố
-  'DZ-002': Flag,               // Thiếu cờ/biển cảnh báo
-  'DZ-003': Construction,       // Làm việc gần máy cẩu
-  'ATGT-001': PersonStanding,   // Thiếu người điều hướng
-  'ATGT-002': Gauge,            // Vượt tốc độ
-  'ATGT-003': OctagonX,         // Thiếu đèn đỏ / biển dừng
-  'ATGT-004': Waypoints,        // Không phân làn/luồng
-  'BPTC-001': Grid3x3,          // Lưới/giáo bao che
-  'BPTC-002': Forklift,         // Cẩu/nâng thẳng lên cao
-  'BPTC-003': PanelTop,         // Sàn tiếp liệu
-  'BPTC-004': Scissors,         // Hàn/cắt thiếu che chắn
-  'BPTC-005': Fence,            // Thiếu lưới chống rơi
-  'BPTC-006': Cable,            // Thiếu dây cứu sinh/lan can
-  'BPTC-007': Pickaxe,           // Bùn đất trên đường nội bộ
-  'BPTC-008': Droplets,          // Đường nội bộ đọng nước
-  'BPTC-009': Package,           // Vật tư chiếm dụng lòng đường
-  'PCCC-001': Cigarette,        // Hút thuốc sai nơi quy định
-  'PCCC-002': Flame,            // Dấu hiệu cháy nổ
-}
-
-const iconRefs = Object.values(SCENARIO_ICONS)
-const uniqueRefs = new Set(iconRefs)
-if (uniqueRefs.size !== iconRefs.length) {
-  console.warn('[safetyScenarioIcons] Trùng icon component giữa các kịch bản')
+  'PPE-001': CircleSlash,
+  'PPE-002': Shirt,
+  'PPE-003': Footprints,
+  'WAH-001': Anchor,
+  'DZ-003': Construction,
+  'ATGT-002': Gauge,
+  'ATGT-004': Waypoints,
+  'BPTC-007': Pickaxe,
+  'BPTC-008': Droplets,
+  'BPTC-009': Package,
+  'PCCC-001': Cigarette,
+  'PCCC-002': Flame,
 }
 
 for (const scenario of SAFETY_SCENARIOS) {

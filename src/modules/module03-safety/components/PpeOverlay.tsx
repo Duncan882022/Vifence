@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState, memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
-import { MobileAiBackendConfig } from '@/modules/module02-training/components/MobileAiBackendConfig'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { isInPpeVideoSegment } from '../data/ppeCameras'
+import { shouldRunPpeOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
   createPpeClient,
   getMobileAiBackendUrl,
   type PpeDetection,
   type PpeMetrics,
 } from '../services/ppeBackend.service'
+import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
+import { OVERLAY_CYCLE_DEFAULTS, ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
+import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
-const VIOLATION_MIN_CONF = 0.55
+const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
 
 const BEHAVIOR_STYLE: Record<string, { border: string; fill: string; label: string; bg: string }> = {
   person: {
@@ -61,32 +64,26 @@ const BEHAVIOR_STYLE: Record<string, { border: string; fill: string; label: stri
   },
 }
 
+const COMPLIANT_BEHAVIORS = new Set(['hard_hat', 'safety_vest', 'safety_shoes'])
+
 function visibleDetections(detections: PpeDetection[]): PpeDetection[] {
   return detections.filter(d => {
+    if (COMPLIANT_BEHAVIORS.has(d.behavior)) return false
     if (d.behavior === 'person') return true
     if (d.behavior.startsWith('no_')) return d.confidence >= VIOLATION_MIN_CONF
     return d.confidence >= 0.40
   })
 }
 
-/** Ẩn bbox person nếu đã có ROI mũ/áo/giày hoặc vi phạm — tránh chồng chéo. */
+/** Chỉ ROI vi phạm + người — không hiển thị bbox “đang mang đồ”. */
 function overlayDetections(detections: PpeDetection[]): PpeDetection[] {
-  const visible = visibleDetections(detections)
-  const persons = visible.filter(d => d.behavior === 'person')
-  const items = visible.filter(d => d.behavior !== 'person')
-
-  const showPersons = persons.filter(person => {
-    const [px1, py1, px2, py2] = person.bbox
-    const hasRelated = items.some(item => {
-      const [x1, y1, x2, y2] = item.bbox
-      const cx = (x1 + x2) / 2
-      const cy = (y1 + y2) / 2
-      return cx >= px1 && cx <= px2 && cy >= py1 && cy <= py2
-    })
-    return !hasRelated
-  })
-
-  return [...showPersons, ...items]
+  return visibleDetections(detections).sort(
+    (a, b) => {
+      const diff = ppeScanRank(a.behavior, a.bbox) - ppeScanRank(b.behavior, b.bbox)
+      if (diff !== 0) return diff
+      return a.bbox[0] - b.bbox[0]
+    },
+  )
 }
 
 interface PpeOverlayProps {
@@ -104,6 +101,7 @@ function DetectionBox({
   videoRef,
   compact,
   videoFit = 'contain',
+  pulse,
 }: {
   detection: PpeDetection
   frameWidth: number
@@ -111,6 +109,7 @@ function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   videoFit: 'cover' | 'contain'
+  pulse?: boolean
 }) {
   const style = BEHAVIOR_STYLE[detection.behavior] ?? BEHAVIOR_STYLE.person
   const video = videoRef.current
@@ -142,7 +141,12 @@ function DetectionBox({
         zIndex: isViolation ? 8 : 4,
       }}
     >
-      <div className={cn('absolute inset-0 border rounded-sm', style.border, style.fill)} />
+      <div className={cn(
+        'absolute inset-0 border rounded-sm',
+        style.border,
+        style.fill,
+        pulse && 'animate-pulse',
+      )} />
       {!compact || isViolation ? (
         <span
           className={cn(
@@ -196,7 +200,7 @@ function usePpeState(
       return
     }
 
-    const shouldAnalyze = () => isInPpeVideoSegment(video.currentTime)
+    const shouldAnalyze = () => shouldRunPpeOnCamera(cameraId, video.currentTime)
 
     clientRef.current?.stop()
     clientRef.current = createPpeClient(video, {
@@ -252,13 +256,24 @@ export const PpeOverlay = memo(function PpeOverlay({
   enabled = true,
   compact,
 }: PpeOverlayProps) {
-  const { status, statusMsg, detections, frameSize } = usePpeState(cameraId, videoRef, enabled)
+  const { detections, frameSize } = usePpeState(cameraId, videoRef, enabled)
+  const { visible: cycledDetections, pulse } = useRoiCycleDisplay(
+    detections,
+    d => d.behavior.startsWith('no_'),
+    {
+      getScanRank: d => ppeScanRank(d.behavior, d.bbox),
+      getViolationRank: d => ppeViolationRank(d.behavior, d.bbox),
+      ...OVERLAY_CYCLE_DEFAULTS,
+    },
+  )
 
-  const showStatus = status === 'error' || status === 'connecting'
+  const showContent = cycledDetections.length > 0 && frameSize.width > 0
+
+  if (!showContent) return null
 
   return (
     <>
-      {detections.map((d, i) => (
+      {cycledDetections.map((d, i) => (
         <DetectionBox
           key={`${d.behavior}-${i}-${d.bbox.join(',')}`}
           detection={d}
@@ -267,18 +282,9 @@ export const PpeOverlay = memo(function PpeOverlay({
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
+          pulse={pulse}
         />
       ))}
-      {showStatus && (
-        <div className="absolute bottom-1 left-1 z-20 pointer-events-none">
-          <span className="text-[7px] font-mono px-1 py-0.5 rounded bg-black/60 text-white/80">
-            PPE {status === 'connecting' ? '…' : statusMsg ?? status}
-          </span>
-        </div>
-      )}
-      {!compact && status === 'error' && (
-        <MobileAiBackendConfig className="absolute bottom-6 left-1 z-30" />
-      )}
     </>
   )
 })

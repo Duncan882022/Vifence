@@ -2,15 +2,26 @@ import { useEffect, useRef } from 'react'
 import { cn } from '@/utils/cn'
 import { CameraAiOverlay } from './CameraAiOverlay'
 import { CraneProximityOverlay } from '@/modules/module03-safety/components/CraneProximityOverlay'
+import { PcccOverlay } from '@/modules/module03-safety/components/PcccOverlay'
 import { PpeOverlay } from '@/modules/module03-safety/components/PpeOverlay'
-import { isCraneProximityCamera } from '@/modules/module03-safety/data/craneProximityCameras'
-import { isPpeCamera } from '@/modules/module03-safety/data/ppeCameras'
+import { WahOverlay } from '@/modules/module03-safety/components/WahOverlay'
+import { AtgtOverlay } from '@/modules/module03-safety/components/AtgtOverlay'
+import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlayCycleSync'
+import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
 import {
   isAiOverlayDisabledCamera,
+  isAtgtCamera,
+  isCraneProximityCamera,
+  isFaceOverlayCamera,
+  isPcccCamera,
+  isPpeCamera,
   isRoadAnalysisOverlayCamera,
-} from '@/modules/module04-housekeeping/data/roadAnalysisCameras'
+  isWahCamera,
+} from '../data/cameraAiRuntime'
 import { getFeedKeyForCamera, getVideoObjectFitForCamera } from '../data/trainingCameraFeeds'
+import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
+import { useCameraBboxVisible } from './CameraBboxToggle'
 
 interface CameraVideoFeedProps {
   cameraId: string
@@ -32,16 +43,29 @@ export function CameraVideoFeed({
   compact,
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [bboxVisible] = useCameraBboxVisible(cameraId)
+  useCameraAiEnabledModels(cameraId)
+  const overlayActive = Boolean(aiOverlay && bboxVisible)
   const feedKey = getFeedKeyForCamera(cameraId)
   const overlayDisabled = isAiOverlayDisabledCamera(cameraId)
   const roadAnalysis = isRoadAnalysisOverlayCamera(cameraId)
   const craneProximity = isCraneProximityCamera(cameraId)
   const ppeAnalysis = isPpeCamera(cameraId)
+  const pcccAnalysis = isPcccCamera(cameraId)
+  const wahAnalysis = isWahCamera(cameraId)
+  const atgtAnalysis = isAtgtCamera(cameraId)
+  const faceDemo = isFaceOverlayCamera(cameraId)
   const videoFit = getVideoObjectFitForCamera(cameraId, streamType)
-  const showFaceOverlay = Boolean(aiOverlay && feedKey && !roadAnalysis && !craneProximity && !ppeAnalysis && !overlayDisabled)
-  const showRoadOverlay = Boolean(aiOverlay && roadAnalysis && !overlayDisabled)
-  const showCraneOverlay = Boolean(aiOverlay && craneProximity && !overlayDisabled)
-  const showPpeOverlay = Boolean(aiOverlay && ppeAnalysis && !overlayDisabled)
+  const showFaceOverlay = Boolean(
+    overlayActive && feedKey && faceDemo && !roadAnalysis && !craneProximity && !ppeAnalysis && !pcccAnalysis && !wahAnalysis && !atgtAnalysis && !overlayDisabled,
+  )
+  const showRoadOverlay = Boolean(overlayActive && roadAnalysis && !overlayDisabled)
+  const showCraneOverlay = Boolean(overlayActive && craneProximity && !overlayDisabled)
+  const showPpeOverlay = Boolean(overlayActive && ppeAnalysis && !overlayDisabled)
+  const showPcccOverlay = Boolean(overlayActive && pcccAnalysis && !overlayDisabled)
+  const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
+  const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
+  const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPcccOverlay || showWahOverlay || showAtgtOverlay
 
   useEffect(() => {
     const video = videoRef.current
@@ -100,7 +124,7 @@ export function CameraVideoFeed({
           feedKey={feedKey}
           compact={compact}
           videoRef={videoRef}
-          enabled={playing && aiOverlay}
+          enabled={playing && overlayActive}
         />
       )}
       {showRoadOverlay && (
@@ -109,27 +133,59 @@ export function CameraVideoFeed({
           compact={compact}
           videoRef={videoRef}
           videoFit={videoFit}
-          enabled={playing && aiOverlay}
+          enabled={playing && overlayActive}
         />
       )}
-      {showCraneOverlay && (
-        <CraneProximityOverlay
-          cameraId={cameraId}
-          compact={compact}
-          videoRef={videoRef}
-          videoFit={videoFit}
-          enabled={playing && aiOverlay}
-        />
-      )}
-      {showPpeOverlay && (
-        <PpeOverlay
-          cameraId={cameraId}
-          compact={compact}
-          videoRef={videoRef}
-          videoFit={videoFit}
-          enabled={playing && aiOverlay}
-        />
-      )}
+      <OverlayCycleProvider
+        enabled={playing && overlayActive && showAnySafetyOverlay}
+        stepMs={OVERLAY_CYCLE_DEFAULTS.stepMs}
+        holdMs={OVERLAY_CYCLE_DEFAULTS.holdMs}
+      >
+        {showCraneOverlay && (
+          <CraneProximityOverlay
+            cameraId={cameraId}
+            compact={compact}
+            videoRef={videoRef}
+            videoFit={videoFit}
+            enabled={playing && overlayActive}
+          />
+        )}
+        {showPpeOverlay && (
+          <PpeOverlay
+            cameraId={cameraId}
+            compact={compact}
+            videoRef={videoRef}
+            videoFit={videoFit}
+            enabled={playing && overlayActive}
+          />
+        )}
+        {showPcccOverlay && (
+          <PcccOverlay
+            cameraId={cameraId}
+            compact={compact}
+            videoRef={videoRef}
+            enabled={playing && overlayActive}
+          />
+        )}
+        {showWahOverlay && (
+          <WahOverlay
+            cameraId={cameraId}
+            compact={compact}
+            videoRef={videoRef}
+            videoFit={videoFit}
+            enabled={playing && overlayActive}
+          />
+        )}
+        {showAtgtOverlay && (
+          <AtgtOverlay
+            cameraId={cameraId}
+            compact={compact}
+            videoRef={videoRef}
+            videoFit={videoFit}
+            enabled={playing && overlayActive}
+          />
+        )}
+      </OverlayCycleProvider>
     </div>
   )
 }

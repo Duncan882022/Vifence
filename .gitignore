@@ -11,3 +11,6 @@ vifence-pages.zip
 !.env.example
 backend-ai/data/auto_train/
 backend-ai/.venv/
+yolov8n.pt
+public/camera-feeds/*.bak*
+public/camera-feeds/*.pre-*

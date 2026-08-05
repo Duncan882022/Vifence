@@ -1,0 +1,17 @@
+{
+  "frames": [
+    {
+      "file": "scene.jpg",
+      "width": 1024,
+      "height": 976,
+      "boxes": {
+        "person_1": [770, 94, 815, 188],
+        "person_2": [888, 40, 938, 132]
+      },
+      "harness": {
+        "person_1": true,
+        "person_2": true
+      }
+    }
+  ]
+}

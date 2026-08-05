@@ -13,7 +13,7 @@ export interface SafetyMonitoringCategory {
   alerts: string[]
 }
 
-/** SAFETY GROUP DICTIONARY — nguồn sự thật cho phân loại vi phạm ATLD (19 kịch bản) */
+/** SAFETY GROUP DICTIONARY — chỉ kịch bản đã triển khai AI (12 kịch bản / 6 nhóm) */
 export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
   {
     id: 'ppe',
@@ -45,8 +45,6 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     goal: 'Giám sát các hành vi của người lao động khi làm việc trên cao nhằm phòng ngừa nguy cơ ngã cao và vật rơi.',
     scenarios: [
       'Không sử dụng dây an toàn tại mép biên',
-      'Quăng, ném vật liệu từ trên cao',
-      'Không đeo hoặc không móc dây an toàn khi làm việc trên cao',
     ],
     monitoringMethods: [
       'Kiểm tra trước thi công (Pre-work Inspection)',
@@ -71,8 +69,6 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     shortTitle: 'Khu vực nguy hiểm',
     goal: 'Giám sát các khu vực nguy hiểm nhằm phát hiện điều kiện mất an toàn và ngăn ngừa người hoặc phương tiện tiếp cận vùng rủi ro.',
     scenarios: [
-      'Đất đào hoặc vật tư cách mép hố < 0,5 m',
-      'Không bố trí biển báo hoặc cờ cảnh báo hố sâu',
       'Làm việc trong vùng nguy hiểm',
     ],
     monitoringMethods: [
@@ -97,9 +93,7 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     shortTitle: 'An toàn giao thông',
     goal: 'Giám sát việc tổ chức giao thông và hoạt động của phương tiện trong công trường.',
     scenarios: [
-      'Không bố trí người điều hướng giao thông',
       'Phương tiện vượt tốc độ quy định',
-      'Không bố trí đèn đỏ, biển báo hoặc cảnh báo giao thông',
       'Không tổ chức phân làn, phân luồng giao thông',
     ],
     monitoringMethods: ['Giám sát liên tục', 'Theo sự kiện'],
@@ -120,12 +114,6 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
     shortTitle: 'Biện pháp thi công',
     goal: 'Giám sát việc triển khai hiện trường theo đúng biện pháp thi công đã được phê duyệt.',
     scenarios: [
-      'Giáo hoặc lưới bao che không đúng quy định',
-      'Cẩu vật tư trực tiếp lên ban công, không có sàn tiếp nhận',
-      'Sàn tiếp liệu trên cao ≥ 6 m không đúng biện pháp',
-      'Hàn, cắt không có che chắn',
-      'Thi công kết cấu thép, lợp mái không có lưới chống rơi',
-      'Thi công trên cao không có dây cứu sinh, lan can hoặc sàn thao tác',
       'Đường nội bộ bùn bẩn',
       'Đường nội bộ đọng nước',
       'Vật tư chiếm dụng lòng đường',

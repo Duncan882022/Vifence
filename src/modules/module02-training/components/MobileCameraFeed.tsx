@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, Circle, SwitchCamera, Wifi } from 'lucide-react'
+import { Camera } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
   buildMobileCaptureConstraints,
@@ -10,12 +10,14 @@ import {
 import {
   createMobileAiAnalyzeClient,
   getMobileAiBackendUrl,
+  MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiAnalyzeResult,
-  type MobileAiConnectionStatus,
   type MobileAiDetection,
 } from '../services/mobileAiBackend.service'
-import { MobileAiBackendConfig } from './MobileAiBackendConfig'
-import { MobileAiAlertBadge, MobileAiOverlay } from './MobileAiOverlay'
+import { MobileAiOverlay } from './MobileAiOverlay'
+import { isMobileSmokingFireCamera } from '../data/cameraAiRuntime'
+import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
+import { useCameraBboxVisible } from './CameraBboxToggle'
 
 type MobileFeedStatus = 'idle' | 'scanning' | 'live' | 'error'
 
@@ -27,7 +29,6 @@ interface MobileCameraFeedProps {
   autoStartCapture?: boolean
   compact?: boolean
   aiEnabled?: boolean
-  onMaximize?: () => void
 }
 
 export function MobileCameraFeed({
@@ -48,17 +49,19 @@ export function MobileCameraFeed({
   const [status, setStatus] = useState<MobileFeedStatus>('idle')
   const [errorMsg, setErrorMsg] = useState<string>()
   const [backendUrl, setBackendUrl] = useState(() => getMobileAiBackendUrl())
-  const [aiStatus, setAiStatus] = useState<MobileAiConnectionStatus>('idle')
   const [detections, setDetections] = useState<MobileAiDetection[]>([])
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const [layoutTick, setLayoutTick] = useState(0)
   const facingRef = useRef<CameraFacing>('environment')
   const deviceIndexRef = useRef(0)
+  const [bboxVisible] = useCameraBboxVisible(cameraId)
+  useCameraAiEnabledModels(cameraId)
+  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId)
+  const showAiOverlay = aiEnabled && bboxVisible && mobileAiEnabled
 
   const stopAiClient = useCallback(() => {
     aiClientRef.current?.stop()
     aiClientRef.current = null
-    setAiStatus('idle')
     setDetections([])
   }, [])
 
@@ -73,7 +76,7 @@ export function MobileCameraFeed({
     stopAiClient()
     const video = videoRef.current
     const url = getMobileAiBackendUrl()
-    if (!aiEnabled || !video || !url || status !== 'live') return
+    if (!showAiOverlay || !video || !url || status !== 'live') return
 
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
@@ -97,11 +100,11 @@ export function MobileCameraFeed({
         }
         setFrameSize({ width: result.width, height: result.height })
       },
-      onStatusChange: (next) => {
-        setAiStatus(next)
+      onStatusChange: () => {
+        // Trạng thái backend hiển thị qua toolbar ngrok trên CameraChrome.
       },
     })
-  }, [aiEnabled, cameraId, status, stopAiClient])
+  }, [showAiOverlay, cameraId, status, stopAiClient])
 
   const startCapture = useCallback(async (
     nextFacing?: CameraFacing,
@@ -154,14 +157,18 @@ export function MobileCameraFeed({
     }
   }, [cameraId, stopCapture])
 
-  const flipCamera = useCallback(() => {
-    if (isHandheldDevice()) {
-      const next = facingRef.current === 'user' ? 'environment' : 'user'
-      void startCapture(next)
-    } else {
-      void startCapture(undefined, deviceIndexRef.current + 1)
+  useEffect(() => {
+    const bump = () => setBackendUrl(getMobileAiBackendUrl())
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === MOBILE_AI_BACKEND_STORAGE_KEY) bump()
     }
-  }, [startCapture])
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('vifence-mobile-ai-backend-changed', bump)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('vifence-mobile-ai-backend-changed', bump)
+    }
+  }, [])
 
   useEffect(() => {
     if (!playing) {
@@ -180,13 +187,13 @@ export function MobileCameraFeed({
   }, [playing, cameraId, autoStartCapture])
 
   useEffect(() => {
-    if (status === 'live' && aiEnabled && backendUrl) {
+    if (status === 'live' && showAiOverlay && backendUrl) {
       startAiClient()
     } else {
       stopAiClient()
     }
     return stopAiClient
-  }, [status, aiEnabled, backendUrl, startAiClient, stopAiClient])
+  }, [status, showAiOverlay, backendUrl, startAiClient, stopAiClient])
 
   useEffect(() => {
     const video = videoRef.current
@@ -204,11 +211,6 @@ export function MobileCameraFeed({
     }
   }, [status])
 
-  const toolbarBtn = cn(
-    'rounded bg-black/55 border border-white/20 text-white/85 hover:bg-black/75 transition-colors shrink-0',
-    compact ? 'p-0.5' : 'p-1',
-  )
-
   if (!playing) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-[#0a1219] text-muted-foreground">
@@ -219,11 +221,6 @@ export function MobileCameraFeed({
       </div>
     )
   }
-
-  const toolbarCorner = cn(
-    'absolute z-[6] flex flex-col gap-1 pointer-events-auto',
-    compact ? 'top-1 right-1' : 'top-2 right-2',
-  )
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-black">
@@ -238,18 +235,15 @@ export function MobileCameraFeed({
         )}
       />
 
-      {status === 'live' && aiEnabled && (
-        <>
-          <MobileAiOverlay
-            detections={detections}
-            frameWidth={frameSize.width}
-            frameHeight={frameSize.height}
-            videoRef={videoRef}
-            layoutTick={layoutTick}
-            compact={compact}
-          />
-          <MobileAiAlertBadge detections={detections} compact={compact} />
-        </>
+      {status === 'live' && showAiOverlay && (
+        <MobileAiOverlay
+          detections={detections}
+          frameWidth={frameSize.width}
+          frameHeight={frameSize.height}
+          videoRef={videoRef}
+          layoutTick={layoutTick}
+          compact={compact}
+        />
       )}
 
       {status === 'scanning' && (
@@ -294,49 +288,6 @@ export function MobileCameraFeed({
             Thử lại
           </button>
         </div>
-      )}
-
-      {status === 'live' && (
-        <>
-          <div className={cn(
-            'absolute left-2 top-2 z-[4] flex items-center gap-1',
-            compact && 'top-1 left-1 gap-0.5',
-          )}>
-            <span className={cn(
-              'flex items-center gap-1 rounded bg-black/55 border border-red-500/40 text-red-300 font-bold',
-              compact ? 'px-1 py-0.5 text-[7px]' : 'px-1.5 py-0.5 text-[9px]',
-            )}>
-              <Circle className={cn(compact ? 'w-1.5 h-1.5' : 'w-2 h-2', 'fill-red-500 text-red-500 animate-pulse')} />
-              REC
-            </span>
-            {aiEnabled && aiStatus === 'connected' && (
-              <span className={cn(
-                'flex items-center gap-0.5 rounded bg-black/55 border border-green-500/35 text-green-300/90 font-bold',
-                compact ? 'px-1 py-0.5 text-[6px]' : 'px-1.5 py-0.5 text-[8px]',
-              )}>
-                <Wifi className={cn(compact ? 'w-2 h-2' : 'w-2.5 h-2.5')} />
-                AI
-              </span>
-            )}
-          </div>
-
-          <div className={cn(toolbarCorner, compact ? 'top-8' : 'top-11')}>
-            <button
-              type="button"
-              onClick={flipCamera}
-              className={toolbarBtn}
-              title={isHandheldDevice() ? 'Đổi camera trước/sau' : 'Đổi camera'}
-            >
-              <SwitchCamera className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
-            </button>
-            {aiEnabled && (
-              <MobileAiBackendConfig
-                compact={compact}
-                onSaved={() => setBackendUrl(getMobileAiBackendUrl())}
-              />
-            )}
-          </div>
-        </>
       )}
     </div>
   )

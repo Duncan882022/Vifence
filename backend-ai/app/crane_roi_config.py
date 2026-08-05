@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
+
 
 class RoiPoint(TypedDict):
     x: float
@@ -56,7 +58,7 @@ CRANE_ROI_ZONES: list[CraneRoiZone] = [
 ]
 
 PROXIMITY_THRESHOLD_METERS = 1.0
-EVENT_MIN_CONFIDENCE = 0.80
+EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
 PERSON_MIN_CONFIDENCE = 0.45
 CRANE_MIN_CONFIDENCE = 0.50
 DEFAULT_PIXELS_PER_METER = 92.0

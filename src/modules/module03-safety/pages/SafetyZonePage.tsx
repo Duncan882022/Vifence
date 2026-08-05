@@ -7,26 +7,24 @@ import { SAFETY_ZONE_MAP } from '../data/safetyZones'
 import { MONITORING_DEVICE_MAP } from '../data/monitoringDevices'
 import { MONITORING_PROFILE_MAP } from '../data/monitoringProfiles'
 import {
-  getAllSafetyRecords,
   getZoneOpenCount,
   getZoneViolationsToday,
 } from '../services/safetyDashboard.service'
-import { mergeSafetyRecordsWithAi } from '../services/safetyAiEvents.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
+import { SafetyViolationDetailModal } from '../components/SafetyViolationDetailModal'
 import { SafetySiteMap } from '../components/dashboard/SafetySiteMap'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
 import { cn } from '@/utils/cn'
+import type { SafetyViolationRecord } from '../types/safety.types'
 
 export function SafetyZonePage() {
   const { zoneId } = useParams<{ zoneId: string }>()
   const [eventsOpen, setEventsOpen] = useState(true)
+  const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
   const zone = zoneId ? SAFETY_ZONE_MAP.get(zoneId) : null
   const aiLiveRecords = useSafetyAiEvents(15000)
-  const allRecords = useMemo(
-    () => mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
-    [aiLiveRecords],
-  )
+  const allRecords = aiLiveRecords
 
   const records = useMemo(
     () => (zoneId ? getZoneViolationsToday(zoneId, allRecords) : []),
@@ -130,10 +128,18 @@ export function SafetyZonePage() {
           }
         >
           {eventsOpen && (
-            <SafetyViolationTable records={records} />
+            <SafetyViolationTable
+              records={records}
+              onSnapshotClick={setDetailRecord}
+            />
           )}
         </Panel>
       </div>
+
+      <SafetyViolationDetailModal
+        record={detailRecord}
+        onClose={() => setDetailRecord(null)}
+      />
     </PageLayout>
   )
 }

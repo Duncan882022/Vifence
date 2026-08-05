@@ -3,8 +3,9 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Play, Send, ShieldCheck } fro
 import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../../types/safety.types'
 import { getScenarioName, SAFETY_SCENARIO_MAP } from '../../data/safetyScenarios'
-import { getZoneName } from '../../data/safetyZones'
-import { DEVICE_TYPE_LABELS } from '../../data/monitoringDevices'
+import { getEventAreaLabel, getEventSourceLabel } from '../../utils/safetyCameraBridge'
+import { displayUnknown } from '../../utils/displayUnknown'
+import { getResponsiblePartyLabel } from '../../utils/eventSubject'
 import {
   AUTOMATION_BADGE, formatSla, getAlertCardStatusDisplay, isAiAutoHandled, SEVERITY_BADGE,
   SEVERITY_ICONS,
@@ -12,13 +13,13 @@ import {
 } from '../../utils/safetyDashboardUi'
 import { formatDateTime } from '@/utils/format'
 import { EventSubjectCell } from '../violations/EventSubjectCell'
-import { getSubject } from '../../utils/eventSubject'
 
 interface SafetyViolationTableProps {
   records: SafetyViolationRecord[]
   selectedId?: string
   onSelect?: (v: SafetyViolationRecord) => void
   onPlayback?: (v: SafetyViolationRecord) => void
+  onSnapshotClick?: (v: SafetyViolationRecord) => void
 }
 
 type SortKey = 'detectedAt' | 'zoneId' | 'groupId' | 'scenarioId' | 'severity' | 'status'
@@ -66,7 +67,8 @@ function compareRecords(a: SafetyViolationRecord, b: SafetyViolationRecord, key:
       cmp = a.detectedAt.localeCompare(b.detectedAt)
       break
     case 'zoneId':
-      cmp = getZoneName(a.zoneId).localeCompare(getZoneName(b.zoneId), 'vi')
+      cmp = getEventAreaLabel(a.sourceDeviceId, a.sourceType, a.zoneId)
+        .localeCompare(getEventAreaLabel(b.sourceDeviceId, b.sourceType, b.zoneId), 'vi')
       break
     case 'groupId':
       cmp = a.groupId.localeCompare(b.groupId)
@@ -128,7 +130,7 @@ function SortableHeader({
 }
 
 export function SafetyViolationTable({
-  records, selectedId, onSelect, onPlayback,
+  records, selectedId, onSelect, onPlayback, onSnapshotClick,
 }: SafetyViolationTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('detectedAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -211,7 +213,7 @@ export function SafetyViolationTable({
               const aiAutoHandled = isAiAutoHandled(v)
               const StatusIcon = statusDisplay.icon
               const SeverityIcon = SEVERITY_ICONS[v.severity]
-              const contractor = getSubject(v).contractorName ?? getSubject(v).siteContractor ?? v.contractorName
+              const contractor = getResponsiblePartyLabel(v)
 
               return (
                 <tr
@@ -227,12 +229,12 @@ export function SafetyViolationTable({
                   </td>
                   <td className="px-2 py-1.5 text-[9px] text-muted-foreground tabular-nums whitespace-nowrap align-top">{formatDateTime(v.detectedAt)}</td>
                   <td className="px-2 py-1.5 min-w-[160px] max-w-[220px] align-top">
-                    <EventSubjectCell record={v} compact />
+                    <EventSubjectCell record={v} compact onSnapshotClick={onSnapshotClick} />
                   </td>
-                  <td className="px-2 py-1.5 text-[9px] text-foreground whitespace-nowrap align-top">{getZoneName(v.zoneId)}</td>
+                  <td className="px-2 py-1.5 text-[9px] text-foreground whitespace-nowrap align-top">{displayUnknown(getEventAreaLabel(v.sourceDeviceId, v.sourceType, v.zoneId))}</td>
                   <td className="px-2 py-1.5 text-[9px] font-bold text-muted-foreground align-top">{v.groupId}</td>
                   <td className="px-2 py-1.5 text-[9px] text-foreground max-w-[130px] truncate align-top">{getScenarioName(v.scenarioId)}</td>
-                  <td className="px-2 py-1.5 text-[9px] text-muted-foreground whitespace-nowrap align-top">{DEVICE_TYPE_LABELS[v.sourceType]}</td>
+                  <td className="px-2 py-1.5 text-[9px] text-muted-foreground whitespace-nowrap align-top">{displayUnknown(getEventSourceLabel(v.sourceDeviceId, v.sourceType))}</td>
                   <td className="px-2 py-1.5 align-top">
                     <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', SEVERITY_BADGE[v.severity])}>
                       <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
@@ -257,9 +259,7 @@ export function SafetyViolationTable({
                                 : 'HSE'}
                       </span>
                     )}
-                    {contractor && (
-                      <p className="text-[7px] text-muted-foreground/70 mt-0.5 truncate max-w-[90px]">{contractor}</p>
-                    )}
+                    <p className="text-[7px] text-muted-foreground/70 mt-0.5 truncate max-w-[90px]">{contractor}</p>
                   </td>
                   <td className={cn('px-2 py-1.5 text-[9px] tabular-nums align-top', sla.className)}>{sla.label}</td>
                   <td className="px-2 py-1.5 align-top">

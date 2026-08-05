@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Maximize2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { CameraChrome, CameraLiveBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
@@ -15,7 +16,6 @@ import {
   filterCameras,
   groupCamerasForSidebar,
   isDefaultCourseCamera,
-  streamTypeBadge,
   type CameraFilterTab,
   type TrainingCamera,
 } from '../data/trainingCameras'
@@ -25,8 +25,8 @@ const CCTV_SCANLINE = {
     'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
 } as const
 
-function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, onMaximize }: {
-  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; onMaximize?: () => void
+function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
+  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean
 }) {
   if (cam.streamType === 'mobile') {
     return (
@@ -37,7 +37,6 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, onMax
         autoStartCapture={playing}
         compact={compact}
         aiEnabled={aiOverlay}
-        onMaximize={onMaximize}
       />
     )
   }
@@ -57,8 +56,6 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, onMax
 function CameraThumb({ cam, selected, onClick, compact = false, strip = false }: {
   cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean
 }) {
-  const badge = streamTypeBadge(cam)
-
   return (
     <div
       onClick={onClick}
@@ -75,17 +72,9 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
       <CameraLiveFeed cam={cam} playing={false} compact aiOverlay={false} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
-      <span className="absolute top-0.5 left-0.5 flex items-center gap-0.5">
-        <span className={cn('rounded-full bg-red-500 animate-pulse', compact ? 'w-0.5 h-0.5' : 'w-1 h-1')} />
-        <span className={cn('text-red-400 font-bold tracking-tight', compact ? 'text-[5px]' : 'text-[7px]')}>LIVE</span>
-      </span>
-
-      {badge && (
-        <span className={cn(
-          'absolute font-bold rounded bg-amber-500/30 text-amber-200 border border-amber-500/40',
-          compact ? 'top-0.5 right-5 text-[5px] px-0.5 py-px' : 'top-1 right-7 text-[6px] px-1 py-px',
-        )}>
-          {badge}
+      {(cam.streamType !== 'mobile' || selected) && (
+        <span className="absolute top-0.5 left-0.5 z-[1]">
+          <CameraLiveBadge compact={compact} />
         </span>
       )}
 
@@ -122,94 +111,20 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
   )
 }
 
-function CameraCell({ cam, compact, onMaximize }: {
-  cam: TrainingCamera; compact?: boolean; onMaximize: () => void
+function CameraCell({ cam, compact, onMaximize, isMaximized }: {
+  cam: TrainingCamera; compact?: boolean; onMaximize: () => void; isMaximized?: boolean
 }) {
-  const badge = streamTypeBadge(cam)
-
-  const isMobile = cam.streamType === 'mobile'
-
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact={compact} aiOverlay onMaximize={onMaximize} />
+      <CameraLiveFeed cam={cam} compact={compact} aiOverlay />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
-
-      {isMobile ? (
-        <button
-          type="button"
-          onClick={onMaximize}
-          className={cn(
-            'absolute z-[7] p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0 pointer-events-auto',
-            compact ? 'top-1 right-1' : 'top-2 right-2',
-          )}
-          title="Phóng to"
-        >
-          <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
-        </button>
-      ) : (
-        <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
-          <div className="flex items-center gap-1 min-w-0">
-            <span className={cn(
-              'bg-red-500/90 text-white font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0',
-              compact ? 'text-[8px]' : 'text-[10px]',
-            )}>
-              <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
-              LIVE
-            </span>
-            {badge && (
-              <span className={cn(
-                'shrink-0 font-bold px-1.5 py-0.5 rounded border',
-                cam.streamType === 'flycam' && 'bg-violet-500/25 border-violet-500/40 text-violet-200',
-                cam.streamType === 'bodycam' && 'bg-amber-500/25 border-amber-500/40 text-amber-200',
-                compact ? 'text-[7px]' : 'text-[8px]',
-              )}>
-                {badge}
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onMaximize}
-            className="p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0"
-            title="Phóng to"
-          >
-            <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
-          </button>
-        </div>
-      )}
-
-      <div className={cn(
-        'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent',
-        compact ? 'px-2 pt-5 pb-1.5' : 'px-3 pt-10 pb-3',
-      )}>
-        <div className="flex items-center justify-between gap-2">
-          <span className={cn(
-            'font-semibold text-white tracking-wide truncate',
-            compact ? 'text-[9px]' : 'text-[13px]',
-          )}>
-            {cameraDisplayLabel(cam)}
-          </span>
-          {cameraMetaLabel(cam) && cam.streamType === 'fixed' && (
-            <span className={cn(
-              'shrink-0 bg-blue-500/25 border border-blue-500/40 text-blue-200 rounded-full font-medium',
-              compact ? 'text-[7px] px-1.5 py-0.5' : 'text-[9px] px-2.5 py-0.5',
-            )}>
-              {cameraMetaLabel(cam)}
-            </span>
-          )}
-          {cameraMetaLabel(cam) && cam.streamType !== 'fixed' && cam.streamType !== 'mobile' && (
-            <span className={cn(
-              'shrink-0 rounded-full font-medium border text-muted-foreground/80',
-              cam.streamType === 'flycam' && 'bg-violet-500/15 border-violet-500/30',
-              cam.streamType === 'bodycam' && 'bg-amber-500/15 border-amber-500/30',
-              compact ? 'text-[7px] px-1.5 py-0.5' : 'text-[9px] px-2.5 py-0.5',
-            )}>
-              {cameraMetaLabel(cam)}
-            </span>
-          )}
-        </div>
-      </div>
+      <CameraChrome
+        cam={cam}
+        compact={compact}
+        onMaximize={onMaximize}
+        isMaximized={isMaximized}
+      />
     </div>
   )
 }
@@ -265,33 +180,26 @@ function FullscreenOverlay({ cam, onClose }: { cam: TrainingCamera | null; onClo
     if (!cam) return
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', h)
+      document.body.style.overflow = ''
+    }
   }, [cam, onClose])
 
   if (!cam) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center backdrop-blur-sm" onClick={onClose}>
-      <div className="relative flex flex-col gap-2" style={{ width: '80vw', height: '75vh' }}
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="bg-red-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
-            </span>
-            <span className="text-sm font-semibold text-white truncate">{cameraDisplayLabel(cam)}</span>
-            {cameraMetaLabel(cam) && cam.streamType !== 'mobile' && (
-              <span className="text-xs text-white/60 truncate">— {cameraMetaLabel(cam)}</span>
-            )}
-          </div>
-          <button onClick={onClose}
-            className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0">
-          <CameraCell cam={cam} onMaximize={onClose} />
-        </div>
+    <div
+      className="fixed inset-0 z-50 bg-black/92 flex items-center justify-center backdrop-blur-sm p-3"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="relative w-full h-full max-w-[96vw] max-h-[92vh] rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <CameraCell cam={cam} onMaximize={onClose} isMaximized />
       </div>
     </div>
   )

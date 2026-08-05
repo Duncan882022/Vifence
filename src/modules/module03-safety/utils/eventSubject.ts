@@ -6,6 +6,8 @@ import type {
 } from '../types/safety.types'
 import { getScenarioName, SAFETY_SCENARIO_MAP } from '../data/safetyScenarios'
 import { getZoneName, SAFETY_ZONE_MAP } from '../data/safetyZones'
+import { displayUnknown } from './displayUnknown'
+import { resolveVehiclePlate } from './vehiclePlate'
 
 export const EVENT_SUBJECT_LABELS: Record<EventSubjectType, string> = {
   PERSON: 'Người lao động',
@@ -76,9 +78,10 @@ export function buildEventSubject(input: BuildSubjectInput): SafetyEventSubject 
     case 'VEHICLE':
       return {
         type,
-        vehiclePlate: input.vehicle?.plate ?? '51C-000.00',
-        vehicleType: input.vehicle?.type ?? 'Xe tải',
-        driverName: input.vehicle?.driver ?? input.worker?.name,
+        vehiclePlate: input.vehicle?.plate
+          ? resolveVehiclePlate(input.vehicle.plate)
+          : undefined,
+        vehicleType: input.vehicle?.type,
         contractorName: input.contractorName,
         responsibleUnit: 'CONTRACTOR',
       }
@@ -176,17 +179,17 @@ export function getAlertSubjectLabel(record: SafetyViolationRecord): string {
 
   switch (type) {
     case 'PERSON':
-      return s.workerName ?? EVENT_SUBJECT_LABELS.PERSON
+      return displayUnknown(s.workerName)
     case 'VEHICLE':
-      return s.vehiclePlate ?? EVENT_SUBJECT_LABELS.VEHICLE
+      return resolveVehiclePlate(s.vehiclePlate)
     case 'SITE_CONDITION':
       return EVENT_SUBJECT_LABELS.SITE_CONDITION
     case 'CONSTRUCTION_ACTIVITY':
-      return s.workActivity ?? EVENT_SUBJECT_LABELS.CONSTRUCTION_ACTIVITY
+      return displayUnknown(s.workActivity ?? s.workItem)
     case 'MANAGEMENT':
-      return s.managementUnit ?? s.responsibleRole ?? 'Ban điều hành'
+      return displayUnknown(s.managementUnit ?? s.responsibleRole)
     default:
-      return EVENT_SUBJECT_LABELS[type] ?? '—'
+      return displayUnknown(EVENT_SUBJECT_LABELS[type])
   }
 }
 
@@ -197,18 +200,19 @@ export function getResponsiblePartyLabel(record: SafetyViolationRecord): string 
 
   switch (type) {
     case 'PERSON':
-      return s.contractorName ?? s.teamName ?? '—'
+      return displayUnknown(s.contractorName ?? s.teamName)
     case 'VEHICLE':
-      return s.contractorName ?? '—'
+      return displayUnknown(s.contractorName)
     case 'SITE_CONDITION':
-      return s.siteContractor ?? s.contractorName ?? '—'
+      return displayUnknown(s.siteContractor ?? s.contractorName)
     case 'CONSTRUCTION_ACTIVITY':
-      return s.constructionUnit ?? s.teamName ?? s.contractorName ?? '—'
+      return displayUnknown(s.constructionUnit ?? s.teamName ?? s.contractorName)
     case 'MANAGEMENT':
-      return s.managementUnit
-        ?? (s.responsibleUnit ? RESPONSIBLE_UNIT_LABELS[s.responsibleUnit] : null)
-        ?? 'Ban điều hành'
+      return displayUnknown(
+        s.managementUnit
+          ?? (s.responsibleUnit ? RESPONSIBLE_UNIT_LABELS[s.responsibleUnit] : undefined),
+      )
     default:
-      return s.contractorName ?? '—'
+      return displayUnknown(s.contractorName)
   }
 }

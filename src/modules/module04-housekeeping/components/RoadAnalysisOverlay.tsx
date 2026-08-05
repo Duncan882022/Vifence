@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoPointToOverlay, mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
-import { MobileAiBackendConfig } from '@/modules/module02-training/components/MobileAiBackendConfig'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
+import { shouldRunRoadOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
   createRoadAnalysisClient,
   getMobileAiBackendUrl,
@@ -228,17 +228,29 @@ function useRoadAnalysisState(
     const video = videoRef.current
     if (!video || !enabled) return
     const bump = () => setLayoutTick(t => t + 1)
+    const syncSegment = () => {
+      if (!shouldRunRoadOnCamera(cameraId, video.currentTime)) {
+        setDetections([])
+        setMetrics(undefined)
+      }
+    }
     const clearOverlay = () => setDetections([])
+    const onSeeked = () => {
+      clearOverlay()
+      syncSegment()
+    }
     const observer = new ResizeObserver(bump)
     observer.observe(video)
     video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('seeked', clearOverlay)
+    video.addEventListener('timeupdate', syncSegment)
+    video.addEventListener('seeked', onSeeked)
     return () => {
       observer.disconnect()
       video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('seeked', clearOverlay)
+      video.removeEventListener('timeupdate', syncSegment)
+      video.removeEventListener('seeked', onSeeked)
     }
-  }, [enabled, videoRef])
+  }, [cameraId, enabled, videoRef])
 
   const stopClient = useCallback(() => {
     clientRef.current?.stop()
@@ -261,10 +273,18 @@ function useRoadAnalysisState(
       return
     }
 
+    const shouldAnalyze = () => shouldRunRoadOnCamera(cameraId, video.currentTime)
+
     clientRef.current = createRoadAnalysisClient(video, {
       cameraId,
       backendUrl,
+      shouldAnalyze,
       onResult: result => {
+        if (!shouldRunRoadOnCamera(cameraId, video.currentTime)) {
+          setDetections([])
+          setMetrics(undefined)
+          return
+        }
         setDetections(visibleDetections(result.detections))
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
@@ -288,28 +308,16 @@ export function RoadAnalysisOverlay({
   enabled = true,
   compact,
 }: RoadAnalysisOverlayProps) {
-  const { status, statusMsg, detections, frameSize, metrics, roiZones, layoutTick } =
+  const { detections, frameSize, roiZones, layoutTick } =
     useRoadAnalysisState(cameraId, videoRef, enabled)
 
-  const hasBackend = Boolean(getMobileAiBackendUrl())
-  const showContent = enabled
-
-  if (!showContent) return null
+  if (!enabled) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
       {roiZones.length > 0 && (
         <RoiPolygons zones={roiZones} videoRef={videoRef} videoFit={videoFit} />
       )}
-
-      <div className="absolute top-2 left-2 z-[4] pointer-events-auto flex items-center gap-1">
-        <MobileAiBackendConfig compact={compact} />
-        {!hasBackend && !compact && (
-          <span className="text-[7px] font-mono px-1 py-px rounded bg-sky-500/15 text-sky-200 border border-sky-500/30">
-            URL chung Mobile · iPhone
-          </span>
-        )}
-      </div>
 
       {frameSize.width > 0 && detections.map((d, idx) => (
         <DetectionBox
@@ -322,36 +330,6 @@ export function RoadAnalysisOverlay({
           videoFit={videoFit}
         />
       ))}
-
-      {!compact && metrics && (
-        <div className="absolute top-2 right-2 flex flex-col gap-0.5 items-end max-w-[55%]">
-          <span className="text-[7px] font-mono px-1 py-px rounded bg-black/55 text-white/75 text-right">
-            ROI: bùn {metrics.mud_percent.toFixed(1)}% · nước {metrics.water_percent.toFixed(1)}%
-          </span>
-          {metrics.object_count > 0 && (
-            <span className="text-[7px] font-mono px-1 py-px rounded bg-orange-500/20 text-orange-200">
-              {metrics.object_count} vật thể
-            </span>
-          )}
-        </div>
-      )}
-
-      {(status === 'connecting' || status === 'error') && (
-        <div className="absolute bottom-2 left-2 text-[7px] font-mono px-1.5 py-0.5 rounded bg-black/60 max-w-[85%]">
-          <span className={status === 'error' ? 'text-red-300' : 'text-amber-200'}>
-            {status === 'connecting'
-              ? 'Đang phân tích đường…'
-              : (statusMsg ?? 'Lỗi backend')}
-          </span>
-        </div>
-      )}
-
-      {status === 'connected' && !compact && (
-        <div className="absolute bottom-2 left-10 flex items-center gap-1 px-1 py-px rounded bg-emerald-500/15 border border-emerald-500/30">
-          <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[7px] text-emerald-300 font-mono">HK AI</span>
-        </div>
-      )}
     </div>
   )
 }

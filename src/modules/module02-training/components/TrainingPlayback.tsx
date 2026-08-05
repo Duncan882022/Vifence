@@ -10,6 +10,7 @@ import { DEMO_NOW } from '../data/trainingMockData'
 import { formatCourseMeta } from '../data/trainingCourseMeta'
 import { getCourseRoomCamera, cameraDisplayLabel } from '../data/trainingCameras'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { CameraBboxToggle } from './CameraBboxToggle'
 import type { TrainingEvent, AttendanceStatus, AttendanceSession, CourseRecord } from './TrainingEventTable'
 import {
   getAttendanceBadges,
@@ -338,9 +339,12 @@ export function TrainingPlayback({ event }: TrainingPlaybackProps) {
                       'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
                   }}
                 />
-                <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 rounded bg-black/55 backdrop-blur-sm">
-                  <Camera className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-[9px] text-white/80 font-medium truncate">{cameraDisplayLabel(camera)}</span>
+                <div className="absolute top-2 left-2 right-2 flex items-center justify-between gap-2 pointer-events-none">
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-black/55 backdrop-blur-sm pointer-events-auto">
+                    <Camera className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-[9px] text-white/80 font-medium truncate">{cameraDisplayLabel(camera)}</span>
+                  </div>
+                  <CameraBboxToggle cameraId={camera.id} className="pointer-events-auto" />
                 </div>
               </>
             ) : (

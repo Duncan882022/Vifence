@@ -1,0 +1,85 @@
+{
+  "frames": [
+    {
+      "file": "0355.png",
+      "width": 1024,
+      "height": 976,
+      "pad_top": 0,
+      "pad_left": 0,
+      "boxes": {
+        "tower_crane": [
+          349,
+          134,
+          556,
+          622
+        ],
+        "sany_drill": [
+          142,
+          311,
+          374,
+          650
+        ],
+        "crane_green": [
+          515,
+          359,
+          942,
+          754
+        ]
+      }
+    },
+    {
+      "file": "0360.png",
+      "width": 1024,
+      "height": 976,
+      "pad_top": 3,
+      "pad_left": 0,
+      "boxes": {
+        "sany_drill": [
+          128,
+          268,
+          350,
+          642
+        ],
+        "tower_crane": [
+          358,
+          95,
+          526,
+          597
+        ],
+        "crane_green": [
+          469,
+          393,
+          944,
+          749
+        ]
+      }
+    },
+    {
+      "file": "0359.png",
+      "width": 1024,
+      "height": 976,
+      "pad_top": 4,
+      "pad_left": 0,
+      "boxes": {
+        "sany_drill": [
+          208,
+          301,
+          382,
+          593
+        ],
+        "tower_crane": [
+          383,
+          86,
+          556,
+          600
+        ],
+        "crane_green": [
+          564,
+          459,
+          824,
+          713
+        ]
+      }
+    }
+  ]
+}

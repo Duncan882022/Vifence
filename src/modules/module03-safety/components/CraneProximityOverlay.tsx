@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
-import { MobileAiBackendConfig } from '@/modules/module02-training/components/MobileAiBackendConfig'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
@@ -12,9 +11,12 @@ import {
   type CraneProximityDetection,
   type CraneProximityMetrics,
 } from '../services/craneProximityBackend.service'
-import { isInPpeVideoSegment, isPpeCamera } from '../data/ppeCameras'
+import { shouldRunCraneOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
+import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
+import { craneScanRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
+import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
-const EVENT_MIN_CONFIDENCE = 0.80
+const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
 const UNKNOWN_MIN_CONFIDENCE = 0.45
 
 const BOX_STYLE = {
@@ -108,6 +110,7 @@ function DetectionBox({
   videoRef,
   compact,
   videoFit = 'contain',
+  pulse,
 }: {
   detection: CraneProximityDetection
   frameWidth: number
@@ -115,6 +118,7 @@ function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   videoFit: 'cover' | 'contain'
+  pulse?: boolean
 }) {
   const style = resolveDetectionStyle(detection)
   const video = videoRef.current
@@ -165,6 +169,7 @@ function DetectionBox({
           style.border,
           style.fill,
           isPending && 'border-dashed opacity-60',
+          pulse && 'animate-pulse',
         )}
       />
       <span
@@ -249,8 +254,7 @@ function useCraneProximityState(
     clientRef.current = createCraneProximityClient(video, {
       cameraId,
       backendUrl,
-      shouldAnalyze: () =>
-        !isPpeCamera(cameraId) || !isInPpeVideoSegment(video.currentTime),
+      shouldAnalyze: () => shouldRunCraneOnCamera(cameraId, video.currentTime),
       onResult: result => {
         const visible = result.detections
           .filter(d => {
@@ -268,17 +272,8 @@ function useCraneProximityState(
           return d.confidence >= 0.40
         })
           .sort((a, b) => {
-            const rank = (d: CraneProximityDetection) => {
-              if (d.behavior === 'crane') {
-                if (d.machine_kind === 'tower_crane') return 0
-                if (d.machine_kind === 'sany_drill') return 1
-                if (d.machine_kind === 'crane_green') return 2
-                return 3
-              }
-              if (d.behavior === 'person') return 4
-              if (d.behavior === 'crane_proximity') return 5
-              return 6
-            }
+            const rank = (d: CraneProximityDetection) =>
+              craneScanRank(d.behavior, d.machine_kind)
             return rank(a) - rank(b)
           })
         setDetections(visible)
@@ -304,27 +299,24 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
   enabled = true,
   compact,
 }: CraneProximityOverlayProps) {
-  const { status, statusMsg, detections, frameSize, metrics, layoutTick } =
+  const { detections, frameSize, layoutTick } =
     useCraneProximityState(cameraId, videoRef, enabled)
 
-  const hasBackend = Boolean(getMobileAiBackendUrl())
-  const hasViolation = detections.some(d => d.behavior === 'crane_proximity')
-  const showContent = enabled && (detections.length > 0 || metrics || !hasBackend)
+  const { visible: cycledDetections, pulse } = useRoiCycleDisplay<CraneProximityDetection>(
+    detections,
+    d => d.behavior === 'crane_proximity',
+    {
+      ...OVERLAY_CYCLE_DEFAULTS,
+      getScanRank: (d: CraneProximityDetection) => craneScanRank(d.behavior, d.machine_kind),
+    },
+  )
+  const showContent = enabled && detections.length > 0 && frameSize.width > 0
 
-  if (!showContent && status !== 'connecting' && status !== 'error') return null
+  if (!showContent) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      <div className="absolute top-2 left-2 z-[4] pointer-events-auto flex items-center gap-1">
-        <MobileAiBackendConfig compact={compact} />
-        {!hasBackend && !compact && (
-          <span className="text-[7px] font-mono px-1 py-px rounded bg-amber-500/15 text-amber-200 border border-amber-500/30">
-            URL chung Mobile · Crane AI
-          </span>
-        )}
-      </div>
-
-      {frameSize.width > 0 && detections.map(d => (
+      {cycledDetections.map(d => (
         <DetectionBox
           key={`${d.behavior}-${d.machine_kind ?? 'none'}-${Math.round(d.bbox[0])}-${Math.round(d.bbox[1])}-${layoutTick}`}
           detection={d}
@@ -333,46 +325,9 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
+          pulse={pulse}
         />
       ))}
-
-      {!compact && metrics && (
-        <div className="absolute top-2 right-2 flex flex-col gap-0.5 items-end max-w-[55%]">
-          <span className="text-[7px] font-mono px-1 py-px rounded bg-black/55 text-white/75 text-right">
-            Người: {metrics.person_count} · ngưỡng ≤ {metrics.proximity_threshold_m}m
-          </span>
-          {metrics.min_distance_m != null && (
-            <span className={cn(
-              'text-[7px] font-mono px-1 py-px rounded',
-              metrics.min_distance_m <= metrics.proximity_threshold_m
-                ? 'bg-red-500/20 text-red-200'
-                : 'bg-emerald-500/15 text-emerald-200',
-            )}>
-              K/c gần nhất: {metrics.min_distance_m.toFixed(1)}m
-            </span>
-          )}
-          {hasViolation && (
-            <span className="text-[7px] font-mono px-1 py-px rounded bg-red-500/25 text-red-200 border border-red-500/40">
-              DZ
-            </span>
-          )}
-        </div>
-      )}
-
-      {(status === 'connecting' || status === 'error') && (
-        <div className="absolute bottom-2 left-2 text-[7px] font-mono px-1.5 py-0.5 rounded bg-black/60 max-w-[85%]">
-          <span className={status === 'error' ? 'text-red-300' : 'text-amber-200'}>
-            {status === 'connecting' ? 'Đang phân tích máy cẩu…' : (statusMsg ?? 'Lỗi backend')}
-          </span>
-        </div>
-      )}
-
-      {status === 'connected' && !compact && (
-        <div className="absolute bottom-2 left-10 flex items-center gap-1 px-1 py-px rounded bg-amber-500/15 border border-amber-500/30">
-          <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse" />
-          <span className="text-[7px] text-amber-300 font-mono">Crane AI</span>
-        </div>
-      )}
     </div>
   )
 })

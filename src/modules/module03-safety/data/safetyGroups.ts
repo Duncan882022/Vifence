@@ -28,7 +28,7 @@ function displayNameFromDictionary(title: string, shortTitle: string): string {
   return paren?.[1]?.trim() ?? shortTitle
 }
 
-/** 6 nhóm ATLĐ — tên & mô tả lấy từ `SAFETY_MONITORING_DICTIONARY` */
+/** 6 nhóm ATLĐ — dictionary + kịch bản khớp pipeline AI đang chạy (12 kịch bản) */
 export const SAFETY_GROUPS: SafetyGroup[] = GROUP_ORDER.map(id => {
   const violationType = GROUP_TO_VIOLATION_TYPE[id]
   const cat = SAFETY_MONITORING_DICTIONARY.find(c => c.id === violationType)!

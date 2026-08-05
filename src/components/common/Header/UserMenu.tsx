@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { User, ChevronDown, BookOpen, FileBarChart, Users, Building2, Camera, UserCog, Shield, Check, Lock } from 'lucide-react'
 import { useAppStore } from '@/store/app.store'
-import { TENANTS } from '@/data/tenants'
+import { TENANTS, type TenantId } from '@/data/tenants'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { useTenantStore } from '@/store/tenant.store'
 import { IS_DEMO_AUTH } from '@/modules/dao-tao-tuan-thu/services/ghpagesDemo.service'
 import { cn } from '@/utils/cn'
+
+/** Công trường khả dụng khi ở module ATLĐ */
+const SAFETY_TENANT_IDS = new Set<TenantId>(['ocp1', 'giang-vo'])
 
 const MENU_ITEMS = [
   {
@@ -48,11 +51,17 @@ const MENU_ITEMS = [
 
 export function UserMenu() {
   const { user } = useAppStore()
+  const location = useLocation()
+  const isSafetyModule = location.pathname.startsWith('/module03')
   const { activeTenantId, tenantName } = useActiveTenant()
   const setActiveTenant = useTenantStore(s => s.setActiveTenant)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+
+  const siteOptions = isSafetyModule
+    ? TENANTS.filter(site => SAFETY_TENANT_IDS.has(site.id))
+    : TENANTS
 
   useEffect(() => {
     if (!open) return
@@ -127,7 +136,7 @@ export function UserMenu() {
             Công trường
           </div>
           <div className="space-y-0.5 mt-1">
-            {TENANTS.map(site => {
+            {siteOptions.map(site => {
               const enabled = site.hasDemoData
               const selected = site.id === activeTenantId
 
@@ -164,29 +173,33 @@ export function UserMenu() {
             })}
           </div>
 
-          <div className="h-px bg-[#1e2433] my-2" />
+          {!isSafetyModule && (
+            <>
+              <div className="h-px bg-[#1e2433] my-2" />
 
-          {/* QUẢN TRỊ SECTION */}
-          <div className="px-3 py-1 text-[9px] font-bold text-white/40 uppercase tracking-wider">
-            Quản trị
-          </div>
-          <div className="space-y-0.5 mt-1">
-            {MENU_ITEMS.map(item => (
-              <button
-                key={item.to}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false)
-                  navigate(item.to)
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[11px] font-medium text-foreground hover:bg-[#1a2235] transition-colors"
-              >
-                <item.icon className="w-3.5 h-3.5 text-primary shrink-0" />
-                {item.label}
-              </button>
-            ))}
-          </div>
+              {/* QUẢN TRỊ SECTION */}
+              <div className="px-3 py-1 text-[9px] font-bold text-white/40 uppercase tracking-wider">
+                Quản trị
+              </div>
+              <div className="space-y-0.5 mt-1">
+                {MENU_ITEMS.map(item => (
+                  <button
+                    key={item.to}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false)
+                      navigate(item.to)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[11px] font-medium text-foreground hover:bg-[#1a2235] transition-colors"
+                  >
+                    <item.icon className="w-3.5 h-3.5 text-primary shrink-0" />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           
           {!IS_DEMO_AUTH && (
             <>

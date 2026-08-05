@@ -12,10 +12,12 @@ function needsTunnelFetch(url: string): boolean {
 /** Snapshot từ backend/ngrok — img tag không gửi được header ngrok, phải fetch blob. */
 export function RemoteViolationSnapshotImage({
   src,
+  fallbackSrc,
   alt,
   className,
 }: {
   src: string
+  fallbackSrc?: string
   alt: string
   className?: string
 }) {
@@ -43,14 +45,14 @@ export function RemoteViolationSnapshotImage({
         setDisplaySrc(objectUrl)
       })
       .catch(() => {
-        if (!cancelled) setDisplaySrc(undefined)
+        if (!cancelled) setDisplaySrc(fallbackSrc)
       })
 
     return () => {
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [src])
+  }, [src, fallbackSrc])
 
   if (!displaySrc) {
     return (

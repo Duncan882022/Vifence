@@ -8,7 +8,7 @@ import type {
 import { getAllSafetyRecords } from './safetyDashboard.service'
 import { getScenarioName } from '../data/safetyScenarios'
 import { SAFETY_CAMERAS } from '../data/safetyCameras'
-import { SAFETY_DEMO_TODAY } from '../data/safetyDemoDate'
+import { getSafetyTodayDate } from '../data/safetyDemoDate'
 import { getViolationFeedUrl, getViolationClipMarker } from '../data/safetyViolationFeeds'
 import { groupIdToFeedType, groupIdToViolationType } from '../utils/groupToViolationType'
 import { resolveTrainingCameraId } from '../utils/safetyCameraBridge'
@@ -85,5 +85,5 @@ export async function fetchSafetyRecordDetections(recordId: string): Promise<Cam
 }
 
 export function getSafetyDefaultPlaybackDate(): string {
-  return SAFETY_DEMO_TODAY
+  return getSafetyTodayDate()
 }

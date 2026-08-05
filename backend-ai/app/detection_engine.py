@@ -11,7 +11,9 @@ from .config import settings
 from .detectors import FireDetector, SmokingDetector
 from .detectors.flame_blob_detector import FlameBlobDetector
 from .events import EventStore, PersistenceDebouncer
+from .pccc_demo import match_demo_detections
 from .schemas import Detection, ViolationEvent
+from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 
 # Ngưỡng tin cậy tối thiểu để 1 box do model auto-train sinh ra được CỘNG
 # THÊM vào kết quả detect hiện tại (không thay thế) — chỉ tăng recall, không
@@ -218,15 +220,19 @@ class DetectionEngine:
     ) -> tuple[list[Detection], list[ViolationEvent]]:
         """Chạy detector trên 1 frame, trả về detections + events mới."""
         all_detections: list[Detection] = []
-        for detector in self.detectors:
-            if not detector.ready:
-                continue
-            name = getattr(detector, "name", detector.behavior)
-            if detector_names is not None and name not in detector_names:
-                continue
-            all_detections.extend(detector.predict(frame))
+        demo_dets = match_demo_detections(frame, camera_id) if camera_id else None
+        if demo_dets:
+            all_detections.extend(demo_dets)
+        else:
+            for detector in self.detectors:
+                if not detector.ready:
+                    continue
+                name = getattr(detector, "name", detector.behavior)
+                if detector_names is not None and name not in detector_names:
+                    continue
+                all_detections.extend(detector.predict(frame))
 
-        all_detections = _augment_with_auto_train_model(frame, all_detections)
+            all_detections = _augment_with_auto_train_model(frame, all_detections)
 
         by_behavior: dict[str, list[Detection]] = {}
         for det in all_detections:
@@ -262,7 +268,10 @@ class DetectionEngine:
         new_events: list[ViolationEvent] = []
         cam_key = camera_id or "LOCAL-CAM"
         for behavior, debouncer in debouncers.items():
-            dets = by_behavior.get(behavior, [])
+            dets = [
+                d for d in by_behavior.get(behavior, [])
+                if d.confidence >= VIOLATION_MIN_CONFIDENCE
+            ]
             best = max((d.confidence for d in dets), default=0.0)
             episode_key = f"{cam_key}:{behavior}"
             was_active = debouncer.snapshot()["active"]

@@ -10,21 +10,18 @@ import type {
   ZoneRiskLevel,
 } from '../types/safety.types'
 import { MONITORING_DEVICES } from '../data/monitoringDevices'
+import { computeSafetyDeviceKpis } from '../data/safetyCameras'
 import { SAFETY_GROUPS } from '../data/safetyGroups'
 import { getScenariosForGroup } from '../data/safetyScenarios'
+import { isImplementedSafetyScenario } from '../data/implementedSafetyCatalog'
 import {
-  getTodayViolations,
-  getYesterdayViolations,
-  isOpenStatus,
-  SAFETY_VIOLATION_RECORDS,
-} from '../data/safetyViolationRecords'
-import { SAFETY_ZONES } from '../data/safetyZones'
-import {
+  getSafetyTodayDate,
+  getSafetyYesterdayDate,
   SAFETY_DEMO_MONTH_START,
-  SAFETY_DEMO_TODAY,
   SAFETY_DEMO_WEEK_START,
-  SAFETY_DEMO_YESTERDAY,
 } from '../data/safetyDemoDate'
+import { isOpenStatus } from '../data/safetyViolationRecords'
+import { SAFETY_ZONES } from '../data/safetyZones'
 import {
   getEventSubjectType,
   getSubject,
@@ -37,10 +34,22 @@ import {
 import { countAlertStatusBuckets } from '../utils/safetyDashboardUi'
 
 const NEAR_DUE_HOURS = 4
-const TODAY = SAFETY_DEMO_TODAY
 
 export function getAllSafetyRecords(): SafetyViolationRecord[] {
-  return SAFETY_VIOLATION_RECORDS
+  return []
+}
+
+function isTodayRecord(detectedAt: string): boolean {
+  return detectedAt.startsWith(getSafetyTodayDate())
+}
+
+/** Chỉ sự kiện AI live + kịch bản đã triển khai */
+export function filterLiveSafetyRecords(records: SafetyViolationRecord[]): SafetyViolationRecord[] {
+  return records.filter(v => isImplementedSafetyScenario(v.scenarioId))
+}
+
+export function filterTodayLiveRecords(records: SafetyViolationRecord[]): SafetyViolationRecord[] {
+  return filterLiveSafetyRecords(records).filter(v => isTodayRecord(v.detectedAt))
 }
 
 export function mergeViolationStatusOverrides(
@@ -55,17 +64,11 @@ export function mergeViolationStatusOverrides(
   })
 }
 
-function isLiveAiSafetyRecord(record: SafetyViolationRecord): boolean {
-  return record.id.startsWith('ai-')
-}
-
 function matchesDateRange(
   detectedAt: string,
   range?: SafetyDashboardFilters['dateRange'],
-  record?: SafetyViolationRecord,
 ): boolean {
-  if (record && isLiveAiSafetyRecord(record)) return true
-  if (range === 'today') return detectedAt.startsWith(TODAY)
+  if (range === 'today') return isTodayRecord(detectedAt)
   if (range === 'week') return detectedAt >= SAFETY_DEMO_WEEK_START
   if (range === 'month') return detectedAt >= SAFETY_DEMO_MONTH_START
   return true
@@ -118,7 +121,8 @@ export function filterViolations(
     if (statusFilter && statusFilter !== 'OPEN' && v.status !== statusFilter) return false
 
     if (!matchesQuickFilter(v, filters.quickFilter)) return false
-    if (!matchesDateRange(v.detectedAt, filters.dateRange, v)) return false
+    if (!matchesDateRange(v.detectedAt, filters.dateRange)) return false
+    if (!isImplementedSafetyScenario(v.scenarioId)) return false
     if (filters.searchQuery && !matchesEventSearch(v, filters.searchQuery)) return false
 
     return true
@@ -126,14 +130,15 @@ export function filterViolations(
 }
 
 export function computeDashboardKpis(records: SafetyViolationRecord[]): SafetyDashboardKpis {
-  const todayFiltered = records.filter(v => v.detectedAt.startsWith(TODAY))
-  const todayAll = getTodayViolations()
-  const yesterday = getYesterdayViolations()
+  const todayFiltered = filterTodayLiveRecords(records)
+  const yesterday = filterLiveSafetyRecords(records).filter(
+    v => v.detectedAt.startsWith(getSafetyYesterdayDate()),
+  )
   const todayBuckets = countAlertStatusBuckets(todayFiltered)
   const yesterdayBuckets = countAlertStatusBuckets(yesterday)
   const openToday = todayFiltered.filter(v => isOpenStatus(v.status))
   const closedToday = todayFiltered.filter(v => v.status === 'CLOSED')
-  const now = new Date(`${TODAY}T17:30:00`).getTime()
+  const now = Date.now()
 
   const nearDue = openToday.filter(v => {
     if (!v.dueAt) return false
@@ -141,29 +146,8 @@ export function computeDashboardKpis(records: SafetyViolationRecord[]): SafetyDa
     return due > now && due - now <= NEAR_DUE_HOURS * 3600_000
   }).length
 
-  const cameras = MONITORING_DEVICES.filter(d => d.type === 'FIXED_CAMERA' || d.type === 'PTZ_CAMERA')
-  const drones = MONITORING_DEVICES.filter(d => d.type === 'DRONE' || d.type === 'DRONE_RTK')
-  const bodycams = MONITORING_DEVICES.filter(d => d.type === 'BODY_CAMERA')
-
-  const isDeviceActive = (status: typeof MONITORING_DEVICES[number]['status']) => status !== 'OFFLINE'
-
-  const countDevices = (list: typeof MONITORING_DEVICES) => ({
-    active: list.filter(d => isDeviceActive(d.status)).length,
-    total: list.length,
-  })
-
-  const cameraStats = countDevices(cameras)
-  const bodycamStats = countDevices(bodycams)
-  const flycamStats = countDevices(drones)
-
-  const deviceBreakdown = [
-    { key: 'camera' as const, label: 'Camera', ...cameraStats },
-    { key: 'bodycam' as const, label: 'Bodycam', ...bodycamStats },
-    { key: 'flycam' as const, label: 'Flycam', ...flycamStats },
-  ]
-
-  const deviceActiveCount = deviceBreakdown.reduce((sum, d) => sum + d.active, 0)
-  const deviceTotalCount = deviceBreakdown.reduce((sum, d) => sum + d.total, 0)
+  const deviceKpis = computeSafetyDeviceKpis()
+  const { deviceActiveCount, deviceTotalCount, deviceBreakdown, cameraCount, bodycamCount, droneCount, monitoredZones } = deviceKpis
 
   const yesterdayClosed = yesterday.filter(v => v.status === 'CLOSED')
   const yesterdayClosedCount = yesterdayClosed.length
@@ -174,17 +158,17 @@ export function computeDashboardKpis(records: SafetyViolationRecord[]): SafetyDa
   const countStatus = (s: ViolationStatus) => todayFiltered.filter(v => v.status === s).length
 
   return {
-    monitoredZones: SAFETY_ZONES.length,
-    cameraCount: cameraStats.active,
-    droneCount: flycamStats.active,
-    bodycamCount: bodycamStats.active,
+    monitoredZones,
+    cameraCount,
+    droneCount,
+    bodycamCount,
     radarCount: 0,
     deviceActiveCount,
     deviceTotalCount,
     deviceBreakdown,
     todayViolations: todayFiltered.length,
     yesterdayViolations: yesterday.length,
-    yesterdayDeviceActiveCount: Math.max(0, deviceActiveCount - 1),
+    yesterdayDeviceActiveCount: deviceActiveCount,
     yesterdayDeviceTotalCount: deviceTotalCount,
     yesterdayClosedCount,
     yesterdayClosedRate,
@@ -210,20 +194,19 @@ export function computeDashboardKpis(records: SafetyViolationRecord[]): SafetyDa
     overdueCount: countStatus('OVERDUE'),
     nearDueCount: nearDue,
     openCount: openToday.length,
-    closedRate: todayAll.length
-      ? Math.round((countAlertStatusBuckets(todayAll).handledTotalCount / todayAll.length) * 100)
+    closedRate: todayFiltered.length
+      ? Math.round((countAlertStatusBuckets(todayFiltered).handledTotalCount / todayFiltered.length) * 100)
       : 0,
   }
 }
 
-/** Thống kê nhóm — cùng nguồn sự kiện hôm nay với `getPriorityAlerts` (Severity + Scenario) */
+/** Thống kê nhóm — count từ sự kiện AI hôm nay (12 kịch bản triển khai) */
 function scenarioSeverityForGroup(
   groupToday: SafetyViolationRecord[],
   scenarioId: string,
-  fallback: AlertSeverity,
-): AlertSeverity {
+): AlertSeverity | null {
   const items = groupToday.filter(v => v.scenarioId === scenarioId)
-  if (items.length === 0) return fallback
+  if (items.length === 0) return null
 
   const rank: Record<AlertSeverity, number> = { CRITICAL: 0, VIOLATION: 1, WARNING: 2 }
   return items.reduce<AlertSeverity>(
@@ -232,9 +215,14 @@ function scenarioSeverityForGroup(
   )
 }
 
-export function computeGroupStats(records: SafetyViolationRecord[]): SafetyGroupStats[] {
-  const { all: today } = getPriorityAlerts(records)
-  const yesterday = records.filter(v => v.detectedAt.startsWith(SAFETY_DEMO_YESTERDAY))
+export function computeGroupStats(
+  records: SafetyViolationRecord[],
+  sourceRecords: SafetyViolationRecord[] = records,
+): SafetyGroupStats[] {
+  const today = filterTodayLiveRecords(records)
+  const yesterday = filterLiveSafetyRecords(sourceRecords).filter(
+    v => v.detectedAt.startsWith(getSafetyYesterdayDate()),
+  )
 
   return SAFETY_GROUPS.map(group => {
     const groupToday = today.filter(v => v.groupId === group.id)
@@ -249,7 +237,7 @@ export function computeGroupStats(records: SafetyViolationRecord[]): SafetyGroup
       scenarioId: sc.id,
       name: sc.name,
       count: scenarioCounts.get(sc.id) ?? 0,
-      severity: scenarioSeverityForGroup(groupToday, sc.id, sc.defaultSeverity),
+      severity: scenarioSeverityForGroup(groupToday, sc.id) ?? sc.defaultSeverity,
     }))
 
     return {
@@ -266,7 +254,7 @@ export function computeGroupStats(records: SafetyViolationRecord[]): SafetyGroup
 }
 
 export function computeWorkflowStats(records: SafetyViolationRecord[]): SafetyWorkflowStats {
-  const today = records.filter(v => v.detectedAt.startsWith(TODAY))
+  const today = records.filter(v => isTodayRecord(v.detectedAt))
   const count = (s: ViolationStatus) => today.filter(v => v.status === s).length
   const closed = count('CLOSED')
   const open = today.filter(v => isOpenStatus(v.status))
@@ -287,7 +275,7 @@ export function computeWorkflowStats(records: SafetyViolationRecord[]): SafetyWo
 }
 
 export function computeZoneRiskLevels(records: SafetyViolationRecord[]): Map<string, ZoneRiskLevel> {
-  const today = records.filter(v => v.detectedAt.startsWith(TODAY))
+  const today = records.filter(v => isTodayRecord(v.detectedAt))
   const map = new Map<string, ZoneRiskLevel>()
 
   SAFETY_ZONES.forEach(zone => {
@@ -320,8 +308,7 @@ export function getPriorityAlerts(records: SafetyViolationRecord[]): {
   violation: SafetyViolationRecord[]
   critical: SafetyViolationRecord[]
 } {
-  const today = records
-    .filter(v => v.detectedAt.startsWith(TODAY) || isLiveAiSafetyRecord(v))
+  const today = filterTodayLiveRecords(records)
     .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))
 
   return {
@@ -345,9 +332,7 @@ export function getScenarioForGroup(groupId: SafetyGroupId) {
 }
 
 export function getZoneViolationsToday(zoneId: string, records: SafetyViolationRecord[]) {
-  return records.filter(v =>
-    v.zoneId === zoneId && (v.detectedAt.startsWith(TODAY) || isLiveAiSafetyRecord(v)),
-  )
+  return records.filter(v => v.zoneId === zoneId && isTodayRecord(v.detectedAt))
 }
 
 export function getZoneOpenCount(zoneId: string, records: SafetyViolationRecord[]) {
@@ -355,5 +340,5 @@ export function getZoneOpenCount(zoneId: string, records: SafetyViolationRecord[
 }
 
 export function getFilteredTodayRecords(filters: SafetyDashboardFilters): SafetyViolationRecord[] {
-  return filterViolations(SAFETY_VIOLATION_RECORDS, { ...filters, dateRange: filters.dateRange ?? 'today' })
+  return filterViolations([], { ...filters, dateRange: filters.dateRange ?? 'today' })
 }

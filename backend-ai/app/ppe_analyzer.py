@@ -11,6 +11,7 @@ import numpy as np
 from .auto_train.inference import predict_boxes
 from .detectors.person_detector import PersonDetector
 from .schemas import PpeDetection
+from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("ppe_analyzer")
 
@@ -35,7 +36,7 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
-_VIOLATION_CONF = 0.55
+_VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
 _MODEL_MIN_CONF = 0.62
 
@@ -210,6 +211,93 @@ def _looks_barefoot_or_open_footwear(metrics: dict[str, float]) -> bool:
     return False
 
 
+def _split_feet_halves(
+    feet: tuple[float, float, float, float],
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float]]:
+    x1, y1, x2, y2 = feet
+    fw = x2 - x1
+    gap = max(4.0, fw * 0.08)
+    mid = (x1 + x2) / 2
+    left = (x1, y1, mid - gap / 2, y2)
+    right = (mid + gap / 2, y1, x2, y2)
+    return left, right
+
+
+def _shoe_detection_for_foot(
+    frame: np.ndarray,
+    foot: tuple[float, float, float, float],
+) -> tuple[str, tuple[float, float, float, float], float] | None:
+    """Trả ('safety_shoes'|'no_shoes', bbox, conf) cho một bên chân."""
+    fx1, fy1, fx2, fy2 = foot
+    if fx2 - fx1 < 8 or fy2 - fy1 < 8:
+        return None
+
+    metrics = _feet_metrics(frame, foot)
+    sb = _heuristic_shoes(frame, foot)
+    if sb:
+        return ("safety_shoes", sb, 0.58)
+
+    if not _looks_barefoot_or_open_footwear(metrics):
+        min_contour = _min_shoe_contour(metrics["bottom_area"])
+        if (
+            metrics["bottom_dark_nonskin"] >= 0.10
+            and metrics["max_shoe_contour"] >= min_contour
+        ):
+            return ("safety_shoes", _shoe_bbox_from_feet(foot), 0.55)
+
+    if _looks_barefoot_or_open_footwear(metrics):
+        return ("no_shoes", foot, 0.55)
+
+    return None
+
+
+def _evaluate_foot_shoes(
+    frame: np.ndarray,
+    foot: tuple[float, float, float, float],
+) -> tuple[str, tuple[float, float, float, float], float] | None:
+    """Đánh giá một bên chân — không suy luận thiếu giày khi không đủ căn cứ."""
+    det = _shoe_detection_for_foot(frame, foot)
+    if det is not None:
+        return det
+
+    metrics = _feet_metrics(frame, foot)
+    if _looks_barefoot_or_open_footwear(metrics):
+        return ("no_shoes", foot, 0.55)
+
+    if not _looks_barefoot_or_open_footwear(metrics):
+        min_contour = _min_shoe_contour(metrics["bottom_area"])
+        if (
+            metrics["bottom_dark_nonskin"] >= 0.08
+            and metrics["max_shoe_contour"] >= min_contour * 0.85
+        ):
+            return ("safety_shoes", _shoe_bbox_from_feet(foot), 0.52)
+
+    return None
+
+
+def _shoe_detections_for_person(
+    frame: np.ndarray,
+    feet: tuple[float, float, float, float],
+    person_conf: float,
+) -> list[tuple[str, tuple[float, float, float, float], float]]:
+    """Luôn quét 2 chân trái/phải — chỉ trả no_shoes khi cả hai xác định vi phạm."""
+    _ = person_conf
+
+    left, right = _split_feet_halves(feet)
+    per_foot = [
+        _evaluate_foot_shoes(frame, left),
+        _evaluate_foot_shoes(frame, right),
+    ]
+
+    shoes = [d for d in per_foot if d and d[0] == "safety_shoes"]
+    bare = [d for d in per_foot if d and d[0] == "no_shoes"]
+
+    out: list[tuple[str, tuple[float, float, float, float], float]] = list(shoes)
+    if len(bare) >= 2:
+        out.extend(bare)
+    return out
+
+
 def _shoe_bbox_from_feet(feet: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     x1, y1, x2, y2 = feet
     fh = y2 - y1
@@ -368,38 +456,30 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
                 )
             )
 
-        feet_metrics = _feet_metrics(frame, feet)
-        shoes = None
-        sb = _heuristic_shoes(frame, feet)
-        if sb:
-            shoes = (sb, 0.58)
-        elif not _looks_barefoot_or_open_footwear(feet_metrics):
-            min_contour = _min_shoe_contour(feet_metrics["bottom_area"])
-            if (
-                feet_metrics["bottom_dark_nonskin"] >= 0.10
-                and feet_metrics["max_shoe_contour"] >= min_contour
-            ):
-                shoes = (_shoe_bbox_from_feet(feet), 0.55)
-        if shoes:
-            box, conf = shoes
-            detections.append(
-                PpeDetection(
-                    behavior="safety_shoes",
-                    label=PPE_LABELS["safety_shoes"],
-                    scenario_id=PPE_SCENARIO["safety_shoes"],
-                    confidence=round(conf, 3),
-                    bbox=[float(v) for v in box],
+        shoe_items = _shoe_detections_for_person(frame, feet, person.person_conf)
+        shoe_violation_logged = False
+        for behavior, box, conf in shoe_items:
+            if behavior == "safety_shoes":
+                detections.append(
+                    PpeDetection(
+                        behavior="safety_shoes",
+                        label=PPE_LABELS["safety_shoes"],
+                        scenario_id=PPE_SCENARIO["safety_shoes"],
+                        confidence=round(conf, 3),
+                        bbox=[float(v) for v in box],
+                    )
                 )
-            )
-        else:
-            violations += 1
+                continue
+            if not shoe_violation_logged:
+                violations += 1
+                shoe_violation_logged = True
             detections.append(
                 PpeDetection(
                     behavior="no_shoes",
                     label=PPE_LABELS["no_shoes"],
                     scenario_id=PPE_SCENARIO["no_shoes"],
-                    confidence=round(max(_VIOLATION_CONF, person.person_conf * 0.90), 3),
-                    bbox=[float(v) for v in feet],
+                    confidence=round(max(conf, _VIOLATION_CONF, person.person_conf * 0.90), 3),
+                    bbox=[float(v) for v in box],
                 )
             )
 

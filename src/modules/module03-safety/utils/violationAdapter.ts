@@ -1,16 +1,15 @@
 import type { Event } from '@/types/event'
 import type { SafetyViolationRecord } from '../types/safety.types'
 import { getScenarioName, SAFETY_SCENARIO_MAP } from '../data/safetyScenarios'
-import { getZoneName } from '../data/safetyZones'
 import { SAFETY_GROUP_MAP } from '../data/safetyGroups'
-import { DEVICE_TYPE_LABELS } from '../data/monitoringDevices'
 import { getViolationFeedUrl } from '../data/safetyViolationFeeds'
 import { resolveViolationSnapshotUrl } from '../data/safetyViolationSnapshots'
 import { groupIdToFeedType } from './groupToViolationType'
 import { getSubject } from './eventSubject'
 import {
+  getEventAreaLabel,
+  getEventSourceLabel,
   getSafetyCamera,
-  getSafetyCameraDisplayName,
   resolveTrainingCameraId,
 } from './safetyCameraBridge'
 
@@ -29,10 +28,8 @@ export function violationRecordToEvent(v: SafetyViolationRecord): Event {
     description: v.description ?? scenario?.description ?? getScenarioName(v.scenarioId),
     timestamp: v.detectedAt,
     cameraId: trainingCam?.id ?? v.sourceDeviceId,
-    cameraName: trainingCam
-      ? getSafetyCameraDisplayName(trainingCam.id)
-      : DEVICE_TYPE_LABELS[v.sourceType] ?? v.sourceDeviceId,
-    location: getZoneName(v.zoneId),
+    cameraName: getEventSourceLabel(v.sourceDeviceId, v.sourceType),
+    location: getEventAreaLabel(v.sourceDeviceId, v.sourceType, v.zoneId),
     workerId: subject.workerId,
     workerName: subject.workerName,
     contractorName: subject.contractorName ?? subject.siteContractor ?? subject.constructionUnit ?? v.contractorName,

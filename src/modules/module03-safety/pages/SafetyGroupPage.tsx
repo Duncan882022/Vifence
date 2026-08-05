@@ -3,15 +3,14 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
-import type { SafetyGroupId } from '../types/safety.types'
+import type { SafetyGroupId, SafetyViolationRecord } from '../types/safety.types'
 import { SAFETY_GROUP_MAP } from '../data/safetyGroups'
-import { getScenarioForGroup, getAllSafetyRecords } from '../services/safetyDashboard.service'
-import { mergeSafetyRecordsWithAi } from '../services/safetyAiEvents.service'
+import { getScenarioForGroup, filterTodayLiveRecords } from '../services/safetyDashboard.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
+import { SafetyViolationDetailModal } from '../components/SafetyViolationDetailModal'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
 import { GROUP_COLORS, GROUP_ICONS } from '../utils/safetyDashboardUi'
-import { SAFETY_DEMO_TODAY } from '../data/safetyDemoDate'
 import { cn } from '@/utils/cn'
 
 const VALID_GROUPS: SafetyGroupId[] = ['PPE', 'WAH', 'DZ', 'ATGT', 'BPTC', 'PCCC']
@@ -19,21 +18,16 @@ const VALID_GROUPS: SafetyGroupId[] = ['PPE', 'WAH', 'DZ', 'ATGT', 'BPTC', 'PCCC
 export function SafetyGroupPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const [eventsOpen, setEventsOpen] = useState(true)
+  const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
   const validId = VALID_GROUPS.includes(groupId as SafetyGroupId) ? groupId as SafetyGroupId : 'WAH'
   const group = SAFETY_GROUP_MAP.get(validId)!
   const Icon = GROUP_ICONS[validId]
   const scenarios = getScenarioForGroup(validId)
-  const aiLiveRecords = useSafetyAiEvents(15000)
-  const allRecords = useMemo(
-    () => mergeSafetyRecordsWithAi(getAllSafetyRecords(), aiLiveRecords),
-    [aiLiveRecords],
-  )
+  const aiLiveRecords = useSafetyAiEvents(5000)
+  const allRecords = aiLiveRecords
 
   const records = useMemo(
-    () => allRecords.filter(
-      v => v.groupId === validId
-        && (v.detectedAt.startsWith(SAFETY_DEMO_TODAY) || v.id.startsWith('ai-')),
-    ),
+    () => filterTodayLiveRecords(allRecords).filter(v => v.groupId === validId),
     [validId, allRecords],
   )
 
@@ -119,10 +113,18 @@ export function SafetyGroupPage() {
           }
         >
           {eventsOpen && (
-            <SafetyViolationTable records={records} />
+            <SafetyViolationTable
+              records={records}
+              onSnapshotClick={setDetailRecord}
+            />
           )}
         </Panel>
       </div>
+
+      <SafetyViolationDetailModal
+        record={detailRecord}
+        onClose={() => setDetailRecord(null)}
+      />
     </PageLayout>
   )
 }

@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 from .crane_detection_catalog import CRANE_CATALOG_STYLES
-from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
+from .schemas import ATGT_SCENARIO_META, Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
 
 logger = logging.getLogger("events")
 
@@ -66,8 +66,16 @@ class PersistenceDebouncer:
         self._last_hit_at = None
         self._logged_this_episode = False
 
+    def reset(self) -> None:
+        """Reset phiên — dùng khi track mới / rời segment demo."""
+        self._reset_episode()
+        self._last_confirmed_at = 0.0
+
     def register(self, hit: bool) -> bool:
         now = time.time()
+
+        if hit and self._last_hit_at is not None and now - self._last_hit_at > self.max_gap_seconds:
+            self._reset_episode()
 
         if hit:
             if self._active_since is None:
@@ -308,6 +316,142 @@ class EventStore:
             event.confidence,
         )
         return event
+
+    def add_wah(
+        self,
+        detection: Detection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-04",
+        person_bbox: Optional[list[float]] = None,
+    ) -> ViolationEvent:
+        event_date = _event_date()
+        event = ViolationEvent.from_wah_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        snapshot_name = f"{event_date}/{event.id}.jpg"
+        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        annotated = self._draw_wah_snapshot(frame, detection, person_bbox)
+        cv2.imwrite(str(snapshot_path), annotated)
+        event.snapshot_file = snapshot_name
+
+        with self._lock:
+            self._events.appendleft(event)
+        self._append_to_disk(event)
+        logger.info(
+            "Sự kiện WAH [%s]: %s (%s) conf=%.2f",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+        )
+        return event
+
+    @classmethod
+    def _draw_wah_snapshot(
+        cls,
+        frame: np.ndarray,
+        detection: Detection,
+        person_bbox: Optional[list[float]] = None,
+    ) -> np.ndarray:
+        annotated = frame.copy()
+        h, w = frame.shape[:2]
+        if person_bbox and len(person_bbox) >= 4:
+            px1, py1, px2, py2 = [int(v) for v in person_bbox]
+            px1, py1 = max(0, px1), max(0, py1)
+            px2, py2 = min(w - 1, px2), min(h - 1, py2)
+            cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 200, 80), 1)
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        color = (0, 140, 255)
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+        label = f"{detection.label} {detection.confidence * 100:.0f}%"
+        cv2.putText(
+            annotated, label, (x1, max(y1 - 8, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2,
+        )
+        return annotated
+
+    def add_atgt(
+        self,
+        detection: Detection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-03",
+        vehicle_bbox: Optional[list[float]] = None,
+    ) -> ViolationEvent:
+        event_date = _event_date()
+        event = ViolationEvent.from_atgt_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        snapshot_name = f"{event_date}/{event.id}.jpg"
+        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        annotated = self._draw_atgt_snapshot(frame, detection, vehicle_bbox)
+        cv2.imwrite(str(snapshot_path), annotated)
+        event.snapshot_file = snapshot_name
+
+        with self._lock:
+            self._events.appendleft(event)
+        self._append_to_disk(event)
+        logger.info(
+            "Sự kiện ATGT [%s]: %s (%s) conf=%.2f",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+        )
+        return event
+
+    @classmethod
+    def _draw_atgt_snapshot(
+        cls,
+        frame: np.ndarray,
+        detection: Detection,
+        vehicle_bbox: Optional[list[float]] = None,
+    ) -> np.ndarray:
+        annotated = frame.copy()
+        h, w = frame.shape[:2]
+        if vehicle_bbox and len(vehicle_bbox) >= 4:
+            vx1, vy1, vx2, vy2 = [int(v) for v in vehicle_bbox]
+            vx1, vy1 = max(0, vx1), max(0, vy1)
+            vx2, vy2 = min(w - 1, vx2), min(h - 1, vy2)
+            cv2.rectangle(annotated, (vx1, vy1), (vx2, vy2), (180, 180, 180), 1)
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        colors = {
+            "speeding": (0, 120, 255),
+            "hard_median": (255, 200, 0),
+            "no_soft_median": (200, 80, 255),
+        }
+        color = colors.get(detection.behavior, (0, 200, 255))
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+        meta = ATGT_SCENARIO_META.get(detection.behavior, {})
+        snapshot_banners = {
+            "speeding": "ATGT-002 · Phuong tien vuot qua toc do quy dinh",
+            "no_soft_median": "ATGT-004 · Khong to chuc phan lan, luong giao thong",
+        }
+        base = snapshot_banners.get(
+            detection.behavior,
+            meta.get("scenario_id", "ATGT"),
+        )
+        plate = getattr(detection, "vehicle_plate", None)
+        if plate and detection.behavior == "speeding":
+            base = f"{base} · {plate}"
+        banner = f"{base} · {detection.confidence * 100:.0f}%"
+        cv2.rectangle(annotated, (0, 0), (w - 1, 28), (8, 40, 60), -1)
+        cv2.putText(
+            annotated, banner, (8, 20),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1,
+        )
+        return annotated
 
     @classmethod
     def _draw_ppe_snapshot(

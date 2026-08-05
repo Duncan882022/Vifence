@@ -85,4 +85,13 @@ TASKS: dict[str, TaskConfig] = {
         imgsz=416,
         runtime_conf_threshold=0.38,
     ),
+    "wah_harness": TaskConfig(
+        task_id="wah_harness",
+        classes=["safety_harness"],
+        min_new_samples=12,
+        min_interval_seconds=600.0,
+        epochs=25,
+        imgsz=416,
+        runtime_conf_threshold=0.35,
+    ),
 }

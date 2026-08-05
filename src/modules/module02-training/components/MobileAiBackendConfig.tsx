@@ -13,9 +13,10 @@ interface MobileAiBackendConfigProps {
   compact?: boolean
   onSaved?: () => void
   className?: string
+  buttonClassName?: string
 }
 
-export function MobileAiBackendConfig({ compact, onSaved, className }: MobileAiBackendConfigProps) {
+export function MobileAiBackendConfig({ compact, onSaved, className, buttonClassName }: MobileAiBackendConfigProps) {
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState(() => getMobileAiBackendUrl())
   const [checking, setChecking] = useState(false)
@@ -61,12 +62,15 @@ export function MobileAiBackendConfig({ compact, onSaved, className }: MobileAiB
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'rounded bg-black/55 border border-sky-500/40 text-sky-200 hover:bg-black/70 transition-colors shrink-0',
-          compact ? 'p-0.5' : 'p-1',
+          buttonClassName ?? cn(
+            'rounded bg-black/55 border border-sky-500/40 text-sky-200 hover:bg-black/70 transition-colors shrink-0',
+            compact ? 'p-0.5' : 'p-1',
+          ),
         )}
-        title="Cấu hình backend AI"
+        title="Cấu hình ngrok / backend AI"
+        aria-label="Cấu hình ngrok / backend AI"
       >
-        <Settings2 className={cn(compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
+        <Settings2 className={cn(compact ? 'w-3 h-3' : 'w-3.5 h-3.5')} />
       </button>
       </div>
 

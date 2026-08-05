@@ -25,7 +25,7 @@ _RECHECK_SECONDS = 60.0
 def _is_manual_promoted(task_id: str) -> bool:
     if registry.get_active_weights(task_id) is None:
         return False
-    return task_id == "crane_machinery" or task_id.startswith("ppe_")
+    return task_id == "crane_machinery" or task_id.startswith("ppe_") or task_id.startswith("wah_")
 
 
 def get_model(task_id: str):

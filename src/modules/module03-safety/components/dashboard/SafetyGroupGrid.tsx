@@ -80,17 +80,19 @@ function GroupScenarioTable({ s }: { s: SafetyGroupStats }) {
               <span className="w-px h-4 bg-[#1e2433]/90 shrink-0" aria-hidden />
 
               <TagTooltip content={SEVERITY_LABELS_UI[severity]} className="shrink-0 flex justify-end">
-                <span
-                  className={cn(
-                    'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5',
-                    active
-                      ? SEVERITY_BADGE[severity]
-                      : 'bg-[#1a2235]/30 text-muted-foreground/35 border-[#1e2433]/50',
-                  )}
-                >
-                  <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                  {SEVERITY_LABELS_UI[severity]}
-                </span>
+                {active ? (
+                  <span
+                    className={cn(
+                      'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5',
+                      SEVERITY_BADGE[severity],
+                    )}
+                  >
+                    <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                    {SEVERITY_LABELS_UI[severity]}
+                  </span>
+                ) : (
+                  <span className="text-[8px] text-muted-foreground/35 tabular-nums w-12 text-right">—</span>
+                )}
               </TagTooltip>
             </div>
           )
@@ -127,6 +129,12 @@ function GroupCard({ s }: { s: SafetyGroupStats }) {
           <div className="flex items-center gap-1">
             <span className="text-[10px] font-bold text-foreground tracking-wide">
               {s.groupId}
+            </span>
+            <span className={cn(
+              'text-[10px] font-bold tabular-nums',
+              s.total > 0 ? 'text-foreground' : 'text-muted-foreground/40',
+            )}>
+              {s.total}
             </span>
             <TagTooltip content={trendLabel} className="ml-auto shrink-0">
               <span

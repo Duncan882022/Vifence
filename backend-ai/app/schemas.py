@@ -57,6 +57,9 @@ class Detection(BaseModel):
     label: str  # tên class gốc trả về từ model (vd "cigarette", "fire", "smoke")
     confidence: float
     bbox: list[float]  # [x1, y1, x2, y2] toạ độ pixel trên frame gốc
+    vehicle_plate: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    driver_name: Optional[str] = None
 
 
 # Metadata tĩnh mô tả kịch bản, ăn khớp với nhóm PCCC trong
@@ -176,6 +179,36 @@ PPE_SCENARIO_META = {
     },
 }
 
+WAH_SCENARIO_META = {
+    "no_harness": {
+        "scenario_id": "WAH-001",
+        "scenario_name": "Người lao động làm việc gần mép biên không có dây an toàn",
+        "violation_type": "work-at-height",
+        "group": "WAH",
+    },
+}
+
+ATGT_SCENARIO_META = {
+    "speeding": {
+        "scenario_id": "ATGT-002",
+        "scenario_name": "Phương tiện vượt quá tốc độ quy định",
+        "violation_type": "traffic-safety",
+        "group": "ATGT",
+    },
+    "hard_median": {
+        "scenario_id": "ATGT-004",
+        "scenario_name": "Đã tổ chức phân làn (làn cứng)",
+        "violation_type": "traffic-safety",
+        "group": "ATGT",
+    },
+    "no_soft_median": {
+        "scenario_id": "ATGT-004",
+        "scenario_name": "Không tổ chức phân làn, luồng giao thông",
+        "violation_type": "traffic-safety",
+        "group": "ATGT",
+    },
+}
+
 
 class ViolationEvent(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -190,6 +223,9 @@ class ViolationEvent(BaseModel):
     event_date: Optional[str] = None
     camera_id: str = "LOCAL-CAM"
     snapshot_file: Optional[str] = None
+    vehicle_plate: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    driver_name: Optional[str] = None
 
     @classmethod
     def from_detection(
@@ -312,4 +348,57 @@ class ViolationEvent(BaseModel):
             event_date=day,
             camera_id=camera_id,
             snapshot_file=snapshot_file,
+        )
+
+    @classmethod
+    def from_wah_detection(
+        cls,
+        detection: Detection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "A-04",
+    ) -> "ViolationEvent":
+        meta = WAH_SCENARIO_META[detection.behavior]
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
+            snapshot_file=snapshot_file,
+        )
+
+    @classmethod
+    def from_atgt_detection(
+        cls,
+        detection: Detection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "A-03",
+    ) -> "ViolationEvent":
+        meta = ATGT_SCENARIO_META[detection.behavior]
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
+            snapshot_file=snapshot_file,
+            vehicle_plate=detection.vehicle_plate,
+            vehicle_type=detection.vehicle_type,
+            driver_name=detection.driver_name,
         )

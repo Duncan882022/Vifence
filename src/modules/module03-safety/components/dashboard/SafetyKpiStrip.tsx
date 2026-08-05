@@ -9,7 +9,6 @@ import {
   HardHat,
   Layers,
   Minus,
-  Radio,
   ShieldAlert,
   TrendingDown,
   TrendingUp,
@@ -105,10 +104,13 @@ function MetricCard({
 
 function DeviceInsight({ kpis }: { kpis: SafetyDashboardKpis }) {
   const chips = [
-    { icon: Camera, label: 'Camera', tip: 'Camera cố định + PTZ', value: kpis.deviceBreakdown.find(d => d.key === 'camera')?.active ?? 0, className: 'bg-sky-500/10 text-sky-400' },
-    { icon: HardHat, label: 'Body', tip: 'Bodycam', value: kpis.deviceBreakdown.find(d => d.key === 'bodycam')?.active ?? 0, className: 'bg-violet-500/10 text-violet-400' },
-    { icon: Radio, label: 'Fly', tip: 'Flycam', value: kpis.deviceBreakdown.find(d => d.key === 'flycam')?.active ?? 0, className: 'bg-cyan-500/10 text-cyan-400' },
-  ]
+    { icon: Camera, label: 'Cam', tip: 'Cam 03 + Cam 04 · TTDV-A', value: kpis.deviceBreakdown.find(d => d.key === 'camera')?.active ?? 0, className: 'bg-sky-500/10 text-sky-400' },
+    { icon: HardHat, label: 'Mobile', tip: 'Duncan IPhone · Bodycam', value: kpis.deviceBreakdown.find(d => d.key === 'bodycam')?.active ?? 0, className: 'bg-violet-500/10 text-violet-400' },
+  ].filter(chip => chip.value > 0)
+
+  if (chips.length === 0) {
+    return <p className="text-[9px] text-muted-foreground/60 leading-snug">Không có thiết bị online</p>
+  }
 
   return (
     <div className="flex flex-wrap gap-1">

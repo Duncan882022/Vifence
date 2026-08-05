@@ -211,6 +211,8 @@ export interface MobileAiAnalyzeClientOptions {
   backendUrl: string
   onResult: (result: MobileAiAnalyzeResult) => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
+  /** Chỉ gửi frame khi hàm trả true (vd đoạn PCCC trong video). */
+  shouldAnalyze?: () => boolean
   intervalMs?: number
 }
 
@@ -265,6 +267,7 @@ export function createMobileAiAnalyzeClient(
     backendUrl,
     onResult,
     onStatusChange,
+    shouldAnalyze = () => true,
     intervalMs = 450,
   } = options
 
@@ -286,6 +289,16 @@ export function createMobileAiAnalyzeClient(
   const tick = async () => {
     if (stopped || inFlight) {
       scheduleNext(400)
+      return
+    }
+
+    if (typeof document !== 'undefined' && document.hidden) {
+      scheduleNext(2000)
+      return
+    }
+
+    if (!shouldAnalyze()) {
+      scheduleNext(600)
       return
     }
 
