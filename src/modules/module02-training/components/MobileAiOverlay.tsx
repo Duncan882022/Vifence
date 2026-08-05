@@ -1,10 +1,13 @@
+import { type RefObject } from 'react'
 import { cn } from '@/utils/cn'
+import { mapVideoRectToOverlay } from '../utils/videoOverlayCoords'
 import type { MobileAiDetection } from '../services/mobileAiBackend.service'
 
 interface MobileAiOverlayProps {
   detections: MobileAiDetection[]
   frameWidth: number
   frameHeight: number
+  videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
 }
 
@@ -25,24 +28,37 @@ function DetectionBox({
   det,
   frameWidth,
   frameHeight,
+  videoRef,
   compact,
 }: {
   det: MobileAiDetection
   frameWidth: number
   frameHeight: number
+  videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
 }) {
   const [x1, y1, x2, y2] = det.bbox
   const style = BEHAVIOR_STYLE[det.behavior] ?? BEHAVIOR_STYLE.fire
-  const left = (x1 / frameWidth) * 100
-  const top = (y1 / frameHeight) * 100
-  const width = ((x2 - x1) / frameWidth) * 100
-  const height = ((y2 - y1) / frameHeight) * 100
+  const video = videoRef.current
+
+  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
+    return null
+  }
+
+  const sx = video.videoWidth / frameWidth
+  const sy = video.videoHeight / frameHeight
+  const box = mapVideoRectToOverlay(
+    { x: x1 * sx, y: y1 * sy, width: (x2 - x1) * sx, height: (y2 - y1) * sy },
+    video,
+    'contain',
+  )
+
+  if (box.w <= 0.5 || box.h <= 0.5) return null
 
   return (
     <div
       className="absolute pointer-events-none"
-      style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
+      style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
     >
       <div className={cn('absolute inset-0 border-2 rounded-sm', style.border)} />
       <span
@@ -64,6 +80,7 @@ export function MobileAiOverlay({
   detections,
   frameWidth,
   frameHeight,
+  videoRef,
   compact,
 }: MobileAiOverlayProps) {
   if (detections.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
@@ -76,6 +93,7 @@ export function MobileAiOverlay({
           det={det}
           frameWidth={frameWidth}
           frameHeight={frameHeight}
+          videoRef={videoRef}
           compact={compact}
         />
       ))}

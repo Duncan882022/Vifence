@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { MobileAiBackendConfig } from '@/modules/module02-training/components/MobileAiBackendConfig'
@@ -120,7 +120,6 @@ function DetectionBox({
   const [x1, y1, x2, y2] = detection.bbox
   const isGreenExcavator = detection.machine_kind === 'crane_green'
   const isPending = detection.behavior === 'crane' && detection.confidence < EVENT_MIN_CONFIDENCE
-  const isMachinery = detection.behavior === 'crane' && Boolean(detection.machine_kind)
   const layerZ = detection.behavior === 'crane_proximity'
     ? 7
     : isGreenExcavator
@@ -161,11 +160,10 @@ function DetectionBox({
     >
       <div
         className={cn(
-          'absolute inset-0 rounded-sm',
+          'absolute inset-0 border rounded-sm',
           style.border,
           style.fill,
-          isGreenExcavator ? 'border-2' : isMachinery ? 'border-2' : 'border',
-          isPending && !isGreenExcavator && 'border-dashed opacity-60',
+          isPending && 'border-dashed opacity-60',
         )}
       />
       <span
@@ -296,7 +294,7 @@ function useCraneProximityState(
   return { status, statusMsg, detections, frameSize, metrics, layoutTick }
 }
 
-export function CraneProximityOverlay({
+export const CraneProximityOverlay = memo(function CraneProximityOverlay({
   cameraId,
   videoRef,
   videoFit = 'contain',
@@ -374,4 +372,4 @@ export function CraneProximityOverlay({
       )}
     </div>
   )
-}
+})

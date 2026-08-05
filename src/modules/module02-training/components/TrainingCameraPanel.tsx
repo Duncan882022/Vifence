@@ -135,7 +135,19 @@ function CameraCell({ cam, compact, onMaximize }: {
       <CameraLiveFeed cam={cam} compact={compact} aiOverlay onMaximize={onMaximize} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
-      {!isMobile && (
+      {isMobile ? (
+        <button
+          type="button"
+          onClick={onMaximize}
+          className={cn(
+            'absolute z-[7] p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0 pointer-events-auto',
+            compact ? 'top-1 right-1' : 'top-2 right-2',
+          )}
+          title="Phóng to"
+        >
+          <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
+        </button>
+      ) : (
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
           <div className="flex items-center gap-1 min-w-0">
             <span className={cn(
@@ -157,6 +169,7 @@ function CameraCell({ cam, compact, onMaximize }: {
             )}
           </div>
           <button
+            type="button"
             onClick={onMaximize}
             className="p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0"
             title="Phóng to"
