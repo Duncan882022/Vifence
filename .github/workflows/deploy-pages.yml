@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -34,14 +32,10 @@ jobs:
       - name: Build
         run: npm run build:pages
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy gh-pages branch
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: docs
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          folder: docs
+          branch: gh-pages
+          clean: true
+          single-commit: true
