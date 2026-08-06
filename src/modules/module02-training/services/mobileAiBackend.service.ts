@@ -1,4 +1,9 @@
 /** URL backend AI local (ngrok/Cloudflare Tunnel) — cache trình duyệt + sync JSON backend. */
+import {
+  captureVideoFrameBase64,
+  scaledAnalyzeDelay,
+} from '../utils/videoFrameCapture'
+
 export const MOBILE_AI_BACKEND_STORAGE_KEY = 'vifence_mobile_ai_backend_url'
 const STORAGE_KEY = MOBILE_AI_BACKEND_STORAGE_KEY
 
@@ -205,30 +210,12 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
   }
 }
 
-export function captureVideoFrameBase64(
-  video: HTMLVideoElement,
-  maxWidth = 480,
-  quality = 0.52,
-): string | null {
-  const w = video.videoWidth
-  const h = video.videoHeight
-  if (!w || !h) return null
-
-  const scale = w > maxWidth ? maxWidth / w : 1
-  const cw = Math.round(w * scale)
-  const ch = Math.round(h * scale)
-
-  const canvas = document.createElement('canvas')
-  canvas.width = cw
-  canvas.height = ch
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return null
-
-  ctx.drawImage(video, 0, 0, cw, ch)
-  const dataUrl = canvas.toDataURL('image/jpeg', quality)
-  const comma = dataUrl.indexOf(',')
-  return comma >= 0 ? dataUrl.slice(comma + 1) : null
-}
+export {
+  captureVideoFrameBase64,
+  getVideoAnalyzeIntervalScale,
+  scaledAnalyzeDelay,
+  setVideoAnalyzeIntervalScale,
+} from '../utils/videoFrameCapture'
 
 export type MobileAiConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -309,7 +296,7 @@ export function createMobileAiAnalyzeClient(
 
   const scheduleNext = (delay = intervalMs) => {
     if (stopped) return
-    timerId = window.setTimeout(() => { void tick() }, delay)
+    timerId = window.setTimeout(() => { void tick() }, scaledAnalyzeDelay(video, delay))
   }
 
   const tick = async () => {

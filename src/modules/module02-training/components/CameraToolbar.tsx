@@ -123,7 +123,7 @@ export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraCh
         compact ? 'top-1.5 left-1.5' : 'top-2 left-2',
       )}>
         <CameraLiveBadge compact={compact} />
-        <BackendConnectionBadge compact={compact} variant="chip" />
+        <BackendConnectionBadge compact={compact} />
       </div>
       <CameraToolbar
         cameraId={cam.id}

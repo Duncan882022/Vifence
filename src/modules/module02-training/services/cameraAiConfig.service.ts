@@ -55,39 +55,30 @@ export function getRoiZonesForModel(
 }
 
 export function isInModelVideoSegment(
-  modelId: CameraAiModelId,
-  currentTimeSec: number,
+  _modelId: CameraAiModelId,
+  _currentTimeSec: number,
 ): boolean {
-  const model = getCameraAiModel(modelId)
-  const segments = model?.videoSegments
-  if (!segments || segments.length === 0) return true
-  return segments.some(s => currentTimeSec >= s.startSec && currentTimeSec < s.endSec)
+  /** videoSegments trong catalog chỉ mô tả clip demo — runtime không gate theo giây. */
+  return true
 }
 
-/** Model có segment đang active — ưu tiên segment hẹp hơn (PPE/PCCC trước crane). */
+/** @deprecated Segment không còn gate runtime — dùng getEnabledModelsForCamera. */
 export function getActiveTimedModelForCamera(
   cameraId: string,
-  currentTimeSec: number,
+  _currentTimeSec: number,
 ): CameraAiModelId | null {
   const enabled = getEnabledModelsForCamera(cameraId)
-  const timed = enabled.filter(id => {
+  const timed = enabled.find(id => {
     const m = getCameraAiModel(id)
     return m?.videoSegments && m.videoSegments.length > 0
   })
-  for (const id of timed) {
-    if (isInModelVideoSegment(id, currentTimeSec)) return id
-  }
-  return null
+  return timed ?? null
 }
 
 export function shouldRunModelOnCamera(
   cameraId: string,
   modelId: CameraAiModelId,
-  currentTimeSec?: number,
+  _currentTimeSec?: number,
 ): boolean {
-  if (!isCameraAiModelEnabled(cameraId, modelId)) return false
-  const model = getCameraAiModel(modelId)
-  if (!model?.videoSegments?.length) return true
-  if (currentTimeSec == null) return true
-  return isInModelVideoSegment(modelId, currentTimeSec)
+  return isCameraAiModelEnabled(cameraId, modelId)
 }

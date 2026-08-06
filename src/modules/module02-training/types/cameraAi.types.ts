@@ -38,7 +38,7 @@ export interface CameraAiModelDefinition {
   endpoint?: string
   autoTrainTasks?: string[]
   overlayKind: CameraAiOverlayKind
-  /** Chỉ fixed cam — segment trong clip demo (vd Cam A-04). */
+  /** Mô tả đoạn demo trong clip (không gate runtime khi model bật). */
   videoSegments?: CameraAiVideoSegment[]
   /** Hiển thị trong listing — không bắt buộc có weights local. */
   modelVersion?: string

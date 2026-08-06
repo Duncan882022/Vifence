@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/utils/cn'
+import { setVideoAnalyzeIntervalScale } from '../services/mobileAiBackend.service'
 import { CameraAiOverlay } from './CameraAiOverlay'
 import { CraneProximityOverlay } from '@/modules/module03-safety/components/CraneProximityOverlay'
 import { PcccOverlay } from '@/modules/module03-safety/components/PcccOverlay'
@@ -32,6 +33,8 @@ interface CameraVideoFeedProps {
   aiOverlay?: boolean
   /** Thu nhỏ label overlay — vẫn hiển thị detect */
   compact?: boolean
+  /** Giảm tần suất gửi frame AI khi grid nhiều luồng (video mượt hơn). */
+  analyzeThrottle?: boolean
 }
 
 export function CameraVideoFeed({
@@ -41,6 +44,7 @@ export function CameraVideoFeed({
   playing = true,
   aiOverlay = false,
   compact,
+  analyzeThrottle,
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
@@ -66,6 +70,15 @@ export function CameraVideoFeed({
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPcccOverlay || showWahOverlay || showAtgtOverlay
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    setVideoAnalyzeIntervalScale(video, analyzeThrottle ? 2 : 1)
+    return () => {
+      setVideoAnalyzeIntervalScale(video, 1)
+    }
+  }, [analyzeThrottle, src])
 
   useEffect(() => {
     const video = videoRef.current

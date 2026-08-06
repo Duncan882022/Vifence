@@ -5,7 +5,6 @@ import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
-import { isInPpeVideoSegment } from '../data/ppeCameras'
 import { shouldRunPpeOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
   createPpeClient,
@@ -218,15 +217,7 @@ function usePpeState(
       },
     })
 
-    const onTimeUpdate = () => {
-      if (!isInPpeVideoSegment(video.currentTime)) {
-        setDetections([])
-      }
-    }
-    video.addEventListener('timeupdate', onTimeUpdate)
-
     return () => {
-      video.removeEventListener('timeupdate', onTimeUpdate)
       clientRef.current?.stop()
       clientRef.current = null
     }

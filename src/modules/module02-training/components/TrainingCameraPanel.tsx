@@ -25,8 +25,8 @@ const CCTV_SCANLINE = {
     'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
 } as const
 
-function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
-  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean
+function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle }: {
+  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean
 }) {
   if (cam.streamType === 'mobile') {
     return (
@@ -49,6 +49,7 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false }: {
       playing={playing}
       aiOverlay={aiOverlay}
       compact={compact}
+      analyzeThrottle={analyzeThrottle}
     />
   )
 }
@@ -111,13 +112,13 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
   )
 }
 
-function CameraCell({ cam, compact, onMaximize, isMaximized }: {
-  cam: TrainingCamera; compact?: boolean; onMaximize: () => void; isMaximized?: boolean
+function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle }: {
+  cam: TrainingCamera; compact?: boolean; onMaximize: () => void; isMaximized?: boolean; analyzeThrottle?: boolean
 }) {
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact={compact} aiOverlay />
+      <CameraLiveFeed cam={cam} compact={compact} aiOverlay analyzeThrottle={analyzeThrottle} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
       <CameraChrome
         cam={cam}
@@ -148,6 +149,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   const cols = getGridCols(count, stackedPortrait, forceSingleCol)
   const rows = Math.ceil(count / cols)
   const compact = count > 2
+  const analyzeThrottle = count >= 2
 
   return (
     <div
@@ -168,7 +170,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
             fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
           )}
         >
-          <CameraCell cam={cam} compact={compact} onMaximize={() => onMaximize(cam)} />
+          <CameraCell cam={cam} compact={compact} analyzeThrottle={analyzeThrottle} onMaximize={() => onMaximize(cam)} />
         </div>
       ))}
     </div>

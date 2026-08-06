@@ -1,6 +1,7 @@
 import {
   captureVideoFrameBase64,
   getMobileAiBackendUrl,
+  scaledAnalyzeDelay,
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 
@@ -136,7 +137,7 @@ export function createPpeClient(
 
   const scheduleNext = (delay = intervalMs) => {
     if (stopped) return
-    timerId = window.setTimeout(() => { void tick() }, delay)
+    timerId = window.setTimeout(() => { void tick() }, scaledAnalyzeDelay(video, delay))
   }
 
   const tick = async () => {

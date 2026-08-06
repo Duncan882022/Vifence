@@ -193,7 +193,7 @@ export function SafetyDashboardPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   {tier2Open && (
                     <>
-                      <BackendConnectionBadge variant="chip" />
+                      <BackendConnectionBadge />
                       <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
                     </>
                   )}
