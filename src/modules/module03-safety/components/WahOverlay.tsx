@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, type RefObject } from 'react'
+import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
@@ -14,11 +14,11 @@ import {
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
+import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { OVERLAY_CYCLE_DEFAULTS, wahScanRank } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 import {
   filterWahHarnessFalsePositives,
-  hasWahHarnessViolation,
 } from '../utils/wahHarnessLogic'
 
 interface WahOverlayProps {
@@ -157,6 +157,8 @@ function useWahState(
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
+  const resetDetections = useCallback(() => setDetections([]), [])
+  useOverlaySceneReset(videoRef, enabled, resetDetections)
 
   useEffect(() => {
     const video = videoRef.current
@@ -187,7 +189,7 @@ function useWahState(
         const filtered = filterWahHarnessFalsePositives(result.detections)
         setFrameSize({ width: result.width, height: result.height })
         setDetections(visibleDetections(filtered))
-        if (result.events.length > 0 && hasWahHarnessViolation(result.detections, VIOLATION_MIN_CONF)) {
+        if (result.events.length > 0) {
           notifySafetyAiEventsChanged()
         }
       },

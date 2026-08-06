@@ -9,8 +9,8 @@
  */
 
 export const OVERLAY_CYCLE_DEFAULTS = {
-  stepMs: 340,
-  holdMs: 2800,
+  stepMs: 260,
+  holdMs: 900,
 } as const
 
 /** Rank ngưỡng — rank < CONDITION = subject, < VIOLATION = condition. */

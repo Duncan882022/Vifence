@@ -11,7 +11,14 @@ const captureStateByVideo = new WeakMap<HTMLVideoElement, VideoCaptureState>()
 const analyzeIntervalScaleByVideo = new WeakMap<HTMLVideoElement, number>()
 
 /** Khoảng cách tối thiểu giữa 2 lần drawImage thực sự (ms). */
-const MIN_CAPTURE_GAP_MS = 480
+const MIN_CAPTURE_GAP_MS = 160
+
+export function invalidateVideoFrameCapture(video: HTMLVideoElement): void {
+  const state = captureStateByVideo.get(video)
+  if (!state) return
+  state.lastAt = 0
+  state.lastBase64 = null
+}
 
 export function setVideoAnalyzeIntervalScale(video: HTMLVideoElement, scale: number): void {
   analyzeIntervalScaleByVideo.set(video, Math.max(1, scale))

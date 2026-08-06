@@ -23,7 +23,7 @@ export function SafetyZonePage() {
   const [eventsOpen, setEventsOpen] = useState(true)
   const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
   const zone = zoneId ? SAFETY_ZONE_MAP.get(zoneId) : null
-  const aiLiveRecords = useSafetyAiEvents(15000)
+  const aiLiveRecords = useSafetyAiEvents()
   const allRecords = aiLiveRecords
 
   const records = useMemo(

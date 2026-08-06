@@ -10,8 +10,11 @@ import {
 } from '../services/safetyAiEvents.service'
 import type { SafetyViolationRecord } from '../types/safety.types'
 
+/** 15 phút — khớp cooldown log sự kiện backend; overlay vẫn refresh ngay khi có event mới. */
+export const SAFETY_AI_EVENTS_POLL_MS = 15 * 60 * 1000
+
 /** Poll sự kiện AI từ backend JSON — ghép vào panel Safety (PCCC, ATGT, …). */
-export function useSafetyAiEvents(pollMs = 5000): SafetyViolationRecord[] {
+export function useSafetyAiEvents(pollMs = SAFETY_AI_EVENTS_POLL_MS): SafetyViolationRecord[] {
   const [records, setRecords] = useState<SafetyViolationRecord[]>([])
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, type RefObject } from 'react'
+import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
@@ -19,7 +19,8 @@ import {
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { atgtScanRank, atgtViolationRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
-import { filterAtgtLaneOverlayDetections, isAtgtLaneMedianBehavior } from '../utils/atgtLaneLogic'
+import { filterAtgtLaneOverlayDetections, isAtgtLaneMedianBehavior, isAtgtLaneViolationBehavior } from '../utils/atgtLaneLogic'
+import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
 interface AtgtOverlayProps {
@@ -63,6 +64,12 @@ const BEHAVIOR_STYLE: Record<
     label: 'text-emerald-200',
     bg: 'bg-emerald-600/35',
   },
+  no_soft_median: {
+    border: 'border-purple-400/95',
+    fill: 'bg-purple-500/16',
+    label: 'text-purple-200',
+    bg: 'bg-purple-600/40',
+  },
 }
 
 function formatLabel(detection: AtgtDetection): string {
@@ -81,6 +88,7 @@ function visibleDetections(detections: AtgtDetection[]): AtgtDetection[] {
       if (d.behavior === 'speeding') return d.confidence >= VIOLATION_MIN_CONF
       if (d.behavior === 'vehicle') return d.confidence >= VEHICLE_MIN_CONF
       if (isAtgtLaneMedianBehavior(d.behavior)) return d.confidence >= 0
+      if (isAtgtLaneViolationBehavior(d.behavior)) return d.confidence >= 0
       return d.confidence >= 0.5
     }),
   ).sort((a, b) => {
@@ -114,7 +122,8 @@ const DetectionBox = memo(function DetectionBox({
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
   const layerZ = detection.behavior === 'speeding' ? 7
-    : isAtgtLaneMedianBehavior(detection.behavior) ? 5
+    : isAtgtLaneViolationBehavior(detection.behavior) ? 6
+      : isAtgtLaneMedianBehavior(detection.behavior) ? 5
       : detection.behavior === 'vehicle' ? 3
         : 2
 
@@ -175,6 +184,8 @@ function useAtgtState(
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
+  const resetDetections = useCallback(() => setDetections([]), [])
+  useOverlaySceneReset(videoRef, enabled, resetDetections)
 
   useEffect(() => {
     const video = videoRef.current
@@ -242,8 +253,15 @@ export const AtgtOverlay = memo(function AtgtOverlay({
     enabled,
   )
 
-  const { visible: cycledDetections, pulse } = useRoiCycleDisplay(
-    detections,
+  const laneDetections = detections.filter(
+    d => isAtgtLaneMedianBehavior(d.behavior) || isAtgtLaneViolationBehavior(d.behavior),
+  )
+  const trafficDetections = detections.filter(
+    d => !isAtgtLaneMedianBehavior(d.behavior) && !isAtgtLaneViolationBehavior(d.behavior),
+  )
+
+  const { visible: cycledTraffic, pulse } = useRoiCycleDisplay(
+    trafficDetections,
     d => d.behavior === 'speeding',
     {
       getScanRank: d => atgtScanRank(d.behavior),
@@ -251,6 +269,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
       ...OVERLAY_CYCLE_DEFAULTS,
     },
   )
+  const cycledDetections = [...laneDetections, ...cycledTraffic]
   const showContent = enabled && frameSize.width > 0 && detections.length > 0
 
   if (!showContent) return null
@@ -266,7 +285,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
-          pulse={pulse}
+          pulse={pulse && !isAtgtLaneMedianBehavior(d.behavior) && !isAtgtLaneViolationBehavior(d.behavior)}
         />
       ))}
     </div>

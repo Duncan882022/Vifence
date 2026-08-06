@@ -23,7 +23,7 @@ export function SafetyGroupPage() {
   const group = SAFETY_GROUP_MAP.get(validId)!
   const Icon = GROUP_ICONS[validId]
   const scenarios = getScenarioForGroup(validId)
-  const aiLiveRecords = useSafetyAiEvents(5000)
+  const aiLiveRecords = useSafetyAiEvents()
   const allRecords = aiLiveRecords
 
   const records = useMemo(

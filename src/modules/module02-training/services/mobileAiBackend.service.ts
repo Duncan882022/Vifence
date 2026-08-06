@@ -213,6 +213,7 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
 export {
   captureVideoFrameBase64,
   getVideoAnalyzeIntervalScale,
+  invalidateVideoFrameCapture,
   scaledAnalyzeDelay,
   setVideoAnalyzeIntervalScale,
 } from '../utils/videoFrameCapture'

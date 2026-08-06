@@ -82,7 +82,7 @@ export function SafetyDashboardPage() {
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
   const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
-  const aiLiveRecords = useSafetyAiEvents(15000)
+  const aiLiveRecords = useSafetyAiEvents()
 
   const allRecords = useMemo(
     () => mergeViolationStatusOverrides(aiLiveRecords, statusOverrides),

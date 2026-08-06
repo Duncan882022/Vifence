@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     debounce_hits: int = 3
     debounce_window: int = 5
-    event_cooldown_seconds: float = 30.0
+    event_cooldown_seconds: float = 900.0
     # Fallback khi behavior không có cấu hình riêng.
     event_min_duration_seconds: float = 5.0
 
@@ -40,24 +40,23 @@ class Settings(BaseSettings):
     # Cháy nổ — chờ lâu hơn (~6s), có thể nhắc lại sau cooldown nếu vẫn phát hiện.
     fire_event_min_duration_seconds: float = 6.0
     fire_event_max_gap_seconds: float = 15.0
-    fire_event_cooldown_seconds: float = 60.0
+    fire_event_cooldown_seconds: float = 900.0
 
     # Không log lại cùng behavior trên cùng camera trong N giây (trừ khi đã qua phiên mới + đủ thời gian).
-    event_repeat_min_seconds: float = 180.0
+    event_repeat_min_seconds: float = 900.0
 
-    # Cam A-04 — lặp snapshot tối đa 5 phút/lần (DZ gần máy / WAH không dây).
-    road_event_repeat_seconds: float = 7200.0
-    crane_event_repeat_seconds: float = 300.0
-    ppe_event_repeat_seconds: float = 60.0
-    # PCCC Cam A-04 — lặp snapshot tối đa 10 phút/lần cho cùng loại vi phạm.
-    pccc_event_repeat_seconds: float = 600.0
-    wah_event_repeat_seconds: float = 300.0
-    # ATGT Cam A-03 — lặp snapshot tối đa 45s/lần (demo loop ~15s).
-    atgt_event_repeat_seconds: float = 45.0
+    # Demo — tối đa 1 snapshot sự kiện / loại / camera mỗi 15 phút (giảm lag I/O + FE poll).
+    demo_event_repeat_seconds: float = 900.0
+    road_event_repeat_seconds: float = 900.0
+    crane_event_repeat_seconds: float = 900.0
+    ppe_event_repeat_seconds: float = 900.0
+    pccc_event_repeat_seconds: float = 900.0
+    wah_event_repeat_seconds: float = 900.0
+    atgt_event_repeat_seconds: float = 900.0
 
-    # Hút thuốc — lặp snapshot mỗi 30 phút nếu vẫn phát hiện.
-    smoking_event_cooldown_seconds: float = 1800.0
-    smoking_event_repeat_min_seconds: float = 1800.0
+    # Hút thuốc — lặp snapshot mỗi 15 phút nếu vẫn phát hiện.
+    smoking_event_cooldown_seconds: float = 900.0
+    smoking_event_repeat_min_seconds: float = 900.0
 
     # Tạm tắt thu thập + train tự động khi chưa đủ video đa dạng (bật lại
     # bằng AUTO_TRAIN_ENABLED=true trong .env khi đã có thêm dữ liệu).

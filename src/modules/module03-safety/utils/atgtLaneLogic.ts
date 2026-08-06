@@ -21,13 +21,14 @@ export function hasAtgtLaneMedian(
   )
 }
 
-/** Không vẽ ROI tím (vi phạm); chỉ vẽ ROI xanh làn khi detect được làn. */
 export function filterAtgtLaneOverlayDetections<T extends { behavior: string; confidence: number }>(
   detections: T[],
 ): T[] {
   const lanePresent = hasAtgtLaneMedian(detections)
   return detections.filter(d => {
-    if (isAtgtLaneViolationBehavior(d.behavior)) return false
+    if (isAtgtLaneViolationBehavior(d.behavior)) {
+      return !lanePresent && d.confidence >= ATGT_LANE_MIN_CONF
+    }
     if (isAtgtLaneMedianBehavior(d.behavior)) {
       return lanePresent && d.confidence >= ATGT_LANE_MIN_CONF
     }

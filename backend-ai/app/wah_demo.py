@@ -93,11 +93,17 @@ def _detections_from_person_boxes(
     for key in person_keys:
         bbox = _scale_bbox(boxes[key], sx, sy)
         pb = (bbox[0], bbox[1], bbox[2], bbox[3])
-        has_harness, harness_box = detect_harness_on_person(
-            frame,
-            pb,
-            harness_flag=bool(harness_flags.get(key)),
-        )
+        harness_flag = harness_flags.get(key)
+        if harness_flag is False:
+            has_harness, harness_box = False, None
+        elif harness_flag is True:
+            has_harness, harness_box = True, harness_bbox_from_person(pb)
+        else:
+            has_harness, harness_box = detect_harness_on_person(
+                frame,
+                pb,
+                harness_flag=False,
+            )
 
         detections.append(
             Detection(
@@ -149,7 +155,7 @@ def match_demo_detections(
         eh = int(entry.get("height", ref.shape[0]))
         ref_cmp = ref if ref.shape[:2] == (fh, fw) else cv2.resize(ref, (fw, fh))
         diff = float(np.mean(cv2.absdiff(ref_cmp, frame)))
-        if diff > 12.0:
+        if diff > 16.0:
             small_w = max(160, min(fw, 320))
             small_h = max(120, int(eh * small_w / ew))
             ref_small = cv2.resize(ref, (small_w, small_h))

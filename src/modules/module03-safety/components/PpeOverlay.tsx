@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, type RefObject } from 'react'
+import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
@@ -15,6 +15,7 @@ import {
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { OVERLAY_CYCLE_DEFAULTS, ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
+import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 
 const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
 
@@ -175,6 +176,8 @@ function usePpeState(
   const [metrics, setMetrics] = useState<PpeMetrics>()
   const [layoutTick, setLayoutTick] = useState(0)
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
+  const resetDetections = useCallback(() => setDetections([]), [])
+  useOverlaySceneReset(videoRef, enabled, resetDetections)
 
   useEffect(() => {
     const bump = () => setBackendUrlVersion(v => v + 1)

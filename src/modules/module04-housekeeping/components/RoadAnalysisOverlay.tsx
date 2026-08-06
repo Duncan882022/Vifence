@@ -5,6 +5,7 @@ import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
 import { shouldRunRoadOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
@@ -210,6 +211,8 @@ function useRoadAnalysisState(
   [cameraId])
   const [layoutTick, setLayoutTick] = useState(0)
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
+  const resetDetections = useCallback(() => setDetections([]), [])
+  useOverlaySceneReset(videoRef, enabled, resetDetections)
 
   useEffect(() => {
     const bump = () => setBackendUrlVersion(v => v + 1)

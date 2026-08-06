@@ -74,7 +74,7 @@ export function CameraVideoFeed({
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    setVideoAnalyzeIntervalScale(video, analyzeThrottle ? 2 : 1)
+    setVideoAnalyzeIntervalScale(video, analyzeThrottle ? 1.35 : 1)
     return () => {
       setVideoAnalyzeIntervalScale(video, 1)
     }

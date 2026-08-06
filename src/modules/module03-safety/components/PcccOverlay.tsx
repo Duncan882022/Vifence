@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, type RefObject } from 'react'
+import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
 import { MobileAiOverlay } from '@/modules/module02-training/components/MobileAiOverlay'
 import {
   type MobileAiConnectionStatus,
@@ -14,6 +14,7 @@ import {
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
+import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { OVERLAY_CYCLE_DEFAULTS, pcccScanRank, pcccViolationRank } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
@@ -55,6 +56,8 @@ function usePcccState(
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
+  const resetDetections = useCallback(() => setDetections([]), [])
+  useOverlaySceneReset(videoRef, enabled, resetDetections)
 
   useEffect(() => {
     const video = videoRef.current

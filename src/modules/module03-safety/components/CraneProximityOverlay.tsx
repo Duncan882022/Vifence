@@ -3,6 +3,7 @@ import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { type MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
+import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import {
   createCraneProximityClient,
   getMobileAiBackendUrl,
@@ -199,6 +200,8 @@ function useCraneProximityState(
   const [metrics, setMetrics] = useState<CraneProximityMetrics>()
   const [layoutTick, setLayoutTick] = useState(0)
   const backendUrlVersion = useMobileAiBackendVersion()
+  const resetDetections = useCallback(() => setDetections([]), [])
+  useOverlaySceneReset(videoRef, enabled, resetDetections)
 
   const syncSegment = (video: HTMLVideoElement) => {
     if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
