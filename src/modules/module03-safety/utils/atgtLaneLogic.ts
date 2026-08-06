@@ -2,8 +2,6 @@
 
 export const ATGT_LANE_MIN_CONF = 0
 
-export const CAM03_ATGT_LANE_CHECK_OPENING_SEC = 1.0
-
 export type AtgtLaneBehavior = 'hard_median' | 'soft_median' | 'no_soft_median'
 
 export function isAtgtLaneMedianBehavior(behavior: string): boolean {
@@ -21,11 +19,6 @@ export function hasAtgtLaneMedian(
   return detections.some(
     d => isAtgtLaneMedianBehavior(d.behavior) && (d.confidence ?? 1) >= minConf,
   )
-}
-
-export function isCam03AtgtOpeningFrame(currentTimeSec: number, segmentStartSec: number): boolean {
-  return currentTimeSec >= segmentStartSec
-    && currentTimeSec - segmentStartSec < CAM03_ATGT_LANE_CHECK_OPENING_SEC
 }
 
 /** Không vẽ ROI tím (vi phạm); chỉ vẽ ROI xanh làn khi detect được làn. */

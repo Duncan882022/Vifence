@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState, memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
-import {
-  MOBILE_AI_BACKEND_STORAGE_KEY,
-  type MobileAiConnectionStatus,
-} from '@/modules/module02-training/services/mobileAiBackend.service'
+import { type MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
 import {
   createCraneProximityClient,
   getMobileAiBackendUrl,
@@ -12,6 +10,7 @@ import {
   type CraneProximityMetrics,
 } from '../services/craneProximityBackend.service'
 import { shouldRunCraneOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
+import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { craneScanRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
@@ -103,7 +102,7 @@ function resolveDetectionStyle(detection: CraneProximityDetection) {
   return BEHAVIOR_STYLE[detection.behavior] ?? BOX_STYLE
 }
 
-function DetectionBox({
+const DetectionBox = memo(function DetectionBox({
   detection,
   frameWidth,
   frameHeight,
@@ -185,7 +184,7 @@ function DetectionBox({
       </span>
     </div>
   )
-}
+})
 
 function useCraneProximityState(
   cameraId: string,
@@ -199,36 +198,33 @@ function useCraneProximityState(
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const [metrics, setMetrics] = useState<CraneProximityMetrics>()
   const [layoutTick, setLayoutTick] = useState(0)
-  const [backendUrlVersion, setBackendUrlVersion] = useState(0)
+  const backendUrlVersion = useMobileAiBackendVersion()
 
-  useEffect(() => {
-    const bump = () => setBackendUrlVersion(v => v + 1)
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === MOBILE_AI_BACKEND_STORAGE_KEY) bump()
+  const syncSegment = (video: HTMLVideoElement) => {
+    if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
+      setDetections([])
     }
-    window.addEventListener('storage', onStorage)
-    window.addEventListener('vifence-mobile-ai-backend-changed', bump)
-    return () => {
-      window.removeEventListener('storage', onStorage)
-      window.removeEventListener('vifence-mobile-ai-backend-changed', bump)
-    }
-  }, [])
+  }
 
   useEffect(() => {
     const video = videoRef.current
     if (!video || !enabled) return
     const bump = () => setLayoutTick(t => t + 1)
-    const clearOverlay = () => setDetections([])
+    const onSegmentChange = () => {
+      syncSegment(video)
+    }
     const observer = new ResizeObserver(bump)
     observer.observe(video)
     video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('seeked', clearOverlay)
+    video.addEventListener('seeked', onSegmentChange)
+    video.addEventListener('timeupdate', onSegmentChange)
     return () => {
       observer.disconnect()
       video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('seeked', clearOverlay)
+      video.removeEventListener('seeked', onSegmentChange)
+      video.removeEventListener('timeupdate', onSegmentChange)
     }
-  }, [enabled, videoRef])
+  }, [cameraId, enabled, videoRef])
 
   const stopClient = useCallback(() => {
     clientRef.current?.stop()
@@ -256,6 +252,12 @@ function useCraneProximityState(
       backendUrl,
       shouldAnalyze: () => shouldRunCraneOnCamera(cameraId, video.currentTime),
       onResult: result => {
+        syncSegment(video)
+        if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
+          setDetections([])
+          return
+        }
+
         const visible = result.detections
           .filter(d => {
           if (d.behavior === 'crane_proximity') return d.confidence >= EVENT_MIN_CONFIDENCE
@@ -279,6 +281,13 @@ function useCraneProximityState(
         setDetections(visible)
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
+
+        const backendViolation = (result.events ?? []).some(
+          e => e.behavior === 'crane_proximity' && e.confidence >= EVENT_MIN_CONFIDENCE,
+        )
+        if (backendViolation) {
+          notifySafetyAiEventsChanged()
+        }
       },
       onStatusChange: (next, msg) => {
         setStatus(next)

@@ -2,6 +2,8 @@ export const ATGT_SPEEDING_VIOLATION_TEXT = 'Phương tiện vượt quá tốc 
 
 export const ATGT_LANE_VIOLATION_TEXT = 'Không tổ chức phân làn, luồng giao thông'
 
+const ATGT_LANE_FALLBACK_SNAPSHOT = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}camera-feeds/cam03-atgt-no-lane-scene.jpg`
+
 function drawViolationBox(
   ctx: CanvasRenderingContext2D,
   bbox: [number, number, number, number],
@@ -107,4 +109,9 @@ export function captureAtgtLaneSnapshot(
   })
 
   return canvas.toDataURL('image/jpeg', 0.84)
+}
+
+/** Snapshot tĩnh khi không chụp được khung video (vẫn log ATGT-004). */
+export function resolveAtgtLaneFallbackSnapshot(): string {
+  return ATGT_LANE_FALLBACK_SNAPSHOT
 }

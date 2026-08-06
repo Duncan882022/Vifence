@@ -89,7 +89,10 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     needsPolygon: false,
     endpoint: '/analyze/atgt/frame',
     overlayKind: 'atgt',
-    videoSegments: [{ startSec: 10.05, endSec: 15.05 }],
+    videoSegments: [
+      { startSec: 0, endSec: 10.5 },
+      { startSec: 10.5, endSec: 15.05 },
+    ],
   },
   {
     id: 'mobile_smoking_fire',

@@ -21,6 +21,24 @@ export interface AtgtDetection {
   driverName?: string
 }
 
+type RawAtgtDetection = AtgtDetection & {
+  vehicle_plate?: string
+  vehicle_type?: string
+  driver_name?: string
+}
+
+function mapAtgtDetection(raw: RawAtgtDetection): AtgtDetection {
+  return {
+    behavior: raw.behavior,
+    label: raw.label,
+    confidence: raw.confidence,
+    bbox: raw.bbox,
+    vehiclePlate: raw.vehiclePlate ?? raw.vehicle_plate,
+    vehicleType: raw.vehicleType ?? raw.vehicle_type,
+    driverName: raw.driverName ?? raw.driver_name,
+  }
+}
+
 export interface AtgtResult {
   camera_id: string
   width: number
@@ -74,7 +92,7 @@ export async function postAtgtAnalyzeFrame(
     width?: number
     height?: number
     camera_id?: string
-    detections?: AtgtDetection[]
+    detections?: RawAtgtDetection[]
     events?: MobileAiViolationEvent[]
   }
 
@@ -87,7 +105,7 @@ export async function postAtgtAnalyzeFrame(
     camera_id: data.camera_id ?? cameraId,
     width: data.width,
     height: data.height,
-    detections: data.detections ?? [],
+    detections: (data.detections ?? []).map(mapAtgtDetection),
     events: data.events ?? [],
   }
 }

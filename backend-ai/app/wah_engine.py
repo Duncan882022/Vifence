@@ -109,22 +109,26 @@ class WahEngine:
 
         persons = [d for d in detections if d.behavior == "person"]
         harnesses = [d for d in detections if d.behavior == "safety_harness"]
-        violations = [
-            d for d in detections
-            if d.behavior == _EVENT_BEHAVIOR and d.confidence >= _MIN_CONF
-        ]
+        violations: list[Detection] = []
+        for det in detections:
+            if det.behavior != _EVENT_BEHAVIOR or det.confidence < _MIN_CONF:
+                continue
+            person = _match_person(det, persons)
+            if person is None:
+                continue
+            if _harness_on_person(person.bbox, harnesses):
+                continue
+            violations.append(det)
 
         if len(tracks) + len(violations) > _MAX_TRACKS:
             violations.sort(key=lambda d: d.confidence, reverse=True)
-            violations = violations[:_MAX_TRACKS]
+            violations = violations[: max(0, _MAX_TRACKS - len(tracks))]
 
         matched_ids: set[str] = set()
 
         for det in violations:
             person = _match_person(det, persons)
             if person is None:
-                continue
-            if det.behavior == _EVENT_BEHAVIOR and _harness_on_person(person.bbox, harnesses):
                 continue
 
             person_bbox = [float(v) for v in person.bbox]

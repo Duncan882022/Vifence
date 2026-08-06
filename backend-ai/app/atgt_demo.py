@@ -158,7 +158,12 @@ def _detections_from_boxes(
 
     has_lane = any(d.behavior in ("hard_median", "soft_median") for d in detections)
     if not has_lane:
-        lane_box = boxes.get("hard_median") or boxes.get("no_soft_median") or boxes.get("traffic_lane")
+        lane_box = (
+            boxes.get("hard_median")
+            or boxes.get("lane_check")
+            or boxes.get("no_soft_median")
+            or boxes.get("traffic_lane")
+        )
         if lane_box:
             bbox = _scale_bbox(lane_box, sx, sy)
             detections.append(

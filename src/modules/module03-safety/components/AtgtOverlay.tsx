@@ -7,34 +7,19 @@ import {
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { shouldRunAtgtOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
-  cam03AtgtDemoDetections,
-  CAM03_ATGT_DEMO_HARD_MEDIAN,
-  isInCam03AtgtDemoSegment,
-} from '../data/cam03AtgtDemo'
-import {
   createAtgtClient,
   getMobileAiBackendUrl,
   type AtgtDetection,
 } from '../services/atgtBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import {
-  registerAtgtSpeedingDemoEvent,
-  registerAtgtLaneDemoEvent,
-  resetAtgtDemoEventSegment,
-} from '../services/atgtDemoEvents.service'
-import {
-  captureAtgtLaneSnapshot,
-  captureAtgtSpeedingSnapshot,
-} from '../utils/captureAtgtSnapshot'
-import {
   formatSpeedingOverlayLabel,
   formatVehicleOverlayLabel,
-  resolveVehiclePlate,
-  UNKNOWN_VEHICLE_PLATE,
 } from '../utils/vehiclePlate'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
+import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { atgtScanRank, atgtViolationRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
-import { filterAtgtLaneOverlayDetections, hasAtgtLaneMedian, isAtgtLaneMedianBehavior } from '../utils/atgtLaneLogic'
+import { filterAtgtLaneOverlayDetections, isAtgtLaneMedianBehavior } from '../utils/atgtLaneLogic'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
 interface AtgtOverlayProps {
@@ -108,61 +93,7 @@ function visibleDetections(detections: AtgtDetection[]): AtgtDetection[] {
   })
 }
 
-function resolveAtgtDetections(
-  video: HTMLVideoElement,
-  cameraId: string,
-  backendItems: AtgtDetection[],
-): AtgtDetection[] {
-  if (cameraId !== 'A-03' || !isInCam03AtgtDemoSegment(video.currentTime)) {
-    return backendItems
-  }
-
-  const demo = demoDetectionsForVideo(video)
-  const backendVehicle = backendItems.find(d => d.behavior === 'vehicle' || d.behavior === 'speeding')
-  if (!backendVehicle?.vehiclePlate && !backendVehicle?.vehicleType) {
-    return demo
-  }
-
-  return demo.map(d => {
-    if (d.behavior !== 'vehicle' && d.behavior !== 'speeding') return d
-    const plate = backendVehicle.vehiclePlate ?? d.vehiclePlate
-    const vehicleType = backendVehicle.vehicleType ?? d.vehicleType
-    return {
-      ...d,
-      vehiclePlate: plate,
-      vehicleType,
-      label: d.behavior === 'vehicle'
-        ? formatVehicleOverlayLabel(plate)
-        : d.label,
-    }
-  })
-}
-
-function laneCheckSnapshotBbox(
-  video: HTMLVideoElement,
-  items: AtgtDetection[],
-): [number, number, number, number] {
-  const found = items.find(d => d.behavior === 'no_soft_median')
-  if (found) return found.bbox
-
-  const w = video.videoWidth
-  const h = video.videoHeight
-  return [
-    CAM03_ATGT_DEMO_HARD_MEDIAN.x1 * w,
-    CAM03_ATGT_DEMO_HARD_MEDIAN.y1 * h,
-    CAM03_ATGT_DEMO_HARD_MEDIAN.x2 * w,
-    CAM03_ATGT_DEMO_HARD_MEDIAN.y2 * h,
-  ]
-}
-
-function demoDetectionsForVideo(video: HTMLVideoElement): AtgtDetection[] {
-  const w = video.videoWidth
-  const h = video.videoHeight
-  if (!w || !h) return []
-  return cam03AtgtDemoDetections(w, h, video.currentTime)
-}
-
-function DetectionBox({
+const DetectionBox = memo(function DetectionBox({
   detection,
   frameWidth,
   frameHeight,
@@ -230,7 +161,7 @@ function DetectionBox({
       </span>
     </div>
   )
-}
+})
 
 function useAtgtState(
   cameraId: string,
@@ -242,59 +173,8 @@ function useAtgtState(
   const [statusMsg, setStatusMsg] = useState<string>()
   const [detections, setDetections] = useState<AtgtDetection[]>([])
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
-  const [layoutTick, setLayoutTick] = useState(0)
+  const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
-  const [inSegment, setInSegment] = useState(false)
-  const segmentLoggedRef = useRef<{ speeding?: string; lane?: string }>({})
-  const wasInSegmentRef = useRef(false)
-
-  const maybeLogDemoEvents = (
-    video: HTMLVideoElement,
-    items: AtgtDetection[],
-  ) => {
-    if (cameraId !== 'A-03' || !isInCam03AtgtDemoSegment(video.currentTime)) return
-    if (!video.videoWidth || !video.videoHeight || video.readyState < 2) return
-
-    const loopPass = Math.floor(video.currentTime / Math.max(video.duration || 15, 1))
-    const lanePresent = hasAtgtLaneMedian(items, 0)
-    if (!lanePresent) {
-      const key = `${loopPass}-lane`
-      if (segmentLoggedRef.current.lane !== key) {
-        const laneBbox = laneCheckSnapshotBbox(video, items)
-        const snapshotUrl = captureAtgtLaneSnapshot(video, laneBbox) ?? undefined
-        if (!snapshotUrl) return
-        const record = registerAtgtLaneDemoEvent({
-          cameraId,
-          confidence: items.find(d => d.behavior === 'no_soft_median')?.confidence ?? 0.86,
-          segmentKey: key,
-          snapshotUrl,
-        })
-        if (record) segmentLoggedRef.current.lane = key
-      }
-    }
-
-    const speeding = items.find(d => d.behavior === 'speeding')
-    if (speeding) {
-      const key = `${loopPass}-speeding`
-      if (segmentLoggedRef.current.speeding !== key) {
-        const vehicle = items.find(d => d.behavior === 'vehicle') ?? speeding
-        const plate = resolveVehiclePlate(vehicle.vehiclePlate ?? speeding.vehiclePlate)
-        const snapshotUrl = captureAtgtSpeedingSnapshot(video, vehicle.bbox, {
-          vehiclePlate: plate !== UNKNOWN_VEHICLE_PLATE ? plate : undefined,
-        }) ?? undefined
-        if (!snapshotUrl) return
-        const record = registerAtgtSpeedingDemoEvent({
-          cameraId,
-          confidence: speeding.confidence,
-          segmentKey: key,
-          snapshotUrl,
-          vehiclePlate: plate,
-          vehicleType: vehicle.vehicleType ?? speeding.vehicleType,
-        })
-        if (record) segmentLoggedRef.current.speeding = key
-      }
-    }
-  }
 
   useEffect(() => {
     const video = videoRef.current
@@ -303,44 +183,7 @@ function useAtgtState(
       clientRef.current = null
       setDetections([])
       setStatus('idle')
-      setInSegment(false)
       return
-    }
-
-    const applyDetections = (items: AtgtDetection[], width: number, height: number) => {
-      setFrameSize({ width, height })
-      setDetections(visibleDetections(items))
-      if (video) maybeLogDemoEvents(video, items)
-    }
-
-    const syncSegment = () => {
-      const active = cameraId === 'A-03' && isInCam03AtgtDemoSegment(video.currentTime)
-      setInSegment(active)
-      if (!active) {
-        if (wasInSegmentRef.current) {
-          wasInSegmentRef.current = false
-          setDetections([])
-          segmentLoggedRef.current = {}
-          resetAtgtDemoEventSegment()
-        }
-        return
-      }
-      if (!wasInSegmentRef.current) {
-        resetAtgtDemoEventSegment()
-        segmentLoggedRef.current = {}
-        wasInSegmentRef.current = true
-      }
-    }
-
-    const applyDemoOverlay = () => {
-      syncSegment()
-      if (!isInCam03AtgtDemoSegment(video.currentTime) || !shouldRunAtgtOnCamera(cameraId, video.currentTime)) {
-        return
-      }
-      const demo = demoDetectionsForVideo(video)
-      if (demo.length > 0) {
-        applyDetections(demo, video.videoWidth, video.videoHeight)
-      }
     }
 
     const shouldAnalyze = () => shouldRunAtgtOnCamera(cameraId, video.currentTime)
@@ -355,45 +198,35 @@ function useAtgtState(
         setStatusMsg(msg)
       },
       onResult: result => {
-        const items = resolveAtgtDetections(
-          video,
-          cameraId,
-          result.detections.length > 0 ? result.detections : [],
-        )
-        applyDetections(items, result.width, result.height)
+        if (!shouldRunAtgtOnCamera(cameraId, video.currentTime)) {
+          setDetections([])
+          return
+        }
+        setFrameSize({ width: result.width, height: result.height })
+        setDetections(visibleDetections(result.detections))
         if (result.events.length > 0) {
           notifySafetyAiEventsChanged()
         }
       },
     })
 
-    video.addEventListener('timeupdate', syncSegment)
-    video.addEventListener('seeked', applyDemoOverlay)
-    applyDemoOverlay()
+    const onSegmentChange = () => {
+      if (!shouldRunAtgtOnCamera(cameraId, video.currentTime)) {
+        setDetections([])
+      }
+    }
+    video.addEventListener('timeupdate', onSegmentChange)
+    video.addEventListener('seeked', onSegmentChange)
 
     return () => {
-      video.removeEventListener('timeupdate', syncSegment)
-      video.removeEventListener('seeked', applyDemoOverlay)
+      video.removeEventListener('timeupdate', onSegmentChange)
+      video.removeEventListener('seeked', onSegmentChange)
       clientRef.current?.stop()
       clientRef.current = null
     }
   }, [cameraId, enabled, videoRef, backendUrlVersion])
 
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    const bump = () => setLayoutTick(v => v + 1)
-    video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('resize', bump)
-    window.addEventListener('resize', bump)
-    return () => {
-      video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('resize', bump)
-      window.removeEventListener('resize', bump)
-    }
-  }, [videoRef, layoutTick])
-
-  return { status, statusMsg, detections, frameSize, layoutTick, inSegment }
+  return { status, statusMsg, detections, frameSize, layoutTick }
 }
 
 export const AtgtOverlay = memo(function AtgtOverlay({
@@ -403,7 +236,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   enabled = true,
   compact,
 }: AtgtOverlayProps) {
-  const { detections, frameSize, inSegment, layoutTick } = useAtgtState(
+  const { detections, frameSize, layoutTick } = useAtgtState(
     cameraId,
     videoRef,
     enabled,
@@ -418,7 +251,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
       ...OVERLAY_CYCLE_DEFAULTS,
     },
   )
-  const showContent = inSegment && detections.length > 0 && frameSize.width > 0
+  const showContent = enabled && frameSize.width > 0 && detections.length > 0
 
   if (!showContent) return null
 

@@ -5,7 +5,6 @@ import {
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getSafetyTodayDate } from '../data/safetyDemoDate'
 import {
-  fetchOverlaySafetyEvents,
   fetchSafetyAiEvents,
   SAFETY_AI_EVENTS_CHANGED,
 } from '../services/safetyAiEvents.service'
@@ -22,8 +21,7 @@ export function useSafetyAiEvents(pollMs = 5000): SafetyViolationRecord[] {
     const tick = async () => {
       const url = getMobileAiBackendUrl()
       if (!url) {
-        const overlay = await fetchOverlaySafetyEvents()
-        if (!cancelled) setRecords(overlay)
+        if (!cancelled) setRecords([])
         return
       }
       const next = await fetchSafetyAiEvents(url, getSafetyTodayDate())

@@ -11,7 +11,7 @@ const SCENARIO_SNAPSHOTS: Record<string, string> = {
   'WAH-001': `${BASE}avatars/clip-w-010.jpg`,
   'DZ-003': `${BASE}housekeeping/clutter-violation.jpg`,
   'ATGT-002': `${BASE}camera-feeds/cam03-atgt-scene.jpg`,
-  'ATGT-004': `${BASE}camera-feeds/cam03-atgt-scene.jpg`,
+  'ATGT-004': `${BASE}camera-feeds/cam03-atgt-no-lane-scene.jpg`,
   'BPTC-007': `${BASE}housekeeping/clutter-violation.jpg`,
   'BPTC-008': `${BASE}housekeeping/materials-violation.jpg`,
   'BPTC-009': `${BASE}housekeeping/thumb-kho-vat-tu.jpg`,

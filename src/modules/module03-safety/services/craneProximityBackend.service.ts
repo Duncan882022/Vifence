@@ -41,6 +41,7 @@ export interface CraneProximityResult {
   roi_zones: CraneProximityRoiZone[]
   metrics: CraneProximityMetrics
   detections: CraneProximityDetection[]
+  events?: Array<{ id: string; behavior: string; confidence: number }>
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -91,6 +92,7 @@ export async function postCraneAnalyzeFrame(
     roi_zones?: CraneProximityRoiZone[]
     metrics?: CraneProximityMetrics
     detections?: CraneProximityDetection[]
+    events?: Array<{ id: string; behavior: string; confidence: number }>
   }
 
   if (data.type === 'error') throw new Error(data.message ?? 'Lỗi backend.')
@@ -110,6 +112,7 @@ export async function postCraneAnalyzeFrame(
       proximity_threshold_m: 1.0,
     },
     detections: data.detections ?? [],
+    events: data.events ?? [],
   }
 }
 

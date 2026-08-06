@@ -45,14 +45,13 @@ class Settings(BaseSettings):
     # Không log lại cùng behavior trên cùng camera trong N giây (trừ khi đã qua phiên mới + đủ thời gian).
     event_repeat_min_seconds: float = 180.0
 
-    # Cam A-03 / A-04 — lặp snapshot sự kiện (bùn/nước/vật tư / cẩn gần người).
+    # Cam A-04 — lặp snapshot tối đa 5 phút/lần (DZ gần máy / WAH không dây).
     road_event_repeat_seconds: float = 7200.0
-    crane_event_repeat_seconds: float = 7200.0
+    crane_event_repeat_seconds: float = 300.0
     ppe_event_repeat_seconds: float = 60.0
     # PCCC Cam A-04 — lặp snapshot tối đa 10 phút/lần cho cùng loại vi phạm.
     pccc_event_repeat_seconds: float = 600.0
-    # WAH Cam A-04 — lặp snapshot tối đa 10 phút/lần.
-    wah_event_repeat_seconds: float = 600.0
+    wah_event_repeat_seconds: float = 300.0
     # ATGT Cam A-03 — lặp snapshot tối đa 45s/lần (demo loop ~15s).
     atgt_event_repeat_seconds: float = 45.0
 

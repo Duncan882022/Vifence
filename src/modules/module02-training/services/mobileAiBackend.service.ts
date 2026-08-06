@@ -49,7 +49,31 @@ export interface MobileAiAnalyzeResult {
   events: MobileAiViolationEvent[]
 }
 
-const DEFAULT_LOCAL_BACKEND = 'http://localhost:8000'
+/** Mặc định backend — bake từ VITE_MOBILE_AI_BACKEND_URL (.env.local / .env.ghpages). */
+const ENV_BACKEND_URL = (import.meta.env.VITE_MOBILE_AI_BACKEND_URL as string | undefined)?.trim() ?? ''
+const LOCALHOST_FALLBACK = 'http://localhost:8000'
+const SESSION_BACKEND_FROM_URL = 'vifence_url_backend_override'
+const URL_BACKEND_KEYS = ['backendUrl', 'aiBackend', 'backend'] as const
+
+function readUrlBackendUrl(): string {
+  if (typeof window === 'undefined') return ''
+  const params = new URLSearchParams(window.location.search)
+  for (const key of URL_BACKEND_KEYS) {
+    const raw = params.get(key)?.trim()
+    if (raw) return decodeURIComponent(raw)
+  }
+  return ''
+}
+
+/** ?backendUrl= / ?aiBackend= — chia sẻ link demo đồng bộ giữa trình duyệt. */
+function getSharedBackendUrlParam(): string {
+  const fromUrl = readUrlBackendUrl()
+  if (fromUrl) {
+    sessionStorage.setItem(SESSION_BACKEND_FROM_URL, fromUrl)
+    return fromUrl
+  }
+  return sessionStorage.getItem(SESSION_BACKEND_FROM_URL)?.trim() ?? ''
+}
 
 function isRunningOnLocalCms(): boolean {
   if (typeof window === 'undefined') return false
@@ -59,11 +83,13 @@ function isRunningOnLocalCms(): boolean {
 
 export function getMobileAiBackendUrl(): string {
   if (typeof window === 'undefined') return ''
+  const shared = getSharedBackendUrlParam()
+  if (shared) return shared
   const stored = localStorage.getItem(STORAGE_KEY)?.trim() ?? ''
-  // URL đã lưu (ngrok / tunnel / localhost) luôn được tôn trọng — kể cả khi mở CMS trên localhost.
   if (stored) return stored
-  // Chưa cấu hình: dev trên localhost CMS → mặc định backend cùng máy.
-  if (isRunningOnLocalCms()) return DEFAULT_LOCAL_BACKEND
+  // Build-time ngrok — dùng chung local preview + GitHub Pages (khi chưa cấu hình ⚙).
+  if (ENV_BACKEND_URL) return ENV_BACKEND_URL
+  if (isRunningOnLocalCms()) return LOCALHOST_FALLBACK
   return ''
 }
 

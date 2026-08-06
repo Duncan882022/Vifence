@@ -1,4 +1,4 @@
-import { type RefObject } from 'react'
+import { memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '../utils/videoOverlayCoords'
 import type { MobileAiDetection } from '../services/mobileAiBackend.service'
@@ -31,7 +31,7 @@ const BEHAVIOR_STYLE: Record<string, { border: string; label: string; badge: str
   },
 }
 
-function DetectionBox({
+const DetectionBox = memo(function DetectionBox({
   det,
   frameWidth,
   frameHeight,
@@ -100,7 +100,7 @@ function DetectionBox({
       </span>
     </div>
   )
-}
+})
 
 export function MobileAiOverlay({
   detections,

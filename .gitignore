@@ -9,6 +9,7 @@ vifence-pages.zip
 .env
 .env.*
 !.env.example
+!.env.ghpages
 backend-ai/data/auto_train/
 backend-ai/.venv/
 yolov8n.pt

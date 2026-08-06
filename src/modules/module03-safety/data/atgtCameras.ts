@@ -12,8 +12,8 @@ export function isAtgtCamera(cameraId: string): cameraId is AtgtCameraId {
   return isAtgtCameraRuntime(cameraId)
 }
 
-/** Đoạn ATGT trong ttdv-a-cam03-test.mp4 (5s cuối). */
-export const ATGT_VIDEO_SEGMENT = { startSec: 10.05, endSec: 15.05 } as const
+/** Đoạn ATGT trong ttdv-a-cam03-test.mp4 — không làn (0–10.5s) + xe + hàng rào (10.5–15s). */
+export const ATGT_VIDEO_SEGMENT = { startSec: 0, endSec: 15.05 } as const
 
 export function isInAtgtVideoSegment(currentTimeSec: number): boolean {
   return isInAtgtVideoSegmentRuntime(currentTimeSec)

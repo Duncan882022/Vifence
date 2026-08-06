@@ -7,19 +7,19 @@ import {
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { shouldRunWahOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
-  cam04WahDemoDetections,
-  isInCam04WahDemoSegment,
-  type WahDemoBehavior,
-} from '../data/cam04WahDemo'
-import {
   createWahClient,
   getMobileAiBackendUrl,
   type WahDetection,
 } from '../services/wahBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
+import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { OVERLAY_CYCLE_DEFAULTS, wahScanRank } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
+import {
+  filterWahHarnessFalsePositives,
+  hasWahHarnessViolation,
+} from '../utils/wahHarnessLogic'
 
 interface WahOverlayProps {
   cameraId: string
@@ -40,7 +40,7 @@ const BOX_STYLE = {
 } as const
 
 const BEHAVIOR_STYLE: Record<
-  WahDemoBehavior,
+  string,
   { border: string; fill: string; label: string; bg: string }
 > = {
   person: BOX_STYLE,
@@ -64,8 +64,9 @@ function formatLabel(detection: WahDetection): string {
   return detection.label
 }
 
-function visibleDetections(detections: WahDetection[]): WahDetection[] {
-  return detections
+/** `filtered` phải đã qua `filterWahHarnessFalsePositives` — tránh lọc lại 2 lần. */
+function visibleDetections(filtered: WahDetection[]): WahDetection[] {
+  return filtered
     .filter(d => {
       if (d.behavior === 'no_harness') return d.confidence >= VIOLATION_MIN_CONF
       if (d.behavior === 'safety_harness') return d.confidence >= 0.5
@@ -73,24 +74,6 @@ function visibleDetections(detections: WahDetection[]): WahDetection[] {
       return d.confidence >= 0.5
     })
     .sort((a, b) => wahScanRank(a.behavior) - wahScanRank(b.behavior))
-}
-
-function resolveWahOverlayItems(
-  video: HTMLVideoElement,
-  cameraId: string,
-  backendItems: WahDetection[],
-): WahDetection[] {
-  if (cameraId === 'A-04' && isInCam04WahDemoSegment(video.currentTime)) {
-    return demoDetectionsForVideo(video)
-  }
-  return backendItems.length > 0 ? backendItems : []
-}
-
-function demoDetectionsForVideo(video: HTMLVideoElement): WahDetection[] {
-  const w = video.videoWidth
-  const h = video.videoHeight
-  if (!w || !h) return []
-  return cam04WahDemoDetections(w, h)
 }
 
 function DetectionBox({
@@ -172,10 +155,8 @@ function useWahState(
   const [statusMsg, setStatusMsg] = useState<string>()
   const [detections, setDetections] = useState<WahDetection[]>([])
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
-  const [layoutTick, setLayoutTick] = useState(0)
+  const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
-  const [inSegment, setInSegment] = useState(false)
-  const wasInSegmentRef = useRef(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -184,35 +165,7 @@ function useWahState(
       clientRef.current = null
       setDetections([])
       setStatus('idle')
-      setInSegment(false)
       return
-    }
-
-    const applyDetections = (items: WahDetection[], width: number, height: number) => {
-      setFrameSize({ width, height })
-      setDetections(visibleDetections(items))
-    }
-
-    const syncSegment = () => {
-      const active = cameraId === 'A-04' && isInCam04WahDemoSegment(video.currentTime)
-      setInSegment(active)
-      if (!active) {
-        if (wasInSegmentRef.current) setDetections([])
-        wasInSegmentRef.current = false
-        return
-      }
-      wasInSegmentRef.current = true
-    }
-
-    const applyDemoOverlay = () => {
-      syncSegment()
-      if (!isInCam04WahDemoSegment(video.currentTime) || !shouldRunWahOnCamera(cameraId, video.currentTime)) {
-        return
-      }
-      const demo = demoDetectionsForVideo(video)
-      if (demo.length > 0) {
-        applyDetections(demo, video.videoWidth, video.videoHeight)
-      }
     }
 
     const shouldAnalyze = () => shouldRunWahOnCamera(cameraId, video.currentTime)
@@ -227,41 +180,36 @@ function useWahState(
         setStatusMsg(msg)
       },
       onResult: result => {
-        const items = resolveWahOverlayItems(video, cameraId, result.detections)
-        applyDetections(items, result.width, result.height)
-        if (result.events.length > 0) {
+        if (!shouldRunWahOnCamera(cameraId, video.currentTime)) {
+          setDetections([])
+          return
+        }
+        const filtered = filterWahHarnessFalsePositives(result.detections)
+        setFrameSize({ width: result.width, height: result.height })
+        setDetections(visibleDetections(filtered))
+        if (result.events.length > 0 && hasWahHarnessViolation(result.detections, VIOLATION_MIN_CONF)) {
           notifySafetyAiEventsChanged()
         }
       },
     })
 
-    video.addEventListener('timeupdate', syncSegment)
-    video.addEventListener('seeked', applyDemoOverlay)
-    applyDemoOverlay()
+    const onSegmentChange = () => {
+      if (!shouldRunWahOnCamera(cameraId, video.currentTime)) {
+        setDetections([])
+      }
+    }
+    video.addEventListener('timeupdate', onSegmentChange)
+    video.addEventListener('seeked', onSegmentChange)
 
     return () => {
-      video.removeEventListener('timeupdate', syncSegment)
-      video.removeEventListener('seeked', applyDemoOverlay)
+      video.removeEventListener('timeupdate', onSegmentChange)
+      video.removeEventListener('seeked', onSegmentChange)
       clientRef.current?.stop()
       clientRef.current = null
     }
   }, [cameraId, enabled, videoRef, backendUrlVersion])
 
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    const bump = () => setLayoutTick(v => v + 1)
-    video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('resize', bump)
-    window.addEventListener('resize', bump)
-    return () => {
-      video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('resize', bump)
-      window.removeEventListener('resize', bump)
-    }
-  }, [videoRef, layoutTick])
-
-  return { status, statusMsg, detections, frameSize, layoutTick, inSegment }
+  return { status, statusMsg, detections, frameSize, layoutTick }
 }
 
 export const WahOverlay = memo(function WahOverlay({
@@ -271,7 +219,7 @@ export const WahOverlay = memo(function WahOverlay({
   enabled = true,
   compact,
 }: WahOverlayProps) {
-  const { detections, frameSize, inSegment, layoutTick } = useWahState(
+  const { detections, frameSize, layoutTick } = useWahState(
     cameraId,
     videoRef,
     enabled,
@@ -285,7 +233,7 @@ export const WahOverlay = memo(function WahOverlay({
       ...OVERLAY_CYCLE_DEFAULTS,
     },
   )
-  const showContent = inSegment && detections.length > 0 && frameSize.width > 0
+  const showContent = enabled && detections.length > 0 && frameSize.width > 0
 
   if (!showContent) return null
 

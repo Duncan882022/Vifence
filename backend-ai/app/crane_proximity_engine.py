@@ -1,4 +1,4 @@
-"""Debounced crane-proximity events — Cam A-04 (≥ 3s, lặp 2 giờ)."""
+"""Debounced crane-proximity events — Cam A-04 (≥ 3s, lặp 5 phút)."""
 
 from __future__ import annotations
 

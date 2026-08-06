@@ -1,8 +1,7 @@
+import { formatVnIsoFromUnix } from '@/utils/vnDateTime'
 import {
   getMobileAiBackendUrl,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
-import { getAtgtDemoSafetyEvents } from './atgtDemoEvents.service'
-import { getPcccDemoSafetyEvents } from './pcccDemoEvents.service'
 import type {
   AlertSeverity,
   SafetyGroupId,
@@ -109,12 +108,6 @@ function normalizeBaseUrl(baseUrl: string): string {
   return `https://${trimmed}`
 }
 
-function toIsoLocalTimestamp(unixSeconds: number): string {
-  const d = new Date(unixSeconds * 1000)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
 function buildSnapshotUrl(backendUrl: string, eventId: string): string {
   return `${normalizeBaseUrl(backendUrl)}/events/${eventId}/snapshot`
 }
@@ -182,7 +175,7 @@ export function mapBackendEventToSafetyRecord(
               : 'ZONE-A01',
     sourceDeviceId,
     sourceType,
-    detectedAt: toIsoLocalTimestamp(event.created_at),
+    detectedAt: formatVnIsoFromUnix(event.created_at),
     severity: BEHAVIOR_TO_SEVERITY[event.behavior] ?? 'VIOLATION',
     status: 'DETECTED',
     confidence: event.confidence,
@@ -214,8 +207,6 @@ export function mapBackendEventToSafetyRecord(
 
 export function isLiveSafetyRecord(record: SafetyViolationRecord): boolean {
   return record.id.startsWith('ai-')
-    || record.id.startsWith('atgt-demo-')
-    || record.id.startsWith('pccc-demo-')
 }
 
 export function filterLiveSafetyRecords(records: SafetyViolationRecord[]): SafetyViolationRecord[] {
@@ -226,12 +217,8 @@ export async function fetchSafetyAiEvents(
   backendUrl?: string,
   date?: string,
 ): Promise<SafetyViolationRecord[]> {
-  const overlayEvents = filterLiveSafetyRecords([
-    ...getAtgtDemoSafetyEvents(),
-    ...getPcccDemoSafetyEvents(),
-  ])
   const base = normalizeBaseUrl(backendUrl ?? getMobileAiBackendUrl())
-  if (!base) return overlayEvents
+  if (!base) return []
 
   const params = new URLSearchParams({ limit: '50' })
   if (date) params.set('date', date)
@@ -241,15 +228,13 @@ export async function fetchSafetyAiEvents(
       headers: TUNNEL_HEADERS,
       mode: 'cors',
     })
-    if (!res.ok) return overlayEvents
+    if (!res.ok) return []
     const rows = await res.json() as BackendViolationEvent[]
-    const backendRecords = filterLiveSafetyRecords(
+    return filterLiveSafetyRecords(
       rows.map(row => mapBackendEventToSafetyRecord(row, base)),
     )
-    const merged = mergeSafetyRecordsWithAi(overlayEvents, backendRecords)
-    return attachDemoSnapshotsToBackend(merged, overlayEvents)
   } catch {
-    return overlayEvents
+    return []
   }
 }
 
@@ -264,29 +249,6 @@ export function mergeSafetyRecordsWithAi(
   )
 }
 
-/** Ưu tiên snapshot chụp từ video (data URL) cho sự kiện backend ATGT cùng kịch bản. */
-function attachDemoSnapshotsToBackend(
-  records: SafetyViolationRecord[],
-  demoRecords: SafetyViolationRecord[],
-): SafetyViolationRecord[] {
-  const demoSnapByScenario = new Map<string, string>()
-  for (const demo of demoRecords) {
-    if (demo.snapshotUrl?.startsWith('data:')) {
-      demoSnapByScenario.set(demo.scenarioId, demo.snapshotUrl)
-    }
-  }
-  if (demoSnapByScenario.size === 0) return records
-
-  return records.map(record => {
-    if (!record.id.startsWith('ai-') || record.groupId !== 'ATGT') return record
-    const localSnap = demoSnapByScenario.get(record.scenarioId)
-    return localSnap ? { ...record, snapshotUrl: localSnap } : record
-  })
-}
-
 export async function fetchOverlaySafetyEvents(): Promise<SafetyViolationRecord[]> {
-  return filterLiveSafetyRecords([
-    ...getAtgtDemoSafetyEvents(),
-    ...getPcccDemoSafetyEvents(),
-  ])
+  return fetchSafetyAiEvents()
 }
