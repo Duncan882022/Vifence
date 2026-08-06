@@ -6,6 +6,7 @@ import {
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
+import { BackendConnectionBadge } from '@/modules/module02-training/components/BackendConnectionBadge'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import {
   filterSafetyCameras,
@@ -191,7 +192,10 @@ export function SafetyDashboardPage() {
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
                   {tier2Open && (
-                    <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
+                    <>
+                      <BackendConnectionBadge variant="chip" />
+                      <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
+                    </>
                   )}
                   {!tier2Open && cameraMode === 'live' && (
                     <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">

@@ -3,6 +3,7 @@ import { cn } from '@/utils/cn'
 import { cameraDisplayLabel, cameraMetaLabel, type TrainingCamera } from '../data/trainingCameras'
 import { CameraAiConfigButton } from './CameraAiConfigModal'
 import { CameraBboxToggle } from './CameraBboxToggle'
+import { BackendConnectionBadge } from './BackendConnectionBadge'
 import { MobileAiBackendConfig } from './MobileAiBackendConfig'
 import { CAMERA_LIVE_BADGE, CAMERA_TOOLBAR_SHELL, cameraToolbarBtn } from './cameraToolbarStyles'
 
@@ -118,10 +119,11 @@ export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraCh
   return (
     <>
       <div className={cn(
-        'absolute z-[8] pointer-events-none',
+        'absolute z-[8] pointer-events-none flex items-center gap-1',
         compact ? 'top-1.5 left-1.5' : 'top-2 left-2',
       )}>
         <CameraLiveBadge compact={compact} />
+        <BackendConnectionBadge compact={compact} variant="chip" />
       </div>
       <CameraToolbar
         cameraId={cam.id}
