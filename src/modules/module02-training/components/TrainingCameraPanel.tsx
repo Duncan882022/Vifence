@@ -25,8 +25,8 @@ const CCTV_SCANLINE = {
     'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
 } as const
 
-function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle }: {
-  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean
+function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle, streamIndex }: {
+  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean; streamIndex?: number
 }) {
   if (cam.streamType === 'mobile') {
     return (
@@ -50,6 +50,7 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
       aiOverlay={aiOverlay}
       compact={compact}
       analyzeThrottle={analyzeThrottle}
+      streamIndex={streamIndex}
     />
   )
 }
@@ -112,13 +113,13 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
   )
 }
 
-function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle }: {
-  cam: TrainingCamera; compact?: boolean; onMaximize: () => void; isMaximized?: boolean; analyzeThrottle?: boolean
+function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex }: {
+  cam: TrainingCamera; compact?: boolean; onMaximize: () => void; isMaximized?: boolean; analyzeThrottle?: boolean; streamIndex?: number
 }) {
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact={compact} aiOverlay analyzeThrottle={analyzeThrottle} />
+      <CameraLiveFeed cam={cam} compact={compact} aiOverlay analyzeThrottle={analyzeThrottle} streamIndex={streamIndex} />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
       <CameraChrome
         cam={cam}
@@ -162,7 +163,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
         ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : {}),
       }}
     >
-      {cams.map(cam => (
+      {cams.map((cam, index) => (
         <div
           key={cam.id}
           className={cn(
@@ -170,7 +171,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
             fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
           )}
         >
-          <CameraCell cam={cam} compact={compact} analyzeThrottle={analyzeThrottle} onMaximize={() => onMaximize(cam)} />
+          <CameraCell cam={cam} compact={compact} analyzeThrottle={analyzeThrottle} streamIndex={index} onMaximize={() => onMaximize(cam)} />
         </div>
       ))}
     </div>

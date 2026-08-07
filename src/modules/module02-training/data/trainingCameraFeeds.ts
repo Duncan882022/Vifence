@@ -76,6 +76,19 @@ export function getCameraFeedUrl(key: CameraFeedKey): string {
   return `${base}camera-feeds/${FEED_FILES[key]}`
 }
 
+const POSTER_FILES: Partial<Record<CameraFeedKey, string>> = {
+  'ocp1-a-03': 'cam03-atgt-scene.jpg',
+  'ocp1-a-04': 'cam04-ppe-workers.jpg',
+}
+
+/** Ảnh poster — hiển thị trên mobile khi video đang buffer (iOS Safari). */
+export function getCameraFeedPosterUrl(key: CameraFeedKey): string | undefined {
+  const file = POSTER_FILES[key]
+  if (!file) return undefined
+  const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
+  return `${base}camera-feeds/${file}`
+}
+
 /** Camera id → clip (khớp khoá học / vị trí lắp cam). */
 export const CAMERA_FEED_BY_ID: Record<string, CameraFeedKey> = {
   'A-01': 'ocp1-a-01',
