@@ -17,9 +17,8 @@ import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { OVERLAY_CYCLE_DEFAULTS, wahScanRank } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
-import {
-  filterWahHarnessFalsePositives,
-} from '../utils/wahHarnessLogic'
+import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { filterWahHarnessFalsePositives } from '../utils/wahHarnessLogic'
 
 interface WahOverlayProps {
   cameraId: string
@@ -59,9 +58,10 @@ const BEHAVIOR_STYLE: Record<
 }
 
 function formatLabel(detection: WahDetection): string {
-  if (detection.behavior === 'no_harness') return 'WAH'
-  if (detection.behavior === 'safety_harness') return 'Dây AT'
-  return detection.label
+  return formatRoiOverlayBadge(
+    formatRoiOverlayCode(detection.behavior),
+    detection.confidence,
+  )
 }
 
 /** `filtered` phải đã qua `filterWahHarnessFalsePositives` — tránh lọc lại 2 lần. */
@@ -139,7 +139,7 @@ function DetectionBox({
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
-        {formatLabel(detection)} {(detection.confidence * 100).toFixed(0)}%
+        {formatLabel(detection)}
       </span>
     </div>
   )

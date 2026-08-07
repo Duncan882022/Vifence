@@ -14,6 +14,7 @@ import { shouldRunCraneOnCamera } from '@/modules/module02-training/data/cameraA
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { craneScanRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
+import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
 const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
@@ -70,10 +71,17 @@ const BEHAVIOR_STYLE: Record<
   },
 }
 
-function formatDetectionLabel(detection: CraneProximityDetection): string {
-  if (detection.behavior === 'crane_proximity') return 'DZ'
-  if (detection.machine_kind === 'crane_green') return 'Máy xúc'
-  return detection.label
+function formatDetectionBadge(
+  detection: CraneProximityDetection,
+  isPending: boolean,
+): string {
+  const behaviorKey = detection.behavior === 'crane' && detection.machine_kind
+    ? detection.machine_kind
+    : detection.behavior
+  const code = formatRoiOverlayCode(behaviorKey, detection.scenario_id)
+  const distLabel = formatDistanceLabel(detection.distance_m)
+  const pending = isPending ? ' ·LB' : ''
+  return formatRoiOverlayBadge(code, detection.confidence, `${distLabel}${pending}`)
 }
 
 function formatDistanceLabel(distanceM: number | undefined): string {
@@ -149,8 +157,7 @@ const DetectionBox = memo(function DetectionBox({
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
-  const displayLabel = formatDetectionLabel(detection)
-  const distLabel = formatDistanceLabel(detection.distance_m)
+  const displayLabel = formatDetectionBadge(detection, isPending)
 
   return (
     <div
@@ -181,7 +188,7 @@ const DetectionBox = memo(function DetectionBox({
           isPending && 'opacity-70',
         )}
       >
-        {displayLabel} {(detection.confidence * 100).toFixed(0)}%{distLabel}{isPending ? ' · chưa đủ ngưỡng' : ''}
+        {displayLabel}
       </span>
     </div>
   )

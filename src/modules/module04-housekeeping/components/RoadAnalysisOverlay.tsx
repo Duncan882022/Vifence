@@ -7,6 +7,7 @@ import {
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
+import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import { shouldRunRoadOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
   createRoadAnalysisClient,
@@ -145,7 +146,10 @@ function DetectionBox({
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
-        {detection.label} {(detection.confidence * 100).toFixed(0)}%
+        {formatRoiOverlayBadge(
+          formatRoiOverlayCode(detection.behavior, detection.scenario_id),
+          detection.confidence,
+        )}
       </span>
     </div>
   )

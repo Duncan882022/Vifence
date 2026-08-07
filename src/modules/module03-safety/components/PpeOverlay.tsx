@@ -14,6 +14,7 @@ import {
 } from '../services/ppeBackend.service'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { OVERLAY_CYCLE_DEFAULTS, ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
+import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 
@@ -156,7 +157,10 @@ function DetectionBox({
             compact ? 'text-[5px]' : 'text-[7px]',
           )}
         >
-          {detection.label} {(detection.confidence * 100).toFixed(0)}%
+          {formatRoiOverlayBadge(
+            formatRoiOverlayCode(detection.behavior, detection.scenario_id),
+            detection.confidence,
+          )}
         </span>
       ) : null}
     </div>

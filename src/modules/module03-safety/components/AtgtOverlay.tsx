@@ -12,10 +12,7 @@ import {
   type AtgtDetection,
 } from '../services/atgtBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
-import {
-  formatSpeedingOverlayLabel,
-  formatVehicleOverlayLabel,
-} from '../utils/vehiclePlate'
+import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { atgtScanRank, atgtViolationRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
@@ -73,13 +70,10 @@ const BEHAVIOR_STYLE: Record<
 }
 
 function formatLabel(detection: AtgtDetection): string {
-  if (detection.behavior === 'speeding') {
-    return formatSpeedingOverlayLabel(detection.vehiclePlate)
-  }
-  if (detection.behavior === 'vehicle') {
-    return formatVehicleOverlayLabel(detection.vehiclePlate)
-  }
-  return detection.label
+  return formatRoiOverlayBadge(
+    formatRoiOverlayCode(detection.behavior),
+    detection.confidence,
+  )
 }
 
 function visibleDetections(detections: AtgtDetection[]): AtgtDetection[] {
@@ -166,7 +160,7 @@ const DetectionBox = memo(function DetectionBox({
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
-        {formatLabel(detection)} {(detection.confidence * 100).toFixed(0)}%
+        {formatLabel(detection)}
       </span>
     </div>
   )

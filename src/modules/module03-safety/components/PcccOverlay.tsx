@@ -16,6 +16,7 @@ import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { OVERLAY_CYCLE_DEFAULTS, pcccScanRank, pcccViolationRank } from '../utils/overlayScanOrder'
+import { formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
 function visibleDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
@@ -38,7 +39,7 @@ interface PcccOverlayProps {
 function toOverlayDetections(detections: PcccDetection[]): MobileAiDetection[] {
   return detections.map(d => ({
     behavior: d.behavior,
-    label: d.label,
+    label: formatRoiOverlayCode(d.behavior),
     confidence: d.confidence,
     bbox: d.bbox,
   }))

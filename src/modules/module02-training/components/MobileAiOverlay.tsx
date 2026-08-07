@@ -1,6 +1,7 @@
 import { memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '../utils/videoOverlayCoords'
+import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import type { MobileAiDetection } from '../services/mobileAiBackend.service'
 
 interface MobileAiOverlayProps {
@@ -65,11 +66,10 @@ const DetectionBox = memo(function DetectionBox({
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
-  const displayLabel = det.behavior === 'smoking'
-    ? 'PCCC · Hút thuốc'
-    : det.behavior === 'fire'
-      ? 'PCCC · Cháy nổ'
-      : det.label
+  const displayLabel = formatRoiOverlayBadge(
+    formatRoiOverlayCode(det.behavior),
+    det.confidence,
+  )
 
   return (
     <div
@@ -95,8 +95,6 @@ const DetectionBox = memo(function DetectionBox({
         )}
       >
         {displayLabel}
-        {' '}
-        {(det.confidence * 100).toFixed(0)}%
       </span>
     </div>
   )
@@ -149,7 +147,7 @@ export function MobileAiAlertBadge({
           BEHAVIOR_STYLE.smoking.badge,
           compact ? 'text-[6px]' : 'text-[8px]',
         )}>
-          Hút thuốc
+          PCCC-001
         </span>
       )}
       {fire && (
@@ -158,7 +156,7 @@ export function MobileAiAlertBadge({
           BEHAVIOR_STYLE.fire.badge,
           compact ? 'text-[6px]' : 'text-[8px]',
         )}>
-          Cháy nổ
+          PCCC-002
         </span>
       )}
     </div>
