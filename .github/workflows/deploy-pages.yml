@@ -7,15 +7,17 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +34,21 @@ jobs:
       - name: Build
         run: npm run build:pages
 
+      # Cách 1: GitHub Actions Pages (khi Settings → Source = GitHub Actions)
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy via GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      # Cách 2: nhánh gh-pages (khi Settings → Source = branch gh-pages / root)
       - name: Deploy gh-pages branch
         uses: JamesIves/github-pages-deploy-action@v4
         with:

@@ -8,6 +8,9 @@
     "dev:local": "vite --host 127.0.0.1 --port 5174",
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && vite build --mode ghpages && cp docs/index.html docs/404.html",
+    "preview:pages": "vite preview --outDir docs --base /Vifence/",
+    "deploy:pages": "bash scripts/deploy-pages.sh",
+    "start:local": "bash scripts/start-local.sh",
     "pack:pages": "npm run build:pages && cd docs && zip -r ../vifence-pages.zip . && echo '→ Upload nội dung vifence-pages.zip lên root repo GitHub (duncan882022/Vifence)'",
     "lint": "eslint .",
     "preview": "vite preview"
