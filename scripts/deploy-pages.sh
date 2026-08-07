@@ -18,7 +18,7 @@ fi
 echo "→ Push nhánh gh-pages…"
 TMP_BRANCH="tmp-gh-pages-$(date +%s)"
 git subtree split --prefix docs -b "$TMP_BRANCH"
-git push origin "$TMP_BRANCH:gh-pages" --force
+git push origin "refs/heads/${TMP_BRANCH}:refs/heads/gh-pages" --force
 git branch -D "$TMP_BRANCH"
 
 echo "→ Push main…"
