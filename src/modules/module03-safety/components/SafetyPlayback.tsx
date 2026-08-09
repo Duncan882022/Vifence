@@ -144,9 +144,11 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
           <>
             <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
             <EventPlaybackViewport
+              videoRef={videoRef}
               bbox={violationBbox}
               frameWidth={frameWidth}
               frameHeight={frameHeight}
+              videoFit="contain"
             >
               <video
                 key={event.id}

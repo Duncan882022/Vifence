@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Play, Send, ShieldCheck } from 'lucide-react'
+import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../../types/safety.types'
-import { getScenarioName, SAFETY_SCENARIO_MAP } from '../../data/safetyScenarios'
+import { getScenarioName } from '../../data/safetyScenarios'
 import { getEventAreaLabel, getEventSourceLabel } from '../../utils/safetyCameraBridge'
 import { displayUnknown } from '../../utils/displayUnknown'
 import { getResponsiblePartyLabel } from '../../utils/eventSubject'
 import {
-  AUTOMATION_BADGE, formatSla, getAlertCardStatusDisplay, isAiAutoHandled, SEVERITY_BADGE,
+  formatSla, getAlertCardStatusDisplay, SEVERITY_BADGE,
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
+  shouldShowAlertHandlingBadge,
 } from '../../utils/safetyDashboardUi'
 import { formatDateTime } from '@/utils/format'
 import { EventSubjectCell } from '../violations/EventSubjectCell'
@@ -206,11 +208,10 @@ export function SafetyViolationTable({
                 </td>
               </tr>
             ) : visibleRecords.map((v, index) => {
-              const scenario = SAFETY_SCENARIO_MAP.get(v.scenarioId)
               const sla = formatSla(v)
               const selected = selectedId === v.id
               const statusDisplay = getAlertCardStatusDisplay(v)
-              const aiAutoHandled = isAiAutoHandled(v)
+              const showHandlingBadge = shouldShowAlertHandlingBadge(v)
               const StatusIcon = statusDisplay.icon
               const SeverityIcon = SEVERITY_ICONS[v.severity]
               const contractor = getResponsiblePartyLabel(v)
@@ -236,21 +237,23 @@ export function SafetyViolationTable({
                   <td className="px-2 py-1.5 text-[9px] text-foreground max-w-[130px] truncate align-top">{getScenarioName(v.scenarioId)}</td>
                   <td className="px-2 py-1.5 text-[9px] text-muted-foreground whitespace-nowrap align-top">{displayUnknown(getEventSourceLabel(v.sourceDeviceId, v.sourceType))}</td>
                   <td className="px-2 py-1.5 align-top">
-                    <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', SEVERITY_BADGE[v.severity])}>
-                      <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                      {SEVERITY_LABELS_UI[v.severity]}
-                    </span>
+                    <TagTooltip content={SEVERITY_LABELS_UI[v.severity]} className="inline-flex">
+                      <span
+                        className={cn(
+                          'w-5 h-5 rounded border inline-flex items-center justify-center',
+                          SEVERITY_BADGE[v.severity],
+                        )}
+                        aria-label={SEVERITY_LABELS_UI[v.severity]}
+                      >
+                        <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                      </span>
+                    </TagTooltip>
                   </td>
                   <td className="px-2 py-1.5 align-top">
-                    <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', statusDisplay.badgeClassName)}>
-                      <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                      {statusDisplay.label}
-                    </span>
-                    {scenario
-                      && (aiAutoHandled || scenario.automationLevel === 'AUTOMATIC' || v.severity === 'CRITICAL')
-                      && (
-                      <span className={cn('ml-1 text-[7px] px-1 py-0.5 rounded border', AUTOMATION_BADGE.AUTOMATIC)}>
-                        {v.severity === 'CRITICAL' ? 'Loa IP' : 'AI'}
+                    {showHandlingBadge && (
+                      <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', statusDisplay.badgeClassName)}>
+                        <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                        {statusDisplay.label}
                       </span>
                     )}
                     <p className="text-[7px] text-muted-foreground/70 mt-0.5 truncate max-w-[90px]">{contractor}</p>

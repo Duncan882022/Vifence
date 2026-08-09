@@ -40,9 +40,11 @@ export function PlaybackVideoFrame({
       {videoSrc ? (
         isEventClip ? (
           <EventPlaybackViewport
+            videoRef={videoRef}
             bbox={selectedRecord?.violationBbox}
             frameWidth={selectedRecord?.frameWidth}
             frameHeight={selectedRecord?.frameHeight}
+            videoFit="contain"
             zoomEnabled={false}
             className="z-[1]"
           >

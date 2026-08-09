@@ -122,11 +122,16 @@ REMOTE_SYSTEMD
 echo "→ Nginx reverse proxy…"
 ssh_cmd "bash -s" <<REMOTE_NGINX
 set -euo pipefail
-cat > /etc/nginx/sites-available/vifence-api <<EOF
+API_DOMAIN="${API_DOMAIN}"
+VPS_HOST="${VPS_HOST}"
+CERT_DIR="/etc/letsencrypt/live/\${API_DOMAIN}"
+
+write_http_only() {
+  cat > /etc/nginx/sites-available/vifence-api <<EOF
 server {
     listen 80;
     listen [::]:80;
-    server_name ${API_DOMAIN} ${VPS_HOST};
+    server_name \${API_DOMAIN} \${VPS_HOST};
 
     client_max_body_size 20M;
 
@@ -144,6 +149,51 @@ server {
     }
 }
 EOF
+}
+
+write_https() {
+  cat > /etc/nginx/sites-available/vifence-api <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name \${API_DOMAIN} \${VPS_HOST};
+    return 301 https://\${API_DOMAIN}\\\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name \${API_DOMAIN} \${VPS_HOST};
+
+    ssl_certificate \${CERT_DIR}/fullchain.pem;
+    ssl_certificate_key \${CERT_DIR}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 20M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \\\$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+}
+EOF
+}
+
+if [[ -f "\${CERT_DIR}/fullchain.pem" && -f "\${CERT_DIR}/privkey.pem" ]]; then
+  write_https
+else
+  write_http_only
+fi
+
 ln -sf /etc/nginx/sites-available/vifence-api /etc/nginx/sites-enabled/vifence-api
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
@@ -153,13 +203,61 @@ REMOTE_NGINX
 echo "→ Let's Encrypt (HTTPS)…"
 ssh_cmd "bash -s" <<REMOTE_SSL
 set -euo pipefail
-if certbot certificates 2>/dev/null | grep -q "${API_DOMAIN}"; then
+API_DOMAIN="${API_DOMAIN}"
+CERT_DIR="/etc/letsencrypt/live/\${API_DOMAIN}"
+if [[ -f "\${CERT_DIR}/fullchain.pem" ]]; then
   certbot renew --quiet || true
 else
-  certbot --nginx -d "${API_DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email --redirect || \
+  certbot --nginx -d "\${API_DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email --redirect || \
     echo "⚠ Certbot thất bại — dùng tạm http://${VPS_HOST} (GitHub Pages cần HTTPS)"
 fi
 REMOTE_SSL
+
+echo "→ Bật lại HTTPS nginx nếu đã có cert…"
+ssh_cmd "bash -s" <<REMOTE_HTTPS_RELOAD
+set -euo pipefail
+API_DOMAIN="${API_DOMAIN}"
+VPS_HOST="${VPS_HOST}"
+CERT_DIR="/etc/letsencrypt/live/\${API_DOMAIN}"
+if [[ -f "\${CERT_DIR}/fullchain.pem" && -f "\${CERT_DIR}/privkey.pem" ]] && ! grep -q 'listen 443' /etc/nginx/sites-available/vifence-api; then
+  cat > /etc/nginx/sites-available/vifence-api <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name \${API_DOMAIN} \${VPS_HOST};
+    return 301 https://\${API_DOMAIN}\\\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name \${API_DOMAIN} \${VPS_HOST};
+
+    ssl_certificate \${CERT_DIR}/fullchain.pem;
+    ssl_certificate_key \${CERT_DIR}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 20M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \\\$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+}
+EOF
+  nginx -t
+  systemctl reload nginx
+fi
+REMOTE_HTTPS_RELOAD
 
 echo "→ Chờ /health…"
 for i in 1 2 3 4 5 6 7 8 9 10; do

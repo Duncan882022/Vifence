@@ -25,22 +25,6 @@ const SCENARIO_SEEK_SEC: Record<string, number> = {
   'DZ-003': 5,
 }
 
-/** Bbox chuẩn hoá 0–1 khi backend chưa trả bbox. */
-const NORMALIZED_BBOX: Record<string, ViolationBbox> = {
-  'BPTC-007': [0.08, 0.42, 0.38, 0.72],
-  'BPTC-008': [0.12, 0.48, 0.42, 0.78],
-  'BPTC-009': [0.55, 0.35, 0.82, 0.62],
-  'ATGT-002': [0.05, 0.28, 0.35, 0.58],
-  'ATGT-004': [0.08, 0.32, 0.42, 0.62],
-  'PPE-001': [0.52, 0.38, 0.68, 0.72],
-  'PPE-002': [0.48, 0.42, 0.64, 0.76],
-  'PPE-003': [0.55, 0.55, 0.72, 0.82],
-  'PCCC-001': [0.58, 0.45, 0.72, 0.62],
-  'PCCC-002': [0.62, 0.38, 0.78, 0.55],
-  'WAH-001': [0.62, 0.08, 0.82, 0.32],
-  'DZ-003': [0.35, 0.28, 0.62, 0.72],
-}
-
 const CAMERA_FRAME_SIZE: Record<string, { width: number; height: number }> = {
   'A-03': { width: 640, height: 640 },
   'A-04': { width: 1024, height: 976 },
@@ -76,26 +60,16 @@ export function resolvePlaybackSeekSec(record: Pick<SafetyViolationRecord, 'scen
 }
 
 export function resolveViolationBbox(
-  record: Pick<SafetyViolationRecord, 'scenarioId' | 'bbox' | 'sourceDeviceId' | 'sourceType'>,
+  record: Pick<SafetyViolationRecord, 'scenarioId' | 'bbox' | 'subjectBbox' | 'sourceDeviceId' | 'sourceType'>,
 ): ViolationBbox | undefined {
-  if (record.bbox && record.bbox.length >= 4) {
-    return [
-      record.bbox[0],
-      record.bbox[1],
-      record.bbox[2],
-      record.bbox[3],
-    ]
+  const raw = record.subjectBbox ?? record.bbox
+  if (raw && raw.length >= 4) {
+    const [x1, y1, x2, y2] = raw
+    if (x2 > x1 && y2 > y1) {
+      return [x1, y1, x2, y2]
+    }
   }
-  const normalized = NORMALIZED_BBOX[record.scenarioId]
-  if (!normalized) return undefined
-  const cameraId = resolveTrainingCameraId(record.sourceDeviceId, record.sourceType)
-  const frame = inferCameraFrameSize(cameraId)
-  return [
-    normalized[0] * frame.width,
-    normalized[1] * frame.height,
-    normalized[2] * frame.width,
-    normalized[3] * frame.height,
-  ]
+  return undefined
 }
 
 export function resolveFrameSize(

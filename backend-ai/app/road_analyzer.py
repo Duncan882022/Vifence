@@ -1619,6 +1619,8 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
         roi_pixels = max(_roi_pixel_count(roi_mask), 1)
 
         for pct, box in mud_patches:
+            if pct < 1.25:
+                continue
             trimmed = _trim_mud_from_objects(box, obj_boxes, w)
             if trimmed is None:
                 continue

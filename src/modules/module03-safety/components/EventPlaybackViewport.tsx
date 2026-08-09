@@ -1,43 +1,102 @@
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
+import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
-  bboxOverlayStyle,
   buildEventClipWindow,
-  computeBboxZoomStyle,
   type ViolationBbox,
 } from '../utils/eventPlaybackClip'
 
 interface EventPlaybackViewportProps {
+  videoRef: RefObject<HTMLVideoElement | null>
   bbox?: ViolationBbox
   frameWidth?: number
   frameHeight?: number
+  videoFit?: 'cover' | 'contain'
   /** Bật zoom ROI — desktop mặc định; mobile/tablet chỉ khung ROI. */
   zoomEnabled?: boolean
   className?: string
   children: ReactNode
 }
 
+function mapBboxToOverlay(
+  bbox: ViolationBbox,
+  frameWidth: number,
+  frameHeight: number,
+  video: HTMLVideoElement,
+  fit: 'cover' | 'contain',
+) {
+  const sx = video.videoWidth / frameWidth
+  const sy = video.videoHeight / frameHeight
+  return mapVideoRectToOverlay(
+    {
+      x: bbox[0] * sx,
+      y: bbox[1] * sy,
+      width: (bbox[2] - bbox[0]) * sx,
+      height: (bbox[3] - bbox[1]) * sy,
+    },
+    video,
+    fit,
+  )
+}
+
 export function EventPlaybackViewport({
+  videoRef,
   bbox,
   frameWidth,
   frameHeight,
+  videoFit = 'contain',
   zoomEnabled,
   className,
   children,
 }: EventPlaybackViewportProps) {
   const { isDesktop } = useShellLayout()
   const allowZoom = zoomEnabled ?? isDesktop
+  const [layoutTick, setLayoutTick] = useState(0)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const bump = () => setLayoutTick(t => t + 1)
+    video.addEventListener('loadedmetadata', bump)
+    video.addEventListener('loadeddata', bump)
+    video.addEventListener('resize', bump)
+    window.addEventListener('resize', bump)
+
+    if (video.videoWidth > 0) bump()
+
+    return () => {
+      video.removeEventListener('loadedmetadata', bump)
+      video.removeEventListener('loadeddata', bump)
+      video.removeEventListener('resize', bump)
+      window.removeEventListener('resize', bump)
+    }
+  }, [videoRef, bbox, frameWidth, frameHeight])
+
+  const overlayBox = useMemo(() => {
+    const video = videoRef.current
+    if (!bbox || !frameWidth || !frameHeight || !video?.videoWidth || !video.videoHeight) {
+      return undefined
+    }
+    const box = mapBboxToOverlay(bbox, frameWidth, frameHeight, video, videoFit)
+    if (box.w <= 0.4 || box.h <= 0.4) return undefined
+    return box
+  }, [bbox, frameWidth, frameHeight, videoRef, videoFit, layoutTick])
 
   const zoomStyle = useMemo(() => {
-    if (!allowZoom || !bbox || !frameWidth || !frameHeight) return undefined
-    return computeBboxZoomStyle(bbox, frameWidth, frameHeight, isDesktop ? 2.6 : 1.35)
-  }, [allowZoom, bbox, frameWidth, frameHeight, isDesktop])
-
-  const roiStyle = useMemo(() => {
-    if (!bbox || !frameWidth || !frameHeight) return undefined
-    return bboxOverlayStyle(bbox, frameWidth, frameHeight)
-  }, [bbox, frameWidth, frameHeight])
+    if (!allowZoom || !overlayBox) return undefined
+    const cx = overlayBox.x + overlayBox.w / 2
+    const cy = overlayBox.y + overlayBox.h / 2
+    const boxW = Math.max(overlayBox.w / 100, 0.08)
+    const boxH = Math.max(overlayBox.h / 100, 0.08)
+    const maxScale = isDesktop ? 2.6 : 1.35
+    const scale = Math.min(0.88 / boxW, 0.88 / boxH, maxScale)
+    return {
+      transformOrigin: `${cx}% ${cy}%`,
+      transform: `scale(${scale})`,
+    }
+  }, [allowZoom, overlayBox, isDesktop])
 
   return (
     <div className={cn('absolute inset-0 overflow-hidden', className)}>
@@ -49,10 +108,15 @@ export function EventPlaybackViewport({
         style={zoomStyle}
       >
         {children}
-        {roiStyle && (
+        {overlayBox && (
           <div
             className="absolute border-2 border-red-400/95 rounded-sm pointer-events-none z-[6] shadow-[0_0_10px_rgba(248,113,113,0.35)]"
-            style={roiStyle}
+            style={{
+              left: `${overlayBox.x}%`,
+              top: `${overlayBox.y}%`,
+              width: `${overlayBox.w}%`,
+              height: `${overlayBox.h}%`,
+            }}
             aria-hidden
           />
         )}

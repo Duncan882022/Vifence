@@ -362,13 +362,37 @@ class _PersonPpe:
     person_conf: float
 
 
+def _plausible_person_box(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Loại bbox giả trên vật kiến trúc / lưới — chỉ giữ người có tỷ lệ hợp lý."""
+    x1, y1, x2, y2 = box
+    bw = max(x2 - x1, 1.0)
+    bh = max(y2 - y1, 1.0)
+    if bh < frame_h * 0.07 or bh > frame_h * 0.62:
+        return False
+    if bw < frame_w * 0.04 or bw > frame_w * 0.42:
+        return False
+    aspect = bh / bw
+    if aspect < 1.05 or aspect > 4.8:
+        return False
+    cy = (y1 + y2) / 2
+    if cy < frame_h * 0.12:
+        return False
+    return True
+
+
 def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
     detector = _get_person_detector()
+    h, w = frame.shape[:2]
     persons_raw = detector.predict(frame)
     persons = [
         _PersonPpe((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), p.confidence)
         for p in persons_raw
         if p.confidence >= _PERSON_CONF
+        and _plausible_person_box((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), w, h)
     ]
 
     helmet_items = _model_items("ppe_helmet", frame, "hard_hat")

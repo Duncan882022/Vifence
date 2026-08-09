@@ -117,6 +117,9 @@ export interface BackendViolationEvent {
   behavior: string
   confidence: number
   bbox: number[]
+  subject_bbox?: number[]
+  frame_width?: number
+  frame_height?: number
   created_at: number
   camera_id?: string
   event_date?: string
@@ -206,6 +209,11 @@ export function mapBackendEventToSafetyRecord(
     bbox: event.bbox.length >= 4
       ? [event.bbox[0], event.bbox[1], event.bbox[2], event.bbox[3]]
       : undefined,
+    subjectBbox: event.subject_bbox && event.subject_bbox.length >= 4
+      ? [event.subject_bbox[0], event.subject_bbox[1], event.subject_bbox[2], event.subject_bbox[3]]
+      : undefined,
+    frameWidth: event.frame_width,
+    frameHeight: event.frame_height,
     dedupKey: event.dedup_key ?? buildSafetyDedupKey(sourceDeviceId, scenarioId, event.behavior),
   }
 }

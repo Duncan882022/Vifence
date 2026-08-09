@@ -19,13 +19,28 @@ import {
   type RoadAnalysisRoiZone,
 } from '../services/roadAnalysisBackend.service'
 
-function visibleDetections(detections: RoadAnalysisDetection[]): RoadAnalysisDetection[] {
-  return detections.filter(
-    d =>
-      d.behavior !== 'unknown'
-      && d.label !== 'Unknown'
-      && !d.behavior.startsWith('mesh_'),
-  )
+function visibleDetections(
+  detections: RoadAnalysisDetection[],
+  frameWidth: number,
+  frameHeight: number,
+): RoadAnalysisDetection[] {
+  const frameArea = Math.max(frameWidth * frameHeight, 1)
+  return detections.filter(d => {
+    if (
+      d.behavior !== 'mud'
+      && d.behavior !== 'water'
+      && d.behavior !== 'object'
+    ) {
+      return false
+    }
+    if (d.label === 'Unknown') return false
+    if (d.behavior.startsWith('mesh_')) return false
+    if (d.confidence < 0.68) return false
+    const [x1, y1, x2, y2] = d.bbox
+    const areaRatio = ((x2 - x1) * (y2 - y1)) / frameArea
+    if (areaRatio < 0.0035) return false
+    return true
+  })
 }
 
 const BEHAVIOR_STYLE: Partial<Record<
@@ -284,7 +299,7 @@ function useRoadAnalysisState(
           setMetrics(undefined)
           return
         }
-        setDetections(visibleDetections(result.detections))
+        setDetections(visibleDetections(result.detections, result.width, result.height))
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
         if (result.events && result.events.length > 0) {

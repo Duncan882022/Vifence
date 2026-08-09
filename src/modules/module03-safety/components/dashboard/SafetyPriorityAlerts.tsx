@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Clock, Gavel, Loader2, Play, User } from 'lucide-react'
+import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import type {
@@ -25,6 +26,7 @@ import {
   SEVERITY_BADGE,
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
+  shouldShowAlertHandlingBadge,
 } from '../../utils/safetyDashboardUi'
 import {
   getAlertSubjectLabel,
@@ -58,30 +60,21 @@ const FILTER_TABS: { key: AlertFilterTab; label: string }[] = [
 const INITIAL_COUNT = 10
 const BATCH_SIZE = 6
 
-function GroupTag({ groupId }: { groupId: SafetyGroupId }) {
-  const Icon = GROUP_ICONS[groupId]
-
-  return (
-    <span
-      className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', GROUP_BADGE[groupId])}
-      title={getGroupDictionaryTooltip(groupId)}
-    >
-      <Icon className={cn('w-2.5 h-2.5 shrink-0', GROUP_COLORS[groupId])} aria-hidden />
-      {groupId}
-    </span>
-  )
-}
-
 function SeverityTag({ severity }: { severity: AlertSeverity }) {
   const Icon = SEVERITY_ICONS[severity]
 
   return (
-    <span
-      className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', SEVERITY_BADGE[severity])}
-    >
-      <Icon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-      {SEVERITY_LABELS_UI[severity]}
-    </span>
+    <TagTooltip content={SEVERITY_LABELS_UI[severity]} className="shrink-0">
+      <span
+        className={cn(
+          'w-5 h-5 rounded border inline-flex items-center justify-center',
+          SEVERITY_BADGE[severity],
+        )}
+        aria-label={SEVERITY_LABELS_UI[severity]}
+      >
+        <Icon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+      </span>
+    </TagTooltip>
   )
 }
 
@@ -210,13 +203,14 @@ function AlertCard({
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex flex-wrap items-center gap-1 min-w-0">
-              <GroupTag groupId={v.groupId} />
               <SeverityTag severity={v.severity} />
-              <StatusTag
-                label={statusDisplay.label}
-                badgeClassName={statusDisplay.badgeClassName}
-                icon={statusDisplay.icon}
-              />
+              {shouldShowAlertHandlingBadge(v) && (
+                <StatusTag
+                  label={statusDisplay.label}
+                  badgeClassName={statusDisplay.badgeClassName}
+                  icon={statusDisplay.icon}
+                />
+              )}
             </div>
             <AlertCardActions
               v={v}

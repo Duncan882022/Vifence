@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { formatDateTime } from '@/utils/format'
 import type { SafetyViolationRecord } from '../types/safety.types'
 import { getScenarioName, SAFETY_SCENARIO_MAP } from '../data/safetyScenarios'
@@ -23,6 +24,7 @@ import {
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
   getAlertCardStatusDisplay,
+  shouldShowAlertHandlingBadge,
 } from '../utils/safetyDashboardUi'
 import { getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS, getResponsiblePartyLabel } from '../utils/eventSubject'
 import { resolveVehiclePlate } from '../utils/vehiclePlate'
@@ -148,14 +150,23 @@ export function SafetyViolationDetailModal({
 
           <div className="px-4 py-3 space-y-3">
             <div className="flex flex-wrap gap-1.5">
-              <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', SEVERITY_BADGE[record.severity])}>
-                <SeverityIcon className="w-3 h-3" aria-hidden />
-                {SEVERITY_LABELS_UI[record.severity]}
-              </span>
-              <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', statusDisplay.badgeClassName)}>
-                <StatusIcon className="w-3 h-3" aria-hidden />
-                {statusDisplay.label}
-              </span>
+              <TagTooltip content={SEVERITY_LABELS_UI[record.severity]} className="shrink-0">
+                <span
+                  className={cn(
+                    'w-6 h-6 rounded border inline-flex items-center justify-center',
+                    SEVERITY_BADGE[record.severity],
+                  )}
+                  aria-label={SEVERITY_LABELS_UI[record.severity]}
+                >
+                  <SeverityIcon className="w-3 h-3" aria-hidden />
+                </span>
+              </TagTooltip>
+              {shouldShowAlertHandlingBadge(record) && (
+                <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', statusDisplay.badgeClassName)}>
+                  <StatusIcon className="w-3 h-3" aria-hidden />
+                  {statusDisplay.label}
+                </span>
+              )}
             </div>
 
             {showExtraNote && (

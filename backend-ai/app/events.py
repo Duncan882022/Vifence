@@ -204,6 +204,9 @@ class EventStore:
 
         event.dedup_key = dedup_key
         event_date = event.event_date or _event_date(event.created_at)
+        h, w = annotated.shape[:2]
+        event.frame_width = int(w)
+        event.frame_height = int(h)
         snapshot_name = f"{event_date}/{event.id}.jpg"
         snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
         cv2.imwrite(str(snapshot_path), annotated)
@@ -321,6 +324,8 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
+        if person_bbox and len(person_bbox) >= 4:
+            event.subject_bbox = [float(v) for v in person_bbox]
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         annotated = self._draw_ppe_snapshot(frame, detection, person_bbox)
@@ -352,6 +357,8 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
+        if person_bbox and len(person_bbox) >= 4:
+            event.subject_bbox = [float(v) for v in person_bbox]
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         annotated = self._draw_wah_snapshot(frame, detection, person_bbox)
@@ -409,6 +416,8 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
+        if vehicle_bbox and len(vehicle_bbox) >= 4:
+            event.subject_bbox = [float(v) for v in vehicle_bbox]
         plate = getattr(detection, "vehicle_plate", None)
         stable_track = track_id or (plate if plate else detection.behavior)
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)

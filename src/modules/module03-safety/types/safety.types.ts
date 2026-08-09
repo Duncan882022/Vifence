@@ -182,6 +182,8 @@ export interface SafetyViolationRecord {
   playbackUrl?: string
   /** Bbox vi phạm trên frame gốc [x1,y1,x2,y2] — zoom playback. */
   bbox?: [number, number, number, number]
+  /** Bbox đối tượng (người/xe) — ưu tiên cho ROI playback. */
+  subjectBbox?: [number, number, number, number]
   frameWidth?: number
   frameHeight?: number
   /** Giây seek vào clip camera / demo. */

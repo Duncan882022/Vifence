@@ -198,6 +198,14 @@ export function getAlertCardStatusDisplay(
   }
 }
 
+/** Chỉ hiện badge xử lý khi AI tự động hoặc qua Loa — không hiện Chưa xử lý / Đã xử lý */
+export function shouldShowAlertHandlingBadge(
+  record: Pick<SafetyViolationRecord, 'groupId' | 'scenarioId' | 'severity' | 'status'>,
+): boolean {
+  const bucket = getAlertHandlingStatus(record)
+  return bucket === 'ai_auto' || bucket === 'ai_speaker'
+}
+
 /** Chưa xử lý thủ công — loại AI tự động, Loa, đã đóng */
 export function isManualUnhandled(
   record: Pick<SafetyViolationRecord, 'groupId' | 'scenarioId' | 'severity' | 'status'>,
