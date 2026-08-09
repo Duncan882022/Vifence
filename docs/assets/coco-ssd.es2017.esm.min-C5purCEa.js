@@ -1,4 +1,4 @@
-import{q as w,s as O}from"./index-BR1rcvws.js";import{G as q,d as z,l as $,a as M,r as P}from"./graph_model-FPKPqeor.js";import{dN as D}from"./index-DEoRkBL0.js";function A(u,_){for(var o=0;o<_.length;o++){const l=_[o];if(typeof l!="string"&&!Array.isArray(l)){for(const a in l)if(a!=="default"&&!(a in u)){const N=Object.getOwnPropertyDescriptor(l,a);N&&Object.defineProperty(u,a,N.get?N:{enumerable:!0,get:()=>l[a]})}}}return Object.freeze(Object.defineProperty(u,Symbol.toStringTag,{value:"Module"}))}var f={exports:{}};/** @license See the LICENSE file. */const B="4.22.0";/**
+import{t as w,v as O}from"./index-Dyu_7Dgc.js";import{G as z,d as q,l as $,a as M,r as P}from"./graph_model-CpTsXS6J.js";import{dN as D}from"./index-DzZQVlVn.js";function A(u,_){for(var o=0;o<_.length;o++){const l=_[o];if(typeof l!="string"&&!Array.isArray(l)){for(const a in l)if(a!=="default"&&!(a in u)){const N=Object.getOwnPropertyDescriptor(l,a);N&&Object.defineProperty(u,a,N.get?N:{enumerable:!0,get:()=>l[a]})}}}return Object.freeze(Object.defineProperty(u,Symbol.toStringTag,{value:"Module"}))}var f={exports:{}};/** @license See the LICENSE file. */const B="4.22.0";/**
  * @license
  * Copyright 2018 Google LLC. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@ import{q as w,s as O}from"./index-BR1rcvws.js";import{G as q,d as z,l as $,a as 
  * See the License for the specific language governing permissions and
  * limitations under the License.
  * =============================================================================
- */const E=Object.freeze(Object.defineProperty({__proto__:null,GraphModel:q,deregisterOp:z,loadGraphModel:$,loadGraphModelSync:M,registerOp:P,version_converter:B},Symbol.toStringTag,{value:"Module"})),G=w(E),C=w(D);/**
+ */const E=Object.freeze(Object.defineProperty({__proto__:null,GraphModel:z,deregisterOp:q,loadGraphModel:$,loadGraphModelSync:M,registerOp:P,version_converter:B},Symbol.toStringTag,{value:"Module"})),G=w(E),C=w(D);/**
  * @license
  * Copyright 2023 Google LLC. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License");
