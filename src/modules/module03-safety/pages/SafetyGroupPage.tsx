@@ -34,14 +34,13 @@ export function SafetyGroupPage() {
 
   const detailRecord = useResolvedSafetyRecord(records, detailId)
 
-  const automationStats = useMemo(() => {
-    const counts = { AUTOMATIC: 0, AI_ASSISTED: 0, HSE_VERIFICATION: 0 }
-    records.forEach(v => {
+  const automationAutoCount = useMemo(
+    () => records.filter(v => {
       const s = scenarios.find(sc => sc.id === v.scenarioId)
-      if (s) counts[s.automationLevel]++
-    })
-    return counts
-  }, [records, scenarios])
+      return s?.automationLevel === 'AUTOMATIC'
+    }).length,
+    [records, scenarios],
+  )
 
   const criticalCount = records.filter(v => v.severity === 'CRITICAL').length
 
@@ -62,22 +61,18 @@ export function SafetyGroupPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-3 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 px-3 shrink-0">
         <div className="rounded-lg border border-[#1e2433] p-2 bg-[#0b0f1a]">
           <p className="text-[8px] text-muted-foreground">Vi phạm</p>
           <p className="text-xl font-bold text-foreground tabular-nums">{records.length}</p>
         </div>
         <div className="rounded-lg border border-[#1e2433] p-2 bg-[#0b0f1a]">
           <p className="text-[8px] text-muted-foreground">AI tự động</p>
-          <p className="text-xl font-bold text-green-400 tabular-nums">{automationStats.AUTOMATIC}</p>
+          <p className="text-xl font-bold text-green-400 tabular-nums">{automationAutoCount}</p>
         </div>
         <div className="rounded-lg border border-[#1e2433] p-2 bg-[#0b0f1a]">
-          <p className="text-[8px] text-muted-foreground">AI đề xuất</p>
-          <p className="text-xl font-bold text-amber-400 tabular-nums">{automationStats.AI_ASSISTED}</p>
-        </div>
-        <div className="rounded-lg border border-[#1e2433] p-2 bg-[#0b0f1a]">
-          <p className="text-[8px] text-muted-foreground">HSE xác minh</p>
-          <p className="text-xl font-bold text-violet-400 tabular-nums">{automationStats.HSE_VERIFICATION}</p>
+          <p className="text-[8px] text-muted-foreground">Khẩn cấp</p>
+          <p className="text-xl font-bold text-red-400 tabular-nums">{criticalCount}</p>
         </div>
       </div>
 

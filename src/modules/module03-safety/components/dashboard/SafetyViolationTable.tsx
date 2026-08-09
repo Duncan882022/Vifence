@@ -246,17 +246,11 @@ export function SafetyViolationTable({
                       <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
                       {statusDisplay.label}
                     </span>
-                    {scenario && (
-                      <span className={cn('ml-1 text-[7px] px-1 py-0.5 rounded border', AUTOMATION_BADGE[scenario.automationLevel])}>
-                        {aiAutoHandled
-                          ? 'AI'
-                          : v.severity === 'CRITICAL'
-                            ? 'Loa IP'
-                            : scenario.automationLevel === 'AUTOMATIC'
-                              ? 'AI'
-                              : scenario.automationLevel === 'AI_ASSISTED'
-                                ? 'Đề xuất'
-                                : 'HSE'}
+                    {scenario
+                      && (aiAutoHandled || scenario.automationLevel === 'AUTOMATIC' || v.severity === 'CRITICAL')
+                      && (
+                      <span className={cn('ml-1 text-[7px] px-1 py-0.5 rounded border', AUTOMATION_BADGE.AUTOMATIC)}>
+                        {v.severity === 'CRITICAL' ? 'Loa IP' : 'AI'}
                       </span>
                     )}
                     <p className="text-[7px] text-muted-foreground/70 mt-0.5 truncate max-w-[90px]">{contractor}</p>

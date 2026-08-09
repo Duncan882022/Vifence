@@ -6,7 +6,6 @@ import {
   Clock,
   MapPin,
   Play,
-  ShieldAlert,
   User,
   X,
 } from 'lucide-react'
@@ -17,7 +16,6 @@ import { getScenarioName, SAFETY_SCENARIO_MAP } from '../data/safetyScenarios'
 import { resolveStaticViolationSnapshotUrl, resolveViolationSnapshotUrl } from '../data/safetyViolationSnapshots'
 import { RemoteViolationSnapshotImage } from './violations/RemoteViolationSnapshotImage'
 import {
-  AUTOMATION_BADGE,
   GROUP_BADGE,
   GROUP_COLORS,
   GROUP_ICONS,
@@ -25,9 +23,8 @@ import {
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
   getAlertCardStatusDisplay,
-  isAiAutoHandled,
 } from '../utils/safetyDashboardUi'
-import { getAlertSubjectLabel, getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS, getResponsiblePartyLabel } from '../utils/eventSubject'
+import { getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS, getResponsiblePartyLabel } from '../utils/eventSubject'
 import { resolveVehiclePlate } from '../utils/vehiclePlate'
 import { displayUnknown } from '../utils/displayUnknown'
 import { getEventAreaLabel, getEventSourceLabel } from '../utils/safetyCameraBridge'
@@ -87,8 +84,14 @@ export function SafetyViolationDetailModal({
   const SeverityIcon = SEVERITY_ICONS[record.severity]
   const GroupIcon = GROUP_ICONS[record.groupId]
   const ScenarioIcon = getScenarioIcon(record.scenarioId) ?? GroupIcon
-  const aiHandled = isAiAutoHandled(record)
-  const description = record.description ?? scenario?.description ?? getScenarioName(record.scenarioId)
+  const scenarioTitle = getScenarioName(record.scenarioId)
+  const extraNote = record.description?.trim()
+  const showExtraNote = Boolean(
+    extraNote
+    && extraNote !== scenarioTitle
+    && extraNote !== scenario?.description?.trim()
+    && extraNote !== scenario?.name?.trim(),
+  )
   const eventArea = displayUnknown(getEventAreaLabel(record.sourceDeviceId, record.sourceType, record.zoneId))
   const eventSource = displayUnknown(getEventSourceLabel(record.sourceDeviceId, record.sourceType))
   const subject = getSubject(record)
@@ -119,9 +122,8 @@ export function SafetyViolationDetailModal({
             </div>
             <div className="min-w-0">
               <p id="safety-violation-detail-title" className="text-sm font-semibold text-foreground leading-snug">
-                {getScenarioName(record.scenarioId)}
+                {scenarioTitle}
               </p>
-              <p className="text-[10px] font-mono text-muted-foreground">{record.scenarioId}</p>
             </div>
           </div>
           <button
@@ -146,10 +148,6 @@ export function SafetyViolationDetailModal({
 
           <div className="px-4 py-3 space-y-3">
             <div className="flex flex-wrap gap-1.5">
-              <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', GROUP_BADGE[record.groupId])}>
-                <GroupIcon className={cn('w-3 h-3', GROUP_COLORS[record.groupId])} aria-hidden />
-                {record.groupId}
-              </span>
               <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', SEVERITY_BADGE[record.severity])}>
                 <SeverityIcon className="w-3 h-3" aria-hidden />
                 {SEVERITY_LABELS_UI[record.severity]}
@@ -158,14 +156,11 @@ export function SafetyViolationDetailModal({
                 <StatusIcon className="w-3 h-3" aria-hidden />
                 {statusDisplay.label}
               </span>
-              {scenario && (
-                <span className={cn('text-[9px] px-1.5 py-0.5 rounded border', AUTOMATION_BADGE[scenario.automationLevel])}>
-                  {aiHandled ? 'AI tự động' : scenario.automationLevel === 'AI_ASSISTED' ? 'AI đề xuất' : 'HSE xác minh'}
-                </span>
-              )}
             </div>
 
-            <p className="text-[11px] text-foreground/90 leading-relaxed">{description}</p>
+            {showExtraNote && (
+              <p className="text-[11px] text-foreground/90 leading-relaxed">{extraNote}</p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <DetailRow icon={Clock} label="Thời gian phát hiện">
@@ -177,34 +172,13 @@ export function SafetyViolationDetailModal({
               <DetailRow icon={Camera} label="Nguồn giám sát">
                 {eventSource}
               </DetailRow>
-              <DetailRow icon={User} label="Đối tượng sự kiện">
-                {getAlertSubjectLabel(record)}
-                <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
-                  {EVENT_SUBJECT_LABELS[eventSubjectType]}
-                </span>
-              </DetailRow>
               {isVehicleEvent && (
-                <>
-                  <DetailRow icon={Car} label="Biển số">
-                    <span className="font-mono font-semibold tracking-wide">{vehiclePlate}</span>
-                  </DetailRow>
-                  <DetailRow icon={Car} label="Loại phương tiện">
+                <DetailRow icon={Car} label="Phương tiện">
+                  <span className="font-mono font-semibold tracking-wide">{vehiclePlate}</span>
+                  <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
                     {displayUnknown(subject.vehicleType)}
-                  </DetailRow>
-                </>
-              )}
-              {eventSubjectType === 'SITE_CONDITION' && (
-                <>
-                  <DetailRow icon={MapPin} label="Block / khu vực">
-                    {displayUnknown(subject.block)}
-                  </DetailRow>
-                  <DetailRow icon={MapPin} label="Hạng mục">
-                    {displayUnknown(subject.workItem)}
-                  </DetailRow>
-                  <DetailRow icon={User} label="Nhà thầu phụ trách">
-                    {displayUnknown(subject.siteContractor ?? subject.contractorName)}
-                  </DetailRow>
-                </>
+                  </span>
+                </DetailRow>
               )}
               {eventSubjectType === 'PERSON' && (
                 <>
@@ -219,11 +193,10 @@ export function SafetyViolationDetailModal({
                   </DetailRow>
                 </>
               )}
-              {record.confidence != null && (
-                <DetailRow icon={ShieldAlert} label="Độ tin cậy AI">
-                  <span className="tabular-nums font-semibold">
-                    {(record.confidence * 100).toFixed(0)}%
-                  </span>
+              {(eventSubjectType === 'CONSTRUCTION_ACTIVITY'
+                || eventSubjectType === 'MANAGEMENT') && (
+                <DetailRow icon={User} label="Đối tượng">
+                  {EVENT_SUBJECT_LABELS[eventSubjectType]}
                 </DetailRow>
               )}
             </div>
