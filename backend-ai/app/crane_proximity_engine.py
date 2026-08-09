@@ -47,7 +47,7 @@ class CraneProximityEngine:
                 min_duration_seconds=_CONFIRM_SECONDS,
                 cooldown_seconds=_REPEAT_SECONDS,
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=False,
+                one_event_per_episode=True,
             )
         return self._gates[camera_id]
 
@@ -91,14 +91,15 @@ class CraneProximityEngine:
                     event = self.store.add_crane(
                         top_det, pending["frame"], camera_id=camera_id, context=frame_context,
                     )
-                    new_events.append(event)
-                    logger.info(
-                        "Crane proximity [%s] track=%s dist=%.2fm conf=%.0f%%",
-                        event.id,
-                        track_id,
-                        top_det.distance_m or 0,
-                        top_det.confidence * 100,
-                    )
+                    if event:
+                        new_events.append(event)
+                        logger.info(
+                            "Crane proximity [%s] track=%s dist=%.2fm conf=%.0f%%",
+                            event.id,
+                            track_id,
+                            top_det.distance_m or 0,
+                            top_det.confidence * 100,
+                        )
             elif was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
         else:

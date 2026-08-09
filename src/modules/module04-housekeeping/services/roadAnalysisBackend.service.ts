@@ -47,6 +47,7 @@ export interface RoadAnalysisResult {
   roi_zones: RoadAnalysisRoiZone[]
   metrics: RoadAnalysisMetrics
   detections: RoadAnalysisDetection[]
+  events?: Array<{ id: string; behavior: string }>
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

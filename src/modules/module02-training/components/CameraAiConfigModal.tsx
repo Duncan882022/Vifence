@@ -7,6 +7,10 @@ import { getDefaultRoiZonesForModel } from '../data/cameraAiRoiDefaults'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import type { CameraAiModelId } from '../types/cameraAi.types'
 import {
+  cameraToolbarBtnStandalone,
+  cameraToolbarIconSize,
+} from './cameraToolbarStyles'
+import {
   GROUP_BADGE,
   GROUP_COLORS,
   GROUP_ICONS,
@@ -256,15 +260,12 @@ export function CameraAiConfigButton({ cameraId, compact, className }: CameraAiC
           setOpen(true)
         }}
         className={cn(
-          className ?? cn(
-            'rounded border bg-violet-500/20 border-violet-500/40 text-violet-200 hover:bg-violet-500/30 transition-colors shrink-0 pointer-events-auto',
-            compact ? 'p-0.5' : 'p-1',
-          ),
+          className ?? cameraToolbarBtnStandalone(compact),
         )}
         title="Cấu hình model AI"
         aria-label="Cấu hình model AI"
       >
-        <Cpu className={cn(className ? (compact ? 'w-3 h-3' : 'w-3.5 h-3.5') : (compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'))} />
+        <Cpu className={cameraToolbarIconSize(compact)} aria-hidden />
       </button>
       <CameraAiConfigModal cameraId={cameraId} open={open} onClose={() => setOpen(false)} />
     </>

@@ -65,7 +65,7 @@ class RoadAnalysisEngine:
                 min_duration_seconds=_ROAD_CONFIRM_SECONDS,
                 cooldown_seconds=_ROAD_REPEAT_SECONDS,
                 max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
-                one_event_per_episode=False,
+                one_event_per_episode=True,
             )
         return self._gates[camera_id][track_id]
 
@@ -137,16 +137,22 @@ class RoadAnalysisEngine:
                 if top_det.confidence < EVENT_MIN_CONFIDENCE:
                     continue
                 snap_frame = pending["frame"]
-                event = self.store.add_road(top_det, snap_frame, camera_id=camera_id)
-                new_events.append(event)
-                logger.info(
-                    "Road event [%s] %s track=%s conf=%.2f bbox=%s",
-                    event.scenario_id,
-                    event.scenario_name,
-                    track_id,
-                    event.confidence,
-                    [int(v) for v in top_det.bbox],
+                event = self.store.add_road(
+                    top_det,
+                    snap_frame,
+                    camera_id=camera_id,
+                    track_id=track_id,
                 )
+                if event:
+                    new_events.append(event)
+                    logger.info(
+                        "Road event [%s] %s track=%s conf=%.2f bbox=%s",
+                        event.scenario_id,
+                        event.scenario_name,
+                        track_id,
+                        event.confidence,
+                        [int(v) for v in top_det.bbox],
+                    )
             elif was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
 

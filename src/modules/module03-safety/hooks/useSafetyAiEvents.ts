@@ -1,54 +1,70 @@
-import { useEffect, useState } from 'react'
-import {
-  getMobileAiBackendUrl,
-  MOBILE_AI_BACKEND_STORAGE_KEY,
-} from '@/modules/module02-training/services/mobileAiBackend.service'
+import { useEffect, useSyncExternalStore } from 'react'
+import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getSafetyTodayDate } from '../data/safetyDemoDate'
 import {
   fetchSafetyAiEvents,
   SAFETY_AI_EVENTS_CHANGED,
 } from '../services/safetyAiEvents.service'
+import {
+  getSafetyEventsSnapshot,
+  setSafetyEventsSnapshot,
+  subscribeSafetyEvents,
+} from '../store/safetyEventsStore'
 import type { SafetyViolationRecord } from '../types/safety.types'
 
-/** 15 phút — khớp cooldown log sự kiện backend; overlay vẫn refresh ngay khi có event mới. */
-export const SAFETY_AI_EVENTS_POLL_MS = 15 * 60 * 1000
+/** Poll sự kiện — overlay vẫn refresh ngay qua SAFETY_AI_EVENTS_CHANGED. */
+export const SAFETY_AI_EVENTS_POLL_MS = 60 * 1000
 
-/** Poll sự kiện AI từ backend JSON — ghép vào panel Safety (PCCC, ATGT, …). */
+let pollRefCount = 0
+let pollTimerId = 0
+let pollMsActive = SAFETY_AI_EVENTS_POLL_MS
+
+async function refreshSafetyEvents(): Promise<void> {
+  const url = getMobileAiBackendUrl()
+  if (!url) {
+    setSafetyEventsSnapshot([])
+    return
+  }
+  const next = await fetchSafetyAiEvents(url, getSafetyTodayDate())
+  setSafetyEventsSnapshot(next)
+}
+
+function startSafetyEventsPolling(pollMs: number): void {
+  pollMsActive = pollMs
+  void refreshSafetyEvents()
+  pollTimerId = window.setInterval(() => { void refreshSafetyEvents() }, pollMs)
+  window.addEventListener('vifence-mobile-ai-backend-changed', onRefresh)
+  window.addEventListener(SAFETY_AI_EVENTS_CHANGED, onRefresh)
+}
+
+function stopSafetyEventsPolling(): void {
+  window.clearInterval(pollTimerId)
+  window.removeEventListener('vifence-mobile-ai-backend-changed', onRefresh)
+  window.removeEventListener(SAFETY_AI_EVENTS_CHANGED, onRefresh)
+}
+
+function onRefresh(): void {
+  void refreshSafetyEvents()
+}
+
+/** Poll sự kiện AI từ backend — một nguồn dữ liệu chung cho dashboard / popup / playback. */
 export function useSafetyAiEvents(pollMs = SAFETY_AI_EVENTS_POLL_MS): SafetyViolationRecord[] {
-  const [records, setRecords] = useState<SafetyViolationRecord[]>([])
-
   useEffect(() => {
-    let cancelled = false
-    let timerId = 0
-
-    const tick = async () => {
-      const url = getMobileAiBackendUrl()
-      if (!url) {
-        if (!cancelled) setRecords([])
-        return
-      }
-      const next = await fetchSafetyAiEvents(url, getSafetyTodayDate())
-      if (!cancelled) setRecords(next)
+    pollRefCount += 1
+    if (pollRefCount === 1) startSafetyEventsPolling(pollMs)
+    else if (pollMs !== pollMsActive) {
+      stopSafetyEventsPolling()
+      startSafetyEventsPolling(pollMs)
     }
-
-    void tick()
-    timerId = window.setInterval(() => { void tick() }, pollMs)
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === MOBILE_AI_BACKEND_STORAGE_KEY) void tick()
-    }
-    window.addEventListener('storage', onStorage)
-    window.addEventListener('vifence-mobile-ai-backend-changed', tick)
-    window.addEventListener(SAFETY_AI_EVENTS_CHANGED, tick)
-
     return () => {
-      cancelled = true
-      window.clearInterval(timerId)
-      window.removeEventListener('storage', onStorage)
-      window.removeEventListener('vifence-mobile-ai-backend-changed', tick)
-      window.removeEventListener(SAFETY_AI_EVENTS_CHANGED, tick)
+      pollRefCount -= 1
+      if (pollRefCount === 0) stopSafetyEventsPolling()
     }
   }, [pollMs])
 
-  return records
+  return useSyncExternalStore(
+    subscribeSafetyEvents,
+    getSafetyEventsSnapshot,
+    () => [],
+  )
 }

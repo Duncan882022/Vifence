@@ -28,6 +28,8 @@ import { PlaybackRecordTimeline } from './PlaybackRecordTimeline'
 import { PlaybackControlBar, PlaybackMobileControls } from './PlaybackControlBar'
 import { PlaybackDetectionsList } from './PlaybackDetectionsList'
 import { PlaybackMobileStrip } from './PlaybackMobileStrip'
+import { useEventClipPlayback } from '@/modules/module03-safety/components/EventPlaybackViewport'
+import { buildEventClipWindow, EVENT_PLAYBACK_CLIP_SEC } from '@/modules/module03-safety/utils/eventPlaybackClip'
 
 export interface CameraPlaybackPanelProps {
   cameras: TrainingCamera[]
@@ -162,10 +164,27 @@ export function CameraPlaybackPanel({
   }, [selectedRecord?.id, fetchDetections])
 
   const videoSrc = resolvePlaybackVideoUrl(selectedRecord)
+  const isEventClip = selectedRecord?.type === 'event'
+  const eventSeekSec = selectedRecord?.seekSec ?? 0
+  const eventClipSec = selectedRecord?.clipDurationSec ?? EVENT_PLAYBACK_CLIP_SEC
+
+  useEventClipPlayback(videoRef, {
+    enabled: isEventClip && Boolean(videoSrc),
+    videoSrc,
+    seekSec: eventSeekSec,
+    clipDurationSec: eventClipSec,
+    autoPlay: true,
+    onClipProgress: (current, clipDur) => {
+      setDuration(clipDur)
+      setCurrentTime(current)
+      setProgress(clipDur > 0 ? (current / clipDur) * 100 : 0)
+      setIsPlaying(true)
+    },
+  })
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !videoSrc) return
+    if (!video || !videoSrc || isEventClip) return
 
     const onCanPlay = () => {
       video.currentTime = seekSec
@@ -174,11 +193,11 @@ export function CameraPlaybackPanel({
 
     video.addEventListener('canplay', onCanPlay, { once: true })
     return () => video.removeEventListener('canplay', onCanPlay)
-  }, [selectedRecord?.id, videoSrc, seekSec])
+  }, [selectedRecord?.id, videoSrc, seekSec, isEventClip])
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || isEventClip) return
 
     const onTimeUpdate = () => {
       setCurrentTime(video.currentTime)
@@ -192,7 +211,7 @@ export function CameraPlaybackPanel({
       video.removeEventListener('timeupdate', onTimeUpdate)
       video.removeEventListener('durationchange', onDuration)
     }
-  }, [selectedRecord?.id])
+  }, [selectedRecord?.id, isEventClip])
 
   useEffect(() => {
     const video = videoRef.current
@@ -227,7 +246,16 @@ export function CameraPlaybackPanel({
 
   const handleScrub = (pct: number) => {
     const video = videoRef.current
-    if (!video || !duration) return
+    if (!video) return
+    if (isEventClip && video.duration) {
+      const clip = buildEventClipWindow(eventSeekSec, video.duration, eventClipSec)
+      const next = clip.start + (pct / 100) * clip.duration
+      video.currentTime = next
+      setCurrentTime(next - clip.start)
+      setProgress(pct)
+      return
+    }
+    if (!duration) return
     const next = (pct / 100) * duration
     video.currentTime = next
     setCurrentTime(next)

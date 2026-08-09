@@ -6,7 +6,6 @@ import {
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
-import { BackendConnectionBadge } from '@/modules/module02-training/components/BackendConnectionBadge'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import {
   filterSafetyCameras,
@@ -37,13 +36,13 @@ import {
   mergeViolationStatusOverrides,
 } from '../services/safetyDashboard.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
+import { useResolvedSafetyRecord } from '../hooks/useResolvedSafetyRecord'
 import { violationRecordToEvent } from '../utils/violationAdapter'
 import {
   fetchSafetyCameraRecords,
   fetchSafetyRecordDetections,
   getSafetyDefaultPlaybackDate,
 } from '../services/safetyCameraPlayback.service'
-import type { Event } from '@/types/event'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { cn } from '@/utils/cn'
 
@@ -77,17 +76,24 @@ export function SafetyDashboardPage() {
   const [selectedId, setSelectedId] = useState<string | undefined>()
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>()
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
-  const [playbackModalEvent, setPlaybackModalEvent] = useState<Event | null>(null)
+  const [playbackId, setPlaybackId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
-  const [handleTarget, setHandleTarget] = useState<SafetyViolationRecord | null>(null)
-  const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
+  const [handleId, setHandleId] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
   const aiLiveRecords = useSafetyAiEvents()
 
   const allRecords = useMemo(
     () => mergeViolationStatusOverrides(aiLiveRecords, statusOverrides),
     [statusOverrides, aiLiveRecords],
   )
+
+  const detailRecord = useResolvedSafetyRecord(allRecords, detailId)
+  const handleTarget = useResolvedSafetyRecord(allRecords, handleId)
+  const playbackModalEvent = useMemo(() => {
+    const record = playbackId ? allRecords.find(r => r.id === playbackId) : null
+    return record ? violationRecordToEvent(record) : null
+  }, [allRecords, playbackId])
 
   const tier2Open = lowerPanel === 'camera'
   const eventsPanelOpen = SHOW_VIOLATION_EVENTS_PANEL && lowerPanel === 'events'
@@ -106,7 +112,7 @@ export function SafetyDashboardPage() {
   const alerts = useMemo(() => getPriorityAlerts(alertScope), [alertScope])
 
   const handlePlayback = (v: SafetyViolationRecord) => {
-    setPlaybackModalEvent(violationRecordToEvent(v))
+    setPlaybackId(v.id)
     setSelectedId(v.id)
   }
 
@@ -119,13 +125,13 @@ export function SafetyDashboardPage() {
   }
 
   const handleHandleRequest = (v: SafetyViolationRecord) => {
-    setHandleTarget(v)
+    setHandleId(v.id)
   }
 
   const confirmHandled = () => {
-    if (!handleTarget) return
-    setStatusOverrides(prev => ({ ...prev, [handleTarget.id]: 'CLOSED' }))
-    setHandleTarget(null)
+    if (!handleId) return
+    setStatusOverrides(prev => ({ ...prev, [handleId]: 'CLOSED' }))
+    setHandleId(null)
   }
 
   const bothLowerCollapsed = lowerPanel === 'none'
@@ -192,10 +198,7 @@ export function SafetyDashboardPage() {
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
                   {tier2Open && (
-                    <>
-                      <BackendConnectionBadge />
-                      <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
-                    </>
+                    <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
                   )}
                   {!tier2Open && cameraMode === 'live' && (
                     <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
@@ -308,7 +311,7 @@ export function SafetyDashboardPage() {
                 onPlayback={handlePlayback}
                 onSelect={v => setSelectedId(v.id)}
                 onHandle={handleHandleRequest}
-                onSnapshotClick={setDetailRecord}
+                onSnapshotClick={v => setDetailId(v.id)}
               />
             </div>
           </div>
@@ -352,7 +355,7 @@ export function SafetyDashboardPage() {
                   selectedId={selectedId}
                   onSelect={v => setSelectedId(v.id)}
                   onPlayback={handlePlayback}
-                  onSnapshotClick={setDetailRecord}
+                  onSnapshotClick={v => setDetailId(v.id)}
                 />
               )}
             </Panel>
@@ -363,21 +366,21 @@ export function SafetyDashboardPage() {
 
       <SafetyHandleConfirmDialog
         record={handleTarget}
-        onClose={() => setHandleTarget(null)}
+        onClose={() => setHandleId(null)}
         onConfirm={confirmHandled}
       />
 
       <SafetyViolationDetailModal
         record={detailRecord}
-        onClose={() => setDetailRecord(null)}
+        onClose={() => setDetailId(null)}
         onPlayback={handlePlayback}
       />
 
       <Suspense fallback={null}>
         <SafetyPlaybackModal
-          open={playbackModalEvent != null}
+          open={playbackId != null}
           event={playbackModalEvent}
-          onClose={() => setPlaybackModalEvent(null)}
+          onClose={() => setPlaybackId(null)}
         />
       </Suspense>
     </>

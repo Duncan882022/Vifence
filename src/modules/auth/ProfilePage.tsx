@@ -2,17 +2,18 @@ import { useState } from 'react'
 import { 
   User, Mail, Phone, Shield, Calendar, Lock, Key, 
   Eye, EyeOff, Save, Edit2, X, CheckCircle, AlertCircle, 
-  Loader2 
+  Loader2, ScanFace, ChevronRight
 } from 'lucide-react'
 import { useAppStore } from '@/store/app.store'
 import { updateUser, changePassword } from '@/api/user.api'
 import { cn } from '@/utils/cn'
+import { FacialScannerPanel } from './components/FacialScannerPanel'
 
 export function ProfilePage() {
   const { user, setUser } = useAppStore()
   
-  // Tabs: 'info' | 'password'
-  const [activeTab, setActiveTab] = useState<'info' | 'password'>('info')
+  // Tabs: 'info' | 'password' | 'facial'
+  const [activeTab, setActiveTab] = useState<'info' | 'password' | 'facial'>('info')
   
   // Edit mode for Info
   const [isEditingInfo, setIsEditingInfo] = useState(false)
@@ -225,6 +226,15 @@ export function ProfilePage() {
                 @{user?.username}
               </span>
             </div>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('facial'); setSuccessMsg(null); setErrorMsg(null) }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-sky-400/10 text-sky-400 hover:bg-sky-400/15 border border-sky-400/25 transition-colors shrink-0"
+            >
+              <ScanFace className="w-3.5 h-3.5" />
+              Quét khuôn mặt
+              <ChevronRight className="w-3 h-3 opacity-70" />
+            </button>
           </div>
         </div>
 
@@ -254,10 +264,26 @@ export function ProfilePage() {
             <Lock className="w-4 h-4" />
             Bảo mật & Mật khẩu
           </button>
+          <button
+            onClick={() => { setActiveTab('facial'); setSuccessMsg(null); setErrorMsg(null); }}
+            className={cn(
+              "px-5 py-3 text-xs font-semibold tracking-wide border-b-2 transition-all flex items-center gap-2",
+              activeTab === 'facial' 
+                ? "border-primary text-primary" 
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <ScanFace className="w-4 h-4" />
+            Quét khuôn mặt
+          </button>
         </div>
 
         {/* Tab Contents */}
-        {activeTab === 'info' ? (
+        {activeTab === 'facial' && user ? (
+          <div className="border border-[#1e2433] bg-[#0d111a] rounded-xl p-6">
+            <FacialScannerPanel user={user} />
+          </div>
+        ) : activeTab === 'info' ? (
           <div className="border border-[#1e2433] bg-[#0d111a] rounded-xl p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground/80">Chi tiết tài khoản</h2>

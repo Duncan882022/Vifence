@@ -71,6 +71,7 @@ def promote(
                 "num_samples": num_samples,
                 "last_attempt_at": time.time(),
                 "last_attempt_status": "promoted",
+                "samples_at_last_attempt": num_samples,
             }
         )
         data[task_id] = entry
@@ -81,11 +82,14 @@ def promote(
 def record_attempt(task_id: str, *, status: str, detail: str | None = None) -> None:
     """Ghi lại lần train gần nhất kể cả khi không promote (skip/fail) — để
     hiển thị status và tính lại thời điểm chờ lần thử kế tiếp."""
+    from . import dataset
+
     with _lock:
         data = _read()
         entry = data.get(task_id, {})
         entry["last_attempt_at"] = time.time()
         entry["last_attempt_status"] = status
+        entry["samples_at_last_attempt"] = dataset.sample_count(task_id)
         if detail:
             entry["last_attempt_detail"] = detail
         data[task_id] = entry
@@ -95,6 +99,16 @@ def record_attempt(task_id: str, *, status: str, detail: str | None = None) -> N
 def next_version(task_id: str) -> int:
     entry = get(task_id)
     return int((entry or {}).get("version", 0)) + 1
+
+
+def new_samples_since_attempt(task_id: str) -> int:
+    from . import dataset
+
+    entry = get(task_id)
+    if not entry or entry.get("samples_at_last_attempt") is None:
+        return dataset.sample_count(task_id)
+    baseline = int(entry["samples_at_last_attempt"])
+    return max(0, dataset.sample_count(task_id) - baseline)
 
 
 def all_status() -> dict[str, Any]:

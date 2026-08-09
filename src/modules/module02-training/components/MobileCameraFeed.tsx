@@ -243,6 +243,7 @@ export function MobileCameraFeed({
           videoRef={videoRef}
           layoutTick={layoutTick}
           compact={compact}
+          modelId="mobile_smoking_fire"
         />
       )}
 

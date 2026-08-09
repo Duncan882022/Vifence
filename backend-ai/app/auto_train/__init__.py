@@ -5,8 +5,8 @@ Luồng hoạt động:
 1. `collector.collect(...)` — mỗi frame đi qua pipeline detect hiện tại (rule
    màu Cam 03/04, YOLO lửa/hút thuốc) đều được lưu lại kèm nhãn do chính
    detector hiện tại sinh ra (pseudo-label / "giáo viên").
-2. `scheduler` chạy nền, định kỳ kiểm tra đã đủ dữ liệu mới chưa — nếu đủ thì
-   gọi `trainer.train_task()` tự fine-tune YOLO trên dữ liệu vừa thu thập.
+2. `scheduler` chạy nền — mặc định train **2 lần/ngày** (6h & 18h UTC+7) khi
+   đủ ảnh mới kể từ lần train trước; gọi `trainer.train_task()` fine-tune YOLO.
 3. Model mới chỉ được `registry.promote()` (đưa vào chạy thật) nếu đạt
    ngưỡng chất lượng tối thiểu — tránh tự thay model đang chạy tốt bằng bản
    train dở dang.

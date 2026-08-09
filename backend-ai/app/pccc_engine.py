@@ -34,7 +34,7 @@ class PcccEngine:
                 min_duration_seconds=_CONFIRM_SECONDS,
                 cooldown_seconds=_REPEAT_SECONDS,
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=False,
+                one_event_per_episode=True,
             )
         return self._gates[camera_id][behavior]
 
@@ -70,14 +70,15 @@ class PcccEngine:
                 top = best["detection"] if best else det
                 snap = best["frame"] if best else frame
                 event = self.store.add(top, snap, camera_id=camera_id)
-                new_events.append(event)
-                logger.info(
-                    "PCCC event [%s] %s (%s) conf=%.0f%%",
-                    event.id,
-                    event.scenario_name,
-                    det.behavior,
-                    event.confidence * 100,
-                )
+                if event:
+                    new_events.append(event)
+                    logger.info(
+                        "PCCC event [%s] %s (%s) conf=%.0f%%",
+                        event.id,
+                        event.scenario_name,
+                        det.behavior,
+                        event.confidence * 100,
+                    )
 
         for behavior in _EVENT_BEHAVIORS:
             if behavior in active_behaviors:

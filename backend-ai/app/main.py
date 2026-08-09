@@ -30,7 +30,9 @@ from .pccc_engine import PcccEngine
 from .wah_engine import WahEngine
 from .atgt_engine import AtgtEngine
 from .mobile_frame_utils import analyze_engine_frame, downscale_for_mobile
-from .schemas import MobileAiConfigPayload, MobileFramePayload
+from .schemas import MobileAiConfigPayload, MobileFramePayload, WorkerGalleryEnrollPayload
+from .worker_identity.gallery import enroll_face, get_enrollment_status, user_id_to_worker_id
+from .worker_identity.recognizer import gallery_status, reload_gallery
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -129,6 +131,38 @@ def index():
 @app.get("/health")
 def health():
     return {"status": "ok", **engine.status()}
+
+
+@app.get("/workers/gallery/status")
+def worker_gallery_status(user_id: str | None = None):
+    status = gallery_status()
+    if user_id:
+        worker_id = user_id_to_worker_id(user_id)
+        status["enrollment"] = get_enrollment_status(worker_id)
+    return status
+
+
+@app.post("/workers/gallery/enroll")
+def worker_gallery_enroll(payload: WorkerGalleryEnrollPayload):
+    frame = _decode_frame(payload.image_b64)
+    if frame is None:
+        return {"ok": False, "error": "invalid_image"}
+    worker_id = user_id_to_worker_id(payload.user_id)
+    try:
+        enrollment = enroll_face(
+            worker_id,
+            payload.worker_name.strip(),
+            payload.employee_code.strip(),
+            frame,
+            contractor_name=(payload.contractor_name or None),
+            pose_slot=payload.pose_slot,
+        )
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    except RuntimeError as exc:
+        return {"ok": False, "error": str(exc)}
+    reload_gallery()
+    return {"ok": True, "enrollment": enrollment}
 
 
 @app.get("/config/mobile-ai")
@@ -288,6 +322,34 @@ def _collect_crane_auto_train_sample(small: np.ndarray, result: dict) -> None:
     auto_train_collector.collect("crane_machinery", small, boxes)
 
 
+_PPE_AUTO_TRAIN_BY_BEHAVIOR = {
+    "hard_hat": "ppe_helmet",
+    "safety_vest": "ppe_vest",
+    "safety_shoes": "ppe_shoes",
+}
+
+
+def _collect_ppe_auto_train_sample(small: np.ndarray, result: dict) -> None:
+    if not settings.auto_train_enabled:
+        return
+    by_task: dict[str, list[tuple[str, float, float, float, float]]] = {}
+    for d in result.get("detections", []):
+        task_id = _PPE_AUTO_TRAIN_BY_BEHAVIOR.get(d.get("behavior", ""))
+        if not task_id:
+            continue
+        cls_name = d.get("behavior")
+        if task_id == "ppe_helmet":
+            cls_name = "hard_hat"
+        elif task_id == "ppe_vest":
+            cls_name = "safety_vest"
+        elif task_id == "ppe_shoes":
+            cls_name = "safety_shoes"
+        x1, y1, x2, y2 = d["bbox"]
+        by_task.setdefault(task_id, []).append((cls_name, x1, y1, x2, y2))
+    for task_id, boxes in by_task.items():
+        auto_train_collector.collect(task_id, small, boxes)
+
+
 def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     return analyze_engine_frame(
         frame,
@@ -307,7 +369,12 @@ def _analyze_crane_frame(frame: np.ndarray, camera_id: str) -> dict:
 
 
 def _analyze_ppe_frame(frame: np.ndarray, camera_id: str) -> dict:
-    return analyze_engine_frame(frame, camera_id, ppe_engine.process_frame)
+    return analyze_engine_frame(
+        frame,
+        camera_id,
+        ppe_engine.process_frame,
+        after_process=_collect_ppe_auto_train_sample,
+    )
 
 
 def _analyze_pccc_frame(frame: np.ndarray, camera_id: str) -> dict:

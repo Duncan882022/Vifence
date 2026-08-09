@@ -11,6 +11,11 @@ export interface CameraPlaybackRecord {
   thumbnailUrl?: string
   /** Seconds into clip when selecting this event record */
   seekSec?: number
+  /** Cắt clip ngắn quanh vi phạm (giây). */
+  clipDurationSec?: number
+  violationBbox?: [number, number, number, number]
+  frameWidth?: number
+  frameHeight?: number
 }
 
 export interface CameraDetection {

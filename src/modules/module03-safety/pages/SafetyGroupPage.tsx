@@ -3,10 +3,11 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
-import type { SafetyGroupId, SafetyViolationRecord } from '../types/safety.types'
+import type { SafetyGroupId } from '../types/safety.types'
 import { SAFETY_GROUP_MAP } from '../data/safetyGroups'
 import { getScenarioForGroup, filterTodayLiveRecords } from '../services/safetyDashboard.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
+import { useResolvedSafetyRecord } from '../hooks/useResolvedSafetyRecord'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { SafetyViolationDetailModal } from '../components/SafetyViolationDetailModal'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
@@ -18,7 +19,7 @@ const VALID_GROUPS: SafetyGroupId[] = ['PPE', 'WAH', 'DZ', 'ATGT', 'BPTC', 'PCCC
 export function SafetyGroupPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const [eventsOpen, setEventsOpen] = useState(true)
-  const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
   const validId = VALID_GROUPS.includes(groupId as SafetyGroupId) ? groupId as SafetyGroupId : 'WAH'
   const group = SAFETY_GROUP_MAP.get(validId)!
   const Icon = GROUP_ICONS[validId]
@@ -30,6 +31,8 @@ export function SafetyGroupPage() {
     () => filterTodayLiveRecords(allRecords).filter(v => v.groupId === validId),
     [validId, allRecords],
   )
+
+  const detailRecord = useResolvedSafetyRecord(records, detailId)
 
   const automationStats = useMemo(() => {
     const counts = { AUTOMATIC: 0, AI_ASSISTED: 0, HSE_VERIFICATION: 0 }
@@ -115,7 +118,7 @@ export function SafetyGroupPage() {
           {eventsOpen && (
             <SafetyViolationTable
               records={records}
-              onSnapshotClick={setDetailRecord}
+              onSnapshotClick={v => setDetailId(v.id)}
             />
           )}
         </Panel>
@@ -123,7 +126,7 @@ export function SafetyGroupPage() {
 
       <SafetyViolationDetailModal
         record={detailRecord}
-        onClose={() => setDetailRecord(null)}
+        onClose={() => setDetailId(null)}
       />
     </PageLayout>
   )

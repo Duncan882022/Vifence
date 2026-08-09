@@ -1,0 +1,44 @@
+[
+  {
+    "worker_id": "w-001",
+    "worker_name": "Phạm Văn Cường",
+    "employee_code": "NV000789",
+    "contractor_name": "Vincons",
+    "face_image": "w-001.jpg"
+  },
+  {
+    "worker_id": "w-003",
+    "worker_name": "Lê Văn Dũng",
+    "employee_code": "NV000321",
+    "contractor_name": "Vincons",
+    "face_image": "w-003.jpg"
+  },
+  {
+    "worker_id": "w-005",
+    "worker_name": "Nguyễn Thị Phương",
+    "employee_code": "NV000112",
+    "contractor_name": "SGC",
+    "face_image": "w-005.jpg"
+  },
+  {
+    "worker_id": "w-008",
+    "worker_name": "Bùi Thị Lan",
+    "employee_code": "NV000887",
+    "contractor_name": "Vincons",
+    "face_image": "w-008.jpg"
+  },
+  {
+    "worker_id": "w-010",
+    "worker_name": "Võ Đức Thắng",
+    "employee_code": "NV000998",
+    "contractor_name": "Alpha",
+    "face_image": "w-010.jpg"
+  },
+  {
+    "worker_id": "w-019",
+    "worker_name": "Nguyễn Văn Hoàng",
+    "employee_code": "NV001155",
+    "contractor_name": "Vincons",
+    "face_image": "w-019.jpg"
+  }
+]

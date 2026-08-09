@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
@@ -134,9 +134,29 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
 function getGridCols(count: number, stackedPortrait: boolean, forceSingleCol = false): number {
   if (forceSingleCol || count === 1) return 1
   if (stackedPortrait && count <= 4) return 1
+  if (stackedPortrait && count > 6) return 2
   if (count <= 4) return 2
   if (count <= 9) return 3
   return 4
+}
+
+const MOBILE_PORTRAIT_MAX_VISIBLE_ROWS = 4
+const MOBILE_LANDSCAPE_MAX_VISIBLE_ROWS = 3
+const GRID_GAP_PX = 6
+const MOBILE_VIDEO_COL_PAD_Y = 12
+
+function getMobileVideoViewportHeight(
+  containerWidth: number,
+  cols: number,
+  rowCount: number,
+  maxVisibleRows: number,
+): number | null {
+  if (containerWidth <= 0 || rowCount <= 0) return null
+  const gap = GRID_GAP_PX
+  const cellWidth = (containerWidth - gap * (cols - 1)) / cols
+  const rowHeight = cellWidth * (9 / 16)
+  const visibleRows = Math.min(rowCount, maxVisibleRows)
+  return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
 function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol }: {
@@ -168,7 +188,7 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
           key={cam.id}
           className={cn(
             'relative w-full min-w-0 shrink-0',
-            fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
+            fillHeight ? 'h-full min-h-[120px]' : 'aspect-video max-h-[min(72vh,720px)]',
           )}
         >
           <CameraCell cam={cam} compact={compact} analyzeThrottle={analyzeThrottle} streamIndex={index} onMaximize={() => onMaximize(cam)} />
@@ -245,6 +265,9 @@ export function TrainingCameraPanel({
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [filterTab, setFilterTab] = useState<string>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
+  const videoGridRef = useRef<HTMLDivElement>(null)
+  const [landscapeSidebarH, setLandscapeSidebarH] = useState<number | null>(null)
+  const [mobileViewportH, setMobileViewportH] = useState<number | null>(null)
   const { isDesktop } = useShellLayout()
   const { hasDemoData } = useActiveTenant()
 
@@ -270,7 +293,60 @@ export function TrainingCameraPanel({
     ? catalog.filter(c => (defaultCameraIds as readonly string[]).includes(c.id))
     : catalog.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
-  const fillHeightMain = isDesktop
+  /** Luôn giữ aspect-video — tránh kéo giãn ROI/camera trên web & tablet. */
+  const fillHeightMain = false
+
+  const gridCols = useMemo(
+    () => getGridCols(safeCams.length, stackedPortrait),
+    [safeCams.length, stackedPortrait],
+  )
+  const gridRows = useMemo(
+    () => Math.ceil(safeCams.length / gridCols),
+    [safeCams.length, gridCols],
+  )
+
+  useEffect(() => {
+    const scrollNode = videoGridRef.current
+    if (!scrollNode || isDesktop) {
+      setMobileViewportH(null)
+      setLandscapeSidebarH(null)
+      return
+    }
+
+    const mobileMq = window.matchMedia('(max-width: 1023px)')
+    const landscapeMq = window.matchMedia('(max-width: 1023px) and (orientation: landscape)')
+
+    const sync = () => {
+      if (!mobileMq.matches) {
+        setMobileViewportH(null)
+        setLandscapeSidebarH(null)
+        return
+      }
+
+      const maxRows = landscapeMq.matches
+        ? MOBILE_LANDSCAPE_MAX_VISIBLE_ROWS
+        : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
+      const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
+      setMobileViewportH(viewportH)
+
+      if (landscapeMq.matches && sidebarOpen && viewportH) {
+        setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
+      } else {
+        setLandscapeSidebarH(null)
+      }
+    }
+
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(scrollNode)
+    mobileMq.addEventListener('change', sync)
+    landscapeMq.addEventListener('change', sync)
+    return () => {
+      observer.disconnect()
+      mobileMq.removeEventListener('change', sync)
+      landscapeMq.removeEventListener('change', sync)
+    }
+  }, [isDesktop, gridCols, gridRows, safeCams.length, selectedIds.join(','), sidebarOpen])
 
   useEffect(() => {
     setSelectedIds(prev => (prev.length === 0 ? [...defaultIds] : prev))
@@ -305,9 +381,19 @@ export function TrainingCameraPanel({
 
   return (
     <>
-      <div className="flex flex-1 min-h-0 h-full w-full flex-col lg:flex-row max-lg:landscape:flex-row">
-        <div className="flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 max-lg:landscape:min-w-0">
-          <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain">
+      <div className={cn(
+        'w-full min-h-0',
+        'flex flex-col lg:flex-row lg:flex-1 lg:min-h-0 lg:h-full',
+        'max-lg:h-auto max-lg:flex-none',
+        'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
+        'max-lg:landscape:items-start',
+      )}>
+        <div className="flex min-h-0 min-w-0 p-2 max-lg:pb-1 lg:flex-1 lg:min-h-0 max-lg:landscape:min-w-0 max-lg:landscape:h-auto max-lg:landscape:self-start">
+          <div
+            ref={videoGridRef}
+            className="w-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+            style={mobileViewportH ? { maxHeight: mobileViewportH } : undefined}
+          >
             <CameraGrid
               cams={safeCams}
               onMaximize={cam => setFocusedCam(cam)}
@@ -317,15 +403,18 @@ export function TrainingCameraPanel({
           </div>
         </div>
 
-        <div className={cn(
-          'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
-          'border-t lg:border-t-0 lg:border-l',
-          'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
-          'lg:overflow-hidden',
-          sidebarOpen
-            ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
-            : 'w-full shrink-0 lg:flex lg:w-8 lg:h-full lg:min-h-0',
-        )}>
+        <div
+          className={cn(
+            'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
+            'border-t lg:border-t-0 lg:border-l',
+            'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
+            'lg:overflow-hidden',
+            sidebarOpen
+              ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
+              : 'w-full shrink-0 lg:flex lg:w-8 lg:h-full lg:min-h-0',
+          )}
+          style={landscapeSidebarH ? { maxHeight: landscapeSidebarH } : undefined}
+        >
           {sidebarOpen ? (
             <>
               <div className="flex items-center gap-1.5 px-2 py-1.5 lg:px-2.5 lg:py-2 border-b border-[#1e2433] shrink-0">

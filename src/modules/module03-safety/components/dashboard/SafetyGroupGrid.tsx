@@ -83,15 +83,15 @@ function GroupScenarioTable({ s }: { s: SafetyGroupStats }) {
                 {active ? (
                   <span
                     className={cn(
-                      'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5',
+                      'w-5 h-5 rounded border inline-flex items-center justify-center',
                       SEVERITY_BADGE[severity],
                     )}
+                    aria-label={SEVERITY_LABELS_UI[severity]}
                   >
                     <SeverityIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                    {SEVERITY_LABELS_UI[severity]}
                   </span>
                 ) : (
-                  <span className="text-[8px] text-muted-foreground/35 tabular-nums w-12 text-right">—</span>
+                  <span className="text-[8px] text-muted-foreground/35 tabular-nums w-5 text-center">—</span>
                 )}
               </TagTooltip>
             </div>

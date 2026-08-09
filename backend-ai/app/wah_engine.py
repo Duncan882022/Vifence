@@ -10,6 +10,7 @@ import numpy as np
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
 from .schemas import Detection, ViolationEvent
+from .track_matching import assign_person_track_id
 from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 from .wah_demo import match_demo_detections
 
@@ -90,7 +91,7 @@ class WahEngine:
                 min_duration_seconds=_CONFIRM_SECONDS,
                 cooldown_seconds=_REPEAT_SECONDS,
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=False,
+                one_event_per_episode=True,
             )
         return self._gates[camera_id][track_id]
 
@@ -132,8 +133,17 @@ class WahEngine:
                 continue
 
             person_bbox = [float(v) for v in person.bbox]
-            slot = _person_slot(person_bbox, frame_w, frame_h)
-            track_id = f"{slot}:{_EVENT_BEHAVIOR}"
+            track_id = assign_person_track_id(
+                person_bbox,
+                tracks,
+                behavior=_EVENT_BEHAVIOR,
+                frame_w=frame_w,
+                frame_h=frame_h,
+                max_tracks=_MAX_TRACKS,
+            )
+            if track_id is None:
+                continue
+            slot = track_id.split(":")[0]
 
             if track_id not in tracks:
                 if len(tracks) >= _MAX_TRACKS:
@@ -167,16 +177,18 @@ class WahEngine:
                         pending["frame"],
                         camera_id=camera_id,
                         person_bbox=pending.get("person_bbox"),
+                        track_id=track_id,
                     )
-                    new_events.append(event)
-                    logger.info(
-                        "WAH event [%s] %s person=%s track=%s conf=%.0f%%",
-                        event.id,
-                        event.scenario_name,
-                        slot,
-                        track_id,
-                        event.confidence * 100,
-                    )
+                    if event:
+                        new_events.append(event)
+                        logger.info(
+                            "WAH event [%s] %s person=%s track=%s conf=%.0f%%",
+                            event.id,
+                            event.scenario_name,
+                            slot,
+                            track_id,
+                            event.confidence * 100,
+                        )
             elif was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
 

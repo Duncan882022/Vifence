@@ -124,6 +124,7 @@ export interface BackendViolationEvent {
   scenario_name?: string
   group?: string
   violation_type?: string
+  dedup_key?: string
   vehicle_plate?: string | null
   vehicle_type?: string | null
   driver_name?: string | null
@@ -148,8 +149,8 @@ export function mapBackendEventToSafetyRecord(
   event: BackendViolationEvent,
   backendUrl: string,
 ): SafetyViolationRecord {
-  const scenarioId = BEHAVIOR_TO_SCENARIO[event.behavior] ?? event.scenario_id ?? 'PCCC-001'
-  const groupId = BEHAVIOR_TO_GROUP[event.behavior] ?? (event.group as SafetyGroupId | undefined) ?? 'PCCC'
+  const scenarioId = event.scenario_id ?? BEHAVIOR_TO_SCENARIO[event.behavior] ?? 'PCCC-001'
+  const groupId = (event.group as SafetyGroupId | undefined) ?? BEHAVIOR_TO_GROUP[event.behavior] ?? 'PCCC'
   const isCam03Ai = CAM03_BEHAVIORS.has(event.behavior)
   const isCam04Ai = CAM04_BEHAVIORS.has(event.behavior)
   const isFixedCamAi = isCam03Ai || isCam04Ai
@@ -200,9 +201,37 @@ export function mapBackendEventToSafetyRecord(
         ? buildSiteConditionSubject(scenarioId, event.scenario_name)
         : { type: 'PERSON' },
     verificationRequired: !isCam04Ai || event.behavior === 'crane_proximity',
-    description: event.scenario_name ?? getScenarioName(scenarioId),
+    description: event.scenario_name ?? event.violation_type ?? getScenarioName(scenarioId),
     snapshotUrl: buildSnapshotUrl(backendUrl, event.id),
+    bbox: event.bbox.length >= 4
+      ? [event.bbox[0], event.bbox[1], event.bbox[2], event.bbox[3]]
+      : undefined,
+    dedupKey: event.dedup_key ?? buildSafetyDedupKey(sourceDeviceId, scenarioId, event.behavior),
   }
+}
+
+/** Khóa dedup fallback khi backend chưa có dedup_key (dữ liệu cũ). */
+export function buildSafetyDedupKey(
+  cameraId: string,
+  scenarioId: string,
+  trackHint: string,
+): string {
+  return `${cameraId}|${scenarioId}|${trackHint}`
+}
+
+/** Loại bản trùng — giữ bản mới nhất theo dedupKey hoặc id. */
+export function dedupeSafetyRecords(records: SafetyViolationRecord[]): SafetyViolationRecord[] {
+  const best = new Map<string, SafetyViolationRecord>()
+  for (const record of records) {
+    const key = record.dedupKey ?? record.id
+    const prev = best.get(key)
+    if (!prev || new Date(record.detectedAt).getTime() > new Date(prev.detectedAt).getTime()) {
+      best.set(key, record)
+    }
+  }
+  return [...best.values()].sort(
+    (a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime(),
+  )
 }
 
 export function isLiveSafetyRecord(record: SafetyViolationRecord): boolean {
@@ -230,8 +259,10 @@ export async function fetchSafetyAiEvents(
     })
     if (!res.ok) return []
     const rows = await res.json() as BackendViolationEvent[]
-    return filterLiveSafetyRecords(
-      rows.map(row => mapBackendEventToSafetyRecord(row, base)),
+    return dedupeSafetyRecords(
+      filterLiveSafetyRecords(
+        rows.map(row => mapBackendEventToSafetyRecord(row, base)),
+      ),
     )
   } catch {
     return []

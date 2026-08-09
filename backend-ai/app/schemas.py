@@ -41,6 +41,11 @@ class PpeDetection(BaseModel):
     scenario_id: str
     confidence: float
     bbox: list[float]
+    worker_id: Optional[str] = None
+    worker_name: Optional[str] = None
+    employee_code: Optional[str] = None
+    contractor_name: Optional[str] = None
+    face_match_confidence: Optional[float] = None
 
 
 class MobileAiConfigPayload(BaseModel):
@@ -223,9 +228,16 @@ class ViolationEvent(BaseModel):
     event_date: Optional[str] = None
     camera_id: str = "LOCAL-CAM"
     snapshot_file: Optional[str] = None
+    dedup_key: Optional[str] = None
     vehicle_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
     driver_name: Optional[str] = None
+    worker_id: Optional[str] = None
+    worker_name: Optional[str] = None
+    employee_code: Optional[str] = None
+    contractor_name: Optional[str] = None
+    face_match_confidence: Optional[float] = None
+    face_match_source: Optional[str] = None
 
     @classmethod
     def from_detection(
@@ -402,3 +414,12 @@ class ViolationEvent(BaseModel):
             vehicle_type=detection.vehicle_type,
             driver_name=detection.driver_name,
         )
+
+
+class WorkerGalleryEnrollPayload(BaseModel):
+    user_id: str
+    worker_name: str
+    employee_code: str
+    contractor_name: Optional[str] = None
+    image_b64: str
+    pose_slot: int = Field(ge=1, le=3)

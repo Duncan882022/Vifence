@@ -41,6 +41,7 @@ rsync_cmd() {
     --exclude 'data/events/*.jsonl' \
     --exclude 'data/snapshots/*.jpg' \
     --exclude 'data/config/*.json' \
+    --exclude 'data/auto_train/' \
     -e "$ssh_rsh" \
     "$ROOT/backend-ai/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 }
@@ -74,14 +75,21 @@ python3 -m venv .venv
 REMOTE_VENV
 
 echo "→ .env production…"
-ssh_cmd "bash -s" <<'REMOTE_ENV'
+VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
+ssh_cmd "bash -s" <<REMOTE_ENV
 set -euo pipefail
-cat > /opt/vifence/backend-ai/.env <<'EOF'
+cat > /opt/vifence/backend-ai/.env <<EOF
 HOST=0.0.0.0
 PORT=8000
 DETECTION_LOOP_ENABLED=false
-AUTO_TRAIN_ENABLED=false
+AUTO_TRAIN_ENABLED=${VPS_AUTO_TRAIN_ENABLED}
 AUTO_TRAIN_INFERENCE_ENABLED=true
+AUTO_TRAIN_SCHEDULE_HOURS_LOCAL=6,18
+AUTO_TRAIN_SCHEDULE_TZ_OFFSET_HOURS=7
+AUTO_TRAIN_SCHEDULE_WINDOW_MINUTES=90
+AUTO_TRAIN_CHECK_INTERVAL_SECONDS=120
+AUTO_TRAIN_MIN_INTERVAL_SECONDS=39600
+AUTO_TRAIN_MIN_NEW_SAMPLES_DELTA=10
 CAMERA_SOURCE=0
 EOF
 REMOTE_ENV

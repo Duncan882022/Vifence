@@ -16,16 +16,14 @@ import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { craneScanRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
+import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
 
 const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
 const UNKNOWN_MIN_CONFIDENCE = 0.45
+const SUBJECT_STYLE = modelBoxStyle('crane_proximity', 'subject')
+const VIOLATION_STYLE = modelBoxStyle('crane_proximity', 'violation')
 
-const BOX_STYLE = {
-  border: 'border-gray-400/80',
-  fill: 'bg-gray-400/10',
-  label: 'text-gray-200',
-  bg: 'bg-gray-600/35',
-} as const
+const BOX_STYLE = SUBJECT_STYLE
 
 const BEHAVIOR_STYLE: Record<
   string,
@@ -33,42 +31,12 @@ const BEHAVIOR_STYLE: Record<
 > = {
   person: BOX_STYLE,
   unknown: BOX_STYLE,
-  crane: {
-    border: 'border-amber-400/90',
-    fill: 'bg-amber-400/10',
-    label: 'text-amber-200',
-    bg: 'bg-amber-500/35',
-  },
-  crane_green: {
-    border: 'border-emerald-400/95',
-    fill: 'bg-emerald-400/12',
-    label: 'text-emerald-100',
-    bg: 'bg-emerald-700/45',
-  },
-  sany_drill: {
-    border: 'border-orange-400/95',
-    fill: 'bg-orange-400/12',
-    label: 'text-orange-200',
-    bg: 'bg-orange-600/40',
-  },
-  excavator_orange: {
-    border: 'border-orange-400/95',
-    fill: 'bg-orange-400/12',
-    label: 'text-orange-200',
-    bg: 'bg-orange-600/40',
-  },
-  tower_crane: {
-    border: 'border-yellow-300/95',
-    fill: 'bg-yellow-300/12',
-    label: 'text-yellow-100',
-    bg: 'bg-yellow-500/40',
-  },
-  crane_proximity: {
-    border: 'border-red-400/95',
-    fill: 'bg-red-500/18',
-    label: 'text-red-200',
-    bg: 'bg-red-600/40',
-  },
+  crane: SUBJECT_STYLE,
+  crane_green: SUBJECT_STYLE,
+  sany_drill: SUBJECT_STYLE,
+  excavator_orange: SUBJECT_STYLE,
+  tower_crane: SUBJECT_STYLE,
+  crane_proximity: VIOLATION_STYLE,
 }
 
 function formatDetectionBadge(

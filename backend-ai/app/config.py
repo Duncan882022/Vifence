@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     wah_event_repeat_seconds: float = 900.0
     atgt_event_repeat_seconds: float = 900.0
 
+    # Chặn ghi trùng nhanh cùng dedup_key (giây) — bổ sung one_event_per_episode.
+    event_rapid_dedup_seconds: float = 45.0
+
+    # Nhận diện công nhân — gắn danh tính vào vi phạm (PPE/WAH/PCCC).
+    worker_recognition_enabled: bool = True
+    worker_match_min_confidence: float = 0.42
+    worker_demo_fallback_enabled: bool = True
+    worker_gallery_dir: str = "data/worker_gallery"
+
     # Hút thuốc — lặp snapshot mỗi 15 phút nếu vẫn phát hiện.
     smoking_event_cooldown_seconds: float = 900.0
     smoking_event_repeat_min_seconds: float = 900.0
@@ -61,6 +70,15 @@ class Settings(BaseSettings):
     # Tạm tắt thu thập + train tự động khi chưa đủ video đa dạng (bật lại
     # bằng AUTO_TRAIN_ENABLED=true trong .env khi đã có thêm dữ liệu).
     auto_train_enabled: bool = False
+
+    # Train theo cửa sổ cố định — mặc định 6h và 18h (UTC+7), ~2 lần/ngày.
+    # Để trống chuỗi → chế độ cũ (poll + min_interval từng task).
+    auto_train_schedule_hours_local: str = "6,18"
+    auto_train_schedule_tz_offset_hours: int = 7
+    auto_train_schedule_window_minutes: float = 90.0
+    auto_train_check_interval_seconds: float = 120.0
+    auto_train_min_interval_seconds: float = 39600.0
+    auto_train_min_new_samples_delta: int = 10
 
     # Tắt vòng lặp detect nền (webcam) khi chỉ dùng FE gửi frame qua ngrok —
     # giảm RAM, tránh backend bị kill khi chạy đồng thời road + crane.

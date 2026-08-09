@@ -148,6 +148,7 @@ export const PcccOverlay = memo(function PcccOverlay({
       layoutTick={layoutTick}
       compact={compact}
       pulse={pulse}
+      modelId="pccc"
     />
   )
 })

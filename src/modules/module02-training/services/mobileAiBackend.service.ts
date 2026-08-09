@@ -1,25 +1,18 @@
-/** URL backend AI local (ngrok/Cloudflare Tunnel) — cache trình duyệt + sync JSON backend. */
+/** URL backend AI — cố định qua VITE_MOBILE_AI_BACKEND_URL (.env.local / .env.ghpages). */
 import {
   captureVideoFrameBase64,
   scaledAnalyzeDelay,
 } from '../utils/videoFrameCapture'
 
+/** @deprecated Chỉ giữ key cho listener storage cũ — URL không còn lưu localStorage. */
 export const MOBILE_AI_BACKEND_STORAGE_KEY = 'vifence_mobile_ai_backend_url'
-const STORAGE_KEY = MOBILE_AI_BACKEND_STORAGE_KEY
 
 export function notifyMobileAiBackendUrlChanged(): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('vifence-mobile-ai-backend-changed'))
 }
 
-export interface MobileAiBackendConfigRecord {
-  backend_url: string
-  updated_at: number
-  date: string
-  source: string
-}
-
-/** Header bắt buộc khi gọi ngrok free từ trình duyệt (WebSocket không gửi được header này). */
+/** Header tùy chọn khi gọi tunnel cũ (ngrok free). */
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
@@ -57,28 +50,6 @@ export interface MobileAiAnalyzeResult {
 /** Mặc định backend — bake từ VITE_MOBILE_AI_BACKEND_URL (.env.local / .env.ghpages). */
 const ENV_BACKEND_URL = (import.meta.env.VITE_MOBILE_AI_BACKEND_URL as string | undefined)?.trim() ?? ''
 const LOCALHOST_FALLBACK = 'http://localhost:8000'
-const SESSION_BACKEND_FROM_URL = 'vifence_url_backend_override'
-const URL_BACKEND_KEYS = ['backendUrl', 'aiBackend', 'backend'] as const
-
-function readUrlBackendUrl(): string {
-  if (typeof window === 'undefined') return ''
-  const params = new URLSearchParams(window.location.search)
-  for (const key of URL_BACKEND_KEYS) {
-    const raw = params.get(key)?.trim()
-    if (raw) return decodeURIComponent(raw)
-  }
-  return ''
-}
-
-/** ?backendUrl= / ?aiBackend= — chia sẻ link demo đồng bộ giữa trình duyệt. */
-function getSharedBackendUrlParam(): string {
-  const fromUrl = readUrlBackendUrl()
-  if (fromUrl) {
-    sessionStorage.setItem(SESSION_BACKEND_FROM_URL, fromUrl)
-    return fromUrl
-  }
-  return sessionStorage.getItem(SESSION_BACKEND_FROM_URL)?.trim() ?? ''
-}
 
 function isRunningOnLocalCms(): boolean {
   if (typeof window === 'undefined') return false
@@ -88,72 +59,9 @@ function isRunningOnLocalCms(): boolean {
 
 export function getMobileAiBackendUrl(): string {
   if (typeof window === 'undefined') return ''
-  const shared = getSharedBackendUrlParam()
-  if (shared) return shared
-  const stored = localStorage.getItem(STORAGE_KEY)?.trim() ?? ''
-  if (stored) return stored
-  // Build-time ngrok — dùng chung local preview + GitHub Pages (khi chưa cấu hình ⚙).
   if (ENV_BACKEND_URL) return ENV_BACKEND_URL
   if (isRunningOnLocalCms()) return LOCALHOST_FALLBACK
   return ''
-}
-
-export function setMobileAiBackendUrl(url: string): void {
-  if (typeof window === 'undefined') return
-  const trimmed = url.trim()
-  if (trimmed) localStorage.setItem(STORAGE_KEY, trimmed)
-  else localStorage.removeItem(STORAGE_KEY)
-  notifyMobileAiBackendUrlChanged()
-}
-
-export function buildMobileAiConfigUrl(baseUrl: string): string {
-  return `${normalizeBaseUrl(baseUrl)}/config/mobile-ai`
-}
-
-/** Lưu localStorage + ghi JSON trên backend (theo ngày). */
-export async function saveMobileAiBackendUrl(url: string): Promise<void> {
-  const trimmed = url.trim()
-  setMobileAiBackendUrl(trimmed)
-  if (!trimmed) return
-  try {
-    await fetchWithTimeout(buildMobileAiConfigUrl(trimmed), {
-      method: 'PUT',
-      headers: {
-        ...TUNNEL_HEADERS,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ backend_url: trimmed, source: 'mobile-fe' }),
-      mode: 'cors',
-    }, 12000)
-  } catch {
-    // Offline hoặc backend cũ — vẫn giữ localStorage
-  }
-}
-
-/** Đọc cấu hình mới nhất từ JSON backend (nếu có). */
-export async function fetchMobileAiBackendConfig(
-  baseUrl: string,
-): Promise<MobileAiBackendConfigRecord | null> {
-  const configUrl = buildMobileAiConfigUrl(baseUrl)
-  if (!configUrl) return null
-  try {
-    const res = await fetchWithTimeout(configUrl, {
-      method: 'GET',
-      headers: TUNNEL_HEADERS,
-      mode: 'cors',
-    }, 12000)
-    if (!res.ok) return null
-    const data = await res.json() as { configured?: boolean; backend_url?: string }
-    if (!data.configured || !data.backend_url) return null
-    return {
-      backend_url: data.backend_url,
-      updated_at: (data as MobileAiBackendConfigRecord).updated_at ?? Date.now() / 1000,
-      date: (data as MobileAiBackendConfigRecord).date ?? '',
-      source: (data as MobileAiBackendConfigRecord).source ?? 'backend',
-    }
-  } catch {
-    return null
-  }
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

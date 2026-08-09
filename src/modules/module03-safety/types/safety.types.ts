@@ -180,8 +180,16 @@ export interface SafetyViolationRecord {
   dueAt?: string
   snapshotUrl?: string
   playbackUrl?: string
+  /** Bbox vi phạm trên frame gốc [x1,y1,x2,y2] — zoom playback. */
+  bbox?: [number, number, number, number]
+  frameWidth?: number
+  frameHeight?: number
+  /** Giây seek vào clip camera / demo. */
+  playbackSeekSec?: number
   verificationRequired: boolean
   description?: string
+  /** Khóa dedup từ backend — cùng camera × kịch bản × đối tượng. */
+  dedupKey?: string
   /** @deprecated dùng subject — giữ để tương thích adapter */
   contractorId?: string
   contractorName?: string

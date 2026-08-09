@@ -11,6 +11,7 @@ from .config import settings
 from .events import EventStore, PersistenceDebouncer
 from .ppe_analyzer import analyze_ppe_frame
 from .schemas import PpeDetection, ViolationEvent
+from .track_matching import assign_person_track_id
 from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("ppe_engine")
@@ -45,7 +46,7 @@ def _center_inside(inner: list[float], outer: list[float]) -> bool:
 
 
 def _person_slot(person_bbox: list[float], frame_w: int, frame_h: int) -> str:
-    """Ô lưới ổn định theo vị trí — giữ identity người qua các frame."""
+    """Ô lưới ổn định theo vị trí — dùng khi log."""
     cx, cy = _bbox_center(person_bbox)
     gx = min(7, int(cx / max(frame_w / 8, 1)))
     gy = min(5, int(cy / max(frame_h / 6, 1)))
@@ -85,7 +86,7 @@ class PpeEngine:
                 min_duration_seconds=_CONFIRM_SECONDS,
                 cooldown_seconds=_REPEAT_SECONDS,
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=False,
+                one_event_per_episode=True,
             )
         return self._gates[camera_id][track_id]
 
@@ -120,8 +121,17 @@ class PpeEngine:
                 continue
 
             person_bbox = [float(v) for v in person.bbox]
+            track_id = assign_person_track_id(
+                person_bbox,
+                tracks,
+                behavior=det.behavior,
+                frame_w=frame_w,
+                frame_h=frame_h,
+                max_tracks=_MAX_TRACKS,
+            )
+            if track_id is None:
+                continue
             slot = _person_slot(person_bbox, frame_w, frame_h)
-            track_id = f"{slot}:{det.behavior}"
 
             gate = self._gate_for(camera_id, track_id)
             if track_id not in tracks:
@@ -154,16 +164,18 @@ class PpeEngine:
                         pending["frame"],
                         camera_id=camera_id,
                         person_bbox=pending.get("person_bbox"),
+                        track_id=track_id,
                     )
-                    new_events.append(event)
-                    logger.info(
-                        "PPE event [%s] %s person=%s track=%s conf=%.0f%%",
-                        event.id,
-                        event.scenario_name,
-                        slot,
-                        track_id,
-                        event.confidence * 100,
-                    )
+                    if event:
+                        new_events.append(event)
+                        logger.info(
+                            "PPE event [%s] %s person=%s track=%s conf=%.0f%%",
+                            event.id,
+                            event.scenario_name,
+                            slot,
+                            track_id,
+                            event.confidence * 100,
+                        )
             elif was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
 

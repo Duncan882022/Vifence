@@ -32,6 +32,7 @@ import { resolveVehiclePlate } from '../utils/vehiclePlate'
 import { displayUnknown } from '../utils/displayUnknown'
 import { getEventAreaLabel, getEventSourceLabel } from '../utils/safetyCameraBridge'
 import { getScenarioIcon } from '../data/safetyScenarioIcons'
+import { isLiveSafetyRecord } from '../services/safetyAiEvents.service'
 
 interface SafetyViolationDetailModalProps {
   record: SafetyViolationRecord | null
@@ -80,7 +81,7 @@ export function SafetyViolationDetailModal({
 
   const scenario = SAFETY_SCENARIO_MAP.get(record.scenarioId)
   const snapshotUrl = resolveViolationSnapshotUrl(record)
-  const fallbackUrl = resolveStaticViolationSnapshotUrl(record)
+  const staticFallback = isLiveSafetyRecord(record) ? undefined : resolveStaticViolationSnapshotUrl(record)
   const statusDisplay = getAlertCardStatusDisplay(record)
   const StatusIcon = statusDisplay.icon
   const SeverityIcon = SEVERITY_ICONS[record.severity]
@@ -137,7 +138,7 @@ export function SafetyViolationDetailModal({
           <div className="relative aspect-[16/10] sm:aspect-[16/9] bg-black border-b border-[#1e2433]">
             <RemoteViolationSnapshotImage
               src={snapshotUrl}
-              fallbackSrc={fallbackUrl !== snapshotUrl ? fallbackUrl : undefined}
+              fallbackSrc={staticFallback && staticFallback !== snapshotUrl ? staticFallback : undefined}
               alt={getScenarioName(record.scenarioId)}
               className="absolute inset-0 w-full h-full object-contain"
             />

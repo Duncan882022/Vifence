@@ -31,12 +31,13 @@ import {
   isUnassigned,
   matchesEventSearch,
 } from '../utils/eventSubject'
+import { getSafetyEventsSnapshot } from '../store/safetyEventsStore'
 import { countAlertStatusBuckets } from '../utils/safetyDashboardUi'
 
 const NEAR_DUE_HOURS = 4
 
 export function getAllSafetyRecords(): SafetyViolationRecord[] {
-  return []
+  return getSafetyEventsSnapshot()
 }
 
 function isTodayRecord(detectedAt: string): boolean {

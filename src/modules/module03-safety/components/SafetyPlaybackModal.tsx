@@ -34,7 +34,7 @@ export function SafetyPlaybackModal({ open, event, onClose }: SafetyPlaybackModa
       role="presentation"
     >
       <div
-        className="relative flex flex-col overflow-hidden w-full max-w-lg sm:max-w-[960px] sm:w-[92vw] max-h-[85vh] sm:max-h-[78vh] rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60"
+        className="relative flex flex-col overflow-hidden w-full max-w-lg sm:max-w-[960px] sm:w-[92vw] max-h-[92dvh] sm:max-h-[88dvh] rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

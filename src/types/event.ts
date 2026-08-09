@@ -21,6 +21,12 @@ export interface Event {
   violationCategory?: string
   imageUrl?: string
   videoUrl?: string
+  /** Playback sự kiện — cắt 3s quanh thời điểm vi phạm. */
+  playbackSeekSec?: number
+  clipDurationSec?: number
+  violationBbox?: [number, number, number, number]
+  frameWidth?: number
+  frameHeight?: number
   status: EventStatus
   severity: EventSeverity
   module: EventModule

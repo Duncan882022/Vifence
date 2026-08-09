@@ -3,6 +3,8 @@ import { cn } from '@/utils/cn'
 import { mapVideoRectToOverlay } from '../utils/videoOverlayCoords'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import type { MobileAiDetection } from '../services/mobileAiBackend.service'
+import type { CameraAiModelId } from '../types/cameraAi.types'
+import { getCameraAiModelVisual, modelBoxStyle } from '../data/cameraAiModelTokens'
 
 interface MobileAiOverlayProps {
   detections: MobileAiDetection[]
@@ -12,24 +14,21 @@ interface MobileAiOverlayProps {
   layoutTick?: number
   compact?: boolean
   pulse?: boolean
+  modelId?: CameraAiModelId
 }
 
-const BEHAVIOR_STYLE: Record<string, { border: string; label: string; badge: string }> = {
-  smoking: {
-    border: 'border-orange-400/90',
-    label: 'bg-orange-500/30 text-orange-200',
-    badge: 'bg-orange-500/25 border-orange-500/40 text-orange-200',
-  },
-  fire: {
-    border: 'border-red-400/90',
-    label: 'bg-red-500/30 text-red-200',
-    badge: 'bg-red-500/25 border-red-500/40 text-red-200',
-  },
-  no_harness: {
-    border: 'border-orange-400/95',
-    label: 'bg-orange-500/30 text-orange-200',
-    badge: 'bg-orange-500/25 border-orange-500/40 text-orange-200',
-  },
+function isViolationBehavior(behavior: string): boolean {
+  return behavior === 'smoking' || behavior === 'fire' || behavior === 'no_harness'
+}
+
+function resolveBehaviorStyle(modelId: CameraAiModelId, behavior: string) {
+  const box = modelBoxStyle(modelId, isViolationBehavior(behavior) ? 'violation' : 'subject')
+  const visual = getCameraAiModelVisual(modelId)
+  return {
+    border: box.border,
+    label: cn(box.bg, box.label),
+    badge: visual.badge,
+  }
 }
 
 const DetectionBox = memo(function DetectionBox({
@@ -39,6 +38,7 @@ const DetectionBox = memo(function DetectionBox({
   videoRef,
   compact,
   pulse,
+  modelId,
 }: {
   det: MobileAiDetection
   frameWidth: number
@@ -46,11 +46,12 @@ const DetectionBox = memo(function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   pulse?: boolean
+  modelId: CameraAiModelId
 }) {
   const [x1, y1, x2, y2] = det.bbox
-  const style = BEHAVIOR_STYLE[det.behavior] ?? BEHAVIOR_STYLE.fire
+  const style = resolveBehaviorStyle(modelId, det.behavior)
   const video = videoRef.current
-  const isViolation = det.behavior === 'smoking' || det.behavior === 'fire'
+  const isViolation = isViolationBehavior(det.behavior)
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
@@ -108,6 +109,7 @@ export function MobileAiOverlay({
   layoutTick = 0,
   compact,
   pulse,
+  modelId = 'pccc',
 }: MobileAiOverlayProps) {
   if (detections.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
 
@@ -122,6 +124,7 @@ export function MobileAiOverlay({
           videoRef={videoRef}
           compact={compact}
           pulse={pulse}
+          modelId={modelId}
         />
       ))}
     </div>
@@ -131,20 +134,25 @@ export function MobileAiOverlay({
 export function MobileAiAlertBadge({
   detections,
   compact,
+  modelId = 'pccc',
 }: {
   detections: MobileAiDetection[]
   compact?: boolean
+  modelId?: CameraAiModelId
 }) {
   const smoking = detections.some(d => d.behavior === 'smoking')
   const fire = detections.some(d => d.behavior === 'fire')
   if (!smoking && !fire) return null
+
+  const smokingStyle = resolveBehaviorStyle(modelId, 'smoking')
+  const fireStyle = resolveBehaviorStyle(modelId, 'fire')
 
   return (
     <div className={cn('absolute left-2 flex flex-col gap-1 z-[10]', compact ? 'top-14' : 'top-[4.5rem]')}>
       {smoking && (
         <span className={cn(
           'rounded font-bold border px-1.5 py-0.5',
-          BEHAVIOR_STYLE.smoking.badge,
+          smokingStyle.badge,
           compact ? 'text-[6px]' : 'text-[8px]',
         )}>
           PCCC-001
@@ -153,7 +161,7 @@ export function MobileAiAlertBadge({
       {fire && (
         <span className={cn(
           'rounded font-bold border px-1.5 py-0.5',
-          BEHAVIOR_STYLE.fire.badge,
+          fireStyle.badge,
           compact ? 'text-[6px]' : 'text-[8px]',
         )}>
           PCCC-002

@@ -11,17 +11,17 @@ import {
   getZoneViolationsToday,
 } from '../services/safetyDashboard.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
+import { useResolvedSafetyRecord } from '../hooks/useResolvedSafetyRecord'
 import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTable'
 import { SafetyViolationDetailModal } from '../components/SafetyViolationDetailModal'
 import { SafetySiteMap } from '../components/dashboard/SafetySiteMap'
 import { SafetyEventsCollapsedSummary } from '../components/dashboard/SafetyEventsCollapsedSummary'
 import { cn } from '@/utils/cn'
-import type { SafetyViolationRecord } from '../types/safety.types'
 
 export function SafetyZonePage() {
   const { zoneId } = useParams<{ zoneId: string }>()
   const [eventsOpen, setEventsOpen] = useState(true)
-  const [detailRecord, setDetailRecord] = useState<SafetyViolationRecord | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
   const zone = zoneId ? SAFETY_ZONE_MAP.get(zoneId) : null
   const aiLiveRecords = useSafetyAiEvents()
   const allRecords = aiLiveRecords
@@ -30,6 +30,8 @@ export function SafetyZonePage() {
     () => (zoneId ? getZoneViolationsToday(zoneId, allRecords) : []),
     [zoneId, allRecords],
   )
+
+  const detailRecord = useResolvedSafetyRecord(records, detailId)
 
   const openCount = zoneId ? getZoneOpenCount(zoneId, allRecords) : 0
   const criticalCount = records.filter(v => v.severity === 'CRITICAL').length
@@ -130,7 +132,7 @@ export function SafetyZonePage() {
           {eventsOpen && (
             <SafetyViolationTable
               records={records}
-              onSnapshotClick={setDetailRecord}
+              onSnapshotClick={v => setDetailId(v.id)}
             />
           )}
         </Panel>
@@ -138,7 +140,7 @@ export function SafetyZonePage() {
 
       <SafetyViolationDetailModal
         record={detailRecord}
-        onClose={() => setDetailRecord(null)}
+        onClose={() => setDetailId(null)}
       />
     </PageLayout>
   )

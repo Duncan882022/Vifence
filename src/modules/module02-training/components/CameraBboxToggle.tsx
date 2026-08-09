@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Eye, ScanEye } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
+  cameraToolbarBtnStandalone,
+  cameraToolbarIconSize,
+} from './cameraToolbarStyles'
+import {
   CAMERA_BBOX_PREFERENCE_CHANGED,
   getCameraBboxVisible,
   toggleCameraBboxVisible,
@@ -46,13 +50,7 @@ export function CameraBboxToggle({ cameraId, compact, className, activeClassName
         toggle()
       }}
       className={cn(
-        className ?? cn(
-          'rounded border transition-colors shrink-0 pointer-events-auto',
-          visible
-            ? 'bg-sky-500/20 border-sky-500/40 text-sky-200 hover:bg-sky-500/30'
-            : 'bg-black/50 border-white/20 text-white/70 hover:bg-black/70 hover:text-white',
-          compact ? 'p-0.5' : 'p-1',
-        ),
+        className ?? cameraToolbarBtnStandalone(compact, visible),
         visible && activeClassName,
       )}
       title={visible ? 'Ẩn ROI detect' : 'Hiện ROI detect'}
@@ -60,8 +58,8 @@ export function CameraBboxToggle({ cameraId, compact, className, activeClassName
       aria-label={visible ? 'Ẩn ROI detect' : 'Hiện ROI detect'}
     >
       {visible
-        ? <ScanEye className={cn(compact ? 'w-3 h-3' : 'w-3.5 h-3.5')} />
-        : <Eye className={cn(compact ? 'w-3 h-3' : 'w-3.5 h-3.5')} />}
+        ? <ScanEye className={cameraToolbarIconSize(compact)} aria-hidden />
+        : <Eye className={cameraToolbarIconSize(compact)} aria-hidden />}
     </button>
   )
 }

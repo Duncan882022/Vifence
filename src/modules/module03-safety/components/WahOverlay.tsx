@@ -19,6 +19,7 @@ import { OVERLAY_CYCLE_DEFAULTS, wahScanRank } from '../utils/overlayScanOrder'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { filterWahHarnessFalsePositives } from '../utils/wahHarnessLogic'
+import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
 
 interface WahOverlayProps {
   cameraId: string
@@ -30,31 +31,18 @@ interface WahOverlayProps {
 
 const PERSON_MIN_CONF = 0.45
 const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
+const SUBJECT_STYLE = modelBoxStyle('wah', 'subject')
+const VIOLATION_STYLE = modelBoxStyle('wah', 'violation')
 
-const BOX_STYLE = {
-  border: 'border-gray-400/80',
-  fill: 'bg-gray-400/10',
-  label: 'text-gray-200',
-  bg: 'bg-gray-600/35',
-} as const
+const BOX_STYLE = SUBJECT_STYLE
 
 const BEHAVIOR_STYLE: Record<
   string,
   { border: string; fill: string; label: string; bg: string }
 > = {
   person: BOX_STYLE,
-  safety_harness: {
-    border: 'border-orange-400/90',
-    fill: 'bg-orange-500/14',
-    label: 'text-orange-100',
-    bg: 'bg-orange-600/35',
-  },
-  no_harness: {
-    border: 'border-red-400/95',
-    fill: 'bg-red-500/18',
-    label: 'text-red-200',
-    bg: 'bg-red-600/40',
-  },
+  safety_harness: SUBJECT_STYLE,
+  no_harness: VIOLATION_STYLE,
 }
 
 function formatLabel(detection: WahDetection): string {

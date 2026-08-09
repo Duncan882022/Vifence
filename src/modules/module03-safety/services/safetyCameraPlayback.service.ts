@@ -13,11 +13,16 @@ import { getViolationFeedUrl, getViolationClipMarker } from '../data/safetyViola
 import { groupIdToFeedType, groupIdToViolationType } from '../utils/groupToViolationType'
 import { resolveTrainingCameraId } from '../utils/safetyCameraBridge'
 import type { SafetyViolationRecord } from '../types/safety.types'
+import {
+  buildEventPlaybackMeta,
+  EVENT_PLAYBACK_CLIP_SEC,
+} from '../utils/eventPlaybackClip'
 
 function violationToRecord(v: SafetyViolationRecord): CameraPlaybackRecord {
   const feedType = groupIdToFeedType(v.groupId)
   const violationType = groupIdToViolationType(v.groupId)
   const end = dayjs(v.detectedAt).add(2, 'minute').toISOString()
+  const meta = buildEventPlaybackMeta(v)
   return {
     id: v.id,
     name: getScenarioName(v.scenarioId),
@@ -25,7 +30,11 @@ function violationToRecord(v: SafetyViolationRecord): CameraPlaybackRecord {
     endTime: end,
     type: 'event',
     videoUrl: v.playbackUrl ?? getViolationFeedUrl(feedType),
-    seekSec: getViolationClipMarker(violationType ?? feedType),
+    seekSec: meta.seekSec ?? getViolationClipMarker(violationType ?? feedType),
+    clipDurationSec: EVENT_PLAYBACK_CLIP_SEC,
+    violationBbox: meta.bbox,
+    frameWidth: meta.frameWidth,
+    frameHeight: meta.frameHeight,
     thumbnailUrl: v.snapshotUrl,
   }
 }

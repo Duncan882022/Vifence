@@ -12,6 +12,8 @@ import {
   getSafetyCamera,
   resolveTrainingCameraId,
 } from './safetyCameraBridge'
+import { isLiveSafetyRecord } from '../services/safetyAiEvents.service'
+import { buildEventPlaybackMeta, EVENT_PLAYBACK_CLIP_SEC } from './eventPlaybackClip'
 
 export function violationRecordToEvent(v: SafetyViolationRecord): Event {
   const scenario = SAFETY_SCENARIO_MAP.get(v.scenarioId)
@@ -19,6 +21,8 @@ export function violationRecordToEvent(v: SafetyViolationRecord): Event {
   const subject = getSubject(v)
   const trainingCamId = resolveTrainingCameraId(v.sourceDeviceId, v.sourceType)
   const trainingCam = getSafetyCamera(trainingCamId)
+  const liveCameraFeed = isLiveSafetyRecord(v) ? trainingCam?.streamUrl : undefined
+  const playbackMeta = buildEventPlaybackMeta(v)
 
   return {
     id: v.id,
@@ -36,7 +40,12 @@ export function violationRecordToEvent(v: SafetyViolationRecord): Event {
     vehiclePlate: subject.vehiclePlate,
     vehicleType: subject.vehicleType,
     imageUrl: v.snapshotUrl ?? resolveViolationSnapshotUrl(v),
-    videoUrl: v.playbackUrl ?? getViolationFeedUrl(groupIdToFeedType(v.groupId)),
+    videoUrl: v.playbackUrl ?? liveCameraFeed ?? getViolationFeedUrl(groupIdToFeedType(v.groupId)),
+    playbackSeekSec: playbackMeta.seekSec,
+    clipDurationSec: EVENT_PLAYBACK_CLIP_SEC,
+    violationBbox: playbackMeta.bbox,
+    frameWidth: playbackMeta.frameWidth,
+    frameHeight: playbackMeta.frameHeight,
     status: v.status === 'CLOSED' ? 'processed' : 'pending',
     severity: v.severity === 'CRITICAL' ? 'critical' : 'warning',
     module: 'safety',

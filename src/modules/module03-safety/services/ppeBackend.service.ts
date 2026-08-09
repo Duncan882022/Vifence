@@ -37,6 +37,7 @@ export interface PpeResult {
   height: number
   metrics: PpeMetrics
   detections: PpeDetection[]
+  events?: Array<{ id: string; behavior: string }>
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

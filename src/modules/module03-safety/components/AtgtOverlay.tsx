@@ -19,6 +19,7 @@ import { atgtScanRank, atgtViolationRank, OVERLAY_CYCLE_DEFAULTS } from '../util
 import { filterAtgtLaneOverlayDetections, isAtgtLaneMedianBehavior, isAtgtLaneViolationBehavior } from '../utils/atgtLaneLogic'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
+import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
 
 interface AtgtOverlayProps {
   cameraId: string
@@ -30,43 +31,20 @@ interface AtgtOverlayProps {
 
 const VEHICLE_MIN_CONF = 0.45
 const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
+const SUBJECT_STYLE = modelBoxStyle('atgt_traffic', 'subject')
+const VIOLATION_STYLE = modelBoxStyle('atgt_traffic', 'violation')
 
-const BOX_STYLE = {
-  border: 'border-gray-400/80',
-  fill: 'bg-gray-400/10',
-  label: 'text-gray-200',
-  bg: 'bg-gray-600/35',
-} as const
+const BOX_STYLE = SUBJECT_STYLE
 
 const BEHAVIOR_STYLE: Record<
   string,
   { border: string; fill: string; label: string; bg: string }
 > = {
   vehicle: BOX_STYLE,
-  speeding: {
-    border: 'border-cyan-400/95',
-    fill: 'bg-cyan-500/18',
-    label: 'text-cyan-200',
-    bg: 'bg-cyan-600/40',
-  },
-  hard_median: {
-    border: 'border-emerald-400/90',
-    fill: 'bg-emerald-500/12',
-    label: 'text-emerald-200',
-    bg: 'bg-emerald-600/35',
-  },
-  soft_median: {
-    border: 'border-emerald-400/90',
-    fill: 'bg-emerald-500/12',
-    label: 'text-emerald-200',
-    bg: 'bg-emerald-600/35',
-  },
-  no_soft_median: {
-    border: 'border-purple-400/95',
-    fill: 'bg-purple-500/16',
-    label: 'text-purple-200',
-    bg: 'bg-purple-600/40',
-  },
+  speeding: VIOLATION_STYLE,
+  hard_median: SUBJECT_STYLE,
+  soft_median: SUBJECT_STYLE,
+  no_soft_median: VIOLATION_STYLE,
 }
 
 function formatLabel(detection: AtgtDetection): string {

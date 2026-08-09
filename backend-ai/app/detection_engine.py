@@ -312,8 +312,9 @@ class DetectionEngine:
                     event = self.store.add(
                         top_detection, snap_frame, camera_id=cam_key,
                     )
-                    new_events.append(event)
-                    self._mark_event_logged(cam_key, behavior, top_detection)
+                    if event:
+                        new_events.append(event)
+                        self._mark_event_logged(cam_key, behavior, top_detection)
             elif was_active and not debouncer.snapshot()["active"]:
                 self._episode_best.pop(episode_key, None)
 

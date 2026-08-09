@@ -11,6 +11,8 @@ import cv2
 import numpy as np
 
 from .crane_detection_catalog import CRANE_CATALOG_STYLES
+from .config import settings
+from .event_dedup import EventDedupRegistry, build_dedup_key, dedupe_events_by_key
 from .schemas import ATGT_SCENARIO_META, Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
 
 logger = logging.getLogger("events")
@@ -156,13 +158,16 @@ class EventStore:
     def __init__(self, max_in_memory: int = 200):
         self._events: deque[ViolationEvent] = deque(maxlen=max_in_memory)
         self._lock = threading.Lock()
+        self._dedup = EventDedupRegistry(settings.event_rapid_dedup_seconds)
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
         EVENTS_DIR.mkdir(parents=True, exist_ok=True)
         self._load_today_from_disk()
 
     def _load_today_from_disk(self) -> None:
         today = _event_date()
-        for event in self._read_events_file(_daily_events_file(today)):
+        disk_events = self._read_events_file(_daily_events_file(today))
+        self._dedup.load_from_events(disk_events)
+        for event in disk_events:
             with self._lock:
                 if not any(e.id == event.id for e in self._events):
                     self._events.appendleft(event)
@@ -186,13 +191,39 @@ class EventStore:
             logger.warning("Không đọc được %s: %s", path, exc)
         return rows
 
+    def _finalize_event(
+        self,
+        event: ViolationEvent,
+        annotated: np.ndarray,
+        dedup_key: str,
+        log_template: str,
+        *log_args: object,
+    ) -> Optional[ViolationEvent]:
+        if self._dedup.should_skip(dedup_key):
+            return None
+
+        event.dedup_key = dedup_key
+        event_date = event.event_date or _event_date(event.created_at)
+        snapshot_name = f"{event_date}/{event.id}.jpg"
+        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        cv2.imwrite(str(snapshot_path), annotated)
+        event.snapshot_file = snapshot_name
+
+        with self._lock:
+            self._events.appendleft(event)
+        self._append_to_disk(event)
+        self._dedup.register(dedup_key, event.created_at)
+        logger.info(log_template, *log_args)
+        return event
+
     def add(
         self,
         detection: Detection,
         frame: np.ndarray,
         *,
         camera_id: str = "LOCAL-CAM",
-    ) -> ViolationEvent:
+        dedup_key: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
         event_date = _event_date()
         event = ViolationEvent.from_detection(
             detection,
@@ -200,23 +231,18 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        snapshot_name = f"{event_date}/{event.id}.jpg"
-        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, detection.behavior)
         annotated = self._draw_bbox(frame, detection)
-        cv2.imwrite(str(snapshot_path), annotated)
-        event.snapshot_file = snapshot_name
-
-        with self._lock:
-            self._events.appendleft(event)
-        self._append_to_disk(event)
-        logger.info(
+        return self._finalize_event(
+            event,
+            annotated,
+            key,
             "Sự kiện mới [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
         )
-        return event
 
     def add_road(
         self,
@@ -224,7 +250,9 @@ class EventStore:
         frame: np.ndarray,
         *,
         camera_id: str = "A-03",
-    ) -> ViolationEvent:
+        dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
         event_date = _event_date()
         event = ViolationEvent.from_road_detection(
             detection,
@@ -232,23 +260,19 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        snapshot_name = f"{event_date}/{event.id}.jpg"
-        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        stable_track = track_id or detection.behavior
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         annotated = self._draw_road_bbox(frame, detection)
-        cv2.imwrite(str(snapshot_path), annotated)
-        event.snapshot_file = snapshot_name
-
-        with self._lock:
-            self._events.appendleft(event)
-        self._append_to_disk(event)
-        logger.info(
+        return self._finalize_event(
+            event,
+            annotated,
+            key,
             "Sự kiện road [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
         )
-        return event
 
     def add_crane(
         self,
@@ -257,7 +281,8 @@ class EventStore:
         *,
         camera_id: str = "A-04",
         context: Optional[list[CraneProximityDetection]] = None,
-    ) -> ViolationEvent:
+        dedup_key: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
         event_date = _event_date()
         event = ViolationEvent.from_crane_detection(
             detection,
@@ -265,16 +290,12 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        snapshot_name = f"{event_date}/{event.id}.jpg"
-        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, "proximity")
         annotated = self._draw_crane_snapshot(frame, detection, context)
-        cv2.imwrite(str(snapshot_path), annotated)
-        event.snapshot_file = snapshot_name
-
-        with self._lock:
-            self._events.appendleft(event)
-        self._append_to_disk(event)
-        logger.info(
+        return self._finalize_event(
+            event,
+            annotated,
+            key,
             "Sự kiện crane [%s]: %s (%s) conf=%.2f dist=%s",
             event_date,
             event.scenario_name,
@@ -282,7 +303,6 @@ class EventStore:
             event.confidence,
             getattr(detection, "distance_m", None),
         )
-        return event
 
     def add_ppe(
         self,
@@ -291,7 +311,9 @@ class EventStore:
         *,
         camera_id: str = "A-04",
         person_bbox: Optional[list[float]] = None,
-    ) -> ViolationEvent:
+        dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
         event_date = _event_date()
         event = ViolationEvent.from_ppe_detection(
             detection,
@@ -299,23 +321,19 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        snapshot_name = f"{event_date}/{event.id}.jpg"
-        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        stable_track = track_id or detection.behavior
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         annotated = self._draw_ppe_snapshot(frame, detection, person_bbox)
-        cv2.imwrite(str(snapshot_path), annotated)
-        event.snapshot_file = snapshot_name
-
-        with self._lock:
-            self._events.appendleft(event)
-        self._append_to_disk(event)
-        logger.info(
+        return self._finalize_event(
+            event,
+            annotated,
+            key,
             "Sự kiện PPE [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
         )
-        return event
 
     def add_wah(
         self,
@@ -324,7 +342,9 @@ class EventStore:
         *,
         camera_id: str = "A-04",
         person_bbox: Optional[list[float]] = None,
-    ) -> ViolationEvent:
+        dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
         event_date = _event_date()
         event = ViolationEvent.from_wah_detection(
             detection,
@@ -332,23 +352,19 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        snapshot_name = f"{event_date}/{event.id}.jpg"
-        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        stable_track = track_id or detection.behavior
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         annotated = self._draw_wah_snapshot(frame, detection, person_bbox)
-        cv2.imwrite(str(snapshot_path), annotated)
-        event.snapshot_file = snapshot_name
-
-        with self._lock:
-            self._events.appendleft(event)
-        self._append_to_disk(event)
-        logger.info(
+        return self._finalize_event(
+            event,
+            annotated,
+            key,
             "Sự kiện WAH [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
         )
-        return event
 
     @classmethod
     def _draw_wah_snapshot(
@@ -383,7 +399,9 @@ class EventStore:
         *,
         camera_id: str = "A-03",
         vehicle_bbox: Optional[list[float]] = None,
-    ) -> ViolationEvent:
+        dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
         event_date = _event_date()
         event = ViolationEvent.from_atgt_detection(
             detection,
@@ -391,23 +409,20 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        snapshot_name = f"{event_date}/{event.id}.jpg"
-        snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
+        plate = getattr(detection, "vehicle_plate", None)
+        stable_track = track_id or (plate if plate else detection.behavior)
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         annotated = self._draw_atgt_snapshot(frame, detection, vehicle_bbox)
-        cv2.imwrite(str(snapshot_path), annotated)
-        event.snapshot_file = snapshot_name
-
-        with self._lock:
-            self._events.appendleft(event)
-        self._append_to_disk(event)
-        logger.info(
+        return self._finalize_event(
+            event,
+            annotated,
+            key,
             "Sự kiện ATGT [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
         )
-        return event
 
     @classmethod
     def _draw_atgt_snapshot(
@@ -597,9 +612,13 @@ class EventStore:
 
     def list_events(self, limit: int = 50, date: Optional[str] = None) -> list[ViolationEvent]:
         if date:
-            return self._read_events_file(_daily_events_file(date))[:limit]
-        with self._lock:
-            return list(self._events)[:limit]
+            rows = self._read_events_file(_daily_events_file(date))
+        else:
+            with self._lock:
+                rows = list(self._events)
+        deduped = dedupe_events_by_key(rows)
+        deduped.sort(key=lambda e: e.created_at, reverse=True)
+        return deduped[:limit]
 
     def list_event_dates(self) -> list[str]:
         dates: set[str] = set()

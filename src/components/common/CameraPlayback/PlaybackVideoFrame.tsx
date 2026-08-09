@@ -4,6 +4,7 @@ import { Camera } from 'lucide-react'
 import { cameraDisplayLabel, type TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import type { CameraPlaybackRecord } from '@/types/cameraPlayback'
 import { getCameraLocation as getLocation } from '@/utils/cameraPlaybackUi'
+import { EventPlaybackViewport } from '@/modules/module03-safety/components/EventPlaybackViewport'
 
 const CCTV_SCANLINE = {
   backgroundImage:
@@ -28,19 +29,42 @@ export function PlaybackVideoFrame({
   muted,
 }: PlaybackVideoFrameProps) {
   const location = getLocation(cam)
+  const isEventClip = selectedRecord?.type === 'event'
+  const clipLabel = isEventClip
+    ? `Clip ${selectedRecord?.clipDurationSec ?? 3}s · ROI vi phạm`
+    : null
 
   return (
     <div className="relative w-full h-full min-h-[120px] overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
       {videoSrc ? (
-        <video
-          ref={videoRef}
-          src={videoSrc}
-          className="absolute inset-0 w-full h-full object-contain z-[1]"
-          muted={muted}
-          playsInline
-          preload="auto"
-        />
+        isEventClip ? (
+          <EventPlaybackViewport
+            bbox={selectedRecord?.violationBbox}
+            frameWidth={selectedRecord?.frameWidth}
+            frameHeight={selectedRecord?.frameHeight}
+            zoomEnabled={false}
+            className="z-[1]"
+          >
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              className="absolute inset-0 w-full h-full object-contain bg-black"
+              muted={muted}
+              playsInline
+              preload="auto"
+            />
+          </EventPlaybackViewport>
+        ) : (
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            className="absolute inset-0 w-full h-full object-contain z-[1]"
+            muted={muted}
+            playsInline
+            preload="auto"
+          />
+        )
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground/40 z-[1]">
           <Camera className="w-8 h-8" />
@@ -56,9 +80,13 @@ export function PlaybackVideoFrame({
           <div className="min-w-0 bg-black/60 rounded px-2 py-1 border border-[#1e2433]">
             <p className="text-[8px] text-white/90 font-semibold truncate">{selectedRecord.name}</p>
             <p className="text-[7px] text-white/45 tabular-nums">
-              {dayjs(selectedRecord.startTime).format('HH:mm:ss')}
-              {' – '}
-              {dayjs(selectedRecord.endTime).format('HH:mm:ss')}
+              {clipLabel ?? (
+                <>
+                  {dayjs(selectedRecord.startTime).format('HH:mm:ss')}
+                  {' – '}
+                  {dayjs(selectedRecord.endTime).format('HH:mm:ss')}
+                </>
+              )}
             </p>
           </div>
         )}

@@ -15,54 +15,23 @@ import {
 import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { OVERLAY_CYCLE_DEFAULTS, ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
+import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
 
 const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
+const SUBJECT_STYLE = modelBoxStyle('ppe', 'subject')
+const VIOLATION_STYLE = modelBoxStyle('ppe', 'violation')
 
 const BEHAVIOR_STYLE: Record<string, { border: string; fill: string; label: string; bg: string }> = {
-  person: {
-    border: 'border-sky-400/70',
-    fill: 'bg-sky-400/8',
-    label: 'text-sky-200',
-    bg: 'bg-sky-600/30',
-  },
-  hard_hat: {
-    border: 'border-green-400/90',
-    fill: 'bg-green-400/12',
-    label: 'text-green-200',
-    bg: 'bg-green-600/35',
-  },
-  safety_vest: {
-    border: 'border-lime-400/90',
-    fill: 'bg-lime-400/12',
-    label: 'text-lime-200',
-    bg: 'bg-lime-600/35',
-  },
-  safety_shoes: {
-    border: 'border-emerald-400/90',
-    fill: 'bg-emerald-400/12',
-    label: 'text-emerald-200',
-    bg: 'bg-emerald-600/35',
-  },
-  no_helmet: {
-    border: 'border-red-400/95',
-    fill: 'bg-red-500/18',
-    label: 'text-red-200',
-    bg: 'bg-red-600/40',
-  },
-  no_vest: {
-    border: 'border-orange-400/95',
-    fill: 'bg-orange-500/16',
-    label: 'text-orange-200',
-    bg: 'bg-orange-600/40',
-  },
-  no_shoes: {
-    border: 'border-amber-400/95',
-    fill: 'bg-amber-500/16',
-    label: 'text-amber-200',
-    bg: 'bg-amber-600/40',
-  },
+  person: SUBJECT_STYLE,
+  hard_hat: SUBJECT_STYLE,
+  safety_vest: SUBJECT_STYLE,
+  safety_shoes: SUBJECT_STYLE,
+  no_helmet: VIOLATION_STYLE,
+  no_vest: VIOLATION_STYLE,
+  no_shoes: VIOLATION_STYLE,
 }
 
 const COMPLIANT_BEHAVIORS = new Set(['hard_hat', 'safety_vest', 'safety_shoes'])
@@ -221,6 +190,9 @@ function usePpeState(
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
         setDetections(overlayDetections(result.detections))
+        if (result.events && result.events.length > 0) {
+          notifySafetyAiEventsChanged()
+        }
       },
     })
 

@@ -4,8 +4,7 @@ import { cameraDisplayLabel, cameraMetaLabel, type TrainingCamera } from '../dat
 import { CameraAiConfigButton } from './CameraAiConfigModal'
 import { CameraBboxToggle } from './CameraBboxToggle'
 import { BackendConnectionBadge } from './BackendConnectionBadge'
-import { MobileAiBackendConfig } from './MobileAiBackendConfig'
-import { CAMERA_LIVE_BADGE, CAMERA_TOOLBAR_SHELL, cameraToolbarBtn } from './cameraToolbarStyles'
+import { CAMERA_LIVE_BADGE, CAMERA_TOOLBAR_SHELL, cameraToolbarBtn, cameraToolbarIconSize } from './cameraToolbarStyles'
 
 interface CameraLiveBadgeProps {
   compact?: boolean
@@ -71,10 +70,6 @@ export function CameraToolbar({
       compact ? 'top-1.5 right-1.5' : 'top-2 right-2',
     )}>
       <div className={CAMERA_TOOLBAR_SHELL}>
-        <MobileAiBackendConfig
-          compact={compact}
-          buttonClassName={cameraToolbarBtn(compact)}
-        />
         <CameraAiConfigButton
           cameraId={cameraId}
           compact={compact}
@@ -98,8 +93,8 @@ export function CameraToolbar({
             aria-label={isMaximized ? 'Thu nhỏ' : 'Phóng to'}
           >
             {isMaximized
-              ? <Minimize2 className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-              : <Maximize2 className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />}
+              ? <Minimize2 className={cameraToolbarIconSize(compact)} aria-hidden />
+              : <Maximize2 className={cameraToolbarIconSize(compact)} aria-hidden />}
           </button>
         )}
       </div>

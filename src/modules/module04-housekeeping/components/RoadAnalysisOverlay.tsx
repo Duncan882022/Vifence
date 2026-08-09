@@ -6,9 +6,11 @@ import {
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
+import { notifySafetyAiEventsChanged } from '@/modules/module03-safety/services/safetyAiEvents.service'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import { shouldRunRoadOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
+import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
 import {
   createRoadAnalysisClient,
   getMobileAiBackendUrl,
@@ -30,12 +32,7 @@ const BEHAVIOR_STYLE: Partial<Record<
   RoadAnalysisDetection['behavior'],
   { border: string; fill: string; label: string; bg: string }
 >> = {
-  mud: {
-    border: 'border-amber-400/90',
-    fill: 'bg-amber-400/12',
-    label: 'text-amber-200',
-    bg: 'bg-amber-500/35',
-  },
+  mud: modelBoxStyle('road_material', 'violation'),
   water: {
     border: 'border-sky-400/90',
     fill: 'bg-sky-400/12',
@@ -48,18 +45,13 @@ const BEHAVIOR_STYLE: Partial<Record<
     label: 'text-orange-200',
     bg: 'bg-orange-500/35',
   },
-  unknown: {
-    border: 'border-gray-400/80',
-    fill: 'bg-gray-400/10',
-    label: 'text-gray-200',
-    bg: 'bg-gray-600/35',
-  },
+  unknown: modelBoxStyle('road_material', 'subject'),
 }
 
 const ROI_STROKE: Record<string, { stroke: string; fill: string }> = {
   ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.18)' },
   BUFFER: { stroke: 'rgba(134, 239, 172, 0.55)', fill: 'none' },
-  STORAGE: { stroke: 'rgba(167, 139, 250, 0.5)', fill: 'none' },
+  STORAGE: { stroke: 'rgba(167, 139, 250, 0.35)', fill: 'none' },
 }
 
 interface RoadAnalysisOverlayProps {
@@ -295,6 +287,9 @@ function useRoadAnalysisState(
         setDetections(visibleDetections(result.detections))
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
+        if (result.events && result.events.length > 0) {
+          notifySafetyAiEventsChanged()
+        }
       },
       onStatusChange: (next, msg) => {
         setStatus(next)

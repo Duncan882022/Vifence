@@ -170,15 +170,17 @@ class AtgtEngine:
                     pending["frame"],
                     camera_id=camera_id,
                     vehicle_bbox=pending.get("vehicle_bbox"),
+                    track_id=track_id,
                 )
-                new_events.append(event)
-                logger.info(
-                    "ATGT %s [%s] slot=%s conf=%.0f%%",
-                    top.behavior,
-                    event.id,
-                    slot,
-                    event.confidence * 100,
-                )
+                if event:
+                    new_events.append(event)
+                    logger.info(
+                        "ATGT %s [%s] slot=%s conf=%.0f%%",
+                        top.behavior,
+                        event.id,
+                        slot,
+                        event.confidence * 100,
+                    )
 
         for track_id, state in list(tracks.items()):
             if track_id in matched_ids:

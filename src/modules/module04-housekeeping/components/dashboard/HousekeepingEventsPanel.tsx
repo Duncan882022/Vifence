@@ -6,6 +6,8 @@ import { getHousekeepingScenarioName } from '../../data/housekeepingScenarios'
 import {
   GROUP_BADGE,
   GROUP_BORDER_ACCENT,
+  GROUP_COLORS,
+  GROUP_ICONS,
   SEVERITY_BADGE,
   SEVERITY_LABELS,
   STATUS_LABELS,
@@ -57,9 +59,18 @@ function EventCard({
 
       <div className="min-w-0 flex-1 flex flex-col justify-center gap-1">
         <div className="flex flex-wrap items-center gap-1">
-          <span className={cn('text-[8px] px-1 py-0.5 rounded border font-semibold', GROUP_BADGE[record.groupId])}>
-            {record.groupId}
-          </span>
+          {(() => {
+            const GroupIcon = GROUP_ICONS[record.groupId]
+            return (
+              <span
+                className={cn('inline-flex items-center justify-center rounded border p-0.5 shrink-0', GROUP_BADGE[record.groupId])}
+                title={record.groupId}
+                aria-label={record.groupId}
+              >
+                <GroupIcon className={cn('w-2.5 h-2.5', GROUP_COLORS[record.groupId])} aria-hidden />
+              </span>
+            )
+          })()}
           <span className={cn('text-[8px] px-1 py-0.5 rounded border', SEVERITY_BADGE[record.severity])}>
             {SEVERITY_LABELS[record.severity]}
           </span>

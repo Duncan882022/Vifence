@@ -1,7 +1,7 @@
 import { Loader2, Wifi, WifiOff } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useMobileAiBackendHealth } from '../hooks/useMobileAiBackendHealth'
-import { cameraToolbarBtn } from './cameraToolbarStyles'
+import { cameraToolbarBtn, cameraToolbarIconSize } from './cameraToolbarStyles'
 
 interface BackendConnectionBadgeProps {
   compact?: boolean
@@ -36,7 +36,7 @@ const STATUS_META = {
     pulse: false,
   },
   unconfigured: {
-    label: 'Chưa cấu hình backend — bấm ⚙ góc phải',
+    label: 'Chưa cấu hình backend AI',
     Icon: WifiOff,
     iconClass: 'text-gray-400',
     shellClass: 'border-gray-500/35',
@@ -53,7 +53,7 @@ export function BackendConnectionBadge({
   const { status, recheck } = useMobileAiBackendHealth()
   const meta = STATUS_META[status]
   const Icon = meta.Icon
-  const iconSize = compact ? 'w-2.5 h-2.5' : 'w-3 h-3'
+  const iconSize = cameraToolbarIconSize(compact)
 
   if (variant === 'toolbar') {
     return (
@@ -71,7 +71,7 @@ export function BackendConnectionBadge({
         title={meta.label}
         aria-label={meta.label}
       >
-        <Icon className={cn(compact ? 'w-3 h-3' : 'w-3.5 h-3.5', meta.iconClass)} />
+        <Icon className={cn(iconSize, meta.iconClass)} aria-hidden />
       </button>
     )
   }
