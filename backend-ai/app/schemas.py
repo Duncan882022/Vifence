@@ -223,11 +223,11 @@ class ViolationEvent(BaseModel):
     violation_type: str
     group: str
     confidence: float
-  bbox: list[float]
-  subject_bbox: Optional[list[float]] = None
-  frame_width: Optional[int] = None
-  frame_height: Optional[int] = None
-  created_at: float = Field(default_factory=time.time)
+    bbox: list[float]
+    subject_bbox: Optional[list[float]] = None
+    frame_width: Optional[int] = None
+    frame_height: Optional[int] = None
+    created_at: float = Field(default_factory=time.time)
     event_date: Optional[str] = None
     camera_id: str = "LOCAL-CAM"
     snapshot_file: Optional[str] = None
