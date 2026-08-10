@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, memo, type RefObject
 import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { getDefaultRoiZonesForModel } from '@/modules/module02-training/data/cameraAiRoiDefaults'
+import type { CameraAiRoiZone } from '@/modules/module02-training/types/cameraAi.types'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { type MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
@@ -37,20 +38,19 @@ const ROI_STROKE: Record<string, { stroke: string; fill: string; dash: string }>
 }
 
 function CraneRoiPolygons({
-  cameraId,
+  zones,
   videoRef,
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
 }: {
-  cameraId: string
+  zones: CameraAiRoiZone[]
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
 }) {
   const video = videoRef.current
-  const zones = getDefaultRoiZonesForModel(cameraId, 'crane_proximity')
   if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
 
   return (
@@ -348,7 +348,20 @@ function useCraneProximityState(
     return stopClient
   }, [cameraId, enabled, stopClient, videoRef, backendUrlVersion, vms?.active])
 
-  return { status, statusMsg, detections, frameSize, metrics, layoutTick }
+  const roiZones = useMemo<CameraAiRoiZone[]>(() => {
+    const fromVms = (vms?.snapshot?.roi_zones ?? [])
+      .filter(z => z.type === 'CRANE_BODY' || z.type === 'CRANE_WORK')
+      .map(z => ({
+        id: z.id,
+        label: z.label,
+        type: z.type,
+        polygon: z.polygon,
+      }))
+    if (fromVms.length > 0) return fromVms
+    return getDefaultRoiZonesForModel(cameraId, 'crane_proximity')
+  }, [cameraId, vms?.snapshot?.roi_zones])
+
+  return { status, statusMsg, detections, frameSize, metrics, roiZones, layoutTick }
 }
 
 export const CraneProximityOverlay = memo(function CraneProximityOverlay({
@@ -359,7 +372,7 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
   enabled = true,
   compact,
 }: CraneProximityOverlayProps) {
-  const { detections, frameSize, layoutTick } =
+  const { detections, frameSize, roiZones, layoutTick } =
     useCraneProximityState(cameraId, videoRef, enabled)
 
   const stableDetections = useStableOverlayDetections(detections)
@@ -405,10 +418,6 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
     return merged
   }, [stickyViolations, stableDetections])
 
-  const roiZones = useMemo(
-    () => getDefaultRoiZonesForModel(cameraId, 'crane_proximity'),
-    [cameraId],
-  )
   const showPolygon = roiZones.length > 0
   const video = videoRef.current
   const overlayFrameSize =
@@ -426,7 +435,7 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
       {showPolygon && (
         <CraneRoiPolygons
-          cameraId={cameraId}
+          zones={roiZones}
           videoRef={videoRef}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}

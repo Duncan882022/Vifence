@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
+import { useEffect, useRef, useState, memo, useCallback, useMemo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
@@ -38,20 +38,19 @@ const ATGT_ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: str
 }
 
 function AtgtRoiPolygons({
-  cameraId,
+  zones,
   videoRef,
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
 }: {
-  cameraId: string
+  zones: Array<{ id: string; type: string; polygon: Array<{ x: number; y: number }> }>
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
 }) {
   const video = videoRef.current
-  const zones = getRoiZonesForCamera(cameraId).filter(z => z.type === 'ROAD')
   if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
 
   return (
@@ -242,7 +241,13 @@ function useAtgtState(
     }
   }, [cameraId, enabled, videoRef, backendUrlVersion, vms?.active])
 
-  return { status, statusMsg, detections, frameSize, layoutTick }
+  const roiZones = useMemo(() => {
+    const fromVms = (vms?.snapshot?.roi_zones ?? []).filter(z => z.type === 'ROAD')
+    if (fromVms.length > 0) return fromVms
+    return getRoiZonesForCamera(cameraId).filter(z => z.type === 'ROAD')
+  }, [cameraId, vms?.snapshot?.roi_zones])
+
+  return { status, statusMsg, detections, frameSize, roiZones, layoutTick }
 }
 
 export const AtgtOverlay = memo(function AtgtOverlay({
@@ -253,7 +258,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   enabled = true,
   compact,
 }: AtgtOverlayProps) {
-  const { detections, frameSize, layoutTick } = useAtgtState(
+  const { detections, frameSize, roiZones, layoutTick } = useAtgtState(
     cameraId,
     videoRef,
     enabled,
@@ -273,9 +278,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   const visible = [...violationVisible, ...medianVisible]
 
   const roadMaterialActive = isCameraAiModelEnabled(cameraId, 'road_material')
-  const showPolygon =
-    !roadMaterialActive
-    && getRoiZonesForCamera(cameraId).some(z => z.type === 'ROAD')
+  const showPolygon = !roadMaterialActive && roiZones.length > 0
   const showBoxes = visible.length > 0 && frameSize.width > 0
 
   if (!enabled) return null
@@ -285,7 +288,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
       {showPolygon && (
         <AtgtRoiPolygons
-          cameraId={cameraId}
+          zones={roiZones}
           videoRef={videoRef}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
