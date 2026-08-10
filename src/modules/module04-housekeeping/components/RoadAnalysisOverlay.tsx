@@ -9,6 +9,7 @@ import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cam
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { notifySafetyAiEventsChanged } from '@/modules/module03-safety/services/safetyAiEvents.service'
 import { useVmsDetections } from '@/modules/module03-safety/context/VmsDetectionContext'
+import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
 import { useStableOverlayDetections } from '@/modules/module03-safety/hooks/useStableOverlayDetections'
 import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
@@ -352,7 +353,7 @@ export function RoadAnalysisOverlay({
 
   if (!enabled) return null
 
-  const showPolygon = roiZones.length > 0
+  const showPolygon = roiZones.length > 0 && !isVmsLiveCamera(cameraId)
   const showBoxes = visible.length > 0 && frameSize.width > 0
   const video = videoRef.current
   const overlayFrameSize =

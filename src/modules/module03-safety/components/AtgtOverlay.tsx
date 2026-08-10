@@ -13,6 +13,7 @@ import {
 } from '../services/atgtBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
+import { isVmsLiveCamera } from '../services/vmsDetections.service'
 import { getRoiZonesForCamera } from '@/modules/module04-housekeeping/data/housekeepingRoiConfig'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
@@ -285,7 +286,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   const visible = [...violationVisible, ...medianVisible]
 
   const roadMaterialActive = isCameraAiModelEnabled(cameraId, 'road_material')
-  const showPolygon = !roadMaterialActive && roiZones.length > 0
+  const showPolygon = !roadMaterialActive && roiZones.length > 0 && !isVmsLiveCamera(cameraId)
   const showBoxes = visible.length > 0 && frameSize.width > 0
   const video = videoRef.current
   const overlayFrameSize =

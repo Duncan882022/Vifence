@@ -19,6 +19,7 @@ import {
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
+import { isVmsLiveCamera } from '../services/vmsDetections.service'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
 import { appendCraneProximityRelated, isMachineDetection } from '../utils/craneOverlayRelated'
 import { craneScanRank } from '../utils/overlayScanOrder'
@@ -429,7 +430,8 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
     return merged
   }, [stickyViolations, stableDetections])
 
-  const showPolygon = roiZones.length > 0
+  // VMS live (A-03/A-04): chỉ bbox detection — không vẽ polygon zone trên tile (Spec §D9).
+  const showPolygon = roiZones.length > 0 && !isVmsLiveCamera(cameraId)
   const video = videoRef.current
   const overlayFrameSize =
     frameSize.width > 0
