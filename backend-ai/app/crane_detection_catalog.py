@@ -14,7 +14,6 @@ from .crane_proximity_analyzer import (
     _bbox_edge_distance_px,
     _detect_machinery_units,
     _get_person_detector,
-    _machinery_search_mask,
 )
 from .crane_roi_config import (
     DEFAULT_PIXELS_PER_METER,
@@ -38,6 +37,26 @@ CRANE_CATALOG_STYLES: dict[str, dict[str, Any]] = {
     "crane_green": {
         "label": "Máy xúc",
         "color": (80, 220, 80),
+        "scenario": "DZ-003",
+    },
+    "road_roller": {
+        "label": "Xe lăn đường",
+        "color": (160, 160, 60),
+        "scenario": "DZ-003",
+    },
+    "dump_truck": {
+        "label": "Xe tải ben",
+        "color": (60, 120, 220),
+        "scenario": "DZ-003",
+    },
+    "forklift": {
+        "label": "Xe nâng",
+        "color": (220, 160, 60),
+        "scenario": "DZ-003",
+    },
+    "machinery": {
+        "label": "Máy thi công",
+        "color": (180, 180, 180),
         "scenario": "DZ-003",
     },
     "person": {
@@ -75,13 +94,11 @@ def analyze_crane_catalog(
     frame: np.ndarray,
     camera_id: str = "A-04",
 ) -> tuple[list[CraneCatalogDetection], list[list[dict]]]:
-    """Detect catalog — 3 máy + người trong vùng Cam 04."""
-    h, w = frame.shape[:2]
-    search = _machinery_search_mask(h, w)
+    """Detect catalog — máy móc (object-detection tổng quát) + người trong vùng Cam 04."""
     px_per_m = DEFAULT_PIXELS_PER_METER
     catalog: list[CraneCatalogDetection] = []
 
-    units = _detect_machinery_units(frame, search)
+    units = _detect_machinery_units(frame, camera_id)
     for unit in units:
         catalog.append(
             CraneCatalogDetection(
@@ -233,7 +250,11 @@ def render_crane_catalog(
             )
 
     scale = max(0.40, min(0.55, w / 1500))
-    order = {"tower_crane": 0, "sany_drill": 1, "crane_green": 2, "person": 3, "crane_proximity": 4}
+    order = {
+        "tower_crane": 0, "sany_drill": 1, "crane_green": 2,
+        "road_roller": 3, "dump_truck": 3, "forklift": 3, "machinery": 3,
+        "person": 4, "crane_proximity": 5,
+    }
     for det in sorted(detections, key=lambda d: order.get(d.kind, 9)):
         if det.behavior == "crane_proximity":
             continue
@@ -244,7 +265,10 @@ def render_crane_catalog(
     cv2.putText(out, title, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 200, 80), 1, cv2.LINE_AA)
 
     if show_legend:
-        kinds = ["tower_crane", "sany_drill", "crane_green", "person"]
+        kinds = [
+            "tower_crane", "sany_drill", "crane_green",
+            "road_roller", "dump_truck", "forklift", "machinery", "person",
+        ]
         present = [k for k in kinds if any(d.kind == k for d in detections)]
         lx, ly = 12, h - 14 - len(present) * 24
         cv2.rectangle(out, (8, ly - 12), (min(w - 8, 260), h - 8), (16, 16, 16), -1)

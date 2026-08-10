@@ -60,6 +60,17 @@ _MIN_WARM_HALO_RATIO = 0.22  # quanh lõi phải có màu ấm rõ, không phả
 _MIN_ORANGE_SATURATION_RATIO = 0.42  # đèn trắng/vàng nhạt (S thấp) -> loại
 _ORANGE_EXPAND_MARGIN = 0.25
 
+# Lửa/open flame sát mặt đất (đốm lửa nhỏ cạnh CN — demo Cam A-04, không cần 2 khung nhấp nháy).
+_GROUND_Y_MIN_RATIO = 0.72
+_GROUND_X_MIN_RATIO = 0.50
+_MIN_GROUND_AREA = 22
+_MAX_GROUND_AREA_RATIO = 0.0038
+_MIN_GROUND_VMAX = 140
+_MIN_GROUND_SMEAN = 92.0
+_MAX_GROUND_ASPECT = 3.4
+_MIN_GROUND_FILL = 0.22
+_GROUND_CY_MIN_RATIO = 0.84
+
 
 class FlameBlobDetector:
     """Detector heuristic (không dùng ML) bổ sung cho FireDetector.
@@ -133,6 +144,7 @@ class FlameBlobDetector:
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         detections = self._detect_blue(frame, hsv)
         detections.extend(self._detect_orange_flicker(frame, hsv))
+        detections.extend(self._detect_ground_orange(frame, hsv))
         return detections
 
     def _detect_blue(self, frame: np.ndarray, hsv: np.ndarray) -> list[Detection]:
@@ -248,3 +260,80 @@ class FlameBlobDetector:
                 )
             )
         return detections
+
+    def _detect_ground_orange(self, frame: np.ndarray, hsv: np.ndarray) -> list[Detection]:
+        """Đốm lửa cam/vàng sát mặt đất — bắt lửa củi/dầu nhỏ cạnh CN (1 khung hình)."""
+        h, w = frame.shape[:2]
+        frame_area = h * w
+        y0 = int(h * _GROUND_Y_MIN_RATIO)
+        x0 = int(w * _GROUND_X_MIN_RATIO)
+        roi_hsv = hsv[y0:, x0:]
+        if roi_hsv.size == 0:
+            return []
+
+        mask = cv2.bitwise_or(
+            cv2.inRange(roi_hsv, np.array([5, 80, 120], dtype=np.uint8), np.array([32, 255, 255], dtype=np.uint8)),
+            cv2.inRange(roi_hsv, np.array([0, 95, 145], dtype=np.uint8), np.array([14, 255, 255], dtype=np.uint8)),
+        )
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), 1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), 1)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        detections: list[Detection] = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < _MIN_GROUND_AREA or area > frame_area * _MAX_GROUND_AREA_RATIO:
+                continue
+            x, y, bw, bh = cv2.boundingRect(cnt)
+            abs_y = y0 + y + bh / 2
+            if abs_y < h * _GROUND_CY_MIN_RATIO:
+                continue
+            aspect = bw / max(bh, 1)
+            if aspect > _MAX_GROUND_ASPECT and area < frame_area * 0.0012:
+                continue
+
+            roi = roi_hsv[y : y + bh, x : x + bw]
+            if roi.size == 0:
+                continue
+            fill = cv2.countNonZero(mask[y : y + bh, x : x + bw]) / roi.shape[0] / roi.shape[1]
+            if fill < _MIN_GROUND_FILL:
+                continue
+            vmax = float(roi[:, :, 2].max())
+            smean = float(roi[:, :, 1].mean())
+            if vmax < _MIN_GROUND_VMAX or smean < _MIN_GROUND_SMEAN:
+                continue
+            if self._saturation_ratio(roi) < 0.34:
+                continue
+
+            # Loại vùng da lớn (CN ngồi gần lửa) — lửa thật nhỏ gọn, không phải bbox người.
+            if area > frame_area * 0.0018 and self._skin_ratio(roi) > 0.22:
+                continue
+
+            confidence = min(
+                0.78
+                + min(area / max(frame_area * 0.0012, 1.0), 1.0) * 0.10
+                + min((abs_y / h - _GROUND_CY_MIN_RATIO) * 0.35, 0.08),
+                0.92,
+            )
+            if confidence < max(self.conf_threshold, 0.80):
+                continue
+
+            detections.append(
+                Detection(
+                    behavior=self.behavior,
+                    label="flame-ground",
+                    confidence=confidence,
+                    bbox=[
+                        float(x0 + x),
+                        float(y0 + y),
+                        float(x0 + x + bw),
+                        float(y0 + y + bh),
+                    ],
+                )
+            )
+
+        if not detections:
+            return []
+
+        detections.sort(key=lambda d: d.confidence, reverse=True)
+        return [detections[0]]

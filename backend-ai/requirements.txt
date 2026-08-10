@@ -1,7 +1,7 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 opencv-python>=4.9
-ultralytics>=8.3
+ultralytics>=8.3.50
 huggingface_hub>=0.24
 hf_xet>=1.0  # bắt buộc để tải file từ repo HF dùng Xet storage (vd model cháy nổ/hút thuốc ở trên)
 pydantic>=2.7
@@ -9,3 +9,5 @@ pydantic-settings>=2.4
 eval_type_backport>=0.2  # cho phép pydantic hiểu cú pháp "X | None" trên Python < 3.10
 python-dotenv>=1.0
 numpy>=1.26
+torch>=2.0
+transformers>=4.40  # OWLv2 zero-shot — detect máy móc DZ (Cam A-04) theo mô tả text, không rule màu/vị trí cố định

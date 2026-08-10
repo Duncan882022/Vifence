@@ -12,17 +12,18 @@ from .events import EventStore, PersistenceDebouncer
 from .ppe_analyzer import analyze_ppe_frame
 from .schemas import PpeDetection, ViolationEvent
 from .track_matching import assign_person_track_id
-from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
+from .snapshot_sync import build_snapshot_episode, merge_episode_best, resync_ppe_episode
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("ppe_engine")
 
-_CONFIRM_SECONDS = 3.0
+_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _REPEAT_SECONDS = settings.ppe_event_repeat_seconds
-_MAX_GAP_SECONDS = 3.0
+_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _TRACK_EXPIRE_SECONDS = 4.0
 _VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _EVENT_BEHAVIORS = frozenset({"no_helmet", "no_vest", "no_shoes"})
-_MAX_TRACKS = 24
+_MAX_TRACKS = 36
 
 
 class _PpeTrack:
@@ -90,7 +91,14 @@ class PpeEngine:
             )
         return self._gates[camera_id][track_id]
 
-    def process_frame(self, frame: np.ndarray, camera_id: str) -> tuple[dict, list[ViolationEvent]]:
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        capture_frame: np.ndarray | None = None,
+    ) -> tuple[dict, list[ViolationEvent]]:
+        snapshot_source = capture_frame if capture_frame is not None else frame
         result = analyze_ppe_frame(frame, camera_id)
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
@@ -110,6 +118,7 @@ class PpeEngine:
         ]
 
         matched_ids: set[str] = set()
+        assigned_this_frame: set[str] = set()
 
         if len(tracks) + len(violations) > _MAX_TRACKS:
             violations.sort(key=lambda d: d.confidence, reverse=True)
@@ -128,9 +137,11 @@ class PpeEngine:
                 frame_w=frame_w,
                 frame_h=frame_h,
                 max_tracks=_MAX_TRACKS,
+                blocked_tracks=assigned_this_frame,
             )
             if track_id is None:
                 continue
+            assigned_this_frame.add(track_id)
             slot = _person_slot(person_bbox, frame_w, frame_h)
 
             gate = self._gate_for(camera_id, track_id)
@@ -144,18 +155,19 @@ class PpeEngine:
             state.person_bbox = person_bbox
             state.last_seen = now
 
-            if state.episode_best is None or det.confidence > state.episode_best["detection"].confidence:
-                state.episode_best = {
-                    "detection": det,
-                    "frame": frame.copy(),
-                    "person_bbox": person_bbox,
-                }
+            state.episode_best = merge_episode_best(
+                state.episode_best,
+                detection=det,
+                analyze_frame=frame,
+                capture_frame=snapshot_source,
+                person_bbox=person_bbox,
+            )
 
             was_active = gate.snapshot()["active"]
             confirmed = gate.register(True)
 
             if confirmed and state.episode_best:
-                pending = state.episode_best
+                pending = resync_ppe_episode(state.episode_best, camera_id)
                 state.episode_best = None
                 top_det = pending["detection"]
                 if top_det.confidence >= _VIOLATION_MIN_CONF:

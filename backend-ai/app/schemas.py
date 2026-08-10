@@ -32,7 +32,8 @@ class CraneProximityDetection(BaseModel):
     confidence: float
     bbox: list[float]
     distance_m: Optional[float] = None
-    machine_kind: Optional[str] = None  # crane_green | excavator_orange | machinery
+    machine_kind: Optional[str] = None  # tower_crane | crane_green | sany_drill | road_roller | dump_truck | forklift | machinery
+    machine_bbox: Optional[list[float]] = None
 
 
 class PpeDetection(BaseModel):
@@ -62,6 +63,7 @@ class Detection(BaseModel):
     label: str  # tên class gốc trả về từ model (vd "cigarette", "fire", "smoke")
     confidence: float
     bbox: list[float]  # [x1, y1, x2, y2] toạ độ pixel trên frame gốc
+    subject_bbox: Optional[list[float]] = None  # người vi phạm (snapshot PCCC heuristic)
     vehicle_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
     driver_name: Optional[str] = None
@@ -225,12 +227,16 @@ class ViolationEvent(BaseModel):
     confidence: float
     bbox: list[float]
     subject_bbox: Optional[list[float]] = None
+    related_bbox: Optional[list[float]] = None
     frame_width: Optional[int] = None
     frame_height: Optional[int] = None
     created_at: float = Field(default_factory=time.time)
+    confirmed_at: Optional[float] = None  # Unix timestamp khi đủ confirm (VMS)
     event_date: Optional[str] = None
     camera_id: str = "LOCAL-CAM"
     snapshot_file: Optional[str] = None
+    clip_file: Optional[str] = None       # Đường dẫn clip MP4 (VMS mode)
+    clip_duration_sec: Optional[float] = None
     dedup_key: Optional[str] = None
     vehicle_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
@@ -420,7 +426,8 @@ class ViolationEvent(BaseModel):
 
 
 class WorkerGalleryEnrollPayload(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
+    cccd: Optional[str] = None
     worker_name: str
     employee_code: str
     contractor_name: Optional[str] = None

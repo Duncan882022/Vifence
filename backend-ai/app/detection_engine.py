@@ -11,7 +11,6 @@ from .config import settings
 from .detectors import FireDetector, SmokingDetector
 from .detectors.flame_blob_detector import FlameBlobDetector
 from .events import EventStore, PersistenceDebouncer
-from .pccc_demo import match_demo_detections
 from .schemas import Detection, ViolationEvent
 from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 
@@ -220,19 +219,15 @@ class DetectionEngine:
     ) -> tuple[list[Detection], list[ViolationEvent]]:
         """Chạy detector trên 1 frame, trả về detections + events mới."""
         all_detections: list[Detection] = []
-        demo_dets = match_demo_detections(frame, camera_id) if camera_id else None
-        if demo_dets:
-            all_detections.extend(demo_dets)
-        else:
-            for detector in self.detectors:
-                if not detector.ready:
-                    continue
-                name = getattr(detector, "name", detector.behavior)
-                if detector_names is not None and name not in detector_names:
-                    continue
-                all_detections.extend(detector.predict(frame))
+        for detector in self.detectors:
+            if not detector.ready:
+                continue
+            name = getattr(detector, "name", detector.behavior)
+            if detector_names is not None and name not in detector_names:
+                continue
+            all_detections.extend(detector.predict(frame))
 
-            all_detections = _augment_with_auto_train_model(frame, all_detections)
+        all_detections = _augment_with_auto_train_model(frame, all_detections)
 
         by_behavior: dict[str, list[Detection]] = {}
         for det in all_detections:

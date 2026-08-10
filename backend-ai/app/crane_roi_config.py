@@ -21,14 +21,6 @@ class CraneRoiZone(TypedDict, total=False):
     pixels_per_meter: float
 
 
-# ROI máy xúc (bên phải) — fallback khi JPEG nén làm lệch màu detect
-GREEN_EXCAVATOR_ROI: list[RoiPoint] = [
-    {"x": 0.34, "y": 0.30},
-    {"x": 0.97, "y": 0.32},
-    {"x": 0.97, "y": 0.82},
-    {"x": 0.30, "y": 0.78},
-]
-
 CRANE_ROI_ZONES: list[CraneRoiZone] = [
     {
         "id": "roi-crane-body-a04",
@@ -37,10 +29,10 @@ CRANE_ROI_ZONES: list[CraneRoiZone] = [
         "cameraId": "A-04",
         "pixels_per_meter": 92.0,
         "polygon": [
-            {"x": 0.32, "y": 0.06},
-            {"x": 0.94, "y": 0.10},
-            {"x": 0.90, "y": 0.52},
-            {"x": 0.26, "y": 0.46},
+            {"x": 0.18, "y": 0.10},
+            {"x": 0.82, "y": 0.10},
+            {"x": 0.78, "y": 0.54},
+            {"x": 0.22, "y": 0.50},
         ],
     },
     {
@@ -49,10 +41,10 @@ CRANE_ROI_ZONES: list[CraneRoiZone] = [
         "type": "CRANE_WORK",
         "cameraId": "A-04",
         "polygon": [
-            {"x": 0.08, "y": 0.42},
-            {"x": 0.96, "y": 0.44},
-            {"x": 0.96, "y": 0.98},
-            {"x": 0.04, "y": 0.98},
+            {"x": 0.06, "y": 0.56},
+            {"x": 0.94, "y": 0.56},
+            {"x": 0.94, "y": 0.98},
+            {"x": 0.06, "y": 0.98},
         ],
     },
 ]

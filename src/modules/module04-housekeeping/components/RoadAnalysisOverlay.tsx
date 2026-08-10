@@ -8,6 +8,7 @@ import {
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { notifySafetyAiEventsChanged } from '@/modules/module03-safety/services/safetyAiEvents.service'
+import { useVmsDetections } from '@/modules/module03-safety/context/VmsDetectionContext'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
 import { useStableOverlayDetections } from '@/modules/module03-safety/hooks/useStableOverlayDetections'
 import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
@@ -206,6 +207,29 @@ function useRoadAnalysisState(
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
+  const vms = useVmsDetections()
+
+  useEffect(() => {
+    if (!enabled || !vms?.active || !vms.snapshot) return
+    const roadMetrics = vms.snapshot.metrics.road as RoadAnalysisResult['metrics'] | undefined
+    setDetections(visibleDetections(
+      vms.snapshot.detections
+        .filter(d => d.behavior === 'mud' || d.behavior === 'water' || d.behavior === 'object')
+        .map(d => ({
+          behavior: d.behavior as RoadAnalysisDetection['behavior'],
+          label: d.label,
+          scenario_id: d.scenario_id ?? '',
+          confidence: d.confidence,
+          bbox: d.bbox,
+        })),
+      vms.snapshot.width,
+      vms.snapshot.height,
+    ))
+    setFrameSize({ width: vms.snapshot.width, height: vms.snapshot.height })
+    setMetrics(roadMetrics)
+    setStatus(vms.status)
+    setStatusMsg(vms.statusMsg)
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
 
   useEffect(() => {
     const bump = () => setBackendUrlVersion(v => v + 1)
@@ -243,9 +267,11 @@ function useRoadAnalysisState(
 
   useEffect(() => {
     stopClient()
-    if (!enabled) {
-      setStatus('idle')
-      setDetections([])
+    if (!enabled || vms?.active) {
+      if (!enabled) {
+        setStatus('idle')
+        setDetections([])
+      }
       return
     }
 
@@ -278,9 +304,16 @@ function useRoadAnalysisState(
     })
 
     return stopClient
-  }, [cameraId, enabled, stopClient, videoRef, backendUrlVersion])
+  }, [cameraId, enabled, stopClient, videoRef, backendUrlVersion, vms?.active])
 
-  return { status, statusMsg, detections, frameSize, metrics, roiZones, layoutTick, backendUrlVersion }
+  const effectiveRoiZones = useMemo<RoadAnalysisRoiZone[]>(() => {
+    const fromVms = (vms?.snapshot?.roi_zones ?? [])
+      .filter(z => z.type === 'ROAD')
+    if (fromVms.length > 0) return fromVms
+    return roiZones
+  }, [roiZones, vms?.snapshot?.roi_zones])
+
+  return { status, statusMsg, detections, frameSize, metrics, roiZones: effectiveRoiZones, layoutTick, backendUrlVersion }
 }
 
 export function RoadAnalysisOverlay({

@@ -11,6 +11,7 @@ import {
   type PpeMetrics,
 } from '../services/ppeBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
+import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
@@ -42,6 +43,30 @@ function usePpeState(
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
+  const vms = useVmsDetections()
+
+  useEffect(() => {
+    if (!enabled || !vms?.active || !vms.snapshot) return
+    const ppeMetrics = vms.snapshot.metrics.ppe as PpeMetrics | undefined
+    setFrameSize({ width: vms.snapshot.width, height: vms.snapshot.height })
+    setMetrics(ppeMetrics ?? {
+      person_count: vms.snapshot.detections.filter(d => d.behavior === 'person').length,
+      ppe_violations: vms.snapshot.detections.filter(d => d.behavior.startsWith('no_')).length,
+    })
+    setDetections(
+      vms.snapshot.detections
+        .filter(d => ['person', 'hard_hat', 'no_helmet', 'safety_vest', 'no_vest', 'safety_shoes', 'no_shoes'].includes(d.behavior))
+        .map(d => ({
+          behavior: d.behavior as PpeDetection['behavior'],
+          label: d.label,
+          scenario_id: d.scenario_id ?? '',
+          confidence: d.confidence,
+          bbox: d.bbox,
+        })),
+    )
+    setStatus(vms.status)
+    setStatusMsg(vms.statusMsg)
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
 
   useEffect(() => {
     const bump = () => setBackendUrlVersion(v => v + 1)
@@ -58,11 +83,13 @@ function usePpeState(
 
   useEffect(() => {
     const video = videoRef.current
-    if (!enabled || !video) {
+    if (!enabled || !video || vms?.active) {
       clientRef.current?.stop()
       clientRef.current = null
-      setDetections([])
-      setStatus('idle')
+      if (!enabled) {
+        setDetections([])
+        setStatus('idle')
+      }
       return
     }
 
@@ -91,7 +118,7 @@ function usePpeState(
       clientRef.current?.stop()
       clientRef.current = null
     }
-  }, [cameraId, enabled, videoRef, backendUrlVersion])
+  }, [cameraId, enabled, videoRef, backendUrlVersion, vms?.active])
 
   useEffect(() => {
     const video = videoRef.current

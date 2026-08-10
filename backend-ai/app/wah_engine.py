@@ -11,14 +11,15 @@ from .config import settings
 from .events import EventStore, PersistenceDebouncer
 from .schemas import Detection, ViolationEvent
 from .track_matching import assign_person_track_id
-from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
-from .wah_demo import match_demo_detections
+from .snapshot_sync import build_snapshot_episode, merge_episode_best
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
+from .wah_analyzer import analyze_wah_frame
 
 logger = logging.getLogger("wah_engine")
 
-_CONFIRM_SECONDS = 0.0
+_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _REPEAT_SECONDS = settings.wah_event_repeat_seconds
-_MAX_GAP_SECONDS = 3.0
+_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _EVENT_BEHAVIOR = "no_harness"
 _MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _MAX_TRACKS = 12
@@ -41,13 +42,6 @@ def _bbox_center(bbox: list[float] | tuple[float, ...]) -> tuple[float, float]:
 def _center_inside(inner: list[float], outer: list[float]) -> bool:
     cx, cy = _bbox_center(inner)
     return outer[0] <= cx <= outer[2] and outer[1] <= cy <= outer[3]
-
-
-def _person_slot(person_bbox: list[float], frame_w: int, frame_h: int) -> str:
-    cx, cy = _bbox_center(person_bbox)
-    gx = min(7, int(cx / max(frame_w / 8, 1)))
-    gy = min(5, int(cy / max(frame_h / 6, 1)))
-    return f"p{gy}{gx}"
 
 
 def _match_person(violation: Detection, persons: list[Detection]) -> Detection | None:
@@ -96,12 +90,16 @@ class WahEngine:
         return self._gates[camera_id][track_id]
 
     def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
-        demo = match_demo_detections(frame, camera_id)
-        if demo:
-            return demo
-        return []
+        return analyze_wah_frame(frame, camera_id)
 
-    def process_frame(self, frame: np.ndarray, camera_id: str) -> tuple[dict, list[ViolationEvent]]:
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        capture_frame: np.ndarray | None = None,
+    ) -> tuple[dict, list[ViolationEvent]]:
+        snapshot_source = capture_frame if capture_frame is not None else frame
         detections = self._collect_detections(frame, camera_id)
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
@@ -126,6 +124,7 @@ class WahEngine:
             violations = violations[: max(0, _MAX_TRACKS - len(tracks))]
 
         matched_ids: set[str] = set()
+        assigned_this_frame: set[str] = set()
 
         for det in violations:
             person = _match_person(det, persons)
@@ -140,9 +139,11 @@ class WahEngine:
                 frame_w=frame_w,
                 frame_h=frame_h,
                 max_tracks=_MAX_TRACKS,
+                blocked_tracks=assigned_this_frame,
             )
             if track_id is None:
                 continue
+            assigned_this_frame.add(track_id)
             slot = track_id.split(":")[0]
 
             if track_id not in tracks:
@@ -157,12 +158,13 @@ class WahEngine:
 
             gate = self._gate_for(camera_id, track_id)
 
-            if state.episode_best is None or det.confidence > state.episode_best["detection"].confidence:
-                state.episode_best = {
-                    "detection": det,
-                    "frame": frame.copy(),
-                    "person_bbox": person_bbox,
-                }
+            state.episode_best = merge_episode_best(
+                state.episode_best,
+                detection=det,
+                analyze_frame=frame,
+                capture_frame=snapshot_source,
+                person_bbox=person_bbox,
+            )
 
             was_active = gate.snapshot()["active"]
             confirmed = gate.register(True)

@@ -8,11 +8,13 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 
 from ..config import settings
 from . import registry
+from .paths import DATA_DIR
 from .tasks import TASKS
 
 logger = logging.getLogger("auto_train.inference")
@@ -20,6 +22,23 @@ logger = logging.getLogger("auto_train.inference")
 _cache: dict[str, dict] = {}
 _lock = threading.Lock()
 _RECHECK_SECONDS = 60.0
+
+
+def _resolve_weights_path(task_id: str, path: str | None) -> Path | None:
+    """Registry có thể ghi path máy dev — fallback theo tên file trong DATA_DIR."""
+    if path:
+        candidate = Path(path)
+        if candidate.is_file():
+            return candidate
+        by_name = DATA_DIR / task_id / candidate.name
+        if by_name.is_file():
+            return by_name
+    task_dir = DATA_DIR / task_id
+    if task_dir.is_dir():
+        weights = sorted(task_dir.glob("*.pt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if weights:
+            return weights[0]
+    return None
 
 
 def _is_manual_promoted(task_id: str) -> bool:
@@ -43,21 +62,24 @@ def get_model(task_id: str):
         if entry and now - entry["checked_at"] < _RECHECK_SECONDS:
             return entry["model"]
 
-        active_path = registry.get_active_weights(task_id)
-        if entry and entry.get("path") == active_path:
+        active_path = registry.get(task_id)
+        raw_weights = active_path.get("active_weights") if active_path else None
+        resolved = _resolve_weights_path(task_id, raw_weights)
+        if entry and entry.get("path") == (str(resolved) if resolved else None):
             entry["checked_at"] = now
             return entry["model"]
 
-        if not active_path:
+        if not resolved:
             _cache[task_id] = {"model": None, "path": None, "checked_at": now}
             return None
 
         try:
             from ultralytics import YOLO
 
-            model = YOLO(active_path)
-            _cache[task_id] = {"model": model, "path": active_path, "checked_at": now}
-            logger.info("[%s] Đã load model auto-train: %s", task_id, active_path)
+            weights = str(resolved)
+            model = YOLO(weights)
+            _cache[task_id] = {"model": model, "path": weights, "checked_at": now}
+            logger.info("[%s] Đã load model auto-train: %s", task_id, weights)
             return model
         except Exception as exc:  # noqa: BLE001
             logger.warning(

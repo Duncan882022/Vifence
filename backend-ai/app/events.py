@@ -10,10 +10,18 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from .atgt_plate_reader import read_vehicle_plate
 from .crane_detection_catalog import CRANE_CATALOG_STYLES
 from .config import settings
 from .event_dedup import EventDedupRegistry, build_dedup_key, dedupe_events_by_key
-from .schemas import ATGT_SCENARIO_META, Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
+from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
+from .snapshot_compose import (
+    compose_violation_snapshot,
+    draw_atld_roi_box,
+    format_snapshot_badge,
+    format_snapshot_code,
+    merge_bboxes,
+)
 
 logger = logging.getLogger("events")
 
@@ -24,7 +32,11 @@ LEGACY_EVENTS_FILE = DATA_DIR / "events.jsonl"
 
 
 def _event_date(ts: Optional[float] = None) -> str:
-    return datetime.fromtimestamp(ts or time.time()).strftime("%Y-%m-%d")
+    """Ngày sự kiện theo giờ VN — đồng bộ filter FE (?date= / getSafetyTodayDate)."""
+    from datetime import timezone, timedelta
+
+    vn = timezone(timedelta(hours=7))
+    return datetime.fromtimestamp(ts or time.time(), tz=vn).strftime("%Y-%m-%d")
 
 
 def _daily_events_file(date: str) -> Path:
@@ -132,26 +144,6 @@ class PersistenceDebouncer:
         }
 
 
-class Debouncer:
-    """Legacy hit-window debouncer — giữ cho tương thích test."""
-
-    def __init__(self, hits: int, window: int, cooldown_seconds: float):
-        self.hits_required = hits
-        self.window = deque(maxlen=window)
-        self.cooldown_seconds = cooldown_seconds
-        self._last_confirmed_at: float = 0.0
-
-    def register(self, hit: bool) -> bool:
-        self.window.append(hit)
-        if sum(self.window) < self.hits_required:
-            return False
-        now = time.time()
-        if now - self._last_confirmed_at < self.cooldown_seconds:
-            return False
-        self._last_confirmed_at = now
-        return True
-
-
 class EventStore:
     """Lưu event RAM + JSONL theo ngày + snapshot ảnh theo ngày."""
 
@@ -194,22 +186,26 @@ class EventStore:
     def _finalize_event(
         self,
         event: ViolationEvent,
-        annotated: np.ndarray,
+        snapshot_image: np.ndarray,
         dedup_key: str,
         log_template: str,
         *log_args: object,
+        frame_size: Optional[tuple[int, int]] = None,
     ) -> Optional[ViolationEvent]:
         if self._dedup.should_skip(dedup_key):
             return None
 
         event.dedup_key = dedup_key
         event_date = event.event_date or _event_date(event.created_at)
-        h, w = annotated.shape[:2]
-        event.frame_width = int(w)
-        event.frame_height = int(h)
+        if frame_size:
+            event.frame_width, event.frame_height = frame_size
+        else:
+            h, w = snapshot_image.shape[:2]
+            event.frame_width = int(w)
+            event.frame_height = int(h)
         snapshot_name = f"{event_date}/{event.id}.jpg"
         snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
-        cv2.imwrite(str(snapshot_path), annotated)
+        cv2.imwrite(str(snapshot_path), snapshot_image)
         event.snapshot_file = snapshot_name
 
         with self._lock:
@@ -218,6 +214,28 @@ class EventStore:
         self._dedup.register(dedup_key, event.created_at)
         logger.info(log_template, *log_args)
         return event
+
+    @staticmethod
+    def _compose_event_snapshot(
+        raw: np.ndarray,
+        annotated: np.ndarray,
+        event: ViolationEvent,
+        *,
+        behavior: str = "",
+        focus_bbox: Optional[list[float]] = None,
+    ) -> np.ndarray:
+        return compose_violation_snapshot(
+            raw,
+            annotated,
+            scenario_id=event.scenario_id,
+            behavior=behavior,
+            focus_bbox=focus_bbox,
+        )
+
+    @staticmethod
+    def _frame_size(raw: np.ndarray) -> tuple[int, int]:
+        h, w = raw.shape[:2]
+        return int(w), int(h)
 
     def add(
         self,
@@ -235,16 +253,69 @@ class EventStore:
             camera_id=camera_id,
         )
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, detection.behavior)
-        annotated = self._draw_bbox(frame, detection)
+        raw = frame.copy()
+        annotated = self._draw_bbox(raw, detection)
+        snapshot = self._compose_event_snapshot(
+            raw,
+            annotated,
+            event,
+            behavior=detection.behavior,
+            focus_bbox=list(detection.bbox),
+        )
         return self._finalize_event(
             event,
-            annotated,
+            snapshot,
             key,
             "Sự kiện mới [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
+            frame_size=self._frame_size(raw),
+        )
+
+    def add_pccc(
+        self,
+        detection: Detection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-04",
+        person_bbox: Optional[list[float]] = None,
+        dedup_key: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
+        event_date = _event_date()
+        event = ViolationEvent.from_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        subject = person_bbox or getattr(detection, "subject_bbox", None)
+        if subject and len(subject) >= 4:
+            event.subject_bbox = [float(v) for v in subject]
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, detection.behavior)
+        raw = frame.copy()
+        annotated = self._draw_pccc_snapshot(raw, detection, subject)
+        focus_parts: list[list[float]] = [list(detection.bbox)]
+        if subject and len(subject) >= 4:
+            focus_parts.append([float(v) for v in subject])
+        snapshot = self._compose_event_snapshot(
+            raw,
+            annotated,
+            event,
+            behavior=detection.behavior,
+            focus_bbox=merge_bboxes(focus_parts),
+        )
+        return self._finalize_event(
+            event,
+            snapshot,
+            key,
+            "Sự kiện PCCC [%s]: %s (%s) conf=%.2f",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+            frame_size=self._frame_size(raw),
         )
 
     def add_road(
@@ -265,16 +336,19 @@ class EventStore:
         )
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
-        annotated = self._draw_road_bbox(frame, detection)
+        raw = frame.copy()
+        annotated = self._draw_road_bbox(raw, detection)
+        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
         return self._finalize_event(
             event,
-            annotated,
+            snapshot,
             key,
             "Sự kiện road [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
+            frame_size=self._frame_size(raw),
         )
 
     def add_crane(
@@ -284,8 +358,12 @@ class EventStore:
         *,
         camera_id: str = "A-04",
         context: Optional[list[CraneProximityDetection]] = None,
+        person_bbox: Optional[list[float]] = None,
+        machine_bbox: Optional[list[float]] = None,
         dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
     ) -> Optional[ViolationEvent]:
+        _ = context
         event_date = _event_date()
         event = ViolationEvent.from_crane_detection(
             detection,
@@ -293,11 +371,23 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, "proximity")
-        annotated = self._draw_crane_snapshot(frame, detection, context)
+        if person_bbox and len(person_bbox) >= 4:
+            event.subject_bbox = [float(v) for v in person_bbox]
+        if machine_bbox and len(machine_bbox) >= 4:
+            event.related_bbox = [float(v) for v in machine_bbox]
+        stable_track = track_id or "proximity"
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
+        raw = frame.copy()
+        annotated = self._draw_crane_snapshot(
+            raw,
+            detection,
+            person_bbox=person_bbox,
+            machine_bbox=machine_bbox,
+        )
+        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
         return self._finalize_event(
             event,
-            annotated,
+            snapshot,
             key,
             "Sự kiện crane [%s]: %s (%s) conf=%.2f dist=%s",
             event_date,
@@ -305,6 +395,7 @@ class EventStore:
             event.id,
             event.confidence,
             getattr(detection, "distance_m", None),
+            frame_size=self._frame_size(raw),
         )
 
     def add_ppe(
@@ -328,16 +419,19 @@ class EventStore:
             event.subject_bbox = [float(v) for v in person_bbox]
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
-        annotated = self._draw_ppe_snapshot(frame, detection, person_bbox)
+        raw = frame.copy()
+        annotated = self._draw_ppe_snapshot(raw, detection, person_bbox)
+        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
         return self._finalize_event(
             event,
-            annotated,
+            snapshot,
             key,
             "Sự kiện PPE [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
+            frame_size=self._frame_size(raw),
         )
 
     def add_wah(
@@ -361,16 +455,19 @@ class EventStore:
             event.subject_bbox = [float(v) for v in person_bbox]
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
-        annotated = self._draw_wah_snapshot(frame, detection, person_bbox)
+        raw = frame.copy()
+        annotated = self._draw_wah_snapshot(raw, detection, person_bbox)
+        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
         return self._finalize_event(
             event,
-            annotated,
+            snapshot,
             key,
             "Sự kiện WAH [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
+            frame_size=self._frame_size(raw),
         )
 
     @classmethod
@@ -380,22 +477,20 @@ class EventStore:
         detection: Detection,
         person_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
+        """Snapshot WAH — chỉ vùng vi phạm (không vẽ người)."""
+        _ = person_bbox
         annotated = frame.copy()
         h, w = frame.shape[:2]
-        if person_bbox and len(person_bbox) >= 4:
-            px1, py1, px2, py2 = [int(v) for v in person_bbox]
-            px1, py1 = max(0, px1), max(0, py1)
-            px2, py2 = min(w - 1, px2), min(h - 1, py2)
-            cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 200, 80), 1)
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255)
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        label = f"{detection.label} {detection.confidence * 100:.0f}%"
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
+        label = format_snapshot_badge(code, detection.confidence)
         cv2.putText(
             annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2,
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
         )
         return annotated
 
@@ -418,19 +513,27 @@ class EventStore:
         )
         if vehicle_bbox and len(vehicle_bbox) >= 4:
             event.subject_bbox = [float(v) for v in vehicle_bbox]
+        if not getattr(detection, "vehicle_plate", None) and vehicle_bbox and len(vehicle_bbox) >= 4:
+            retry = read_vehicle_plate(frame, vehicle_bbox)
+            if retry:
+                detection = detection.model_copy(update={"vehicle_plate": retry})
+                event.vehicle_plate = retry
         plate = getattr(detection, "vehicle_plate", None)
         stable_track = track_id or (plate if plate else detection.behavior)
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
-        annotated = self._draw_atgt_snapshot(frame, detection, vehicle_bbox)
+        raw = frame.copy()
+        annotated = self._draw_atgt_snapshot(raw, detection, vehicle_bbox)
+        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
         return self._finalize_event(
             event,
-            annotated,
+            snapshot,
             key,
             "Sự kiện ATGT [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
             event.confidence,
+            frame_size=self._frame_size(raw),
         )
 
     @classmethod
@@ -440,13 +543,10 @@ class EventStore:
         detection: Detection,
         vehicle_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
+        """Snapshot ATGT — chỉ vùng vi phạm (không vẽ xe info)."""
+        _ = vehicle_bbox
         annotated = frame.copy()
         h, w = frame.shape[:2]
-        if vehicle_bbox and len(vehicle_bbox) >= 4:
-            vx1, vy1, vx2, vy2 = [int(v) for v in vehicle_bbox]
-            vx1, vy1 = max(0, vx1), max(0, vy1)
-            vx2, vy2 = min(w - 1, vx2), min(h - 1, vy2)
-            cv2.rectangle(annotated, (vx1, vy1), (vx2, vy2), (180, 180, 180), 1)
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
@@ -456,24 +556,12 @@ class EventStore:
             "no_soft_median": (200, 80, 255),
         }
         color = colors.get(detection.behavior, (0, 200, 255))
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        meta = ATGT_SCENARIO_META.get(detection.behavior, {})
-        snapshot_banners = {
-            "speeding": "ATGT-002 · Phuong tien vuot qua toc do quy dinh",
-            "no_soft_median": "ATGT-004 · Khong to chuc phan lan, luong giao thong",
-        }
-        base = snapshot_banners.get(
-            detection.behavior,
-            meta.get("scenario_id", "ATGT"),
-        )
-        plate = getattr(detection, "vehicle_plate", None)
-        if plate and detection.behavior == "speeding":
-            base = f"{base} · {plate}"
-        banner = f"{base} · {detection.confidence * 100:.0f}%"
-        cv2.rectangle(annotated, (0, 0), (w - 1, 28), (8, 40, 60), -1)
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
+        label = format_snapshot_badge(code, detection.confidence)
         cv2.putText(
-            annotated, banner, (8, 20),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1,
+            annotated, label, (x1, max(y1 - 8, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
         )
         return annotated
 
@@ -484,14 +572,9 @@ class EventStore:
         detection: PpeDetection,
         person_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
-        annotated = frame.copy()
-        if person_bbox and len(person_bbox) >= 4:
-            px1, py1, px2, py2 = [int(v) for v in person_bbox]
-            h, w = frame.shape[:2]
-            px1, py1 = max(0, px1), max(0, py1)
-            px2, py2 = min(w - 1, px2), min(h - 1, py2)
-            cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 200, 80), 1)
-        return cls._draw_ppe_bbox(annotated, detection, copy_frame=False)
+        """Snapshot PPE — chỉ vùng lỗi (mũ/áo/giày), không vẽ người."""
+        _ = person_bbox
+        return cls._draw_ppe_bbox(frame, detection, copy_frame=True, thickness=2)
 
     @staticmethod
     def _draw_ppe_bbox(
@@ -499,6 +582,7 @@ class EventStore:
         detection: PpeDetection,
         *,
         copy_frame: bool = True,
+        thickness: int = 2,
     ) -> np.ndarray:
         annotated = frame.copy() if copy_frame else frame
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
@@ -515,12 +599,19 @@ class EventStore:
             "person": (255, 200, 80),
         }
         color = colors.get(detection.behavior, (0, 255, 0))
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        label = f"{detection.label} {detection.confidence * 100:.0f}%"
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
+        code = format_snapshot_code(detection.behavior, detection.scenario_id)
+        if detection.behavior != "person":
+            label = format_snapshot_badge(code, detection.confidence)
+            cv2.putText(
+                annotated, label, (x1, max(y1 - 8, 12)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
+            )
+        else:
+            cv2.putText(
+                annotated, code, (x1, max(y1 - 8, 12)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1,
+            )
         return annotated
 
     @staticmethod
@@ -545,9 +636,14 @@ class EventStore:
         else:
             color = CRANE_CATALOG_STYLES.get(detection.behavior, CRANE_CATALOG_STYLES["person"])["color"]
         thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness)
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
+        code = format_snapshot_code(
+            detection.behavior,
+            detection.scenario_id,
+            machine_kind=getattr(detection, "machine_kind", None),
+        )
         dist = f" · {detection.distance_m:.2f}m" if detection.distance_m is not None else ""
-        label = f"{detection.label} {detection.confidence * 100:.0f}%{dist}"
+        label = format_snapshot_badge(code, detection.confidence, dist)
         cv2.putText(
             annotated, label, (x1, max(y1 - 8, 12)),
             cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
@@ -559,13 +655,25 @@ class EventStore:
         cls,
         frame: np.ndarray,
         primary: CraneProximityDetection,
-        context: Optional[list[CraneProximityDetection]] = None,
+        *,
+        person_bbox: Optional[list[float]] = None,
+        machine_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
+        """Snapshot DZ — chỉ người vi phạm + máy liên quan, không vẽ toàn bộ context."""
         annotated = frame.copy()
-        for det in context or []:
-            if det.behavior == primary.behavior and det.bbox == primary.bbox:
-                continue
-            cls._draw_crane_bbox(annotated, det, emphasis=False, copy_frame=False)
+        _ = person_bbox if person_bbox and len(person_bbox) >= 4 else primary.bbox
+
+        if machine_bbox and len(machine_bbox) >= 4:
+            machine_det = CraneProximityDetection(
+                behavior="crane",
+                label=primary.label,
+                scenario_id=primary.scenario_id,
+                confidence=primary.confidence,
+                bbox=[float(v) for v in machine_bbox],
+                machine_kind=primary.machine_kind,
+            )
+            cls._draw_crane_bbox(annotated, machine_det, emphasis=False, copy_frame=False)
+
         cls._draw_crane_bbox(annotated, primary, emphasis=True, copy_frame=False)
         return annotated
 
@@ -586,8 +694,35 @@ class EventStore:
             "mesh_dirty": (40, 180, 40),
         }
         color = colors.get(detection.behavior, (0, 255, 0))
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        label = f"{detection.label} {detection.confidence:.2f}"
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        code = format_snapshot_code(detection.behavior, detection.scenario_id)
+        label = format_snapshot_badge(code, detection.confidence)
+        cv2.putText(
+            annotated, label, (x1, max(y1 - 8, 12)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
+        )
+        return annotated
+
+    @staticmethod
+    def _draw_pccc_snapshot(
+        frame: np.ndarray,
+        detection: Detection,
+        person_bbox: Optional[list[float]] = None,
+    ) -> np.ndarray:
+        annotated = frame.copy()
+        h, w = frame.shape[:2]
+        if person_bbox and len(person_bbox) >= 4:
+            px1, py1, px2, py2 = [int(v) for v in person_bbox]
+            px1, py1 = max(0, px1), max(0, py1)
+            px2, py2 = min(w - 1, px2), min(h - 1, py2)
+            cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 200, 80), 1, cv2.LINE_AA)
+        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w - 1, x2), min(h - 1, y2)
+        color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
+        label = format_snapshot_badge(code, detection.confidence)
         cv2.putText(
             annotated, label, (x1, max(y1 - 8, 12)),
             cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
@@ -602,11 +737,12 @@ class EventStore:
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        label = f"{detection.label} {detection.confidence:.2f}"
+        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
+        label = format_snapshot_badge(code, detection.confidence)
         cv2.putText(
             annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2,
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
         )
         return annotated
 
@@ -622,6 +758,10 @@ class EventStore:
     def list_events(self, limit: int = 50, date: Optional[str] = None) -> list[ViolationEvent]:
         if date:
             rows = self._read_events_file(_daily_events_file(date))
+            with self._lock:
+                for event in self._events:
+                    if (event.event_date or _event_date(event.created_at)) == date:
+                        rows.append(event)
         else:
             with self._lock:
                 rows = list(self._events)

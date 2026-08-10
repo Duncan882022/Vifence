@@ -12,6 +12,7 @@ import {
   type AtgtDetection,
 } from '../services/atgtBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
+import { useVmsDetections } from '../context/VmsDetectionContext'
 import { getRoiZonesForCamera } from '@/modules/module04-housekeeping/data/housekeepingRoiConfig'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
@@ -181,14 +182,37 @@ function useAtgtState(
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
+  const vms = useVmsDetections()
+
+  useEffect(() => {
+    if (!enabled || !vms?.active || !vms.snapshot) return
+    setFrameSize({ width: vms.snapshot.width, height: vms.snapshot.height })
+    setDetections(visibleDetections(
+      vms.snapshot.detections
+        .filter(d => ['vehicle', 'speeding', 'hard_median', 'soft_median', 'no_soft_median'].includes(d.behavior))
+        .map(d => ({
+          behavior: d.behavior as AtgtDetection['behavior'],
+          label: d.label,
+          confidence: d.confidence,
+          bbox: d.bbox,
+          vehiclePlate: d.vehicle_plate,
+          vehicleType: d.vehicle_type,
+          driverName: d.driver_name,
+        })),
+    ))
+    setStatus(vms.status)
+    setStatusMsg(vms.statusMsg)
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
 
   useEffect(() => {
     const video = videoRef.current
-    if (!enabled || !video) {
+    if (!enabled || !video || vms?.active) {
       clientRef.current?.stop()
       clientRef.current = null
-      setDetections([])
-      setStatus('idle')
+      if (!enabled) {
+        setDetections([])
+        setStatus('idle')
+      }
       return
     }
 
@@ -216,7 +240,7 @@ function useAtgtState(
       clientRef.current?.stop()
       clientRef.current = null
     }
-  }, [cameraId, enabled, videoRef, backendUrlVersion])
+  }, [cameraId, enabled, videoRef, backendUrlVersion, vms?.active])
 
   return { status, statusMsg, detections, frameSize, layoutTick }
 }

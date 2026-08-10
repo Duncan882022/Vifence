@@ -30,6 +30,21 @@ def user_id_to_worker_id(user_id: str) -> str:
     return f"u-{safe}" if safe else "u-unknown"
 
 
+def cccd_to_worker_id(cccd: str) -> str:
+    digits = re.sub(r"\D", "", cccd.strip())
+    if len(digits) < 9:
+        raise ValueError("cccd_invalid")
+    return f"c-{digits[:20]}"
+
+
+def resolve_worker_id(*, user_id: Optional[str] = None, cccd: Optional[str] = None) -> str:
+    if cccd and cccd.strip():
+        return cccd_to_worker_id(cccd)
+    if user_id and user_id.strip():
+        return user_id_to_worker_id(user_id)
+    raise ValueError("missing_identity")
+
+
 def face_filename(worker_id: str, pose_slot: int) -> str:
     if pose_slot <= 1:
         return f"{worker_id}.jpg"
@@ -172,6 +187,7 @@ def enroll_face(
     *,
     contractor_name: Optional[str] = None,
     pose_slot: int = 1,
+    cccd: Optional[str] = None,
 ) -> dict:
     if pose_slot < 1 or pose_slot > ENROLLMENT_POSE_COUNT:
         raise ValueError(f"pose_slot phải từ 1 đến {ENROLLMENT_POSE_COUNT}")
@@ -202,6 +218,9 @@ def enroll_face(
         row["employee_code"] = employee_code
         if contractor_name is not None:
             row["contractor_name"] = contractor_name
+
+    if cccd:
+        row["cccd"] = re.sub(r"\D", "", cccd.strip())[:20]
 
     images = [face_filename(worker_id, slot) for slot in range(1, ENROLLMENT_POSE_COUNT + 1)]
     row["face_images"] = images

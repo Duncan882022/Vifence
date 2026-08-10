@@ -1,5 +1,7 @@
 # Vifence Safety AI — Local Backend (POC)
 
+> **Production / VMS:** Kiến trúc đích, ma trận camera × scenario, ngưỡng detect và lộ trình Phase 1–3 — xem [`Vifence_VMS-Spec-v1.md`](../Vifence_VMS-Spec-v1.md) (chốt 2026-08-10).
+
 Backend Python chạy **local** để test 2 mục tiêu AI cho module An toàn lao động:
 
 1. Stream webcam + phát hiện **hút thuốc** (`smoking`)
@@ -19,7 +21,7 @@ Webcam (cv2.VideoCapture)
                                  tạm dùng cho vape, xem mục "Vape" bên dưới)
             → FireDetector     (YOLOv26, model: SalahALHaismawi/yolov26-fire-detection)
             → FlameBlobDetector (heuristic màu sắc, bắt lửa xanh dương/bật lửa khò)
-                → Debouncer (yêu cầu N/M lần detect liên tiếp mới confirm)
+                → PersistenceDebouncer (yêu cầu detect liên tục đủ lâu mới confirm)
                     → EventStore (lưu RAM + data/events.jsonl + snapshot .jpg)
     → FastAPI
         GET  /health              trạng thái camera + từng model
@@ -63,7 +65,6 @@ theo thời gian thực, sự kiện đã xác nhận hiện ở sidebar bên ph
 | `FIRE_MODEL_REPO` / `FIRE_MODEL_FILE` | Model Hugging Face cho cháy nổ | `SalahALHaismawi/yolov26-fire-detection` |
 | `FLAME_HEURISTIC_CONF_THRESHOLD` | Ngưỡng detector heuristic lửa xanh dương | `0.35` |
 | `SMOKING_CONF_THRESHOLD` / `FIRE_CONF_THRESHOLD` | Ngưỡng confidence tối thiểu | `0.5` / `0.5` |
-| `DEBOUNCE_HITS` / `DEBOUNCE_WINDOW` | Cần bao nhiêu lần dương tính / trong bao nhiêu lần gần nhất mới confirm event | `3` / `5` |
 | `EVENT_COOLDOWN_SECONDS` | Nghỉ giữa 2 event cùng loại | `30` |
 
 ## macOS: lỡ bắt nhầm camera iPhone (Continuity Camera)
@@ -253,7 +254,7 @@ ngrok http 8000
 ## Bước tích hợp tiếp theo (chưa làm trong POC này)
 
 1. Verify độ chính xác model hút thuốc/cháy nổ trên webcam thật, điều chỉnh
-   `*_CONF_THRESHOLD` / `DEBOUNCE_*` cho phù hợp.
+   `*_CONF_THRESHOLD` / `*_EVENT_MIN_DURATION_SECONDS` cho phù hợp.
 2. Thêm scenario `PCCC-002` vào `safetyMonitoringDictionary.ts` +
    `safetyScenarios.ts` (frontend) để có icon/label/mock hiển thị đồng bộ.
 3. Đổi transport `WS /ws/live` sang đúng format MPEG-TS mà

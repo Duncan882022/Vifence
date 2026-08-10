@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,13 +11,14 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auto_train import collector as auto_train_collector
 from .auto_train.scheduler import scheduler as auto_train_scheduler
+from . import machinery_detector
 from .camera_stream import CameraStream
 from .config import settings
 from .crane_proximity_engine import CraneProximityEngine
@@ -31,14 +33,18 @@ from .wah_engine import WahEngine
 from .atgt_engine import AtgtEngine
 from .mobile_frame_utils import analyze_engine_frame, downscale_for_mobile
 from .schemas import MobileAiConfigPayload, MobileFramePayload, WorkerGalleryEnrollPayload
-from .worker_identity.gallery import enroll_face, get_enrollment_status, user_id_to_worker_id
+from .worker_identity.gallery import enroll_face, get_enrollment_status, resolve_worker_id
 from .worker_identity.recognizer import gallery_status, reload_gallery
+from .vms_worker import CameraVmsWorker, CLIPS_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-_analyze_executor = ThreadPoolExecutor(max_workers=1)
+_analyze_executor = ThreadPoolExecutor(max_workers=4)
+
+# VMS workers — khởi tạo trong lifespan khi VMS_MODE_ENABLED=true
+_vms_workers: dict[str, CameraVmsWorker] = {}
 
 
 def _decode_frame(image_b64: str) -> Optional[np.ndarray]:
@@ -86,10 +92,58 @@ atgt_engine = AtgtEngine(engine.store)
 mobile_config_store = MobileAiConfigStore()
 
 
+def _build_vms_workers() -> None:
+    """Khởi tạo VMS worker cho từng camera theo VMS_CAMERA_SOURCES."""
+    cam_map = settings.vms_camera_map
+    if not cam_map:
+        logger.warning(
+            "VMS_MODE_ENABLED=true nhưng VMS_CAMERA_SOURCES rỗng — không có worker nào. "
+            "Cài: VMS_CAMERA_SOURCES=A-03:/path/cam03.mp4,A-04:/path/cam04.mp4"
+        )
+        return
+
+    # Cấu hình engines per camera theo ma trận (Spec §4)
+    cam_engines: dict[str, dict[str, object]] = {
+        "A-03": {
+            "road": road_engine.process_frame,
+            "atgt": atgt_engine.process_frame,
+        },
+        "A-04": {
+            "ppe": ppe_engine.process_frame,
+            "pccc": pccc_engine.process_frame,
+            "wah": wah_engine.process_frame,
+            "crane": crane_engine.process_frame,
+        },
+    }
+
+    def on_event(ev):
+        """Callback khi VMS worker xác nhận sự kiện."""
+        logger.info("[VMS] Event confirmed: %s %s", ev.scenario_id, ev.id)
+
+    for cam_id, source_path in cam_map.items():
+        engines = cam_engines.get(cam_id, {})
+        worker = CameraVmsWorker(
+            camera_id=cam_id,
+            source_path=source_path,
+            process_frame_fns=engines,
+            on_event=on_event,
+            ai_fps=settings.vms_ai_fps,
+        )
+        _vms_workers[cam_id] = worker
+        logger.info("[VMS] Worker A-%s tạo xong (%d engines).", cam_id, len(engines))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Đang khởi động backend AI…")
-    if settings.detection_loop_enabled:
+
+    if settings.vms_mode_enabled:
+        logger.info("VMS mode: server-side AI + HLS stream đang khởi động…")
+        engine.ensure_models_loaded()
+        _build_vms_workers()
+        for worker in _vms_workers.values():
+            worker.start()
+    elif settings.detection_loop_enabled:
         engine.ensure_models_loaded()
         camera.start()
         engine.start()
@@ -99,13 +153,24 @@ async def lifespan(app: FastAPI):
             "Detection loop tắt — smoking/fire lazy-load khi mobile gửi frame; "
             "road/crane nhận frame từ FE."
         )
+
     if settings.auto_train_enabled:
         auto_train_scheduler.start()
     else:
         logger.info("Auto-train tắt — chỉ chạy detect rule-based / model gốc.")
+
+    threading.Thread(
+        target=machinery_detector.preload,
+        name="machinery-preload",
+        daemon=True,
+    ).start()
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     yield
-    if settings.detection_loop_enabled:
+
+    if settings.vms_mode_enabled:
+        for worker in _vms_workers.values():
+            worker.stop()
+    if settings.detection_loop_enabled and not settings.vms_mode_enabled:
         engine.stop()
         camera.stop()
     if settings.auto_train_enabled:
@@ -134,10 +199,13 @@ def health():
 
 
 @app.get("/workers/gallery/status")
-def worker_gallery_status(user_id: str | None = None):
+def worker_gallery_status(user_id: str | None = None, cccd: str | None = None):
     status = gallery_status()
-    if user_id:
-        worker_id = user_id_to_worker_id(user_id)
+    if user_id or cccd:
+        try:
+            worker_id = resolve_worker_id(user_id=user_id, cccd=cccd)
+        except ValueError as exc:
+            return {**status, "error": str(exc)}
         status["enrollment"] = get_enrollment_status(worker_id)
     return status
 
@@ -147,7 +215,12 @@ def worker_gallery_enroll(payload: WorkerGalleryEnrollPayload):
     frame = _decode_frame(payload.image_b64)
     if frame is None:
         return {"ok": False, "error": "invalid_image"}
-    worker_id = user_id_to_worker_id(payload.user_id)
+    if not payload.user_id and not payload.cccd:
+        return {"ok": False, "error": "missing_identity"}
+    try:
+        worker_id = resolve_worker_id(user_id=payload.user_id, cccd=payload.cccd)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     try:
         enrollment = enroll_face(
             worker_id,
@@ -156,6 +229,7 @@ def worker_gallery_enroll(payload: WorkerGalleryEnrollPayload):
             frame,
             contractor_name=(payload.contractor_name or None),
             pose_slot=payload.pose_slot,
+            cccd=payload.cccd,
         )
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
@@ -289,6 +363,90 @@ def debug_frame():
     if not ok:
         return {"error": "encode_failed"}
     return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
+# ---------------------------------------------------------------------------
+# VMS stream endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/stream/{camera_id}/index.m3u8")
+def vms_stream_playlist(camera_id: str):
+    """HLS playlist cho camera VMS (live stream từ MP4 loop)."""
+    worker = _vms_workers.get(camera_id)
+    if worker is None:
+        raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
+    if not worker.hls_ready():
+        raise HTTPException(status_code=503, detail="HLS stream chưa sẵn sàng, thử lại sau 5s")
+    return FileResponse(
+        str(worker.hls_index_path()),
+        media_type="application/vnd.apple.mpegurl",
+        headers={"Cache-Control": "no-cache, no-store"},
+    )
+
+
+@app.get("/stream/{camera_id}/detections")
+def vms_stream_detections(camera_id: str):
+    """Detections + ROI zones mới nhất từ VMS AI — FE poll vẽ overlay (Option 2)."""
+    worker = _vms_workers.get(camera_id)
+    if worker is None:
+        raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
+    payload = worker.get_latest_overlay()
+    return {
+        "type": "detections",
+        "vms_ready": payload.get("updated_at", 0) > 0,
+        **payload,
+    }
+
+
+@app.get("/stream/{camera_id}/{segment}")
+def vms_stream_segment(camera_id: str, segment: str):
+    """HLS segment .ts cho camera VMS."""
+    worker = _vms_workers.get(camera_id)
+    if worker is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    seg_path = worker.hls_index_path().parent / segment
+    if not seg_path.exists():
+        raise HTTPException(status_code=404, detail="Segment not found")
+    return FileResponse(str(seg_path), media_type="video/mp2t")
+
+
+@app.get("/cameras/vms")
+def list_vms_cameras():
+    """Danh sách camera VMS + trạng thái HLS."""
+    return [
+        {
+            "camera_id": cam_id,
+            "hls_ready": worker.hls_ready(),
+            "hls_url": f"/stream/{cam_id}/index.m3u8",
+            "source_path": worker.source_path,
+        }
+        for cam_id, worker in _vms_workers.items()
+    ]
+
+
+@app.get("/events/{event_id}/clip")
+def event_clip(event_id: str):
+    """Trả về clip MP4 của sự kiện (VMS mode)."""
+    events = engine.store.list_events(limit=500)
+    event = next((e for e in events if e.id == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.clip_file:
+        raise HTTPException(status_code=404, detail="Clip chưa có cho event này")
+
+    clip_path = CLIPS_DIR / event.camera_id / event.clip_file
+    if not clip_path.exists():
+        # Thử tìm relative path trực tiếp
+        clip_path2 = CLIPS_DIR / event.clip_file
+        if not clip_path2.exists():
+            raise HTTPException(status_code=404, detail="Clip file không tìm thấy trên server")
+        clip_path = clip_path2
+
+    return FileResponse(
+        str(clip_path),
+        media_type="video/mp4",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 _ROAD_AUTO_TRAIN_CLASS_BY_KIND = {"material": "material"}

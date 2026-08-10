@@ -46,6 +46,7 @@ jobs:
       - name: Deploy via GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
 
       # Cách 2: nhánh gh-pages (khi Settings → Source = branch gh-pages / root)
       - name: Deploy gh-pages branch

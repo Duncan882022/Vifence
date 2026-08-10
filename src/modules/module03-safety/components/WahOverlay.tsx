@@ -10,6 +10,7 @@ import {
   type WahDetection,
 } from '../services/wahBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
+import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
@@ -114,14 +115,35 @@ function useWahState(
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
+  const vms = useVmsDetections()
+
+  useEffect(() => {
+    if (!enabled || !vms?.active || !vms.snapshot) return
+    const mapped = filterWahHarnessFalsePositives(
+      vms.snapshot.detections
+        .filter(d => d.behavior === 'no_harness' || d.behavior === 'safety_harness')
+        .map(d => ({
+          behavior: d.behavior as WahDetection['behavior'],
+          label: d.label,
+          confidence: d.confidence,
+          bbox: d.bbox,
+        })),
+    )
+    setFrameSize({ width: vms.snapshot.width, height: vms.snapshot.height })
+    setDetections(mapped)
+    setStatus(vms.status)
+    setStatusMsg(vms.statusMsg)
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
 
   useEffect(() => {
     const video = videoRef.current
-    if (!enabled || !video) {
+    if (!enabled || !video || vms?.active) {
       clientRef.current?.stop()
       clientRef.current = null
-      setDetections([])
-      setStatus('idle')
+      if (!enabled) {
+        setDetections([])
+        setStatus('idle')
+      }
       return
     }
 
@@ -164,7 +186,7 @@ function useWahState(
       clientRef.current?.stop()
       clientRef.current = null
     }
-  }, [cameraId, enabled, videoRef, backendUrlVersion])
+  }, [cameraId, enabled, videoRef, backendUrlVersion, vms?.active])
 
   return { status, statusMsg, detections, frameSize, layoutTick }
 }

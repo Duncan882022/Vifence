@@ -1,5 +1,5 @@
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
-import { getStreamUrlForCamera } from '@/modules/module02-training/data/trainingCameraFeeds'
+import { getBestStreamUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
 
 /** Zone camera công trường Giảng Võ — Module 03 ATLĐ */
 export type SafetyCameraZone = 'TTDV-A'
@@ -15,7 +15,7 @@ const FIXED_CAMERAS: TrainingCamera[] = [
     zone: 'TTDV-A',
     status: 'online',
     streamType: 'fixed',
-    streamUrl: getStreamUrlForCamera('A-03'),
+    streamUrl: getBestStreamUrl('A-03'),
   },
   {
     id: 'A-04',
@@ -24,7 +24,7 @@ const FIXED_CAMERAS: TrainingCamera[] = [
     zone: 'TTDV-A',
     status: 'online',
     streamType: 'fixed',
-    streamUrl: getStreamUrlForCamera('A-04'),
+    streamUrl: getBestStreamUrl('A-04'),
   },
 ]
 

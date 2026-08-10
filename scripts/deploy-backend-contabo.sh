@@ -33,14 +33,24 @@ rsync_cmd() {
     ssh_rsh="ssh -o StrictHostKeyChecking=no"
   fi
   rsync -avz --delete \
+    --filter='protect data/events/' \
+    --filter='protect data/events/**' \
+    --filter='protect data/snapshots/' \
+    --filter='protect data/snapshots/**' \
+    --filter='protect data/clips/' \
+    --filter='protect data/clips/**' \
+    --filter='protect data/hls/' \
+    --filter='protect data/hls/**' \
     --exclude '.venv/' \
     --exclude '__pycache__/' \
     --exclude '*.pyc' \
     --exclude '.env' \
     --exclude 'data/events.jsonl' \
-    --exclude 'data/events/*.jsonl' \
-    --exclude 'data/snapshots/*.jpg' \
+    --exclude 'data/events/**/*.jsonl' \
+    --exclude 'data/snapshots/**/*.jpg' \
+    --exclude 'data/clips/**/*.mp4' \
     --exclude 'data/config/*.json' \
+    --exclude 'data/config/*.jsonl' \
     --exclude 'data/auto_train/' \
     -e "$ssh_rsh" \
     "$ROOT/backend-ai/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
@@ -57,13 +67,41 @@ apt-get update -qq
 apt-get install -y -qq \
   python3 python3-venv python3-pip \
   nginx certbot python3-certbot-nginx \
+  tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng \
   libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 \
+  ffmpeg \
   curl rsync
 REMOTE_PACKAGES
 
 echo "→ Rsync backend-ai…"
 ssh_cmd "mkdir -p ${REMOTE_DIR}"
 rsync_cmd
+
+echo "→ Rsync model inference (crane_machinery YOLO)…"
+rsync_inference() {
+  local ssh_rsh
+  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+    ssh_rsh="sshpass -e ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no"
+  elif [[ -f "$SSH_KEY" ]]; then
+    ssh_rsh="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+  else
+    ssh_rsh="ssh -o StrictHostKeyChecking=no"
+  fi
+  ssh_cmd "mkdir -p ${REMOTE_DIR}/data/auto_train/crane_machinery"
+  if [[ -f "$ROOT/backend-ai/data/auto_train/crane_machinery/v4_best.pt" ]]; then
+    rsync -avz \
+      -e "$ssh_rsh" \
+      "$ROOT/backend-ai/data/auto_train/crane_machinery/v4_best.pt" \
+      "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/data/auto_train/crane_machinery/v4_best.pt"
+  fi
+  if [[ -f "$ROOT/backend-ai/data/auto_train/registry.json" ]]; then
+    rsync -avz \
+      -e "$ssh_rsh" \
+      "$ROOT/backend-ai/data/auto_train/registry.json" \
+      "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/data/auto_train/registry.json"
+  fi
+}
+rsync_inference
 
 echo "→ Python venv + pip install…"
 ssh_cmd "bash -s" <<REMOTE_VENV
@@ -74,8 +112,36 @@ python3 -m venv .venv
 .venv/bin/pip install -q -r requirements.txt
 REMOTE_VENV
 
+echo "→ Thư mục video VPS (MP4 loop sources)…"
+VPS_VIDEO_DIR="${VPS_VIDEO_DIR:-/opt/vifence/videos}"
+ssh_cmd "mkdir -p ${VPS_VIDEO_DIR}"
+# Rsync video files nếu có local (bỏ qua nếu chưa có — cần upload thủ công lần đầu)
+if [[ -n "${LOCAL_CAM03:-}" && -f "$LOCAL_CAM03" ]]; then
+  rsync_cmd_file() {
+    local src="$1" dst="$2"
+    local ssh_rsh
+    if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+      ssh_rsh="sshpass -e ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no"
+    elif [[ -f "$SSH_KEY" ]]; then
+      ssh_rsh="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+    else
+      ssh_rsh="ssh -o StrictHostKeyChecking=no"
+    fi
+    rsync -avz -e "$ssh_rsh" "$src" "${VPS_USER}@${VPS_HOST}:${dst}"
+  }
+  echo "→ Upload cam03 video…"
+  rsync_cmd_file "$LOCAL_CAM03" "${VPS_VIDEO_DIR}/cam03.mp4"
+fi
+if [[ -n "${LOCAL_CAM04:-}" && -f "$LOCAL_CAM04" ]]; then
+  echo "→ Upload cam04 video…"
+  rsync_cmd_file "$LOCAL_CAM04" "${VPS_VIDEO_DIR}/cam04.mp4"
+fi
+
 echo "→ .env production…"
 VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
+VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-false}"
+VPS_VIDEO_A03="${VPS_VIDEO_A03:-${VPS_VIDEO_DIR}/cam03.mp4}"
+VPS_VIDEO_A04="${VPS_VIDEO_A04:-${VPS_VIDEO_DIR}/cam04.mp4}"
 ssh_cmd "bash -s" <<REMOTE_ENV
 set -euo pipefail
 cat > /opt/vifence/backend-ai/.env <<EOF
@@ -91,6 +157,9 @@ AUTO_TRAIN_CHECK_INTERVAL_SECONDS=120
 AUTO_TRAIN_MIN_INTERVAL_SECONDS=39600
 AUTO_TRAIN_MIN_NEW_SAMPLES_DELTA=10
 CAMERA_SOURCE=0
+VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
+VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04}
+VMS_AI_FPS=6.0
 EOF
 REMOTE_ENV
 

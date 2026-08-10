@@ -94,4 +94,20 @@ TASKS: dict[str, TaskConfig] = {
         imgsz=416,
         runtime_conf_threshold=0.35,
     ),
+    # BPTC-001 — Lưới bao che giàn giáo (safety mesh cover).
+    # Phase 1: stub (model chưa train). Cần seed 150–300 ảnh/class.
+    # Class 1 YOLO: "mesh_cover" (panel present) → vi phạm detect bằng rule
+    # (zone coverage < 60%, rách theo contour, bẩn theo HSV offset).
+    # Khi có đủ seed → activate bằng AUTO_TRAIN_ENABLED=true.
+    "safety_mesh_cover": TaskConfig(
+        task_id="safety_mesh_cover",
+        classes=["mesh_cover"],
+        base_weights="yolov8n.pt",
+        min_new_samples=150,
+        min_interval_seconds=3600.0,
+        epochs=30,
+        imgsz=640,
+        batch=8,
+        runtime_conf_threshold=0.50,
+    ),
 }

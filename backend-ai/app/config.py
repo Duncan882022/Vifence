@@ -27,8 +27,6 @@ class Settings(BaseSettings):
     smoking_model_file: str = "best.pt"
     smoking_conf_threshold: float = 0.5
 
-    debounce_hits: int = 3
-    debounce_window: int = 5
     event_cooldown_seconds: float = 900.0
     # Fallback khi behavior không có cấu hình riêng.
     event_min_duration_seconds: float = 5.0
@@ -45,8 +43,7 @@ class Settings(BaseSettings):
     # Không log lại cùng behavior trên cùng camera trong N giây (trừ khi đã qua phiên mới + đủ thời gian).
     event_repeat_min_seconds: float = 900.0
 
-    # Demo — tối đa 1 snapshot sự kiện / loại / camera mỗi 15 phút (giảm lag I/O + FE poll).
-    demo_event_repeat_seconds: float = 900.0
+    # Tối đa 1 snapshot sự kiện / loại / camera mỗi 15 phút (giảm lag I/O + FE poll).
     road_event_repeat_seconds: float = 900.0
     crane_event_repeat_seconds: float = 900.0
     ppe_event_repeat_seconds: float = 900.0
@@ -60,7 +57,7 @@ class Settings(BaseSettings):
     # Nhận diện công nhân — gắn danh tính vào vi phạm (PPE/WAH/PCCC).
     worker_recognition_enabled: bool = True
     worker_match_min_confidence: float = 0.42
-    worker_demo_fallback_enabled: bool = True
+    worker_demo_fallback_enabled: bool = False
     worker_gallery_dir: str = "data/worker_gallery"
 
     # Hút thuốc — lặp snapshot mỗi 15 phút nếu vẫn phát hiện.
@@ -87,6 +84,17 @@ class Settings(BaseSettings):
     # Tắt inference YOLO auto-train (road/crane) — chỉ rule/demo; tiết kiệm RAM.
     auto_train_inference_enabled: bool = True
 
+    # --- VMS mode (Phase 1) ---
+    # Bật VMS: BE ingest + AI + HLS + clip; FE chỉ xem stream.
+    vms_mode_enabled: bool = False
+
+    # Đường dẫn file nguồn MP4 cho từng camera (VMS mode).
+    # Format: "A-03:/path/to/cam03.mp4,A-04:/path/to/cam04.mp4"
+    vms_camera_sources: str = ""
+
+    # FPS AI trên server (VMS mode) — tiết kiệm CPU, đủ ATLĐ.
+    vms_ai_fps: float = 6.0
+
     @property
     def camera_source_value(self) -> Union[int, str]:
         """cv2.VideoCapture chấp nhận cả index webcam (int) lẫn URL/path (str)."""
@@ -94,6 +102,21 @@ class Settings(BaseSettings):
             return int(self.camera_source)
         except ValueError:
             return self.camera_source
+
+    @property
+    def vms_camera_map(self) -> dict[str, str]:
+        """Parse VMS_CAMERA_SOURCES → dict camera_id → source_path."""
+        result: dict[str, str] = {}
+        for entry in self.vms_camera_sources.split(","):
+            entry = entry.strip()
+            if ":" not in entry:
+                continue
+            cam_id, path = entry.split(":", 1)
+            cam_id = cam_id.strip()
+            path = path.strip()
+            if cam_id and path:
+                result[cam_id] = path
+        return result
 
 
 settings = Settings()

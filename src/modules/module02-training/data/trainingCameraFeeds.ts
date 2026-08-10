@@ -157,8 +157,10 @@ export function getStreamUrlForCamera(cameraId: string): string | undefined {
  * VITE_VMS_BACKEND_URL phải trỏ tới backend (vd https://217.217.253.247.nip.io).
  */
 export function getVmsHlsUrl(cameraId: string): string | undefined {
-  const backendUrl = import.meta.env.VITE_VMS_BACKEND_URL as string | undefined
-  if (!backendUrl) return undefined
+  const backendUrl = (
+    import.meta.env.VITE_VMS_BACKEND_URL as string | undefined
+  ) || (import.meta.env.VITE_MOBILE_AI_BACKEND_URL as string | undefined)
+  if (!backendUrl?.trim()) return undefined
   const base = backendUrl.replace(/\/$/, '')
   return `${base}/stream/${cameraId}/index.m3u8`
 }

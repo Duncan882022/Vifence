@@ -12,6 +12,7 @@ import {
   type PcccDetection,
 } from '../services/pcccBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
+import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import {
@@ -58,14 +59,34 @@ function usePcccState(
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
+  const vms = useVmsDetections()
+
+  useEffect(() => {
+    if (!enabled || !vms?.active || !vms.snapshot) return
+    setFrameSize({ width: vms.snapshot.width, height: vms.snapshot.height })
+    setDetections(visibleDetections(
+      vms.snapshot.detections
+        .filter(d => d.behavior === 'smoking' || d.behavior === 'fire')
+        .map(d => ({
+          behavior: d.behavior as PcccDetection['behavior'],
+          label: formatRoiOverlayCode(d.behavior),
+          confidence: d.confidence,
+          bbox: d.bbox,
+        })),
+    ))
+    setStatus(vms.status)
+    setStatusMsg(vms.statusMsg)
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
 
   useEffect(() => {
     const video = videoRef.current
-    if (!enabled || !video) {
+    if (!enabled || !video || vms?.active) {
       clientRef.current?.stop()
       clientRef.current = null
-      setDetections([])
-      setStatus('idle')
+      if (!enabled) {
+        setDetections([])
+        setStatus('idle')
+      }
       return
     }
 
@@ -107,7 +128,7 @@ function usePcccState(
       clientRef.current?.stop()
       clientRef.current = null
     }
-  }, [cameraId, enabled, videoRef, backendUrlVersion])
+  }, [cameraId, enabled, videoRef, backendUrlVersion, vms?.active])
 
   return { status, statusMsg, detections, frameSize, layoutTick }
 }

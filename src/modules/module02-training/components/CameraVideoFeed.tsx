@@ -8,9 +8,13 @@ import { PcccOverlay } from '@/modules/module03-safety/components/PcccOverlay'
 import { PpeOverlay } from '@/modules/module03-safety/components/PpeOverlay'
 import { WahOverlay } from '@/modules/module03-safety/components/WahOverlay'
 import { AtgtOverlay } from '@/modules/module03-safety/components/AtgtOverlay'
+import { VmsDetectionProvider } from '@/modules/module03-safety/context/VmsDetectionContext'
+import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetectionFeed'
+import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlayCycleSync'
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
+import { isHlsStreamUrl, useHlsVideoSource } from '../hooks/useHlsVideoSource'
 import {
   isAiOverlayDisabledCamera,
   isAtgtCamera,
@@ -82,6 +86,10 @@ export function CameraVideoFeed({
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPcccOverlay || showWahOverlay || showAtgtOverlay
+  const isHls = isHlsStreamUrl(src)
+  const vmsFeed = useVmsDetectionFeed(cameraId, Boolean(overlayActive && isVmsLiveCamera(cameraId)))
+
+  useHlsVideoSource(videoRef, src, playing)
 
   useEffect(() => {
     const video = videoRef.current
@@ -182,11 +190,11 @@ export function CameraVideoFeed({
     <div className="absolute inset-0 overflow-hidden">
       <video
         ref={videoRef}
-        src={src}
+        src={isHls ? undefined : src}
         poster={posterUrl}
         autoPlay
         muted
-        loop
+        loop={!isHls}
         playsInline
         crossOrigin="anonymous"
         preload={playing ? (isDesktop ? 'auto' : 'metadata') : 'none'}
@@ -197,6 +205,7 @@ export function CameraVideoFeed({
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
+      <VmsDetectionProvider value={vmsFeed.active ? vmsFeed : null}>
       {showFaceOverlay && feedKey && (
         <CameraAiOverlay
           feedKey={feedKey}
@@ -271,6 +280,7 @@ export function CameraVideoFeed({
           />
         )}
       </OverlayCycleProvider>
+      </VmsDetectionProvider>
     </div>
   )
 }

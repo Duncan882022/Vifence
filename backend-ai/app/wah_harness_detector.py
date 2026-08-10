@@ -52,19 +52,37 @@ def _strap_mask(hsv: np.ndarray) -> np.ndarray:
     )
 
 
+def _back_strap_ratio(frame: np.ndarray, person_bbox: tuple[float, float, float, float]) -> float:
+    """Tỷ lệ dải cam/vàng trên vùng lưng — ổn định hơn crop torso khi người nhỏ/xa."""
+    crop = _region_crop(frame, harness_bbox_from_person(person_bbox))
+    if crop.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    mask = _strap_mask(hsv)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), 1)
+    return float(mask.sum() / 255) / (crop.shape[0] * crop.shape[1])
+
+
 def _heuristic_strap_harness(frame: np.ndarray, person_bbox: tuple[float, float, float, float]) -> bool:
+    back_ratio = _back_strap_ratio(frame, person_bbox)
     crop = _region_crop(frame, person_bbox)
     if crop.size == 0:
-        return False
+        return back_ratio >= 0.016
     ch, cw = crop.shape[:2]
     torso = crop[int(ch * 0.10) : int(ch * 0.88), int(cw * 0.05) : int(cw * 0.95)]
-    if torso.size == 0:
+    torso_ratio = 0.0
+    if torso.size > 0:
+        hsv = cv2.cvtColor(torso, cv2.COLOR_BGR2HSV)
+        mask = _strap_mask(hsv)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8), 1)
+        torso_ratio = float(mask.sum() / 255) / (torso.shape[0] * torso.shape[1])
+    ratio = max(back_ratio, torso_ratio)
+    # Áo phản quang phủ gần hết torso — không coi là dây an toàn (tránh chặn log WAH).
+    if ratio >= 0.12:
         return False
-    hsv = cv2.cvtColor(torso, cv2.COLOR_BGR2HSV)
-    mask = _strap_mask(hsv)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8), 1)
-    ratio = float(mask.sum() / 255) / (torso.shape[0] * torso.shape[1])
-    return ratio >= _STRAP_MIN_RATIO
+    crop_area = crop.shape[0] * crop.shape[1]
+    min_ratio = 0.016 if crop_area < 2400 else _STRAP_MIN_RATIO
+    return ratio >= min_ratio
 
 
 def _heuristic_x_harness_back(frame: np.ndarray, person_bbox: tuple[float, float, float, float]) -> bool:
@@ -78,31 +96,42 @@ def _heuristic_x_harness_back(frame: np.ndarray, person_bbox: tuple[float, float
     mask = _strap_mask(hsv)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), 1)
 
-    ratio = float(mask.sum() / 255) / (crop.shape[0] * crop.shape[1])
-    if ratio >= _X_BACK_MIN_RATIO * 1.8:
+    crop_area = crop.shape[0] * crop.shape[1]
+    ratio = float(mask.sum() / 255) / crop_area
+    strong_ratio = 0.045 if crop_area >= 2200 else 0.017
+    # Tín hiệu mạnh — dây chữ X rõ trên lưng (ngưỡng thấp hơn khi bbox nhỏ/xa).
+    if ratio >= strong_ratio:
         return True
+    if ratio < _X_BACK_MIN_RATIO:
+        return False
 
     edges = cv2.Canny(mask, 40, 120)
-    min_len = max(8, int(min(crop.shape[:2]) * 0.18))
+    min_len = max(6, int(min(crop.shape[:2]) * 0.14))
     lines = cv2.HoughLinesP(
-        edges, 1, np.pi / 180, threshold=8,
-        minLineLength=min_len, maxLineGap=5,
+        edges, 1, np.pi / 180, threshold=6,
+        minLineLength=min_len, maxLineGap=6,
     )
     if lines is None or len(lines) < 2:
-        return ratio >= _X_BACK_MIN_RATIO
+        return ratio >= 0.014 and crop_area < 2600
 
     angles: list[float] = []
-    for line in lines:
-        x1, y1, x2, y2 = line[0]
+    for line in lines.reshape(-1, 4):
+        x1, y1, x2, y2 = [float(v) for v in line]
+        seg_len = float(np.hypot(x2 - x1, y2 - y1))
+        if seg_len < min_len * 0.75:
+            continue
         ang = abs(float(np.arctan2(y2 - y1, x2 - x1)))
         if 0.35 < ang < 2.75:
             angles.append(ang)
 
+    if len(angles) < 2:
+        return ratio >= 0.014 and crop_area < 2600
+
     for i, a1 in enumerate(angles):
         for a2 in angles[i + 1 :]:
-            if abs(a1 - a2) > 0.45:
+            if abs(a1 - a2) > 0.40:
                 return True
-    return ratio >= _X_BACK_MIN_RATIO
+    return ratio >= 0.020
 
 
 def _model_harness_on_person(

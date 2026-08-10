@@ -14,6 +14,7 @@ import {
 } from '../services/craneProximityBackend.service'
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
+import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
 import { appendCraneProximityRelated, isMachineDetection } from '../utils/craneOverlayRelated'
 import { craneScanRank } from '../utils/overlayScanOrder'
@@ -249,6 +250,32 @@ function useCraneProximityState(
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
+  const vms = useVmsDetections()
+
+  useEffect(() => {
+    if (!enabled || !vms?.active || !vms.snapshot) return
+    const craneMetrics = vms.snapshot.metrics.crane as CraneProximityMetrics | undefined
+    const mapped = vms.snapshot.detections
+      .filter(d => ['crane', 'crane_proximity', 'person'].includes(d.behavior))
+      .map(d => ({
+        behavior: d.behavior as CraneProximityDetection['behavior'],
+        label: d.label,
+        scenario_id: d.scenario_id ?? 'DZ-003',
+        confidence: d.confidence,
+        bbox: d.bbox,
+        machine_kind: d.machine_kind,
+        distance_m: d.distance_m,
+        nearest_machine: d.nearest_machine,
+      })) as CraneProximityDetection[]
+    const visible = mapped
+      .filter(passesCraneOverlayDetection)
+      .sort((a, b) => craneScanRank(a.behavior, a.machine_kind) - craneScanRank(b.behavior, b.machine_kind))
+    setDetections(visible)
+    setFrameSize({ width: vms.snapshot.width, height: vms.snapshot.height })
+    setMetrics(craneMetrics)
+    setStatus(vms.status)
+    setStatusMsg(vms.statusMsg)
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
 
   useEffect(() => {
     const video = videoRef.current
@@ -273,9 +300,11 @@ function useCraneProximityState(
 
   useEffect(() => {
     stopClient()
-    if (!enabled) {
-      setStatus('idle')
-      setDetections([])
+    if (!enabled || vms?.active) {
+      if (!enabled) {
+        setStatus('idle')
+        setDetections([])
+      }
       return
     }
 
@@ -317,7 +346,7 @@ function useCraneProximityState(
     })
 
     return stopClient
-  }, [cameraId, enabled, stopClient, videoRef, backendUrlVersion])
+  }, [cameraId, enabled, stopClient, videoRef, backendUrlVersion, vms?.active])
 
   return { status, statusMsg, detections, frameSize, metrics, layoutTick }
 }

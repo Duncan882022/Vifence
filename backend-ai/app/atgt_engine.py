@@ -7,18 +7,23 @@ import time
 
 import numpy as np
 
+from .atgt_analyzer import (
+    _HARD_MEDIAN_CONF,
+    _SOFT_MEDIAN_CONF,
+    analyze_atgt_frame,
+)
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
-from .atgt_demo import match_demo_detections
 from .atgt_plate_reader import read_vehicle_plate
 from .schemas import Detection, ViolationEvent
-from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
+from .snapshot_sync import build_snapshot_episode, frame_scale, merge_episode_best, scale_bbox
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("atgt_engine")
 
-_CONFIRM_SECONDS = 0.0
+_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _REPEAT_SECONDS = settings.atgt_event_repeat_seconds
-_MAX_GAP_SECONDS = 3.0
+_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _MAX_TRACKS = 12
 _TRACK_EXPIRE_SECONDS = 4.0
@@ -64,25 +69,42 @@ def _match_vehicle(violation: Detection, vehicles: list[Detection]) -> Detection
     return best
 
 
-def _lane_present(detections: list[Detection]) -> bool:
-    return any(
-        d.behavior in ("hard_median", "soft_median") and d.confidence >= 0.0
-        for d in detections
-    )
+def _lane_present(detections: list[Detection], frame_w: int, frame_h: int) -> bool:
+    for det in detections:
+        if det.behavior == "soft_median" and det.confidence >= _SOFT_MEDIAN_CONF:
+            return True
+        if det.behavior != "hard_median" or det.confidence < _HARD_MEDIAN_CONF:
+            continue
+        x1, y1, x2, y2 = det.bbox
+        span = max(float(x2 - x1), 0.0)
+        if span >= frame_w * 0.34:
+            return True
+    return False
 
 
-def _enrich_vehicle_plates(frame: np.ndarray, detections: list[Detection]) -> None:
+def _enrich_vehicle_plates(
+    frame: np.ndarray,
+    detections: list[Detection],
+    *,
+    ocr_frame: np.ndarray | None = None,
+    ocr_scale: tuple[float, float] = (1.0, 1.0),
+) -> None:
+    source = ocr_frame if ocr_frame is not None else frame
+    sx, sy = ocr_scale
     for det in detections:
         if det.behavior not in ("vehicle", "speeding"):
             continue
         if det.vehicle_plate:
             continue
-        plate = read_vehicle_plate(frame, det.bbox)
+        bbox = det.bbox
+        if sx != 1.0 or sy != 1.0:
+            bbox = scale_bbox(det.bbox, sx, sy)
+        plate = read_vehicle_plate(source, bbox)
         if not plate:
             continue
         det.vehicle_plate = plate
         if det.behavior == "vehicle":
-            det.label = f"Ô tô · {plate}"
+            det.label = f"{det.vehicle_type or 'Phương tiện'} · {plate}"
 
 
 class AtgtEngine:
@@ -109,14 +131,24 @@ class AtgtEngine:
         return self._gates[camera_id][track_id]
 
     def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
-        demo = match_demo_detections(frame, camera_id)
-        if demo:
-            return demo
-        return []
+        return analyze_atgt_frame(frame, camera_id)
 
-    def process_frame(self, frame: np.ndarray, camera_id: str) -> tuple[dict, list[ViolationEvent]]:
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        capture_frame: np.ndarray | None = None,
+    ) -> tuple[dict, list[ViolationEvent]]:
+        snapshot_source = capture_frame if capture_frame is not None else frame
         detections = self._collect_detections(frame, camera_id)
-        _enrich_vehicle_plates(frame, detections)
+        sx, sy = frame_scale(frame, snapshot_source) if capture_frame is not None else (1.0, 1.0)
+        _enrich_vehicle_plates(
+            frame,
+            detections,
+            ocr_frame=snapshot_source if capture_frame is not None else None,
+            ocr_scale=(sx, sy),
+        )
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
         now = time.time()
@@ -130,7 +162,7 @@ class AtgtEngine:
         ]
 
         for det in violations:
-            if det.behavior == "no_soft_median" and _lane_present(detections):
+            if det.behavior == "no_soft_median" and _lane_present(detections, frame_w, frame_h):
                 continue
             vehicle_bbox: list[float] | None = None
             if det.behavior == "speeding":
@@ -154,17 +186,25 @@ class AtgtEngine:
                 state.vehicle_bbox = vehicle_bbox
             state.last_seen = now
             gate = self._gate_for(camera_id, track_id)
-            if state.episode_best is None or det.confidence > state.episode_best["detection"].confidence:
-                state.episode_best = {
-                    "detection": det,
-                    "frame": frame.copy(),
-                    "vehicle_bbox": vehicle_bbox,
-                }
+            state.episode_best = merge_episode_best(
+                state.episode_best,
+                detection=det,
+                analyze_frame=frame,
+                capture_frame=snapshot_source,
+                extra={"vehicle_bbox": vehicle_bbox},
+            )
             confirmed = gate.register(True)
             if confirmed and state.episode_best:
                 pending = state.episode_best
                 state.episode_best = None
                 top = pending["detection"]
+                if not top.vehicle_plate and pending.get("vehicle_bbox"):
+                    retry_plate = read_vehicle_plate(
+                        pending["frame"],
+                        pending["vehicle_bbox"],
+                    )
+                    if retry_plate:
+                        top = top.model_copy(update={"vehicle_plate": retry_plate})
                 event = self.store.add_atgt(
                     top,
                     pending["frame"],

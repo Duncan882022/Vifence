@@ -71,6 +71,54 @@ def _sub_region(box: tuple[float, float, float, float], y0: float, y1: float) ->
     return x1, py1 + ph * y0, x2, py1 + ph * y1
 
 
+def _feet_region(
+    person_box: tuple[float, float, float, float],
+    frame_h: int,
+) -> tuple[float, float, float, float]:
+    """Vùng chân — mở rộng xuống dưới bbox người để gom giày (YOLO hay cắt sát mắt cá)."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    fy1 = y1 + ph * 0.72
+    fy2 = min(float(frame_h), y2 + ph * 0.10)
+    return x1, fy1, x2, fy2
+
+
+def _foot_environment_ratios(crop: np.ndarray) -> dict[str, float]:
+    """Tách nền đất/bùn/vũng khỏi da chân — tránh false-positive no_shoes trên nền công trường."""
+    if crop.size == 0:
+        return {"mud_ratio": 0.0, "pants_ratio": 0.0, "puddle_ratio": 0.0}
+    h, w = crop.shape[:2]
+    area = max(h * w, 1)
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    mud = cv2.bitwise_or(
+        cv2.inRange(hsv, np.array([8, 25, 25]), np.array([28, 170, 130])),
+        cv2.inRange(hsv, np.array([0, 0, 35]), np.array([180, 55, 110])),
+    )
+    pants = cv2.inRange(hsv, np.array([95, 35, 25]), np.array([130, 255, 180]))
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    puddle = cv2.bitwise_and(
+        (gray < 88).astype(np.uint8) * 255,
+        cv2.inRange(hsv, np.array([0, 0, 20]), np.array([180, 80, 120])),
+    )
+    return {
+        "mud_ratio": float(cv2.countNonZero(mud)) / area,
+        "pants_ratio": float(cv2.countNonZero(pants)) / area,
+        "puddle_ratio": float(cv2.countNonZero(puddle)) / area,
+    }
+
+
+def _foot_skin_mask(hsv: np.ndarray) -> np.ndarray:
+    """Da chân — hẹp hơn mask cũ, loại bùn nâu và vũng tối trên mặt đất."""
+    skin = cv2.inRange(hsv, np.array([0, 32, 72]), np.array([20, 150, 245]))
+    mud = cv2.inRange(hsv, np.array([8, 20, 25]), np.array([28, 150, 120]))
+    return cv2.bitwise_and(skin, cv2.bitwise_not(mud))
+
+
+def _feet_view_obstructed(env: dict[str, float]) -> bool:
+    """Không đủ căn cứ đánh giá giày — nền bùn/vũng che chân."""
+    return env["mud_ratio"] > 0.24 or env["puddle_ratio"] > 0.28
+
+
 def _region_crop(frame: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = [int(v) for v in box]
@@ -81,25 +129,99 @@ def _region_crop(frame: np.ndarray, box: tuple[float, float, float, float]) -> n
     return frame[y1:y2, x1:x2]
 
 
+def _helmet_cap_plausible(x: int, y: int, bw: int, bh: int, crop_w: int, crop_h: int) -> bool:
+    """Mũ nằm trên đỉnh đầu — loại dải sáng nền trời/lưới ở mép khung."""
+    if bw < 8 or bh < 6:
+        return False
+    if x <= 1 and bw >= crop_w * 0.78:
+        return False
+    if x + bw >= crop_w - 1 and bw >= crop_w * 0.78:
+        return False
+    if y > crop_h * 0.55:
+        return False
+    cx = x + bw / 2
+    if cx < crop_w * 0.14 or cx > crop_w * 0.86:
+        return False
+    aspect = bw / max(bh, 1)
+    if not 0.45 <= aspect <= 4.5:
+        return False
+    return True
+
+
+def _helmet_patch_looks_real(
+    crop: np.ndarray,
+    x: int,
+    y: int,
+    bw: int,
+    bh: int,
+    contour_area: float,
+    crop_w: int,
+) -> bool:
+    patch = crop[y : y + bh, x : x + bw]
+    if patch.size == 0:
+        return False
+    hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+    mean_s = float(np.mean(hsv[:, :, 1]))
+    mean_v = float(np.mean(hsv[:, :, 2]))
+    fill = contour_area / max(bw * bh, 1)
+    if mean_s < 38 and mean_v < 150:
+        return False
+    if mean_s < 42 and mean_v < 145 and bw >= crop_w * 0.40:
+        return False
+    if fill < 0.22 and mean_s < 35:
+        return False
+    return True
+
+
 def _heuristic_helmet(frame: np.ndarray, head: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
     crop = _region_crop(frame, head)
     if crop.size == 0:
         return None
+    crop_h, crop_w = crop.shape[:2]
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
     mask = cv2.bitwise_or(
-        cv2.inRange(hsv, np.array([0, 0, 165]), np.array([180, 50, 255])),
-        cv2.inRange(hsv, np.array([18, 75, 115]), np.array([38, 255, 255])),
+        cv2.inRange(hsv, np.array([0, 0, 150]), np.array([180, 65, 255])),
+        cv2.inRange(hsv, np.array([15, 60, 100]), np.array([40, 255, 255])),
     )
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), 1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), 1)
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not cnts:
+    best: tuple[float, tuple[int, int, int, int]] | None = None
+    for cnt in cnts:
+        area = cv2.contourArea(cnt)
+        if area < 40:
+            continue
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        if not _helmet_cap_plausible(x, y, bw, bh, crop_w, crop_h):
+            continue
+        if not _helmet_patch_looks_real(crop, x, y, bw, bh, area, crop_w):
+            continue
+        score = area + (24.0 if y <= crop_h * 0.22 else 0.0)
+        if best is None or score > best[0]:
+            best = (score, (x, y, bw, bh))
+    if best is not None:
+        x, y, bw, bh = best[1]
+        hx1, hy1, _, _ = head
+        return hx1 + x, hy1 + y, hx1 + x + bw, hy1 + y + bh
+
+    upper = crop[: max(int(crop_h * 0.62), 1)]
+    if upper.size == 0:
         return None
-    cnt = max(cnts, key=cv2.contourArea)
-    if cv2.contourArea(cnt) < 70:
-        return None
-    x, y, bw, bh = cv2.boundingRect(cnt)
-    hx1, hy1, _, _ = head
-    return hx1 + x, hy1 + y, hx1 + x + bw, hy1 + y + bh
+    upper_hsv = cv2.cvtColor(upper, cv2.COLOR_BGR2HSV)
+    cap = cv2.inRange(upper_hsv, np.array([0, 0, 155]), np.array([180, 60, 255]))
+    cap = cv2.morphologyEx(cap, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), 1)
+    cap_cnts, _ = cv2.findContours(cap, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for cnt in sorted(cap_cnts, key=cv2.contourArea, reverse=True):
+        area = cv2.contourArea(cnt)
+        if area < 36:
+            break
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        if not _helmet_cap_plausible(x, y, bw, bh, upper.shape[1], upper.shape[0]):
+            continue
+        if not _helmet_patch_looks_real(upper, x, y, bw, bh, area, upper.shape[1]):
+            continue
+        hx1, hy1, _, _ = head
+        return hx1 + x, hy1 + y, hx1 + x + bw, hy1 + y + bh
+    return None
 
 
 def _heuristic_vest(frame: np.ndarray, torso: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
@@ -125,26 +247,40 @@ def _heuristic_vest(frame: np.ndarray, torso: tuple[float, float, float, float])
 
 def _feet_metrics(frame: np.ndarray, feet: tuple[float, float, float, float]) -> dict[str, float]:
     crop = _region_crop(frame, feet)
+    env = _foot_environment_ratios(crop)
     if crop.size == 0:
-        return {"skin_ratio": 0.0, "lower_skin_ratio": 0.0, "bottom_dark_nonskin": 0.0, "max_shoe_contour": 0.0, "bottom_area": 0.0, "bottom_skin_ratio": 0.0, "shoe_aspect": 0.0}
+        return {
+            "skin_ratio": 0.0,
+            "lower_skin_ratio": 0.0,
+            "bottom_dark_nonskin": 0.0,
+            "max_shoe_contour": 0.0,
+            "bottom_area": 0.0,
+            "bottom_skin_ratio": 0.0,
+            "shoe_aspect": 0.0,
+            "mud_ratio": 0.0,
+            "pants_ratio": 0.0,
+            "puddle_ratio": 0.0,
+        }
     h, w = crop.shape[:2]
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    skin = cv2.inRange(hsv, np.array([0, 18, 55]), np.array([25, 170, 255]))
+    skin = _foot_skin_mask(hsv)
     skin_ratio = float(skin.sum() / 255) / (h * w)
 
     lower = crop[int(h * 0.35) :]
     lh, lw = lower.shape[:2]
     lower_hsv = cv2.cvtColor(lower, cv2.COLOR_BGR2HSV)
-    lower_skin = cv2.inRange(lower_hsv, np.array([0, 18, 55]), np.array([25, 170, 255]))
+    lower_skin = _foot_skin_mask(lower_hsv)
     lower_skin_ratio = float(lower_skin.sum() / 255) / (lh * lw) if lh * lw else 0.0
 
     bottom = crop[int(h * 0.55) :]
     bh, bw = bottom.shape[:2]
     bottom_hsv = cv2.cvtColor(bottom, cv2.COLOR_BGR2HSV)
-    bottom_skin = cv2.inRange(bottom_hsv, np.array([0, 18, 55]), np.array([25, 170, 255]))
+    bottom_skin = _foot_skin_mask(bottom_hsv)
     bottom_gray = cv2.cvtColor(bottom, cv2.COLOR_BGR2GRAY)
     bottom_dark = (bottom_gray < 90).astype(np.uint8) * 255
+    bottom_mud = cv2.inRange(bottom_hsv, np.array([8, 20, 25]), np.array([28, 150, 120]))
     bottom_dark = cv2.bitwise_and(bottom_dark, cv2.bitwise_not(bottom_skin))
+    bottom_dark = cv2.bitwise_and(bottom_dark, cv2.bitwise_not(bottom_mud))
     bottom_dark_nonskin = float(bottom_dark.sum() / 255) / (bh * bw) if bh * bw else 0.0
 
     cnts, _ = cv2.findContours(bottom_dark, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -166,6 +302,9 @@ def _feet_metrics(frame: np.ndarray, feet: tuple[float, float, float, float]) ->
         "bottom_area": bottom_area,
         "bottom_skin_ratio": bottom_skin_ratio,
         "shoe_aspect": shoe_aspect,
+        "mud_ratio": env["mud_ratio"],
+        "pants_ratio": env["pants_ratio"],
+        "puddle_ratio": env["puddle_ratio"],
     }
 
 
@@ -175,6 +314,11 @@ def _min_shoe_contour(bottom_area: float) -> float:
 
 def _looks_barefoot_or_open_footwear(metrics: dict[str, float]) -> bool:
     """Chân trần / dép — tách khỏi giày bảo hộ (kể cả giày đen ở 640px)."""
+    if _feet_view_obstructed(metrics):
+        return False
+    if metrics.get("pants_ratio", 0.0) > 0.16 and metrics.get("max_shoe_contour", 0.0) < 40:
+        return False
+
     lower_skin = metrics["lower_skin_ratio"]
     bottom_dark = metrics["bottom_dark_nonskin"]
     max_contour = metrics["max_shoe_contour"]
@@ -185,8 +329,14 @@ def _looks_barefoot_or_open_footwear(metrics: dict[str, float]) -> bool:
 
     if lower_skin > 0.90 and bottom_dark < 0.08:
         return True
-    if bottom_dark < 0.055:
+    if bottom_dark < 0.055 and max_contour < 24:
         return True
+
+    # Vệt bùn / nhiễu dọc — không phải chân trần
+    if shoe_aspect > 1.6 and max_contour < min_contour * 0.42:
+        return False
+    if max_contour < 28 and bottom_dark < 0.12:
+        return False
 
     # Giày bảo hộ — contour đủ lớn, tối, không phải dép mỏng
     if shoe_aspect >= 0.72 and max_contour >= min_contour and bottom_dark >= 0.10:
@@ -280,22 +430,44 @@ def _shoe_detections_for_person(
     feet: tuple[float, float, float, float],
     person_conf: float,
 ) -> list[tuple[str, tuple[float, float, float, float], float]]:
-    """Luôn quét 2 chân trái/phải — chỉ trả no_shoes khi cả hai xác định vi phạm."""
+    """Quét 2 chân — chỉ log no_shoes khi thiếu giày rõ ràng, không phạt vì crop một bên lỗi."""
     _ = person_conf
 
     left, right = _split_feet_halves(feet)
-    per_foot = [
-        _evaluate_foot_shoes(frame, left),
-        _evaluate_foot_shoes(frame, right),
-    ]
+    left_det = _evaluate_foot_shoes(frame, left)
+    right_det = _evaluate_foot_shoes(frame, right)
+    per_foot = [left_det, right_det]
 
     shoes = [d for d in per_foot if d and d[0] == "safety_shoes"]
     bare = [d for d in per_foot if d and d[0] == "no_shoes"]
 
-    out: list[tuple[str, tuple[float, float, float, float], float]] = list(shoes)
+    if shoes:
+        return shoes
+
     if len(bare) >= 2:
-        out.extend(bare)
-    return out
+        return bare
+
+    if len(bare) == 1:
+        whole = _feet_metrics(frame, feet)
+        if _looks_barefoot_or_open_footwear(whole):
+            return bare
+        return []
+
+    if not shoes and not bare:
+        metrics = _feet_metrics(frame, feet)
+        if _looks_barefoot_or_open_footwear(metrics):
+            return [("no_shoes", feet, 0.52)]
+        left_m = _feet_metrics(frame, left)
+        right_m = _feet_metrics(frame, right)
+        if _looks_barefoot_or_open_footwear(left_m) and _looks_barefoot_or_open_footwear(right_m):
+            return [("no_shoes", left, 0.52), ("no_shoes", right, 0.52)]
+        out: list[tuple[str, tuple[float, float, float, float], float]] = []
+        for foot in (left, right):
+            foot_metrics = _feet_metrics(frame, foot)
+            if not _looks_barefoot_or_open_footwear(foot_metrics):
+                out.append(("safety_shoes", _shoe_bbox_from_feet(foot), 0.50))
+        return out
+    return []
 
 
 def _shoe_bbox_from_feet(feet: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
@@ -306,6 +478,8 @@ def _shoe_bbox_from_feet(feet: tuple[float, float, float, float]) -> tuple[float
 
 def _heuristic_shoes(frame: np.ndarray, feet: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
     metrics = _feet_metrics(frame, feet)
+    if _feet_view_obstructed(metrics):
+        return None
     if _looks_barefoot_or_open_footwear(metrics):
         return None
 
@@ -319,10 +493,12 @@ def _heuristic_shoes(frame: np.ndarray, feet: tuple[float, float, float, float])
         return None
 
     hsv = cv2.cvtColor(bottom, cv2.COLOR_BGR2HSV)
-    skin = cv2.inRange(hsv, np.array([0, 18, 55]), np.array([25, 170, 255]))
+    skin = _foot_skin_mask(hsv)
+    mud = cv2.inRange(hsv, np.array([8, 20, 25]), np.array([28, 150, 120]))
     gray = cv2.cvtColor(bottom, cv2.COLOR_BGR2GRAY)
     dark = (gray < 95).astype(np.uint8) * 255
     dark = cv2.bitwise_and(dark, cv2.bitwise_not(skin))
+    dark = cv2.bitwise_and(dark, cv2.bitwise_not(mud))
     dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((5, 3), np.uint8), 1)
     cnts, _ = cv2.findContours(dark, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
@@ -334,6 +510,11 @@ def _heuristic_shoes(frame: np.ndarray, feet: tuple[float, float, float, float])
         return None
     x, y, bw2, bh2 = cv2.boundingRect(cnt)
     if bw2 < bw * 0.22:
+        return None
+    if bh2 < max(6, bh * 0.12):
+        return None
+    cx = x + bw2 / 2
+    if cx < bw * 0.18 or cx > bw * 0.82:
         return None
     off_y = int(h * 0.45)
     fx1, fy1, _, _ = feet
@@ -406,7 +587,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
         pb = person.person_box
         head = _sub_region(pb, 0.0, 0.30)
         torso = _sub_region(pb, 0.20, 0.72)
-        feet = _sub_region(pb, 0.78, 1.0)
+        feet = _feet_region(pb, h)
 
         detections.append(
             PpeDetection(

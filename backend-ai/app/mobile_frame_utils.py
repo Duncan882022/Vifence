@@ -34,8 +34,19 @@ def scale_result_to_frame(result: dict, frame: np.ndarray, small: np.ndarray) ->
 
     scaled_events = []
     for e in result.get("events", []):
-        x1, y1, x2, y2 = e["bbox"]
-        scaled_events.append({**e, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
+        patch = dict(e)
+        if "bbox" in patch and len(patch["bbox"]) >= 4:
+            x1, y1, x2, y2 = patch["bbox"]
+            patch["bbox"] = [x1 * sx, y1 * sy, x2 * sx, y2 * sy]
+        if patch.get("subject_bbox") and len(patch["subject_bbox"]) >= 4:
+            x1, y1, x2, y2 = patch["subject_bbox"]
+            patch["subject_bbox"] = [x1 * sx, y1 * sy, x2 * sx, y2 * sy]
+        if patch.get("related_bbox") and len(patch["related_bbox"]) >= 4:
+            x1, y1, x2, y2 = patch["related_bbox"]
+            patch["related_bbox"] = [x1 * sx, y1 * sy, x2 * sx, y2 * sy]
+        patch["frame_width"] = ow
+        patch["frame_height"] = oh
+        scaled_events.append(patch)
     result["events"] = scaled_events
     result["width"] = ow
     result["height"] = oh
@@ -51,7 +62,7 @@ def analyze_engine_frame(
     after_process: Callable[[np.ndarray, dict], None] | None = None,
 ) -> dict:
     small = downscale_for_mobile(frame, max_width=max_width)
-    result, _ = process_fn(small, camera_id)
+    result, _ = process_fn(small, camera_id, capture_frame=frame)
     if after_process is not None:
         after_process(small, result)
     return scale_result_to_frame(result, frame, small)

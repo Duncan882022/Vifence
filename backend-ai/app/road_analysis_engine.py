@@ -5,24 +5,34 @@ from __future__ import annotations
 import logging
 import time
 
+import cv2
 import numpy as np
 
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
 from .road_analyzer import (
     EVENT_MIN_CONFIDENCE,
+    _is_valid_object_box,
     analyze_road_frame,
     episode_snapshot_score,
 )
 from .schemas import RoadDetection, ViolationEvent
+from .snapshot_sync import merge_episode_best
 from .unknown_detection import UNKNOWN_LABEL
 
 logger = logging.getLogger("road_analysis_engine")
 
-# Xác nhận sau 3s detect liên tục; lặp snapshot mỗi 2 giờ nếu vẫn phát hiện
-_ROAD_CONFIRM_SECONDS = 3.0
+# Xác nhận thống nhất 2s trước khi ghi sự kiện
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS
+
+_ROAD_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _ROAD_REPEAT_SECONDS = settings.road_event_repeat_seconds
-_ROAD_MAX_GAP_SECONDS = 3.0
+_ROAD_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
+_BEHAVIOR_CONFIRM_SECONDS: dict[str, float] = {
+    "mud": VIOLATION_CONFIRM_SECONDS,
+    "water": VIOLATION_CONFIRM_SECONDS,
+    "object": VIOLATION_CONFIRM_SECONDS,
+}
 _ROAD_MIN_CONFIDENCE = EVENT_MIN_CONFIDENCE
 _BEHAVIOR_MIN_CONFIDENCE: dict[str, float] = {
     "mud": EVENT_MIN_CONFIDENCE,
@@ -61,18 +71,25 @@ class RoadAnalysisEngine:
         if camera_id not in self._gates:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
+            behavior = track_id if track_id in _BEHAVIOR_CONFIRM_SECONDS else "object"
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_ROAD_CONFIRM_SECONDS,
+                min_duration_seconds=_BEHAVIOR_CONFIRM_SECONDS.get(behavior, _ROAD_CONFIRM_SECONDS),
                 cooldown_seconds=_ROAD_REPEAT_SECONDS,
                 max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
                 one_event_per_episode=True,
             )
         return self._gates[camera_id][track_id]
 
-    def _stable_track_id(self, det: RoadDetection) -> str:
-        """Một debouncer / loại — tránh log trùng khi bbox nhảy hoặc đổi nhãn phụ."""
+    def _stable_track_id(self, det: RoadDetection, frame_w: int, frame_h: int) -> str:
+        """Một debouncer theo vùng — tránh gộp mọi BPTC-009 vào một log."""
+        bx = det.bbox
+        cx = min(7, int(((bx[0] + bx[2]) / 2) / max(frame_w / 8, 1)))
+        cy = min(5, int(((bx[1] + bx[3]) / 2) / max(frame_h / 6, 1)))
+        slot = f"p{cy}{cx}"
         if det.behavior == "object":
-            return "object"
+            return f"object:{slot}"
+        if det.behavior in ("mud", "water"):
+            return f"{det.behavior}:{slot}"
         return det.behavior
 
     def _expire_stale_tracks(self, tracks: dict[str, _TrackState], now: float) -> None:
@@ -83,7 +100,14 @@ class RoadAnalysisEngine:
         for tid in stale:
             tracks.pop(tid, None)
 
-    def process_frame(self, frame: np.ndarray, camera_id: str) -> tuple[dict, list[ViolationEvent]]:
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        capture_frame: np.ndarray | None = None,
+    ) -> tuple[dict, list[ViolationEvent]]:
+        snapshot_source = capture_frame if capture_frame is not None else frame
         result = analyze_road_frame(frame, camera_id)
         detections_raw = result.get("detections", [])
         tracks = self._tracks_for(camera_id)
@@ -91,10 +115,15 @@ class RoadAnalysisEngine:
         now = time.time()
 
         dets: list[RoadDetection] = []
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         for row in detections_raw:
             det = RoadDetection.model_validate(row)
             if det.behavior == "unknown" or det.label == UNKNOWN_LABEL:
                 continue
+            if det.behavior == "object":
+                ibox = tuple(int(v) for v in det.bbox)
+                if not _is_valid_object_box(hsv, ibox, frame_w, frame_h):
+                    continue
             min_conf = _BEHAVIOR_MIN_CONFIDENCE.get(det.behavior, _ROAD_MIN_CONFIDENCE)
             if det.confidence >= min_conf:
                 dets.append(det)
@@ -107,7 +136,7 @@ class RoadAnalysisEngine:
             dets = dets[:_MAX_TRACKS]
 
         for det in dets:
-            track_id = self._stable_track_id(det)
+            track_id = self._stable_track_id(det, frame_w, frame_h)
             gate = self._gate_for(camera_id, track_id)
             if track_id not in tracks:
                 if len(tracks) >= _MAX_TRACKS:
@@ -120,12 +149,13 @@ class RoadAnalysisEngine:
 
             quality = episode_snapshot_score(det.behavior, det, frame_w, frame_h)
             if quality >= 0:
-                if state.episode_best is None or quality > state.episode_best["quality"]:
-                    state.episode_best = {
-                        "quality": quality,
-                        "detection": det,
-                        "frame": frame.copy(),
-                    }
+                state.episode_best = merge_episode_best(
+                    state.episode_best,
+                    detection=det,
+                    analyze_frame=frame,
+                    capture_frame=snapshot_source,
+                    quality=quality,
+                )
 
             was_active = gate.snapshot()["active"]
             confirmed = gate.register(True)

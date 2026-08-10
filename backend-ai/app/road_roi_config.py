@@ -63,6 +63,19 @@ ROAD_ROI_ZONES: list[RoiZone] = [
         ],
         "exempt_from_occupancy": False,
     },
+    {
+        "id": "roi-buffer-a04",
+        "label": "Lề đường — TTDV-A Cam 04",
+        "type": "BUFFER",
+        "camera_id": "A-04",
+        "polygon": [
+            {"x": 0.05, "y": 0.35},
+            {"x": 0.12, "y": 0.42},
+            {"x": 0.08, "y": 0.78},
+            {"x": 0.02, "y": 0.68},
+        ],
+        "exempt_from_occupancy": False,
+    },
 ]
 
 

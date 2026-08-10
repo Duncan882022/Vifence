@@ -7,15 +7,16 @@ import time
 
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
-from .pccc_demo import match_demo_detections
+from .pccc_analyzer import analyze_pccc_frame
 from .schemas import Detection, ViolationEvent
-from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
+from .snapshot_sync import build_snapshot_episode, merge_episode_best
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("pccc_engine")
 
-_CONFIRM_SECONDS = 0.0
+_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _REPEAT_SECONDS = settings.pccc_event_repeat_seconds
-_MAX_GAP_SECONDS = 3.0
+_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _EVENT_BEHAVIORS = frozenset({"smoking", "fire"})
 _MIN_CONF = VIOLATION_MIN_CONFIDENCE
 
@@ -39,12 +40,16 @@ class PcccEngine:
         return self._gates[camera_id][behavior]
 
     def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
-        demo = match_demo_detections(frame, camera_id)
-        if demo:
-            return demo
-        return []
+        return analyze_pccc_frame(frame, camera_id)
 
-    def process_frame(self, frame: np.ndarray, camera_id: str) -> tuple[dict, list[ViolationEvent]]:
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        capture_frame: np.ndarray | None = None,
+    ) -> tuple[dict, list[ViolationEvent]]:
+        snapshot_source = capture_frame if capture_frame is not None else frame
         detections = self._collect_detections(frame, camera_id)
         new_events: list[ViolationEvent] = []
         active_behaviors: set[str] = set()
@@ -57,19 +62,31 @@ class PcccEngine:
             episode_key = f"{camera_id}:{det.behavior}"
             gate = self._gate_for(camera_id, det.behavior)
 
-            pending = self._episode_best.get(episode_key)
-            if pending is None or det.confidence > pending["detection"].confidence:
-                self._episode_best[episode_key] = {
-                    "detection": det,
-                    "frame": frame.copy(),
-                }
+            self._episode_best[episode_key] = merge_episode_best(
+                self._episode_best.get(episode_key),
+                detection=det,
+                analyze_frame=frame,
+                capture_frame=snapshot_source,
+                person_bbox=getattr(det, "subject_bbox", None),
+            )
 
             confirmed = gate.register(True)
             if confirmed:
                 best = self._episode_best.pop(episode_key, None)
                 top = best["detection"] if best else det
-                snap = best["frame"] if best else frame
-                event = self.store.add(top, snap, camera_id=camera_id)
+                snap = best["frame"] if best else snapshot_source
+                person_bbox = best.get("person_bbox") if best else getattr(det, "subject_bbox", None)
+                if det.behavior == "smoking" and person_bbox:
+                    event = self.store.add_pccc(
+                        top,
+                        snap,
+                        camera_id=camera_id,
+                        person_bbox=person_bbox,
+                    )
+                elif det.behavior == "fire":
+                    event = self.store.add_pccc(top, snap, camera_id=camera_id)
+                else:
+                    event = self.store.add(top, snap, camera_id=camera_id)
                 if event:
                     new_events.append(event)
                     logger.info(
