@@ -65,14 +65,16 @@ export function resolvePpeSlotBbox(
   return derivePpeSlotBbox(group.person.bbox, slot)
 }
 
-export function groupPpeDetections(detections: PpeDetection[]): PpePersonGroup[] {
+export function groupPpeDetections(
+  detections: Array<PpeDetection & { trackId?: string }>,
+): PpePersonGroup[] {
   const persons = detections.filter(d => d.behavior === 'person')
   const others = detections.filter(d => d.behavior !== 'person')
 
   return persons.map((person, index) => {
     const pb = person.bbox
     const group: PpePersonGroup = {
-      id: `ppe-${index}-${Math.round(pb[0])}-${Math.round(pb[1])}`,
+      id: person.trackId ?? `ppe-${index}-${Math.round(pb[0])}-${Math.round(pb[1])}`,
       person,
       slots: { feet: [] },
     }
@@ -105,10 +107,28 @@ export function groupPpeDetections(detections: PpeDetection[]): PpePersonGroup[]
   })
 }
 
+/** PPE-003 — chỉ vi phạm giày khi cả 2 chân đều thiếu giày (detect được). */
+export function groupHasFeetShoesViolation(group: PpePersonGroup): boolean {
+  return group.slots.feet.filter(d => d.behavior === 'no_shoes').length >= 2
+}
+
 export function groupHasViolation(group: PpePersonGroup): boolean {
   if (group.slots.head?.behavior.startsWith('no_')) return true
   if (group.slots.torso?.behavior.startsWith('no_')) return true
-  return group.slots.feet.some(d => d.behavior.startsWith('no_'))
+  return groupHasFeetShoesViolation(group)
+}
+
+/** Box overlay tách rời — không gộp bbox người (giày so le khó gộp). */
+export function flattenPpeViolationOverlayBoxes(groups: PpePersonGroup[]): PpeDetection[] {
+  const out: PpeDetection[] = []
+  for (const group of groups) {
+    if (group.slots.head?.behavior.startsWith('no_')) out.push(group.slots.head)
+    if (group.slots.torso?.behavior.startsWith('no_')) out.push(group.slots.torso)
+    if (groupHasFeetShoesViolation(group)) {
+      out.push(...group.slots.feet.filter(d => d.behavior === 'no_shoes'))
+    }
+  }
+  return out
 }
 
 export function slotDetection(

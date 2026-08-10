@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Play, Send, ShieldCheck } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Send, ShieldCheck } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../../types/safety.types'
@@ -21,7 +21,6 @@ interface SafetyViolationTableProps {
   records: SafetyViolationRecord[]
   selectedId?: string
   onSelect?: (v: SafetyViolationRecord) => void
-  onPlayback?: (v: SafetyViolationRecord) => void
   onSnapshotClick?: (v: SafetyViolationRecord) => void
 }
 
@@ -133,7 +132,7 @@ function SortableHeader({
 }
 
 export function SafetyViolationTable({
-  records, selectedId, onSelect, onPlayback, onSnapshotClick,
+  records, selectedId, onSelect, onSnapshotClick,
 }: SafetyViolationTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('detectedAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -278,9 +277,6 @@ export function SafetyViolationTable({
                   <td className={cn('px-2 py-1.5 text-[9px] tabular-nums align-top', sla.className)}>{sla.label}</td>
                   <td className="px-2 py-1.5 align-top">
                     <div className="flex items-center gap-0.5">
-                      <button type="button" onClick={e => { e.stopPropagation(); onPlayback?.(v) }} className="p-1 rounded hover:bg-[#1e2433] text-muted-foreground hover:text-primary" title="Playback">
-                        <Play className="w-3 h-3" />
-                      </button>
                       <button type="button" onClick={e => e.stopPropagation()} className="p-1 rounded hover:bg-[#1e2433] text-muted-foreground" title="Giao việc">
                         <Send className="w-3 h-3" />
                       </button>

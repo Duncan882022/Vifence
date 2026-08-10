@@ -12,6 +12,7 @@ from .events import EventStore, PersistenceDebouncer
 from .ppe_analyzer import analyze_ppe_frame
 from .schemas import PpeDetection, ViolationEvent
 from .track_matching import assign_person_track_id
+from .worker_identity.detection_enrich import copy_worker_identity
 from .snapshot_sync import build_snapshot_episode, merge_episode_best, resync_ppe_episode
 from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
 
@@ -130,6 +131,7 @@ class PpeEngine:
                 continue
 
             person_bbox = [float(v) for v in person.bbox]
+            copy_worker_identity(person, det)
             track_id = assign_person_track_id(
                 person_bbox,
                 tracks,

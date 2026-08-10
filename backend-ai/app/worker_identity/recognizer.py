@@ -11,6 +11,7 @@ import numpy as np
 from ..config import settings
 from ..detectors.face_guard import detect_faces
 from .demo_roster import demo_match_from_track
+from ..unknown_detection import UNKNOWN_LABEL
 from .gallery import _face_embedding, gallery_dir, load_gallery, match_embedding, registry_rows
 from .models import WorkerMatch
 
@@ -69,13 +70,22 @@ def _crop_person(frame: np.ndarray, person_bbox: list[float]) -> np.ndarray | No
     return frame[y1:y2, x1:x2].copy()
 
 
+def unknown_worker_match(match_source: str = "unknown") -> WorkerMatch:
+    """Không nhận diện được gallery — UI hiển thị Unknown."""
+    return WorkerMatch(
+        worker_id="unknown",
+        worker_name=UNKNOWN_LABEL,
+        employee_code="",
+        contractor_name=None,
+        confidence=0.0,
+        match_source=match_source,
+    )
+
+
 def _best_face_in_crop(crop: np.ndarray) -> np.ndarray | None:
     ok, faces = detect_faces(crop, score_threshold=0.45)
     if not ok or faces is None or len(faces) == 0:
-        head = crop[: max(1, int(crop.shape[0] * 0.45)), :]
-        if head.size == 0:
-            return None
-        return head
+        return None
     best = None
     best_area = 0.0
     for face in faces:
@@ -118,31 +128,28 @@ def identify_person(
     *,
     camera_id: str,
     track_id: Optional[str] = None,
-) -> WorkerMatch | None:
-    if not settings.worker_recognition_enabled:
-        return None
+) -> WorkerMatch:
+    """Luôn chạy detect mặt trong bbox người — khớp gallery hoặc Unknown."""
     if not person_bbox or len(person_bbox) < 4:
-        return None
+        return unknown_worker_match("no_person_bbox")
 
     cache_key = f"{camera_id}:{track_id or person_bbox[0]}"
     if cache_key in _track_cache:
-        cached = _track_cache[cache_key]
-        return WorkerMatch(
-            worker_id=cached.worker_id,
-            worker_name=cached.worker_name,
-            employee_code=cached.employee_code,
-            contractor_name=cached.contractor_name,
-            confidence=cached.confidence,
-            match_source="track_cache",
-        )
+        return _track_cache[cache_key]
 
-    _ensure_gallery()
-    match = _match_face(frame, person_bbox)
-    if match is None and settings.worker_demo_fallback_enabled and track_id:
-        match = demo_match_from_track(camera_id, track_id)
+    match: WorkerMatch | None = None
+    if settings.worker_recognition_enabled:
+        _ensure_gallery()
+        match = _match_face(frame, person_bbox)
+        if match is None and settings.worker_demo_fallback_enabled and track_id:
+            match = demo_match_from_track(camera_id, track_id)
 
-    if match:
-        _track_cache[cache_key] = match
+    if match is None:
+        crop = _crop_person(frame, person_bbox)
+        face_crop = _best_face_in_crop(crop) if crop is not None else None
+        source = "face_unmatched" if face_crop is not None else "face_not_found"
+        match = unknown_worker_match(source)
+    else:
         logger.info(
             "[worker_identity] %s → %s (%s) conf=%.2f src=%s",
             track_id or "person",
@@ -151,4 +158,6 @@ def identify_person(
             match.confidence,
             match.match_source,
         )
+
+    _track_cache[cache_key] = match
     return match

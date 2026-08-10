@@ -30,6 +30,12 @@ export interface VmsOverlayDetection {
   vehicle_plate?: string
   vehicle_type?: string
   driver_name?: string
+  worker_id?: string
+  worker_name?: string
+  employee_code?: string
+  contractor_name?: string
+  face_match_confidence?: number
+  track_id?: string
   subject_bbox?: [number, number, number, number]
   related_bbox?: [number, number, number, number]
 }
@@ -39,6 +45,8 @@ export interface VmsDetectionSnapshot {
   width: number
   height: number
   updated_at: number
+  /** Vị trí trong file nguồn (giây) lúc AI chạy — đồng bộ overlay live. */
+  source_pts_sec?: number
   vms_ready: boolean
   detections: VmsOverlayDetection[]
   roi_zones: RoadAnalysisRoiZone[]
@@ -94,6 +102,7 @@ function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null 
     confidence: Number(raw.confidence ?? 0),
     bbox,
     scenario_id: raw.scenario_id ? String(raw.scenario_id) : undefined,
+    track_id: raw.track_id ? String(raw.track_id) : undefined,
     object_kind: raw.object_kind ? String(raw.object_kind) : undefined,
     machine_kind: raw.machine_kind ? String(raw.machine_kind) : undefined,
     distance_m: raw.distance_m != null ? Number(raw.distance_m) : undefined,
@@ -101,6 +110,12 @@ function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null 
     vehicle_plate: raw.vehicle_plate ? String(raw.vehicle_plate) : undefined,
     vehicle_type: raw.vehicle_type ? String(raw.vehicle_type) : undefined,
     driver_name: raw.driver_name ? String(raw.driver_name) : undefined,
+    worker_id: raw.worker_id ? String(raw.worker_id) : undefined,
+    worker_name: raw.worker_name ? String(raw.worker_name) : undefined,
+    employee_code: raw.employee_code ? String(raw.employee_code) : undefined,
+    contractor_name: raw.contractor_name ? String(raw.contractor_name) : undefined,
+    face_match_confidence:
+      raw.face_match_confidence != null ? Number(raw.face_match_confidence) : undefined,
     subject_bbox: normalizeBbox(raw.subject_bbox as number[] | undefined) ?? undefined,
     related_bbox: normalizeBbox(raw.related_bbox as number[] | undefined) ?? undefined,
   }
@@ -124,6 +139,7 @@ export async function fetchVmsDetections(
     width?: number
     height?: number
     updated_at?: number
+    source_pts_sec?: number
     vms_ready?: boolean
     detections?: Record<string, unknown>[]
     roi_zones?: RoadAnalysisRoiZone[]
@@ -139,6 +155,7 @@ export async function fetchVmsDetections(
     width: Number(data.width ?? 0),
     height: Number(data.height ?? 0),
     updated_at: Number(data.updated_at ?? 0),
+    source_pts_sec: data.source_pts_sec != null ? Number(data.source_pts_sec) : undefined,
     vms_ready: Boolean(data.vms_ready),
     detections,
     roi_zones: data.roi_zones ?? [],

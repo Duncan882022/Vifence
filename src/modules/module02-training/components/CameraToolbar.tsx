@@ -70,6 +70,12 @@ export function CameraToolbar({
       compact ? 'top-1.5 right-1.5' : 'top-2 right-2',
     )}>
       <div className={CAMERA_TOOLBAR_SHELL}>
+        <BackendConnectionBadge
+          cameraId={cameraId}
+          compact={compact}
+          variant="toolbar"
+          className={cameraToolbarBtn(compact)}
+        />
         <CameraAiConfigButton
           cameraId={cameraId}
           compact={compact}
@@ -118,7 +124,6 @@ export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraCh
         compact ? 'top-1.5 left-1.5' : 'top-2 left-2',
       )}>
         <CameraLiveBadge compact={compact} />
-        <BackendConnectionBadge compact={compact} />
       </div>
       <CameraToolbar
         cameraId={cam.id}

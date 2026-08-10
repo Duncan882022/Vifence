@@ -25,6 +25,8 @@ export interface ViolationStickyOverlayOptions<T extends StickyOverlayDetection>
   getTrackKey?: (item: T) => string
   /** DZ — thêm máy/cẩu liên quan khi có vi phạm crane_proximity. */
   appendRelated?: (visibleViolations: T[], allDetections: T[]) => T[]
+  /** Đổi key → xóa sticky tracks (VMS poll mới). */
+  syncKey?: string
 }
 
 function bboxIou(a: Bbox, b: Bbox): number {
@@ -40,7 +42,8 @@ function bboxIou(a: Bbox, b: Bbox): number {
   return union > 0 ? inter / union : 0
 }
 
-function defaultTrackKey(det: StickyOverlayDetection): string {
+function defaultTrackKey(det: StickyOverlayDetection & { trackId?: string }): string {
+  if (det.trackId) return `${det.behavior}:${det.trackId}`
   const cx = Math.round((det.bbox[0] + det.bbox[2]) / 2 / 28)
   const cy = Math.round((det.bbox[1] + det.bbox[3]) / 2 / 28)
   return `${det.behavior}:${cx}:${cy}`
@@ -84,8 +87,15 @@ export function useViolationStickyOverlay<T extends StickyOverlayDetection>(
   } = options
 
   const tracksRef = useRef<Map<string, StickyTrack<T>>>(new Map())
+  const lastSyncKeyRef = useRef<string | undefined>(undefined)
+  const syncKey = options.syncKey
 
   return useMemo(() => {
+    if (syncKey !== undefined && syncKey !== lastSyncKeyRef.current) {
+      tracksRef.current = new Map()
+      lastSyncKeyRef.current = syncKey
+    }
+
     const incoming = detections.filter(
       d => isViolation(d) && d.confidence >= minConfidence,
     )
@@ -123,5 +133,5 @@ export function useViolationStickyOverlay<T extends StickyOverlayDetection>(
     const violations = [...nextTracks.values()].map(t => t.detection)
     const visible = appendRelated ? appendRelated(violations, detections) : violations
     return { visible }
-  }, [detections, minConfidence, missGraceFrames, isViolation, getTrackKey, appendRelated])
+  }, [detections, minConfidence, missGraceFrames, isViolation, getTrackKey, appendRelated, syncKey])
 }

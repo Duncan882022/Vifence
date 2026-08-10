@@ -30,6 +30,8 @@ import { PlaybackDetectionsList } from './PlaybackDetectionsList'
 import { PlaybackMobileStrip } from './PlaybackMobileStrip'
 import { useEventClipPlayback } from '@/modules/module03-safety/components/EventPlaybackViewport'
 import { buildEventClipWindow, EVENT_PLAYBACK_CLIP_SEC } from '@/modules/module03-safety/utils/eventPlaybackClip'
+import { SafetyEventDetailContent } from '@/modules/module03-safety/components/SafetyEventDetailContent'
+import type { SafetyViolationRecord } from '@/modules/module03-safety/types/safety.types'
 
 export interface CameraPlaybackPanelProps {
   cameras: TrainingCamera[]
@@ -38,6 +40,10 @@ export interface CameraPlaybackPanelProps {
   defaultDate?: string
   maxDate?: string
   initialRecordId?: string
+  /** Đồng bộ bản ghi đang chọn từ danh sách sự kiện (tier ATLĐ). */
+  selectedRecordId?: string | null
+  /** Metadata sự kiện — hiển thị dưới video khi đang phát clip vi phạm. */
+  activeEventRecord?: SafetyViolationRecord | null
   /** Cùng filter sidebar với TrainingCameraPanel — nếu không truyền thì fallback theo location */
   filterTabs?: string[]
   filterFn?: (tab: string) => TrainingCamera[]
@@ -56,6 +62,8 @@ export function CameraPlaybackPanel({
   defaultDate,
   maxDate,
   initialRecordId,
+  selectedRecordId,
+  activeEventRecord,
   filterTabs,
   filterFn,
   groupFn,
@@ -143,6 +151,17 @@ export function CameraPlaybackPanel({
 
     return () => { cancelled = true }
   }, [activeCam, date, fetchRecords, initialRecordId])
+
+  useEffect(() => {
+    if (!selectedRecordId || records.length === 0) return
+    const match = records.find(item => item.id === selectedRecordId)
+    if (!match) return
+    setSelectedRecord(match)
+    setSeekSec(match.seekSec ?? 0)
+    setProgress(0)
+    setCurrentTime(0)
+    setIsPlaying(false)
+  }, [selectedRecordId, records])
 
   useEffect(() => {
     if (!selectedRecord?.id) {
@@ -337,6 +356,7 @@ export function CameraPlaybackPanel({
             selectedRecord={selectedRecord}
             videoRef={videoRef}
             muted={muted || volume === 0}
+            activeEventRecord={activeEventRecord}
           />
         </div>
 
@@ -356,6 +376,11 @@ export function CameraPlaybackPanel({
 
         {isDesktop ? (
           <div className="shrink-0 flex flex-col gap-1 pt-0.5 border-t border-[#1e2433]/50">
+            {activeEventRecord && selectedRecord?.type === 'event' && (
+              <div className="max-h-[140px] overflow-y-auto rounded-lg border border-[#1e2433] bg-[#0a0e17]/80 mx-0.5">
+                <SafetyEventDetailContent record={activeEventRecord} variant="playback" />
+              </div>
+            )}
             <PlaybackRecordTimeline
               compact
               records={records}
@@ -382,6 +407,11 @@ export function CameraPlaybackPanel({
           </div>
         ) : (
           <>
+            {activeEventRecord && selectedRecord?.type === 'event' && (
+              <div className="max-h-[120px] overflow-y-auto rounded-lg border border-[#1e2433] bg-[#0a0e17]/80 shrink-0">
+                <SafetyEventDetailContent record={activeEventRecord} variant="playback" />
+              </div>
+            )}
             <PlaybackRecordTimeline
               records={records}
               selectedRecord={selectedRecord}

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, memo, useCallback, useMemo, type RefObject } from 'react'
+import { cn } from '@/utils/cn'
+import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
@@ -15,9 +17,17 @@ import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
-import { groupPpeDetections, groupHasViolation } from '../utils/ppeDetectionGroups'
+import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
+import {
+  flattenPpeViolationOverlayBoxes,
+  groupHasViolation,
+  groupPpeDetections,
+} from '../utils/ppeDetectionGroups'
 import { shouldShowOverlayBox } from '../utils/overlayCoverage'
-import { PpePersonGroupBox } from './PpePersonGroupBox'
+import { formatPersonOverlayBadge } from '../utils/personOverlayLabel'
+import { formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { getOverlayBoxStyle } from '../utils/roiBoxRole'
+import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 
 interface PpeOverlayProps {
   cameraId: string
@@ -26,6 +36,75 @@ interface PpeOverlayProps {
   videoObjectPosition?: 'center' | 'bottom'
   enabled?: boolean
   compact?: boolean
+}
+
+function PpeDetectionBox({
+  detection,
+  frameWidth,
+  frameHeight,
+  videoRef,
+  compact,
+  videoFit,
+  videoObjectPosition = 'center',
+  snapOverlay = false,
+}: {
+  detection: PpeDetection
+  frameWidth: number
+  frameHeight: number
+  videoRef: RefObject<HTMLVideoElement | null>
+  compact?: boolean
+  videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
+  snapOverlay?: boolean
+}) {
+  const style = getOverlayBoxStyle('ppe', detection.behavior)
+  const video = videoRef.current
+  const [x1, y1, x2, y2] = detection.bbox
+
+  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
+    return null
+  }
+
+  const box = mapBackendBboxToOverlay(
+    [x1, y1, x2, y2],
+    frameWidth,
+    frameHeight,
+    video,
+    videoFit,
+    videoObjectPosition,
+  )
+
+  if (box.w <= 0.5 || box.h <= 0.5) return null
+  if (!shouldShowOverlayBox(detection.confidence, detection.bbox)) return null
+
+  return (
+    <div
+      className={overlayBoxMotionClass(snapOverlay)}
+      style={{
+        left: `${box.x}%`,
+        top: `${box.y}%`,
+        width: `${box.w}%`,
+        height: `${box.h}%`,
+        zIndex: 8,
+      }}
+    >
+      <div className={cn('absolute inset-0 rounded-sm', style.border, style.fill)} />
+      <span
+        className={cn(
+          'absolute -top-3 left-0 px-0.5 py-px font-mono whitespace-nowrap rounded-sm',
+          style.bg,
+          style.label,
+          compact ? 'text-[5px]' : 'text-[7px]',
+        )}
+      >
+        {formatPersonOverlayBadge(
+          detection.worker_name,
+          detection.confidence,
+          ` · ${formatRoiOverlayCode(detection.behavior, detection.scenario_id)}`,
+        )}
+      </span>
+    </div>
+  )
 }
 
 function usePpeState(
@@ -42,8 +121,8 @@ function usePpeState(
   const [layoutTick, setLayoutTick] = useState(0)
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
   const resetDetections = useCallback(() => setDetections([]), [])
-  useOverlaySceneReset(videoRef, enabled, resetDetections)
   const vms = useVmsDetections()
+  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -62,6 +141,11 @@ function usePpeState(
           scenario_id: d.scenario_id ?? '',
           confidence: d.confidence,
           bbox: d.bbox,
+          worker_id: d.worker_id,
+          worker_name: d.worker_name,
+          employee_code: d.employee_code,
+          contractor_name: d.contractor_name,
+          face_match_confidence: d.face_match_confidence,
         })),
     )
     setStatus(vms.status)
@@ -146,36 +230,41 @@ export const PpeOverlay = memo(function PpeOverlay({
   compact,
 }: PpeOverlayProps) {
   const { detections, frameSize, layoutTick } = usePpeState(cameraId, videoRef, enabled)
-  const stableDetections = useStableOverlayDetections(detections)
+  const { syncKey, trackLock, missGraceFrames, snapOverlay } = useLiveOverlaySync()
+  const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
 
   const { visible: stickyViolations } = useViolationStickyOverlay(stableDetections, {
     isViolation: d => d.behavior.startsWith('no_'),
+    syncKey,
+    missGraceFrames,
   })
 
-  const visibleGroups = useMemo(() => {
+  const visibleBoxes = useMemo(() => {
     if (stickyViolations.length === 0) return []
-    return groupPpeDetections(stableDetections).filter(group => {
+    const groups = groupPpeDetections(stableDetections).filter(group => {
       if (!groupHasViolation(group)) return false
       return shouldShowOverlayBox(group.person.confidence, group.person.bbox)
     })
+    return flattenPpeViolationOverlayBoxes(groups)
   }, [stableDetections, stickyViolations])
 
-  if (visibleGroups.length === 0 || frameSize.width <= 0) return null
+  if (visibleBoxes.length === 0 || frameSize.width <= 0) return null
 
   return (
-    <>
-      {visibleGroups.map(group => (
-        <PpePersonGroupBox
-          key={`${group.id}-${layoutTick}`}
-          group={group}
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
+      {visibleBoxes.map((detection, index) => (
+        <PpeDetectionBox
+          key={`${detection.behavior}-${index}-${Math.round(detection.bbox[0])}-${Math.round(detection.bbox[1])}-${layoutTick}`}
+          detection={detection}
           frameWidth={frameSize.width}
           frameHeight={frameSize.height}
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          snapOverlay={snapOverlay}
         />
       ))}
-    </>
+    </div>
   )
 })

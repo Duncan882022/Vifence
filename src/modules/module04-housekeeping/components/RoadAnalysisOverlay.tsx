@@ -9,10 +9,12 @@ import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cam
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { notifySafetyAiEventsChanged } from '@/modules/module03-safety/services/safetyAiEvents.service'
 import { useVmsDetections } from '@/modules/module03-safety/context/VmsDetectionContext'
-import { isVmsLiveCamera, shouldShowVmsLiveRoiOverlay } from '@/modules/module03-safety/services/vmsDetections.service'
+import { useCameraLiveRoiVisible } from '@/modules/module02-training/hooks/useCameraLiveRoiVisible'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
 import { useStableOverlayDetections } from '@/modules/module03-safety/hooks/useStableOverlayDetections'
 import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
+import { useLiveOverlaySync } from '@/modules/module03-safety/hooks/useLiveOverlaySync'
+import { overlayBoxMotionClass } from '@/modules/module03-safety/utils/overlayBoxMotion'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import { getOverlayBoxStyle } from '@/modules/module03-safety/utils/roiBoxRole'
 import {
@@ -30,6 +32,10 @@ function visibleDetections(
 ): RoadAnalysisDetection[] {
   const frameArea = Math.max(frameWidth * frameHeight, 1)
   return detections.filter(d => {
+    if (d.behavior.startsWith('mesh_')) {
+      if (d.label === 'Unknown') return false
+      return d.confidence >= 0.85
+    }
     if (
       d.behavior !== 'mud'
       && d.behavior !== 'water'
@@ -38,21 +44,25 @@ function visibleDetections(
       return false
     }
     if (d.label === 'Unknown') return false
-    if (d.behavior.startsWith('mesh_')) return false
     if (d.confidence < 0.68) return false
     const [x1, y1, x2, y2] = d.bbox
     const areaRatio = ((x2 - x1) * (y2 - y1)) / frameArea
     if (areaRatio < 0.0035) return false
+    /** Bùn/nước có thể phủ vùng lớn trong ROI — vật cản (object) giữ ngưỡng chặt hơn. */
+    const maxArea = d.behavior === 'object' ? 0.32 : 0.58
+    if (areaRatio > maxArea) return false
     return true
   })
 }
 
 
-/** Chỉ vẽ ROAD trên overlay — BUFFER (lề đường) lệch khung demo, backend không dùng. */
+/** Polygon ROI — đồng bộ nét mỏng với ATGT/Crane (Cam A-03). */
 const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
-  ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.18)' },
-  STORAGE: { stroke: 'rgba(167, 139, 250, 0.35)', fill: 'none', dash: '4 3' },
+  ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.12)' },
+  MESH: { stroke: 'rgba(56, 189, 248, 0.90)', fill: 'rgba(14, 165, 233, 0.10)', dash: '5 3' },
+  STORAGE: { stroke: 'rgba(167, 139, 250, 0.30)', fill: 'none', dash: '4 3' },
 }
+const ROI_POLYGON_STROKE_WIDTH = 1.2
 
 interface RoadAnalysisOverlayProps {
   cameraId: string
@@ -89,6 +99,7 @@ function DetectionBox({
   compact,
   videoFit = 'contain',
   videoObjectPosition = 'center',
+  snapOverlay = false,
 }: {
   detection: RoadAnalysisDetection
   frameWidth: number
@@ -97,6 +108,7 @@ function DetectionBox({
   compact?: boolean
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
+  snapOverlay?: boolean
 }) {
   const style = getOverlayBoxStyle('road_material', detection.behavior)
   const video = videoRef.current
@@ -119,7 +131,7 @@ function DetectionBox({
 
   return (
     <div
-      className="absolute pointer-events-none z-[3]"
+      className={cn('pointer-events-none z-[3]', overlayBoxMotionClass(snapOverlay))}
       style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}
     >
       <div
@@ -164,7 +176,9 @@ function RoiPolygons({
   layoutTick: number
 }) {
   const video = videoRef.current
-  if (zones.length === 0 || (frameWidth <= 0 && !video?.videoWidth)) return null
+  const fw = frameWidth > 0 ? frameWidth : (video?.videoWidth ?? 0)
+  const fh = frameHeight > 0 ? frameHeight : (video?.videoHeight ?? 0)
+  if (zones.length === 0 || (fw <= 0 && fh <= 0 && !video?.clientWidth)) return null
 
   return (
     <svg
@@ -178,8 +192,8 @@ function RoiPolygons({
         const points = polygonPointsOnVideo(
           zone.polygon,
           video,
-          frameWidth,
-          frameHeight,
+          fw,
+          fh,
           videoFit,
           videoObjectPosition,
         )
@@ -190,7 +204,7 @@ function RoiPolygons({
             points={points}
             fill={style.fill}
             stroke={style.stroke}
-            strokeWidth={1.4}
+            strokeWidth={ROI_POLYGON_STROKE_WIDTH}
             strokeDasharray={style.dash}
             vectorEffect="non-scaling-stroke"
           />
@@ -213,7 +227,7 @@ function useRoadAnalysisState(
   const [metrics, setMetrics] = useState<RoadAnalysisResult['metrics']>()
   const roiZones = useMemo<RoadAnalysisRoiZone[]>(() =>
     getRoiZonesForCamera(cameraId)
-      .filter(z => z.type === 'ROAD')
+      .filter(z => z.type === 'ROAD' || z.type === 'MESH')
       .map(z => ({
       id: z.id,
       label: z.label,
@@ -224,8 +238,8 @@ function useRoadAnalysisState(
   const [layoutTick, setLayoutTick] = useState(0)
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
   const resetDetections = useCallback(() => setDetections([]), [])
-  useOverlaySceneReset(videoRef, enabled, resetDetections)
   const vms = useVmsDetections()
+  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -233,7 +247,12 @@ function useRoadAnalysisState(
     const roadMetrics = vms.snapshot.metrics.road as RoadAnalysisResult['metrics'] | undefined
     setDetections(visibleDetections(
       vms.snapshot.detections
-        .filter(d => d.behavior === 'mud' || d.behavior === 'water' || d.behavior === 'object')
+        .filter(d =>
+          d.behavior === 'mud'
+          || d.behavior === 'water'
+          || d.behavior === 'object'
+          || d.behavior.startsWith('mesh_'),
+        )
         .map(d => ({
           behavior: d.behavior as RoadAnalysisDetection['behavior'],
           label: d.label,
@@ -327,7 +346,7 @@ function useRoadAnalysisState(
 
   const effectiveRoiZones = useMemo<RoadAnalysisRoiZone[]>(() => {
     const fromVms = (vms?.snapshot?.roi_zones ?? [])
-      .filter(z => z.type === 'ROAD')
+      .filter(z => z.type === 'ROAD' || z.type === 'MESH')
     if (fromVms.length > 0) return fromVms
     return roiZones
   }, [roiZones, vms?.snapshot?.roi_zones])
@@ -345,32 +364,38 @@ export function RoadAnalysisOverlay({
 }: RoadAnalysisOverlayProps) {
   const { detections, frameSize, roiZones, layoutTick } =
     useRoadAnalysisState(cameraId, videoRef, enabled)
-  const stableDetections = useStableOverlayDetections(detections)
+  const { syncKey, trackLock, missGraceFrames, snapOverlay } = useLiveOverlaySync()
+  const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
   const { visible } = useViolationStickyOverlay(stableDetections, {
     isViolation: d =>
-      d.behavior === 'mud' || d.behavior === 'water' || d.behavior === 'object',
+      d.behavior === 'mud'
+      || d.behavior === 'water'
+      || d.behavior === 'object'
+      || d.behavior.startsWith('mesh_'),
+    syncKey,
+    missGraceFrames,
   })
+  const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
 
   if (!enabled) return null
 
-  // A-03: luôn vẽ ROI lòng đường mặc định; cam VMS khác (A-04) chỉ bbox — cấu hình ROI per-cam sau.
-  const showPolygon = roiZones.length > 0 && (
-    shouldShowVmsLiveRoiOverlay(cameraId) || !isVmsLiveCamera(cameraId)
-  )
-  const showBoxes = visible.length > 0 && frameSize.width > 0
+  const showPolygon = roiZones.length > 0 && liveRoiVisible
   const video = videoRef.current
-  const overlayFrameSize =
-    frameSize.width > 0
-      ? frameSize
-      : video?.videoWidth && video.videoHeight
-        ? { width: video.videoWidth, height: video.videoHeight }
-        : { width: 0, height: 0 }
+  const overlayFrameSize = {
+    width: frameSize.width > 0
+      ? frameSize.width
+      : video?.videoWidth ?? (cameraId === 'A-03' ? 640 : 0),
+    height: frameSize.height > 0
+      ? frameSize.height
+      : video?.videoHeight ?? (cameraId === 'A-03' ? 640 : 0),
+  }
+  const showBoxes = visible.length > 0 && overlayFrameSize.width > 0
 
   if (!showPolygon && !showBoxes) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {showPolygon && (
+      {showPolygon && overlayFrameSize.width > 0 && (
         <RoiPolygons
           key={`road-roi-${layoutTick}`}
           zones={roiZones}
@@ -387,12 +412,13 @@ export function RoadAnalysisOverlay({
         <DetectionBox
           key={`${d.behavior}-${idx}-${Math.round(d.bbox[0])}-${Math.round(d.bbox[1])}-${layoutTick}`}
           detection={d}
-          frameWidth={frameSize.width}
-          frameHeight={frameSize.height}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          snapOverlay={snapOverlay}
         />
       ))}
     </div>

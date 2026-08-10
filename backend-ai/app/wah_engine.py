@@ -59,9 +59,22 @@ def _match_person(violation: Detection, persons: list[Detection]) -> Detection |
 
 
 def _harness_on_person(person_bbox: list[float], harnesses: list[Detection]) -> bool:
-    pb = tuple(person_bbox)
+    px1, py1, px2, py2 = person_bbox
+    person_h = max(py2 - py1, 1.0)
     for harness in harnesses:
-        if _center_inside(harness.bbox, pb):
+        cx, cy = _bbox_center(harness.bbox)
+        if not (px1 <= cx <= px2 and py1 <= cy <= py1 + person_h * 0.62):
+            continue
+        hx1, hy1, hx2, hy2 = harness.bbox
+        ix1 = max(px1, hx1)
+        iy1 = max(py1, hy1)
+        ix2 = min(px2, hx2)
+        iy2 = min(py2, hy2)
+        if ix2 <= ix1 or iy2 <= iy1:
+            continue
+        overlap = (ix2 - ix1) * (iy2 - iy1)
+        person_area = (px2 - px1) * (py2 - py1)
+        if overlap / max(person_area, 1.0) >= 0.06:
             return True
     return False
 

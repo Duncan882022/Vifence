@@ -106,22 +106,52 @@ def _water_patch_looks_real(hsv: np.ndarray, box: tuple[int, int, int, int]) -> 
     return white_ratio > 0.08 or mean_s < 22
 
 
+def _water_validation_band(
+    box: tuple[int, int, int, int],
+    *,
+    expanded: bool = False,
+    frame_width: int = 0,
+) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = [int(v) for v in box]
+    h = max(y2 - y1, 1)
+    if expanded and frame_width > 0 and (x2 - x1) >= frame_width * 0.40:
+        # Bbox rộng ôm vũng — chỉ xác thực dải đáy (tránh hàng rào phía trên).
+        return x1, y1 + int(h * 0.62), x2, y2
+    if not expanded:
+        return x1, y1, x2, y2
+    return x1, y1 + int(h * 0.38), x2, y2
+
+
 def _is_valid_water_box(
     hsv: np.ndarray,
     box: tuple[int, int, int, int],
     frame_width: int,
     frame_height: int,
+    *,
+    expanded: bool = False,
 ) -> bool:
-    if _score_water_box(box, frame_width, frame_height) < 0:
+    if _score_water_box(box, frame_width, frame_height, expanded=expanded) < 0:
         return False
-    if _is_temporary_barrier_box(hsv, box):
+    if _is_temporary_barrier_box(hsv, box) and box[3] < frame_height * 0.88:
         return False
-    if not _water_patch_looks_real(hsv, box):
+    band = _water_validation_band(box, expanded=expanded, frame_width=frame_width)
+    wide = expanded and (box[2] - box[0]) >= frame_width * 0.40
+    if wide and box[3] < frame_height * 0.88:
+        return False
+    if wide and box[3] >= frame_height * 0.78:
+        cx = (box[0] + box[2]) / 2
+        cy = (box[1] + box[3]) / 2
+        if cy >= frame_height * 0.72 and frame_width * 0.12 <= cx <= frame_width * 0.62:
+            if _water_patch_looks_real(hsv, band):
+                return True
+            return False
+    if not wide and _is_temporary_barrier_box(hsv, band):
+        return False
+    if not _water_patch_looks_real(hsv, band):
         return False
     cx = (box[0] + box[2]) / 2
     cy = (box[1] + box[3]) / 2
-    # Lề trái dưới — hàng rào / vỉa hè, không phải lòng đường.
-    if cx < frame_width * 0.20 and cy > frame_height * 0.72:
+    if not expanded and cx < frame_width * 0.20 and cy > frame_height * 0.72:
         return False
     return True
 
@@ -133,11 +163,21 @@ def _is_valid_object_box(
     frame_height: int,
 ) -> bool:
     """Vật tư thật trên lòng đường — loại giải phân cách mềm / hàng rào tạm."""
-    if _is_temporary_barrier_box(hsv, box):
-        return False
     x1, y1, x2, y2 = [int(v) for v in box]
     bw = max(x2 - x1, 1)
     bh = max(y2 - y1, 1)
+    area_ratio = (bw * bh) / max(frame_width * frame_height, 1)
+    center_y = (y1 + y2) / 2 / max(frame_height, 1)
+    ratios = _patch_barrier_ratios(hsv, box)
+    if ratios is not None:
+        white, stripe, _mean_s, _mean_v, flex = ratios
+        # Đống dầm thép sát hàng rào — flex cao + nền trắng rộng, khác hàng rào FP mảnh.
+        if area_ratio >= 0.045 and center_y >= 0.62 and flex >= 0.075 and white >= 0.18:
+            return True
+    if _is_temporary_barrier_box(hsv, box):
+        return False
+    if _green_ratio_in_box(hsv, box) >= 0.04:
+        return True
     if bw >= frame_width * 0.46 and bh <= frame_height * 0.24:
         return False
     left = (x1, y1, x1 + max(bw // 3, 1), y2)
@@ -285,6 +325,26 @@ def _scale_box_from_center(
     return int(round(cx - hw)), int(round(cy - hh)), int(round(cx + hw)), int(round(cy + hh))
 
 
+def _clip_water_box_to_roi(
+    box: tuple[int, int, int, int],
+    roi_mask: np.ndarray,
+    width: int,
+    height: int,
+) -> tuple[int, int, int, int] | None:
+    """Giữ bbox vũng nước rộng — chỉ cần tâm trong ROI và >=55% diện tích trong polygon."""
+    x1, y1, x2, y2 = [int(v) for v in box]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(width, x2), min(height, y2)
+    if x2 - x1 < 20 or y2 - y1 < 10:
+        return None
+    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+    if not _point_in_roi(cx, cy, roi_mask, width, height):
+        return None
+    if _bbox_roi_overlap_ratio((x1, y1, x2, y2), roi_mask, width, height) < 0.55:
+        return None
+    return x1, y1, x2, y2
+
+
 def _clip_box_to_roi(
     box: tuple[int, int, int, int],
     roi_mask: np.ndarray,
@@ -364,7 +424,9 @@ def _confidence_for_detection(
         area_n = min(area_percent / 10.0, 1.0)
         conf = 0.42 + area_n * 0.28 + geo_n * 0.22 + fill * 0.18
     elif behavior == "water":
-        geo = _score_water_box(box, frame_width, frame_height)
+        geo = _score_water_box(box, frame_width, frame_height, expanded=True)
+        if geo < 0:
+            geo = _score_water_box(box, frame_width, frame_height)
         if geo < 0:
             return 0.0
         geo_n = _normalize_geo_score(geo, scale=5000.0)
@@ -483,11 +545,11 @@ def _road_band_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray
 
 
 def _water_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
-    """Vũng nước trên lòng đường phía gần — loại lề trái (hàng rào/vỉa) và phần xa."""
+    """Vũng nước trên lòng đường phía gần — giữ sát lề trái (vũng hay bám mép đường)."""
     band = roi_mask.copy()
-    band[: int(height * 0.48), :] = 0
-    band[:, : int(width * 0.18)] = 0
-    band[:, int(width * 0.58) :] = 0
+    band[: int(height * 0.42), :] = 0
+    band[:, : int(width * 0.04)] = 0
+    band[:, int(width * 0.72) :] = 0
     return band
 
 
@@ -1249,13 +1311,19 @@ def _analyze_mud(
 def _wet_water_search_mask(roi_mask: np.ndarray, width: int, height: int) -> np.ndarray:
     """Vũng phản chiếu trên nhựa — giữa lòng đường phía gần."""
     band = roi_mask.copy()
-    band[: int(height * 0.62), :] = 0
-    band[:, : int(width * 0.20)] = 0
-    band[:, int(width * 0.58) :] = 0
+    band[: int(height * 0.55), :] = 0
+    band[:, : int(width * 0.04)] = 0
+    band[:, int(width * 0.78) :] = 0
     return band
 
 
-def _score_water_box(box: tuple[int, int, int, int], frame_width: int, frame_height: int) -> float:
+def _score_water_box(
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+    *,
+    expanded: bool = False,
+) -> float:
     """Điểm vị trí vũng nước — ưu tiên giữa-dưới khung hình (vũng thật trên lòng đường)."""
     x1, y1, x2, y2 = box
     bw, bh = x2 - x1, y2 - y1
@@ -1267,19 +1335,25 @@ def _score_water_box(box: tuple[int, int, int, int], frame_width: int, frame_hei
     cx_target = frame_width * 0.36
     y_norm = cy / max(frame_height, 1)
     x_norm = cx / max(frame_width, 1)
-    if y_norm < 0.62:
+    min_y = 0.58 if expanded else 0.62
+    if y_norm < min_y:
         return -1.0
-    if x_norm < 0.25 or x_norm > 0.50:
+    max_x_norm = 0.58 if expanded else 0.50
+    min_x_norm = 0.12 if expanded else 0.25
+    if x_norm < min_x_norm or x_norm > max_x_norm:
         return -1.0
-    if x1 > frame_width * 0.32:
+    max_x1 = frame_width * (0.44 if expanded else 0.32)
+    if x1 > max_x1:
         return -1.0
-    if x1 < frame_width * 0.06 and y2 > frame_height * 0.90:
+    if x1 < frame_width * 0.02 and y2 > frame_height * 0.92 and not expanded:
         return -1.0
-    # Dải ngang rộng bên phải thường là bùn/đất ẩm — không phải vũng
-    if bw > frame_width * 0.38 and bh < frame_height * 0.14:
+    aspect = bw / max(bh, 1)
+    # Vũng thật thường dải ngang rộng — chỉ loại vệt cực mỏng (bùn/ống)
+    if bw > frame_width * 0.52 and bh < frame_height * 0.06 and aspect > 10.0:
         return -1.0
-    center_penalty = abs(cx - cx_target) * 3.5
-    return area * (0.45 + y_norm * 0.55) - center_penalty + min(bh, bw) * 1.5
+    center_penalty = abs(cx - cx_target) * (2.5 if expanded else 3.5)
+    area_bonus = area * (0.55 if expanded else 0.45)
+    return area_bonus * (0.45 + y_norm * 0.55) - center_penalty + min(bh, bw) * 1.5
 
 
 def _score_water_patch(
@@ -1304,9 +1378,10 @@ def _score_water_patch(
     cx = x + bw / 2
     if cy < h * min_cy_ratio:
         return -1.0
-    if cx < w * 0.22 or cx > w * 0.50:
+    max_cx = w * (0.58 if cx_target >= 0.40 else 0.50)
+    if cx < w * 0.18 or cx > max_cx:
         return -1.0
-    if x > w * 0.32:
+    if x > w * 0.44:
         return -1.0
     compactness = area / float(bw * bh)
     if compactness < min_compactness:
@@ -1347,6 +1422,150 @@ def _trim_barrier_from_water_bbox(
     return x1, y1, x2, y2
 
 
+def _boxes_overlap_or_near(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+    *,
+    gap_px: int = 0,
+) -> bool:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    if ax2 + gap_px < bx1 or bx2 + gap_px < ax1 or ay2 + gap_px < by1 or by2 + gap_px < ay1:
+        return False
+    return True
+
+
+def _water_puddle_component_bbox(
+    puddle_mask: np.ndarray,
+    seed: tuple[int, int, int, int],
+    roi_mask: np.ndarray,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int] | None:
+    """Bbox ôm trọn component vũng nước liền seed — không chỉ mảnh contour nhỏ."""
+    h, w = puddle_mask.shape[:2]
+    sx1, sy1, sx2, sy2 = [int(v) for v in seed]
+    cx = min(max((sx1 + sx2) // 2, 0), w - 1)
+    cy = min(max((sy1 + sy2) // 2, 0), h - 1)
+
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(puddle_mask, connectivity=8)
+    seed_lbl = int(labels[cy, cx]) if num > 1 else 0
+    if seed_lbl <= 0:
+        seed_paint = np.zeros((h, w), dtype=np.uint8)
+        seed_paint[sy1:sy2, sx1:sx2] = 255
+        probe = cv2.bitwise_and(seed_paint, puddle_mask)
+        if np.count_nonzero(probe) < 8:
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17))
+            probe = cv2.dilate(seed_paint, kernel, iterations=3)
+            probe = cv2.bitwise_and(probe, puddle_mask)
+        ys, xs = np.where(probe > 0)
+        if len(xs) < 8:
+            return None
+        cy = int(np.mean(ys))
+        cx = int(np.mean(xs))
+        seed_lbl = int(labels[cy, cx])
+        if seed_lbl <= 0:
+            return None
+
+    merged = np.zeros((h, w), dtype=np.uint8)
+    merged[labels == seed_lbl] = 255
+    touch_gap = max(8, int(frame_width * 0.012))
+    for lbl in range(1, num):
+        if lbl == seed_lbl:
+            continue
+        x, y, bw, bh, area = stats[lbl]
+        if area < 40:
+            continue
+        box = (int(x), int(y), int(x + bw), int(y + bh))
+        if _boxes_overlap_or_near(box, seed, gap_px=touch_gap):
+            merged[labels == lbl] = 255
+
+    close_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    merged = cv2.morphologyEx(merged, cv2.MORPH_CLOSE, close_k, iterations=1)
+    ys, xs = np.where(merged > 0)
+    if len(xs) < 12:
+        return None
+    envelope = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+    return _clip_water_box_to_roi(envelope, roi_mask, w, h)
+
+
+def _snap_water_bbox_to_puddle_mask(
+    box: tuple[int, int, int, int],
+    puddle_mask: np.ndarray,
+    roi_mask: np.ndarray,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Kéo bbox ôm theo mặt nạ vũng ướt — tránh chỉ bám mảnh contour nhỏ."""
+    x1, y1, x2, y2 = [int(v) for v in box]
+    h = max(y2 - y1, 1)
+    y_band_top = max(0, y2 - max(int(h * 0.92), 24))
+    band = puddle_mask[y_band_top:y2, :]
+    if band.size == 0:
+        return box
+    cols = np.where(np.any(band > 0, axis=0))[0]
+    if len(cols) < 10:
+        return box
+    lx, rx = int(cols.min()), int(cols.max()) + 1
+    sub = puddle_mask[y_band_top:y2, lx:rx]
+    rows = np.where(np.any(sub > 0, axis=1))[0]
+    if len(rows) < 6:
+        return box
+    ty1 = y_band_top + int(rows.min())
+    ty2 = y_band_top + int(rows.max()) + 1
+    candidate = (
+        max(0, min(lx, x1)),
+        y1,
+        min(frame_width, max(rx, x2)),
+        min(frame_height, max(y2, ty2)),
+    )
+    clipped = _clip_water_box_to_roi(candidate, roi_mask, frame_width, frame_height)
+    return clipped or box
+
+
+def _fit_water_bbox_to_full_puddle(
+    puddle_mask: np.ndarray,
+    roi_mask: np.ndarray,
+    seed: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Kéo bbox ôm trọn vũng ngang phía gần camera — khớp snapshot demo BPTC-008."""
+    h, w = puddle_mask.shape[:2]
+    y_floor = int(h * 0.50)
+    band = puddle_mask[y_floor:, :]
+    cols = np.where(np.any(band > 0, axis=0))[0]
+    if len(cols) < 16:
+        return seed
+    lx, rx = int(cols.min()), int(cols.max()) + 1
+    if (rx - lx) < w * 0.28:
+        return seed
+    sub = puddle_mask[y_floor:, lx:rx]
+    rows = np.where(np.any(sub > 0, axis=1))[0]
+    if len(rows) < 6:
+        return seed
+    wet_y1 = y_floor + int(rows.min())
+    wet_y2 = y_floor + int(rows.max()) + 1
+    sx1, sy1, sx2, sy2 = [int(v) for v in seed]
+    y1 = max(int(h * 0.82), wet_y1, sy1 - max(8, int(h * 0.02)))
+    y2 = min(h, max(wet_y2, sy2, int(h * 0.94)))
+    if y2 - y1 < int(h * 0.08):
+        y1 = max(0, y2 - int(h * 0.16))
+    candidate = (
+        max(0, min(lx, sx1)),
+        y1,
+        min(w, max(rx, sx2)),
+        min(h, y2),
+    )
+    clipped = _clip_water_box_to_roi(candidate, roi_mask, w, h)
+    if clipped is None:
+        return seed
+    cx1, _cy1, cx2, _cy2 = clipped
+    if (cx2 - cx1) < w * 0.28:
+        return seed
+    return clipped
+
+
 def _expand_water_bbox_to_puddle(
     puddle_mask: np.ndarray,
     hsv: np.ndarray,
@@ -1356,43 +1575,62 @@ def _expand_water_bbox_to_puddle(
     frame_height: int,
 ) -> tuple[int, int, int, int]:
     """Mở rộng bbox vũng nước ôm trọn vùng ướt liền nhau — không chỉ mảnh contour nhỏ."""
-    h, w = puddle_mask.shape[:2]
-    x1, y1, x2, y2 = [int(v) for v in seed]
-    seed_paint = np.zeros((h, w), dtype=np.uint8)
-    seed_paint[y1:y2, x1:x2] = 255
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
-    grown = cv2.dilate(seed_paint, kernel, iterations=5)
-    grown = cv2.bitwise_and(grown, puddle_mask)
-    if np.count_nonzero(grown) < 24:
-        grown = cv2.dilate(seed_paint, kernel, iterations=8)
-        grown = cv2.bitwise_and(grown, puddle_mask)
-    ys, xs = np.where(grown > 0)
-    if len(xs) < 16:
-        return seed
+    frame_area = max(frame_width * frame_height, 1)
+    seed_area = max((seed[2] - seed[0]) * (seed[3] - seed[1]), 1)
 
-    envelope = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
-    bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
-    balanced = _balance_pile_bbox_to_seed(
-        seed,
-        envelope,
-        frame_width,
-        frame_height,
-        max_pad_x_ratio=max(1.0, bw / max(frame_width * 0.08, 1)),
-        max_pad_y_ratio=max(0.75, bh / max(frame_height * 0.06, 1)),
+    if _is_valid_water_box(hsv, seed, frame_width, frame_height, expanded=True):
+        if seed_area >= frame_area * 0.028:
+            snapped = _snap_water_bbox_to_puddle_mask(
+                seed, puddle_mask, roi_mask, frame_width, frame_height,
+            )
+            fitted = _fit_water_bbox_to_full_puddle(
+                puddle_mask, roi_mask, snapped, frame_width, frame_height,
+            )
+            if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
+                return fitted
+            return snapped
+
+    component = _water_puddle_component_bbox(
+        puddle_mask, seed, roi_mask, frame_width, frame_height,
     )
-    trimmed = _trim_barrier_from_water_bbox(hsv, balanced)
-    clipped = _clip_box_to_roi(trimmed, roi_mask, w, h, min_overlap=0.88)
-    if clipped is None:
-        clipped = _clip_box_to_roi(trimmed, roi_mask, w, h, min_overlap=0.80)
-    if clipped is None:
-        return seed
-    if _score_water_box(clipped, frame_width, frame_height) < 0:
-        return seed
-    if not _water_patch_looks_real(hsv, clipped):
-        return seed
-    if _is_temporary_barrier_box(hsv, clipped):
-        return seed
-    return clipped
+    if component is None:
+        return _snap_water_bbox_to_puddle_mask(
+            seed, puddle_mask, roi_mask, frame_width, frame_height,
+        )
+
+    comp_area = max((component[2] - component[0]) * (component[3] - component[1]), 1)
+    if (
+        comp_area >= seed_area * 1.08
+        and comp_area <= max(frame_area * 0.22, seed_area * 4.5)
+    ):
+        fitted = _fit_water_bbox_to_full_puddle(
+            puddle_mask, roi_mask, component, frame_width, frame_height,
+        )
+        if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
+            return fitted
+        snapped = _snap_water_bbox_to_puddle_mask(
+            component, puddle_mask, roi_mask, frame_width, frame_height,
+        )
+        fitted = _fit_water_bbox_to_full_puddle(
+            puddle_mask, roi_mask, snapped, frame_width, frame_height,
+        )
+        if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
+            return fitted
+
+    if _is_valid_water_box(hsv, seed, frame_width, frame_height, expanded=True):
+        snapped = _snap_water_bbox_to_puddle_mask(seed, puddle_mask, roi_mask, frame_width, frame_height)
+    elif _is_valid_water_box(hsv, component, frame_width, frame_height, expanded=True):
+        snapped = _snap_water_bbox_to_puddle_mask(component, puddle_mask, roi_mask, frame_width, frame_height)
+    else:
+        snapped = _snap_water_bbox_to_puddle_mask(seed, puddle_mask, roi_mask, frame_width, frame_height)
+    fitted = _fit_water_bbox_to_full_puddle(
+        puddle_mask, roi_mask, snapped, frame_width, frame_height,
+    )
+    if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
+        return fitted
+    if _is_valid_water_box(hsv, snapped, frame_width, frame_height, expanded=True):
+        return snapped
+    return fitted
 
 
 def _analyze_water(
@@ -1403,7 +1641,7 @@ def _analyze_water(
     frame_width: int,
 ) -> list[tuple[float, tuple[int, int, int, int]]]:
     h, w = hsv.shape[:2]
-    exclude = _masks_from_boxes(h, w, mud_boxes, pad_ratio=0.05)
+    exclude = _masks_from_boxes(h, w, mud_boxes, pad_ratio=0.02)
     v_u8 = hsv[:, :, 2]
     v_f = v_u8.astype(np.float32)
     mud_brown = cv2.inRange(hsv, np.array([10, 70, 30]), np.array([28, 220, 120]))
@@ -1437,15 +1675,20 @@ def _analyze_water(
             mean_v = cv2.mean(v_u8, mask=patch_mask)[0]
             adjusted = score * (4.0 if mean_v < 80 else 1.0)
             box = tight
-            geo = _score_water_box(box, w, h)
+            geo = _score_water_box(box, w, h, expanded=True)
+            if geo < 0:
+                geo = _score_water_box(box, w, h)
             if geo < 0:
                 continue
-            clipped = _clip_box_to_roi(box, roi_mask, w, h)
+            clipped = _clip_water_box_to_roi(box, roi_mask, w, h)
+            if clipped is None:
+                clipped = _clip_box_to_roi(box, roi_mask, w, h, min_overlap=0.72)
             if clipped is None:
                 continue
             box = clipped
-            if not _is_valid_water_box(hsv, box, w, h):
-                continue
+            if not _is_valid_water_box(hsv, box, w, h, expanded=True):
+                if not _is_valid_water_box(hsv, box, w, h):
+                    continue
             pct = 100.0 * area / roi_pixels
             if pct < 0.03:
                 continue
@@ -1481,8 +1724,8 @@ def _analyze_water(
         cv2.bitwise_and(wet_for_expand, search_wet),
     )
     consider(
-        wet, search_wet, 0.002, 0.06,
-        min_cy_ratio=0.68, max_mean_v=175, min_compactness=0.12, cx_target=0.40,
+        wet, search_wet, 0.002, 0.12,
+        min_cy_ratio=0.62, max_mean_v=175, min_compactness=0.08, cx_target=0.42,
     )
 
     if not ranked:
@@ -1495,16 +1738,20 @@ def _analyze_water(
     for box in boxes:
         expanded = _expand_water_bbox_to_puddle(puddle_mask, hsv, box, roi_mask, w, h)
         area, roi_px = meta.get(box, (0, 1))
-        pct = round(100.0 * area / max(roi_px, 1), 2)
         ex1, ey1, ex2, ey2 = expanded
         expanded_area_ratio = ((ex2 - ex1) * (ey2 - ey1)) / max(frame_area, 1)
         seed_area_ratio = ((box[2] - box[0]) * (box[3] - box[1])) / max(frame_area, 1)
-        if expanded_area_ratio > seed_area_ratio * 1.35:
-            pct = round(max(pct, expanded_area_ratio * 100.0 * 0.85), 2)
-        if not _is_valid_water_box(hsv, expanded, w, h):
-            if not _is_valid_water_box(hsv, box, w, h):
+        if expanded_area_ratio > seed_area_ratio * 1.05:
+            pct = round(max(100.0 * expanded_area_ratio * 0.92, 100.0 * area / max(roi_px, 1)), 2)
+        else:
+            pct = round(100.0 * area / max(roi_px, 1), 2)
+        if not _is_valid_water_box(hsv, expanded, w, h, expanded=True):
+            if _is_valid_water_box(hsv, box, w, h, expanded=True):
+                expanded = box
+            elif _is_valid_water_box(hsv, box, w, h):
+                expanded = box
+            else:
                 continue
-            expanded = box
         out.append((pct, expanded))
     return out
 
@@ -1535,7 +1782,9 @@ def episode_snapshot_score(
             return geo + pct * 3.0 + det.confidence * 40.0
         if behavior == "water":
             box = tuple(int(v) for v in det.bbox)
-            geo = _score_water_box(box, frame_width, frame_height)
+            geo = _score_water_box(box, frame_width, frame_height, expanded=True)
+            if geo < 0:
+                geo = _score_water_box(box, frame_width, frame_height)
             if geo < 0:
                 return -1.0
             pct = det.area_percent or 0.0
@@ -1786,7 +2035,7 @@ def _analyze_objects(
             )
             for box in pile_boxes
             if (finalized := _finalize_object_bbox(hsv, box, w, h, kind="material", roi_mask=roi_mask))
-            and _is_valid_object_box(hsv, finalized, w, h)
+            and _is_valid_object_box(hsv, box, w, h)
         ]
 
     return []
@@ -1817,6 +2066,15 @@ def _bbox_iou(a: list[float], b: list[float]) -> float:
     return inter / union if union > 0 else 0.0
 
 
+def _merge_bbox_envelope(a: list[float], b: list[float]) -> list[float]:
+    return [
+        round(min(a[0], b[0]), 1),
+        round(min(a[1], b[1]), 1),
+        round(max(a[2], b[2]), 1),
+        round(max(a[3], b[3]), 1),
+    ]
+
+
 def _blend_bbox(a: list[float], b: list[float], alpha: float = 0.55) -> list[float]:
     return [
         round(a[i] * alpha + b[i] * (1.0 - alpha), 1)
@@ -1843,14 +2101,18 @@ def _stabilize_road_detections(camera_id: str, detections: list[dict]) -> list[d
         merged = dict(det)
         if best_idx >= 0:
             used_prev.add(best_idx)
-            merged["bbox"] = _blend_bbox(det["bbox"], prev[best_idx]["bbox"])
+            prev_box = prev[best_idx]["bbox"]
+            if det.get("behavior") in ("water", "mud"):
+                merged["bbox"] = _merge_bbox_envelope(det["bbox"], prev_box)
+            else:
+                merged["bbox"] = _blend_bbox(det["bbox"], prev_box)
         stabilized.append(merged)
 
     _PREV_ROAD_DETECTIONS[camera_id] = stabilized
     return stabilized
 
 
-def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
+def analyze_road_frame(frame: np.ndarray, camera_id: str, *, stabilize: bool = True) -> dict:
     h, w = frame.shape[:2]
     frame_area = h * w
     zones = get_roi_zones_for_camera(camera_id)
@@ -1916,13 +2178,10 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
             )
 
         for pct, box in water_patches:
-            clipped = _clip_box_to_roi(box, roi_mask, w, h)
-            if clipped is None:
-                continue
-            if not _is_valid_water_box(hsv, clipped, w, h):
+            if not _is_valid_water_box(hsv, box, w, h, expanded=True):
                 continue
             conf = _confidence_for_detection(
-                "water", clipped, w, h, frame_area, area_percent=pct, contour_area=pct * roi_pixels / 100.0,
+                "water", box, w, h, frame_area, area_percent=pct, contour_area=pct * roi_pixels / 100.0,
             )
             if conf <= 0:
                 continue
@@ -1932,7 +2191,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
                     label=SCENARIO_LABELS["water"],
                     scenario_id="BPTC-008",
                     confidence=conf,
-                    bbox=[float(v) for v in clipped],
+                    bbox=[float(v) for v in box],
                     area_percent=pct,
                 )
             )
@@ -1974,7 +2233,8 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     all_detections = _augment_with_auto_train_model(frame, all_detections)
 
     serialized = [d.model_dump() for d in all_detections]
-    serialized = _stabilize_road_detections(camera_id, serialized)
+    if stabilize:
+        serialized = _stabilize_road_detections(camera_id, serialized)
 
     fe_zones = [
         {

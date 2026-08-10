@@ -14,10 +14,10 @@ from .atgt_analyzer import (
 )
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
-from .atgt_plate_reader import read_vehicle_plate
+from .atgt_plate_reader import resolve_vehicle_plate
 from .schemas import Detection, ViolationEvent
 from .snapshot_sync import build_snapshot_episode, frame_scale, merge_episode_best, scale_bbox
-from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE, get_threshold
 
 logger = logging.getLogger("atgt_engine")
 
@@ -69,9 +69,28 @@ def _match_vehicle(violation: Detection, vehicles: list[Detection]) -> Detection
     return best
 
 
-def _lane_present(detections: list[Detection], frame_w: int, frame_h: int) -> bool:
+def _lane_present(
+    detections: list[Detection],
+    frame_w: int,
+    frame_h: int,
+    violation_bbox: list[float] | tuple[float, ...] | None = None,
+) -> bool:
+    """Có phân cách hợp lệ che vùng vi phạm — hàng rào phải không chặn log thiếu làn trái."""
+    vcx = None
+    if violation_bbox is not None and len(violation_bbox) >= 4:
+        vcx = (float(violation_bbox[0]) + float(violation_bbox[2])) / 2.0
     for det in detections:
         if det.behavior == "soft_median" and det.confidence >= _SOFT_MEDIAN_CONF:
+            dcx = (det.bbox[0] + det.bbox[2]) / 2.0
+            if vcx is not None and dcx > frame_w * 0.55 and vcx < frame_w * 0.42:
+                continue
+            if vcx is not None:
+                ix1 = max(float(violation_bbox[0]), det.bbox[0])
+                iy1 = max(float(violation_bbox[1]), det.bbox[1])
+                ix2 = min(float(violation_bbox[2]), det.bbox[2])
+                iy2 = min(float(violation_bbox[3]), det.bbox[3])
+                if ix2 <= ix1 or iy2 <= iy1:
+                    continue
             return True
         if det.behavior != "hard_median" or det.confidence < _HARD_MEDIAN_CONF:
             continue
@@ -82,10 +101,24 @@ def _lane_present(detections: list[Detection], frame_w: int, frame_h: int) -> bo
     return False
 
 
+def _confirm_seconds(behavior: str) -> float:
+    if settings.atgt_demo_enabled and behavior == "speeding":
+        return settings.atgt_demo_confirm_seconds
+    scenario_id = "ATGT-002" if behavior == "speeding" else "ATGT-004"
+    return get_threshold(scenario_id).confirm_seconds
+
+
+def _max_gap_seconds(behavior: str) -> float:
+    if settings.atgt_demo_enabled and behavior == "speeding":
+        return settings.atgt_demo_max_gap_seconds
+    return _MAX_GAP_SECONDS
+
+
 def _enrich_vehicle_plates(
     frame: np.ndarray,
     detections: list[Detection],
     *,
+    camera_id: str,
     ocr_frame: np.ndarray | None = None,
     ocr_scale: tuple[float, float] = (1.0, 1.0),
 ) -> None:
@@ -99,7 +132,7 @@ def _enrich_vehicle_plates(
         bbox = det.bbox
         if sx != 1.0 or sy != 1.0:
             bbox = scale_bbox(det.bbox, sx, sy)
-        plate = read_vehicle_plate(source, bbox)
+        plate = resolve_vehicle_plate(source, bbox, camera_id=camera_id)
         if not plate:
             continue
         det.vehicle_plate = plate
@@ -118,14 +151,14 @@ class AtgtEngine:
             self._tracks[camera_id] = {}
         return self._tracks[camera_id]
 
-    def _gate_for(self, camera_id: str, track_id: str) -> PersistenceDebouncer:
+    def _gate_for(self, camera_id: str, track_id: str, *, behavior: str) -> PersistenceDebouncer:
         if camera_id not in self._gates:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_CONFIRM_SECONDS,
+                min_duration_seconds=_confirm_seconds(behavior),
                 cooldown_seconds=_REPEAT_SECONDS,
-                max_gap_seconds=_MAX_GAP_SECONDS,
+                max_gap_seconds=_max_gap_seconds(behavior),
                 one_event_per_episode=True,
             )
         return self._gates[camera_id][track_id]
@@ -146,6 +179,7 @@ class AtgtEngine:
         _enrich_vehicle_plates(
             frame,
             detections,
+            camera_id=camera_id,
             ocr_frame=snapshot_source if capture_frame is not None else None,
             ocr_scale=(sx, sy),
         )
@@ -162,30 +196,35 @@ class AtgtEngine:
         ]
 
         for det in violations:
-            if det.behavior == "no_soft_median" and _lane_present(detections, frame_w, frame_h):
+            if det.behavior == "no_soft_median" and _lane_present(
+                detections, frame_w, frame_h, det.bbox,
+            ):
                 continue
             vehicle_bbox: list[float] | None = None
             if det.behavior == "speeding":
                 vehicle = _match_vehicle(det, vehicles)
-                if vehicle is None:
-                    continue
-                vehicle_bbox = [float(v) for v in vehicle.bbox]
+                if vehicle is not None:
+                    vehicle_bbox = [float(v) for v in vehicle.bbox]
+                else:
+                    vehicle_bbox = [float(v) for v in det.bbox]
                 slot = _vehicle_slot(vehicle_bbox, frame_w, frame_h)
                 track_id = f"{slot}:speeding"
+                lane_behavior = "speeding"
             else:
                 slot = "lane"
                 track_id = "lane:no_soft_median"
+                lane_behavior = "no_soft_median"
             if track_id not in tracks:
                 if len(tracks) >= _MAX_TRACKS:
                     continue
                 tracks[track_id] = _AtgtTrack()
-                self._gate_for(camera_id, track_id).reset()
+                self._gate_for(camera_id, track_id, behavior=lane_behavior).reset()
             state = tracks[track_id]
             matched_ids.add(track_id)
             if vehicle_bbox:
                 state.vehicle_bbox = vehicle_bbox
             state.last_seen = now
-            gate = self._gate_for(camera_id, track_id)
+            gate = self._gate_for(camera_id, track_id, behavior=lane_behavior)
             state.episode_best = merge_episode_best(
                 state.episode_best,
                 detection=det,
@@ -199,9 +238,10 @@ class AtgtEngine:
                 state.episode_best = None
                 top = pending["detection"]
                 if not top.vehicle_plate and pending.get("vehicle_bbox"):
-                    retry_plate = read_vehicle_plate(
+                    retry_plate = resolve_vehicle_plate(
                         pending["frame"],
                         pending["vehicle_bbox"],
+                        camera_id=camera_id,
                     )
                     if retry_plate:
                         top = top.model_copy(update={"vehicle_plate": retry_plate})
@@ -225,7 +265,8 @@ class AtgtEngine:
         for track_id, state in list(tracks.items()):
             if track_id in matched_ids:
                 continue
-            gate = self._gate_for(camera_id, track_id)
+            behavior = "speeding" if track_id.endswith(":speeding") else "no_soft_median"
+            gate = self._gate_for(camera_id, track_id, behavior=behavior)
             gate.register(False)
             if not gate.snapshot()["active"]:
                 state.episode_best = None

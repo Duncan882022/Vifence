@@ -12,7 +12,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from .atgt_plate_reader import read_vehicle_plate
+from .atgt_plate_reader import resolve_vehicle_plate
+from .config import settings
 from .detectors.vehicle_detector import VehicleDetector
 from .road_roi_config import get_roi_zones_for_camera
 from .schemas import Detection
@@ -197,6 +198,7 @@ def _detect_hard_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, flo
 
 def _detect_soft_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, float, float, float] | None:
     """Phân cách mềm (chóp nón / dải phản quang cam) trong ROI."""
+    h, w = frame.shape[:2]
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     orange = cv2.inRange(hsv, np.array([4, 120, 120]), np.array([22, 255, 255]))
     orange = cv2.bitwise_and(orange, orange, mask=mask)
@@ -298,6 +300,42 @@ def _missing_lane_separation_bbox(
     return (rx1, lane_y1, lane_x2, ry2)
 
 
+def _left_lane_missing_median(
+    frame: np.ndarray,
+    mask: np.ndarray,
+) -> tuple[float, float, float, float] | None:
+    """Lề trái thiếu phân làn — vẫn log ATGT-004 khi hàng rào phải đã có soft_median."""
+    h, w = frame.shape[:2]
+    roi_bbox = _mask_bbox(mask)
+    if roi_bbox is None:
+        return None
+    rx1, ry1, rx2, ry2 = roi_bbox
+    lane_x2 = rx1 + max(28.0, (rx2 - rx1) * 0.52)
+    lane_y1 = ry1 + (ry2 - ry1) * 0.28
+    left_mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.rectangle(
+        left_mask,
+        (int(rx1), int(lane_y1)),
+        (int(lane_x2), int(ry2)),
+        255,
+        -1,
+    )
+    left_mask = cv2.bitwise_and(left_mask, mask)
+    if cv2.countNonZero(left_mask) < 120:
+        return None
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    white = cv2.inRange(hsv, np.array([0, 0, 162]), np.array([180, 58, 255]))
+    orange = cv2.inRange(hsv, np.array([4, 120, 120]), np.array([22, 255, 255]))
+    stripe = cv2.bitwise_or(white, orange)
+    lane_mark = cv2.bitwise_and(stripe, left_mask)
+    lane_mark = cv2.morphologyEx(lane_mark, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), 1)
+    marked_ratio = cv2.countNonZero(lane_mark) / max(cv2.countNonZero(left_mask), 1)
+    if marked_ratio >= 0.018:
+        return None
+    return (rx1, lane_y1, rx1 + max(28.0, (lane_x2 - rx1) * 0.88), ry2)
+
+
 def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
     h, w = frame.shape[:2]
     mask = _roi_mask(camera_id, w, h)
@@ -317,7 +355,7 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
 
     fence = _detect_fence_median(frame, mask)
     if fence:
-        return [
+        detections: list[Detection] = [
             Detection(
                 behavior="soft_median",
                 label="Hàng rào phân cách",
@@ -325,6 +363,17 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
                 bbox=list(fence),
             )
         ]
+        left_gap = _missing_lane_separation_bbox(mask, w, h)
+        if left_gap is not None:
+            detections.append(
+                Detection(
+                    behavior="no_soft_median",
+                    label="Không tổ chức phân làn, luồng giao thông",
+                    confidence=round(_MIN_CONF + 0.03, 3),
+                    bbox=list(left_gap),
+                )
+            )
+        return detections
 
     soft = _detect_soft_median(frame, mask)
     if soft:
@@ -352,8 +401,8 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
 
 def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detection]:
     detector = _get_vehicle_detector()
-    now = time.time()
-    raw = [d for d in detector.predict(frame) if d.confidence >= _VEHICLE_CONF]
+    conf_floor = settings.atgt_demo_vehicle_conf if settings.atgt_demo_enabled else _VEHICLE_CONF
+    raw = [d for d in detector.predict(frame) if d.confidence >= conf_floor]
 
     bboxes = [tuple(float(v) for v in d.bbox) for d in raw]
     # --- Tạm thời tắt tracking tốc độ thật — chờ video mới calibrate lại ---
@@ -363,7 +412,7 @@ def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detec
     detections: list[Detection] = []
     for idx, det in enumerate(raw):
         bbox = bboxes[idx]
-        plate = read_vehicle_plate(frame, bbox)
+        plate = resolve_vehicle_plate(frame, bbox, camera_id=camera_id)
         vtype = det.vehicle_type or "Phương tiện"
         label = f"{vtype} · {plate}" if plate else vtype
         detections.append(
@@ -377,23 +426,18 @@ def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detec
             )
         )
 
-        # --- Tạm thời: detect xe → coi như vượt tốc độ (log ATGT-002) ---
-        # Khi có video mới: bật lại block tracking bên dưới, xóa block tạm này.
-        # speed_kmh = speeds.get(idx, 0.0)
-        # if speed_kmh > SPEED_LIMIT_KMH:
-        #     over_ratio = min((speed_kmh - SPEED_LIMIT_KMH) / 40.0, 0.15)
-        #     conf = round(min(0.97, _MIN_CONF + over_ratio), 3)
-        temp_conf = round(max(_MIN_CONF, det.confidence * 0.95), 3)
-        detections.append(
-            Detection(
-                behavior="speeding",
-                label=f"Vượt quá tốc độ quy định ({vtype})",
-                confidence=temp_conf,
-                bbox=list(bbox),
-                vehicle_plate=plate,
-                vehicle_type=vtype,
+        if settings.atgt_demo_enabled:
+            temp_conf = round(max(_MIN_CONF, det.confidence * 0.95), 3)
+            detections.append(
+                Detection(
+                    behavior="speeding",
+                    label=f"Vượt quá tốc độ quy định ({vtype})",
+                    confidence=temp_conf,
+                    bbox=list(bbox),
+                    vehicle_plate=plate,
+                    vehicle_type=vtype,
+                )
             )
-        )
 
     detections.extend(_analyze_lane_state(frame, camera_id))
     return detections

@@ -24,6 +24,11 @@ export interface PpeDetection {
   scenario_id: string
   confidence: number
   bbox: [number, number, number, number]
+  worker_id?: string
+  worker_name?: string
+  employee_code?: string
+  contractor_name?: string
+  face_match_confidence?: number
 }
 
 export interface PpeMetrics {

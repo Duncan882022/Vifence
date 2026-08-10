@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Gavel, Loader2, Play, User } from 'lucide-react'
+import { Clock, Gavel, Loader2, User } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -42,7 +42,7 @@ interface SafetyEventsPanelProps {
   critical: SafetyViolationRecord[]
   /** Lọc theo nhóm khi chọn từ Nhóm ATLĐ */
   selectedGroupId?: SafetyGroupId | null
-  onPlayback?: (v: SafetyViolationRecord) => void
+  selectedId?: string
   onSelect?: (v: SafetyViolationRecord) => void
   onHandle?: (v: SafetyViolationRecord) => void
   onSnapshotClick?: (v: SafetyViolationRecord) => void
@@ -121,33 +121,17 @@ function AlertCardActions({
   aiAutoHandled,
   handled,
   handleDisabled,
-  onPlayback,
   onHandle,
   v,
-  compact,
 }: {
   aiAutoHandled: boolean
   handled: boolean
   handleDisabled: boolean
-  onPlayback?: (v: SafetyViolationRecord) => void
   onHandle?: (v: SafetyViolationRecord) => void
   v: SafetyViolationRecord
-  compact?: boolean
 }) {
   return (
-    <div className={cn('flex items-center gap-0.5 shrink-0', compact ? 'gap-1' : '')}>
-      <button
-        type="button"
-        onClick={e => { e.stopPropagation(); onPlayback?.(v) }}
-        className={cn(
-          'flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-[#1e2433]/80 transition-colors',
-          compact ? 'min-h-[32px] flex-1 px-2 gap-1.5 border border-[#1e2433]/60' : 'w-7 h-7',
-        )}
-        title="Xem lại"
-      >
-        <Play className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />
-        {compact && <span className="text-[10px] font-medium">Xem lại</span>}
-      </button>
+    <div className="flex items-center gap-0.5 shrink-0">
       <button
         type="button"
         disabled={handleDisabled}
@@ -156,8 +140,7 @@ function AlertCardActions({
           if (!handleDisabled) onHandle?.(v)
         }}
         className={cn(
-          'flex items-center justify-center rounded-md transition-colors border sm:border-0',
-          compact ? 'min-h-[32px] flex-1 px-2 gap-1.5' : 'w-7 h-7',
+          'flex items-center justify-center rounded-md transition-colors border w-7 h-7',
           handleDisabled
             ? 'opacity-25 cursor-not-allowed pointer-events-none grayscale border-[#1e2433]/40 text-muted-foreground'
             : 'hover:bg-[#1e2433]/80 text-muted-foreground hover:text-amber-400 border-[#1e2433]/60',
@@ -171,8 +154,7 @@ function AlertCardActions({
         }
         aria-disabled={handleDisabled}
       >
-        <Gavel className={cn(compact ? 'w-3.5 h-3.5' : 'w-3 h-3')} />
-        {compact && <span className="text-[10px] font-medium">Xử lý</span>}
+        <Gavel className="w-3 h-3" />
       </button>
     </div>
   )
@@ -180,13 +162,13 @@ function AlertCardActions({
 
 function AlertCard({
   v,
-  onPlayback,
+  selected,
   onSelect,
   onHandle,
   onSnapshotClick,
 }: {
   v: SafetyViolationRecord
-  onPlayback?: (v: SafetyViolationRecord) => void
+  selected?: boolean
   onSelect?: (v: SafetyViolationRecord) => void
   onHandle?: (v: SafetyViolationRecord) => void
   onSnapshotClick?: (v: SafetyViolationRecord) => void
@@ -203,8 +185,11 @@ function AlertCard({
       role="button"
       tabIndex={0}
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-lg border border-[#1e2433] border-l-[3px] bg-[#0a0e17]',
+        'group relative flex flex-col overflow-hidden rounded-lg border border-l-[3px] bg-[#0a0e17]',
         'hover:border-[#2a3855] hover:bg-[#0c1019] transition-colors cursor-pointer',
+        selected
+          ? 'border-primary/50 ring-1 ring-primary/25 bg-[#0c1019]'
+          : 'border-[#1e2433]',
         GROUP_BORDER_ACCENT[v.groupId],
       )}
       onClick={() => onSelect?.(v)}
@@ -236,7 +221,6 @@ function AlertCard({
               aiAutoHandled={aiAutoHandled}
               handled={handled}
               handleDisabled={handleDisabled}
-              onPlayback={onPlayback}
               onHandle={onHandle}
             />
           </div>
@@ -270,7 +254,8 @@ function AlertCard({
 export function SafetyEventsPanel({
   all, warning, violation, critical,
   selectedGroupId = null,
-  onPlayback, onSelect, onHandle, onSnapshotClick,
+  selectedId,
+  onSelect, onHandle, onSnapshotClick,
 }: SafetyEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<AlertFilterTab>('all')
   const [groupQuickFilters, setGroupQuickFilters] = useState<Set<SafetyGroupId>>(new Set())
@@ -451,7 +436,14 @@ export function SafetyEventsPanel({
         ) : (
           <div className="space-y-2">
             {visibleItems.map(v => (
-              <AlertCard key={v.id} v={v} onPlayback={onPlayback} onSelect={onSelect} onHandle={onHandle} onSnapshotClick={onSnapshotClick} />
+              <AlertCard
+                key={v.id}
+                v={v}
+                selected={selectedId === v.id}
+                onSelect={onSelect}
+                onHandle={onHandle}
+                onSnapshotClick={onSnapshotClick}
+              />
             ))}
 
             {hasMore && (

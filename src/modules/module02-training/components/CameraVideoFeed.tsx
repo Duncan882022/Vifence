@@ -17,13 +17,6 @@ import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/
 import { isHlsStreamUrl, useHlsVideoSource } from '../hooks/useHlsVideoSource'
 import {
   isAiOverlayDisabledCamera,
-  isAtgtCamera,
-  isCraneProximityCamera,
-  isFaceOverlayCamera,
-  isPcccCamera,
-  isPpeCamera,
-  isRoadAnalysisOverlayCamera,
-  isWahCamera,
 } from '../data/cameraAiRuntime'
 import {
   getCameraFeedPosterUrl,
@@ -32,6 +25,7 @@ import {
   getVideoObjectPositionForCamera,
 } from '../data/trainingCameraFeeds'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
+import { useCameraLiveRoiVisible } from '../hooks/useCameraLiveRoiVisible'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 
 interface CameraVideoFeedProps {
@@ -61,25 +55,30 @@ export function CameraVideoFeed({
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
+  const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
   const { isDesktop } = useShellLayout()
-  useCameraAiEnabledModels(cameraId)
+  const { enabledModels } = useCameraAiEnabledModels(cameraId)
   const overlayActive = Boolean(aiOverlay && bboxVisible)
   const feedKey = getFeedKeyForCamera(cameraId)
   const posterUrl = feedKey ? getCameraFeedPosterUrl(feedKey) : undefined
   const overlayDisabled = isAiOverlayDisabledCamera(cameraId)
-  const roadAnalysis = isRoadAnalysisOverlayCamera(cameraId)
-  const craneProximity = isCraneProximityCamera(cameraId)
-  const ppeAnalysis = isPpeCamera(cameraId)
-  const pcccAnalysis = isPcccCamera(cameraId)
-  const wahAnalysis = isWahCamera(cameraId)
-  const atgtAnalysis = isAtgtCamera(cameraId)
-  const faceDemo = isFaceOverlayCamera(cameraId)
+  const roadAnalysis = enabledModels.includes('road_material')
+  const craneProximity = enabledModels.includes('crane_proximity')
+  const ppeAnalysis = enabledModels.includes('ppe')
+  const pcccAnalysis = enabledModels.includes('pccc')
+  const wahAnalysis = enabledModels.includes('wah')
+  const atgtAnalysis = enabledModels.includes('atgt_traffic')
+  const faceDemo = enabledModels.includes('face_demo')
   const videoFit = getVideoObjectFitForCamera(cameraId, streamType)
   const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, streamType)
   const showFaceOverlay = Boolean(
     overlayActive && feedKey && faceDemo && !roadAnalysis && !craneProximity && !ppeAnalysis && !pcccAnalysis && !wahAnalysis && !atgtAnalysis && !overlayDisabled,
   )
-  const showRoadOverlay = Boolean(overlayActive && roadAnalysis && !overlayDisabled)
+  /** A-03: luôn mount lớp ROI lòng đường khi bật ScanEye + cấu hình ROI (kể cả tắt model road). */
+  const showA03RoadRoiLayer = cameraId === 'A-03' && liveRoiVisible
+  const showRoadOverlay = Boolean(
+    overlayActive && !overlayDisabled && (roadAnalysis || showA03RoadRoiLayer),
+  )
   const showCraneOverlay = Boolean(overlayActive && craneProximity && !overlayDisabled)
   const showPpeOverlay = Boolean(overlayActive && ppeAnalysis && !overlayDisabled)
   const showPcccOverlay = Boolean(overlayActive && pcccAnalysis && !overlayDisabled)

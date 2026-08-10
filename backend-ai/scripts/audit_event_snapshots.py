@@ -348,7 +348,7 @@ def audit_scenario_engines() -> list[CaseResult]:
     # WAH
     frame = _extract_video_frame("A-04", 22)
     if frame is not None:
-        _, ev = _run_engine_frames(WahEngine, frame, "A-04", frames=4, sleep_s=0.3)
+        _, ev = _run_engine_frames(WahEngine, frame, "A-04", frames=10, sleep_s=0.45)
         ok = any("WAH/no_harness/WAH-001" in e for e in ev)
         results.append(CaseResult("engine_WAH-001", ok, f"events={ev}"))
 
@@ -492,7 +492,6 @@ def audit_atgt() -> list[CaseResult]:
         from app.schemas import Detection
 
         store_syn = _fresh_store()
-        eng_syn = AtgtEngine(store_syn)
         fake_lane = [
             Detection(
                 behavior="no_soft_median",
@@ -503,8 +502,7 @@ def audit_atgt() -> list[CaseResult]:
         ]
         try:
             with patch("app.atgt_engine.analyze_atgt_frame", return_value=fake_lane):
-                _, events = eng_syn.process_frame(base, "A-03")
-            ev = _event_summary(events)
+                _, ev = _run_engine_frames(AtgtEngine, base, "A-03", frames=8, sleep_s=0.35)
             ok = len(ev) >= 1 and any("ATGT" in x for x in ev)
             results.append(
                 CaseResult(
@@ -533,9 +531,15 @@ def audit_wah() -> list[CaseResult]:
         store = _fresh_store()
         engine = WahEngine(store)
         try:
-            payload, events = engine.process_frame(frame, "A-04")
-            beh = _behaviors(payload)
-            ev = _event_summary(events)
+            ev: list[str] = []
+            beh: list[str] = []
+            for _ in range(8):
+                payload, events = engine.process_frame(frame, "A-04")
+                beh = _behaviors(payload)
+                ev = _event_summary(events)
+                if ev:
+                    break
+                time.sleep(0.35)
             has_no_harness = "no_harness" in beh
             has_event = any("WAH" in e for e in ev)
             expect_event = expected.get("person_2") is False

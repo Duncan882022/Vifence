@@ -53,9 +53,9 @@ export function CameraBboxToggle({ cameraId, compact, className, activeClassName
         className ?? cameraToolbarBtnStandalone(compact, visible),
         visible && activeClassName,
       )}
-      title={visible ? 'Ẩn ROI detect' : 'Hiện ROI detect'}
+      title={visible ? 'Ẩn overlay AI & ROI' : 'Hiện overlay AI & ROI'}
       aria-pressed={visible}
-      aria-label={visible ? 'Ẩn ROI detect' : 'Hiện ROI detect'}
+      aria-label={visible ? 'Ẩn overlay AI & ROI' : 'Hiện overlay AI & ROI'}
     >
       {visible
         ? <ScanEye className={cameraToolbarIconSize(compact)} aria-hidden />

@@ -6,12 +6,14 @@ export function useOverlaySceneReset(
   videoRef: RefObject<HTMLVideoElement | null>,
   enabled: boolean,
   onReset: () => void,
+  options?: { liveHls?: boolean },
 ): void {
   useEffect(() => {
     const video = videoRef.current
     if (!enabled || !video) return
 
     let lastT = video.currentTime
+    const liveHls = options?.liveHls ?? false
 
     const reset = () => {
       invalidateVideoFrameCapture(video)
@@ -21,7 +23,7 @@ export function useOverlaySceneReset(
     const onTime = () => {
       const t = video.currentTime
       const looped = t < lastT - 0.06
-      const jumped = t - lastT > 1.1
+      const jumped = t - lastT > (liveHls ? 0.35 : 1.1)
       if (looped || jumped) reset()
       lastT = t
     }
@@ -33,5 +35,5 @@ export function useOverlaySceneReset(
       video.removeEventListener('timeupdate', onTime)
       video.removeEventListener('seeked', reset)
     }
-  }, [videoRef, enabled, onReset])
+  }, [videoRef, enabled, onReset, options?.liveHls])
 }

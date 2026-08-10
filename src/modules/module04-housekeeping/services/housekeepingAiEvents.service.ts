@@ -23,6 +23,9 @@ const BEHAVIOR_TO_HK: Record<string, string> = {
   mud: 'HK-01',
   water: 'HK-02',
   object: 'HK-03',
+  mesh_missing: 'BPTC-001',
+  mesh_torn: 'BPTC-001',
+  mesh_dirty: 'BPTC-001',
 }
 
 const MESH_BEHAVIORS = new Set(['mesh_missing', 'mesh_torn', 'mesh_dirty'])
@@ -31,6 +34,9 @@ const BEHAVIOR_TO_SEVERITY: Record<string, HousekeepingAlertSeverity> = {
   mud: 'WARNING',
   water: 'WARNING',
   object: 'VIOLATION',
+  mesh_missing: 'VIOLATION',
+  mesh_torn: 'WARNING',
+  mesh_dirty: 'WARNING',
 }
 
 const BEHAVIOR_TO_SUBJECT: Record<string, HousekeepingEventSubjectType> = {
@@ -73,16 +79,18 @@ export function mapBackendEventToHousekeepingRecord(
 ): HousekeepingEventRecord | null {
   const scenarioId = BEHAVIOR_TO_HK[event.behavior]
     ?? BACKEND_TO_HK_SCENARIO[event.scenario_id ?? '']
-  if (!scenarioId && !MESH_BEHAVIORS.has(event.behavior)) return null
+    ?? (MESH_BEHAVIORS.has(event.behavior) ? 'BPTC-001' : undefined)
+  if (!scenarioId) return null
 
   const cameraId = event.camera_id ?? 'A-03'
+  const roiType = MESH_BEHAVIORS.has(event.behavior) ? 'MESH' : 'ROAD'
 
   return {
     id: `ai-hk-${event.id}`,
     scenarioId,
     groupId: 'HK',
     zoneId: 'khu-a',
-    roiType: 'ROAD',
+    roiType,
     sourceDeviceId: cameraId,
     detectedAt: toIsoLocalTimestamp(event.created_at),
     severity: BEHAVIOR_TO_SEVERITY[event.behavior] ?? 'WARNING',

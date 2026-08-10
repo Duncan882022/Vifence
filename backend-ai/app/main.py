@@ -25,6 +25,7 @@ from .crane_proximity_engine import CraneProximityEngine
 from .detection_engine import DetectionEngine
 from .mobile_config_store import MobileAiConfigStore
 from .road_analysis_engine import RoadAnalysisEngine
+from .mesh_analysis_engine import MeshAnalysisEngine
 from .road_detection_catalog import analyze_road_catalog, render_road_catalog, save_road_catalog_snapshot
 from .crane_detection_catalog import analyze_crane_catalog, render_crane_catalog
 from .ppe_engine import PpeEngine
@@ -84,6 +85,7 @@ def _analyze_mobile_frame(frame: np.ndarray, camera_id: str) -> dict:
 camera = CameraStream(settings.camera_source_value)
 engine = DetectionEngine(camera)
 road_engine = RoadAnalysisEngine(engine.store)
+mesh_engine = MeshAnalysisEngine(engine.store)
 crane_engine = CraneProximityEngine(engine.store)
 ppe_engine = PpeEngine(engine.store)
 pccc_engine = PcccEngine(engine.store)
@@ -106,6 +108,7 @@ def _build_vms_workers() -> None:
     cam_engines: dict[str, dict[str, object]] = {
         "A-03": {
             "road": road_engine.process_frame,
+            "mesh": mesh_engine.process_frame,
             "atgt": atgt_engine.process_frame,
         },
         "A-04": {
@@ -517,6 +520,14 @@ def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
     )
 
 
+def _analyze_mesh_frame(frame: np.ndarray, camera_id: str) -> dict:
+    return analyze_engine_frame(
+        frame,
+        camera_id,
+        mesh_engine.process_frame,
+    )
+
+
 def _analyze_crane_frame(frame: np.ndarray, camera_id: str) -> dict:
     return analyze_engine_frame(
         frame,
@@ -708,6 +719,30 @@ async def analyze_road_frame_endpoint(payload: MobileFramePayload):
     return await loop.run_in_executor(
         _analyze_executor,
         _analyze_road_frame,
+        frame,
+        camera_id,
+    )
+
+
+@app.post("/analyze/mesh/frame")
+async def analyze_mesh_frame_endpoint(payload: MobileFramePayload):
+    """Phân tích lưới bao che (BPTC-001) — debounce + ghi sự kiện."""
+    if payload.type != "frame" or not payload.image:
+        return {"type": "error", "message": "missing_image"}
+
+    try:
+        frame = _decode_frame(payload.image)
+    except Exception as exc:  # noqa: BLE001
+        return {"type": "error", "message": f"decode_failed: {exc}"}
+
+    if frame is None:
+        return {"type": "error", "message": "invalid_image"}
+
+    camera_id = payload.camera_id or "A-03"
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _analyze_executor,
+        _analyze_mesh_frame,
         frame,
         camera_id,
     )

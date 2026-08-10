@@ -154,4 +154,19 @@ def analyze_pccc_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detec
     filtered: list[Detection] = []
     for dets in by_behavior.values():
         filtered.extend(dets)
-    return filtered
+
+    from .worker_identity.detection_enrich import enrich_smoking_detection
+
+    smoking_index = 0
+    enriched: list[Detection] = []
+    for det in filtered:
+        if det.behavior == "smoking" and det.confidence >= VIOLATION_MIN_CONFIDENCE:
+            enrich_smoking_detection(
+                frame,
+                det,
+                camera_id=camera_id,
+                person_index=smoking_index,
+            )
+            smoking_index += 1
+        enriched.append(det)
+    return enriched

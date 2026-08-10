@@ -202,21 +202,15 @@ def _person_to_machinery_distance_px(
     person_box: tuple[int, int, int, int],
     machine_box: tuple[int, int, int, int],
 ) -> float:
-    """Chân người → mép máy (inset nhẹ) — tránh ROI lớn cho 0.0 m."""
+    """Mép bbox người → mép bbox máy — ổn định khi chân người nằm dưới thân máy cao."""
+    edge = _bbox_edge_distance_px(person_box, machine_box)
+    if edge <= 0:
+        return 12.0
     px, py = _person_anchor(person_box)
     x1, y1, x2, y2 = machine_box
-    inset_x = (x2 - x1) * 0.18
-    inset_y = (y2 - y1) * 0.14
-    mx1, my1 = x1 + inset_x, y1 + inset_y
-    mx2, my2 = x2 - inset_x, y2 - inset_y
-    nx = min(max(px, mx1), mx2)
-    ny = min(max(py, my1), my2)
-    dist = math.hypot(px - nx, py - ny)
-    if dist < 10:
-        cx = (x1 + x2) / 2.0
-        cy = (y1 + y2) / 2.0
-        dist = math.hypot(px - cx, py - cy) * 0.40
-    return max(dist, 12.0)
+    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    anchor_dist = math.hypot(px - cx, py - cy) * 0.35
+    return max(min(edge, anchor_dist), 12.0)
 
 
 def _person_anchor(box: tuple[int, int, int, int]) -> tuple[float, float]:
@@ -273,20 +267,25 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
             )
         )
 
-    for box, p_conf in persons:
-        all_detections.append(
-            CraneProximityDetection(
-                behavior="person",
-                label=person_display_label(p_conf),
-                scenario_id=SCENARIO_ID,
-                confidence=round(p_conf, 3),
-                bbox=[float(v) for v in box],
-            )
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
+    for person_index, (box, p_conf) in enumerate(persons):
+        person_det = CraneProximityDetection(
+            behavior="person",
+            label=person_display_label(p_conf),
+            scenario_id=SCENARIO_ID,
+            confidence=round(p_conf, 3),
+            bbox=[float(v) for v in box],
         )
+        enrich_person_bbox(frame, person_det, camera_id=camera_id, person_index=person_index)
+        all_detections.append(person_det)
 
         nearest_unit: _MachineryUnit | None = None
         nearest_dist_m = float("inf")
-        for unit in machinery_units:
+        # Khoảng cách tới mọi máy trong khung — ROI CRANE_WORK chỉ gate người,
+        # không loại máy có tâm ngoài polygon (cẩu tháp thường nằm phía trên).
+        proximity_units = all_machinery if all_machinery else machinery_units
+        for unit in proximity_units:
             dist_px = _person_to_machinery_distance_px(box, unit.bbox)
             dist_m = dist_px / px_per_m
             if dist_m < nearest_dist_m:
@@ -307,18 +306,23 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
             continue
 
         violations += 1
-        all_detections.append(
-            CraneProximityDetection(
-                behavior="crane_proximity",
-                label=SCENARIO_LABEL,
-                scenario_id=SCENARIO_ID,
-                confidence=conf,
-                bbox=[float(v) for v in box],
-                distance_m=round(nearest_dist_m, 1),
-                machine_kind=nearest_unit.kind,
-                machine_bbox=[float(v) for v in nearest_unit.bbox],
-            )
+        proximity_det = CraneProximityDetection(
+            behavior="crane_proximity",
+            label=SCENARIO_LABEL,
+            scenario_id=SCENARIO_ID,
+            confidence=conf,
+            bbox=[float(v) for v in box],
+            distance_m=round(nearest_dist_m, 1),
+            machine_kind=nearest_unit.kind,
+            machine_bbox=[float(v) for v in nearest_unit.bbox],
         )
+        if person_det.worker_id:
+            proximity_det.worker_id = person_det.worker_id
+            proximity_det.worker_name = person_det.worker_name
+            proximity_det.employee_code = person_det.employee_code
+            proximity_det.contractor_name = person_det.contractor_name
+            proximity_det.face_match_confidence = person_det.face_match_confidence
+        all_detections.append(proximity_det)
 
     fe_zones = [
         {

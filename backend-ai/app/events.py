@@ -10,7 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .atgt_plate_reader import read_vehicle_plate
+from .atgt_plate_reader import resolve_vehicle_plate
 from .crane_detection_catalog import CRANE_CATALOG_STYLES
 from .config import settings
 from .event_dedup import EventDedupRegistry, build_dedup_key, dedupe_events_by_key
@@ -514,7 +514,7 @@ class EventStore:
         if vehicle_bbox and len(vehicle_bbox) >= 4:
             event.subject_bbox = [float(v) for v in vehicle_bbox]
         if not getattr(detection, "vehicle_plate", None) and vehicle_bbox and len(vehicle_bbox) >= 4:
-            retry = read_vehicle_plate(frame, vehicle_bbox)
+            retry = resolve_vehicle_plate(frame, vehicle_bbox, camera_id=camera_id)
             if retry:
                 detection = detection.model_copy(update={"vehicle_plate": retry})
                 event.vehicle_plate = retry

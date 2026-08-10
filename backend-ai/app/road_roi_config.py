@@ -50,6 +50,19 @@ ROAD_ROI_ZONES: list[RoiZone] = [
         "exempt_from_occupancy": False,
     },
     {
+        "id": "roi-mesh-a03",
+        "label": "Lưới bao che — TTDV-A Cam 03",
+        "type": "MESH",
+        "camera_id": "A-03",
+        "polygon": [
+            {"x": 0.3500, "y": 0.1000},
+            {"x": 0.9800, "y": 0.0800},
+            {"x": 0.9800, "y": 0.6800},
+            {"x": 0.4200, "y": 0.5500},
+        ],
+        "exempt_from_occupancy": True,
+    },
+    {
         "id": "roi-road-a04",
         "label": "Lòng đường — TTDV-A Cam 04",
         "type": "ROAD",
@@ -81,3 +94,7 @@ ROAD_ROI_ZONES: list[RoiZone] = [
 
 def get_roi_zones_for_camera(camera_id: str) -> list[RoiZone]:
     return [z for z in ROAD_ROI_ZONES if z["camera_id"] == camera_id]
+
+
+def get_mesh_zones_for_camera(camera_id: str) -> list[RoiZone]:
+    return [z for z in ROAD_ROI_ZONES if z["camera_id"] == camera_id and z["type"] == "MESH"]

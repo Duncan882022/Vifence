@@ -47,6 +47,8 @@ export interface CameraAiModelDefinition {
 
 export interface CameraAiConfigRecord {
   enabledModels: CameraAiModelId[]
+  /** Hiển thị polygon ROI trên live tile — mặc định theo camera (A-03 bật). */
+  showLiveRoi?: boolean
 }
 
 export type CameraAiConfigMap = Record<string, CameraAiConfigRecord>

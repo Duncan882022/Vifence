@@ -1,9 +1,10 @@
 import { Loader2, Wifi, WifiOff } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { useMobileAiBackendHealth } from '../hooks/useMobileAiBackendHealth'
+import { useCameraBackendHealth } from '../hooks/useCameraBackendHealth'
 import { cameraToolbarBtn, cameraToolbarIconSize } from './cameraToolbarStyles'
 
 interface BackendConnectionBadgeProps {
+  cameraId?: string
   compact?: boolean
   className?: string
   /** overlay = cạnh LIVE trên video; toolbar = nút toolbar góc phải */
@@ -46,11 +47,12 @@ const STATUS_META = {
 } as const
 
 export function BackendConnectionBadge({
+  cameraId,
   compact,
   className,
   variant = 'overlay',
 }: BackendConnectionBadgeProps) {
-  const { status, recheck } = useMobileAiBackendHealth()
+  const { status, recheck } = useCameraBackendHealth(cameraId)
   const meta = STATUS_META[status]
   const Icon = meta.Icon
   const iconSize = cameraToolbarIconSize(compact)

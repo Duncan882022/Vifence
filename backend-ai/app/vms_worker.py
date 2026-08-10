@@ -66,6 +66,7 @@ class CameraVmsWorker:
         self._ai_fps = ai_fps
 
         self._frame: Optional[np.ndarray] = None
+        self._source_pts_sec: float = 0.0
         self._frame_lock = threading.Lock()
         self._running = False
         self._source_duration: float = 0.0
@@ -149,6 +150,7 @@ class CameraVmsWorker:
                 "width": int(self._latest_overlay.get("width") or 0),
                 "height": int(self._latest_overlay.get("height") or 0),
                 "updated_at": float(self._latest_overlay.get("updated_at") or 0.0),
+                "source_pts_sec": float(self._latest_overlay.get("source_pts_sec") or 0.0),
                 "detections": list(self._latest_overlay.get("detections") or []),
                 "roi_zones": list(self._latest_overlay.get("roi_zones") or []),
                 "metrics": dict(self._latest_overlay.get("metrics") or {}),
@@ -208,6 +210,7 @@ class CameraVmsWorker:
 
                 with self._frame_lock:
                     self._frame = frame
+                    self._source_pts_sec = source_pts
                 with self._pts_lock:
                     self._pts_history.append((wall_now, source_pts))
 
@@ -228,7 +231,9 @@ class CameraVmsWorker:
         while self._running:
             t0 = time.monotonic()
 
-            frame = self.get_frame()
+            with self._frame_lock:
+                frame = None if self._frame is None else self._frame.copy()
+                source_pts_sec = float(self._source_pts_sec)
             if frame is not None:
                 h, w = frame.shape[:2]
                 frame_w, frame_h = w, h
@@ -238,7 +243,10 @@ class CameraVmsWorker:
 
                 for engine_name, fn in self._process_fns.items():
                     try:
-                        result, events = fn(frame, self.camera_id, capture_frame=frame)
+                        engine_kwargs: dict = {"capture_frame": frame}
+                        if engine_name == "road":
+                            engine_kwargs["stabilize"] = False
+                        result, events = fn(frame, self.camera_id, **engine_kwargs)
                         if isinstance(result, dict):
                             merged_detections.extend(result.get("detections") or [])
                             zone_rows = result.get("roi_zones") or []
@@ -271,6 +279,7 @@ class CameraVmsWorker:
                         "roi_zones": merged_zones,
                         "metrics": merged_metrics,
                         "updated_at": time.time(),
+                        "source_pts_sec": round(source_pts_sec, 3),
                     }
 
             elapsed = time.monotonic() - t0

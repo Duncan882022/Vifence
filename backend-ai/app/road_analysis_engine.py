@@ -106,9 +106,10 @@ class RoadAnalysisEngine:
         camera_id: str,
         *,
         capture_frame: np.ndarray | None = None,
+        stabilize: bool = True,
     ) -> tuple[dict, list[ViolationEvent]]:
         snapshot_source = capture_frame if capture_frame is not None else frame
-        result = analyze_road_frame(frame, camera_id)
+        result = analyze_road_frame(frame, camera_id, stabilize=stabilize)
         detections_raw = result.get("detections", [])
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]

@@ -12,6 +12,8 @@ import {
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
+import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
+import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
@@ -43,6 +45,7 @@ function DetectionBox({
   compact,
   videoFit,
   videoObjectPosition = 'center',
+  snapOverlay = false,
 }: {
   detection: WahDetection
   frameWidth: number
@@ -51,6 +54,7 @@ function DetectionBox({
   compact?: boolean
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
+  snapOverlay?: boolean
 }) {
   const style = getOverlayBoxStyle('wah', detection.behavior)
   const video = videoRef.current
@@ -73,7 +77,7 @@ function DetectionBox({
 
   return (
     <div
-      className="absolute pointer-events-none"
+      className={overlayBoxMotionClass(snapOverlay)}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -114,8 +118,8 @@ function useWahState(
   const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
-  useOverlaySceneReset(videoRef, enabled, resetDetections)
   const vms = useVmsDetections()
+  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -205,9 +209,12 @@ export const WahOverlay = memo(function WahOverlay({
     enabled,
   )
 
-  const stableDetections = useStableOverlayDetections(detections)
+  const { syncKey, trackLock, missGraceFrames, snapOverlay } = useLiveOverlaySync()
+  const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
   const { visible } = useViolationStickyOverlay(stableDetections, {
     isViolation: d => d.behavior === 'no_harness',
+    syncKey,
+    missGraceFrames,
   })
 
   if (!enabled || visible.length === 0 || frameSize.width <= 0) return null
@@ -224,6 +231,7 @@ export const WahOverlay = memo(function WahOverlay({
           compact={compact}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          snapOverlay={snapOverlay}
         />
       ))}
     </div>

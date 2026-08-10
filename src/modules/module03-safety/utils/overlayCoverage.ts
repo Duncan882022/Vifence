@@ -2,8 +2,8 @@ import { OVERLAY_MIN_CONFIDENCE } from './overlayVisibility'
 
 export type OverlayBbox = [number, number, number, number]
 
-/** Tỷ lệ vùng `expected` được bbox `actual` phủ (intersection / area(expected)). */
-export const OVERLAY_MIN_COVERAGE = 0.70
+/** Ngưỡng vùng kỳ vọng được detection phủ — bbox phải ôm đối tượng, không “tràn” ROI. */
+export const OVERLAY_MIN_COVERAGE = 0.78
 
 function bboxArea(bbox: OverlayBbox): number {
   const w = Math.max(0, bbox[2] - bbox[0])

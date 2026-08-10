@@ -65,7 +65,10 @@ def analyze_wah_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detect
     h, w = frame.shape[:2]
     raw = detector.predict(frame)
 
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
     detections: list[Detection] = []
+    person_index = 0
     for det in raw:
         if det.confidence < _PERSON_CONF:
             continue
@@ -73,14 +76,15 @@ def analyze_wah_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detect
         if not _plausible_person_box(box, w, h):
             continue
 
-        detections.append(
-            Detection(
-                behavior="person",
-                label="Person",
-                confidence=round(det.confidence, 3),
-                bbox=list(box),
-            )
+        person_det = Detection(
+            behavior="person",
+            label="Person",
+            confidence=round(det.confidence, 3),
+            bbox=list(box),
         )
+        enrich_person_bbox(frame, person_det, camera_id=camera_id, person_index=person_index)
+        person_index += 1
+        detections.append(person_det)
 
         has_harness, harness_box = detect_harness_on_person(frame, box)
         if has_harness:

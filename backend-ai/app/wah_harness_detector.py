@@ -77,12 +77,14 @@ def _heuristic_strap_harness(frame: np.ndarray, person_bbox: tuple[float, float,
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8), 1)
         torso_ratio = float(mask.sum() / 255) / (torso.shape[0] * torso.shape[1])
     ratio = max(back_ratio, torso_ratio)
-    # Áo phản quang phủ gần hết torso — không coi là dây an toàn (tránh chặn log WAH).
-    if ratio >= 0.12:
+    # Áo phản quang phủ lưng — không coi là dây an toàn (tránh chặn log WAH).
+    if ratio >= 0.065:
         return False
     crop_area = crop.shape[0] * crop.shape[1]
-    min_ratio = 0.016 if crop_area < 2400 else _STRAP_MIN_RATIO
-    return ratio >= min_ratio
+    min_ratio = 0.022 if crop_area < 2400 else max(_STRAP_MIN_RATIO, 0.006)
+    if ratio < min_ratio:
+        return False
+    return _heuristic_x_harness_back(frame, person_bbox)
 
 
 def _heuristic_x_harness_back(frame: np.ndarray, person_bbox: tuple[float, float, float, float]) -> bool:
@@ -98,10 +100,9 @@ def _heuristic_x_harness_back(frame: np.ndarray, person_bbox: tuple[float, float
 
     crop_area = crop.shape[0] * crop.shape[1]
     ratio = float(mask.sum() / 255) / crop_area
-    strong_ratio = 0.045 if crop_area >= 2200 else 0.017
-    # Tín hiệu mạnh — dây chữ X rõ trên lưng (ngưỡng thấp hơn khi bbox nhỏ/xa).
-    if ratio >= strong_ratio:
-        return True
+    # Áo phản quang phủ lưng — không coi là dây chữ X (tránh chặn WAH-001 trên giàn giáo).
+    if ratio >= 0.065:
+        return False
     if ratio < _X_BACK_MIN_RATIO:
         return False
 

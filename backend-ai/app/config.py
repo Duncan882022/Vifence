@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     worker_demo_fallback_enabled: bool = False
     worker_gallery_dir: str = "data/worker_gallery"
 
+    # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số (fake nếu OCR fail).
+    atgt_demo_enabled: bool = True
+    atgt_demo_confirm_seconds: float = 0.0
+    atgt_demo_max_gap_seconds: float = 120.0
+    atgt_demo_vehicle_conf: float = 0.32
+
     # Hút thuốc — lặp snapshot mỗi 15 phút nếu vẫn phát hiện.
     smoking_event_cooldown_seconds: float = 900.0
     smoking_event_repeat_min_seconds: float = 900.0

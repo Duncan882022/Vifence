@@ -149,6 +149,13 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
                 person_match = person
         if person_match is not None:
             synced["person_bbox"] = scale_bbox(person_match.bbox, sx, sy)
+            synced_det = synced["detection"]
+            if hasattr(synced_det, "worker_name"):
+                synced_det.worker_id = person_match.worker_id
+                synced_det.worker_name = person_match.worker_name
+                synced_det.employee_code = person_match.employee_code
+                synced_det.contractor_name = person_match.contractor_name
+                synced_det.face_match_confidence = person_match.face_match_confidence
     return synced
 
 

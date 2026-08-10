@@ -115,8 +115,10 @@ def _foot_skin_mask(hsv: np.ndarray) -> np.ndarray:
 
 
 def _feet_view_obstructed(env: dict[str, float]) -> bool:
-    """Không đủ căn cứ đánh giá giày — nền bùn/vũng che chân."""
-    return env["mud_ratio"] > 0.24 or env["puddle_ratio"] > 0.28
+    """Không đủ căn cứ đánh giá giày — nền bùn/vũng che chân (chỉ xét vùng mắt cá)."""
+    return env.get("foot_mud_ratio", env["mud_ratio"]) > 0.42 or env.get(
+        "foot_puddle_ratio", env["puddle_ratio"],
+    ) > 0.34
 
 
 def _region_crop(frame: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
@@ -260,8 +262,12 @@ def _feet_metrics(frame: np.ndarray, feet: tuple[float, float, float, float]) ->
             "mud_ratio": 0.0,
             "pants_ratio": 0.0,
             "puddle_ratio": 0.0,
+            "foot_mud_ratio": 0.0,
+            "foot_puddle_ratio": 0.0,
         }
     h, w = crop.shape[:2]
+    foot_band = crop[int(h * 0.35) :, :]
+    foot_env = _foot_environment_ratios(foot_band) if foot_band.size > 0 else env
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
     skin = _foot_skin_mask(hsv)
     skin_ratio = float(skin.sum() / 255) / (h * w)
@@ -305,6 +311,8 @@ def _feet_metrics(frame: np.ndarray, feet: tuple[float, float, float, float]) ->
         "mud_ratio": env["mud_ratio"],
         "pants_ratio": env["pants_ratio"],
         "puddle_ratio": env["puddle_ratio"],
+        "foot_mud_ratio": foot_env["mud_ratio"],
+        "foot_puddle_ratio": foot_env["puddle_ratio"],
     }
 
 
@@ -430,43 +438,27 @@ def _shoe_detections_for_person(
     feet: tuple[float, float, float, float],
     person_conf: float,
 ) -> list[tuple[str, tuple[float, float, float, float], float]]:
-    """Quét 2 chân — chỉ log no_shoes khi thiếu giày rõ ràng, không phạt vì crop một bên lỗi."""
+    """Quét 2 chân — PPE-003 chỉ khi CẢ HAI chân đều thiếu giày; một bên không detect → không phạt."""
     _ = person_conf
 
     left, right = _split_feet_halves(feet)
     left_det = _evaluate_foot_shoes(frame, left)
     right_det = _evaluate_foot_shoes(frame, right)
-    per_foot = [left_det, right_det]
 
-    shoes = [d for d in per_foot if d and d[0] == "safety_shoes"]
-    bare = [d for d in per_foot if d and d[0] == "no_shoes"]
+    left_state = left_det[0] if left_det else None
+    right_state = right_det[0] if right_det else None
 
-    if shoes:
-        return shoes
-
-    if len(bare) >= 2:
-        return bare
-
-    if len(bare) == 1:
-        whole = _feet_metrics(frame, feet)
-        if _looks_barefoot_or_open_footwear(whole):
-            return bare
-        return []
-
-    if not shoes and not bare:
-        metrics = _feet_metrics(frame, feet)
-        if _looks_barefoot_or_open_footwear(metrics):
-            return [("no_shoes", feet, 0.52)]
-        left_m = _feet_metrics(frame, left)
-        right_m = _feet_metrics(frame, right)
-        if _looks_barefoot_or_open_footwear(left_m) and _looks_barefoot_or_open_footwear(right_m):
-            return [("no_shoes", left, 0.52), ("no_shoes", right, 0.52)]
-        out: list[tuple[str, tuple[float, float, float, float], float]] = []
-        for foot in (left, right):
-            foot_metrics = _feet_metrics(frame, foot)
-            if not _looks_barefoot_or_open_footwear(foot_metrics):
-                out.append(("safety_shoes", _shoe_bbox_from_feet(foot), 0.50))
+    out: list[tuple[str, tuple[float, float, float, float], float]] = []
+    if left_state == "safety_shoes" and left_det:
+        out.append(left_det)
+    if right_state == "safety_shoes" and right_det:
+        out.append(right_det)
+    if out:
         return out
+
+    if left_state == "no_shoes" and right_state == "no_shoes" and left_det and right_det:
+        return [left_det, right_det]
+
     return []
 
 
@@ -580,24 +572,30 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
     vest_items = _model_items("ppe_vest", frame, "safety_vest")
     # Giày: chỉ heuristic/metrics — model seed hay false-positive chân trần.
 
+    from .worker_identity.detection_enrich import copy_worker_identity, enrich_person_bbox
+
     detections: list[PpeDetection] = []
     violations = 0
 
-    for person in persons:
+    for person_index, person in enumerate(persons):
         pb = person.person_box
         head = _sub_region(pb, 0.0, 0.30)
         torso = _sub_region(pb, 0.20, 0.72)
         feet = _feet_region(pb, h)
 
-        detections.append(
-            PpeDetection(
-                behavior="person",
-                label=PPE_LABELS["person"],
-                scenario_id=PPE_SCENARIO["person"],
-                confidence=round(person.person_conf, 3),
-                bbox=[float(v) for v in pb],
-            )
+        person_det = PpeDetection(
+            behavior="person",
+            label=PPE_LABELS["person"],
+            scenario_id=PPE_SCENARIO["person"],
+            confidence=round(person.person_conf, 3),
+            bbox=[float(v) for v in pb],
         )
+        enrich_person_bbox(frame, person_det, camera_id=camera_id, person_index=person_index)
+        detections.append(person_det)
+
+        def _append_violation(violation: PpeDetection) -> None:
+            copy_worker_identity(person_det, violation)
+            detections.append(violation)
 
         helmet = None
         hb = _heuristic_helmet(frame, head)
@@ -620,7 +618,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
             )
         else:
             violations += 1
-            detections.append(
+            _append_violation(
                 PpeDetection(
                     behavior="no_helmet",
                     label=PPE_LABELS["no_helmet"],
@@ -651,7 +649,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
             )
         else:
             violations += 1
-            detections.append(
+            _append_violation(
                 PpeDetection(
                     behavior="no_vest",
                     label=PPE_LABELS["no_vest"],
@@ -678,7 +676,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
             if not shoe_violation_logged:
                 violations += 1
                 shoe_violation_logged = True
-            detections.append(
+            _append_violation(
                 PpeDetection(
                     behavior="no_shoes",
                     label=PPE_LABELS["no_shoes"],

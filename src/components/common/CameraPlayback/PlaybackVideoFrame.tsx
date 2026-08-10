@@ -1,6 +1,6 @@
 import type { RefObject } from 'react'
 import dayjs from 'dayjs'
-import { Camera } from 'lucide-react'
+import { Camera, Radio } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { cameraDisplayLabel, type TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import {
@@ -10,6 +10,9 @@ import {
 import type { CameraPlaybackRecord } from '@/types/cameraPlayback'
 import { getCameraLocation as getLocation } from '@/utils/cameraPlaybackUi'
 import { EventPlaybackViewport } from '@/modules/module03-safety/components/EventPlaybackViewport'
+import { SEVERITY_BADGE, SEVERITY_ICONS, SEVERITY_LABELS_UI } from '@/modules/module03-safety/utils/safetyDashboardUi'
+import type { SafetyViolationRecord } from '@/modules/module03-safety/types/safety.types'
+import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 
 const CCTV_SCANLINE = {
   backgroundImage:
@@ -23,6 +26,7 @@ interface PlaybackVideoFrameProps {
   selectedRecord: CameraPlaybackRecord | null
   videoRef: RefObject<HTMLVideoElement | null>
   muted: boolean
+  activeEventRecord?: SafetyViolationRecord | null
 }
 
 export function PlaybackVideoFrame({
@@ -32,14 +36,15 @@ export function PlaybackVideoFrame({
   selectedRecord,
   videoRef,
   muted,
+  activeEventRecord,
 }: PlaybackVideoFrameProps) {
   const location = getLocation(cam)
   const isEventClip = selectedRecord?.type === 'event'
   const playbackFit = getVideoObjectFitForCamera(cam.id)
   const playbackObjectPosition = getVideoObjectPositionForCamera(cam.id)
-  const clipLabel = isEventClip
-    ? `Clip ${selectedRecord?.clipDurationSec ?? 3}s · ROI vi phạm`
-    : null
+  const clipSec = selectedRecord?.clipDurationSec ?? 3
+  const eventMeta = activeEventRecord ?? null
+  const SeverityIcon = eventMeta ? SEVERITY_ICONS[eventMeta.severity] : null
 
   return (
     <div className="relative w-full h-full min-h-[120px] overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
@@ -91,20 +96,47 @@ export function PlaybackVideoFrame({
       )}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-[2]" style={CCTV_SCANLINE} />
 
-      <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-20">
-        {selectedRecord && (
-          <div className="min-w-0 bg-black/60 rounded px-2 py-1 border border-[#1e2433]">
-            <p className="text-[8px] text-white/90 font-semibold truncate">{selectedRecord.name}</p>
-            <p className="text-[7px] text-white/45 tabular-nums">
-              {clipLabel ?? (
-                <>
-                  {dayjs(selectedRecord.startTime).format('HH:mm:ss')}
-                  {' – '}
-                  {dayjs(selectedRecord.endTime).format('HH:mm:ss')}
-                </>
+      <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1.5 z-20 pointer-events-none">
+        <div className="flex flex-col gap-1 min-w-0">
+          {isEventClip && eventMeta && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-black/65 text-white/95 border border-white/10 font-mono">
+                {eventMeta.scenarioId}
+              </span>
+              {SeverityIcon && (
+                <TagTooltip content={SEVERITY_LABELS_UI[eventMeta.severity]}>
+                  <span className={cn(
+                    'w-5 h-5 rounded border inline-flex items-center justify-center bg-black/55',
+                    SEVERITY_BADGE[eventMeta.severity],
+                  )}>
+                    <SeverityIcon className="w-2.5 h-2.5" aria-hidden />
+                  </span>
+                </TagTooltip>
               )}
-            </p>
-          </div>
+            </div>
+          )}
+          {selectedRecord && (
+            <div className="min-w-0 bg-black/60 rounded px-2 py-1 border border-[#1e2433] max-w-[70%]">
+              <p className="text-[8px] text-white/90 font-semibold truncate">{selectedRecord.name}</p>
+              <p className="text-[7px] text-white/45 tabular-nums">
+                {isEventClip
+                  ? `Clip ${clipSec}s · ${dayjs(selectedRecord.startTime).format('HH:mm:ss')}`
+                  : (
+                    <>
+                      {dayjs(selectedRecord.startTime).format('HH:mm:ss')}
+                      {' – '}
+                      {dayjs(selectedRecord.endTime).format('HH:mm:ss')}
+                    </>
+                  )}
+              </p>
+            </div>
+          )}
+        </div>
+        {isEventClip && (
+          <span className="inline-flex items-center gap-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-red-500/90 text-white shrink-0">
+            <Radio className="w-2.5 h-2.5 animate-pulse" aria-hidden />
+            AI
+          </span>
         )}
       </div>
 

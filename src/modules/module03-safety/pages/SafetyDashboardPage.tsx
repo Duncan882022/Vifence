@@ -1,4 +1,4 @@
-import { useMemo, useState, lazy, Suspense } from 'react'
+import { useMemo, useState } from 'react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import {
   CameraModeToggle,
@@ -24,9 +24,6 @@ import { SafetyViolationTable } from '../components/dashboard/SafetyViolationTab
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import { SafetyHandleConfirmDialog } from '../components/SafetyHandleConfirmDialog'
 import { SafetyViolationDetailModal } from '../components/SafetyViolationDetailModal'
-const SafetyPlaybackModal = lazy(() =>
-  import('../components/SafetyPlaybackModal').then(m => ({ default: m.SafetyPlaybackModal })),
-)
 import type { SafetyDashboardFilters, SafetyViolationRecord, ViolationStatus } from '../types/safety.types'
 import {
   computeDashboardKpis,
@@ -37,7 +34,7 @@ import {
 } from '../services/safetyDashboard.service'
 import { useSafetyAiEvents } from '../hooks/useSafetyAiEvents'
 import { useResolvedSafetyRecord } from '../hooks/useResolvedSafetyRecord'
-import { violationRecordToEvent } from '../utils/violationAdapter'
+import { resolveTrainingCameraId } from '../utils/safetyCameraBridge'
 import {
   fetchSafetyCameraRecords,
   fetchSafetyRecordDetections,
@@ -76,7 +73,6 @@ export function SafetyDashboardPage() {
   const [selectedId, setSelectedId] = useState<string | undefined>()
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>()
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
-  const [playbackId, setPlaybackId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, ViolationStatus>>({})
   const [handleId, setHandleId] = useState<string | null>(null)
@@ -90,10 +86,7 @@ export function SafetyDashboardPage() {
 
   const detailRecord = useResolvedSafetyRecord(allRecords, detailId)
   const handleTarget = useResolvedSafetyRecord(allRecords, handleId)
-  const playbackModalEvent = useMemo(() => {
-    const record = playbackId ? allRecords.find(r => r.id === playbackId) : null
-    return record ? violationRecordToEvent(record) : null
-  }, [allRecords, playbackId])
+  const selectedRecord = useResolvedSafetyRecord(allRecords, selectedId)
 
   const tier2Open = lowerPanel === 'camera'
   const eventsPanelOpen = SHOW_VIOLATION_EVENTS_PANEL && lowerPanel === 'events'
@@ -111,9 +104,12 @@ export function SafetyDashboardPage() {
   )
   const alerts = useMemo(() => getPriorityAlerts(alertScope), [alertScope])
 
-  const handlePlayback = (v: SafetyViolationRecord) => {
-    setPlaybackId(v.id)
+  const handleSelectEvent = (v: SafetyViolationRecord) => {
     setSelectedId(v.id)
+    const camId = resolveTrainingCameraId(v.sourceDeviceId, v.sourceType)
+    if (camId) setSelectedCamId(camId)
+    setCameraMode('playback')
+    setLowerPanel('camera')
   }
 
   const handleSelectCamera = (cam: TrainingCamera) => {
@@ -237,7 +233,8 @@ export function SafetyDashboardPage() {
                       onSelectCamera={handleSelectCamera}
                       defaultDate={getSafetyDefaultPlaybackDate()}
                       maxDate={getSafetyDefaultPlaybackDate()}
-                      initialRecordId={undefined}
+                      selectedRecordId={selectedId}
+                      activeEventRecord={selectedRecord}
                       filterTabs={[...SAFETY_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterSafetyCameras(tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
                       groupFn={(cams, tab) => groupSafetyCamerasForSidebar(cams, tab as typeof SAFETY_CAMERA_FILTER_TABS[number])}
@@ -308,8 +305,8 @@ export function SafetyDashboardPage() {
                 violation={alerts.violation}
                 critical={alerts.critical}
                 selectedGroupId={filters.groupId}
-                onPlayback={handlePlayback}
-                onSelect={v => setSelectedId(v.id)}
+                selectedId={selectedId}
+                onSelect={handleSelectEvent}
                 onHandle={handleHandleRequest}
                 onSnapshotClick={v => setDetailId(v.id)}
               />
@@ -353,8 +350,7 @@ export function SafetyDashboardPage() {
                 <SafetyViolationTable
                   records={filterViolations(allRecords, filters)}
                   selectedId={selectedId}
-                  onSelect={v => setSelectedId(v.id)}
-                  onPlayback={handlePlayback}
+                  onSelect={handleSelectEvent}
                   onSnapshotClick={v => setDetailId(v.id)}
                 />
               )}
@@ -373,16 +369,7 @@ export function SafetyDashboardPage() {
       <SafetyViolationDetailModal
         record={detailRecord}
         onClose={() => setDetailId(null)}
-        onPlayback={handlePlayback}
       />
-
-      <Suspense fallback={null}>
-        <SafetyPlaybackModal
-          open={playbackId != null}
-          event={playbackModalEvent}
-          onClose={() => setPlaybackId(null)}
-        />
-      </Suspense>
     </>
   )
 }

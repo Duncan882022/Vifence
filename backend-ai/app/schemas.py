@@ -34,6 +34,11 @@ class CraneProximityDetection(BaseModel):
     distance_m: Optional[float] = None
     machine_kind: Optional[str] = None  # tower_crane | crane_green | sany_drill | road_roller | dump_truck | forklift | machinery
     machine_bbox: Optional[list[float]] = None
+    worker_id: Optional[str] = None
+    worker_name: Optional[str] = None
+    employee_code: Optional[str] = None
+    contractor_name: Optional[str] = None
+    face_match_confidence: Optional[float] = None
 
 
 class PpeDetection(BaseModel):
@@ -67,6 +72,11 @@ class Detection(BaseModel):
     vehicle_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
     driver_name: Optional[str] = None
+    worker_id: Optional[str] = None
+    worker_name: Optional[str] = None
+    employee_code: Optional[str] = None
+    contractor_name: Optional[str] = None
+    face_match_confidence: Optional[float] = None
 
 
 # Metadata tĩnh mô tả kịch bản, ăn khớp với nhóm PCCC trong
@@ -271,6 +281,11 @@ class ViolationEvent(BaseModel):
             event_date=day,
             camera_id=camera_id,
             snapshot_file=snapshot_file,
+            worker_id=detection.worker_id,
+            worker_name=detection.worker_name,
+            employee_code=detection.employee_code,
+            contractor_name=detection.contractor_name,
+            face_match_confidence=detection.face_match_confidence,
         )
 
     @classmethod
@@ -369,6 +384,11 @@ class ViolationEvent(BaseModel):
             event_date=day,
             camera_id=camera_id,
             snapshot_file=snapshot_file,
+            worker_id=detection.worker_id,
+            worker_name=detection.worker_name,
+            employee_code=detection.employee_code,
+            contractor_name=detection.contractor_name,
+            face_match_confidence=detection.face_match_confidence,
         )
 
     @classmethod

@@ -7,15 +7,20 @@ import { getDefaultRoiZonesForModel } from '../data/cameraAiRoiDefaults'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import type { CameraAiModelId } from '../types/cameraAi.types'
 import {
-  cameraToolbarBtnStandalone,
-  cameraToolbarIconSize,
-} from './cameraToolbarStyles'
+  cameraHasPolygonRoiModels,
+  getCameraLiveRoiVisible,
+  setCameraLiveRoiVisible,
+} from '../services/cameraAiConfig.service'
 import {
   GROUP_BADGE,
   GROUP_COLORS,
   GROUP_ICONS,
 } from '@/modules/module03-safety/utils/safetyDashboardUi'
 import type { SafetyGroupId } from '@/modules/module03-safety/types/safety.types'
+import {
+  cameraToolbarBtnStandalone,
+  cameraToolbarIconSize,
+} from './cameraToolbarStyles'
 
 interface CameraAiConfigModalProps {
   cameraId: string
@@ -55,6 +60,12 @@ function formatZoneLine(zone: { label: string; type: string; polygon: unknown[];
 export function CameraAiConfigModal({ cameraId, open, onClose }: CameraAiConfigModalProps) {
   const { enabledModels, toggleModel } = useCameraAiEnabledModels(cameraId)
   const [expandedPolygon, setExpandedPolygon] = useState<CameraAiModelId | null>(null)
+  const [liveRoiVisible, setLiveRoiVisible] = useState(() => getCameraLiveRoiVisible(cameraId))
+  const hasPolygonModels = cameraHasPolygonRoiModels(cameraId)
+
+  useEffect(() => {
+    if (open) setLiveRoiVisible(getCameraLiveRoiVisible(cameraId))
+  }, [open, cameraId])
 
   useEffect(() => {
     if (!open) return
@@ -224,8 +235,30 @@ export function CameraAiConfigModal({ cameraId, open, onClose }: CameraAiConfigM
           })}
         </div>
 
-        <div className="px-4 py-3 border-t border-[#1e2433] shrink-0">
-          <p className="text-[9px] text-muted-foreground mb-2">
+        <div className="px-4 py-3 border-t border-[#1e2433] shrink-0 space-y-2">
+          {hasPolygonModels && (
+            <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-[#1e2433] bg-[#0b0f1a] px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={liveRoiVisible}
+                onChange={e => {
+                  const next = e.target.checked
+                  setLiveRoiVisible(next)
+                  setCameraLiveRoiVisible(cameraId, next)
+                }}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="min-w-0">
+                <span className="block text-[11px] font-semibold text-foreground">
+                  Hiển thị polygon ROI trên live view
+                </span>
+                <span className="block text-[9px] text-muted-foreground mt-0.5 leading-snug">
+                  Cam 03 mặc định bật vùng lòng đường · cấu hình chi tiết per-zone sẽ bổ sung sau
+                </span>
+              </span>
+            </label>
+          )}
+          <p className="text-[9px] text-muted-foreground">
             {enabledModels.length} model đang bật · Lưu tự động trên trình duyệt
           </p>
           <button

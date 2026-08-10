@@ -18,6 +18,11 @@ export interface CraneProximityDetection {
   confidence: number
   bbox: [number, number, number, number]
   distance_m?: number
+  worker_id?: string
+  worker_name?: string
+  employee_code?: string
+  contractor_name?: string
+  face_match_confidence?: number
   machine_kind?:
     | 'crane_green'
     | 'sany_drill'

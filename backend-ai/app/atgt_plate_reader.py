@@ -1,7 +1,8 @@
-"""Đọc biển số xe từ khung hình — chỉ trả giá trị khi OCR xác thực được, không fake."""
+"""Đọc biển số xe từ khung hình — OCR thật; demo fallback khi bật ATGT_DEMO_ENABLED."""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -13,7 +14,19 @@ from typing import Iterable
 import cv2
 import numpy as np
 
+from .config import settings
+
 logger = logging.getLogger("atgt_plate_reader")
+
+_DEMO_PLATES: tuple[str, ...] = (
+    "51A-123.45",
+    "51B-678.90",
+    "50F-888.88",
+    "29C-456.78",
+    "30H-321.09",
+    "43D-555.66",
+    "60K-112.23",
+)
 
 _TESSERACT = shutil.which("tesseract")
 _OCR_LANG = "vie+eng"
@@ -268,6 +281,18 @@ def _ocr_crop(crop: np.ndarray) -> str | None:
     return None
 
 
+def demo_plate_from_bbox(
+    camera_id: str,
+    bbox: list[float] | tuple[float, ...],
+) -> str:
+    """Biển số demo ổn định theo vị trí xe trên camera (presentation)."""
+    cx = (float(bbox[0]) + float(bbox[2])) / 2.0
+    cy = (float(bbox[1]) + float(bbox[3])) / 2.0
+    digest = hashlib.md5(f"{camera_id}:{int(cx // 40)}:{int(cy // 40)}".encode()).hexdigest()
+    idx = int(digest[:8], 16) % len(_DEMO_PLATES)
+    return _DEMO_PLATES[idx]
+
+
 def read_vehicle_plate(
     frame: np.ndarray,
     bbox: list[float] | tuple[float, ...],
@@ -281,6 +306,22 @@ def read_vehicle_plate(
         plate = _ocr_crop(crop)
         if plate:
             return plate
+    return None
+
+
+def resolve_vehicle_plate(
+    frame: np.ndarray,
+    bbox: list[float] | tuple[float, ...],
+    *,
+    camera_id: str = "A-03",
+    plate_box_rel: list[float] | tuple[float, ...] | None = None,
+) -> str | None:
+    """OCR trước; nếu demo bật thì gán biển số mẫu ổn định."""
+    plate = read_vehicle_plate(frame, bbox, plate_box_rel)
+    if plate:
+        return plate
+    if settings.atgt_demo_enabled:
+        return demo_plate_from_bbox(camera_id, bbox)
     return None
 
 

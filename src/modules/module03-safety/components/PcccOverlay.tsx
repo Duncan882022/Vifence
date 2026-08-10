@@ -19,7 +19,25 @@ import {
   getVideoObjectFitForCamera,
   getVideoObjectPositionForCamera,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
+import { formatPersonOverlayBadge } from '../utils/personOverlayLabel'
 import { formatRoiOverlayCode } from '../utils/roiOverlayCode'
+
+function pcccOverlayLabel(det: Pick<PcccDetection, 'behavior' | 'confidence' | 'worker_name'>): string {
+  const code = formatRoiOverlayCode(det.behavior)
+  if (det.behavior === 'smoking') {
+    return formatPersonOverlayBadge(det.worker_name, det.confidence, ` · ${code}`)
+  }
+  return code
+}
+
+function toOverlayDetections(detections: PcccDetection[]): MobileAiDetection[] {
+  return detections.map(d => ({
+    behavior: d.behavior,
+    label: pcccOverlayLabel(d),
+    confidence: d.confidence,
+    bbox: d.bbox,
+  }))
+}
 
 function visibleDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
   return detections.filter(d =>
@@ -36,15 +54,6 @@ interface PcccOverlayProps {
   videoObjectPosition?: 'center' | 'bottom'
 }
 
-function toOverlayDetections(detections: PcccDetection[]): MobileAiDetection[] {
-  return detections.map(d => ({
-    behavior: d.behavior,
-    label: formatRoiOverlayCode(d.behavior),
-    confidence: d.confidence,
-    bbox: d.bbox,
-  }))
-}
-
 function usePcccState(
   cameraId: string,
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -58,8 +67,8 @@ function usePcccState(
   const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
-  useOverlaySceneReset(videoRef, enabled, resetDetections)
   const vms = useVmsDetections()
+  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -69,7 +78,11 @@ function usePcccState(
         .filter(d => d.behavior === 'smoking' || d.behavior === 'fire')
         .map(d => ({
           behavior: d.behavior as PcccDetection['behavior'],
-          label: formatRoiOverlayCode(d.behavior),
+          label: pcccOverlayLabel({
+            behavior: d.behavior as PcccDetection['behavior'],
+            confidence: d.confidence,
+            worker_name: d.worker_name,
+          }),
           confidence: d.confidence,
           bbox: d.bbox,
         })),

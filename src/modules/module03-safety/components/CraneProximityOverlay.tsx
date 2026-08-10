@@ -17,10 +17,12 @@ import {
   type CraneProximityMetrics,
 } from '../services/craneProximityBackend.service'
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
+import { useCameraLiveRoiVisible } from '@/modules/module02-training/hooks/useCameraLiveRoiVisible'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
-import { isVmsLiveCamera } from '../services/vmsDetections.service'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
+import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
+import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 import { appendCraneProximityRelated, isMachineDetection } from '../utils/craneOverlayRelated'
 import { craneScanRank } from '../utils/overlayScanOrder'
 import { getOverlayBoxStyle } from '../utils/roiBoxRole'
@@ -31,6 +33,7 @@ import {
 import { shouldShowOverlayBox } from '../utils/overlayCoverage'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 import { formatRoiOverlayBadge, formatCraneOverlayLabel, machineKindLabel } from '../utils/roiOverlayCode'
+import { formatPersonOverlayBadge } from '../utils/personOverlayLabel'
 
 const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
 const INFO_MIN_CONFIDENCE = OVERLAY_MIN_CONFIDENCE
@@ -127,12 +130,15 @@ function resolveDetectionStyle(detection: CraneProximityDetection) {
 function formatDetectionBadge(
   detection: CraneProximityDetection,
 ): string {
+  const distLabel = formatDistanceLabel(detection.distance_m)
+  if (detection.behavior === 'person' || detection.behavior === 'crane_proximity') {
+    return formatPersonOverlayBadge(detection.worker_name, detection.confidence, distLabel)
+  }
   const code = formatCraneOverlayLabel(detection.behavior, {
     machineKind: detection.machine_kind,
     scenarioId: detection.scenario_id,
     label: detection.label,
   })
-  const distLabel = formatDistanceLabel(detection.distance_m)
   return formatRoiOverlayBadge(code, detection.confidence, distLabel)
 }
 
@@ -159,6 +165,7 @@ const DetectionBox = memo(function DetectionBox({
   videoFit = 'contain',
   videoObjectPosition = 'center',
   pulse,
+  snapOverlay = false,
 }: {
   detection: CraneProximityDetection
   frameWidth: number
@@ -168,6 +175,7 @@ const DetectionBox = memo(function DetectionBox({
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   pulse?: boolean
+  snapOverlay?: boolean
 }) {
   const style = resolveDetectionStyle(detection)
   const video = videoRef.current
@@ -202,7 +210,7 @@ const DetectionBox = memo(function DetectionBox({
 
   return (
     <div
-      className="absolute pointer-events-none"
+      className={overlayBoxMotionClass(snapOverlay)}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -260,8 +268,8 @@ function useCraneProximityState(
   const [layoutTick, setLayoutTick] = useState(0)
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
-  useOverlaySceneReset(videoRef, enabled, resetDetections)
   const vms = useVmsDetections()
+  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -269,16 +277,21 @@ function useCraneProximityState(
     const craneMetrics = vms.snapshot.metrics.crane as CraneProximityMetrics | undefined
     const mapped = vms.snapshot.detections
       .filter(d => ['crane', 'crane_proximity', 'person'].includes(d.behavior))
-      .map(d => ({
-        behavior: d.behavior as CraneProximityDetection['behavior'],
-        label: d.label,
-        scenario_id: d.scenario_id ?? 'DZ-003',
-        confidence: d.confidence,
-        bbox: d.bbox,
-        machine_kind: d.machine_kind,
-        distance_m: d.distance_m,
-        nearest_machine: d.nearest_machine,
-      })) as CraneProximityDetection[]
+        .map(d => ({
+          behavior: d.behavior as CraneProximityDetection['behavior'],
+          label: d.label,
+          scenario_id: d.scenario_id ?? 'DZ-003',
+          confidence: d.confidence,
+          bbox: d.bbox,
+          machine_kind: d.machine_kind,
+          distance_m: d.distance_m,
+          nearest_machine: d.nearest_machine,
+          worker_id: d.worker_id,
+          worker_name: d.worker_name,
+          employee_code: d.employee_code,
+          contractor_name: d.contractor_name,
+          face_match_confidence: d.face_match_confidence,
+        })) as CraneProximityDetection[]
     const visible = mapped
       .filter(passesCraneOverlayDetection)
       .sort((a, b) => craneScanRank(a.behavior, a.machine_kind) - craneScanRank(b.behavior, b.machine_kind))
@@ -387,7 +400,8 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
   const { detections, frameSize, roiZones, layoutTick } =
     useCraneProximityState(cameraId, videoRef, enabled)
 
-  const stableDetections = useStableOverlayDetections(detections)
+  const { syncKey, trackLock, missGraceFrames, snapOverlay } = useLiveOverlaySync()
+  const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
 
   const appendRelated = useCallback(
     (visible: CraneProximityDetection[], all: CraneProximityDetection[]) =>
@@ -398,6 +412,8 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
   const { visible: stickyViolations } = useViolationStickyOverlay(stableDetections, {
     isViolation: d => d.behavior === 'crane_proximity',
     appendRelated,
+    syncKey,
+    missGraceFrames,
   })
 
   const renderDetections = useMemo(() => {
@@ -430,8 +446,8 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
     return merged
   }, [stickyViolations, stableDetections])
 
-  // A-04 VMS: chỉ bbox detection — không vẽ polygon CRANE_BODY/CRANE_WORK (cấu hình ROI per-cam sau).
-  const showPolygon = roiZones.length > 0 && !isVmsLiveCamera(cameraId)
+  const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
+  const showPolygon = roiZones.length > 0 && liveRoiVisible
   const video = videoRef.current
   const overlayFrameSize =
     frameSize.width > 0
@@ -467,6 +483,7 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
           compact={compact}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          snapOverlay={snapOverlay}
         />
       ))}
     </div>

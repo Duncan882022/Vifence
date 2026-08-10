@@ -3,6 +3,7 @@ import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
+import { useCameraLiveRoiVisible } from '@/modules/module02-training/hooks/useCameraLiveRoiVisible'
 import {
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -13,10 +14,11 @@ import {
 } from '../services/atgtBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
-import { isVmsLiveCamera, shouldShowVmsLiveRoiOverlay } from '../services/vmsDetections.service'
 import { getRoiZonesForCamera } from '@/modules/module04-housekeeping/data/housekeepingRoiConfig'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
+import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
+import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
@@ -116,6 +118,7 @@ const DetectionBox = memo(function DetectionBox({
   compact,
   videoFit,
   videoObjectPosition = 'center',
+  snapOverlay = false,
 }: {
   detection: AtgtDetection
   frameWidth: number
@@ -124,6 +127,7 @@ const DetectionBox = memo(function DetectionBox({
   compact?: boolean
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
+  snapOverlay?: boolean
 }) {
   const style = getOverlayBoxStyle('atgt_traffic', detection.behavior)
   const video = videoRef.current
@@ -147,7 +151,7 @@ const DetectionBox = memo(function DetectionBox({
 
   return (
     <div
-      className="absolute pointer-events-none"
+      className={overlayBoxMotionClass(snapOverlay)}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -188,8 +192,8 @@ function useAtgtState(
   const layoutTick = useOverlayLayoutTick(videoRef)
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
-  useOverlaySceneReset(videoRef, enabled, resetDetections)
   const vms = useVmsDetections()
+  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -271,12 +275,15 @@ export const AtgtOverlay = memo(function AtgtOverlay({
     videoRef,
     enabled,
   )
-  const stableDetections = useStableOverlayDetections(detections)
+  const { syncKey, trackLock, missGraceFrames, snapOverlay } = useLiveOverlaySync()
+  const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
   const laneFiltered = filterAtgtLaneOverlayDetections(stableDetections)
 
   const { visible: violationVisible } = useViolationStickyOverlay(laneFiltered, {
     isViolation: d =>
       d.behavior === 'speeding' || isAtgtLaneViolationBehavior(d.behavior),
+    syncKey,
+    missGraceFrames,
   })
 
   const medianVisible = laneFiltered.filter(
@@ -286,9 +293,12 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   const visible = [...violationVisible, ...medianVisible]
 
   const roadMaterialActive = isCameraAiModelEnabled(cameraId, 'road_material')
-  const showPolygon = !roadMaterialActive && roiZones.length > 0 && (
-    shouldShowVmsLiveRoiOverlay(cameraId) || !isVmsLiveCamera(cameraId)
-  )
+  const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
+  /** Cam A-03: polygon lòng đường do RoadAnalysisOverlay vẽ — tránh trùng / lệch. */
+  const showPolygon = cameraId !== 'A-03'
+    && !roadMaterialActive
+    && roiZones.length > 0
+    && liveRoiVisible
   const showBoxes = visible.length > 0 && frameSize.width > 0
   const video = videoRef.current
   const overlayFrameSize =
@@ -324,6 +334,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
           compact={compact}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          snapOverlay={snapOverlay}
         />
       ))}
     </div>
