@@ -88,7 +88,10 @@ export function SafetyViolationDetailModal({
   const SeverityIcon = SEVERITY_ICONS[record.severity]
   const GroupIcon = GROUP_ICONS[record.groupId]
   const ScenarioIcon = getScenarioIcon(record.scenarioId) ?? GroupIcon
-  const scenarioTitle = getScenarioName(record.scenarioId)
+  const scenarioTitle =
+    (isLiveSafetyRecord(record) && record.description?.trim())
+      ? record.description.trim()
+      : getScenarioName(record.scenarioId)
   const extraNote = record.description?.trim()
   const showExtraNote = Boolean(
     extraNote

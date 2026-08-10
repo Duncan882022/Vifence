@@ -117,6 +117,7 @@ export const SAFETY_MONITORING_DICTIONARY: SafetyMonitoringCategory[] = [
       'Đường nội bộ bùn bẩn',
       'Đường nội bộ đọng nước',
       'Vật tư chiếm dụng lòng đường',
+      'Lưới bao che thiếu/hở',
     ],
     monitoringMethods: [
       'Kiểm tra trước thi công',

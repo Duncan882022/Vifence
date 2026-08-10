@@ -127,6 +127,23 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   },
 ]
 
+/** Tên hiển thị cố định theo scenario ID — tránh lệch khi thêm kịch bản mới (vd BPTC-001). */
+const SCENARIO_ID_DISPLAY_NAME: Record<string, string> = {
+  'PPE-001': 'Không đội mũ bảo hộ',
+  'PPE-002': 'Không mặc áo bảo hộ',
+  'PPE-003': 'Không mang giày bảo hộ',
+  'WAH-001': 'Không sử dụng dây an toàn tại mép biên',
+  'DZ-003': 'Làm việc trong vùng nguy hiểm',
+  'ATGT-002': 'Phương tiện vượt tốc độ quy định',
+  'ATGT-004': 'Không tổ chức phân làn, phân luồng giao thông',
+  'BPTC-001': 'Lưới bao che thiếu/hở',
+  'BPTC-007': 'Đường nội bộ bùn bẩn',
+  'BPTC-008': 'Đường nội bộ đọng nước',
+  'BPTC-009': 'Vật tư chiếm dụng lòng đường',
+  'PCCC-001': 'Hút thuốc không đúng nơi quy định',
+  'PCCC-002': 'Dấu hiệu cháy nổ',
+}
+
 function buildScenariosFromDictionary(defs: RawScenarioDef[]): SafetyScenario[] {
   const indexByGroup = new Map<SafetyGroupId, number>()
 
@@ -135,7 +152,9 @@ function buildScenariosFromDictionary(defs: RawScenarioDef[]): SafetyScenario[] 
     indexByGroup.set(def.groupId, index + 1)
 
     const violationType = GROUP_TO_VIOLATION_TYPE[def.groupId]
-    const dictName = getDictionaryScenarioName(violationType, index)
+    const dictName =
+      SCENARIO_ID_DISPLAY_NAME[def.id]
+      ?? getDictionaryScenarioName(violationType, index)
 
     if (import.meta.env.DEV && !dictName) {
       console.warn(`[safetyScenarios] Thiếu tên dictionary cho ${def.id} (${def.groupId}[${index}])`)
