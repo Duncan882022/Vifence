@@ -28,10 +28,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      # docs/ đã được build local (npm run build:pages) rồi commit vào main —
-      # KHÔNG rebuild ở CI vì src trên main có thể chưa sync với build local.
-      - name: Verify docs/ exists
-        run: test -f docs/index.html
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build:pages
 
       # Cách 1: GitHub Actions Pages (khi Settings → Source = GitHub Actions)
       - name: Setup Pages
@@ -45,7 +46,6 @@ jobs:
       - name: Deploy via GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        continue-on-error: true
 
       # Cách 2: nhánh gh-pages (khi Settings → Source = branch gh-pages / root)
       - name: Deploy gh-pages branch
