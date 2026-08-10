@@ -28,11 +28,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install
-        run: npm ci
-
-      - name: Build
-        run: npm run build:pages
+      # docs/ đã được build local (npm run build:pages) rồi commit vào main —
+      # KHÔNG rebuild ở CI vì src trên main có thể chưa sync với build local.
+      - name: Verify docs/ exists
+        run: test -f docs/index.html
 
       # Cách 1: GitHub Actions Pages (khi Settings → Source = GitHub Actions)
       - name: Setup Pages
