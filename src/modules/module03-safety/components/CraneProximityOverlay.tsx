@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import {
+  mapBackendBboxToOverlay,
+  mapNormalizedPolygonToOverlay,
+} from '@/modules/module02-training/utils/videoOverlayCoords'
 import { getDefaultRoiZonesForModel } from '@/modules/module02-training/data/cameraAiRoiDefaults'
 import type { CameraAiRoiZone } from '@/modules/module02-training/types/cameraAi.types'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
@@ -39,19 +42,23 @@ const ROI_STROKE: Record<string, { stroke: string; fill: string; dash: string }>
 
 function CraneRoiPolygons({
   zones,
+  frameWidth,
+  frameHeight,
   videoRef,
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
 }: {
   zones: CameraAiRoiZone[]
+  frameWidth: number
+  frameHeight: number
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
 }) {
   const video = videoRef.current
-  if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
+  if (zones.length === 0 || (frameWidth <= 0 && !video?.videoWidth)) return null
 
   return (
     <svg
@@ -62,12 +69,15 @@ function CraneRoiPolygons({
     >
       {zones.map(zone => {
         const style = ROI_STROKE[zone.type] ?? ROI_STROKE.CRANE_WORK
-        const points = zone.polygon
-          .map(p => {
-            const pt = mapVideoPointToOverlay(p.x, p.y, video, videoFit, videoObjectPosition)
-            return `${pt.x},${pt.y}`
-          })
-          .join(' ')
+        const points = mapNormalizedPolygonToOverlay(
+          zone.polygon,
+          video,
+          frameWidth,
+          frameHeight,
+          videoFit,
+          videoObjectPosition,
+        )
+        if (!points) return null
         return (
           <polygon
             key={`${zone.id}-${layoutTick}`}
@@ -254,6 +264,7 @@ function useCraneProximityState(
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
+    setLayoutTick(t => t + 1)
     const craneMetrics = vms.snapshot.metrics.crane as CraneProximityMetrics | undefined
     const mapped = vms.snapshot.detections
       .filter(d => ['crane', 'crane_proximity', 'person'].includes(d.behavior))
@@ -436,6 +447,8 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
       {showPolygon && (
         <CraneRoiPolygons
           zones={roiZones}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}

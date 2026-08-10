@@ -71,6 +71,51 @@ export function mapVideoPointToOverlay(
   return { x: pt.x, y: pt.y }
 }
 
+/** Kích thước khung nguồn — ưu tiên metadata video, fallback frame BE (VMS/HLS). */
+export function resolveOverlayIntrinsicSize(
+  video: HTMLVideoElement | null | undefined,
+  frameWidth: number,
+  frameHeight: number,
+): { width: number; height: number; containerWidth: number; containerHeight: number } {
+  const width = video?.videoWidth || frameWidth
+  const height = video?.videoHeight || frameHeight
+  const containerWidth = video?.clientWidth ?? 0
+  const containerHeight = video?.clientHeight ?? 0
+  return { width, height, containerWidth, containerHeight }
+}
+
+/** Polygon ROI chuẩn hoá 0–1 → chuỗi points SVG (% viewBox 0–100). */
+export function mapNormalizedPolygonToOverlay(
+  polygon: Array<{ x: number; y: number }>,
+  video: HTMLVideoElement | null | undefined,
+  frameWidth: number,
+  frameHeight: number,
+  fit: 'cover' | 'contain' = 'cover',
+  objectPosition: 'center' | 'bottom' = 'center',
+): string {
+  const { width, height, containerWidth, containerHeight } = resolveOverlayIntrinsicSize(
+    video,
+    frameWidth,
+    frameHeight,
+  )
+  if (!width || !height || !containerWidth || !containerHeight) return ''
+
+  return polygon
+    .map(p => {
+      const pt = videoRectToOverlayPercent(
+        { x: p.x * width, y: p.y * height, width: 1, height: 1 },
+        width,
+        height,
+        containerWidth,
+        containerHeight,
+        fit,
+        objectPosition,
+      )
+      return `${pt.x},${pt.y}`
+    })
+    .join(' ')
+}
+
 export interface VideoSourceRect {
   x: number
   y: number

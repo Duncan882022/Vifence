@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, memo, useCallback, useMemo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import {
@@ -39,19 +39,23 @@ const ATGT_ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: str
 
 function AtgtRoiPolygons({
   zones,
+  frameWidth,
+  frameHeight,
   videoRef,
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
 }: {
   zones: Array<{ id: string; type: string; polygon: Array<{ x: number; y: number }> }>
+  frameWidth: number
+  frameHeight: number
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
 }) {
   const video = videoRef.current
-  if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
+  if (zones.length === 0 || (frameWidth <= 0 && !video?.videoWidth)) return null
 
   return (
     <svg
@@ -62,12 +66,15 @@ function AtgtRoiPolygons({
     >
       {zones.map(zone => {
         const style = ATGT_ROI_STROKE[zone.type] ?? ATGT_ROI_STROKE.ROAD
-        const points = zone.polygon
-          .map(p => {
-            const pt = mapVideoPointToOverlay(p.x, p.y, video, videoFit, videoObjectPosition)
-            return `${pt.x},${pt.y}`
-          })
-          .join(' ')
+        const points = mapNormalizedPolygonToOverlay(
+          zone.polygon,
+          video,
+          frameWidth,
+          frameHeight,
+          videoFit,
+          videoObjectPosition,
+        )
+        if (!points) return null
         return (
           <polygon
             key={`${zone.id}-${layoutTick}`}
@@ -280,6 +287,13 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   const roadMaterialActive = isCameraAiModelEnabled(cameraId, 'road_material')
   const showPolygon = !roadMaterialActive && roiZones.length > 0
   const showBoxes = visible.length > 0 && frameSize.width > 0
+  const video = videoRef.current
+  const overlayFrameSize =
+    frameSize.width > 0
+      ? frameSize
+      : video?.videoWidth && video.videoHeight
+        ? { width: video.videoWidth, height: video.videoHeight }
+        : { width: 0, height: 0 }
 
   if (!enabled) return null
   if (!showPolygon && !showBoxes) return null
@@ -289,6 +303,8 @@ export const AtgtOverlay = memo(function AtgtOverlay({
       {showPolygon && (
         <AtgtRoiPolygons
           zones={roiZones}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}

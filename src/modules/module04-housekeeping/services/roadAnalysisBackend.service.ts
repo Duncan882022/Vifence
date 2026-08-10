@@ -30,7 +30,7 @@ export interface RoadAnalysisDetection {
 export interface RoadAnalysisRoiZone {
   id: string
   label: string
-  type: 'ROAD' | 'BUFFER' | 'STORAGE' | 'MESH'
+  type: 'ROAD' | 'BUFFER' | 'STORAGE' | 'MESH' | 'CRANE_BODY' | 'CRANE_WORK'
   polygon: Array<{ x: number; y: number }>
 }
 

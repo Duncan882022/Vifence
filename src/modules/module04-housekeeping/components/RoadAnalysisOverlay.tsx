@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
@@ -64,16 +64,20 @@ interface RoadAnalysisOverlayProps {
 
 function polygonPointsOnVideo(
   polygon: Array<{ x: number; y: number }>,
-  video: HTMLVideoElement,
+  video: HTMLVideoElement | null | undefined,
+  frameWidth: number,
+  frameHeight: number,
   fit: 'cover' | 'contain',
   objectPosition: 'center' | 'bottom' = 'center',
 ): string {
-  return polygon
-    .map(p => {
-      const pt = mapVideoPointToOverlay(p.x, p.y, video, fit, objectPosition)
-      return `${pt.x},${pt.y}`
-    })
-    .join(' ')
+  return mapNormalizedPolygonToOverlay(
+    polygon,
+    video,
+    frameWidth,
+    frameHeight,
+    fit,
+    objectPosition,
+  )
 }
 
 function DetectionBox({
@@ -143,19 +147,23 @@ function DetectionBox({
 
 function RoiPolygons({
   zones,
+  frameWidth,
+  frameHeight,
   videoRef,
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
 }: {
   zones: RoadAnalysisRoiZone[]
+  frameWidth: number
+  frameHeight: number
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
 }) {
   const video = videoRef.current
-  if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
+  if (zones.length === 0 || (frameWidth <= 0 && !video?.videoWidth)) return null
 
   return (
     <svg
@@ -166,10 +174,19 @@ function RoiPolygons({
     >
       {zones.map(zone => {
         const style = ROI_STROKE[zone.type] ?? ROI_STROKE.ROAD
+        const points = polygonPointsOnVideo(
+          zone.polygon,
+          video,
+          frameWidth,
+          frameHeight,
+          videoFit,
+          videoObjectPosition,
+        )
+        if (!points) return null
         return (
           <polygon
             key={`${zone.id}-${layoutTick}`}
-            points={polygonPointsOnVideo(zone.polygon, video, videoFit, videoObjectPosition)}
+            points={points}
             fill={style.fill}
             stroke={style.stroke}
             strokeWidth={1.4}
@@ -211,6 +228,7 @@ function useRoadAnalysisState(
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
+    setLayoutTick(t => t + 1)
     const roadMetrics = vms.snapshot.metrics.road as RoadAnalysisResult['metrics'] | undefined
     setDetections(visibleDetections(
       vms.snapshot.detections
@@ -336,6 +354,13 @@ export function RoadAnalysisOverlay({
 
   const showPolygon = roiZones.length > 0
   const showBoxes = visible.length > 0 && frameSize.width > 0
+  const video = videoRef.current
+  const overlayFrameSize =
+    frameSize.width > 0
+      ? frameSize
+      : video?.videoWidth && video.videoHeight
+        ? { width: video.videoWidth, height: video.videoHeight }
+        : { width: 0, height: 0 }
 
   if (!showPolygon && !showBoxes) return null
 
@@ -345,6 +370,8 @@ export function RoadAnalysisOverlay({
         <RoiPolygons
           key={`road-roi-${layoutTick}`}
           zones={roiZones}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
