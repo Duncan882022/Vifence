@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { 
   User, Mail, Phone, Shield, Calendar, Lock, Key, 
   Eye, EyeOff, Save, Edit2, X, CheckCircle, AlertCircle, 
@@ -7,7 +7,7 @@ import {
 import { useAppStore } from '@/store/app.store'
 import { updateUser, changePassword } from '@/api/user.api'
 import { cn } from '@/utils/cn'
-import { FacialScannerPanel } from './components/FacialScannerPanel'
+import { FacialScannerPanel, identityFromUser } from './components/FacialScannerPanel'
 
 export function ProfilePage() {
   const { user, setUser } = useAppStore()
@@ -178,6 +178,10 @@ export function ProfilePage() {
 
   const userDisplayName = user?.fullName || user?.name || user?.username || 'Người dùng'
   const userInitials = getInitials(userDisplayName)
+  const scannerIdentity = useMemo(
+    () => (user ? identityFromUser(user) : null),
+    [user],
+  )
 
   return (
     <div className="min-h-screen bg-[#070b13] text-foreground pl-[70px] sm:pl-[240px] pt-16 pb-8 transition-all">
@@ -279,9 +283,9 @@ export function ProfilePage() {
         </div>
 
         {/* Tab Contents */}
-        {activeTab === 'facial' && user ? (
+        {activeTab === 'facial' && user && scannerIdentity ? (
           <div className="border border-[#1e2433] bg-[#0d111a] rounded-xl p-6">
-            <FacialScannerPanel user={user} />
+            <FacialScannerPanel identity={scannerIdentity} />
           </div>
         ) : activeTab === 'info' ? (
           <div className="border border-[#1e2433] bg-[#0d111a] rounded-xl p-6">

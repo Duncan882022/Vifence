@@ -1,5 +1,18 @@
 /** Mã ngắn trên bbox ROI — đồng bộ kịch bản ATLĐ, tránh text dài trên overlay. */
 
+/** Tên hiển thị máy thi công — ưu tiên hơn mã nhóm DZ trên bbox live/snapshot. */
+export const MACHINE_KIND_LABEL: Record<string, string> = {
+  tower_crane: 'Máy cẩu tháp',
+  crane_green: 'Máy xúc',
+  sany_drill: 'Máy khoan',
+  excavator_orange: 'Máy khoan',
+  road_roller: 'Xe lăn đường',
+  dump_truck: 'Xe tải ben',
+  forklift: 'Xe nâng',
+  machinery: 'Máy thi công',
+  machinery_yellow: 'Máy thi công',
+}
+
 const BEHAVIOR_ROI_CODE: Record<string, string> = {
   person: 'NV',
   unknown: '?',
@@ -11,11 +24,15 @@ const BEHAVIOR_ROI_CODE: Record<string, string> = {
   no_shoes: 'PPE-003',
   safety_harness: 'WAH+',
   no_harness: 'WAH-001',
-  crane: 'DZ',
-  crane_green: 'DZ-M1',
-  sany_drill: 'DZ-M2',
-  excavator_orange: 'DZ-M3',
-  tower_crane: 'DZ-C',
+  crane: 'Máy thi công',
+  crane_green: 'Máy xúc',
+  sany_drill: 'Máy khoan',
+  excavator_orange: 'Máy khoan',
+  tower_crane: 'Máy cẩu tháp',
+  road_roller: 'Xe lăn đường',
+  dump_truck: 'Xe tải ben',
+  forklift: 'Xe nâng',
+  machinery: 'Máy thi công',
   crane_proximity: 'DZ-003',
   vehicle: 'ATGT',
   speeding: 'ATGT-002',
@@ -29,6 +46,34 @@ const BEHAVIOR_ROI_CODE: Record<string, string> = {
   object: 'BPTC-009',
 }
 
+export function formatCraneOverlayLabel(
+  behavior: string,
+  options?: {
+    machineKind?: string | null
+    scenarioId?: string | null
+    label?: string | null
+  },
+): string {
+  if (behavior === 'crane_proximity') {
+    return formatRoiOverlayCode('crane_proximity', options?.scenarioId)
+  }
+  if (behavior === 'person') {
+    return formatRoiOverlayCode('person')
+  }
+  if (behavior === 'crane') {
+    const kind = options?.machineKind?.trim()
+    if (kind && MACHINE_KIND_LABEL[kind]) {
+      return MACHINE_KIND_LABEL[kind]
+    }
+    const backendLabel = options?.label?.trim()
+    if (backendLabel && !/^DZ/i.test(backendLabel)) {
+      return backendLabel
+    }
+    return 'Máy thi công'
+  }
+  return formatRoiOverlayCode(behavior, options?.scenarioId)
+}
+
 export function formatRoiOverlayCode(
   behavior: string,
   scenarioId?: string | null,
@@ -36,6 +81,11 @@ export function formatRoiOverlayCode(
   const sid = scenarioId?.trim()
   if (sid && /^[A-Z]+-\d{3}$/.test(sid)) return sid
   return BEHAVIOR_ROI_CODE[behavior] ?? behavior.slice(0, 10).toUpperCase()
+}
+
+export function machineKindLabel(kind?: string | null): string {
+  if (!kind) return 'Máy thi công'
+  return MACHINE_KIND_LABEL[kind] ?? 'Máy thi công'
 }
 
 export function formatRoiOverlayBadge(

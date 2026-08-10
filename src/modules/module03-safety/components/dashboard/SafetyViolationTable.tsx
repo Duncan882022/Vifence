@@ -8,11 +8,12 @@ import { getEventAreaLabel, getEventSourceLabel } from '../../utils/safetyCamera
 import { displayUnknown } from '../../utils/displayUnknown'
 import { getResponsiblePartyLabel } from '../../utils/eventSubject'
 import {
-  formatSla, getAlertCardStatusDisplay, SEVERITY_BADGE,
+  formatSla, getAlertCardStatusDisplay, isIconOnlyHandlingBadge, SEVERITY_BADGE,
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
   shouldShowAlertHandlingBadge,
 } from '../../utils/safetyDashboardUi'
+import { SafetyGroupIconBadge } from '../SafetyGroupIconBadge'
 import { formatDateTime } from '@/utils/format'
 import { EventSubjectCell } from '../violations/EventSubjectCell'
 
@@ -233,7 +234,9 @@ export function SafetyViolationTable({
                     <EventSubjectCell record={v} compact onSnapshotClick={onSnapshotClick} />
                   </td>
                   <td className="px-2 py-1.5 text-[9px] text-foreground whitespace-nowrap align-top">{displayUnknown(getEventAreaLabel(v.sourceDeviceId, v.sourceType, v.zoneId))}</td>
-                  <td className="px-2 py-1.5 text-[9px] font-bold text-muted-foreground align-top">{v.groupId}</td>
+                  <td className="px-2 py-1.5 align-top">
+                    <SafetyGroupIconBadge groupId={v.groupId} size="sm" showLabel />
+                  </td>
                   <td className="px-2 py-1.5 text-[9px] text-foreground max-w-[130px] truncate align-top">{getScenarioName(v.scenarioId)}</td>
                   <td className="px-2 py-1.5 text-[9px] text-muted-foreground whitespace-nowrap align-top">{displayUnknown(getEventSourceLabel(v.sourceDeviceId, v.sourceType))}</td>
                   <td className="px-2 py-1.5 align-top">
@@ -251,10 +254,24 @@ export function SafetyViolationTable({
                   </td>
                   <td className="px-2 py-1.5 align-top">
                     {showHandlingBadge && (
-                      <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', statusDisplay.badgeClassName)}>
-                        <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                        {statusDisplay.label}
-                      </span>
+                      isIconOnlyHandlingBadge(v) ? (
+                        <TagTooltip content={statusDisplay.label} className="inline-flex">
+                          <span
+                            className={cn(
+                              'w-5 h-5 rounded border inline-flex items-center justify-center',
+                              statusDisplay.badgeClassName,
+                            )}
+                            aria-label={statusDisplay.label}
+                          >
+                            <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                          </span>
+                        </TagTooltip>
+                      ) : (
+                        <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', statusDisplay.badgeClassName)}>
+                          <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                          {statusDisplay.label}
+                        </span>
+                      )
                     )}
                     <p className="text-[7px] text-muted-foreground/70 mt-0.5 truncate max-w-[90px]">{contractor}</p>
                   </td>

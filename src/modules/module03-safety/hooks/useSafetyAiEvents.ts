@@ -21,12 +21,12 @@ let pollMsActive = SAFETY_AI_EVENTS_POLL_MS
 
 async function refreshSafetyEvents(): Promise<void> {
   const url = getMobileAiBackendUrl()
-  if (!url) {
-    setSafetyEventsSnapshot([])
-    return
+  if (!url) return
+
+  const result = await fetchSafetyAiEvents(url, getSafetyTodayDate())
+  if (result.ok) {
+    setSafetyEventsSnapshot(result.records)
   }
-  const next = await fetchSafetyAiEvents(url, getSafetyTodayDate())
-  setSafetyEventsSnapshot(next)
 }
 
 function startSafetyEventsPolling(pollMs: number): void {

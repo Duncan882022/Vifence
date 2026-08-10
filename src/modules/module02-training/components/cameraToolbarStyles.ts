@@ -1,22 +1,22 @@
 import { cn } from '@/utils/cn'
 
-/** Kích icon toolbar — đồng bộ cấu hình / ẩn hiện / phóng to. */
+/** Icon toolbar — đồng bộ LIVE (Radio) + WiFi overlay bên trái. */
 export function cameraToolbarIconSize(compact?: boolean) {
-  return compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
+  return compact ? 'w-2 h-2' : 'w-2.5 h-2.5'
 }
 
 export const CAMERA_TOOLBAR_SHELL = cn(
-  'flex items-center gap-0.5 p-0.5 rounded-xl',
+  'flex items-center gap-0.5 p-0.5 rounded-lg',
   'bg-white/[0.07] backdrop-blur-xl backdrop-saturate-150',
   'border border-white/[0.14]',
-  'shadow-lg shadow-black/45 ring-1 ring-inset ring-white/[0.06]',
+  'shadow-md shadow-black/35 ring-1 ring-inset ring-white/[0.05]',
 )
 
 export function cameraToolbarBtn(compact?: boolean, active?: boolean) {
   return cn(
-    'inline-flex items-center justify-center rounded-lg transition-all duration-200',
+    'inline-flex items-center justify-center rounded-md transition-all duration-200',
     'shrink-0 pointer-events-auto',
-    compact ? 'w-6 h-6' : 'w-7 h-7',
+    compact ? 'p-0.5' : 'p-1',
     active
       ? 'bg-sky-400/18 border border-sky-300/28 text-sky-100 shadow-inner shadow-sky-500/10'
       : cn(
@@ -31,7 +31,7 @@ export function cameraToolbarBtn(compact?: boolean, active?: boolean) {
 export function cameraToolbarBtnStandalone(compact?: boolean, active?: boolean) {
   return cn(
     cameraToolbarBtn(compact, active),
-    'bg-white/[0.06] backdrop-blur-md border-white/[0.12]',
+    'bg-black/60 backdrop-blur-md border-white/[0.12]',
   )
 }
 

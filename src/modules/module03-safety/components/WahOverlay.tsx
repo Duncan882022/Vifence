@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
-import {
-  type MobileAiConnectionStatus,
-} from '@/modules/module02-training/services/mobileAiBackend.service'
+import { type MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { shouldRunWahOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
   createWahClient,
@@ -12,37 +10,21 @@ import {
   type WahDetection,
 } from '../services/wahBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
-import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
+import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
+import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
-import { OVERLAY_CYCLE_DEFAULTS, wahScanRank } from '../utils/overlayScanOrder'
-import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
 import { filterWahHarnessFalsePositives } from '../utils/wahHarnessLogic'
-import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
+import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 
 interface WahOverlayProps {
   cameraId: string
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
   enabled?: boolean
   compact?: boolean
-}
-
-const PERSON_MIN_CONF = 0.45
-const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
-const SUBJECT_STYLE = modelBoxStyle('wah', 'subject')
-const VIOLATION_STYLE = modelBoxStyle('wah', 'violation')
-
-const BOX_STYLE = SUBJECT_STYLE
-
-const BEHAVIOR_STYLE: Record<
-  string,
-  { border: string; fill: string; label: string; bg: string }
-> = {
-  person: BOX_STYLE,
-  safety_harness: SUBJECT_STYLE,
-  no_harness: VIOLATION_STYLE,
 }
 
 function formatLabel(detection: WahDetection): string {
@@ -52,18 +34,6 @@ function formatLabel(detection: WahDetection): string {
   )
 }
 
-/** `filtered` phải đã qua `filterWahHarnessFalsePositives` — tránh lọc lại 2 lần. */
-function visibleDetections(filtered: WahDetection[]): WahDetection[] {
-  return filtered
-    .filter(d => {
-      if (d.behavior === 'no_harness') return d.confidence >= VIOLATION_MIN_CONF
-      if (d.behavior === 'safety_harness') return d.confidence >= 0.5
-      if (d.behavior === 'person') return d.confidence >= PERSON_MIN_CONF
-      return d.confidence >= 0.5
-    })
-    .sort((a, b) => wahScanRank(a.behavior) - wahScanRank(b.behavior))
-}
-
 function DetectionBox({
   detection,
   frameWidth,
@@ -71,7 +41,7 @@ function DetectionBox({
   videoRef,
   compact,
   videoFit,
-  pulse,
+  videoObjectPosition = 'center',
 }: {
   detection: WahDetection
   frameWidth: number
@@ -79,25 +49,23 @@ function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   videoFit: 'cover' | 'contain'
-  pulse?: boolean
+  videoObjectPosition?: 'center' | 'bottom'
 }) {
-  const style = BEHAVIOR_STYLE[detection.behavior] ?? BOX_STYLE
+  const style = getOverlayBoxStyle('wah', detection.behavior)
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
-  const layerZ = detection.behavior === 'no_harness' ? 7
-    : detection.behavior === 'safety_harness' ? 6
-      : 3
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
 
-  const sx = video.videoWidth / frameWidth
-  const sy = video.videoHeight / frameHeight
-  const box = mapVideoRectToOverlay(
-    { x: x1 * sx, y: y1 * sy, width: (x2 - x1) * sx, height: (y2 - y1) * sy },
+  const box = mapBackendBboxToOverlay(
+    [x1, y1, x2, y2],
+    frameWidth,
+    frameHeight,
     video,
     videoFit,
+    videoObjectPosition,
   )
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
@@ -110,14 +78,13 @@ function DetectionBox({
         top: `${box.y}%`,
         width: `${box.w}%`,
         height: `${box.h}%`,
-        zIndex: layerZ,
+        zIndex: 7,
       }}
     >
       <div className={cn(
         'absolute inset-0 border rounded-sm',
         style.border,
         style.fill,
-        pulse && 'animate-pulse',
       )} />
       <span
         className={cn(
@@ -176,7 +143,7 @@ function useWahState(
         }
         const filtered = filterWahHarnessFalsePositives(result.detections)
         setFrameSize({ width: result.width, height: result.height })
-        setDetections(visibleDetections(filtered))
+        setDetections(filtered)
         if (result.events.length > 0) {
           notifySafetyAiEventsChanged()
         }
@@ -206,6 +173,7 @@ export const WahOverlay = memo(function WahOverlay({
   cameraId,
   videoRef,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
   enabled = true,
   compact,
 }: WahOverlayProps) {
@@ -215,21 +183,16 @@ export const WahOverlay = memo(function WahOverlay({
     enabled,
   )
 
-  const { visible: cycledDetections, pulse } = useRoiCycleDisplay(
-    detections,
-    d => d.behavior === 'no_harness',
-    {
-      getScanRank: d => wahScanRank(d.behavior),
-      ...OVERLAY_CYCLE_DEFAULTS,
-    },
-  )
-  const showContent = enabled && detections.length > 0 && frameSize.width > 0
+  const stableDetections = useStableOverlayDetections(detections)
+  const { visible } = useViolationStickyOverlay(stableDetections, {
+    isViolation: d => d.behavior === 'no_harness',
+  })
 
-  if (!showContent) return null
+  if (!enabled || visible.length === 0 || frameSize.width <= 0) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {cycledDetections.map((d, i) => (
+      {visible.map((d, i) => (
         <DetectionBox
           key={`${d.behavior}-${i}-${Math.round(d.bbox[0])}-${layoutTick}`}
           detection={d}
@@ -238,7 +201,7 @@ export const WahOverlay = memo(function WahOverlay({
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
-          pulse={pulse}
+          videoObjectPosition={videoObjectPosition}
         />
       ))}
     </div>

@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import type { SafetyGroupId } from '../types/safety.types'
 import { SAFETY_GROUP_MAP, getGroupDictionaryTooltip } from '../data/safetyGroups'
@@ -18,9 +19,23 @@ const PAD_SIZE: Record<BadgeSize, string> = {
   md: 'p-1',
 }
 
+const LABEL_PAD: Record<BadgeSize, string> = {
+  xs: 'px-1 py-0.5 gap-0.5',
+  sm: 'px-1.5 py-0.5 gap-1',
+  md: 'px-2 py-1 gap-1',
+}
+
+const LABEL_TEXT: Record<BadgeSize, string> = {
+  xs: 'text-[8px]',
+  sm: 'text-[9px]',
+  md: 'text-[10px]',
+}
+
 interface SafetyGroupIconBadgeProps {
   groupId: SafetyGroupId
   size?: BadgeSize
+  /** Icon + mã nhóm (PPE, DZ, WAH…) — mặc định bật trên sự kiện. */
+  showLabel?: boolean
   className?: string
   badgeClassName?: string
   iconClassName?: string
@@ -28,10 +43,11 @@ interface SafetyGroupIconBadgeProps {
   icon?: LucideIcon
 }
 
-/** Badge nhóm ATLĐ — chỉ icon, tooltip/aria-label đủ ngữ nghĩa. */
+/** Badge nhóm ATLĐ — icon (+ nhãn PPE/DZ/WAH khi showLabel). */
 export function SafetyGroupIconBadge({
   groupId,
   size = 'sm',
+  showLabel = true,
   className,
   badgeClassName,
   iconClassName,
@@ -41,18 +57,33 @@ export function SafetyGroupIconBadge({
   const groupName = SAFETY_GROUP_MAP.get(groupId)?.name ?? groupId
   const tip = getGroupDictionaryTooltip(groupId)
 
-  return (
+  const badge = (
     <span
       className={cn(
-        'inline-flex items-center justify-center rounded border shrink-0',
-        PAD_SIZE[size],
+        'inline-flex items-center rounded border shrink-0 font-semibold',
+        showLabel ? LABEL_PAD[size] : cn('justify-center', PAD_SIZE[size]),
+        showLabel && LABEL_TEXT[size],
         badgeClassName ?? GROUP_BADGE[groupId],
         className,
       )}
-      title={tip}
       aria-label={`${groupId} · ${groupName}`}
     >
       <Icon className={cn(ICON_SIZE[size], GROUP_COLORS[groupId], iconClassName)} aria-hidden />
+      {showLabel && groupId}
+    </span>
+  )
+
+  if (showLabel) {
+    return (
+      <TagTooltip content={`${groupId} · ${groupName}`} className="shrink-0">
+        {badge}
+      </TagTooltip>
+    )
+  }
+
+  return (
+    <span title={tip} className="shrink-0">
+      {badge}
     </span>
   )
 }

@@ -43,6 +43,10 @@ const BEHAVIOR_TO_SCENARIO: Record<string, string> = {
   hard_hat: 'PPE-001',
   safety_vest: 'PPE-002',
   safety_shoes: 'PPE-003',
+  // BPTC-001 — Lưới bao che giàn giáo
+  mesh_missing: 'BPTC-001',
+  mesh_torn: 'BPTC-001',
+  mesh_dirty: 'BPTC-001',
 }
 
 const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
@@ -65,6 +69,9 @@ const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
   hard_hat: 'PPE',
   safety_vest: 'PPE',
   safety_shoes: 'PPE',
+  mesh_missing: 'BPTC',
+  mesh_torn: 'BPTC',
+  mesh_dirty: 'BPTC',
 }
 
 const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
@@ -87,11 +94,16 @@ const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
   hard_hat: 'WARNING',
   safety_vest: 'WARNING',
   safety_shoes: 'WARNING',
+  mesh_missing: 'VIOLATION',
+  mesh_torn: 'WARNING',
+  mesh_dirty: 'WARNING',
 }
 
 const CAM03_BEHAVIORS = new Set([
   'mud', 'water', 'object',
   'vehicle', 'speeding', 'hard_median', 'no_soft_median', 'soft_median',
+  // BPTC-001 lưới bao che — cam mặt tiền (A-05 khi deploy, A-03 fallback)
+  'mesh_missing', 'mesh_torn', 'mesh_dirty',
 ])
 
 const CAM04_BEHAVIORS = new Set([
@@ -118,9 +130,11 @@ export interface BackendViolationEvent {
   confidence: number
   bbox: number[]
   subject_bbox?: number[]
+  related_bbox?: number[]
   frame_width?: number
   frame_height?: number
   created_at: number
+  confirmed_at?: number
   camera_id?: string
   event_date?: string
   scenario_id?: string
@@ -131,6 +145,9 @@ export interface BackendViolationEvent {
   vehicle_plate?: string | null
   vehicle_type?: string | null
   driver_name?: string | null
+  /** Đường dẫn clip MP4 tương đối (VMS mode) — dùng với /events/{id}/clip */
+  clip_file?: string | null
+  clip_duration_sec?: number | null
 }
 
 function buildVehicleSubject(event: BackendViolationEvent): SafetyViolationRecord['subject'] {
@@ -212,9 +229,16 @@ export function mapBackendEventToSafetyRecord(
     subjectBbox: event.subject_bbox && event.subject_bbox.length >= 4
       ? [event.subject_bbox[0], event.subject_bbox[1], event.subject_bbox[2], event.subject_bbox[3]]
       : undefined,
+    relatedBbox: event.related_bbox && event.related_bbox.length >= 4
+      ? [event.related_bbox[0], event.related_bbox[1], event.related_bbox[2], event.related_bbox[3]]
+      : undefined,
     frameWidth: event.frame_width,
     frameHeight: event.frame_height,
     dedupKey: event.dedup_key ?? buildSafetyDedupKey(sourceDeviceId, scenarioId, event.behavior),
+    clipUrl: event.clip_file
+      ? `${normalizeBaseUrl(backendUrl)}/events/${event.id}/clip`
+      : undefined,
+    clipDurationSec: event.clip_duration_sec ?? undefined,
   }
 }
 
@@ -250,14 +274,18 @@ export function filterLiveSafetyRecords(records: SafetyViolationRecord[]): Safet
   return records.filter(r => isImplementedSafetyScenario(r.scenarioId))
 }
 
+export type FetchSafetyAiEventsResult =
+  | { ok: true; records: SafetyViolationRecord[] }
+  | { ok: false; reason: 'no_backend' | 'http_error' | 'network_error' }
+
 export async function fetchSafetyAiEvents(
   backendUrl?: string,
   date?: string,
-): Promise<SafetyViolationRecord[]> {
+): Promise<FetchSafetyAiEventsResult> {
   const base = normalizeBaseUrl(backendUrl ?? getMobileAiBackendUrl())
-  if (!base) return []
+  if (!base) return { ok: false, reason: 'no_backend' }
 
-  const params = new URLSearchParams({ limit: '50' })
+  const params = new URLSearchParams({ limit: '200' })
   if (date) params.set('date', date)
 
   try {
@@ -265,15 +293,18 @@ export async function fetchSafetyAiEvents(
       headers: TUNNEL_HEADERS,
       mode: 'cors',
     })
-    if (!res.ok) return []
+    if (!res.ok) return { ok: false, reason: 'http_error' }
     const rows = await res.json() as BackendViolationEvent[]
-    return dedupeSafetyRecords(
-      filterLiveSafetyRecords(
-        rows.map(row => mapBackendEventToSafetyRecord(row, base)),
+    return {
+      ok: true,
+      records: dedupeSafetyRecords(
+        filterLiveSafetyRecords(
+          rows.map(row => mapBackendEventToSafetyRecord(row, base)),
+        ),
       ),
-    )
+    }
   } catch {
-    return []
+    return { ok: false, reason: 'network_error' }
   }
 }
 
@@ -289,5 +320,6 @@ export function mergeSafetyRecordsWithAi(
 }
 
 export async function fetchOverlaySafetyEvents(): Promise<SafetyViolationRecord[]> {
-  return fetchSafetyAiEvents()
+  const result = await fetchSafetyAiEvents()
+  return result.ok ? result.records : []
 }

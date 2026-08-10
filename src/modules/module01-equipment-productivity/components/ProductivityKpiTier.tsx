@@ -51,8 +51,8 @@ function MetricCard({
           'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
           theme.iconBg,
         )}>
-          <span className={theme.iconColor}>{icon}</span>
-        </div>
+              <span className={theme.iconColor}>{icon}</span>
+            </div>
         <div className="flex-1 min-w-0">
           <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide truncate leading-tight">
             {label}
@@ -102,13 +102,13 @@ function ProgressBar({ value, barClass, delay = 0.25 }: {
 }) {
   return (
     <div className="h-2 rounded-full bg-[#1a2030] overflow-hidden">
-      <motion.div
+        <motion.div
         className={cn('h-full rounded-full', barClass)}
-        initial={{ width: 0 }}
+          initial={{ width: 0 }}
         animate={{ width: `${Math.min(100, Math.max(0, value))}%` }}
         transition={{ delay, duration: 0.8, ease: EASE }}
-      />
-    </div>
+        />
+      </div>
   )
 }
 
@@ -186,7 +186,7 @@ function FleetCard({ machines, index }: { machines: Machine[]; index: number }) 
             <FleetChip color="#fbbf24" label="Chờ việc" count={standby} />
             <FleetChip color="#f87171" label="Hỏng hóc" count={broken} />
             <FleetChip color="#38bdf8" label="Lưu kho" count={stored} />
-          </div>
+      </div>
           <ProgressBar
             value={utilizationPct}
             barClass="bg-gradient-to-r from-amber-600 to-amber-400"
@@ -238,13 +238,13 @@ function PileCard({ projects, worksites, index }: {
                 {row.code}
               </span>
               <div className="flex-1 h-2 rounded-full bg-[#1a2030] overflow-hidden">
-                <motion.div
+          <motion.div
                   className={cn('h-full rounded-full', projectBarClass(row.progressPct))}
-                  initial={{ width: 0 }}
+            initial={{ width: 0 }}
                   animate={{ width: `${row.progressPct}%` }}
                   transition={{ delay: 0.15 + i * 0.05, duration: 0.7, ease: EASE }}
-                />
-              </div>
+          />
+        </div>
               <span className="relative group shrink-0">
                 <span className={cn(
                   'text-[8px] sm:text-[9px] font-semibold tabular-nums w-7 text-right block',
@@ -347,7 +347,7 @@ function TodayProgressCard({ projects, worksites, index }: {
               <div key={row.code} className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[8px] sm:text-[9px] font-semibold text-muted-foreground w-8 shrink-0">
                   {row.code}
-                </span>
+        </span>
                 <div className="flex-1 h-1.5 rounded-full bg-[#1a2030] overflow-hidden">
                   <motion.div
                     className={cn('h-full rounded-full', projectBarClass(row.progressPct))}
@@ -355,7 +355,7 @@ function TodayProgressCard({ projects, worksites, index }: {
                     animate={{ width: `${row.progressPct}%` }}
                     transition={{ delay: 0.2 + i * 0.05, duration: 0.7, ease: EASE }}
                   />
-                </div>
+      </div>
                 <span className="relative group shrink-0">
                   <span className={cn(
                     'text-[8px] sm:text-[9px] font-semibold tabular-nums w-7 text-right block',
@@ -369,10 +369,10 @@ function TodayProgressCard({ projects, worksites, index }: {
                       : `${row.completed}/${row.planned} cọc hoàn thành`}
                   </span>
                 </span>
-              </div>
+      </div>
             ))}
           </div>
-        </div>
+      </div>
       )}
     />
   )
@@ -428,14 +428,14 @@ function FuelCard({ machines, index }: { machines: Machine[]; index: number }) {
       label="Nhiên liệu hôm nay"
       hero={(
         <div className="flex flex-col gap-0 mt-0.5">
-          <div className="flex items-baseline gap-1">
+            <div className="flex items-baseline gap-1">
             <HeroValue className={netColor}>
               {isNetWaste ? '-' : '+'}{fmtD(Math.abs(netMillion), 1)}
             </HeroValue>
             <HeroUnit>triệu VNĐ</HeroUnit>
           </div>
           <p className="text-[8px] text-muted-foreground/60 leading-tight">{netLabel}</p>
-        </div>
+            </div>
       )}
       insight={(
         <div className="flex flex-col gap-1.5">
@@ -456,7 +456,7 @@ function FuelCard({ machines, index }: { machines: Machine[]; index: number }) {
             )}
             <InsightChip count={activeCount} label="Máy chạy" className="bg-sky-500/10 text-sky-400" />
           </div>
-        </div>
+      </div>
       )}
     />
   )

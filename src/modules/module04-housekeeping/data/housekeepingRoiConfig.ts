@@ -53,7 +53,7 @@ export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
     label: 'Lòng đường — TTDV-A Cam 04',
     type: 'ROAD',
     cameraId: 'A-04',
-    /** Lòng đường đất/bùn phía trước — ttdv-a-cam04-test.mp4 (785×1024) */
+    /** Lòng đường đất/bùn phía trước — ttdv-a-cam04-test.mp4 (1024×976) */
     polygon: [
       { x: 0.02, y: 1.0000 },
       { x: 0.98, y: 1.0000 },

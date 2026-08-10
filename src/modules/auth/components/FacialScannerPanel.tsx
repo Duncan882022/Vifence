@@ -11,22 +11,32 @@ import { cn } from '@/utils/cn'
 import type { User } from '@/types/user'
 import { captureVideoFrameBase64 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
-  enrollWorkerFace,
-  fetchWorkerGalleryStatus,
+  enrollWorkerFaceForIdentity,
+  fetchWorkerGalleryStatusForIdentity,
   pingWorkerGalleryBackend,
+  type FacialScannerIdentity,
   type WorkerEnrollmentStatus,
 } from '../services/workerGallery.service'
 
 interface FacialScannerPanelProps {
-  user: User
+  identity: FacialScannerIdentity
+  subtitle?: string
 }
 
-function deriveEmployeeCode(user: User): string {
+export function deriveEmployeeCodeFromUser(user: User): string {
   if (user.username?.trim()) return user.username.trim().toUpperCase()
   return `NV${user.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase() || '000001'}`
 }
 
-export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
+export function identityFromUser(user: User): FacialScannerIdentity {
+  return {
+    userId: user.id,
+    workerName: user.fullName || user.name || user.username || 'Người dùng',
+    employeeCode: deriveEmployeeCodeFromUser(user),
+  }
+}
+
+export function FacialScannerPanel({ identity, subtitle }: FacialScannerPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
@@ -40,8 +50,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  const workerName = user.fullName || user.name || user.username || 'Người dùng'
-  const employeeCode = deriveEmployeeCode(user)
+  const identityKey = identity.cccd ?? identity.userId ?? ''
 
   const refreshStatus = useCallback(async () => {
     setLoading(true)
@@ -53,7 +62,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
         setErrorMsg('Không kết nối được backend AI. Kiểm tra VITE_MOBILE_AI_BACKEND_URL.')
         return
       }
-      const status = await fetchWorkerGalleryStatus(user.id)
+      const status = await fetchWorkerGalleryStatusForIdentity(identity)
       setEnrollment(status.enrollment ?? null)
       const nextSlot = status.enrollment?.poses.find(p => !p.captured)?.slot
       if (nextSlot) setActiveSlot(nextSlot)
@@ -63,7 +72,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
     } finally {
       setLoading(false)
     }
-  }, [user.id])
+  }, [identity.userId, identity.cccd])
 
   const startCamera = useCallback(async () => {
     setCameraError(null)
@@ -95,7 +104,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
     return () => {
       streamRef.current?.getTracks().forEach(track => track.stop())
     }
-  }, [refreshStatus, startCamera])
+  }, [refreshStatus, startCamera, identityKey])
 
   const handleCapture = async () => {
     const video = videoRef.current
@@ -114,13 +123,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
     setErrorMsg(null)
     setSuccessMsg(null)
     try {
-      const next = await enrollWorkerFace({
-        user_id: user.id,
-        worker_name: workerName,
-        employee_code: employeeCode,
-        image_b64: imageB64,
-        pose_slot: activeSlot,
-      })
+      const next = await enrollWorkerFaceForIdentity(identity, imageB64, activeSlot)
       setEnrollment(next)
       setSuccessMsg(`Đã lưu góc "${next.poses.find(p => p.slot === activeSlot)?.label ?? activeSlot}".`)
       const pending = next.poses.find(p => !p.captured)
@@ -141,6 +144,9 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
   ]
   const capturedCount = enrollment?.poses_captured ?? poses.filter(p => p.captured).length
   const complete = enrollment?.complete ?? false
+  const defaultSubtitle = identity.cccd
+    ? `Quét 3 góc mặt để đăng ký nhận diện ATLĐ — CCCD: ${identity.employeeCode}.`
+    : `Quét 3 góc mặt để hệ thống nhận diện bạn trên vi phạm PPE/WAH/PCCC — mã: ${identity.employeeCode}.`
 
   return (
     <div className="space-y-5">
@@ -150,8 +156,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
             Quét khuôn mặt ATLĐ
           </h2>
           <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
-            Quét 3 góc mặt để hệ thống nhận diện bạn trên vi phạm PPE/WAH/PCCC.
-            Dữ liệu lưu vào gallery backend AI — mã nhân viên: <span className="font-mono text-foreground/80">{employeeCode}</span>.
+            {subtitle ?? defaultSubtitle}
           </p>
         </div>
         <button
@@ -269,7 +274,7 @@ export function FacialScannerPanel({ user }: FacialScannerPanelProps) {
             </button>
             {complete && (
               <p className="text-[10px] text-green-400 text-center">
-                Gallery đã đủ dữ liệu nhận diện cho tài khoản này.
+                Gallery đã đủ dữ liệu nhận diện{identity.cccd ? ' cho CCCD này' : ' cho tài khoản này'}.
               </p>
             )}
             {backendOnline === false && (

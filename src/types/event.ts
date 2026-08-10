@@ -21,10 +21,16 @@ export interface Event {
   violationCategory?: string
   imageUrl?: string
   videoUrl?: string
+  /** URL clip MP4 VMS (ưu tiên hơn videoUrl + seek). */
+  clipUrl?: string
   /** Playback sự kiện — cắt 3s quanh thời điểm vi phạm. */
   playbackSeekSec?: number
   clipDurationSec?: number
   violationBbox?: [number, number, number, number]
+  /** Người vi phạm — khung ROI phụ (PPE/DZ/WAH). */
+  subjectBbox?: [number, number, number, number]
+  /** Máy/đối tượng liên quan — khung ROI phụ (DZ). */
+  relatedBbox?: [number, number, number, number]
   frameWidth?: number
   frameHeight?: number
   status: EventStatus

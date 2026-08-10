@@ -12,6 +12,7 @@ export const IMPLEMENTED_SAFETY_SCENARIO_IDS = [
   'DZ-003',
   'ATGT-002',
   'ATGT-004',
+  'BPTC-001',
   'BPTC-007',
   'BPTC-008',
   'BPTC-009',

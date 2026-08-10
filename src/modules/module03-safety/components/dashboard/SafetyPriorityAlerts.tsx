@@ -21,6 +21,7 @@ import {
   getAlertCardStatusDisplay,
   getAlertHandlingStatus,
   isAiAutoHandled,
+  isIconOnlyHandlingBadge,
   isManualUnhandled,
   AI_AUTO_STATUS_LABEL,
   SEVERITY_BADGE,
@@ -28,6 +29,7 @@ import {
   SEVERITY_LABELS_UI,
   shouldShowAlertHandlingBadge,
 } from '../../utils/safetyDashboardUi'
+import { SafetyGroupIconBadge } from '../SafetyGroupIconBadge'
 import {
   getAlertSubjectLabel,
 } from '../../utils/eventSubject'
@@ -82,22 +84,37 @@ function StatusTag({
   label,
   badgeClassName,
   icon: StatusIcon,
+  iconOnly = false,
 }: {
   label: string
   badgeClassName: string
   icon: LucideIcon
+  iconOnly?: boolean
 }) {
-  return (
+  const badge = (
     <span
       className={cn(
-        'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5 font-medium max-w-full',
+        iconOnly
+          ? 'w-5 h-5 rounded border inline-flex items-center justify-center'
+          : 'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5 font-medium max-w-full',
         badgeClassName,
       )}
+      aria-label={label}
     >
-      <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-      <span className="truncate">{label}</span>
+      <StatusIcon className={cn('shrink-0', iconOnly ? 'w-2.5 h-2.5' : 'w-2.5 h-2.5')} aria-hidden />
+      {!iconOnly && <span className="truncate">{label}</span>}
     </span>
   )
+
+  if (iconOnly) {
+    return (
+      <TagTooltip content={label} className="shrink-0">
+        {badge}
+      </TagTooltip>
+    )
+  }
+
+  return badge
 }
 
 function AlertCardActions({
@@ -203,12 +220,14 @@ function AlertCard({
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex flex-wrap items-center gap-1 min-w-0">
+              <SafetyGroupIconBadge groupId={v.groupId} size="sm" showLabel />
               <SeverityTag severity={v.severity} />
               {shouldShowAlertHandlingBadge(v) && (
                 <StatusTag
                   label={statusDisplay.label}
                   badgeClassName={statusDisplay.badgeClassName}
                   icon={statusDisplay.icon}
+                  iconOnly={isIconOnlyHandlingBadge(v)}
                 />
               )}
             </div>

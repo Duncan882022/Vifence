@@ -14,6 +14,8 @@ export interface CameraPlaybackRecord {
   /** Cắt clip ngắn quanh vi phạm (giây). */
   clipDurationSec?: number
   violationBbox?: [number, number, number, number]
+  subjectBbox?: [number, number, number, number]
+  relatedBbox?: [number, number, number, number]
   frameWidth?: number
   frameHeight?: number
 }

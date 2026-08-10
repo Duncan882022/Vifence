@@ -184,10 +184,16 @@ export interface SafetyViolationRecord {
   bbox?: [number, number, number, number]
   /** Bbox đối tượng (người/xe) — ưu tiên cho ROI playback. */
   subjectBbox?: [number, number, number, number]
+  /** Bbox liên quan (máy cẩu DZ, v.v.) — snapshot/playback cặp riêng. */
+  relatedBbox?: [number, number, number, number]
   frameWidth?: number
   frameHeight?: number
   /** Giây seek vào clip camera / demo. */
   playbackSeekSec?: number
+  /** URL clip MP4 đã cắt sẵn từ VMS backend (ưu tiên hơn seek vào demo video). */
+  clipUrl?: string
+  /** Thời lượng clip (giây) — từ VMS backend. */
+  clipDurationSec?: number
   verificationRequired: boolean
   description?: string
   /** Khóa dedup từ backend — cùng camera × kịch bản × đối tượng. */

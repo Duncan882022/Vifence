@@ -1,5 +1,5 @@
 import {
-  captureVideoFrameBase64,
+  captureCameraAnalyzeFrame,
   getMobileAiBackendUrl,
   scaledAnalyzeDelay,
   type MobileAiConnectionStatus,
@@ -157,7 +157,7 @@ export function createPpeClient(
       return
     }
 
-    const image = captureVideoFrameBase64(video, 640, 0.72)
+    const image = captureCameraAnalyzeFrame(video, cameraId, 640, 0.72)
     if (!image) {
       scheduleNext(500)
       return

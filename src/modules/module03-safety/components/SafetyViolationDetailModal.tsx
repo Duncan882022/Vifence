@@ -24,8 +24,10 @@ import {
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
   getAlertCardStatusDisplay,
+  isIconOnlyHandlingBadge,
   shouldShowAlertHandlingBadge,
 } from '../utils/safetyDashboardUi'
+import { SafetyGroupIconBadge } from './SafetyGroupIconBadge'
 import { getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS, getResponsiblePartyLabel } from '../utils/eventSubject'
 import { resolveVehiclePlate } from '../utils/vehiclePlate'
 import { displayUnknown } from '../utils/displayUnknown'
@@ -150,6 +152,7 @@ export function SafetyViolationDetailModal({
 
           <div className="px-4 py-3 space-y-3">
             <div className="flex flex-wrap gap-1.5">
+              <SafetyGroupIconBadge groupId={record.groupId} size="sm" showLabel />
               <TagTooltip content={SEVERITY_LABELS_UI[record.severity]} className="shrink-0">
                 <span
                   className={cn(
@@ -162,10 +165,24 @@ export function SafetyViolationDetailModal({
                 </span>
               </TagTooltip>
               {shouldShowAlertHandlingBadge(record) && (
-                <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', statusDisplay.badgeClassName)}>
-                  <StatusIcon className="w-3 h-3" aria-hidden />
-                  {statusDisplay.label}
-                </span>
+                isIconOnlyHandlingBadge(record) ? (
+                  <TagTooltip content={statusDisplay.label} className="shrink-0">
+                    <span
+                      className={cn(
+                        'w-6 h-6 rounded border inline-flex items-center justify-center',
+                        statusDisplay.badgeClassName,
+                      )}
+                      aria-label={statusDisplay.label}
+                    >
+                      <StatusIcon className="w-3 h-3" aria-hidden />
+                    </span>
+                  </TagTooltip>
+                ) : (
+                  <span className={cn('text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', statusDisplay.badgeClassName)}>
+                    <StatusIcon className="w-3 h-3" aria-hidden />
+                    {statusDisplay.label}
+                  </span>
+                )
               )}
             </div>
 
@@ -174,6 +191,28 @@ export function SafetyViolationDetailModal({
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {shouldShowAlertHandlingBadge(record) && (
+                <DetailRow icon={StatusIcon} label="Trạng thái xử lý">
+                  {isIconOnlyHandlingBadge(record) ? (
+                    <TagTooltip content={statusDisplay.label} className="inline-flex">
+                      <span
+                        className={cn(
+                          'w-6 h-6 rounded border inline-flex items-center justify-center',
+                          statusDisplay.badgeClassName,
+                        )}
+                        aria-label={statusDisplay.label}
+                      >
+                        <StatusIcon className="w-3 h-3" aria-hidden />
+                      </span>
+                    </TagTooltip>
+                  ) : (
+                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1 w-fit', statusDisplay.badgeClassName)}>
+                      <StatusIcon className="w-3 h-3" aria-hidden />
+                      {statusDisplay.label}
+                    </span>
+                  )}
+                </DetailRow>
+              )}
               <DetailRow icon={Clock} label="Thời gian phát hiện">
                 <span className="tabular-nums">{formatDateTime(record.detectedAt)}</span>
               </DetailRow>

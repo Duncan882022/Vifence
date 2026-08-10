@@ -9,6 +9,25 @@ export const EVENT_PLAYBACK_CLIP_SEC = 3
 
 export type ViolationBbox = [number, number, number, number]
 
+function normalizeBbox(raw?: number[]): ViolationBbox | undefined {
+  if (!raw || raw.length < 4) return undefined
+  const [x1, y1, x2, y2] = raw
+  if (x2 <= x1 || y2 <= y1) return undefined
+  return [x1, y1, x2, y2]
+}
+
+export function unionBboxes(...boxes: (ViolationBbox | undefined)[]): ViolationBbox | undefined {
+  const valid = boxes.filter((box): box is ViolationBbox => Boolean(box))
+  if (valid.length === 0) return undefined
+  if (valid.length === 1) return valid[0]
+  return [
+    Math.min(...valid.map(box => box[0])),
+    Math.min(...valid.map(box => box[1])),
+    Math.max(...valid.map(box => box[2])),
+    Math.max(...valid.map(box => box[3])),
+  ]
+}
+
 /** Giây vào clip demo — giữa segment model hoặc marker clip cũ. */
 const SCENARIO_SEEK_SEC: Record<string, number> = {
   'BPTC-007': 5,
@@ -60,16 +79,31 @@ export function resolvePlaybackSeekSec(record: Pick<SafetyViolationRecord, 'scen
 }
 
 export function resolveViolationBbox(
-  record: Pick<SafetyViolationRecord, 'scenarioId' | 'bbox' | 'subjectBbox' | 'sourceDeviceId' | 'sourceType'>,
+  record: Pick<SafetyViolationRecord, 'bbox' | 'subjectBbox'>,
 ): ViolationBbox | undefined {
-  const raw = record.subjectBbox ?? record.bbox
-  if (raw && raw.length >= 4) {
-    const [x1, y1, x2, y2] = raw
-    if (x2 > x1 && y2 > y1) {
-      return [x1, y1, x2, y2]
-    }
-  }
-  return undefined
+  return normalizeBbox(record.bbox) ?? normalizeBbox(record.subjectBbox)
+}
+
+export function resolveSubjectBbox(
+  record: Pick<SafetyViolationRecord, 'subjectBbox'>,
+): ViolationBbox | undefined {
+  return normalizeBbox(record.subjectBbox)
+}
+
+export function resolveRelatedBbox(
+  record: Pick<SafetyViolationRecord, 'relatedBbox'>,
+): ViolationBbox | undefined {
+  return normalizeBbox(record.relatedBbox)
+}
+
+export function resolvePlaybackZoomBbox(
+  record: Pick<SafetyViolationRecord, 'bbox' | 'subjectBbox' | 'relatedBbox'>,
+): ViolationBbox | undefined {
+  return unionBboxes(
+    resolveViolationBbox(record),
+    resolveSubjectBbox(record),
+    resolveRelatedBbox(record),
+  )
 }
 
 export function resolveFrameSize(
@@ -154,6 +188,17 @@ export function resolveLiveFeedSeekSec(record: SafetyViolationRecord): number | 
 export function buildEventPlaybackMeta(record: SafetyViolationRecord) {
   const seekSec = resolveLiveFeedSeekSec(record) ?? resolvePlaybackSeekSec(record)
   const bbox = resolveViolationBbox(record)
+  const subjectBbox = resolveSubjectBbox(record)
+  const relatedBbox = resolveRelatedBbox(record)
+  const zoomBbox = resolvePlaybackZoomBbox(record)
   const frame = resolveFrameSize(record)
-  return { seekSec, bbox, frameWidth: frame.width, frameHeight: frame.height }
+  return {
+    seekSec,
+    bbox,
+    subjectBbox,
+    relatedBbox,
+    zoomBbox,
+    frameWidth: frame.width,
+    frameHeight: frame.height,
+  }
 }

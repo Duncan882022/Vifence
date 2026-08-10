@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapVideoPointToOverlay, mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { notifySafetyAiEventsChanged } from '@/modules/module03-safety/services/safetyAiEvents.service'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
+import { useStableOverlayDetections } from '@/modules/module03-safety/hooks/useStableOverlayDetections'
+import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
-import { shouldRunRoadOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
-import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
+import { getOverlayBoxStyle } from '@/modules/module03-safety/utils/roiBoxRole'
 import {
   createRoadAnalysisClient,
   getMobileAiBackendUrl,
@@ -43,36 +45,18 @@ function visibleDetections(
   })
 }
 
-const BEHAVIOR_STYLE: Partial<Record<
-  RoadAnalysisDetection['behavior'],
-  { border: string; fill: string; label: string; bg: string }
->> = {
-  mud: modelBoxStyle('road_material', 'violation'),
-  water: {
-    border: 'border-sky-400/90',
-    fill: 'bg-sky-400/12',
-    label: 'text-sky-200',
-    bg: 'bg-sky-500/35',
-  },
-  object: {
-    border: 'border-orange-400/90',
-    fill: 'bg-orange-400/12',
-    label: 'text-orange-200',
-    bg: 'bg-orange-500/35',
-  },
-  unknown: modelBoxStyle('road_material', 'subject'),
-}
 
-const ROI_STROKE: Record<string, { stroke: string; fill: string }> = {
+/** Chỉ vẽ ROAD trên overlay — BUFFER (lề đường) lệch khung demo, backend không dùng. */
+const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
   ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.18)' },
-  BUFFER: { stroke: 'rgba(134, 239, 172, 0.55)', fill: 'none' },
-  STORAGE: { stroke: 'rgba(167, 139, 250, 0.35)', fill: 'none' },
+  STORAGE: { stroke: 'rgba(167, 139, 250, 0.35)', fill: 'none', dash: '4 3' },
 }
 
 interface RoadAnalysisOverlayProps {
   cameraId: string
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
   enabled?: boolean
   compact?: boolean
 }
@@ -81,10 +65,11 @@ function polygonPointsOnVideo(
   polygon: Array<{ x: number; y: number }>,
   video: HTMLVideoElement,
   fit: 'cover' | 'contain',
+  objectPosition: 'center' | 'bottom' = 'center',
 ): string {
   return polygon
     .map(p => {
-      const pt = mapVideoPointToOverlay(p.x, p.y, video, fit)
+      const pt = mapVideoPointToOverlay(p.x, p.y, video, fit, objectPosition)
       return `${pt.x},${pt.y}`
     })
     .join(' ')
@@ -97,6 +82,7 @@ function DetectionBox({
   videoRef,
   compact,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
 }: {
   detection: RoadAnalysisDetection
   frameWidth: number
@@ -104,13 +90,9 @@ function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
 }) {
-  const style = BEHAVIOR_STYLE[detection.behavior] ?? BEHAVIOR_STYLE.unknown ?? {
-    border: 'border-gray-400/80',
-    fill: 'bg-gray-400/10',
-    label: 'text-gray-200',
-    bg: 'bg-gray-600/35',
-  }
+  const style = getOverlayBoxStyle('road_material', detection.behavior)
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
 
@@ -118,17 +100,13 @@ function DetectionBox({
     return null
   }
 
-  const sx = video.videoWidth / frameWidth
-  const sy = video.videoHeight / frameHeight
-  const box = mapVideoRectToOverlay(
-    {
-      x: x1 * sx,
-      y: y1 * sy,
-      width: (x2 - x1) * sx,
-      height: (y2 - y1) * sy,
-    },
+  const box = mapBackendBboxToOverlay(
+    [x1, y1, x2, y2],
+    frameWidth,
+    frameHeight,
     video,
     videoFit,
+    videoObjectPosition,
   )
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
@@ -166,31 +144,35 @@ function RoiPolygons({
   zones,
   videoRef,
   videoFit,
+  videoObjectPosition = 'center',
+  layoutTick,
 }: {
   zones: RoadAnalysisRoiZone[]
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
+  layoutTick: number
 }) {
   const video = videoRef.current
-  if (!video?.videoWidth || !video.videoHeight) return null
-
-  const visible = zones.filter(z => z.type === 'ROAD')
+  if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
 
   return (
     <svg
       className="absolute inset-0 w-full h-full pointer-events-none z-[1]"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
+      aria-hidden
     >
-      {visible.map(zone => {
+      {zones.map(zone => {
         const style = ROI_STROKE[zone.type] ?? ROI_STROKE.ROAD
         return (
           <polygon
-            key={zone.id}
-            points={polygonPointsOnVideo(zone.polygon, video, videoFit)}
+            key={`${zone.id}-${layoutTick}`}
+            points={polygonPointsOnVideo(zone.polygon, video, videoFit, videoObjectPosition)}
             fill={style.fill}
             stroke={style.stroke}
             strokeWidth={1.4}
+            strokeDasharray={style.dash}
             vectorEffect="non-scaling-stroke"
           />
         )
@@ -212,7 +194,7 @@ function useRoadAnalysisState(
   const [metrics, setMetrics] = useState<RoadAnalysisResult['metrics']>()
   const roiZones = useMemo<RoadAnalysisRoiZone[]>(() =>
     getRoiZonesForCamera(cameraId)
-      .filter(z => z.type === 'ROAD' || z.type === 'BUFFER')
+      .filter(z => z.type === 'ROAD')
       .map(z => ({
       id: z.id,
       label: z.label,
@@ -242,27 +224,15 @@ function useRoadAnalysisState(
     const video = videoRef.current
     if (!video || !enabled) return
     const bump = () => setLayoutTick(t => t + 1)
-    const syncSegment = () => {
-      if (!shouldRunRoadOnCamera(cameraId, video.currentTime)) {
-        setDetections([])
-        setMetrics(undefined)
-      }
-    }
-    const clearOverlay = () => setDetections([])
-    const onSeeked = () => {
-      clearOverlay()
-      syncSegment()
-    }
     const observer = new ResizeObserver(bump)
     observer.observe(video)
     video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('timeupdate', syncSegment)
-    video.addEventListener('seeked', onSeeked)
+    video.addEventListener('loadeddata', bump)
+    if (video.videoWidth > 0) bump()
     return () => {
       observer.disconnect()
       video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('timeupdate', syncSegment)
-      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('loadeddata', bump)
     }
   }, [cameraId, enabled, videoRef])
 
@@ -287,18 +257,13 @@ function useRoadAnalysisState(
       return
     }
 
-    const shouldAnalyze = () => shouldRunRoadOnCamera(cameraId, video.currentTime)
+    const shouldAnalyze = () => isCameraAiModelEnabled(cameraId, 'road_material')
 
     clientRef.current = createRoadAnalysisClient(video, {
       cameraId,
       backendUrl,
       shouldAnalyze,
       onResult: result => {
-        if (!shouldRunRoadOnCamera(cameraId, video.currentTime)) {
-          setDetections([])
-          setMetrics(undefined)
-          return
-        }
         setDetections(visibleDetections(result.detections, result.width, result.height))
         setFrameSize({ width: result.width, height: result.height })
         setMetrics(result.metrics)
@@ -322,21 +287,39 @@ export function RoadAnalysisOverlay({
   cameraId,
   videoRef,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
   enabled = true,
   compact,
 }: RoadAnalysisOverlayProps) {
   const { detections, frameSize, roiZones, layoutTick } =
     useRoadAnalysisState(cameraId, videoRef, enabled)
+  const stableDetections = useStableOverlayDetections(detections)
+  const { visible } = useViolationStickyOverlay(stableDetections, {
+    isViolation: d =>
+      d.behavior === 'mud' || d.behavior === 'water' || d.behavior === 'object',
+  })
 
   if (!enabled) return null
 
+  const showPolygon = roiZones.length > 0
+  const showBoxes = visible.length > 0 && frameSize.width > 0
+
+  if (!showPolygon && !showBoxes) return null
+
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {roiZones.length > 0 && (
-        <RoiPolygons zones={roiZones} videoRef={videoRef} videoFit={videoFit} />
+      {showPolygon && (
+        <RoiPolygons
+          key={`road-roi-${layoutTick}`}
+          zones={roiZones}
+          videoRef={videoRef}
+          videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
+          layoutTick={layoutTick}
+        />
       )}
 
-      {frameSize.width > 0 && detections.map((d, idx) => (
+      {showBoxes && visible.map((d, idx) => (
         <DetectionBox
           key={`${d.behavior}-${idx}-${Math.round(d.bbox[0])}-${Math.round(d.bbox[1])}-${layoutTick}`}
           detection={d}
@@ -345,6 +328,7 @@ export function RoadAnalysisOverlay({
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
         />
       ))}
     </div>

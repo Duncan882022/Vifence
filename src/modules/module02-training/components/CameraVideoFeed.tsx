@@ -25,6 +25,7 @@ import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
   getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
 } from '../data/trainingCameraFeeds'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
@@ -70,6 +71,7 @@ export function CameraVideoFeed({
   const atgtAnalysis = isAtgtCamera(cameraId)
   const faceDemo = isFaceOverlayCamera(cameraId)
   const videoFit = getVideoObjectFitForCamera(cameraId, streamType)
+  const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, streamType)
   const showFaceOverlay = Boolean(
     overlayActive && feedKey && faceDemo && !roadAnalysis && !craneProximity && !ppeAnalysis && !pcccAnalysis && !wahAnalysis && !atgtAnalysis && !overlayDisabled,
   )
@@ -191,6 +193,7 @@ export function CameraVideoFeed({
         className={cn(
           'absolute inset-0 h-full w-full',
           videoFit === 'contain' ? 'object-contain bg-black' : 'object-cover',
+          videoObjectPosition === 'bottom' && videoFit === 'cover' && 'object-bottom',
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
@@ -208,6 +211,7 @@ export function CameraVideoFeed({
           compact={compact}
           videoRef={videoRef}
           videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
           enabled={playing && overlayActive}
         />
       )}
@@ -222,6 +226,7 @@ export function CameraVideoFeed({
             compact={compact}
             videoRef={videoRef}
             videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
             enabled={playing && overlayActive}
           />
         )}
@@ -231,6 +236,7 @@ export function CameraVideoFeed({
             compact={compact}
             videoRef={videoRef}
             videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
             enabled={playing && overlayActive}
           />
         )}
@@ -239,6 +245,8 @@ export function CameraVideoFeed({
             cameraId={cameraId}
             compact={compact}
             videoRef={videoRef}
+            videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
             enabled={playing && overlayActive}
           />
         )}
@@ -248,6 +256,7 @@ export function CameraVideoFeed({
             compact={compact}
             videoRef={videoRef}
             videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
             enabled={playing && overlayActive}
           />
         )}
@@ -257,6 +266,7 @@ export function CameraVideoFeed({
             compact={compact}
             videoRef={videoRef}
             videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
             enabled={playing && overlayActive}
           />
         )}

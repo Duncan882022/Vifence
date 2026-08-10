@@ -1,50 +1,96 @@
 import { useEffect, useRef, useState, memo, useCallback, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
+import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import {
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
-import { shouldRunAtgtOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import {
   createAtgtClient,
   getMobileAiBackendUrl,
   type AtgtDetection,
 } from '../services/atgtBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
+import { getRoiZonesForCamera } from '@/modules/module04-housekeeping/data/housekeepingRoiConfig'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
-import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
+import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
+import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
-import { atgtScanRank, atgtViolationRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
-import { filterAtgtLaneOverlayDetections, isAtgtLaneMedianBehavior, isAtgtLaneViolationBehavior } from '../utils/atgtLaneLogic'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
-import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
-import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
+import { isAtgtLaneViolationBehavior, filterAtgtLaneOverlayDetections } from '../utils/atgtLaneLogic'
+import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 
 interface AtgtOverlayProps {
   cameraId: string
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
   enabled?: boolean
   compact?: boolean
 }
 
 const VEHICLE_MIN_CONF = 0.45
-const VIOLATION_MIN_CONF = VIOLATION_MIN_CONFIDENCE
-const SUBJECT_STYLE = modelBoxStyle('atgt_traffic', 'subject')
-const VIOLATION_STYLE = modelBoxStyle('atgt_traffic', 'violation')
 
-const BOX_STYLE = SUBJECT_STYLE
+const ATGT_ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
+  ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.12)' },
+}
 
-const BEHAVIOR_STYLE: Record<
-  string,
-  { border: string; fill: string; label: string; bg: string }
-> = {
-  vehicle: BOX_STYLE,
-  speeding: VIOLATION_STYLE,
-  hard_median: SUBJECT_STYLE,
-  soft_median: SUBJECT_STYLE,
-  no_soft_median: VIOLATION_STYLE,
+function AtgtRoiPolygons({
+  cameraId,
+  videoRef,
+  videoFit,
+  videoObjectPosition = 'center',
+  layoutTick,
+}: {
+  cameraId: string
+  videoRef: RefObject<HTMLVideoElement | null>
+  videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
+  layoutTick: number
+}) {
+  const video = videoRef.current
+  const zones = getRoiZonesForCamera(cameraId).filter(z => z.type === 'ROAD')
+  if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
+
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none z-[1]"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      {zones.map(zone => {
+        const style = ATGT_ROI_STROKE[zone.type] ?? ATGT_ROI_STROKE.ROAD
+        const points = zone.polygon
+          .map(p => {
+            const pt = mapVideoPointToOverlay(p.x, p.y, video, videoFit, videoObjectPosition)
+            return `${pt.x},${pt.y}`
+          })
+          .join(' ')
+        return (
+          <polygon
+            key={`${zone.id}-${layoutTick}`}
+            points={points}
+            fill={style.fill}
+            stroke={style.stroke}
+            strokeWidth={1.2}
+            strokeDasharray={style.dash}
+            vectorEffect="non-scaling-stroke"
+          />
+        )
+      })}
+    </svg>
+  )
+}
+
+function visibleDetections(detections: AtgtDetection[]): AtgtDetection[] {
+  return detections.filter(d => {
+    if (d.behavior === 'speeding') return d.confidence >= 0.45
+    if (d.behavior === 'vehicle') return d.confidence >= VEHICLE_MIN_CONF
+    if (isAtgtLaneViolationBehavior(d.behavior)) return d.confidence >= 0.45
+    return false
+  })
 }
 
 function formatLabel(detection: AtgtDetection): string {
@@ -54,25 +100,6 @@ function formatLabel(detection: AtgtDetection): string {
   )
 }
 
-function visibleDetections(detections: AtgtDetection[]): AtgtDetection[] {
-  return filterAtgtLaneOverlayDetections(
-    detections.filter(d => {
-      if (d.behavior === 'speeding') return d.confidence >= VIOLATION_MIN_CONF
-      if (d.behavior === 'vehicle') return d.confidence >= VEHICLE_MIN_CONF
-      if (isAtgtLaneMedianBehavior(d.behavior)) return d.confidence >= 0
-      if (isAtgtLaneViolationBehavior(d.behavior)) return d.confidence >= 0
-      return d.confidence >= 0.5
-    }),
-  ).sort((a, b) => {
-    const rank = (d: AtgtDetection) => {
-      if (d.behavior === 'vehicle') return 0
-      if (isAtgtLaneMedianBehavior(d.behavior)) return 1
-      return 2
-    }
-    return rank(a) - rank(b)
-  })
-}
-
 const DetectionBox = memo(function DetectionBox({
   detection,
   frameWidth,
@@ -80,7 +107,7 @@ const DetectionBox = memo(function DetectionBox({
   videoRef,
   compact,
   videoFit,
-  pulse,
+  videoObjectPosition = 'center',
 }: {
   detection: AtgtDetection
   frameWidth: number
@@ -88,27 +115,24 @@ const DetectionBox = memo(function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   videoFit: 'cover' | 'contain'
-  pulse?: boolean
+  videoObjectPosition?: 'center' | 'bottom'
 }) {
-  const style = BEHAVIOR_STYLE[detection.behavior] ?? BOX_STYLE
+  const style = getOverlayBoxStyle('atgt_traffic', detection.behavior)
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
-  const layerZ = detection.behavior === 'speeding' ? 7
-    : isAtgtLaneViolationBehavior(detection.behavior) ? 6
-      : isAtgtLaneMedianBehavior(detection.behavior) ? 5
-      : detection.behavior === 'vehicle' ? 3
-        : 2
+  const layerZ = detection.behavior === 'speeding' ? 7 : 6
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
 
-  const sx = video.videoWidth / frameWidth
-  const sy = video.videoHeight / frameHeight
-  const box = mapVideoRectToOverlay(
-    { x: x1 * sx, y: y1 * sy, width: (x2 - x1) * sx, height: (y2 - y1) * sy },
+  const box = mapBackendBboxToOverlay(
+    [x1, y1, x2, y2],
+    frameWidth,
+    frameHeight,
     video,
     videoFit,
+    videoObjectPosition,
   )
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
@@ -128,7 +152,6 @@ const DetectionBox = memo(function DetectionBox({
         'absolute inset-0 border rounded-sm',
         style.border,
         style.fill,
-        pulse && 'animate-pulse',
       )} />
       <span
         className={cn(
@@ -169,7 +192,7 @@ function useAtgtState(
       return
     }
 
-    const shouldAnalyze = () => shouldRunAtgtOnCamera(cameraId, video.currentTime)
+    const shouldAnalyze = () => isCameraAiModelEnabled(cameraId, 'atgt_traffic')
 
     clientRef.current?.stop()
     clientRef.current = createAtgtClient(video, {
@@ -181,10 +204,6 @@ function useAtgtState(
         setStatusMsg(msg)
       },
       onResult: result => {
-        if (!shouldRunAtgtOnCamera(cameraId, video.currentTime)) {
-          setDetections([])
-          return
-        }
         setFrameSize({ width: result.width, height: result.height })
         setDetections(visibleDetections(result.detections))
         if (result.events.length > 0) {
@@ -193,17 +212,7 @@ function useAtgtState(
       },
     })
 
-    const onSegmentChange = () => {
-      if (!shouldRunAtgtOnCamera(cameraId, video.currentTime)) {
-        setDetections([])
-      }
-    }
-    video.addEventListener('timeupdate', onSegmentChange)
-    video.addEventListener('seeked', onSegmentChange)
-
     return () => {
-      video.removeEventListener('timeupdate', onSegmentChange)
-      video.removeEventListener('seeked', onSegmentChange)
       clientRef.current?.stop()
       clientRef.current = null
     }
@@ -216,6 +225,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
   cameraId,
   videoRef,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
   enabled = true,
   compact,
 }: AtgtOverlayProps) {
@@ -224,31 +234,41 @@ export const AtgtOverlay = memo(function AtgtOverlay({
     videoRef,
     enabled,
   )
+  const stableDetections = useStableOverlayDetections(detections)
+  const laneFiltered = filterAtgtLaneOverlayDetections(stableDetections)
 
-  const laneDetections = detections.filter(
-    d => isAtgtLaneMedianBehavior(d.behavior) || isAtgtLaneViolationBehavior(d.behavior),
-  )
-  const trafficDetections = detections.filter(
-    d => !isAtgtLaneMedianBehavior(d.behavior) && !isAtgtLaneViolationBehavior(d.behavior),
+  const { visible: violationVisible } = useViolationStickyOverlay(laneFiltered, {
+    isViolation: d =>
+      d.behavior === 'speeding' || isAtgtLaneViolationBehavior(d.behavior),
+  })
+
+  const medianVisible = laneFiltered.filter(
+    d => (d.behavior === 'soft_median' || d.behavior === 'hard_median') && d.confidence >= 0.45,
   )
 
-  const { visible: cycledTraffic, pulse } = useRoiCycleDisplay(
-    trafficDetections,
-    d => d.behavior === 'speeding',
-    {
-      getScanRank: d => atgtScanRank(d.behavior),
-      getViolationRank: d => atgtViolationRank(d.behavior),
-      ...OVERLAY_CYCLE_DEFAULTS,
-    },
-  )
-  const cycledDetections = [...laneDetections, ...cycledTraffic]
-  const showContent = enabled && frameSize.width > 0 && detections.length > 0
+  const visible = [...violationVisible, ...medianVisible]
 
-  if (!showContent) return null
+  const roadMaterialActive = isCameraAiModelEnabled(cameraId, 'road_material')
+  const showPolygon =
+    !roadMaterialActive
+    && getRoiZonesForCamera(cameraId).some(z => z.type === 'ROAD')
+  const showBoxes = visible.length > 0 && frameSize.width > 0
+
+  if (!enabled) return null
+  if (!showPolygon && !showBoxes) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {cycledDetections.map((d, i) => (
+      {showPolygon && (
+        <AtgtRoiPolygons
+          cameraId={cameraId}
+          videoRef={videoRef}
+          videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
+          layoutTick={layoutTick}
+        />
+      )}
+      {showBoxes && visible.map((d, i) => (
         <DetectionBox
           key={`${d.behavior}-${i}-${Math.round(d.bbox[0])}-${layoutTick}`}
           detection={d}
@@ -257,7 +277,7 @@ export const AtgtOverlay = memo(function AtgtOverlay({
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
-          pulse={pulse && !isAtgtLaneMedianBehavior(d.behavior) && !isAtgtLaneViolationBehavior(d.behavior)}
+          videoObjectPosition={videoObjectPosition}
         />
       ))}
     </div>

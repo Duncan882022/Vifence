@@ -12,14 +12,17 @@ export function useOverlayLayoutTick(videoRef: RefObject<HTMLVideoElement | null
     if (!video) return
     const bump = () => setLayoutTick(v => v + 1)
     video.addEventListener('loadedmetadata', bump)
+    video.addEventListener('loadeddata', bump)
     video.addEventListener('resize', bump)
     window.addEventListener('resize', bump)
+    if (video.videoWidth > 0) bump()
     return () => {
       video.removeEventListener('loadedmetadata', bump)
+      video.removeEventListener('loadeddata', bump)
       video.removeEventListener('resize', bump)
       window.removeEventListener('resize', bump)
     }
-  }, [videoRef, layoutTick])
+  }, [videoRef])
 
   return layoutTick
 }

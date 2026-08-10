@@ -6,6 +6,9 @@ import type { CameraAiConfigMap, CameraAiModelId, CameraAiRoiZone } from '../typ
 const STORAGE_KEY = 'vifence_camera_ai_config'
 export const CAMERA_AI_CONFIG_CHANGED = 'vifence-camera-ai-config-changed'
 
+/** A-04 — khi một model người/vi phạm chạy, bật thêm model liên quan trên cùng frame. */
+const A04_MULTI_VIOLATION_MODELS: CameraAiModelId[] = ['ppe', 'pccc', 'wah']
+
 function readAll(): CameraAiConfigMap {
   if (typeof window === 'undefined') return {}
   try {
@@ -55,11 +58,15 @@ export function getRoiZonesForModel(
 }
 
 export function isInModelVideoSegment(
-  _modelId: CameraAiModelId,
-  _currentTimeSec: number,
+  modelId: CameraAiModelId,
+  currentTimeSec: number,
 ): boolean {
-  /** videoSegments trong catalog chỉ mô tả clip demo — runtime không gate theo giây. */
-  return true
+  const model = getCameraAiModel(modelId)
+  const segments = model?.videoSegments
+  if (!segments || segments.length === 0) return true
+  return segments.some(
+    segment => currentTimeSec >= segment.startSec && currentTimeSec < segment.endSec,
+  )
 }
 
 /** @deprecated Segment không còn gate runtime — dùng getEnabledModelsForCamera. */
@@ -78,7 +85,17 @@ export function getActiveTimedModelForCamera(
 export function shouldRunModelOnCamera(
   cameraId: string,
   modelId: CameraAiModelId,
-  _currentTimeSec?: number,
+  currentTimeSec = 0,
 ): boolean {
-  return isCameraAiModelEnabled(cameraId, modelId)
+  if (!isCameraAiModelEnabled(cameraId, modelId)) return false
+  if (isInModelVideoSegment(modelId, currentTimeSec)) return true
+  if (
+    cameraId === 'A-04'
+    && A04_MULTI_VIOLATION_MODELS.includes(modelId)
+  ) {
+    return A04_MULTI_VIOLATION_MODELS.some(
+      peer => peer !== modelId && isInModelVideoSegment(peer, currentTimeSec),
+    )
+  }
+  return false
 }

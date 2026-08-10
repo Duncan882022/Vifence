@@ -88,7 +88,10 @@ export function craneScanRank(behavior: string, machineKind?: string | null): nu
     if (machineKind === 'tower_crane') return subjectRank(10)
     if (machineKind === 'sany_drill') return subjectRank(11)
     if (machineKind === 'crane_green') return subjectRank(12)
-    return subjectRank(13)
+    if (machineKind === 'road_roller') return subjectRank(13)
+    if (machineKind === 'dump_truck') return subjectRank(14)
+    if (machineKind === 'forklift') return subjectRank(15)
+    return subjectRank(16)
   }
   return conditionRank(0)
 }

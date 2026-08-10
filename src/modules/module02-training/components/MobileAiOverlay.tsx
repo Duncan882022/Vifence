@@ -1,10 +1,13 @@
-import { memo, type RefObject } from 'react'
+import { memo, useMemo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapVideoRectToOverlay } from '../utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay } from '../utils/videoOverlayCoords'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import type { MobileAiDetection } from '../services/mobileAiBackend.service'
 import type { CameraAiModelId } from '../types/cameraAi.types'
-import { getCameraAiModelVisual, modelBoxStyle } from '../data/cameraAiModelTokens'
+import { getCameraAiModelVisual } from '../data/cameraAiModelTokens'
+import { getOverlayBoxStyle, isAtldViolationBehavior } from '@/modules/module03-safety/utils/roiBoxRole'
+import { shouldShowOverlayBox } from '@/modules/module03-safety/utils/overlayCoverage'
+import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
 
 interface MobileAiOverlayProps {
   detections: MobileAiDetection[]
@@ -13,21 +16,20 @@ interface MobileAiOverlayProps {
   videoRef: RefObject<HTMLVideoElement | null>
   layoutTick?: number
   compact?: boolean
-  pulse?: boolean
   modelId?: CameraAiModelId
-}
-
-function isViolationBehavior(behavior: string): boolean {
-  return behavior === 'smoking' || behavior === 'fire' || behavior === 'no_harness'
+  videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
 }
 
 function resolveBehaviorStyle(modelId: CameraAiModelId, behavior: string) {
-  const box = modelBoxStyle(modelId, isViolationBehavior(behavior) ? 'violation' : 'subject')
+  const box = getOverlayBoxStyle(modelId, behavior)
   const visual = getCameraAiModelVisual(modelId)
   return {
     border: box.border,
+    fill: box.fill,
     label: cn(box.bg, box.label),
     badge: visual.badge,
+    role: box.role,
   }
 }
 
@@ -37,32 +39,38 @@ const DetectionBox = memo(function DetectionBox({
   frameHeight,
   videoRef,
   compact,
-  pulse,
   modelId,
+  videoFit = 'cover',
+  videoObjectPosition = 'center',
 }: {
   det: MobileAiDetection
   frameWidth: number
   frameHeight: number
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
-  pulse?: boolean
   modelId: CameraAiModelId
+  videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
 }) {
   const [x1, y1, x2, y2] = det.bbox
   const style = resolveBehaviorStyle(modelId, det.behavior)
   const video = videoRef.current
-  const isViolation = isViolationBehavior(det.behavior)
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
 
-  const sx = video.videoWidth / frameWidth
-  const sy = video.videoHeight / frameHeight
-  const box = mapVideoRectToOverlay(
-    { x: x1 * sx, y: y1 * sy, width: (x2 - x1) * sx, height: (y2 - y1) * sy },
+  if (!shouldShowOverlayBox(det.confidence, det.bbox as [number, number, number, number])) {
+    return null
+  }
+
+  const box = mapBackendBboxToOverlay(
+    [x1, y1, x2, y2],
+    frameWidth,
+    frameHeight,
     video,
-    'contain',
+    videoFit,
+    videoObjectPosition,
   )
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
@@ -80,13 +88,13 @@ const DetectionBox = memo(function DetectionBox({
         top: `${box.y}%`,
         width: `${box.w}%`,
         height: `${box.h}%`,
-        zIndex: isViolation ? 9 : 4,
+        zIndex: 9,
       }}
     >
       <div className={cn(
         'absolute inset-0 border rounded-sm',
         style.border,
-        pulse && 'animate-pulse',
+        style.fill,
       )} />
       <span
         className={cn(
@@ -108,14 +116,28 @@ export function MobileAiOverlay({
   videoRef,
   layoutTick = 0,
   compact,
-  pulse,
   modelId = 'pccc',
+  videoFit = 'cover',
+  videoObjectPosition = 'center',
 }: MobileAiOverlayProps) {
-  if (detections.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
+  const stickyInput = useMemo(
+    () => detections.map(d => ({
+      ...d,
+      confidence: d.confidence,
+      bbox: d.bbox as [number, number, number, number],
+    })),
+    [detections],
+  )
+
+  const { visible } = useViolationStickyOverlay(stickyInput, {
+    isViolation: d => isAtldViolationBehavior(d.behavior),
+  })
+
+  if (visible.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[9]">
-      {detections.map((det, i) => (
+      {visible.map((det, i) => (
         <DetectionBox
           key={`${det.behavior}-${det.label}-${i}-${Math.round(det.bbox[0])}-${layoutTick}`}
           det={det}
@@ -123,8 +145,9 @@ export function MobileAiOverlay({
           frameHeight={frameHeight}
           videoRef={videoRef}
           compact={compact}
-          pulse={pulse}
           modelId={modelId}
+          videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
         />
       ))}
     </div>
@@ -140,8 +163,8 @@ export function MobileAiAlertBadge({
   compact?: boolean
   modelId?: CameraAiModelId
 }) {
-  const smoking = detections.some(d => d.behavior === 'smoking')
-  const fire = detections.some(d => d.behavior === 'fire')
+  const smoking = detections.some(d => d.behavior === 'smoking' && d.confidence >= 0.70)
+  const fire = detections.some(d => d.behavior === 'fire' && d.confidence >= 0.70)
   if (!smoking && !fire) return null
 
   const smokingStyle = resolveBehaviorStyle(modelId, 'smoking')

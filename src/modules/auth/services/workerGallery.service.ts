@@ -34,10 +34,20 @@ export interface WorkerGalleryStatusResponse {
   track_cache_size: number
   min_match_confidence: number
   enrollment?: WorkerEnrollmentStatus
+  error?: string
+}
+
+export interface FacialScannerIdentity {
+  userId?: string
+  cccd?: string
+  workerName: string
+  employeeCode: string
+  contractorName?: string | null
 }
 
 export interface WorkerGalleryEnrollPayload {
-  user_id: string
+  user_id?: string
+  cccd?: string
   worker_name: string
   employee_code: string
   contractor_name?: string | null
@@ -83,12 +93,36 @@ export async function pingWorkerGalleryBackend(): Promise<boolean> {
 }
 
 export async function fetchWorkerGalleryStatus(userId: string): Promise<WorkerGalleryStatusResponse> {
+  return fetchWorkerGalleryStatusForIdentity({ userId })
+}
+
+export async function fetchWorkerGalleryStatusForIdentity(
+  identity: Pick<FacialScannerIdentity, 'userId' | 'cccd'>,
+): Promise<WorkerGalleryStatusResponse> {
   const base = galleryBaseUrl()
   if (!base) {
     throw new Error('Chưa cấu hình backend AI (VITE_MOBILE_AI_BACKEND_URL).')
   }
-  const params = new URLSearchParams({ user_id: userId })
+  const params = new URLSearchParams()
+  if (identity.userId) params.set('user_id', identity.userId)
+  if (identity.cccd) params.set('cccd', identity.cccd)
   return fetchJson(`${base}/workers/gallery/status?${params.toString()}`)
+}
+
+function buildEnrollPayload(
+  identity: FacialScannerIdentity,
+  imageB64: string,
+  poseSlot: number,
+): WorkerGalleryEnrollPayload {
+  return {
+    user_id: identity.userId,
+    cccd: identity.cccd,
+    worker_name: identity.workerName,
+    employee_code: identity.employeeCode,
+    contractor_name: identity.contractorName,
+    image_b64: imageB64,
+    pose_slot: poseSlot,
+  }
 }
 
 export async function enrollWorkerFace(payload: WorkerGalleryEnrollPayload): Promise<WorkerEnrollmentStatus> {
@@ -108,4 +142,12 @@ export async function enrollWorkerFace(payload: WorkerGalleryEnrollPayload): Pro
     throw new Error(data.error || 'Không lưu được ảnh khuôn mặt.')
   }
   return data.enrollment
+}
+
+export async function enrollWorkerFaceForIdentity(
+  identity: FacialScannerIdentity,
+  imageB64: string,
+  poseSlot: number,
+): Promise<WorkerEnrollmentStatus> {
+  return enrollWorkerFace(buildEnrollPayload(identity, imageB64, poseSlot))
 }

@@ -9,10 +9,10 @@ const CRANE_ROI_ZONES: CameraAiRoiZone[] = [
     type: 'CRANE_BODY',
     pixelsPerMeter: 92,
     polygon: [
-      { x: 0.32, y: 0.06 },
-      { x: 0.94, y: 0.10 },
-      { x: 0.90, y: 0.52 },
-      { x: 0.26, y: 0.46 },
+      { x: 0.18, y: 0.10 },
+      { x: 0.82, y: 0.10 },
+      { x: 0.78, y: 0.54 },
+      { x: 0.22, y: 0.50 },
     ],
   },
   {
@@ -20,10 +20,10 @@ const CRANE_ROI_ZONES: CameraAiRoiZone[] = [
     label: 'Vùng làm việc gần cẩu — Cam 04',
     type: 'CRANE_WORK',
     polygon: [
-      { x: 0.08, y: 0.42 },
-      { x: 0.96, y: 0.44 },
-      { x: 0.96, y: 0.98 },
-      { x: 0.04, y: 0.98 },
+      { x: 0.06, y: 0.56 },
+      { x: 0.94, y: 0.56 },
+      { x: 0.94, y: 0.98 },
+      { x: 0.06, y: 0.98 },
     ],
   },
 ]

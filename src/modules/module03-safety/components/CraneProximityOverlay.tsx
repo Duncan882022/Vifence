@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState, memo, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay, mapVideoPointToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { getDefaultRoiZonesForModel } from '@/modules/module02-training/data/cameraAiRoiDefaults'
+import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { type MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
@@ -10,46 +12,116 @@ import {
   type CraneProximityDetection,
   type CraneProximityMetrics,
 } from '../services/craneProximityBackend.service'
-import { shouldRunCraneOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
+import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
-import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
-import { craneScanRank, OVERLAY_CYCLE_DEFAULTS } from '../utils/overlayScanOrder'
-import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
+import { appendCraneProximityRelated, isMachineDetection } from '../utils/craneOverlayRelated'
+import { craneScanRank } from '../utils/overlayScanOrder'
+import { getOverlayBoxStyle } from '../utils/roiBoxRole'
+import {
+  MACHINERY_INFO_MIN_CONFIDENCE,
+  OVERLAY_MIN_CONFIDENCE,
+} from '../utils/overlayVisibility'
+import { shouldShowOverlayBox } from '../utils/overlayCoverage'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
-import { modelBoxStyle } from '@/modules/module02-training/data/cameraAiModelTokens'
+import { formatRoiOverlayBadge, formatCraneOverlayLabel, machineKindLabel } from '../utils/roiOverlayCode'
 
 const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
-const UNKNOWN_MIN_CONFIDENCE = 0.45
-const SUBJECT_STYLE = modelBoxStyle('crane_proximity', 'subject')
-const VIOLATION_STYLE = modelBoxStyle('crane_proximity', 'violation')
+const INFO_MIN_CONFIDENCE = OVERLAY_MIN_CONFIDENCE
+const MACHINE_MIN_CONFIDENCE = MACHINERY_INFO_MIN_CONFIDENCE
 
-const BOX_STYLE = SUBJECT_STYLE
+const ROI_STROKE: Record<string, { stroke: string; fill: string; dash: string }> = {
+  CRANE_WORK: { stroke: 'rgba(56, 189, 248, 0.85)', fill: 'rgba(56, 189, 248, 0.10)', dash: '6 4' },
+  CRANE_BODY: { stroke: 'rgba(251, 191, 36, 0.55)', fill: 'none', dash: '5 4' },
+}
 
-const BEHAVIOR_STYLE: Record<
-  string,
-  { border: string; fill: string; label: string; bg: string }
-> = {
-  person: BOX_STYLE,
-  unknown: BOX_STYLE,
-  crane: SUBJECT_STYLE,
-  crane_green: SUBJECT_STYLE,
-  sany_drill: SUBJECT_STYLE,
-  excavator_orange: SUBJECT_STYLE,
-  tower_crane: SUBJECT_STYLE,
-  crane_proximity: VIOLATION_STYLE,
+function CraneRoiPolygons({
+  cameraId,
+  videoRef,
+  videoFit,
+  videoObjectPosition = 'center',
+  layoutTick,
+}: {
+  cameraId: string
+  videoRef: RefObject<HTMLVideoElement | null>
+  videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
+  layoutTick: number
+}) {
+  const video = videoRef.current
+  const zones = getDefaultRoiZonesForModel(cameraId, 'crane_proximity')
+  if (!video?.videoWidth || !video.videoHeight || zones.length === 0) return null
+
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none z-[1]"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      {zones.map(zone => {
+        const style = ROI_STROKE[zone.type] ?? ROI_STROKE.CRANE_WORK
+        const points = zone.polygon
+          .map(p => {
+            const pt = mapVideoPointToOverlay(p.x, p.y, video, videoFit, videoObjectPosition)
+            return `${pt.x},${pt.y}`
+          })
+          .join(' ')
+        return (
+          <polygon
+            key={`${zone.id}-${layoutTick}`}
+            points={points}
+            fill={style.fill}
+            stroke={style.stroke}
+            strokeWidth={1.2}
+            strokeDasharray={style.dash}
+            vectorEffect="non-scaling-stroke"
+          />
+        )
+      })}
+    </svg>
+  )
+}
+const MACHINE_KIND_STYLE: Record<string, { border: string; fill: string; label: string; bg: string }> = {
+  tower_crane: {
+    border: 'border-amber-300/95 border-dashed',
+    fill: 'bg-amber-400/12',
+    label: 'text-amber-100',
+    bg: 'bg-amber-950/75',
+  },
+  crane_green: {
+    border: 'border-lime-400/95 border-dashed',
+    fill: 'bg-lime-400/12',
+    label: 'text-lime-100',
+    bg: 'bg-lime-950/75',
+  },
+  sany_drill: {
+    border: 'border-sky-400/95 border-dashed',
+    fill: 'bg-sky-400/12',
+    label: 'text-sky-100',
+    bg: 'bg-sky-950/75',
+  },
+}
+
+function resolveDetectionStyle(detection: CraneProximityDetection) {
+  if (detection.behavior === 'crane' && detection.machine_kind) {
+    const kindStyle = MACHINE_KIND_STYLE[detection.machine_kind]
+    if (kindStyle) return { ...kindStyle, role: 'info' as const }
+  }
+  const behaviorKey = detection.behavior === 'unknown' ? 'person' : detection.behavior
+  return getOverlayBoxStyle('crane_proximity', behaviorKey, detection.machine_kind)
 }
 
 function formatDetectionBadge(
   detection: CraneProximityDetection,
-  isPending: boolean,
 ): string {
-  const behaviorKey = detection.behavior === 'crane' && detection.machine_kind
-    ? detection.machine_kind
-    : detection.behavior
-  const code = formatRoiOverlayCode(behaviorKey, detection.scenario_id)
+  const code = formatCraneOverlayLabel(detection.behavior, {
+    machineKind: detection.machine_kind,
+    scenarioId: detection.scenario_id,
+    label: detection.label,
+  })
   const distLabel = formatDistanceLabel(detection.distance_m)
-  const pending = isPending ? ' ·LB' : ''
-  return formatRoiOverlayBadge(code, detection.confidence, `${distLabel}${pending}`)
+  return formatRoiOverlayBadge(code, detection.confidence, distLabel)
 }
 
 function formatDistanceLabel(distanceM: number | undefined): string {
@@ -61,22 +133,9 @@ interface CraneProximityOverlayProps {
   cameraId: string
   videoRef: RefObject<HTMLVideoElement | null>
   videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
   enabled?: boolean
   compact?: boolean
-}
-
-function resolveDetectionStyle(detection: CraneProximityDetection) {
-  if (
-    detection.label === 'Unknown'
-    || detection.label === 'person_unknown'
-    || detection.behavior === 'unknown'
-  ) {
-    return BOX_STYLE
-  }
-  if (detection.behavior === 'crane' && detection.machine_kind) {
-    return BEHAVIOR_STYLE[detection.machine_kind as keyof typeof BEHAVIOR_STYLE] ?? BEHAVIOR_STYLE.crane
-  }
-  return BEHAVIOR_STYLE[detection.behavior] ?? BOX_STYLE
 }
 
 const DetectionBox = memo(function DetectionBox({
@@ -86,6 +145,7 @@ const DetectionBox = memo(function DetectionBox({
   videoRef,
   compact,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
   pulse,
 }: {
   detection: CraneProximityDetection
@@ -94,16 +154,16 @@ const DetectionBox = memo(function DetectionBox({
   videoRef: RefObject<HTMLVideoElement | null>
   compact?: boolean
   videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
   pulse?: boolean
 }) {
   const style = resolveDetectionStyle(detection)
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
-  const isGreenExcavator = detection.machine_kind === 'crane_green'
-  const isPending = detection.behavior === 'crane' && detection.confidence < EVENT_MIN_CONFIDENCE
-  const layerZ = detection.behavior === 'crane_proximity'
+  const isViolation = detection.behavior === 'crane_proximity'
+  const layerZ = isViolation
     ? 7
-    : isGreenExcavator
+    : detection.machine_kind === 'crane_green'
       ? 6
       : detection.machine_kind === 'sany_drill'
         ? 5
@@ -115,17 +175,18 @@ const DetectionBox = memo(function DetectionBox({
     return null
   }
 
-  const sx = video.videoWidth / frameWidth
-  const sy = video.videoHeight / frameHeight
-  const box = mapVideoRectToOverlay(
-    { x: x1 * sx, y: y1 * sy, width: (x2 - x1) * sx, height: (y2 - y1) * sy },
+  const box = mapBackendBboxToOverlay(
+    [x1, y1, x2, y2],
+    frameWidth,
+    frameHeight,
     video,
     videoFit,
+    videoObjectPosition,
   )
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
-  const displayLabel = formatDetectionBadge(detection, isPending)
+  const displayLabel = formatDetectionBadge(detection)
 
   return (
     <div
@@ -140,10 +201,9 @@ const DetectionBox = memo(function DetectionBox({
     >
       <div
         className={cn(
-          'absolute inset-0 border rounded-sm',
+          'absolute inset-0 rounded-sm border-2',
           style.border,
           style.fill,
-          isPending && 'border-dashed opacity-60',
           pulse && 'animate-pulse',
         )}
       />
@@ -153,7 +213,6 @@ const DetectionBox = memo(function DetectionBox({
           style.bg,
           style.label,
           compact ? 'text-[5px]' : 'text-[7px]',
-          isPending && 'opacity-70',
         )}
       >
         {displayLabel}
@@ -161,6 +220,19 @@ const DetectionBox = memo(function DetectionBox({
     </div>
   )
 })
+
+function passesCraneOverlayDetection(d: CraneProximityDetection): boolean {
+  if (d.behavior === 'crane' && d.machine_kind) {
+    return d.confidence >= MACHINE_MIN_CONFIDENCE
+  }
+  if (d.behavior === 'crane_proximity') {
+    return shouldShowOverlayBox(d.confidence, d.bbox)
+  }
+  if (d.behavior === 'person') {
+    return d.confidence >= INFO_MIN_CONFIDENCE
+  }
+  return false
+}
 
 function useCraneProximityState(
   cameraId: string,
@@ -178,29 +250,19 @@ function useCraneProximityState(
   const resetDetections = useCallback(() => setDetections([]), [])
   useOverlaySceneReset(videoRef, enabled, resetDetections)
 
-  const syncSegment = (video: HTMLVideoElement) => {
-    if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
-      setDetections([])
-    }
-  }
-
   useEffect(() => {
     const video = videoRef.current
     if (!video || !enabled) return
     const bump = () => setLayoutTick(t => t + 1)
-    const onSegmentChange = () => {
-      syncSegment(video)
-    }
     const observer = new ResizeObserver(bump)
     observer.observe(video)
     video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('seeked', onSegmentChange)
-    video.addEventListener('timeupdate', onSegmentChange)
+    video.addEventListener('loadeddata', bump)
+    if (video.videoWidth > 0) bump()
     return () => {
       observer.disconnect()
       video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('seeked', onSegmentChange)
-      video.removeEventListener('timeupdate', onSegmentChange)
+      video.removeEventListener('loadeddata', bump)
     }
   }, [cameraId, enabled, videoRef])
 
@@ -228,29 +290,10 @@ function useCraneProximityState(
     clientRef.current = createCraneProximityClient(video, {
       cameraId,
       backendUrl,
-      shouldAnalyze: () => shouldRunCraneOnCamera(cameraId, video.currentTime),
+      shouldAnalyze: () => isCameraAiModelEnabled(cameraId, 'crane_proximity'),
       onResult: result => {
-        syncSegment(video)
-        if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
-          setDetections([])
-          return
-        }
-
         const visible = result.detections
-          .filter(d => {
-          if (d.behavior === 'crane_proximity') return d.confidence >= EVENT_MIN_CONFIDENCE
-          if (
-            d.behavior === 'unknown'
-            || d.label === 'Unknown'
-            || d.label === 'person_unknown'
-          ) {
-            return d.confidence >= UNKNOWN_MIN_CONFIDENCE
-          }
-          if (d.behavior === 'person') return d.confidence >= UNKNOWN_MIN_CONFIDENCE
-          // Máy móc (crane/crane_green/sany_drill/tower_crane): vẫn vẽ bbox khi
-          // AI phát hiện được nhưng chưa đủ ngưỡng — giúp giám sát biết đã detect.
-          return d.confidence >= 0.40
-        })
+          .filter(passesCraneOverlayDetection)
           .sort((a, b) => {
             const rank = (d: CraneProximityDetection) =>
               craneScanRank(d.behavior, d.machine_kind)
@@ -283,36 +326,94 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
   cameraId,
   videoRef,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
   enabled = true,
   compact,
 }: CraneProximityOverlayProps) {
   const { detections, frameSize, layoutTick } =
     useCraneProximityState(cameraId, videoRef, enabled)
 
-  const { visible: cycledDetections, pulse } = useRoiCycleDisplay<CraneProximityDetection>(
-    detections,
-    d => d.behavior === 'crane_proximity',
-    {
-      ...OVERLAY_CYCLE_DEFAULTS,
-      getScanRank: (d: CraneProximityDetection) => craneScanRank(d.behavior, d.machine_kind),
-    },
-  )
-  const showContent = enabled && detections.length > 0 && frameSize.width > 0
+  const stableDetections = useStableOverlayDetections(detections)
 
-  if (!showContent) return null
+  const appendRelated = useCallback(
+    (visible: CraneProximityDetection[], all: CraneProximityDetection[]) =>
+      appendCraneProximityRelated(visible, all),
+    [],
+  )
+
+  const { visible: stickyViolations } = useViolationStickyOverlay(stableDetections, {
+    isViolation: d => d.behavior === 'crane_proximity',
+    appendRelated,
+  })
+
+  const renderDetections = useMemo(() => {
+    const apiMachines = stableDetections.filter(
+      d => isMachineDetection(d) && d.confidence >= MACHINE_MIN_CONFIDENCE,
+    )
+
+    const fromViolations: CraneProximityDetection[] = stickyViolations.flatMap(v => {
+      if (v.behavior !== 'crane_proximity' || !v.machine_bbox || v.machine_bbox.length < 4) {
+        return []
+      }
+      return [{
+        behavior: 'crane' as const,
+        label: machineKindLabel(v.machine_kind),
+        scenario_id: v.scenario_id,
+        confidence: Math.max(v.confidence, 0.85),
+        bbox: v.machine_bbox,
+        machine_kind: v.machine_kind,
+      }]
+    })
+
+    const seen = new Set<string>()
+    const merged: CraneProximityDetection[] = []
+    for (const det of [...stickyViolations, ...apiMachines, ...fromViolations]) {
+      const key = `${det.behavior}-${det.machine_kind ?? 'x'}-${det.bbox.map(v => Math.round(v / 8)).join(',')}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(det)
+    }
+    return merged
+  }, [stickyViolations, stableDetections])
+
+  const roiZones = useMemo(
+    () => getDefaultRoiZonesForModel(cameraId, 'crane_proximity'),
+    [cameraId],
+  )
+  const showPolygon = roiZones.length > 0
+  const video = videoRef.current
+  const overlayFrameSize =
+    frameSize.width > 0
+      ? frameSize
+      : video?.videoWidth && video.videoHeight
+        ? { width: video.videoWidth, height: video.videoHeight }
+        : { width: 0, height: 0 }
+  const showBoxes = renderDetections.length > 0 && overlayFrameSize.width > 0
+
+  if (!enabled) return null
+  if (!showPolygon && !showBoxes) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {cycledDetections.map(d => (
+      {showPolygon && (
+        <CraneRoiPolygons
+          cameraId={cameraId}
+          videoRef={videoRef}
+          videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
+          layoutTick={layoutTick}
+        />
+      )}
+      {showBoxes && renderDetections.map(d => (
         <DetectionBox
           key={`${d.behavior}-${d.machine_kind ?? 'none'}-${Math.round(d.bbox[0])}-${Math.round(d.bbox[1])}-${layoutTick}`}
           detection={d}
-          frameWidth={frameSize.width}
-          frameHeight={frameSize.height}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
-          pulse={pulse}
+          videoObjectPosition={videoObjectPosition}
         />
       ))}
     </div>

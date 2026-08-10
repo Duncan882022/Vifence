@@ -15,6 +15,10 @@ import { VIOLATION_TYPE_LABELS } from '../data/safetyViolations'
 import type { ViolationType } from '@/types/safety'
 import { ViolationTypeIcon } from './ViolationTypeIcon'
 import { getSafetyCameraDisplayName } from '../utils/safetyCameraBridge'
+import {
+  getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
+} from '@/modules/module02-training/data/trainingCameraFeeds'
 import { EventPlaybackViewport, useEventClipPlayback } from './EventPlaybackViewport'
 import { EVENT_PLAYBACK_CLIP_SEC, buildEventClipWindow } from '../utils/eventPlaybackClip'
 
@@ -53,12 +57,20 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
   const seekSec = event?.playbackSeekSec ?? (feedType ? getViolationClipMarker(feedType) : 0)
   const clipSec = event?.clipDurationSec ?? EVENT_PLAYBACK_CLIP_SEC
   const violationBbox = event?.violationBbox
+  const subjectBbox = event?.subjectBbox
+  const relatedBbox = event?.relatedBbox
   const frameWidth = event?.frameWidth
   const frameHeight = event?.frameHeight
   const speed = SPEEDS[speedIndex]
   const cameraLabel = event
     ? getSafetyCameraDisplayName(event.cameraId, event.cameraName)
     : undefined
+  const playbackFit = event
+    ? getVideoObjectFitForCamera(event.cameraId)
+    : 'contain'
+  const playbackObjectPosition = event
+    ? getVideoObjectPositionForCamera(event.cameraId)
+    : 'center'
 
   // Pause and release video source on unmount to prevent orphaned audio after modal close
   useEffect(() => {
@@ -146,9 +158,12 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
             <EventPlaybackViewport
               videoRef={videoRef}
               bbox={violationBbox}
+              subjectBbox={subjectBbox}
+              relatedBbox={relatedBbox}
               frameWidth={frameWidth}
               frameHeight={frameHeight}
-              videoFit="contain"
+              videoFit={playbackFit}
+              videoObjectPosition={playbackObjectPosition}
             >
               <video
                 key={event.id}
@@ -158,7 +173,9 @@ export function SafetyPlayback({ event, className }: SafetyPlaybackProps) {
                 playsInline
                 preload="auto"
                 className={cn(
-                  'absolute inset-0 h-full w-full object-contain bg-black',
+                  'absolute inset-0 h-full w-full bg-black',
+                  playbackFit === 'contain' ? 'object-contain' : 'object-cover',
+                  playbackObjectPosition === 'bottom' && playbackFit === 'cover' && 'object-bottom',
                   'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
                 )}
                 onError={() => setLoadError('Không tải được clip vi phạm')}

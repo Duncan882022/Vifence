@@ -139,81 +139,81 @@ export function SafetyDashboardPage() {
 
   return (
     <>
-      <PageLayout>
-        <Panel
-          title="Tổng Quan"
-          fit
-          expandable={tier1Open}
-          noPadding
-          className="shrink-0"
-          headerRight={
-            <div className="flex items-center gap-2 min-w-0">
+    <PageLayout>
+      <Panel
+        title="Tổng Quan"
+        fit
+        expandable={tier1Open}
+        noPadding
+        className="shrink-0"
+        headerRight={
+          <div className="flex items-center gap-2 min-w-0">
               {!tier1Open && (
                 <SafetyOverviewCollapsedSummary
                   kpis={kpis}
                   groupTotal={groupStats.reduce((sum, g) => sum + g.total, 0)}
                 />
               )}
-              <TierCollapseButton
-                open={tier1Open}
-                onToggle={() => setTier1Open(open => !open)}
-                label="Tổng Quan"
-              />
-            </div>
-          }
-        >
-          {tier1Open && (
+            <TierCollapseButton
+              open={tier1Open}
+              onToggle={() => setTier1Open(open => !open)}
+              label="Tổng Quan"
+            />
+          </div>
+        }
+      >
+        {tier1Open && (
             <div className="p-2 sm:p-3 max-lg:overflow-x-hidden">
               <SafetyKpiStrip kpis={kpis} groupStats={groupStats} embedded />
-            </div>
-          )}
-        </Panel>
+          </div>
+        )}
+      </Panel>
 
-        <div className={cn(
-          'flex flex-col gap-3',
-          'max-lg:flex-none',
-          'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
-        )}>
+      <div className={cn(
+        'flex flex-col gap-3',
+        'max-lg:flex-none',
+        'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
+      )}>
           {/* Camera — ưu tiên chiều cao khi mở (LIVE phải thấy rõ, giống Module 02) */}
-          <div className={cn(
-            'flex flex-col min-h-0',
+        <div className={cn(
+          'flex flex-col min-h-0',
             tier2Open
               ? cn(
                 'max-lg:flex-none max-lg:min-h-[280px]',
                 cameraMode === 'playback' ? 'lg:flex-[13]' : 'lg:flex-[11]',
               )
               : 'shrink-0',
-          )}>
-            <Panel
+        )}>
+          <Panel
               title="Camera"
-              expandable={tier2Open}
-              fit={!tier2Open}
-              noPadding
-              className={cn(
+            expandable={tier2Open}
+            fit={!tier2Open}
+            noPadding
+            className={cn(
                 tier2Open && 'lg:flex-1 lg:min-h-[260px]',
                 tier2Open && 'max-lg:!h-auto max-lg:min-h-[280px] max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
                 tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible max-lg:[&>div:last-child]:min-h-[240px]',
-                !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
-              )}
-              headerRight={
-                <div className="flex items-center gap-2 min-w-0">
+              !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
+            )}
+            headerRight={
+              <div className="flex items-center gap-2 min-w-0">
                   {tier2Open && (
                     <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
                   )}
                   {!tier2Open && cameraMode === 'live' && (
-                    <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
-                      <span className="text-primary font-semibold">{activeStreamCount}</span> luồng
-                    </span>
-                  )}
-                  <TierCollapseButton
-                    open={tier2Open}
+                  <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                    <span className="text-primary font-semibold">{activeStreamCount}</span> luồng
+                  </span>
+                )}
+                <TierCollapseButton
+                  open={tier2Open}
                     onToggle={handleToggleCamera}
-                    label="Camera"
-                  />
-                </div>
-              }
-            >
-              {tier2Open && (
+                  label="Camera"
+                />
+              </div>
+            }
+          >
+            {tier2Open && (
                 <div className={cn(
                   'flex flex-col flex-1 min-h-0 h-full w-full max-lg:min-h-[240px]',
                   cameraMode === 'live' && 'max-lg:h-auto max-lg:flex-none',
@@ -221,9 +221,9 @@ export function SafetyDashboardPage() {
                 )}>
                   {cameraMode === 'live' ? (
                     <TrainingCameraPanel
-                      selectedId={selectedCamId}
+                  selectedId={selectedCamId}
                       onSelectCamera={handleSelectCamera}
-                      onStreamCountChange={setActiveStreamCount}
+                  onStreamCountChange={setActiveStreamCount}
                       cameras={SAFETY_CAMERAS}
                       defaultCameraIds={DEFAULT_SAFETY_CAMERA_IDS}
                       filterTabs={[...SAFETY_CAMERA_FILTER_TABS]}
@@ -245,15 +245,15 @@ export function SafetyDashboardPage() {
                       fetchDetections={fetchSafetyRecordDetections}
                     />
                   )}
-                </div>
-              )}
-            </Panel>
-          </div>
+              </div>
+            )}
+          </Panel>
+        </div>
 
           {/* Nhóm ATLĐ + Sự kiện — mobile & desktop: nhóm trước */}
-          <div className={cn(
-            'flex flex-col lg:flex-row gap-3 min-h-0',
-            'max-lg:flex-none',
+        <div className={cn(
+          'flex flex-col lg:flex-row gap-3 min-h-0',
+          'max-lg:flex-none',
             bothLowerCollapsed
               ? 'lg:flex-1 lg:min-h-0'
               : tier2Open
@@ -314,7 +314,7 @@ export function SafetyDashboardPage() {
                 onSnapshotClick={v => setDetailId(v.id)}
               />
             </div>
-          </div>
+      </div>
 
           {SHOW_VIOLATION_EVENTS_PANEL && (
           <div className={cn(
@@ -359,10 +359,10 @@ export function SafetyDashboardPage() {
                 />
               )}
             </Panel>
-          </div>
+            </div>
           )}
         </div>
-      </PageLayout>
+    </PageLayout>
 
       <SafetyHandleConfirmDialog
         record={handleTarget}

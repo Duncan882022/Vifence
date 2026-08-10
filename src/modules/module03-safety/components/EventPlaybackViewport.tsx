@@ -1,18 +1,27 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
-import { mapVideoRectToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   buildEventClipWindow,
+  unionBboxes,
   type ViolationBbox,
 } from '../utils/eventPlaybackClip'
 
 interface EventPlaybackViewportProps {
   videoRef: RefObject<HTMLVideoElement | null>
+  /** Khung vi phạm chính — solid đỏ. */
   bbox?: ViolationBbox
+  /** Người vi phạm — dashed vàng (CN). */
+  subjectBbox?: ViolationBbox
+  /** Máy/đối tượng liên quan — dashed xanh (DZ). */
+  relatedBbox?: ViolationBbox
+  /** Zoom ROI — mặc định union các khung trên. */
+  zoomBbox?: ViolationBbox
   frameWidth?: number
   frameHeight?: number
   videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
   /** Bật zoom ROI — desktop mặc định; mobile/tablet chỉ khung ROI. */
   zoomEnabled?: boolean
   className?: string
@@ -25,27 +34,68 @@ function mapBboxToOverlay(
   frameHeight: number,
   video: HTMLVideoElement,
   fit: 'cover' | 'contain',
+  objectPosition: 'center' | 'bottom',
 ) {
-  const sx = video.videoWidth / frameWidth
-  const sy = video.videoHeight / frameHeight
-  return mapVideoRectToOverlay(
-    {
-      x: bbox[0] * sx,
-      y: bbox[1] * sy,
-      width: (bbox[2] - bbox[0]) * sx,
-      height: (bbox[3] - bbox[1]) * sy,
-    },
+  return mapBackendBboxToOverlay(
+    bbox,
+    frameWidth,
+    frameHeight,
     video,
     fit,
+    objectPosition,
+  )
+}
+
+function mapOverlayBox(
+  bbox: ViolationBbox,
+  frameWidth: number,
+  frameHeight: number,
+  video: HTMLVideoElement,
+  fit: 'cover' | 'contain',
+  objectPosition: 'center' | 'bottom',
+) {
+  const box = mapBboxToOverlay(bbox, frameWidth, frameHeight, video, fit, objectPosition)
+  if (box.w <= 0.4 || box.h <= 0.4) return undefined
+  return box
+}
+
+interface PlaybackRoiBoxProps {
+  box: { x: number; y: number; w: number; h: number }
+  className: string
+  label?: string
+}
+
+function PlaybackRoiBox({ box, className, label }: PlaybackRoiBoxProps) {
+  return (
+    <div
+      className={cn('absolute rounded-sm pointer-events-none z-[6]', className)}
+      style={{
+        left: `${box.x}%`,
+        top: `${box.y}%`,
+        width: `${box.w}%`,
+        height: `${box.h}%`,
+      }}
+      aria-hidden
+    >
+      {label && (
+        <span className="absolute -top-3.5 left-0 text-[8px] font-semibold px-1 py-0.5 rounded bg-black/70 text-white/90 whitespace-nowrap">
+          {label}
+        </span>
+      )}
+    </div>
   )
 }
 
 export function EventPlaybackViewport({
   videoRef,
   bbox,
+  subjectBbox,
+  relatedBbox,
+  zoomBbox,
   frameWidth,
   frameHeight,
   videoFit = 'contain',
+  videoObjectPosition = 'center',
   zoomEnabled,
   className,
   children,
@@ -72,20 +122,37 @@ export function EventPlaybackViewport({
       video.removeEventListener('resize', bump)
       window.removeEventListener('resize', bump)
     }
-  }, [videoRef, bbox, frameWidth, frameHeight])
+  }, [videoRef, bbox, subjectBbox, relatedBbox, zoomBbox, frameWidth, frameHeight])
 
-  const overlayBox = useMemo(() => {
+  const overlayBoxes = useMemo(() => {
     const video = videoRef.current
-    if (!bbox || !frameWidth || !frameHeight || !video?.videoWidth || !video.videoHeight) {
+    if (!frameWidth || !frameHeight || !video?.videoWidth || !video.videoHeight) {
       return undefined
     }
-    const box = mapBboxToOverlay(bbox, frameWidth, frameHeight, video, videoFit)
-    if (box.w <= 0.4 || box.h <= 0.4) return undefined
-    return box
-  }, [bbox, frameWidth, frameHeight, videoRef, videoFit, layoutTick])
+
+    const map = (target?: ViolationBbox) => (
+      target
+        ? mapOverlayBox(target, frameWidth, frameHeight, video, videoFit, videoObjectPosition)
+        : undefined
+    )
+
+    return {
+      violation: map(bbox),
+      subject: map(subjectBbox),
+      related: map(relatedBbox),
+      zoom: map(
+        zoomBbox
+        ?? unionBboxes(bbox, subjectBbox, relatedBbox)
+        ?? bbox
+        ?? subjectBbox
+        ?? relatedBbox,
+      ),
+    }
+  }, [bbox, subjectBbox, relatedBbox, zoomBbox, frameWidth, frameHeight, videoRef, videoFit, videoObjectPosition, layoutTick])
 
   const zoomStyle = useMemo(() => {
-    if (!allowZoom || !overlayBox) return undefined
+    if (!allowZoom || !overlayBoxes?.zoom) return undefined
+    const overlayBox = overlayBoxes.zoom
     const cx = overlayBox.x + overlayBox.w / 2
     const cy = overlayBox.y + overlayBox.h / 2
     const boxW = Math.max(overlayBox.w / 100, 0.08)
@@ -96,7 +163,11 @@ export function EventPlaybackViewport({
       transformOrigin: `${cx}% ${cy}%`,
       transform: `scale(${scale})`,
     }
-  }, [allowZoom, overlayBox, isDesktop])
+  }, [allowZoom, overlayBoxes, isDesktop])
+
+  const hasRoiOverlay = Boolean(
+    overlayBoxes?.violation || overlayBoxes?.subject || overlayBoxes?.related,
+  )
 
   return (
     <div className={cn('absolute inset-0 overflow-hidden', className)}>
@@ -108,16 +179,30 @@ export function EventPlaybackViewport({
         style={zoomStyle}
       >
         {children}
-        {overlayBox && (
-          <div
-            className="absolute border-2 border-red-400/95 rounded-sm pointer-events-none z-[6] shadow-[0_0_10px_rgba(248,113,113,0.35)]"
-            style={{
-              left: `${overlayBox.x}%`,
-              top: `${overlayBox.y}%`,
-              width: `${overlayBox.w}%`,
-              height: `${overlayBox.h}%`,
-            }}
-            aria-hidden
+        {overlayBoxes?.related && (
+          <PlaybackRoiBox
+            box={overlayBoxes.related}
+            className="border-2 border-dashed border-sky-400/90 shadow-[0_0_8px_rgba(56,189,248,0.25)]"
+            label="Máy"
+          />
+        )}
+        {overlayBoxes?.subject && (
+          <PlaybackRoiBox
+            box={overlayBoxes.subject}
+            className="border border-dashed border-amber-300/90 shadow-[0_0_6px_rgba(252,211,77,0.2)]"
+            label="CN"
+          />
+        )}
+        {overlayBoxes?.violation && (
+          <PlaybackRoiBox
+            box={overlayBoxes.violation}
+            className="border-2 border-red-400/95 shadow-[0_0_10px_rgba(248,113,113,0.35)]"
+          />
+        )}
+        {!hasRoiOverlay && overlayBoxes?.zoom && (
+          <PlaybackRoiBox
+            box={overlayBoxes.zoom}
+            className="border-2 border-red-400/95 shadow-[0_0_10px_rgba(248,113,113,0.35)]"
           />
         )}
       </div>

@@ -1,6 +1,6 @@
 /** URL backend AI — cố định qua VITE_MOBILE_AI_BACKEND_URL (.env.local / .env.ghpages). */
 import {
-  captureVideoFrameBase64,
+  captureCameraAnalyzeFrame,
   scaledAnalyzeDelay,
 } from '../utils/videoFrameCapture'
 
@@ -119,6 +119,7 @@ export async function pingMobileAiBackend(baseUrl: string): Promise<boolean> {
 }
 
 export {
+  captureCameraAnalyzeFrame,
   captureVideoFrameBase64,
   getVideoAnalyzeIntervalScale,
   invalidateVideoFrameCapture,
@@ -224,7 +225,7 @@ export function createMobileAiAnalyzeClient(
       return
     }
 
-    const image = captureVideoFrameBase64(video, 640, 0.72)
+    const image = captureCameraAnalyzeFrame(video, cameraId, 640, 0.72)
     if (!image) {
       scheduleNext(500)
       return

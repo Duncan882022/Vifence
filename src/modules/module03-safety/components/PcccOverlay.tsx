@@ -12,21 +12,18 @@ import {
   type PcccDetection,
 } from '../services/pcccBackend.service'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
-import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
-import { OVERLAY_CYCLE_DEFAULTS, pcccScanRank, pcccViolationRank } from '../utils/overlayScanOrder'
+import {
+  getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
+} from '@/modules/module02-training/data/trainingCameraFeeds'
 import { formatRoiOverlayCode } from '../utils/roiOverlayCode'
-import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
 
 function visibleDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
-  return detections.filter(d => {
-    if (d.behavior === 'smoking' || d.behavior === 'fire') {
-      return d.confidence >= VIOLATION_MIN_CONFIDENCE
-    }
-    if (d.behavior === 'person') return true
-    return d.confidence >= 0.40
-  })
+  return detections.filter(d =>
+    (d.behavior === 'smoking' || d.behavior === 'fire') && d.confidence >= 0.45,
+  )
 }
 
 interface PcccOverlayProps {
@@ -34,6 +31,8 @@ interface PcccOverlayProps {
   videoRef: RefObject<HTMLVideoElement | null>
   enabled?: boolean
   compact?: boolean
+  videoFit?: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
 }
 
 function toOverlayDetections(detections: PcccDetection[]): MobileAiDetection[] {
@@ -118,6 +117,8 @@ export const PcccOverlay = memo(function PcccOverlay({
   videoRef,
   enabled = true,
   compact,
+  videoFit = 'cover',
+  videoObjectPosition = 'center',
 }: PcccOverlayProps) {
   const { detections, frameSize, layoutTick } = usePcccState(
     cameraId,
@@ -125,30 +126,24 @@ export const PcccOverlay = memo(function PcccOverlay({
     enabled,
   )
 
-  const { visible: cycledDetections, pulse } = useRoiCycleDisplay(
-    detections,
-    d => d.behavior === 'smoking' || d.behavior === 'fire',
-    {
-      getScanRank: d => pcccScanRank(d.behavior),
-      getViolationRank: d => pcccViolationRank(d.behavior),
-      ...OVERLAY_CYCLE_DEFAULTS,
-    },
-  )
+  const showContent = enabled && detections.length > 0 && frameSize.width > 0
 
-  const showContent = enabled && cycledDetections.length > 0 && frameSize.width > 0
+  const resolvedFit = videoFit ?? getVideoObjectFitForCamera(cameraId)
+  const resolvedPosition = videoObjectPosition ?? getVideoObjectPositionForCamera(cameraId)
 
   if (!showContent) return null
 
   return (
     <MobileAiOverlay
-      detections={cycledDetections}
+      detections={detections}
       frameWidth={frameSize.width}
       frameHeight={frameSize.height}
       videoRef={videoRef}
       layoutTick={layoutTick}
       compact={compact}
-      pulse={pulse}
       modelId="pccc"
+      videoFit={resolvedFit}
+      videoObjectPosition={resolvedPosition}
     />
   )
 })

@@ -1,4 +1,13 @@
 /** Canvas + cache dùng chung theo từng thẻ video — tránh tạo canvas mới mỗi lần AI chụp frame. */
+import {
+  getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
+} from '@/modules/module02-training/data/trainingCameraFeeds'
+import {
+  getVisibleVideoSourceRect,
+  type VideoSourceRect,
+} from './videoOverlayCoords'
+
 interface VideoCaptureState {
   canvas: HTMLCanvasElement
   ctx: CanvasRenderingContext2D
@@ -12,6 +21,11 @@ const analyzeIntervalScaleByVideo = new WeakMap<HTMLVideoElement, number>()
 
 /** Khoảng cách tối thiểu giữa 2 lần drawImage thực sự (ms). */
 const MIN_CAPTURE_GAP_MS = 160
+
+export interface VideoCaptureViewport {
+  fit: 'cover' | 'contain'
+  objectPosition: 'center' | 'bottom'
+}
 
 export function invalidateVideoFrameCapture(video: HTMLVideoElement): void {
   const state = captureStateByVideo.get(video)
@@ -32,16 +46,27 @@ export function scaledAnalyzeDelay(video: HTMLVideoElement, delayMs: number): nu
   return Math.round(delayMs * getVideoAnalyzeIntervalScale(video))
 }
 
+function resolveCaptureRegion(
+  video: HTMLVideoElement,
+  viewport?: VideoCaptureViewport,
+): VideoSourceRect {
+  const w = video.videoWidth
+  const h = video.videoHeight
+  if (!w || !h) return { x: 0, y: 0, width: 0, height: 0 }
+  if (!viewport) return { x: 0, y: 0, width: w, height: h }
+  return getVisibleVideoSourceRect(video, viewport.fit, viewport.objectPosition)
+}
+
 export function captureVideoFrameBase64(
   video: HTMLVideoElement,
   maxWidth = 480,
   quality = 0.52,
+  viewport?: VideoCaptureViewport,
 ): string | null {
-  const w = video.videoWidth
-  const h = video.videoHeight
-  if (!w || !h) return null
+  const region = resolveCaptureRegion(video, viewport)
+  if (region.width <= 0 || region.height <= 0) return null
 
-  const cacheKey = `${maxWidth}:${quality}`
+  const cacheKey = `${maxWidth}:${quality}:${Math.round(region.x)}:${Math.round(region.y)}:${Math.round(region.width)}:${Math.round(region.height)}`
   const now = performance.now()
   let state = captureStateByVideo.get(video)
 
@@ -54,9 +79,9 @@ export function captureVideoFrameBase64(
     return state.lastBase64
   }
 
-  const scale = w > maxWidth ? maxWidth / w : 1
-  const cw = Math.round(w * scale)
-  const ch = Math.round(h * scale)
+  const scale = region.width > maxWidth ? maxWidth / region.width : 1
+  const cw = Math.max(1, Math.round(region.width * scale))
+  const ch = Math.max(1, Math.round(region.height * scale))
 
   if (!state) {
     const canvas = document.createElement('canvas')
@@ -71,7 +96,11 @@ export function captureVideoFrameBase64(
     state.canvas.height = ch
   }
 
-  state.ctx.drawImage(video, 0, 0, cw, ch)
+  state.ctx.drawImage(
+    video,
+    region.x, region.y, region.width, region.height,
+    0, 0, cw, ch,
+  )
   const dataUrl = state.canvas.toDataURL('image/jpeg', quality)
   const comma = dataUrl.indexOf(',')
   const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : null
@@ -80,4 +109,17 @@ export function captureVideoFrameBase64(
   state.cacheKey = cacheKey
   state.lastBase64 = base64
   return base64
+}
+
+/** Gửi full frame — ROI backend dùng polygon 0–1 trên khung gốc; overlay map qua mapBackendBboxToOverlay. */
+export function captureCameraAnalyzeFrame(
+  video: HTMLVideoElement,
+  cameraId: string,
+  maxWidth = 640,
+  quality = 0.72,
+): string | null {
+  return captureVideoFrameBase64(video, maxWidth, quality, {
+    fit: getVideoObjectFitForCamera(cameraId),
+    objectPosition: getVideoObjectPositionForCamera(cameraId),
+  })
 }

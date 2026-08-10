@@ -1,5 +1,5 @@
 import {
-  captureVideoFrameBase64,
+  captureCameraAnalyzeFrame,
   getMobileAiBackendUrl,
   scaledAnalyzeDelay,
   type MobileAiConnectionStatus,
@@ -18,7 +18,17 @@ export interface CraneProximityDetection {
   confidence: number
   bbox: [number, number, number, number]
   distance_m?: number
-  machine_kind?: 'crane_green' | 'sany_drill' | 'excavator_orange' | 'tower_crane' | 'machinery_yellow' | 'machinery'
+  machine_kind?:
+    | 'crane_green'
+    | 'sany_drill'
+    | 'excavator_orange'
+    | 'tower_crane'
+    | 'machinery_yellow'
+    | 'road_roller'
+    | 'dump_truck'
+    | 'forklift'
+    | 'machinery'
+  machine_bbox?: [number, number, number, number]
 }
 
 export interface CraneProximityRoiZone {
@@ -172,7 +182,7 @@ export function createCraneProximityClient(
     }
 
     // q≥0.72 — q55 làm lệch màu xanh máy xúc, bbox detect sai vị trí
-    const image = captureVideoFrameBase64(video, 640, 0.72)
+    const image = captureCameraAnalyzeFrame(video, cameraId, 640, 0.72)
     if (!image) {
       scheduleNext(500)
       return

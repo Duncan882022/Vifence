@@ -228,7 +228,7 @@ export function getModelDefinition(modelId: CameraAiModelId) {
 
 export function modelBoxStyle(
   modelId: CameraAiModelId,
-  role: 'subject' | 'violation',
+  role: 'subject' | 'violation' | 'info',
 ): { border: string; fill: string; label: string; bg: string } {
   const v = getCameraAiModelVisual(modelId)
   if (role === 'violation') {
@@ -239,12 +239,14 @@ export function modelBoxStyle(
       bg: v.violationBg,
     }
   }
-  return {
+  const subject = {
     border: v.subjectBorder,
     fill: v.subjectFill,
     label: v.subjectLabel,
     bg: v.subjectBg,
   }
+  if (role === 'info') return subject
+  return subject
 }
 
 export const ALL_CAMERA_AI_MODELS = CAMERA_AI_MODEL_CATALOG

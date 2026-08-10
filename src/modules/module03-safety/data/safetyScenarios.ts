@@ -72,6 +72,15 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
     devices: [{ type: 'DRONE', role: 'PRIMARY' }, { type: 'MOBILE', role: 'VERIFICATION' }],
   },
   {
+    id: 'BPTC-001',
+    groupId: 'BPTC',
+    description: 'Lưới bao che giàn giáo thiếu, rách hoặc bẩn — nguy cơ rơi vật liệu',
+    monitoringModes: ['CONTINUOUS', 'CHANGE_DETECTION'],
+    automationLevel: 'AI_ASSISTED',
+    defaultSeverity: 'VIOLATION',
+    devices: [{ type: 'FIXED_CAMERA', role: 'PRIMARY' }],
+  },
+  {
     id: 'BPTC-007',
     groupId: 'BPTC',
     description: 'Diện tích bùn đất che phủ mặt đường vượt ngưỡng cho phép trong ROI',

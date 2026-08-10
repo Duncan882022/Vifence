@@ -33,6 +33,8 @@ function violationToRecord(v: SafetyViolationRecord): CameraPlaybackRecord {
     seekSec: meta.seekSec ?? getViolationClipMarker(violationType ?? feedType),
     clipDurationSec: EVENT_PLAYBACK_CLIP_SEC,
     violationBbox: meta.bbox,
+    subjectBbox: meta.subjectBbox,
+    relatedBbox: meta.relatedBbox,
     frameWidth: meta.frameWidth,
     frameHeight: meta.frameHeight,
     thumbnailUrl: v.snapshotUrl,

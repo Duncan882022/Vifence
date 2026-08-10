@@ -116,9 +116,20 @@ export const CAMERA_FEED_BY_ID: Record<string, CameraFeedKey> = {
 
 export function getOverlayFitForFeed(feedKey: CameraFeedKey): 'cover' | 'contain' {
   if (feedKey.startsWith('bodycam-')) return 'contain'
-  /** TTDV-A Cam 03/04 — khung dọc/vuông demo, không crop */
+  /** TTDV-A Cam 03/04 — contain: hiển thị full khung gốc, không crop (640² / 1024×976). */
   if (feedKey === 'ocp1-a-03' || feedKey === 'ocp1-a-04') return 'contain'
   return 'cover'
+}
+
+/** object-position khi dùng object-cover — Cam 03/04 dùng contain nên luôn center. */
+export function getVideoObjectPositionForCamera(
+  cameraId: string,
+  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'fixed',
+): 'center' | 'bottom' {
+  if (streamType === 'bodycam' || streamType === 'mobile') return 'center'
+  const feedKey = getFeedKeyForCamera(cameraId)
+  if (feedKey === 'ocp1-a-03' || feedKey === 'ocp1-a-04') return 'center'
+  return 'center'
 }
 
 export function getVideoObjectFitForCamera(
@@ -138,4 +149,21 @@ export function getFeedKeyForCamera(cameraId: string): CameraFeedKey | undefined
 export function getStreamUrlForCamera(cameraId: string): string | undefined {
   const key = getFeedKeyForCamera(cameraId)
   return key ? getCameraFeedUrl(key) : undefined
+}
+
+/**
+ * VMS mode — HLS stream URL từ backend.
+ * Khi VMS_MODE_ENABLED=true trên VPS, camera A-03/A-04 stream qua HLS.
+ * VITE_VMS_BACKEND_URL phải trỏ tới backend (vd https://217.217.253.247.nip.io).
+ */
+export function getVmsHlsUrl(cameraId: string): string | undefined {
+  const backendUrl = import.meta.env.VITE_VMS_BACKEND_URL as string | undefined
+  if (!backendUrl) return undefined
+  const base = backendUrl.replace(/\/$/, '')
+  return `${base}/stream/${cameraId}/index.m3u8`
+}
+
+/** Trả về URL stream tốt nhất: VMS HLS nếu có, fallback MP4 local. */
+export function getBestStreamUrl(cameraId: string): string | undefined {
+  return getVmsHlsUrl(cameraId) ?? getStreamUrlForCamera(cameraId)
 }

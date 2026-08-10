@@ -1,7 +1,12 @@
 import type { RefObject } from 'react'
 import dayjs from 'dayjs'
 import { Camera } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import { cameraDisplayLabel, type TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import {
+  getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
+} from '@/modules/module02-training/data/trainingCameraFeeds'
 import type { CameraPlaybackRecord } from '@/types/cameraPlayback'
 import { getCameraLocation as getLocation } from '@/utils/cameraPlaybackUi'
 import { EventPlaybackViewport } from '@/modules/module03-safety/components/EventPlaybackViewport'
@@ -30,6 +35,8 @@ export function PlaybackVideoFrame({
 }: PlaybackVideoFrameProps) {
   const location = getLocation(cam)
   const isEventClip = selectedRecord?.type === 'event'
+  const playbackFit = getVideoObjectFitForCamera(cam.id)
+  const playbackObjectPosition = getVideoObjectPositionForCamera(cam.id)
   const clipLabel = isEventClip
     ? `Clip ${selectedRecord?.clipDurationSec ?? 3}s · ROI vi phạm`
     : null
@@ -42,16 +49,23 @@ export function PlaybackVideoFrame({
           <EventPlaybackViewport
             videoRef={videoRef}
             bbox={selectedRecord?.violationBbox}
+            subjectBbox={selectedRecord?.subjectBbox}
+            relatedBbox={selectedRecord?.relatedBbox}
             frameWidth={selectedRecord?.frameWidth}
             frameHeight={selectedRecord?.frameHeight}
-            videoFit="contain"
+            videoFit={playbackFit}
+            videoObjectPosition={playbackObjectPosition}
             zoomEnabled={false}
             className="z-[1]"
           >
             <video
               ref={videoRef}
               src={videoSrc}
-              className="absolute inset-0 w-full h-full object-contain bg-black"
+              className={cn(
+                'absolute inset-0 w-full h-full bg-black',
+                playbackFit === 'contain' ? 'object-contain' : 'object-cover',
+                playbackObjectPosition === 'bottom' && playbackFit === 'cover' && 'object-bottom',
+              )}
               muted={muted}
               playsInline
               preload="auto"
