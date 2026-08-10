@@ -9,7 +9,7 @@ import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cam
 import { useOverlaySceneReset } from '@/modules/module03-safety/hooks/useOverlaySceneReset'
 import { notifySafetyAiEventsChanged } from '@/modules/module03-safety/services/safetyAiEvents.service'
 import { useVmsDetections } from '@/modules/module03-safety/context/VmsDetectionContext'
-import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
+import { isVmsLiveCamera, shouldShowVmsLiveRoiOverlay } from '@/modules/module03-safety/services/vmsDetections.service'
 import { getRoiZonesForCamera } from '../data/housekeepingRoiConfig'
 import { useStableOverlayDetections } from '@/modules/module03-safety/hooks/useStableOverlayDetections'
 import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
@@ -353,7 +353,10 @@ export function RoadAnalysisOverlay({
 
   if (!enabled) return null
 
-  const showPolygon = roiZones.length > 0 && !isVmsLiveCamera(cameraId)
+  // A-03: luôn vẽ ROI lòng đường mặc định; cam VMS khác (A-04) chỉ bbox — cấu hình ROI per-cam sau.
+  const showPolygon = roiZones.length > 0 && (
+    shouldShowVmsLiveRoiOverlay(cameraId) || !isVmsLiveCamera(cameraId)
+  )
   const showBoxes = visible.length > 0 && frameSize.width > 0
   const video = videoRef.current
   const overlayFrameSize =

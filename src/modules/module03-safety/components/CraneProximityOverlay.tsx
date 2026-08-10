@@ -430,7 +430,7 @@ export const CraneProximityOverlay = memo(function CraneProximityOverlay({
     return merged
   }, [stickyViolations, stableDetections])
 
-  // VMS live (A-03/A-04): chỉ bbox detection — không vẽ polygon zone trên tile (Spec §D9).
+  // A-04 VMS: chỉ bbox detection — không vẽ polygon CRANE_BODY/CRANE_WORK (cấu hình ROI per-cam sau).
   const showPolygon = roiZones.length > 0 && !isVmsLiveCamera(cameraId)
   const video = videoRef.current
   const overlayFrameSize =

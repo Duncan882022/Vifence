@@ -10,6 +10,13 @@ const TUNNEL_HEADERS: Record<string, string> = {
 
 const VMS_CAMERA_IDS = new Set(['A-03', 'A-04'])
 
+/** Cam VMS luôn vẽ polygon ROI mặc định trên live tile — sau sẽ cấu hình per-cam. */
+const VMS_LIVE_ROI_OVERLAY_CAMERAS = new Set(['A-03'])
+
+export function shouldShowVmsLiveRoiOverlay(cameraId: string): boolean {
+  return VMS_LIVE_ROI_OVERLAY_CAMERAS.has(cameraId)
+}
+
 export interface VmsOverlayDetection {
   behavior: string
   label: string
