@@ -19,11 +19,13 @@ const CRANE_ROI_ZONES: CameraAiRoiZone[] = [
     id: 'roi-crane-work-a04',
     label: 'Vùng làm việc gần cẩu — Cam 04',
     type: 'CRANE_WORK',
+    /** Bám lòng đường/bãi làm việc phía trước — cùng trace roi-road-a04. */
     polygon: [
-      { x: 0.06, y: 0.56 },
-      { x: 0.94, y: 0.56 },
-      { x: 0.94, y: 0.98 },
-      { x: 0.06, y: 0.98 },
+      { x: 0.02, y: 1.0000 },
+      { x: 0.98, y: 1.0000 },
+      { x: 0.88, y: 0.52 },
+      { x: 0.12, y: 0.48 },
+      { x: 0.02, y: 0.72 },
     ],
   },
 ]

@@ -118,13 +118,13 @@ ROAD_SCENARIO_META = {
     },
     "mesh_missing": {
         "scenario_id": "BPTC-001",
-        "scenario_name": "Lưới bao che thiếu/hở",
+        "scenario_name": "Lưới bao che thiếu",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
     "mesh_torn": {
         "scenario_id": "BPTC-001",
-        "scenario_name": "Lưới bao che bị rách",
+        "scenario_name": "Lưới bao che thiếu",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
@@ -351,6 +351,11 @@ class ViolationEvent(BaseModel):
             event_date=day,
             camera_id=camera_id,
             snapshot_file=snapshot_file,
+            worker_id=detection.worker_id,
+            worker_name=detection.worker_name,
+            employee_code=detection.employee_code,
+            contractor_name=detection.contractor_name,
+            face_match_confidence=detection.face_match_confidence,
         )
 
     @classmethod

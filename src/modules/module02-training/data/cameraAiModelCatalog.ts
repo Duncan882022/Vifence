@@ -16,7 +16,7 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     label: 'Lòng đường',
     groupId: 'BPTC',
     scenarioIds: ['BPTC-007', 'BPTC-008', 'BPTC-009', 'BPTC-001'],
-    description: 'Bùn, nước đọng, vật cản (bbox) + lưới bao che thiếu/hở/bẩn (polygon xanh). Auto-train road_material + safety_mesh_cover.',
+    description: 'Bùn, nước đọng, vật cản (bbox) + lưới bao che thiếu/bẩn (polygon xanh). Auto-train road_material + safety_mesh_cover.',
     needsPolygon: true,
     polygonHint: 'Vẽ ROAD (+ MESH tùy chọn).',
     endpoint: '/analyze/road/frame',
@@ -24,7 +24,7 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     overlayKind: 'road',
     modelVersion: 'v3',
     modelMetric: 'mAP50 0.82 · mesh HSV',
-    videoSegments: [{ startSec: 0, endSec: 10.05 }],
+    videoSegments: [{ startSec: 0, endSec: 15.05 }],
   },
   {
     id: 'crane_proximity',
@@ -87,8 +87,8 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     endpoint: '/analyze/atgt/frame',
     overlayKind: 'atgt',
     videoSegments: [
-      { startSec: 0, endSec: 10.5 },
-      { startSec: 10.5, endSec: 15.05 },
+      { startSec: 5, endSec: 15.5 },
+      { startSec: 15.5, endSec: 20.05 },
     ],
   },
   {

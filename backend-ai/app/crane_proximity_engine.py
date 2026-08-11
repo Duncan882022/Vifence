@@ -15,6 +15,7 @@ from .schemas import CraneProximityDetection, ViolationEvent
 from .snapshot_sync import build_snapshot_episode, merge_episode_best
 from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS
 from .track_matching import assign_person_track_id, bbox_iou
+from .worker_identity.detection_enrich import copy_worker_identity
 
 logger = logging.getLogger("crane_proximity_engine")
 
@@ -81,9 +82,9 @@ class CraneProximityEngine:
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
                 min_duration_seconds=_CONFIRM_SECONDS,
-                cooldown_seconds=_REPEAT_SECONDS,
+                cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=True,
+                one_event_per_episode=settings.event_log_one_per_episode,
             )
         return self._gates[camera_id][track_id]
 
@@ -122,6 +123,8 @@ class CraneProximityEngine:
 
         for det in violations:
             person = _match_person(det, persons)
+            if person is not None:
+                copy_worker_identity(person, det)
             person_bbox = [float(v) for v in (person.bbox if person else det.bbox)]
             machine_bbox = (
                 [float(v) for v in det.machine_bbox]

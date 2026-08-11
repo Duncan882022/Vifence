@@ -74,8 +74,15 @@ apt-get install -y -qq \
 REMOTE_PACKAGES
 
 echo "→ Pre-deploy audit (13 nhóm ATLĐ)…"
-if [[ -x "${ROOT}/backend-ai/.venv/bin/python" ]]; then
-  "${ROOT}/backend-ai/.venv/bin/python" "${ROOT}/backend-ai/scripts/audit_pre_deploy.py" || {
+if [[ "${SKIP_PRE_DEPLOY_AUDIT:-}" == "1" ]]; then
+  echo "⚠ Bỏ qua audit (SKIP_PRE_DEPLOY_AUDIT=1)"
+elif [[ -x "${ROOT}/backend-ai/.venv/bin/python" ]]; then
+  mkdir -p "${ROOT}/backend-ai/.tmp"
+  TMPDIR="${ROOT}/backend-ai/.tmp" \
+  A03_BPTC_EVENT_LOGGING_ENABLED=true \
+  ATGT_LANE_VIOLATION_ONLY=false \
+  EVENT_TEST_MODE=true \
+    "${ROOT}/backend-ai/.venv/bin/python" "${ROOT}/backend-ai/scripts/audit_pre_deploy.py" || {
     echo "✗ Pre-deploy audit FAIL — sửa backend trước khi rsync."
     exit 1
   }
@@ -87,7 +94,7 @@ echo "→ Rsync backend-ai…"
 ssh_cmd "mkdir -p ${REMOTE_DIR}"
 rsync_cmd
 
-echo "→ Rsync model inference (crane_machinery YOLO)…"
+echo "→ Rsync model inference (crane_machinery + safety_mesh_cover + worker_face YOLO)…"
 rsync_inference() {
   local ssh_rsh
   if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
@@ -97,13 +104,33 @@ rsync_inference() {
   else
     ssh_rsh="ssh -o StrictHostKeyChecking=no"
   fi
-  ssh_cmd "mkdir -p ${REMOTE_DIR}/data/auto_train/crane_machinery"
-  if [[ -f "$ROOT/backend-ai/data/auto_train/crane_machinery/v4_best.pt" ]]; then
-    rsync -avz \
-      -e "$ssh_rsh" \
-      "$ROOT/backend-ai/data/auto_train/crane_machinery/v4_best.pt" \
-      "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/data/auto_train/crane_machinery/v4_best.pt"
-  fi
+  for task in crane_machinery safety_mesh_cover worker_face; do
+    ssh_cmd "mkdir -p ${REMOTE_DIR}/data/auto_train/${task}/images ${REMOTE_DIR}/data/auto_train/${task}/labels"
+    local weights=""
+    for v in v4_best.pt v3_best.pt v2_best.pt v1_best.pt; do
+      if [[ -f "$ROOT/backend-ai/data/auto_train/${task}/${v}" ]]; then
+        weights="$ROOT/backend-ai/data/auto_train/${task}/${v}"
+        break
+      fi
+    done
+    if [[ -n "$weights" ]]; then
+      rsync -avz -e "$ssh_rsh" "$weights" \
+        "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/data/auto_train/${task}/$(basename "$weights")"
+    fi
+    if [[ -d "$ROOT/backend-ai/data/auto_train/${task}/images" ]]; then
+      local n
+      n="$(find "$ROOT/backend-ai/data/auto_train/${task}/images" -name '*.jpg' 2>/dev/null | wc -l | tr -d ' ')"
+      if [[ "${n:-0}" -gt 0 ]]; then
+        echo "   → ${task}: ${n} seed images…"
+        rsync -avz -e "$ssh_rsh" \
+          "$ROOT/backend-ai/data/auto_train/${task}/images/" \
+          "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/data/auto_train/${task}/images/"
+        rsync -avz -e "$ssh_rsh" \
+          "$ROOT/backend-ai/data/auto_train/${task}/labels/" \
+          "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/data/auto_train/${task}/labels/"
+      fi
+    fi
+  done
   if [[ -f "$ROOT/backend-ai/data/auto_train/registry.json" ]]; then
     rsync -avz \
       -e "$ssh_rsh" \
@@ -160,12 +187,17 @@ PORT=8000
 DETECTION_LOOP_ENABLED=false
 AUTO_TRAIN_ENABLED=${VPS_AUTO_TRAIN_ENABLED}
 AUTO_TRAIN_INFERENCE_ENABLED=true
-AUTO_TRAIN_SCHEDULE_HOURS_LOCAL=0,6
+AUTO_TRAIN_SCHEDULE_HOURS_LOCAL=0,6,22
 AUTO_TRAIN_SCHEDULE_TZ_OFFSET_HOURS=7
 AUTO_TRAIN_SCHEDULE_WINDOW_MINUTES=90
 AUTO_TRAIN_CHECK_INTERVAL_SECONDS=120
 AUTO_TRAIN_MIN_INTERVAL_SECONDS=39600
 AUTO_TRAIN_MIN_NEW_SAMPLES_DELTA=10
+A03_BPTC_EVENT_LOGGING_ENABLED=true
+ATGT_LANE_VIOLATION_ONLY=false
+ATGT_DEMO_FAKE_PLATE_FALLBACK=false
+EVENT_TEST_MODE=false
+EVENT_FIRST_SEEN_WINDOW_SECONDS=10800
 CAMERA_SOURCE=0
 VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
 VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04}
@@ -185,6 +217,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/vifence/backend-ai
 EnvironmentFile=/opt/vifence/backend-ai/.env
+Environment=TORCHDYNAMO_DISABLE=1
+Environment=PYTORCH_JIT=0
 ExecStart=/opt/vifence/backend-ai/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
@@ -215,6 +249,12 @@ server {
     client_max_body_size 20M;
 
     location / {
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "*" always;
+        if (\\\$request_method = OPTIONS) {
+            return 204;
+        }
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \\\$http_upgrade;
@@ -252,6 +292,12 @@ server {
     client_max_body_size 20M;
 
     location / {
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "*" always;
+        if (\\\$request_method = OPTIONS) {
+            return 204;
+        }
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \\\$http_upgrade;

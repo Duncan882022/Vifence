@@ -22,7 +22,6 @@ import {
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
   getAlertCardStatusDisplay,
-  isIconOnlyHandlingBadge,
   shouldShowAlertHandlingBadge,
 } from '../utils/safetyDashboardUi'
 import { SafetyGroupIconBadge } from './SafetyGroupIconBadge'
@@ -60,30 +59,18 @@ function StatusBadge({ record }: { record: SafetyViolationRecord }) {
   const StatusIcon = statusDisplay.icon
   if (!shouldShowAlertHandlingBadge(record)) return null
 
-  if (isIconOnlyHandlingBadge(record)) {
-    return (
-      <TagTooltip content={statusDisplay.label} className="shrink-0">
-        <span
-          className={cn(
-            'w-6 h-6 rounded border inline-flex items-center justify-center',
-            statusDisplay.badgeClassName,
-          )}
-          aria-label={statusDisplay.label}
-        >
-          <StatusIcon className="w-3 h-3" aria-hidden />
-        </span>
-      </TagTooltip>
-    )
-  }
-
   return (
-    <span className={cn(
-      'text-[9px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1',
-      statusDisplay.badgeClassName,
-    )}>
-      <StatusIcon className="w-3 h-3" aria-hidden />
-      {statusDisplay.label}
-    </span>
+    <TagTooltip content={statusDisplay.label} className="shrink-0">
+      <span
+        className={cn(
+          'w-5 h-5 rounded border inline-flex items-center justify-center',
+          statusDisplay.badgeClassName,
+        )}
+        aria-label={statusDisplay.label}
+      >
+        <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
+      </span>
+    </TagTooltip>
   )
 }
 

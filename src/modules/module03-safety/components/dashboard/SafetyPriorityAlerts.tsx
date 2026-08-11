@@ -21,7 +21,6 @@ import {
   getAlertCardStatusDisplay,
   getAlertHandlingStatus,
   isAiAutoHandled,
-  isIconOnlyHandlingBadge,
   isManualUnhandled,
   AI_AUTO_STATUS_LABEL,
   SEVERITY_BADGE,
@@ -212,7 +211,7 @@ function AlertCard({
                   label={statusDisplay.label}
                   badgeClassName={statusDisplay.badgeClassName}
                   icon={statusDisplay.icon}
-                  iconOnly={isIconOnlyHandlingBadge(v)}
+                  iconOnly
                 />
               )}
             </div>

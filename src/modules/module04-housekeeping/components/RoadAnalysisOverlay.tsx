@@ -56,8 +56,9 @@ function visibleDetections(
 }
 
 
-/** Polygon ROI — chỉ vẽ MESH (lưới bao che); không vẽ ROAD xanh trên live tile. */
+/** Polygon ROI — ROAD xanh (lòng đường) + MESH xanh dương (lưới bao che), nét 1.2. */
 const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
+  ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.12)' },
   MESH: { stroke: 'rgba(56, 189, 248, 0.95)', fill: 'rgba(14, 165, 233, 0.10)' },
   STORAGE: { stroke: 'rgba(167, 139, 250, 0.30)', fill: 'none', dash: '4 3' },
 }
@@ -186,8 +187,8 @@ function RoiPolygons({
       preserveAspectRatio="none"
       aria-hidden
     >
-      {zones.filter(z => z.type === 'MESH').map(zone => {
-        const style = ROI_STROKE.MESH
+      {zones.filter(z => z.type === 'ROAD' || z.type === 'MESH').map(zone => {
+        const style = ROI_STROKE[zone.type] ?? ROI_STROKE.ROAD
         const points = polygonPointsOnVideo(
           zone.polygon,
           video,
@@ -204,6 +205,7 @@ function RoiPolygons({
             fill={style.fill}
             stroke={style.stroke}
             strokeWidth={ROI_POLYGON_STROKE_WIDTH}
+            strokeDasharray={style.dash}
             vectorEffect="non-scaling-stroke"
           />
         )
@@ -237,7 +239,10 @@ function useRoadAnalysisState(
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
   const resetDetections = useCallback(() => setDetections([]), [])
   const vms = useVmsDetections()
-  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
+  useOverlaySceneReset(videoRef, enabled, resetDetections, {
+    liveHls: Boolean(vms?.active),
+    cameraId,
+  })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
@@ -343,10 +348,19 @@ function useRoadAnalysisState(
   }, [cameraId, enabled, stopClient, videoRef, backendUrlVersion, vms?.active])
 
   const effectiveRoiZones = useMemo<RoadAnalysisRoiZone[]>(() => {
-    const fromVms = (vms?.snapshot?.roi_zones ?? [])
-      .filter(z => z.type === 'ROAD' || z.type === 'MESH')
-    if (fromVms.length > 0) return fromVms
-    return roiZones
+    const fromVms = (vms?.snapshot?.roi_zones ?? []).filter(
+      z => z.type === 'ROAD' || z.type === 'MESH',
+    )
+    const byId = new Map(roiZones.map(z => [z.id, z]))
+    for (const z of fromVms) {
+      byId.set(z.id, {
+        id: z.id,
+        label: z.label ?? byId.get(z.id)?.label ?? z.id,
+        type: z.type,
+        polygon: z.polygon,
+      })
+    }
+    return [...byId.values()].filter(z => z.type === 'ROAD' || z.type === 'MESH')
   }, [roiZones, vms?.snapshot?.roi_zones])
 
   return { status, statusMsg, detections, frameSize, metrics, roiZones: effectiveRoiZones, layoutTick, backendUrlVersion }
@@ -374,10 +388,7 @@ export function RoadAnalysisOverlay({
     missGraceFrames,
   })
   const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
-
-  if (!enabled) return null
-
-  const showPolygon = roiZones.some(z => z.type === 'MESH') && liveRoiVisible
+  const showPolygon = liveRoiVisible && roiZones.some(z => z.type === 'ROAD' || z.type === 'MESH')
   const video = videoRef.current
   const overlayFrameSize = {
     width: frameSize.width > 0
@@ -389,11 +400,12 @@ export function RoadAnalysisOverlay({
   }
   const showBoxes = visible.length > 0 && overlayFrameSize.width > 0
 
+  if (!enabled) return null
   if (!showPolygon && !showBoxes) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {showPolygon && overlayFrameSize.width > 0 && (
+      {showPolygon && (
         <RoiPolygons
           key={`road-roi-${layoutTick}`}
           zones={roiZones}

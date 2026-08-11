@@ -1496,74 +1496,73 @@ def _snap_water_bbox_to_puddle_mask(
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int]:
-    """Kéo bbox ôm theo mặt nạ vũng ướt — tránh chỉ bám mảnh contour nhỏ."""
+    """Kéo bbox ôm theo mặt nạ vũng ướt quanh seed — không trải ngang cả lòng đường."""
     x1, y1, x2, y2 = [int(v) for v in box]
+    bw = max(x2 - x1, 1)
+    pad_x = max(10, int(bw * 0.14))
+    x_lo = max(0, x1 - pad_x)
+    x_hi = min(frame_width, x2 + pad_x)
     h = max(y2 - y1, 1)
-    y_band_top = max(0, y2 - max(int(h * 0.92), 24))
-    band = puddle_mask[y_band_top:y2, :]
+    y_band_top = max(0, y2 - max(int(h * 0.95), 28))
+    band = puddle_mask[y_band_top:y2, x_lo:x_hi]
     if band.size == 0:
         return box
     cols = np.where(np.any(band > 0, axis=0))[0]
-    if len(cols) < 10:
+    if len(cols) < 8:
         return box
-    lx, rx = int(cols.min()), int(cols.max()) + 1
+    lx = x_lo + int(cols.min())
+    rx = x_lo + int(cols.max()) + 1
     sub = puddle_mask[y_band_top:y2, lx:rx]
     rows = np.where(np.any(sub > 0, axis=1))[0]
-    if len(rows) < 6:
+    if len(rows) < 5:
         return box
     ty1 = y_band_top + int(rows.min())
     ty2 = y_band_top + int(rows.max()) + 1
+    pad_y = max(4, int((ty2 - ty1) * 0.06))
     candidate = (
-        max(0, min(lx, x1)),
-        y1,
-        min(frame_width, max(rx, x2)),
-        min(frame_height, max(y2, ty2)),
+        max(0, lx - max(4, int(bw * 0.04))),
+        max(0, min(y1, ty1) - pad_y),
+        min(frame_width, rx + max(4, int(bw * 0.04))),
+        min(frame_height, ty2 + pad_y),
     )
     clipped = _clip_water_box_to_roi(candidate, roi_mask, frame_width, frame_height)
     return clipped or box
 
 
-def _fit_water_bbox_to_full_puddle(
+def _local_water_bbox_from_puddle(
     puddle_mask: np.ndarray,
-    roi_mask: np.ndarray,
     seed: tuple[int, int, int, int],
+    roi_mask: np.ndarray,
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int]:
-    """Kéo bbox ôm trọn vũng ngang phía gần camera — khớp snapshot demo BPTC-008."""
+    """BBox gọn quanh vũng — chỉ mở rộng trong vùng ướt liền seed."""
     h, w = puddle_mask.shape[:2]
-    y_floor = int(h * 0.50)
-    band = puddle_mask[y_floor:, :]
-    cols = np.where(np.any(band > 0, axis=0))[0]
-    if len(cols) < 16:
-        return seed
-    lx, rx = int(cols.min()), int(cols.max()) + 1
-    if (rx - lx) < w * 0.28:
-        return seed
-    sub = puddle_mask[y_floor:, lx:rx]
-    rows = np.where(np.any(sub > 0, axis=1))[0]
-    if len(rows) < 6:
-        return seed
-    wet_y1 = y_floor + int(rows.min())
-    wet_y2 = y_floor + int(rows.max()) + 1
     sx1, sy1, sx2, sy2 = [int(v) for v in seed]
-    y1 = max(int(h * 0.82), wet_y1, sy1 - max(8, int(h * 0.02)))
-    y2 = min(h, max(wet_y2, sy2, int(h * 0.94)))
-    if y2 - y1 < int(h * 0.08):
-        y1 = max(0, y2 - int(h * 0.16))
+    seed_paint = np.zeros((h, w), dtype=np.uint8)
+    seed_paint[sy1:sy2, sx1:sx2] = 255
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17))
+    local = cv2.dilate(seed_paint, kernel, iterations=2)
+    local = cv2.bitwise_and(local, puddle_mask)
+    local = cv2.bitwise_and(local, roi_mask)
+    ys, xs = np.where(local > 0)
+    if len(xs) < 10:
+        component = _water_puddle_component_bbox(
+            puddle_mask, seed, roi_mask, frame_width, frame_height,
+        )
+        return component or seed
+
+    envelope = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+    pad_x = max(6, int((envelope[2] - envelope[0]) * 0.05))
+    pad_y = max(5, int((envelope[3] - envelope[1]) * 0.07))
     candidate = (
-        max(0, min(lx, sx1)),
-        y1,
-        min(w, max(rx, sx2)),
-        min(h, y2),
+        max(0, envelope[0] - pad_x),
+        max(0, envelope[1] - pad_y),
+        min(w, envelope[2] + pad_x),
+        min(h, envelope[3] + pad_y),
     )
     clipped = _clip_water_box_to_roi(candidate, roi_mask, w, h)
-    if clipped is None:
-        return seed
-    cx1, _cy1, cx2, _cy2 = clipped
-    if (cx2 - cx1) < w * 0.28:
-        return seed
-    return clipped
+    return clipped or seed
 
 
 def _expand_water_bbox_to_puddle(
@@ -1574,63 +1573,38 @@ def _expand_water_bbox_to_puddle(
     frame_width: int,
     frame_height: int,
 ) -> tuple[int, int, int, int]:
-    """Mở rộng bbox vũng nước ôm trọn vùng ướt liền nhau — không chỉ mảnh contour nhỏ."""
-    frame_area = max(frame_width * frame_height, 1)
-    seed_area = max((seed[2] - seed[0]) * (seed[3] - seed[1]), 1)
+    """Mở rộng bbox vũng nước gọn quanh vũng thật — không trải ngang cả lòng đường."""
+    max_width = frame_width * 0.46
 
-    if _is_valid_water_box(hsv, seed, frame_width, frame_height, expanded=True):
-        if seed_area >= frame_area * 0.028:
-            snapped = _snap_water_bbox_to_puddle_mask(
-                seed, puddle_mask, roi_mask, frame_width, frame_height,
-            )
-            fitted = _fit_water_bbox_to_full_puddle(
-                puddle_mask, roi_mask, snapped, frame_width, frame_height,
-            )
-            if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
-                return fitted
-            return snapped
-
-    component = _water_puddle_component_bbox(
+    local = _local_water_bbox_from_puddle(
         puddle_mask, seed, roi_mask, frame_width, frame_height,
     )
-    if component is None:
-        return _snap_water_bbox_to_puddle_mask(
-            seed, puddle_mask, roi_mask, frame_width, frame_height,
-        )
-
-    comp_area = max((component[2] - component[0]) * (component[3] - component[1]), 1)
-    if (
-        comp_area >= seed_area * 1.08
-        and comp_area <= max(frame_area * 0.22, seed_area * 4.5)
+    if (local[2] - local[0]) <= max_width and _is_valid_water_box(
+        hsv, local, frame_width, frame_height,
     ):
-        fitted = _fit_water_bbox_to_full_puddle(
-            puddle_mask, roi_mask, component, frame_width, frame_height,
-        )
-        if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
-            return fitted
-        snapped = _snap_water_bbox_to_puddle_mask(
-            component, puddle_mask, roi_mask, frame_width, frame_height,
-        )
-        fitted = _fit_water_bbox_to_full_puddle(
-            puddle_mask, roi_mask, snapped, frame_width, frame_height,
-        )
-        if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
-            return fitted
+        return local
+    if (local[2] - local[0]) <= max_width and _is_valid_water_box(
+        hsv, local, frame_width, frame_height, expanded=True,
+    ):
+        return local
 
-    if _is_valid_water_box(hsv, seed, frame_width, frame_height, expanded=True):
-        snapped = _snap_water_bbox_to_puddle_mask(seed, puddle_mask, roi_mask, frame_width, frame_height)
-    elif _is_valid_water_box(hsv, component, frame_width, frame_height, expanded=True):
-        snapped = _snap_water_bbox_to_puddle_mask(component, puddle_mask, roi_mask, frame_width, frame_height)
-    else:
-        snapped = _snap_water_bbox_to_puddle_mask(seed, puddle_mask, roi_mask, frame_width, frame_height)
-    fitted = _fit_water_bbox_to_full_puddle(
-        puddle_mask, roi_mask, snapped, frame_width, frame_height,
+    snapped = _snap_water_bbox_to_puddle_mask(
+        seed, puddle_mask, roi_mask, frame_width, frame_height,
     )
-    if _is_valid_water_box(hsv, fitted, frame_width, frame_height, expanded=True):
-        return fitted
-    if _is_valid_water_box(hsv, snapped, frame_width, frame_height, expanded=True):
+    if (snapped[2] - snapped[0]) <= max_width and _is_valid_water_box(
+        hsv, snapped, frame_width, frame_height,
+    ):
         return snapped
-    return fitted
+    if (snapped[2] - snapped[0]) <= max_width and _is_valid_water_box(
+        hsv, snapped, frame_width, frame_height, expanded=True,
+    ):
+        return snapped
+
+    if _is_valid_water_box(hsv, seed, frame_width, frame_height):
+        return seed
+    if _is_valid_water_box(hsv, seed, frame_width, frame_height, expanded=True):
+        return seed
+    return local if (local[2] - local[0]) <= (snapped[2] - snapped[0]) else snapped
 
 
 def _analyze_water(
@@ -1789,8 +1763,10 @@ def episode_snapshot_score(
                 return -1.0
             pct = det.area_percent or 0.0
             cx = (box[0] + box[2]) / 2
+            bw = box[2] - box[0]
             x_bonus = max(0.0, 12000.0 - abs(cx / max(frame_width, 1) - 0.36) * 28000.0)
-            return geo + x_bonus + pct * 4.0 + det.confidence * 50.0
+            compact_bonus = max(0.0, frame_width * 0.44 - bw) * 14.0
+            return geo + x_bonus + compact_bonus + pct * 4.0 + det.confidence * 50.0
         pct = det.area_percent or 0.0
         return det.confidence * 1000.0 + pct * 10.0
     return det.confidence
@@ -2250,7 +2226,7 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str, *, stabilize: bool = T
             "polygon": z["polygon"],
         }
         for z in zones
-        if z["type"] == "ROAD"
+        if z["type"] in ("ROAD", "MESH")
     ]
 
     return {

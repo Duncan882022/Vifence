@@ -14,6 +14,7 @@ Exit 0 = sẵn sàng deploy · Exit 1 = chặn deploy.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,12 @@ def _run_step(label: str, script: Path) -> int:
     if not script.exists():
         print(f"FAIL — thiếu script {script}")
         return 1
-    proc = subprocess.run([str(PY), str(script)], cwd=str(ROOT))
+    env = os.environ.copy()
+    env["EVENT_TEST_MODE"] = "true"
+    env["A03_BPTC_EVENT_LOGGING_ENABLED"] = "true"
+    env["ATGT_LANE_VIOLATION_ONLY"] = "false"
+    env["ATGT_DEMO_FAKE_PLATE_FALLBACK"] = "true"
+    proc = subprocess.run([str(PY), str(script)], cwd=str(ROOT), env=env)
     if proc.returncode != 0:
         print(f"\n✗ FAIL — {label}")
         return proc.returncode

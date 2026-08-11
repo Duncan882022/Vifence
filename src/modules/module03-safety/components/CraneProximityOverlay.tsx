@@ -39,12 +39,12 @@ const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
 const INFO_MIN_CONFIDENCE = OVERLAY_MIN_CONFIDENCE
 const MACHINE_MIN_CONFIDENCE = MACHINERY_INFO_MIN_CONFIDENCE
 
-const ROI_STROKE: Record<string, { stroke: string; fill: string; dash: string }> = {
-  CRANE_WORK: { stroke: 'rgba(56, 189, 248, 0.85)', fill: 'rgba(56, 189, 248, 0.10)', dash: '6 4' },
-  CRANE_BODY: { stroke: 'rgba(251, 191, 36, 0.55)', fill: 'none', dash: '5 4' },
+const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
+  CRANE_WORK: { stroke: 'rgba(56, 189, 248, 0.95)', fill: 'rgba(56, 189, 248, 0.10)' },
+  CRANE_BODY: { stroke: 'rgba(251, 191, 36, 0.75)', fill: 'none' },
 }
-/** Cam A-04 — polygon ROI mỏng hơn ATGT/Road (1.2). */
-const CRANE_ROI_POLYGON_STROKE_WIDTH = 0.75
+/** Cam A-04 — đồng bộ nét polygon với Cam A-03 (Road/ATGT). */
+const CRANE_ROI_POLYGON_STROKE_WIDTH = 1.2
 
 function CraneRoiPolygons({
   zones,
@@ -271,7 +271,10 @@ function useCraneProximityState(
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
   const vms = useVmsDetections()
-  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
+  useOverlaySceneReset(videoRef, enabled, resetDetections, {
+    liveHls: Boolean(vms?.active),
+    cameraId,
+  })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return

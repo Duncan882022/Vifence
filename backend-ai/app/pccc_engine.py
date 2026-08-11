@@ -33,9 +33,9 @@ class PcccEngine:
         if behavior not in self._gates[camera_id]:
             self._gates[camera_id][behavior] = PersistenceDebouncer(
                 min_duration_seconds=_CONFIRM_SECONDS,
-                cooldown_seconds=_REPEAT_SECONDS,
+                cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=True,
+                one_event_per_episode=settings.event_log_one_per_episode,
             )
         return self._gates[camera_id][behavior]
 

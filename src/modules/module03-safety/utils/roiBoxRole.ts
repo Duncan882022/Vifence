@@ -71,6 +71,28 @@ export interface OverlayBoxStyle {
   role: RoiBoxRole
 }
 
+/** BPTC-001 — thiếu lưới (xanh) vs bẩn lưới (nâu). */
+const MESH_BEHAVIOR_BOX_STYLES: Record<string, Omit<OverlayBoxStyle, 'role'>> = {
+  mesh_missing: {
+    border: 'border-green-400/95 border-2 border-solid',
+    fill: 'bg-green-500/16',
+    label: 'text-green-200',
+    bg: 'bg-green-600/40',
+  },
+  mesh_torn: {
+    border: 'border-green-400/95 border-2 border-solid',
+    fill: 'bg-green-500/16',
+    label: 'text-green-200',
+    bg: 'bg-green-600/40',
+  },
+  mesh_dirty: {
+    border: 'border-[#92400e]/95 border-2 border-solid',
+    fill: 'bg-[#78350f]/26',
+    label: 'text-amber-50',
+    bg: 'bg-[#92400e]/58',
+  },
+}
+
 /** Màu + kiểu viền overlay camera — đồng bộ snapshot backend. */
 export function getOverlayBoxStyle(
   modelId: CameraAiModelId,
@@ -79,6 +101,10 @@ export function getOverlayBoxStyle(
 ): OverlayBoxStyle {
   const key = resolveBehaviorForRoiRole(behavior, machineKind)
   const role = resolveRoiBoxRole(key)
+  const meshStyle = MESH_BEHAVIOR_BOX_STYLES[key]
+  if (meshStyle) {
+    return { ...meshStyle, role }
+  }
   const tokens = modelBoxStyle(modelId, role === 'violation' ? 'violation' : 'info')
   const border = role === 'violation'
     ? cn(tokens.border, 'border-2 border-solid')

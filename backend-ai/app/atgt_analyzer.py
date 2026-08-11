@@ -158,14 +158,90 @@ def _mask_bbox(mask: np.ndarray) -> tuple[float, float, float, float] | None:
     return float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())
 
 
+def _centroid_in_mask(bbox: tuple[float, ...], mask: np.ndarray) -> bool:
+    h, w = mask.shape[:2]
+    cx = int((bbox[0] + bbox[2]) / 2)
+    cy = int((bbox[1] + bbox[3]) / 2)
+    if cx < 0 or cy < 0 or cx >= w or cy >= h:
+        return False
+    return mask[cy, cx] > 0
+
+
+def _bbox_overlap_mask_ratio(bbox: tuple[float, ...], mask: np.ndarray) -> float:
+    h, w = mask.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return 0.0
+    patch = mask[y1:y2, x1:x2]
+    return float(np.count_nonzero(patch)) / max((x2 - x1) * (y2 - y1), 1)
+
+
+def _clip_bbox_to_mask(
+    bbox: tuple[float, ...],
+    mask: np.ndarray,
+) -> tuple[float, float, float, float] | None:
+    h, w = mask.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 - x1 < 12 or y2 - y1 < 10:
+        return None
+    patch = np.zeros((h, w), dtype=np.uint8)
+    patch[y1:y2, x1:x2] = 255
+    clipped = cv2.bitwise_and(patch, mask)
+    return _mask_bbox(clipped)
+
+
+def lane_detection_inside_road(
+    bbox: tuple[float, ...] | list[float],
+    mask: np.ndarray,
+    *,
+    min_overlap: float = 0.42,
+) -> bool:
+    """Phân làn / vi phạm ATGT-004 chỉ hợp lệ khi nằm trong polygon ROAD."""
+    box = tuple(float(v) for v in bbox)
+    if not _centroid_in_mask(box, mask):
+        return False
+    return _bbox_overlap_mask_ratio(box, mask) >= min_overlap
+
+
+def _road_lane_interior_mask(mask: np.ndarray, height: int, width: int) -> np.ndarray:
+    """Phần lòng đường phía gần camera — bên trong polygon ROAD."""
+    interior = mask.copy()
+    interior[: int(height * 0.28), :] = 0
+    return interior
+
+
+def _interior_row_span(interior: np.ndarray, y: int) -> tuple[int, int] | None:
+    cols = np.where(interior[y, :] > 0)[0]
+    if len(cols) < 8:
+        return None
+    return int(cols[0]), int(cols[-1])
+
+
+def _finalize_lane_detection(
+    bbox: tuple[float, float, float, float] | None,
+    mask: np.ndarray,
+) -> tuple[float, float, float, float] | None:
+    if bbox is None:
+        return None
+    clipped = _clip_bbox_to_mask(bbox, mask)
+    if clipped is None:
+        return None
+    if not lane_detection_inside_road(clipped, mask):
+        return None
+    return clipped
+
+
 def _detect_hard_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, float, float, float] | None:
     """Dải phân cách cứng (bê tông/kim loại cố định) — cạnh dài, ~ngang, xuyên ROI.
 
     Cạnh phải được tính trên ảnh GỐC rồi mới cắt theo mask — nếu che nền về 0
     trước khi tính Canny sẽ tự tạo viền giả đúng theo biên polygon ROI."""
     h, w = frame.shape[:2]
-    # Chỉ tìm phân cách ở nửa trên ROI — tránh bắt nhầm dầm thép/vật tư phía dưới.
-    lane_mask = mask.copy()
+    lane_mask = _road_lane_interior_mask(mask, h, w)
     lane_mask[int(h * 0.62) :, :] = 0
     if cv2.countNonZero(lane_mask) < 120:
         return None
@@ -193,15 +269,16 @@ def _detect_hard_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, flo
 
     if best is None or best_len < min_len:
         return None
-    return best
+    return _finalize_lane_detection(best, mask)
 
 
 def _detect_soft_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, float, float, float] | None:
-    """Phân cách mềm (chóp nón / dải phản quang cam) trong ROI."""
+    """Phân cách mềm (chóp nón / dải phản quang cam) trong polygon ROAD."""
     h, w = frame.shape[:2]
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    search = _road_lane_interior_mask(mask, h, w)
     orange = cv2.inRange(hsv, np.array([4, 120, 120]), np.array([22, 255, 255]))
-    orange = cv2.bitwise_and(orange, orange, mask=mask)
+    orange = cv2.bitwise_and(orange, orange, mask=search)
     orange = cv2.morphologyEx(orange, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), 1)
     cnts, _ = cv2.findContours(orange, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
@@ -218,19 +295,26 @@ def _detect_soft_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, flo
         return None
     if bw < 28 or bh < 18:
         return None
-    return float(x), float(y), float(x + bw), float(y + bh)
+    return _finalize_lane_detection((float(x), float(y), float(x + bw), float(y + bh)), mask)
 
 
 def _detect_paved_lane_edge(
     frame: np.ndarray,
     mask: np.ndarray,
 ) -> tuple[float, float, float, float] | None:
-    """Lề / vạch trắng lớp nhựa bên phải — phân làn thật trên lòng đường (Cam A-03)."""
+    """Vạch trắng lớp nhựa — bên phải lòng đường trong polygon ROAD."""
     h, w = frame.shape[:2]
-    search = mask.copy()
-    search[:, : int(w * 0.34)] = 0
+    interior = _road_lane_interior_mask(mask, h, w)
+    search = interior.copy()
+    for y in range(h):
+        span = _interior_row_span(interior, y)
+        if span is None:
+            search[y, :] = 0
+            continue
+        x_left, x_right = span
+        cut = x_left + int((x_right - x_left) * 0.38)
+        search[y, :cut] = 0
     search[int(h * 0.74) :, :] = 0
-    search[: int(h * 0.36), :] = 0
     if cv2.countNonZero(search) < 120:
         return None
 
@@ -274,19 +358,26 @@ def _detect_paved_lane_edge(
     x1, y1, x2, y2 = best
     thickness = max(8.0, (y2 - y1) * 0.55 + 12.0)
     cy = (y1 + y2) / 2.0
-    return (x1, cy - thickness / 2, x2, cy + thickness / 2)
+    return _finalize_lane_detection((x1, cy - thickness / 2, x2, cy + thickness / 2), mask)
 
 
 def _detect_fence_median(
     frame: np.ndarray,
     mask: np.ndarray,
 ) -> tuple[float, float, float, float] | None:
-    """Hàng rào tạm đỏ-trắng — phân cách luồng người / xe (ATGT soft median)."""
+    """Hàng rào tạm — chỉ trong polygon ROAD (không lấy hàng rào ngoài lề)."""
     h, w = frame.shape[:2]
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    search = mask.copy()
-    search[:, int(w * 0.42) :] = 0
-    search[: int(h * 0.22), :] = 0
+    interior = _road_lane_interior_mask(mask, h, w)
+    search = interior.copy()
+    for y in range(h):
+        span = _interior_row_span(interior, y)
+        if span is None:
+            search[y, :] = 0
+            continue
+        x_left, x_right = span
+        cut = x_left + int((x_right - x_left) * 0.58)
+        search[y, cut:] = 0
     if cv2.countNonZero(search) < 80:
         return None
 
@@ -332,11 +423,14 @@ def _detect_fence_median(
     y2 = max(b[3] for b in qualifying)
     pad_x = max(6, int((x2 - x1) * 0.10))
     pad_y = max(4, int((y2 - y1) * 0.03))
-    return (
-        float(max(0, x1 - pad_x)),
-        float(max(0, y1 - pad_y)),
-        float(min(w, x2 + pad_x)),
-        float(min(h, y2 + pad_y)),
+    return _finalize_lane_detection(
+        (
+            float(max(0, x1 - pad_x)),
+            float(max(0, y1 - pad_y)),
+            float(min(w, x2 + pad_x)),
+            float(min(h, y2 + pad_y)),
+        ),
+        mask,
     )
 
 
@@ -345,38 +439,40 @@ def _missing_lane_separation_bbox(
     width: int,
     height: int,
 ) -> tuple[float, float, float, float] | None:
-    """Vùng thiếu phân cách — dọc lề trái lòng đường (vị trí hàng rào)."""
-    roi_bbox = _mask_bbox(mask)
-    if roi_bbox is None:
-        return None
-    rx1, ry1, rx2, ry2 = roi_bbox
-    strip_w = max(28.0, (rx2 - rx1) * 0.16)
-    lane_x2 = rx1 + strip_w
-    lane_y1 = ry1 + (ry2 - ry1) * 0.30
-    return (rx1, lane_y1, lane_x2, ry2)
+    """Vùng thiếu phân cách — dải trái bên trong polygon ROAD."""
+    h, w = mask.shape[:2]
+    interior = _road_lane_interior_mask(mask, h, w)
+    strip = np.zeros((h, w), dtype=np.uint8)
+    y_start = int(h * 0.28)
+    for y in range(y_start, h):
+        span = _interior_row_span(interior, y)
+        if span is None:
+            continue
+        x_left, x_right = span
+        strip_w = max(28, int((x_right - x_left) * 0.20))
+        strip[y, x_left : min(w, x_left + strip_w)] = 255
+    strip = cv2.bitwise_and(strip, interior)
+    bbox = _mask_bbox(strip)
+    return _finalize_lane_detection(bbox, mask) if bbox else None
 
 
 def _left_lane_missing_median(
     frame: np.ndarray,
     mask: np.ndarray,
 ) -> tuple[float, float, float, float] | None:
-    """Lề trái thiếu phân làn — vẫn log ATGT-004 khi hàng rào phải đã có soft_median."""
+    """Lề trái thiếu phân làn — kiểm tra trong polygon ROAD."""
     h, w = frame.shape[:2]
-    roi_bbox = _mask_bbox(mask)
-    if roi_bbox is None:
-        return None
-    rx1, ry1, rx2, ry2 = roi_bbox
-    lane_x2 = rx1 + max(28.0, (rx2 - rx1) * 0.52)
-    lane_y1 = ry1 + (ry2 - ry1) * 0.28
+    interior = _road_lane_interior_mask(mask, h, w)
     left_mask = np.zeros((h, w), dtype=np.uint8)
-    cv2.rectangle(
-        left_mask,
-        (int(rx1), int(lane_y1)),
-        (int(lane_x2), int(ry2)),
-        255,
-        -1,
-    )
-    left_mask = cv2.bitwise_and(left_mask, mask)
+    y_start = int(h * 0.28)
+    for y in range(y_start, h):
+        span = _interior_row_span(interior, y)
+        if span is None:
+            continue
+        x_left, x_right = span
+        lane_x2 = x_left + max(28, int((x_right - x_left) * 0.52))
+        left_mask[y, x_left:lane_x2] = 255
+    left_mask = cv2.bitwise_and(left_mask, interior)
     if cv2.countNonZero(left_mask) < 120:
         return None
 
@@ -389,7 +485,8 @@ def _left_lane_missing_median(
     marked_ratio = cv2.countNonZero(lane_mark) / max(cv2.countNonZero(left_mask), 1)
     if marked_ratio >= 0.018:
         return None
-    return (rx1, lane_y1, rx1 + max(28.0, (lane_x2 - rx1) * 0.88), ry2)
+    bbox = _mask_bbox(left_mask)
+    return _finalize_lane_detection(bbox, mask) if bbox else None
 
 
 def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
@@ -468,6 +565,27 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
     ]
 
 
+def _accept_demo_vehicle(
+    bbox: tuple[float, ...],
+    confidence: float,
+    plate: str | None,
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Demo Cam A-03 — bỏ FP hàng rào/vật tĩnh; chỉ giữ xe có biển hoặc conf cao."""
+    if plate:
+        return True
+    if confidence < 0.58:
+        return False
+    cx = (bbox[0] + bbox[2]) / 2.0
+    if cx > frame_w * 0.68:
+        return False
+    area_ratio = ((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])) / max(frame_w * frame_h, 1)
+    if area_ratio < 0.012:
+        return False
+    return confidence >= 0.72
+
+
 def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detection]:
     detector = _get_vehicle_detector()
     conf_floor = settings.atgt_demo_vehicle_conf if settings.atgt_demo_enabled else _VEHICLE_CONF
@@ -479,9 +597,12 @@ def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detec
     speeds: dict[int, float] = {}
 
     detections: list[Detection] = []
+    fh, fw = frame.shape[:2]
     for idx, det in enumerate(raw):
         bbox = bboxes[idx]
         plate = resolve_vehicle_plate(frame, bbox, camera_id=camera_id)
+        if settings.atgt_demo_enabled and not _accept_demo_vehicle(bbox, det.confidence, plate, fw, fh):
+            continue
         vtype = det.vehicle_type or "Phương tiện"
         label = f"{vtype} · {plate}" if plate else vtype
         detections.append(

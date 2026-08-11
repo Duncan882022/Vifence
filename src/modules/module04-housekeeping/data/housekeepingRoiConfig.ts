@@ -50,14 +50,17 @@ export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
   },
   {
     id: 'roi-mesh-a03',
-    label: 'Lưới bao che thiếu/hở/bẩn — TTDV-A Cam 03',
+    label: 'Lưới bao che thiếu/bẩn — TTDV-A Cam 03',
     type: 'MESH',
     cameraId: 'A-03',
+    /**
+     * Màn che / mesh — chiếm 1.9/3 (~63%) phía trên toàn khung Cam A-03 (full width).
+     */
     polygon: [
-      { x: 0.3500, y: 0.1000 },
-      { x: 0.9800, y: 0.0800 },
-      { x: 0.9800, y: 0.6800 },
-      { x: 0.4200, y: 0.5500 },
+      { x: 0.0000, y: 0.0000 },
+      { x: 1.0000, y: 0.0000 },
+      { x: 1.0000, y: 0.6333 },
+      { x: 0.0000, y: 0.6333 },
     ],
     exemptFromOccupancy: true,
   },

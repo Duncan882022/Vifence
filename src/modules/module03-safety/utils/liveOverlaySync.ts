@@ -1,22 +1,52 @@
 import type { TrackLockConfig } from './bboxTrackLock'
 import type { VmsDetectionSnapshot } from '../services/vmsDetections.service'
 
-/** Live VMS tile — bbox bám khung poll hiện tại, không giữ ROI frame cũ. */
+/** Live VMS tile — EMA + track lock giữa các poll (~6 FPS), không reset mỗi poll. */
 export const LIVE_TRACK_LOCK_CONFIG: Partial<TrackLockConfig> = {
   matchIouMin: 0.22,
   unlockIouMin: 0.1,
-  maxMissFrames: 0,
-  smoothAlpha: 1,
+  maxMissFrames: 2,
+  smoothAlpha: 0.42,
   minConfidence: 0.5,
   matchSameBehavior: true,
 }
 
-export const LIVE_MISS_GRACE_FRAMES = 0
+export const LIVE_MISS_GRACE_FRAMES = 2
 
+const lastPtsByCamera = new Map<string, number>()
+const sceneEpochByCamera = new Map<string, number>()
+
+/** Video loop / seek trên tile — reset track lock giữa các poll. */
+export function bumpVmsOverlaySceneEpoch(cameraId: string): void {
+  const next = (sceneEpochByCamera.get(cameraId) ?? 0) + 1
+  sceneEpochByCamera.set(cameraId, next)
+  lastPtsByCamera.delete(cameraId)
+}
+
+function detectSceneEpochBump(cameraId: string, pts: number): number {
+  let epoch = sceneEpochByCamera.get(cameraId) ?? 0
+  const prev = lastPtsByCamera.get(cameraId)
+  if (prev != null && Number.isFinite(prev)) {
+    const looped = pts < prev - 0.08
+    const jumped = pts - prev > 0.45
+    if (looped || jumped) {
+      epoch += 1
+      sceneEpochByCamera.set(cameraId, epoch)
+    }
+  }
+  lastPtsByCamera.set(cameraId, pts)
+  return epoch
+}
+
+/** Key ổn định theo cam + scene epoch — chỉ đổi khi loop/nhảy cảnh, không theo từng poll. */
 export function buildVmsOverlaySyncKey(snapshot: VmsDetectionSnapshot | null | undefined): string {
-  if (!snapshot) return ''
+  if (!snapshot?.camera_id) return ''
+  const cam = snapshot.camera_id
   const pts = snapshot.source_pts_sec
-  return pts != null && Number.isFinite(pts)
-    ? `${snapshot.updated_at}:${pts.toFixed(3)}`
-    : String(snapshot.updated_at)
+  if (pts != null && Number.isFinite(pts)) {
+    const epoch = detectSceneEpochBump(cam, pts)
+    return `${cam}:${epoch}`
+  }
+  const epoch = sceneEpochByCamera.get(cam) ?? 0
+  return `${cam}:${epoch}`
 }

@@ -51,8 +51,39 @@ class Settings(BaseSettings):
     wah_event_repeat_seconds: float = 900.0
     atgt_event_repeat_seconds: float = 900.0
 
-    # Chặn ghi trùng nhanh cùng dedup_key (giây) — bổ sung one_event_per_episode.
+    # Cửa sổ "lần đầu" theo dedup_key: giữ created_at, chỉ refresh snapshot.
+    # Sau cửa sổ mới cho phép event mới (cùng lỗi có thể là lần hành vi khác).
+    event_first_seen_window_seconds: float = 10800.0  # 3 giờ
+
+    # Chặn ghi trùng rất nhanh (giây) — lớp phụ; cửa sổ chính = first_seen.
     event_rapid_dedup_seconds: float = 45.0
+
+    # Local/test: confirm nhanh ~8s (bỏ one_event_per_episode). Production: false.
+    # Vẫn giữ created_at lần đầu + refresh snapshot trong event_first_seen_window.
+    event_test_mode: bool = False
+
+    # Cam A-03: overlay BPTC vẫn chạy; chỉ tắt ghi sự kiện mud/water/object/mesh.
+    a03_bptc_event_logging_enabled: bool = False
+
+    # ATGT: mặc định chỉ log thiếu phân làn (ATGT-004). Audit/predeploy: false.
+    atgt_lane_violation_only: bool = True
+
+    def event_repeat_seconds(self, configured: float) -> float:
+        """Cooldown giữa các lần confirm engine cùng track."""
+        return 8.0 if self.event_test_mode else configured
+
+    @property
+    def event_log_one_per_episode(self) -> bool:
+        return not self.event_test_mode
+
+    @property
+    def event_first_seen_window_effective(self) -> float:
+        """Cửa sổ giữ giờ lần đầu — test mode rút 2 phút để audit/local re-log được."""
+        return 120.0 if self.event_test_mode else self.event_first_seen_window_seconds
+
+    @property
+    def event_rapid_dedup_effective(self) -> float:
+        return self.event_first_seen_window_effective
 
     # Nhận diện công nhân — gắn danh tính vào vi phạm (PPE/WAH/PCCC).
     worker_recognition_enabled: bool = True
@@ -60,11 +91,13 @@ class Settings(BaseSettings):
     worker_demo_fallback_enabled: bool = False
     worker_gallery_dir: str = "data/worker_gallery"
 
-    # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số (fake nếu OCR fail).
+    # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True
     atgt_demo_confirm_seconds: float = 0.0
     atgt_demo_max_gap_seconds: float = 120.0
     atgt_demo_vehicle_conf: float = 0.32
+    # Biển số giả ngẫu nhiên khi OCR fail — tắt mặc định (dùng anchor/OCR thật).
+    atgt_demo_fake_plate_fallback: bool = False
 
     # Hút thuốc — lặp snapshot mỗi 15 phút nếu vẫn phát hiện.
     smoking_event_cooldown_seconds: float = 900.0

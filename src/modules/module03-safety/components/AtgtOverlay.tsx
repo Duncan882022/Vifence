@@ -279,7 +279,10 @@ function useAtgtState(
   const backendUrlVersion = useMobileAiBackendVersion()
   const resetDetections = useCallback(() => setDetections([]), [])
   const vms = useVmsDetections()
-  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
+  useOverlaySceneReset(videoRef, enabled, resetDetections, {
+    liveHls: Boolean(vms?.active),
+    cameraId,
+  })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return

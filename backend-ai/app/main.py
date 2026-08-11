@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .auto_train.frame_collectors import (
     collect_crane_sample,
+    collect_face_sample,
     collect_mesh_sample,
     collect_ppe_sample,
     collect_road_sample,
@@ -147,6 +148,12 @@ async def lifespan(app: FastAPI):
 
     if settings.vms_mode_enabled:
         logger.info("VMS mode: server-side AI + HLS stream đang khởi động…")
+        if settings.event_test_mode:
+            logger.info("EVENT_TEST_MODE=true — log lặp ~8s/track.")
+        if not settings.a03_bptc_event_logging_enabled:
+            logger.info("Cam A-03: không ghi sự kiện BPTC (chỉ overlay).")
+        if settings.atgt_lane_violation_only:
+            logger.info("ATGT: chỉ log thiếu phân làn (ATGT-004).")
         engine.ensure_models_loaded()
         _build_vms_workers()
         for worker in _vms_workers.values():
@@ -173,6 +180,10 @@ async def lifespan(app: FastAPI):
         daemon=True,
     ).start()
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
+    if settings.event_test_mode:
+        logger.warning(
+            "EVENT_TEST_MODE=bật — log sự kiện lặp ~8s/track (chỉ dùng local/test)."
+        )
     yield
 
     if settings.vms_mode_enabled:
@@ -292,7 +303,10 @@ def event_snapshot(event_id: str):
     path = engine.store.resolve_snapshot_path(event_id, snapshot_file)
     if path is None or not path.exists():
         return {"error": "not_found"}
-    return FileResponse(path)
+    return FileResponse(
+        path,
+        headers={"Cache-Control": "no-cache, max-age=0, must-revalidate"},
+    )
 
 
 @app.get("/training/status")
@@ -377,6 +391,13 @@ def debug_frame():
 # VMS stream endpoints
 # ---------------------------------------------------------------------------
 
+_STREAM_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+}
+
+
 @app.get("/stream/{camera_id}/index.m3u8")
 def vms_stream_playlist(camera_id: str):
     """HLS playlist cho camera VMS (live stream từ MP4 loop)."""
@@ -388,7 +409,7 @@ def vms_stream_playlist(camera_id: str):
     return FileResponse(
         str(worker.hls_index_path()),
         media_type="application/vnd.apple.mpegurl",
-        headers={"Cache-Control": "no-cache, no-store"},
+        headers={"Cache-Control": "no-cache, no-store", **_STREAM_CORS_HEADERS},
     )
 
 
@@ -415,7 +436,7 @@ def vms_stream_segment(camera_id: str, segment: str):
     seg_path = worker.hls_index_path().parent / segment
     if not seg_path.exists():
         raise HTTPException(status_code=404, detail="Segment not found")
-    return FileResponse(str(seg_path), media_type="video/mp2t")
+    return FileResponse(str(seg_path), media_type="video/mp2t", headers=_STREAM_CORS_HEADERS)
 
 
 @app.get("/cameras/vms")
@@ -467,6 +488,7 @@ def _collect_crane_auto_train_sample(small: np.ndarray, result: dict) -> None:
 
 def _collect_ppe_auto_train_sample(small: np.ndarray, result: dict) -> None:
     collect_ppe_sample(small, result)
+    collect_face_sample(small, result)
 
 
 def _collect_mesh_auto_train_sample(small: np.ndarray, result: dict) -> None:

@@ -8,7 +8,7 @@ import { getEventAreaLabel, getEventSourceLabel } from '../../utils/safetyCamera
 import { displayUnknown } from '../../utils/displayUnknown'
 import { getResponsiblePartyLabel } from '../../utils/eventSubject'
 import {
-  formatSla, getAlertCardStatusDisplay, isIconOnlyHandlingBadge, SEVERITY_BADGE,
+  formatSla, getAlertCardStatusDisplay, SEVERITY_BADGE,
   SEVERITY_ICONS,
   SEVERITY_LABELS_UI,
   shouldShowAlertHandlingBadge,
@@ -253,24 +253,17 @@ export function SafetyViolationTable({
                   </td>
                   <td className="px-2 py-1.5 align-top">
                     {showHandlingBadge && (
-                      isIconOnlyHandlingBadge(v) ? (
-                        <TagTooltip content={statusDisplay.label} className="inline-flex">
-                          <span
-                            className={cn(
-                              'w-5 h-5 rounded border inline-flex items-center justify-center',
-                              statusDisplay.badgeClassName,
-                            )}
-                            aria-label={statusDisplay.label}
-                          >
-                            <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                          </span>
-                        </TagTooltip>
-                      ) : (
-                        <span className={cn('text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5', statusDisplay.badgeClassName)}>
+                      <TagTooltip content={statusDisplay.label} className="inline-flex">
+                        <span
+                          className={cn(
+                            'w-5 h-5 rounded border inline-flex items-center justify-center',
+                            statusDisplay.badgeClassName,
+                          )}
+                          aria-label={statusDisplay.label}
+                        >
                           <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-                          {statusDisplay.label}
                         </span>
-                      )
+                      </TagTooltip>
                     )}
                     <p className="text-[7px] text-muted-foreground/70 mt-0.5 truncate max-w-[90px]">{contractor}</p>
                   </td>

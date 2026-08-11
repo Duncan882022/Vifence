@@ -30,11 +30,12 @@ export function unionBboxes(...boxes: (ViolationBbox | undefined)[]): ViolationB
 
 /** Giây vào clip demo — giữa segment model hoặc marker clip cũ. */
 const SCENARIO_SEEK_SEC: Record<string, number> = {
-  'BPTC-007': 5,
-  'BPTC-008': 5,
-  'BPTC-009': 5,
-  'ATGT-002': 5,
-  'ATGT-004': 12,
+  'BPTC-001': 2.5,
+  'BPTC-007': 10,
+  'BPTC-008': 10,
+  'BPTC-009': 10,
+  'ATGT-002': 17,
+  'ATGT-004': 17,
   'PPE-001': 8,
   'PPE-002': 10,
   'PPE-003': 12,

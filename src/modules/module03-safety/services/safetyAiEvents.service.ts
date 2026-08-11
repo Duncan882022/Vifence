@@ -120,8 +120,10 @@ function normalizeBaseUrl(baseUrl: string): string {
   return `https://${trimmed}`
 }
 
-function buildSnapshotUrl(backendUrl: string, eventId: string): string {
-  return `${normalizeBaseUrl(backendUrl)}/events/${eventId}/snapshot`
+function buildSnapshotUrl(backendUrl: string, eventId: string, cacheKey?: number): string {
+  const base = `${normalizeBaseUrl(backendUrl)}/events/${eventId}/snapshot`
+  if (cacheKey == null || !Number.isFinite(cacheKey)) return base
+  return `${base}?t=${Math.floor(cacheKey)}`
 }
 
 export interface BackendViolationEvent {
@@ -222,7 +224,11 @@ export function mapBackendEventToSafetyRecord(
         : { type: 'PERSON' },
     verificationRequired: !isCam04Ai || event.behavior === 'crane_proximity',
     description: event.scenario_name ?? event.violation_type ?? getScenarioName(scenarioId),
-    snapshotUrl: buildSnapshotUrl(backendUrl, event.id),
+    snapshotUrl: buildSnapshotUrl(
+      backendUrl,
+      event.id,
+      event.confirmed_at ?? event.created_at,
+    ),
     bbox: event.bbox.length >= 4
       ? [event.bbox[0], event.bbox[1], event.bbox[2], event.bbox[3]]
       : undefined,

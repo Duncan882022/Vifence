@@ -194,17 +194,19 @@ class DetectionEngine:
                     if "min_duration" in cfg
                     else duration
                 ),
-                cooldown_seconds=(
-                    cfg["cooldown"]()
-                    if "cooldown" in cfg
-                    else cooldown
+                cooldown_seconds=settings.event_repeat_seconds(
+                    cfg["cooldown"]() if "cooldown" in cfg else cooldown
                 ),
                 max_gap_seconds=(
                     cfg["max_gap"]()
                     if "max_gap" in cfg
                     else 2.5
                 ),
-                one_event_per_episode=cfg.get("one_event_per_episode", False),
+                one_event_per_episode=(
+                    False
+                    if settings.event_test_mode
+                    else cfg.get("one_event_per_episode", False)
+                ),
             )
         return debouncers
 
@@ -335,9 +337,9 @@ class DetectionEngine:
     ) -> bool:
         now = time.time()
         if behavior == "smoking":
-            min_gap = settings.smoking_event_repeat_min_seconds
+            min_gap = settings.event_repeat_seconds(settings.smoking_event_repeat_min_seconds)
         else:
-            min_gap = settings.event_repeat_min_seconds
+            min_gap = settings.event_repeat_seconds(settings.event_repeat_min_seconds)
         key = f"{camera_id}:{behavior}"
         last_at = self._last_event_at.get(key)
         if last_at is not None and now - last_at < min_gap:

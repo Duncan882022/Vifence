@@ -40,5 +40,17 @@
     "employee_code": "NV001155",
     "contractor_name": "Vincons",
     "face_image": "w-019.jpg"
+  },
+  {
+    "worker_id": "w-020",
+    "worker_name": "Nguyễn Văn Vui",
+    "employee_code": "VCS00234",
+    "contractor_name": "Vincons",
+    "face_images": [
+      "w-020.jpg",
+      "w-020-2.jpg",
+      "w-020-3.jpg"
+    ],
+    "face_image": "w-020.jpg"
   }
 ]

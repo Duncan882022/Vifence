@@ -110,4 +110,16 @@ TASKS: dict[str, TaskConfig] = {
         batch=8,
         runtime_conf_threshold=0.50,
     ),
+    # Nhận diện khuôn mặt — pseudo-label từ YuNet (face_detection_yunet.onnx).
+    "worker_face": TaskConfig(
+        task_id="worker_face",
+        classes=["face"],
+        base_weights="yolov8n.pt",
+        min_new_samples=80,
+        min_interval_seconds=3600.0,
+        epochs=25,
+        imgsz=416,
+        batch=8,
+        runtime_conf_threshold=0.42,
+    ),
 }

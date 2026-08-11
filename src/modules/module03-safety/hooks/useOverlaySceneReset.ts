@@ -1,12 +1,13 @@
 import { useEffect, type RefObject } from 'react'
 import { invalidateVideoFrameCapture } from '@/modules/module02-training/utils/videoFrameCapture'
+import { bumpVmsOverlaySceneEpoch } from '../utils/liveOverlaySync'
 
 /** Xóa overlay + cache frame khi video loop / nhảy cảnh — tránh ROI “dính” frame cũ. */
 export function useOverlaySceneReset(
   videoRef: RefObject<HTMLVideoElement | null>,
   enabled: boolean,
   onReset: () => void,
-  options?: { liveHls?: boolean },
+  options?: { liveHls?: boolean; cameraId?: string },
 ): void {
   useEffect(() => {
     const video = videoRef.current
@@ -14,9 +15,13 @@ export function useOverlaySceneReset(
 
     let lastT = video.currentTime
     const liveHls = options?.liveHls ?? false
+    const cameraId = options?.cameraId
 
     const reset = () => {
       invalidateVideoFrameCapture(video)
+      if (liveHls && cameraId) {
+        bumpVmsOverlaySceneEpoch(cameraId)
+      }
       onReset()
     }
 
@@ -35,5 +40,5 @@ export function useOverlaySceneReset(
       video.removeEventListener('timeupdate', onTime)
       video.removeEventListener('seeked', reset)
     }
-  }, [videoRef, enabled, onReset, options?.liveHls])
+  }, [videoRef, enabled, onReset, options?.liveHls, options?.cameraId])
 }

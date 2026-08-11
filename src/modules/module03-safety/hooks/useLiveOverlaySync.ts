@@ -11,7 +11,7 @@ export interface LiveOverlaySyncState {
   syncKey: string
   trackLock: Partial<TrackLockConfig> | undefined
   missGraceFrames: number | undefined
-  /** Không animate bbox — tránh cảm giác ROI frame cũ trượt sang frame mới. */
+  /** Tắt CSS transition khi cần bbox nhảy tức thì (playback tua). */
   snapOverlay: boolean
 }
 
@@ -25,6 +25,6 @@ export function useLiveOverlaySync(): LiveOverlaySyncState {
     syncKey,
     trackLock: live ? LIVE_TRACK_LOCK_CONFIG : undefined,
     missGraceFrames: live ? LIVE_MISS_GRACE_FRAMES : undefined,
-    snapOverlay: live,
+    snapOverlay: false,
   }
 }

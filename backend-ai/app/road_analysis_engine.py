@@ -10,6 +10,7 @@ import numpy as np
 
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
+from .mesh_analyzer import MESH_VIOLATION_BEHAVIORS
 from .road_analyzer import (
     EVENT_MIN_CONFIDENCE,
     _is_valid_object_box,
@@ -71,12 +72,17 @@ class RoadAnalysisEngine:
         if camera_id not in self._gates:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
-            behavior = track_id if track_id in _BEHAVIOR_CONFIRM_SECONDS else "object"
+            behavior = track_id.split(":")[0] if ":" in track_id else track_id
+            if behavior not in _BEHAVIOR_CONFIRM_SECONDS:
+                behavior = "object"
+            confirm = _BEHAVIOR_CONFIRM_SECONDS.get(behavior, _ROAD_CONFIRM_SECONDS)
+            if settings.event_test_mode and behavior in {"object", "mud", "water"}:
+                confirm = min(confirm, 1.0)
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_BEHAVIOR_CONFIRM_SECONDS.get(behavior, _ROAD_CONFIRM_SECONDS),
-                cooldown_seconds=_ROAD_REPEAT_SECONDS,
+                min_duration_seconds=confirm,
+                cooldown_seconds=settings.event_repeat_seconds(_ROAD_REPEAT_SECONDS),
                 max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
-                one_event_per_episode=True,
+                one_event_per_episode=settings.event_log_one_per_episode,
             )
         return self._gates[camera_id][track_id]
 
@@ -107,7 +113,14 @@ class RoadAnalysisEngine:
         *,
         capture_frame: np.ndarray | None = None,
         stabilize: bool = True,
+        persist_events: bool | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
+        if persist_events is None:
+            persist_events = (
+                settings.a03_bptc_event_logging_enabled
+                if camera_id == "A-03"
+                else True
+            )
         snapshot_source = capture_frame if capture_frame is not None else frame
         result = analyze_road_frame(frame, camera_id, stabilize=stabilize)
         detections_raw = result.get("detections", [])
@@ -119,6 +132,8 @@ class RoadAnalysisEngine:
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         for row in detections_raw:
             det = RoadDetection.model_validate(row)
+            if det.behavior in MESH_VIOLATION_BEHAVIORS:
+                continue
             if det.behavior == "unknown" or det.label == UNKNOWN_LABEL:
                 continue
             if det.behavior == "object":
@@ -168,6 +183,8 @@ class RoadAnalysisEngine:
                 if top_det.confidence < EVENT_MIN_CONFIDENCE:
                     continue
                 snap_frame = pending["frame"]
+                if not persist_events:
+                    continue
                 event = self.store.add_road(
                     top_det,
                     snap_frame,

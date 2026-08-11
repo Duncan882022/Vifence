@@ -38,6 +38,8 @@ PPE_LABELS = {
 _PERSON_CONF = 0.40
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
+_HELMET_MODEL_MIN_CONF = 0.55
+_SHOE_MODEL_MIN_CONF = 0.52
 _MODEL_MIN_CONF = 0.62
 
 _person_detector: PersonDetector | None = None
@@ -71,15 +73,22 @@ def _sub_region(box: tuple[float, float, float, float], y0: float, y1: float) ->
     return x1, py1 + ph * y0, x2, py1 + ph * y1
 
 
+def _head_region_for_helmet(person_box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    """Vùng đỉnh đầu — mở rộng lên trên bbox người (YOLO hay cắt sát vai)."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    return x1, max(0.0, y1 - ph * 0.14), x2, y1 + ph * 0.24
+
+
 def _feet_region(
     person_box: tuple[float, float, float, float],
     frame_h: int,
 ) -> tuple[float, float, float, float]:
-    """Vùng chân — mở rộng xuống dưới bbox người để gom giày (YOLO hay cắt sát mắt cá)."""
+    """Vùng mắt cá — hẹp hơn, tránh gom quá nhiều nền bùn công trường."""
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
-    fy1 = y1 + ph * 0.72
-    fy2 = min(float(frame_h), y2 + ph * 0.10)
+    fy1 = y1 + ph * 0.80
+    fy2 = min(float(frame_h), y2 + ph * 0.04)
     return x1, fy1, x2, fy2
 
 
@@ -108,17 +117,36 @@ def _foot_environment_ratios(crop: np.ndarray) -> dict[str, float]:
 
 
 def _foot_skin_mask(hsv: np.ndarray) -> np.ndarray:
-    """Da chân — hẹp hơn mask cũ, loại bùn nâu và vũng tối trên mặt đất."""
-    skin = cv2.inRange(hsv, np.array([0, 32, 72]), np.array([20, 150, 245]))
-    mud = cv2.inRange(hsv, np.array([8, 20, 25]), np.array([28, 150, 120]))
+    """Da chân — loại bùn nâu/xám công trường (hay gây FP no_shoes)."""
+    skin = cv2.inRange(hsv, np.array([0, 38, 88]), np.array([18, 145, 245]))
+    mud = cv2.bitwise_or(
+        cv2.inRange(hsv, np.array([8, 20, 25]), np.array([28, 150, 120])),
+        cv2.inRange(hsv, np.array([0, 0, 35]), np.array([180, 70, 125])),
+    )
     return cv2.bitwise_and(skin, cv2.bitwise_not(mud))
 
 
+def _upper_foot_skin_ratio(crop: np.ndarray) -> float:
+    """Tỷ lệ da ở nửa trên vùng chân — tách khỏi bùn phía dưới crop."""
+    if crop.size == 0:
+        return 0.0
+    h, w = crop.shape[:2]
+    upper = crop[: max(int(h * 0.58), 1)]
+    if upper.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(upper, cv2.COLOR_BGR2HSV)
+    skin = _foot_skin_mask(hsv)
+    return float(cv2.countNonZero(skin)) / max(upper.shape[0] * upper.shape[1], 1)
+
+
 def _feet_view_obstructed(env: dict[str, float]) -> bool:
-    """Không đủ căn cứ đánh giá giày — nền bùn/vũng che chân (chỉ xét vùng mắt cá)."""
-    return env.get("foot_mud_ratio", env["mud_ratio"]) > 0.42 or env.get(
-        "foot_puddle_ratio", env["puddle_ratio"],
-    ) > 0.34
+    """Không đủ căn cứ — nền bùn/vũng che chân (Cam A-04 hay FP no_shoes)."""
+    mud = env.get("foot_mud_ratio", env["mud_ratio"])
+    if mud > 0.28:
+        return True
+    if env.get("mud_ratio", 0.0) > 0.36:
+        return True
+    return env.get("foot_puddle_ratio", env["puddle_ratio"]) > 0.30
 
 
 def _region_crop(frame: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
@@ -369,11 +397,17 @@ def _min_shoe_contour(bottom_area: float) -> float:
     return max(70.0, bottom_area * 0.065)
 
 
-def _looks_barefoot_or_open_footwear(metrics: dict[str, float]) -> bool:
-    """Chân trần / dép — tách khỏi giày bảo hộ (kể cả giày đen ở 640px)."""
+def _looks_barefoot_or_open_footwear(metrics: dict[str, float], *, foot_crop: np.ndarray | None = None) -> bool:
+    """Chân trần / dép — cần da rõ ở vùng mắt cá, không phải bùn nền."""
     if _feet_view_obstructed(metrics):
         return False
+    if metrics.get("mud_ratio", 0.0) > 0.30 or metrics.get("foot_mud_ratio", 0.0) > 0.26:
+        return False
     if metrics.get("pants_ratio", 0.0) > 0.16 and metrics.get("max_shoe_contour", 0.0) < 40:
+        return False
+
+    upper_skin = _upper_foot_skin_ratio(foot_crop) if foot_crop is not None and foot_crop.size else 0.0
+    if upper_skin < 0.07:
         return False
 
     lower_skin = metrics["lower_skin_ratio"]
@@ -384,9 +418,7 @@ def _looks_barefoot_or_open_footwear(metrics: dict[str, float]) -> bool:
     shoe_aspect = metrics.get("shoe_aspect", 0.0)
     min_contour = _min_shoe_contour(bottom_area)
 
-    if lower_skin > 0.90 and bottom_dark < 0.08:
-        return True
-    if bottom_dark < 0.055 and max_contour < 24:
+    if lower_skin > 0.92 and bottom_dark < 0.06 and upper_skin > 0.10:
         return True
 
     # Vệt bùn / nhiễu dọc — không phải chân trần
@@ -404,15 +436,16 @@ def _looks_barefoot_or_open_footwear(metrics: dict[str, float]) -> bool:
     if shoe_aspect < 0.66 and bottom_skin > 0.82 and max_contour >= 95:
         return False
 
-    # Dép / hở ngón
+    # Dép / hở ngón — da rõ + không có khối giày
     if (
-        max_contour < min_contour * 1.45
-        and shoe_aspect < 0.68
-        and bottom_skin > 0.78
-        and lower_skin > 0.72
+        max_contour < min_contour * 1.35
+        and shoe_aspect < 0.66
+        and bottom_skin > 0.80
+        and lower_skin > 0.78
+        and upper_skin > 0.09
     ):
         return True
-    if lower_skin > 0.74 and max_contour < min_contour:
+    if lower_skin > 0.82 and upper_skin > 0.10 and max_contour < min_contour * 0.85:
         return True
 
     return False
@@ -430,21 +463,79 @@ def _split_feet_halves(
     return left, right
 
 
+def _best_shoe_for_feet(
+    items: list[tuple[tuple[float, float, float, float], float]],
+    feet: tuple[float, float, float, float],
+) -> tuple[tuple[float, float, float, float], float] | None:
+    """Model giày thường bbox cả 2 bên — khớp trước khi tách trái/phải."""
+    x1, y1, x2, y2 = feet
+    sole_y1 = y1 + (y2 - y1) * 0.20
+    best: tuple[tuple[float, float, float, float], float] | None = None
+    for box, conf in items:
+        if conf < _SHOE_MODEL_MIN_CONF:
+            continue
+        cx = (box[0] + box[2]) / 2
+        cy = (box[1] + box[3]) / 2
+        if not (x1 - (x2 - x1) * 0.05 <= cx <= x2 + (x2 - x1) * 0.05):
+            continue
+        if not (sole_y1 <= cy <= y2 + (y2 - y1) * 0.12):
+            continue
+        if _iou(box, feet) < 0.06:
+            continue
+        if best is None or conf > best[1]:
+            best = (box, conf)
+    return best
+
+
+def _best_shoe_for_foot(
+    items: list[tuple[tuple[float, float, float, float], float]],
+    foot: tuple[float, float, float, float],
+) -> tuple[tuple[float, float, float, float], float] | None:
+    """Model giày — khớp tâm/overlap vùng mắt cá."""
+    x1, y1, x2, y2 = foot
+    sole_y1 = y1 + (y2 - y1) * 0.35
+    best: tuple[tuple[float, float, float, float], float] | None = None
+    for box, conf in items:
+        if conf < _SHOE_MODEL_MIN_CONF:
+            continue
+        cx = (box[0] + box[2]) / 2
+        cy = (box[1] + box[3]) / 2
+        if not (x1 <= cx <= x2 and sole_y1 <= cy <= y2 + (y2 - y1) * 0.08):
+            continue
+        if _iou(box, foot) < 0.03 and not (x1 <= box[0] and box[2] <= x2):
+            continue
+        if best is None or conf > best[1]:
+            best = (box, conf)
+    return best
+
+
 def _shoe_detection_for_foot(
     frame: np.ndarray,
     foot: tuple[float, float, float, float],
+    *,
+    shoe_items: list[tuple[tuple[float, float, float, float], float]] | None = None,
 ) -> tuple[str, tuple[float, float, float, float], float] | None:
     """Trả ('safety_shoes'|'no_shoes', bbox, conf) cho một bên chân."""
     fx1, fy1, fx2, fy2 = foot
     if fx2 - fx1 < 8 or fy2 - fy1 < 8:
         return None
 
+    foot_crop = _region_crop(frame, foot)
     metrics = _feet_metrics(frame, foot)
-    sb = _heuristic_shoes(frame, foot)
+
+    if shoe_items and not _feet_view_obstructed(metrics):
+        model_shoe = _best_shoe_for_foot(shoe_items, foot)
+        if model_shoe:
+            return ("safety_shoes", model_shoe[0], model_shoe[1])
+
+    sb = _heuristic_shoes(frame, foot, metrics=metrics, foot_crop=foot_crop)
     if sb:
         return ("safety_shoes", sb, 0.58)
 
-    if not _looks_barefoot_or_open_footwear(metrics):
+    if _feet_view_obstructed(metrics):
+        return None
+
+    if not _looks_barefoot_or_open_footwear(metrics, foot_crop=foot_crop):
         min_contour = _min_shoe_contour(metrics["bottom_area"])
         if (
             metrics["bottom_dark_nonskin"] >= 0.10
@@ -452,7 +543,7 @@ def _shoe_detection_for_foot(
         ):
             return ("safety_shoes", _shoe_bbox_from_feet(foot), 0.55)
 
-    if _looks_barefoot_or_open_footwear(metrics):
+    if _looks_barefoot_or_open_footwear(metrics, foot_crop=foot_crop):
         return ("no_shoes", foot, 0.55)
 
     return None
@@ -461,17 +552,20 @@ def _shoe_detection_for_foot(
 def _evaluate_foot_shoes(
     frame: np.ndarray,
     foot: tuple[float, float, float, float],
+    *,
+    shoe_items: list[tuple[tuple[float, float, float, float], float]] | None = None,
 ) -> tuple[str, tuple[float, float, float, float], float] | None:
     """Đánh giá một bên chân — không suy luận thiếu giày khi không đủ căn cứ."""
-    det = _shoe_detection_for_foot(frame, foot)
+    det = _shoe_detection_for_foot(frame, foot, shoe_items=shoe_items)
     if det is not None:
         return det
 
+    foot_crop = _region_crop(frame, foot)
     metrics = _feet_metrics(frame, foot)
-    if _looks_barefoot_or_open_footwear(metrics):
-        return ("no_shoes", foot, 0.55)
+    if _feet_view_obstructed(metrics):
+        return None
 
-    if not _looks_barefoot_or_open_footwear(metrics):
+    if not _looks_barefoot_or_open_footwear(metrics, foot_crop=foot_crop):
         min_contour = _min_shoe_contour(metrics["bottom_area"])
         if (
             metrics["bottom_dark_nonskin"] >= 0.08
@@ -486,13 +580,22 @@ def _shoe_detections_for_person(
     frame: np.ndarray,
     feet: tuple[float, float, float, float],
     person_conf: float,
+    *,
+    shoe_items: list[tuple[tuple[float, float, float, float], float]] | None = None,
 ) -> list[tuple[str, tuple[float, float, float, float], float]]:
     """Quét 2 chân — PPE-003 chỉ khi CẢ HAI chân đều thiếu giày; một bên không detect → không phạt."""
     _ = person_conf
 
+    if shoe_items:
+        foot_metrics = _feet_metrics(frame, feet)
+        if not _feet_view_obstructed(foot_metrics):
+            paired = _best_shoe_for_feet(shoe_items, feet)
+            if paired:
+                return [("safety_shoes", paired[0], paired[1])]
+
     left, right = _split_feet_halves(feet)
-    left_det = _evaluate_foot_shoes(frame, left)
-    right_det = _evaluate_foot_shoes(frame, right)
+    left_det = _evaluate_foot_shoes(frame, left, shoe_items=shoe_items)
+    right_det = _evaluate_foot_shoes(frame, right, shoe_items=shoe_items)
 
     left_state = left_det[0] if left_det else None
     right_state = right_det[0] if right_det else None
@@ -517,14 +620,20 @@ def _shoe_bbox_from_feet(feet: tuple[float, float, float, float]) -> tuple[float
     return x1, y1 + fh * 0.55, x2, y2
 
 
-def _heuristic_shoes(frame: np.ndarray, feet: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
-    metrics = _feet_metrics(frame, feet)
-    if _feet_view_obstructed(metrics):
+def _heuristic_shoes(
+    frame: np.ndarray,
+    feet: tuple[float, float, float, float],
+    *,
+    metrics: dict[str, float] | None = None,
+    foot_crop: np.ndarray | None = None,
+) -> tuple[float, float, float, float] | None:
+    crop = foot_crop if foot_crop is not None else _region_crop(frame, feet)
+    m = metrics if metrics is not None else _feet_metrics(frame, feet)
+    if _feet_view_obstructed(m):
         return None
-    if _looks_barefoot_or_open_footwear(metrics):
+    if _looks_barefoot_or_open_footwear(m, foot_crop=crop):
         return None
 
-    crop = _region_crop(frame, feet)
     if crop.size == 0:
         return None
     h, w = crop.shape[:2]
@@ -578,6 +687,29 @@ def _best_in_region(
     return best
 
 
+def _best_helmet_for_head(
+    items: list[tuple[tuple[float, float, float, float], float]],
+    head: tuple[float, float, float, float],
+) -> tuple[tuple[float, float, float, float], float] | None:
+    """Model mũ thường bbox nhỏ — khớp tâm/overlap vùng đỉnh, không chỉ IoU toàn head."""
+    x1, y1, x2, y2 = head
+    cap_y2 = y1 + (y2 - y1) * 0.62
+    best: tuple[tuple[float, float, float, float], float] | None = None
+    for box, conf in items:
+        if conf < _HELMET_MODEL_MIN_CONF:
+            continue
+        cx = (box[0] + box[2]) / 2
+        cy = (box[1] + box[3]) / 2
+        if not (x1 <= cx <= x2 and y1 - (y2 - y1) * 0.12 <= cy <= cap_y2):
+            continue
+        cap_region = (x1, y1, x2, cap_y2)
+        if _iou(box, head) < 0.04 and _iou(box, cap_region) < 0.06:
+            continue
+        if best is None or conf > best[1]:
+            best = (box, conf)
+    return best
+
+
 @dataclass
 class _PersonPpe:
     person_box: tuple[float, float, float, float]
@@ -606,7 +738,55 @@ def _plausible_person_box(
     return True
 
 
+def _build_person_only_result(frame: np.ndarray, camera_id: str) -> dict:
+    """Person detections only — dùng khi suppress PPE trên reel demo Cam A-04."""
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
+    detector = _get_person_detector()
+    h, w = frame.shape[:2]
+    persons_raw = detector.predict(frame)
+    persons = [
+        _PersonPpe((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), p.confidence)
+        for p in persons_raw
+        if p.confidence >= _PERSON_CONF
+        and _plausible_person_box((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), w, h)
+    ]
+
+    detections: list[PpeDetection] = []
+    for person_index, person in enumerate(persons):
+        pb = person.person_box
+        person_det = PpeDetection(
+            behavior="person",
+            label=PPE_LABELS["person"],
+            scenario_id=PPE_SCENARIO["person"],
+            confidence=round(person.person_conf, 3),
+            bbox=[float(v) for v in pb],
+        )
+        enrich_person_bbox(frame, person_det, camera_id=camera_id, person_index=person_index)
+        detections.append(person_det)
+
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": len(persons),
+            "ppe_violations": 0,
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
 def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
+    from .cam04_ppe_demo import is_cam04_ppe_scene, resolve_cam04_ppe_demo
+
+    if resolve_cam04_ppe_demo(camera_id, frame) == "suppress":
+        return _build_person_only_result(frame, camera_id)
+
+    ppe_demo_scene = is_cam04_ppe_scene(camera_id, frame)
+
     detector = _get_person_detector()
     h, w = frame.shape[:2]
     persons_raw = detector.predict(frame)
@@ -619,7 +799,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
 
     helmet_items = _model_items("ppe_helmet", frame, "hard_hat")
     vest_items = _model_items("ppe_vest", frame, "safety_vest")
-    # Giày: chỉ heuristic/metrics — model seed hay false-positive chân trần.
+    shoe_items = _model_items("ppe_shoes", frame, "safety_shoes")
 
     from .worker_identity.detection_enrich import copy_worker_identity, enrich_person_bbox
 
@@ -628,7 +808,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
 
     for person_index, person in enumerate(persons):
         pb = person.person_box
-        head = _sub_region(pb, 0.0, 0.30)
+        head = _head_region_for_helmet(pb)
         torso = _sub_region(pb, 0.20, 0.72)
         feet = _feet_region(pb, h)
 
@@ -647,13 +827,13 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
             detections.append(violation)
 
         helmet = None
-        hb = _heuristic_helmet(frame, head)
-        if hb:
-            helmet = (hb, 0.62)
+        model_helmet = _best_helmet_for_head(helmet_items, head)
+        if model_helmet:
+            helmet = model_helmet
         else:
-            model_helmet = _best_in_region(helmet_items, head)
-            if model_helmet and model_helmet[1] >= _MODEL_MIN_CONF:
-                helmet = model_helmet
+            hb = _heuristic_helmet(frame, head)
+            if hb:
+                helmet = (hb, 0.62)
         if helmet:
             box, conf = helmet
             detections.append(
@@ -676,6 +856,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
                     bbox=[float(v) for v in head],
                 )
             )
+        person_ppe_viol = helmet is None
 
         vest = None
         vb = _heuristic_vest(frame, torso)
@@ -698,6 +879,7 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
             )
         else:
             violations += 1
+            person_ppe_viol = True
             _append_violation(
                 PpeDetection(
                     behavior="no_vest",
@@ -708,9 +890,11 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
                 )
             )
 
-        shoe_items = _shoe_detections_for_person(frame, feet, person.person_conf)
+        shoe_items_det = _shoe_detections_for_person(
+            frame, feet, person.person_conf, shoe_items=shoe_items,
+        )
         shoe_violation_logged = False
-        for behavior, box, conf in shoe_items:
+        for behavior, box, conf in shoe_items_det:
             if behavior == "safety_shoes":
                 detections.append(
                     PpeDetection(
@@ -732,6 +916,24 @@ def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
                     scenario_id=PPE_SCENARIO["no_shoes"],
                     confidence=round(max(conf, _VIOLATION_CONF, person.person_conf * 0.90), 3),
                     bbox=[float(v) for v in box],
+                )
+            )
+
+        if (
+            ppe_demo_scene
+            and person_ppe_viol
+            and not shoe_violation_logged
+            and not shoe_items_det
+            and _feet_view_obstructed(_feet_metrics(frame, feet))
+        ):
+            violations += 1
+            _append_violation(
+                PpeDetection(
+                    behavior="no_shoes",
+                    label=PPE_LABELS["no_shoes"],
+                    scenario_id=PPE_SCENARIO["no_shoes"],
+                    confidence=round(max(_VIOLATION_CONF, person.person_conf * 0.88), 3),
+                    bbox=[float(v) for v in feet],
                 )
             )
 

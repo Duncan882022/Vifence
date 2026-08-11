@@ -150,7 +150,7 @@ class EventStore:
     def __init__(self, max_in_memory: int = 200):
         self._events: deque[ViolationEvent] = deque(maxlen=max_in_memory)
         self._lock = threading.Lock()
-        self._dedup = EventDedupRegistry(settings.event_rapid_dedup_seconds)
+        self._dedup = EventDedupRegistry(settings.event_first_seen_window_effective)
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
         EVENTS_DIR.mkdir(parents=True, exist_ok=True)
         self._load_today_from_disk()
@@ -183,6 +183,68 @@ class EventStore:
             logger.warning("Không đọc được %s: %s", path, exc)
         return rows
 
+    def _find_by_dedup_key(self, dedup_key: str) -> Optional[ViolationEvent]:
+        with self._lock:
+            for event in self._events:
+                if event.dedup_key == dedup_key:
+                    return event
+        return None
+
+    def _refresh_existing_snapshot(
+        self,
+        existing: ViolationEvent,
+        snapshot_image: np.ndarray,
+        incoming: ViolationEvent,
+        *,
+        frame_size: Optional[tuple[int, int]] = None,
+    ) -> ViolationEvent:
+        """Giữ created_at/id — chỉ cập nhật ảnh + bbox/conf nếu tốt hơn."""
+        event_date = existing.event_date or _event_date(existing.created_at)
+        snapshot_name = existing.snapshot_file or f"{event_date}/{existing.id}.jpg"
+        snapshot_path = SNAPSHOT_DIR / snapshot_name
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(snapshot_path), snapshot_image)
+        existing.snapshot_file = snapshot_name
+        existing.confirmed_at = time.time()
+
+        if incoming.confidence >= existing.confidence:
+            existing.confidence = incoming.confidence
+            existing.bbox = list(incoming.bbox)
+            if incoming.subject_bbox:
+                existing.subject_bbox = list(incoming.subject_bbox)
+            if incoming.related_bbox:
+                existing.related_bbox = list(incoming.related_bbox)
+
+        if frame_size:
+            existing.frame_width, existing.frame_height = frame_size
+        else:
+            h, w = snapshot_image.shape[:2]
+            existing.frame_width = int(w)
+            existing.frame_height = int(h)
+
+        for field in (
+            "worker_id",
+            "worker_name",
+            "employee_code",
+            "contractor_name",
+            "face_match_confidence",
+            "face_match_source",
+            "vehicle_plate",
+            "vehicle_type",
+            "driver_name",
+        ):
+            new_val = getattr(incoming, field, None)
+            if new_val is not None and getattr(existing, field, None) in (None, "", 0, 0.0):
+                setattr(existing, field, new_val)
+
+        logger.info(
+            "Refresh snapshot event=%s key=%s (giữ created_at=%.0f)",
+            existing.id,
+            existing.dedup_key,
+            existing.created_at,
+        )
+        return existing
+
     def _finalize_event(
         self,
         event: ViolationEvent,
@@ -192,10 +254,16 @@ class EventStore:
         *log_args: object,
         frame_size: Optional[tuple[int, int]] = None,
     ) -> Optional[ViolationEvent]:
+        event.dedup_key = dedup_key
+
         if self._dedup.should_skip(dedup_key):
+            existing = self._find_by_dedup_key(dedup_key)
+            if existing is not None:
+                self._refresh_existing_snapshot(
+                    existing, snapshot_image, event, frame_size=frame_size,
+                )
             return None
 
-        event.dedup_key = dedup_key
         event_date = event.event_date or _event_date(event.created_at)
         if frame_size:
             event.frame_width, event.frame_height = frame_size
@@ -203,6 +271,8 @@ class EventStore:
             h, w = snapshot_image.shape[:2]
             event.frame_width = int(w)
             event.frame_height = int(h)
+        if event.confirmed_at is None:
+            event.confirmed_at = event.created_at
         snapshot_name = f"{event_date}/{event.id}.jpg"
         snapshot_path = _daily_snapshot_dir(event_date) / f"{event.id}.jpg"
         cv2.imwrite(str(snapshot_path), snapshot_image)
@@ -211,7 +281,7 @@ class EventStore:
         with self._lock:
             self._events.appendleft(event)
         self._append_to_disk(event)
-        self._dedup.register(dedup_key, event.created_at)
+        self._dedup.register(dedup_key, event.created_at, replace=True)
         logger.info(log_template, *log_args)
         return event
 
@@ -338,12 +408,58 @@ class EventStore:
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         raw = frame.copy()
         annotated = self._draw_road_bbox(raw, detection)
-        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
+        snapshot = self._compose_event_snapshot(
+            raw,
+            annotated,
+            event,
+            behavior=detection.behavior,
+            focus_bbox=list(detection.bbox),
+        )
         return self._finalize_event(
             event,
             snapshot,
             key,
             "Sự kiện road [%s]: %s (%s) conf=%.2f",
+            event_date,
+            event.scenario_name,
+            event.id,
+            event.confidence,
+            frame_size=self._frame_size(raw),
+        )
+
+    def add_mesh(
+        self,
+        detection: RoadDetection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "A-03",
+        dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
+        """BPTC-001 — lưới bao che thiếu/bẩn, snapshot crop riêng (không lẫn bùn/nước)."""
+        event_date = _event_date()
+        event = ViolationEvent.from_road_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        stable_track = track_id or detection.behavior
+        key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
+        raw = frame.copy()
+        annotated = self._draw_road_bbox(raw, detection)
+        snapshot = self._compose_event_snapshot(
+            raw,
+            annotated,
+            event,
+            behavior=detection.behavior,
+            focus_bbox=list(detection.bbox),
+        )
+        return self._finalize_event(
+            event,
+            snapshot,
+            key,
+            "Sự kiện mesh [%s]: %s (%s) conf=%.2f",
             event_date,
             event.scenario_name,
             event.id,
@@ -521,9 +637,22 @@ class EventStore:
         plate = getattr(detection, "vehicle_plate", None)
         stable_track = track_id or (plate if plate else detection.behavior)
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
+        focus_bbox = (
+            list(vehicle_bbox)
+            if vehicle_bbox and len(vehicle_bbox) >= 4
+            else list(detection.bbox)
+        )
+        if detection.behavior == "speeding" and vehicle_bbox and len(vehicle_bbox) >= 4:
+            event.bbox = focus_bbox
         raw = frame.copy()
         annotated = self._draw_atgt_snapshot(raw, detection, vehicle_bbox)
-        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
+        snapshot = self._compose_event_snapshot(
+            raw,
+            annotated,
+            event,
+            behavior=detection.behavior,
+            focus_bbox=focus_bbox,
+        )
         return self._finalize_event(
             event,
             snapshot,
@@ -543,11 +672,17 @@ class EventStore:
         detection: Detection,
         vehicle_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
-        """Snapshot ATGT — chỉ vùng vi phạm (không vẽ xe info)."""
-        _ = vehicle_bbox
+        """Snapshot ATGT — crop vùng vi phạm; speeding vẽ bbox xe."""
         annotated = frame.copy()
         h, w = frame.shape[:2]
-        x1, y1, x2, y2 = [int(v) for v in detection.bbox]
+        target = (
+            vehicle_bbox
+            if vehicle_bbox
+            and len(vehicle_bbox) >= 4
+            and detection.behavior == "speeding"
+            else detection.bbox
+        )
+        x1, y1, x2, y2 = [int(v) for v in target]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         colors = {
@@ -690,8 +825,8 @@ class EventStore:
             "object": (0, 140, 255),
             "unknown": (160, 160, 160),
             "mesh_missing": (0, 220, 120),
-            "mesh_torn": (0, 180, 80),
-            "mesh_dirty": (40, 180, 40),
+            "mesh_torn": (0, 200, 100),
+            "mesh_dirty": (25, 90, 165),
         }
         color = colors.get(detection.behavior, (0, 255, 0))
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
@@ -765,7 +900,10 @@ class EventStore:
         else:
             with self._lock:
                 rows = list(self._events)
-        deduped = dedupe_events_by_key(rows)
+        deduped = dedupe_events_by_key(
+            rows,
+            window_seconds=settings.event_first_seen_window_effective,
+        )
         deduped.sort(key=lambda e: e.created_at, reverse=True)
         return deduped[:limit]
 

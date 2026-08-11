@@ -134,8 +134,9 @@ def identify_person(
         return unknown_worker_match("no_person_bbox")
 
     cache_key = f"{camera_id}:{track_id or person_bbox[0]}"
-    if cache_key in _track_cache:
-        return _track_cache[cache_key]
+    cached = _track_cache.get(cache_key)
+    if cached is not None and cached.worker_id != "unknown":
+        return cached
 
     match: WorkerMatch | None = None
     if settings.worker_recognition_enabled:
@@ -159,5 +160,6 @@ def identify_person(
             match.match_source,
         )
 
-    _track_cache[cache_key] = match
+    if match.worker_id != "unknown":
+        _track_cache[cache_key] = match
     return match

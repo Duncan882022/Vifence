@@ -1,4 +1,4 @@
-"""Debounced mesh cover events — BPTC-001 (Lưới bao che thiếu/rách/bẩn)."""
+"""Debounced mesh cover events — BPTC-001 (Lưới bao che thiếu/bẩn)."""
 
 from __future__ import annotations
 
@@ -55,9 +55,9 @@ class MeshAnalysisEngine:
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
                 min_duration_seconds=_MESH_CONFIRM_SECONDS,
-                cooldown_seconds=_MESH_REPEAT_SECONDS,
+                cooldown_seconds=settings.event_repeat_seconds(_MESH_REPEAT_SECONDS),
                 max_gap_seconds=_MESH_MAX_GAP_SECONDS,
-                one_event_per_episode=True,
+                one_event_per_episode=settings.event_log_one_per_episode,
             )
         return self._gates[camera_id][track_id]
 
@@ -76,7 +76,14 @@ class MeshAnalysisEngine:
         camera_id: str,
         *,
         capture_frame: np.ndarray | None = None,
+        persist_events: bool | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
+        if persist_events is None:
+            persist_events = (
+                settings.a03_bptc_event_logging_enabled
+                if camera_id == "A-03"
+                else True
+            )
         snapshot_source = capture_frame if capture_frame is not None else frame
         h, w = frame.shape[:2]
         mesh_zones = get_mesh_zones_for_camera(camera_id)
@@ -126,7 +133,9 @@ class MeshAnalysisEngine:
                 state.episode_best = None
                 top_det = pending["detection"]
                 snap_frame = pending["frame"]
-                event = self.store.add_road(
+                if not persist_events:
+                    continue
+                event = self.store.add_mesh(
                     top_det,
                     snap_frame,
                     camera_id=camera_id,

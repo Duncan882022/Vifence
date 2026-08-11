@@ -167,5 +167,12 @@ export function getVmsHlsUrl(cameraId: string): string | undefined {
 
 /** Trả về URL stream tốt nhất: VMS HLS nếu có, fallback MP4 local. */
 export function getBestStreamUrl(cameraId: string): string | undefined {
-  return getVmsHlsUrl(cameraId) ?? getStreamUrlForCamera(cameraId)
+  const hls = getVmsHlsUrl(cameraId)
+  const mp4 = getStreamUrlForCamera(cameraId)
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    // GitHub Pages — ưu tiên MP4 cùng origin (tránh CORS HLS cross-origin).
+    if (host.endsWith('github.io')) return mp4 ?? hls
+  }
+  return hls ?? mp4
 }

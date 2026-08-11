@@ -10,7 +10,9 @@ import numpy as np
 from .atgt_analyzer import (
     _HARD_MEDIAN_CONF,
     _SOFT_MEDIAN_CONF,
+    _roi_mask,
     analyze_atgt_frame,
+    lane_detection_inside_road,
 )
 from .config import settings
 from .events import EventStore, PersistenceDebouncer
@@ -27,7 +29,13 @@ _MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _MAX_TRACKS = 12
 _TRACK_EXPIRE_SECONDS = 4.0
-_EVENT_BEHAVIORS = frozenset({"speeding", "no_soft_median", "hard_median"})
+_EVENT_BEHAVIORS_ALL = frozenset({"speeding", "no_soft_median", "hard_median"})
+
+
+def _event_behaviors() -> frozenset[str]:
+    if settings.atgt_lane_violation_only:
+        return frozenset({"no_soft_median"})
+    return _EVENT_BEHAVIORS_ALL
 
 
 class _AtgtTrack:
@@ -74,23 +82,36 @@ def _lane_present(
     frame_w: int,
     frame_h: int,
     violation_bbox: list[float] | tuple[float, ...] | None = None,
+    *,
+    road_mask: np.ndarray | None = None,
 ) -> bool:
-    """Có phân cách hợp lệ che vùng vi phạm — hàng rào phải không chặn log thiếu làn trái."""
+    """Có phân cách hợp lệ trong polygon ROAD che vùng vi phạm."""
     vcx = None
     if violation_bbox is not None and len(violation_bbox) >= 4:
         vcx = (float(violation_bbox[0]) + float(violation_bbox[2])) / 2.0
     for det in detections:
+        if road_mask is not None and not lane_detection_inside_road(det.bbox, road_mask):
+            continue
         if det.behavior == "soft_median" and det.confidence >= _SOFT_MEDIAN_CONF:
             x1, _y1, x2, _y2 = det.bbox
             span = max(float(x2 - x1), 0.0)
             dcx = (x1 + x2) / 2.0
-            if vcx is not None and vcx < frame_w * 0.20:
-                # Mép trái — soft_median bám hàng rào, không phải phân làn giữa lòng đường.
-                if x1 <= frame_w * 0.05 and span >= frame_w * 0.22:
-                    continue
-            if vcx is not None and dcx > frame_w * 0.55 and vcx < frame_w * 0.42:
+            if (
+                road_mask is None
+                and vcx is not None
+                and vcx < frame_w * 0.20
+                and x1 <= frame_w * 0.05
+                and span >= frame_w * 0.22
+            ):
                 continue
-            if vcx is not None:
+            if (
+                road_mask is None
+                and vcx is not None
+                and dcx > frame_w * 0.55
+                and vcx < frame_w * 0.42
+            ):
+                continue
+            if vcx is not None and violation_bbox is not None:
                 ix1 = max(float(violation_bbox[0]), det.bbox[0])
                 iy1 = max(float(violation_bbox[1]), det.bbox[1])
                 ix2 = min(float(violation_bbox[2]), det.bbox[2])
@@ -111,11 +132,9 @@ def _confirm_seconds(behavior: str) -> float:
     if settings.atgt_demo_enabled:
         if behavior == "speeding":
             return settings.atgt_demo_confirm_seconds
-        if behavior == "no_soft_median":
+        if behavior in {"no_soft_median", "hard_median"}:
             # VMS 6fps: mỗi giây video ≈ 1s wall — confirm ngắn để kịp log trong 1 loop.
-            return min(get_threshold("ATGT-004").confirm_seconds, 1.0)
-        if behavior == "hard_median":
-            return min(get_threshold("ATGT-004").confirm_seconds, 1.0)
+            return min(get_threshold("ATGT-004").confirm_seconds, 0.85)
     scenario_id = "ATGT-002" if behavior == "speeding" else "ATGT-004"
     return get_threshold(scenario_id).confirm_seconds
 
@@ -169,9 +188,9 @@ class AtgtEngine:
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
                 min_duration_seconds=_confirm_seconds(behavior),
-                cooldown_seconds=_REPEAT_SECONDS,
+                cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_max_gap_seconds(behavior),
-                one_event_per_episode=True,
+                one_event_per_episode=settings.event_log_one_per_episode,
             )
         return self._gates[camera_id][track_id]
 
@@ -197,6 +216,7 @@ class AtgtEngine:
         )
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
+        road_mask = _roi_mask(camera_id, frame_w, frame_h)
         now = time.time()
         new_events: list[ViolationEvent] = []
         matched_ids: set[str] = set()
@@ -204,7 +224,7 @@ class AtgtEngine:
         vehicles = [d for d in detections if d.behavior == "vehicle"]
         violations = [
             d for d in detections
-            if d.behavior in _EVENT_BEHAVIORS
+            if d.behavior in _event_behaviors()
             and (
                 d.confidence >= _MIN_CONF
                 or (d.behavior == "hard_median" and d.confidence >= _HARD_MEDIAN_CONF)
@@ -213,7 +233,7 @@ class AtgtEngine:
 
         for det in violations:
             if det.behavior == "no_soft_median" and _lane_present(
-                detections, frame_w, frame_h, det.bbox,
+                detections, frame_w, frame_h, det.bbox, road_mask=road_mask,
             ):
                 continue
             vehicle_bbox: list[float] | None = None
@@ -257,6 +277,9 @@ class AtgtEngine:
                 pending = state.episode_best
                 state.episode_best = None
                 top = pending["detection"]
+                if top.behavior == "speeding" and settings.atgt_demo_enabled:
+                    if not top.vehicle_plate and top.confidence < 0.82:
+                        continue
                 if not top.vehicle_plate and pending.get("vehicle_bbox"):
                     retry_plate = resolve_vehicle_plate(
                         pending["frame"],

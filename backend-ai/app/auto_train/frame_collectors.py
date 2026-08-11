@@ -88,13 +88,75 @@ def collect_mesh_sample(frame, result: dict) -> None:
     if not settings.auto_train_enabled:
         return
     from .inference import predict_boxes
+    from ..mesh_analyzer import mesh_cover_boxes_from_frame
 
     small = downscale_for_mobile(frame)
+    camera_id = str(result.get("camera_id") or "A-03")
     boxes: list[tuple[str, float, float, float, float]] = []
     for cls_name, _conf, x1, y1, x2, y2 in predict_boxes("safety_mesh_cover", small, conf_threshold=0.35):
         if cls_name == "mesh_cover":
             boxes.append((cls_name, x1, y1, x2, y2))
+    if not boxes:
+        for x1, y1, x2, y2 in mesh_cover_boxes_from_frame(small, camera_id=camera_id):
+            boxes.append(("mesh_cover", x1, y1, x2, y2))
     auto_train_collector.collect("safety_mesh_cover", small, boxes)
+
+
+def _face_boxes_in_person_crops(
+    frame,
+    detections: list[dict],
+) -> list[tuple[float, float, float, float]]:
+    from ..detectors.face_guard import face_boxes_from_frame
+
+    h, w = frame.shape[:2]
+    seen: set[tuple[int, int, int, int]] = set()
+    boxes: list[tuple[float, float, float, float]] = []
+    for d in detections:
+        if d.get("behavior") != "person":
+            continue
+        x1, y1, x2, y2 = [int(v) for v in d["bbox"]]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 <= x1 or y2 <= y1:
+            continue
+        crop = frame[y1:y2, x1:x2]
+        if crop.size == 0:
+            continue
+        for fx1, fy1, fx2, fy2 in face_boxes_from_frame(crop, score_threshold=0.40):
+            gx1, gy1 = fx1 + x1, fy1 + y1
+            gx2, gy2 = fx2 + x1, fy2 + y1
+            key = (int(gx1), int(gy1), int(gx2), int(gy2))
+            if key in seen:
+                continue
+            seen.add(key)
+            boxes.append((gx1, gy1, gx2, gy2))
+    return boxes
+
+
+def collect_face_sample(frame, result: dict) -> None:
+    if not settings.auto_train_enabled:
+        return
+    from .inference import predict_boxes
+    from ..detectors.face_guard import face_boxes_from_frame
+
+    small = downscale_for_mobile(frame)
+    sw, sh = small.shape[1], small.shape[0]
+    ow, oh = frame.shape[1], frame.shape[0]
+    sx, sy = sw / ow, sh / oh
+    dets = _scale_detections_to_small(frame, result.get("detections") or [])
+    boxes: list[tuple[str, float, float, float, float]] = []
+
+    for cls_name, _conf, x1, y1, x2, y2 in predict_boxes("worker_face", small, conf_threshold=0.35):
+        if cls_name == "face":
+            boxes.append((cls_name, x1, y1, x2, y2))
+
+    if not boxes:
+        for x1, y1, x2, y2 in face_boxes_from_frame(small, score_threshold=0.42):
+            boxes.append(("face", x1, y1, x2, y2))
+        for x1, y1, x2, y2 in _face_boxes_in_person_crops(small, dets):
+            boxes.append(("face", x1, y1, x2, y2))
+
+    auto_train_collector.collect("worker_face", small, boxes)
 
 
 def collect_vms_engine_sample(engine_name: str, frame, result: dict) -> None:
@@ -105,5 +167,6 @@ def collect_vms_engine_sample(engine_name: str, frame, result: dict) -> None:
         collect_crane_sample(frame, result)
     elif engine_name == "ppe":
         collect_ppe_sample(frame, result)
+        collect_face_sample(frame, result)
     elif engine_name == "mesh":
         collect_mesh_sample(frame, result)

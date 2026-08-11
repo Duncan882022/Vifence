@@ -12,6 +12,13 @@ Exit 0 = đủ 13/13 scenario_id có event · Exit 1 = thiếu.
 
 from __future__ import annotations
 
+import os
+
+os.environ["EVENT_TEST_MODE"] = "true"
+os.environ["A03_BPTC_EVENT_LOGGING_ENABLED"] = "true"
+os.environ["ATGT_LANE_VIOLATION_ONLY"] = "false"
+os.environ["ATGT_DEMO_FAKE_PLATE_FALLBACK"] = "true"
+
 import subprocess
 import sys
 import time

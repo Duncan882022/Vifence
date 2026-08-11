@@ -198,12 +198,11 @@ export function getAlertCardStatusDisplay(
   }
 }
 
-/** AI tự động / Loa — chỉ icon; Chưa xử lý / Đã xử lý — icon + chữ. */
+/** Badge trạng thái xử lý — chỉ icon + tooltip (đồng bộ severity / AI). */
 export function isIconOnlyHandlingBadge(
-  record: Pick<SafetyViolationRecord, 'groupId' | 'scenarioId' | 'severity' | 'status'>,
+  _record: Pick<SafetyViolationRecord, 'groupId' | 'scenarioId' | 'severity' | 'status'>,
 ): boolean {
-  const bucket = getAlertHandlingStatus(record)
-  return bucket === 'ai_auto' || bucket === 'ai_speaker'
+  return true
 }
 
 /** Hiển thị badge trạng thái xử lý trên mọi sự kiện (AI tự động / Loa / đã xử lý / chưa xử lý). */

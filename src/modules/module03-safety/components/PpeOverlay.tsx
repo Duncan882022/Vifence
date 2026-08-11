@@ -122,7 +122,10 @@ function usePpeState(
   const [backendUrlVersion, setBackendUrlVersion] = useState(0)
   const resetDetections = useCallback(() => setDetections([]), [])
   const vms = useVmsDetections()
-  useOverlaySceneReset(videoRef, enabled, resetDetections, { liveHls: Boolean(vms?.active) })
+  useOverlaySceneReset(videoRef, enabled, resetDetections, {
+    liveHls: Boolean(vms?.active),
+    cameraId,
+  })
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
