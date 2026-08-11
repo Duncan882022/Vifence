@@ -76,7 +76,7 @@ class Settings(BaseSettings):
 
     # Train theo cửa sổ cố định — mặc định 6h và 18h (UTC+7), ~2 lần/ngày.
     # Để trống chuỗi → chế độ cũ (poll + min_interval từng task).
-    auto_train_schedule_hours_local: str = "6,18"
+    auto_train_schedule_hours_local: str = "0,6"
     auto_train_schedule_tz_offset_hours: int = 7
     auto_train_schedule_window_minutes: float = 90.0
     auto_train_check_interval_seconds: float = 120.0

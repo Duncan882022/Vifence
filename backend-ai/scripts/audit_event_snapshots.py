@@ -38,6 +38,7 @@ SCENARIO_SEEK_SEC: dict[str, tuple[str, int]] = {
     "BPTC-007": ("A-03", 5),
     "BPTC-008": ("A-03", 5),
     "BPTC-009": ("A-03", 5),
+    "BPTC-001": ("A-03", 0),
     "ATGT-002": ("A-03", 5),
     "ATGT-004": ("A-03", 12),
     "PPE-001": ("A-04", 8),
@@ -314,6 +315,16 @@ def audit_scenario_analyzer() -> list[CaseResult]:
         ok = "no_harness" in beh
         results.append(CaseResult("analyzer_WAH-001_no_harness", ok, f"beh={sorted(beh)}"))
 
+    # BPTC-001 mesh @ t0
+    from app.mesh_analyzer import analyze_mesh_frame
+
+    frame = _extract_video_frame("A-03", 0)
+    if frame is not None:
+        dets = analyze_mesh_frame(frame, "A-03")
+        beh = {d.behavior for d in dets}
+        ok = bool(beh & {"mesh_missing", "mesh_torn", "mesh_dirty"})
+        results.append(CaseResult("analyzer_BPTC-001_mesh", ok, f"beh={sorted(beh)}"))
+
     return results
 
 
@@ -351,6 +362,15 @@ def audit_scenario_engines() -> list[CaseResult]:
         _, ev = _run_engine_frames(WahEngine, frame, "A-04", frames=10, sleep_s=0.45)
         ok = any("WAH/no_harness/WAH-001" in e for e in ev)
         results.append(CaseResult("engine_WAH-001", ok, f"events={ev}"))
+
+    # BPTC-001 mesh
+    from app.mesh_analysis_engine import MeshAnalysisEngine
+
+    frame = _extract_video_frame("A-03", 0)
+    if frame is not None:
+        _, ev = _run_engine_frames(MeshAnalysisEngine, frame, "A-03", frames=10, sleep_s=0.45)
+        ok = any("BPTC-001" in e for e in ev)
+        results.append(CaseResult("engine_BPTC-001_mesh", ok, f"events={ev}"))
 
     # ATGT speeding t12
     frame = _extract_video_frame("A-03", 12)

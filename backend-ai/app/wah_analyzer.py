@@ -50,6 +50,15 @@ def _plausible_person_box(
     return True
 
 
+def _wah_edge_violation_candidate(
+    box: tuple[float, float, float, float],
+    frame_h: int,
+) -> bool:
+    """WAH-001 — chỉ log người làm việc mép biên (phía trên khung, nhìn từ dưới lên)."""
+    cy = (box[1] + box[3]) / 2.0
+    return cy <= frame_h * 0.42
+
+
 def _collect_harness_sample(frame: np.ndarray, harness_box: tuple[float, float, float, float]) -> None:
     if not settings.auto_train_enabled:
         return
@@ -74,6 +83,8 @@ def analyze_wah_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detect
             continue
         box = tuple(float(v) for v in det.bbox)
         if not _plausible_person_box(box, w, h):
+            continue
+        if not _wah_edge_violation_candidate(box, h):
             continue
 
         person_det = Detection(

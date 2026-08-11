@@ -63,6 +63,8 @@ const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }
   STORAGE: { stroke: 'rgba(167, 139, 250, 0.30)', fill: 'none', dash: '4 3' },
 }
 const ROI_POLYGON_STROKE_WIDTH = 1.2
+/** Cam A-03 — chỉ tô fill ROI, không vẽ viền (tránh nhầm phân làn ATGT / vật tư). */
+const A03_ROAD_ROI_STROKE = 'none'
 
 interface RoadAnalysisOverlayProps {
   cameraId: string
@@ -166,6 +168,7 @@ function RoiPolygons({
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
+  cameraId,
 }: {
   zones: RoadAnalysisRoiZone[]
   frameWidth: number
@@ -174,6 +177,7 @@ function RoiPolygons({
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
+  cameraId: string
 }) {
   const video = videoRef.current
   const fw = frameWidth > 0 ? frameWidth : (video?.videoWidth ?? 0)
@@ -198,13 +202,14 @@ function RoiPolygons({
           videoObjectPosition,
         )
         if (!points) return null
+        const roadFillOnly = cameraId === 'A-03' && zone.type === 'ROAD'
         return (
           <polygon
             key={`${zone.id}-${layoutTick}`}
             points={points}
             fill={style.fill}
-            stroke={style.stroke}
-            strokeWidth={ROI_POLYGON_STROKE_WIDTH}
+            stroke={roadFillOnly ? A03_ROAD_ROI_STROKE : style.stroke}
+            strokeWidth={roadFillOnly ? 0 : ROI_POLYGON_STROKE_WIDTH}
             strokeDasharray={style.dash}
             vectorEffect="non-scaling-stroke"
           />
@@ -405,6 +410,7 @@ export function RoadAnalysisOverlay({
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
           layoutTick={layoutTick}
+          cameraId={cameraId}
         />
       )}
 

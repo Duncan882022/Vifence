@@ -4,6 +4,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+echo "→ Pre-deploy audit (13 nhóm ATLĐ)…"
+if [[ -x "${ROOT}/backend-ai/.venv/bin/python" ]]; then
+  "${ROOT}/backend-ai/.venv/bin/python" "${ROOT}/backend-ai/scripts/audit_pre_deploy.py" || {
+    echo "✗ Pre-deploy audit FAIL — sửa trước khi build Pages."
+    exit 1
+  }
+else
+  echo "⚠ Bỏ qua audit — chưa có backend-ai/.venv"
+fi
+
 echo "→ Build GitHub Pages…"
 npm run build:pages
 

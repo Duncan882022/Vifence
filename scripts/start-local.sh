@@ -4,10 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-if [[ ! -f .env.local ]]; then
-  cp .env.ghpages .env.local
-  echo "→ Đã tạo .env.local từ .env.ghpages"
-fi
+bash "${ROOT}/scripts/setup-local-dev.sh"
 
 BACKEND_PID=""
 cleanup() {

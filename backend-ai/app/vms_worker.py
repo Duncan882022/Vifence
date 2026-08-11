@@ -24,6 +24,8 @@ from typing import Callable, Optional
 import cv2
 import numpy as np
 
+from .auto_train.frame_collectors import collect_vms_engine_sample
+
 logger = logging.getLogger("vms_worker")
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -256,6 +258,10 @@ class CameraVmsWorker:
                                 merged_metrics[engine_name] = result["metrics"]
                             frame_w = int(result.get("width") or frame_w)
                             frame_h = int(result.get("height") or frame_h)
+                            try:
+                                collect_vms_engine_sample(engine_name, frame, result)
+                            except Exception as exc:  # noqa: BLE001
+                                logger.debug("[VMS %s] Auto-train collect: %s", self.camera_id, exc)
 
                         if events and self._on_event:
                             for ev in events:

@@ -11,6 +11,7 @@ import numpy as np
 
 from . import machinery_detector
 from .auto_train.inference import predict_boxes
+from .cam04_machinery_demo import resolve_cam04_demo_machinery
 from .crane_roi_config import (
     CRANE_MIN_CONFIDENCE,
     DEFAULT_PIXELS_PER_METER,
@@ -157,6 +158,128 @@ def _units_from_detections(
     ]
 
 
+def _machinery_iou(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    aa = max((ax2 - ax1) * (ay2 - ay1), 1)
+    bb = max((bx2 - bx1) * (by2 - by1), 1)
+    return inter / (aa + bb - inter)
+
+
+def _nms_machinery_hits(
+    hits: list[tuple[str, tuple[int, int, int, int], float]],
+    *,
+    iou_threshold: float = 0.45,
+) -> list[tuple[str, tuple[int, int, int, int], float]]:
+    """Mỗi loại máy tối đa 1 bbox — giữ conf cao nhất."""
+    grouped: dict[str, list[tuple[tuple[int, int, int, int], float]]] = {}
+    for kind, bbox, conf in hits:
+        grouped.setdefault(kind, []).append((bbox, conf))
+
+    merged: list[tuple[str, tuple[int, int, int, int], float]] = []
+    for kind, items in grouped.items():
+        items.sort(key=lambda row: row[1], reverse=True)
+        kept: list[tuple[tuple[int, int, int, int], float]] = []
+        for bbox, conf in items:
+            if any(_machinery_iou(bbox, prev) > iou_threshold for prev, _ in kept):
+                continue
+            kept.append((bbox, conf))
+        for bbox, conf in kept[:1]:
+            merged.append((kind, bbox, conf))
+    return merged
+
+
+def _machinery_color_mask(hsv: np.ndarray, kind: str) -> np.ndarray:
+    h, s, v = cv2.split(hsv)
+    if kind == "crane_green":
+        return (
+            (h >= 32) & (h <= 95) & (s > 35) & (v > 40)
+        ).astype(np.uint8) * 255
+    if kind == "sany_drill":
+        orange = ((h >= 5) & (h <= 28) & (s > 45) & (v > 55)).astype(np.uint8) * 255
+        yellow = ((h >= 18) & (h <= 38) & (s > 40) & (v > 70)).astype(np.uint8) * 255
+        return cv2.bitwise_or(orange, yellow)
+    if kind == "tower_crane":
+        warm = ((h >= 12) & (h <= 42) & (s > 25) & (v > 45)).astype(np.uint8) * 255
+        neutral = ((s < 55) & (v > 75)).astype(np.uint8) * 255
+        return cv2.bitwise_or(warm, neutral)
+    return ((s > 20) & (v > 35)).astype(np.uint8) * 255
+
+
+def _refine_machinery_bbox(
+    frame: np.ndarray,
+    kind: str,
+    box: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Siết bbox YOLO/OWLv2 theo màu thân máy — bỏ nền đất/trời thừa."""
+    h, w = frame.shape[:2]
+    x1, y1, x2, y2 = (int(v) for v in box)
+    bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
+    if bw < 24 or bh < 24:
+        return box
+
+    pad_x = max(8, int(bw * 0.08))
+    pad_y = max(8, int(bh * 0.06))
+    ex1 = max(0, x1 - pad_x)
+    ex2 = min(w, x2 + pad_x)
+    ey1 = max(0, y1 - pad_y)
+    ey2 = min(h, y2 + pad_y)
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    patch = hsv[ey1:ey2, ex1:ex2]
+    mask = _machinery_color_mask(patch, kind)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    best: tuple[int, int, int, int] | None = None
+    best_score = 0.0
+    orig_cx = (x1 + x2) / 2.0
+    orig_cy = (y1 + y2) / 2.0
+    for ctn in cnts:
+        area = cv2.contourArea(ctn)
+        if area < 900:
+            continue
+        rx, ry, rbw, rbh = cv2.boundingRect(ctn)
+        if rbw < 12 or rbh < 12:
+            continue
+        tx1, ty1 = rx + ex1, ry + ey1
+        tx2, ty2 = tx1 + rbw, ty1 + rbh
+        ccx = (tx1 + tx2) / 2.0
+        ccy = (ty1 + ty2) / 2.0
+        dist = math.hypot(ccx - orig_cx, ccy - orig_cy)
+        score = area - dist * 2.4
+        if score > best_score:
+            best_score = score
+            best = (tx1, ty1, tx2, ty2)
+
+    if best is None:
+        return box
+
+    tx1, ty1, tx2, ty2 = best
+    # Giữ chiều cao gốc cho máy khoan — tránh cắt mất cột khoan.
+    if kind == "sany_drill":
+        ty1 = min(ty1, y1 + int(bh * 0.08))
+        ty2 = max(ty2, y2 - int(bh * 0.04))
+    elif kind == "crane_green":
+        tx1 = max(tx1, x1 + int(bw * 0.12))
+        ty1 = max(ty1, y1 + int(bh * 0.10))
+
+    if tx2 - tx1 < 20 or ty2 - ty1 < 20:
+        return box
+    if _machinery_iou((tx1, ty1, tx2, ty2), box) < 0.12:
+        return box
+    return tx1, ty1, tx2, ty2
+
+
 def _rank_machinery_units(units: list[_MachineryUnit]) -> list[_MachineryUnit]:
     units.sort(
         key=lambda u: (
@@ -169,21 +292,39 @@ def _rank_machinery_units(units: list[_MachineryUnit]) -> list[_MachineryUnit]:
 
 
 def _detect_machinery_units(frame: np.ndarray, camera_id: str) -> list[_MachineryUnit]:
-    """YOLO crane_machinery (nếu có weights) → OWLv2 zero-shot trên frame hiện tại."""
+    """Nhãn demo Cam A-04 (khớp frame) → YOLO crane_machinery → OWLv2."""
+    demo_hits = resolve_cam04_demo_machinery(camera_id, frame)
+    if demo_hits is not None:
+        return _rank_machinery_units(
+            _units_from_detections(demo_hits, "cam04_demo_labels"),
+        )
+
     yolo_hits: list[tuple[str, tuple[int, int, int, int], float]] = []
     for label, x1, y1, x2, y2, conf in predict_boxes(
         "crane_machinery",
         frame,
         conf_threshold=CRANE_MIN_CONFIDENCE,
     ):
-        bbox = (int(x1), int(y1), int(x2), int(y2))
+        bbox = _refine_machinery_bbox(
+            frame,
+            label,
+            (int(x1), int(y1), int(x2), int(y2)),
+        )
         yolo_hits.append((label, bbox, round(conf, 3)))
     if yolo_hits:
-        return _rank_machinery_units(_units_from_detections(yolo_hits, "yolo_crane_machinery"))
+        merged = _nms_machinery_hits(yolo_hits)
+        return _rank_machinery_units(
+            _units_from_detections(merged, "yolo_crane_machinery"),
+        )
 
     owlv2_hits = machinery_detector.detect_for_frame(camera_id, frame)
+    refined = [
+        (kind, _refine_machinery_bbox(frame, kind, bbox), conf)
+        for kind, bbox, conf in owlv2_hits
+    ]
+    merged = _nms_machinery_hits(refined)
     return _rank_machinery_units(
-        _units_from_detections(owlv2_hits, "owlv2_zero_shot"),
+        _units_from_detections(merged, "owlv2_zero_shot"),
     )
 
 

@@ -27,7 +27,7 @@ _MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _MAX_TRACKS = 12
 _TRACK_EXPIRE_SECONDS = 4.0
-_EVENT_BEHAVIORS = frozenset({"speeding", "no_soft_median"})
+_EVENT_BEHAVIORS = frozenset({"speeding", "no_soft_median", "hard_median"})
 
 
 class _AtgtTrack:
@@ -81,7 +81,13 @@ def _lane_present(
         vcx = (float(violation_bbox[0]) + float(violation_bbox[2])) / 2.0
     for det in detections:
         if det.behavior == "soft_median" and det.confidence >= _SOFT_MEDIAN_CONF:
-            dcx = (det.bbox[0] + det.bbox[2]) / 2.0
+            x1, _y1, x2, _y2 = det.bbox
+            span = max(float(x2 - x1), 0.0)
+            dcx = (x1 + x2) / 2.0
+            if vcx is not None and vcx < frame_w * 0.20:
+                # Mép trái — soft_median bám hàng rào, không phải phân làn giữa lòng đường.
+                if x1 <= frame_w * 0.05 and span >= frame_w * 0.22:
+                    continue
             if vcx is not None and dcx > frame_w * 0.55 and vcx < frame_w * 0.42:
                 continue
             if vcx is not None:
@@ -102,8 +108,14 @@ def _lane_present(
 
 
 def _confirm_seconds(behavior: str) -> float:
-    if settings.atgt_demo_enabled and behavior == "speeding":
-        return settings.atgt_demo_confirm_seconds
+    if settings.atgt_demo_enabled:
+        if behavior == "speeding":
+            return settings.atgt_demo_confirm_seconds
+        if behavior == "no_soft_median":
+            # VMS 6fps: mỗi giây video ≈ 1s wall — confirm ngắn để kịp log trong 1 loop.
+            return min(get_threshold("ATGT-004").confirm_seconds, 1.0)
+        if behavior == "hard_median":
+            return min(get_threshold("ATGT-004").confirm_seconds, 1.0)
     scenario_id = "ATGT-002" if behavior == "speeding" else "ATGT-004"
     return get_threshold(scenario_id).confirm_seconds
 
@@ -192,7 +204,11 @@ class AtgtEngine:
         vehicles = [d for d in detections if d.behavior == "vehicle"]
         violations = [
             d for d in detections
-            if d.behavior in _EVENT_BEHAVIORS and d.confidence >= _MIN_CONF
+            if d.behavior in _EVENT_BEHAVIORS
+            and (
+                d.confidence >= _MIN_CONF
+                or (d.behavior == "hard_median" and d.confidence >= _HARD_MEDIAN_CONF)
+            )
         ]
 
         for det in violations:
@@ -210,6 +226,10 @@ class AtgtEngine:
                 slot = _vehicle_slot(vehicle_bbox, frame_w, frame_h)
                 track_id = f"{slot}:speeding"
                 lane_behavior = "speeding"
+            elif det.behavior == "hard_median":
+                slot = "lane"
+                track_id = "lane:hard_median"
+                lane_behavior = "hard_median"
             else:
                 slot = "lane"
                 track_id = "lane:no_soft_median"
@@ -265,7 +285,12 @@ class AtgtEngine:
         for track_id, state in list(tracks.items()):
             if track_id in matched_ids:
                 continue
-            behavior = "speeding" if track_id.endswith(":speeding") else "no_soft_median"
+            if track_id.endswith(":speeding"):
+                behavior = "speeding"
+            elif track_id.endswith(":hard_median"):
+                behavior = "hard_median"
+            else:
+                behavior = "no_soft_median"
             gate = self._gate_for(camera_id, track_id, behavior=behavior)
             gate.register(False)
             if not gate.snapshot()["active"]:

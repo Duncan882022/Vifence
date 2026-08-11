@@ -16,7 +16,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .auto_train import collector as auto_train_collector
+from .auto_train.frame_collectors import (
+    collect_crane_sample,
+    collect_mesh_sample,
+    collect_ppe_sample,
+    collect_road_sample,
+)
 from .auto_train.scheduler import scheduler as auto_train_scheduler
 from . import machinery_detector
 from .camera_stream import CameraStream
@@ -452,63 +457,20 @@ def event_clip(event_id: str):
     )
 
 
-_ROAD_AUTO_TRAIN_CLASS_BY_KIND = {"material": "material"}
-
-
 def _collect_road_auto_train_sample(small: np.ndarray, result: dict) -> None:
-    if not settings.auto_train_enabled:
-        return
-    boxes: list[tuple[str, float, float, float, float]] = []
-    for d in result.get("detections", []):
-        behavior = d.get("behavior")
-        cls_name: str | None = None
-        if behavior in ("mud", "water"):
-            cls_name = behavior
-        elif behavior == "object":
-            cls_name = _ROAD_AUTO_TRAIN_CLASS_BY_KIND.get(d.get("object_kind"))
-        if cls_name:
-            x1, y1, x2, y2 = d["bbox"]
-            boxes.append((cls_name, x1, y1, x2, y2))
-    auto_train_collector.collect("road_material", small, boxes)
+    collect_road_sample(small, result)
 
 
 def _collect_crane_auto_train_sample(small: np.ndarray, result: dict) -> None:
-    if not settings.auto_train_enabled:
-        return
-    boxes: list[tuple[str, float, float, float, float]] = []
-    for d in result.get("detections", []):
-        if d.get("behavior") == "crane" and d.get("machine_kind"):
-            x1, y1, x2, y2 = d["bbox"]
-            boxes.append((d["machine_kind"], x1, y1, x2, y2))
-    auto_train_collector.collect("crane_machinery", small, boxes)
-
-
-_PPE_AUTO_TRAIN_BY_BEHAVIOR = {
-    "hard_hat": "ppe_helmet",
-    "safety_vest": "ppe_vest",
-    "safety_shoes": "ppe_shoes",
-}
+    collect_crane_sample(small, result)
 
 
 def _collect_ppe_auto_train_sample(small: np.ndarray, result: dict) -> None:
-    if not settings.auto_train_enabled:
-        return
-    by_task: dict[str, list[tuple[str, float, float, float, float]]] = {}
-    for d in result.get("detections", []):
-        task_id = _PPE_AUTO_TRAIN_BY_BEHAVIOR.get(d.get("behavior", ""))
-        if not task_id:
-            continue
-        cls_name = d.get("behavior")
-        if task_id == "ppe_helmet":
-            cls_name = "hard_hat"
-        elif task_id == "ppe_vest":
-            cls_name = "safety_vest"
-        elif task_id == "ppe_shoes":
-            cls_name = "safety_shoes"
-        x1, y1, x2, y2 = d["bbox"]
-        by_task.setdefault(task_id, []).append((cls_name, x1, y1, x2, y2))
-    for task_id, boxes in by_task.items():
-        auto_train_collector.collect(task_id, small, boxes)
+    collect_ppe_sample(small, result)
+
+
+def _collect_mesh_auto_train_sample(small: np.ndarray, result: dict) -> None:
+    collect_mesh_sample(small, result)
 
 
 def _analyze_road_frame(frame: np.ndarray, camera_id: str) -> dict:
@@ -525,6 +487,7 @@ def _analyze_mesh_frame(frame: np.ndarray, camera_id: str) -> dict:
         frame,
         camera_id,
         mesh_engine.process_frame,
+        after_process=_collect_mesh_auto_train_sample,
     )
 
 

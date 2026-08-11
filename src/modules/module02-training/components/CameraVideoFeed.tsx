@@ -74,8 +74,8 @@ export function CameraVideoFeed({
   const showFaceOverlay = Boolean(
     overlayActive && feedKey && faceDemo && !roadAnalysis && !craneProximity && !ppeAnalysis && !pcccAnalysis && !wahAnalysis && !atgtAnalysis && !overlayDisabled,
   )
-  /** A-03: luôn mount lớp ROI lòng đường khi bật ScanEye + cấu hình ROI (kể cả tắt model road). */
-  const showA03RoadRoiLayer = cameraId === 'A-03' && liveRoiVisible
+  /** A-03: ROI lòng đường — ẩn viền xanh khi ATGT bật (tránh nhầm với phân làn). */
+  const showA03RoadRoiLayer = cameraId === 'A-03' && liveRoiVisible && !atgtAnalysis
   const showRoadOverlay = Boolean(
     overlayActive && !overlayDisabled && (roadAnalysis || showA03RoadRoiLayer),
   )

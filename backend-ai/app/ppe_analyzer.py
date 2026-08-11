@@ -131,6 +131,41 @@ def _region_crop(frame: np.ndarray, box: tuple[float, float, float, float]) -> n
     return frame[y1:y2, x1:x2]
 
 
+def _looks_like_white_helmet_dome(crop: np.ndarray) -> tuple[int, int, int, int] | None:
+    """Mũ trắng phủ gần hết head crop — contour full-frame bị anti-glare rule chặn."""
+    crop_h, crop_w = crop.shape[:2]
+    if crop_h < 12 or crop_w < 10:
+        return None
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    upper_rows = max(int(crop_h * 0.38), 1)
+    mid_rows = max(int(crop_h * 0.62), upper_rows + 1)
+    v_top = float(np.mean(hsv[:upper_rows, :, 2]))
+    v_mid = float(np.mean(hsv[upper_rows:mid_rows, :, 2]))
+    v_bot = float(np.mean(hsv[mid_rows:, :, 2])) if mid_rows < crop_h else v_mid
+    mean_s = float(np.mean(hsv[:, :, 1]))
+    if v_top < 168 or mean_s > 88:
+        return None
+    skin = cv2.inRange(hsv, np.array([0, 20, 40]), np.array([25, 180, 220]))
+    skin_ratio = cv2.countNonZero(skin) / max(crop_h * crop_w, 1)
+    if skin_ratio > 0.10:
+        return None
+    dome = v_top >= v_mid + 8 or (v_top >= 185 and v_bot <= v_top - 18 and v_top >= v_mid + 3)
+    if not dome:
+        return None
+    cap_rows = crop[: max(int(crop_h * 0.52), 1)]
+    cap_hsv = cv2.cvtColor(cap_rows, cv2.COLOR_BGR2HSV)
+    bright = cv2.inRange(cap_hsv, np.array([0, 0, 155]), np.array([180, 75, 255]))
+    bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), 1)
+    ys, xs = np.where(bright > 0)
+    if len(xs) < 12:
+        return None
+    x0, x1 = int(xs.min()), int(xs.max())
+    y0, y1 = int(ys.min()), int(ys.max())
+    if x1 - x0 < 8 or y1 - y0 < 6:
+        return None
+    return x0, y0, x1 + 1, y1 + 1
+
+
 def _helmet_cap_plausible(x: int, y: int, bw: int, bh: int, crop_w: int, crop_h: int) -> bool:
     """Mũ nằm trên đỉnh đầu — loại dải sáng nền trời/lưới ở mép khung."""
     if bw < 8 or bh < 6:
@@ -193,9 +228,17 @@ def _heuristic_helmet(frame: np.ndarray, head: tuple[float, float, float, float]
         if area < 40:
             continue
         x, y, bw, bh = cv2.boundingRect(cnt)
-        if not _helmet_cap_plausible(x, y, bw, bh, crop_w, crop_h):
+        plausible = _helmet_cap_plausible(x, y, bw, bh, crop_w, crop_h)
+        full_dome = (
+            not plausible
+            and x <= 2
+            and y <= 6
+            and bw >= crop_w * 0.62
+            and _looks_like_white_helmet_dome(crop) is not None
+        )
+        if not plausible and not full_dome:
             continue
-        if not _helmet_patch_looks_real(crop, x, y, bw, bh, area, crop_w):
+        if not full_dome and not _helmet_patch_looks_real(crop, x, y, bw, bh, area, crop_w):
             continue
         score = area + (24.0 if y <= crop_h * 0.22 else 0.0)
         if best is None or score > best[0]:
@@ -204,6 +247,12 @@ def _heuristic_helmet(frame: np.ndarray, head: tuple[float, float, float, float]
         x, y, bw, bh = best[1]
         hx1, hy1, _, _ = head
         return hx1 + x, hy1 + y, hx1 + x + bw, hy1 + y + bh
+
+    dome_box = _looks_like_white_helmet_dome(crop)
+    if dome_box is not None:
+        x0, y0, x1, y1 = dome_box
+        hx1, hy1, _, _ = head
+        return hx1 + x0, hy1 + y0, hx1 + x1, hy1 + y1
 
     upper = crop[: max(int(crop_h * 0.62), 1)]
     if upper.size == 0:

@@ -77,14 +77,36 @@ def _heuristic_strap_harness(frame: np.ndarray, person_bbox: tuple[float, float,
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8), 1)
         torso_ratio = float(mask.sum() / 255) / (torso.shape[0] * torso.shape[1])
     ratio = max(back_ratio, torso_ratio)
-    # Áo phản quang phủ lưng — không coi là dây an toàn (tránh chặn log WAH).
-    if ratio >= 0.065:
-        return False
     crop_area = crop.shape[0] * crop.shape[1]
     min_ratio = 0.022 if crop_area < 2400 else max(_STRAP_MIN_RATIO, 0.006)
     if ratio < min_ratio:
         return False
+    if ratio >= 0.085 and not _heuristic_x_harness_back(frame, person_bbox):
+        return False
     return _heuristic_x_harness_back(frame, person_bbox)
+
+
+def _diagonal_strap_angles(mask: np.ndarray, crop: np.ndarray) -> tuple[list[float], bool]:
+    """Trả về góc dải chéo và có cặp giao (>40°) hay không."""
+    edges = cv2.Canny(mask, 40, 120)
+    min_len = max(6, int(min(crop.shape[:2]) * 0.14))
+    lines = cv2.HoughLinesP(
+        edges, 1, np.pi / 180, threshold=6,
+        minLineLength=min_len, maxLineGap=6,
+    )
+    if lines is None:
+        return [], False
+    angles: list[float] = []
+    for line in lines.reshape(-1, 4):
+        x1, y1, x2, y2 = [float(v) for v in line]
+        seg_len = float(np.hypot(x2 - x1, y2 - y1))
+        if seg_len < min_len * 0.75:
+            continue
+        ang = abs(float(np.arctan2(y2 - y1, x2 - x1)))
+        if 0.35 < ang < 2.75:
+            angles.append(ang)
+    has_cross = any(abs(a1 - a2) > 0.40 for i, a1 in enumerate(angles) for a2 in angles[i + 1 :])
+    return angles, has_cross
 
 
 def _heuristic_x_harness_back(frame: np.ndarray, person_bbox: tuple[float, float, float, float]) -> bool:
@@ -100,39 +122,23 @@ def _heuristic_x_harness_back(frame: np.ndarray, person_bbox: tuple[float, float
 
     crop_area = crop.shape[0] * crop.shape[1]
     ratio = float(mask.sum() / 255) / crop_area
-    # Áo phản quang phủ lưng — không coi là dây chữ X (tránh chặn WAH-001 trên giàn giáo).
-    if ratio >= 0.065:
-        return False
     if ratio < _X_BACK_MIN_RATIO:
         return False
 
-    edges = cv2.Canny(mask, 40, 120)
-    min_len = max(6, int(min(crop.shape[:2]) * 0.14))
-    lines = cv2.HoughLinesP(
-        edges, 1, np.pi / 180, threshold=6,
-        minLineLength=min_len, maxLineGap=6,
-    )
-    if lines is None or len(lines) < 2:
-        return ratio >= 0.014 and crop_area < 2600
+    angles, has_cross = _diagonal_strap_angles(mask, crop)
 
-    angles: list[float] = []
-    for line in lines.reshape(-1, 4):
-        x1, y1, x2, y2 = [float(v) for v in line]
-        seg_len = float(np.hypot(x2 - x1, y2 - y1))
-        if seg_len < min_len * 0.75:
-            continue
-        ang = abs(float(np.arctan2(y2 - y1, x2 - x1)))
-        if 0.35 < ang < 2.75:
-            angles.append(ang)
+    # Dây cam/vàng rõ — 2+ dải chéo hoặc chữ X (Cam A-04 mép biên).
+    if ratio >= 0.052 and len(angles) >= 2:
+        return True
+    if has_cross and ratio >= 0.042:
+        return True
+    if ratio >= 0.014 and has_cross and len(angles) >= 2 and crop_area < 2600:
+        return True
 
-    if len(angles) < 2:
-        return ratio >= 0.014 and crop_area < 2600
-
-    for i, a1 in enumerate(angles):
-        for a2 in angles[i + 1 :]:
-            if abs(a1 - a2) > 0.40:
-                return True
-    return ratio >= 0.020
+    # Áo phản quang phủ đều — không coi là dây.
+    if ratio >= 0.085 and len(angles) < 2:
+        return False
+    return ratio >= 0.020 and len(angles) >= 1 and crop_area < 2600
 
 
 def _model_harness_on_person(

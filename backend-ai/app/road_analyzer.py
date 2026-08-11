@@ -1971,6 +1971,10 @@ def _analyze_objects(
             continue
         bw, bh = box[2] - box[0], box[3] - box[1]
         area_ratio = (bw * bh) / max(frame_area, 1)
+        aspect = bw / max(bh, 1)
+        # Dầm thép / vật dài — hay bị nhầm bao xi măng khi sát hàng rào.
+        if aspect > 1.08 and bw >= w * 0.20:
+            continue
         if area_ratio > 0.075 or bh > h * 0.36:
             continue
         patch = hsv[box[1]:box[3], box[0]:box[2]]
@@ -2017,9 +2021,11 @@ def _analyze_objects(
     edge_boxes = _merge_adjacent_boxes(edge_boxes, w)
     color_boxes = [box for _, box in by_kind]
     for box in edge_boxes:
-        if any(_bbox_iou(box, known) >= 0.34 for known in color_boxes):
-            continue
         ar = (box[2] - box[0]) / max(box[3] - box[1], 1)
+        if any(_bbox_iou(box, known) >= 0.34 for known in color_boxes):
+            # Dầm thép dài — không để cement FP chặn edge detect.
+            if ar <= 1.12:
+                continue
         kind = "steel" if ar > 1.12 else "generic"
         by_kind.append((_refine_object_kind(hsv, box, kind), box))
 
@@ -2035,7 +2041,7 @@ def _analyze_objects(
             )
             for box in pile_boxes
             if (finalized := _finalize_object_bbox(hsv, box, w, h, kind="material", roi_mask=roi_mask))
-            and _is_valid_object_box(hsv, box, w, h)
+            and _is_valid_object_box(hsv, finalized, w, h)
         ]
 
     return []

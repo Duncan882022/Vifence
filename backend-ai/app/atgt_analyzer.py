@@ -221,6 +221,62 @@ def _detect_soft_median(frame: np.ndarray, mask: np.ndarray) -> tuple[float, flo
     return float(x), float(y), float(x + bw), float(y + bh)
 
 
+def _detect_paved_lane_edge(
+    frame: np.ndarray,
+    mask: np.ndarray,
+) -> tuple[float, float, float, float] | None:
+    """Lề / vạch trắng lớp nhựa bên phải — phân làn thật trên lòng đường (Cam A-03)."""
+    h, w = frame.shape[:2]
+    search = mask.copy()
+    search[:, : int(w * 0.34)] = 0
+    search[int(h * 0.74) :, :] = 0
+    search[: int(h * 0.36), :] = 0
+    if cv2.countNonZero(search) < 120:
+        return None
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    white = cv2.inRange(hsv, np.array([0, 0, 172]), np.array([180, 52, 255]))
+    lane = cv2.bitwise_and(white, search)
+    lane = cv2.morphologyEx(lane, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), 1)
+    edges = cv2.Canny(lane, 45, 130)
+    min_len = max(48, int(w * 0.16))
+    lines = cv2.HoughLinesP(
+        edges,
+        1,
+        np.pi / 180,
+        threshold=38,
+        minLineLength=min_len,
+        maxLineGap=18,
+    )
+    if lines is None:
+        return None
+
+    best: tuple[float, float, float, float] | None = None
+    best_score = 0.0
+    for line in lines.reshape(-1, 4):
+        x1, y1, x2, y2 = (float(v) for v in line)
+        length = math.hypot(x2 - x1, y2 - y1)
+        if length < min_len:
+            continue
+        angle = abs(math.degrees(math.atan2(y2 - y1, x2 - x1)))
+        if angle > 22.0:
+            continue
+        cx = (x1 + x2) / 2.0
+        if cx < w * 0.42:
+            continue
+        score = length + (w - cx) * 0.04
+        if score > best_score:
+            best_score = score
+            best = (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
+
+    if best is None:
+        return None
+    x1, y1, x2, y2 = best
+    thickness = max(8.0, (y2 - y1) * 0.55 + 12.0)
+    cy = (y1 + y2) / 2.0
+    return (x1, cy - thickness / 2, x2, cy + thickness / 2)
+
+
 def _detect_fence_median(
     frame: np.ndarray,
     mask: np.ndarray,
@@ -354,25 +410,38 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
         ]
 
     fence = _detect_fence_median(frame, mask)
-    if fence:
-        detections: list[Detection] = [
-            Detection(
-                behavior="soft_median",
-                label="Hàng rào phân cách",
-                confidence=_SOFT_MEDIAN_CONF,
-                bbox=list(fence),
-            )
-        ]
-        left_gap = _missing_lane_separation_bbox(mask, w, h)
-        if left_gap is not None:
+    paved = _detect_paved_lane_edge(frame, mask)
+    if fence or paved:
+        detections: list[Detection] = []
+        if fence:
             detections.append(
                 Detection(
-                    behavior="no_soft_median",
-                    label="Không tổ chức phân làn, luồng giao thông",
-                    confidence=round(_MIN_CONF + 0.03, 3),
-                    bbox=list(left_gap),
+                    behavior="soft_median",
+                    label="Hàng rào phân cách",
+                    confidence=_SOFT_MEDIAN_CONF,
+                    bbox=list(fence),
                 )
             )
+        if paved:
+            detections.append(
+                Detection(
+                    behavior="hard_median",
+                    label="Vạch phân làn",
+                    confidence=_HARD_MEDIAN_CONF,
+                    bbox=list(paved),
+                )
+            )
+        if not paved:
+            left_gap = _missing_lane_separation_bbox(mask, w, h)
+            if left_gap is not None:
+                detections.append(
+                    Detection(
+                        behavior="no_soft_median",
+                        label="Không tổ chức phân làn, luồng giao thông",
+                        confidence=round(_MIN_CONF + 0.03, 3),
+                        bbox=list(left_gap),
+                    )
+                )
         return detections
 
     soft = _detect_soft_median(frame, mask)

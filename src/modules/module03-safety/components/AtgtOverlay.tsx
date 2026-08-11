@@ -35,6 +35,91 @@ interface AtgtOverlayProps {
 }
 
 const VEHICLE_MIN_CONF = 0.45
+const LANE_GUIDE_STROKE_WIDTH = 0.75
+
+const LANE_GUIDE_STROKE: Record<string, { stroke: string; dash?: string }> = {
+  soft_median: { stroke: 'rgba(56, 189, 248, 0.92)', dash: '5 3' },
+  hard_median: { stroke: 'rgba(74, 222, 128, 0.95)' },
+}
+
+function mapBboxPointToOverlay(
+  x: number,
+  y: number,
+  frameWidth: number,
+  frameHeight: number,
+  video: HTMLVideoElement | null | undefined,
+  videoFit: 'cover' | 'contain',
+  videoObjectPosition: 'center' | 'bottom',
+): { x: number; y: number } | null {
+  const box = mapBackendBboxToOverlay(
+    [x, y, x + 1, y + 1],
+    frameWidth,
+    frameHeight,
+    video,
+    videoFit,
+    videoObjectPosition,
+  )
+  if (box.w <= 0) return null
+  return { x: box.x, y: box.y }
+}
+
+function LaneMedianGuide({
+  detection,
+  frameWidth,
+  frameHeight,
+  videoRef,
+  videoFit,
+  videoObjectPosition = 'center',
+}: {
+  detection: AtgtDetection
+  frameWidth: number
+  frameHeight: number
+  videoRef: RefObject<HTMLVideoElement | null>
+  videoFit: 'cover' | 'contain'
+  videoObjectPosition?: 'center' | 'bottom'
+}) {
+  const video = videoRef.current
+  const [x1, y1, x2, y2] = detection.bbox
+  const style = LANE_GUIDE_STROKE[detection.behavior] ?? LANE_GUIDE_STROKE.soft_median
+
+  const isVerticalFence =
+    detection.behavior === 'soft_median' && (x2 - x1) < (y2 - y1) * 0.72
+  const lineX = isVerticalFence ? x2 : null
+  const lineY = detection.behavior === 'hard_median' ? (y1 + y2) / 2 : null
+
+  const p1 = isVerticalFence && lineX != null
+    ? mapBboxPointToOverlay(lineX, y1, frameWidth, frameHeight, video, videoFit, videoObjectPosition)
+    : lineY != null
+      ? mapBboxPointToOverlay(x1, lineY, frameWidth, frameHeight, video, videoFit, videoObjectPosition)
+      : null
+  const p2 = isVerticalFence && lineX != null
+    ? mapBboxPointToOverlay(lineX, y2, frameWidth, frameHeight, video, videoFit, videoObjectPosition)
+    : lineY != null
+      ? mapBboxPointToOverlay(x2, lineY, frameWidth, frameHeight, video, videoFit, videoObjectPosition)
+      : null
+
+  if (!p1 || !p2) return null
+
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none z-[3]"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      <line
+        x1={p1.x}
+        y1={p1.y}
+        x2={p2.x}
+        y2={p2.y}
+        stroke={style.stroke}
+        strokeWidth={LANE_GUIDE_STROKE_WIDTH}
+        strokeDasharray={style.dash}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+}
 
 const ATGT_ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
   ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.12)' },
@@ -324,19 +409,34 @@ export const AtgtOverlay = memo(function AtgtOverlay({
           layoutTick={layoutTick}
         />
       )}
-      {showBoxes && visible.map((d, i) => (
-        <DetectionBox
-          key={`${d.behavior}-${i}-${Math.round(d.bbox[0])}-${layoutTick}`}
-          detection={d}
-          frameWidth={frameSize.width}
-          frameHeight={frameSize.height}
-          videoRef={videoRef}
-          compact={compact}
-          videoFit={videoFit}
-          videoObjectPosition={videoObjectPosition}
-          snapOverlay={snapOverlay}
-        />
-      ))}
+      {showBoxes && visible.map((d, i) => {
+        if (d.behavior === 'soft_median' || d.behavior === 'hard_median') {
+          return (
+            <LaneMedianGuide
+              key={`lane-${d.behavior}-${i}-${Math.round(d.bbox[0])}-${layoutTick}`}
+              detection={d}
+              frameWidth={frameSize.width}
+              frameHeight={frameSize.height}
+              videoRef={videoRef}
+              videoFit={videoFit}
+              videoObjectPosition={videoObjectPosition}
+            />
+          )
+        }
+        return (
+          <DetectionBox
+            key={`${d.behavior}-${i}-${Math.round(d.bbox[0])}-${layoutTick}`}
+            detection={d}
+            frameWidth={frameSize.width}
+            frameHeight={frameSize.height}
+            videoRef={videoRef}
+            compact={compact}
+            videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
+            snapOverlay={snapOverlay}
+          />
+        )
+      })}
     </div>
   )
 })

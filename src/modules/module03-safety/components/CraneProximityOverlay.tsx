@@ -16,7 +16,7 @@ import {
   type CraneProximityDetection,
   type CraneProximityMetrics,
 } from '../services/craneProximityBackend.service'
-import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
+import { shouldRunCraneOnCamera } from '@/modules/module02-training/data/cameraAiRuntime'
 import { useCameraLiveRoiVisible } from '@/modules/module02-training/hooks/useCameraLiveRoiVisible'
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
@@ -43,6 +43,8 @@ const ROI_STROKE: Record<string, { stroke: string; fill: string; dash: string }>
   CRANE_WORK: { stroke: 'rgba(56, 189, 248, 0.85)', fill: 'rgba(56, 189, 248, 0.10)', dash: '6 4' },
   CRANE_BODY: { stroke: 'rgba(251, 191, 36, 0.55)', fill: 'none', dash: '5 4' },
 }
+/** Cam A-04 — polygon ROI mỏng hơn ATGT/Road (1.2). */
+const CRANE_ROI_POLYGON_STROKE_WIDTH = 0.75
 
 function CraneRoiPolygons({
   zones,
@@ -88,7 +90,7 @@ function CraneRoiPolygons({
             points={points}
             fill={style.fill}
             stroke={style.stroke}
-            strokeWidth={1.2}
+            strokeWidth={CRANE_ROI_POLYGON_STROKE_WIDTH}
             strokeDasharray={style.dash}
             vectorEffect="non-scaling-stroke"
           />
@@ -273,6 +275,11 @@ function useCraneProximityState(
 
   useEffect(() => {
     if (!enabled || !vms?.active || !vms.snapshot) return
+    const video = videoRef.current
+    if (video && !shouldRunCraneOnCamera(cameraId, video.currentTime)) {
+      setDetections([])
+      return
+    }
     setLayoutTick(t => t + 1)
     const craneMetrics = vms.snapshot.metrics.crane as CraneProximityMetrics | undefined
     const mapped = vms.snapshot.detections
@@ -300,7 +307,23 @@ function useCraneProximityState(
     setMetrics(craneMetrics)
     setStatus(vms.status)
     setStatusMsg(vms.statusMsg)
-  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg])
+  }, [enabled, vms?.active, vms?.snapshot?.updated_at, vms?.status, vms?.statusMsg, cameraId, videoRef])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !enabled) return
+    const onSegmentChange = () => {
+      if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
+        setDetections([])
+      }
+    }
+    video.addEventListener('timeupdate', onSegmentChange)
+    video.addEventListener('seeked', onSegmentChange)
+    return () => {
+      video.removeEventListener('timeupdate', onSegmentChange)
+      video.removeEventListener('seeked', onSegmentChange)
+    }
+  }, [cameraId, enabled, videoRef])
 
   useEffect(() => {
     const video = videoRef.current
@@ -344,8 +367,12 @@ function useCraneProximityState(
     clientRef.current = createCraneProximityClient(video, {
       cameraId,
       backendUrl,
-      shouldAnalyze: () => isCameraAiModelEnabled(cameraId, 'crane_proximity'),
+      shouldAnalyze: () => shouldRunCraneOnCamera(cameraId, video.currentTime),
       onResult: result => {
+        if (!shouldRunCraneOnCamera(cameraId, video.currentTime)) {
+          setDetections([])
+          return
+        }
         const visible = result.detections
           .filter(passesCraneOverlayDetection)
           .sort((a, b) => {

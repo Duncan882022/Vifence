@@ -73,6 +73,16 @@ apt-get install -y -qq \
   curl rsync
 REMOTE_PACKAGES
 
+echo "→ Pre-deploy audit (13 nhóm ATLĐ)…"
+if [[ -x "${ROOT}/backend-ai/.venv/bin/python" ]]; then
+  "${ROOT}/backend-ai/.venv/bin/python" "${ROOT}/backend-ai/scripts/audit_pre_deploy.py" || {
+    echo "✗ Pre-deploy audit FAIL — sửa backend trước khi rsync."
+    exit 1
+  }
+else
+  echo "⚠ Bỏ qua audit — chưa có backend-ai/.venv"
+fi
+
 echo "→ Rsync backend-ai…"
 ssh_cmd "mkdir -p ${REMOTE_DIR}"
 rsync_cmd
@@ -139,7 +149,7 @@ fi
 
 echo "→ .env production…"
 VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
-VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-false}"
+VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-true}"
 VPS_VIDEO_A03="${VPS_VIDEO_A03:-${VPS_VIDEO_DIR}/cam03.mp4}"
 VPS_VIDEO_A04="${VPS_VIDEO_A04:-${VPS_VIDEO_DIR}/cam04.mp4}"
 ssh_cmd "bash -s" <<REMOTE_ENV
@@ -150,7 +160,7 @@ PORT=8000
 DETECTION_LOOP_ENABLED=false
 AUTO_TRAIN_ENABLED=${VPS_AUTO_TRAIN_ENABLED}
 AUTO_TRAIN_INFERENCE_ENABLED=true
-AUTO_TRAIN_SCHEDULE_HOURS_LOCAL=6,18
+AUTO_TRAIN_SCHEDULE_HOURS_LOCAL=0,6
 AUTO_TRAIN_SCHEDULE_TZ_OFFSET_HOURS=7
 AUTO_TRAIN_SCHEDULE_WINDOW_MINUTES=90
 AUTO_TRAIN_CHECK_INTERVAL_SECONDS=120
