@@ -56,15 +56,12 @@ function visibleDetections(
 }
 
 
-/** Polygon ROI — đồng bộ nét mỏng với ATGT/Crane (Cam A-03). */
+/** Polygon ROI — chỉ vẽ MESH (lưới bao che); không vẽ ROAD xanh trên live tile. */
 const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
-  ROAD: { stroke: 'rgba(74, 222, 128, 0.95)', fill: 'rgba(34, 197, 94, 0.12)' },
-  MESH: { stroke: 'rgba(56, 189, 248, 0.90)', fill: 'rgba(14, 165, 233, 0.10)', dash: '5 3' },
+  MESH: { stroke: 'rgba(56, 189, 248, 0.95)', fill: 'rgba(14, 165, 233, 0.10)' },
   STORAGE: { stroke: 'rgba(167, 139, 250, 0.30)', fill: 'none', dash: '4 3' },
 }
 const ROI_POLYGON_STROKE_WIDTH = 1.2
-/** Cam A-03 — chỉ tô fill ROI, không vẽ viền (tránh nhầm phân làn ATGT / vật tư). */
-const A03_ROAD_ROI_STROKE = 'none'
 
 interface RoadAnalysisOverlayProps {
   cameraId: string
@@ -168,7 +165,6 @@ function RoiPolygons({
   videoFit,
   videoObjectPosition = 'center',
   layoutTick,
-  cameraId,
 }: {
   zones: RoadAnalysisRoiZone[]
   frameWidth: number
@@ -177,7 +173,6 @@ function RoiPolygons({
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   layoutTick: number
-  cameraId: string
 }) {
   const video = videoRef.current
   const fw = frameWidth > 0 ? frameWidth : (video?.videoWidth ?? 0)
@@ -191,8 +186,8 @@ function RoiPolygons({
       preserveAspectRatio="none"
       aria-hidden
     >
-      {zones.map(zone => {
-        const style = ROI_STROKE[zone.type] ?? ROI_STROKE.ROAD
+      {zones.filter(z => z.type === 'MESH').map(zone => {
+        const style = ROI_STROKE.MESH
         const points = polygonPointsOnVideo(
           zone.polygon,
           video,
@@ -202,15 +197,13 @@ function RoiPolygons({
           videoObjectPosition,
         )
         if (!points) return null
-        const roadFillOnly = cameraId === 'A-03' && zone.type === 'ROAD'
         return (
           <polygon
             key={`${zone.id}-${layoutTick}`}
             points={points}
             fill={style.fill}
-            stroke={roadFillOnly ? A03_ROAD_ROI_STROKE : style.stroke}
-            strokeWidth={roadFillOnly ? 0 : ROI_POLYGON_STROKE_WIDTH}
-            strokeDasharray={style.dash}
+            stroke={style.stroke}
+            strokeWidth={ROI_POLYGON_STROKE_WIDTH}
             vectorEffect="non-scaling-stroke"
           />
         )
@@ -384,7 +377,7 @@ export function RoadAnalysisOverlay({
 
   if (!enabled) return null
 
-  const showPolygon = roiZones.length > 0 && liveRoiVisible
+  const showPolygon = roiZones.some(z => z.type === 'MESH') && liveRoiVisible
   const video = videoRef.current
   const overlayFrameSize = {
     width: frameSize.width > 0
@@ -410,7 +403,6 @@ export function RoadAnalysisOverlay({
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
           layoutTick={layoutTick}
-          cameraId={cameraId}
         />
       )}
 

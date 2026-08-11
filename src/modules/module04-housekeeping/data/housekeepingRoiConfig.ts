@@ -50,7 +50,7 @@ export const HOUSEKEEPING_ROI_ZONES: HousekeepingRoiZone[] = [
   },
   {
     id: 'roi-mesh-a03',
-    label: 'Lưới bao che — TTDV-A Cam 03',
+    label: 'Lưới bao che thiếu/hở/bẩn — TTDV-A Cam 03',
     type: 'MESH',
     cameraId: 'A-03',
     polygon: [

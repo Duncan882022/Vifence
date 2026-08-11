@@ -136,7 +136,7 @@ const SCENARIO_ID_DISPLAY_NAME: Record<string, string> = {
   'DZ-003': 'Làm việc trong vùng nguy hiểm',
   'ATGT-002': 'Phương tiện vượt tốc độ quy định',
   'ATGT-004': 'Không tổ chức phân làn, phân luồng giao thông',
-  'BPTC-001': 'Lưới bao che thiếu/hở',
+  'BPTC-001': 'Lưới bao che thiếu/hở/bẩn',
   'BPTC-007': 'Đường nội bộ bùn bẩn',
   'BPTC-008': 'Đường nội bộ đọng nước',
   'BPTC-009': 'Vật tư chiếm dụng lòng đường',

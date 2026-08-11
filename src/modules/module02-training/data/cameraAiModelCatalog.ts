@@ -16,7 +16,7 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     label: 'Lòng đường',
     groupId: 'BPTC',
     scenarioIds: ['BPTC-007', 'BPTC-008', 'BPTC-009', 'BPTC-001'],
-    description: 'Bùn, nước đọng, vật cản + lưới bao che (BPTC-001 qua engine mesh/VMS). Auto-train road_material + safety_mesh_cover.',
+    description: 'Bùn, nước đọng, vật cản (bbox) + lưới bao che thiếu/hở/bẩn (polygon xanh). Auto-train road_material + safety_mesh_cover.',
     needsPolygon: true,
     polygonHint: 'Vẽ ROAD (+ MESH tùy chọn).',
     endpoint: '/analyze/road/frame',

@@ -35,9 +35,9 @@ MESH_VIOLATION_BEHAVIORS = frozenset({"mesh_missing", "mesh_torn", "mesh_dirty"}
 
 _LABELS = {
     "mesh_cover": "Lưới bao che OK",
-    "mesh_missing": "Lưới bao che thiếu/hở",
-    "mesh_torn": "Lưới bao che bị rách",
-    "mesh_dirty": "Lưới bao che bẩn",
+    "mesh_missing": "Lưới bao che thiếu/hở/bẩn",
+    "mesh_torn": "Lưới bao che thiếu/hở/bẩn",
+    "mesh_dirty": "Lưới bao che thiếu/hở/bẩn",
 }
 
 

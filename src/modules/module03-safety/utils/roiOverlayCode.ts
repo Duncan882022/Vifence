@@ -44,6 +44,9 @@ const BEHAVIOR_ROI_CODE: Record<string, string> = {
   mud: 'BPTC-007',
   water: 'BPTC-008',
   object: 'BPTC-009',
+  mesh_missing: 'BPTC-001',
+  mesh_torn: 'BPTC-001',
+  mesh_dirty: 'BPTC-001',
 }
 
 export function formatCraneOverlayLabel(
