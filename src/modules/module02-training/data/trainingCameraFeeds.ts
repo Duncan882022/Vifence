@@ -3,7 +3,7 @@
  * OCP1-A/B: CCTV 16:9 · Body cam: 9:16 · Flycam: 16:9 toàn cảnh.
  * A-03 (TTDV-A · Cam 03): mock từ public/camera-feeds/ttdv-a-cam03-test.mp4
  * A-04 (TTDV-A · Cam 04): mock từ public/camera-feeds/ttdv-a-cam04-test.mp4
- *   (10s hiện trường cẩu + 5s PPE workers + 5s PCCC hút thuốc/lửa)
+ *   (build: scripts/build-cam04-test-mp4.sh — ảnh demo 0355/0359/0360 + PPE/PCCC/WAH scene)
  *
  * Mốc cắt (giây): OCP1-A 170,188,205,212,218,238,248,252 ·
  * Body 163,209,169 · Fly 174,177

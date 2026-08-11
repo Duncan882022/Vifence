@@ -13,6 +13,7 @@
     "deploy:pages": "bash scripts/deploy-pages.sh",
     "setup:local": "bash scripts/setup-local-dev.sh",
     "pull:auto-train": "bash scripts/pull-auto-train.sh",
+    "build:cam04": "bash scripts/build-cam04-test-mp4.sh",
     "audit:predeploy": "backend-ai/.venv/bin/python backend-ai/scripts/audit_pre_deploy.py",
     "start:local": "bash scripts/start-local.sh",
     "start:fe": "bash scripts/start-fe-remote.sh",
