@@ -51,6 +51,7 @@ function mapBboxPointToOverlay(
   videoFit: 'cover' | 'contain',
   videoObjectPosition: 'center' | 'bottom',
 ): { x: number; y: number } | null {
+  if (!video) return null
   const box = mapBackendBboxToOverlay(
     [x, y, x + 1, y + 1],
     frameWidth,
