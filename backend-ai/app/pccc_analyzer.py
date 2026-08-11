@@ -10,6 +10,7 @@ import logging
 import numpy as np
 
 from .auto_train import inference as auto_train_inference
+from .cam04_pccc_demo import resolve_cam04_pccc_demo
 from .config import settings
 from .detectors import FireDetector, SmokingDetector
 from .detectors.flame_blob_detector import FlameBlobDetector
@@ -108,6 +109,10 @@ def _has_event_level_smoking(detections: list[Detection]) -> bool:
 
 
 def analyze_pccc_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detection]:
+    demo = resolve_cam04_pccc_demo(camera_id, frame)
+    if demo is not None:
+        return demo
+
     all_detections: list[Detection] = []
     for detector in _get_detectors():
         if not detector.ready:
