@@ -117,11 +117,8 @@ def draw_atld_roi_box(
     *,
     thickness: int = 2,
 ) -> None:
-    """Vi phạm ATLĐ — viền liền mỏng; máy/người/PPE đạt chuẩn — nét đứt 1px."""
-    if behavior in {"mesh_missing", "mesh_torn", "mesh_dirty"}:
-        draw_dashed_rectangle(frame, (x1, y1), (x2, y2), color, thickness=1)
-        return
-    if is_atld_violation_behavior(behavior):
+    """Vi phạm ATLĐ — viền liền; máy/người/PPE đạt chuẩn — nét đứt 1px."""
+    if is_atld_violation_behavior(behavior) or behavior.startswith("no_"):
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
     else:
         draw_dashed_rectangle(
@@ -130,6 +127,39 @@ def draw_atld_roi_box(
             (x2, y2),
             color,
             thickness=1,
+        )
+
+
+def draw_violation_roi_annotation(
+    frame: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: tuple[int, int, int],
+    *,
+    behavior: str,
+    scenario_id: str | None,
+    confidence: float,
+    thickness: int = 2,
+    machine_kind: str | None = None,
+    suffix: str = "",
+) -> None:
+    """Snapshot vi phạm — viền liền + nhãn mã kịch bản (vd BPTC-001 88%)."""
+    draw_atld_roi_box(frame, x1, y1, x2, y2, color, behavior, thickness=thickness)
+    if behavior.startswith("no_") or is_atld_violation_behavior(behavior):
+        draw_snapshot_roi_badge(
+            frame,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            scenario_id=scenario_id,
+            confidence=confidence,
+            behavior=behavior,
+            machine_kind=machine_kind,
+            suffix=suffix,
         )
 
 

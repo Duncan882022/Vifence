@@ -18,7 +18,7 @@ from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetec
 from .snapshot_compose import (
     compose_violation_snapshot,
     draw_atld_roi_box,
-    draw_snapshot_roi_badge,
+    draw_violation_roi_annotation,
     merge_bboxes,
 )
 
@@ -681,7 +681,18 @@ class EventStore:
             "no_soft_median": (0, 140, 255),
         }
         color = colors.get(detection.behavior, (0, 200, 255))
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        draw_violation_roi_annotation(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            behavior=detection.behavior,
+            scenario_id=getattr(detection, "scenario_id", None),
+            confidence=float(detection.confidence),
+            thickness=2,
+        )
         return annotated
 
     @classmethod
@@ -718,7 +729,18 @@ class EventStore:
             "person": (255, 200, 80),
         }
         color = colors.get(detection.behavior, (0, 255, 0))
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
+        draw_violation_roi_annotation(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            behavior=detection.behavior,
+            scenario_id=getattr(detection, "scenario_id", None),
+            confidence=float(detection.confidence),
+            thickness=thickness,
+        )
         return annotated
 
     @staticmethod
@@ -742,21 +764,21 @@ class EventStore:
             color = CRANE_CATALOG_STYLES["person"]["color"]
         else:
             color = CRANE_CATALOG_STYLES.get(detection.behavior, CRANE_CATALOG_STYLES["person"])["color"]
-        thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 1
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
+        thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
         suffix = ""
         if detection.behavior == "crane_proximity" and detection.distance_m is not None:
             suffix = f" · {detection.distance_m:.1f}m"
-        draw_snapshot_roi_badge(
+        draw_violation_roi_annotation(
             annotated,
             x1,
             y1,
             x2,
             y2,
             color,
+            behavior=detection.behavior,
             scenario_id=getattr(detection, "scenario_id", None),
             confidence=float(detection.confidence),
-            behavior=detection.behavior,
+            thickness=thickness,
             machine_kind=getattr(detection, "machine_kind", None),
             suffix=suffix,
         )
@@ -806,11 +828,18 @@ class EventStore:
             "mesh_dirty": (14, 64, 146),  # nâu #92400e — bẩn (đồng bộ FE)
         }
         color = colors.get(detection.behavior, (0, 255, 0))
-        if detection.behavior in {"mesh_missing", "mesh_torn", "mesh_dirty"}:
-            from .snapshot_compose import draw_dashed_rectangle
-            draw_dashed_rectangle(annotated, (x1, y1), (x2, y2), color, thickness=1)
-        else:
-            draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=1)
+        draw_violation_roi_annotation(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            behavior=detection.behavior,
+            scenario_id=getattr(detection, "scenario_id", None),
+            confidence=float(detection.confidence),
+            thickness=1,
+        )
         return annotated
 
     @staticmethod
@@ -827,7 +856,18 @@ class EventStore:
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        draw_violation_roi_annotation(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            behavior=detection.behavior,
+            scenario_id=getattr(detection, "scenario_id", None),
+            confidence=float(detection.confidence),
+            thickness=2,
+        )
         return annotated
 
     @staticmethod
@@ -838,7 +878,18 @@ class EventStore:
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        draw_violation_roi_annotation(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            behavior=detection.behavior,
+            scenario_id=getattr(detection, "scenario_id", None),
+            confidence=float(detection.confidence),
+            thickness=2,
+        )
         return annotated
 
     def _append_to_disk(self, event: ViolationEvent) -> None:

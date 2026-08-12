@@ -36,7 +36,7 @@ SCENARIO_THRESHOLDS: dict[str, ScenarioThreshold] = {
     "PCCC-002": ScenarioThreshold(min_confidence=0.88, confirm_seconds=6.0, max_gap_seconds=15.0, cooldown_seconds=900.0),
     # BPTC — đường
     "BPTC-007": ScenarioThreshold(min_confidence=0.80, confirm_seconds=2.0, max_gap_seconds=3.0, cooldown_seconds=600.0),
-    "BPTC-008": ScenarioThreshold(min_confidence=0.80, confirm_seconds=2.0, max_gap_seconds=3.0, cooldown_seconds=600.0),
+    "BPTC-008": ScenarioThreshold(min_confidence=0.85, confirm_seconds=3.0, max_gap_seconds=3.0, cooldown_seconds=1800.0),
     "BPTC-009": ScenarioThreshold(min_confidence=0.85, confirm_seconds=2.0, max_gap_seconds=3.0, cooldown_seconds=600.0),
     # BPTC — mesh cover
     "BPTC-001": ScenarioThreshold(min_confidence=0.85, confirm_seconds=2.0, max_gap_seconds=3.0, cooldown_seconds=1800.0),

@@ -24,14 +24,14 @@ from .unknown_detection import UNKNOWN_LABEL
 logger = logging.getLogger("road_analysis_engine")
 
 # Xác nhận thống nhất 2s trước khi ghi sự kiện
-from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS
+from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, get_threshold
 
 _ROAD_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _ROAD_REPEAT_SECONDS = settings.road_event_repeat_seconds
 _ROAD_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _BEHAVIOR_CONFIRM_SECONDS: dict[str, float] = {
     "mud": VIOLATION_CONFIRM_SECONDS,
-    "water": VIOLATION_CONFIRM_SECONDS,
+    "water": get_threshold("BPTC-008").confirm_seconds,
     "object": VIOLATION_CONFIRM_SECONDS,
 }
 _ROAD_MIN_CONFIDENCE = EVENT_MIN_CONFIDENCE
@@ -91,6 +91,9 @@ class RoadAnalysisEngine:
         bx = det.bbox
         cx = min(7, int(((bx[0] + bx[2]) / 2) / max(frame_w / 8, 1)))
         cy = min(5, int(((bx[1] + bx[3]) / 2) / max(frame_h / 6, 1)))
+        if det.behavior in ("mud", "water"):
+            cx = min(3, int(((bx[0] + bx[2]) / 2) / max(frame_w / 4, 1)))
+            cy = min(3, int(((bx[1] + bx[3]) / 2) / max(frame_h / 4, 1)))
         slot = f"p{cy}{cx}"
         if det.behavior == "object":
             return f"object:{slot}"

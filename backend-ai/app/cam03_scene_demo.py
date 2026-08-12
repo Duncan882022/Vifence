@@ -215,6 +215,8 @@ def resolve_cam03_mesh_demo(
         )
 
     dirty_bbox = _localize_mesh_dirty_bbox(hsv, roi_mask, zone_box)
+    if dirty_bbox is None and anchor.mesh_dirty is not None:
+        dirty_bbox = _scale_anchor_bbox(anchor.mesh_dirty, w, h)
     if dirty_bbox is not None and bbox_inside_mesh_zone(dirty_bbox, zone_polygon, w, h):
         x1, y1, x2, y2 = dirty_bbox
         out.append(
