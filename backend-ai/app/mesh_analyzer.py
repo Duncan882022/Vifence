@@ -719,6 +719,12 @@ def analyze_mesh_frame(
     zone_polygon: Optional[list[dict]] = None,
 ) -> list[RoadDetection]:
     """Phân tích lưới bao che trong frame — model YOLO + heuristic ROI."""
+    from .cam03_scene_demo import resolve_cam03_mesh_demo
+
+    demo = resolve_cam03_mesh_demo(camera_id, frame)
+    if demo is not None:
+        return demo
+
     zone = _resolve_zone_polygon(camera_id, zone_polygon)
     if zone is None:
         return []

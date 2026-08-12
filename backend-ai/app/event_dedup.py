@@ -14,7 +14,16 @@ logger = logging.getLogger("event_dedup")
 
 def build_dedup_key(camera_id: str, scenario_id: str, track_id: str) -> str:
     """Khóa duy nhất: camera × kịch bản × đối tượng theo dõi."""
-    return f"{camera_id}|{scenario_id}|{track_id}"
+    base = f"{camera_id}|{scenario_id}|{track_id}"
+    from .config import settings
+
+    if not settings.event_dedup_enabled():
+        from .vms_loop_state import loops_completed
+
+        loop_n = loops_completed(camera_id)
+        if 1 <= loop_n <= 3:
+            return f"{base}|L{loop_n}"
+    return base
 
 
 class EventDedupRegistry:

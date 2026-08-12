@@ -619,4 +619,6 @@ def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detec
             )
 
     detections.extend(_analyze_lane_state(frame, camera_id))
-    return detections
+    from .cam03_scene_demo import augment_cam03_atgt_demo
+
+    return augment_cam03_atgt_demo(camera_id, frame, detections)
