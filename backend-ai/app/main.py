@@ -170,10 +170,13 @@ async def lifespan(app: FastAPI):
             logger.info("EVENT_TEST_MODE=true — dedup 2 phút (debug timing, không dùng audit loop).")
         else:
             logger.info(
-                "Audit grace: %d vòng loop đầu ghi đủ (dedup 3h sau grace). Dedup cửa sổ=%.0fs.",
-                settings.event_audit_grace_loops,
+                "Audit grace: dedup tắt %.0f phút đầu; sau đó cửa sổ dedup=%.0fs.",
+                settings.event_audit_grace_minutes,
                 settings.event_first_seen_window_seconds,
             )
+        from .vms_loop_state import arm_dedup_grace
+
+        arm_dedup_grace()
         if not settings.a03_bptc_event_logging_enabled:
             logger.info("Cam A-03: không ghi sự kiện BPTC (chỉ overlay).")
         if settings.atgt_lane_violation_only:

@@ -68,7 +68,9 @@ class Settings(BaseSettings):
     # ATGT: false = log cả vượt tốc độ (ATGT-002) + thiếu phân làn (ATGT-004).
     atgt_lane_violation_only: bool = False
 
-    # Số vòng loop video trước khi bật dedup 3h. 2 = ghi đủ ở loop 1–2, từ loop 3 dedup.
+    # Phút đầu sau restart / DELETE /events: dedup tắt — ghi đủ mọi trường hợp qua nhiều loop.
+    event_audit_grace_minutes: float = 10.0
+    # Legacy — không còn dùng cho dedup (giữ env tương thích).
     event_audit_grace_loops: int = 2
 
     def event_repeat_seconds(self, configured: float) -> float:
@@ -80,15 +82,12 @@ class Settings(BaseSettings):
         return not self.event_test_mode
 
     def event_dedup_enabled(self) -> bool:
-        """False trong N vòng loop đầu — ghi đủ mọi trường hợp trước khi dedup 3h."""
+        """False trong N phút audit đầu — ghi đủ trước khi dedup 3h."""
         if self.event_test_mode:
             return True
-        grace = self.event_audit_grace_loops
-        if grace <= 0:
-            return True
-        from .vms_loop_state import min_loops_completed
+        from .vms_loop_state import dedup_grace_elapsed
 
-        return min_loops_completed() >= grace
+        return dedup_grace_elapsed()
 
     @property
     def event_first_seen_window_effective(self) -> float:

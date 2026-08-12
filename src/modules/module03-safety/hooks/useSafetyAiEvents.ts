@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
-import { getSafetyTodayDate } from '../data/safetyDemoDate'
+import { getSafetyLiveEventDate } from '../services/safetyAiEvents.service'
 import {
   fetchSafetyAiEvents,
   SAFETY_AI_EVENTS_CHANGED,
@@ -13,7 +13,7 @@ import {
 import type { SafetyViolationRecord } from '../types/safety.types'
 
 /** Poll sự kiện — overlay vẫn refresh ngay qua SAFETY_AI_EVENTS_CHANGED. */
-export const SAFETY_AI_EVENTS_POLL_MS = 60 * 1000
+export const SAFETY_AI_EVENTS_POLL_MS = 10 * 1000
 
 let pollRefCount = 0
 let pollTimerId = 0
@@ -23,7 +23,7 @@ async function refreshSafetyEvents(): Promise<void> {
   const url = getMobileAiBackendUrl()
   if (!url) return
 
-  const result = await fetchSafetyAiEvents(url, getSafetyTodayDate())
+  const result = await fetchSafetyAiEvents(url, getSafetyLiveEventDate())
   if (result.ok) {
     setSafetyEventsSnapshot(result.records)
   }

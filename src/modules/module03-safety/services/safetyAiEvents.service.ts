@@ -1,4 +1,4 @@
-import { formatVnIsoFromUnix } from '@/utils/vnDateTime'
+import { formatVnDate, formatVnIsoFromUnix } from '@/utils/vnDateTime'
 import {
   getMobileAiBackendUrl,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -302,6 +302,11 @@ export type FetchSafetyAiEventsResult =
   | { ok: true; records: SafetyViolationRecord[] }
   | { ok: false; reason: 'no_backend' | 'http_error' | 'network_error' }
 
+export function getSafetyLiveEventDate(): string {
+  /** Live AI — luôn hôm nay (VN), không dính session ?date= demo playback. */
+  return formatVnDate()
+}
+
 export async function fetchSafetyAiEvents(
   backendUrl?: string,
   date?: string,
@@ -310,7 +315,8 @@ export async function fetchSafetyAiEvents(
   if (!base) return { ok: false, reason: 'no_backend' }
 
   const params = new URLSearchParams({ limit: '200' })
-  if (date) params.set('date', date)
+  const eventDate = date ?? getSafetyLiveEventDate()
+  params.set('date', eventDate)
 
   try {
     const res = await fetch(`${base}/events?${params.toString()}`, {
