@@ -85,13 +85,13 @@ class Detection(BaseModel):
 SCENARIO_META = {
     "smoking": {
         "scenario_id": "PCCC-001",
-        "scenario_name": "Phát hiện hút thuốc ngoài khu vực cho phép",
+        "scenario_name": "Hút thuốc không đúng nơi quy định",
         "violation_type": "fire-hot-work",
         "group": "PCCC",
     },
     "fire": {
         "scenario_id": "PCCC-002",
-        "scenario_name": "Phát hiện dấu hiệu cháy nổ",
+        "scenario_name": "Dấu hiệu cháy nổ",
         "violation_type": "fire-hot-work",
         "group": "PCCC",
     },
@@ -214,7 +214,7 @@ ATGT_SCENARIO_META = {
     },
     "no_soft_median": {
         "scenario_id": "ATGT-004",
-        "scenario_name": "Không tổ chức phân làn, luồng giao thông",
+        "scenario_name": "Không tổ chức phân làn, phân luồng giao thông",
         "violation_type": "traffic-safety",
         "group": "ATGT",
     },

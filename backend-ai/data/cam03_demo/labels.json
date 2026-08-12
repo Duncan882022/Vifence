@@ -4,8 +4,7 @@
       "file": "mesh-scene.jpg",
       "width": 640,
       "height": 640,
-      "mesh_missing": [212, 428, 364, 543],
-      "mesh_dirty": [190, 330, 290, 430]
+      "mesh_missing": [134, 252, 177, 292]
     },
     {
       "file": "atgt-scene.jpg",

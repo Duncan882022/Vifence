@@ -266,6 +266,8 @@ MIN_WATER_EVENT_AREA_RATIO = 0.0045
 MIN_WATER_EVENT_ROI_PERCENT = 0.15
 MIN_WATER_BBOX_WIDTH = 22
 MIN_WATER_BBOX_HEIGHT = 14
+MAX_WATER_BBOX_WIDTH_RATIO = 0.34
+MAX_WATER_BBOX_HEIGHT_RATIO = 0.20
 MIN_OBJECT_AREA_RATIO = 0.008
 MAX_OBJECT_AREA_RATIO = 0.12
 MIN_OBJECT_EPISODE_AREA_RATIO = 0.012
@@ -1643,6 +1645,63 @@ def _expand_water_bbox_to_puddle(
     return local if (local[2] - local[0]) <= (snapped[2] - snapped[0]) else snapped
 
 
+def _shrink_water_bbox(
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Giới hạn bbox vũng — tránh trải dọc quá cao / quá rộng."""
+    x1, y1, x2, y2 = box
+    max_w = int(frame_width * MAX_WATER_BBOX_WIDTH_RATIO)
+    max_h = int(frame_height * MAX_WATER_BBOX_HEIGHT_RATIO)
+    bw, bh = x2 - x1, y2 - y1
+    if bw <= max_w and bh <= max_h:
+        return box
+    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    nw, nh = min(bw, max_w), min(bh, max_h)
+    return (
+        int(round(cx - nw / 2.0)),
+        int(round(cy - nh / 2.0)),
+        int(round(cx + nw / 2.0)),
+        int(round(cy + nh / 2.0)),
+    )
+
+
+def _finalize_water_bbox(
+    seed: tuple[int, int, int, int],
+    expanded: tuple[int, int, int, int],
+    puddle_mask: np.ndarray,
+    roi_mask: np.ndarray,
+    hsv: np.ndarray,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[int, int, int, int]:
+    """Chọn bbox gọn nhất quanh vũng thật — ưu tiên component mask, không envelope lớn."""
+    frame_area = frame_width * frame_height
+    component = _water_puddle_component_bbox(
+        puddle_mask, seed, roi_mask, frame_width, frame_height,
+    )
+    candidates: list[tuple[int, int, int, int]] = []
+    for box in (component, seed, expanded):
+        if box is None:
+            continue
+        shrunk = _shrink_water_bbox(box, frame_width, frame_height)
+        clipped = _clip_water_box_to_roi(shrunk, roi_mask, frame_width, frame_height)
+        if clipped is None:
+            continue
+        if not _water_meets_violation_size(clipped, frame_width, frame_height, frame_area):
+            continue
+        if not _is_valid_water_box(hsv, clipped, frame_width, frame_height, expanded=True):
+            if not _is_valid_water_box(hsv, clipped, frame_width, frame_height):
+                continue
+        candidates.append(clipped)
+    if candidates:
+        return min(candidates, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+    shrunk = _shrink_water_bbox(expanded, frame_width, frame_height)
+    clipped = _clip_water_box_to_roi(shrunk, roi_mask, frame_width, frame_height)
+    return clipped or shrunk
+
+
 def _analyze_water(
     hsv: np.ndarray,
     roi_mask: np.ndarray,
@@ -1747,6 +1806,11 @@ def _analyze_water(
     meta = {row[2]: (row[1], row[3]) for row in ranked}
     for box in boxes:
         expanded = _expand_water_bbox_to_puddle(puddle_mask, hsv, box, roi_mask, w, h)
+        expanded = _finalize_water_bbox(box, expanded, puddle_mask, roi_mask, hsv, w, h)
+        expanded = _shrink_water_bbox(expanded, w, h)
+        clipped_final = _clip_water_box_to_roi(expanded, roi_mask, w, h)
+        if clipped_final is not None:
+            expanded = clipped_final
         area, roi_px = meta.get(box, (0, 1))
         ex1, ey1, ex2, ey2 = expanded
         expanded_area_ratio = ((ex2 - ex1) * (ey2 - ey1)) / max(frame_area, 1)
@@ -1756,11 +1820,7 @@ def _analyze_water(
         else:
             pct = round(100.0 * area / max(roi_px, 1), 2)
         if not _is_valid_water_box(hsv, expanded, w, h, expanded=True):
-            if _is_valid_water_box(hsv, box, w, h, expanded=True):
-                expanded = box
-            elif _is_valid_water_box(hsv, box, w, h):
-                expanded = box
-            else:
+            if not _is_valid_water_box(hsv, expanded, w, h):
                 continue
         if not _water_meets_violation_size(expanded, w, h, frame_area, area_percent=pct):
             continue
@@ -2122,7 +2182,9 @@ def _stabilize_road_detections(camera_id: str, detections: list[dict]) -> list[d
         if best_idx >= 0:
             used_prev.add(best_idx)
             prev_box = prev[best_idx]["bbox"]
-            if det.get("behavior") in ("water", "mud"):
+            if det.get("behavior") == "water":
+                merged["bbox"] = _blend_bbox(det["bbox"], prev_box, alpha=0.68)
+            elif det.get("behavior") == "mud":
                 merged["bbox"] = _merge_bbox_envelope(det["bbox"], prev_box)
             else:
                 merged["bbox"] = _blend_bbox(det["bbox"], prev_box)

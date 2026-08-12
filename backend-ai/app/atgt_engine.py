@@ -131,23 +131,24 @@ def _lane_present(
     return False
 
 
-def _lane_organized_in_road(
+def _fence_organized_in_road(
     detections: list[Detection],
     *,
     road_mask: np.ndarray | None = None,
 ) -> bool:
-    """Đã có phân làn (cứng/mềm) trong polygon ROAD — không ghi ATGT-004."""
+    """Đã có hàng rào phân cách (soft_median) trong ROAD — không ghi ATGT-004."""
     for det in detections:
+        if det.behavior != "soft_median" or det.confidence < _SOFT_MEDIAN_CONF:
+            continue
         if road_mask is not None and not lane_detection_inside_road(det.bbox, road_mask):
             continue
-        if det.behavior == "soft_median" and det.confidence >= _SOFT_MEDIAN_CONF:
-            return True
-        if det.behavior == "hard_median" and det.confidence >= _HARD_MEDIAN_CONF:
-            return True
+        return True
     return False
 
 
 def _confirm_seconds(behavior: str) -> float:
+    if not settings.event_dedup_enabled() and behavior == "no_soft_median":
+        return 0.0
     if settings.atgt_demo_enabled:
         if behavior == "speeding":
             return settings.atgt_demo_confirm_seconds
@@ -213,8 +214,14 @@ class AtgtEngine:
             )
         return self._gates[camera_id][track_id]
 
-    def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
-        return analyze_atgt_frame(frame, camera_id)
+    def _collect_detections(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        source_pts_sec: float | None = None,
+    ) -> list[Detection]:
+        return analyze_atgt_frame(frame, camera_id, source_pts_sec=source_pts_sec)
 
     def reset_camera(self, camera_id: str) -> None:
         self._tracks.pop(camera_id, None)
@@ -226,9 +233,10 @@ class AtgtEngine:
         camera_id: str,
         *,
         capture_frame: np.ndarray | None = None,
+        source_pts_sec: float | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
         snapshot_source = capture_frame if capture_frame is not None else frame
-        detections = self._collect_detections(frame, camera_id)
+        detections = self._collect_detections(frame, camera_id, source_pts_sec=source_pts_sec)
         sx, sy = frame_scale(frame, snapshot_source) if capture_frame is not None else (1.0, 1.0)
         _enrich_vehicle_plates(
             frame,
@@ -240,16 +248,17 @@ class AtgtEngine:
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
         road_mask = _roi_mask(camera_id, frame_w, frame_h)
-        lane_organized = _lane_organized_in_road(detections, road_mask=road_mask)
+        lane_organized = _fence_organized_in_road(detections, road_mask=road_mask)
         now = time.time()
         new_events: list[ViolationEvent] = []
         matched_ids: set[str] = set()
 
         if lane_organized:
-            lane_track = tracks.get("lane:no_soft_median")
-            if lane_track is not None:
-                self._gate_for(camera_id, "lane:no_soft_median", behavior="no_soft_median").reset()
-                lane_track.episode_best = None
+            if settings.event_dedup_enabled():
+                lane_track = tracks.get("lane:no_soft_median")
+                if lane_track is not None:
+                    self._gate_for(camera_id, "lane:no_soft_median", behavior="no_soft_median").reset()
+                    lane_track.episode_best = None
 
         vehicles = [d for d in detections if d.behavior == "vehicle"]
         violations = [
@@ -259,12 +268,7 @@ class AtgtEngine:
         ]
 
         for det in violations:
-            if det.behavior == "no_soft_median" and (
-                lane_organized
-                or _lane_present(
-                    detections, frame_w, frame_h, det.bbox, road_mask=road_mask,
-                )
-            ):
+            if det.behavior == "no_soft_median" and lane_organized:
                 continue
             vehicle_bbox: list[float] | None = None
             if det.behavior == "speeding":

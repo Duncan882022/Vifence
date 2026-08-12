@@ -1,4 +1,4 @@
-import { formatVnDate, formatVnIsoFromUnix } from '@/utils/vnDateTime'
+import { formatVnDate, formatVnDateOffsetDays, formatVnIsoFromUnix } from '@/utils/vnDateTime'
 import {
   getMobileAiBackendUrl,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -164,11 +164,52 @@ function buildSiteConditionSubject(scenarioId: string): SafetyViolationRecord['s
   return {
     type: 'SITE_CONDITION',
     workItem: getScenarioName(scenarioId),
+    siteContractor: 'Vincons',
+    contractorName: 'Vincons',
+    responsibleUnit: 'CONTRACTOR',
   }
 }
 
+function buildCam03SiteSubject(
+  scenarioId: string,
+  behavior: string,
+): SafetyViolationRecord['subject'] {
+  if (behavior.startsWith('mesh_')) {
+    return {
+      type: 'SITE_CONDITION',
+      siteContractor: 'Vincons',
+      contractorName: 'Vincons',
+      responsibleUnit: 'CONTRACTOR',
+    }
+  }
+  return buildSiteConditionSubject(scenarioId)
+}
+
+const CAM04_PCCC_SMOKING_DEMO_SUBJECT: SafetyViolationRecord['subject'] = {
+  type: 'PERSON',
+  workerId: 'w-021',
+  workerName: 'Phạm Quang Tùng',
+  employeeCode: 'VCS112233',
+  contractorName: 'Vincons',
+  responsibleUnit: 'CONTRACTOR',
+}
+
+const CAM04_DZ_DEMO_SUBJECT: SafetyViolationRecord['subject'] = {
+  type: 'PERSON',
+  workerId: 'w-019',
+  workerName: 'Nguyễn Văn Hoàng',
+  employeeCode: 'NV001155',
+  contractorName: 'Vincons',
+  responsibleUnit: 'CONTRACTOR',
+}
+
+function isUnknownWorkerName(name: string | undefined): boolean {
+  const trimmed = name?.trim()
+  return !trimmed || trimmed.toLowerCase() === 'unknown'
+}
+
 function buildPersonSubject(event: BackendViolationEvent): SafetyViolationRecord['subject'] {
-  return {
+  const fromApi: SafetyViolationRecord['subject'] = {
     type: 'PERSON',
     workerId: event.worker_id ?? undefined,
     workerName: event.worker_name ?? undefined,
@@ -176,6 +217,21 @@ function buildPersonSubject(event: BackendViolationEvent): SafetyViolationRecord
     contractorName: event.contractor_name ?? undefined,
     responsibleUnit: 'CONTRACTOR',
   }
+  if (
+    event.behavior === 'smoking'
+    && event.camera_id === 'A-04'
+    && isUnknownWorkerName(fromApi.workerName)
+  ) {
+    return { ...CAM04_PCCC_SMOKING_DEMO_SUBJECT }
+  }
+  if (
+    event.camera_id === 'A-04'
+    && (event.behavior === 'crane_proximity' || event.scenario_id === 'DZ-003')
+    && isUnknownWorkerName(fromApi.workerName)
+  ) {
+    return { ...CAM04_DZ_DEMO_SUBJECT }
+  }
+  return fromApi
 }
 
 function isValidAtgt004LiveRecord(record: SafetyViolationRecord): boolean {
@@ -233,9 +289,7 @@ export function mapBackendEventToSafetyRecord(
     subject: isCam03Ai
       ? (event.behavior === 'speeding'
         ? buildVehicleSubject(event)
-        : event.behavior === 'no_soft_median'
-          ? buildSiteConditionSubject(scenarioId)
-          : { type: 'SITE_CONDITION' })
+        : buildCam03SiteSubject(scenarioId, event.behavior))
       : event.behavior === 'fire'
         ? buildSiteConditionSubject(scenarioId)
         : buildPersonSubject(event),
@@ -305,6 +359,10 @@ export type FetchSafetyAiEventsResult =
 export function getSafetyLiveEventDate(): string {
   /** Live AI — luôn hôm nay (VN), không dính session ?date= demo playback. */
   return formatVnDate()
+}
+
+export function getSafetyLiveYesterdayDate(): string {
+  return formatVnDateOffsetDays(-1, getSafetyLiveEventDate())
 }
 
 export async function fetchSafetyAiEvents(

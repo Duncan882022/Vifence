@@ -79,7 +79,12 @@ class Settings(BaseSettings):
 
     @property
     def event_log_one_per_episode(self) -> bool:
-        return not self.event_test_mode
+        """False trong audit grace — mỗi loop VMS ghi lại đủ ~13 kịch bản."""
+        if self.event_test_mode:
+            return False
+        if not self.event_dedup_enabled():
+            return False
+        return True
 
     def event_dedup_enabled(self) -> bool:
         """False trong N phút audit đầu — ghi đủ trước khi dedup 3h."""
@@ -146,6 +151,12 @@ class Settings(BaseSettings):
 
     # FPS AI trên server (VMS mode) — tiết kiệm CPU, đủ ATLĐ.
     vms_ai_fps: float = 6.0
+
+    def vms_ai_fps_effective(self) -> float:
+        """Hạ FPS trong audit grace — VPS kịp chạy hết engine / segment ngắn."""
+        if not self.event_dedup_enabled():
+            return min(self.vms_ai_fps, 2.5)
+        return self.vms_ai_fps
 
     @property
     def camera_source_value(self) -> Union[int, str]:

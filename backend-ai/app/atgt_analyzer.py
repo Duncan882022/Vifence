@@ -495,6 +495,33 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
     if mask is None:
         return []
 
+    # Hàng rào tạm = đã phân làn — không ghi ATGT-004.
+    fence = _detect_fence_median(frame, mask)
+    if fence:
+        return [
+            Detection(
+                behavior="soft_median",
+                label="Hàng rào phân cách",
+                confidence=_SOFT_MEDIAN_CONF,
+                bbox=list(fence),
+            )
+        ]
+
+    # Không có hàng rào → kiểm tra thiếu phân làn / phân luồng trong ROAD.
+    lane_bbox = _left_lane_missing_median(frame, mask)
+    if lane_bbox is None:
+        lane_bbox = _missing_lane_separation_bbox(mask, w, h)
+    if lane_bbox:
+        return [
+            Detection(
+                behavior="no_soft_median",
+                label="Không tổ chức phân làn, phân luồng giao thông",
+                confidence=max(round(_MIN_CONF + 0.03, 3), 0.87),
+                bbox=list(lane_bbox),
+            )
+        ]
+
+    # Overlay thông tin — vạch / phân cách mềm (không chặn vi phạm khi thiếu hàng rào).
     hard = _detect_hard_median(frame, mask)
     if hard:
         return [
@@ -506,29 +533,16 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
             )
         ]
 
-    fence = _detect_fence_median(frame, mask)
     paved = _detect_paved_lane_edge(frame, mask)
-    if fence or paved:
-        detections: list[Detection] = []
-        if fence:
-            detections.append(
-                Detection(
-                    behavior="soft_median",
-                    label="Hàng rào phân cách",
-                    confidence=_SOFT_MEDIAN_CONF,
-                    bbox=list(fence),
-                )
+    if paved:
+        return [
+            Detection(
+                behavior="hard_median",
+                label="Vạch phân làn",
+                confidence=_HARD_MEDIAN_CONF,
+                bbox=list(paved),
             )
-        if paved:
-            detections.append(
-                Detection(
-                    behavior="hard_median",
-                    label="Vạch phân làn",
-                    confidence=_HARD_MEDIAN_CONF,
-                    bbox=list(paved),
-                )
-            )
-        return detections
+        ]
 
     soft = _detect_soft_median(frame, mask)
     if soft:
@@ -541,17 +555,7 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
             )
         ]
 
-    lane_bbox = _missing_lane_separation_bbox(mask, w, h)
-    if lane_bbox is None:
-        return []
-    return [
-        Detection(
-            behavior="no_soft_median",
-            label="Không tổ chức phân làn, luồng giao thông",
-            confidence=round(_MIN_CONF + 0.03, 3),
-            bbox=list(lane_bbox),
-        )
-    ]
+    return []
 
 
 def _accept_demo_vehicle(
@@ -575,7 +579,12 @@ def _accept_demo_vehicle(
     return confidence >= 0.72
 
 
-def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detection]:
+def analyze_atgt_frame(
+    frame: np.ndarray,
+    camera_id: str = "A-03",
+    *,
+    source_pts_sec: float | None = None,
+) -> list[Detection]:
     detector = _get_vehicle_detector()
     conf_floor = settings.atgt_demo_vehicle_conf if settings.atgt_demo_enabled else _VEHICLE_CONF
     raw = [d for d in detector.predict(frame) if d.confidence >= conf_floor]
@@ -621,4 +630,9 @@ def analyze_atgt_frame(frame: np.ndarray, camera_id: str = "A-03") -> list[Detec
     detections.extend(_analyze_lane_state(frame, camera_id))
     from .cam03_scene_demo import augment_cam03_atgt_demo
 
-    return augment_cam03_atgt_demo(camera_id, frame, detections)
+    return augment_cam03_atgt_demo(
+        camera_id,
+        frame,
+        detections,
+        source_pts_sec=source_pts_sec,
+    )

@@ -131,9 +131,9 @@ def _build_vms_workers() -> None:
     # Cấu hình engines per camera theo ma trận (Spec §4)
     cam_engines: dict[str, dict[str, object]] = {
         "A-03": {
-            "road": road_engine.process_frame,
-            "mesh": mesh_engine.process_frame,
             "atgt": atgt_engine.process_frame,
+            "mesh": mesh_engine.process_frame,
+            "road": road_engine.process_frame,
         },
         "A-04": {
             "ppe": ppe_engine.process_frame,
@@ -154,7 +154,7 @@ def _build_vms_workers() -> None:
             source_path=source_path,
             process_frame_fns=engines,
             on_event=on_event,
-            ai_fps=settings.vms_ai_fps,
+            ai_fps=settings.vms_ai_fps_effective(),
         )
         _vms_workers[cam_id] = worker
         logger.info("[VMS] Worker A-%s tạo xong (%d engines).", cam_id, len(engines))

@@ -286,7 +286,7 @@ def audit_scenario_analyzer() -> list[CaseResult]:
         ok = "speeding" in beh
         results.append(CaseResult("analyzer_ATGT-002_speed_t17", ok, f"beh={sorted(beh)}"))
         plates = [d.vehicle_plate for d in dets if d.behavior == "speeding" and d.vehicle_plate]
-        ok_plate = any(p == "29H-825.54" for p in plates)
+        ok_plate = any(p == "29H2-5354" for p in plates)
         results.append(
             CaseResult(
                 "analyzer_ATGT-002_plate",

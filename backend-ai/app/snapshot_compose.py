@@ -75,8 +75,8 @@ def draw_dashed_rectangle(
     pt2: tuple[int, int],
     color: tuple[int, int, int],
     thickness: int = 1,
-    dash_len: int = 8,
-    gap_len: int = 6,
+    dash_len: int = 6,
+    gap_len: int = 5,
 ) -> None:
     x1, y1 = pt1
     x2, y2 = pt2
@@ -117,16 +117,19 @@ def draw_atld_roi_box(
     *,
     thickness: int = 2,
 ) -> None:
-    """Vi phạm ATLĐ — viền liền; thông tin (người/máy/đạt chuẩn) — viền đứt."""
+    """Vi phạm ATLĐ — viền liền mỏng; máy/người/PPE đạt chuẩn — nét đứt 1px."""
+    if behavior in {"mesh_missing", "mesh_torn", "mesh_dirty"}:
+        draw_dashed_rectangle(frame, (x1, y1), (x2, y2), color, thickness=1)
+        return
     if is_atld_violation_behavior(behavior):
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
     else:
         draw_dashed_rectangle(
             frame,
             (x1, y1),
             (x2, y2),
             color,
-            thickness=max(1, thickness - 1),
+            thickness=1,
         )
 
 
@@ -150,6 +153,33 @@ def format_snapshot_badge(code: str, confidence: float, suffix: str = "") -> str
     pct = f"{confidence * 100:.0f}%"
     base = f"{code} {pct}"
     return f"{base}{suffix}" if suffix else base
+
+
+def draw_snapshot_roi_badge(
+    frame: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: tuple[int, int, int],
+    *,
+    scenario_id: str | None,
+    confidence: float,
+    behavior: str,
+    machine_kind: str | None = None,
+    suffix: str = "",
+) -> None:
+    """Nhãn ngắn trên bbox snapshot — mã kịch bản + % (đồng bộ overlay live)."""
+    code = format_snapshot_code(behavior, scenario_id, machine_kind=machine_kind)
+    badge = format_snapshot_badge(code, confidence, suffix)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.45
+    thickness = 1
+    (tw, th), _ = cv2.getTextSize(badge, font, scale, thickness)
+    ty = max(y1 - 6, th + 8)
+    cv2.rectangle(frame, (x1, ty - th - 8), (x1 + tw + 8, ty + 4), (16, 16, 16), -1)
+    cv2.rectangle(frame, (x1, ty - th - 8), (x1 + tw + 8, ty + 4), color, 1)
+    cv2.putText(frame, badge, (x1 + 4, ty - 2), font, scale, color, thickness, cv2.LINE_AA)
 
 
 def merge_bboxes(boxes: list[list[float]]) -> list[float] | None:

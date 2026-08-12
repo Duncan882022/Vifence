@@ -28,6 +28,7 @@ export function violationRecordToEvent(v: SafetyViolationRecord): Event {
     id: v.id,
     type: group?.name ?? v.groupId,
     scenario: getScenarioName(v.scenarioId),
+    scenarioId: v.scenarioId,
     violationCategory: v.groupId,
     description: v.description ?? scenario?.description ?? getScenarioName(v.scenarioId),
     timestamp: v.detectedAt,

@@ -24,6 +24,8 @@ interface EventPlaybackViewportProps {
   videoObjectPosition?: 'center' | 'bottom'
   /** Bật zoom ROI — desktop mặc định; mobile/tablet chỉ khung ROI. */
   zoomEnabled?: boolean
+  /** Màu viền ROI vi phạm — ATGT-004 cam, còn lại đỏ mặc định. */
+  violationRoiClass?: string
   className?: string
   children: ReactNode
 }
@@ -97,6 +99,7 @@ export function EventPlaybackViewport({
   videoFit = 'contain',
   videoObjectPosition = 'center',
   zoomEnabled,
+  violationRoiClass,
   className,
   children,
 }: EventPlaybackViewportProps) {
@@ -165,6 +168,9 @@ export function EventPlaybackViewport({
     }
   }, [allowZoom, overlayBoxes, isDesktop])
 
+  const violationClass =
+    violationRoiClass ?? 'border-2 border-red-400/95 shadow-[0_0_10px_rgba(248,113,113,0.35)]'
+
   const hasRoiOverlay = Boolean(
     overlayBoxes?.violation || overlayBoxes?.subject || overlayBoxes?.related,
   )
@@ -182,7 +188,7 @@ export function EventPlaybackViewport({
         {overlayBoxes?.related && (
           <PlaybackRoiBox
             box={overlayBoxes.related}
-            className="border-2 border-dashed border-sky-400/90 shadow-[0_0_8px_rgba(56,189,248,0.25)]"
+            className="border border-dashed border-sky-400/90 shadow-[0_0_6px_rgba(56,189,248,0.2)]"
             label="Máy"
           />
         )}
@@ -196,13 +202,13 @@ export function EventPlaybackViewport({
         {overlayBoxes?.violation && (
           <PlaybackRoiBox
             box={overlayBoxes.violation}
-            className="border-2 border-red-400/95 shadow-[0_0_10px_rgba(248,113,113,0.35)]"
+            className={violationClass}
           />
         )}
         {!hasRoiOverlay && overlayBoxes?.zoom && (
           <PlaybackRoiBox
             box={overlayBoxes.zoom}
-            className="border-2 border-red-400/95 shadow-[0_0_10px_rgba(248,113,113,0.35)]"
+            className={violationClass}
           />
         )}
       </div>

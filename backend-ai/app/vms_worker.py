@@ -194,6 +194,11 @@ class CameraVmsWorker:
 
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             frame_sleep = 1.0 / fps
+            from .config import settings
+
+            if not settings.event_dedup_enabled():
+                # Audit grace: ingest chậm theo AI — tránh nhảy segment (mesh 5s, PPE ~6s).
+                frame_sleep = max(frame_sleep, 1.0 / settings.vms_ai_fps_effective())
 
             logger.info("[VMS %s] Ingest bắt đầu @ %.1f FPS", self.camera_id, fps)
 
@@ -228,6 +233,29 @@ class CameraVmsWorker:
     # Internal — AI loop
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _grace_engine_active(camera_id: str, engine_name: str, source_pts_sec: float) -> bool:
+        """Audit grace — chỉ chạy engine khớp segment demo (tránh VPS bỏ lỡ ATGT/PPE)."""
+        from .config import settings
+
+        if settings.event_dedup_enabled():
+            return True
+        if camera_id == "A-03":
+            if source_pts_sec < 6.0:
+                return engine_name in {"mesh", "road"}
+            if 15.5 <= source_pts_sec <= 20.5:
+                return engine_name == "atgt"
+            return engine_name == "road"
+        if camera_id == "A-04":
+            if source_pts_sec < 4.0:
+                return engine_name == "crane"
+            if 8.0 <= source_pts_sec <= 17.0:
+                return engine_name in {"ppe", "pccc"}
+            if source_pts_sec >= 19.5:
+                return engine_name == "wah"
+            return engine_name in {"ppe", "pccc", "crane"}
+        return True
+
     def _ai_loop(self) -> None:
         interval = 1.0 / self._ai_fps
         logger.info("[VMS %s] AI loop @ %.1f FPS, %d engine(s)", self.camera_id, self._ai_fps, len(self._process_fns))
@@ -246,10 +274,16 @@ class CameraVmsWorker:
                 merged_metrics: dict = {}
 
                 for engine_name, fn in self._process_fns.items():
+                    if not self._grace_engine_active(self.camera_id, engine_name, source_pts_sec):
+                        continue
                     try:
                         engine_kwargs: dict = {"capture_frame": frame}
                         if engine_name == "road":
                             engine_kwargs["stabilize"] = False
+                        if engine_name == "atgt":
+                            engine_kwargs["source_pts_sec"] = source_pts_sec
+                        if engine_name == "mesh":
+                            engine_kwargs["source_pts_sec"] = source_pts_sec
                         result, events = fn(frame, self.camera_id, **engine_kwargs)
                         if isinstance(result, dict):
                             merged_detections.extend(result.get("detections") or [])

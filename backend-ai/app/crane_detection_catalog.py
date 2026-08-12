@@ -20,6 +20,7 @@ from .crane_roi_config import (
     PROXIMITY_THRESHOLD_METERS,
     get_crane_zones_for_camera,
 )
+from .snapshot_compose import draw_atld_roi_box, draw_snapshot_roi_badge, format_snapshot_code
 from .unknown_detection import PERSON_UNKNOWN_LABEL
 
 # BGR — đồng bộ CraneProximityOverlay
@@ -184,6 +185,14 @@ def _draw_zone(
         )
 
 
+def _catalog_kind_behavior(kind: str) -> str:
+    if kind == "crane_proximity":
+        return "crane_proximity"
+    if kind in MACHINERY_LABELS:
+        return "crane"
+    return "person"
+
+
 def _draw_detailed_bbox(
     out: np.ndarray,
     det: CraneCatalogDetection,
@@ -193,25 +202,23 @@ def _draw_detailed_bbox(
     style = CRANE_CATALOG_STYLES.get(det.kind, CRANE_CATALOG_STYLES["person"])
     color = style["color"]
     x1, y1, x2, y2 = det.bbox
+    behavior = _catalog_kind_behavior(det.kind)
+    thickness = 3 if behavior == "crane_proximity" else 1
+    draw_atld_roi_box(out, x1, y1, x2, y2, color, behavior, thickness=thickness)
 
-    cv2.rectangle(out, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
-    for cx, cy in ((x1, y1), (x2, y1), (x1, y2), (x2, y2)):
-        cv2.circle(out, (cx, cy), 4, color, -1, cv2.LINE_AA)
-        cv2.circle(out, (cx, cy), 4, (20, 20, 20), 1, cv2.LINE_AA)
-
-    tag = f"{det.label} {det.confidence * 100:.0f}%"
-    if det.distance_m is not None and det.kind == "person":
-        tag += f" · {det.distance_m:.2f}m"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    thickness = 1
-    (tw, th), _ = cv2.getTextSize(tag, font, scale, thickness)
-    ty = max(y1 - 6, th + 8)
-    cv2.rectangle(out, (x1, ty - th - 8), (x1 + tw + 8, ty + 4), (16, 16, 16), -1)
-    cv2.rectangle(out, (x1, ty - th - 8), (x1 + tw + 8, ty + 4), color, 1)
-    cv2.putText(out, tag, (x1 + 4, ty - 2), font, scale, color, thickness, cv2.LINE_AA)
+    suffix = f" · {det.distance_m:.2f}m" if det.distance_m is not None and det.kind == "person" else ""
+    draw_snapshot_roi_badge(
+        out, x1, y1, x2, y2, color,
+        scenario_id="DZ-003" if behavior == "crane_proximity" else None,
+        confidence=float(det.confidence),
+        behavior=behavior,
+        machine_kind=det.kind if behavior == "crane" else None,
+        suffix=suffix,
+    )
 
     if det.kind == "person" and det.nearest_machine and det.distance_m is not None:
         sub = f"↔ {det.nearest_machine} ({det.distance_m:.2f}m)"
+        font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(
             out, sub, (x1, y2 + int(14 * scale / 0.45)),
             font, scale * 0.85, color, 1, cv2.LINE_AA,

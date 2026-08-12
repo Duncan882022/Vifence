@@ -40,11 +40,11 @@ const INFO_MIN_CONFIDENCE = OVERLAY_MIN_CONFIDENCE
 const MACHINE_MIN_CONFIDENCE = MACHINERY_INFO_MIN_CONFIDENCE
 
 const ROI_STROKE: Record<string, { stroke: string; fill: string; dash?: string }> = {
-  CRANE_WORK: { stroke: 'rgba(56, 189, 248, 0.95)', fill: 'rgba(56, 189, 248, 0.10)' },
-  CRANE_BODY: { stroke: 'rgba(251, 191, 36, 0.75)', fill: 'none' },
+  CRANE_WORK: { stroke: 'rgba(56, 189, 248, 0.85)', fill: 'rgba(56, 189, 248, 0.06)', dash: '4 3' },
+  CRANE_BODY: { stroke: 'rgba(251, 191, 36, 0.70)', fill: 'none', dash: '4 3' },
 }
-/** Cam A-04 — đồng bộ nét polygon với Cam A-03 (Road/ATGT). */
-const CRANE_ROI_POLYGON_STROKE_WIDTH = 1.2
+/** Cam A-04 — polygon ROI mỏng nét đứt. */
+const CRANE_ROI_POLYGON_STROKE_WIDTH = 0.9
 
 function CraneRoiPolygons({
   zones,
@@ -101,22 +101,52 @@ function CraneRoiPolygons({
 }
 const MACHINE_KIND_STYLE: Record<string, { border: string; fill: string; label: string; bg: string }> = {
   tower_crane: {
-    border: 'border-amber-300/95 border-dashed',
-    fill: 'bg-amber-400/12',
+    border: 'border border-dashed border-amber-300/95',
+    fill: 'bg-amber-400/8',
     label: 'text-amber-100',
     bg: 'bg-amber-950/75',
   },
   crane_green: {
-    border: 'border-lime-400/95 border-dashed',
-    fill: 'bg-lime-400/12',
+    border: 'border border-dashed border-lime-400/95',
+    fill: 'bg-lime-400/8',
     label: 'text-lime-100',
     bg: 'bg-lime-950/75',
   },
   sany_drill: {
-    border: 'border-sky-400/95 border-dashed',
-    fill: 'bg-sky-400/12',
+    border: 'border border-dashed border-sky-400/95',
+    fill: 'bg-sky-400/8',
     label: 'text-sky-100',
     bg: 'bg-sky-950/75',
+  },
+  excavator_orange: {
+    border: 'border border-dashed border-orange-400/95',
+    fill: 'bg-orange-400/8',
+    label: 'text-orange-100',
+    bg: 'bg-orange-950/75',
+  },
+  road_roller: {
+    border: 'border border-dashed border-yellow-400/90',
+    fill: 'bg-yellow-400/8',
+    label: 'text-yellow-100',
+    bg: 'bg-yellow-950/75',
+  },
+  dump_truck: {
+    border: 'border border-dashed border-slate-300/90',
+    fill: 'bg-slate-400/8',
+    label: 'text-slate-100',
+    bg: 'bg-slate-950/75',
+  },
+  forklift: {
+    border: 'border border-dashed border-cyan-400/90',
+    fill: 'bg-cyan-400/8',
+    label: 'text-cyan-100',
+    bg: 'bg-cyan-950/75',
+  },
+  machinery: {
+    border: 'border border-dashed border-amber-300/90',
+    fill: 'bg-amber-400/8',
+    label: 'text-amber-100',
+    bg: 'bg-amber-950/75',
   },
 }
 
@@ -124,6 +154,9 @@ function resolveDetectionStyle(detection: CraneProximityDetection) {
   if (detection.behavior === 'crane' && detection.machine_kind) {
     const kindStyle = MACHINE_KIND_STYLE[detection.machine_kind]
     if (kindStyle) return { ...kindStyle, role: 'info' as const }
+  }
+  if (detection.behavior === 'crane') {
+    return { ...MACHINE_KIND_STYLE.machinery, role: 'info' as const }
   }
   const behaviorKey = detection.behavior === 'unknown' ? 'person' : detection.behavior
   return getOverlayBoxStyle('crane_proximity', behaviorKey, detection.machine_kind)
@@ -223,7 +256,7 @@ const DetectionBox = memo(function DetectionBox({
     >
       <div
         className={cn(
-          'absolute inset-0 rounded-sm border-2',
+          'absolute inset-0 rounded-sm',
           style.border,
           style.fill,
           pulse && 'animate-pulse',

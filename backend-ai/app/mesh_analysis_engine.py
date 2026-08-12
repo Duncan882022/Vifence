@@ -81,6 +81,7 @@ class MeshAnalysisEngine:
         *,
         capture_frame: np.ndarray | None = None,
         persist_events: bool | None = None,
+        source_pts_sec: float | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
         if persist_events is None:
             persist_events = (
@@ -93,7 +94,12 @@ class MeshAnalysisEngine:
         mesh_zones = get_mesh_zones_for_camera(camera_id)
         zone_polygon = mesh_zones[0]["polygon"] if mesh_zones else None
 
-        raw = analyze_mesh_frame(frame, camera_id, zone_polygon=zone_polygon)
+        raw = analyze_mesh_frame(
+            frame,
+            camera_id,
+            zone_polygon=zone_polygon,
+            source_pts_sec=source_pts_sec,
+        )
         dets = [
             det for det in raw
             if det.behavior in MESH_VIOLATION_BEHAVIORS

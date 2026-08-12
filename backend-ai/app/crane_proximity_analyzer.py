@@ -408,7 +408,7 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
             )
         )
 
-    from .worker_identity.detection_enrich import enrich_person_bbox
+    from .worker_identity.detection_enrich import copy_worker_identity, enrich_person_bbox
 
     for person_index, (box, p_conf) in enumerate(persons):
         person_det = CraneProximityDetection(
@@ -457,12 +457,7 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
             machine_kind=nearest_unit.kind,
             machine_bbox=[float(v) for v in nearest_unit.bbox],
         )
-        if person_det.worker_id:
-            proximity_det.worker_id = person_det.worker_id
-            proximity_det.worker_name = person_det.worker_name
-            proximity_det.employee_code = person_det.employee_code
-            proximity_det.contractor_name = person_det.contractor_name
-            proximity_det.face_match_confidence = person_det.face_match_confidence
+        copy_worker_identity(person_det, proximity_det)
         all_detections.append(proximity_det)
 
     fe_zones = [

@@ -60,6 +60,7 @@ _LOCAL_DIRTY_MAX_ZONE_RATIO = 0.22
 _LOCAL_DIRTY_MAX_WIDTH_RATIO = 0.38
 _MESH_LABEL_MISSING = "Lưới bao che thiếu"
 _MESH_LABEL_DIRTY = "Lưới bao che bẩn"
+_MESH_BBOX_MIN_ZONE_OVERLAP = 0.55
 
 MESH_VIOLATION_BEHAVIORS = frozenset({"mesh_missing", "mesh_torn", "mesh_dirty"})
 
@@ -85,6 +86,50 @@ def _zone_bbox(polygon: list[dict], width: int, height: int) -> list[float]:
     xs = [p["x"] * width for p in polygon]
     ys = [p["y"] * height for p in polygon]
     return [float(min(xs)), float(min(ys)), float(max(xs)), float(max(ys))]
+
+
+def bbox_inside_mesh_zone(
+    bbox: list[float],
+    zone_polygon: list[dict],
+    width: int,
+    height: int,
+    *,
+    min_overlap: float = _MESH_BBOX_MIN_ZONE_OVERLAP,
+) -> bool:
+    """BBox phải nằm chủ yếu trong polygon MESH — tránh log ngoài ROI lưới."""
+    if len(bbox) < 4:
+        return False
+    x1, y1, x2, y2 = [float(v) for v in bbox[:4]]
+    if x2 <= x1 or y2 <= y1:
+        return False
+
+    pts = np.array(
+        [[int(p["x"] * width), int(p["y"] * height)] for p in zone_polygon],
+        dtype=np.int32,
+    )
+    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    if cv2.pointPolygonTest(pts, (cx, cy), False) < 0:
+        return False
+
+    roi_mask = _polygon_to_mask(zone_polygon, width, height)
+    ix1, iy1 = max(0, int(x1)), max(0, int(y1))
+    ix2, iy2 = min(width, int(x2)), min(height, int(y2))
+    if ix2 <= ix1 or iy2 <= iy1:
+        return False
+    patch = roi_mask[iy1:iy2, ix1:ix2]
+    return float(np.count_nonzero(patch)) / max(patch.size, 1) >= min_overlap
+
+
+def _filter_mesh_detections_in_zone(
+    detections: list[RoadDetection],
+    zone_polygon: list[dict],
+    width: int,
+    height: int,
+) -> list[RoadDetection]:
+    return [
+        det for det in detections
+        if bbox_inside_mesh_zone(det.bbox, zone_polygon, width, height)
+    ]
 
 
 def _mesh_green_mask(hsv: np.ndarray, roi_mask: np.ndarray) -> np.ndarray:
@@ -717,17 +762,20 @@ def analyze_mesh_frame(
     frame: np.ndarray,
     camera_id: str = "A-05",
     zone_polygon: Optional[list[dict]] = None,
+    *,
+    source_pts_sec: float | None = None,
 ) -> list[RoadDetection]:
     """Phân tích lưới bao che trong frame — model YOLO + heuristic ROI."""
     from .cam03_scene_demo import resolve_cam03_mesh_demo
 
-    demo = resolve_cam03_mesh_demo(camera_id, frame)
-    if demo is not None:
-        return demo
-
+    h, w = frame.shape[:2]
     zone = _resolve_zone_polygon(camera_id, zone_polygon)
     if zone is None:
         return []
+
+    demo = resolve_cam03_mesh_demo(camera_id, frame, source_pts_sec=source_pts_sec)
+    if demo is not None:
+        return _filter_mesh_detections_in_zone(demo, zone, w, h)
 
     results: list[RoadDetection] = []
     boxes = predict_boxes("safety_mesh_cover", frame, conf_threshold=_MESH_CONF_THRESHOLD)
@@ -749,7 +797,6 @@ def analyze_mesh_frame(
 
     results.extend(_heuristic_mesh_violations(frame, zone, existing=results))
 
-    h, w = frame.shape[:2]
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     roi_mask = _polygon_to_mask(zone, w, h)
     zone_box = _zone_bbox(zone, w, h)
@@ -759,6 +806,8 @@ def analyze_mesh_frame(
         if det.behavior == "mesh_dirty" and not _mesh_dirty_bbox_on_net(bbox, hsv, roi_mask):
             continue
         if det.behavior in {"mesh_missing", "mesh_torn"} and not _mesh_gap_bbox_on_net(bbox, hsv, roi_mask):
+            continue
+        if not bbox_inside_mesh_zone(bbox, zone, w, h):
             continue
         refined.append(det.model_copy(update={"bbox": bbox}))
     return refined

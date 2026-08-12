@@ -32,20 +32,14 @@ else
   git commit -m "chore(pages): cập nhật build docs"
 fi
 
-echo "→ Push nhánh gh-pages…"
-TMP_BRANCH="tmp-gh-pages-$(date +%s)"
-git subtree split --prefix docs -b "$TMP_BRANCH"
-git push origin "refs/heads/${TMP_BRANCH}:refs/heads/gh-pages" --force
-git branch -D "$TMP_BRANCH"
-
-echo "→ Push main…"
+echo "→ Push main (GitHub Actions deploy nhánh gh-pages — một nguồn duy nhất)…"
 git push origin main
 
 echo ""
-echo "✓ Deploy xong."
-echo "  Local preview: npm run preview:pages"
+echo "✓ Build + push main xong."
+echo "  GitHub Actions sẽ deploy gh-pages trong ~2–3 phút."
 echo "  GitHub Pages:  https://duncan882022.github.io/Vifence/"
 echo ""
-echo "Nếu site vẫn cũ → Settings → Pages → Source:"
-echo "  • GitHub Actions  HOẶC"
-echo "  • Deploy from branch → gh-pages / (root)"
+echo "Nếu console báo 404 asset JS/CSS:"
+echo "  • Hard refresh (Cmd+Shift+R) — tránh index.html cache trỏ hash cũ"
+echo "  • Settings → Pages → Deploy from branch → gh-pages / (root)"

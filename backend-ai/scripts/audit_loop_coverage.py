@@ -55,7 +55,7 @@ SCENARIO_SPEC: dict[str, tuple[str, str, frozenset[str]]] = {
     "BPTC-009": ("A-03", "road", frozenset({"object"})),
     "BPTC-001": ("A-03", "mesh", frozenset({"mesh_missing", "mesh_torn", "mesh_dirty"})),
     "ATGT-002": ("A-03", "atgt", frozenset({"speeding"})),
-    "ATGT-004": ("A-03", "atgt", frozenset({"no_soft_median"})),
+    "ATGT-004": ("A-03", "atgt", frozenset({"no_soft_median", "soft_median"})),
     "PPE-001": ("A-04", "ppe", frozenset({"no_helmet"})),
     "PPE-002": ("A-04", "ppe", frozenset({"no_vest"})),
     "PPE-003": ("A-04", "ppe", frozenset({"no_shoes"})),

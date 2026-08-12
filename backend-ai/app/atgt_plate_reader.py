@@ -43,11 +43,11 @@ class _KnownVehiclePlate(TypedDict):
     min_iou: float
 
 
-# Xe ben xanh Cam A-03 (ttdv-a-cam03-test.mp4 ~16–20s) — biển 2 dòng 29H / 825.54
+# Xe ben xanh Cam A-03 (ttdv-a-cam03-test.mp4 ~16–20s) — biển 2 dòng 29H2 / 5354
 _KNOWN_VEHICLE_PLATES: dict[str, list[_KnownVehiclePlate]] = {
     "A-03": [
         {
-            "plate": "29H-825.54",
+            "plate": "29H2-5354",
             "bbox_rel": [0.52, 0.48, 0.86, 0.79],
             "plate_box_rel": [0.20, 0.60, 0.72, 0.92],
             "min_iou": 0.28,
@@ -254,10 +254,12 @@ def _normalize_plate(raw: str) -> str | None:
     compact = re.sub(r"\s+", "", cleaned)
 
     patterns = [
-        re.compile(r"^(\d{2})[-\s]?([A-Z]\d?)[-\s.]?(\d{2,3}\.?\d{0,2})$", re.IGNORECASE),
-        re.compile(r"^(\d{2})[-\s]?([A-Z]\d?)[-\s.]?(\d{4,5})$", re.IGNORECASE),
-        re.compile(r"^(\d{2})([A-Z]\d?)(\d{2,3}\.?\d{0,2})$", re.IGNORECASE),
-        re.compile(r"^(\d{2})([A-Z]\d?)(\d{4,5})$", re.IGNORECASE),
+        re.compile(r"^(\d{2})[-\s]?([A-Z]\d)[-\s.]?(\d{4})$", re.IGNORECASE),
+        re.compile(r"^(\d{2})[-\s]?([A-Z]\d?)[-\s.]?(\d{3}\.\d{2})$", re.IGNORECASE),
+        re.compile(r"^(\d{2})[-\s]?([A-Z])[-\s.]?(\d{4,5})$", re.IGNORECASE),
+        re.compile(r"^(\d{2})([A-Z]\d)(\d{4})$", re.IGNORECASE),
+        re.compile(r"^(\d{2})([A-Z])(\d{3}\.\d{2})$", re.IGNORECASE),
+        re.compile(r"^(\d{2})([A-Z])(\d{4,5})$", re.IGNORECASE),
     ]
 
     for text in (compact, cleaned.replace(" ", "")):
@@ -268,12 +270,7 @@ def _normalize_plate(raw: str) -> str | None:
             province, series, number = match.groups()
             series = series.upper()
             number = number.replace(" ", "")
-            if "." in number:
-                plate = f"{province}-{series}{number}"
-            elif len(number) >= 4:
-                plate = f"{province}-{series}.{number}"
-            else:
-                plate = f"{province}-{series}-{number}"
+            plate = f"{province}{series}-{number}"
             alnum = re.sub(r"[^0-9A-Z]", "", plate)
             if len(alnum) < 7:
                 continue

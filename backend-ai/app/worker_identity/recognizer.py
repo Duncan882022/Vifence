@@ -150,7 +150,13 @@ def identify_person(
         face_crop = _best_face_in_crop(crop) if crop is not None else None
         source = "face_unmatched" if face_crop is not None else "face_not_found"
         match = unknown_worker_match(source)
-    else:
+
+    if match.worker_id == "unknown" and track_id:
+        demo = demo_match_from_track(camera_id, track_id)
+        if demo is not None:
+            match = demo
+
+    if match.worker_id != "unknown":
         logger.info(
             "[worker_identity] %s → %s (%s) conf=%.2f src=%s",
             track_id or "person",
@@ -159,7 +165,5 @@ def identify_person(
             match.confidence,
             match.match_source,
         )
-
-    if match.worker_id != "unknown":
         _track_cache[cache_key] = match
     return match

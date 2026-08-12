@@ -75,7 +75,7 @@ export function shouldShowSubjectDetailRow(record: SafetyViolationRecord, title:
   if (type === 'PERSON' || type === 'VEHICLE') return true
 
   if (type === 'SITE_CONDITION') {
-    if (record.scenarioId === 'ATGT-004') return false
+    if (record.scenarioId === 'ATGT-004' || record.scenarioId === 'BPTC-001') return false
     return Boolean(s.workItem?.trim() && !isDuplicateDetailText(s.workItem, title))
   }
   if (type === 'CONSTRUCTION_ACTIVITY') {

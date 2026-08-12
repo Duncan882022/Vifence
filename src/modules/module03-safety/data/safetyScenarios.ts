@@ -110,7 +110,7 @@ const RAW_SCENARIO_DEFS: RawScenarioDef[] = [
   {
     id: 'PCCC-001',
     groupId: 'PCCC',
-    description: 'Phát hiện hút thuốc ngoài khu vực cho phép',
+    description: 'Hút thuốc không đúng nơi quy định',
     monitoringModes: ['CONTINUOUS', 'EVENT_BASED'],
     automationLevel: 'AUTOMATIC',
     defaultSeverity: 'VIOLATION',

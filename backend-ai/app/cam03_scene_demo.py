@@ -19,7 +19,14 @@ logger = logging.getLogger("cam03_scene_demo")
 _DEMO_DIR = Path(__file__).resolve().parent.parent / "data" / "cam03_demo"
 _REEL_ROOT = Path(__file__).resolve().parent.parent.parent
 _FRAME_SMALL = (48, 48)
-_MATCH_DRIFT_MAX = 8.0
+_MATCH_DRIFT_MAX = 10.0
+_ATGT_MATCH_DRIFT_MAX = 18.0
+_ATGT_SEGMENT_START = 15.5
+_ATGT_SEGMENT_END = 20.5
+_MESH_SEGMENT_END = 6.0
+_MESH_MATCH_DRIFT_MAX = 5.0
+_MESH_REF_WIDTH = 640
+_MESH_REF_HEIGHT = 640
 
 
 @dataclass(frozen=True)
@@ -109,20 +116,94 @@ def _best_anchor(frame: np.ndarray) -> tuple[_SceneAnchor | None, float]:
     return best_anchor, best_drift
 
 
+def _best_mesh_anchor(frame: np.ndarray) -> tuple[_SceneAnchor | None, float]:
+    pool = [a for a in _load_anchors() if a.mesh_missing or a.mesh_dirty]
+    if not pool:
+        return None, float("inf")
+    probe = _frame_small(frame)
+    anchor, drift = min(((a, _frame_drift(probe, a.small)) for a in pool), key=lambda x: x[1])
+    if drift > _MESH_MATCH_DRIFT_MAX:
+        return None, drift
+    return anchor, drift
+
+
+def _scale_anchor_bbox(
+    bbox: tuple[int, int, int, int],
+    frame_w: int,
+    frame_h: int,
+) -> list[float]:
+    sx = frame_w / _MESH_REF_WIDTH
+    sy = frame_h / _MESH_REF_HEIGHT
+    x1, y1, x2, y2 = bbox
+    return [
+        float(x1 * sx),
+        float(y1 * sy),
+        float(x2 * sx),
+        float(y2 * sy),
+    ]
+
+
+def _best_atgt_anchor(frame: np.ndarray) -> tuple[_SceneAnchor | None, float]:
+    pool = [a for a in _load_anchors() if a.no_soft_median]
+    if not pool:
+        return None, float("inf")
+    probe = _frame_small(frame)
+    anchor, drift = min(((a, _frame_drift(probe, a.small)) for a in pool), key=lambda x: x[1])
+    if drift > _ATGT_MATCH_DRIFT_MAX:
+        return None, drift
+    return anchor, drift
+
+
 def resolve_cam03_mesh_demo(
     camera_id: str,
     frame: np.ndarray,
+    *,
+    source_pts_sec: float | None = None,
 ) -> list[RoadDetection] | None:
-    """Segment mesh đầu reel → BPTC-001 thiếu + bẩn."""
+    """Segment mesh đầu reel (0–6s) → BPTC-001 thiếu/bẩn chỉ trong ROI lưới thật."""
     if camera_id != "A-03":
         return None
-    anchor, _ = _best_anchor(frame)
-    if anchor is None or (anchor.mesh_missing is None and anchor.mesh_dirty is None):
+    if source_pts_sec is not None and float(source_pts_sec) >= _MESH_SEGMENT_END:
         return None
 
+    anchor, _ = _best_mesh_anchor(frame)
+    if anchor is None:
+        return None
+
+    from .mesh_analyzer import (
+        bbox_inside_mesh_zone,
+        _localize_mesh_dirty_bbox,
+        _localize_mesh_gap_bbox,
+        _mesh_dirty_stain_mask,
+        _polygon_to_mask,
+        _zone_bbox,
+    )
+    from .road_roi_config import get_mesh_zones_for_camera
+
+    h, w = frame.shape[:2]
+    mesh_zones = get_mesh_zones_for_camera(camera_id)
+    zone_polygon = mesh_zones[0]["polygon"] if mesh_zones else None
+    if zone_polygon is None:
+        return None
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    roi_mask = _polygon_to_mask(zone_polygon, w, h)
+    zone_box = _zone_bbox(zone_polygon, w, h)
+    stain_mask = _mesh_dirty_stain_mask(hsv, roi_mask)
+
     out: list[RoadDetection] = []
-    if anchor.mesh_missing:
-        x1, y1, x2, y2 = anchor.mesh_missing
+
+    # Lỗ lưới — chỉ tìm trên cột lưới xanh bên trái, tránh nhầm cẩu/vùng giữa frame.
+    left_mask = roi_mask.copy()
+    left_mask[:, int(w * 0.35) :] = 0
+    left_zone_box = [0.0, 0.0, float(w) * 0.35, zone_box[3]]
+    gap_bbox = _localize_mesh_gap_bbox(
+        hsv, left_mask, left_zone_box, stain_mask=stain_mask,
+    )
+    if gap_bbox is None and anchor.mesh_missing is not None:
+        gap_bbox = _scale_anchor_bbox(anchor.mesh_missing, w, h)
+    if gap_bbox is not None and bbox_inside_mesh_zone(gap_bbox, zone_polygon, w, h):
+        x1, y1, x2, y2 = gap_bbox
         out.append(
             RoadDetection(
                 behavior="mesh_missing",
@@ -132,8 +213,10 @@ def resolve_cam03_mesh_demo(
                 bbox=[float(x1), float(y1), float(x2), float(y2)],
             )
         )
-    if anchor.mesh_dirty:
-        x1, y1, x2, y2 = anchor.mesh_dirty
+
+    dirty_bbox = _localize_mesh_dirty_bbox(hsv, roi_mask, zone_box)
+    if dirty_bbox is not None and bbox_inside_mesh_zone(dirty_bbox, zone_polygon, w, h):
+        x1, y1, x2, y2 = dirty_bbox
         out.append(
             RoadDetection(
                 behavior="mesh_dirty",
@@ -143,34 +226,75 @@ def resolve_cam03_mesh_demo(
                 bbox=[float(x1), float(y1), float(x2), float(y2)],
             )
         )
-    return out
+
+    return out or None
 
 
 def augment_cam03_atgt_demo(
     camera_id: str,
     frame: np.ndarray,
     detections: list[Detection],
+    *,
+    source_pts_sec: float | None = None,
 ) -> list[Detection]:
-    """Segment ATGT (t≈16s) — bổ sung ATGT-004 khi ML chỉ thấy soft_median."""
+    """Cam A-03 — có hàng rào thì không vi phạm; không hàng rào thì bổ sung ATGT-004 trên segment ATGT."""
     if camera_id != "A-03":
         return detections
-    anchor, _ = _best_anchor(frame)
-    if anchor is None or anchor.no_soft_median is None:
+
+    if any(d.behavior == "soft_median" for d in detections):
+        return [d for d in detections if d.behavior != "no_soft_median"]
+
+    if any(d.behavior == "no_soft_median" for d in detections):
         return detections
 
-    x1, y1, x2, y2 = anchor.no_soft_median
-    filtered = [
-        d for d in detections
-        if d.behavior not in {"soft_median", "hard_median"}
+    in_atgt = (
+        source_pts_sec is not None
+        and _ATGT_SEGMENT_START <= float(source_pts_sec) <= _ATGT_SEGMENT_END
+    )
+    if not in_atgt:
+        return detections
+
+    from .atgt_analyzer import (
+        _left_lane_missing_median,
+        _missing_lane_separation_bbox,
+        _roi_mask,
+    )
+
+    h, w = frame.shape[:2]
+    mask = _roi_mask(camera_id, w, h)
+    if mask is None:
+        return detections
+
+    lane_bbox = _left_lane_missing_median(frame, mask)
+    if lane_bbox is None:
+        lane_bbox = _missing_lane_separation_bbox(mask, w, h)
+
+    anchor, drift = _best_atgt_anchor(frame)
+    if lane_bbox is None and anchor is not None and anchor.no_soft_median is not None:
+        if drift <= _ATGT_MATCH_DRIFT_MAX:
+            lane_bbox = anchor.no_soft_median
+
+    if lane_bbox is None:
+        return detections
+
+    x1, y1, x2, y2 = lane_bbox
+    return [
+        *detections,
+        Detection(
+            behavior="no_soft_median",
+            label="Không tổ chức phân làn, phân luồng giao thông",
+            confidence=max(VIOLATION_MIN_CONFIDENCE, 0.87),
+            bbox=[float(x1), float(y1), float(x2), float(y2)],
+        ),
     ]
-    has_lane_violation = any(d.behavior == "no_soft_median" for d in filtered)
-    if not has_lane_violation:
-        filtered.append(
-            Detection(
-                behavior="no_soft_median",
-                label="Không tổ chức phân làn, luồng giao thông",
-                confidence=max(VIOLATION_MIN_CONFIDENCE, 0.87),
-                bbox=[float(x1), float(y1), float(x2), float(y2)],
-            )
-        )
-    return filtered
+
+
+def is_cam03_atgt_lane_violation_scene(
+    camera_id: str,
+    frame: np.ndarray,
+    *,
+    source_pts_sec: float | None = None,
+) -> bool:
+    """Luôn False — engine phải tôn trọng lane_organized, không bypass demo."""
+    _ = camera_id, frame, source_pts_sec
+    return False

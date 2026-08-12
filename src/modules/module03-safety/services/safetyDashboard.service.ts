@@ -20,6 +20,10 @@ import {
   SAFETY_DEMO_MONTH_START,
   SAFETY_DEMO_WEEK_START,
 } from '../data/safetyDemoDate'
+import {
+  getSafetyLiveEventDate,
+  getSafetyLiveYesterdayDate,
+} from './safetyAiEvents.service'
 import { isOpenStatus } from '../data/safetyViolationRecords'
 import { SAFETY_ZONES } from '../data/safetyZones'
 import {
@@ -41,7 +45,14 @@ export function getAllSafetyRecords(): SafetyViolationRecord[] {
 }
 
 function isTodayRecord(detectedAt: string): boolean {
+  // Sự kiện AI live fetch theo getSafetyLiveEventDate() — không lệch ?date= playback.
+  if (detectedAt.startsWith(getSafetyLiveEventDate())) return true
   return detectedAt.startsWith(getSafetyTodayDate())
+}
+
+function isYesterdayRecord(detectedAt: string): boolean {
+  if (detectedAt.startsWith(getSafetyLiveYesterdayDate())) return true
+  return detectedAt.startsWith(getSafetyYesterdayDate())
 }
 
 /** Chỉ sự kiện AI live + kịch bản đã triển khai */
@@ -133,7 +144,7 @@ export function filterViolations(
 export function computeDashboardKpis(records: SafetyViolationRecord[]): SafetyDashboardKpis {
   const todayFiltered = filterTodayLiveRecords(records)
   const yesterday = filterLiveSafetyRecords(records).filter(
-    v => v.detectedAt.startsWith(getSafetyYesterdayDate()),
+    v => isYesterdayRecord(v.detectedAt),
   )
   const todayBuckets = countAlertStatusBuckets(todayFiltered)
   const yesterdayBuckets = countAlertStatusBuckets(yesterday)
@@ -222,7 +233,7 @@ export function computeGroupStats(
 ): SafetyGroupStats[] {
   const today = filterTodayLiveRecords(records)
   const yesterday = filterLiveSafetyRecords(sourceRecords).filter(
-    v => v.detectedAt.startsWith(getSafetyYesterdayDate()),
+    v => isYesterdayRecord(v.detectedAt),
   )
 
   return SAFETY_GROUPS.map(group => {

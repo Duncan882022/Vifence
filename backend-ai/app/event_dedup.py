@@ -21,7 +21,7 @@ def build_dedup_key(camera_id: str, scenario_id: str, track_id: str) -> str:
         from .vms_loop_state import loops_completed
 
         loop_n = loops_completed(camera_id)
-        if 1 <= loop_n <= 3:
+        if loop_n > 0:
             return f"{base}|L{loop_n}"
     return base
 

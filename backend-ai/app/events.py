@@ -18,6 +18,7 @@ from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetec
 from .snapshot_compose import (
     compose_violation_snapshot,
     draw_atld_roi_box,
+    draw_snapshot_roi_badge,
     merge_bboxes,
 )
 
@@ -363,16 +364,13 @@ class EventStore:
             event.subject_bbox = [float(v) for v in subject]
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, detection.behavior)
         raw = frame.copy()
-        annotated = self._draw_pccc_snapshot(raw, detection, subject)
-        focus_parts: list[list[float]] = [list(detection.bbox)]
-        if subject and len(subject) >= 4:
-            focus_parts.append([float(v) for v in subject])
+        annotated = self._draw_pccc_snapshot(raw, detection)
         snapshot = self._compose_event_snapshot(
             raw,
             annotated,
             event,
             behavior=detection.behavior,
-            focus_bbox=merge_bboxes(focus_parts),
+            focus_bbox=list(detection.bbox),
         )
         return self._finalize_event(
             event,
@@ -680,7 +678,7 @@ class EventStore:
         colors = {
             "speeding": (0, 120, 255),
             "hard_median": (255, 200, 0),
-            "no_soft_median": (200, 80, 255),
+            "no_soft_median": (0, 140, 255),
         }
         color = colors.get(detection.behavior, (0, 200, 255))
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
@@ -744,8 +742,24 @@ class EventStore:
             color = CRANE_CATALOG_STYLES["person"]["color"]
         else:
             color = CRANE_CATALOG_STYLES.get(detection.behavior, CRANE_CATALOG_STYLES["person"])["color"]
-        thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
+        thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 1
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
+        suffix = ""
+        if detection.behavior == "crane_proximity" and detection.distance_m is not None:
+            suffix = f" · {detection.distance_m:.1f}m"
+        draw_snapshot_roi_badge(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            scenario_id=getattr(detection, "scenario_id", None),
+            confidence=float(detection.confidence),
+            behavior=detection.behavior,
+            machine_kind=getattr(detection, "machine_kind", None),
+            suffix=suffix,
+        )
         return annotated
 
     @classmethod
@@ -792,7 +806,11 @@ class EventStore:
             "mesh_dirty": (14, 64, 146),  # nâu #92400e — bẩn (đồng bộ FE)
         }
         color = colors.get(detection.behavior, (0, 255, 0))
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        if detection.behavior in {"mesh_missing", "mesh_torn", "mesh_dirty"}:
+            from .snapshot_compose import draw_dashed_rectangle
+            draw_dashed_rectangle(annotated, (x1, y1), (x2, y2), color, thickness=1)
+        else:
+            draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=1)
         return annotated
 
     @staticmethod
@@ -801,13 +819,10 @@ class EventStore:
         detection: Detection,
         person_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
+        """Snapshot PCCC — chỉ ROI vi phạm (solid). Bbox người (info) chỉ trên live overlay."""
+        _ = person_bbox
         annotated = frame.copy()
         h, w = frame.shape[:2]
-        if person_bbox and len(person_bbox) >= 4:
-            px1, py1, px2, py2 = [int(v) for v in person_bbox]
-            px1, py1 = max(0, px1), max(0, py1)
-            px2, py2 = min(w - 1, px2), min(h - 1, py2)
-            cv2.rectangle(annotated, (px1, py1), (px2, py2), (255, 200, 80), 1, cv2.LINE_AA)
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)

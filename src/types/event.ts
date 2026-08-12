@@ -18,6 +18,8 @@ export interface Event {
   trafficRole?: string
   trafficSubject?: string
   scenario?: string
+  /** Mã kịch bản ATLĐ (ATGT-004, BPTC-001, …) — dùng styling ROI playback. */
+  scenarioId?: string
   violationCategory?: string
   imageUrl?: string
   videoUrl?: string

@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
+  Building2,
   Camera,
   Car,
   Clock,
@@ -78,7 +79,12 @@ export function SafetyEventDetailContent({
   const subject = getSubject(record)
   const eventSubjectType = getEventSubjectType(record)
   const isVehicleEvent = eventSubjectType === 'VEHICLE'
+  const isPersonEvent = eventSubjectType === 'PERSON'
   const vehiclePlate = resolveVehiclePlate(subject.vehiclePlate)
+  const responsibleParty = getResponsiblePartyLabel(record)
+  const showResponsibleParty = !isPersonEvent
+    && !isVehicleEvent
+    && responsibleParty !== '—'
   const showSnapshot = variant === 'modal'
 
   return (
@@ -112,8 +118,6 @@ export function SafetyEventDetailContent({
           </div>
         )}
 
-        {variant === 'modal' && <SafetyEventBadgeRow record={record} />}
-
         {showExtraNote && (
           <p className="text-[11px] text-foreground/85 leading-relaxed border-l-2 border-[#2a3855] pl-2.5">
             {record.description?.trim()}
@@ -142,7 +146,7 @@ export function SafetyEventDetailContent({
                 </span>
               </DetailRow>
             )}
-            {eventSubjectType === 'PERSON' && (
+            {isPersonEvent && (
               <>
                 <DetailRow icon={User} label="Mã nhân sự">
                   {displayUnknown(subject.employeeCode)}
@@ -150,14 +154,20 @@ export function SafetyEventDetailContent({
                 <DetailRow icon={User} label="Họ tên">
                   {displayUnknown(subject.workerName)}
                 </DetailRow>
-                <DetailRow icon={User} label="Nhà thầu">
-                  {getResponsiblePartyLabel(record)}
+                <DetailRow icon={Building2} label="Nhà thầu">
+                  {responsibleParty}
                 </DetailRow>
               </>
             )}
-            {(eventSubjectType === 'CONSTRUCTION_ACTIVITY'
-              || eventSubjectType === 'MANAGEMENT'
-              || eventSubjectType === 'SITE_CONDITION')
+            {showResponsibleParty && (
+              <DetailRow icon={Building2} label="Nhà thầu phụ trách">
+                {responsibleParty}
+              </DetailRow>
+            )}
+            {variant === 'playback'
+              && (eventSubjectType === 'CONSTRUCTION_ACTIVITY'
+                || eventSubjectType === 'MANAGEMENT'
+                || eventSubjectType === 'SITE_CONDITION')
               && shouldShowSubjectDetailRow(record, scenarioTitle) && (
               <DetailRow icon={User} label="Đối tượng">
                 {eventSubjectType === 'CONSTRUCTION_ACTIVITY'

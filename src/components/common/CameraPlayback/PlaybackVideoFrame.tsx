@@ -10,6 +10,7 @@ import {
 import type { CameraPlaybackRecord } from '@/types/cameraPlayback'
 import { getCameraLocation as getLocation } from '@/utils/cameraPlaybackUi'
 import { EventPlaybackViewport } from '@/modules/module03-safety/components/EventPlaybackViewport'
+import { playbackViolationRoiClass } from '@/modules/module03-safety/utils/roiBoxRole'
 import { SEVERITY_BADGE, SEVERITY_ICONS, SEVERITY_LABELS_UI } from '@/modules/module03-safety/utils/safetyDashboardUi'
 import type { SafetyViolationRecord } from '@/modules/module03-safety/types/safety.types'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
@@ -61,6 +62,7 @@ export function PlaybackVideoFrame({
             videoFit={playbackFit}
             videoObjectPosition={playbackObjectPosition}
             zoomEnabled={false}
+            violationRoiClass={playbackViolationRoiClass(activeEventRecord?.scenarioId)}
             className="z-[1]"
           >
             <video

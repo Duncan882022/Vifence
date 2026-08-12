@@ -16,6 +16,7 @@ import {
   getVideoObjectPositionForCamera,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { EventPlaybackViewport, useEventClipPlayback } from './EventPlaybackViewport'
+import { playbackViolationRoiClass } from '../utils/roiBoxRole'
 import { EVENT_PLAYBACK_CLIP_SEC, buildEventClipWindow } from '../utils/eventPlaybackClip'
 
 const SPEEDS = [0.5, 1, 1.5, 2]
@@ -159,6 +160,7 @@ export function SafetyPlayback({ event, className, variant = 'embedded' }: Safet
               frameHeight={event.frameHeight}
               videoFit={playbackFit}
               videoObjectPosition={playbackObjectPosition}
+              violationRoiClass={playbackViolationRoiClass(event.scenarioId)}
             >
               <video
                 key={event.id}
