@@ -329,7 +329,7 @@ def event_snapshot(event_id: str):
     snapshot_file = next((e.snapshot_file for e in events if e.id == event_id), None)
     path = engine.store.resolve_snapshot_path(event_id, snapshot_file)
     if path is None or not path.exists():
-        return {"error": "not_found"}
+        raise HTTPException(status_code=404, detail="Snapshot not found")
     return FileResponse(
         path,
         headers={"Cache-Control": "no-cache, max-age=0, must-revalidate"},
@@ -496,10 +496,9 @@ def event_clip(event_id: str):
     if not event.clip_file:
         raise HTTPException(status_code=404, detail="Clip chưa có cho event này")
 
-    clip_path = CLIPS_DIR / event.camera_id / event.clip_file
+    clip_path = CLIPS_DIR / event.clip_file
     if not clip_path.exists():
-        # Thử tìm relative path trực tiếp
-        clip_path2 = CLIPS_DIR / event.clip_file
+        clip_path2 = CLIPS_DIR / event.camera_id / event.clip_file
         if not clip_path2.exists():
             raise HTTPException(status_code=404, detail="Clip file không tìm thấy trên server")
         clip_path = clip_path2

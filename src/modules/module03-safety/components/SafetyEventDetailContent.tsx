@@ -105,9 +105,6 @@ export function SafetyEventDetailContent({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-[#1a2235] text-muted-foreground border border-[#1e2433]">
-                  {record.scenarioId}
-                </span>
                 <SafetyEventBadgeRow record={record} />
               </div>
               <p className="text-[12px] font-semibold text-foreground leading-snug">{scenarioTitle}</p>
@@ -115,7 +112,7 @@ export function SafetyEventDetailContent({
           </div>
         )}
 
-        <SafetyEventBadgeRow record={record} />
+        {variant === 'modal' && <SafetyEventBadgeRow record={record} />}
 
         {showExtraNote && (
           <p className="text-[11px] text-foreground/85 leading-relaxed border-l-2 border-[#2a3855] pl-2.5">
@@ -124,48 +121,53 @@ export function SafetyEventDetailContent({
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 pt-0.5">
-          <DetailRow icon={Clock} label="Thời gian phát hiện">
-            <span className="tabular-nums">{formatDateTime(record.detectedAt)}</span>
-          </DetailRow>
-          <DetailRow icon={MapPin} label="Khu vực">
-            {eventArea}
-          </DetailRow>
-          <DetailRow icon={Camera} label="Nguồn giám sát">
-            {eventSource}
-          </DetailRow>
-          {isVehicleEvent && (
-            <DetailRow icon={Car} label="Biển số / phương tiện">
-              <span className="font-mono font-semibold tracking-wide">{vehiclePlate}</span>
-              <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
-                {displayUnknown(subject.vehicleType)}
-              </span>
+          <div className="space-y-2.5">
+            <DetailRow icon={Clock} label="Thời gian phát hiện">
+              <span className="tabular-nums">{formatDateTime(record.detectedAt)}</span>
             </DetailRow>
-          )}
-          {eventSubjectType === 'PERSON' && (
-            <>
-              <DetailRow icon={User} label="Họ tên">
-                {displayUnknown(subject.workerName)}
-              </DetailRow>
-              <DetailRow icon={User} label="Mã nhân sự">
-                {displayUnknown(subject.employeeCode)}
-              </DetailRow>
-              <DetailRow icon={User} label="Nhà thầu">
-                {getResponsiblePartyLabel(record)}
-              </DetailRow>
-            </>
-          )}
-          {(eventSubjectType === 'CONSTRUCTION_ACTIVITY'
-            || eventSubjectType === 'MANAGEMENT'
-            || eventSubjectType === 'SITE_CONDITION')
-            && shouldShowSubjectDetailRow(record, scenarioTitle) && (
-            <DetailRow icon={User} label="Đối tượng">
-              {eventSubjectType === 'CONSTRUCTION_ACTIVITY'
-                ? displayUnknown(subject.workActivity ?? subject.workItem)
-                : eventSubjectType === 'MANAGEMENT'
-                  ? displayUnknown(subject.managementUnit ?? subject.responsibleRole)
-                  : displayUnknown(subject.workItem)}
+            <DetailRow icon={Camera} label="Nguồn giám sát">
+              {eventSource}
             </DetailRow>
-          )}
+            <DetailRow icon={MapPin} label="Khu vực">
+              {eventArea}
+            </DetailRow>
+          </div>
+
+          <div className="space-y-2.5">
+            {isVehicleEvent && (
+              <DetailRow icon={Car} label="Biển số / phương tiện">
+                <span className="font-mono font-semibold tracking-wide">{vehiclePlate}</span>
+                <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
+                  {displayUnknown(subject.vehicleType)}
+                </span>
+              </DetailRow>
+            )}
+            {eventSubjectType === 'PERSON' && (
+              <>
+                <DetailRow icon={User} label="Mã nhân sự">
+                  {displayUnknown(subject.employeeCode)}
+                </DetailRow>
+                <DetailRow icon={User} label="Họ tên">
+                  {displayUnknown(subject.workerName)}
+                </DetailRow>
+                <DetailRow icon={User} label="Nhà thầu">
+                  {getResponsiblePartyLabel(record)}
+                </DetailRow>
+              </>
+            )}
+            {(eventSubjectType === 'CONSTRUCTION_ACTIVITY'
+              || eventSubjectType === 'MANAGEMENT'
+              || eventSubjectType === 'SITE_CONDITION')
+              && shouldShowSubjectDetailRow(record, scenarioTitle) && (
+              <DetailRow icon={User} label="Đối tượng">
+                {eventSubjectType === 'CONSTRUCTION_ACTIVITY'
+                  ? displayUnknown(subject.workActivity ?? subject.workItem)
+                  : eventSubjectType === 'MANAGEMENT'
+                    ? displayUnknown(subject.managementUnit ?? subject.responsibleRole)
+                    : displayUnknown(subject.workItem)}
+              </DetailRow>
+            )}
+          </div>
         </div>
       </div>
     </div>

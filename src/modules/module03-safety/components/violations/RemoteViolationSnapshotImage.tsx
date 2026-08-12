@@ -37,6 +37,8 @@ export function RemoteViolationSnapshotImage({
     fetch(src, { headers: TUNNEL_HEADERS, mode: 'cors' })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const type = res.headers.get('content-type') ?? ''
+        if (!type.startsWith('image/')) throw new Error('not_image')
         return res.blob()
       })
       .then(blob => {

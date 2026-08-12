@@ -59,9 +59,6 @@ export function SafetyViolationDetailModal({
               <p id="safety-violation-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
                 {scenarioTitle}
               </p>
-              <p className="text-[9px] text-muted-foreground font-mono mt-0.5">
-                {record.scenarioId}
-              </p>
             </div>
           </div>
           <button

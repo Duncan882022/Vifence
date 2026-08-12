@@ -90,6 +90,10 @@ def resolve_smoking_person_bbox(frame: np.ndarray, detection: Detection) -> list
     return best
 
 
+def _apply_smoking_demo_match(camera_id: str) -> WorkerMatch | None:
+    return demo_smoking_match(camera_id)
+
+
 def enrich_smoking_detection(
     frame: np.ndarray,
     detection: Detection,
@@ -100,6 +104,10 @@ def enrich_smoking_detection(
     """Gắn nhận diện người hút thuốc — luôn có worker_name (Unknown nếu không khớp)."""
     person_bbox = resolve_smoking_person_bbox(frame, detection)
     if not person_bbox:
+        demo = _apply_smoking_demo_match(camera_id)
+        if demo is not None:
+            _apply_match(detection, demo)
+            return demo
         match = unknown_worker_match("no_person_bbox")
         _apply_match(detection, match)
         return match
@@ -118,7 +126,7 @@ def enrich_smoking_detection(
         person_index=person_index,
     )
     if match.worker_id == "unknown":
-        demo = demo_smoking_match(camera_id)
+        demo = _apply_smoking_demo_match(camera_id)
         if demo is not None:
             match = demo
             _apply_match(holder, match)

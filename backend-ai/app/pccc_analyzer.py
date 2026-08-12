@@ -108,10 +108,33 @@ def _has_event_level_smoking(detections: list[Detection]) -> bool:
     )
 
 
+def _enrich_smoking_detections(
+    frame: np.ndarray,
+    detections: list[Detection],
+    *,
+    camera_id: str,
+) -> list[Detection]:
+    from .worker_identity.detection_enrich import enrich_smoking_detection
+
+    smoking_index = 0
+    enriched: list[Detection] = []
+    for det in detections:
+        if det.behavior == "smoking" and det.confidence >= VIOLATION_MIN_CONFIDENCE:
+            enrich_smoking_detection(
+                frame,
+                det,
+                camera_id=camera_id,
+                person_index=smoking_index,
+            )
+            smoking_index += 1
+        enriched.append(det)
+    return enriched
+
+
 def analyze_pccc_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detection]:
     demo = resolve_cam04_pccc_demo(camera_id, frame)
     if demo is not None:
-        return demo
+        return _enrich_smoking_detections(frame, demo, camera_id=camera_id)
 
     all_detections: list[Detection] = []
     for detector in _get_detectors():
@@ -160,18 +183,4 @@ def analyze_pccc_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detec
     for dets in by_behavior.values():
         filtered.extend(dets)
 
-    from .worker_identity.detection_enrich import enrich_smoking_detection
-
-    smoking_index = 0
-    enriched: list[Detection] = []
-    for det in filtered:
-        if det.behavior == "smoking" and det.confidence >= VIOLATION_MIN_CONFIDENCE:
-            enrich_smoking_detection(
-                frame,
-                det,
-                camera_id=camera_id,
-                person_index=smoking_index,
-            )
-            smoking_index += 1
-        enriched.append(det)
-    return enriched
+    return _enrich_smoking_detections(frame, filtered, camera_id=camera_id)
