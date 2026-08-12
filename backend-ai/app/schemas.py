@@ -118,19 +118,19 @@ ROAD_SCENARIO_META = {
     },
     "mesh_missing": {
         "scenario_id": "BPTC-001",
-        "scenario_name": "Lưới bao che thiếu",
+        "scenario_name": "Lưới bao che thiếu/bẩn",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
     "mesh_torn": {
         "scenario_id": "BPTC-001",
-        "scenario_name": "Lưới bao che thiếu",
+        "scenario_name": "Lưới bao che thiếu/bẩn",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
     "mesh_dirty": {
         "scenario_id": "BPTC-001",
-        "scenario_name": "Lưới bao che bẩn",
+        "scenario_name": "Lưới bao che thiếu/bẩn",
         "violation_type": "method-statement",
         "group": "BPTC",
     },
@@ -209,12 +209,6 @@ ATGT_SCENARIO_META = {
     "speeding": {
         "scenario_id": "ATGT-002",
         "scenario_name": "Phương tiện vượt quá tốc độ quy định",
-        "violation_type": "traffic-safety",
-        "group": "ATGT",
-    },
-    "hard_median": {
-        "scenario_id": "ATGT-004",
-        "scenario_name": "Đã tổ chức phân làn (làn cứng)",
         "violation_type": "traffic-safety",
         "group": "ATGT",
     },

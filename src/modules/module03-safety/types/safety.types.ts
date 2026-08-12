@@ -196,6 +196,8 @@ export interface SafetyViolationRecord {
   clipDurationSec?: number
   verificationRequired: boolean
   description?: string
+  /** Behavior AI gốc (mesh_missing / mesh_dirty …) — phân biệt ROI màu, không đổi title catalog. */
+  aiBehavior?: string
   /** Khóa dedup từ backend — cùng camera × kịch bản × đối tượng. */
   dedupKey?: string
   /** @deprecated dùng subject — giữ để tương thích adapter */

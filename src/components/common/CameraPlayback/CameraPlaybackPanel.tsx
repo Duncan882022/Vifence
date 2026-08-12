@@ -53,6 +53,8 @@ export interface CameraPlaybackPanelProps {
     params: { startDate: string; endDate: string },
   ) => Promise<CameraPlaybackRecordsResponse>
   fetchDetections?: (recordId: string) => Promise<CameraDetectionsResponse>
+  /** % chiều cao vùng video desktop (mặc định 70). Module 03 ATLĐ: ~82. */
+  videoAreaFlex?: number
 }
 
 export function CameraPlaybackPanel({
@@ -69,6 +71,7 @@ export function CameraPlaybackPanel({
   groupFn,
   fetchRecords = fetchCameraRecords,
   fetchDetections = fetchRecordDetections,
+  videoAreaFlex = 70,
 }: CameraPlaybackPanelProps) {
   const resolveCamera = useCallback(
     (id?: string) => cameras.find(cam => cam.id === id) ?? cameras[0] ?? null,
@@ -347,8 +350,10 @@ export function CameraPlaybackPanel({
       )}>
         <div className={cn(
           'relative w-full min-h-0',
-          isDesktop ? 'flex-[1_1_70%] min-h-[200px]' : 'aspect-video shrink-0',
-        )}>
+          isDesktop ? 'flex-1 min-h-0' : 'aspect-video shrink-0',
+        )}
+        style={isDesktop && videoAreaFlex < 80 ? { flex: `1 1 ${videoAreaFlex}%` } : undefined}
+        >
           <PlaybackVideoFrame
             cam={activeCam}
             videoSrc={videoSrc}
@@ -377,7 +382,7 @@ export function CameraPlaybackPanel({
         {isDesktop ? (
           <div className="shrink-0 flex flex-col gap-1 pt-0.5 border-t border-[#1e2433]/50">
             {activeEventRecord && selectedRecord?.type === 'event' && (
-              <div className="max-h-[140px] overflow-y-auto rounded-lg border border-[#1e2433] bg-[#0a0e17]/80 mx-0.5">
+              <div className="max-h-[100px] overflow-y-auto rounded-lg border border-[#1e2433] bg-[#0a0e17]/80 mx-0.5">
                 <SafetyEventDetailContent record={activeEventRecord} variant="playback" />
               </div>
             )}

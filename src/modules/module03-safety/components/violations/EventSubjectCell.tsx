@@ -116,7 +116,7 @@ export function AlertEventSnapshot({
   const snapshotUrl = resolveViolationSnapshotUrl(record)
   const fallbackUrl = resolveStaticViolationSnapshotUrl(record)
   const frameClass = cn(
-    'relative shrink-0 w-[80px] min-h-[76px] overflow-hidden rounded-lg border border-[#1e2433]/90 bg-black shadow-inner',
+    'relative shrink-0 w-[68px] min-h-[58px] overflow-hidden rounded-md border border-[#1e2433]/90 bg-black shadow-inner',
     className,
   )
   const image = (

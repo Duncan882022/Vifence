@@ -28,6 +28,8 @@ _IN_DEMO_REEL_DRIFT_MAX = 35.0
 _PPE_SCENE_DRIFT_MAX = 20.0
 
 _PPE_SCENE_STEM = "cam04-ppe-workers"
+_WAH_SCENE_STEM = "cam04-wah-scene"
+_WAH_SCENE_DRIFT_MAX = 20.0
 
 _REEL_ANCHOR_FILES = (
     _DEMO_DATA / "0355.png",
@@ -41,7 +43,7 @@ _REEL_ANCHOR_FILES = (
     _REEL_ROOT / "public/camera-feeds/cam04-wah-scene.jpg",
 )
 
-Cam04PpeDemoAction = Optional[Literal["suppress"]]
+Cam04PpeDemoAction = Optional[Literal["suppress", "vest_only"]]
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class _PpeAnchor:
     key: str
     small: np.ndarray
     is_ppe_scene: bool
+    is_wah_scene: bool = False
 
 
 def _frame_small(frame: np.ndarray) -> np.ndarray:
@@ -76,13 +79,14 @@ def _load_anchors() -> tuple[_PpeAnchor, ...]:
                 key=stem,
                 small=_frame_small(img),
                 is_ppe_scene=stem == _PPE_SCENE_STEM,
+                is_wah_scene=stem == _WAH_SCENE_STEM,
             )
         )
     return tuple(anchors)
 
 
 def resolve_cam04_ppe_demo(camera_id: str, frame: np.ndarray) -> Cam04PpeDemoAction:
-    """None → chạy PPE ML/heuristic; 'suppress' → chỉ person, không vi phạm."""
+    """None → PPE đầy đủ; 'vest_only' → WAH segment, chỉ log thiếu áo phản quang; 'suppress' → chỉ person."""
     if camera_id != "A-04":
         return None
     anchors = _load_anchors()
@@ -99,6 +103,10 @@ def resolve_cam04_ppe_demo(camera_id: str, frame: np.ndarray) -> Cam04PpeDemoAct
     ppe_drifts = [drift for anchor, drift in scored if anchor.is_ppe_scene]
     if ppe_drifts and min(ppe_drifts) <= _PPE_SCENE_DRIFT_MAX:
         return None
+
+    wah_drifts = [drift for anchor, drift in scored if anchor.is_wah_scene]
+    if wah_drifts and min(wah_drifts) <= _WAH_SCENE_DRIFT_MAX:
+        return "vest_only"
 
     best_anchor, _best_drift = min(scored, key=lambda item: item[1])
     if best_anchor.is_ppe_scene:

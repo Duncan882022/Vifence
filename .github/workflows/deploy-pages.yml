@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -34,21 +32,8 @@ jobs:
       - name: Build
         run: npm run build:pages
 
-      # Cách 1: GitHub Actions Pages (khi Settings → Source = GitHub Actions)
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-
-      - name: Deploy via GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        continue-on-error: true
-
-      # Cách 2: nhánh gh-pages (khi Settings → Source = branch gh-pages / root)
+      # Deploy nhánh gh-pages (Settings → Pages → Deploy from branch gh-pages / root).
+      # Chỉ một nguồn deploy — tránh race khiến index.html trỏ asset hash cũ → 404.
       - name: Deploy gh-pages branch
         uses: JamesIves/github-pages-deploy-action@v4
         with:

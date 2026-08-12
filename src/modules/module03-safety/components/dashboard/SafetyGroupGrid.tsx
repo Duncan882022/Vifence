@@ -37,7 +37,7 @@ function GroupScenarioTable({ s }: { s: SafetyGroupStats }) {
           return (
             <div
               key={item.scenarioId}
-              className="flex items-center gap-1 px-2 py-1.5 border-b border-[#1e2433]/50 last:border-b-0 min-w-0"
+              className="flex items-center gap-1 px-1.5 py-1 border-b border-[#1e2433]/50 last:border-b-0 min-w-0"
             >
               <TagTooltip content={item.name} multiline className="flex items-center gap-1.5 flex-1 min-w-0">
                 {ScenarioIcon && (
@@ -111,7 +111,7 @@ function GroupCard({ s }: { s: SafetyGroupStats }) {
   return (
     <div
       className={cn(
-        'flex flex-col h-full min-h-0 text-left border border-l-2 rounded-lg p-2 overflow-hidden',
+        'flex flex-col h-full min-h-0 text-left border border-l-2 rounded-lg p-1.5 overflow-hidden',
         'bg-[#0b0f1a] border-[#1e2433]',
         GROUP_BORDER_ACCENT[s.groupId],
       )}
@@ -119,11 +119,11 @@ function GroupCard({ s }: { s: SafetyGroupStats }) {
       <TagTooltip content={groupTip} multiline className="flex items-start gap-1.5 shrink-0 min-w-0 w-full">
         <div
           className={cn(
-            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border',
+            'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border',
             GROUP_BADGE[s.groupId],
           )}
         >
-          <Icon className={cn('w-4 h-4', GROUP_COLORS[s.groupId])} aria-hidden />
+          <Icon className={cn('w-3.5 h-3.5', GROUP_COLORS[s.groupId])} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
@@ -162,8 +162,8 @@ function GroupCard({ s }: { s: SafetyGroupStats }) {
 
 export function SafetyGroupGrid({ stats }: SafetyGroupGridProps) {
   return (
-    <div className="h-full min-h-0 p-2 max-lg:h-auto max-lg:min-h-0 max-lg:overflow-visible lg:overflow-hidden">
-      <div className="grid h-full min-h-0 max-lg:h-auto max-lg:grid-flow-row max-lg:auto-rows-min grid-cols-1 min-[480px]:max-lg:grid-cols-2 lg:grid-cols-3 lg:grid-rows-2 gap-2 lg:auto-rows-fr">
+    <div className="h-full min-h-0 p-1.5 max-lg:h-auto max-lg:min-h-0 max-lg:overflow-visible lg:overflow-hidden">
+      <div className="grid h-full min-h-0 max-lg:h-auto max-lg:grid-flow-row max-lg:auto-rows-min grid-cols-1 min-[480px]:max-lg:grid-cols-2 lg:grid-cols-3 lg:grid-rows-2 gap-1.5 lg:auto-rows-fr">
         {stats.map(s => (
           <GroupCard key={s.groupId} s={s} />
         ))}

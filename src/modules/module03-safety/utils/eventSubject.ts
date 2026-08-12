@@ -9,6 +9,97 @@ import { getZoneName, SAFETY_ZONE_MAP } from '../data/safetyZones'
 import { displayUnknown } from './displayUnknown'
 import { resolveVehiclePlate } from './vehiclePlate'
 
+export function normalizeDetailText(value: string | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function isDuplicateDetailText(a: string | undefined, b: string | undefined): boolean {
+  if (!a?.trim() || !b?.trim()) return false
+  const left = normalizeDetailText(a)
+  const right = normalizeDetailText(b)
+  return left === right || left.includes(right) || right.includes(left)
+}
+
+/** BPTC-001 — chi tiết thiếu/bẩn hiển thị qua màu ROI (xanh/nâu), không lặp text. */
+const MESH_VARIANT_DESCRIPTIONS = new Set([
+  'lưới bao che thiếu',
+  'lưới bao che bẩn',
+])
+
+/** Metadata cũ từ backend khi hard_median bị log nhầm ATGT-004. */
+const ATGT004_STALE_LANE_PHRASES = [
+  /đã tổ chức/i,
+  /làn cứng/i,
+  /làn mềm/i,
+  /hàng rào/i,
+  /phân cách/i,
+]
+
+export function isStaleAtgt004LaneNote(text: string | undefined): boolean {
+  const normalized = text?.trim()
+  if (!normalized) return false
+  return ATGT004_STALE_LANE_PHRASES.some(pattern => pattern.test(normalized))
+}
+
+/** Tiêu đề sự kiện — tên kịch bản Nhóm ATLĐ (SCENARIO_ID_DISPLAY_NAME). */
+export function resolveEventScenarioTitle(record: SafetyViolationRecord): string {
+  return getScenarioName(record.scenarioId)
+}
+
+export function shouldShowEventDescriptionNote(
+  record: SafetyViolationRecord,
+  title: string,
+): boolean {
+  const extra = record.description?.trim()
+  if (!extra) return false
+  if (record.scenarioId === 'BPTC-001' && MESH_VARIANT_DESCRIPTIONS.has(normalizeDetailText(extra))) {
+    return false
+  }
+  if (record.scenarioId === 'ATGT-004' && isStaleAtgt004LaneNote(extra)) {
+    return false
+  }
+  const scenario = SAFETY_SCENARIO_MAP.get(record.scenarioId)
+  const skipAgainst = [
+    title,
+    getScenarioName(record.scenarioId),
+    scenario?.name,
+    scenario?.description,
+  ]
+  return !skipAgainst.some(text => isDuplicateDetailText(extra, text))
+}
+
+export function shouldShowSubjectDetailRow(record: SafetyViolationRecord, title: string): boolean {
+  const type = getEventSubjectType(record)
+  const s = getSubject(record)
+
+  if (type === 'PERSON' || type === 'VEHICLE') return true
+
+  if (type === 'SITE_CONDITION') {
+    if (record.scenarioId === 'ATGT-004') return false
+    return Boolean(s.workItem?.trim() && !isDuplicateDetailText(s.workItem, title))
+  }
+  if (type === 'CONSTRUCTION_ACTIVITY') {
+    const specific = s.workActivity ?? s.workItem
+    return Boolean(specific?.trim() && !isDuplicateDetailText(specific, title))
+  }
+  if (type === 'MANAGEMENT') {
+    const specific = s.managementUnit ?? s.responsibleRole
+    return Boolean(specific?.trim() && !isDuplicateDetailText(specific, title))
+  }
+  return false
+}
+
+export function shouldShowAlertSubjectLine(record: SafetyViolationRecord): boolean {
+  const title = resolveEventScenarioTitle(record)
+  const label = getAlertSubjectLabel(record)
+  if (!label || label === '—') return false
+  if (isDuplicateDetailText(label, title)) return false
+  if (label === EVENT_SUBJECT_LABELS.SITE_CONDITION) return false
+  if (label === EVENT_SUBJECT_LABELS.CONSTRUCTION_ACTIVITY) return false
+  if (label === EVENT_SUBJECT_LABELS.MANAGEMENT) return false
+  return true
+}
+
 export const EVENT_SUBJECT_LABELS: Record<EventSubjectType, string> = {
   PERSON: 'Người lao động',
   VEHICLE: 'Phương tiện',

@@ -528,17 +528,6 @@ def _analyze_lane_state(frame: np.ndarray, camera_id: str) -> list[Detection]:
                     bbox=list(paved),
                 )
             )
-        if not paved:
-            left_gap = _missing_lane_separation_bbox(mask, w, h)
-            if left_gap is not None:
-                detections.append(
-                    Detection(
-                        behavior="no_soft_median",
-                        label="Không tổ chức phân làn, luồng giao thông",
-                        confidence=round(_MIN_CONF + 0.03, 3),
-                        bbox=list(left_gap),
-                    )
-                )
         return detections
 
     soft = _detect_soft_median(frame, mask)

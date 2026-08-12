@@ -70,6 +70,10 @@ class MeshAnalysisEngine:
     def _episode_score(self, det: RoadDetection) -> float:
         return det.confidence * 1000.0
 
+    def reset_camera(self, camera_id: str) -> None:
+        self._tracks.pop(camera_id, None)
+        self._gates.pop(camera_id, None)
+
     def process_frame(
         self,
         frame: np.ndarray,

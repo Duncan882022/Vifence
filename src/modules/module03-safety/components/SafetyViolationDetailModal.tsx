@@ -3,10 +3,9 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { SafetyViolationRecord } from '../types/safety.types'
-import { getScenarioName, SAFETY_SCENARIO_MAP } from '../data/safetyScenarios'
-import { GROUP_BADGE, GROUP_COLORS, GROUP_ICONS } from '../utils/safetyDashboardUi'
 import { getScenarioIcon } from '../data/safetyScenarioIcons'
-import { isLiveSafetyRecord } from '../services/safetyAiEvents.service'
+import { GROUP_BADGE, GROUP_COLORS, GROUP_ICONS } from '../utils/safetyDashboardUi'
+import { resolveEventScenarioTitle } from '../utils/eventSubject'
 import { SafetyEventDetailContent } from './SafetyEventDetailContent'
 
 interface SafetyViolationDetailModalProps {
@@ -33,10 +32,7 @@ export function SafetyViolationDetailModal({
   if (!record) return null
 
   const ScenarioIcon = getScenarioIcon(record.scenarioId) ?? GROUP_ICONS[record.groupId]
-  const scenarioTitle =
-    (isLiveSafetyRecord(record) && record.description?.trim())
-      ? record.description.trim()
-      : getScenarioName(record.scenarioId)
+  const scenarioTitle = resolveEventScenarioTitle(record)
 
   return createPortal(
     <div
@@ -65,9 +61,6 @@ export function SafetyViolationDetailModal({
               </p>
               <p className="text-[9px] text-muted-foreground font-mono mt-0.5">
                 {record.scenarioId}
-                {SAFETY_SCENARIO_MAP.get(record.scenarioId)?.name && (
-                  <span className="text-muted-foreground/50"> · {record.groupId}</span>
-                )}
               </p>
             </div>
           </div>

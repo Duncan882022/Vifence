@@ -16,12 +16,13 @@ if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
   exit 0
 fi
 
+pkill -f "run_backend_watchdog.sh" 2>/dev/null || true
 pkill -f "uvicorn app.main:app" 2>/dev/null || true
 sleep 1
 
 echo "→ Khởi động backend ${HEALTH_URL} (log: ${LOG})…"
 cd backend-ai
-nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 >> "$LOG" 2>&1 &
+nohup bash scripts/run_backend_watchdog.sh >> "$LOG" 2>&1 &
 BACKEND_PID=$!
 cd "$ROOT"
 

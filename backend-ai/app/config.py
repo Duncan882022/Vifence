@@ -58,15 +58,18 @@ class Settings(BaseSettings):
     # Chặn ghi trùng rất nhanh (giây) — lớp phụ; cửa sổ chính = first_seen.
     event_rapid_dedup_seconds: float = 45.0
 
-    # Local/test: confirm nhanh ~8s (bỏ one_event_per_episode). Production: false.
-    # Vẫn giữ created_at lần đầu + refresh snapshot trong event_first_seen_window.
+    # Local/test: confirm nhanh ~8s, dedup 2 phút — chỉ dùng debug timing. Production/audit: false.
+    # false = vòng loop đầu ghi đủ nhóm; loop lại trong 3h chỉ refresh snapshot (event_first_seen_window).
     event_test_mode: bool = False
 
-    # Cam A-03: overlay BPTC vẫn chạy; chỉ tắt ghi sự kiện mud/water/object/mesh.
-    a03_bptc_event_logging_enabled: bool = False
+    # Cam A-03: ghi sự kiện BPTC (bùn/nước/vật/lưới). false = chỉ overlay, không vào tab Sự kiện.
+    a03_bptc_event_logging_enabled: bool = True
 
-    # ATGT: mặc định chỉ log thiếu phân làn (ATGT-004). Audit/predeploy: false.
-    atgt_lane_violation_only: bool = True
+    # ATGT: false = log cả vượt tốc độ (ATGT-002) + thiếu phân làn (ATGT-004).
+    atgt_lane_violation_only: bool = False
+
+    # Số vòng loop video trước khi bật dedup 3h. 2 = ghi đủ ở loop 1–2, từ loop 3 dedup.
+    event_audit_grace_loops: int = 2
 
     def event_repeat_seconds(self, configured: float) -> float:
         """Cooldown giữa các lần confirm engine cùng track."""
@@ -75,6 +78,17 @@ class Settings(BaseSettings):
     @property
     def event_log_one_per_episode(self) -> bool:
         return not self.event_test_mode
+
+    def event_dedup_enabled(self) -> bool:
+        """False trong N vòng loop đầu — ghi đủ mọi trường hợp trước khi dedup 3h."""
+        if self.event_test_mode:
+            return True
+        grace = self.event_audit_grace_loops
+        if grace <= 0:
+            return True
+        from .vms_loop_state import min_loops_completed
+
+        return min_loops_completed() >= grace
 
     @property
     def event_first_seen_window_effective(self) -> float:

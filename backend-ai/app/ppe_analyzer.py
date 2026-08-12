@@ -779,11 +779,93 @@ def _build_person_only_result(frame: np.ndarray, camera_id: str) -> dict:
     }
 
 
+def _build_vest_only_result(frame: np.ndarray, camera_id: str) -> dict:
+    """Segment WAH — log no_vest cho công nhân mép biên (áo phản quang)."""
+    from .wah_analyzer import _wah_edge_violation_candidate
+    from .worker_identity.detection_enrich import copy_worker_identity, enrich_person_bbox
+
+    detector = _get_person_detector()
+    h, w = frame.shape[:2]
+    persons_raw = detector.predict(frame)
+    persons = [
+        _PersonPpe((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), p.confidence)
+        for p in persons_raw
+        if p.confidence >= _PERSON_CONF
+        and _plausible_person_box((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), w, h)
+        and _wah_edge_violation_candidate((p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3]), h)
+    ]
+
+    vest_items = _model_items("ppe_vest", frame, "safety_vest")
+    detections: list[PpeDetection] = []
+    violations = 0
+
+    for person_index, person in enumerate(persons):
+        pb = person.person_box
+        torso = _sub_region(pb, 0.20, 0.72)
+        person_det = PpeDetection(
+            behavior="person",
+            label=PPE_LABELS["person"],
+            scenario_id=PPE_SCENARIO["person"],
+            confidence=round(person.person_conf, 3),
+            bbox=[float(v) for v in pb],
+        )
+        enrich_person_bbox(frame, person_det, camera_id=camera_id, person_index=person_index)
+        detections.append(person_det)
+
+        vest = None
+        vb = _heuristic_vest(frame, torso)
+        if vb:
+            vest = (vb, 0.60)
+        else:
+            model_vest = _best_in_region(vest_items, torso)
+            if model_vest and model_vest[1] >= 0.70:
+                vest = model_vest
+        if vest:
+            box, conf = vest
+            detections.append(
+                PpeDetection(
+                    behavior="safety_vest",
+                    label=PPE_LABELS["safety_vest"],
+                    scenario_id=PPE_SCENARIO["safety_vest"],
+                    confidence=round(conf, 3),
+                    bbox=[float(v) for v in box],
+                )
+            )
+        else:
+            violations += 1
+            viol = PpeDetection(
+                behavior="no_vest",
+                label=PPE_LABELS["no_vest"],
+                scenario_id=PPE_SCENARIO["no_vest"],
+                confidence=round(max(_VIOLATION_CONF, person.person_conf * 0.93), 3),
+                bbox=[float(v) for v in torso],
+            )
+            copy_worker_identity(person_det, viol)
+            detections.append(viol)
+
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": len(persons),
+            "ppe_violations": violations,
+            "ppe_mode": "vest_only",
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
 def analyze_ppe_frame(frame: np.ndarray, camera_id: str = "A-04") -> dict:
     from .cam04_ppe_demo import is_cam04_ppe_scene, resolve_cam04_ppe_demo
 
-    if resolve_cam04_ppe_demo(camera_id, frame) == "suppress":
+    demo_action = resolve_cam04_ppe_demo(camera_id, frame)
+    if demo_action == "suppress":
         return _build_person_only_result(frame, camera_id)
+    if demo_action == "vest_only":
+        return _build_vest_only_result(frame, camera_id)
 
     ppe_demo_scene = is_cam04_ppe_scene(camera_id, frame)
 

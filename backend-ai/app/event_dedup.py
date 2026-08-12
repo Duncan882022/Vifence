@@ -61,6 +61,12 @@ class EventDedupRegistry:
             return
         self._first_logged_at[dedup_key] = min(self._first_logged_at[dedup_key], created_at)
 
+    def clear(self) -> int:
+        """Xóa toàn bộ khóa dedup trong RAM — dùng khi DELETE /events."""
+        count = len(self._first_logged_at)
+        self._first_logged_at.clear()
+        return count
+
 
 def dedupe_events_by_key(
     events: list[ViolationEvent],

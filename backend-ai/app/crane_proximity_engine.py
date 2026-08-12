@@ -88,6 +88,10 @@ class CraneProximityEngine:
             )
         return self._gates[camera_id][track_id]
 
+    def reset_camera(self, camera_id: str) -> None:
+        self._tracks.pop(camera_id, None)
+        self._gates.pop(camera_id, None)
+
     def process_frame(
         self,
         frame: np.ndarray,

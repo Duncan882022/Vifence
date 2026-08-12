@@ -41,7 +41,13 @@ _FOLIAGE_VAL_MAX = 150
 _COVERAGE_MISSING_THRESHOLD = 0.60
 _DIRTY_HSV_STD_THRESHOLD = 30.0
 _DIRTY_STAIN_MIN_RATIO = 0.010
-_DIRTY_MIN_MESH_OVERLAP = 0.08
+_DIRTY_MIN_MESH_OVERLAP = 0.22
+_DIRTY_MIN_BBOX_MESH_FILL = 0.28
+_DIRTY_MAX_MACHINERY_OVERLAP = 0.12
+# mesh_missing — lỗ trên lưới thật, không phải khe trời giữa 2 tòa.
+_GAP_MAX_INTERIOR_MESH_FILL = 0.25
+_GAP_MIN_RING_MESH_FILL = 0.18
+_GAP_MAX_SKY_FILL = 0.48
 _DIRTY_BROWN_HUE_LOW = 6
 _DIRTY_BROWN_HUE_HIGH = 38
 _DIRTY_BROWN_SAT_MIN = 28
@@ -110,6 +116,108 @@ def _foliage_exclusion_mask(hsv: np.ndarray, roi_mask: np.ndarray) -> np.ndarray
     return cv2.bitwise_and(foliage, foliage, mask=roi_mask)
 
 
+def _machinery_exclusion_mask(hsv: np.ndarray, roi_mask: np.ndarray) -> np.ndarray:
+    """Cẩu tháp / máy thi công — không coi là vết bẩn trên lưới."""
+    warm = cv2.inRange(
+        hsv,
+        np.array([12, 26, 45]),
+        np.array([42, 255, 255]),
+    )
+    neutral = cv2.inRange(
+        hsv,
+        np.array([0, 0, 78]),
+        np.array([180, 54, 255]),
+    )
+    machinery = cv2.bitwise_or(warm, neutral)
+    return cv2.bitwise_and(machinery, machinery, mask=roi_mask)
+
+
+def _sky_like_mask(hsv: np.ndarray, roi_mask: np.ndarray) -> np.ndarray:
+    """Trời / nền sáng saturation thấp — không phải lỗ lưới trên mặt công trình."""
+    sky = cv2.inRange(
+        hsv,
+        np.array([0, 0, 128]),
+        np.array([180, 50, 255]),
+    )
+    return cv2.bitwise_and(sky, sky, mask=roi_mask)
+
+
+def _bbox_mesh_fill(bbox: list[float], green_roi: np.ndarray) -> float:
+    """Tỷ lệ pixel lưới xanh trong bbox — loại bbox ôm cẩu tháp/trời."""
+    h, w = green_roi.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return 0.0
+    patch = green_roi[y1:y2, x1:x2]
+    return float(np.count_nonzero(patch)) / max(patch.size, 1)
+
+
+def _bbox_overlap_ratio(bbox: list[float], mask: np.ndarray) -> float:
+    h, w = mask.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return 0.0
+    patch = mask[y1:y2, x1:x2]
+    return float(np.count_nonzero(patch)) / max(patch.size, 1)
+
+
+def _bbox_ring_mesh_fill(bbox: list[float], green_roi: np.ndarray, *, pad_px: int = 16) -> float:
+    """Tỷ lệ lưới xanh trên viền quanh bbox — lỗ lưới thật phải được bao quanh bởi lưới."""
+    h, w = green_roi.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    ox1, oy1 = max(0, x1 - pad_px), max(0, y1 - pad_px)
+    ox2, oy2 = min(w, x2 + pad_px), min(h, y2 + pad_px)
+    if ox2 <= ox1 or oy2 <= oy1:
+        return 0.0
+    inner_x1, inner_y1 = x1 - ox1, y1 - oy1
+    inner_x2, inner_y2 = x2 - ox1, y2 - oy1
+    outer = green_roi[oy1:oy2, ox1:ox2].copy()
+    outer[inner_y1:inner_y2, inner_x1:inner_x2] = 0
+    ring_area = outer.size - max((inner_x2 - inner_x1) * (inner_y2 - inner_y1), 1)
+    return float(np.count_nonzero(outer)) / max(ring_area, 1)
+
+
+def _mesh_dirty_bbox_on_net(
+    bbox: list[float],
+    hsv: np.ndarray,
+    roi_mask: np.ndarray,
+) -> bool:
+    """BBox mesh_dirty phải nằm chủ yếu trên lưới xanh, không ôm cẩu tháp."""
+    green_roi = _mesh_green_mask(hsv, roi_mask)
+    mesh_fill = _bbox_mesh_fill(bbox, green_roi)
+    if mesh_fill < _DIRTY_MIN_BBOX_MESH_FILL:
+        return False
+    machinery = _machinery_exclusion_mask(hsv, roi_mask)
+    if _bbox_overlap_ratio(bbox, machinery) > _DIRTY_MAX_MACHINERY_OVERLAP:
+        return False
+    return True
+
+
+def _mesh_gap_bbox_on_net(
+    bbox: list[float],
+    hsv: np.ndarray,
+    roi_mask: np.ndarray,
+) -> bool:
+    """BBox mesh_missing phải là lỗ trên mặt lưới — không bbox khe trời giữa tòa nhà."""
+    green_roi = _mesh_green_mask(hsv, roi_mask)
+    interior_mesh = _bbox_mesh_fill(bbox, green_roi)
+    if interior_mesh > _GAP_MAX_INTERIOR_MESH_FILL:
+        return False
+    sky = _sky_like_mask(hsv, roi_mask)
+    if _bbox_overlap_ratio(bbox, sky) > _GAP_MAX_SKY_FILL:
+        return False
+    if _bbox_ring_mesh_fill(bbox, green_roi) < _GAP_MIN_RING_MESH_FILL:
+        return False
+    machinery = _machinery_exclusion_mask(hsv, roi_mask)
+    if _bbox_overlap_ratio(bbox, machinery) > _DIRTY_MAX_MACHINERY_OVERLAP:
+        return False
+    return True
+
+
 def _mesh_overlap_ratio(patch_mask: np.ndarray, mesh_mask: np.ndarray) -> float:
     area = max(int(np.count_nonzero(patch_mask)), 1)
     overlap = int(np.count_nonzero(cv2.bitwise_and(patch_mask, mesh_mask)))
@@ -137,11 +245,14 @@ def _localize_mesh_gap_bbox(
     zone_area = max(int(np.count_nonzero(roi_mask)), 1)
 
     green_roi = _mesh_green_mask(hsv, roi_mask)
-    green_near = cv2.dilate(green_roi, np.ones((11, 11), np.uint8), iterations=1)
+    green_near = cv2.dilate(green_roi, np.ones((7, 7), np.uint8), iterations=1)
+    green_touch = cv2.dilate(green_roi, np.ones((3, 3), np.uint8), iterations=1)
+    sky = _sky_like_mask(hsv, roi_mask)
 
     low_sat = cv2.inRange(hsv, np.array([0, 0, 35]), np.array([180, 38, 215]))
     open_cand = cv2.bitwise_and(low_sat, roi_mask)
     open_cand = cv2.bitwise_and(open_cand, cv2.bitwise_not(green_roi))
+    open_cand = cv2.bitwise_and(open_cand, cv2.bitwise_not(sky))
     open_cand = cv2.bitwise_and(open_cand, green_near)
     if stain_mask is not None:
         open_cand = cv2.bitwise_and(open_cand, cv2.bitwise_not(stain_mask))
@@ -166,6 +277,10 @@ def _localize_mesh_gap_bbox(
         neighbor_green = int(np.count_nonzero(green_roi[y0:y1, x0:x1]))
         if neighbor_green < 48:
             continue
+        touch_mask = np.zeros((h, w), dtype=np.uint8)
+        cv2.drawContours(touch_mask, [cnt], -1, 255, -1)
+        if int(np.count_nonzero(cv2.bitwise_and(touch_mask, green_touch))) < 16:
+            continue
         score = area + neighbor_green * 0.35 - max(0.0, bw - zone_w * 0.55) * 8.0
         if best is None or score > best[0]:
             best = (score, (x, y, bw, bh))
@@ -173,14 +288,82 @@ def _localize_mesh_gap_bbox(
     if best is None:
         return None
     x, y, bw, bh = best[1]
-    pad_x = max(int(bw * 0.06), 4)
-    pad_y = max(int(bh * 0.08), 4)
+    pad_x = max(int(bw * 0.03), 2)
+    pad_y = max(int(bh * 0.04), 2)
     return [
         float(max(0, x - pad_x)),
         float(max(0, y - pad_y)),
         float(min(w, x + bw + pad_x)),
         float(min(h, y + bh + pad_y)),
     ]
+
+
+def _clamp_mesh_bbox(
+    bbox: list[float],
+    zone_box: list[float],
+    *,
+    max_w_ratio: float = 0.34,
+    max_h_ratio: float = 0.40,
+) -> list[float]:
+    """Giới hạn bbox mesh — tránh ROI tràn gần hết zone."""
+    zone_w = max(zone_box[2] - zone_box[0], 1.0)
+    zone_h = max(zone_box[3] - zone_box[1], 1.0)
+    bw = max(bbox[2] - bbox[0], 1.0)
+    bh = max(bbox[3] - bbox[1], 1.0)
+    if bw <= zone_w * max_w_ratio and bh <= zone_h * max_h_ratio:
+        return bbox
+    cx = (bbox[0] + bbox[2]) / 2.0
+    cy = (bbox[1] + bbox[3]) / 2.0
+    tw = min(bw, zone_w * max_w_ratio)
+    th = min(bh, zone_h * max_h_ratio)
+    return [
+        max(zone_box[0], cx - tw / 2.0),
+        max(zone_box[1], cy - th / 2.0),
+        min(zone_box[2], cx + tw / 2.0),
+        min(zone_box[3], cy + th / 2.0),
+    ]
+
+
+def _refine_mesh_bbox(
+    hsv: np.ndarray,
+    roi_mask: np.ndarray,
+    bbox: list[float],
+    behavior: str,
+    zone_box: list[float],
+) -> list[float]:
+    """Siết bbox quanh pixel vi phạm thực trong vùng detect."""
+    h, w = hsv.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 - x1 < 12 or y2 - y1 < 12:
+        return _clamp_mesh_bbox(bbox, zone_box)
+
+    sub_roi = roi_mask[y1:y2, x1:x2]
+    if int(np.count_nonzero(sub_roi)) < 16:
+        return _clamp_mesh_bbox(bbox, zone_box)
+
+    sub_hsv = hsv[y1:y2, x1:x2]
+    sub_zone = [0.0, 0.0, float(x2 - x1), float(y2 - y1)]
+    refined: list[float] | None = None
+    if behavior in {"mesh_missing", "mesh_torn"}:
+        stain = _mesh_dirty_stain_mask(sub_hsv, sub_roi)
+        refined = _localize_mesh_gap_bbox(sub_hsv, sub_roi, sub_zone, stain_mask=stain)
+    elif behavior == "mesh_dirty":
+        refined = _localize_mesh_dirty_bbox(sub_hsv, sub_roi, sub_zone)
+
+    if refined is None:
+        return _clamp_mesh_bbox(bbox, zone_box)
+
+    return _clamp_mesh_bbox(
+        [
+            float(x1 + refined[0]),
+            float(y1 + refined[1]),
+            float(x1 + refined[2]),
+            float(y1 + refined[3]),
+        ],
+        zone_box,
+    )
 
 
 def _mesh_hsv_std(hsv: np.ndarray, roi_mask: np.ndarray) -> float:
@@ -192,20 +375,23 @@ def _mesh_hsv_std(hsv: np.ndarray, roi_mask: np.ndarray) -> float:
 
 
 def _mesh_dirty_stain_mask(hsv: np.ndarray, roi_mask: np.ndarray) -> np.ndarray:
-    """Vết bùn/nâu trên lưới xanh — chỉ tông đất, không dùng rel-dark (dễ nhầm bụi cây)."""
+    """Vết bùn/nâu trên lưới xanh — chỉ pixel trên lưới thật, loại cẩu tháp."""
     green_roi = _mesh_green_mask(hsv, roi_mask)
-    green_near = cv2.dilate(green_roi, np.ones((15, 15), np.uint8), iterations=2)
+    mesh_mat = _mesh_material_mask(hsv, roi_mask)
     foliage = _foliage_exclusion_mask(hsv, roi_mask)
+    machinery = _machinery_exclusion_mask(hsv, roi_mask)
 
     brown = cv2.inRange(
         hsv,
         np.array([_DIRTY_BROWN_HUE_LOW, _DIRTY_BROWN_SAT_MIN, _DIRTY_BROWN_VAL_MIN]),
         np.array([_DIRTY_BROWN_HUE_HIGH, 220, _DIRTY_BROWN_VAL_MAX]),
     )
-    stain = cv2.bitwise_and(brown, green_near)
+    stain = cv2.bitwise_and(brown, mesh_mat)
+    stain = cv2.bitwise_and(stain, green_roi)
     stain = cv2.bitwise_and(stain, roi_mask)
     stain = cv2.bitwise_and(stain, cv2.bitwise_not(foliage))
-    stain = cv2.morphologyEx(stain, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8), iterations=2)
+    stain = cv2.bitwise_and(stain, cv2.bitwise_not(machinery))
+    stain = cv2.morphologyEx(stain, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=1)
     return stain
 
 
@@ -240,6 +426,20 @@ def _dirty_bbox_valid(
     return True
 
 
+def _dirty_bbox_on_net(
+    bbox: list[float],
+    hsv: np.ndarray,
+    roi_mask: np.ndarray,
+    zone_box: list[float],
+    zone_area: int,
+    *,
+    allow_tall: bool = False,
+) -> bool:
+    if not _dirty_bbox_valid(bbox, zone_box, zone_area, allow_tall=allow_tall):
+        return False
+    return _mesh_dirty_bbox_on_net(bbox, hsv, roi_mask)
+
+
 def _union_bbox_from_points(xs: np.ndarray, ys: np.ndarray) -> list[float] | None:
     if len(xs) == 0:
         return None
@@ -262,8 +462,8 @@ def _localize_mesh_dirty_bbox(
 
     cnts, _ = cv2.findContours(stain, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     green_roi = _mesh_green_mask(hsv, roi_mask)
-    green_near = cv2.dilate(green_roi, np.ones((11, 11), np.uint8), iterations=1)
     foliage = _foliage_exclusion_mask(hsv, roi_mask)
+    machinery = _machinery_exclusion_mask(hsv, roi_mask)
     best: tuple[float, list[float]] | None = None
 
     for cnt in cnts:
@@ -281,18 +481,21 @@ def _localize_mesh_dirty_bbox(
         stain_area = int(np.count_nonzero(stain_inside))
         if stain_area < _LOCAL_DIRTY_MIN_AREA:
             continue
-        mesh_overlap = _mesh_overlap_ratio(stain_inside, green_near)
+        mesh_overlap = _mesh_overlap_ratio(stain_inside, green_roi)
         foliage_overlap = _mesh_overlap_ratio(stain_inside, foliage)
+        machinery_overlap = _mesh_overlap_ratio(stain_inside, machinery)
         if mesh_overlap < _DIRTY_MIN_MESH_OVERLAP:
             continue
         if foliage_overlap > 0.42:
+            continue
+        if machinery_overlap > _DIRTY_MAX_MACHINERY_OVERLAP:
             continue
         ys, xs = np.where(stain_inside > 0)
         raw = _union_bbox_from_points(xs, ys)
         if raw is None:
             continue
         candidate = list(raw)
-        if not _dirty_bbox_valid(candidate, zone_box, zone_area, allow_tall=True):
+        if not _dirty_bbox_on_net(candidate, hsv, roi_mask, zone_box, zone_area, allow_tall=True):
             continue
         cx = (candidate[0] + candidate[2]) / 2.0
         if cx < w * 0.06:
@@ -300,7 +503,7 @@ def _localize_mesh_dirty_bbox(
         aspect = (candidate[3] - candidate[1]) / max(candidate[2] - candidate[0], 1.0)
         fill = stain_area / max((candidate[2] - candidate[0]) * (candidate[3] - candidate[1]), 1.0)
         vertical_bonus = min(aspect, 2.6) * 36.0 if aspect >= 0.85 else 0.0
-        score = stain_area + fill * 110.0 + vertical_bonus + mesh_overlap * 220.0 - foliage_overlap * 140.0
+        score = stain_area + fill * 110.0 + vertical_bonus + mesh_overlap * 220.0 - foliage_overlap * 140.0 - machinery_overlap * 180.0
         if best is None or score > best[0]:
             best = (score, candidate)
 
@@ -310,8 +513,8 @@ def _localize_mesh_dirty_bbox(
     candidate = best[1]
     bw = candidate[2] - candidate[0]
     bh = candidate[3] - candidate[1]
-    pad_x = max(int(bw * 0.12), 10)
-    pad_y = max(int(bh * 0.14), 12)
+    pad_x = max(int(bw * 0.06), 6)
+    pad_y = max(int(bh * 0.07), 6)
     return [
         float(max(0, candidate[0] - pad_x)),
         float(max(0, candidate[1] - pad_y)),
@@ -320,11 +523,20 @@ def _localize_mesh_dirty_bbox(
     ]
 
 
-def _fallback_dirty_bbox(stain: np.ndarray, w: int, h: int) -> list[float] | None:
-    """BBox dự phòng khi có vết bẩn nhưng localize chặt không ra — vẫn log mesh_dirty."""
+def _fallback_dirty_bbox(
+    stain: np.ndarray,
+    w: int,
+    h: int,
+    *,
+    hsv: np.ndarray | None = None,
+    roi_mask: np.ndarray | None = None,
+    zone_box: list[float] | None = None,
+) -> list[float] | None:
+    """BBox dự phòng — chỉ chọn vết trên lưới, không lấy cẩu tháp."""
     cnts, _ = cv2.findContours(stain, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     best_area = 0.0
     best_rect: tuple[int, int, int, int] | None = None
+    zone_area = int(np.count_nonzero(roi_mask)) if roi_mask is not None else w * h
     for cnt in cnts:
         area = cv2.contourArea(cnt)
         if area < 72 or area <= best_area:
@@ -332,13 +544,22 @@ def _fallback_dirty_bbox(stain: np.ndarray, w: int, h: int) -> list[float] | Non
         x, y, bw, bh = cv2.boundingRect(cnt)
         if bw < 8 or bh < 8:
             continue
+        candidate = [
+            float(max(0, x)),
+            float(max(0, y)),
+            float(min(w, x + bw)),
+            float(min(h, y + bh)),
+        ]
+        if hsv is not None and roi_mask is not None and zone_box is not None:
+            if not _dirty_bbox_on_net(candidate, hsv, roi_mask, zone_box, zone_area, allow_tall=True):
+                continue
         best_area = area
         best_rect = (x, y, bw, bh)
     if best_rect is None:
         return None
     x, y, bw, bh = best_rect
-    pad_x = max(int(bw * 0.12), 8)
-    pad_y = max(int(bh * 0.14), 8)
+    pad_x = max(int(bw * 0.06), 4)
+    pad_y = max(int(bh * 0.07), 4)
     return [
         float(max(0, x - pad_x)),
         float(max(0, y - pad_y)),
@@ -399,12 +620,18 @@ def _heuristic_mesh_violations(
     if dirty_hit and "mesh_dirty" not in behaviors_present:
         zone_area_px = int(np.count_nonzero(roi_mask))
         use_bbox: list[float] | None = None
-        if dirty_bbox and _dirty_bbox_valid(dirty_bbox, zone_box, zone_area_px, allow_tall=True):
+        if dirty_bbox and _dirty_bbox_on_net(dirty_bbox, hsv, roi_mask, zone_box, zone_area_px, allow_tall=True):
             use_bbox = dirty_bbox
         elif stain_ratio >= _DIRTY_STAIN_MIN_RATIO:
-            green_near = cv2.dilate(_mesh_green_mask(hsv, roi_mask), np.ones((11, 11), np.uint8), 1)
-            combined_stain = cv2.bitwise_and(stain_mask, green_near)
-            use_bbox = _fallback_dirty_bbox(combined_stain, w, h)
+            combined_stain = stain_mask
+            use_bbox = _fallback_dirty_bbox(
+                combined_stain,
+                w,
+                h,
+                hsv=hsv,
+                roi_mask=roi_mask,
+                zone_box=zone_box,
+            )
         if use_bbox is not None:
             out.append(
                 RoadDetection(
@@ -428,30 +655,22 @@ def _heuristic_mesh_violations(
         dirty_overlap = inter > dirty_area * 0.55
 
     if gap_bbox and "mesh_missing" not in behaviors_present and not dirty_overlap:
-        gap_area = max((gap_bbox[2] - gap_bbox[0]) * (gap_bbox[3] - gap_bbox[1]), 1.0)
-        zone_area = max((zone_box[2] - zone_box[0]) * (zone_box[3] - zone_box[1]), 1.0)
-        gap_ratio = gap_area / zone_area
-        out.append(
-            RoadDetection(
-                behavior="mesh_missing",
-                label=_LABELS["mesh_missing"],
-                scenario_id="BPTC-001",
-                confidence=_confidence_for_mesh("mesh_missing", gap_ratio + 1.5),
-                bbox=gap_bbox,
-                area_percent=round(coverage * 100.0, 2),
+        if not _mesh_gap_bbox_on_net(gap_bbox, hsv, roi_mask):
+            gap_bbox = None
+        else:
+            gap_area = max((gap_bbox[2] - gap_bbox[0]) * (gap_bbox[3] - gap_bbox[1]), 1.0)
+            zone_area = max((zone_box[2] - zone_box[0]) * (zone_box[3] - zone_box[1]), 1.0)
+            gap_ratio = gap_area / zone_area
+            out.append(
+                RoadDetection(
+                    behavior="mesh_missing",
+                    label=_LABELS["mesh_missing"],
+                    scenario_id="BPTC-001",
+                    confidence=_confidence_for_mesh("mesh_missing", gap_ratio + 1.5),
+                    bbox=gap_bbox,
+                    area_percent=round(coverage * 100.0, 2),
+                )
             )
-        )
-    elif coverage < _COVERAGE_MISSING_THRESHOLD and "mesh_missing" not in behaviors_present:
-        out.append(
-            RoadDetection(
-                behavior="mesh_missing",
-                label=_LABELS["mesh_missing"],
-                scenario_id="BPTC-001",
-                confidence=_confidence_for_mesh("mesh_missing", coverage),
-                bbox=zone_box,
-                area_percent=round(coverage * 100.0, 2),
-            )
-        )
 
     return out
 
@@ -523,4 +742,17 @@ def analyze_mesh_frame(
         )
 
     results.extend(_heuristic_mesh_violations(frame, zone, existing=results))
-    return results
+
+    h, w = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    roi_mask = _polygon_to_mask(zone, w, h)
+    zone_box = _zone_bbox(zone, w, h)
+    refined: list[RoadDetection] = []
+    for det in results:
+        bbox = _refine_mesh_bbox(hsv, roi_mask, det.bbox, det.behavior, zone_box)
+        if det.behavior == "mesh_dirty" and not _mesh_dirty_bbox_on_net(bbox, hsv, roi_mask):
+            continue
+        if det.behavior in {"mesh_missing", "mesh_torn"} and not _mesh_gap_bbox_on_net(bbox, hsv, roi_mask):
+            continue
+        refined.append(det.model_copy(update={"bbox": bbox}))
+    return refined

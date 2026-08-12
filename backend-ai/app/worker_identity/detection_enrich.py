@@ -6,6 +6,7 @@ import numpy as np
 
 from ..schemas import CraneProximityDetection, Detection, PpeDetection
 from .models import WorkerMatch
+from .demo_roster import demo_smoking_match
 from .recognizer import identify_person, unknown_worker_match
 
 
@@ -116,5 +117,10 @@ def enrich_smoking_detection(
         camera_id=camera_id,
         person_index=person_index,
     )
+    if match.worker_id == "unknown":
+        demo = demo_smoking_match(camera_id)
+        if demo is not None:
+            match = demo
+            _apply_match(holder, match)
     copy_worker_identity(holder, detection)
     return match

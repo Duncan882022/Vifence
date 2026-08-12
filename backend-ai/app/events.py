@@ -18,8 +18,6 @@ from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetec
 from .snapshot_compose import (
     compose_violation_snapshot,
     draw_atld_roi_box,
-    format_snapshot_badge,
-    format_snapshot_code,
     merge_bboxes,
 )
 
@@ -256,7 +254,7 @@ class EventStore:
     ) -> Optional[ViolationEvent]:
         event.dedup_key = dedup_key
 
-        if self._dedup.should_skip(dedup_key):
+        if settings.event_dedup_enabled() and self._dedup.should_skip(dedup_key):
             existing = self._find_by_dedup_key(dedup_key)
             if existing is not None:
                 self._refresh_existing_snapshot(
@@ -602,12 +600,6 @@ class EventStore:
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255)
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
-        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
-        label = format_snapshot_badge(code, detection.confidence)
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
         return annotated
 
     def add_atgt(
@@ -692,12 +684,6 @@ class EventStore:
         }
         color = colors.get(detection.behavior, (0, 200, 255))
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
-        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
-        label = format_snapshot_badge(code, detection.confidence)
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
         return annotated
 
     @classmethod
@@ -735,18 +721,6 @@ class EventStore:
         }
         color = colors.get(detection.behavior, (0, 255, 0))
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
-        code = format_snapshot_code(detection.behavior, detection.scenario_id)
-        if detection.behavior != "person":
-            label = format_snapshot_badge(code, detection.confidence)
-            cv2.putText(
-                annotated, label, (x1, max(y1 - 8, 12)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-            )
-        else:
-            cv2.putText(
-                annotated, code, (x1, max(y1 - 8, 12)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1,
-            )
         return annotated
 
     @staticmethod
@@ -772,17 +746,6 @@ class EventStore:
             color = CRANE_CATALOG_STYLES.get(detection.behavior, CRANE_CATALOG_STYLES["person"])["color"]
         thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=thickness)
-        code = format_snapshot_code(
-            detection.behavior,
-            detection.scenario_id,
-            machine_kind=getattr(detection, "machine_kind", None),
-        )
-        dist = f" · {detection.distance_m:.2f}m" if detection.distance_m is not None else ""
-        label = format_snapshot_badge(code, detection.confidence, dist)
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
         return annotated
 
     @classmethod
@@ -824,18 +787,12 @@ class EventStore:
             "water": (255, 160, 0),
             "object": (0, 140, 255),
             "unknown": (160, 160, 160),
-            "mesh_missing": (0, 220, 120),
+            "mesh_missing": (0, 220, 120),  # xanh — thiếu/rách
             "mesh_torn": (0, 200, 100),
-            "mesh_dirty": (25, 90, 165),
+            "mesh_dirty": (14, 64, 146),  # nâu #92400e — bẩn (đồng bộ FE)
         }
         color = colors.get(detection.behavior, (0, 255, 0))
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
-        code = format_snapshot_code(detection.behavior, detection.scenario_id)
-        label = format_snapshot_badge(code, detection.confidence)
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
         return annotated
 
     @staticmethod
@@ -856,12 +813,6 @@ class EventStore:
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
-        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
-        label = format_snapshot_badge(code, detection.confidence)
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
         return annotated
 
     @staticmethod
@@ -873,12 +824,6 @@ class EventStore:
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255) if detection.behavior == "smoking" else (0, 0, 255)
         draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
-        code = format_snapshot_code(detection.behavior, getattr(detection, "scenario_id", None))
-        label = format_snapshot_badge(code, detection.confidence)
-        cv2.putText(
-            annotated, label, (x1, max(y1 - 8, 12)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
-        )
         return annotated
 
     def _append_to_disk(self, event: ViolationEvent) -> None:
@@ -949,12 +894,21 @@ class EventStore:
                 jpg.unlink(missing_ok=True)
                 removed_files += 1
 
+        dedup_keys = self._dedup.clear()
+
+        from .vms_loop_state import reset_all as reset_vms_loops
+        from .engine_loop_reset import reset_all_engines
+
+        reset_vms_loops()
+        reset_all_engines()
+
         logger.info(
-            "Đã xóa sự kiện: %d trong RAM, %d file trên đĩa",
+            "Đã xóa sự kiện: %d trong RAM, %d file trên đĩa, %d khóa dedup",
             removed_memory,
             removed_files,
+            dedup_keys,
         )
-        return {"memory": removed_memory, "files": removed_files}
+        return {"memory": removed_memory, "files": removed_files, "dedup_keys": dedup_keys}
 
     def resolve_snapshot_path(self, event_id: str, snapshot_file: Optional[str] = None) -> Optional[Path]:
         if snapshot_file:

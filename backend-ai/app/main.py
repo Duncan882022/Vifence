@@ -99,6 +99,24 @@ wah_engine = WahEngine(engine.store)
 atgt_engine = AtgtEngine(engine.store)
 mobile_config_store = MobileAiConfigStore()
 
+from .engine_loop_reset import _bind_engine
+
+for _eng in (
+    road_engine,
+    mesh_engine,
+    atgt_engine,
+    ppe_engine,
+    pccc_engine,
+    wah_engine,
+    crane_engine,
+):
+    _bind_engine(_eng)
+
+from .engine_loop_reset import reset_all_engines
+from .vms_loop_state import register_reset_handler
+
+register_reset_handler(reset_all_engines)
+
 
 def _build_vms_workers() -> None:
     """Khởi tạo VMS worker cho từng camera theo VMS_CAMERA_SOURCES."""
@@ -149,12 +167,18 @@ async def lifespan(app: FastAPI):
     if settings.vms_mode_enabled:
         logger.info("VMS mode: server-side AI + HLS stream đang khởi động…")
         if settings.event_test_mode:
-            logger.info("EVENT_TEST_MODE=true — log lặp ~8s/track.")
+            logger.info("EVENT_TEST_MODE=true — dedup 2 phút (debug timing, không dùng audit loop).")
+        else:
+            logger.info(
+                "Audit grace: %d vòng loop đầu ghi đủ (dedup 3h sau grace). Dedup cửa sổ=%.0fs.",
+                settings.event_audit_grace_loops,
+                settings.event_first_seen_window_seconds,
+            )
         if not settings.a03_bptc_event_logging_enabled:
             logger.info("Cam A-03: không ghi sự kiện BPTC (chỉ overlay).")
         if settings.atgt_lane_violation_only:
             logger.info("ATGT: chỉ log thiếu phân làn (ATGT-004).")
-        engine.ensure_models_loaded()
+        # VMS dùng engine riêng (road/mesh/atgt/ppe/…) — không cần preload smoking/fire YOLO (tiết kiệm RAM local).
         _build_vms_workers()
         for worker in _vms_workers.values():
             worker.start()
@@ -388,14 +412,24 @@ def debug_frame():
 
 
 # ---------------------------------------------------------------------------
-# VMS stream endpoints
+# VMS stream endpoints — CORS: CORSMiddleware (không thêm header nginx / FileResponse)
 # ---------------------------------------------------------------------------
 
-_STREAM_CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-    "Access-Control-Allow-Headers": "*",
-}
+def _hls_bytes_response(path: Path, media_type: str) -> Response:
+    """Đọc snapshot file HLS — tránh race ffmpeg rewrite gây lỗi Content-Length (206)."""
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        body = path.read_bytes()
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="HLS file temporarily unavailable") from exc
+    if not body:
+        raise HTTPException(status_code=503, detail="HLS file empty")
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Cache-Control": "no-cache, no-store"},
+    )
 
 
 @app.get("/stream/{camera_id}/index.m3u8")
@@ -406,11 +440,7 @@ def vms_stream_playlist(camera_id: str):
         raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
     if not worker.hls_ready():
         raise HTTPException(status_code=503, detail="HLS stream chưa sẵn sàng, thử lại sau 5s")
-    return FileResponse(
-        str(worker.hls_index_path()),
-        media_type="application/vnd.apple.mpegurl",
-        headers={"Cache-Control": "no-cache, no-store", **_STREAM_CORS_HEADERS},
-    )
+    return _hls_bytes_response(worker.hls_index_path(), "application/vnd.apple.mpegurl")
 
 
 @app.get("/stream/{camera_id}/detections")
@@ -436,7 +466,7 @@ def vms_stream_segment(camera_id: str, segment: str):
     seg_path = worker.hls_index_path().parent / segment
     if not seg_path.exists():
         raise HTTPException(status_code=404, detail="Segment not found")
-    return FileResponse(str(seg_path), media_type="video/mp2t", headers=_STREAM_CORS_HEADERS)
+    return _hls_bytes_response(seg_path, "video/mp2t")
 
 
 @app.get("/cameras/vms")

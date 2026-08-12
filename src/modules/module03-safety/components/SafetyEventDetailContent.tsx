@@ -8,24 +8,24 @@ import {
   User,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { formatDateTime } from '@/utils/format'
 import type { SafetyViolationRecord } from '../types/safety.types'
-import { getScenarioName, SAFETY_SCENARIO_MAP } from '../data/safetyScenarios'
 import { resolveStaticViolationSnapshotUrl, resolveViolationSnapshotUrl } from '../data/safetyViolationSnapshots'
 import { RemoteViolationSnapshotImage } from './violations/RemoteViolationSnapshotImage'
 import {
   GROUP_BADGE,
   GROUP_COLORS,
   GROUP_ICONS,
-  SEVERITY_BADGE,
-  SEVERITY_ICONS,
-  SEVERITY_LABELS_UI,
-  getAlertCardStatusDisplay,
-  shouldShowAlertHandlingBadge,
 } from '../utils/safetyDashboardUi'
-import { SafetyGroupIconBadge } from './SafetyGroupIconBadge'
-import { getEventSubjectType, getSubject, EVENT_SUBJECT_LABELS, getResponsiblePartyLabel } from '../utils/eventSubject'
+import { SafetyEventBadgeRow } from './SafetyEventBadgeRow'
+import {
+  getEventSubjectType,
+  getSubject,
+  getResponsiblePartyLabel,
+  resolveEventScenarioTitle,
+  shouldShowEventDescriptionNote,
+  shouldShowSubjectDetailRow,
+} from '../utils/eventSubject'
 import { resolveVehiclePlate } from '../utils/vehiclePlate'
 import { displayUnknown } from '../utils/displayUnknown'
 import { getEventAreaLabel, getEventSourceLabel } from '../utils/safetyCameraBridge'
@@ -54,26 +54,6 @@ export function DetailRow({
   )
 }
 
-function StatusBadge({ record }: { record: SafetyViolationRecord }) {
-  const statusDisplay = getAlertCardStatusDisplay(record)
-  const StatusIcon = statusDisplay.icon
-  if (!shouldShowAlertHandlingBadge(record)) return null
-
-  return (
-    <TagTooltip content={statusDisplay.label} className="shrink-0">
-      <span
-        className={cn(
-          'w-5 h-5 rounded border inline-flex items-center justify-center',
-          statusDisplay.badgeClassName,
-        )}
-        aria-label={statusDisplay.label}
-      >
-        <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-      </span>
-    </TagTooltip>
-  )
-}
-
 export interface SafetyEventDetailContentProps {
   record: SafetyViolationRecord
   /** modal = snapshot + meta · playback = meta only (video ở tier Camera) */
@@ -87,23 +67,12 @@ export function SafetyEventDetailContent({
   variant = 'modal',
   className,
 }: SafetyEventDetailContentProps) {
-  const scenario = SAFETY_SCENARIO_MAP.get(record.scenarioId)
   const snapshotUrl = resolveViolationSnapshotUrl(record)
   const staticFallback = isLiveSafetyRecord(record) ? undefined : resolveStaticViolationSnapshotUrl(record)
-  const SeverityIcon = SEVERITY_ICONS[record.severity]
   const GroupIcon = GROUP_ICONS[record.groupId]
   const ScenarioIcon = getScenarioIcon(record.scenarioId) ?? GroupIcon
-  const scenarioTitle =
-    (isLiveSafetyRecord(record) && record.description?.trim())
-      ? record.description.trim()
-      : getScenarioName(record.scenarioId)
-  const extraNote = record.description?.trim()
-  const showExtraNote = Boolean(
-    extraNote
-    && extraNote !== scenarioTitle
-    && extraNote !== scenario?.description?.trim()
-    && extraNote !== scenario?.name?.trim(),
-  )
+  const scenarioTitle = resolveEventScenarioTitle(record)
+  const showExtraNote = shouldShowEventDescriptionNote(record, scenarioTitle)
   const eventArea = displayUnknown(getEventAreaLabel(record.sourceDeviceId, record.sourceType, record.zoneId))
   const eventSource = displayUnknown(getEventSourceLabel(record.sourceDeviceId, record.sourceType))
   const subject = getSubject(record)
@@ -119,14 +88,9 @@ export function SafetyEventDetailContent({
           <RemoteViolationSnapshotImage
             src={snapshotUrl}
             fallbackSrc={staticFallback && staticFallback !== snapshotUrl ? staticFallback : undefined}
-            alt={getScenarioName(record.scenarioId)}
+            alt={scenarioTitle}
             className="absolute inset-0 w-full h-full object-contain"
           />
-          <div className="absolute top-2 left-2 flex items-center gap-1.5">
-            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-black/60 text-white/90 border border-white/10 font-mono">
-              {record.scenarioId}
-            </span>
-          </div>
         </div>
       )}
 
@@ -144,37 +108,18 @@ export function SafetyEventDetailContent({
                 <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-[#1a2235] text-muted-foreground border border-[#1e2433]">
                   {record.scenarioId}
                 </span>
-                <SafetyGroupIconBadge groupId={record.groupId} size="sm" showLabel />
+                <SafetyEventBadgeRow record={record} />
               </div>
               <p className="text-[12px] font-semibold text-foreground leading-snug">{scenarioTitle}</p>
             </div>
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {variant === 'modal' && <SafetyGroupIconBadge groupId={record.groupId} size="sm" showLabel />}
-          <TagTooltip content={SEVERITY_LABELS_UI[record.severity]} className="shrink-0">
-            <span
-              className={cn(
-                'w-6 h-6 rounded border inline-flex items-center justify-center',
-                SEVERITY_BADGE[record.severity],
-              )}
-              aria-label={SEVERITY_LABELS_UI[record.severity]}
-            >
-              <SeverityIcon className="w-3 h-3" aria-hidden />
-            </span>
-          </TagTooltip>
-          <StatusBadge record={record} />
-          {variant === 'modal' && (
-            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#1a2235] text-muted-foreground border border-[#1e2433] ml-auto">
-              {record.scenarioId}
-            </span>
-          )}
-        </div>
+        <SafetyEventBadgeRow record={record} />
 
         {showExtraNote && (
           <p className="text-[11px] text-foreground/85 leading-relaxed border-l-2 border-[#2a3855] pl-2.5">
-            {extraNote}
+            {record.description?.trim()}
           </p>
         )}
 
@@ -211,9 +156,14 @@ export function SafetyEventDetailContent({
           )}
           {(eventSubjectType === 'CONSTRUCTION_ACTIVITY'
             || eventSubjectType === 'MANAGEMENT'
-            || eventSubjectType === 'SITE_CONDITION') && (
+            || eventSubjectType === 'SITE_CONDITION')
+            && shouldShowSubjectDetailRow(record, scenarioTitle) && (
             <DetailRow icon={User} label="Đối tượng">
-              {EVENT_SUBJECT_LABELS[eventSubjectType]}
+              {eventSubjectType === 'CONSTRUCTION_ACTIVITY'
+                ? displayUnknown(subject.workActivity ?? subject.workItem)
+                : eventSubjectType === 'MANAGEMENT'
+                  ? displayUnknown(subject.managementUnit ?? subject.responsibleRole)
+                  : displayUnknown(subject.workItem)}
             </DetailRow>
           )}
         </div>

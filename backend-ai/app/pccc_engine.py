@@ -39,6 +39,12 @@ class PcccEngine:
             )
         return self._gates[camera_id][behavior]
 
+    def reset_camera(self, camera_id: str) -> None:
+        self._gates.pop(camera_id, None)
+        stale = [k for k in self._episode_best if k.startswith(f"{camera_id}:")]
+        for key in stale:
+            self._episode_best.pop(key, None)
+
     def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
         return analyze_pccc_frame(frame, camera_id)
 

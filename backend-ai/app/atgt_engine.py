@@ -1,4 +1,7 @@
-"""Debounced ATGT events — vượt tốc độ theo xe + làn phân cách cứng (Cam A-03)."""
+"""Debounced ATGT events — vượt tốc độ (ATGT-002) + thiếu phân làn (ATGT-004, Cam A-03).
+
+hard_median / soft_median chỉ dùng overlay — không ghi sự kiện vi phạm.
+"""
 
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ _MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
 _MIN_CONF = VIOLATION_MIN_CONFIDENCE
 _MAX_TRACKS = 12
 _TRACK_EXPIRE_SECONDS = 4.0
-_EVENT_BEHAVIORS_ALL = frozenset({"speeding", "no_soft_median", "hard_median"})
+_EVENT_BEHAVIORS_ALL = frozenset({"speeding", "no_soft_median"})
 
 
 def _event_behaviors() -> frozenset[str]:
@@ -128,11 +131,27 @@ def _lane_present(
     return False
 
 
+def _lane_organized_in_road(
+    detections: list[Detection],
+    *,
+    road_mask: np.ndarray | None = None,
+) -> bool:
+    """Đã có phân làn (cứng/mềm) trong polygon ROAD — không ghi ATGT-004."""
+    for det in detections:
+        if road_mask is not None and not lane_detection_inside_road(det.bbox, road_mask):
+            continue
+        if det.behavior == "soft_median" and det.confidence >= _SOFT_MEDIAN_CONF:
+            return True
+        if det.behavior == "hard_median" and det.confidence >= _HARD_MEDIAN_CONF:
+            return True
+    return False
+
+
 def _confirm_seconds(behavior: str) -> float:
     if settings.atgt_demo_enabled:
         if behavior == "speeding":
             return settings.atgt_demo_confirm_seconds
-        if behavior in {"no_soft_median", "hard_median"}:
+        if behavior == "no_soft_median":
             # VMS 6fps: mỗi giây video ≈ 1s wall — confirm ngắn để kịp log trong 1 loop.
             return min(get_threshold("ATGT-004").confirm_seconds, 0.85)
     scenario_id = "ATGT-002" if behavior == "speeding" else "ATGT-004"
@@ -197,6 +216,10 @@ class AtgtEngine:
     def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
         return analyze_atgt_frame(frame, camera_id)
 
+    def reset_camera(self, camera_id: str) -> None:
+        self._tracks.pop(camera_id, None)
+        self._gates.pop(camera_id, None)
+
     def process_frame(
         self,
         frame: np.ndarray,
@@ -217,23 +240,30 @@ class AtgtEngine:
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
         road_mask = _roi_mask(camera_id, frame_w, frame_h)
+        lane_organized = _lane_organized_in_road(detections, road_mask=road_mask)
         now = time.time()
         new_events: list[ViolationEvent] = []
         matched_ids: set[str] = set()
+
+        if lane_organized:
+            lane_track = tracks.get("lane:no_soft_median")
+            if lane_track is not None:
+                self._gate_for(camera_id, "lane:no_soft_median", behavior="no_soft_median").reset()
+                lane_track.episode_best = None
 
         vehicles = [d for d in detections if d.behavior == "vehicle"]
         violations = [
             d for d in detections
             if d.behavior in _event_behaviors()
-            and (
-                d.confidence >= _MIN_CONF
-                or (d.behavior == "hard_median" and d.confidence >= _HARD_MEDIAN_CONF)
-            )
+            and d.confidence >= _MIN_CONF
         ]
 
         for det in violations:
-            if det.behavior == "no_soft_median" and _lane_present(
-                detections, frame_w, frame_h, det.bbox, road_mask=road_mask,
+            if det.behavior == "no_soft_median" and (
+                lane_organized
+                or _lane_present(
+                    detections, frame_w, frame_h, det.bbox, road_mask=road_mask,
+                )
             ):
                 continue
             vehicle_bbox: list[float] | None = None
@@ -246,10 +276,6 @@ class AtgtEngine:
                 slot = _vehicle_slot(vehicle_bbox, frame_w, frame_h)
                 track_id = f"{slot}:speeding"
                 lane_behavior = "speeding"
-            elif det.behavior == "hard_median":
-                slot = "lane"
-                track_id = "lane:hard_median"
-                lane_behavior = "hard_median"
             else:
                 slot = "lane"
                 track_id = "lane:no_soft_median"
@@ -310,8 +336,6 @@ class AtgtEngine:
                 continue
             if track_id.endswith(":speeding"):
                 behavior = "speeding"
-            elif track_id.endswith(":hard_median"):
-                behavior = "hard_median"
             else:
                 behavior = "no_soft_median"
             gate = self._gate_for(camera_id, track_id, behavior=behavior)

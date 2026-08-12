@@ -198,6 +198,7 @@ ATGT_LANE_VIOLATION_ONLY=false
 ATGT_DEMO_FAKE_PLATE_FALLBACK=false
 EVENT_TEST_MODE=false
 EVENT_FIRST_SEEN_WINDOW_SECONDS=10800
+EVENT_AUDIT_GRACE_LOOPS=2
 CAMERA_SOURCE=0
 VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
 VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04}
@@ -233,6 +234,7 @@ systemctl restart vifence-backend
 REMOTE_SYSTEMD
 
 echo "→ Nginx reverse proxy…"
+# CORS do FastAPI CORSMiddleware — không add_header trên nginx (tránh duplicate *, *)
 ssh_cmd "bash -s" <<REMOTE_NGINX
 set -euo pipefail
 API_DOMAIN="${API_DOMAIN}"
@@ -249,12 +251,6 @@ server {
     client_max_body_size 20M;
 
     location / {
-        add_header Access-Control-Allow-Origin "*" always;
-        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "*" always;
-        if (\\\$request_method = OPTIONS) {
-            return 204;
-        }
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \\\$http_upgrade;
@@ -292,12 +288,6 @@ server {
     client_max_body_size 20M;
 
     location / {
-        add_header Access-Control-Allow-Origin "*" always;
-        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "*" always;
-        if (\\\$request_method = OPTIONS) {
-            return 204;
-        }
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \\\$http_upgrade;

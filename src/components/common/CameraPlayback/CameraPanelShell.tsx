@@ -215,7 +215,7 @@ export function CameraPanelShell({
           liveLandscapeGrid && 'h-full flex items-center justify-center',
           isLandscapeMobile && !liveLandscapeGrid && 'w-full max-w-[min(100%,calc((100dvh-64px)*16/9))]',
           !isLandscapeMobile && !stackedMobile && 'h-full max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden max-lg:landscape:overscroll-y-contain',
-          'lg:min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden lg:overscroll-y-contain lg:flex lg:flex-col',
+          'lg:min-h-0 lg:h-full lg:overflow-hidden lg:flex lg:flex-col',
         )}>
           {children}
         </div>

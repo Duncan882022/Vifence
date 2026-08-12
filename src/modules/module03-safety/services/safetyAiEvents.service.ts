@@ -10,6 +10,7 @@ import type {
 import { getScenarioName } from '../data/safetyScenarios'
 import { isImplementedSafetyScenario } from '../data/implementedSafetyCatalog'
 import { inferEventSourceMeta } from '../utils/safetyCameraBridge'
+import { isStaleAtgt004LaneNote } from '../utils/eventSubject'
 import { resolveVehiclePlate } from '../utils/vehiclePlate'
 
 const TUNNEL_HEADERS: Record<string, string> = {
@@ -28,9 +29,7 @@ const BEHAVIOR_TO_SCENARIO: Record<string, string> = {
   fire: 'PCCC-002',
   no_harness: 'WAH-001',
   speeding: 'ATGT-002',
-  hard_median: 'ATGT-004',
   no_soft_median: 'ATGT-004',
-  soft_median: 'ATGT-004',
   mud: 'BPTC-007',
   water: 'BPTC-008',
   object: 'BPTC-009',
@@ -54,9 +53,7 @@ const BEHAVIOR_TO_GROUP: Record<string, SafetyGroupId> = {
   fire: 'PCCC',
   no_harness: 'WAH',
   speeding: 'ATGT',
-  hard_median: 'ATGT',
   no_soft_median: 'ATGT',
-  soft_median: 'ATGT',
   mud: 'BPTC',
   water: 'BPTC',
   object: 'BPTC',
@@ -79,9 +76,7 @@ const BEHAVIOR_TO_SEVERITY: Record<string, AlertSeverity> = {
   fire: 'CRITICAL',
   no_harness: 'CRITICAL',
   speeding: 'VIOLATION',
-  hard_median: 'WARNING',
   no_soft_median: 'VIOLATION',
-  soft_median: 'WARNING',
   mud: 'WARNING',
   water: 'WARNING',
   object: 'VIOLATION',
@@ -150,6 +145,11 @@ export interface BackendViolationEvent {
   /** Đường dẫn clip MP4 tương đối (VMS mode) — dùng với /events/{id}/clip */
   clip_file?: string | null
   clip_duration_sec?: number | null
+  worker_id?: string | null
+  worker_name?: string | null
+  employee_code?: string | null
+  contractor_name?: string | null
+  face_match_confidence?: number | null
 }
 
 function buildVehicleSubject(event: BackendViolationEvent): SafetyViolationRecord['subject'] {
@@ -160,11 +160,30 @@ function buildVehicleSubject(event: BackendViolationEvent): SafetyViolationRecor
   }
 }
 
-function buildSiteConditionSubject(scenarioId: string, scenarioName?: string): SafetyViolationRecord['subject'] {
+function buildSiteConditionSubject(scenarioId: string): SafetyViolationRecord['subject'] {
   return {
     type: 'SITE_CONDITION',
-    workItem: scenarioName ?? getScenarioName(scenarioId),
+    workItem: getScenarioName(scenarioId),
   }
+}
+
+function buildPersonSubject(event: BackendViolationEvent): SafetyViolationRecord['subject'] {
+  return {
+    type: 'PERSON',
+    workerId: event.worker_id ?? undefined,
+    workerName: event.worker_name ?? undefined,
+    employeeCode: event.employee_code ?? undefined,
+    contractorName: event.contractor_name ?? undefined,
+    responsibleUnit: 'CONTRACTOR',
+  }
+}
+
+function isValidAtgt004LiveRecord(record: SafetyViolationRecord): boolean {
+  if (record.scenarioId !== 'ATGT-004') return true
+  if (record.aiBehavior && record.aiBehavior !== 'no_soft_median') return false
+  if (isStaleAtgt004LaneNote(record.subject?.workItem)) return false
+  if (isStaleAtgt004LaneNote(record.description)) return false
+  return true
 }
 
 export function mapBackendEventToSafetyRecord(
@@ -189,9 +208,7 @@ export function mapBackendEventToSafetyRecord(
       ? 'ZONE-B01'
       : event.behavior === 'no_soft_median'
         ? 'ZONE-B02'
-        : event.behavior === 'hard_median'
-          ? 'ZONE-B02'
-          : isCam04Ai || sourceDeviceId === 'A-04'
+        : isCam04Ai || sourceDeviceId === 'A-04'
             ? 'ZONE-A02'
             : sourceDeviceId === 'A-03'
               ? 'ZONE-A02'
@@ -217,13 +234,14 @@ export function mapBackendEventToSafetyRecord(
       ? (event.behavior === 'speeding'
         ? buildVehicleSubject(event)
         : event.behavior === 'no_soft_median'
-          ? buildSiteConditionSubject(scenarioId, event.scenario_name)
+          ? buildSiteConditionSubject(scenarioId)
           : { type: 'SITE_CONDITION' })
       : event.behavior === 'fire'
-        ? buildSiteConditionSubject(scenarioId, event.scenario_name)
-        : { type: 'PERSON' },
+        ? buildSiteConditionSubject(scenarioId)
+        : buildPersonSubject(event),
     verificationRequired: !isCam04Ai || event.behavior === 'crane_proximity',
-    description: event.scenario_name ?? event.violation_type ?? getScenarioName(scenarioId),
+    description: getScenarioName(scenarioId),
+    aiBehavior: event.behavior,
     snapshotUrl: buildSnapshotUrl(
       backendUrl,
       event.id,
@@ -277,7 +295,7 @@ export function isLiveSafetyRecord(record: SafetyViolationRecord): boolean {
 }
 
 export function filterLiveSafetyRecords(records: SafetyViolationRecord[]): SafetyViolationRecord[] {
-  return records.filter(r => isImplementedSafetyScenario(r.scenarioId))
+  return records.filter(r => isImplementedSafetyScenario(r.scenarioId) && isValidAtgt004LiveRecord(r))
 }
 
 export type FetchSafetyAiEventsResult =

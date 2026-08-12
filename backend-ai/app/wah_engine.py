@@ -102,6 +102,10 @@ class WahEngine:
             )
         return self._gates[camera_id][track_id]
 
+    def reset_camera(self, camera_id: str) -> None:
+        self._tracks.pop(camera_id, None)
+        self._gates.pop(camera_id, None)
+
     def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
         return analyze_wah_frame(frame, camera_id)
 

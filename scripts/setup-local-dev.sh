@@ -8,12 +8,23 @@ cd "$ROOT"
 CAM03="${ROOT}/public/camera-feeds/ttdv-a-cam03-test.mp4"
 CAM04="${ROOT}/public/camera-feeds/ttdv-a-cam04-test.mp4"
 
+CONTABO_API="${VIFENCE_CONTABO_API:-https://217.217.253.247.nip.io}"
+LOCAL_API="http://127.0.0.1:8000"
+
+if [[ "${LOCAL_BE:-}" == "1" ]]; then
+  FE_API="$LOCAL_API"
+  FE_NOTE="BE local :8000 (npm run start:backend:local)"
+else
+  FE_API="$CONTABO_API"
+  FE_NOTE="BE Contabo — ổn định HLS; LOCAL_BE=1 để dùng :8000"
+fi
+
 cat > .env.local <<EOF
-# Local dev — FE :5173 → BE :8000 (npm run start:local)
-VITE_MOBILE_AI_BACKEND_URL=http://127.0.0.1:8000
-VITE_VMS_BACKEND_URL=http://127.0.0.1:8000
+# Local FE dev — ${FE_NOTE}
+VITE_MOBILE_AI_BACKEND_URL=${FE_API}
+VITE_VMS_BACKEND_URL=${FE_API}
 EOF
-echo "→ .env.local → http://127.0.0.1:8000"
+echo "→ .env.local → ${FE_API}"
 
 mkdir -p backend-ai/data/auto_train
 cat > backend-ai/.env <<EOF
@@ -34,10 +45,10 @@ AUTO_TRAIN_MIN_NEW_SAMPLES_DELTA=10
 
 VMS_MODE_ENABLED=true
 VMS_CAMERA_SOURCES=A-03:${CAM03},A-04:${CAM04}
-VMS_AI_FPS=6.0
+VMS_AI_FPS=3.0
 
-DETECTION_FPS=6.0
-STREAM_FPS=12.0
+DETECTION_FPS=3.0
+STREAM_FPS=8.0
 
 FIRE_MODEL_REPO=SalahALHaismawi/yolov26-fire-detection
 FIRE_MODEL_FILE=best.pt

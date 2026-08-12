@@ -52,5 +52,12 @@
       "w-020-3.jpg"
     ],
     "face_image": "w-020.jpg"
+  },
+  {
+    "worker_id": "w-021",
+    "worker_name": "Phạm Quang Tùng",
+    "employee_code": "VCS112233",
+    "contractor_name": "Vincons",
+    "face_image": "w-021.jpg"
   }
 ]

@@ -200,7 +200,9 @@ class CameraVmsWorker:
             while self._running:
                 ok, frame = cap.read()
                 if not ok or frame is None:
-                    # EOF → loop lại từ đầu
+                    from .vms_loop_state import register_video_loop
+
+                    register_video_loop(self.camera_id)
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ok, frame = cap.read()
                     if not ok or frame is None:

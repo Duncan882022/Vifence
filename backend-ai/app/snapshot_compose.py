@@ -32,8 +32,8 @@ BEHAVIOR_ROI_CODE: dict[str, str] = {
     "crane_proximity": "DZ-003",
     "vehicle": "ATGT",
     "speeding": "ATGT-002",
-    "hard_median": "ATGT-004",
-    "soft_median": "ATGT-004",
+    "hard_median": "LÀN+",
+    "soft_median": "LÀN+",
     "no_soft_median": "ATGT-004",
     "smoking": "PCCC-001",
     "fire": "PCCC-002",
@@ -168,6 +168,8 @@ def _focus_crop_profile(behavior: str) -> tuple[float, int, float]:
     """margin_ratio, min_side_px, max_frame_ratio — crop vùng vi phạm trên snapshot."""
     if behavior in {"fire", "smoking"}:
         return 1.35, 220, 0.42
+    if behavior in {"mesh_missing", "mesh_torn", "mesh_dirty"}:
+        return 0.12, 96, 0.34
     if behavior.startswith("no_"):
         return 0.55, 180, 0.55
     return 0.45, 160, 0.55
@@ -225,24 +227,9 @@ def compose_violation_snapshot(
     behavior: str = "",
     focus_bbox: list[float] | None = None,
 ) -> np.ndarray:
-    """Ảnh lưu sự kiện: crop vùng vi phạm + bbox + mã lỗi."""
-    code = format_snapshot_code(behavior, scenario_id)
+    """Ảnh lưu sự kiện: crop vùng vi phạm + bbox ROI (mã trên bbox — không header bundle)."""
     h, w = raw.shape[:2]
     roi = annotated if annotated.shape[:2] == (h, w) else cv2.resize(annotated, (w, h))
     if focus_bbox and len(focus_bbox) >= 4:
         roi = crop_to_focus(roi, focus_bbox, behavior=behavior)
-    h, w = roi.shape[:2]
-    header_h = 28
-    canvas = np.zeros((h + header_h, w, 3), dtype=np.uint8)
-    canvas[:] = (12, 16, 24)
-
-    header_bg = (24, 32, 48)
-    accent = (56, 189, 248)
-
-    cv2.rectangle(canvas, (0, 0), (w - 1, header_h - 1), header_bg, -1)
-    cv2.putText(
-        canvas, code, (8, 20),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.55, accent, 1, cv2.LINE_AA,
-    )
-    canvas[header_h : header_h + h, 0:w] = roi
-    return canvas
+    return roi

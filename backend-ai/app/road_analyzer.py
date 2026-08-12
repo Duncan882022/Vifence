@@ -156,6 +156,33 @@ def _is_valid_water_box(
     return True
 
 
+def _water_meets_violation_size(
+    box: tuple[int, int, int, int],
+    frame_width: int,
+    frame_height: int,
+    frame_area: int,
+    *,
+    area_percent: float = 0.0,
+) -> bool:
+    """Vũng nước đủ lớn mới được ghi sự kiện BPTC-008."""
+    x1, y1, x2, y2 = box
+    bw, bh = max(x2 - x1, 0), max(y2 - y1, 0)
+    if bw < MIN_WATER_BBOX_WIDTH or bh < MIN_WATER_BBOX_HEIGHT:
+        return False
+    bbox_ratio = (bw * bh) / max(frame_area, 1)
+    if bbox_ratio < MIN_WATER_EVENT_AREA_RATIO:
+        return False
+    aspect = bw / max(bh, 1)
+    # Vệt ướt mảnh sát mép — không coi là vũng đọng.
+    if aspect > 5.5 and bh < frame_height * 0.028:
+        return False
+    if bw < frame_width * 0.06 and bh < frame_height * 0.024:
+        return False
+    if area_percent > 0 and area_percent < MIN_WATER_EVENT_ROI_PERCENT:
+        return False
+    return True
+
+
 def _is_valid_object_box(
     hsv: np.ndarray,
     box: tuple[int, int, int, int],
@@ -213,6 +240,8 @@ def _augment_with_auto_train_model(frame: np.ndarray, all_detections: list[RoadD
             continue
         if behavior == "water" and not _is_valid_water_box(hsv, int_box, w, h):
             continue
+        if behavior == "water" and not _water_meets_violation_size(int_box, w, h, w * h):
+            continue
         if behavior == "mud":
             if _score_mud_box(int_box, w, h) < 0 or _is_temporary_barrier_box(hsv, int_box):
                 continue
@@ -232,6 +261,11 @@ def _augment_with_auto_train_model(frame: np.ndarray, all_detections: list[RoadD
 
 MUD_THRESHOLD_PERCENT = 4.0
 WATER_THRESHOLD_PERCENT = 0.28
+# BPTC-008 — chỉ ghi sự kiện khi vũng đủ lớn (loại vệt ướt / mảnh nhỏ).
+MIN_WATER_EVENT_AREA_RATIO = 0.0045
+MIN_WATER_EVENT_ROI_PERCENT = 0.15
+MIN_WATER_BBOX_WIDTH = 22
+MIN_WATER_BBOX_HEIGHT = 14
 MIN_OBJECT_AREA_RATIO = 0.008
 MAX_OBJECT_AREA_RATIO = 0.12
 MIN_OBJECT_EPISODE_AREA_RATIO = 0.012
@@ -424,6 +458,8 @@ def _confidence_for_detection(
         area_n = min(area_percent / 10.0, 1.0)
         conf = 0.42 + area_n * 0.28 + geo_n * 0.22 + fill * 0.18
     elif behavior == "water":
+        if not _water_meets_violation_size(box, frame_width, frame_height, frame_area, area_percent=area_percent):
+            return 0.0
         geo = _score_water_box(box, frame_width, frame_height, expanded=True)
         if geo < 0:
             geo = _score_water_box(box, frame_width, frame_height)
@@ -1327,7 +1363,7 @@ def _score_water_box(
     """Điểm vị trí vũng nước — ưu tiên giữa-dưới khung hình (vũng thật trên lòng đường)."""
     x1, y1, x2, y2 = box
     bw, bh = x2 - x1, y2 - y1
-    if bw < 12 or bh < 8:
+    if bw < MIN_WATER_BBOX_WIDTH or bh < MIN_WATER_BBOX_HEIGHT:
         return -1.0
     cx = (x1 + x2) / 2
     cy = (y1 + y2) / 2
@@ -1372,7 +1408,7 @@ def _score_water_patch(
     max_mean_v: float = 200.0,
     min_compactness: float = 0.0,
 ) -> float:
-    if bw < 12 or bh < 8:
+    if bw < MIN_WATER_BBOX_WIDTH or bh < MIN_WATER_BBOX_HEIGHT:
         return -1.0
     cy = y + bh / 2
     cx = x + bw / 2
@@ -1664,7 +1700,7 @@ def _analyze_water(
                 if not _is_valid_water_box(hsv, box, w, h):
                     continue
             pct = 100.0 * area / roi_pixels
-            if pct < 0.03:
+            if pct < MIN_WATER_EVENT_ROI_PERCENT:
                 continue
             ranked.append((adjusted + geo * 0.15, area, box, roi_pixels))
 
@@ -1676,7 +1712,7 @@ def _analyze_water(
     dark_for_expand = cv2.morphologyEx(dark.copy(), cv2.MORPH_CLOSE, k5, iterations=1)
     dark = cv2.bitwise_and(dark, cv2.bitwise_not(exclude))
     dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, k5, iterations=1)
-    consider(dark, search_dark, 0.0012, 0.07, min_cy_ratio=0.72, max_mean_v=75)
+    consider(dark, search_dark, 0.0035, 0.07, min_cy_ratio=0.72, max_mean_v=75)
 
     search_wet = _wet_water_search_mask(roi_mask, frame_width, h)
     local = cv2.GaussianBlur(v_f, (51, 51), 0)
@@ -1698,8 +1734,8 @@ def _analyze_water(
         cv2.bitwise_and(wet_for_expand, search_wet),
     )
     consider(
-        wet, search_wet, 0.002, 0.12,
-        min_cy_ratio=0.62, max_mean_v=175, min_compactness=0.08, cx_target=0.42,
+        wet, search_wet, 0.0045, 0.12,
+        min_cy_ratio=0.62, max_mean_v=175, min_compactness=0.10, cx_target=0.42,
     )
 
     if not ranked:
@@ -1726,6 +1762,8 @@ def _analyze_water(
                 expanded = box
             else:
                 continue
+        if not _water_meets_violation_size(expanded, w, h, frame_area, area_percent=pct):
+            continue
         out.append((pct, expanded))
     return out
 

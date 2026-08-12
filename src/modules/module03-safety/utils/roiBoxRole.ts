@@ -71,7 +71,7 @@ export interface OverlayBoxStyle {
   role: RoiBoxRole
 }
 
-/** BPTC-001 — thiếu lưới (xanh) vs bẩn lưới (nâu). */
+/** BPTC-001 — thiếu/rách (xanh) vs bẩn (nâu #92400e), title catalog gộp "thiếu/bẩn". */
 const MESH_BEHAVIOR_BOX_STYLES: Record<string, Omit<OverlayBoxStyle, 'role'>> = {
   mesh_missing: {
     border: 'border-green-400/95 border-2 border-solid',

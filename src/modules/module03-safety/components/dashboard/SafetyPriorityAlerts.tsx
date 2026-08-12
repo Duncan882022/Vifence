@@ -10,7 +10,6 @@ import type {
   SafetyViolationRecord,
 } from '../../types/safety.types'
 import { SAFETY_GROUPS, getGroupDictionaryTooltip } from '../../data/safetyGroups'
-import { getScenarioName } from '../../data/safetyScenarios'
 import { formatEventDateTime } from '@/utils/format'
 import { getEventCapturePlace } from '../../utils/safetyCameraBridge'
 import {
@@ -31,6 +30,8 @@ import {
 import { SafetyGroupIconBadge } from '../SafetyGroupIconBadge'
 import {
   getAlertSubjectLabel,
+  resolveEventScenarioTitle,
+  shouldShowAlertSubjectLine,
 } from '../../utils/eventSubject'
 import { AlertEventSnapshot } from '../violations/EventSubjectCell'
 
@@ -58,8 +59,8 @@ const FILTER_TABS: { key: AlertFilterTab; label: string }[] = [
   { key: 'unhandled', label: 'Chưa xử lý' },
 ]
 
-const INITIAL_COUNT = 10
-const BATCH_SIZE = 6
+const INITIAL_COUNT = 6
+const BATCH_SIZE = 4
 
 function SeverityTag({ severity }: { severity: AlertSeverity }) {
   const Icon = SEVERITY_ICONS[severity]
@@ -194,7 +195,7 @@ function AlertCard({
       onClick={() => onSelect?.(v)}
       onKeyDown={e => e.key === 'Enter' && onSelect?.(v)}
     >
-      <div className="flex gap-3 p-2.5 min-w-0 items-stretch">
+      <div className="flex gap-2 p-2 min-w-0 items-stretch">
         <AlertEventSnapshot
           record={v}
           className="self-stretch"
@@ -225,16 +226,18 @@ function AlertCard({
           </div>
 
           <h3 className="text-[11px] font-semibold text-foreground leading-snug line-clamp-2 pr-1">
-            {getScenarioName(v.scenarioId)}
+            {resolveEventScenarioTitle(v)}
           </h3>
 
           <div className="space-y-1 min-w-0">
+            {shouldShowAlertSubjectLine(v) && (
             <div className="flex items-center gap-1.5 min-w-0">
               <User className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
               <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
                 {getAlertSubjectLabel(v)}
               </p>
             </div>
+            )}
             <div className="flex items-start gap-1.5 min-w-0">
               <Clock className="w-2.5 h-2.5 shrink-0 mt-px text-muted-foreground/45" aria-hidden />
               <p className="text-[8px] min-w-0 leading-snug">
@@ -357,7 +360,7 @@ export function SafetyEventsPanel({
   }
 
   const groupFilterBar = (
-    <div className="flex flex-wrap gap-1 px-2 py-1.5 border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none">
+    <div className="flex flex-wrap gap-1 px-1.5 py-1 border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none">
       {SAFETY_GROUPS.map(g => {
         const Icon = GROUP_ICONS[g.id]
         const active = groupQuickFilters.has(g.id)
@@ -394,7 +397,7 @@ export function SafetyEventsPanel({
       title="Sự kiện"
       noPadding
       expandable
-      className="flex-1 min-h-0 max-lg:!h-auto max-lg:min-h-[320px] overflow-hidden h-full"
+      className="flex-1 min-h-0 max-lg:!h-auto max-lg:min-h-[200px] overflow-hidden h-full"
     >
     <div className="flex flex-col h-full min-h-0">
       <div className="flex border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none overscroll-x-contain snap-x snap-mandatory">
@@ -425,7 +428,7 @@ export function SafetyEventsPanel({
 
       {groupFilterBar}
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
         {empty ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">Không có sự kiện</p>
         ) : activeItems.length === 0 ? (
@@ -433,7 +436,7 @@ export function SafetyEventsPanel({
             Không có mục phù hợp bộ lọc
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {visibleItems.map(v => (
               <AlertCard
                 key={v.id}
