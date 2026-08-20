@@ -267,7 +267,7 @@ export function Module05Page() {
                 noPadding
                 className={cn(
                   'flex flex-col overflow-hidden',
-                  'max-lg:!h-auto max-lg:min-h-[520px]',
+                  'max-lg:!h-auto',
                   'lg:min-h-0 lg:h-full md:flex-[3]',
                   tier3Focus === 'heatmap' && 'flex-1',
                 )}

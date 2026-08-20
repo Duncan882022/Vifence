@@ -15,7 +15,7 @@ import type { PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
   PATROL_HELMET_GPS_PINS,
-  PATROL_HELMET_ZONE_ASSIGNMENTS,
+
   PATROL_HELMET_ZONE_TRAILS,
   PATROL_SITE_CENTER,
   PATROL_SITE_FOCUS_BOUNDS,
@@ -165,11 +165,7 @@ function createZoneStatIcon(
   visited: boolean,
   peopleCurrent: number,
   vehiclesCurrent: number,
-  helmetId?: string,
 ): L.DivIcon {
-  const helmetLine = helmetId
-    ? `<div style="color:${borderColor};font-size:9px;line-height:1.35;margin-top:2px;font-weight:700;">⛑ Mũ ${helmetId.replace('HC-', '')}</div>`
-    : ''
   const html = `
     <div style="
       background:rgba(8,11,18,0.93);
@@ -185,12 +181,11 @@ function createZoneStatIcon(
       <div style="color:${borderColor};font-weight:700;font-size:9px;letter-spacing:0.6px;margin-bottom:2px;">${shortName}</div>
       ${visited
         ? `<div style="color:#e2e8f0;font-size:10px;line-height:1.35;">👤 ${peopleCurrent} người</div>
-           <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">🚛 ${vehiclesCurrent} máy</div>
-           ${helmetLine}`
+           <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">🚛 ${vehiclesCurrent} máy</div>`
         : '<div style="color:#475569;font-size:9px;margin-top:1px;">Chưa đến</div>'
       }
     </div>`
-  const h = visited ? (helmetId ? 74 : 60) : 42
+  const h = visited ? 60 : 42
   return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
@@ -359,9 +354,7 @@ export function PatrolGeoHeatmap({
           border-color:#334155 !important;
         }
         .leaflet-control-attribution {
-          background:rgba(8,11,18,.75) !important;
-          color:#475569 !important;
-          font-size:9px !important;
+          display:none !important;
         }
         .patrol-zone-tip {
           background:#0a0e15 !important;
@@ -384,11 +377,11 @@ export function PatrolGeoHeatmap({
           dragging={false}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
-          attributionControl
+          attributionControl={false}
         >
           <MapInvalidator />
           <MapSiteFocusLock center={PATROL_SITE_CENTER} />
-          <TileLayer url={ESRI_TILE_URL} attribution={ESRI_ATTRIBUTION} />
+          <TileLayer url={ESRI_TILE_URL} attribution="" />
         <ZoomControl position="bottomright" />
 
         {/* Zone polygons — dashed borders, NO fill */}
@@ -426,9 +419,6 @@ export function PatrolGeoHeatmap({
           const zone = zoneMap.get(gpsZone.zone_id)
           const visited = zone?.coverage === 'VISITED'
           const displayVal = zone ? formatDisplayValue(zone, layer, countMode, displayMode) : '—'
-          const helmetId = PATROL_HELMET_ZONE_ASSIGNMENTS.find(
-            a => a.zoneId === gpsZone.zone_id,
-          )?.helmetId
           return (
             <Marker
               key={`stat-${gpsZone.zone_id}-${displayVal}`}
@@ -439,7 +429,6 @@ export function PatrolGeoHeatmap({
                 visited,
                 zone?.peopleCurrent ?? 0,
                 zone?.vehiclesCurrent ?? 0,
-                helmetId,
               )}
               zIndexOffset={300}
             />

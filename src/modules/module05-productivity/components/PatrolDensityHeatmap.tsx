@@ -3,7 +3,7 @@
  * Mobile và desktop dùng cùng map overlay (khu vực + mũ tuần tra).
  */
 import { useMemo, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
+
 import { cn } from '@/utils/cn'
 import { MOCK_PATROL_DASHBOARD } from '../data/patrolMockData'
 import type { PatrolDensityLayer } from '../services/patrolHeatmap.service'
@@ -28,13 +28,6 @@ const LEGEND = [
   { color: '#475569', label: 'Chưa đến' },
 ] as const
 
-function formatSessionDate(sessionLabel: string): string {
-  const dateStr = sessionLabel.replace('PATROL_', '').slice(0, 8)
-  const y = dateStr.slice(0, 4)
-  const m = dateStr.slice(4, 6)
-  const d = dateStr.slice(6, 8)
-  return `${d}/${m}/${y} 08:00`
-}
 
 function ToggleBtn({
   active,
@@ -73,13 +66,8 @@ export function PatrolDensityHeatmap() {
   const isRouteOnly = heatLayer === 'route'
   const activeLayer: PatrolDensityLayer = isRouteOnly ? 'people' : heatLayer
 
-  const sessionLabel = useMemo(
-    () => formatSessionDate(MOCK_PATROL_DASHBOARD.sessionLabel),
-    [],
-  )
-
   return (
-    <div className="flex flex-col overflow-hidden h-full min-h-0">
+    <div className="flex flex-col overflow-hidden lg:h-full lg:min-h-0">
       {/* ── Toolbar ─────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-2 space-y-2">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 min-w-0">
@@ -95,12 +83,6 @@ export function PatrolDensityHeatmap() {
             ))}
           </div>
 
-          <div className="inline-flex items-center justify-center gap-1 rounded-md border border-[#334155] bg-[#1a2235] px-2 py-1.5 shrink-0">
-            <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-            <span className="text-[10px] font-medium text-foreground tabular-nums whitespace-nowrap">
-              {sessionLabel}
-            </span>
-          </div>
         </div>
 
         {!isRouteOnly && (
@@ -122,7 +104,7 @@ export function PatrolDensityHeatmap() {
       </div>
 
       {/* ── Map — cùng overlay khu vực + mũ trên mọi breakpoint ── */}
-      <div className="min-w-0 relative flex-1 min-h-[320px] max-lg:min-h-[360px]">
+      <div className="min-w-0 relative lg:flex-1 lg:min-h-[200px] max-lg:h-[360px]">
         <PatrolGeoHeatmap
           zones={liveZones}
           cameraPositions={cameraPositions}
