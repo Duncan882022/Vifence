@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2,
+  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2, X,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -112,6 +113,51 @@ function PatrolKPIs() {
   )
 }
 
+/* ── Heatmap fullscreen modal ─────────────────────────────────── */
+function HeatmapModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 backdrop-blur-[2px] p-3 sm:p-5"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="relative flex flex-col w-full max-w-5xl h-[90dvh] rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
+          <span className="text-[11px] font-bold tracking-widest text-foreground uppercase">HEATMAP</span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Đóng"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {/* Content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <PatrolDensityHeatmap />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
   const [tier1Open, setTier1Open] = useState(true)
@@ -121,7 +167,8 @@ export function Module05Page() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [detailEventId, setDetailEventId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
-  const [tier3Focus, setTier3Focus] = useState<'none' | 'heatmap' | 'events'>('none')
+  const [tier3Focus, setTier3Focus] = useState<'none' | 'events'>('none')
+  const [heatmapExpanded, setHeatmapExpanded] = useState(false)
 
   const playbackDate = getPatrolDefaultPlaybackDate()
 
@@ -261,66 +308,58 @@ export function Module05Page() {
             'max-lg:flex-none',
             tier2Open ? 'lg:flex-[10]' : 'lg:flex-1',
           )}>
-            {tier3Focus !== 'events' && (
-              <Panel
-                title="HEATMAP"
-                noPadding
-                className={cn(
-                  'flex flex-col overflow-hidden',
-                  'max-lg:!h-auto',
-                  'lg:min-h-0 lg:h-full md:flex-[3]',
-                  tier3Focus === 'heatmap' && 'flex-1',
-                )}
-                headerRight={
-                  <button
-                    onClick={() => setTier3Focus(f => f === 'heatmap' ? 'none' : 'heatmap')}
-                    className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                    title={tier3Focus === 'heatmap' ? 'Thu nhỏ' : 'Phóng to'}
-                    aria-label={tier3Focus === 'heatmap' ? 'Thu nhỏ heatmap' : 'Phóng to heatmap'}
-                  >
-                    {tier3Focus === 'heatmap'
-                      ? <Minimize2 className="w-3.5 h-3.5" />
-                      : <Maximize2 className="w-3.5 h-3.5" />
-                    }
-                  </button>
-                }
-              >
-                <PatrolDensityHeatmap />
-              </Panel>
-            )}
+            <Panel
+              title="HEATMAP"
+              noPadding
+              className={cn(
+                'flex flex-col overflow-hidden',
+                'max-lg:!h-auto',
+                'lg:min-h-0 lg:h-full md:flex-[3]',
+              )}
+              headerRight={
+                <button
+                  onClick={() => setHeatmapExpanded(true)}
+                  className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Phóng to"
+                  aria-label="Phóng to heatmap"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              }
+            >
+              <PatrolDensityHeatmap />
+            </Panel>
 
-            {tier3Focus !== 'heatmap' && (
-              <Panel
-                title="SỰ KIỆN"
-                noPadding
-                className={cn(
-                  'min-h-0 flex flex-col overflow-hidden',
-                  'min-h-[220px] sm:min-h-[260px] md:min-h-0 md:flex-[2]',
-                  tier3Focus === 'events' && 'flex-1',
-                )}
-                headerRight={
-                  <button
-                    onClick={() => setTier3Focus(f => f === 'events' ? 'none' : 'events')}
-                    className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                    title={tier3Focus === 'events' ? 'Thu nhỏ' : 'Phóng to'}
-                    aria-label={tier3Focus === 'events' ? 'Thu nhỏ sự kiện' : 'Phóng to sự kiện'}
-                  >
-                    {tier3Focus === 'events'
-                      ? <Minimize2 className="w-3.5 h-3.5" />
-                      : <Maximize2 className="w-3.5 h-3.5" />
-                    }
-                  </button>
-                }
-              >
-                <PatrolEventsPanel
-                  events={MOCK_PATROL_EVENTS}
-                  selectedId={selectedEventId}
-                  onSelect={handleSelectEvent}
-                  onSnapshotClick={ev => setDetailEventId(ev.id)}
-                  onPlayback={handleSelectEvent}
-                />
-              </Panel>
-            )}
+            <Panel
+              title="SỰ KIỆN"
+              noPadding
+              className={cn(
+                'min-h-0 flex flex-col overflow-hidden',
+                'min-h-[220px] sm:min-h-[260px] md:min-h-0 md:flex-[2]',
+                tier3Focus === 'events' && 'flex-1',
+              )}
+              headerRight={
+                <button
+                  onClick={() => setTier3Focus(f => f === 'events' ? 'none' : 'events')}
+                  className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+                  title={tier3Focus === 'events' ? 'Thu nhỏ' : 'Phóng to'}
+                  aria-label={tier3Focus === 'events' ? 'Thu nhỏ sự kiện' : 'Phóng to sự kiện'}
+                >
+                  {tier3Focus === 'events'
+                    ? <Minimize2 className="w-3.5 h-3.5" />
+                    : <Maximize2 className="w-3.5 h-3.5" />
+                  }
+                </button>
+              }
+            >
+              <PatrolEventsPanel
+                events={MOCK_PATROL_EVENTS}
+                selectedId={selectedEventId}
+                onSelect={handleSelectEvent}
+                onSnapshotClick={ev => setDetailEventId(ev.id)}
+                onPlayback={handleSelectEvent}
+              />
+            </Panel>
           </div>
         </div>
       </PageLayout>
@@ -330,6 +369,10 @@ export function Module05Page() {
         onClose={() => setDetailEventId(null)}
         onPlayback={handleSelectEvent}
       />
+
+      {heatmapExpanded && (
+        <HeatmapModal onClose={() => setHeatmapExpanded(false)} />
+      )}
     </>
   )
 }
