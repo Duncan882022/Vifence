@@ -164,8 +164,6 @@ export interface PatrolHelmetPin {
   position: [number, number]
 }
 
-export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
-
 /** Khu phụ trách của từng mũ — 5 helmet / 5 zone chính. */
 export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
   helmetId: string
@@ -179,7 +177,7 @@ export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
 ] as const
 
 function buildHelmetPins(): PatrolHelmetPin[] {
-  return PATROL_HELMET_ZONE_ASSIGNMENTS.map(({ helmetId, zoneId }) => {
+  return (PATROL_HELMET_ZONE_ASSIGNMENTS as readonly { helmetId: string; zoneId: string }[]).map(({ helmetId, zoneId }) => {
     const zone = PATROL_GPS_ZONES.find(z => z.zone_id === zoneId)
     if (!zone) throw new Error(`Missing zone ${zoneId} for ${helmetId}`)
     const num = helmetId.replace('HC-', '')
@@ -192,6 +190,8 @@ function buildHelmetPins(): PatrolHelmetPin[] {
     }
   })
 }
+
+export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
 
 /** Vòng tuần tra nhỏ trong khu phụ trách (~25 m bán kính). */
 export function buildHelmetZoneTrail(
