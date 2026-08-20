@@ -10,7 +10,7 @@ import 'leaflet/dist/leaflet.css'
 import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon } from 'geojson'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
@@ -254,24 +254,29 @@ function MapInvalidator() {
 /** Khóa tâm map tại công trường — chỉ zoom in/out, không kéo lệch focus. */
 function MapSiteFocusLock({ center }: { center: [number, number] }) {
   const map = useMap()
+  const lockingRef = useRef(false)
 
   useEffect(() => {
     map.setMaxBounds(L.latLngBounds(PATROL_SITE_FOCUS_BOUNDS))
     map.setMinZoom(PATROL_SITE_MIN_ZOOM)
     map.setMaxZoom(PATROL_SITE_MAX_ZOOM)
     map.dragging.disable()
+    map.scrollWheelZoom.enable()
 
-    const lockToSiteCenter = () => {
+    const recenter = () => {
+      if (lockingRef.current) return
+      lockingRef.current = true
       map.setView(center, map.getZoom(), { animate: false })
+      lockingRef.current = false
     }
 
-    map.on('zoomend', lockToSiteCenter)
-    map.on('moveend', lockToSiteCenter)
-    lockToSiteCenter()
+    /* Chỉ lắng nghe zoomend — dragging đã tắt nên moveend không cần thiết
+       và sẽ gây vòng lặp setView → moveend → setView → ... */
+    map.on('zoomend', recenter)
+    recenter()
 
     return () => {
-      map.off('zoomend', lockToSiteCenter)
-      map.off('moveend', lockToSiteCenter)
+      map.off('zoomend', recenter)
     }
   }, [map, center])
 
