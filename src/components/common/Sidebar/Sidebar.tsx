@@ -44,7 +44,7 @@ const navItems: NavItem[] = [
     ],
   },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
-  { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: false },
+  { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: true },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
   { path: '/module07', label: 'Nghiệm thu',            icon: ClipboardCheck, available: false },
   { path: '/module08', label: 'Báo cáo điều hành',    icon: BarChart3,      available: false },
