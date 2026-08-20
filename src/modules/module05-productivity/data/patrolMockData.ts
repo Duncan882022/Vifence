@@ -62,8 +62,8 @@ export const MOCK_PATROL_DASHBOARD: PatrolDashboard = {
   uniquePeople: 183,
   uniqueVehicles: 37,
   visitedZones: 8,
-  totalZones: 10,
-  coveragePercent: 80,
+  totalZones: 8,
+  coveragePercent: 100,
   activePatrolSeconds: 2820,
   sessionLabel: 'PATROL_20260820_0800',
 }
@@ -75,7 +75,7 @@ export const MOCK_HELMET_CAMERAS: HelmetCamera[] = [
     name: 'Helmet 01',
     status: 'ONLINE',
     currentZone: 'ZONE_A',
-    gps: { lat: 21.003700, lng: 105.945910 },
+    gps: { lat: 21.003767, lng: 105.945910 },
     activeSeconds: 2884,
     patrolSessionId: 'PATROL_20260820_0800',
   },
@@ -93,7 +93,7 @@ export const MOCK_HELMET_CAMERAS: HelmetCamera[] = [
     name: 'Helmet 03',
     status: 'ONLINE',
     currentZone: 'ZONE_C',
-    gps: { lat: 21.004650, lng: 105.947200 },
+    gps: { lat: 21.004667, lng: 105.947177 },
     activeSeconds: 2410,
     patrolSessionId: 'PATROL_20260820_0822',
   },
@@ -111,7 +111,7 @@ export const MOCK_HELMET_CAMERAS: HelmetCamera[] = [
     name: 'Helmet 05',
     status: 'ONLINE',
     currentZone: 'ZONE_E',
-    gps: { lat: 21.003700, lng: 105.948443 },
+    gps: { lat: 21.003767, lng: 105.948443 },
     activeSeconds: 1755,
     patrolSessionId: 'PATROL_20260820_0840',
   },
@@ -127,8 +127,6 @@ export const MOCK_PATROL_ZONES: PatrolZone[] = [
   { id: 'ZONE_F', name: 'Sân cẩu',                  shortName: 'Cẩu',  coverage: 'VISITED',     dwellSeconds: 340, peopleCurrent: 8,  vehiclesCurrent: 6,  uniquePeople: 11, uniqueVehicles: 7,  areaSqm: 700  },
   { id: 'ZONE_G', name: 'Cổng ra vào',              shortName: 'Cổng', coverage: 'VISITED',     dwellSeconds: 98,  peopleCurrent: 12, vehiclesCurrent: 4,  uniquePeople: 16, uniqueVehicles: 5,  areaSqm: 300  },
   { id: 'ZONE_H', name: 'Khu đúc cọc',              shortName: 'Cọc',  coverage: 'VISITED',     dwellSeconds: 460, peopleCurrent: 22, vehiclesCurrent: 9,  uniquePeople: 27, uniqueVehicles: 10, areaSqm: 980  },
-  { id: 'ZONE_I', name: 'Hàng rào phía Bắc',        shortName: 'HR-B', coverage: 'NOT_VISITED', dwellSeconds: 0,   peopleCurrent: 0,  vehiclesCurrent: 0,  uniquePeople: 0,  uniqueVehicles: 0,  areaSqm: 550  },
-  { id: 'ZONE_J', name: 'Hàng rào phía Nam',        shortName: 'HR-N', coverage: 'NOT_VISITED', dwellSeconds: 0,   peopleCurrent: 0,  vehiclesCurrent: 0,  uniquePeople: 0,  uniqueVehicles: 0,  areaSqm: 520  },
 ]
 
 /* ── Events — GPS updated to match GPS zone grid ───────────── */

@@ -41,8 +41,8 @@ function PatrolKPIs() {
   const d = MOCK_PATROL_DASHBOARD
   const events = MOCK_PATROL_EVENTS
   const totalAlerts = events.length
-  const activeAlerts = events.filter(e => e.status === 'LOCKED').length
-  const endedAlerts = totalAlerts - activeAlerts
+  const ppeCount = events.filter(e => e.type === 'PPE_VIOLATION').length
+  const machineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
 
   const kpis = [
     {
@@ -84,7 +84,7 @@ function PatrolKPIs() {
       label: 'Cảnh báo',
       value: totalAlerts,
       unit: 'sự kiện',
-      detail: `${activeAlerts} đang xử lý · ${endedAlerts} đã xử lý`,
+      detail: `${ppeCount} PPE · ${machineCount} Machine`,
       change: 1,
       changeType: 'increase' as const,
       previousValue: totalAlerts - 1,
@@ -266,8 +266,9 @@ export function Module05Page() {
                 title="HEATMAP"
                 noPadding
                 className={cn(
-                  'min-h-0 flex flex-col overflow-hidden',
-                  'min-h-[220px] sm:min-h-[260px] md:min-h-0 md:flex-[3]',
+                  'flex flex-col overflow-hidden',
+                  'max-lg:!h-auto max-lg:min-h-[520px]',
+                  'lg:min-h-0 lg:h-full md:flex-[3]',
                   tier3Focus === 'heatmap' && 'flex-1',
                 )}
                 headerRight={

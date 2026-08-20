@@ -1,37 +1,35 @@
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { getStreamUrlForCamera } from '@/modules/module02-training/data/trainingCameraFeeds'
+import { PATROL_HELMET_ZONE_ASSIGNMENTS } from './patrolSiteMap'
 
 export type PatrolCameraFilterTab = 'Tất cả' | 'Online' | 'Offline'
 
-/** Camera mũ bảo hộ — POC dùng clip bodycam (9:16) */
-export const PATROL_CAMERAS: TrainingCamera[] = [
-  {
-    id: 'HC-01',
-    name: 'Helmet 01',
-    location: 'Zone A — Khu thi công móng',
-    zone: 'ZONE_A',
-    status: 'online',
+const ZONE_LABELS: Record<string, string> = {
+  ZONE_A: 'Khu thi công móng',
+  ZONE_B: 'Khu lắp dựng tầng',
+  ZONE_C: 'Khu hoàn thiện',
+  ZONE_D: 'Khu kho vật tư',
+  ZONE_E: 'Khu văn phòng công trường',
+}
+
+function buildPatrolCamera(id: string, zoneId: string, online: boolean): TrainingCamera {
+  const num = id.replace('HC-', '')
+  const streamUrl = online ? getStreamUrlForCamera(id) : undefined
+  return {
+    id,
+    name: `Helmet ${num}`,
+    location: `Phụ trách — ${ZONE_LABELS[zoneId] ?? zoneId}`,
+    zone: zoneId,
+    status: online ? 'online' : 'offline',
     streamType: 'bodycam',
-    streamUrl: getStreamUrlForCamera('HC-01'),
-  },
-  {
-    id: 'HC-02',
-    name: 'Helmet 02',
-    location: 'Zone C — Khu hoàn thiện',
-    zone: 'ZONE_C',
-    status: 'online',
-    streamType: 'bodycam',
-    streamUrl: getStreamUrlForCamera('HC-02'),
-  },
-  {
-    id: 'HC-03',
-    name: 'Helmet 03',
-    location: 'Zone B — Khu lắp dựng tầng',
-    zone: 'ZONE_B',
-    status: 'offline',
-    streamType: 'bodycam',
-  },
-]
+    ...(streamUrl ? { streamUrl } : {}),
+  }
+}
+
+/** 5 camera mũ — mỗi mũ phụ trách 1 khu (ZONE_A … ZONE_E). */
+export const PATROL_CAMERAS: TrainingCamera[] = PATROL_HELMET_ZONE_ASSIGNMENTS.map(
+  ({ helmetId, zoneId }) => buildPatrolCamera(helmetId, zoneId, true),
+)
 
 export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
 
@@ -55,10 +53,17 @@ export function filterPatrolCameras(tab: PatrolCameraFilterTab): TrainingCamera[
 export function groupPatrolCamerasForSidebar(
   cameras: TrainingCamera[],
 ): { key: string; cameras: TrainingCamera[] }[] {
-  const online = cameras.filter(c => c.status === 'online')
-  const offline = cameras.filter(c => c.status === 'offline')
-  const groups: { key: string; cameras: TrainingCamera[] }[] = []
-  if (online.length > 0) groups.push({ key: 'Đang tuần tra', cameras: online })
-  if (offline.length > 0) groups.push({ key: 'Offline', cameras: offline })
-  return groups.length > 0 ? groups : [{ key: 'Helmet', cameras }]
+  const byZone = PATROL_HELMET_ZONE_ASSIGNMENTS.map(({ zoneId, helmetId }) => {
+    const cam = cameras.find(c => c.id === helmetId)
+    return cam ? { zoneId, cam } : null
+  }).filter((x): x is { zoneId: string; cam: TrainingCamera } => !!x)
+
+  if (byZone.length === 0) {
+    return [{ key: 'Helmet', cameras }]
+  }
+
+  return byZone.map(({ zoneId, cam }) => ({
+    key: ZONE_LABELS[zoneId]?.split(' ').slice(-2).join(' ') ?? zoneId,
+    cameras: [cam],
+  }))
 }

@@ -1,15 +1,13 @@
 /**
  * Mock WebSocket hook — HQCV §41.
- * Production: replace setInterval with actual WebSocket /ws/patrol/{id}.
- *
- * Simulated events:
- *   zone_count_updated  — every 3 500 ms
- *   camera_position     — every 2 000 ms (HC-01 moves along GPS trail)
- *   coverage_updated    — once after 30 s (simulates a new zone visited)
+ * Mỗi mũ tuần tra trong khu phụ trách (vòng lặp GPS quanh tâm zone).
  */
 import { useEffect, useRef, useState } from 'react'
 import { MOCK_PATROL_ZONES, type PatrolZone } from '../data/patrolMockData'
-import { PATROL_GPS_TRAIL, PATROL_HELMET_GPS_PINS } from '../data/patrolSiteMap'
+import {
+  PATROL_HELMET_GPS_PINS,
+  PATROL_HELMET_ZONE_TRAILS,
+} from '../data/patrolSiteMap'
 
 export type LivePatrolZone = PatrolZone
 
@@ -49,7 +47,9 @@ export function usePatrolWebSocket(_patrolId: string): {
     buildInitialPositions,
   )
 
-  const trailIndexRef = useRef(0)
+  const trailIndicesRef = useRef<Record<string, number>>(
+    Object.fromEntries(PATROL_HELMET_GPS_PINS.map(p => [p.id, 0])),
+  )
 
   /* zone_count_updated ── every 3.5 s */
   useEffect(() => {
@@ -59,27 +59,46 @@ export function usePatrolWebSocket(_patrolId: string): {
     return () => window.clearInterval(t)
   }, [])
 
-  /* camera_position ── HC-01 moves along GPS trail every 2 s */
+  /* camera_position — mỗi mũ di chuyển trong khu phụ trách, lệch phase */
   useEffect(() => {
-    const trail = PATROL_GPS_TRAIL
     const t = window.setInterval(() => {
-      trailIndexRef.current = (trailIndexRef.current + 1) % trail.length
-      const pos = trail[trailIndexRef.current]
-      setCameraPositions(prev => ({ ...prev, 'HC-01': pos }))
+      setCameraPositions(prev => {
+        const next = { ...prev }
+        for (const pin of PATROL_HELMET_GPS_PINS) {
+          const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
+          if (!trail?.length) continue
+          const idx = trailIndicesRef.current[pin.id] ?? 0
+          const step = pin.id === 'HC-01' || pin.id === 'HC-03' ? 1 : 1
+          trailIndicesRef.current[pin.id] = (idx + step) % trail.length
+          next[pin.id] = trail[trailIndicesRef.current[pin.id]]
+        }
+        return next
+      })
     }, 2000)
     return () => window.clearInterval(t)
   }, [])
 
-  /* coverage_updated ── simulate HC-04 finishing ZONE_D after 30 s */
+  /* Stagger initial phase so 5 mũ không chồng vị trí */
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      setLiveZones(prev =>
-        prev.map(z =>
-          z.id === 'ZONE_D' ? { ...z, dwellSeconds: z.dwellSeconds + 45 } : z,
-        ),
-      )
-    }, 30_000)
-    return () => window.clearTimeout(t)
+    const offsets: Record<string, number> = {
+      'HC-01': 0,
+      'HC-02': 3,
+      'HC-03': 6,
+      'HC-04': 9,
+      'HC-05': 12,
+    }
+    trailIndicesRef.current = Object.fromEntries(
+      PATROL_HELMET_GPS_PINS.map(p => [p.id, offsets[p.id] ?? 0]),
+    )
+    setCameraPositions(() => {
+      const pos: CameraPositions = {}
+      for (const pin of PATROL_HELMET_GPS_PINS) {
+        const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
+        const idx = offsets[pin.id] ?? 0
+        pos[pin.id] = trail?.[idx] ?? pin.position
+      }
+      return pos
+    })
   }, [])
 
   return { liveZones, cameraPositions }

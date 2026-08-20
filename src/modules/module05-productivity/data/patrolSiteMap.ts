@@ -23,15 +23,13 @@ export interface PatrolGpsZone {
   center: [number, number]
 }
 
-/* ── 10 GPS Zones ───────────────────────────────────────────── */
+/* ── 8 GPS Zones ────────────────────────────────────────────── */
 /**
  * Grid layout:
  *
- *  [ZONE_I  — N fence     ]
  *  [ZONE_F ] [ZONE_C ] [ZONE_H ]
  *  [ZONE_A ] [ZONE_B ] [ZONE_E ]
  *  [ZONE_D ] [ZONE_G         ]
- *  [ZONE_J  — S fence     ]
  */
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
   {
@@ -154,36 +152,6 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
     borderColor: '#64748b',
     center: [21.004667, 105.948443],
   },
-  {
-    zone_id: 'ZONE_I',
-    name: 'Hàng rào phía Bắc',
-    shortName: 'HR-B',
-    polygon: [
-      [21.005117, 105.945076],
-      [21.005117, 105.949276],
-      [21.005617, 105.949276],
-      [21.005617, 105.945076],
-    ],
-    area_m2: 550,
-    tier: 'secondary',
-    borderColor: '#475569',
-    center: [21.005367, 105.947176],
-  },
-  {
-    zone_id: 'ZONE_J',
-    name: 'Hàng rào phía Nam',
-    shortName: 'HR-N',
-    polygon: [
-      [21.002017, 105.945076],
-      [21.002017, 105.949276],
-      [21.002417, 105.949276],
-      [21.002417, 105.945076],
-    ],
-    area_m2: 520,
-    tier: 'secondary',
-    borderColor: '#475569',
-    center: [21.002217, 105.947176],
-  },
 ]
 
 /* ── Helmet GPS pins ────────────────────────────────────────── */
@@ -196,13 +164,69 @@ export interface PatrolHelmetPin {
   position: [number, number]
 }
 
-export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = [
-  { id: 'HC-01', label: 'Helmet 01', zoneId: 'ZONE_A', color: '#ef4444', position: [21.003700, 105.945910] },
-  { id: 'HC-02', label: 'Helmet 02', zoneId: 'ZONE_B', color: '#eab308', position: [21.003767, 105.947177] },
-  { id: 'HC-03', label: 'Helmet 03', zoneId: 'ZONE_C', color: '#22c55e', position: [21.004650, 105.947200] },
-  { id: 'HC-04', label: 'Helmet 04', zoneId: 'ZONE_D', color: '#3b82f6', position: [21.002867, 105.945910] },
-  { id: 'HC-05', label: 'Helmet 05', zoneId: 'ZONE_E', color: '#a855f7', position: [21.003700, 105.948443] },
-]
+export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
+
+/** Khu phụ trách của từng mũ — 5 helmet / 5 zone chính. */
+export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
+  helmetId: string
+  zoneId: string
+}[] = [
+  { helmetId: 'HC-01', zoneId: 'ZONE_A' },
+  { helmetId: 'HC-02', zoneId: 'ZONE_B' },
+  { helmetId: 'HC-03', zoneId: 'ZONE_C' },
+  { helmetId: 'HC-04', zoneId: 'ZONE_D' },
+  { helmetId: 'HC-05', zoneId: 'ZONE_E' },
+] as const
+
+function buildHelmetPins(): PatrolHelmetPin[] {
+  return PATROL_HELMET_ZONE_ASSIGNMENTS.map(({ helmetId, zoneId }) => {
+    const zone = PATROL_GPS_ZONES.find(z => z.zone_id === zoneId)
+    if (!zone) throw new Error(`Missing zone ${zoneId} for ${helmetId}`)
+    const num = helmetId.replace('HC-', '')
+    return {
+      id: helmetId,
+      label: `Helmet ${num}`,
+      zoneId,
+      color: zone.borderColor,
+      position: zone.center,
+    }
+  })
+}
+
+/** Vòng tuần tra nhỏ trong khu phụ trách (~25 m bán kính). */
+export function buildHelmetZoneTrail(
+  center: [number, number],
+  radiusM = 25,
+  points = 12,
+): [number, number][] {
+  const [lat, lng] = center
+  const latDelta = radiusM / 111_320
+  const lngDelta = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180))
+  const trail: [number, number][] = []
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * 2 * Math.PI
+    trail.push([
+      parseFloat((lat + latDelta * Math.sin(angle)).toFixed(6)),
+      parseFloat((lng + lngDelta * Math.cos(angle)).toFixed(6)),
+    ])
+  }
+  return trail
+}
+
+/** Lộ trình tuần tra theo khu — mỗi mũ 1 vòng trong zone được giao. */
+export const PATROL_HELMET_ZONE_TRAILS: Record<string, [number, number][]> =
+  Object.fromEntries(
+    PATROL_HELMET_GPS_PINS.map(pin => {
+      const zone = PATROL_GPS_ZONES.find(z => z.zone_id === pin.zoneId)!
+      return [pin.id, buildHelmetZoneTrail(zone.center)]
+    }),
+  )
+
+export function getPatrolHelmetZoneName(helmetId: string): string {
+  const pin = PATROL_HELMET_GPS_PINS.find(p => p.id === helmetId)
+  if (!pin) return helmetId
+  return PATROL_GPS_ZONES.find(z => z.zone_id === pin.zoneId)?.name ?? pin.zoneId
+}
 
 /* ── GPS Patrol Trail ────────────────────────────────────────── */
 /**
@@ -249,6 +273,15 @@ export const PATROL_GPS_TRAIL = buildPatrolGpsTrail()
 /** Map centre for Leaflet MapContainer — Vinhomes Ocean Park 1. */
 export const PATROL_SITE_CENTER: [number, number] = [21.003817, 105.947176]
 
+/** Giới hạn pan/zoom — chỉ trong phạm vi công trường [SW, NE]. */
+export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
+  [21.001517, 105.944976],
+  [21.006117, 105.949376],
+]
+
+export const PATROL_SITE_MIN_ZOOM = 15
+export const PATROL_SITE_MAX_ZOOM = 19
+
 /* ── Legacy exports (kept for backward compat with old SVG components) ── */
 
 export type PatrolZoneDisplayTier = 'primary' | 'secondary'
@@ -275,8 +308,6 @@ export const PATROL_HEATMAP_ZONE_SHAPES: PatrolHeatmapZoneShape[] = [
   { id: 'ZONE_F', label: 'ZONE_F', sublabel: 'Sân cẩu', polygon: [{ x: 54, y: 52 }, { x: 72, y: 50 }, { x: 74, y: 72 }, { x: 56, y: 74 }], cx: 63, cy: 62, displayTier: 'secondary', borderColor: '#64748b', cardAnchor: { x: 63, y: 62 } },
   { id: 'ZONE_G', label: 'ZONE_G', sublabel: 'Cổng ra vào', polygon: [{ x: 66, y: 8 }, { x: 88, y: 8 }, { x: 88, y: 22 }, { x: 66, y: 22 }], cx: 77, cy: 15, displayTier: 'secondary', borderColor: '#64748b', cardAnchor: { x: 77, y: 15 } },
   { id: 'ZONE_H', label: 'ZONE_H', sublabel: 'Khu đúc cọc', polygon: [{ x: 10, y: 38 }, { x: 34, y: 36 }, { x: 32, y: 50 }, { x: 8, y: 52 }], cx: 21, cy: 44, displayTier: 'secondary', borderColor: '#64748b', cardAnchor: { x: 21, y: 44 } },
-  { id: 'ZONE_I', label: 'ZONE_I', sublabel: 'Hàng rào Bắc', polygon: [{ x: 8, y: 4 }, { x: 88, y: 4 }, { x: 88, y: 10 }, { x: 8, y: 10 }], cx: 48, cy: 7, displayTier: 'secondary', borderColor: '#475569', cardAnchor: { x: 48, y: 7 } },
-  { id: 'ZONE_J', label: 'ZONE_J', sublabel: 'Hàng rào Nam', polygon: [{ x: 8, y: 86 }, { x: 88, y: 86 }, { x: 88, y: 94 }, { x: 8, y: 94 }], cx: 48, cy: 90, displayTier: 'secondary', borderColor: '#475569', cardAnchor: { x: 48, y: 90 } },
 ]
 
 export const PATROL_PRIMARY_ZONE_IDS = PATROL_GPS_ZONES

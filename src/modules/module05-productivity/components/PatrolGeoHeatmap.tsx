@@ -7,15 +7,21 @@
  * HQCV §12–16
  */
 import 'leaflet/dist/leaflet.css'
+import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl } from 'react-leaflet'
 import type { Feature, FeatureCollection, Polygon } from 'geojson'
 import { useEffect, useMemo, useState } from 'react'
 import type { PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
   PATROL_HELMET_GPS_PINS,
+  PATROL_HELMET_ZONE_ASSIGNMENTS,
+  PATROL_HELMET_ZONE_TRAILS,
   PATROL_SITE_CENTER,
+  PATROL_SITE_FOCUS_BOUNDS,
+  PATROL_SITE_MAX_ZOOM,
+  PATROL_SITE_MIN_ZOOM,
+  getPatrolHelmetZoneName,
   type PatrolHelmetPin,
 } from '../data/patrolSiteMap'
 import {
@@ -115,15 +121,13 @@ function createHeatBlobIcon(
 ): L.DivIcon {
   if (!visited || count === 0) {
     const size = 50
-    return L.divIcon({
-      html: `<div style="width:${size}px;height:${size}px;background:radial-gradient(circle,rgba(100,116,139,0.12) 0%,transparent 70%);border-radius:50%;pointer-events:none;"></div>`,
-      className: '',
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
-    })
+    return L.divIcon(divIconOpts(
+      `<div style="width:${size}px;height:${size}px;background:radial-gradient(circle,rgba(100,116,139,0.12) 0%,transparent 70%);border-radius:50%;pointer-events:none;"></div>`,
+      [size, size],
+      [size / 2, size / 2],
+    ))
   }
   const ratio = Math.min(1, count / maxCount)
-  /* blob diameter: 90px (sparse) → 220px (dense) */
   const size = Math.round(90 + ratio * 130)
   const color = getPatrolHeatBlobColor(count, true)
   const [r, g, b] = hexToRgb(color)
@@ -140,22 +144,32 @@ function createHeatBlobIcon(
       border-radius:50%;
       pointer-events:none;
     "></div>`
-  return L.divIcon({
-    html,
-    className: '',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  })
+  return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
-/* ── Zone stat card: shows both 👤 people + 🚛 vehicles ─────── */
+const PATROL_DIV_ICON_CLASS = 'patrol-map-div-icon'
+
+function divIconOpts(html: string, iconSize: [number, number], iconAnchor: [number, number]): L.DivIconOptions {
+  return {
+    html,
+    className: PATROL_DIV_ICON_CLASS,
+    iconSize,
+    iconAnchor,
+  }
+}
+
+/* ── Zone stat card: shows both 👤 people + 🚛 máy ─────────── */
 function createZoneStatIcon(
   shortName: string,
   borderColor: string,
   visited: boolean,
   peopleCurrent: number,
   vehiclesCurrent: number,
+  helmetId?: string,
 ): L.DivIcon {
+  const helmetLine = helmetId
+    ? `<div style="color:${borderColor};font-size:9px;line-height:1.35;margin-top:2px;font-weight:700;">⛑ Mũ ${helmetId.replace('HC-', '')}</div>`
+    : ''
   const html = `
     <div style="
       background:rgba(8,11,18,0.93);
@@ -171,12 +185,13 @@ function createZoneStatIcon(
       <div style="color:${borderColor};font-weight:700;font-size:9px;letter-spacing:0.6px;margin-bottom:2px;">${shortName}</div>
       ${visited
         ? `<div style="color:#e2e8f0;font-size:10px;line-height:1.35;">👤 ${peopleCurrent} người</div>
-           <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">🚛 ${vehiclesCurrent} máy</div>`
+           <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">🚛 ${vehiclesCurrent} máy</div>
+           ${helmetLine}`
         : '<div style="color:#475569;font-size:9px;margin-top:1px;">Chưa đến</div>'
       }
     </div>`
-  const h = visited ? 60 : 42
-  return L.divIcon({ html, className: '', iconSize: [84, h], iconAnchor: [42, h / 2] })
+  const h = visited ? (helmetId ? 74 : 60) : 42
+  return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
 /* ── Helmet marker icon ─────────────────────────────────────── */
@@ -204,7 +219,63 @@ function createHelmetIcon(pin: PatrolHelmetPin, isMoving: boolean) {
       ">${pin.id.replace('HC-', '')}</div>
       ${pulse}
     </div>`
-  return L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] })
+  return L.divIcon(divIconOpts(html, [22, 22], [11, 11]))
+}
+
+/* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
+function MapInvalidator() {
+  const map = useMap()
+
+  useEffect(() => {
+    const invalidate = () => map.invalidateSize({ animate: false, pan: false })
+    invalidate()
+    const t1 = window.setTimeout(invalidate, 120)
+    const t2 = window.setTimeout(invalidate, 600)
+
+    window.addEventListener('resize', invalidate)
+    window.addEventListener('orientationchange', invalidate)
+
+    const container = map.getContainer().parentElement
+    const observer = container ? new ResizeObserver(invalidate) : null
+    if (container && observer) observer.observe(container)
+
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+      window.removeEventListener('resize', invalidate)
+      window.removeEventListener('orientationchange', invalidate)
+      observer?.disconnect()
+    }
+  }, [map])
+
+  return null
+}
+
+/** Khóa tâm map tại công trường — chỉ zoom in/out, không kéo lệch focus. */
+function MapSiteFocusLock({ center }: { center: [number, number] }) {
+  const map = useMap()
+
+  useEffect(() => {
+    map.setMaxBounds(L.latLngBounds(PATROL_SITE_FOCUS_BOUNDS))
+    map.setMinZoom(PATROL_SITE_MIN_ZOOM)
+    map.setMaxZoom(PATROL_SITE_MAX_ZOOM)
+    map.dragging.disable()
+
+    const lockToSiteCenter = () => {
+      map.setView(center, map.getZoom(), { animate: false })
+    }
+
+    map.on('zoomend', lockToSiteCenter)
+    map.on('moveend', lockToSiteCenter)
+    lockToSiteCenter()
+
+    return () => {
+      map.off('zoomend', lockToSiteCenter)
+      map.off('moveend', lockToSiteCenter)
+    }
+  }, [map, center])
+
+  return null
 }
 
 /* ── Responsive map zoom ────────────────────────────────────── */
@@ -215,13 +286,16 @@ function usePatrolMapZoom(): number {
   })
 
   useEffect(() => {
-    const update = () => setZoom(window.innerWidth < 1024 ? 16 : 17)
+    const update = () => {
+      const w = window.innerWidth
+      setZoom(w < 1024 ? 16 : 17)
+    }
     update()
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [])
 
-  return zoom
+  return Math.min(PATROL_SITE_MAX_ZOOM, Math.max(PATROL_SITE_MIN_ZOOM, zoom))
 }
 
 /* ── Component ──────────────────────────────────────────────── */
@@ -262,13 +336,18 @@ export function PatrolGeoHeatmap({
   const mapZoom = usePatrolMapZoom()
 
   return (
-    <div className="relative h-full w-full" style={{ minHeight: 200 }}>
+    <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px]">
       <style>{`
         @keyframes patrol-pulse {
           0%,100%{opacity:1;transform:scale(1)}
           50%{opacity:.35;transform:scale(1.7)}
         }
-        .leaflet-container { background:#080b12 !important; }
+        .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
+        .${PATROL_DIV_ICON_CLASS} {
+          background: transparent !important;
+          border: none !important;
+          overflow: visible !important;
+        }
         .leaflet-control-zoom a {
           background:#111827 !important;
           color:#e2e8f0 !important;
@@ -289,14 +368,22 @@ export function PatrolGeoHeatmap({
         .patrol-zone-tip::before { display:none; }
       `}</style>
 
-      <MapContainer
-        center={PATROL_SITE_CENTER}
-        zoom={mapZoom}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-        attributionControl
-      >
-        <TileLayer url={ESRI_TILE_URL} attribution={ESRI_ATTRIBUTION} />
+      <div className="absolute inset-0">
+        <MapContainer
+          center={PATROL_SITE_CENTER}
+          zoom={mapZoom}
+          minZoom={PATROL_SITE_MIN_ZOOM}
+          maxZoom={PATROL_SITE_MAX_ZOOM}
+          maxBounds={PATROL_SITE_FOCUS_BOUNDS}
+          maxBoundsViscosity={1.0}
+          dragging={false}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+          attributionControl
+        >
+          <MapInvalidator />
+          <MapSiteFocusLock center={PATROL_SITE_CENTER} />
+          <TileLayer url={ESRI_TILE_URL} attribution={ESRI_ATTRIBUTION} />
         <ZoomControl position="bottomright" />
 
         {/* Zone polygons — dashed borders, NO fill */}
@@ -329,11 +416,14 @@ export function PatrolGeoHeatmap({
           )
         })}
 
-        {/* Zone stat cards — both 👤 people & 🚛 vehicles */}
+        {/* Zone stat cards — mọi breakpoint */}
         {showZoneStats && PATROL_GPS_ZONES.map(gpsZone => {
           const zone = zoneMap.get(gpsZone.zone_id)
           const visited = zone?.coverage === 'VISITED'
           const displayVal = zone ? formatDisplayValue(zone, layer, countMode, displayMode) : '—'
+          const helmetId = PATROL_HELMET_ZONE_ASSIGNMENTS.find(
+            a => a.zoneId === gpsZone.zone_id,
+          )?.helmetId
           return (
             <Marker
               key={`stat-${gpsZone.zone_id}-${displayVal}`}
@@ -344,50 +434,50 @@ export function PatrolGeoHeatmap({
                 visited,
                 zone?.peopleCurrent ?? 0,
                 zone?.vehiclesCurrent ?? 0,
+                helmetId,
               )}
-              zIndexOffset={200}
+              zIndexOffset={300}
             />
           )
         })}
 
-        {/* Multi-color patrol route — one segment per helmet pair */}
-        {showRoute && PATROL_HELMET_GPS_PINS.map((pin, i) => {
-          if (i >= PATROL_HELMET_GPS_PINS.length - 1) return null
-          const from = cameraPositions[pin.id] ?? pin.position
-          const nextPin = PATROL_HELMET_GPS_PINS[i + 1]
-          const to = cameraPositions[nextPin.id] ?? nextPin.position
+        {/* Lộ trình tuần tra — mỗi mũ 1 vòng trong khu phụ trách */}
+        {showRoute && PATROL_HELMET_GPS_PINS.map(pin => {
+          const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
+          if (!trail?.length) return null
           return (
             <Polyline
-              key={`route-seg-${pin.id}`}
-              positions={[from, to]}
+              key={`zone-route-${pin.id}`}
+              positions={trail}
               color={pin.color}
               weight={2.5}
-              opacity={0.90}
+              opacity={0.85}
             />
           )
         })}
 
-        {/* Helmet camera markers */}
+        {/* 5 mũ — vị trí realtime trong khu phụ trách */}
         {showCameras && PATROL_HELMET_GPS_PINS.map(pin => {
           const livePos = cameraPositions[pin.id] ?? pin.position
-          const isMoving = pin.id === 'HC-01'
+          const zoneName = getPatrolHelmetZoneName(pin.id)
           return (
             <Marker
               key={pin.id}
               position={livePos}
-              icon={createHelmetIcon(pin, isMoving)}
+              icon={createHelmetIcon(pin, true)}
               zIndexOffset={500}
             >
               <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
                 <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
                   <strong>{pin.label}</strong><br />
-                  {pin.zoneId}
+                  Phụ trách: {zoneName}
                 </span>
               </Tooltip>
             </Marker>
           )
         })}
-      </MapContainer>
+        </MapContainer>
+      </div>
     </div>
   )
 }

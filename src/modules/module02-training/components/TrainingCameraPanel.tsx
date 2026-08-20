@@ -259,9 +259,13 @@ export function TrainingCameraPanel({
     ?? ((list: TrainingCamera[], tab: string) => groupCamerasForSidebar(list, tab as CameraFilterTab))
 
   const defaultIds = [...(defaultCameraIds ?? DEFAULT_COURSE_CAMERA_IDS)]
-  const [selectedIds, setSelectedIds] = useState<string[]>(
-    selectedId ? [selectedId] : defaultIds,
-  )
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => {
+    const base = defaultIds.length > 0 ? [...defaultIds] : []
+    if (selectedId && !base.includes(selectedId)) {
+      return [selectedId, ...base]
+    }
+    return base.length > 0 ? base : (selectedId ? [selectedId] : [])
+  })
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [filterTab, setFilterTab] = useState<string>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
