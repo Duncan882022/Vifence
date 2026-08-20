@@ -55,13 +55,23 @@ function getSampleCanvas(): CanvasRenderingContext2D {
 
 async function ensureTfBackend(): Promise<void> {
   try {
-    await import('@tensorflow/tfjs-backend-webgl')
-    const tf = await import('@tensorflow/tfjs-core')
-    await tf.setBackend('webgl')
+    /* @tensorflow/tfjs bundles webgl + cpu backends and auto-registers them */
+    const tf = await import('@tensorflow/tfjs')
+    if (tf.findBackend('webgl')) {
+      await tf.setBackend('webgl')
+    } else if (tf.findBackend('cpu')) {
+      await tf.setBackend('cpu')
+    }
     await tf.ready()
   } catch {
-    const tf = await import('@tensorflow/tfjs-core')
-    await tf.ready()
+    /* last resort: try cpu-only */
+    try {
+      const tf = await import('@tensorflow/tfjs')
+      await tf.setBackend('cpu')
+      await tf.ready()
+    } catch {
+      /* inference unavailable — models will return null gracefully */
+    }
   }
 }
 
