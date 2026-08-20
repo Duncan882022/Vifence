@@ -3,9 +3,10 @@
  *  GeoJSON consumers must swap to [lng, lat] per RFC 7946.
  *
  *  Site: Vinhomes Ocean Park 1 (OCP1), Gia Lâm, Hà Nội
- *  Center: 21.003817°N, 105.947176°E
- *  Site bounding box: SW(21.002017, 105.945276) — NE(21.005617, 105.949076)
- *  ~400 m N-S × ~395 m E-W
+ *  Center: 21.003560°N, 105.947157°E
+ *  Site perimeter (rotated quad — corners from field survey):
+ *    TOP  21.004587, 105.947314  |  RIGHT 21.003598, 105.948614
+ *    LEFT 21.003712, 105.945782  |  BOT   21.002343, 105.946914
  */
 
 /* ── GPS Zone type ──────────────────────────────────────────── */
@@ -36,121 +37,129 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
     zone_id: 'ZONE_A',
     name: 'Khu thi công móng',
     shortName: 'Móng',
+    // Field-surveyed corners (TL→TR→BR→BL)
     polygon: [
-      [21.003317, 105.945276],
-      [21.003317, 105.946543],
-      [21.004217, 105.946543],
-      [21.004217, 105.945276],
+      [21.003764, 105.947262],
+      [21.003487, 105.947495],
+      [21.003215, 105.947086],
+      [21.003590, 105.947037],
     ],
     area_m2: 1200,
     tier: 'primary',
     borderColor: '#ef4444',
-    center: [21.003767, 105.945910],
+    center: [21.003514, 105.947220],
   },
   {
     zone_id: 'ZONE_B',
     name: 'Khu lắp dựng tầng',
     shortName: 'Tầng',
+    // Interpolated — east of Móng, same row
     polygon: [
-      [21.003317, 105.946543],
-      [21.003317, 105.947810],
-      [21.004217, 105.947810],
-      [21.004217, 105.946543],
+      [21.004007, 105.947472],
+      [21.003702, 105.947735],
+      [21.003454, 105.947350],
+      [21.003801, 105.947188],
     ],
     area_m2: 850,
     tier: 'primary',
     borderColor: '#eab308',
-    center: [21.003767, 105.947177],
+    center: [21.003741, 105.947436],
   },
   {
     zone_id: 'ZONE_C',
     name: 'Khu hoàn thiện',
     shortName: 'HT',
+    // Interpolated — north row, centre column
     polygon: [
-      [21.004217, 105.946543],
-      [21.004217, 105.947810],
-      [21.005117, 105.947810],
-      [21.005117, 105.946543],
+      [21.004467, 105.947201],
+      [21.004162, 105.947464],
+      [21.003914, 105.947079],
+      [21.004261, 105.946917],
     ],
     area_m2: 1450,
     tier: 'primary',
     borderColor: '#22c55e',
-    center: [21.004667, 105.947177],
+    center: [21.004201, 105.947165],
   },
   {
     zone_id: 'ZONE_D',
     name: 'Khu kho vật tư',
     shortName: 'Kho',
+    // Field-surveyed corners (TL→TR→BR→BL)
     polygon: [
-      [21.002417, 105.945276],
-      [21.002417, 105.946543],
-      [21.003317, 105.946543],
-      [21.003317, 105.945276],
+      [21.003335, 105.947520],
+      [21.003004, 105.947813],
+      [21.002779, 105.947453],
+      [21.003098, 105.947179],
     ],
     area_m2: 600,
     tier: 'primary',
     borderColor: '#3b82f6',
-    center: [21.002867, 105.945910],
+    center: [21.003054, 105.947491],
   },
   {
     zone_id: 'ZONE_E',
     name: 'Khu văn phòng công trường',
     shortName: 'VP',
+    // Field-surveyed corners (TL→TR→BR→BL)
     polygon: [
-      [21.003317, 105.947810],
-      [21.003317, 105.949076],
-      [21.004217, 105.949076],
-      [21.004217, 105.947810],
+      [21.004405, 105.947320],
+      [21.003780, 105.948162],
+      [21.003531, 105.947989],
+      [21.004156, 105.947137],
     ],
     area_m2: 400,
     tier: 'primary',
     borderColor: '#a855f7',
-    center: [21.003767, 105.948443],
+    center: [21.003968, 105.947652],
   },
   {
     zone_id: 'ZONE_F',
     name: 'Sân cẩu',
     shortName: 'Cẩu',
+    // Interpolated — north row, west column (left of HT)
     polygon: [
-      [21.004217, 105.945276],
-      [21.004217, 105.946543],
-      [21.005117, 105.946543],
-      [21.005117, 105.945276],
+      [21.004240, 105.946985],
+      [21.003935, 105.947248],
+      [21.003687, 105.946863],
+      [21.004034, 105.946701],
     ],
     area_m2: 700,
     tier: 'secondary',
     borderColor: '#06b6d4',
-    center: [21.004667, 105.945910],
+    center: [21.003974, 105.946949],
   },
   {
     zone_id: 'ZONE_G',
     name: 'Cổng ra vào',
     shortName: 'Cổng',
+    // Interpolated — south row, east of Kho
     polygon: [
-      [21.002417, 105.946543],
-      [21.002417, 105.949076],
-      [21.003317, 105.949076],
-      [21.003317, 105.946543],
+      [21.003547, 105.947743],
+      [21.003242, 105.948006],
+      [21.002994, 105.947621],
+      [21.003341, 105.947459],
     ],
     area_m2: 300,
     tier: 'secondary',
     borderColor: '#f59e0b',
-    center: [21.002867, 105.947810],
+    center: [21.003281, 105.947707],
   },
   {
     zone_id: 'ZONE_H',
     name: 'Khu đúc cọc',
     shortName: 'Cọc',
+    // Interpolated — north row, east of HT
     polygon: [
-      [21.004217, 105.947810],
-      [21.004217, 105.949076],
-      [21.005117, 105.949076],
-      [21.005117, 105.947810],
+      [21.004694, 105.947417],
+      [21.004389, 105.947680],
+      [21.004141, 105.947295],
+      [21.004488, 105.947133],
     ],
     area_m2: 980,
     tier: 'secondary',
     borderColor: '#64748b',
-    center: [21.004667, 105.948443],
+    center: [21.004428, 105.947381],
   },
 ]
 
@@ -240,15 +249,15 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 const TRAIL_WAYPOINTS: [number, number][] = [
-  [21.003767, 105.945910], // ZONE_A
-  [21.003767, 105.947177], // ZONE_B
-  [21.003767, 105.948443], // ZONE_E
-  [21.004667, 105.948443], // ZONE_H
-  [21.004667, 105.947177], // ZONE_C
-  [21.004667, 105.945910], // ZONE_F
-  [21.002867, 105.945910], // ZONE_D
-  [21.002867, 105.947810], // ZONE_G
-  [21.003767, 105.945910], // back to A
+  [21.003514, 105.947220], // ZONE_A Móng
+  [21.003741, 105.947436], // ZONE_B Tầng
+  [21.003968, 105.947652], // ZONE_E VP
+  [21.004428, 105.947381], // ZONE_H Cọc
+  [21.004201, 105.947165], // ZONE_C HT
+  [21.003974, 105.946949], // ZONE_F Cẩu
+  [21.003054, 105.947491], // ZONE_D Kho
+  [21.003281, 105.947707], // ZONE_G Cổng
+  [21.003514, 105.947220], // back to A
 ]
 
 export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
@@ -270,13 +279,13 @@ export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
 /** Flat list of GPS trail positions (used for polyline rendering). */
 export const PATROL_GPS_TRAIL = buildPatrolGpsTrail()
 
-/** Map centre for Leaflet MapContainer — Vinhomes Ocean Park 1. */
-export const PATROL_SITE_CENTER: [number, number] = [21.003817, 105.947176]
+/** Map centre for Leaflet MapContainer — geometric centroid of the site quad. */
+export const PATROL_SITE_CENTER: [number, number] = [21.003560, 105.947157]
 
 /** Giới hạn pan/zoom — chỉ trong phạm vi công trường [SW, NE]. */
 export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
-  [21.001517, 105.944976],
-  [21.006117, 105.949376],
+  [21.001800, 105.944900],
+  [21.005300, 105.949500],
 ]
 
 export const PATROL_SITE_MIN_ZOOM = 15
