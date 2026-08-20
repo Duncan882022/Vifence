@@ -334,13 +334,17 @@ export function PatrolGeoHeatmap({
   const mapZoom = usePatrolMapZoom()
 
   return (
-    <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px]">
+    <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px] overflow-hidden isolate">
       <style>{`
         @keyframes patrol-pulse {
           0%,100%{opacity:1;transform:scale(1)}
           50%{opacity:.35;transform:scale(1.7)}
         }
         .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
+        .leaflet-pane, .leaflet-map-pane, .leaflet-tile-pane,
+        .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane,
+        .leaflet-control-container { z-index: auto !important; }
+        .leaflet-control { z-index: 10 !important; }
         .${PATROL_DIV_ICON_CLASS} {
           background: transparent !important;
           border: none !important;
