@@ -2,7 +2,7 @@
  * PatrolDensityHeatmap — HQCV §12 toolbar + Leaflet map.
  * Mobile và desktop dùng cùng map overlay (khu vực + mũ tuần tra).
  */
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import { cn } from '@/utils/cn'
 import { MOCK_PATROL_DASHBOARD } from '../data/patrolMockData'

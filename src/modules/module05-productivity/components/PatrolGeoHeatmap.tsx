@@ -37,8 +37,6 @@ import type { CameraPositions } from '../services/usePatrolWebSocket'
 /* ── ESRI satellite tile ────────────────────────────────────── */
 const ESRI_TILE_URL =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-const ESRI_ATTRIBUTION =
-  'Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP'
 
 /* ── GeoJSON builder ────────────────────────────────────────── */
 interface ZoneProperties {
