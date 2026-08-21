@@ -183,7 +183,7 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /** Point inside zone quad — u/v ∈ [0,1], inset from edges. */
-function polygonInteriorPoint(
+export function patrolZoneInteriorPoint(
   polygon: [number, number][],
   u: number,
   v: number,
@@ -220,7 +220,7 @@ export function buildHelmetZoneTrail(
     const v = vVals[(row + phaseSeed) % vVals.length]
     const uOrder = row % 2 === 0 ? uVals : [...uVals].reverse()
     for (const u of uOrder) {
-      waypoints.push(polygonInteriorPoint(polygon, u, v))
+      waypoints.push(patrolZoneInteriorPoint(polygon, u, v))
     }
   }
   waypoints.push(waypoints[0])
