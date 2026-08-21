@@ -1,6 +1,6 @@
 /**
- * PatrolDensityHeatmap — HQCV §12 toolbar + Leaflet map.
- * Mobile và desktop dùng cùng map overlay (khu vực + mũ tuần tra).
+ * PatrolDensityHeatmap — 4-layer toolbar + Leaflet map.
+ * Layer 1: Polygon  | Layer 2: Detection | Layer 3: Density | Layer 4: Patrol Route
  */
 import { useState } from 'react'
 
@@ -10,14 +10,11 @@ import type { PatrolDensityLayer } from '../services/patrolHeatmap.service'
 import { usePatrolWebSocket } from '../services/usePatrolWebSocket'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
 
-/* ── Layer config ───────────────────────────────────────────── */
-type HeatLayer = PatrolDensityLayer | 'route'
-
-const LAYER_OPTS: { key: HeatLayer; label: string }[] = [
+/* ── Density sub-layer ──────────────────────────────────────── */
+const DENSITY_OPTS: { key: PatrolDensityLayer; label: string }[] = [
   { key: 'people',   label: 'Người' },
   { key: 'vehicle',  label: 'Máy' },
   { key: 'combined', label: 'Tổng hợp' },
-  { key: 'route',    label: 'Lộ trình tuần tra' },
 ]
 
 const LEGEND = [
@@ -28,8 +25,8 @@ const LEGEND = [
   { color: '#475569', label: 'Chưa đến' },
 ] as const
 
-
-function ToggleBtn({
+/* ── Shared button components ───────────────────────────────── */
+function RadioBtn({
   active,
   onClick,
   children,
@@ -44,7 +41,7 @@ function ToggleBtn({
       onClick={onClick}
       className={cn(
         'font-semibold transition-colors whitespace-nowrap',
-        'flex-1 min-w-0 px-1.5 sm:px-2.5 py-1.5 sm:py-1 text-[9px] sm:text-[10px]',
+        'flex-1 min-w-0 px-1.5 sm:px-2.5 py-1 text-[9px] sm:text-[10px]',
         active
           ? 'bg-sky-500 text-white'
           : 'bg-[#1a2235] text-muted-foreground hover:text-foreground',
@@ -55,47 +52,89 @@ function ToggleBtn({
   )
 }
 
+function LayerToggle({
+  active,
+  color,
+  onClick,
+  children,
+}: {
+  active: boolean
+  color: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium transition-all border',
+        active
+          ? 'text-white border-transparent'
+          : 'bg-transparent text-[#475569] border-[#334155] hover:border-[#475569]',
+      )}
+      style={active ? { background: color, borderColor: color } : {}}
+    >
+      <span
+        className={cn('w-1.5 h-1.5 rounded-full shrink-0 transition-all', active ? 'opacity-100' : 'opacity-30')}
+        style={{ background: active ? '#fff' : color }}
+      />
+      {children}
+    </button>
+  )
+}
+
 /* ── Component ──────────────────────────────────────────────── */
 export function PatrolDensityHeatmap() {
-  const [heatLayer, setHeatLayer] = useState<HeatLayer>('people')
+  const [densityType, setDensityType] = useState<PatrolDensityLayer>('people')
+  const [layers, setLayers] = useState({
+    polygon:   true,
+    detection: true,
+    density:   true,
+    route:     true,
+  })
 
-  const { liveZones, cameraPositions } = usePatrolWebSocket(
+  const { liveZones, cameraPositions, routeHistory } = usePatrolWebSocket(
     MOCK_PATROL_DASHBOARD.sessionLabel,
   )
 
-  const isRouteOnly = heatLayer === 'route'
-  const activeLayer: PatrolDensityLayer = isRouteOnly ? 'people' : heatLayer
+  const toggleLayer = (k: keyof typeof layers) =>
+    setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
   return (
     <div className="flex flex-col overflow-hidden lg:h-full lg:min-h-0">
       {/* ── Toolbar ─────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-2 space-y-2">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 min-w-0">
-          <div className="flex flex-1 rounded-lg overflow-hidden border border-[#334155] min-w-0">
-            {LAYER_OPTS.map(({ key, label }) => (
-              <ToggleBtn
-                key={key}
-                active={heatLayer === key}
-                onClick={() => setHeatLayer(key)}
-              >
-                {label}
-              </ToggleBtn>
-            ))}
-          </div>
+      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-2 space-y-1.5">
 
+        {/* Row 1 — 4 layer toggles */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[8px] text-[#475569] font-semibold tracking-wider uppercase mr-0.5">Lớp</span>
+          <LayerToggle active={layers.polygon}   color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+          <LayerToggle active={layers.detection} color="#38bdf8" onClick={() => toggleLayer('detection')}>Detection</LayerToggle>
+          <LayerToggle active={layers.density}   color="#f97316" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
+          <LayerToggle active={layers.route}     color="#22c55e" onClick={() => toggleLayer('route')}>Lộ trình</LayerToggle>
         </div>
 
-        {!isRouteOnly && (
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5">
+        {/* Row 2 — Density sub-type (only when density is ON) */}
+        {layers.density && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[8px] text-[#475569] font-semibold tracking-wider uppercase mr-0.5">Loại</span>
+            <div className="flex rounded overflow-hidden border border-[#334155]">
+              {DENSITY_OPTS.map(({ key, label }) => (
+                <RadioBtn key={key} active={densityType === key} onClick={() => setDensityType(key)}>
+                  {label}
+                </RadioBtn>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Row 3 — Density legend */}
+        {layers.density && (
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
             {LEGEND.map(({ color, label }) => (
-              <span
-                key={label}
-                className="inline-flex items-center gap-1 shrink-0 text-muted-foreground"
-              >
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ background: color }}
-                />
+              <span key={label} className="inline-flex items-center gap-1 shrink-0 text-muted-foreground">
+                <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
                 <span className="text-[9px] whitespace-nowrap">{label}</span>
               </span>
             ))}
@@ -103,17 +142,21 @@ export function PatrolDensityHeatmap() {
         )}
       </div>
 
-      {/* ── Map — cùng overlay khu vực + mũ trên mọi breakpoint ── */}
+      {/* ── Map ─────────────────────────────────────────────── */}
       <div className="min-w-0 relative lg:flex-1 lg:min-h-[200px] max-lg:h-[360px]">
         <PatrolGeoHeatmap
           zones={liveZones}
           cameraPositions={cameraPositions}
-          layer={activeLayer}
+          routeHistory={routeHistory}
+          layer={densityType}
           displayMode="count"
           countMode="current"
-          showRoute
-          showCameras
-          showZoneStats={!isRouteOnly}
+          showSiteBoundary={layers.polygon}
+          showZonePolygons={layers.polygon}
+          showDetections={layers.detection}
+          showDensity={layers.density}
+          showRoute={layers.route}
+          showCameras={layers.route}
         />
       </div>
     </div>

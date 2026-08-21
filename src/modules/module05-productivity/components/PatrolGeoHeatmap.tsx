@@ -7,16 +7,15 @@
  * HQCV §12–16
  */
 import 'leaflet/dist/leaflet.css'
-import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
+import { CircleMarker, GeoJSON, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import type { Feature, FeatureCollection, Polygon } from 'geojson'
+import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MOCK_HELMET_CAMERAS, type PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
   PATROL_HELMET_GPS_PINS,
-
-  PATROL_HELMET_ZONE_TRAILS,
+  PATROL_SITE_BOUNDARY,
   PATROL_SITE_CENTER,
   PATROL_SITE_FOCUS_BOUNDS,
   PATROL_SITE_MAX_ZOOM,
@@ -24,6 +23,11 @@ import {
   getPatrolHelmetZoneName,
   type PatrolHelmetPin,
 } from '../data/patrolSiteMap'
+import {
+  PATROL_DETECTION_DOTS,
+  DETECTION_DOT_STYLE,
+} from '../data/patrolDetectionData'
+import type { RouteHistory } from '../services/usePatrolWebSocket'
 import {
   formatDisplayValue,
   getPatrolHeatBlobColor,
@@ -54,7 +58,7 @@ function buildFeatureCollection(
   zones: PatrolZone[],
   layer: PatrolDensityLayer,
   countMode: PatrolCountMode,
-): FeatureCollection<Polygon, ZoneProperties> {
+): FeatureCollection<GeoJsonPolygon, ZoneProperties> {
   const zoneMap = new Map(zones.map(z => [z.id, z]))
   const maxCount = Math.max(
     ...zones.map(z => resolveCount(z, layer, countMode)),
@@ -91,7 +95,7 @@ function buildFeatureCollection(
 }
 
 /* ── Dashed zone border with semi-transparent fill ───────────── */
-function zoneStyle(feature?: Feature<Polygon, ZoneProperties>) {
+function zoneStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   if (!feature) return {}
   const { visited, borderColor, tier } = feature.properties
   return {
@@ -291,23 +295,35 @@ function usePatrolMapZoom(): number {
 export interface PatrolGeoHeatmapProps {
   zones: PatrolZone[]
   cameraPositions: CameraPositions
+  routeHistory: RouteHistory
   layer: PatrolDensityLayer
   displayMode: PatrolDisplayMode
   countMode: PatrolCountMode
+  /* Layer 1 — Polygon */
+  showSiteBoundary: boolean
+  showZonePolygons: boolean
+  /* Layer 2 — Detection dots */
+  showDetections: boolean
+  /* Layer 3 — Density heat blobs + zone stat cards */
+  showDensity: boolean
+  /* Layer 4 — Patrol route polyline + helmet markers */
   showRoute: boolean
   showCameras: boolean
-  showZoneStats: boolean
 }
 
 export function PatrolGeoHeatmap({
   zones,
   cameraPositions,
+  routeHistory,
   layer,
   displayMode,
   countMode,
+  showSiteBoundary,
+  showZonePolygons,
+  showDetections,
+  showDensity,
   showRoute,
   showCameras,
-  showZoneStats,
 }: PatrolGeoHeatmapProps) {
   const featureCollection = useMemo(
     () => buildFeatureCollection(zones, layer, countMode),
@@ -380,96 +396,138 @@ export function PatrolGeoHeatmap({
           <MapInvalidator />
           <MapSiteFocusLock center={PATROL_SITE_CENTER} />
           <TileLayer url={ESRI_TILE_URL} attribution="" />
-        <ZoomControl position="bottomright" />
+          <ZoomControl position="bottomright" />
 
-        {/* Zone polygons — dashed borders, NO fill */}
-        <GeoJSON
-          key={geoJsonKey}
-          data={featureCollection}
-          style={zoneStyle as Parameters<typeof GeoJSON>[0]['style']}
-          onEachFeature={(feature, lyr) => {
-            const props = feature.properties as ZoneProperties
-            lyr.bindTooltip(props.name, {
-              permanent: false,
-              sticky: true,
-              className: 'patrol-zone-tip',
-            })
-          }}
-        />
-
-        {/* Heat blobs — radial gradient at each zone centre */}
-        {PATROL_GPS_ZONES.map(gpsZone => {
-          const zone = zoneMap.get(gpsZone.zone_id)
-          const count = zone ? resolveCount(zone, layer, countMode) : 0
-          const visited = zone?.coverage === 'VISITED'
-          return (
-            <Marker
-              key={`blob-${gpsZone.zone_id}-${count}`}
-              position={gpsZone.center}
-              icon={createHeatBlobIcon(count, maxCount, visited)}
-              zIndexOffset={-100}
+          {/* ── LAYER 1A: Site Boundary ──────────────────────── */}
+          {showSiteBoundary && (
+            <Polygon
+              positions={PATROL_SITE_BOUNDARY}
+              pathOptions={{
+                color: '#ef4444',
+                weight: 2.5,
+                dashArray: '10 6',
+                opacity: 0.9,
+                fillOpacity: 0,
+              }}
             />
-          )
-        })}
+          )}
 
-        {/* Zone stat cards — mọi breakpoint */}
-        {showZoneStats && PATROL_GPS_ZONES.map(gpsZone => {
-          const zone = zoneMap.get(gpsZone.zone_id)
-          const visited = zone?.coverage === 'VISITED'
-          const displayVal = zone ? formatDisplayValue(zone, layer, countMode, displayMode) : '—'
-          return (
-            <Marker
-              key={`stat-${gpsZone.zone_id}-${displayVal}`}
-              position={gpsZone.center}
-              icon={createZoneStatIcon(
-                gpsZone.shortName,
-                gpsZone.borderColor,
-                visited,
-                zone?.peopleCurrent ?? 0,
-                zone?.vehiclesCurrent ?? 0,
-              )}
-              zIndexOffset={300}
+          {/* ── LAYER 1B: Zone Polygons ──────────────────────── */}
+          {showZonePolygons && (
+            <GeoJSON
+              key={geoJsonKey}
+              data={featureCollection}
+              style={zoneStyle as Parameters<typeof GeoJSON>[0]['style']}
+              onEachFeature={(feature, lyr) => {
+                const props = feature.properties as ZoneProperties
+                lyr.bindTooltip(props.name, {
+                  permanent: false,
+                  sticky: true,
+                  className: 'patrol-zone-tip',
+                })
+              }}
             />
-          )
-        })}
+          )}
 
-        {/* Lộ trình tuần tra — mỗi mũ 1 vòng trong khu phụ trách */}
-        {showRoute && PATROL_HELMET_GPS_PINS.map(pin => {
-          const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
-          if (!trail?.length) return null
-          return (
-            <Polyline
-              key={`zone-route-${pin.id}`}
-              positions={trail}
-              color={pin.color}
-              weight={2.5}
-              opacity={0.85}
-            />
-          )
-        })}
+          {/* ── LAYER 2: Detection Dots ───────────────────────── */}
+          {showDetections && PATROL_DETECTION_DOTS.map(dot => {
+            const style = DETECTION_DOT_STYLE[dot.type]
+            return (
+              <CircleMarker
+                key={dot.id}
+                center={dot.position}
+                radius={style.radius}
+                pathOptions={{
+                  color: style.color,
+                  fillColor: style.color,
+                  fillOpacity: 0.75,
+                  weight: 1,
+                  opacity: 0.9,
+                }}
+              >
+                <Tooltip sticky className="patrol-zone-tip">
+                  <span style={{ fontSize: 10 }}>
+                    {dot.type === 'person' ? '👤 Người' : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
+                    Camera: {dot.cameraId} · {Math.round(dot.confidence * 100)}%
+                  </span>
+                </Tooltip>
+              </CircleMarker>
+            )
+          })}
 
-        {/* 5 mũ — vị trí realtime trong khu phụ trách */}
-        {showCameras && PATROL_HELMET_GPS_PINS.map(pin => {
-          const livePos = cameraPositions[pin.id] ?? pin.position
-          const zoneName = getPatrolHelmetZoneName(pin.id)
-          const cam = MOCK_HELMET_CAMERAS.find(c => c.id === pin.id)
-          const isActive = cam?.status === 'ONLINE'
-          return (
-            <Marker
-              key={pin.id}
-              position={livePos}
-              icon={createHelmetIcon(pin, isActive)}
-              zIndexOffset={500}
-            >
-              <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
-                <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                  <strong>{pin.label}</strong><br />
-                  Phụ trách: {zoneName}
-                </span>
-              </Tooltip>
-            </Marker>
-          )
-        })}
+          {/* ── LAYER 3A: Heat Blobs ─────────────────────────── */}
+          {showDensity && PATROL_GPS_ZONES.map(gpsZone => {
+            const zone = zoneMap.get(gpsZone.zone_id)
+            const count = zone ? resolveCount(zone, layer, countMode) : 0
+            const visited = zone?.coverage === 'VISITED'
+            return (
+              <Marker
+                key={`blob-${gpsZone.zone_id}-${count}`}
+                position={gpsZone.center}
+                icon={createHeatBlobIcon(count, maxCount, visited)}
+                zIndexOffset={-100}
+              />
+            )
+          })}
+
+          {/* ── LAYER 3B: Zone Stat Cards ────────────────────── */}
+          {showDensity && PATROL_GPS_ZONES.map(gpsZone => {
+            const zone = zoneMap.get(gpsZone.zone_id)
+            const visited = zone?.coverage === 'VISITED'
+            const displayVal = zone ? formatDisplayValue(zone, layer, countMode, displayMode) : '—'
+            return (
+              <Marker
+                key={`stat-${gpsZone.zone_id}-${displayVal}`}
+                position={gpsZone.center}
+                icon={createZoneStatIcon(
+                  gpsZone.shortName,
+                  gpsZone.borderColor,
+                  visited,
+                  zone?.peopleCurrent ?? 0,
+                  zone?.vehiclesCurrent ?? 0,
+                )}
+                zIndexOffset={300}
+              />
+            )
+          })}
+
+          {/* ── LAYER 4A: Patrol Route (accumulated history) ─── */}
+          {showRoute && PATROL_HELMET_GPS_PINS.map(pin => {
+            const hist = routeHistory[pin.id]
+            if (!hist?.length) return null
+            return (
+              <Polyline
+                key={`route-hist-${pin.id}`}
+                positions={hist}
+                color={pin.color}
+                weight={2}
+                opacity={0.75}
+              />
+            )
+          })}
+
+          {/* ── LAYER 4B: Helmet Markers ─────────────────────── */}
+          {showCameras && PATROL_HELMET_GPS_PINS.map(pin => {
+            const livePos = cameraPositions[pin.id] ?? pin.position
+            const zoneName = getPatrolHelmetZoneName(pin.id)
+            const cam = MOCK_HELMET_CAMERAS.find(c => c.id === pin.id)
+            const isActive = cam?.status === 'ONLINE'
+            return (
+              <Marker
+                key={pin.id}
+                position={livePos}
+                icon={createHelmetIcon(pin, isActive)}
+                zIndexOffset={500}
+              >
+                <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
+                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+                    <strong>{pin.label}</strong><br />
+                    Phụ trách: {zoneName}
+                  </span>
+                </Tooltip>
+              </Marker>
+            )
+          })}
         </MapContainer>
       </div>
     </div>

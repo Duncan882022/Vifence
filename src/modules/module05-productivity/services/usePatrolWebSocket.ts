@@ -12,6 +12,9 @@ import {
 export type LivePatrolZone = PatrolZone
 
 export type CameraPositions = Record<string, [number, number]>
+export type RouteHistory    = Record<string, [number, number][]>
+
+const MAX_HISTORY = 150
 
 function jitter(value: number, max: number): number {
   if (max <= 0) return 0
@@ -39,12 +42,16 @@ function buildInitialPositions(): CameraPositions {
 export function usePatrolWebSocket(_patrolId: string): {
   liveZones: LivePatrolZone[]
   cameraPositions: CameraPositions
+  routeHistory: RouteHistory
 } {
   const [liveZones, setLiveZones] = useState<LivePatrolZone[]>(
     () => MOCK_PATROL_ZONES.map(z => ({ ...z })),
   )
   const [cameraPositions, setCameraPositions] = useState<CameraPositions>(
     buildInitialPositions,
+  )
+  const [routeHistory, setRouteHistory] = useState<RouteHistory>(() =>
+    Object.fromEntries(PATROL_HELMET_GPS_PINS.map(p => [p.id, [p.position]])),
   )
 
   const trailIndicesRef = useRef<Record<string, number>>(
@@ -59,20 +66,37 @@ export function usePatrolWebSocket(_patrolId: string): {
     return () => window.clearInterval(t)
   }, [])
 
-  /* camera_position — mỗi mũ di chuyển trong khu phụ trách, lệch phase */
+  /* camera_position — mỗi mũ di chuyển, tích luỹ history */
   useEffect(() => {
+    let historyTick = 0
     const t = window.setInterval(() => {
-      setCameraPositions(prev => {
-        const next = { ...prev }
-        for (const pin of PATROL_HELMET_GPS_PINS) {
-          const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
-          if (!trail?.length) continue
-          const idx = trailIndicesRef.current[pin.id] ?? 0
-          trailIndicesRef.current[pin.id] = (idx + 1) % trail.length
-          next[pin.id] = trail[trailIndicesRef.current[pin.id]]
-        }
-        return next
-      })
+      const newPositions: CameraPositions = {}
+      for (const pin of PATROL_HELMET_GPS_PINS) {
+        const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
+        if (!trail?.length) continue
+        const idx = trailIndicesRef.current[pin.id] ?? 0
+        trailIndicesRef.current[pin.id] = (idx + 1) % trail.length
+        newPositions[pin.id] = trail[trailIndicesRef.current[pin.id]]
+      }
+      setCameraPositions(newPositions)
+
+      /* Cập nhật history mỗi 5 tick (~1.5s) để tránh re-render quá nhiều */
+      historyTick++
+      if (historyTick % 5 === 0) {
+        setRouteHistory(prev => {
+          const next = { ...prev }
+          for (const pin of PATROL_HELMET_GPS_PINS) {
+            const pos = newPositions[pin.id]
+            if (!pos) continue
+            const hist = prev[pin.id] ?? []
+            const updated = [...hist, pos]
+            next[pin.id] = updated.length > MAX_HISTORY
+              ? updated.slice(updated.length - MAX_HISTORY)
+              : updated
+          }
+          return next
+        })
+      }
     }, 300)
     return () => window.clearInterval(t)
   }, [])
@@ -100,5 +124,5 @@ export function usePatrolWebSocket(_patrolId: string): {
     })
   }, [])
 
-  return { liveZones, cameraPositions }
+  return { liveZones, cameraPositions, routeHistory }
 }
