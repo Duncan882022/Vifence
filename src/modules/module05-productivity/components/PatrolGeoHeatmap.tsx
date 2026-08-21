@@ -1,9 +1,9 @@
 /**
  * PatrolGeoHeatmap — Leaflet satellite map with:
- *  • Heat blob radial gradients per zone (no polygon fill)
- *  • Dashed zone borders only (fillOpacity = 0)
- *  • Zone stat cards showing both 👤 people + 🚛 vehicles
- *  • Multi-color patrol route segments (HC-i → HC-(i+1) in HC-i's colour)
+ *  • Layer 1: site boundary + zone polygons
+ *  • Layer 2: detection dots (clipped to site boundary)
+ *  • Layer 3: density fill inside zone polygons (no circular bleed)
+ *  • Layer 4: patrol route + helmet markers
  * HQCV §12–16
  */
 import 'leaflet/dist/leaflet.css'
@@ -21,6 +21,7 @@ import {
   PATROL_SITE_MAX_ZOOM,
   PATROL_SITE_MIN_ZOOM,
   getPatrolHelmetZoneName,
+  isPointInSiteBoundary,
   type PatrolHelmetPin,
 } from '../data/patrolSiteMap'
 import {
@@ -30,7 +31,8 @@ import {
 import type { RouteHistory } from '../services/usePatrolWebSocket'
 import {
   formatDisplayValue,
-  getPatrolHeatBlobColor,
+  getZoneFillColor,
+  getZoneFillOpacity,
   resolveCount,
   type PatrolCountMode,
   type PatrolDensityLayer,
@@ -94,8 +96,8 @@ function buildFeatureCollection(
   }
 }
 
-/* ── Dashed zone border with semi-transparent fill ───────────── */
-function zoneStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
+/* ── Zone polygon styles ─────────────────────────────────────── */
+function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   if (!feature) return {}
   const { visited, borderColor, tier } = feature.properties
   return {
@@ -108,45 +110,18 @@ function zoneStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   }
 }
 
-/* ── Heat blob (radial gradient) icon ───────────────────────── */
-function hexToRgb(hex: string): [number, number, number] {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return [r, g, b]
-}
-
-function createHeatBlobIcon(
-  count: number,
-  maxCount: number,
-  visited: boolean,
-): L.DivIcon {
-  if (!visited || count === 0) {
-    const size = 50
-    return L.divIcon(divIconOpts(
-      `<div style="width:${size}px;height:${size}px;background:radial-gradient(circle,rgba(100,116,139,0.12) 0%,transparent 70%);border-radius:50%;pointer-events:none;"></div>`,
-      [size, size],
-      [size / 2, size / 2],
-    ))
+/** Density fill — clipped to zone polygon, không tràn ra ngoài ranh giới đỏ. */
+function zoneDensityStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
+  if (!feature) return {}
+  const { visited, borderColor, tier, count, maxCount } = feature.properties
+  return {
+    fillColor: getZoneFillColor(count, maxCount, visited),
+    fillOpacity: getZoneFillOpacity(count, maxCount, visited),
+    color: visited ? borderColor : '#475569',
+    weight: tier === 'primary' ? 2 : 1.5,
+    dashArray: '8 5',
+    opacity: visited ? 0.92 : 0.5,
   }
-  const ratio = Math.min(1, count / maxCount)
-  const size = Math.round(90 + ratio * 130)
-  const color = getPatrolHeatBlobColor(count, true)
-  const [r, g, b] = hexToRgb(color)
-  const html = `
-    <div style="
-      width:${size}px;height:${size}px;
-      background:radial-gradient(circle at 50% 50%,
-        rgba(${r},${g},${b},0.72) 0%,
-        rgba(${r},${g},${b},0.50) 28%,
-        rgba(${r},${g},${b},0.28) 55%,
-        rgba(${r},${g},${b},0.08) 78%,
-        transparent 100%
-      );
-      border-radius:50%;
-      pointer-events:none;
-    "></div>`
-  return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
 const PATROL_DIV_ICON_CLASS = 'patrol-map-div-icon'
@@ -355,8 +330,12 @@ export function PatrolGeoHeatmap({
   }, [zones, layer, countMode, displayMode])
 
   const zoneMap = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
-  const maxCount = useMemo(() => Math.max(...zones.map(z => resolveCount(z, layer, countMode)), 1), [zones, layer, countMode])
+  const visibleDetectionDots = useMemo(
+    () => PATROL_DETECTION_DOTS.filter(d => isPointInSiteBoundary(d.position[0], d.position[1])),
+    [],
+  )
   const mapZoom = usePatrolMapZoom()
+  const geoJsonStyle = showDensity ? zoneDensityStyle : zoneTierStyle
 
   return (
     <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px] overflow-hidden isolate">
@@ -432,12 +411,12 @@ export function PatrolGeoHeatmap({
             />
           )}
 
-          {/* ── LAYER 1B: Zone Polygons ──────────────────────── */}
-          {showZonePolygons && (
+          {/* ── LAYER 1B + 3: Zone polygons / density fill ─────── */}
+          {(showZonePolygons || showDensity) && (
             <GeoJSON
-              key={geoJsonKey}
+              key={`${geoJsonKey}_${showDensity ? 'density' : 'tier'}`}
               data={featureCollection}
-              style={zoneStyle as Parameters<typeof GeoJSON>[0]['style']}
+              style={geoJsonStyle as Parameters<typeof GeoJSON>[0]['style']}
               onEachFeature={(feature, lyr) => {
                 const props = feature.properties as ZoneProperties
                 lyr.bindTooltip(props.name, {
@@ -450,7 +429,7 @@ export function PatrolGeoHeatmap({
           )}
 
           {/* ── LAYER 2: Detection Dots ───────────────────────── */}
-          {showDetections && PATROL_DETECTION_DOTS.map(dot => {
+          {showDetections && visibleDetectionDots.map(dot => {
             const style = DETECTION_DOT_STYLE[dot.type]
             return (
               <CircleMarker
@@ -472,21 +451,6 @@ export function PatrolGeoHeatmap({
                   </span>
                 </Tooltip>
               </CircleMarker>
-            )
-          })}
-
-          {/* ── LAYER 3A: Heat Blobs ─────────────────────────── */}
-          {showDensity && PATROL_GPS_ZONES.map(gpsZone => {
-            const zone = zoneMap.get(gpsZone.zone_id)
-            const count = zone ? resolveCount(zone, layer, countMode) : 0
-            const visited = zone?.coverage === 'VISITED'
-            return (
-              <Marker
-                key={`blob-${gpsZone.zone_id}-${count}`}
-                position={gpsZone.center}
-                icon={createHeatBlobIcon(count, maxCount, visited)}
-                zIndexOffset={-100}
-              />
             )
           })}
 

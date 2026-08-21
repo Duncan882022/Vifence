@@ -61,10 +61,10 @@ const INTERP_ZONE_POLYGONS = {
     [21.002950, 105.945780],
   ],
   ZONE_H: [
-    [21.004405, 105.948270],
-    [21.004405, 105.948540],
-    [21.003760, 105.948540],
-    [21.003760, 105.948270],
+    [21.004405, 105.948150],
+    [21.004350, 105.948550],
+    [21.003760, 105.948400],
+    [21.003760, 105.948150],
   ],
 } as const satisfies Record<string, [number, number][]>
 
@@ -340,16 +340,13 @@ export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
 export const PATROL_GPS_TRAIL = buildPatrolGpsTrail()
 
 /**
- * Ranh giới toàn công trường — 4 góc thực đo ngoài hiện trường (rotated quad).
- * Thứ tự: TOP → RIGHT → BOTTOM → LEFT → TOP (đóng vòng).
+ * Ranh giới toàn công trường — re-export from patrolSiteGeometry.
  */
-export const PATROL_SITE_BOUNDARY: [number, number][] = [
-  [21.004587, 105.947314], // TOP
-  [21.003598, 105.948614], // RIGHT
-  [21.002343, 105.946914], // BOTTOM
-  [21.003712, 105.945782], // LEFT
-  [21.004587, 105.947314], // close
-]
+export {
+  PATROL_SITE_BOUNDARY,
+  isPointInSiteBoundary,
+  clampPointToSiteBoundary,
+} from './patrolSiteGeometry'
 
 /** Map centre for Leaflet MapContainer — geometric centroid of the site quad. */
 export const PATROL_SITE_CENTER: [number, number] = [21.003560, 105.947157]

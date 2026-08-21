@@ -1,9 +1,10 @@
 /**
  * Layer 2 — Detection dots.
  * Mỗi dot = 1 unique object (person/vehicle/equipment) được camera mũ ghi nhận.
- * Dữ liệu tĩnh (deterministic seeded) — sẽ thay bằng WS stream khi có backend thật.
+ * Vị trí: có thể ngoài polygon zone, bắt buộc trong PATROL_SITE_BOUNDARY (polygon đỏ).
  */
 import { PATROL_GPS_ZONES } from './patrolSiteMap'
+import { clampPointToSiteBoundary, isPointInSiteBoundary } from './patrolSiteGeometry'
 
 export type DetectionType = 'person' | 'vehicle' | 'equipment'
 
@@ -25,7 +26,7 @@ function makeLcg(seed: number) {
   }
 }
 
-function scatterDots(
+function scatterDotsInSite(
   zoneId: string,
   type: DetectionType,
   center: [number, number],
@@ -36,17 +37,31 @@ function scatterDots(
   cameras: string[],
 ): DetectionDot[] {
   const rng = makeLcg(seedBase)
-  return Array.from({ length: count }, (_, i) => ({
-    id: `${zoneId}-${type}-${i}`,
-    type,
-    position: [
-      center[0] + (rng() * 2 - 1) * spreadLat,
-      center[1] + (rng() * 2 - 1) * spreadLng,
-    ] as [number, number],
-    zoneId,
-    cameraId: cameras[i % cameras.length],
-    confidence: parseFloat((0.75 + rng() * 0.24).toFixed(2)),
-  }))
+  const dots: DetectionDot[] = []
+  let attempts = 0
+  const maxAttempts = Math.max(count * 50, 50)
+
+  while (dots.length < count && attempts < maxAttempts) {
+    attempts += 1
+    const rawLat = center[0] + (rng() * 2 - 1) * spreadLat
+    const rawLng = center[1] + (rng() * 2 - 1) * spreadLng
+    const position = isPointInSiteBoundary(rawLat, rawLng)
+      ? [parseFloat(rawLat.toFixed(6)), parseFloat(rawLng.toFixed(6))] as [number, number]
+      : clampPointToSiteBoundary(rawLat, rawLng)
+
+    if (!isPointInSiteBoundary(position[0], position[1])) continue
+
+    dots.push({
+      id: `${zoneId}-${type}-${dots.length}`,
+      type,
+      position,
+      zoneId,
+      cameraId: cameras[dots.length % cameras.length],
+      confidence: parseFloat((0.75 + rng() * 0.24).toFixed(2)),
+    })
+  }
+
+  return dots
 }
 
 /* ── Zone-level detection config ────────────────────────────── */
@@ -69,7 +84,6 @@ const ZONE_DETECTION_CONFIG: ZoneDetectionConfig[] = [
   { zoneId: 'ZONE_H', personCount: 10, vehicleCount: 5, equipmentCount: 2, cameras: ['HC-02', 'HC-03'] },
 ]
 
-/* ── Build full detection dot list (module-level constant) ───── */
 function buildDetectionDots(): DetectionDot[] {
   const zoneMap = new Map(PATROL_GPS_ZONES.map(z => [z.zone_id, z]))
   const dots: DetectionDot[] = []
@@ -79,18 +93,18 @@ function buildDetectionDots(): DetectionDot[] {
     const zone = zoneMap.get(cfg.zoneId)
     if (!zone) continue
 
-    // Spread radius ≈ 40% of ~100m zone half-width → ~0.00016° lat / ~0.0002° lng
-    const spreadLat = 0.00016
-    const spreadLng = 0.00020
+    /* Spread rộng hơn zone — dot có thể ngoài polygon zone nhưng trong site */
+    const spreadLat = 0.00028
+    const spreadLng = 0.00035
 
     dots.push(
-      ...scatterDots(cfg.zoneId, 'person',    zone.center, cfg.personCount,    spreadLat, spreadLng, seedCounter++, cfg.cameras),
-      ...scatterDots(cfg.zoneId, 'vehicle',   zone.center, cfg.vehicleCount,   spreadLat, spreadLng, seedCounter++, cfg.cameras),
-      ...scatterDots(cfg.zoneId, 'equipment', zone.center, cfg.equipmentCount, spreadLat, spreadLng, seedCounter++, cfg.cameras),
+      ...scatterDotsInSite(cfg.zoneId, 'person',    zone.center, cfg.personCount,    spreadLat, spreadLng, seedCounter++, cfg.cameras),
+      ...scatterDotsInSite(cfg.zoneId, 'vehicle',   zone.center, cfg.vehicleCount,   spreadLat, spreadLng, seedCounter++, cfg.cameras),
+      ...scatterDotsInSite(cfg.zoneId, 'equipment', zone.center, cfg.equipmentCount, spreadLat, spreadLng, seedCounter++, cfg.cameras),
     )
   }
 
-  return dots
+  return dots.filter(d => isPointInSiteBoundary(d.position[0], d.position[1]))
 }
 
 export const PATROL_DETECTION_DOTS: DetectionDot[] = buildDetectionDots()
