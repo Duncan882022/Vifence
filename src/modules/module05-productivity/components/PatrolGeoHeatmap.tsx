@@ -151,34 +151,60 @@ function createHeatBlobIcon(
 
 const PATROL_DIV_ICON_CLASS = 'patrol-map-div-icon'
 
-function divIconOpts(html: string, iconSize: [number, number], iconAnchor: [number, number]): L.DivIconOptions {
+function divIconOpts(
+  html: string,
+  iconSize: [number, number],
+  iconAnchor: [number, number],
+  interactive = false,
+): L.DivIconOptions {
   return {
     html,
     className: PATROL_DIV_ICON_CLASS,
     iconSize,
     iconAnchor,
+    interactive,
   }
 }
 
-/* ── Zone stat card: shows both 👤 people + 🚛 máy ─────────── */
+/* ── Zone stat card — collapsed label / expanded stats on click ─ */
 function createZoneStatIcon(
   shortName: string,
   borderColor: string,
   visited: boolean,
   peopleCurrent: number,
   vehiclesCurrent: number,
+  expanded: boolean,
 ): L.DivIcon {
+  const interactive = 'pointer-events:auto;cursor:pointer;'
+
+  if (!expanded) {
+    const html = `
+      <div style="
+        background:rgba(8,11,18,0.88);
+        border:1px solid ${borderColor};
+        border-radius:4px;
+        padding:2px 6px;
+        font-family:system-ui,-apple-system,sans-serif;
+        ${interactive}
+        box-shadow:0 1px 4px rgba(0,0,0,0.5);
+        white-space:nowrap;
+      ">
+        <div style="color:${borderColor};font-weight:700;font-size:8px;letter-spacing:0.4px;">${shortName}</div>
+      </div>`
+    return L.divIcon(divIconOpts(html, [44, 18], [22, 9], true))
+  }
+
   const html = `
     <div style="
-      background:rgba(8,11,18,0.93);
+      background:rgba(8,11,18,0.95);
       border:1.5px solid ${borderColor};
       border-radius:6px;
       padding:4px 8px 5px;
       font-family:system-ui,-apple-system,sans-serif;
-      pointer-events:none;
+      ${interactive}
       min-width:72px;
       text-align:left;
-      box-shadow:0 2px 8px rgba(0,0,0,0.6);
+      box-shadow:0 2px 10px rgba(0,0,0,0.7);
     ">
       <div style="color:${borderColor};font-weight:700;font-size:9px;letter-spacing:0.6px;margin-bottom:2px;">${shortName}</div>
       ${visited
@@ -188,7 +214,7 @@ function createZoneStatIcon(
       }
     </div>`
   const h = visited ? 60 : 42
-  return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
+  return L.divIcon(divIconOpts(html, [96, h], [48, h / 2], true))
 }
 
 /* ── Helmet marker icon ─────────────────────────────────────── */
@@ -325,6 +351,16 @@ export function PatrolGeoHeatmap({
   showRoute,
   showCameras,
 }: PatrolGeoHeatmapProps) {
+  const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!showDensity) setExpandedZoneId(null)
+  }, [showDensity])
+
+  const toggleZoneExpand = (zoneId: string) => {
+    setExpandedZoneId(prev => (prev === zoneId ? null : zoneId))
+  }
+
   const featureCollection = useMemo(
     () => buildFeatureCollection(zones, layer, countMode),
     [zones, layer, countMode],
@@ -473,14 +509,15 @@ export function PatrolGeoHeatmap({
             )
           })}
 
-          {/* ── LAYER 3B: Zone Stat Cards ────────────────────── */}
+          {/* ── LAYER 3B: Zone labels — tap to expand stats ─────── */}
           {showDensity && PATROL_GPS_ZONES.map(gpsZone => {
             const zone = zoneMap.get(gpsZone.zone_id)
             const visited = zone?.coverage === 'VISITED'
+            const expanded = expandedZoneId === gpsZone.zone_id
             const displayVal = zone ? formatDisplayValue(zone, layer, countMode, displayMode) : '—'
             return (
               <Marker
-                key={`stat-${gpsZone.zone_id}-${displayVal}`}
+                key={`stat-${gpsZone.zone_id}-${expanded ? 'open' : 'closed'}-${displayVal}`}
                 position={gpsZone.center}
                 icon={createZoneStatIcon(
                   gpsZone.shortName,
@@ -488,8 +525,12 @@ export function PatrolGeoHeatmap({
                   visited,
                   zone?.peopleCurrent ?? 0,
                   zone?.vehiclesCurrent ?? 0,
+                  expanded,
                 )}
-                zIndexOffset={300}
+                zIndexOffset={expanded ? 400 : 300}
+                eventHandlers={{
+                  click: () => toggleZoneExpand(gpsZone.zone_id),
+                }}
               />
             )
           })}
