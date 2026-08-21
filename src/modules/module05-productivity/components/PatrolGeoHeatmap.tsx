@@ -155,14 +155,12 @@ function divIconOpts(
   html: string,
   iconSize: [number, number],
   iconAnchor: [number, number],
-  interactive = false,
 ): L.DivIconOptions {
   return {
     html,
     className: PATROL_DIV_ICON_CLASS,
     iconSize,
     iconAnchor,
-    interactive,
   }
 }
 
@@ -191,7 +189,7 @@ function createZoneStatIcon(
       ">
         <div style="color:${borderColor};font-weight:700;font-size:8px;letter-spacing:0.4px;">${shortName}</div>
       </div>`
-    return L.divIcon(divIconOpts(html, [44, 18], [22, 9], true))
+    return L.divIcon(divIconOpts(html, [44, 18], [22, 9]))
   }
 
   const html = `
@@ -214,7 +212,7 @@ function createZoneStatIcon(
       }
     </div>`
   const h = visited ? 60 : 42
-  return L.divIcon(divIconOpts(html, [96, h], [48, h / 2], true))
+  return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
 /* ── Helmet marker icon ─────────────────────────────────────── */
