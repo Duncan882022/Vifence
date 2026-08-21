@@ -215,32 +215,75 @@ function buildHelmetPins(): PatrolHelmetPin[] {
 
 export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
 
-/** Vòng tuần tra nhỏ trong khu phụ trách (~10 m bán kính). */
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+/** Point inside zone quad — u/v ∈ [0,1], inset from edges. */
+function polygonInteriorPoint(
+  polygon: [number, number][],
+  u: number,
+  v: number,
+): [number, number] {
+  const [tl, tr, br, bl] = polygon
+  const lat =
+    (1 - u) * (1 - v) * tl[0] +
+    u * (1 - v) * tr[0] +
+    u * v * br[0] +
+    (1 - u) * v * bl[0]
+  const lng =
+    (1 - u) * (1 - v) * tl[1] +
+    u * (1 - v) * tr[1] +
+    u * v * br[1] +
+    (1 - u) * v * bl[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+/**
+ * Lộ trình tuần tra tự nhiên trong zone — zigzag nội bộ, không vòng tròn.
+ * Mỗi mũ lệch phase để 5 route không trùng nhau.
+ */
 export function buildHelmetZoneTrail(
-  center: [number, number],
-  radiusM = 10,
-  points = 60,
+  polygon: [number, number][],
+  phaseSeed = 0,
+  stepsPerLeg = 10,
 ): [number, number][] {
-  const [lat, lng] = center
-  const latDelta = radiusM / 111_320
-  const lngDelta = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180))
+  const inset = 0.2
+  const uVals = [inset, 0.5, 1 - inset]
+  const vVals = [inset, 0.5, 1 - inset]
+
+  const waypoints: [number, number][] = []
+  for (let row = 0; row < vVals.length; row += 1) {
+    const v = vVals[(row + phaseSeed) % vVals.length]
+    const uOrder = row % 2 === 0 ? uVals : [...uVals].reverse()
+    for (const u of uOrder) {
+      waypoints.push(polygonInteriorPoint(polygon, u, v))
+    }
+  }
+  waypoints.push(waypoints[0])
+
   const trail: [number, number][] = []
-  for (let i = 0; i <= points; i++) {
-    const angle = (i / points) * 2 * Math.PI
-    trail.push([
-      parseFloat((lat + latDelta * Math.sin(angle)).toFixed(6)),
-      parseFloat((lng + lngDelta * Math.cos(angle)).toFixed(6)),
-    ])
+  for (let i = 0; i < waypoints.length - 1; i += 1) {
+    const [lat1, lng1] = waypoints[i]
+    const [lat2, lng2] = waypoints[i + 1]
+    for (let s = 0; s < stepsPerLeg; s += 1) {
+      const t = s / stepsPerLeg
+      trail.push([
+        parseFloat(lerp(lat1, lat2, t).toFixed(6)),
+        parseFloat(lerp(lng1, lng2, t).toFixed(6)),
+      ])
+    }
   }
   return trail
 }
 
-/** Lộ trình tuần tra theo khu — mỗi mũ 1 vòng trong zone được giao. */
+/** Lộ trình tuần tra theo khu — mỗi mũ zigzag trong polygon zone được giao. */
 export const PATROL_HELMET_ZONE_TRAILS: Record<string, [number, number][]> =
   Object.fromEntries(
     PATROL_HELMET_GPS_PINS.map(pin => {
       const zone = PATROL_GPS_ZONES.find(z => z.zone_id === pin.zoneId)!
-      return [pin.id, buildHelmetZoneTrail(zone.center)]
+      const phase = parseInt(pin.id.replace('HC-', ''), 10) - 1
+      return [pin.id, buildHelmetZoneTrail(zone.polygon, phase)]
     }),
   )
 
@@ -257,10 +300,6 @@ export function getPatrolHelmetZoneName(helmetId: string): string {
  *
  * Each waypoint is a zone centre; 10 steps between each.
  */
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t
-}
-
 const TRAIL_ZONE_IDS = ['ZONE_A', 'ZONE_B', 'ZONE_E', 'ZONE_H', 'ZONE_C', 'ZONE_F', 'ZONE_D', 'ZONE_G'] as const
 
 function zoneCenter(zoneId: string): [number, number] {

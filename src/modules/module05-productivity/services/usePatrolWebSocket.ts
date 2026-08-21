@@ -1,6 +1,6 @@
 /**
  * Mock WebSocket hook — HQCV §41.
- * Mỗi mũ tuần tra trong khu phụ trách (vòng lặp GPS quanh tâm zone).
+ * Mỗi mũ tuần tra zigzag trong polygon khu phụ trách.
  */
 import { useEffect, useRef, useState } from 'react'
 import { MOCK_PATROL_ZONES, type PatrolZone } from '../data/patrolMockData'
