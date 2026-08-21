@@ -90,17 +90,17 @@ function buildFeatureCollection(
   }
 }
 
-/* ── Dashed zone border — NO fill ───────────────────────────── */
+/* ── Dashed zone border with semi-transparent fill ───────────── */
 function zoneStyle(feature?: Feature<Polygon, ZoneProperties>) {
   if (!feature) return {}
   const { visited, borderColor, tier } = feature.properties
   return {
-    fillOpacity: 0,
-    fillColor: 'transparent',
-    color: visited ? borderColor : '#334155',
-    weight: tier === 'primary' ? 1.5 : 1,
-    dashArray: '7 5',
-    opacity: visited ? 0.85 : 0.45,
+    fillColor: visited ? borderColor : '#334155',
+    fillOpacity: visited ? 0.18 : 0.07,
+    color: visited ? borderColor : '#475569',
+    weight: tier === 'primary' ? 2 : 1.5,
+    dashArray: '8 5',
+    opacity: visited ? 0.92 : 0.5,
   }
 }
 
