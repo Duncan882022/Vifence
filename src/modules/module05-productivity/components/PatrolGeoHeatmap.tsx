@@ -11,7 +11,7 @@ import { GeoJSON, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomContro
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon } from 'geojson'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PatrolZone } from '../data/patrolMockData'
+import { MOCK_HELMET_CAMERAS, type PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
   PATROL_HELMET_GPS_PINS,
@@ -188,31 +188,22 @@ function createZoneStatIcon(
 }
 
 /* ── Helmet marker icon ─────────────────────────────────────── */
-function createHelmetIcon(pin: PatrolHelmetPin, isMoving: boolean) {
-  const pulse = isMoving
-    ? `<span style="
-        position:absolute;top:-3px;right:-3px;
-        width:8px;height:8px;
-        background:#22d3ee;
-        border-radius:50%;
-        animation:patrol-pulse 1.2s infinite;
-      "></span>`
-    : ''
+function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
+  const num = String(parseInt(pin.id.replace('HC-', ''), 10))
+  const anim = isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : ''
   const html = `
-    <div style="position:relative;width:22px;height:22px;">
-      <div style="
-        background:${pin.color};
-        border:2px solid #fff;
-        border-radius:50%;
-        width:22px;height:22px;
-        display:flex;align-items:center;justify-content:center;
-        font-size:7.5px;font-weight:800;color:#fff;
-        font-family:system-ui,sans-serif;
-        box-shadow:0 2px 8px rgba(0,0,0,0.6);
-      ">${pin.id.replace('HC-', '')}</div>
-      ${pulse}
-    </div>`
-  return L.divIcon(divIconOpts(html, [22, 22], [11, 11]))
+    <div style="
+      background:${pin.color};
+      border:1.5px solid rgba(255,255,255,0.85);
+      border-radius:50%;
+      width:16px;height:16px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:6.5px;font-weight:800;color:#fff;
+      font-family:system-ui,sans-serif;
+      box-shadow:0 1px 5px rgba(0,0,0,0.55);
+      ${anim}
+    ">${num}</div>`
+  return L.divIcon(divIconOpts(html, [16, 16], [8, 8]))
 }
 
 /* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
@@ -340,6 +331,11 @@ export function PatrolGeoHeatmap({
           0%,100%{opacity:1;transform:scale(1)}
           50%{opacity:.35;transform:scale(1.7)}
         }
+        @keyframes patrol-helmet-glow {
+          0%,100%{ box-shadow:0 1px 5px rgba(0,0,0,0.55),0 0 0 0px rgba(255,255,255,0.55); }
+          55%    { box-shadow:0 1px 5px rgba(0,0,0,0.55),0 0 0 6px rgba(255,255,255,0); }
+        }
+        .leaflet-marker-icon { transition: transform 260ms linear !important; }
         .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
         .leaflet-pane, .leaflet-map-pane, .leaflet-tile-pane,
         .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane,
@@ -456,11 +452,13 @@ export function PatrolGeoHeatmap({
         {showCameras && PATROL_HELMET_GPS_PINS.map(pin => {
           const livePos = cameraPositions[pin.id] ?? pin.position
           const zoneName = getPatrolHelmetZoneName(pin.id)
+          const cam = MOCK_HELMET_CAMERAS.find(c => c.id === pin.id)
+          const isActive = cam?.status === 'ONLINE'
           return (
             <Marker
               key={pin.id}
               position={livePos}
-              icon={createHelmetIcon(pin, true)}
+              icon={createHelmetIcon(pin, isActive)}
               zIndexOffset={500}
             >
               <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>

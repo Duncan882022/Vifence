@@ -68,13 +68,12 @@ export function usePatrolWebSocket(_patrolId: string): {
           const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
           if (!trail?.length) continue
           const idx = trailIndicesRef.current[pin.id] ?? 0
-          const step = pin.id === 'HC-01' || pin.id === 'HC-03' ? 1 : 1
-          trailIndicesRef.current[pin.id] = (idx + step) % trail.length
+          trailIndicesRef.current[pin.id] = (idx + 1) % trail.length
           next[pin.id] = trail[trailIndicesRef.current[pin.id]]
         }
         return next
       })
-    }, 2000)
+    }, 300)
     return () => window.clearInterval(t)
   }, [])
 

@@ -206,7 +206,7 @@ export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
 export function buildHelmetZoneTrail(
   center: [number, number],
   radiusM = 25,
-  points = 12,
+  points = 60,
 ): [number, number][] {
   const [lat, lng] = center
   const latDelta = radiusM / 111_320
