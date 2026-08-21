@@ -9,6 +9,49 @@
  *    LEFT 21.003712, 105.945782  |  BOT   21.002343, 105.946914
  */
 
+/* ── Site quad corners (field survey) ───────────────────────── */
+const SITE_TOP: [number, number]    = [21.004587, 105.947314]
+const SITE_RIGHT: [number, number] = [21.003598, 105.948614]
+const SITE_BOTTOM: [number, number] = [21.002343, 105.946914]
+const SITE_LEFT: [number, number]  = [21.003712, 105.945782]
+
+/** Bilinear point inside site quad — u: west→east, v: north→south. */
+function sitePoint(u: number, v: number): [number, number] {
+  const lat =
+    (1 - u) * (1 - v) * SITE_TOP[0] +
+    u * (1 - v) * SITE_RIGHT[0] +
+    u * v * SITE_BOTTOM[0] +
+    (1 - u) * v * SITE_LEFT[0]
+  const lng =
+    (1 - u) * (1 - v) * SITE_TOP[1] +
+    u * (1 - v) * SITE_RIGHT[1] +
+    u * v * SITE_BOTTOM[1] +
+    (1 - u) * v * SITE_LEFT[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+/** Sub-quad cell — TL→TR→BR→BL, guaranteed inside site boundary. */
+function siteCell(
+  u0: number, u1: number,
+  v0: number, v1: number,
+): [number, number][] {
+  return [
+    sitePoint(u0, v0),
+    sitePoint(u1, v0),
+    sitePoint(u1, v1),
+    sitePoint(u0, v1),
+  ]
+}
+
+function cellCenter(u0: number, u1: number, v0: number, v1: number): [number, number] {
+  return sitePoint((u0 + u1) / 2, (v0 + v1) / 2)
+}
+
+const U1 = 1 / 3
+const U2 = 2 / 3
+const V1 = 1 / 3
+const V2 = 2 / 3
+
 /* ── GPS Zone type ──────────────────────────────────────────── */
 export interface PatrolGpsZone {
   zone_id: string
@@ -53,33 +96,21 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
     zone_id: 'ZONE_B',
     name: 'Khu lắp dựng tầng',
     shortName: 'Tầng',
-    // Interpolated — east of Móng, same row
-    polygon: [
-      [21.004007, 105.947472],
-      [21.003702, 105.947735],
-      [21.003454, 105.947350],
-      [21.003801, 105.947188],
-    ],
+    polygon: siteCell(U1, U2, V1, V2),
     area_m2: 850,
     tier: 'primary',
     borderColor: '#eab308',
-    center: [21.003741, 105.947436],
+    center: cellCenter(U1, U2, V1, V2),
   },
   {
     zone_id: 'ZONE_C',
     name: 'Khu hoàn thiện',
     shortName: 'HT',
-    // Interpolated — north row, centre column
-    polygon: [
-      [21.004467, 105.947201],
-      [21.004162, 105.947464],
-      [21.003914, 105.947079],
-      [21.004261, 105.946917],
-    ],
+    polygon: siteCell(U1, U2, 0, V1),
     area_m2: 1450,
     tier: 'primary',
     borderColor: '#22c55e',
-    center: [21.004201, 105.947165],
+    center: cellCenter(U1, U2, 0, V1),
   },
   {
     zone_id: 'ZONE_D',
@@ -117,49 +148,31 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
     zone_id: 'ZONE_F',
     name: 'Sân cẩu',
     shortName: 'Cẩu',
-    // Interpolated — north row, west column (left of HT)
-    polygon: [
-      [21.004240, 105.946985],
-      [21.003935, 105.947248],
-      [21.003687, 105.946863],
-      [21.004034, 105.946701],
-    ],
+    polygon: siteCell(0, U1, 0, V1),
     area_m2: 700,
     tier: 'secondary',
     borderColor: '#06b6d4',
-    center: [21.003974, 105.946949],
+    center: cellCenter(0, U1, 0, V1),
   },
   {
     zone_id: 'ZONE_G',
     name: 'Cổng ra vào',
     shortName: 'Cổng',
-    // Interpolated — south row, east of Kho
-    polygon: [
-      [21.003547, 105.947743],
-      [21.003242, 105.948006],
-      [21.002994, 105.947621],
-      [21.003341, 105.947459],
-    ],
+    polygon: siteCell(U1, 1, V2, 1),
     area_m2: 300,
     tier: 'secondary',
     borderColor: '#f59e0b',
-    center: [21.003281, 105.947707],
+    center: cellCenter(U1, 1, V2, 1),
   },
   {
     zone_id: 'ZONE_H',
     name: 'Khu đúc cọc',
     shortName: 'Cọc',
-    // Interpolated — north row, east of HT
-    polygon: [
-      [21.004694, 105.947417],
-      [21.004389, 105.947680],
-      [21.004141, 105.947295],
-      [21.004488, 105.947133],
-    ],
+    polygon: siteCell(U2, 1, 0, V1),
     area_m2: 980,
     tier: 'secondary',
     borderColor: '#64748b',
-    center: [21.004428, 105.947381],
+    center: cellCenter(U2, 1, 0, V1),
   },
 ]
 
@@ -248,16 +261,17 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
 
+const TRAIL_ZONE_IDS = ['ZONE_A', 'ZONE_B', 'ZONE_E', 'ZONE_H', 'ZONE_C', 'ZONE_F', 'ZONE_D', 'ZONE_G'] as const
+
+function zoneCenter(zoneId: string): [number, number] {
+  const z = PATROL_GPS_ZONES.find(g => g.zone_id === zoneId)
+  if (!z) throw new Error(`Missing zone ${zoneId}`)
+  return z.center
+}
+
 const TRAIL_WAYPOINTS: [number, number][] = [
-  [21.003514, 105.947220], // ZONE_A Móng
-  [21.003741, 105.947436], // ZONE_B Tầng
-  [21.003968, 105.947652], // ZONE_E VP
-  [21.004428, 105.947381], // ZONE_H Cọc
-  [21.004201, 105.947165], // ZONE_C HT
-  [21.003974, 105.946949], // ZONE_F Cẩu
-  [21.003054, 105.947491], // ZONE_D Kho
-  [21.003281, 105.947707], // ZONE_G Cổng
-  [21.003514, 105.947220], // back to A
+  ...TRAIL_ZONE_IDS.map(zoneCenter),
+  zoneCenter('ZONE_A'),
 ]
 
 export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
