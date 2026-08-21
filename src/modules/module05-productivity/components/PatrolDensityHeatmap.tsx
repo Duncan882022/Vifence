@@ -6,16 +6,8 @@ import { useState } from 'react'
 
 import { cn } from '@/utils/cn'
 import { MOCK_PATROL_DASHBOARD } from '../data/patrolMockData'
-import type { PatrolDensityLayer } from '../services/patrolHeatmap.service'
 import { usePatrolWebSocket } from '../services/usePatrolWebSocket'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
-
-/* ── Density sub-layer ──────────────────────────────────────── */
-const DENSITY_OPTS: { key: PatrolDensityLayer; label: string }[] = [
-  { key: 'people',   label: 'Người' },
-  { key: 'vehicle',  label: 'Máy' },
-  { key: 'combined', label: 'Tổng hợp' },
-]
 
 const LEGEND = [
   { color: '#ef4444', label: 'Rất cao' },
@@ -26,31 +18,6 @@ const LEGEND = [
 ] as const
 
 /* ── Shared button components ───────────────────────────────── */
-function RadioBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'font-semibold transition-colors whitespace-nowrap',
-        'flex-1 min-w-0 px-1.5 sm:px-2.5 py-1 text-[9px] sm:text-[10px]',
-        active
-          ? 'bg-sky-500 text-white'
-          : 'bg-[#1a2235] text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {children}
-    </button>
-  )
-}
 
 function LayerToggle({
   active,
@@ -86,7 +53,6 @@ function LayerToggle({
 
 /* ── Component ──────────────────────────────────────────────── */
 export function PatrolDensityHeatmap() {
-  const [densityType, setDensityType] = useState<PatrolDensityLayer>('people')
   const [layers, setLayers] = useState({
     polygon:   true,
     detection: true,
@@ -115,21 +81,7 @@ export function PatrolDensityHeatmap() {
           <LayerToggle active={layers.route}     color="#22c55e" onClick={() => toggleLayer('route')}>Lộ trình</LayerToggle>
         </div>
 
-        {/* Row 2 — Density sub-type (only when density is ON) */}
-        {layers.density && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[8px] text-[#475569] font-semibold tracking-wider uppercase mr-0.5">Loại</span>
-            <div className="flex rounded overflow-hidden border border-[#334155]">
-              {DENSITY_OPTS.map(({ key, label }) => (
-                <RadioBtn key={key} active={densityType === key} onClick={() => setDensityType(key)}>
-                  {label}
-                </RadioBtn>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Row 3 — Density legend */}
+        {/* Row 2 — Density legend */}
         {layers.density && (
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
             {LEGEND.map(({ color, label }) => (
@@ -148,7 +100,7 @@ export function PatrolDensityHeatmap() {
           zones={liveZones}
           cameraPositions={cameraPositions}
           routeHistory={routeHistory}
-          layer={densityType}
+          layer="combined"
           displayMode="count"
           countMode="current"
           showSiteBoundary={layers.polygon}
