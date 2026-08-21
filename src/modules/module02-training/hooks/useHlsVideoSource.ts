@@ -14,7 +14,11 @@ export function useHlsVideoSource(
     if (!video || !src) return
 
     let destroyed = false
-    let hlsInstance: { destroy: () => void } | null = null
+    let hlsInstance: {
+      destroy: () => void
+      startLoad: () => void
+      recoverMediaError: () => void
+    } | null = null
 
     const attachMp4 = () => {
       video.src = src
@@ -37,10 +41,29 @@ export function useHlsVideoSource(
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          backBufferLength: 30,
+          liveSyncDurationCount: 1,
+          liveMaxLatencyDurationCount: 3,
+          maxLiveSyncPlaybackRate: 1.5,
+          maxBufferLength: 4,
+          backBufferLength: 0,
+          manifestLoadingMaxRetry: 8,
+          manifestLoadingRetryDelay: 800,
+          levelLoadingMaxRetry: 6,
+          fragLoadingMaxRetry: 8,
+          fragLoadingRetryDelay: 600,
         })
         hls.loadSource(src)
         hls.attachMedia(video)
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (destroyed || !data.fatal) return
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            window.setTimeout(() => hls.startLoad(), 800)
+            return
+          }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError()
+          }
+        })
         hlsInstance = hls
       } catch {
         attachMp4()

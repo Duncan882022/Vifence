@@ -4,14 +4,46 @@
       "file": "mesh-scene.jpg",
       "width": 640,
       "height": 640,
-      "mesh_missing": [134, 252, 177, 292],
-      "mesh_dirty": [380, 240, 500, 380]
+      "mesh_missing": [
+        140,
+        280,
+        195,
+        325
+      ],
+      "mesh_dirty": [
+        28,
+        308,
+        98,
+        398
+      ],
+      "water": [
+        253,
+        488,
+        470,
+        616
+      ]
     },
     {
       "file": "atgt-scene.jpg",
       "width": 640,
       "height": 640,
-      "no_soft_median": [0, 404, 329, 638]
+      "no_soft_median": [
+        0,
+        404,
+        329,
+        638
+      ]
+    },
+    {
+      "file": "atgt-no-lane-scene.jpg",
+      "width": 640,
+      "height": 640,
+      "no_soft_median": [
+        0,
+        404,
+        329,
+        638
+      ]
     }
   ]
 }

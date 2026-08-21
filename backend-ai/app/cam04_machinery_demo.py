@@ -22,8 +22,9 @@ logger = logging.getLogger("cam04_machinery_demo")
 
 _DEMO_DIR = Path(__file__).resolve().parent.parent / "data" / "cam04_demo"
 _FRAME_SMALL = (48, 48)
-_MATCH_DRIFT_MAX = 8.0
+_MATCH_DRIFT_MAX = 12.0
 _IN_DEMO_REEL_DRIFT_MAX = 35.0
+_CRANE_SEGMENT_END = 10.5
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,8 @@ def _load_anchors() -> tuple[_DemoAnchor, ...]:
 def resolve_cam04_demo_machinery(
     camera_id: str,
     frame: np.ndarray,
+    *,
+    source_pts_sec: float | None = None,
 ) -> list[tuple[str, tuple[int, int, int, int], float]] | None:
     """Trả danh sách (kind, bbox, conf) nếu quyết định được từ demo reel.
 
@@ -96,6 +99,8 @@ def resolve_cam04_demo_machinery(
     if not anchors:
         return None
 
+    in_crane_segment = source_pts_sec is not None and float(source_pts_sec) <= _CRANE_SEGMENT_END
+
     probe = _frame_small(frame)
     scored = [(anchor, _frame_drift(probe, anchor.small)) for anchor in anchors]
     best_anchor, best_drift = min(scored, key=lambda item: item[1])
@@ -108,6 +113,11 @@ def resolve_cam04_demo_machinery(
         ]
 
     if min_drift <= _IN_DEMO_REEL_DRIFT_MAX:
+        if in_crane_segment:
+            for prefer in ("0359", "0360", "0355"):
+                anchor = next((a for a in anchors if a.key == prefer), None)
+                if anchor is not None:
+                    return [(kind, bbox, 0.95) for kind, bbox in anchor.boxes.items()]
         return []
 
     return None

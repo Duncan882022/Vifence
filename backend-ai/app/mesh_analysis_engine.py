@@ -54,8 +54,8 @@ class MeshAnalysisEngine:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_MESH_CONFIRM_SECONDS,
-                cooldown_seconds=settings.event_repeat_seconds(_MESH_REPEAT_SECONDS),
+                min_duration_seconds=settings.event_debounce_min_seconds(_MESH_CONFIRM_SECONDS),
+                cooldown_seconds=settings.event_repeat_seconds(_MESH_THRESHOLD.cooldown_seconds),
                 max_gap_seconds=_MESH_MAX_GAP_SECONDS,
                 one_event_per_episode=settings.event_log_one_per_episode,
             )
@@ -89,6 +89,39 @@ class MeshAnalysisEngine:
                 if camera_id == "A-03"
                 else True
             )
+        from .cam03_scene_demo import is_cam03_mesh_segment
+
+        # Cam A-03 — BPTC-001 chỉ hợp lệ intro mesh 0–5s; không refresh snapshot ngoài segment.
+        if camera_id == "A-03" and not is_cam03_mesh_segment(source_pts_sec):
+            h, w = frame.shape[:2]
+            tracks = self._tracks_for(camera_id)
+            for track_id in list(tracks.keys()):
+                state = tracks[track_id]
+                self._gate_for(camera_id, track_id, state.behavior).register(False)
+            mesh_zones = get_mesh_zones_for_camera(camera_id)
+            fe_zones = [
+                {
+                    "id": z["id"],
+                    "label": z["label"],
+                    "type": z["type"],
+                    "polygon": z["polygon"],
+                }
+                for z in mesh_zones
+            ]
+            return (
+                {
+                    "type": "result",
+                    "camera_id": camera_id,
+                    "width": w,
+                    "height": h,
+                    "roi_zones": fe_zones,
+                    "metrics": {"mesh_violations": 0, "mesh_behaviors": []},
+                    "detections": [],
+                    "events": [],
+                },
+                [],
+            )
+
         snapshot_source = capture_frame if capture_frame is not None else frame
         h, w = frame.shape[:2]
         mesh_zones = get_mesh_zones_for_camera(camera_id)

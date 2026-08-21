@@ -8,6 +8,8 @@ export interface Camera {
   zone: string
   status: CameraStatus
   streamUrl?: string
+  /** Live JSMpeg WebSocket — cùng cơ chế vifence.io / dao-tao-tuan-thu */
+  wsUrl?: string | null
   thumbnailUrl?: string
   lastActivity?: string
 }

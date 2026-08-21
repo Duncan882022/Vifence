@@ -66,8 +66,8 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="center"
-        className="overflow-hidden bg-[#0d1117] border border-[#1e2433] p-0 gap-0 shadow-2xl shadow-black/60"
-      >        <div className="flex flex-col max-h-[min(92vh,900px)]">
+        className="overflow-hidden bg-[#0d1117] border border-[#1e2433] p-0 gap-0 shadow-2xl shadow-black/60 w-[min(960px,calc(100vw-1rem))] max-h-[min(92vh,900px)]"
+      >
           {/* Header */}
           <div className="shrink-0 px-5 pt-5 pb-4 border-b border-[#1e2433]">
             <div className="flex items-center gap-2 mb-4 pr-8">
@@ -262,8 +262,6 @@ export function AiRecommendationDrawer({ item, open, onOpenChange }: AiRecommend
               </Section>
             )}
           </div>
-
-        </div>
       </SheetContent>
     </Sheet>
   )

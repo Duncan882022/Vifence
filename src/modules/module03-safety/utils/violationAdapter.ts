@@ -14,6 +14,7 @@ import {
 } from './safetyCameraBridge'
 import { isLiveSafetyRecord } from '../services/safetyAiEvents.service'
 import { buildEventPlaybackMeta, EVENT_PLAYBACK_CLIP_SEC } from './eventPlaybackClip'
+import { formatMachineRoiBadge } from './roiOverlayCode'
 
 export function violationRecordToEvent(v: SafetyViolationRecord): Event {
   const scenario = SAFETY_SCENARIO_MAP.get(v.scenarioId)
@@ -48,6 +49,9 @@ export function violationRecordToEvent(v: SafetyViolationRecord): Event {
     violationBbox: playbackMeta.bbox,
     subjectBbox: playbackMeta.subjectBbox,
     relatedBbox: playbackMeta.relatedBbox,
+    relatedRoiLabel: playbackMeta.relatedBbox && v.scenarioId === 'DZ-003'
+      ? formatMachineRoiBadge('sany_drill', v.confidence)
+      : undefined,
     frameWidth: playbackMeta.frameWidth,
     frameHeight: playbackMeta.frameHeight,
     status: v.status === 'CLOSED' ? 'processed' : 'pending',

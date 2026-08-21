@@ -17,7 +17,7 @@ import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useOverlayLayoutTick } from '../hooks/useOverlayLayoutTick'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
-import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { formatViolationRoiBadge } from '../utils/roiOverlayCode'
 import { filterWahHarnessFalsePositives } from '../utils/wahHarnessLogic'
 import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 
@@ -31,10 +31,10 @@ interface WahOverlayProps {
 }
 
 function formatLabel(detection: WahDetection): string {
-  return formatRoiOverlayBadge(
-    formatRoiOverlayCode(detection.behavior),
-    detection.confidence,
-  )
+  return formatViolationRoiBadge(detection.behavior, detection.confidence, {
+    scenarioId: 'WAH-001',
+    distanceM: 0.2,
+  })
 }
 
 function DetectionBox({

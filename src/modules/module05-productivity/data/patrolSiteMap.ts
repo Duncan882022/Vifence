@@ -71,6 +71,7 @@ const INTERP_ZONE_POLYGONS = {
 import { clipPolygonToSiteBoundary } from './patrolSiteGeometry'
 
 function polygonCenter(polygon: [number, number][]): [number, number] {
+  if (polygon.length === 0) return [21.00356, 105.947157]
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
@@ -188,6 +189,9 @@ export function patrolZoneInteriorPoint(
   u: number,
   v: number,
 ): [number, number] {
+  if (polygon.length < 4) {
+    return polygonCenter(polygon)
+  }
   const [tl, tr, br, bl] = polygon
   const lat =
     (1 - u) * (1 - v) * tl[0] +

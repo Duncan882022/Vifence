@@ -35,7 +35,7 @@ const SCENARIO_SEEK_SEC: Record<string, number> = {
   'BPTC-008': 10,
   'BPTC-009': 10,
   'ATGT-002': 17,
-  'ATGT-004': 17,
+  'ATGT-004': 9,
   'PPE-001': 8,
   'PPE-002': 10,
   'PPE-003': 12,

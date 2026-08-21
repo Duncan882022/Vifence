@@ -262,8 +262,8 @@ def _augment_with_auto_train_model(frame: np.ndarray, all_detections: list[RoadD
 MUD_THRESHOLD_PERCENT = 4.0
 WATER_THRESHOLD_PERCENT = 0.28
 # BPTC-008 — chỉ ghi sự kiện khi vũng đủ lớn (loại vệt ướt / mảnh nhỏ).
-MIN_WATER_EVENT_AREA_RATIO = 0.008
-MIN_WATER_EVENT_ROI_PERCENT = 0.24
+MIN_WATER_EVENT_AREA_RATIO = 0.010
+MIN_WATER_EVENT_ROI_PERCENT = 0.32
 MIN_WATER_BBOX_WIDTH = 30
 MIN_WATER_BBOX_HEIGHT = 20
 MAX_WATER_BBOX_WIDTH_RATIO = 0.34
@@ -2194,7 +2194,13 @@ def _stabilize_road_detections(camera_id: str, detections: list[dict]) -> list[d
     return stabilized
 
 
-def analyze_road_frame(frame: np.ndarray, camera_id: str, *, stabilize: bool = True) -> dict:
+def analyze_road_frame(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    stabilize: bool = True,
+    source_pts_sec: float | None = None,
+) -> dict:
     h, w = frame.shape[:2]
     frame_area = h * w
     zones = get_roi_zones_for_camera(camera_id)
@@ -2311,6 +2317,23 @@ def analyze_road_frame(frame: np.ndarray, camera_id: str, *, stabilize: bool = T
             )
 
     # Cam A-03: không vẽ vùng Unknown — edge toàn khung gây bbox nhảy trên overlay.
+
+    if camera_id == "A-03":
+        from .cam03_scene_demo import resolve_cam03_road_demo
+
+        has_water = any(d.behavior == "water" for d in all_detections)
+        if not has_water:
+            all_detections.extend(
+                resolve_cam03_road_demo(
+                    camera_id,
+                    frame,
+                    source_pts_sec=source_pts_sec,
+                )
+            )
+            total_water = max(
+                total_water,
+                max((d.area_percent or 0.0 for d in all_detections if d.behavior == "water"), default=0.0),
+            )
 
     all_detections = _augment_with_auto_train_model(frame, all_detections)
 

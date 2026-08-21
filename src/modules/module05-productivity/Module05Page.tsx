@@ -28,6 +28,8 @@ import {
   groupPatrolCamerasForSidebar,
   type PatrolCameraFilterTab,
 } from './data/patrolCameras'
+import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive } from './data/patrolHelmetStreams'
+import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import {
   fetchPatrolCameraRecords,
   fetchPatrolRecordDetections,
@@ -36,14 +38,31 @@ import {
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
+import { usePatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
+import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
 function PatrolKPIs() {
   const d = MOCK_PATROL_DASHBOARD
   const events = MOCK_PATROL_EVENTS
-  const totalAlerts = events.length
-  const ppeCount = events.filter(e => e.type === 'PPE_VIOLATION').length
-  const machineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
+  const live = usePatrolHelmetLiveMetrics('HC-01')
+  const mockAlerts = events.length
+  const mockPpeCount = events.filter(e => e.type === 'PPE_VIOLATION').length
+  const mockMachineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
+
+  const alertValue = live.connected
+    ? Math.max(live.ppeAlertsToday, live.activePpeViolations)
+    : mockAlerts
+  const totalAlerts = alertValue
+  const ppeCount = live.connected ? live.ppeAlertsToday : mockPpeCount
+  const machineCount = live.connected ? 0 : mockMachineCount
+  const peopleValue = live.connected ? live.personCount : d.uniquePeople
+  const peopleDetail = live.connected
+    ? `${live.personCount} trong khung · ${live.uniqueWorkers} unique · ${live.identifiedWorkers} đã nhận diện`
+    : 'Unique trên công trường hôm nay'
+  const alertDetail = live.connected
+    ? `${live.activePpeViolations} đang vi phạm · ${live.ppeAlertsToday} sự kiện đã ghi hôm nay`
+    : `${ppeCount} PPE · ${machineCount} Machine`
 
   const kpis = [
     {
@@ -59,9 +78,9 @@ function PatrolKPIs() {
     },
     {
       label: 'Công nhân',
-      value: d.uniquePeople,
+      value: peopleValue,
       unit: 'người',
-      detail: 'Unique trên công trường hôm nay',
+      detail: peopleDetail,
       change: 12,
       changeType: 'increase' as const,
       previousValue: 171,
@@ -85,7 +104,7 @@ function PatrolKPIs() {
       label: 'Cảnh báo',
       value: totalAlerts,
       unit: 'sự kiện',
-      detail: `${ppeCount} PPE · ${machineCount} Machine`,
+      detail: alertDetail,
       change: 1,
       changeType: 'increase' as const,
       previousValue: totalAlerts - 1,
@@ -171,10 +190,24 @@ export function Module05Page() {
   const [heatmapExpanded, setHeatmapExpanded] = useState(false)
 
   const playbackDate = getPatrolDefaultPlaybackDate()
+  const { cameras: visionCameras } = useCameras()
+
+  const patrolCamerasLive = useMemo(
+    () => applyPatrolHelmetEnvLive(
+      mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+    ),
+    [visionCameras],
+  )
+
+  const liveHelmetEvents = usePatrolHelmetLiveEvents('HC-01')
+  const patrolEventsLive = useMemo(
+    () => (liveHelmetEvents.connected ? liveHelmetEvents.events : MOCK_PATROL_EVENTS),
+    [liveHelmetEvents.connected, liveHelmetEvents.events],
+  )
 
   const detailEvent = useMemo(
-    () => MOCK_PATROL_EVENTS.find(e => e.id === detailEventId) ?? null,
-    [detailEventId],
+    () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
+    [detailEventId, patrolEventsLive],
   )
 
   const handleSelectCamera = (cam: TrainingCamera) => {
@@ -274,7 +307,7 @@ export function Module05Page() {
                       selectedId={selectedCamId}
                       onSelectCamera={handleSelectCamera}
                       onStreamCountChange={setActiveStreamCount}
-                      cameras={PATROL_CAMERAS}
+                      cameras={patrolCamerasLive}
                       defaultCameraIds={DEFAULT_PATROL_CAMERA_IDS}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab)}
@@ -282,7 +315,7 @@ export function Module05Page() {
                     />
                   ) : (
                     <CameraPlaybackPanel
-                      cameras={PATROL_CAMERAS}
+                      cameras={patrolCamerasLive}
                       selectedCameraId={selectedCamId}
                       onSelectCamera={handleSelectCamera}
                       defaultDate={playbackDate}
@@ -353,7 +386,7 @@ export function Module05Page() {
               }
             >
               <PatrolEventsPanel
-                events={MOCK_PATROL_EVENTS}
+                events={patrolEventsLive}
                 selectedId={selectedEventId}
                 onSelect={handleSelectEvent}
                 onSnapshotClick={ev => setDetailEventId(ev.id)}

@@ -4,6 +4,7 @@ import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJsmpegFeed'
 import { CameraChrome, CameraLiveBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
@@ -38,6 +39,11 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
         compact={compact}
         aiEnabled={aiOverlay}
       />
+    )
+  }
+  if (cam.wsUrl) {
+    return (
+      <CameraJsmpegFeed wsUrl={cam.wsUrl} cameraId={cam.id} />
     )
   }
   if (!cam.streamUrl) return null

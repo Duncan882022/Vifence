@@ -141,6 +141,9 @@ def _build_vms_workers() -> None:
             "wah": wah_engine.process_frame,
             "crane": crane_engine.process_frame,
         },
+        "HC-01": {
+            "ppe": ppe_engine.process_frame,
+        },
     }
 
     def on_event(ev):
@@ -154,10 +157,18 @@ def _build_vms_workers() -> None:
             source_path=source_path,
             process_frame_fns=engines,
             on_event=on_event,
-            ai_fps=settings.vms_ai_fps_effective(),
+            ai_fps=settings.vms_ai_fps,
         )
         _vms_workers[cam_id] = worker
-        logger.info("[VMS] Worker A-%s tạo xong (%d engines).", cam_id, len(engines))
+        logger.info("[VMS] Worker %s tạo xong (%d engines).", cam_id, len(engines))
+
+    from .vms_loop_state import register_seek_handler
+
+    def _seek_all_vms() -> None:
+        for worker in _vms_workers.values():
+            worker.seek_to_start()
+
+    register_seek_handler(_seek_all_vms)
 
 
 @asynccontextmanager

@@ -144,6 +144,7 @@ export function CameraVideoFeed({
     }
 
     const onStalled = () => {
+      if (isHls) return
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         video.load()
         tryPlay()
@@ -151,6 +152,7 @@ export function CameraVideoFeed({
     }
 
     const onError = () => {
+      if (isHls) return
       retryTimer = window.setTimeout(() => {
         video.load()
         tryPlay()
@@ -183,7 +185,7 @@ export function CameraVideoFeed({
       video.removeEventListener('error', onError)
       video.pause()
     }
-  }, [src, playing, isDesktop, streamIndex])
+  }, [src, playing, isDesktop, streamIndex, isHls])
 
   return (
     <div className="absolute inset-0 overflow-hidden">

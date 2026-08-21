@@ -125,9 +125,12 @@ def scan_loop_events() -> tuple[dict[str, EventHit], set[str]]:
             if frame is None:
                 continue
             for _ in range(int(VMS_AI_FPS)):
-                for eng in engines.values():
+                for eng_name, eng in engines.items():
                     try:
-                        _, evs = eng.process_frame(frame, camera_id)
+                        kwargs: dict = {}
+                        if eng_name in ("mesh", "atgt", "ppe", "pccc", "crane", "wah", "road"):
+                            kwargs["source_pts_sec"] = float(sec)
+                        _, evs = eng.process_frame(frame, camera_id, **kwargs)
                     except Exception as exc:  # noqa: BLE001
                         print(f"  WARN engine {camera_id} t={sec}: {exc}")
                         continue

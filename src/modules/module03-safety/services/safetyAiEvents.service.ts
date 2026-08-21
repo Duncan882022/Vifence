@@ -12,6 +12,7 @@ import { isImplementedSafetyScenario } from '../data/implementedSafetyCatalog'
 import { inferEventSourceMeta } from '../utils/safetyCameraBridge'
 import { isStaleAtgt004LaneNote } from '../utils/eventSubject'
 import { resolveVehiclePlate } from '../utils/vehiclePlate'
+import { isRecognizedWorker } from '../utils/personOverlayLabel'
 
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
@@ -150,6 +151,7 @@ export interface BackendViolationEvent {
   employee_code?: string | null
   contractor_name?: string | null
   face_match_confidence?: number | null
+  face_match_source?: string | null
 }
 
 function buildVehicleSubject(event: BackendViolationEvent): SafetyViolationRecord['subject'] {
@@ -164,9 +166,6 @@ function buildSiteConditionSubject(scenarioId: string): SafetyViolationRecord['s
   return {
     type: 'SITE_CONDITION',
     workItem: getScenarioName(scenarioId),
-    siteContractor: 'Vincons',
-    contractorName: 'Vincons',
-    responsibleUnit: 'CONTRACTOR',
   }
 }
 
@@ -175,41 +174,22 @@ function buildCam03SiteSubject(
   behavior: string,
 ): SafetyViolationRecord['subject'] {
   if (behavior.startsWith('mesh_')) {
-    return {
-      type: 'SITE_CONDITION',
-      siteContractor: 'Vincons',
-      contractorName: 'Vincons',
-      responsibleUnit: 'CONTRACTOR',
-    }
+    return { type: 'SITE_CONDITION' }
   }
   return buildSiteConditionSubject(scenarioId)
 }
 
-const CAM04_PCCC_SMOKING_DEMO_SUBJECT: SafetyViolationRecord['subject'] = {
-  type: 'PERSON',
-  workerId: 'w-021',
-  workerName: 'Phạm Quang Tùng',
-  employeeCode: 'VCS112233',
-  contractorName: 'Vincons',
-  responsibleUnit: 'CONTRACTOR',
-}
-
-const CAM04_DZ_DEMO_SUBJECT: SafetyViolationRecord['subject'] = {
-  type: 'PERSON',
-  workerId: 'w-019',
-  workerName: 'Nguyễn Văn Hoàng',
-  employeeCode: 'NV001155',
-  contractorName: 'Vincons',
-  responsibleUnit: 'CONTRACTOR',
-}
-
-function isUnknownWorkerName(name: string | undefined): boolean {
-  const trimmed = name?.trim()
-  return !trimmed || trimmed.toLowerCase() === 'unknown'
-}
-
 function buildPersonSubject(event: BackendViolationEvent): SafetyViolationRecord['subject'] {
-  const fromApi: SafetyViolationRecord['subject'] = {
+  const verified = isRecognizedWorker({
+    workerId: event.worker_id,
+    workerName: event.worker_name,
+    faceMatchConfidence: event.face_match_confidence,
+    faceMatchSource: event.face_match_source,
+  })
+  if (!verified) {
+    return { type: 'PERSON', responsibleUnit: 'CONTRACTOR' }
+  }
+  return {
     type: 'PERSON',
     workerId: event.worker_id ?? undefined,
     workerName: event.worker_name ?? undefined,
@@ -217,21 +197,6 @@ function buildPersonSubject(event: BackendViolationEvent): SafetyViolationRecord
     contractorName: event.contractor_name ?? undefined,
     responsibleUnit: 'CONTRACTOR',
   }
-  if (
-    event.behavior === 'smoking'
-    && event.camera_id === 'A-04'
-    && isUnknownWorkerName(fromApi.workerName)
-  ) {
-    return { ...CAM04_PCCC_SMOKING_DEMO_SUBJECT }
-  }
-  if (
-    event.camera_id === 'A-04'
-    && (event.behavior === 'crane_proximity' || event.scenario_id === 'DZ-003')
-    && isUnknownWorkerName(fromApi.workerName)
-  ) {
-    return { ...CAM04_DZ_DEMO_SUBJECT }
-  }
-  return fromApi
 }
 
 function isValidAtgt004LiveRecord(record: SafetyViolationRecord): boolean {

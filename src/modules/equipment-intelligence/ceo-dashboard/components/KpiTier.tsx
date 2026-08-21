@@ -184,7 +184,7 @@ export function KpiTier({
     ?? Math.round(reliability.mtbfHours / (reliability.mtbfHours + reliability.mttrHours) * 1000) / 10
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-2.5 items-stretch">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5 items-stretch">
 
       {/* ── Card 1 — Đội máy ── */}
       <KpiShell

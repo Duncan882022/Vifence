@@ -3,10 +3,10 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { cn } from '@/utils/cn'
 import type { AiAlert, AiSeverity } from '../types'
 
-const SEV_CONFIG: Record<AiSeverity, { label: string; cls: string; dot: string }> = {
-  critical: { label: 'Nghiêm trọng', cls: 'bg-red-500/15 text-red-400 border-red-500/30', dot: 'bg-red-400' },
-  high:     { label: 'Cao',          cls: 'bg-orange-500/15 text-orange-400 border-orange-500/30', dot: 'bg-orange-400' },
-  medium:   { label: 'Trung bình',   cls: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30', dot: 'bg-yellow-400' },
+const SEV_CONFIG: Record<AiSeverity, { cls: string; dot: string; ariaLabel: string }> = {
+  critical: { cls: 'bg-red-500/15 text-red-400 border-red-500/30', dot: 'bg-red-400', ariaLabel: 'Nghiêm trọng' },
+  high:     { cls: 'bg-orange-500/15 text-orange-400 border-orange-500/30', dot: 'bg-orange-400', ariaLabel: 'Cao' },
+  medium:   { cls: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30', dot: 'bg-yellow-400', ariaLabel: 'Trung bình' },
 }
 
 function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
@@ -36,20 +36,21 @@ export function AiAlertDrawer({ alert, open, onOpenChange }: Props) {
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="center"
-          className="overflow-hidden bg-[#0d1117] border border-[#1e2433] p-0 gap-0 shadow-2xl shadow-black/60"
+          className="overflow-hidden bg-[#0d1117] border border-[#1e2433] p-0 gap-0 shadow-2xl shadow-black/60 w-[min(960px,calc(100vw-1rem))] max-h-[min(92vh,900px)]"
         >
           <div className="flex flex-col max-h-[min(92vh,900px)]">
             {/* Header */}
             <div className="shrink-0 px-5 pt-5 pb-4 border-b border-[#1e2433]">
-              <div className="flex items-center gap-2.5 mb-3 pr-8">
-                <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center border shrink-0', sev.cls)}>
+              <div className="flex items-start gap-2.5 mb-3 pr-8">
+                <div
+                  className={cn('w-7 h-7 rounded-lg flex items-center justify-center border shrink-0', sev.cls)}
+                  aria-label={sev.ariaLabel}
+                  title={sev.ariaLabel}
+                >
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </div>
-                <div>
-                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold border', sev.cls)}>
-                    {sev.label}
-                  </span>
-                  <p className="text-[9px] text-muted-foreground/60 mt-0.5">{alert.subject}</p>
+                <div className="min-w-0">
+                  <p className="text-[9px] text-muted-foreground/60">{alert.subject}</p>
                 </div>
               </div>
               <h2 className="text-[15px] font-bold text-foreground leading-snug">{alert.title}</h2>

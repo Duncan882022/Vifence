@@ -13,11 +13,6 @@ const SEV_DOT: Record<AiSeverity, string> = {
   medium:   'bg-yellow-400',
 }
 
-const SEV_LABEL: Record<AiSeverity, string> = {
-  critical: 'Nghiêm trọng',
-  high:     'Cao',
-  medium:   'Trung bình',
-}
 
 const SEV_ORDER: Record<AiSeverity, number> = { critical: 0, high: 1, medium: 2 }
 
@@ -99,8 +94,6 @@ export function AiOperationAlertsBell() {
                   <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-1.5', SEV_DOT[alert.severity])} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
-                      <span className="text-[8px] font-bold text-muted-foreground/70">{SEV_LABEL[alert.severity]}</span>
-                      {' · '}
                       <span className="text-[8px] text-sky-400">{alert.subject}</span>
                       {!alert.read && <span className="w-1 h-1 rounded-full bg-primary shrink-0" />}
                     </div>

@@ -2,6 +2,7 @@
  * Local MP4 feeds — cắt từ YouTube Unicons Safety Supervisors (Js-1FbF-7yU).
  * OCP1-A/B: CCTV 16:9 · Body cam: 9:16 · Flycam: 16:9 toàn cảnh.
  * A-03 (TTDV-A · Cam 03): mock từ public/camera-feeds/ttdv-a-cam03-test.mp4
+ *   (build: scripts/build-cam03-test-mp4.sh — 5s mesh intro + ~15s body ATGT/road)
  * A-04 (TTDV-A · Cam 04): mock từ public/camera-feeds/ttdv-a-cam04-test.mp4
  *   (build: scripts/build-cam04-test-mp4.sh — ảnh demo 0355/0359/0360 + PPE/PCCC/WAH scene)
  *
@@ -77,7 +78,7 @@ export function getCameraFeedUrl(key: CameraFeedKey): string {
 }
 
 const POSTER_FILES: Partial<Record<CameraFeedKey, string>> = {
-  'ocp1-a-03': 'cam03-atgt-scene.jpg',
+  'ocp1-a-03': 'cam03-mesh-demo.jpg',
   'ocp1-a-04': 'cam04-ppe-workers.jpg',
 }
 
@@ -110,6 +111,8 @@ export const CAMERA_FEED_BY_ID: Record<string, CameraFeedKey> = {
   'BC-01': 'bodycam-01',
   'BC-02': 'bodycam-02',
   'BC-03': 'bodycam-03',
+  'HC-01': 'bodycam-01',
+  'HC-02': 'bodycam-02',
   'FC-01': 'flycam-01',
   'FC-02': 'flycam-02',
 }

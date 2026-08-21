@@ -23,6 +23,7 @@ export interface CraneProximityDetection {
   employee_code?: string
   contractor_name?: string
   face_match_confidence?: number
+  face_match_source?: string
   machine_kind?:
     | 'crane_green'
     | 'sany_drill'

@@ -24,7 +24,10 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     overlayKind: 'road',
     modelVersion: 'v3',
     modelMetric: 'mAP50 0.82 · mesh HSV',
-    videoSegments: [{ startSec: 0, endSec: 15.05 }],
+    videoSegments: [
+      { startSec: 0, endSec: 5.05 },
+      { startSec: 5, endSec: 20.05 },
+    ],
   },
   {
     id: 'crane_proximity',
@@ -87,8 +90,8 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     endpoint: '/analyze/atgt/frame',
     overlayKind: 'atgt',
     videoSegments: [
-      { startSec: 5, endSec: 15.5 },
-      { startSec: 15.5, endSec: 20.05 },
+      { startSec: 5, endSec: 12.05 },
+      { startSec: 12, endSec: 20.05 },
     ],
   },
   {

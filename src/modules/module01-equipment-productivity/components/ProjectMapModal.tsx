@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, AlertTriangle, CheckCircle2, Clock, Wrench, MapPin, HardHat, Fuel, User,
+  X, AlertTriangle, HardHat,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { Project, Worksite, PileStatus, DelayReason } from '../types'
@@ -40,16 +40,12 @@ interface PileDot {
   diameterMm: number
   depthM: number
   machineCode?: string
-  machineType?: string
-  operator?: string
   delayReason?: DelayReason
   plannedStart?: string
   plannedEnd?: string
   actualStart?: string
   actualEnd?: string
   actualDurationH?: number
-  delayHours?: number
-  fuelUsedLitres?: number
   x: number
   y: number
   isReal: boolean
@@ -92,7 +88,7 @@ const DWG = {
   vw: 1200, vh: 860,
   outerX: 8,  outerY: 8,  outerW: 1184, outerH: 844,
   innerX: 22, innerY: 22, innerW: 1156, innerH: 812,
-  tbY: 776,   tbH: 58,
+  tbY: 796,   tbH: 28,
   /* area where building sits */
   pgX: 75,  pgY: 60,  pgW: 1105, pgH: 690,
 }
@@ -197,8 +193,81 @@ function calcBuildingLayout(targetPiles: number): BuildingLayout {
 /* ─────────────────────────────────────────────────────────
    Build pile dots from worksite data + building layout
 ───────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────
+   Pile mock helpers
+───────────────────────────────────────────────────────── */
+const PILE_DIAMETERS = [800, 800, 900, 1000] as const
+const PILE_DEPTHS = [24, 26, 28, 30, 32, 35, 38] as const
+const MOCK_DAY = '2026-07-06'
+
+function pileCodeFor(ws: Worksite, index: number): string {
+  const [proj, khu] = ws.id.split('-')
+  return `${proj.toUpperCase()}-K${khu}-${String(index + 1).padStart(3, '0')}`
+}
+
+function pileIso(h: number, m = 0): string {
+  return `${MOCK_DAY}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
+}
+
+function drillMachinesFor(ws: Worksite) {
+  return MACHINES.filter(
+    m => m.worksiteId === ws.id && /^(SANY|XCMG|BAUER)-/.test(m.code),
+  )
+}
+
+function delayReasonFor(ws: Worksite, index: number): DelayReason {
+  const r = ws.materialReadiness
+  const pool: DelayReason[] = []
+  if (r.bentonitePct < 70) pool.push('lack-bentonite')
+  if (r.concretePct < 75) pool.push('lack-concrete')
+  if (r.steelCagePct < 75) pool.push('lack-steel-cage')
+  if (r.laborPct < 75) pool.push('lack-worker')
+  if (pool.length === 0) pool.push('site-not-ready', 'weather')
+  return pool[index % pool.length]
+}
+
+function synthPilePlan(ws: Worksite, index: number, status: PileStatus) {
+  const diameterMm = PILE_DIAMETERS[index % PILE_DIAMETERS.length]
+  const depthM = PILE_DEPTHS[(index * 3 + ws.plannedPiles) % PILE_DEPTHS.length]
+  const durationH = Math.round((2.2 + (diameterMm / 800) * 1.8) * 10) / 10
+  const shiftStart = 6 + Math.floor(index / 3) * 4
+  const plannedStart = pileIso(shiftStart, (index % 3) * 15)
+  const endH = shiftStart + Math.floor(durationH)
+  const endM = Math.round((durationH % 1) * 60)
+  const plannedEnd = pileIso(endH, endM)
+
+  const drills = drillMachinesFor(ws)
+  const machine = drills[index % Math.max(drills.length, 1)]
+
+  if (status === 'not-started') {
+    return { diameterMm, depthM, plannedStart, plannedEnd, machineCode: machine?.code }
+  }
+
+  const actualStart = plannedStart
+  if (status === 'completed') {
+    const actualEnd = plannedEnd
+    return {
+      diameterMm, depthM, plannedStart, plannedEnd, actualStart, actualEnd,
+      actualDurationH: durationH, machineCode: machine?.code,
+    }
+  }
+  if (status === 'in-progress') {
+    return {
+      diameterMm, depthM, plannedStart, plannedEnd, actualStart,
+      machineCode: machine?.code,
+    }
+  }
+  return {
+    diameterMm, depthM, plannedStart, plannedEnd, actualStart,
+    machineCode: machine?.code,
+    delayReason: status === 'blocked' ? 'machine-breakdown' as DelayReason : delayReasonFor(ws, index),
+  }
+}
+
 function buildDots(ws: Worksite, layout: BuildingLayout): PileDot[] {
-  const real       = PILE_ASSIGNMENTS.filter(p => p.worksiteId === ws.id)
+  const real = PILE_ASSIGNMENTS
+    .filter(p => p.worksiteId === ws.id)
+    .sort((a, b) => a.pileCode.localeCompare(b.pileCode, 'vi'))
   const machineMap = Object.fromEntries(MACHINES.map(m => [m.id, m]))
 
   /* Remaining synthetic statuses after accounting for real piles */
@@ -228,13 +297,11 @@ function buildDots(ws: Worksite, layout: BuildingLayout): PileDot[] {
         pileCode: rp.pileCode, capId: pos.capId,
         status: rp.status,
         diameterMm: rp.diameterMm, depthM: rp.depthM,
-        machineCode: m?.code, machineType: m?.type, operator: m?.operator,
+        machineCode: m?.code,
         delayReason: rp.delayReason,
         plannedStart: rp.plannedStart, plannedEnd: rp.plannedEnd,
         actualStart: rp.actualStart, actualEnd: rp.actualEnd,
         actualDurationH: rp.actualDurationH,
-        delayHours: rp.delayHours > 0 ? rp.delayHours : undefined,
-        fuelUsedLitres: rp.fuelUsedLitres,
         x: pos.x, y: pos.y, isReal: true,
       })
     } else {
@@ -245,11 +312,11 @@ function buildDots(ws: Worksite, layout: BuildingLayout): PileDot[] {
       else if (remBlk  > 0) { status = 'blocked';     remBlk-- }
       else                  { status = 'not-started' }
 
+      const plan = synthPilePlan(ws, i, status)
       dots.push({
-        pileCode: `${ws.code}-${String(i + 1).padStart(3, '0')}`,
+        pileCode: pileCodeFor(ws, i),
         capId: pos.capId, status,
-        diameterMm: [800, 800, 900, 1000][i % 4],
-        depthM:     [25, 28, 30, 32, 35][i % 5],
+        ...plan,
         x: pos.x, y: pos.y, isReal: false,
       })
     }
@@ -261,10 +328,6 @@ function buildDots(ws: Worksite, layout: BuildingLayout): PileDot[] {
    Helpers
 ───────────────────────────────────────────────────────── */
 function fmtTime(iso?: string)  { return iso ? iso.slice(11, 16) : '—' }
-function fmtDate(iso?: string) {
-  if (!iso) return '—'
-  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
-}
 function colLabel(i: number)    { return String.fromCharCode(65 + i) }
 
 /* ─────────────────────────────────────────────────────────
@@ -285,17 +348,8 @@ function CadDrawing({
     ? Math.round((ws.completedPiles / ws.plannedPiles) * 100)
     : 0
 
-  const arrowE = `ae-${uid}`
-  const arrowS = `as-${uid}`
-
-  /* Axis extension beyond building edge */
   const AX = 30
-  const BUBBLE_OFFSET = 44  /* distance from building edge to bubble centre */
-
-  /* Real mm spacing (1:100 scale → 1px=100mm) */
-  const realColMm = Math.round(layout.colSpacing * 100 / 100) * 100
-  const realRowMm = Math.round(layout.rowSpacing * 100 / 100) * 100
-
+  const BUBBLE_OFFSET = 44
   const PILE_R = 4
 
   return (
@@ -307,13 +361,6 @@ function CadDrawing({
     >
       {/* ── Defs first ── */}
       <defs>
-        <marker id={arrowE} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill={C.dim} />
-        </marker>
-        <marker id={arrowS} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto-start-reverse">
-          <path d="M0,0 L6,3 L0,6 Z" fill={C.dim} />
-        </marker>
-        {/* Hatch pattern for pile cap fill */}
         <pattern id={`hatch-${uid}`} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="4" stroke="#1a2d4a" strokeWidth="1" />
         </pattern>
@@ -329,47 +376,16 @@ function CadDrawing({
       <rect x={DWG.innerX} y={DWG.innerY} width={DWG.innerW} height={DWG.innerH}
         fill="none" stroke={C.line} strokeWidth="1" />
 
-      {/* ── Title block ── */}
+      {/* ── Title strip (gọn) ── */}
       <line x1={DWG.innerX} y1={DWG.tbY} x2={DWG.innerX + DWG.innerW} y2={DWG.tbY}
-        stroke={C.line} strokeWidth="1.5" />
+        stroke={C.line} strokeWidth="1" />
       <rect x={DWG.innerX} y={DWG.tbY} width={DWG.innerW} height={DWG.tbH} fill={C.tbBg} />
-      {[320, 640, 860, 1000].map(dx => (
-        <line key={dx}
-          x1={DWG.innerX + dx} y1={DWG.tbY}
-          x2={DWG.innerX + dx} y2={DWG.tbY + DWG.tbH}
-          stroke={C.tbLine} strokeWidth="0.8" />
-      ))}
-      <line x1={DWG.innerX} y1={DWG.tbY + DWG.tbH / 2}
-        x2={DWG.innerX + 860} y2={DWG.tbY + DWG.tbH / 2}
-        stroke={C.tbLine} strokeWidth="0.6" />
-
-      {/* Title block text */}
-      <text x={DWG.innerX + 8} y={DWG.tbY + 13} fontSize="8" fill={C.textSub} letterSpacing="1">CÔNG TY</text>
-      <text x={DWG.innerX + 8} y={DWG.tbY + 25} fontSize="10" fontWeight="bold" fill={C.text}>VIFENCE CORP.</text>
-      <text x={DWG.innerX + 8} y={DWG.tbY + 38} fontSize="8" fill={C.textSub}>Hệ thống giám sát thi công</text>
-      <text x={DWG.innerX + 8} y={DWG.tbY + 51} fontSize="8" fill={C.textSub}>vifence.com.vn</text>
-
-      <text x={DWG.innerX + 328} y={DWG.tbY + 13} fontSize="8" fill={C.textSub} letterSpacing="1">TÊN BẢN VẼ</text>
-      <text x={DWG.innerX + 328} y={DWG.tbY + 27} fontSize="11" fontWeight="bold" fill={C.text}>BẢN VẼ BỐ TRÍ CỌC NHỒI</text>
-      <text x={DWG.innerX + 328} y={DWG.tbY + 41} fontSize="10" fill="#7dd3fc">{ws.name}</text>
-      <text x={DWG.innerX + 328} y={DWG.tbY + 55} fontSize="8" fill={C.textSub}>
-        {ws.completedPiles}/{ws.plannedPiles} cọc · {completedPct}% hoàn thành
+      <text x={DWG.innerX + 12} y={DWG.tbY + 18} fontSize="9" fill={C.text}>
+        {ws.code} · 1:100 · {ws.completedPiles}/{ws.plannedPiles} cọc ({completedPct}%)
       </text>
-
-      <text x={DWG.innerX + 648} y={DWG.tbY + 13} fontSize="8" fill={C.textSub}>TỈ LỆ</text>
-      <text x={DWG.innerX + 648} y={DWG.tbY + 27} fontSize="11" fontWeight="bold" fill={C.text}>1:100</text>
-      <text x={DWG.innerX + 648} y={DWG.tbY + 41} fontSize="8" fill={C.textSub}>SỐ BẢN VẼ</text>
-      <text x={DWG.innerX + 648} y={DWG.tbY + 55} fontSize="10" fontWeight="bold" fill={C.text}>{dwgNo}</text>
-
-      <text x={DWG.innerX + 868} y={DWG.tbY + 13} fontSize="8" fill={C.textSub}>NGÀY</text>
-      <text x={DWG.innerX + 868} y={DWG.tbY + 26} fontSize="9" fill={C.text}>04/07/2026</text>
-      <text x={DWG.innerX + 868} y={DWG.tbY + 41} fontSize="8" fill={C.textSub}>PHIÊN BẢN</text>
-      <text x={DWG.innerX + 868} y={DWG.tbY + 54} fontSize="9" fill={C.text}>Rev. A</text>
-
-      <text x={DWG.innerX + 1008} y={DWG.tbY + 13} fontSize="8" fill={C.textSub}>LẬP</text>
-      <text x={DWG.innerX + 1008} y={DWG.tbY + 26} fontSize="9" fill={C.text}>Vifence AI</text>
-      <text x={DWG.innerX + 1008} y={DWG.tbY + 41} fontSize="8" fill={C.textSub}>KIỂM TRA</text>
-      <text x={DWG.innerX + 1008} y={DWG.tbY + 54} fontSize="9" fill={C.text}>PM / CĐT</text>
+      <text x={DWG.innerX + DWG.innerW - 12} y={DWG.tbY + 18} textAnchor="end" fontSize="8" fill={C.textSub}>
+        {dwgNo}
+      </text>
 
       {/* ── Building outline (dashed) ── */}
       <rect
@@ -477,11 +493,6 @@ function CadDrawing({
             width={cap.capW} height={cap.capH}
             fill={`url(#hatch-${uid})`} stroke={C.capStroke} strokeWidth="1.2"
           />
-          {/* Cap type label */}
-          <text x={cap.cx} y={cap.cy - cap.capH / 2 - 3}
-            textAnchor="middle" fontSize="6" fill={C.dim}>
-            {cap.type}
-          </text>
         </g>
       ))}
 
@@ -516,13 +527,10 @@ function CadDrawing({
             <circle cx={dot.x} cy={dot.y} r={r}
               fill={isSel ? pc.stroke + '55' : pc.fill}
               stroke={pc.stroke} strokeWidth={isSel ? 2 : 1.5} />
-            {/* Label (only for selected or real data piles) */}
-            {(isSel || dot.isReal) && (
+            {/* Label — chỉ cọc đang chọn */}
+            {isSel && (
               <text x={dot.x} y={dot.y + r + 9}
-                textAnchor="middle"
-                fontSize={isSel ? 7 : 5.5}
-                fontWeight={isSel ? 'bold' : 'normal'}
-                fill={isSel ? pc.glow : C.textSub}>
+                textAnchor="middle" fontSize="7" fontWeight="bold" fill={pc.glow}>
                 {dot.pileCode}
               </text>
             )}
@@ -530,65 +538,27 @@ function CadDrawing({
         )
       })}
 
-      {/* ── Dimension lines ── */}
-      {layout.colXs.length >= 2 && (
-        <g>
-          {/* Horizontal dim (top) */}
-          <line
-            x1={layout.colXs[0]} y1={layout.bldgY - AX - 12}
-            x2={layout.colXs[1]} y2={layout.bldgY - AX - 12}
-            stroke={C.dim} strokeWidth="0.8"
-            markerEnd={`url(#${arrowE})`} markerStart={`url(#${arrowS})`}
-          />
-          <line x1={layout.colXs[0]} y1={layout.bldgY - AX - 16} x2={layout.colXs[0]} y2={layout.bldgY - AX - 8}
-            stroke={C.dim} strokeWidth="0.8" />
-          <line x1={layout.colXs[1]} y1={layout.bldgY - AX - 16} x2={layout.colXs[1]} y2={layout.bldgY - AX - 8}
-            stroke={C.dim} strokeWidth="0.8" />
-          <text
-            x={(layout.colXs[0] + layout.colXs[1]) / 2} y={layout.bldgY - AX - 17}
-            textAnchor="middle" fontSize="7.5" fill={C.dim}>
-            {realColMm.toLocaleString()} mm (TYP.)
-          </text>
-        </g>
-      )}
-      {layout.rowYs.length >= 2 && (
-        <g>
-          {/* Vertical dim (left) */}
-          <line
-            x1={layout.bldgX - AX - 12} y1={layout.rowYs[0]}
-            x2={layout.bldgX - AX - 12} y2={layout.rowYs[1]}
-            stroke={C.dim} strokeWidth="0.8"
-            markerEnd={`url(#${arrowE})`} markerStart={`url(#${arrowS})`}
-          />
-          <line x1={layout.bldgX - AX - 16} y1={layout.rowYs[0]} x2={layout.bldgX - AX - 8} y2={layout.rowYs[0]}
-            stroke={C.dim} strokeWidth="0.8" />
-          <line x1={layout.bldgX - AX - 16} y1={layout.rowYs[1]} x2={layout.bldgX - AX - 8} y2={layout.rowYs[1]}
-            stroke={C.dim} strokeWidth="0.8" />
-          <text
-            x={layout.bldgX - AX - 22}
-            y={(layout.rowYs[0] + layout.rowYs[1]) / 2 + 4}
-            textAnchor="middle" fontSize="7.5" fill={C.dim}
-            transform={`rotate(-90,${layout.bldgX - AX - 22},${(layout.rowYs[0] + layout.rowYs[1]) / 2})`}>
-            {realRowMm.toLocaleString()} mm (TYP.)
-          </text>
-        </g>
-      )}
-
-      {/* ── North arrow — positioned in bottom-right corner above title block ── */}
-      <g transform={`translate(${DWG.innerX + DWG.innerW - 32}, ${DWG.tbY - 30})`}>
-        <circle r="18" fill="#0a1020" stroke={C.line} strokeWidth="0.8" />
-        <polygon points="0,-12 3,3 0,0 -3,3" fill={C.line} />
-        <polygon points="0,12 3,-3 0,0 -3,-3" fill={C.dim} />
-        <text y="-14" textAnchor="middle" fontSize="8" fontWeight="bold" fill={C.text}>N</text>
-        <circle cx="0" cy="0" r="2.5" fill={C.line} />
-      </g>
-
-      {/* ── Pile count annotation ── */}
-      <text x={DWG.pgX} y={DWG.tbY - 8} fontSize="8" fill={C.textSub}>
-        TỔNG SỐ CỌC: {ws.plannedPiles}  ·  XONG: {ws.completedPiles}  ·  TỈ LỆ: {completedPct}%  ·  LƯỚI TRỤC: {layout.ncols}×{layout.nrows}
-      </text>
     </svg>
   )
+}
+
+function buildScheduleLine(dot: PileDot): string {
+  const khStart = fmtTime(dot.plannedStart)
+  const khEnd = fmtTime(dot.plannedEnd)
+
+  if (dot.status === 'not-started') {
+    return `KH ${khStart}–${khEnd}`
+  }
+  if (dot.status === 'in-progress') {
+    return dot.actualStart
+      ? `Bắt đầu ${fmtTime(dot.actualStart)} · KH xong ${khEnd}`
+      : `KH ${khStart}–${khEnd}`
+  }
+  if (dot.actualStart && dot.actualEnd) {
+    const dur = dot.actualDurationH !== undefined ? ` · ${dot.actualDurationH}h` : ''
+    return `${fmtTime(dot.actualStart)}–${fmtTime(dot.actualEnd)}${dur}`
+  }
+  return `KH ${khStart}–${khEnd}`
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -596,123 +566,55 @@ function CadDrawing({
 ───────────────────────────────────────────────────────── */
 function PileDetail({ dot }: { dot: PileDot }) {
   const pc = PC[dot.status]
+  const showDelay = (dot.status === 'delayed' || dot.status === 'blocked') && Boolean(dot.delayReason)
+  const showMachine = Boolean(dot.machineCode) && dot.status !== 'not-started'
+
   return (
     <motion.div
       key={dot.pileCode}
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.16 }}
-      className="flex flex-col gap-2.5"
+      transition={{ duration: 0.14 }}
+      className="rounded-lg border border-[#1e2433] bg-[#060b14] overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-start gap-2">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: pc.stroke + '22', border: `1px solid ${pc.stroke}44` }}>
-          <Wrench className="w-4 h-4" style={{ color: pc.stroke }} />
-        </div>
+      <div
+        className="h-0.5"
+        style={{ background: pc.stroke }}
+      />
+      <div className="px-3 py-2.5 space-y-2">
         <div>
-          <p className="text-sm font-bold text-foreground leading-tight">{dot.pileCode}</p>
+          <p className="text-xs font-bold text-foreground leading-tight">{dot.pileCode}</p>
+          <p className="text-[9px] font-semibold mt-1 flex items-center gap-1.5" style={{ color: pc.stroke }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: pc.stroke }} />
+            {STATUS_LABEL[dot.status]}
+          </p>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground/75 tabular-nums">
+          Ø{dot.diameterMm} mm · sâu {dot.depthM} m
+        </p>
+
+        {showMachine && (
           <p className="text-[10px] text-muted-foreground">
-            Ø{dot.diameterMm} mm · sâu {dot.depthM} m · {dot.capId ? `Đài ${dot.capId}` : ''}
-          </p>
-        </div>
-      </div>
-
-      {/* Status */}
-      <span className="inline-flex items-center gap-1.5 self-start text-[10px] font-semibold px-2.5 py-1 rounded-full"
-        style={{ background: pc.stroke + '22', color: pc.stroke, border: `1px solid ${pc.stroke}44` }}>
-        {dot.status === 'completed'   && <CheckCircle2 className="w-3 h-3" />}
-        {dot.status === 'in-progress' && <Clock className="w-3 h-3" />}
-        {(dot.status === 'delayed' || dot.status === 'blocked') && <AlertTriangle className="w-3 h-3" />}
-        {STATUS_LABEL[dot.status]}
-      </span>
-
-      {/* Schedule */}
-      <div className="bg-[#0a0e15] border border-[#1e2433] rounded-lg p-2.5 flex flex-col gap-1.5">
-        <p className="text-[8px] uppercase font-semibold text-muted-foreground tracking-wide flex items-center gap-1">
-          <MapPin className="w-2.5 h-2.5" /> Lịch thi công
-        </p>
-        <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
-          <span className="text-[9px] text-muted-foreground/70">Ngày</span>
-          <span className="text-[9px] font-semibold text-foreground/90">
-            {fmtDate(dot.actualStart ?? dot.plannedStart)}
-          </span>
-          <span className="text-[9px] text-muted-foreground/70">KH bắt đầu</span>
-          <span className="text-[9px] tabular-nums text-foreground/80">
-            {fmtTime(dot.plannedStart)}
-          </span>
-          <span className="text-[9px] text-muted-foreground/70">KH kết thúc</span>
-          <span className="text-[9px] tabular-nums text-foreground/80">
-            {fmtTime(dot.plannedEnd)}
-          </span>
-          {dot.actualStart && <>
-            <span className="text-[9px] text-muted-foreground/70">Bắt đầu TT</span>
-            <span className="text-[9px] font-semibold text-sky-400 tabular-nums">{fmtTime(dot.actualStart)}</span>
-          </>}
-          {dot.actualEnd && <>
-            <span className="text-[9px] text-muted-foreground/70">Kết thúc TT</span>
-            <span className="text-[9px] font-semibold text-sky-400 tabular-nums">{fmtTime(dot.actualEnd)}</span>
-          </>}
-          {dot.actualDurationH !== undefined && <>
-            <span className="text-[9px] text-muted-foreground/70">Thời lượng TT</span>
-            <span className="text-[9px] font-semibold text-emerald-400 tabular-nums">{dot.actualDurationH}h</span>
-          </>}
-          {dot.delayHours !== undefined && <>
-            <span className="text-[9px] text-muted-foreground/70">Trễ</span>
-            <span className="text-[9px] font-semibold text-amber-400 tabular-nums">{dot.delayHours}h</span>
-          </>}
-        </div>
-      </div>
-
-      {/* Machine */}
-      <div className="bg-[#0a0e15] border border-[#1e2433] rounded-lg p-2.5 flex flex-col gap-1.5">
-        <p className="text-[8px] uppercase font-semibold text-muted-foreground tracking-wide flex items-center gap-1">
-          <Wrench className="w-2.5 h-2.5" /> Thiết bị thi công
-        </p>
-        {dot.machineCode ? (
-          <>
-            <p className="text-xs font-bold text-sky-400">{dot.machineCode}</p>
-            {dot.machineType && (
-              <p className="text-[9px] text-muted-foreground/60 leading-snug">{dot.machineType}</p>
-            )}
-            {dot.operator && (
-              <p className="flex items-center gap-1 text-[9px] text-foreground/70 mt-0.5">
-                <User className="w-2.5 h-2.5 shrink-0 text-muted-foreground/50" />
-                {dot.operator}
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="text-[10px] text-muted-foreground/40 italic">Chưa phân công</p>
-        )}
-        {dot.fuelUsedLitres !== undefined && (
-          <p className="flex items-center gap-1 text-[9px] text-amber-400/70 mt-0.5">
-            <Fuel className="w-2.5 h-2.5" /> Nhiên liệu: {dot.fuelUsedLitres} lít
+            Máy <span className="text-sky-400 font-semibold">{dot.machineCode}</span>
           </p>
         )}
-      </div>
 
-      {/* Delay reason */}
-      {dot.delayReason ? (
-        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-2.5 flex items-start gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[8px] uppercase font-semibold text-red-400/60 tracking-wide">Nguyên nhân chậm</p>
-            <p className="text-[11px] font-bold text-red-400 mt-0.5">{DELAY_LABELS[dot.delayReason]}</p>
-          </div>
-        </div>
-      ) : dot.status !== 'not-started' ? (
-        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-2 flex items-center gap-2">
-          <CheckCircle2 className="w-3 h-3 text-green-400/60" />
-          <p className="text-[9px] text-green-400/60">Không có sự cố</p>
-        </div>
-      ) : null}
-
-      {!dot.isReal && (
-        <p className="text-[8px] text-muted-foreground/30 text-center italic mt-1">
-          Dữ liệu kế hoạch tổng hợp
+        <p className="text-[10px] tabular-nums text-foreground/85 leading-snug">
+          {buildScheduleLine(dot)}
         </p>
-      )}
+
+        {showDelay && (
+          <p className="text-[10px] text-red-400 font-medium flex items-start gap-1.5 leading-snug">
+            <AlertTriangle className="w-3 h-3 shrink-0 mt-px" />
+            {DELAY_LABELS[dot.delayReason!]}
+          </p>
+        )}
+
+        {dot.isReal && (
+          <p className="text-[8px] text-primary/50">Log thi công thực tế</p>
+        )}
+      </div>
     </motion.div>
   )
 }
@@ -779,100 +681,58 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
           'flex flex-col bg-[#0b0f18] border border-[#1e2433] rounded-xl shadow-2xl overflow-hidden',
         )}
       >
-        {/* ── Header (2 rows) ── */}
-        <div className="shrink-0 border-b border-[#1e2433]">
-          {/* Row 1: project info + close */}
-          <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5 min-w-0">
-            <div className="w-6 h-6 rounded-md bg-violet-500/10 flex items-center justify-center shrink-0">
-              <HardHat className="w-3 h-3 text-violet-400" />
-            </div>
-            <span className="font-bold text-sm text-foreground truncate min-w-0">{project.name}</span>
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 shrink-0">
-              {project.code}
-            </span>
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-              <MapPin className="w-3 h-3" />{project.region}
-            </span>
-            <div className="flex-1" />
-            <button
-              onClick={onClose}
-              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+        {/* ── Header ── */}
+        <div className="shrink-0 border-b border-[#1e2433] px-4 py-2 flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 shrink">
+            <HardHat className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <span className="font-bold text-sm text-foreground truncate">{project.name}</span>
           </div>
-          {/* Row 2: worksite tabs + summary chips */}
-          <div className="flex items-center gap-2 px-4 pb-2 min-w-0">
-            {/* Scrollable tabs area */}
-            <div className="flex gap-1 overflow-x-auto flex-nowrap flex-1 min-w-0">
-              {worksites.map(ws => {
-                const pct = ws.plannedPiles > 0
-                  ? Math.round(ws.completedPiles / ws.plannedPiles * 100) : 0
-                const riskCount = ws.delayedPiles + ws.blockedPiles
-                return (
-                  <button key={ws.id} onClick={() => switchWs(ws.id)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-semibold transition-colors shrink-0',
-                      activeWsId === ws.id
-                        ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent',
-                    )}>
-                    {ws.code}
-                    <span className={cn('text-[9px] font-bold tabular-nums',
-                      pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400')}>
-                      {pct}%
-                    </span>
-                    {riskCount > 0 && (
-                      <span className="text-[8px] text-amber-400 font-bold">
-                        ⚠{riskCount}
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-            {/* Summary chips — fixed to the right, outside overflow zone */}
-            {activeWs && (
-              <div className="flex items-center gap-2 shrink-0 pl-1 border-l border-[#1e2433]">
-                <span className="text-[9px] text-green-400/70 tabular-nums">{activeWs.completedPiles} xong</span>
-                <span className="text-[9px] text-sky-400/70 tabular-nums">{activeWs.inProgressPiles} t/c</span>
-                {activeWs.delayedPiles + activeWs.blockedPiles > 0 && (
-                  <span className="text-[9px] text-amber-400/70 tabular-nums">{activeWs.delayedPiles + activeWs.blockedPiles} rủi ro</span>
-                )}
-                <span className="text-[9px] text-muted-foreground/40 tabular-nums">/{activeWs.plannedPiles}</span>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* ── HTML legend bar ── */}
-        <div className="flex items-center gap-4 px-4 py-1.5 border-b border-[#1e2433]/60 bg-[#060a10] shrink-0 overflow-x-auto flex-nowrap">
-          {(
-            [
-              ['completed',   'Hoàn thành'],
-              ['in-progress', 'Đang thi công'],
-              ['delayed',     'Chậm tiến độ'],
-              ['blocked',     'Đình trệ'],
-              ['not-started', 'Chưa bắt đầu'],
-            ] as [PileStatus, string][]
-          ).map(([s, lbl]) => (
-            <span key={s} className="flex items-center gap-1.5 text-[9px] text-muted-foreground shrink-0">
-              <svg width="12" height="12" viewBox="0 0 12 12">
-                <circle cx="6" cy="6" r="4.5" fill={PC[s].fill} stroke={PC[s].stroke} strokeWidth="1.2" />
-                <line x1="1.5" y1="6" x2="10.5" y2="6" stroke={PC[s].stroke} strokeWidth="0.8" />
-                <line x1="6" y1="1.5" x2="6" y2="10.5" stroke={PC[s].stroke} strokeWidth="0.8" />
-              </svg>
-              {lbl}
-            </span>
-          ))}
-          <span className="flex items-center gap-1.5 text-[9px] text-muted-foreground shrink-0 ml-1">
-            <span className="inline-block w-4 h-3 border border-[#2e4a70]"
-              style={{ background: 'repeating-linear-gradient(45deg, #1a2d4a, #1a2d4a 1px, transparent 1px, transparent 4px)' }} />
-            Đài cọc
-          </span>
-          <span className="text-[9px] text-muted-foreground/40 shrink-0 ml-4">
-            Click vào ký hiệu cọc để xem chi tiết
-          </span>
+          <div className="flex gap-1 overflow-x-auto flex-nowrap flex-1 min-w-0">
+            {worksites.map(ws => {
+              const pct = ws.plannedPiles > 0
+                ? Math.round(ws.completedPiles / ws.plannedPiles * 100) : 0
+              return (
+                <button key={ws.id} onClick={() => switchWs(ws.id)}
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors shrink-0',
+                    activeWsId === ws.id
+                      ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent',
+                  )}>
+                  {ws.code.replace(/ Khu /, '-K')}
+                  <span className={cn('text-[9px] tabular-nums',
+                    pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400')}>
+                    {pct}%
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {(
+              [
+                ['completed', 'Xong'],
+                ['in-progress', 'TC'],
+                ['delayed', 'Chậm'],
+                ['blocked', 'Trệ'],
+                ['not-started', 'Chưa'],
+              ] as [PileStatus, string][]
+            ).map(([s, lbl]) => (
+              <span key={s} className="flex items-center gap-1 text-[8px] text-muted-foreground/60" title={STATUS_LABEL[s]}>
+                <span className="w-2 h-2 rounded-full" style={{ background: PC[s].stroke }} />
+                {lbl}
+              </span>
+            ))}
+          </div>
+
+          <button
+            onClick={onClose}
+            className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* ── Body ── */}
@@ -892,13 +752,13 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
           </div>
 
           {/* Detail panel */}
-          <div className="w-56 sm:w-60 shrink-0 border-l border-[#1e2433] flex flex-col min-h-0 bg-[#0b0f18]">
+          <div className="w-48 sm:w-52 shrink-0 border-l border-[#1e2433] flex flex-col min-h-0 bg-[#0b0f18]">
             <div className="px-3 py-2 border-b border-[#1e2433] shrink-0 flex items-center justify-between">
               <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Chi tiết cọc</p>
               {selectedDot && (
-                <button onClick={() => setSelectedDot(null)}
-                  className="text-[9px] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-                  ✕ Đóng
+                <button type="button" onClick={() => setSelectedDot(null)}
+                  className="text-[9px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                  ✕
                 </button>
               )}
             </div>
@@ -906,37 +766,9 @@ export function ProjectMapModal({ project, worksites, onClose }: Props) {
               {selectedDot ? (
                 <PileDetail dot={selectedDot} />
               ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-2">
-                  <div className="w-10 h-10 rounded-full bg-[#1a2433] flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                      <circle cx="12" cy="12" r="5" stroke="#374151" strokeWidth="1.5" />
-                      <line x1="7" y1="12" x2="17" y2="12" stroke="#374151" strokeWidth="1" />
-                      <line x1="12" y1="7" x2="12" y2="17" stroke="#374151" strokeWidth="1" />
-                    </svg>
-                  </div>
-                  <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
-                    Click vào ký hiệu cọc trên bản vẽ
-                  </p>
-                  {/* Mini status summary */}
-                  {activeWs && (
-                    <div className="w-full mt-1 flex flex-col gap-1">
-                      {[
-                        { s: 'completed',   n: activeWs.completedPiles,  label: 'Hoàn thành' },
-                        { s: 'in-progress', n: activeWs.inProgressPiles, label: 'Đang t/c' },
-                        { s: 'delayed',     n: activeWs.delayedPiles,    label: 'Chậm' },
-                        { s: 'blocked',     n: activeWs.blockedPiles,    label: 'Đình trệ' },
-                      ].filter(x => x.n > 0).map(x => (
-                        <div key={x.s} className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full shrink-0"
-                            style={{ background: PC[x.s as PileStatus].stroke }} />
-                          <span className="text-[9px] text-muted-foreground/60 flex-1">{x.label}</span>
-                          <span className="text-[9px] font-semibold tabular-nums"
-                            style={{ color: PC[x.s as PileStatus].stroke }}>{x.n}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <p className="text-[10px] text-muted-foreground/45 text-center pt-8 px-2 leading-relaxed">
+                  Chọn cọc trên bản vẽ
+                </p>
               )}
             </div>
           </div>

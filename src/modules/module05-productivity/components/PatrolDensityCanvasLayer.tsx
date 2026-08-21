@@ -73,6 +73,7 @@ function buildHeatSources(
   for (const gpsZone of PATROL_GPS_ZONES) {
     const zone = zoneMap.get(gpsZone.zone_id)
     if (!zone || zone.coverage !== 'VISITED') continue
+    if (gpsZone.polygon.length < 3) continue
     const count = resolveCount(zone, layer, countMode)
     if (count === 0) continue
     const zoneT = count / maxCount
@@ -99,6 +100,7 @@ function buildHeatSources(
 
     for (const u of gridSteps) {
       for (const v of gridSteps) {
+        if (gpsZone.polygon.length < 4) continue
         const [lat, lng] = patrolZoneInteriorPoint(gpsZone.polygon, u, v)
         const edgeFalloff = 1 - Math.abs(u - 0.5) * 0.35 - Math.abs(v - 0.5) * 0.35
         pushSource(

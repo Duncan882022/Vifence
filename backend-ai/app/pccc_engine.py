@@ -31,8 +31,11 @@ class PcccEngine:
         if camera_id not in self._gates:
             self._gates[camera_id] = {}
         if behavior not in self._gates[camera_id]:
+            confirm = _CONFIRM_SECONDS
+            if not settings.event_dedup_enabled():
+                confirm = 0.6 if behavior == "smoking" else 1.0
             self._gates[camera_id][behavior] = PersistenceDebouncer(
-                min_duration_seconds=_CONFIRM_SECONDS,
+                min_duration_seconds=settings.event_debounce_min_seconds(confirm),
                 cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_MAX_GAP_SECONDS,
                 one_event_per_episode=settings.event_log_one_per_episode,
@@ -45,8 +48,14 @@ class PcccEngine:
         for key in stale:
             self._episode_best.pop(key, None)
 
-    def _collect_detections(self, frame: np.ndarray, camera_id: str) -> list[Detection]:
-        return analyze_pccc_frame(frame, camera_id)
+    def _collect_detections(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+        *,
+        source_pts_sec: float | None = None,
+    ) -> list[Detection]:
+        return analyze_pccc_frame(frame, camera_id, source_pts_sec=source_pts_sec)
 
     def process_frame(
         self,
@@ -54,9 +63,10 @@ class PcccEngine:
         camera_id: str,
         *,
         capture_frame: np.ndarray | None = None,
+        source_pts_sec: float | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
         snapshot_source = capture_frame if capture_frame is not None else frame
-        detections = self._collect_detections(frame, camera_id)
+        detections = self._collect_detections(frame, camera_id, source_pts_sec=source_pts_sec)
         new_events: list[ViolationEvent] = []
         active_behaviors: set[str] = set()
 

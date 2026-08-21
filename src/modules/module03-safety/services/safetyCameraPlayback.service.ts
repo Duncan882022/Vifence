@@ -17,6 +17,7 @@ import {
   buildEventPlaybackMeta,
   EVENT_PLAYBACK_CLIP_SEC,
 } from '../utils/eventPlaybackClip'
+import { formatMachineRoiBadge } from '../utils/roiOverlayCode'
 
 function violationToRecord(v: SafetyViolationRecord): CameraPlaybackRecord {
   const feedType = groupIdToFeedType(v.groupId)
@@ -35,6 +36,9 @@ function violationToRecord(v: SafetyViolationRecord): CameraPlaybackRecord {
     violationBbox: meta.bbox,
     subjectBbox: meta.subjectBbox,
     relatedBbox: meta.relatedBbox,
+    relatedRoiLabel: meta.relatedBbox && v.scenarioId === 'DZ-003'
+      ? formatMachineRoiBadge('sany_drill', v.confidence)
+      : undefined,
     frameWidth: meta.frameWidth,
     frameHeight: meta.frameHeight,
     thumbnailUrl: v.snapshotUrl,

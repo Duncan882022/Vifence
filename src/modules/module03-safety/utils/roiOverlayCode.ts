@@ -63,8 +63,9 @@ export function formatCraneOverlayLabel(
   if (behavior === 'person') {
     return formatRoiOverlayCode('person')
   }
-  if (behavior === 'crane') {
-    const kind = options?.machineKind?.trim()
+  const kind = options?.machineKind?.trim()
+    || (behavior !== 'crane' && behavior in MACHINE_KIND_LABEL ? behavior : null)
+  if (behavior === 'crane' || kind) {
     if (kind && MACHINE_KIND_LABEL[kind]) {
       return MACHINE_KIND_LABEL[kind]
     }
@@ -81,6 +82,12 @@ export function formatRoiOverlayCode(
   behavior: string,
   scenarioId?: string | null,
 ): string {
+  if (behavior in MACHINE_KIND_LABEL) {
+    return MACHINE_KIND_LABEL[behavior]
+  }
+  if (behavior === 'crane') {
+    return BEHAVIOR_ROI_CODE.crane
+  }
   const sid = scenarioId?.trim()
   if (sid && /^[A-Z]+-\d{3}$/.test(sid)) return sid
   return BEHAVIOR_ROI_CODE[behavior] ?? behavior.slice(0, 10).toUpperCase()
@@ -98,4 +105,40 @@ export function formatRoiOverlayBadge(
 ): string {
   const pct = `${(confidence * 100).toFixed(0)}%`
   return suffix ? `${code} ${pct}${suffix}` : `${code} ${pct}`
+}
+
+/** Nhãn bbox máy nét đứt — vd Máy khoan 88%. */
+export function formatMachineRoiBadge(
+  machineKind?: string | null,
+  confidence?: number | null,
+): string {
+  const label = machineKindLabel(machineKind)
+  const pct = confidence != null ? (confidence * 100).toFixed(0) : '0'
+  return `${label} ${pct}%`
+}
+
+/** Khoảng cách mép biên — dấu phẩy thập phân (vd 0,2m). */
+export function formatDistanceSuffixMeters(distanceM?: number | null): string {
+  if (distanceM == null || distanceM <= 0) return ''
+  return ` - ${distanceM.toFixed(1).replace('.', ',')}m`
+}
+
+/** Nhãn vi phạm trên bbox — đồng bộ snapshot BPTC-001 88% / WAH-001 88% - 0,2m. */
+export function formatViolationRoiBadge(
+  behavior: string,
+  confidence: number,
+  options?: {
+    scenarioId?: string | null
+    distanceM?: number | null
+  },
+): string {
+  const code = formatRoiOverlayCode(behavior, options?.scenarioId)
+  if (behavior === 'no_harness' || options?.scenarioId === 'WAH-001') {
+    const dist = options?.distanceM ?? 0.2
+    return formatRoiOverlayBadge(code, confidence, formatDistanceSuffixMeters(dist))
+  }
+  if (options?.distanceM != null && options.distanceM > 0) {
+    return formatRoiOverlayBadge(code, confidence, formatDistanceSuffixMeters(options.distanceM))
+  }
+  return formatRoiOverlayBadge(code, confidence)
 }

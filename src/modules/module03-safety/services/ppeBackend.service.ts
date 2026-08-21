@@ -29,6 +29,7 @@ export interface PpeDetection {
   employee_code?: string
   contractor_name?: string
   face_match_confidence?: number
+  face_match_source?: string
 }
 
 export interface PpeMetrics {

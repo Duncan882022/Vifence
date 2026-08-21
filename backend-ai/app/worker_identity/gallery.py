@@ -117,19 +117,24 @@ def load_gallery(base_dir: Optional[Path] = None) -> int:
     return len(loaded)
 
 
-def match_embedding(query: np.ndarray, *, min_confidence: float) -> tuple[WorkerProfile, float] | None:
+def match_embedding(
+    query: np.ndarray,
+    *,
+    min_confidence: float,
+    min_margin: float = 0.0,
+) -> tuple[WorkerProfile, float] | None:
     if not _REGISTRY:
         return None
-    best_profile: WorkerProfile | None = None
-    best_score = min_confidence
+    ranked: list[tuple[WorkerProfile, float]] = []
     for profile, emb in _REGISTRY:
-        score = _similarity(query, emb)
-        if score > best_score:
-            best_score = score
-            best_profile = profile
-    if best_profile is None:
+        ranked.append((profile, _similarity(query, emb)))
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    if not ranked or ranked[0][1] < min_confidence:
         return None
-    return best_profile, best_score
+    if len(ranked) >= 2 and min_margin > 0.0:
+        if ranked[0][1] - ranked[1][1] < min_margin:
+            return None
+    return ranked[0]
 
 
 def list_profiles() -> list[WorkerProfile]:

@@ -291,9 +291,16 @@ def _rank_machinery_units(units: list[_MachineryUnit]) -> list[_MachineryUnit]:
     return units[:4]
 
 
-def _detect_machinery_units(frame: np.ndarray, camera_id: str) -> list[_MachineryUnit]:
+def _detect_machinery_units(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    source_pts_sec: float | None = None,
+) -> list[_MachineryUnit]:
     """Nhãn demo Cam A-04 (khớp frame) → YOLO crane_machinery → OWLv2."""
-    demo_hits = resolve_cam04_demo_machinery(camera_id, frame)
+    demo_hits = resolve_cam04_demo_machinery(
+        camera_id, frame, source_pts_sec=source_pts_sec,
+    )
     if demo_hits is not None:
         return _rank_machinery_units(
             _units_from_detections(demo_hits, "cam04_demo_labels"),
@@ -369,12 +376,17 @@ def _proximity_confidence(person_conf: float, crane_conf: float, distance_m: flo
     return round(min(0.98, conf), 3)
 
 
-def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
+def analyze_crane_proximity_frame(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    source_pts_sec: float | None = None,
+) -> dict:
     h, w = frame.shape[:2]
     px_per_m = DEFAULT_PIXELS_PER_METER
     work_mask = _work_zone_mask(camera_id, w, h)
 
-    all_machinery = _detect_machinery_units(frame, camera_id)
+    all_machinery = _detect_machinery_units(frame, camera_id, source_pts_sec=source_pts_sec)
     machinery_units = [
         unit for unit in all_machinery
         if _machinery_center_in_mask(unit.bbox, work_mask, w, h)
@@ -418,7 +430,13 @@ def analyze_crane_proximity_frame(frame: np.ndarray, camera_id: str) -> dict:
             confidence=round(p_conf, 3),
             bbox=[float(v) for v in box],
         )
-        enrich_person_bbox(frame, person_det, camera_id=camera_id, person_index=person_index)
+        enrich_person_bbox(
+            frame,
+            person_det,
+            camera_id=camera_id,
+            person_index=person_index,
+            source_pts_sec=source_pts_sec,
+        )
         all_detections.append(person_det)
 
         nearest_unit: _MachineryUnit | None = None

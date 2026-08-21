@@ -55,12 +55,22 @@ def _person_slot(person_bbox: list[float], frame_w: int, frame_h: int) -> str:
     return f"p{gy}{gx}"
 
 
+def _person_match_region(person_bbox: list[float], behavior: str) -> list[float]:
+    """Vùng ghép vi phạm ↔ person — mũ có thể nằm trên đỉnh bbox YOLO."""
+    x1, y1, x2, y2 = (float(v) for v in person_bbox)
+    ph = max(y2 - y1, 1.0)
+    if behavior == "no_helmet":
+        return [x1, max(0.0, y1 - ph * 0.38), x2, y2]
+    return [x1, y1, x2, y2]
+
+
 def _match_person(violation: PpeDetection, persons: list[PpeDetection]) -> PpeDetection | None:
     best: PpeDetection | None = None
     best_area = float("inf")
     for person in persons:
         pb = person.bbox
-        if not _center_inside(violation.bbox, pb):
+        region = _person_match_region(pb, violation.behavior)
+        if not _center_inside(violation.bbox, region):
             continue
         area = (pb[2] - pb[0]) * (pb[3] - pb[1])
         if area < best_area:
@@ -74,6 +84,7 @@ class PpeEngine:
         self.store = store
         self._tracks: dict[str, dict[str, _PpeTrack]] = {}
         self._gates: dict[str, dict[str, PersistenceDebouncer]] = {}
+        self._active_segment: dict[str, str] = {}
 
     def _tracks_for(self, camera_id: str) -> dict[str, _PpeTrack]:
         if camera_id not in self._tracks:
@@ -84,8 +95,14 @@ class PpeEngine:
         if camera_id not in self._gates:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
+            behavior = track_id.split(":")[1] if ":" in track_id else ""
+            confirm = _CONFIRM_SECONDS
+            if camera_id.startswith("HC-"):
+                confirm = 1.0
+            elif not settings.event_dedup_enabled() and behavior in ("no_vest", "no_shoes"):
+                confirm = 0.6
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_CONFIRM_SECONDS,
+                min_duration_seconds=settings.event_debounce_min_seconds(confirm),
                 cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_MAX_GAP_SECONDS,
                 one_event_per_episode=settings.event_log_one_per_episode,
@@ -95,6 +112,18 @@ class PpeEngine:
     def reset_camera(self, camera_id: str) -> None:
         self._tracks.pop(camera_id, None)
         self._gates.pop(camera_id, None)
+        self._active_segment.pop(camera_id, None)
+
+    @staticmethod
+    def _resolve_segment_key(camera_id: str, source_pts_sec: float | None) -> str:
+        if camera_id != "A-04" or source_pts_sec is None:
+            return "default"
+        t = float(source_pts_sec)
+        if 9.5 <= t <= 15.0:
+            return "ppe"
+        if 21.0 <= t <= 25.0:
+            return "wah"
+        return "other"
 
     def process_frame(
         self,
@@ -102,13 +131,29 @@ class PpeEngine:
         camera_id: str,
         *,
         capture_frame: np.ndarray | None = None,
+        source_pts_sec: float | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
+        seg = self._resolve_segment_key(camera_id, source_pts_sec)
+        if self._active_segment.get(camera_id) != seg:
+            self._tracks.pop(camera_id, None)
+            self._gates.pop(camera_id, None)
+            self._active_segment[camera_id] = seg
+
         snapshot_source = capture_frame if capture_frame is not None else frame
-        result = analyze_ppe_frame(frame, camera_id)
+        from .cam04_ppe_demo import is_cam04_ppe_violation_segment
+
+        result = analyze_ppe_frame(frame, camera_id, source_pts_sec=source_pts_sec)
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
         now = time.time()
         new_events: list[ViolationEvent] = []
+
+        # Cam A-04 — chỉ log/refresh PPE-001 trong segment 9.5–15s (tránh bbox lệch reel).
+        if camera_id == "A-04" and not is_cam04_ppe_violation_segment(source_pts_sec):
+            for track_id in list(tracks.keys()):
+                self._gate_for(camera_id, track_id).register(False)
+            result["events"] = []
+            return result, []
 
         persons = [
             PpeDetection.model_validate(row)
@@ -167,6 +212,11 @@ class PpeEngine:
                 analyze_frame=frame,
                 capture_frame=snapshot_source,
                 person_bbox=person_bbox,
+                extra=(
+                    {"source_pts_sec": float(source_pts_sec)}
+                    if source_pts_sec is not None
+                    else None
+                ),
             )
 
             was_active = gate.snapshot()["active"]
@@ -177,6 +227,9 @@ class PpeEngine:
                 state.episode_best = None
                 top_det = pending["detection"]
                 if top_det.confidence >= _VIOLATION_MIN_CONF:
+                    from .worker_identity.detection_enrich import sanitize_ppe_event_identity
+
+                    sanitize_ppe_event_identity(top_det)
                     event = self.store.add_ppe(
                         top_det,
                         pending["frame"],

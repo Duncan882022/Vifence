@@ -29,16 +29,21 @@ from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_S
 _ROAD_CONFIRM_SECONDS = VIOLATION_CONFIRM_SECONDS
 _ROAD_REPEAT_SECONDS = settings.road_event_repeat_seconds
 _ROAD_MAX_GAP_SECONDS = VIOLATION_MAX_GAP_SECONDS
+_ROAD_SCENARIO_BY_BEHAVIOR: dict[str, str] = {
+    "mud": "BPTC-007",
+    "water": "BPTC-008",
+    "object": "BPTC-009",
+}
 _BEHAVIOR_CONFIRM_SECONDS: dict[str, float] = {
-    "mud": VIOLATION_CONFIRM_SECONDS,
+    "mud": get_threshold("BPTC-007").confirm_seconds,
     "water": get_threshold("BPTC-008").confirm_seconds,
-    "object": VIOLATION_CONFIRM_SECONDS,
+    "object": get_threshold("BPTC-009").confirm_seconds,
 }
 _ROAD_MIN_CONFIDENCE = EVENT_MIN_CONFIDENCE
 _BEHAVIOR_MIN_CONFIDENCE: dict[str, float] = {
-    "mud": EVENT_MIN_CONFIDENCE,
-    "water": EVENT_MIN_CONFIDENCE,
-    "object": EVENT_MIN_CONFIDENCE,
+    "mud": get_threshold("BPTC-007").min_confidence,
+    "water": get_threshold("BPTC-008").min_confidence,
+    "object": get_threshold("BPTC-009").min_confidence,
 }
 _TRACK_EXPIRE_SECONDS = 4.0
 _MAX_TRACKS = 12
@@ -76,11 +81,12 @@ class RoadAnalysisEngine:
             if behavior not in _BEHAVIOR_CONFIRM_SECONDS:
                 behavior = "object"
             confirm = _BEHAVIOR_CONFIRM_SECONDS.get(behavior, _ROAD_CONFIRM_SECONDS)
-            if settings.event_test_mode and behavior in {"object", "mud", "water"}:
-                confirm = min(confirm, 1.0)
+            confirm = settings.event_debounce_min_seconds(confirm)
+            scenario_id = _ROAD_SCENARIO_BY_BEHAVIOR.get(behavior, "BPTC-009")
+            cooldown = get_threshold(scenario_id).cooldown_seconds
             self._gates[camera_id][track_id] = PersistenceDebouncer(
                 min_duration_seconds=confirm,
-                cooldown_seconds=settings.event_repeat_seconds(_ROAD_REPEAT_SECONDS),
+                cooldown_seconds=settings.event_repeat_seconds(cooldown),
                 max_gap_seconds=_ROAD_MAX_GAP_SECONDS,
                 one_event_per_episode=settings.event_log_one_per_episode,
             )
@@ -121,7 +127,9 @@ class RoadAnalysisEngine:
         capture_frame: np.ndarray | None = None,
         stabilize: bool = True,
         persist_events: bool | None = None,
+        source_pts_sec: float | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
+        _ = source_pts_sec
         if persist_events is None:
             persist_events = (
                 settings.a03_bptc_event_logging_enabled
@@ -129,7 +137,12 @@ class RoadAnalysisEngine:
                 else True
             )
         snapshot_source = capture_frame if capture_frame is not None else frame
-        result = analyze_road_frame(frame, camera_id, stabilize=stabilize)
+        result = analyze_road_frame(
+            frame,
+            camera_id,
+            stabilize=stabilize,
+            source_pts_sec=source_pts_sec,
+        )
         detections_raw = result.get("detections", [])
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]

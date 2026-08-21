@@ -3,9 +3,10 @@ import {
   flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel,
   getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { Search, Download, Filter, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
+import { Search, Download, Filter, Maximize2, Minimize2, ChevronRight } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
+import { EquipmentTablePagination } from '../../components/EquipmentTablePagination'
 import { cn } from '@/utils/cn'
 import type { EquipmentStatus, MmtbRow } from '../types'
 
@@ -286,7 +287,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, expand
     <button
       type="button"
       onClick={onToggle}
-      className="p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
+      className="hidden xl:flex p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
       aria-label={expanded ? 'Thu nhỏ danh sách đội máy' : 'Phóng to danh sách đội máy'}
       title={expanded ? 'Thu nhỏ' : 'Phóng to'}
     >
@@ -294,13 +295,32 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, expand
     </button>
   ) : undefined
 
+  const paginatedRows = table.getRowModel().rows
+
+  const paginationFooter = (
+    <EquipmentTablePagination
+      startRow={startRow}
+      endRow={endRow}
+      total={total}
+      pageSize={pagination.pageSize}
+      onPageSizeChange={size => setPagination(prev => ({ ...prev, pageSize: size, pageIndex: 0 }))}
+      pageNumbers={pageNumbers}
+      currentPage={currentPage}
+      onPageChange={p => table.setPageIndex(p)}
+      onPrevious={() => table.previousPage()}
+      onNext={() => table.nextPage()}
+      canPrevious={table.getCanPreviousPage()}
+      canNext={table.getCanNextPage()}
+    />
+  )
+
   return (
     <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0" headerRight={headerRight}>
       <div className="flex flex-col h-full min-h-0">
         {insightBar}
 
         <div className="flex flex-col sm:flex-row gap-2 px-3 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
             <input
               placeholder="Tìm kiếm máy, dự án, vị trí..."
@@ -309,27 +329,79 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, expand
               className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#060b14] border border-[#1e2433] text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/30 transition-colors"
             />
           </div>
-          <button
-            type="button"
-            title="Bộ lọc nâng cao — chưa triển khai"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#060b14] border border-[#1e2433] text-[11px] text-muted-foreground hover:text-foreground hover:bg-[#1a2235] hover:border-[#2a3855] transition-colors whitespace-nowrap opacity-60 cursor-not-allowed"
-            disabled
-          >
-            <Filter className="w-3.5 h-3.5" />
-            Bộ lọc
-          </button>
-          <button
-            type="button"
-            onClick={exportExcel}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 shadow-[0_2px_12px_rgba(34,197,94,0.25)] transition-colors whitespace-nowrap"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Xuất Excel
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              title="Bộ lọc nâng cao — chưa triển khai"
+              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#060b14] border border-[#1e2433] text-[11px] text-muted-foreground opacity-60 cursor-not-allowed"
+              disabled
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Bộ lọc</span>
+            </button>
+            <button
+              type="button"
+              onClick={exportExcel}
+              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 shadow-[0_2px_12px_rgba(34,197,94,0.25)] transition-colors whitespace-nowrap"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Xuất Excel
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
-          <table className="w-full min-w-[1060px] text-[10px]">
+        {/* Mobile / tablet — card list */}
+        <div className="lg:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-[#1e2433]/60">
+          {paginatedRows.map(row => {
+            const r = row.original
+            return (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => onRowClick(r)}
+                className="w-full text-left px-3 py-3 hover:bg-[#1a2235]/50 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-primary text-[11px]">{r.machineCode}</p>
+                    <p className="text-[10px] text-foreground/90 mt-0.5 truncate">{r.equipmentType}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5 truncate">{r.projectLocation}</p>
+                  </div>
+                  <span className={cn('inline-flex px-2 py-0.5 rounded-md text-[8px] font-bold shrink-0', STATUS_BADGE[r.status])}>
+                    {STATUS_VI[r.status]}
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
+                  <div>
+                    <p className="text-muted-foreground/70">Sức khỏe</p>
+                    <p className="font-bold tabular-nums text-foreground">{r.healthScore}%</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground/70">Sử dụng</p>
+                    <p className={cn(
+                      'font-bold tabular-nums',
+                      r.utilizationPct >= 70 ? 'text-green-400' : r.utilizationPct >= 40 ? 'text-sky-400' : 'text-amber-400',
+                    )}>
+                      {r.utilizationPct}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground/70">BĐ</p>
+                    <p className="font-semibold text-foreground truncate">{r.pmStatusLabel}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-end gap-1 text-[9px] text-primary/80">
+                  Chi tiết
+                  <ChevronRight className="w-3 h-3" />
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Desktop — table */}
+        <div className="hidden lg:flex flex-1 min-h-0 overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[960px] xl:min-w-[1060px] text-[10px]">
             <thead className="sticky top-0 z-10">
               {table.getHeaderGroups().map(hg => (
                 <tr key={hg.id} className="bg-[#0b0f1a]/95 backdrop-blur-sm border-b border-[#1e2433]">
@@ -369,57 +441,7 @@ export function MmtbDataTable({ data, search, onSearchChange, onRowClick, expand
           </table>
         </div>
 
-        <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
-          <span className="text-[10px] text-muted-foreground/70 tabular-nums whitespace-nowrap">
-            Hiển thị <span className="text-foreground/80 font-medium">{startRow}–{endRow}</span> / <span className="text-foreground/80 font-medium">{total}</span> thiết bị
-          </span>
-
-          <div className="flex items-center gap-1">
-            <select
-              value={pagination.pageSize}
-              onChange={e => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), pageIndex: 0 }))}
-              className="mr-1.5 px-2 py-1 rounded-lg bg-[#060b14] border border-[#1e2433] text-[10px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/40 appearance-none"
-            >
-              {[10, 20, 50].map(n => <option key={n} value={n}>{n} / trang</option>)}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-              className="flex items-center justify-center w-7 h-7 rounded-lg border border-[#1e2433] text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-[#1a2235] hover:enabled:text-foreground hover:enabled:border-[#2a3855]"
-              aria-label="Trang trước"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-
-            {pageNumbers.map(p => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => table.setPageIndex(p)}
-                className={cn(
-                  'min-w-[28px] h-7 rounded-lg text-[10px] font-bold tabular-nums px-1.5 transition-colors',
-                  p === currentPage
-                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.15)]'
-                    : 'text-muted-foreground hover:bg-[#1a2235] hover:text-foreground border border-transparent hover:border-[#1e2433]',
-                )}
-              >
-                {p + 1}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-              className="flex items-center justify-center w-7 h-7 rounded-lg border border-[#1e2433] text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-[#1a2235] hover:enabled:text-foreground hover:enabled:border-[#2a3855]"
-              aria-label="Trang sau"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+        {paginationFooter}
       </div>
     </Panel>
   )

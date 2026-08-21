@@ -16,6 +16,8 @@ interface EventPlaybackViewportProps {
   subjectBbox?: ViolationBbox
   /** Máy/đối tượng liên quan — dashed xanh (DZ). */
   relatedBbox?: ViolationBbox
+  /** Nhãn bbox máy nét đứt — vd Máy khoan 88%. */
+  relatedRoiLabel?: string
   /** Zoom ROI — mặc định union các khung trên. */
   zoomBbox?: ViolationBbox
   frameWidth?: number
@@ -93,6 +95,7 @@ export function EventPlaybackViewport({
   bbox,
   subjectBbox,
   relatedBbox,
+  relatedRoiLabel,
   zoomBbox,
   frameWidth,
   frameHeight,
@@ -189,7 +192,7 @@ export function EventPlaybackViewport({
           <PlaybackRoiBox
             box={overlayBoxes.related}
             className="border border-dashed border-sky-400/90 shadow-[0_0_6px_rgba(56,189,248,0.2)]"
-            label="Máy"
+            label={relatedRoiLabel}
           />
         )}
         {overlayBoxes?.subject && (

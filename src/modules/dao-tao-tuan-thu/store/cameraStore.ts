@@ -5,6 +5,12 @@ import type { CameraWithWorker } from './cameraStore.types'
 
 export type CameraFetchStatus = 'idle' | 'loading' | 'success' | 'error'
 
+function isLocalDevOrigin(): boolean {
+  if (typeof window === 'undefined') return false
+  const host = window.location.hostname
+  return host === 'localhost' || host === '127.0.0.1'
+}
+
 interface CameraStore {
   cameras: CameraWithWorker[]
   status: CameraFetchStatus
@@ -16,7 +22,7 @@ interface CameraStore {
 async function loadCameras(
   set: (partial: Partial<CameraStore>) => void,
 ) {
-  if (IS_GHPAGES) {
+  if (IS_GHPAGES || isLocalDevOrigin()) {
     set({ cameras: getGhpagesDemoCameras(), status: 'success', error: null })
     return
   }

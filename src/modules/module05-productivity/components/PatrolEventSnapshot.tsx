@@ -17,7 +17,7 @@ export function PatrolEventSnapshot({ event, className, onClick }: PatrolEventSn
     className,
   )
 
-  const content = (
+  const placeholder = (
     <>
       <div className={cn(
         'absolute inset-0 opacity-90',
@@ -29,7 +29,20 @@ export function PatrolEventSnapshot({ event, className, onClick }: PatrolEventSn
         <Icon className={cn('w-4 h-4', meta.color)} aria-hidden />
         <Camera className="w-2.5 h-2.5 text-white/35" aria-hidden />
       </div>
-      <span className="absolute bottom-0.5 left-0.5 text-[6px] font-mono text-white/45 px-0.5">
+    </>
+  )
+
+  const content = (
+    <>
+      {event.snapshotUrl ? (
+        <img
+          src={event.snapshotUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+        />
+      ) : placeholder}
+      <span className="absolute bottom-0.5 left-0.5 text-[6px] font-mono text-white/45 px-0.5 bg-black/40 rounded">
         {event.cameraId}
       </span>
     </>

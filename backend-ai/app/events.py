@@ -19,6 +19,7 @@ from .snapshot_compose import (
     compose_violation_snapshot,
     draw_atld_roi_box,
     draw_violation_roi_annotation,
+    format_distance_suffix_meters,
     merge_bboxes,
 )
 
@@ -206,13 +207,21 @@ class EventStore:
         existing.snapshot_file = snapshot_name
         existing.confirmed_at = time.time()
 
-        if incoming.confidence >= existing.confidence:
+        if incoming.behavior in ("no_helmet", "no_vest", "no_shoes"):
+            existing.bbox = list(incoming.bbox)
+            if incoming.subject_bbox:
+                existing.subject_bbox = list(incoming.subject_bbox)
+            if incoming.confidence >= existing.confidence:
+                existing.confidence = incoming.confidence
+        elif incoming.confidence >= existing.confidence:
             existing.confidence = incoming.confidence
             existing.bbox = list(incoming.bbox)
             if incoming.subject_bbox:
                 existing.subject_bbox = list(incoming.subject_bbox)
             if incoming.related_bbox:
                 existing.related_bbox = list(incoming.related_bbox)
+        elif incoming.subject_bbox:
+            existing.subject_bbox = list(incoming.subject_bbox)
 
         if frame_size:
             existing.frame_width, existing.frame_height = frame_size
@@ -432,7 +441,7 @@ class EventStore:
         dedup_key: Optional[str] = None,
         track_id: Optional[str] = None,
     ) -> Optional[ViolationEvent]:
-        """BPTC-001 — lưới bao che thiếu/bẩn, snapshot crop riêng (không lẫn bùn/nước)."""
+        """BPTC-001 — lưới bao che thiếu/bẩn, snapshot full frame + ROI."""
         event_date = _event_date()
         event = ViolationEvent.from_road_detection(
             detection,
@@ -520,9 +529,25 @@ class EventStore:
         dedup_key: Optional[str] = None,
         track_id: Optional[str] = None,
     ) -> Optional[ViolationEvent]:
+        from .ppe_analyzer import ppe_violation_display_bbox
+
+        display_det = detection
+        if (
+            person_bbox
+            and len(person_bbox) >= 4
+            and detection.behavior in ("no_helmet", "no_vest", "no_shoes")
+        ):
+            h = frame.shape[0]
+            display = ppe_violation_display_bbox(
+                tuple(float(v) for v in person_bbox),
+                detection.behavior,
+                h,
+            )
+            display_det = detection.model_copy(update={"bbox": [float(v) for v in display]})
+
         event_date = _event_date()
         event = ViolationEvent.from_ppe_detection(
-            detection,
+            display_det,
             snapshot_file=None,
             event_date=event_date,
             camera_id=camera_id,
@@ -532,7 +557,7 @@ class EventStore:
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         raw = frame.copy()
-        annotated = self._draw_ppe_snapshot(raw, detection, person_bbox)
+        annotated = self._draw_ppe_snapshot(raw, display_det, person_bbox)
         snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
         return self._finalize_event(
             event,
@@ -589,7 +614,7 @@ class EventStore:
         detection: Detection,
         person_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
-        """Snapshot WAH — chỉ vùng vi phạm (không vẽ người)."""
+        """Snapshot WAH — viền liền + nhãn WAH-001 88% - 0,2m."""
         _ = person_bbox
         annotated = frame.copy()
         h, w = frame.shape[:2]
@@ -597,7 +622,19 @@ class EventStore:
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w - 1, x2), min(h - 1, y2)
         color = (0, 140, 255)
-        draw_atld_roi_box(annotated, x1, y1, x2, y2, color, detection.behavior, thickness=2)
+        draw_violation_roi_annotation(
+            annotated,
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            behavior=detection.behavior,
+            scenario_id=getattr(detection, "scenario_id", None) or "WAH-001",
+            confidence=float(detection.confidence),
+            thickness=2,
+            suffix=" - 0,2m",
+        )
         return annotated
 
     def add_atgt(
@@ -662,7 +699,7 @@ class EventStore:
         detection: Detection,
         vehicle_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
-        """Snapshot ATGT — crop vùng vi phạm; speeding vẽ bbox xe."""
+        """Snapshot ATGT — full frame + bbox vi phạm; speeding vẽ bbox xe."""
         annotated = frame.copy()
         h, w = frame.shape[:2]
         target = (
@@ -702,8 +739,7 @@ class EventStore:
         detection: PpeDetection,
         person_bbox: Optional[list[float]] = None,
     ) -> np.ndarray:
-        """Snapshot PPE — chỉ vùng lỗi (mũ/áo/giày), không vẽ người."""
-        _ = person_bbox
+        """Snapshot PPE — bbox bám trên người (không tràn lên máy phía sau)."""
         return cls._draw_ppe_bbox(frame, detection, copy_frame=True, thickness=2)
 
     @staticmethod
@@ -767,7 +803,7 @@ class EventStore:
         thickness = 3 if emphasis and detection.behavior == "crane_proximity" else 2
         suffix = ""
         if detection.behavior == "crane_proximity" and detection.distance_m is not None:
-            suffix = f" · {detection.distance_m:.1f}m"
+            suffix = format_distance_suffix_meters(float(detection.distance_m))
         draw_violation_roi_annotation(
             annotated,
             x1,

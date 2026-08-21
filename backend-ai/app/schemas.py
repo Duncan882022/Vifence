@@ -39,6 +39,7 @@ class CraneProximityDetection(BaseModel):
     employee_code: Optional[str] = None
     contractor_name: Optional[str] = None
     face_match_confidence: Optional[float] = None
+    face_match_source: Optional[str] = None
 
 
 class PpeDetection(BaseModel):
@@ -52,6 +53,7 @@ class PpeDetection(BaseModel):
     employee_code: Optional[str] = None
     contractor_name: Optional[str] = None
     face_match_confidence: Optional[float] = None
+    face_match_source: Optional[str] = None
 
 
 class MobileAiConfigPayload(BaseModel):
@@ -77,6 +79,7 @@ class Detection(BaseModel):
     employee_code: Optional[str] = None
     contractor_name: Optional[str] = None
     face_match_confidence: Optional[float] = None
+    face_match_source: Optional[str] = None
 
 
 # Metadata tĩnh mô tả kịch bản, ăn khớp với nhóm PCCC trong
@@ -280,6 +283,7 @@ class ViolationEvent(BaseModel):
             employee_code=detection.employee_code,
             contractor_name=detection.contractor_name,
             face_match_confidence=detection.face_match_confidence,
+            face_match_source=getattr(detection, "face_match_source", None),
         )
 
     @classmethod
@@ -350,6 +354,7 @@ class ViolationEvent(BaseModel):
             employee_code=detection.employee_code,
             contractor_name=detection.contractor_name,
             face_match_confidence=detection.face_match_confidence,
+            face_match_source=getattr(detection, "face_match_source", None),
         )
 
     @classmethod
@@ -371,6 +376,19 @@ class ViolationEvent(BaseModel):
         )
         created = time.time()
         day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        worker_id = detection.worker_id
+        worker_name = detection.worker_name
+        employee_code = detection.employee_code
+        contractor_name = detection.contractor_name
+        face_match_confidence = detection.face_match_confidence
+        face_match_source = getattr(detection, "face_match_source", None)
+        if detection.behavior == "no_shoes":
+            worker_id = "unknown"
+            worker_name = "Unknown"
+            employee_code = ""
+            contractor_name = None
+            face_match_confidence = 0.0
+            face_match_source = "ppe_no_identity"
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],
@@ -383,11 +401,12 @@ class ViolationEvent(BaseModel):
             event_date=day,
             camera_id=camera_id,
             snapshot_file=snapshot_file,
-            worker_id=detection.worker_id,
-            worker_name=detection.worker_name,
-            employee_code=detection.employee_code,
-            contractor_name=detection.contractor_name,
-            face_match_confidence=detection.face_match_confidence,
+            worker_id=worker_id,
+            worker_name=worker_name,
+            employee_code=employee_code,
+            contractor_name=contractor_name,
+            face_match_confidence=face_match_confidence,
+            face_match_source=face_match_source,
         )
 
     @classmethod

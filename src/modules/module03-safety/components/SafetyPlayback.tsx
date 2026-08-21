@@ -156,6 +156,7 @@ export function SafetyPlayback({ event, className, variant = 'embedded' }: Safet
               bbox={event.violationBbox}
               subjectBbox={event.subjectBbox}
               relatedBbox={event.relatedBbox}
+              relatedRoiLabel={event.relatedRoiLabel}
               frameWidth={event.frameWidth}
               frameHeight={event.frameHeight}
               videoFit={playbackFit}

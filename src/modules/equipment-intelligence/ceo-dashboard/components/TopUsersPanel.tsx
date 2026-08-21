@@ -84,8 +84,8 @@ export function TopUsersPanel({ units, open = true, onToggle }: { units: UsageUn
             <tr className="bg-[#0b0f1a]/95 backdrop-blur-sm border-b border-[#1e2433]">
               <th className="px-3 py-2.5 text-left w-10 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">#</th>
               <th className="px-3 py-2.5 text-left text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Đơn vị sử dụng</th>
-              <th className="px-3 py-2.5 text-right text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Tổng MMTB</th>
-              <th className="px-3 py-2.5 text-left min-w-[120px] pl-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Sử dụng</th>
+              <th className="hidden sm:table-cell px-3 py-2.5 text-right text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Tổng MMTB</th>
+              <th className="px-3 py-2.5 text-left min-w-[100px] sm:min-w-[120px] pl-2 sm:pl-4 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Sử dụng</th>
             </tr>
           </thead>
           <tbody>
@@ -109,8 +109,8 @@ export function TopUsersPanel({ units, open = true, onToggle }: { units: UsageUn
                 )}>
                   {u.name}
                 </td>
-                <td className="px-3 py-3 text-right tabular-nums text-foreground font-bold">{u.totalMmtb}</td>
-                <td className="px-3 py-3 pl-4">
+                <td className="hidden sm:table-cell px-3 py-3 text-right tabular-nums text-foreground font-bold">{u.totalMmtb}</td>
+                <td className="px-3 py-3 pl-2 sm:pl-4">
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 rounded-full bg-[#1e2433] overflow-hidden">
                       <div

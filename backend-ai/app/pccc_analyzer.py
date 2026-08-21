@@ -113,6 +113,7 @@ def _enrich_smoking_detections(
     detections: list[Detection],
     *,
     camera_id: str,
+    source_pts_sec: float | None = None,
 ) -> list[Detection]:
     from .worker_identity.detection_enrich import enrich_smoking_detection
 
@@ -125,16 +126,24 @@ def _enrich_smoking_detections(
                 det,
                 camera_id=camera_id,
                 person_index=smoking_index,
+                source_pts_sec=source_pts_sec,
             )
             smoking_index += 1
         enriched.append(det)
     return enriched
 
 
-def analyze_pccc_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detection]:
-    demo = resolve_cam04_pccc_demo(camera_id, frame)
+def analyze_pccc_frame(
+    frame: np.ndarray,
+    camera_id: str = "A-04",
+    *,
+    source_pts_sec: float | None = None,
+) -> list[Detection]:
+    demo = resolve_cam04_pccc_demo(camera_id, frame, source_pts_sec=source_pts_sec)
     if demo is not None:
-        return _enrich_smoking_detections(frame, demo, camera_id=camera_id)
+        return _enrich_smoking_detections(
+            frame, demo, camera_id=camera_id, source_pts_sec=source_pts_sec,
+        )
 
     all_detections: list[Detection] = []
     for detector in _get_detectors():
@@ -183,4 +192,6 @@ def analyze_pccc_frame(frame: np.ndarray, camera_id: str = "A-04") -> list[Detec
     for dets in by_behavior.values():
         filtered.extend(dets)
 
-    return _enrich_smoking_detections(frame, filtered, camera_id=camera_id)
+    return _enrich_smoking_detections(
+        frame, filtered, camera_id=camera_id, source_pts_sec=source_pts_sec,
+    )

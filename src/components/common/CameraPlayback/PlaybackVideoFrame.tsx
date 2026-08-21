@@ -57,6 +57,7 @@ export function PlaybackVideoFrame({
             bbox={selectedRecord?.violationBbox}
             subjectBbox={selectedRecord?.subjectBbox}
             relatedBbox={selectedRecord?.relatedBbox}
+            relatedRoiLabel={selectedRecord?.relatedRoiLabel}
             frameWidth={selectedRecord?.frameWidth}
             frameHeight={selectedRecord?.frameHeight}
             videoFit={playbackFit}

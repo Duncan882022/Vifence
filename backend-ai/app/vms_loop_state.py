@@ -12,6 +12,7 @@ logger = logging.getLogger("vms_loop_state")
 _lock = threading.Lock()
 _loop_counts: dict[str, int] = {}
 _reset_handlers: list[Callable[[str], None]] = []
+_seek_handlers: list[Callable[[], None]] = []
 _dedup_armed_at: float = time.time()
 
 
@@ -23,6 +24,11 @@ def arm_dedup_grace(*, minutes: float | None = None) -> None:
     _dedup_armed_at = time.time()
     mins = minutes if minutes is not None else settings.event_audit_grace_minutes
     logger.info("Audit grace: dedup tắt %.0f phút — ghi đủ mọi trường hợp.", mins)
+    for handler in _seek_handlers:
+        try:
+            handler()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Seek VMS sau arm grace lỗi: %s", exc)
 
 
 def dedup_grace_elapsed() -> bool:
@@ -35,6 +41,11 @@ def dedup_grace_elapsed() -> bool:
 
 def register_reset_handler(handler: Callable[[str], None]) -> None:
     _reset_handlers.append(handler)
+
+
+def register_seek_handler(handler: Callable[[], None]) -> None:
+    """Rewind MP4 về đầu — gọi khi arm grace / DELETE /events."""
+    _seek_handlers.append(handler)
 
 
 def register_video_loop(camera_id: str) -> int:

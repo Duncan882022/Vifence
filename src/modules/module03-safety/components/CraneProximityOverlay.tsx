@@ -32,7 +32,7 @@ import {
 } from '../utils/overlayVisibility'
 import { shouldShowOverlayBox } from '../utils/overlayCoverage'
 import { VIOLATION_MIN_CONFIDENCE } from '../utils/violationConfidence'
-import { formatRoiOverlayBadge, formatCraneOverlayLabel, machineKindLabel } from '../utils/roiOverlayCode'
+import { formatRoiOverlayBadge, formatCraneOverlayLabel, formatViolationRoiBadge, formatMachineRoiBadge, machineKindLabel } from '../utils/roiOverlayCode'
 import { formatPersonOverlayBadge } from '../utils/personOverlayLabel'
 
 const EVENT_MIN_CONFIDENCE = VIOLATION_MIN_CONFIDENCE
@@ -165,21 +165,36 @@ function resolveDetectionStyle(detection: CraneProximityDetection) {
 function formatDetectionBadge(
   detection: CraneProximityDetection,
 ): string {
-  const distLabel = formatDistanceLabel(detection.distance_m)
-  if (detection.behavior === 'person' || detection.behavior === 'crane_proximity') {
-    return formatPersonOverlayBadge(detection.worker_name, detection.confidence, distLabel)
+  if (detection.behavior === 'crane_proximity') {
+    return formatViolationRoiBadge(detection.behavior, detection.confidence, {
+      scenarioId: detection.scenario_id,
+      distanceM: detection.distance_m,
+    })
+  }
+  if (detection.behavior === 'person') {
+    return formatPersonOverlayBadge(
+      detection.worker_name,
+      detection.confidence,
+      '',
+      {
+        workerId: detection.worker_id,
+        workerName: detection.worker_name,
+        faceMatchConfidence: detection.face_match_confidence,
+        faceMatchSource: detection.face_match_source,
+      },
+    )
+  }
+  if (isMachineDetection(detection)) {
+    const kind = detection.machine_kind
+      ?? (detection.behavior !== 'crane' ? detection.behavior : null)
+    return formatMachineRoiBadge(kind, detection.confidence)
   }
   const code = formatCraneOverlayLabel(detection.behavior, {
     machineKind: detection.machine_kind,
     scenarioId: detection.scenario_id,
     label: detection.label,
   })
-  return formatRoiOverlayBadge(code, detection.confidence, distLabel)
-}
-
-function formatDistanceLabel(distanceM: number | undefined): string {
-  if (distanceM == null || distanceM <= 0) return ''
-  return ` · ${distanceM.toFixed(1)}m`
+  return formatRoiOverlayBadge(code, detection.confidence)
 }
 
 interface CraneProximityOverlayProps {
@@ -334,6 +349,7 @@ function useCraneProximityState(
           employee_code: d.employee_code,
           contractor_name: d.contractor_name,
           face_match_confidence: d.face_match_confidence,
+          face_match_source: d.face_match_source,
         })) as CraneProximityDetection[]
     const visible = mapped
       .filter(passesCraneOverlayDetection)

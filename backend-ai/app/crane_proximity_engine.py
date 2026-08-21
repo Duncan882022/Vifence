@@ -81,7 +81,7 @@ class CraneProximityEngine:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_CONFIRM_SECONDS,
+                min_duration_seconds=settings.event_debounce_min_seconds(_CONFIRM_SECONDS),
                 cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_MAX_GAP_SECONDS,
                 one_event_per_episode=settings.event_log_one_per_episode,
@@ -98,9 +98,12 @@ class CraneProximityEngine:
         camera_id: str,
         *,
         capture_frame: np.ndarray | None = None,
+        source_pts_sec: float | None = None,
     ) -> tuple[dict, list[ViolationEvent]]:
         snapshot_source = capture_frame if capture_frame is not None else frame
-        result = analyze_crane_proximity_frame(frame, camera_id)
+        result = analyze_crane_proximity_frame(
+            frame, camera_id, source_pts_sec=source_pts_sec,
+        )
         tracks = self._tracks_for(camera_id)
         frame_h, frame_w = frame.shape[:2]
         now = time.time()

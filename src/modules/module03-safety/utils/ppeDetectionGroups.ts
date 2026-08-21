@@ -26,6 +26,32 @@ function pointInBbox(x: number, y: number, bbox: Bbox): boolean {
   return x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3]
 }
 
+/** Khớp backend ppe_engine._person_match_region — mũ có thể nằm trên đỉnh bbox YOLO. */
+function violationMatchesPerson(violation: PpeDetection, personBbox: Bbox): boolean {
+  const [cx, cy] = bboxCenter(violation.bbox)
+  if (pointInBbox(cx, cy, personBbox)) return true
+  if (violation.behavior !== 'no_helmet') return false
+  const [x1, y1, x2, y2] = personBbox
+  const ph = Math.max(y2 - y1, 1)
+  const headRegion: Bbox = [x1, Math.max(0, y1 - ph * 0.38), x2, y2]
+  return pointInBbox(cx, cy, headRegion)
+}
+
+function mergePersonIdentity(violation: PpeDetection, person: PpeDetection): PpeDetection {
+  if (violation.worker_id && violation.worker_name && violation.face_match_confidence != null) {
+    return violation
+  }
+  return {
+    ...violation,
+    worker_id: person.worker_id ?? violation.worker_id,
+    worker_name: person.worker_name ?? violation.worker_name,
+    employee_code: person.employee_code ?? violation.employee_code,
+    contractor_name: person.contractor_name ?? violation.contractor_name,
+    face_match_confidence: person.face_match_confidence ?? violation.face_match_confidence,
+    face_match_source: person.face_match_source ?? violation.face_match_source,
+  }
+}
+
 function slotForBehavior(behavior: string): PpeBodySlot | null {
   if (HEAD_BEHAVIORS.has(behavior)) return 'head'
   if (TORSO_BEHAVIORS.has(behavior)) return 'torso'
@@ -82,8 +108,7 @@ export function groupPpeDetections(
     for (const det of others) {
       const slot = slotForBehavior(det.behavior)
       if (!slot) continue
-      const [cx, cy] = bboxCenter(det.bbox)
-      if (!pointInBbox(cx, cy, pb)) continue
+      if (!violationMatchesPerson(det, pb)) continue
 
       if (slot === 'feet') {
         group.slots.feet.push(det)
@@ -118,14 +143,31 @@ export function groupHasViolation(group: PpePersonGroup): boolean {
   return groupHasFeetShoesViolation(group)
 }
 
+export function primaryViolationInGroup(group: PpePersonGroup): PpeDetection | undefined {
+  if (group.slots.head?.behavior.startsWith('no_')) return group.slots.head
+  if (group.slots.torso?.behavior.startsWith('no_')) return group.slots.torso
+  if (groupHasFeetShoesViolation(group)) {
+    return group.slots.feet.find(d => d.behavior === 'no_shoes')
+  }
+  return undefined
+}
+
 /** Box overlay tách rời — không gộp bbox người (giày so le khó gộp). */
 export function flattenPpeViolationOverlayBoxes(groups: PpePersonGroup[]): PpeDetection[] {
   const out: PpeDetection[] = []
   for (const group of groups) {
-    if (group.slots.head?.behavior.startsWith('no_')) out.push(group.slots.head)
-    if (group.slots.torso?.behavior.startsWith('no_')) out.push(group.slots.torso)
+    if (group.slots.head?.behavior.startsWith('no_')) {
+      out.push(mergePersonIdentity(group.slots.head, group.person))
+    }
+    if (group.slots.torso?.behavior.startsWith('no_')) {
+      out.push(mergePersonIdentity(group.slots.torso, group.person))
+    }
     if (groupHasFeetShoesViolation(group)) {
-      out.push(...group.slots.feet.filter(d => d.behavior === 'no_shoes'))
+      out.push(
+        ...group.slots.feet
+          .filter(d => d.behavior === 'no_shoes')
+          .map(d => mergePersonIdentity(d, group.person)),
+      )
     }
   }
   return out

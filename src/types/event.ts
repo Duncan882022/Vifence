@@ -33,6 +33,8 @@ export interface Event {
   subjectBbox?: [number, number, number, number]
   /** Máy/đối tượng liên quan — khung ROI phụ (DZ). */
   relatedBbox?: [number, number, number, number]
+  /** Nhãn bbox máy nét đứt — vd Máy khoan 88%. */
+  relatedRoiLabel?: string
   frameWidth?: number
   frameHeight?: number
   status: EventStatus

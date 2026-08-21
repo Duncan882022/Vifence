@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Map } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -20,15 +20,15 @@ function calcRisk(project: Project, worksites: Worksite[]): RiskLevel {
 }
 
 const DELAY_REASON_LABELS: Record<DelayReason, string> = {
-  'machine-breakdown':   'Hỏng máy',
-  'lack-worker':         'Thiếu nhân công',
-  'lack-cement':         'Thiếu xi măng',
-  'lack-bentonite':      'Thiếu bentonite',
-  'lack-concrete':       'Thiếu bê tông',
-  'lack-steel-cage':     'Thiếu lồng thép',
-  'site-not-ready':      'Mặt bằng chưa sẵn',
-  'weather':             'Thời tiết',
-  'inspection-waiting':  'Chờ nghiệm thu',
+  'machine-breakdown': 'Hỏng máy',
+  'lack-worker': 'Thiếu nhân công',
+  'lack-cement': 'Thiếu xi măng',
+  'lack-bentonite': 'Thiếu bentonite',
+  'lack-concrete': 'Thiếu bê tông',
+  'lack-steel-cage': 'Thiếu lồng thép',
+  'site-not-ready': 'Mặt bằng chưa sẵn',
+  weather: 'Thời tiết',
+  'inspection-waiting': 'Chờ nghiệm thu',
 }
 
 function topDelayReason(piles: PileAssignment[]): string {
@@ -42,7 +42,6 @@ function topDelayReason(piles: PileAssignment[]): string {
 
 interface ProjectRow {
   project: Project
-  worksites: Worksite[]
   risk: RiskLevel
   totalPiles: number
   delayedPiles: number
@@ -58,17 +57,30 @@ interface Props {
 }
 
 const RISK_ORDER: Record<RiskLevel, number> = { Cao: 0, 'Trung bình': 1, Thấp: 2 }
-const RISK_COLORS: Record<RiskLevel, { badge: string; row: string; bar: string }> = {
-  'Cao':       { badge: 'bg-red-500/15 text-red-400 ring-red-500/25', row: 'border-l-red-500/60',   bar: '#ef4444' },
-  'Trung bình': { badge: 'bg-amber-500/15 text-amber-400 ring-amber-500/25', row: 'border-l-amber-500/50', bar: '#f59e0b' },
-  'Thấp':      { badge: 'bg-green-500/15 text-green-400 ring-green-500/25', row: 'border-l-green-500/50',  bar: '#22c55e' },
+
+const RISK_BADGE: Record<RiskLevel, string> = {
+  Cao: 'bg-red-500/15 text-red-400 ring-red-500/25',
+  'Trung bình': 'bg-amber-500/15 text-amber-400 ring-amber-500/25',
+  Thấp: 'bg-green-500/15 text-green-400 ring-green-500/25',
+}
+
+function barTone(pct: number): string {
+  if (pct >= 70) return 'from-emerald-600 to-green-400'
+  if (pct >= 50) return 'from-amber-600 to-amber-400'
+  return 'from-red-600 to-red-400'
+}
+
+function pctTone(pct: number): string {
+  if (pct >= 70) return 'text-green-400'
+  if (pct >= 50) return 'text-amber-400'
+  return 'text-red-400'
 }
 
 export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
   const [mapProject, setMapProject] = useState<Project | null>(null)
 
-  const rows = useMemo<ProjectRow[]>(() => {
-    return projects
+  const rows = useMemo<ProjectRow[]>(() => (
+    projects
       .map(proj => {
         const ws = worksites.filter(w => w.projectId === proj.id)
         const totalPiles = ws.reduce((s, w) => s + w.plannedPiles, 0)
@@ -78,7 +90,6 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
         const projPiles = piles.filter(p => ws.some(w => w.id === p.worksiteId))
         return {
           project: proj,
-          worksites: ws,
           risk: calcRisk(proj, ws),
           totalPiles,
           delayedPiles,
@@ -88,76 +99,105 @@ export function ProjectDelayRiskPanel({ projects, worksites, piles }: Props) {
         }
       })
       .sort((a, b) => RISK_ORDER[a.risk] - RISK_ORDER[b.risk])
-  }, [projects, worksites, piles])
+  ), [projects, worksites, piles])
+
+  const highRisk = rows.filter(r => r.risk === 'Cao').length
 
   return (
     <>
-      <Panel title="Năng suất dự án" className="h-full min-h-0" noPadding>
-      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-2 gap-1.5">
-        {rows.map(row => {
-          const col = RISK_COLORS[row.risk]
+      <Panel
+        title="Năng suất dự án"
+        className="h-full min-h-0"
+        noPadding
+        headerRight={highRisk > 0 ? (
+          <span className="inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/15 text-red-400 ring-1 ring-red-500/25">
+            {highRisk} rủi ro cao
+          </span>
+        ) : undefined}
+      >
+        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto px-2 pb-2 pt-1 space-y-1.5">
+          {rows.map((row, idx) => {
+            const delayedTotal = row.delayedPiles + row.blockedPiles
+            const overPlan = row.completedPct > 100
+            const displayPct = Math.min(100, row.completedPct)
 
-          return (
-            <div key={row.project.id} className={cn(
-              'rounded-lg border border-[#1e2433] border-l-[3px] bg-[#0a0e1a] overflow-hidden',
-              row.risk === 'Cao' ? 'bg-red-500/5 border-l-red-500/60' : col.row,
-            )}>
-              <div className="flex items-center gap-2 px-2.5 py-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-bold text-foreground truncate">{row.project.name}</span>
-                    <span className="text-[8px] text-muted-foreground/50">({row.project.code})</span>
-                    {row.completedPct > 100 ? (
-                      <span className="inline-flex px-1.5 py-0.5 rounded-full text-[8px] font-bold ring-1 bg-emerald-500/15 text-emerald-400 ring-emerald-500/25">
-                        Vượt KH
-                      </span>
-                    ) : (
-                      <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[8px] font-bold ring-1', col.badge)}>
-                        {row.risk}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <div className="flex-1 h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, row.completedPct)}%`, background: row.completedPct > 100 ? '#10b981' : col.bar }} />
+            return (
+              <motion.div
+                key={row.project.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.04, duration: 0.28 }}
+                className="group rounded-xl border border-[#1e2433] bg-[#060b14] hover:border-[#2a3855] transition-colors"
+              >
+                <div className="flex items-start gap-2 p-2.5">
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-foreground truncate leading-snug">
+                          {row.project.name}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground/55 mt-0.5">{row.project.code}</p>
+                      </div>
+                      {overPlan ? (
+                        <span className="shrink-0 inline-flex px-2 py-0.5 rounded-full text-[8px] font-bold ring-1 bg-emerald-500/15 text-emerald-400 ring-emerald-500/25">
+                          Vượt KH
+                        </span>
+                      ) : (
+                        <span className={cn('shrink-0 inline-flex px-2 py-0.5 rounded-full text-[8px] font-bold ring-1', RISK_BADGE[row.risk])}>
+                          {row.risk}
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[9px] tabular-nums shrink-0" style={{ color: row.completedPct > 100 ? '#34d399' : undefined }}>{row.completedPct}%</span>
-                  </div>
-                  {row.completedPct > 100 && (
-                    <div className="text-[8px] text-emerald-400 mt-0.5">
-                      +{row.completedPct - 100}% so với kế hoạch
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-[#1a2030] overflow-hidden">
+                        <div
+                          className={cn('h-full rounded-full bg-gradient-to-r transition-all duration-500', barTone(displayPct))}
+                          style={{ width: `${displayPct}%` }}
+                        />
+                      </div>
+                      <span className={cn('text-[10px] font-bold tabular-nums w-9 text-right shrink-0', overPlan ? 'text-emerald-400' : pctTone(displayPct))}>
+                        {row.completedPct}%
+                      </span>
                     </div>
-                  )}
-                </div>
-                <div className="shrink-0 flex items-center gap-1.5">
-                  {row.completedPct <= 100 && (row.delayedPiles + row.blockedPiles) > 0 && (
-                    <span className="text-[8px] text-red-400 font-semibold">{row.delayedPiles + row.blockedPiles} cọc trễ</span>
-                  )}
+
+                    <p className="text-[9px] text-muted-foreground/55 leading-snug">
+                      {delayedTotal > 0 && !overPlan && (
+                        <span className="text-red-400/90 font-medium">{delayedTotal} cọc trễ · {row.topReason}</span>
+                      )}
+                      {overPlan && (
+                        <span className="text-emerald-400/90">+{row.completedPct - 100}% so với kế hoạch</span>
+                      )}
+                      {delayedTotal === 0 && !overPlan && (
+                        <span>{row.totalPiles.toLocaleString('vi-VN')} cọc trong kế hoạch</span>
+                      )}
+                    </p>
+                  </div>
+
                   <button
                     type="button"
                     title="Xem bản đồ cọc"
                     onClick={() => setMapProject(row.project)}
-                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                    className="shrink-0 mt-0.5 p-2 rounded-lg border border-[#1e2433] text-muted-foreground opacity-70 group-hover:opacity-100 hover:text-violet-400 hover:border-violet-500/30 hover:bg-violet-500/10 transition-all"
                   >
                     <Map className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+              </motion.div>
+            )
+          })}
+        </div>
       </Panel>
 
       <AnimatePresence>
-      {mapProject && (
-        <ProjectMapModal
-          key={mapProject.id}
-          project={mapProject}
-          worksites={worksites.filter(w => w.projectId === mapProject.id)}
-          onClose={() => setMapProject(null)}
-        />
-      )}
+        {mapProject && (
+          <ProjectMapModal
+            key={mapProject.id}
+            project={mapProject}
+            worksites={worksites.filter(w => w.projectId === mapProject.id)}
+            onClose={() => setMapProject(null)}
+          />
+        )}
       </AnimatePresence>
     </>
   )

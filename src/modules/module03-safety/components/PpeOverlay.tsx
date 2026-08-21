@@ -16,16 +16,15 @@ import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
-import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
 import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
 import {
   flattenPpeViolationOverlayBoxes,
   groupHasViolation,
   groupPpeDetections,
+  primaryViolationInGroup,
 } from '../utils/ppeDetectionGroups'
 import { shouldShowOverlayBox } from '../utils/overlayCoverage'
-import { formatPersonOverlayBadge } from '../utils/personOverlayLabel'
-import { formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { formatPpeViolationOverlayBadge } from '../utils/personOverlayLabel'
 import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 
@@ -97,11 +96,15 @@ function PpeDetectionBox({
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
-        {formatPersonOverlayBadge(
-          detection.worker_name,
-          detection.confidence,
-          ` · ${formatRoiOverlayCode(detection.behavior, detection.scenario_id)}`,
-        )}
+        {formatPpeViolationOverlayBadge({
+          behavior: detection.behavior,
+          confidence: detection.confidence,
+          scenario_id: detection.scenario_id,
+          worker_id: detection.worker_id,
+          worker_name: detection.worker_name,
+          face_match_confidence: detection.face_match_confidence,
+          face_match_source: detection.face_match_source,
+        })}
       </span>
     </div>
   )
@@ -149,6 +152,7 @@ function usePpeState(
           employee_code: d.employee_code,
           contractor_name: d.contractor_name,
           face_match_confidence: d.face_match_confidence,
+          face_match_source: d.face_match_source,
         })),
     )
     setStatus(vms.status)
@@ -233,23 +237,18 @@ export const PpeOverlay = memo(function PpeOverlay({
   compact,
 }: PpeOverlayProps) {
   const { detections, frameSize, layoutTick } = usePpeState(cameraId, videoRef, enabled)
-  const { syncKey, trackLock, missGraceFrames, snapOverlay } = useLiveOverlaySync()
+  const { syncKey, trackLock, snapOverlay } = useLiveOverlaySync()
   const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
 
-  const { visible: stickyViolations } = useViolationStickyOverlay(stableDetections, {
-    isViolation: d => d.behavior.startsWith('no_'),
-    syncKey,
-    missGraceFrames,
-  })
-
   const visibleBoxes = useMemo(() => {
-    if (stickyViolations.length === 0) return []
     const groups = groupPpeDetections(stableDetections).filter(group => {
       if (!groupHasViolation(group)) return false
-      return shouldShowOverlayBox(group.person.confidence, group.person.bbox)
+      const violation = primaryViolationInGroup(group)
+      if (!violation) return false
+      return shouldShowOverlayBox(violation.confidence, violation.bbox)
     })
     return flattenPpeViolationOverlayBoxes(groups)
-  }, [stableDetections, stickyViolations])
+  }, [stableDetections])
 
   if (visibleBoxes.length === 0 || frameSize.width <= 0) return null
 

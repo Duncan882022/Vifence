@@ -24,8 +24,10 @@ logger = logging.getLogger("cam04_pccc_demo")
 _DEMO_DIR = Path(__file__).resolve().parent.parent / "data" / "cam04_pccc_demo"
 _REEL_ROOT = Path(__file__).resolve().parent.parent.parent
 _FRAME_SMALL = (48, 48)
-_MATCH_DRIFT_MAX = 8.0
+_MATCH_DRIFT_MAX = 12.0
 _IN_DEMO_REEL_DRIFT_MAX = 35.0
+_PCCC_SEGMENT_START = 15.0
+_PCCC_SEGMENT_END = 21.0
 
 _SUPPRESS_REEL_FILES = (
     _REEL_ROOT / "backend-ai/data/cam04_demo/0355.png",
@@ -112,6 +114,8 @@ def _load_anchors() -> tuple[_PcccAnchor, ...]:
 def resolve_cam04_pccc_demo(
     camera_id: str,
     frame: np.ndarray,
+    *,
+    source_pts_sec: float | None = None,
 ) -> list[Detection] | None:
     """Trả detections PCCC từ nhãn demo, [] để suppress, hoặc None → ML/heuristic."""
     if camera_id != "A-04":
@@ -120,17 +124,15 @@ def resolve_cam04_pccc_demo(
     if not anchors:
         return None
 
-    probe = _frame_small(frame)
-    scored = [(anchor, _frame_drift(probe, anchor.small)) for anchor in anchors]
-    best_anchor, best_drift = min(scored, key=lambda item: item[1])
-    min_drift = min(drift for _, drift in scored)
+    in_pccc_segment = (
+        source_pts_sec is not None
+        and _PCCC_SEGMENT_START <= float(source_pts_sec) <= _PCCC_SEGMENT_END
+    )
 
-    if best_drift <= _MATCH_DRIFT_MAX:
-        if best_anchor.fire is None and best_anchor.smoking is None:
-            return []
+    def _inject_from_anchor(anchor: _PcccAnchor) -> list[Detection]:
         out: list[Detection] = []
-        if best_anchor.smoking:
-            x1, y1, x2, y2 = best_anchor.smoking
+        if anchor.smoking:
+            x1, y1, x2, y2 = anchor.smoking
             out.append(
                 Detection(
                     behavior="smoking",
@@ -139,8 +141,8 @@ def resolve_cam04_pccc_demo(
                     bbox=[float(x1), float(y1), float(x2), float(y2)],
                 )
             )
-        if best_anchor.fire:
-            x1, y1, x2, y2 = best_anchor.fire
+        if anchor.fire:
+            x1, y1, x2, y2 = anchor.fire
             out.append(
                 Detection(
                     behavior="fire",
@@ -151,7 +153,21 @@ def resolve_cam04_pccc_demo(
             )
         return out
 
+    scene_anchors = [a for a in anchors if a.fire is not None or a.smoking is not None]
+
+    probe = _frame_small(frame)
+    scored = [(anchor, _frame_drift(probe, anchor.small)) for anchor in anchors]
+    best_anchor, best_drift = min(scored, key=lambda item: item[1])
+    min_drift = min(drift for _, drift in scored)
+
+    if best_drift <= _MATCH_DRIFT_MAX:
+        if best_anchor.fire is None and best_anchor.smoking is None:
+            return []
+        return _inject_from_anchor(best_anchor)
+
     if min_drift <= _IN_DEMO_REEL_DRIFT_MAX:
+        if in_pccc_segment and scene_anchors:
+            return _inject_from_anchor(scene_anchors[0])
         return []
 
     return None

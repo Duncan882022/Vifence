@@ -45,6 +45,8 @@ export interface PatrolEvent {
   status: EventStatus
   confidence: number
   gps: { lat: number; lng: number }
+  /** Snapshot từ backend VMS — `/events/{id}/snapshot` */
+  snapshotUrl?: string
 }
 
 export interface PatrolDashboard {

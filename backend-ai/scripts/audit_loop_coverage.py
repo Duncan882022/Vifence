@@ -124,22 +124,29 @@ def _extract_frame(camera_id: str, sec: int) -> np.ndarray | None:
     return frame
 
 
-def _analyze(engine: str, camera_id: str, frame: np.ndarray) -> set[str]:
+def _analyze(engine: str, camera_id: str, frame: np.ndarray, *, sec: int) -> set[str]:
+    pts = float(sec)
     if engine == "road":
-        return {d["behavior"] for d in analyze_road_frame(frame, camera_id)["detections"]}
+        return {
+            d["behavior"]
+            for d in analyze_road_frame(frame, camera_id, source_pts_sec=pts)["detections"]
+        }
     if engine == "atgt":
-        return {d.behavior for d in analyze_atgt_frame(frame, camera_id)}
+        return {d.behavior for d in analyze_atgt_frame(frame, camera_id, source_pts_sec=pts)}
     if engine == "ppe":
-        return {d["behavior"] for d in analyze_ppe_frame(frame, camera_id)["detections"]}
+        return {
+            d["behavior"]
+            for d in analyze_ppe_frame(frame, camera_id, source_pts_sec=pts)["detections"]
+        }
     if engine == "pccc":
-        return {d.behavior for d in analyze_pccc_frame(frame, camera_id)}
+        return {d.behavior for d in analyze_pccc_frame(frame, camera_id, source_pts_sec=pts)}
     if engine == "wah":
         return {d.behavior for d in analyze_wah_frame(frame, camera_id)}
     if engine == "crane":
-        payload = analyze_crane_proximity_frame(frame, camera_id)
+        payload = analyze_crane_proximity_frame(frame, camera_id, source_pts_sec=pts)
         return {d["behavior"] for d in payload.get("detections", [])}
     if engine == "mesh":
-        return {d.behavior for d in analyze_mesh_frame(frame, camera_id)}
+        return {d.behavior for d in analyze_mesh_frame(frame, camera_id, source_pts_sec=pts)}
     return set()
 
 
@@ -160,7 +167,7 @@ def scan_loop_coverage() -> list[ScenarioHit]:
             for sid, (cam, engine, expect) in SCENARIO_SPEC.items():
                 if cam != camera_id or hits[sid].first_sec is not None:
                     continue
-                found = _analyze(engine, camera_id, frame) & set(expect)
+                found = _analyze(engine, camera_id, frame, sec=sec) & set(expect)
                 if found:
                     hits[sid].first_sec = sec
                     hits[sid].behaviors = sorted(found)

@@ -47,7 +47,7 @@ SCENARIO_SEEK_SEC: dict[str, tuple[str, int]] = {
     "BPTC-009": ("A-03", 10),
     "BPTC-001": ("A-03", 2),
     "ATGT-002": ("A-03", 17),
-    "ATGT-004": ("A-03", 17),
+    "ATGT-004": ("A-03", 9),
     "PPE-001": ("A-04", 8),
     "PPE-002": ("A-04", 10),
     "PPE-003": ("A-04", 12),
@@ -150,13 +150,17 @@ def _run_engine_frames(
     *,
     frames: int = 6,
     sleep_s: float = 0.05,
+    source_pts_sec: float | None = None,
 ) -> tuple[list[str], list[str]]:
     store = _fresh_store()
     engine = Engine(store)
     all_events: list[str] = []
     last_beh: list[str] = []
+    kwargs: dict = {}
+    if source_pts_sec is not None:
+        kwargs["source_pts_sec"] = source_pts_sec
     for _ in range(frames):
-        payload, events = engine.process_frame(frame, camera_id)
+        payload, events = engine.process_frame(frame, camera_id, **kwargs)
         last_beh = _behaviors(payload)
         all_events.extend(_event_summary(events))
         if sleep_s > 0:
@@ -338,7 +342,7 @@ def audit_scenario_analyzer() -> list[CaseResult]:
 
     frame = _extract_video_frame("A-03", 0)
     if frame is not None:
-        dets = analyze_mesh_frame(frame, "A-03")
+        dets = analyze_mesh_frame(frame, "A-03", source_pts_sec=2.0)
         beh = {d.behavior for d in dets}
         ok = bool(beh & {"mesh_missing", "mesh_torn", "mesh_dirty"})
         results.append(CaseResult("analyzer_BPTC-001_mesh", ok, f"beh={sorted(beh)}"))
@@ -356,13 +360,23 @@ def audit_scenario_engines() -> list[CaseResult]:
         ok = any("BPTC-007" in e and "mud" in e for e in ev)
         results.append(CaseResult("engine_BPTC-007_mud", ok, f"events={ev[:3]}"))
 
-    # PPE — t10 log riêng từng loại
+    # PPE — t11 log riêng từng loại (sau fix mũ trắng: có thể chỉ no_vest + no_shoes)
     frame = _extract_video_frame("A-04", 11)
     if frame is not None:
-        _, ev = _run_engine_frames(PpeEngine, frame, "A-04", frames=5, sleep_s=1.2)
-        ok = any("no_vest/PPE-002" in e for e in ev) and any("no_helmet/PPE-001" in e for e in ev)
+        _, ev = _run_engine_frames(
+            PpeEngine,
+            frame,
+            "A-04",
+            frames=5,
+            sleep_s=1.2,
+            source_pts_sec=11.0,
+        )
         dedup = {e.split("/")[1] for e in ev if e.startswith("PPE/")}
-        ok = ok and len(dedup) >= 2
+        ok = (
+            any("no_vest/PPE-002" in e for e in ev)
+            and len(dedup) >= 2
+            and dedup <= {"no_helmet", "no_vest", "no_shoes"}
+        )
         results.append(CaseResult("engine_PPE_multi_person", ok, f"events={ev} types={sorted(dedup)}"))
 
     # PCCC
@@ -386,7 +400,14 @@ def audit_scenario_engines() -> list[CaseResult]:
 
     frame = _extract_video_frame("A-03", 0)
     if frame is not None:
-        _, ev = _run_engine_frames(MeshAnalysisEngine, frame, "A-03", frames=10, sleep_s=0.45)
+        _, ev = _run_engine_frames(
+            MeshAnalysisEngine,
+            frame,
+            "A-03",
+            frames=10,
+            sleep_s=0.45,
+            source_pts_sec=2.0,
+        )
         ok = any("BPTC-001" in e for e in ev)
         results.append(CaseResult("engine_BPTC-001_mesh", ok, f"events={ev}"))
 

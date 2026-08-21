@@ -68,14 +68,26 @@ class Settings(BaseSettings):
     # ATGT: false = log cả vượt tốc độ (ATGT-002) + thiếu phân làn (ATGT-004).
     atgt_lane_violation_only: bool = False
 
-    # Phút đầu sau restart / DELETE /events: dedup tắt — ghi đủ mọi trường hợp qua nhiều loop.
-    event_audit_grace_minutes: float = 10.0
+    # Phút đầu sau restart / DELETE /events: dedup tắt — ghi đủ 13/13 qua vài loop VMS.
+    event_audit_grace_minutes: float = 5.0
     # Legacy — không còn dùng cho dedup (giữ env tương thích).
     event_audit_grace_loops: int = 2
 
     def event_repeat_seconds(self, configured: float) -> float:
         """Cooldown giữa các lần confirm engine cùng track."""
-        return 8.0 if self.event_test_mode else configured
+        if self.event_test_mode:
+            return 8.0
+        if not self.event_dedup_enabled():
+            return 12.0
+        return configured
+
+    def event_debounce_min_seconds(self, configured: float) -> float:
+        """Thời gian giữ detect liên tục trước khi confirm — rút ngắn trong audit grace."""
+        if self.event_test_mode:
+            return min(configured, 1.0)
+        if not self.event_dedup_enabled():
+            return min(configured, 1.2)
+        return configured
 
     @property
     def event_log_one_per_episode(self) -> bool:
@@ -105,7 +117,9 @@ class Settings(BaseSettings):
 
     # Nhận diện công nhân — gắn danh tính vào vi phạm (PPE/WAH/PCCC).
     worker_recognition_enabled: bool = True
-    worker_match_min_confidence: float = 0.42
+    worker_match_min_confidence: float = 0.72
+    # Khoảng cách top-1 vs top-2 gallery — tránh histogram khớp nhầm.
+    worker_match_min_margin: float = 0.10
     worker_demo_fallback_enabled: bool = False
     worker_gallery_dir: str = "data/worker_gallery"
 
@@ -153,9 +167,7 @@ class Settings(BaseSettings):
     vms_ai_fps: float = 6.0
 
     def vms_ai_fps_effective(self) -> float:
-        """Hạ FPS trong audit grace — VPS kịp chạy hết engine / segment ngắn."""
-        if not self.event_dedup_enabled():
-            return min(self.vms_ai_fps, 2.5)
+        """FPS AI trên VMS — luôn dùng cấu hình đầy đủ (grace không hạ FPS)."""
         return self.vms_ai_fps
 
     @property

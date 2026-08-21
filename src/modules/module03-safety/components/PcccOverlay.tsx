@@ -19,15 +19,14 @@ import {
   getVideoObjectFitForCamera,
   getVideoObjectPositionForCamera,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
-import { formatPersonOverlayBadge } from '../utils/personOverlayLabel'
-import { formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { formatViolationRoiBadge } from '../utils/roiOverlayCode'
 
-function pcccOverlayLabel(det: Pick<PcccDetection, 'behavior' | 'confidence' | 'worker_name'>): string {
-  const code = formatRoiOverlayCode(det.behavior)
-  if (det.behavior === 'smoking') {
-    return formatPersonOverlayBadge(det.worker_name, det.confidence, ` · ${code}`)
-  }
-  return code
+function pcccOverlayLabel(
+  det: Pick<PcccDetection, 'behavior' | 'confidence' | 'scenario_id'>,
+): string {
+  return formatViolationRoiBadge(det.behavior, det.confidence, {
+    scenarioId: det.scenario_id,
+  })
 }
 
 function toOverlayDetections(detections: PcccDetection[]): MobileAiDetection[] {
@@ -81,10 +80,10 @@ function usePcccState(
         .filter(d => d.behavior === 'smoking' || d.behavior === 'fire')
         .map(d => ({
           behavior: d.behavior as PcccDetection['behavior'],
-          label: pcccOverlayLabel({
+          label:           pcccOverlayLabel({
             behavior: d.behavior as PcccDetection['behavior'],
             confidence: d.confidence,
-            worker_name: d.worker_name,
+            scenario_id: d.scenario_id,
           }),
           confidence: d.confidence,
           bbox: d.bbox,

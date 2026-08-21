@@ -8,7 +8,7 @@ const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
 
-const VMS_CAMERA_IDS = new Set(['A-03', 'A-04'])
+const VMS_CAMERA_IDS = new Set(['A-03', 'A-04', 'HC-01'])
 
 /** Cam VMS luôn vẽ polygon ROI mặc định trên live tile — sau sẽ cấu hình per-cam. */
 const VMS_LIVE_ROI_OVERLAY_CAMERAS = new Set(['A-03'])
@@ -35,6 +35,7 @@ export interface VmsOverlayDetection {
   employee_code?: string
   contractor_name?: string
   face_match_confidence?: number
+  face_match_source?: string
   track_id?: string
   subject_bbox?: [number, number, number, number]
   related_bbox?: [number, number, number, number]
@@ -116,6 +117,7 @@ function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null 
     contractor_name: raw.contractor_name ? String(raw.contractor_name) : undefined,
     face_match_confidence:
       raw.face_match_confidence != null ? Number(raw.face_match_confidence) : undefined,
+    face_match_source: raw.face_match_source ? String(raw.face_match_source) : undefined,
     subject_bbox: normalizeBbox(raw.subject_bbox as number[] | undefined) ?? undefined,
     related_bbox: normalizeBbox(raw.related_bbox as number[] | undefined) ?? undefined,
   }

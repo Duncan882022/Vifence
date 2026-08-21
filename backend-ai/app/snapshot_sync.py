@@ -103,6 +103,11 @@ def pick_best_detection(
         score = bbox_iou(det.bbox, anchor_bbox) * 2.0 + det.confidence
         if person_bbox and center_inside(det.bbox, person_bbox):
             score += 0.35
+        elif person_bbox and behavior in ("no_helmet", "no_vest", "no_shoes"):
+            cx, cy = bbox_center(det.bbox)
+            px1, py1, px2, py2 = person_bbox
+            if not (px1 <= cx <= px2 and py1 - (py2 - py1) * 0.12 <= cy <= py1 + (py2 - py1) * 0.35):
+                score -= 2.0
         if score > best_score:
             best_score = score
             best = det
@@ -112,6 +117,7 @@ def pick_best_detection(
 def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any]:
     from .ppe_analyzer import analyze_ppe_frame
     from .schemas import PpeDetection
+    from .worker_identity.detection_enrich import sanitize_ppe_event_identity
 
     analyze_frame = episode.get("analyze_frame")
     capture_frame = episode["frame"]
@@ -120,8 +126,13 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
 
     target: PpeDetection = episode["detection"]
     person_bbox = episode.get("person_bbox")
+    source_pts_sec = episode.get("source_pts_sec")
     sx, sy = episode.get("scale") or frame_scale(analyze_frame, capture_frame)
-    fresh = analyze_ppe_frame(analyze_frame, camera_id)
+    fresh = analyze_ppe_frame(
+        analyze_frame,
+        camera_id,
+        source_pts_sec=float(source_pts_sec) if source_pts_sec is not None else None,
+    )
     rows = fresh.get("detections", [])
     detections = [PpeDetection.model_validate(row) for row in rows]
 
@@ -137,7 +148,6 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
         return episode
 
     synced = dict(episode)
-    synced["detection"] = scale_detection(matched, sx, sy)
     if anchor_person is not None:
         persons = [d for d in detections if d.behavior == "person"]
         person_match = None
@@ -149,13 +159,28 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
                 person_match = person
         if person_match is not None:
             synced["person_bbox"] = scale_bbox(person_match.bbox, sx, sy)
-            synced_det = synced["detection"]
-            if hasattr(synced_det, "worker_name"):
+            from .ppe_analyzer import ppe_violation_display_bbox
+
+            display = ppe_violation_display_bbox(
+                tuple(float(v) for v in person_match.bbox),
+                matched.behavior,
+                analyze_frame.shape[0],
+            )
+            matched = matched.model_copy(update={"bbox": [float(v) for v in display]})
+            synced_det = scale_detection(matched, sx, sy)
+            if synced_det.behavior in ("no_helmet", "no_vest"):
                 synced_det.worker_id = person_match.worker_id
                 synced_det.worker_name = person_match.worker_name
                 synced_det.employee_code = person_match.employee_code
                 synced_det.contractor_name = person_match.contractor_name
                 synced_det.face_match_confidence = person_match.face_match_confidence
+                synced_det.face_match_source = getattr(person_match, "face_match_source", None)
+                sanitize_ppe_event_identity(synced_det)
+            synced["detection"] = synced_det
+            return synced
+
+    synced["detection"] = scale_detection(matched, sx, sy)
+    sanitize_ppe_event_identity(synced["detection"])
     return synced
 
 

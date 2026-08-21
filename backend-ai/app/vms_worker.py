@@ -88,7 +88,16 @@ class CameraVmsWorker:
 
         self._ingest_thread: Optional[threading.Thread] = None
         self._ai_thread: Optional[threading.Thread] = None
+        self._hls_watchdog_thread: Optional[threading.Thread] = None
         self._hls_proc: Optional[subprocess.Popen] = None
+        self._hls_lock = threading.Lock()
+        self._hls_started_at: float = 0.0
+        self._hls_restart_cooldown_until: float = 0.0
+        self._hls_pipe_stdin = None
+        self._hls_pipe_size: Optional[tuple[int, int]] = None
+        # RTSP thường chỉ 1 client — relay-only hoặc ingest+pipe HLS khi có AI.
+        self._live_hls_only = _is_live_stream_source(source_path) and not process_frame_fns
+        self._live_hls_from_pipe = _is_live_stream_source(source_path) and bool(process_frame_fns)
 
         self._overlay_lock = threading.Lock()
         self._latest_overlay: dict = {
@@ -123,21 +132,41 @@ class CameraVmsWorker:
 
         self._probe_source_duration()
 
-        self._ingest_thread = threading.Thread(
-            target=self._ingest_loop,
-            name=f"vms-ingest-{self.camera_id}",
-            daemon=True,
-        )
-        self._ingest_thread.start()
+        if not self._live_hls_only:
+            if self._live_hls_from_pipe:
+                logger.info(
+                    "[VMS %s] Live ingest + AI — HLS qua pipe (1 kết nối RTSP).",
+                    self.camera_id,
+                )
+            self._ingest_thread = threading.Thread(
+                target=self._ingest_loop,
+                name=f"vms-ingest-{self.camera_id}",
+                daemon=True,
+            )
+            self._ingest_thread.start()
 
-        self._ai_thread = threading.Thread(
-            target=self._ai_loop,
-            name=f"vms-ai-{self.camera_id}",
-            daemon=True,
-        )
-        self._ai_thread.start()
+            self._ai_thread = threading.Thread(
+                target=self._ai_loop,
+                name=f"vms-ai-{self.camera_id}",
+                daemon=True,
+            )
+            self._ai_thread.start()
+        else:
+            logger.info(
+                "[VMS %s] Live HLS-only — bỏ OpenCV ingest (tránh 2 kết nối RTSP).",
+                self.camera_id,
+            )
 
-        self._start_hls()
+        if not self._live_hls_from_pipe:
+            self._start_hls(fresh_output=True)
+
+        if _is_live_stream_source(self.source_path):
+            self._hls_watchdog_thread = threading.Thread(
+                target=self._hls_watchdog_loop,
+                name=f"vms-hls-watch-{self.camera_id}",
+                daemon=True,
+            )
+            self._hls_watchdog_thread.start()
 
     def stop(self) -> None:
         self._running = False
@@ -156,7 +185,12 @@ class CameraVmsWorker:
         return self._hls_dir / "index.m3u8"
 
     def hls_ready(self) -> bool:
-        return self.hls_index_path().exists()
+        if not self.hls_index_path().is_file():
+            return False
+        if not _is_live_stream_source(self.source_path):
+            return True
+        # Live: phát miễn ffmpeg còn chạy — tránh 503 giữa chừng gây reload FE.
+        return self._hls_proc is not None and self._hls_proc.poll() is None
 
     def get_latest_overlay(self) -> dict:
         """Snapshot detections/zones mới nhất — FE poll để vẽ ROI (Option 2)."""
@@ -207,18 +241,22 @@ class CameraVmsWorker:
                 continue
 
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+            if fps <= 0 or fps > 120:
+                fps = 25.0
             frame_sleep = 1.0 / fps
+            live = _is_live_stream_source(self.source_path)
 
             logger.info("[VMS %s] Ingest bắt đầu @ %.1f FPS", self.camera_id, fps)
 
             while self._running:
                 with self._seek_lock:
-                    if self._seek_to_zero:
+                    if self._seek_to_zero and not live:
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         self._seek_to_zero = False
 
                 if not self._ingest_gate.is_set():
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    if not live:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ok, frame = cap.read()
                     if not ok or frame is None:
                         time.sleep(0.05)
@@ -252,6 +290,8 @@ class CameraVmsWorker:
                     self._source_pts_sec = source_pts
                 with self._pts_lock:
                     self._pts_history.append((wall_now, source_pts))
+
+                self._write_hls_pipe_frame(frame)
 
                 time.sleep(frame_sleep)
 
@@ -287,6 +327,9 @@ class CameraVmsWorker:
         warmup_frame = self.get_frame()
         if warmup_frame is not None:
             self._warmup_engines(warmup_frame)
+            if self._live_hls_from_pipe:
+                hh, ww = warmup_frame.shape[:2]
+                self._start_hls(fresh_output=True, pipe_size=(ww, hh))
             logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
         self._ingest_gate.set()
 
@@ -360,7 +403,70 @@ class CameraVmsWorker:
     # Internal — HLS
     # ------------------------------------------------------------------
 
-    def _start_hls(self) -> None:
+    def _clear_hls_output(self) -> None:
+        for seg in self._hls_dir.glob("seg_*.ts"):
+            try:
+                seg.unlink()
+            except OSError:
+                pass
+        index = self.hls_index_path()
+        if index.is_file():
+            try:
+                index.unlink()
+            except OSError:
+                pass
+
+    def _latest_hls_activity(self) -> float:
+        latest = 0.0
+        index = self.hls_index_path()
+        if index.is_file():
+            try:
+                latest = index.stat().st_mtime
+            except OSError:
+                pass
+        for seg in self._hls_dir.glob("seg_*.ts"):
+            try:
+                latest = max(latest, seg.stat().st_mtime)
+            except OSError:
+                pass
+        return latest
+
+    def _live_hls_encode_args(self, segment_pattern: str, hls_out: str) -> list[str]:
+        return [
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            "-b:v", "800k",
+            "-maxrate", "900k",
+            "-bufsize", "900k",
+            "-g", "12",
+            "-sc_threshold", "0",
+            "-an",
+            "-muxdelay", "0",
+            "-muxpreload", "0",
+            "-hls_time", "1",
+            "-hls_list_size", "3",
+            "-hls_flags", "split_by_time+delete_segments+append_list+omit_endlist+independent_segments",
+            "-hls_segment_filename", segment_pattern,
+            hls_out,
+        ]
+
+    def _write_hls_pipe_frame(self, frame: np.ndarray) -> None:
+        stdin = self._hls_pipe_stdin
+        if stdin is None:
+            return
+        try:
+            out = frame
+            if self._hls_pipe_size is not None:
+                pw, ph = self._hls_pipe_size
+                fh, fw = frame.shape[:2]
+                if (fw, fh) != (pw, ph):
+                    out = cv2.resize(frame, (pw, ph))
+            stdin.write(out.tobytes())
+        except (BrokenPipeError, OSError, ValueError):
+            self._hls_pipe_stdin = None
+
+    def _start_hls(self, *, fresh_output: bool = False, pipe_size: tuple[int, int] | None = None) -> None:
         if not shutil.which("ffmpeg"):
             logger.warning(
                 "[VMS %s] ffmpeg không có trong PATH — HLS stream không khả dụng. "
@@ -372,45 +478,121 @@ class CameraVmsWorker:
         hls_out = str(self._hls_dir / "index.m3u8")
         segment_pattern = str(self._hls_dir / "seg_%04d.ts")
 
+        if fresh_output or (
+            _is_live_stream_source(self.source_path) and not self.hls_index_path().is_file()
+        ):
+            self._clear_hls_output()
+
         cmd = [
             "ffmpeg",
             "-loglevel", "warning",
         ]
-        if _is_live_stream_source(self.source_path):
-            cmd.extend(["-rtsp_transport", "tcp"])
+        stdin_mode = False
+        if self._live_hls_from_pipe and pipe_size is not None:
+            w, h = pipe_size
+            self._hls_pipe_size = (w, h)
+            cmd.extend([
+                "-f", "rawvideo",
+                "-pix_fmt", "bgr24",
+                "-s", f"{w}x{h}",
+                "-r", "25",
+                "-i", "pipe:0",
+            ])
+            cmd.extend(self._live_hls_encode_args(segment_pattern, hls_out))
+            stdin_mode = True
+        elif _is_live_stream_source(self.source_path):
+            cmd.extend([
+                "-fflags", "nobuffer",
+                "-flags", "low_delay",
+                "-probesize", "500000",
+                "-analyzeduration", "500000",
+                "-rtsp_transport", "tcp",
+                "-i", self.source_path,
+                "-r", "25",
+            ])
+            cmd.extend(self._live_hls_encode_args(segment_pattern, hls_out))
         else:
-            cmd.extend(["-stream_loop", "-1"])
-        cmd.extend([
-            "-re",
-            "-i", self.source_path,
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-tune", "zerolatency",
-            "-b:v", "800k",
-            "-maxrate", "900k",
-            "-bufsize", "1600k",
-            "-g", "25",               # keyframe every 1s @ 25fps
-            "-sc_threshold", "0",
-            "-an",                    # no audio
-            "-hls_time", "2",
-            "-hls_list_size", "6",
-            "-hls_flags", "delete_segments+independent_segments",
-            "-hls_segment_filename", segment_pattern,
-            hls_out,
-        ])
+            cmd.extend(["-stream_loop", "-1", "-re", "-i", self.source_path])
+            cmd.extend([
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "zerolatency",
+                "-b:v", "800k",
+                "-maxrate", "900k",
+                "-bufsize", "1600k",
+                "-g", "25",
+                "-sc_threshold", "0",
+                "-an",
+                "-hls_time", "2",
+                "-hls_list_size", "6",
+                "-hls_flags", "delete_segments+independent_segments",
+                "-hls_segment_filename", segment_pattern,
+                hls_out,
+            ])
 
         try:
-            self._hls_proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+            popen_kwargs: dict = {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+            }
+            if stdin_mode:
+                popen_kwargs["stdin"] = subprocess.PIPE
+            self._hls_proc = subprocess.Popen(cmd, **popen_kwargs)
+            self._hls_pipe_stdin = self._hls_proc.stdin if stdin_mode else None
+            self._hls_started_at = time.monotonic()
+            mode = "pipe" if stdin_mode else "direct"
+            logger.info(
+                "[VMS %s] HLS ffmpeg PID %d khởi động (%s).",
+                self.camera_id,
+                self._hls_proc.pid,
+                mode,
             )
-            logger.info("[VMS %s] HLS ffmpeg PID %d khởi động.", self.camera_id, self._hls_proc.pid)
         except Exception as exc:  # noqa: BLE001
             logger.error("[VMS %s] Không khởi động được HLS ffmpeg: %s", self.camera_id, exc)
             self._hls_proc = None
+            self._hls_pipe_stdin = None
+
+    def _restart_hls(self, reason: str) -> None:
+        now = time.monotonic()
+        if now < self._hls_restart_cooldown_until:
+            return
+        self._hls_restart_cooldown_until = now + 20.0
+        logger.warning("[VMS %s] HLS restart: %s", self.camera_id, reason)
+        with self._hls_lock:
+            self._stop_hls_unlocked()
+            if self._live_hls_from_pipe and self._hls_pipe_size:
+                self._start_hls(fresh_output=True, pipe_size=self._hls_pipe_size)
+            else:
+                self._start_hls(fresh_output=True)
+
+    def _hls_watchdog_loop(self) -> None:
+        """Giữ ffmpeg HLS sống cho nguồn live RTSP — restart chậm, tránh downtime liên tục."""
+        while self._running:
+            proc = self._hls_proc
+            dead = proc is None or proc.poll() is not None
+            startup_grace = time.monotonic() - self._hls_started_at < 25.0
+
+            if not dead and not startup_grace:
+                idle_sec = time.time() - self._latest_hls_activity()
+                if idle_sec > 40.0:
+                    self._restart_hls(f"không segment mới {idle_sec:.0f}s")
+            elif dead and not startup_grace:
+                code = proc.returncode if proc is not None else "none"
+                self._restart_hls(f"ffmpeg thoát (code={code})")
+
+            time.sleep(6.0)
 
     def _stop_hls(self) -> None:
+        with self._hls_lock:
+            self._stop_hls_unlocked()
+
+    def _stop_hls_unlocked(self) -> None:
+        if self._hls_pipe_stdin:
+            try:
+                self._hls_pipe_stdin.close()
+            except OSError:
+                pass
+            self._hls_pipe_stdin = None
         if self._hls_proc and self._hls_proc.poll() is None:
             self._hls_proc.terminate()
             try:

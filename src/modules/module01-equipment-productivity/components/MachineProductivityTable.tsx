@@ -3,8 +3,9 @@ import {
   flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel,
   getSortedRowModel, useReactTable, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
-import { AlertTriangle, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { AlertTriangle, Search } from 'lucide-react'
 import { Panel } from '@/components/common/PageLayout/PageLayout'
+import { EquipmentTablePagination } from '@/modules/equipment-intelligence/components/EquipmentTablePagination'
 import { cn } from '@/utils/cn'
 import type { Machine, MachineStatus, Project, Worksite, PileAssignment } from '../types'
 
@@ -22,11 +23,6 @@ const STATUS_LABELS: Record<MachineStatus, string> = {
   stored:    'Lưu kho',
 }
 
-function utilGradient(p: number): string {
-  if (p >= 70) return 'from-green-500 to-emerald-400'
-  if (p >= 45) return 'from-sky-500 to-cyan-400'
-  return 'from-amber-500 to-yellow-400'
-}
 
 interface RowData extends Machine {
   projectCode: string
@@ -144,14 +140,12 @@ export function MachineProductivityTable({ machines, projects, worksites, piles 
       cell: ({ getValue }) => {
         const v = getValue<number>()
         return (
-          <div className="flex items-center gap-1.5 min-w-[80px]">
-            <div className="flex-1 h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
-              <div className={cn('h-full rounded-full bg-gradient-to-r', utilGradient(v))} style={{ width: `${v}%` }} />
-            </div>
-            <span className={cn('text-[10px] tabular-nums w-8 text-right font-bold',
-              v >= 70 ? 'text-green-400' : v >= 45 ? 'text-sky-400' : 'text-amber-400',
-            )}>{v}%</span>
-          </div>
+          <span className={cn(
+            'text-[10px] tabular-nums font-bold',
+            v >= 70 ? 'text-green-400' : v >= 45 ? 'text-sky-400' : 'text-amber-400',
+          )}>
+            {v}%
+          </span>
         )
       },
     },
@@ -220,31 +214,125 @@ export function MachineProductivityTable({ machines, projects, worksites, piles 
     return Array.from({ length: max }, (_, i) => start + i)
   }, [pageCount, currentPage])
 
+  const paginatedRows = table.getRowModel().rows
+
+  const statusInsight = useMemo(() => {
+    const working = machines.filter(m => m.status === 'working').length
+    const idle = machines.filter(m => m.status === 'idle').length
+    const breakdown = machines.filter(m => m.status === 'breakdown').length
+    const stored = machines.filter(m => m.status === 'stored').length
+    return [
+      { label: 'Chạy', count: working, dot: 'bg-green-400', text: 'text-green-400' },
+      { label: 'Chờ', count: idle, dot: 'bg-amber-400', text: 'text-amber-400' },
+      { label: 'Hỏng', count: breakdown, dot: 'bg-red-400', text: 'text-red-400' },
+      { label: 'Kho', count: stored, dot: 'bg-sky-400', text: 'text-sky-400' },
+    ]
+  }, [machines])
+
+  const paginationFooter = (
+    <EquipmentTablePagination
+      startRow={startRow}
+      endRow={endRow}
+      total={total}
+      pageSize={pagination.pageSize}
+      onPageSizeChange={size => setPagination(prev => ({ ...prev, pageSize: size, pageIndex: 0 }))}
+      pageNumbers={pageNumbers}
+      currentPage={currentPage}
+      onPageChange={p => table.setPageIndex(p)}
+      onPrevious={() => table.previousPage()}
+      onNext={() => table.nextPage()}
+      canPrevious={table.getCanPreviousPage()}
+      canNext={table.getCanNextPage()}
+    />
+  )
+
   return (
-    <Panel title="Danh sách Đội máy" noPadding className="h-full min-h-0">
+    <Panel title="Danh sách đội máy" noPadding className="h-full min-h-0">
       <div className="flex flex-col h-full min-h-0">
-        {/* Toolbar */}
-        <div className="flex gap-2 px-3 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-2 px-3 py-2.5 border-b border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
+          <div className="relative w-full min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
             <input
               placeholder="Tìm mã máy, dự án, loại thiết bị..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#060b14] border border-[#1e2433] text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/30 transition-colors"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#060b14] border border-[#1e2433] text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/30 transition-colors"
             />
           </div>
-          <div className="flex items-center gap-2 text-[9px] text-muted-foreground/60">
-            <span className="w-2 h-2 rounded-full bg-green-400" /> Đang hoạt động
-            <span className="w-2 h-2 rounded-full bg-amber-400" /> Chờ việc
-            <span className="w-2 h-2 rounded-full bg-red-400" /> Hỏng hóc
-            <span className="w-2 h-2 rounded-full bg-sky-400" /> Lưu kho
+          <div className="flex flex-wrap gap-1.5">
+            {statusInsight.map(item => (
+              <span
+                key={item.label}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#1e2433] bg-[#060b14] text-[9px]"
+              >
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', item.dot)} />
+                <span className={cn('font-bold tabular-nums', item.text)}>{item.count}</span>
+                <span className="text-muted-foreground/55">{item.label}</span>
+              </span>
+            ))}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-[10px]">
+        {/* Mobile cards */}
+        <div className="lg:hidden flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+          {paginatedRows.map(row => {
+            const r = row.original
+            return (
+              <div
+                key={row.id}
+                className="rounded-xl border border-[#1e2433] bg-[#060b14] px-3 py-3 hover:border-[#2a3855] transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {(r.fuelOver || r.currentPileCode === 'P-083' || r.currentPileCode === 'P-084') && (
+                        <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                      )}
+                      <p className="font-bold text-primary text-[11px]">{r.code}</p>
+                    </div>
+                    <p className="text-[10px] text-foreground/85 mt-0.5 truncate">{r.type}</p>
+                    <p className="text-[9px] text-muted-foreground mt-1">
+                      <span className="text-sky-400 font-semibold">{r.projectCode}</span>
+                      {' / '}{r.worksiteCode}
+                    </p>
+                  </div>
+                  <span className={cn('inline-flex px-2 py-0.5 rounded-lg text-[8px] font-bold shrink-0', STATUS_BADGE[r.status])}>
+                    {STATUS_LABELS[r.status]}
+                  </span>
+                </div>
+                <div className="mt-2.5 grid grid-cols-2 gap-2 text-[9px]">
+                  <div>
+                    <p className="text-muted-foreground/55">Cọc</p>
+                    <p className="font-mono font-semibold text-violet-400 mt-0.5">{r.currentPileCode}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground/55">Sử dụng</p>
+                    <p className={cn(
+                      'font-bold tabular-nums mt-0.5',
+                      r.utilizationPct >= 70 ? 'text-green-400' : r.utilizationPct >= 45 ? 'text-sky-400' : 'text-amber-400',
+                    )}>
+                      {r.utilizationPct}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground/55">Sản lượng</p>
+                    <p className="tabular-nums font-semibold mt-0.5">{r.actualOutputToday}/{r.plannedOutputToday}m</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground/55">NL/giờ</p>
+                    <p className={cn('tabular-nums font-semibold mt-0.5', r.fuelOver ? 'text-red-400' : 'text-amber-300/90')}>
+                      {r.fuelLitresPerHour.toFixed(1)} lít
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden lg:flex flex-1 min-h-0 overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[980px] xl:min-w-[1100px] text-[10px]">
             <thead className="sticky top-0 z-10">
               {table.getHeaderGroups().map(hg => (
                 <tr key={hg.id} className="bg-[#0b0f1a]/95 backdrop-blur-sm border-b border-[#1e2433]">
@@ -284,46 +372,7 @@ export function MachineProductivityTable({ machines, projects, worksites, piles 
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-[#1e2433] shrink-0 bg-[#0b0f1a]/40">
-          <span className="text-[10px] text-muted-foreground/70 tabular-nums whitespace-nowrap">
-            Hiển thị <span className="text-foreground/80 font-medium">{startRow}–{endRow}</span> / <span className="text-foreground/80 font-medium">{total}</span> thiết bị
-          </span>
-          <div className="flex items-center gap-1">
-            <select
-              value={pagination.pageSize}
-              onChange={e => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), pageIndex: 0 }))}
-              className="mr-1.5 px-2 py-1 rounded-lg bg-[#060b14] border border-[#1e2433] text-[10px] text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/40 appearance-none"
-            >
-              {[10, 20, 50].map(n => <option key={n} value={n}>{n} / trang</option>)}
-            </select>
-            <button
-              type="button" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}
-              className="flex items-center justify-center w-7 h-7 rounded-lg border border-[#1e2433] text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-[#1a2235] hover:enabled:text-foreground"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            {pageNumbers.map(p => (
-              <button
-                key={p} type="button" onClick={() => table.setPageIndex(p)}
-                className={cn(
-                  'min-w-[28px] h-7 rounded-lg text-[10px] font-bold tabular-nums px-1.5 transition-colors',
-                  p === currentPage
-                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
-                    : 'text-muted-foreground hover:bg-[#1a2235] hover:text-foreground border border-transparent hover:border-[#1e2433]',
-                )}
-              >
-                {p + 1}
-              </button>
-            ))}
-            <button
-              type="button" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}
-              className="flex items-center justify-center w-7 h-7 rounded-lg border border-[#1e2433] text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-[#1a2235] hover:enabled:text-foreground"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+        {paginationFooter}
       </div>
     </Panel>
   )

@@ -16,6 +16,7 @@ export interface CameraPlaybackRecord {
   violationBbox?: [number, number, number, number]
   subjectBbox?: [number, number, number, number]
   relatedBbox?: [number, number, number, number]
+  relatedRoiLabel?: string
   frameWidth?: number
   frameHeight?: number
 }

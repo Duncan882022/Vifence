@@ -17,6 +17,7 @@ export interface PcccDetection {
   label: string
   confidence: number
   bbox: [number, number, number, number]
+  scenario_id?: string
   worker_name?: string
 }
 

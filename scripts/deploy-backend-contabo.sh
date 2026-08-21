@@ -6,6 +6,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOCAL_CAM03="${LOCAL_CAM03:-${ROOT}/public/camera-feeds/ttdv-a-cam03-test.mp4}"
+LOCAL_CAM04="${LOCAL_CAM04:-${ROOT}/public/camera-feeds/ttdv-a-cam04-test.mp4}"
 VPS_HOST="${VPS_HOST:-217.217.253.247}"
 VPS_USER="${VPS_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/vifence/backend-ai}"
@@ -152,26 +154,31 @@ REMOTE_VENV
 echo "→ Thư mục video VPS (MP4 loop sources)…"
 VPS_VIDEO_DIR="${VPS_VIDEO_DIR:-/opt/vifence/videos}"
 ssh_cmd "mkdir -p ${VPS_VIDEO_DIR}"
+rsync_cmd_file() {
+  local src="$1" dst="$2"
+  local ssh_rsh
+  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+    ssh_rsh="sshpass -e ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no"
+  elif [[ -f "$SSH_KEY" ]]; then
+    ssh_rsh="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+  else
+    ssh_rsh="ssh -o StrictHostKeyChecking=no"
+  fi
+  rsync -avz -e "$ssh_rsh" "$src" "${VPS_USER}@${VPS_HOST}:${dst}"
+}
+clear_vms_hls_cache() {
+  ssh_cmd "rm -rf /opt/vifence/backend-ai/data/hls/A-03 /opt/vifence/backend-ai/data/hls/A-04 2>/dev/null || true; mkdir -p /opt/vifence/backend-ai/data/hls/A-03 /opt/vifence/backend-ai/data/hls/A-04"
+}
 # Rsync video files nếu có local (bỏ qua nếu chưa có — cần upload thủ công lần đầu)
 if [[ -n "${LOCAL_CAM03:-}" && -f "$LOCAL_CAM03" ]]; then
-  rsync_cmd_file() {
-    local src="$1" dst="$2"
-    local ssh_rsh
-    if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
-      ssh_rsh="sshpass -e ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no"
-    elif [[ -f "$SSH_KEY" ]]; then
-      ssh_rsh="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
-    else
-      ssh_rsh="ssh -o StrictHostKeyChecking=no"
-    fi
-    rsync -avz -e "$ssh_rsh" "$src" "${VPS_USER}@${VPS_HOST}:${dst}"
-  }
   echo "→ Upload cam03 video…"
   rsync_cmd_file "$LOCAL_CAM03" "${VPS_VIDEO_DIR}/cam03.mp4"
+  clear_vms_hls_cache
 fi
 if [[ -n "${LOCAL_CAM04:-}" && -f "$LOCAL_CAM04" ]]; then
   echo "→ Upload cam04 video…"
   rsync_cmd_file "$LOCAL_CAM04" "${VPS_VIDEO_DIR}/cam04.mp4"
+  clear_vms_hls_cache
 fi
 
 echo "→ .env production…"
@@ -198,12 +205,16 @@ ATGT_LANE_VIOLATION_ONLY=false
 ATGT_DEMO_FAKE_PLATE_FALLBACK=false
 EVENT_TEST_MODE=false
 EVENT_FIRST_SEEN_WINDOW_SECONDS=10800
-EVENT_AUDIT_GRACE_MINUTES=10
+EVENT_AUDIT_GRACE_MINUTES=5
 EVENT_AUDIT_GRACE_LOOPS=2
 CAMERA_SOURCE=0
 VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
-VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04}
+VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},HC-01:rtsp://157.66.100.182:8554/866926048126907
 VMS_AI_FPS=10.0
+WORKER_RECOGNITION_ENABLED=true
+WORKER_DEMO_FALLBACK_ENABLED=false
+WORKER_MATCH_MIN_CONFIDENCE=0.72
+WORKER_MATCH_MIN_MARGIN=0.10
 EOF
 REMOTE_ENV
 

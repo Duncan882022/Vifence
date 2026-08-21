@@ -130,6 +130,16 @@ def draw_atld_roi_box(
         )
 
 
+INFO_ROI_BEHAVIORS = frozenset({"crane"})
+
+
+def format_distance_suffix_meters(distance_m: float | None) -> str:
+    if distance_m is None or distance_m <= 0:
+        return ""
+    text = f"{distance_m:.1f}".replace(".", ",")
+    return f" - {text}m"
+
+
 def draw_violation_roi_annotation(
     frame: np.ndarray,
     x1: int,
@@ -147,7 +157,11 @@ def draw_violation_roi_annotation(
 ) -> None:
     """Snapshot vi phạm — viền liền + nhãn mã kịch bản (vd BPTC-001 88%)."""
     draw_atld_roi_box(frame, x1, y1, x2, y2, color, behavior, thickness=thickness)
-    if behavior.startswith("no_") or is_atld_violation_behavior(behavior):
+    if (
+        behavior.startswith("no_")
+        or is_atld_violation_behavior(behavior)
+        or behavior in INFO_ROI_BEHAVIORS
+    ):
         draw_snapshot_roi_badge(
             frame,
             x1,
@@ -170,12 +184,20 @@ def format_snapshot_code(
     machine_kind: str | None = None,
 ) -> str:
     sid = (scenario_id or "").strip()
-    if sid and _SCENARIO_CODE.match(sid):
-        return sid
+    if behavior == "crane_proximity":
+        if sid and _SCENARIO_CODE.match(sid):
+            return sid
+        return BEHAVIOR_ROI_CODE.get("crane_proximity", "DZ-003")
+    if behavior == "person":
+        return BEHAVIOR_ROI_CODE.get("person", "NV")
     if behavior == "crane" and machine_kind:
         return MACHINERY_LABELS.get(machine_kind, BEHAVIOR_ROI_CODE.get("crane", "Máy thi công"))
     if machine_kind and machine_kind in BEHAVIOR_ROI_CODE:
         return BEHAVIOR_ROI_CODE[machine_kind]
+    if machine_kind and machine_kind in MACHINERY_LABELS:
+        return MACHINERY_LABELS[machine_kind]
+    if sid and _SCENARIO_CODE.match(sid):
+        return sid
     return BEHAVIOR_ROI_CODE.get(behavior, behavior[:10].upper() or "?")
 
 
@@ -287,9 +309,9 @@ def compose_violation_snapshot(
     behavior: str = "",
     focus_bbox: list[float] | None = None,
 ) -> np.ndarray:
-    """Ảnh lưu sự kiện: crop vùng vi phạm + bbox ROI (mã trên bbox — không header bundle)."""
+    """Ảnh lưu sự kiện: full frame gốc + bbox ROI vi phạm (không crop quanh bbox)."""
+    _ = scenario_id, behavior, focus_bbox
     h, w = raw.shape[:2]
-    roi = annotated if annotated.shape[:2] == (h, w) else cv2.resize(annotated, (w, h))
-    if focus_bbox and len(focus_bbox) >= 4:
-        roi = crop_to_focus(roi, focus_bbox, behavior=behavior)
-    return roi
+    if annotated.shape[:2] == (h, w):
+        return annotated.copy()
+    return cv2.resize(annotated, (w, h))

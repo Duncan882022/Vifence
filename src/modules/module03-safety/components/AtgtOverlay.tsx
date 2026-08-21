@@ -15,7 +15,7 @@ import {
 import { notifySafetyAiEventsChanged } from '../services/safetyAiEvents.service'
 import { useVmsDetections } from '../context/VmsDetectionContext'
 import { getRoiZonesForCamera } from '@/modules/module04-housekeeping/data/housekeepingRoiConfig'
-import { formatRoiOverlayBadge, formatRoiOverlayCode } from '../utils/roiOverlayCode'
+import { formatViolationRoiBadge } from '../utils/roiOverlayCode'
 import { useViolationStickyOverlay } from '../hooks/useViolationStickyOverlay'
 import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
 import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
@@ -190,10 +190,7 @@ function visibleDetections(detections: AtgtDetection[]): AtgtDetection[] {
 }
 
 function formatLabel(detection: AtgtDetection): string {
-  return formatRoiOverlayBadge(
-    formatRoiOverlayCode(detection.behavior),
-    detection.confidence,
-  )
+  return formatViolationRoiBadge(detection.behavior, detection.confidence)
 }
 
 const DetectionBox = memo(function DetectionBox({

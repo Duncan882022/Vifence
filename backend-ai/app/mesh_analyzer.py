@@ -125,11 +125,30 @@ def _filter_mesh_detections_in_zone(
     zone_polygon: list[dict],
     width: int,
     height: int,
+    *,
+    frame: np.ndarray | None = None,
 ) -> list[RoadDetection]:
-    return [
-        det for det in detections
-        if bbox_inside_mesh_zone(det.bbox, zone_polygon, width, height)
-    ]
+    """Chỉ giữ bbox trong polygon MESH và (nếu có frame) trên nền lưới xanh thật."""
+    hsv = roi_mask = zone_box = None
+    if frame is not None:
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        roi_mask = _polygon_to_mask(zone_polygon, width, height)
+        zone_box = _zone_bbox(zone_polygon, width, height)
+
+    out: list[RoadDetection] = []
+    for det in detections:
+        bbox = list(det.bbox)
+        if not bbox_inside_mesh_zone(bbox, zone_polygon, width, height):
+            continue
+        if hsv is not None and roi_mask is not None and zone_box is not None:
+            bbox = _refine_mesh_bbox(hsv, roi_mask, bbox, det.behavior, zone_box)
+            if det.behavior == "mesh_dirty" and not _mesh_dirty_bbox_on_net(bbox, hsv, roi_mask):
+                continue
+            if det.behavior in {"mesh_missing", "mesh_torn"} and not _mesh_gap_bbox_on_net(bbox, hsv, roi_mask):
+                continue
+            det = det.model_copy(update={"bbox": bbox})
+        out.append(det)
+    return out
 
 
 def _mesh_green_mask(hsv: np.ndarray, roi_mask: np.ndarray) -> np.ndarray:
@@ -257,8 +276,12 @@ def _mesh_gap_bbox_on_net(
         return False
     if _bbox_ring_mesh_fill(bbox, green_roi) < _GAP_MIN_RING_MESH_FILL:
         return False
+    # Lỗ lưới hở ra khung/cột bên trong — overlap "machinery" cao là bình thường.
     machinery = _machinery_exclusion_mask(hsv, roi_mask)
-    if _bbox_overlap_ratio(bbox, machinery) > _DIRTY_MAX_MACHINERY_OVERLAP:
+    if (
+        interior_mesh > 0.12
+        and _bbox_overlap_ratio(bbox, machinery) > _DIRTY_MAX_MACHINERY_OVERLAP
+    ):
         return False
     return True
 
@@ -775,7 +798,11 @@ def analyze_mesh_frame(
 
     demo = resolve_cam03_mesh_demo(camera_id, frame, source_pts_sec=source_pts_sec)
     if demo is not None:
-        return _filter_mesh_detections_in_zone(demo, zone, w, h)
+        return _filter_mesh_detections_in_zone(demo, zone, w, h, frame=frame)
+
+    # Cam A-03: chỉ BPTC mesh trong intro 5s — không YOLO/heuristic trên body reel.
+    if camera_id == "A-03":
+        return []
 
     results: list[RoadDetection] = []
     boxes = predict_boxes("safety_mesh_cover", frame, conf_threshold=_MESH_CONF_THRESHOLD)

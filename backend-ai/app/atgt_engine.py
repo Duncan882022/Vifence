@@ -136,14 +136,37 @@ def _fence_organized_in_road(
     *,
     road_mask: np.ndarray | None = None,
 ) -> bool:
-    """Đã có hàng rào phân cách (soft_median) trong ROAD — không ghi ATGT-004."""
+    """Đã có hàng rào đỏ-trắng trong ROAD — không ghi ATGT-004."""
     for det in detections:
         if det.behavior != "soft_median" or det.confidence < _SOFT_MEDIAN_CONF:
+            continue
+        label = (det.label or "").casefold()
+        if "hàng rào" not in label and "hang rao" not in label:
             continue
         if road_mask is not None and not lane_detection_inside_road(det.bbox, road_mask):
             continue
         return True
     return False
+
+
+def _lane_organized(
+    detections: list[Detection],
+    frame_w: int,
+    frame_h: int,
+    *,
+    road_mask: np.ndarray | None = None,
+    violation_bbox: list[float] | tuple[float, ...] | None = None,
+) -> bool:
+    """Có phân làn hợp lệ — không ghi ATGT-004."""
+    if _fence_organized_in_road(detections, road_mask=road_mask):
+        return True
+    return _lane_present(
+        detections,
+        frame_w,
+        frame_h,
+        violation_bbox,
+        road_mask=road_mask,
+    )
 
 
 def _confirm_seconds(behavior: str) -> float:
@@ -207,7 +230,7 @@ class AtgtEngine:
             self._gates[camera_id] = {}
         if track_id not in self._gates[camera_id]:
             self._gates[camera_id][track_id] = PersistenceDebouncer(
-                min_duration_seconds=_confirm_seconds(behavior),
+                min_duration_seconds=settings.event_debounce_min_seconds(_confirm_seconds(behavior)),
                 cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_max_gap_seconds(behavior),
                 one_event_per_episode=settings.event_log_one_per_episode,
