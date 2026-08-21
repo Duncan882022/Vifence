@@ -123,30 +123,32 @@ function createHeatBlobIcon(
   visited: boolean,
 ): L.DivIcon {
   if (!visited || count === 0) {
-    const size = 90
+    const size = 80
     return L.divIcon(divIconOpts(
-      `<div style="width:${size}px;height:${size}px;background:radial-gradient(circle,rgba(100,116,139,0.14) 0%,rgba(100,116,139,0.06) 45%,transparent 78%);border-radius:50%;pointer-events:none;"></div>`,
+      `<div style="width:${size}px;height:${size}px;background:radial-gradient(circle,rgba(100,116,139,0.07) 0%,rgba(100,116,139,0.03) 50%,transparent 80%);border-radius:50%;pointer-events:none;"></div>`,
       [size, size],
       [size / 2, size / 2],
     ))
   }
   const ratio = Math.min(1, count / maxCount)
-  const size = Math.round(120 + ratio * 200)
+  const size = Math.round(100 + ratio * 160)
   const color = getPatrolHeatBlobColor(count, true)
   const [r, g, b] = hexToRgb(color)
+  /* Peak alpha thấp — nhìn xuyên được ảnh vệ tinh + layer bên dưới */
+  const peak = 0.14 + ratio * 0.12
   const html = `
     <div style="
       width:${size}px;height:${size}px;
       background:radial-gradient(circle at 50% 50%,
-        rgba(${r},${g},${b},0.62) 0%,
-        rgba(${r},${g},${b},0.42) 22%,
-        rgba(${r},${g},${b},0.24) 48%,
-        rgba(${r},${g},${b},0.10) 68%,
-        rgba(${r},${g},${b},0.03) 84%,
+        rgba(${r},${g},${b},${peak.toFixed(3)}) 0%,
+        rgba(${r},${g},${b},${(peak * 0.55).toFixed(3)}) 28%,
+        rgba(${r},${g},${b},${(peak * 0.28).toFixed(3)}) 52%,
+        rgba(${r},${g},${b},${(peak * 0.10).toFixed(3)}) 72%,
         transparent 100%
       );
       border-radius:50%;
       pointer-events:none;
+      mix-blend-mode:soft-light;
     "></div>`
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
