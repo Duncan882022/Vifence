@@ -10,7 +10,7 @@ import 'leaflet/dist/leaflet.css'
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MOCK_HELMET_CAMERAS, type PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
@@ -263,34 +263,18 @@ function MapInvalidator() {
   return null
 }
 
-/** Khóa tâm map tại công trường — chỉ zoom in/out, không kéo lệch focus. */
-function MapSiteFocusLock({ center }: { center: [number, number] }) {
+/** Giới hạn pan/zoom trong phạm vi công trường — cho phép kéo ngang/dọc. */
+function MapSiteBoundsConfig() {
   const map = useMap()
-  const lockingRef = useRef(false)
 
   useEffect(() => {
     map.setMaxBounds(L.latLngBounds(PATROL_SITE_FOCUS_BOUNDS))
     map.setMinZoom(PATROL_SITE_MIN_ZOOM)
     map.setMaxZoom(PATROL_SITE_MAX_ZOOM)
-    map.dragging.disable()
+    map.dragging.enable()
     map.scrollWheelZoom.enable()
-
-    const recenter = () => {
-      if (lockingRef.current) return
-      lockingRef.current = true
-      map.setView(center, map.getZoom(), { animate: false })
-      lockingRef.current = false
-    }
-
-    /* Chỉ lắng nghe zoomend — dragging đã tắt nên moveend không cần thiết
-       và sẽ gây vòng lặp setView → moveend → setView → ... */
-    map.on('zoomend', recenter)
-    recenter()
-
-    return () => {
-      map.off('zoomend', recenter)
-    }
-  }, [map, center])
+    map.touchZoom.enable()
+  }, [map])
 
   return null
 }
@@ -418,13 +402,12 @@ export function PatrolGeoHeatmap({
           maxZoom={PATROL_SITE_MAX_ZOOM}
           maxBounds={PATROL_SITE_FOCUS_BOUNDS}
           maxBoundsViscosity={1.0}
-          dragging={false}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
           attributionControl={false}
         >
           <MapInvalidator />
-          <MapSiteFocusLock center={PATROL_SITE_CENTER} />
+          <MapSiteBoundsConfig />
           <TileLayer
             url={ESRI_TILE_URL}
             attribution=""
