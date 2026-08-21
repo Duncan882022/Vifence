@@ -101,6 +101,38 @@ export function getPatrolDensityIntensity(count: number, max: number, visited: b
   return Math.min(1, 0.22 + (count / max) * 0.78)
 }
 
+/** Thang màu mật độ reference — Thấp (lam) → Cao (đỏ). */
+const PATROL_HEATMAP_RAMP: readonly { t: number; rgb: [number, number, number] }[] = [
+  { t: 0.0, rgb: [37, 99, 235] },   // blue
+  { t: 0.18, rgb: [6, 182, 212] },  // cyan
+  { t: 0.38, rgb: [34, 197, 94] },  // green
+  { t: 0.58, rgb: [234, 179, 8] },  // yellow
+  { t: 0.78, rgb: [249, 115, 22] }, // orange
+  { t: 1.0, rgb: [239, 68, 68] },   // red
+]
+
+function lerpChannel(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * t)
+}
+
+/** Map intensity 0..1 → RGB theo thang chú giải HQCV. */
+export function getPatrolHeatmapRampRgb(t: number): [number, number, number] {
+  const v = Math.max(0, Math.min(1, t))
+  for (let i = 1; i < PATROL_HEATMAP_RAMP.length; i += 1) {
+    const prev = PATROL_HEATMAP_RAMP[i - 1]
+    const next = PATROL_HEATMAP_RAMP[i]
+    if (v <= next.t) {
+      const local = (v - prev.t) / (next.t - prev.t)
+      return [
+        lerpChannel(prev.rgb[0], next.rgb[0], local),
+        lerpChannel(prev.rgb[1], next.rgb[1], local),
+        lerpChannel(prev.rgb[2], next.rgb[2], local),
+      ]
+    }
+  }
+  return PATROL_HEATMAP_RAMP[PATROL_HEATMAP_RAMP.length - 1].rgb
+}
+
 /* ── Helpers used by PatrolGeoHeatmap (§12 layer colours) ───── */
 
 /**

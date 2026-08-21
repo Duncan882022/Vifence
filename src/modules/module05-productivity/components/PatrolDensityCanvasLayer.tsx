@@ -1,6 +1,6 @@
 /**
- * Canvas density heatmap — loang màu liên tục giữa các vùng (blur + additive),
- * clip trong polygon đỏ. Giống hiệu ứng reference HQCV.
+ * Canvas density heatmap — 2-pass: intensity splats → blur → color ramp (lam→đỏ).
+ * Hiệu ứng chuyển vùng liên tục giống reference HQCV, clip trong polygon đỏ.
  */
 import L from 'leaflet'
 import { useMap } from 'react-leaflet'
@@ -10,7 +10,7 @@ import { PATROL_DETECTION_DOTS } from '../data/patrolDetectionData'
 import { isPointInSiteBoundary, PATROL_SITE_BOUNDARY } from '../data/patrolSiteGeometry'
 import { PATROL_GPS_ZONES, patrolZoneInteriorPoint } from '../data/patrolSiteMap'
 import {
-  getPatrolHeatBlobColor,
+  getPatrolHeatmapRampRgb,
   resolveCount,
   type PatrolCountMode,
   type PatrolDensityLayer,
@@ -21,21 +21,24 @@ export const PATROL_DENSITY_PANE = 'patrolDensityPane'
 interface HeatSource {
   lat: number
   lng: number
-  color: string
-  alpha: number
+  /** Cường độ điểm nóng 0..1 — quyết định màu sau colorize. */
+  intensity: number
   radius: number
 }
 
-function hexToRgb(hex: string): [number, number, number] {
-  return [
-    parseInt(hex.slice(1, 3), 16),
-    parseInt(hex.slice(3, 5), 16),
-    parseInt(hex.slice(5, 7), 16),
-  ]
+function heatRadiusForZoom(zoom: number): number {
+  return 32 * 1.34 ** (zoom - 16)
 }
 
-function heatRadiusForZoom(zoom: number): number {
-  return 26 * 1.32 ** (zoom - 16)
+function pushSource(
+  sources: HeatSource[],
+  lat: number,
+  lng: number,
+  intensity: number,
+  radius: number,
+): void {
+  if (!isPointInSiteBoundary(lat, lng)) return
+  sources.push({ lat, lng, intensity, radius })
 }
 
 function buildHeatSources(
@@ -50,53 +53,61 @@ function buildHeatSources(
   const sources: HeatSource[] = []
 
   for (const dot of PATROL_DETECTION_DOTS) {
-    if (!isPointInSiteBoundary(dot.position[0], dot.position[1])) continue
     const zone = zoneMap.get(dot.zoneId)
     if (!zone || zone.coverage !== 'VISITED') continue
     const count = resolveCount(zone, layer, countMode)
     if (count === 0) continue
-    const t = count / maxCount
-    const color = getPatrolHeatBlobColor(count, true)
-    const typeW = dot.type === 'vehicle' ? 0.75 : dot.type === 'person' ? 0.5 : 0.35
-    sources.push({
-      lat: dot.position[0],
-      lng: dot.position[1],
-      color,
-      alpha: 0.12 + t * 0.22 * typeW,
-      radius: baseR * (0.9 + typeW * 0.5),
-    })
+    const zoneT = count / maxCount
+    const typeW = dot.type === 'vehicle' ? 0.85 : dot.type === 'person' ? 0.55 : 0.4
+    pushSource(
+      sources,
+      dot.position[0],
+      dot.position[1],
+      (0.18 + zoneT * 0.55) * typeW,
+      baseR * (0.75 + typeW * 0.45),
+    )
   }
 
-  const gridU = [0.22, 0.5, 0.78]
-  const gridV = [0.22, 0.5, 0.78]
+  const gridSteps = [0.18, 0.36, 0.54, 0.72, 0.86]
 
   for (const gpsZone of PATROL_GPS_ZONES) {
     const zone = zoneMap.get(gpsZone.zone_id)
     if (!zone || zone.coverage !== 'VISITED') continue
     const count = resolveCount(zone, layer, countMode)
     if (count === 0) continue
-    const t = count / maxCount
-    const color = getPatrolHeatBlobColor(count, true)
+    const zoneT = count / maxCount
+    const peak = 0.42 + zoneT * 0.58
 
-    sources.push({
-      lat: gpsZone.center[0],
-      lng: gpsZone.center[1],
-      color,
-      alpha: 0.16 + t * 0.28,
-      radius: baseR * (1.6 + t * 1.4),
-    })
+    pushSource(
+      sources,
+      gpsZone.center[0],
+      gpsZone.center[1],
+      peak,
+      baseR * (1.85 + zoneT * 1.35),
+    )
 
-    for (const u of gridU) {
-      for (const v of gridV) {
+    for (let ri = 1; ri <= 3; ri += 1) {
+      const falloff = 1 - ri * 0.22
+      pushSource(
+        sources,
+        gpsZone.center[0],
+        gpsZone.center[1],
+        peak * falloff * 0.72,
+        baseR * (1.35 + zoneT + ri * 0.25),
+      )
+    }
+
+    for (const u of gridSteps) {
+      for (const v of gridSteps) {
         const [lat, lng] = patrolZoneInteriorPoint(gpsZone.polygon, u, v)
-        if (!isPointInSiteBoundary(lat, lng)) continue
-        sources.push({
+        const edgeFalloff = 1 - Math.abs(u - 0.5) * 0.35 - Math.abs(v - 0.5) * 0.35
+        pushSource(
+          sources,
           lat,
           lng,
-          color,
-          alpha: 0.08 + t * 0.16,
-          radius: baseR * (1.1 + t * 0.9),
-        })
+          peak * 0.38 * edgeFalloff,
+          baseR * (1.05 + zoneT * 0.85),
+        )
       }
     }
   }
@@ -115,6 +126,64 @@ function clipSiteOnCtx(ctx: CanvasRenderingContext2D, map: L.Map): void {
   ctx.closePath()
 }
 
+function drawIntensitySplats(
+  ctx: CanvasRenderingContext2D,
+  map: L.Map,
+  sources: HeatSource[],
+  width: number,
+  height: number,
+): void {
+  ctx.clearRect(0, 0, width, height)
+  ctx.globalCompositeOperation = 'lighter'
+
+  for (const src of sources) {
+    const pt = map.latLngToContainerPoint(L.latLng(src.lat, src.lng))
+    const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, src.radius)
+    const a = Math.min(0.72, src.intensity * 0.62)
+    grad.addColorStop(0, `rgba(255,255,255,${a})`)
+    grad.addColorStop(0.4, `rgba(255,255,255,${a * 0.45})`)
+    grad.addColorStop(0.72, `rgba(255,255,255,${a * 0.12})`)
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(pt.x, pt.y, src.radius, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function colorizeIntensity(
+  intensityCtx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): ImageData {
+  const raw = intensityCtx.getImageData(0, 0, width, height)
+  const out = intensityCtx.createImageData(width, height)
+  const src = raw.data
+  const dst = out.data
+
+  let maxVal = 0
+  for (let i = 0; i < src.length; i += 4) {
+    const v = Math.max(src[i], src[i + 1], src[i + 2])
+    if (v > maxVal) maxVal = v
+  }
+  const norm = maxVal > 0 ? 255 / maxVal : 1
+
+  for (let i = 0; i < src.length; i += 4) {
+    const raw = Math.max(src[i], src[i + 1], src[i + 2]) * norm
+    const alpha = raw / 255
+    if (alpha < 0.025) continue
+
+    const t = Math.min(1, alpha * 0.95)
+    const [r, g, b] = getPatrolHeatmapRampRgb(t)
+    dst[i] = r
+    dst[i + 1] = g
+    dst[i + 2] = b
+    dst[i + 3] = Math.round(Math.min(210, 50 + t * 155))
+  }
+
+  return out
+}
+
 function renderHeatCanvas(
   map: L.Map,
   canvas: HTMLCanvasElement,
@@ -124,53 +193,42 @@ function renderHeatCanvas(
   if (size.x <= 0 || size.y <= 0) return
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
-  canvas.width = Math.round(size.x * dpr)
-  canvas.height = Math.round(size.y * dpr)
-  canvas.style.width = `${size.x}px`
-  canvas.style.height = `${size.y}px`
+  const w = size.x
+  const h = size.y
+  canvas.width = Math.round(w * dpr)
+  canvas.height = Math.round(h * dpr)
+  canvas.style.width = `${w}px`
+  canvas.style.height = `${h}px`
 
-  const off = document.createElement('canvas')
-  off.width = canvas.width
-  off.height = canvas.height
-  const octx = off.getContext('2d')
+  const intensity = document.createElement('canvas')
+  intensity.width = canvas.width
+  intensity.height = canvas.height
+  const iCtx = intensity.getContext('2d', { willReadFrequently: true })
+  const blurred = document.createElement('canvas')
+  blurred.width = canvas.width
+  blurred.height = canvas.height
+  const bCtx = blurred.getContext('2d')
   const ctx = canvas.getContext('2d')
-  if (!octx || !ctx) return
+  if (!iCtx || !bCtx || !ctx) return
 
-  octx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  iCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  bCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-  octx.clearRect(0, 0, size.x, size.y)
-  octx.globalCompositeOperation = 'lighter'
+  drawIntensitySplats(iCtx, map, sources, w, h)
 
-  for (const src of sources) {
-    const pt = map.latLngToContainerPoint(L.latLng(src.lat, src.lng))
-    const [r, g, b] = hexToRgb(src.color)
-    const grad = octx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, src.radius)
-    grad.addColorStop(0, `rgba(${r},${g},${b},${src.alpha * 0.85})`)
-    grad.addColorStop(0.35, `rgba(${r},${g},${b},${src.alpha * 0.45})`)
-    grad.addColorStop(0.65, `rgba(${r},${g},${b},${src.alpha * 0.15})`)
-    grad.addColorStop(1, `rgba(${r},${g},${b},0)`)
-    octx.fillStyle = grad
-    octx.beginPath()
-    octx.arc(pt.x, pt.y, src.radius, 0, Math.PI * 2)
-    octx.fill()
-  }
+  const blurPx = Math.max(14, 10 + map.getZoom() * 1.1)
+  bCtx.filter = `blur(${blurPx}px)`
+  bCtx.drawImage(intensity, 0, 0, w, h)
+  bCtx.filter = 'none'
 
-  ctx.clearRect(0, 0, size.x, size.y)
+  const colored = colorizeIntensity(bCtx, w, h)
+
+  ctx.clearRect(0, 0, w, h)
   ctx.save()
   clipSiteOnCtx(ctx, map)
   ctx.clip()
-
-  const blurPx = Math.max(10, 8 + map.getZoom() * 0.6)
-  ctx.filter = `blur(${blurPx}px)`
-  ctx.globalAlpha = 0.88
-  ctx.drawImage(off, 0, 0, size.x, size.y)
-
-  ctx.filter = 'none'
-  ctx.globalAlpha = 0.35
-  ctx.globalCompositeOperation = 'lighter'
-  ctx.drawImage(off, 0, 0, size.x, size.y)
-
+  ctx.putImageData(colored, 0, 0)
   ctx.restore()
 }
 
@@ -211,14 +269,14 @@ export function PatrolDensityCanvasLayer({
 
     const draw = () => {
       if (!enabled) {
-        const ctx = canvas!.getContext('2d')
-        if (ctx) ctx.clearRect(0, 0, canvas!.width, canvas!.height)
+        const c = canvas!.getContext('2d')
+        if (c) c.clearRect(0, 0, canvas!.width, canvas!.height)
         return
       }
       const src = buildHeatSources(zones, layer, countMode, map.getZoom())
       if (src.length === 0) {
-        const ctx = canvas!.getContext('2d')
-        if (ctx) ctx.clearRect(0, 0, canvas!.width, canvas!.height)
+        const c = canvas!.getContext('2d')
+        if (c) c.clearRect(0, 0, canvas!.width, canvas!.height)
         return
       }
       renderHeatCanvas(map, canvas!, src)
@@ -234,8 +292,8 @@ export function PatrolDensityCanvasLayer({
       window.clearTimeout(t1)
       window.clearTimeout(t2)
       map.off('move zoom moveend zoomend viewreset resize load', schedule)
-      const ctx = canvas?.getContext('2d')
-      if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height)
+      const c = canvas?.getContext('2d')
+      if (c && canvas) c.clearRect(0, 0, canvas.width, canvas.height)
     }
   }, [map, enabled, zones, layer, countMode])
 
