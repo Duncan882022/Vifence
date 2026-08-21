@@ -9,48 +9,70 @@
  *    LEFT 21.003712, 105.945782  |  BOT   21.002343, 105.946914
  */
 
-/* ── Site quad corners (field survey) ───────────────────────── */
-const SITE_TOP: [number, number]    = [21.004587, 105.947314]
-const SITE_RIGHT: [number, number] = [21.003598, 105.948614]
-const SITE_BOTTOM: [number, number] = [21.002343, 105.946914]
-const SITE_LEFT: [number, number]  = [21.003712, 105.945782]
+/** Field-surveyed polygons — fixed, do not regenerate. */
+const SURVEYED_ZONE_POLYGONS = {
+  ZONE_A: [
+    [21.003764, 105.947262],
+    [21.003487, 105.947495],
+    [21.003215, 105.947086],
+    [21.003590, 105.947037],
+  ],
+  ZONE_D: [
+    [21.003335, 105.947520],
+    [21.003004, 105.947813],
+    [21.002779, 105.947453],
+    [21.003098, 105.947179],
+  ],
+  ZONE_E: [
+    [21.004405, 105.947320],
+    [21.003780, 105.948162],
+    [21.003531, 105.947989],
+    [21.004156, 105.947137],
+  ],
+} as const satisfies Record<string, [number, number][]>
 
-/** Bilinear point inside site quad — u: west→east, v: north→south. */
-function sitePoint(u: number, v: number): [number, number] {
-  const lat =
-    (1 - u) * (1 - v) * SITE_TOP[0] +
-    u * (1 - v) * SITE_RIGHT[0] +
-    u * v * SITE_BOTTOM[0] +
-    (1 - u) * v * SITE_LEFT[0]
-  const lng =
-    (1 - u) * (1 - v) * SITE_TOP[1] +
-    u * (1 - v) * SITE_RIGHT[1] +
-    u * v * SITE_BOTTOM[1] +
-    (1 - u) * v * SITE_LEFT[1]
+/**
+ * Interpolated polygons — hand-placed in gaps between surveyed zones.
+ * Validated: no bbox overlap with ZONE_A/D/E or each other.
+ */
+const INTERP_ZONE_POLYGONS = {
+  ZONE_B: [
+    [21.003250, 105.946760],
+    [21.003760, 105.946760],
+    [21.003760, 105.946960],
+    [21.003250, 105.946960],
+  ],
+  ZONE_C: [
+    [21.003800, 105.946060],
+    [21.004080, 105.946060],
+    [21.004080, 105.946720],
+    [21.003800, 105.946720],
+  ],
+  ZONE_F: [
+    [21.004130, 105.946060],
+    [21.004587, 105.946720],
+    [21.004120, 105.946720],
+    [21.004120, 105.946060],
+  ],
+  ZONE_G: [
+    [21.002550, 105.945800],
+    [21.003220, 105.946420],
+    [21.002600, 105.946180],
+    [21.002950, 105.945780],
+  ],
+  ZONE_H: [
+    [21.004405, 105.948270],
+    [21.004405, 105.948540],
+    [21.003760, 105.948540],
+    [21.003760, 105.948270],
+  ],
+} as const satisfies Record<string, [number, number][]>
+
+function polygonCenter(polygon: [number, number][]): [number, number] {
+  const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
+  const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
-
-/** Sub-quad cell — TL→TR→BR→BL, guaranteed inside site boundary. */
-function siteCell(
-  u0: number, u1: number,
-  v0: number, v1: number,
-): [number, number][] {
-  return [
-    sitePoint(u0, v0),
-    sitePoint(u1, v0),
-    sitePoint(u1, v1),
-    sitePoint(u0, v1),
-  ]
-}
-
-function cellCenter(u0: number, u1: number, v0: number, v1: number): [number, number] {
-  return sitePoint((u0 + u1) / 2, (v0 + v1) / 2)
-}
-
-const U1 = 1 / 3
-const U2 = 2 / 3
-const V1 = 1 / 3
-const V2 = 2 / 3
 
 /* ── GPS Zone type ──────────────────────────────────────────── */
 export interface PatrolGpsZone {
@@ -69,110 +91,95 @@ export interface PatrolGpsZone {
 
 /* ── 8 GPS Zones ────────────────────────────────────────────── */
 /**
- * Grid layout:
+ * Layout (geographic, no overlap):
  *
- *  [ZONE_F ] [ZONE_C ] [ZONE_H ]
- *  [ZONE_A ] [ZONE_B ] [ZONE_E ]
- *  [ZONE_D ] [ZONE_G         ]
+ *  [ Cẩu F ] [ HT C  ] [ Cọc H ]     ← west / north / NE tip
+ *  [ Móng A] [ Tầng B] [ VP  E ]     ← surveyed A + interp B + surveyed E
+ *  [ Kho D ] [    Cổng G          ]  ← surveyed D + interp G
+ *
+ *  ZONE_A / D / E: field-surveyed (fixed)
+ *  ZONE_B / C / F / G / H: interpolated in remaining gaps
  */
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
   {
     zone_id: 'ZONE_A',
     name: 'Khu thi công móng',
     shortName: 'Móng',
-    // Field-surveyed corners (TL→TR→BR→BL)
-    polygon: [
-      [21.003764, 105.947262],
-      [21.003487, 105.947495],
-      [21.003215, 105.947086],
-      [21.003590, 105.947037],
-    ],
+    polygon: [...SURVEYED_ZONE_POLYGONS.ZONE_A],
     area_m2: 1200,
     tier: 'primary',
     borderColor: '#ef4444',
-    center: [21.003514, 105.947220],
+    center: polygonCenter(SURVEYED_ZONE_POLYGONS.ZONE_A),
   },
   {
     zone_id: 'ZONE_B',
     name: 'Khu lắp dựng tầng',
     shortName: 'Tầng',
-    polygon: siteCell(U1, U2, V1, V2),
+    polygon: [...INTERP_ZONE_POLYGONS.ZONE_B],
     area_m2: 850,
     tier: 'primary',
     borderColor: '#eab308',
-    center: cellCenter(U1, U2, V1, V2),
+    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_B),
   },
   {
     zone_id: 'ZONE_C',
     name: 'Khu hoàn thiện',
     shortName: 'HT',
-    polygon: siteCell(U1, U2, 0, V1),
+    polygon: [...INTERP_ZONE_POLYGONS.ZONE_C],
     area_m2: 1450,
     tier: 'primary',
     borderColor: '#22c55e',
-    center: cellCenter(U1, U2, 0, V1),
+    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_C),
   },
   {
     zone_id: 'ZONE_D',
     name: 'Khu kho vật tư',
     shortName: 'Kho',
-    // Field-surveyed corners (TL→TR→BR→BL)
-    polygon: [
-      [21.003335, 105.947520],
-      [21.003004, 105.947813],
-      [21.002779, 105.947453],
-      [21.003098, 105.947179],
-    ],
+    polygon: [...SURVEYED_ZONE_POLYGONS.ZONE_D],
     area_m2: 600,
     tier: 'primary',
     borderColor: '#3b82f6',
-    center: [21.003054, 105.947491],
+    center: polygonCenter(SURVEYED_ZONE_POLYGONS.ZONE_D),
   },
   {
     zone_id: 'ZONE_E',
     name: 'Khu văn phòng công trường',
     shortName: 'VP',
-    // Field-surveyed corners (TL→TR→BR→BL)
-    polygon: [
-      [21.004405, 105.947320],
-      [21.003780, 105.948162],
-      [21.003531, 105.947989],
-      [21.004156, 105.947137],
-    ],
+    polygon: [...SURVEYED_ZONE_POLYGONS.ZONE_E],
     area_m2: 400,
     tier: 'primary',
     borderColor: '#a855f7',
-    center: [21.003968, 105.947652],
+    center: polygonCenter(SURVEYED_ZONE_POLYGONS.ZONE_E),
   },
   {
     zone_id: 'ZONE_F',
     name: 'Sân cẩu',
     shortName: 'Cẩu',
-    polygon: siteCell(0, U1, 0, V1),
+    polygon: [...INTERP_ZONE_POLYGONS.ZONE_F],
     area_m2: 700,
     tier: 'secondary',
     borderColor: '#06b6d4',
-    center: cellCenter(0, U1, 0, V1),
+    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_F),
   },
   {
     zone_id: 'ZONE_G',
     name: 'Cổng ra vào',
     shortName: 'Cổng',
-    polygon: siteCell(U1, 1, V2, 1),
+    polygon: [...INTERP_ZONE_POLYGONS.ZONE_G],
     area_m2: 300,
     tier: 'secondary',
     borderColor: '#f59e0b',
-    center: cellCenter(U1, 1, V2, 1),
+    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_G),
   },
   {
     zone_id: 'ZONE_H',
     name: 'Khu đúc cọc',
     shortName: 'Cọc',
-    polygon: siteCell(U2, 1, 0, V1),
+    polygon: [...INTERP_ZONE_POLYGONS.ZONE_H],
     area_m2: 980,
     tier: 'secondary',
     borderColor: '#64748b',
-    center: cellCenter(U2, 1, 0, V1),
+    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_H),
   },
 ]
 
