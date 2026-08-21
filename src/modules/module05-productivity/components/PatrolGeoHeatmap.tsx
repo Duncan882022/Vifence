@@ -2,7 +2,7 @@
  * PatrolGeoHeatmap — Leaflet satellite map with:
  *  • Layer 1: site boundary + zone polygons
  *  • Layer 2: detection dots (clipped to site boundary)
- *  • Layer 3: density fill inside zone polygons (no circular bleed)
+ *  • Layer 3: soft radial density blobs (clipped to red site boundary)
  *  • Layer 4: patrol route + helmet markers
  * HQCV §12–16
  */
@@ -31,8 +31,7 @@ import {
 import type { RouteHistory } from '../services/usePatrolWebSocket'
 import {
   formatDisplayValue,
-  getZoneFillColor,
-  getZoneFillOpacity,
+  getPatrolHeatBlobColor,
   resolveCount,
   type PatrolCountMode,
   type PatrolDensityLayer,
@@ -96,7 +95,7 @@ function buildFeatureCollection(
   }
 }
 
-/* ── Zone polygon styles ─────────────────────────────────────── */
+/* ── Zone polygon styles (layer Khu vực only) ───────────────── */
 function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   if (!feature) return {}
   const { visited, borderColor, tier } = feature.properties
@@ -110,20 +109,49 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   }
 }
 
-/** Density fill — clipped to zone polygon, không tràn ra ngoài ranh giới đỏ. */
-function zoneDensityStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
-  if (!feature) return {}
-  const { visited, borderColor, tier, count, maxCount } = feature.properties
-  return {
-    fillColor: getZoneFillColor(count, maxCount, visited),
-    fillOpacity: getZoneFillOpacity(count, maxCount, visited),
-    color: visited ? borderColor : '#475569',
-    weight: tier === 'primary' ? 2 : 1.5,
-    dashArray: '8 5',
-    opacity: visited ? 0.92 : 0.5,
-  }
+/* ── Soft radial heat blob — loang màu, không viền khung zone ── */
+function hexToRgb(hex: string): [number, number, number] {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return [r, g, b]
 }
 
+function createHeatBlobIcon(
+  count: number,
+  maxCount: number,
+  visited: boolean,
+): L.DivIcon {
+  if (!visited || count === 0) {
+    const size = 90
+    return L.divIcon(divIconOpts(
+      `<div style="width:${size}px;height:${size}px;background:radial-gradient(circle,rgba(100,116,139,0.14) 0%,rgba(100,116,139,0.06) 45%,transparent 78%);border-radius:50%;pointer-events:none;"></div>`,
+      [size, size],
+      [size / 2, size / 2],
+    ))
+  }
+  const ratio = Math.min(1, count / maxCount)
+  const size = Math.round(120 + ratio * 200)
+  const color = getPatrolHeatBlobColor(count, true)
+  const [r, g, b] = hexToRgb(color)
+  const html = `
+    <div style="
+      width:${size}px;height:${size}px;
+      background:radial-gradient(circle at 50% 50%,
+        rgba(${r},${g},${b},0.62) 0%,
+        rgba(${r},${g},${b},0.42) 22%,
+        rgba(${r},${g},${b},0.24) 48%,
+        rgba(${r},${g},${b},0.10) 68%,
+        rgba(${r},${g},${b},0.03) 84%,
+        transparent 100%
+      );
+      border-radius:50%;
+      pointer-events:none;
+    "></div>`
+  return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
+}
+
+const PATROL_DENSITY_PANE = 'patrolDensityPane'
 const PATROL_DIV_ICON_CLASS = 'patrol-map-div-icon'
 
 function divIconOpts(
@@ -328,6 +356,51 @@ function MapSiteOverlayClip({ enabled }: { enabled: boolean }) {
   return null
 }
 
+/** Pane riêng cho heat blob — clip theo polygon đỏ, loang mềm nhưng không tràn site. */
+function MapDensityPaneClip({ enabled }: { enabled: boolean }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!map.getPane(PATROL_DENSITY_PANE)) {
+      const pane = map.createPane(PATROL_DENSITY_PANE)
+      pane.style.zIndex = '410'
+      pane.style.pointerEvents = 'none'
+    }
+    const pane = map.getPane(PATROL_DENSITY_PANE)
+    if (!pane) return undefined
+
+    const applyClip = () => {
+      if (!enabled) {
+        pane.style.clipPath = ''
+        pane.style.removeProperty('-webkit-clip-path')
+        return
+      }
+      const pts = PATROL_SITE_BOUNDARY.slice(0, 4).map(([lat, lng]) => {
+        const p = map.latLngToContainerPoint(L.latLng(lat, lng))
+        return `${p.x}px ${p.y}px`
+      })
+      const poly = `polygon(${pts.join(', ')})`
+      pane.style.clipPath = poly
+      pane.style.setProperty('-webkit-clip-path', poly)
+    }
+
+    const schedule = () => requestAnimationFrame(applyClip)
+    map.on('move zoom moveend zoomend viewreset resize load', schedule)
+    const t1 = window.setTimeout(schedule, 60)
+    const t2 = window.setTimeout(schedule, 350)
+
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+      map.off('move zoom moveend zoomend viewreset resize load', schedule)
+      pane.style.clipPath = ''
+      pane.style.removeProperty('-webkit-clip-path')
+    }
+  }, [map, enabled])
+
+  return null
+}
+
 /* ── Responsive map zoom ────────────────────────────────────── */
 function usePatrolMapZoom(): number {
   const [zoom, setZoom] = useState(() => {
@@ -409,8 +482,11 @@ export function PatrolGeoHeatmap({
     [],
   )
   const mapZoom = usePatrolMapZoom()
-  const geoJsonStyle = showDensity ? zoneDensityStyle : zoneTierStyle
-  const clipOverlays = showZonePolygons || showDensity || showDetections
+  const maxCount = useMemo(
+    () => Math.max(...zones.map(z => resolveCount(z, layer, countMode)), 1),
+    [zones, layer, countMode],
+  )
+  const clipOverlays = showZonePolygons || showDetections
 
   return (
     <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px] overflow-hidden isolate">
@@ -463,6 +539,7 @@ export function PatrolGeoHeatmap({
           <MapInvalidator />
           <MapSiteBoundsConfig />
           <MapSiteOverlayClip enabled={clipOverlays} />
+          <MapDensityPaneClip enabled={showDensity} />
           <TileLayer
             url={ESRI_TILE_URL}
             attribution=""
@@ -487,12 +564,12 @@ export function PatrolGeoHeatmap({
             />
           )}
 
-          {/* ── LAYER 1B + 3: Zone polygons / density fill ─────── */}
-          {(showZonePolygons || showDensity) && (
+          {/* ── LAYER 1B: Zone polygons (viền khu — tách khỏi mật độ) ── */}
+          {showZonePolygons && (
             <GeoJSON
-              key={`${geoJsonKey}_${showDensity ? 'density' : 'tier'}`}
+              key={geoJsonKey}
               data={featureCollection}
-              style={geoJsonStyle as Parameters<typeof GeoJSON>[0]['style']}
+              style={zoneTierStyle as Parameters<typeof GeoJSON>[0]['style']}
               onEachFeature={(feature, lyr) => {
                 const props = feature.properties as ZoneProperties
                 lyr.bindTooltip(props.name, {
@@ -503,6 +580,23 @@ export function PatrolGeoHeatmap({
               }}
             />
           )}
+
+          {/* ── LAYER 3A: Soft density blobs — loang màu, clip trong polygon đỏ ── */}
+          {showDensity && PATROL_GPS_ZONES.map(gpsZone => {
+            const zone = zoneMap.get(gpsZone.zone_id)
+            const count = zone ? resolveCount(zone, layer, countMode) : 0
+            const visited = zone?.coverage === 'VISITED'
+            return (
+              <Marker
+                key={`blob-${gpsZone.zone_id}-${count}`}
+                position={gpsZone.center}
+                icon={createHeatBlobIcon(count, maxCount, visited)}
+                pane={PATROL_DENSITY_PANE}
+                zIndexOffset={-200}
+                interactive={false}
+              />
+            )
+          })}
 
           {/* ── LAYER 2: Detection Dots ───────────────────────── */}
           {showDetections && visibleDetectionDots.map(dot => {
