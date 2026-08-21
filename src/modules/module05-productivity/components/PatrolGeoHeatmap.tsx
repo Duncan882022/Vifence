@@ -443,9 +443,9 @@ export function PatrolGeoHeatmap({
                 pathOptions={{
                   color: style.color,
                   fillColor: style.color,
-                  fillOpacity: 0.75,
-                  weight: 1,
-                  opacity: 0.9,
+                  fillOpacity: 0.65,
+                  weight: style.weight,
+                  opacity: 0.85,
                 }}
               >
                 <Tooltip sticky className="patrol-zone-tip">

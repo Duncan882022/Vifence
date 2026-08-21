@@ -110,8 +110,8 @@ export function getZoneDetectionCounts(zoneId: string): {
 }
 
 /* ── Visual config per type ─────────────────────────────────── */
-export const DETECTION_DOT_STYLE: Record<DetectionType, { color: string; radius: number }> = {
-  person:    { color: '#38bdf8', radius: 4 },
-  vehicle:   { color: '#f97316', radius: 5 },
-  equipment: { color: '#a78bfa', radius: 5 },
+export const DETECTION_DOT_STYLE: Record<DetectionType, { color: string; radius: number; weight: number }> = {
+  person:    { color: '#38bdf8', radius: 1.5, weight: 0.5 },
+  vehicle:   { color: '#f97316', radius: 2,   weight: 0.5 },
+  equipment: { color: '#a78bfa', radius: 2,   weight: 0.5 },
 }
