@@ -28,6 +28,10 @@ from .auto_train.frame_collectors import collect_vms_engine_sample
 
 logger = logging.getLogger("vms_worker")
 
+def _is_live_stream_source(source_path: str) -> bool:
+    p = source_path.lower()
+    return p.startswith("rtsp://") or p.startswith("rtmp://") or p.startswith("http://") or p.startswith("https://")
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 HLS_DIR = DATA_DIR / "hls"
 CLIPS_DIR = DATA_DIR / "clips"
@@ -78,6 +82,10 @@ class CameraVmsWorker:
         self._pts_history: deque[tuple[float, float]] = deque(maxlen=maxpts)
         self._pts_lock = threading.Lock()
 
+        self._ingest_gate = threading.Event()
+        self._seek_lock = threading.Lock()
+        self._seek_to_zero = False
+
         self._ingest_thread: Optional[threading.Thread] = None
         self._ai_thread: Optional[threading.Thread] = None
         self._hls_proc: Optional[subprocess.Popen] = None
@@ -101,10 +109,16 @@ class CameraVmsWorker:
     # Public API
     # ------------------------------------------------------------------
 
+    def seek_to_start(self) -> None:
+        """Rewind MP4 về frame 0 — dùng khi arm grace / DELETE /events."""
+        with self._seek_lock:
+            self._seek_to_zero = True
+
     def start(self) -> None:
         if self._running:
             return
         self._running = True
+        self._ingest_gate.clear()
         logger.info("[VMS %s] Worker khởi động. Source: %s", self.camera_id, self.source_path)
 
         self._probe_source_duration()
@@ -194,17 +208,33 @@ class CameraVmsWorker:
 
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             frame_sleep = 1.0 / fps
-            from .config import settings
-
-            if not settings.event_dedup_enabled():
-                # Audit grace: ingest chậm theo AI — tránh nhảy segment (mesh 5s, PPE ~6s).
-                frame_sleep = max(frame_sleep, 1.0 / settings.vms_ai_fps_effective())
 
             logger.info("[VMS %s] Ingest bắt đầu @ %.1f FPS", self.camera_id, fps)
 
             while self._running:
+                with self._seek_lock:
+                    if self._seek_to_zero:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        self._seek_to_zero = False
+
+                if not self._ingest_gate.is_set():
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        time.sleep(0.05)
+                        continue
+                    source_pts = 0.0
+                    with self._frame_lock:
+                        self._frame = frame
+                        self._source_pts_sec = source_pts
+                    time.sleep(0.02)
+                    continue
+
                 ok, frame = cap.read()
                 if not ok or frame is None:
+                    if _is_live_stream_source(self.source_path):
+                        logger.warning("[VMS %s] Mất tín hiệu live — reconnect.", self.camera_id)
+                        break
                     from .vms_loop_state import register_video_loop
 
                     register_video_loop(self.camera_id)
@@ -233,32 +263,32 @@ class CameraVmsWorker:
     # Internal — AI loop
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _grace_engine_active(camera_id: str, engine_name: str, source_pts_sec: float) -> bool:
-        """Audit grace — chỉ chạy engine khớp segment demo (tránh VPS bỏ lỡ ATGT/PPE)."""
-        from .config import settings
-
-        if settings.event_dedup_enabled():
-            return True
-        if camera_id == "A-03":
-            if source_pts_sec < 6.0:
-                return engine_name in {"mesh", "road"}
-            if 15.5 <= source_pts_sec <= 20.5:
-                return engine_name == "atgt"
-            return engine_name == "road"
-        if camera_id == "A-04":
-            if source_pts_sec < 4.0:
-                return engine_name == "crane"
-            if 8.0 <= source_pts_sec <= 17.0:
-                return engine_name in {"ppe", "pccc"}
-            if source_pts_sec >= 19.5:
-                return engine_name == "wah"
-            return engine_name in {"ppe", "pccc", "crane"}
-        return True
+    def _warmup_engines(self, frame: np.ndarray) -> None:
+        """Load model YOLO/tesseract trước khi mở ingest — tránh bỏ lỡ segment đầu reel."""
+        source_pts_sec = 0.0
+        for engine_name, fn in self._process_fns.items():
+            try:
+                engine_kwargs: dict = {"capture_frame": frame}
+                if engine_name == "road":
+                    engine_kwargs["stabilize"] = False
+                if engine_name in ("atgt", "mesh", "ppe", "pccc", "crane", "wah"):
+                    engine_kwargs["source_pts_sec"] = source_pts_sec
+                fn(frame, self.camera_id, **engine_kwargs)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[VMS %s] Warmup engine %s: %s", self.camera_id, engine_name, exc)
 
     def _ai_loop(self) -> None:
         interval = 1.0 / self._ai_fps
         logger.info("[VMS %s] AI loop @ %.1f FPS, %d engine(s)", self.camera_id, self._ai_fps, len(self._process_fns))
+
+        while self._running and self.get_frame() is None:
+            time.sleep(0.05)
+
+        warmup_frame = self.get_frame()
+        if warmup_frame is not None:
+            self._warmup_engines(warmup_frame)
+            logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
+        self._ingest_gate.set()
 
         while self._running:
             t0 = time.monotonic()
@@ -274,15 +304,11 @@ class CameraVmsWorker:
                 merged_metrics: dict = {}
 
                 for engine_name, fn in self._process_fns.items():
-                    if not self._grace_engine_active(self.camera_id, engine_name, source_pts_sec):
-                        continue
                     try:
                         engine_kwargs: dict = {"capture_frame": frame}
                         if engine_name == "road":
                             engine_kwargs["stabilize"] = False
-                        if engine_name == "atgt":
-                            engine_kwargs["source_pts_sec"] = source_pts_sec
-                        if engine_name == "mesh":
+                        if engine_name in ("atgt", "mesh", "ppe", "pccc", "crane", "wah"):
                             engine_kwargs["source_pts_sec"] = source_pts_sec
                         result, events = fn(frame, self.camera_id, **engine_kwargs)
                         if isinstance(result, dict):
@@ -349,8 +375,13 @@ class CameraVmsWorker:
         cmd = [
             "ffmpeg",
             "-loglevel", "warning",
-            "-stream_loop", "-1",     # loop vô hạn
-            "-re",                    # real-time ingest
+        ]
+        if _is_live_stream_source(self.source_path):
+            cmd.extend(["-rtsp_transport", "tcp"])
+        else:
+            cmd.extend(["-stream_loop", "-1"])
+        cmd.extend([
+            "-re",
             "-i", self.source_path,
             "-c:v", "libx264",
             "-preset", "ultrafast",
@@ -366,7 +397,7 @@ class CameraVmsWorker:
             "-hls_flags", "delete_segments+independent_segments",
             "-hls_segment_filename", segment_pattern,
             hls_out,
-        ]
+        ])
 
         try:
             self._hls_proc = subprocess.Popen(

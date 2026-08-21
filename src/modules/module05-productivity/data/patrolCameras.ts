@@ -1,5 +1,5 @@
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
-import { getStreamUrlForCamera } from '@/modules/module02-training/data/trainingCameraFeeds'
+import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS } from './patrolSiteMap'
 
 export type PatrolCameraFilterTab = 'Tất cả' | 'Online' | 'Offline'
@@ -14,7 +14,7 @@ const ZONE_LABELS: Record<string, string> = {
 
 function buildPatrolCamera(id: string, zoneId: string, online: boolean): TrainingCamera {
   const num = id.replace('HC-', '')
-  const streamUrl = online ? getStreamUrlForCamera(id) : undefined
+  const streamUrl = online ? getPatrolHelmetStreamUrl(id) : undefined
   return {
     id,
     name: `Helmet ${num}`,

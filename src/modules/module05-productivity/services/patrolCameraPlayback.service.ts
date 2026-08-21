@@ -5,7 +5,7 @@ import type {
   CameraDetectionsResponse,
   CameraPlaybackRecordsResponse,
 } from '@/types/cameraPlayback'
-import { getStreamUrlForCamera } from '@/modules/module02-training/data/trainingCameraFeeds'
+import { getPatrolHelmetStreamUrl } from '../data/patrolHelmetStreams'
 import { MOCK_PATROL_EVENTS, type PatrolEvent } from '../data/patrolMockData'
 import { PATROL_CAMERAS } from '../data/patrolCameras'
 
@@ -21,7 +21,7 @@ function patrolEventToRecord(ev: PatrolEvent): CameraPlaybackRecord {
     startTime: ev.startedAt,
     endTime: ev.endedAt ?? dayjs(ev.lockedAt).add(2, 'minute').toISOString(),
     type: 'event',
-    videoUrl: getStreamUrlForCamera(ev.cameraId),
+    videoUrl: getPatrolHelmetStreamUrl(ev.cameraId),
     seekSec: eventSeekSec(ev.lockedAt),
     clipDurationSec: 20,
     thumbnailUrl: undefined,
