@@ -68,6 +68,8 @@ const INTERP_ZONE_POLYGONS = {
   ],
 } as const satisfies Record<string, [number, number][]>
 
+import { clipPolygonToSiteBoundary } from './patrolSiteGeometry'
+
 function polygonCenter(polygon: [number, number][]): [number, number] {
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
@@ -89,6 +91,32 @@ export interface PatrolGpsZone {
   center: [number, number]
 }
 
+function buildZonePolygon(raw: readonly [number, number][]): [number, number][] {
+  return clipPolygonToSiteBoundary([...raw])
+}
+
+function buildGpsZone(
+  zone_id: string,
+  name: string,
+  shortName: string,
+  rawPolygon: readonly [number, number][],
+  area_m2: number,
+  tier: 'primary' | 'secondary',
+  borderColor: string,
+): PatrolGpsZone {
+  const polygon = buildZonePolygon(rawPolygon)
+  return {
+    zone_id,
+    name,
+    shortName,
+    polygon,
+    area_m2,
+    tier,
+    borderColor,
+    center: polygonCenter(polygon),
+  }
+}
+
 /* ── 8 GPS Zones ────────────────────────────────────────────── */
 /**
  * Layout (geographic, no overlap):
@@ -101,86 +129,14 @@ export interface PatrolGpsZone {
  *  ZONE_B / C / F / G / H: interpolated in remaining gaps
  */
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
-  {
-    zone_id: 'ZONE_A',
-    name: 'Khu thi công móng',
-    shortName: 'Móng',
-    polygon: [...SURVEYED_ZONE_POLYGONS.ZONE_A],
-    area_m2: 1200,
-    tier: 'primary',
-    borderColor: '#ef4444',
-    center: polygonCenter(SURVEYED_ZONE_POLYGONS.ZONE_A),
-  },
-  {
-    zone_id: 'ZONE_B',
-    name: 'Khu lắp dựng tầng',
-    shortName: 'Tầng',
-    polygon: [...INTERP_ZONE_POLYGONS.ZONE_B],
-    area_m2: 850,
-    tier: 'primary',
-    borderColor: '#eab308',
-    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_B),
-  },
-  {
-    zone_id: 'ZONE_C',
-    name: 'Khu hoàn thiện',
-    shortName: 'HT',
-    polygon: [...INTERP_ZONE_POLYGONS.ZONE_C],
-    area_m2: 1450,
-    tier: 'primary',
-    borderColor: '#22c55e',
-    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_C),
-  },
-  {
-    zone_id: 'ZONE_D',
-    name: 'Khu kho vật tư',
-    shortName: 'Kho',
-    polygon: [...SURVEYED_ZONE_POLYGONS.ZONE_D],
-    area_m2: 600,
-    tier: 'primary',
-    borderColor: '#3b82f6',
-    center: polygonCenter(SURVEYED_ZONE_POLYGONS.ZONE_D),
-  },
-  {
-    zone_id: 'ZONE_E',
-    name: 'Khu văn phòng công trường',
-    shortName: 'VP',
-    polygon: [...SURVEYED_ZONE_POLYGONS.ZONE_E],
-    area_m2: 400,
-    tier: 'primary',
-    borderColor: '#a855f7',
-    center: polygonCenter(SURVEYED_ZONE_POLYGONS.ZONE_E),
-  },
-  {
-    zone_id: 'ZONE_F',
-    name: 'Sân cẩu',
-    shortName: 'Cẩu',
-    polygon: [...INTERP_ZONE_POLYGONS.ZONE_F],
-    area_m2: 700,
-    tier: 'secondary',
-    borderColor: '#06b6d4',
-    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_F),
-  },
-  {
-    zone_id: 'ZONE_G',
-    name: 'Cổng ra vào',
-    shortName: 'Cổng',
-    polygon: [...INTERP_ZONE_POLYGONS.ZONE_G],
-    area_m2: 300,
-    tier: 'secondary',
-    borderColor: '#f59e0b',
-    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_G),
-  },
-  {
-    zone_id: 'ZONE_H',
-    name: 'Khu đúc cọc',
-    shortName: 'Cọc',
-    polygon: [...INTERP_ZONE_POLYGONS.ZONE_H],
-    area_m2: 980,
-    tier: 'secondary',
-    borderColor: '#64748b',
-    center: polygonCenter(INTERP_ZONE_POLYGONS.ZONE_H),
-  },
+  buildGpsZone('ZONE_A', 'Khu thi công móng', 'Móng', SURVEYED_ZONE_POLYGONS.ZONE_A, 1200, 'primary', '#ef4444'),
+  buildGpsZone('ZONE_B', 'Khu lắp dựng tầng', 'Tầng', INTERP_ZONE_POLYGONS.ZONE_B, 850, 'primary', '#eab308'),
+  buildGpsZone('ZONE_C', 'Khu hoàn thiện', 'HT', INTERP_ZONE_POLYGONS.ZONE_C, 1450, 'primary', '#22c55e'),
+  buildGpsZone('ZONE_D', 'Khu kho vật tư', 'Kho', SURVEYED_ZONE_POLYGONS.ZONE_D, 600, 'primary', '#3b82f6'),
+  buildGpsZone('ZONE_E', 'Khu văn phòng công trường', 'VP', SURVEYED_ZONE_POLYGONS.ZONE_E, 400, 'primary', '#a855f7'),
+  buildGpsZone('ZONE_F', 'Sân cẩu', 'Cẩu', INTERP_ZONE_POLYGONS.ZONE_F, 700, 'secondary', '#06b6d4'),
+  buildGpsZone('ZONE_G', 'Cổng ra vào', 'Cổng', INTERP_ZONE_POLYGONS.ZONE_G, 300, 'secondary', '#f59e0b'),
+  buildGpsZone('ZONE_H', 'Khu đúc cọc', 'Cọc', INTERP_ZONE_POLYGONS.ZONE_H, 980, 'secondary', '#64748b'),
 ]
 
 /* ── Helmet GPS pins ────────────────────────────────────────── */
@@ -346,6 +302,7 @@ export {
   PATROL_SITE_BOUNDARY,
   isPointInSiteBoundary,
   clampPointToSiteBoundary,
+  clipPolygonToSiteBoundary,
 } from './patrolSiteGeometry'
 
 /** Map centre for Leaflet MapContainer — geometric centroid of the site quad. */

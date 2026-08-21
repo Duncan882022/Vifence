@@ -254,6 +254,80 @@ function MapSiteBoundsConfig() {
   return null
 }
 
+const PATROL_SITE_CLIP_ID = 'patrol-site-boundary-clip'
+
+/**
+ * SVG clip-path theo polygon đỏ — mọi fill/ stroke trên overlayPane
+ * (zone, mật độ, detection) không thể hiển thị ngoài ranh giới.
+ */
+function MapSiteOverlayClip({ enabled }: { enabled: boolean }) {
+  const map = useMap()
+
+  useEffect(() => {
+    const overlayPane = map.getPanes().overlayPane
+
+    const clearClip = () => {
+      overlayPane.querySelectorAll('svg').forEach(svg => {
+        svg.querySelectorAll('g').forEach(g => g.removeAttribute('clip-path'))
+        svg.removeAttribute('clip-path')
+      })
+    }
+
+    if (!enabled) {
+      clearClip()
+      return undefined
+    }
+
+    const applyClip = () => {
+      const ring = PATROL_SITE_BOUNDARY.slice(0, 4)
+      const d = `M ${ring
+        .map(([lat, lng]) => {
+          const p = map.latLngToLayerPoint(L.latLng(lat, lng))
+          return `${p.x},${p.y}`
+        })
+        .join(' L ')} Z`
+
+      overlayPane.querySelectorAll('svg').forEach(svg => {
+        let defs = svg.querySelector('defs')
+        if (!defs) {
+          defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+          svg.insertBefore(defs, svg.firstChild)
+        }
+
+        let clip = defs.querySelector(`#${PATROL_SITE_CLIP_ID}`) as SVGClipPathElement | null
+        if (!clip) {
+          clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath')
+          clip.id = PATROL_SITE_CLIP_ID
+          clip.setAttribute('clipPathUnits', 'userSpaceOnUse')
+          const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+          clip.appendChild(pathEl)
+          defs.appendChild(clip)
+        }
+
+        const pathEl = clip.querySelector('path')
+        pathEl?.setAttribute('d', d)
+
+        const target = svg.querySelector('g.leaflet-zoom-animated') ?? svg.querySelector('g') ?? svg
+        target.setAttribute('clip-path', `url(#${PATROL_SITE_CLIP_ID})`)
+      })
+    }
+
+    const schedule = () => requestAnimationFrame(applyClip)
+    map.on('move zoom moveend zoomend viewreset resize load', schedule)
+    const t1 = window.setTimeout(schedule, 60)
+    const t2 = window.setTimeout(schedule, 350)
+
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+      map.off('move zoom moveend zoomend viewreset resize load', schedule)
+      clearClip()
+    }
+  }, [map, enabled])
+
+  return null
+}
+
 /* ── Responsive map zoom ────────────────────────────────────── */
 function usePatrolMapZoom(): number {
   const [zoom, setZoom] = useState(() => {
@@ -336,6 +410,7 @@ export function PatrolGeoHeatmap({
   )
   const mapZoom = usePatrolMapZoom()
   const geoJsonStyle = showDensity ? zoneDensityStyle : zoneTierStyle
+  const clipOverlays = showZonePolygons || showDensity || showDetections
 
   return (
     <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px] overflow-hidden isolate">
@@ -387,6 +462,7 @@ export function PatrolGeoHeatmap({
         >
           <MapInvalidator />
           <MapSiteBoundsConfig />
+          <MapSiteOverlayClip enabled={clipOverlays} />
           <TileLayer
             url={ESRI_TILE_URL}
             attribution=""
