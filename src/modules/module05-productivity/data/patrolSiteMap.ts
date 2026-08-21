@@ -202,10 +202,10 @@ function buildHelmetPins(): PatrolHelmetPin[] {
 
 export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
 
-/** Vòng tuần tra nhỏ trong khu phụ trách (~25 m bán kính). */
+/** Vòng tuần tra nhỏ trong khu phụ trách (~10 m bán kính). */
 export function buildHelmetZoneTrail(
   center: [number, number],
-  radiusM = 25,
+  radiusM = 10,
   points = 60,
 ): [number, number][] {
   const [lat, lng] = center

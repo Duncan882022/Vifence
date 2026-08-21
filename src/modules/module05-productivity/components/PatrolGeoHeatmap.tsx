@@ -353,10 +353,6 @@ export function PatrolGeoHeatmap({
         }
         .leaflet-marker-icon { transition: transform 260ms linear !important; }
         .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
-        .leaflet-pane, .leaflet-map-pane, .leaflet-tile-pane,
-        .leaflet-overlay-pane, .leaflet-marker-pane, .leaflet-popup-pane,
-        .leaflet-control-container { z-index: auto !important; }
-        .leaflet-control { z-index: 10 !important; }
         .${PATROL_DIV_ICON_CLASS} {
           background: transparent !important;
           border: none !important;
@@ -395,7 +391,14 @@ export function PatrolGeoHeatmap({
         >
           <MapInvalidator />
           <MapSiteFocusLock center={PATROL_SITE_CENTER} />
-          <TileLayer url={ESRI_TILE_URL} attribution="" />
+          <TileLayer
+            url={ESRI_TILE_URL}
+            attribution=""
+            maxNativeZoom={19}
+            maxZoom={PATROL_SITE_MAX_ZOOM}
+            crossOrigin=""
+            keepBuffer={4}
+          />
           <ZoomControl position="bottomright" />
 
           {/* ── LAYER 1A: Site Boundary ──────────────────────── */}
