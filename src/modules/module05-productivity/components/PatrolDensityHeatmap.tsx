@@ -147,7 +147,9 @@ export function PatrolDensityHeatmap() {
               Detect {hc02Live.personCount} người — chờ GPS để vẽ chấm trên map…
             </span>
           ) : (
-            <span className="text-amber-400/80">HC-02: chờ GPS (stream + quyền vị trí)…</span>
+            <span className="text-amber-400/80">
+              HC-02: chờ GPS… (trong nhà iPhone có thể báo LocationUnknown — đợi Wi‑Fi)
+            </span>
           )}
         </div>
       </div>

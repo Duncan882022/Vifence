@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # GitHub Pages SPA fallback — redirect /Vifence/module03 → /Vifence/?/module03
+# + copy index.html vào các deep-link folder để giảm 404 console khi mở /module05
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cat > "$ROOT/docs/404.html" <<'EOF'
+DOCS="${ROOT}/docs"
+
+cat > "${DOCS}/404.html" <<'EOF'
 <!DOCTYPE html>
 <html lang="vi">
   <head>
@@ -23,3 +26,11 @@ cat > "$ROOT/docs/404.html" <<'EOF'
   <body></body>
 </html>
 EOF
+
+# Deep-link folders: /Vifence/module05/ → 200 + cùng SPA (không spam 404 trong console)
+if [[ -f "${DOCS}/index.html" ]]; then
+  for route in module01 module03 module04 module05 module06 module07 module08 dttt equipment profile scanner; do
+    mkdir -p "${DOCS}/${route}"
+    cp "${DOCS}/index.html" "${DOCS}/${route}/index.html"
+  done
+fi

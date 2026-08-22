@@ -1,5 +1,9 @@
 import { ensureCameraPermission, isDeviceCameraSupported } from '@/modules/module02-training/services/deviceCamera.service'
-import { isDeviceGpsSupported } from '@/modules/module02-training/services/deviceGps.service'
+import {
+  getLastDeviceGpsReading,
+  isDeviceGpsSupported,
+  watchDeviceGps,
+} from '@/modules/module02-training/services/deviceGps.service'
 import { setPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 
 export type PermissionOutcome = 'granted' | 'denied' | 'unsupported' | 'insecure' | 'timeout' | 'unavailable'
@@ -29,7 +33,7 @@ function locationErrorMessage(outcome: PermissionOutcome, code?: number): string
     return 'Quyền Location đang bị chặn. iPhone: Cài đặt → Quyền riêng tư → Dịch vụ định vị → Bật + Safari/Chrome → Khi dùng app.'
   }
   if (outcome === 'unavailable' || code === 2) {
-    return 'Máy không lấy được GPS. Bật Dịch vụ định vị / thử ra chỗ thoáng hơn.'
+    return 'iPhone tạm chưa có GPS (LocationUnknown — hay gặp trong nhà). Không phải từ chối quyền. Bật Wi‑Fi, đợi 10–30s hoặc ra gần cửa sổ rồi bấm lại.'
   }
   return 'Không lấy được vị trí. Kiểm tra quyền Location rồi bấm lại.'
 }
@@ -61,9 +65,9 @@ function readPositionOnce(options: PositionOptions): Promise<{
 }
 
 /**
- * Chờ GPS bằng watchPosition — ổn định hơn getCurrentPosition trên iPhone trong nhà.
+ * Chờ GPS qua singleton watchDeviceGps — tránh mở nhiều CoreLocation session.
  */
-function waitForGpsFix(timeoutMs = 35_000): Promise<{
+function waitForGpsFix(timeoutMs = 40_000): Promise<{
   ok: true
   reading: { lat: number; lng: number; accuracyM: number }
 } | { ok: false; code?: number }> {
@@ -73,7 +77,14 @@ function waitForGpsFix(timeoutMs = 35_000): Promise<{
       return
     }
 
+    const cached = getLastDeviceGpsReading()
+    if (cached && Date.now() - cached.updatedAt < 120_000) {
+      resolve({ ok: true, reading: cached })
+      return
+    }
+
     let settled = false
+    let stopWatch = () => {}
     const finish = (result: {
       ok: true
       reading: { lat: number; lng: number; accuracyM: number }
@@ -81,34 +92,22 @@ function waitForGpsFix(timeoutMs = 35_000): Promise<{
       if (settled) return
       settled = true
       window.clearTimeout(timer)
-      navigator.geolocation.clearWatch(watchId)
+      stopWatch()
       resolve(result)
     }
 
-    const watchId = navigator.geolocation.watchPosition(
-      pos => {
-        finish({
-          ok: true,
-          reading: {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracyM: pos.coords.accuracy,
-          },
-        })
-      },
-      err => {
-        // Chỉ dừng sớm nếu bị deny; timeout/unavailable để watch tiếp đến hết hạn.
-        if (err.code === 1) finish({ ok: false, code: 1 })
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 30_000,
-        timeout: timeoutMs,
+    stopWatch = watchDeviceGps(
+      reading => finish({ ok: true, reading }),
+      code => {
+        if (code === 'denied') finish({ ok: false, code: 1 })
+        // unavailable/timeout: giữ watch đến hết hạn — LocationUnknown tạm thời
       },
     )
 
     const timer = window.setTimeout(() => {
-      finish({ ok: false, code: 3 })
+      const last = getLastDeviceGpsReading()
+      if (last) finish({ ok: true, reading: last })
+      else finish({ ok: false, code: 3 })
     }, timeoutMs)
   })
 }
@@ -125,17 +124,22 @@ async function requestLocationWithFallback(): Promise<{
     return { outcome: 'insecure' }
   }
 
-  // 1) Cache gần đây — trả về ngay nếu có (iPhone thường có)
+  const mem = getLastDeviceGpsReading()
+  if (mem && Date.now() - mem.updatedAt < 120_000) {
+    return { outcome: 'granted', reading: mem }
+  }
+
+  // 1) Cache trình duyệt (Wi‑Fi / cell)
   const cached = await readPositionOnce({
     enableHighAccuracy: false,
     maximumAge: 120_000,
-    timeout: 8_000,
+    timeout: 10_000,
   })
   if (cached.ok) return { outcome: 'granted', reading: cached.reading }
   if (cached.code === 1) return { outcome: 'denied', code: 1 }
 
-  // 2) watchPosition chờ fix thật (trong nhà có thể 10–30s)
-  const watched = await waitForGpsFix(35_000)
+  // 2) Singleton watch — chờ LocationUnknown hết
+  const watched = await waitForGpsFix(40_000)
   if (watched.ok) return { outcome: 'granted', reading: watched.reading }
   if (watched.code === 1) return { outcome: 'denied', code: 1 }
   if (watched.code === 3) return { outcome: 'timeout', code: 3 }
