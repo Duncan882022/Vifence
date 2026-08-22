@@ -123,6 +123,13 @@ class Settings(BaseSettings):
     worker_demo_fallback_enabled: bool = False
     worker_gallery_dir: str = "data/worker_gallery"
 
+    # Patrol HC-* — tiêu chí mặt cho 1 người / 1 ID (sgc hoặc gallery).
+    patrol_face_reuse_min_similarity: float = 0.76
+    patrol_face_split_max_similarity: float = 0.62
+    patrol_face_reuse_min_margin: float = 0.07
+    patrol_gallery_min_confidence: float = 0.74
+    patrol_gallery_min_margin: float = 0.12
+
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True
     atgt_demo_confirm_seconds: float = 0.0

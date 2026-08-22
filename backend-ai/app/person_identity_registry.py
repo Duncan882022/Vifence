@@ -7,8 +7,12 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
+
+from .config import settings
 from .schemas import PpeDetection
 from .track_matching import bbox_iou
+from .worker_identity.gallery import embedding_similarity
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 REGISTRY_FILE = DATA_DIR / "person_identity_registry.json"
@@ -79,11 +83,50 @@ def _center_distance_norm(
     ) ** 0.5
 
 
+def _as_emb(vec: list[float] | None) -> np.ndarray | None:
+    if not vec or len(vec) < 8:
+        return None
+    return np.asarray(vec, dtype=np.float64)
+
+
+def _face_compatible(
+    query: np.ndarray,
+    other: np.ndarray,
+    *,
+    for_merge: bool,
+) -> bool:
+    sim = embedding_similarity(query, other)
+    if for_merge:
+        return sim >= settings.patrol_face_reuse_min_similarity
+    return sim >= settings.patrol_face_split_max_similarity
+
+
+def _conflicts_frame_faces(
+    worker_id: str,
+    face_emb: np.ndarray,
+    frame_face_assignments: dict[str, list[float]] | None,
+) -> bool:
+    """True nếu worker_id đã gán cho mặt khác trong cùng frame — tránh 2 người → 1 ID."""
+    if not frame_face_assignments:
+        return False
+    for wid, emb_list in frame_face_assignments.items():
+        if wid == worker_id:
+            continue
+        other = _as_emb(emb_list)
+        if other is None:
+            continue
+        if _face_compatible(face_emb, other, for_merge=True):
+            continue
+        return True
+    return False
+
+
 def _remember_track_meta(
     state: dict,
     key: str,
     worker_id: str,
     person_bbox: list[float] | None,
+    face_emb: list[float] | None = None,
 ) -> None:
     meta = state.setdefault("track_meta", {})
     entry: dict = {
@@ -92,7 +135,31 @@ def _remember_track_meta(
     }
     if person_bbox and len(person_bbox) >= 4:
         entry["bbox"] = [float(v) for v in person_bbox[:4]]
+    if face_emb and len(face_emb) >= 8:
+        entry["face_emb"] = [float(v) for v in face_emb]
     meta[key] = entry
+
+
+def _identity_face_emb(state: dict, camera_id: str, worker_id: str) -> np.ndarray | None:
+    prefix = f"{camera_id}|"
+    now = time.time()
+    best: np.ndarray | None = None
+    best_ts = 0.0
+    for key, row in (state.get("track_meta") or {}).items():
+        if not key.startswith(prefix):
+            continue
+        if str(row.get("worker_id") or "") != worker_id:
+            continue
+        if now - float(row.get("updated_at") or 0) > _TRACK_META_TTL_SEC:
+            continue
+        emb = _as_emb(row.get("face_emb"))
+        if emb is None:
+            continue
+        ts = float(row.get("updated_at") or 0)
+        if ts >= best_ts:
+            best_ts = ts
+            best = emb
+    return best
 
 
 def _find_reusable_worker_id(
@@ -102,14 +169,39 @@ def _find_reusable_worker_id(
     *,
     frame_w: int = 640,
     frame_h: int = 480,
+    face_emb: np.ndarray | None = None,
+    frame_face_assignments: dict[str, list[float]] | None = None,
 ) -> str | None:
-    """Cùng người, track_id mới — tái dùng sgc theo bbox gần (IoU / khoảng cách)."""
+    """Tái dùng ID — ưu tiên mặt; bbox chỉ khi không có mặt hoặc mặt khớp."""
     now = time.time()
     meta = state.get("track_meta") or {}
     prefix = f"{camera_id}|"
-    best_wid: str | None = None
-    best_score = 0.0
 
+    if face_emb is not None:
+        face_candidates: list[tuple[str, float]] = []
+        for key, row in meta.items():
+            if not key.startswith(prefix):
+                continue
+            if now - float(row.get("updated_at") or 0) > _TRACK_META_TTL_SEC:
+                continue
+            stored = _as_emb(row.get("face_emb"))
+            wid = str(row.get("worker_id") or state.get("tracks", {}).get(key) or "").strip()
+            if not wid or stored is None:
+                continue
+            sim = embedding_similarity(face_emb, stored)
+            if sim < settings.patrol_face_reuse_min_similarity:
+                continue
+            face_candidates.append((wid, sim))
+
+        if face_candidates:
+            face_candidates.sort(key=lambda item: item[1], reverse=True)
+            best_wid, best_sim = face_candidates[0]
+            second_sim = face_candidates[1][1] if len(face_candidates) >= 2 else 0.0
+            if best_sim - second_sim >= settings.patrol_face_reuse_min_margin:
+                if not _conflicts_frame_faces(best_wid, face_emb, frame_face_assignments):
+                    return best_wid
+
+    bbox_candidates: list[tuple[str, float]] = []
     for key, row in meta.items():
         if not key.startswith(prefix):
             continue
@@ -123,11 +215,24 @@ def _find_reusable_worker_id(
         dist = _center_distance_norm(person_bbox, other_bbox, frame_w, frame_h)
         if iou < _REUSE_IOU and dist > _REUSE_CENTER_NORM:
             continue
-        score = iou * 2.0 + max(0.0, 1.0 - dist * 4.0)
-        if score > best_score:
-            best_score = score
-            best_wid = wid
 
+        if face_emb is not None:
+            holder_emb = _as_emb(row.get("face_emb"))
+            if holder_emb is None:
+                holder_emb = _identity_face_emb(state, camera_id, wid)
+            if holder_emb is not None and not _face_compatible(face_emb, holder_emb, for_merge=True):
+                continue
+
+        score = iou * 2.0 + max(0.0, 1.0 - dist * 4.0)
+        bbox_candidates.append((wid, score))
+
+    if not bbox_candidates:
+        return None
+
+    bbox_candidates.sort(key=lambda item: item[1], reverse=True)
+    best_wid = bbox_candidates[0][0]
+    if face_emb is not None and _conflicts_frame_faces(best_wid, face_emb, frame_face_assignments):
+        return None
     return best_wid
 
 
@@ -137,6 +242,7 @@ def bind_patrol_track_identity(
     worker_id: str,
     *,
     person_bbox: list[float] | None = None,
+    face_emb: list[float] | None = None,
     frame_w: int = 640,
     frame_h: int = 480,
 ) -> None:
@@ -149,7 +255,7 @@ def bind_patrol_track_identity(
         state = _load()
         state["tracks"][key] = wid
         if person_bbox and len(person_bbox) >= 4:
-            _remember_track_meta(state, key, wid, person_bbox)
+            _remember_track_meta(state, key, wid, person_bbox, face_emb)
         _save(state)
 
 
@@ -159,11 +265,15 @@ def resolve_patrol_person_identity(
     track_id: str,
     *,
     person_bbox: list[float] | None = None,
+    face_emb: list[float] | None = None,
+    frame_face_assignments: dict[str, list[float]] | None = None,
     frame_w: int = 640,
     frame_h: int = 480,
 ) -> tuple[str, str]:
     """Trả (worker_id, worker_name) — gallery verified hoặc sgc-0xxxxxxx."""
     from .worker_identity.verify import is_verified_face_match, worker_match_from_detection
+
+    query_emb = _as_emb(face_emb)
 
     wid = (detection.worker_id or "").strip()
     wname = (detection.worker_name or "").strip()
@@ -174,7 +284,7 @@ def resolve_patrol_person_identity(
             state = _load()
             state["tracks"][key] = wid
             if person_bbox and len(person_bbox) >= 4:
-                _remember_track_meta(state, key, wid, person_bbox)
+                _remember_track_meta(state, key, wid, person_bbox, face_emb)
             _save(state)
         return wid, wname or wid
 
@@ -190,10 +300,14 @@ def resolve_patrol_person_identity(
         existing = state["tracks"].get(key)
         if isinstance(existing, str) and existing.strip():
             existing = existing.strip()
-            if pb and len(pb) >= 4:
-                _remember_track_meta(state, key, existing, pb)
+            if query_emb is not None:
+                holder_emb = _identity_face_emb(state, camera_id, existing)
+                if holder_emb is not None and not _face_compatible(query_emb, holder_emb, for_merge=True):
+                    existing = ""
+            if existing and pb and len(pb) >= 4:
+                _remember_track_meta(state, key, existing, pb, face_emb)
                 _save(state)
-            return existing, existing
+                return existing, existing
 
         if pb and len(pb) >= 4:
             reused = _find_reusable_worker_id(
@@ -202,10 +316,12 @@ def resolve_patrol_person_identity(
                 pb,
                 frame_w=frame_w,
                 frame_h=frame_h,
+                face_emb=query_emb,
+                frame_face_assignments=frame_face_assignments,
             )
             if reused:
                 state["tracks"][key] = reused
-                _remember_track_meta(state, key, reused, pb)
+                _remember_track_meta(state, key, reused, pb, face_emb)
                 _save(state)
                 return reused, reused
 
@@ -214,6 +330,6 @@ def resolve_patrol_person_identity(
         state["next_seq"] = seq + 1
         state["tracks"][key] = sgc
         if pb and len(pb) >= 4:
-            _remember_track_meta(state, key, sgc, pb)
+            _remember_track_meta(state, key, sgc, pb, face_emb)
         _save(state)
         return sgc, sgc

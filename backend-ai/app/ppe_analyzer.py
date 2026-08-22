@@ -50,6 +50,12 @@ def _is_helmet_bodycam(camera_id: str) -> bool:
 
 _person_detector: PersonDetector | None = None
 _hc_patrol_person_tracks: dict[str, dict[str, object]] = {}
+_hc_frame_face_assignments: dict[str, dict[str, list[float]]] = {}
+
+
+def reset_hc_patrol_face_assignments(camera_id: str) -> None:
+    """Đầu frame HC-* — reset map mặt trong khung để tránh gộp 2 người."""
+    _hc_frame_face_assignments[camera_id] = {}
 
 
 class _HcPersonTrackSlot:
@@ -63,6 +69,7 @@ def _assign_patrol_person_identity(
     person_det: PpeDetection,
     person_box: tuple[float, float, float, float],
     *,
+    frame: np.ndarray,
     camera_id: str,
     frame_w: int,
     frame_h: int,
@@ -73,6 +80,7 @@ def _assign_patrol_person_identity(
         return
     from .person_identity_registry import resolve_patrol_person_identity
     from .track_matching import assign_person_track_id
+    from .worker_identity.recognizer import extract_person_face_embedding
 
     tracks = _hc_patrol_person_tracks.setdefault(camera_id, {})
     person_bbox = [float(v) for v in person_box]
@@ -91,17 +99,24 @@ def _assign_patrol_person_identity(
     if track_id not in tracks:
         tracks[track_id] = _HcPersonTrackSlot(person_bbox)
     else:
-        getattr(tracks[track_id], "person_bbox", person_bbox)
         tracks[track_id] = _HcPersonTrackSlot(person_bbox)
+
+    face_vec = extract_person_face_embedding(frame, person_bbox)
+    face_emb = face_vec.tolist() if face_vec is not None else None
+    frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})
 
     worker_id, worker_name = resolve_patrol_person_identity(
         person_det,
         camera_id,
         track_id,
         person_bbox=person_bbox,
+        face_emb=face_emb,
+        frame_face_assignments=frame_faces,
         frame_w=frame_w,
         frame_h=frame_h,
     )
+    if face_emb is not None:
+        frame_faces[worker_id] = face_emb
     person_det.worker_id = worker_id
     person_det.worker_name = worker_name
 
@@ -1581,6 +1596,8 @@ def analyze_ppe_frame(
     detections: list[PpeDetection] = []
     violations = 0
     assigned_patrol_tracks: set[str] = set()
+    if _is_helmet_bodycam(camera_id):
+        reset_hc_patrol_face_assignments(camera_id)
 
     for person_index, person in enumerate(persons):
         pb = person.person_box
@@ -1612,6 +1629,7 @@ def analyze_ppe_frame(
         _assign_patrol_person_identity(
             person_det,
             pb,
+            frame=frame,
             camera_id=camera_id,
             frame_w=w,
             frame_h=h,

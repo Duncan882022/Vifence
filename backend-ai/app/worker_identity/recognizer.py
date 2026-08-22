@@ -118,14 +118,19 @@ def _best_face_in_crop(crop: np.ndarray, *, score_threshold: float = 0.65) -> np
     return best
 
 
-def _match_face_crop(face: np.ndarray) -> WorkerMatch | None:
+def _match_face_crop(face: np.ndarray, *, camera_id: str = "") -> WorkerMatch | None:
     if face is None or face.size == 0:
         return None
     query = _face_embedding(face)
+    min_conf = settings.worker_match_min_confidence
+    min_margin = settings.worker_match_min_margin
+    if camera_id.startswith("HC-"):
+        min_conf = max(min_conf, settings.patrol_gallery_min_confidence)
+        min_margin = max(min_margin, settings.patrol_gallery_min_margin)
     matched = match_embedding(
         query,
-        min_confidence=settings.worker_match_min_confidence,
-        min_margin=settings.worker_match_min_margin,
+        min_confidence=min_conf,
+        min_margin=min_margin,
     )
     if matched is None:
         return None
@@ -166,7 +171,7 @@ def identify_person(
         return unknown_worker_match("recognition_disabled")
 
     _ensure_gallery()
-    match = _match_face_crop(face)
+    match = _match_face_crop(face, camera_id=camera_id)
     if match is None:
         _track_cache.pop(cache_key, None)
         return unknown_worker_match("face_unmatched")
@@ -181,3 +186,21 @@ def identify_person(
     )
     _track_cache[cache_key] = match
     return match
+
+
+def extract_person_face_embedding(
+    frame: np.ndarray,
+    person_bbox: list[float] | None,
+) -> np.ndarray | None:
+    """Histogram mặt trong bbox người — dùng dedup patrol (không cần khớp gallery)."""
+    if not person_bbox or len(person_bbox) < 4:
+        return None
+    crop = _crop_person(frame, person_bbox)
+    if crop is None:
+        return None
+    face = _best_face_in_crop(crop)
+    if face is None:
+        return None
+    from .gallery import face_histogram_embedding
+
+    return face_histogram_embedding(face)

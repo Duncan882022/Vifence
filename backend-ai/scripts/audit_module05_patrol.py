@@ -156,6 +156,86 @@ def audit_sgc_identity() -> list[CaseResult]:
     return results
 
 
+def _test_face_emb(seed: int) -> list[float]:
+    vec = np.zeros(32, dtype=np.float64)
+    idx = int(seed) % 32
+    vec[idx] = 1.0
+    return vec.tolist()
+
+
+def audit_sgc_face_identity() -> list[CaseResult]:
+    """Mặt — tránh 1 người → 2 ID và 2 người → 1 ID."""
+    from app.person_identity_registry import resolve_patrol_person_identity
+    from app.schemas import PpeDetection
+    from app.worker_identity.gallery import embedding_similarity
+
+    results: list[CaseResult] = []
+    reg_patch, state_patch = _temp_person_registry()
+
+    emb_a = _test_face_emb(11)
+    emb_b = _test_face_emb(99)
+    sim_ab = embedding_similarity(np.asarray(emb_a), np.asarray(emb_b))
+    ok_distinct = sim_ab < 0.62
+
+    with reg_patch, state_patch:
+        det = PpeDetection(
+            behavior="person",
+            label="person",
+            scenario_id="PERS-001",
+            confidence=0.9,
+            bbox=[10.0, 10.0, 100.0, 200.0],
+        )
+        w1, _ = resolve_patrol_person_identity(
+            det,
+            "HC-02",
+            "p01:person",
+            person_bbox=[10.0, 10.0, 100.0, 200.0],
+            face_emb=emb_a,
+        )
+        w2, _ = resolve_patrol_person_identity(
+            det,
+            "HC-02",
+            "p02:person",
+            person_bbox=[400.0, 10.0, 500.0, 200.0],
+            face_emb=emb_a,
+        )
+        ok_same_face = w1 == w2
+
+        frame_faces: dict[str, list[float]] = {w1: emb_a}
+        w3, _ = resolve_patrol_person_identity(
+            det,
+            "HC-02",
+            "p03:person",
+            person_bbox=[12.0, 12.0, 102.0, 202.0],
+            face_emb=emb_b,
+            frame_face_assignments=frame_faces,
+        )
+        ok_split_frame = w3 != w1
+
+    results.append(
+        CaseResult(
+            "sgc_face_test_vectors_distinct",
+            ok_distinct,
+            f"sim(a,b)={sim_ab:.3f} (<0.62)",
+        ),
+    )
+    results.append(
+        CaseResult(
+            "sgc_face_reuse_same_embedding",
+            ok_same_face,
+            f"track p01/p02 same face → {w1}/{w2}",
+        ),
+    )
+    results.append(
+        CaseResult(
+            "sgc_face_split_same_frame",
+            ok_split_frame,
+            f"nearby bbox different face → {w3} vs {w1}",
+        ),
+    )
+    return results
+
+
 def audit_patrol_gps() -> list[CaseResult]:
     from app.patrol_api import get_patrol_gps, patrol_gps_payload, update_patrol_gps
 
@@ -569,6 +649,7 @@ def main() -> int:
     sections = [
         ("Patrol API filters", audit_patrol_filters()),
         ("Person ID sgc-*", audit_sgc_identity()),
+        ("Person ID face dedup", audit_sgc_face_identity()),
         ("GPS bridge", audit_patrol_gps()),
         ("Mobile metrics", audit_mobile_metrics()),
         ("Mobile frame scale", audit_mobile_frame_scale()),

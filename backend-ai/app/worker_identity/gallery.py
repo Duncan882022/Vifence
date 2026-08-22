@@ -83,6 +83,15 @@ def _similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
+def embedding_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Cosine similarity histogram mặt — dùng patrol dedup & gallery."""
+    return _similarity(a, b)
+
+
+def face_histogram_embedding(face_bgr: np.ndarray) -> np.ndarray:
+    return _face_embedding(face_bgr)
+
+
 def load_gallery(base_dir: Optional[Path] = None) -> int:
     global _REGISTRY  # noqa: PLW0603
     root = base_dir or _BASE

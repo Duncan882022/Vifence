@@ -280,9 +280,13 @@ class PpeEngine:
         if camera_id.startswith("HC-"):
             from .event_dedup import build_dedup_key
             from .person_identity_registry import resolve_patrol_person_identity
+            from .ppe_analyzer import reset_hc_patrol_face_assignments
+            from .worker_identity.recognizer import extract_person_face_embedding
 
+            reset_hc_patrol_face_assignments(camera_id)
             person_matched: set[str] = set()
             person_assigned: set[str] = set()
+            frame_face_assignments: dict[str, list[float]] = {}
             frame_persons = persons
             if len(frame_persons) > _MAX_TRACKS:
                 frame_persons = sorted(frame_persons, key=lambda d: d.confidence, reverse=True)[
@@ -317,6 +321,8 @@ class PpeEngine:
                 state.last_seen = now
 
                 existing_wid = (person.worker_id or "").strip()
+                face_vec = extract_person_face_embedding(frame, person_bbox)
+                face_emb = face_vec.tolist() if face_vec is not None else None
                 if existing_wid and existing_wid not in ("", "unknown"):
                     worker_id = existing_wid
                     worker_name = (person.worker_name or worker_id).strip()
@@ -327,6 +333,7 @@ class PpeEngine:
                         track_id,
                         worker_id,
                         person_bbox=person_bbox,
+                        face_emb=face_emb,
                         frame_w=frame_w,
                         frame_h=frame_h,
                     )
@@ -336,9 +343,13 @@ class PpeEngine:
                         camera_id,
                         track_id,
                         person_bbox=person_bbox,
+                        face_emb=face_emb,
+                        frame_face_assignments=frame_face_assignments,
                         frame_w=frame_w,
                         frame_h=frame_h,
                     )
+                if face_emb is not None:
+                    frame_face_assignments[worker_id] = face_emb
                 det = person.model_copy(
                     update={
                         "worker_id": worker_id,
