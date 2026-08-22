@@ -125,6 +125,19 @@ def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, flo
     return inter / union if union > 0 else 0.0
 
 
+def _intersection_area(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    return (ix2 - ix1) * (iy2 - iy1)
+
+
 def _sub_region(box: tuple[float, float, float, float], y0: float, y1: float) -> tuple[float, float, float, float]:
     x1, py1, x2, py2 = box
     ph = py2 - py1
@@ -1183,13 +1196,41 @@ def _torso_assessable(
     *,
     camera_id: str = "",
 ) -> bool:
+    """Chỉ đánh giá áo BHLD khi vùng ngực đủ rõ — không log no_vest nếu ROI rơi vào mặt."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
     torso = _sub_region(person_box, 0.20, 0.72)
-    min_ratio = 0.36 if _is_helmet_bodycam(camera_id) else 0.42
-    if _zone_visible_ratio(torso, frame_w, frame_h) < min_ratio:
+
+    if _zone_visible_ratio(torso, frame_w, frame_h) < 0.42:
         return False
-    _cx1, cy1, _cx2, cy2 = _clip_box_to_frame(torso, frame_w, frame_h)
-    min_h = frame_h * 0.045 if _is_helmet_bodycam(camera_id) else frame_h * 0.06
-    return (cy2 - cy1) >= min_h
+
+    if _is_helmet_bodycam(camera_id):
+        # Bodycam cận mặt/vai — không đủ ngực trong khung thì bỏ qua áo BHLD.
+        if ph < frame_h * 0.35 and y2 < frame_h * 0.44:
+            return False
+
+    _tx1, cy1, _tx2, cy2 = _clip_box_to_frame(torso, frame_w, frame_h)
+    min_torso_h = frame_h * 0.06
+    if _is_helmet_bodycam(camera_id):
+        min_torso_h = max(frame_h * 0.055, ph * 0.16)
+    if (cy2 - cy1) < min_torso_h:
+        return False
+
+    display = _torso_violation_display_bbox(person_box, scan_region=torso)
+    clipped = _clip_box_to_frame(display, frame_w, frame_h)
+    roi_area = max((clipped[2] - clipped[0]) * (clipped[3] - clipped[1]), 1.0)
+
+    head = (x1 + pw * 0.08, y1, x2 - pw * 0.08, y1 + ph * 0.30)
+    if _intersection_area(clipped, head) / roi_area > 0.22:
+        return False
+
+    rcy = (clipped[1] + clipped[3]) / 2.0
+    head_bottom = y1 + ph * 0.28
+    if rcy < head_bottom + ph * 0.10:
+        return False
+
+    return True
 
 
 def _half_body_person(
@@ -1435,6 +1476,9 @@ def _build_vest_only_result(
         )
         detections.append(person_det)
 
+        if not _torso_assessable(pb, w, h, camera_id=camera_id):
+            continue
+
         vest = _resolve_person_vest(frame, torso, vest_items, camera_id=camera_id)
         if vest:
             box, conf = vest
@@ -1454,7 +1498,10 @@ def _build_vest_only_result(
                 label=PPE_LABELS["no_vest"],
                 scenario_id=PPE_SCENARIO["no_vest"],
                 confidence=round(max(_VIOLATION_CONF, person.person_conf * 0.93), 3),
-                bbox=[float(v) for v in torso],
+                bbox=[
+                    float(v)
+                    for v in ppe_violation_display_bbox(pb, "no_vest", h, scan_region=torso)
+                ],
             )
             copy_worker_identity(person_det, viol)
             detections.append(viol)

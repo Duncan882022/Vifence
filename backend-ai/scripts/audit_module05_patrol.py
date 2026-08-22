@@ -348,6 +348,20 @@ def audit_hc02_ppe_analyzer() -> list[CaseResult]:
     ok_vest = abs(vcy - tcy) < (pb[3] - pb[1]) * 0.12
     results.append(CaseResult("hc02_vest_bbox_torso", ok_vest, f"vest_cy={vcy:.0f} torso_cy={tcy:.0f}"))
 
+    from app.ppe_analyzer import _torso_assessable
+
+    face_pb = (120.0, 80.0, 260.0, 210.0)
+    chest_pb = (80.0, 40.0, 260.0, 420.0)
+    ok_face_skip = not _torso_assessable(face_pb, 640, 480, camera_id="HC-02")
+    ok_chest_ok = _torso_assessable(chest_pb, 640, 480, camera_id="HC-02")
+    results.append(
+        CaseResult(
+            "hc02_no_vest_skips_face_only",
+            ok_face_skip and ok_chest_ok,
+            f"face={ok_face_skip} chest={ok_chest_ok}",
+        ),
+    )
+
     frame = np.full((480, 320, 3), 90, dtype=np.uint8)
     cv2.rectangle(frame, (90, 30), (230, 340), (140, 120, 100), -1)
     cv2.rectangle(frame, (110, 50), (210, 120), (30, 30, 30), -1)
