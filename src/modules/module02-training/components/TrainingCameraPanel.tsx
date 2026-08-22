@@ -119,13 +119,27 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
   )
 }
 
-function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex }: {
-  cam: TrainingCamera; compact?: boolean; onMaximize: () => void; isMaximized?: boolean; analyzeThrottle?: boolean; streamIndex?: number
+function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex, playing = true }: {
+  cam: TrainingCamera
+  compact?: boolean
+  onMaximize: () => void
+  isMaximized?: boolean
+  analyzeThrottle?: boolean
+  streamIndex?: number
+  /** false khi mobile đang mở fullscreen — tránh 2 getUserMedia (iPhone tile đen) */
+  playing?: boolean
 }) {
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} compact={compact} aiOverlay analyzeThrottle={analyzeThrottle} streamIndex={streamIndex} />
+      <CameraLiveFeed
+        cam={cam}
+        playing={playing}
+        compact={compact}
+        aiOverlay={playing}
+        analyzeThrottle={analyzeThrottle}
+        streamIndex={streamIndex}
+      />
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
       <CameraChrome
         cam={cam}
@@ -165,12 +179,14 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol }: {
+function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol, pausedCameraId }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   stackedPortrait: boolean
   fillHeight: boolean
   forceSingleCol?: boolean
+  /** Mobile cam đang fullscreen — pause feed trong grid */
+  pausedCameraId?: string | null
 }) {
   const count = cams.length
   const cols = getGridCols(count, stackedPortrait, forceSingleCol)
@@ -189,17 +205,31 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
         ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : {}),
       }}
     >
-      {cams.map((cam, index) => (
-        <div
-          key={cam.id}
-          className={cn(
-            'relative w-full min-w-0 shrink-0',
-            fillHeight ? 'h-full min-h-[120px]' : 'aspect-video max-h-[min(72vh,720px)]',
-          )}
-        >
-          <CameraCell cam={cam} compact={compact} analyzeThrottle={analyzeThrottle} streamIndex={index} onMaximize={() => onMaximize(cam)} />
-        </div>
-      ))}
+      {cams.map((cam, index) => {
+        const pauseForFullscreen = Boolean(
+          pausedCameraId
+          && cam.id === pausedCameraId
+          && cam.streamType === 'mobile',
+        )
+        return (
+          <div
+            key={cam.id}
+            className={cn(
+              'relative w-full min-w-0 shrink-0',
+              fillHeight ? 'h-full min-h-[120px]' : 'aspect-video max-h-[min(72vh,720px)]',
+            )}
+          >
+            <CameraCell
+              cam={cam}
+              compact={compact}
+              analyzeThrottle={analyzeThrottle}
+              streamIndex={index}
+              playing={!pauseForFullscreen}
+              onMaximize={() => onMaximize(cam)}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -409,6 +439,7 @@ export function TrainingCameraPanel({
               onMaximize={cam => setFocusedCam(cam)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
+              pausedCameraId={focusedCam?.id}
             />
           </div>
         </div>

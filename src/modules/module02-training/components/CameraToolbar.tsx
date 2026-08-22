@@ -1,6 +1,7 @@
-import { Maximize2, Minimize2, Radio } from 'lucide-react'
+import { Maximize2, Minimize2, Radio, SwitchCamera } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { cameraDisplayLabel, cameraMetaLabel, type TrainingCamera } from '../data/trainingCameras'
+import { requestMobileCameraFlip } from '../services/mobileCameraFlip'
 import { CameraAiConfigButton } from './CameraAiConfigModal'
 import { CameraBboxToggle } from './CameraBboxToggle'
 import { BackendConnectionBadge } from './BackendConnectionBadge'
@@ -56,6 +57,8 @@ interface CameraToolbarProps {
   compact?: boolean
   onMaximize?: () => void
   isMaximized?: boolean
+  /** Hiện nút đảo cam trước/sau (mobile stream) */
+  showFacingToggle?: boolean
 }
 
 export function CameraToolbar({
@@ -63,6 +66,7 @@ export function CameraToolbar({
   compact,
   onMaximize,
   isMaximized,
+  showFacingToggle,
 }: CameraToolbarProps) {
   return (
     <div className={cn(
@@ -76,6 +80,20 @@ export function CameraToolbar({
           variant="toolbar"
           className={cameraToolbarBtn(compact)}
         />
+        {showFacingToggle && (
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation()
+              requestMobileCameraFlip(cameraId)
+            }}
+            className={cameraToolbarBtn(compact)}
+            title="Đảo camera trước / sau"
+            aria-label="Đảo camera trước / sau"
+          >
+            <SwitchCamera className={cameraToolbarIconSize(compact)} aria-hidden />
+          </button>
+        )}
         <CameraAiConfigButton
           cameraId={cameraId}
           compact={compact}
@@ -130,6 +148,7 @@ export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraCh
         compact={compact}
         onMaximize={onMaximize}
         isMaximized={isMaximized}
+        showFacingToggle={cam.streamType === 'mobile'}
       />
       <CameraInfoBar cam={cam} compact={compact} />
     </>

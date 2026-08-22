@@ -3,10 +3,12 @@ import { Camera } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
   buildMobileCaptureConstraints,
+  getFacingLabel,
   isDeviceCameraSupported,
   isHandheldDevice,
   type CameraFacing,
 } from '../services/deviceCamera.service'
+import { subscribeMobileCameraFlip } from '../services/mobileCameraFlip'
 import {
   createMobileAiAnalyzeClient,
   getMobileAiBackendUrl,
@@ -61,6 +63,7 @@ export function MobileCameraFeed({
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
   const [layoutTick, setLayoutTick] = useState(0)
   const facingRef = useRef<CameraFacing>('environment')
+  const [facing, setFacing] = useState<CameraFacing>('environment')
   const deviceIndexRef = useRef(0)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
   useCameraAiEnabledModels(cameraId)
@@ -195,7 +198,15 @@ export function MobileCameraFeed({
       }
       facingRef.current = useFacing
       deviceIndexRef.current = useDeviceIndex
+      setFacing(useFacing)
       setStatus('live')
+      // iOS: ép play lại sau khi gắn stream (tile nhỏ dễ paused/đen)
+      requestAnimationFrame(() => {
+        const v = videoRef.current
+        if (!v) return
+        v.muted = true
+        void v.play().catch(() => {})
+      })
     } catch (err) {
       setStatus('error')
       const msg = err instanceof Error ? err.message : 'Không mở được camera.'
@@ -221,6 +232,13 @@ export function MobileCameraFeed({
       })
     })
   }, [cameraId, status])
+
+  useEffect(() => {
+    return subscribeMobileCameraFlip(cameraId, () => {
+      const next: CameraFacing = facingRef.current === 'environment' ? 'user' : 'environment'
+      void startCapture(next)
+    })
+  }, [cameraId, startCapture])
 
   useEffect(() => {
     const bump = () => setBackendUrl(getMobileAiBackendUrl())
@@ -263,16 +281,21 @@ export function MobileCameraFeed({
   useEffect(() => {
     const video = videoRef.current
     if (!video || status !== 'live') return
-    const bump = () => setLayoutTick(t => t + 1)
+    const bump = () => {
+      setLayoutTick(t => t + 1)
+      if (video.paused) void video.play().catch(() => {})
+    }
     const observer = new ResizeObserver(bump)
     observer.observe(video)
     video.addEventListener('loadedmetadata', bump)
     video.addEventListener('resize', bump)
+    document.addEventListener('visibilitychange', bump)
     bump()
     return () => {
       observer.disconnect()
       video.removeEventListener('loadedmetadata', bump)
       video.removeEventListener('resize', bump)
+      document.removeEventListener('visibilitychange', bump)
     }
   }, [status])
 
@@ -295,10 +318,19 @@ export function MobileCameraFeed({
         muted
         playsInline
         className={cn(
-          'absolute inset-0 h-full w-full object-contain',
+          'absolute inset-0 h-full w-full object-cover bg-black',
           status !== 'live' && 'opacity-0',
         )}
       />
+
+      {status === 'live' && (
+        <span className={cn(
+          'absolute z-[6] rounded bg-black/55 text-white/85 font-medium pointer-events-none',
+          compact ? 'bottom-8 left-1.5 text-[7px] px-1 py-0.5' : 'bottom-12 left-2 text-[9px] px-1.5 py-0.5',
+        )}>
+          Cam {getFacingLabel(facing)}
+        </span>
+      )}
 
       {status === 'live' && showAiOverlay && (
         <MobileAiOverlay
