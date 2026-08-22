@@ -580,6 +580,90 @@ def audit_hc02_engine_events() -> list[CaseResult]:
     return results
 
 
+def audit_no_vest_snapshot_roi() -> list[CaseResult]:
+    """Snapshot no_vest — ROI bám ngực, không khoanh mặt."""
+    from app.events import EventStore
+    from app.ppe_analyzer import snapshot_annotation_detection
+    from app.schemas import PpeDetection
+
+    results: list[CaseResult] = []
+    store = _fresh_store()
+    frame = np.full((480, 640, 3), 90, dtype=np.uint8)
+
+    face_pb = [178.0, 118.0, 242.0, 140.0]
+    ph = face_pb[3] - face_pb[1]
+    face_det = PpeDetection(
+        behavior="no_vest",
+        label="Không áo phản quang",
+        scenario_id="PPE-002",
+        confidence=0.85,
+        bbox=[178.0, 118.0, 242.0, 136.0],
+        subject_bbox=list(face_pb),
+    )
+    face_event = store.add_ppe(
+        face_det,
+        frame,
+        camera_id="HC-02",
+        person_bbox=list(face_pb),
+        track_id="p_face:no_vest",
+    )
+    face_roi_skipped = (
+        face_event is not None
+        and (
+            face_event.bbox[2] - face_event.bbox[0] < 4
+            or face_event.bbox[3] - face_event.bbox[1] < 4
+        )
+    )
+
+    chest_pb = [80.0, 40.0, 260.0, 420.0]
+    chest_ph = chest_pb[3] - chest_pb[1]
+    chest_det = PpeDetection(
+        behavior="no_vest",
+        label="Không áo phản quang",
+        scenario_id="PPE-002",
+        confidence=0.88,
+        bbox=[100.0, 50.0, 200.0, 150.0],
+        subject_bbox=list(chest_pb),
+    )
+    chest_event = store.add_ppe(
+        chest_det,
+        frame,
+        camera_id="HC-02",
+        person_bbox=list(chest_pb),
+        track_id="p_chest:no_vest",
+    )
+    chest_cy = (chest_event.bbox[1] + chest_event.bbox[3]) / 2.0 if chest_event else 0.0
+    expect_cy = chest_pb[1] + chest_ph * 0.44
+    chest_roi_ok = (
+        chest_event is not None
+        and chest_event.bbox[2] - chest_event.bbox[0] >= 4
+        and abs(chest_cy - expect_cy) < chest_ph * 0.14
+    )
+
+    h, w = frame.shape[:2]
+    annot_face = snapshot_annotation_detection(face_det, w, h, camera_id="HC-02").bbox
+    annot_chest = snapshot_annotation_detection(chest_det, w, h, camera_id="HC-02").bbox
+    ok_annot_face = annot_face[2] - annot_face[0] < 4
+    chest_annot_cy = (annot_chest[1] + annot_chest[3]) / 2.0
+    ok_annot_chest = abs(chest_annot_cy - expect_cy) < chest_ph * 0.14
+
+    results.append(
+        CaseResult(
+            "no_vest_snapshot_skips_face",
+            face_roi_skipped and ok_annot_face,
+            f"event_bbox={getattr(face_event, 'bbox', None)} annot={annot_face}",
+        ),
+    )
+    results.append(
+        CaseResult(
+            "no_vest_snapshot_chest_roi",
+            chest_roi_ok and ok_annot_chest,
+            f"event_cy={chest_cy:.0f} expect={expect_cy:.0f}",
+        ),
+    )
+    return results
+
+
 def audit_person_snapshot_crop() -> list[CaseResult]:
     from app.events import EventStore
     from app.ppe_analyzer import snapshot_annotation_detection
@@ -654,6 +738,7 @@ def main() -> int:
         ("Mobile metrics", audit_mobile_metrics()),
         ("Mobile frame scale", audit_mobile_frame_scale()),
         ("HC-02 PPE analyzer", audit_hc02_ppe_analyzer()),
+        ("No-vest snapshot ROI", audit_no_vest_snapshot_roi()),
         ("HC-02 engine events", audit_hc02_engine_events()),
         ("Person snapshot", audit_person_snapshot_crop()),
     ]

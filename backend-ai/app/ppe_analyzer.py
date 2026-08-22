@@ -239,12 +239,99 @@ def ppe_violation_display_bbox(
     return person_box
 
 
+def _vest_roi_overlaps_face(
+    person_box: tuple[float, float, float, float],
+    roi_box: tuple[float, float, float, float],
+    *,
+    max_head_overlap_ratio: float = 0.18,
+) -> bool:
+    """ROI áo trùng vùng mặt/đầu — không vẽ snapshot."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    head = (x1 + pw * 0.08, y1, x2 - pw * 0.08, y1 + ph * 0.26)
+    roi_area = max((roi_box[2] - roi_box[0]) * (roi_box[3] - roi_box[1]), 1.0)
+    if _intersection_area(roi_box, head) / roi_area > max_head_overlap_ratio:
+        return True
+    rcy = (roi_box[1] + roi_box[3]) / 2.0
+    if rcy < y1 + ph * 0.28:
+        return True
+    return False
+
+
+def _resolve_vest_snapshot_bbox(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str = "",
+) -> tuple[float, float, float, float] | None:
+    """BBox ROI snapshot no_vest — luôn bám ngực, không khoanh mặt."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    chest = _chest_scan_region(person_box)
+    display = _torso_violation_display_bbox(person_box, scan_region=chest)
+    clipped = _clip_box_to_frame(display, frame_w, frame_h)
+
+    min_y1 = y1 + ph * 0.30
+    if clipped[1] < min_y1:
+        clipped = (clipped[0], min_y1, clipped[2], clipped[3])
+
+    min_h = max(ph * 0.08, float(frame_h) * 0.035)
+    if _is_helmet_bodycam(camera_id):
+        min_h = max(ph * 0.10, float(frame_h) * 0.042)
+    if (clipped[3] - clipped[1]) < min_h:
+        return None
+
+    if _vest_roi_overlaps_face(person_box, clipped):
+        return None
+
+    if _is_helmet_bodycam(camera_id):
+        rcy = (clipped[1] + clipped[3]) / 2.0
+        if rcy < y1 + ph * 0.40:
+            return None
+
+    if not _torso_assessable(person_box, frame_w, frame_h, camera_id=camera_id):
+        if _vest_roi_overlaps_face(person_box, clipped, max_head_overlap_ratio=0.10):
+            return None
+
+    return clipped
+
+
 def snapshot_annotation_detection(
     detection: PpeDetection,
     frame_w: int,
     frame_h: int,
+    *,
+    camera_id: str = "",
 ) -> PpeDetection:
-    """BBox vẽ ROI snapshot — giữ bbox analyzer (đã là vùng quét), chỉ clip khung."""
+    """BBox vẽ ROI snapshot — vest/helmet tái tính từ bbox người, không dùng bbox lệch."""
+    if detection.behavior in ("no_vest", "safety_vest"):
+        pb = raw_person_bbox(detection)
+        if pb and len(pb) >= 4:
+            person_tuple = tuple(float(v) for v in pb)
+            resolved = _resolve_vest_snapshot_bbox(
+                person_tuple,
+                frame_w,
+                frame_h,
+                camera_id=camera_id,
+            )
+            if resolved is not None:
+                return detection.model_copy(
+                    update={"bbox": [float(v) for v in resolved]},
+                )
+            return detection.model_copy(update={"bbox": [0.0, 0.0, 0.0, 0.0]})
+
+    if detection.behavior == "no_helmet":
+        pb = raw_person_bbox(detection)
+        if pb and len(pb) >= 4:
+            helmet = _clip_box_to_frame(
+                _helmet_violation_display_bbox(tuple(float(v) for v in pb)),
+                frame_w,
+                frame_h,
+            )
+            return detection.model_copy(update={"bbox": [float(v) for v in helmet]})
+
     if detection.bbox and len(detection.bbox) >= 4:
         clipped = _clip_box_to_frame(
             tuple(float(v) for v in detection.bbox),

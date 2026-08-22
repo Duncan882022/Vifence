@@ -568,7 +568,7 @@ class EventStore:
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         raw = frame.copy()
         h, w = raw.shape[:2]
-        annot_det = snapshot_annotation_detection(display_det, w, h)
+        annot_det = snapshot_annotation_detection(display_det, w, h, camera_id=camera_id)
         event.bbox = [float(v) for v in annot_det.bbox]
         annotated = self._draw_ppe_bbox(raw, annot_det, copy_frame=True, thickness=2)
         snapshot = annotated
@@ -634,7 +634,7 @@ class EventStore:
         h, w = raw.shape[:2]
         from .ppe_analyzer import snapshot_annotation_detection
 
-        annot_det = snapshot_annotation_detection(incoming, w, h)
+        annot_det = snapshot_annotation_detection(incoming, w, h, camera_id=camera_id)
         incoming.bbox = [float(v) for v in annot_det.bbox]
         annotated = self._draw_ppe_bbox(raw, annot_det, copy_frame=True, thickness=2)
         snapshot = annotated
@@ -880,6 +880,21 @@ class EventStore:
         thickness: int = 2,
     ) -> np.ndarray:
         annotated = frame.copy() if copy_frame else frame
+        if detection.behavior in ("no_vest", "safety_vest"):
+            from .ppe_analyzer import raw_person_bbox, _vest_roi_overlaps_face
+
+            pb = raw_person_bbox(detection)
+            if (
+                len(detection.bbox) < 4
+                or detection.bbox[2] - detection.bbox[0] < 4
+                or detection.bbox[3] - detection.bbox[1] < 4
+            ):
+                return annotated
+            if len(pb) >= 4 and _vest_roi_overlaps_face(
+                tuple(float(v) for v in pb),
+                tuple(float(v) for v in detection.bbox),
+            ):
+                return annotated
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
         h, w = frame.shape[:2]
         x1, y1 = max(0, x1), max(0, y1)

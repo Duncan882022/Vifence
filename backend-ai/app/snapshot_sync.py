@@ -175,6 +175,7 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
                 raw_person_bbox,
                 _cap_region_for_helmet,
                 _feet_region,
+                _resolve_vest_snapshot_bbox,
                 _torso_violation_scan_region,
             )
 
@@ -187,12 +188,21 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
                 scan_region = _torso_violation_scan_region(raw_tuple)
             elif matched.behavior == "no_shoes":
                 scan_region = _feet_region(raw_tuple, analyze_frame.shape[0])
-            display = ppe_violation_display_bbox(
-                raw_tuple,
-                matched.behavior,
-                analyze_frame.shape[0],
-                scan_region=scan_region,
-            )
+            if matched.behavior in ("no_vest", "safety_vest"):
+                vest_bbox = _resolve_vest_snapshot_bbox(
+                    raw_tuple,
+                    analyze_frame.shape[1],
+                    analyze_frame.shape[0],
+                    camera_id=camera_id,
+                )
+                display = vest_bbox if vest_bbox is not None else (0.0, 0.0, 0.0, 0.0)
+            else:
+                display = ppe_violation_display_bbox(
+                    raw_tuple,
+                    matched.behavior,
+                    analyze_frame.shape[0],
+                    scan_region=scan_region,
+                )
             matched = matched.model_copy(
                 update={
                     "bbox": [float(v) for v in display],
@@ -211,6 +221,23 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
                 sanitize_ppe_event_identity(synced_det)
             synced["detection"] = synced_det
             return synced
+        elif matched.behavior in ("no_vest", "safety_vest"):
+            from .ppe_analyzer import _resolve_vest_snapshot_bbox
+
+            raw_tuple = tuple(float(v) for v in anchor_person)
+            vest_bbox = _resolve_vest_snapshot_bbox(
+                raw_tuple,
+                analyze_frame.shape[1],
+                analyze_frame.shape[0],
+                camera_id=camera_id,
+            )
+            display = vest_bbox if vest_bbox is not None else (0.0, 0.0, 0.0, 0.0)
+            matched = matched.model_copy(
+                update={
+                    "bbox": [float(v) for v in display],
+                    "subject_bbox": [float(v) for v in anchor_person],
+                },
+            )
 
     synced["detection"] = scale_detection(matched, sx, sy)
     sanitize_ppe_event_identity(synced["detection"])
