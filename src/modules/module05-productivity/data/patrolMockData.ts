@@ -2,7 +2,7 @@
 
 export type CameraStatus = 'ONLINE' | 'OFFLINE'
 export type ZoneCoverage = 'VISITED' | 'NOT_VISITED'
-export type EventType = 'PPE_VIOLATION' | 'MACHINE_STOPPED'
+export type EventType = 'PPE_VIOLATION' | 'MACHINE_STOPPED' | 'PERSON_DETECTED'
 export type EventStatus = 'DETECTED' | 'PENDING' | 'LOCKED' | 'ENDED'
 
 export interface HelmetCamera {
@@ -168,6 +168,42 @@ export const MOCK_PATROL_EVENTS: PatrolEvent[] = [
     status: 'ENDED',
     confidence: 0.87,
     gps: { lat: 21.003600, lng: 105.945900 },
+  },
+  {
+    id: 'EVT-00129',
+    type: 'PERSON_DETECTED',
+    cameraId: 'HC-02',
+    cameraName: 'Helmet 02',
+    zoneId: 'ZONE_C',
+    zoneName: 'Khu hoàn thiện',
+    objectId: 'sgc-00000010',
+    objectLabel: 'sgc-00000010',
+    violationLabel: 'Phát hiện người',
+    startedAt: '2026-08-20T09:35:02+07:00',
+    lockedAt: '2026-08-20T09:35:04+07:00',
+    endedAt: null,
+    durationSeconds: null,
+    status: 'LOCKED',
+    confidence: 0.88,
+    gps: { lat: 21.004100, lng: 105.946800 },
+  },
+  {
+    id: 'EVT-00130',
+    type: 'PERSON_DETECTED',
+    cameraId: 'HC-01',
+    cameraName: 'Helmet 01',
+    zoneId: 'ZONE_A',
+    zoneName: 'Khu thi công móng',
+    objectId: 'sgc-00000003',
+    objectLabel: 'sgc-00000003',
+    violationLabel: 'Phát hiện người',
+    startedAt: '2026-08-20T09:18:44+07:00',
+    lockedAt: '2026-08-20T09:18:46+07:00',
+    endedAt: null,
+    durationSeconds: null,
+    status: 'LOCKED',
+    confidence: 0.91,
+    gps: { lat: 21.003650, lng: 105.945950 },
   },
   {
     id: 'EVT-00143',

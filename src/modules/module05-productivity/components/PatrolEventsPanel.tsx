@@ -27,6 +27,7 @@ type PatrolFilterTab = 'all' | EventType | 'locked' | 'ended'
 const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
   { key: 'PPE_VIOLATION', label: 'PPE' },
+  { key: 'PERSON_DETECTED', label: 'Persons' },
   { key: 'MACHINE_STOPPED', label: 'Máy dừng' },
   { key: 'locked', label: 'Ghi nhận' },
   { key: 'ended', label: 'Đã kết thúc' },
@@ -199,6 +200,8 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
   switch (tab) {
     case 'PPE_VIOLATION':
       return events.filter(e => e.type === 'PPE_VIOLATION')
+    case 'PERSON_DETECTED':
+      return events.filter(e => e.type === 'PERSON_DETECTED')
     case 'MACHINE_STOPPED':
       return events.filter(e => e.type === 'MACHINE_STOPPED')
     case 'locked':
@@ -234,6 +237,7 @@ export function PatrolEventsPanel({
   const tabCounts = useMemo(() => ({
     all: events.length,
     PPE_VIOLATION: events.filter(e => e.type === 'PPE_VIOLATION').length,
+    PERSON_DETECTED: events.filter(e => e.type === 'PERSON_DETECTED').length,
     MACHINE_STOPPED: events.filter(e => e.type === 'MACHINE_STOPPED').length,
     locked: events.filter(e => e.status === 'LOCKED').length,
     ended: events.filter(e => e.status === 'ENDED').length,
@@ -297,18 +301,21 @@ export function PatrolEventsPanel({
             type="button"
             onClick={() => toggleTypeQuick(type)}
             title={meta.tooltip}
-            disabled={count === 0 && !active}
+            disabled={count === 0 && !active && type !== 'PERSON_DETECTED'}
             className={cn(
               'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-colors tabular-nums shrink-0',
               active
                 ? meta.badge
-                : count > 0
+                : count > 0 || type === 'PERSON_DETECTED'
                   ? 'border-[#1e2433] text-muted-foreground hover:border-[#2a3855] hover:text-foreground'
                   : 'border-[#1e2433]/50 text-muted-foreground/40 cursor-default',
             )}
             aria-pressed={active}
           >
-            <Icon className={cn('w-2.5 h-2.5 shrink-0', active || count > 0 ? meta.color : 'opacity-40')} aria-hidden />
+            <Icon className={cn(
+              'w-2.5 h-2.5 shrink-0',
+              active || count > 0 || type === 'PERSON_DETECTED' ? meta.color : 'opacity-40',
+            )} aria-hidden />
             {meta.id}
             {count > 0 && <span>{count}</span>}
           </button>

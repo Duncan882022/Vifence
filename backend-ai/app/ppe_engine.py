@@ -79,6 +79,10 @@ def _match_person(violation: PpeDetection, persons: list[PpeDetection]) -> PpeDe
     return best
 
 
+def _is_violation_track_id(track_id: str) -> bool:
+    return any(track_id.endswith(f":{behavior}") for behavior in _EVENT_BEHAVIORS)
+
+
 class PpeEngine:
     def __init__(self, store: EventStore):
         self.store = store
@@ -97,7 +101,9 @@ class PpeEngine:
         if track_id not in self._gates[camera_id]:
             behavior = track_id.split(":")[1] if ":" in track_id else ""
             confirm = _CONFIRM_SECONDS
-            if camera_id.startswith("HC-"):
+            if behavior == "person" and camera_id.startswith("HC-"):
+                confirm = 0.15
+            elif camera_id.startswith("HC-"):
                 # Mobile helmet — log PPE nhanh hơn cam cố định
                 confirm = 0.45
             elif not settings.event_dedup_enabled() and behavior in ("no_vest", "no_shoes"):
@@ -167,6 +173,10 @@ class PpeEngine:
             if row.get("behavior") in _EVENT_BEHAVIORS
             and float(row.get("confidence", 0)) >= _VIOLATION_MIN_CONF
         ]
+        from .ppe_analyzer import _is_helmet_bodycam
+
+        if _is_helmet_bodycam(camera_id):
+            violations = [det for det in violations if det.behavior != "no_shoes"]
 
         matched_ids: set[str] = set()
         assigned_this_frame: set[str] = set()
@@ -180,7 +190,9 @@ class PpeEngine:
             if person is None:
                 continue
 
-            person_bbox = [float(v) for v in person.bbox]
+            from .ppe_analyzer import raw_person_bbox
+
+            person_bbox = raw_person_bbox(person)
             copy_worker_identity(person, det)
             track_id = assign_person_track_id(
                 person_bbox,
@@ -254,11 +266,89 @@ class PpeEngine:
         for track_id, state in list(tracks.items()):
             if track_id in matched_ids:
                 continue
+            if not _is_violation_track_id(track_id):
+                continue
             gate = self._gate_for(camera_id, track_id)
             was_active = gate.snapshot()["active"]
             gate.register(False)
             if was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
+
+        if camera_id.startswith("HC-"):
+            from .person_identity_registry import resolve_patrol_person_identity
+
+            person_matched: set[str] = set()
+            person_assigned: set[str] = set()
+            frame_persons = persons
+            if len(frame_persons) > _MAX_TRACKS:
+                frame_persons = sorted(frame_persons, key=lambda d: d.confidence, reverse=True)[
+                    :_MAX_TRACKS
+                ]
+
+            for person in frame_persons:
+                from .ppe_analyzer import raw_person_bbox
+
+                person_bbox = raw_person_bbox(person)
+                track_id = assign_person_track_id(
+                    person_bbox,
+                    tracks,
+                    behavior="person",
+                    frame_w=frame_w,
+                    frame_h=frame_h,
+                    max_tracks=_MAX_TRACKS,
+                    blocked_tracks=person_assigned,
+                )
+                if track_id is None:
+                    continue
+                person_assigned.add(track_id)
+                person_matched.add(track_id)
+
+                if track_id not in tracks:
+                    if len(tracks) >= _MAX_TRACKS:
+                        continue
+                    tracks[track_id] = _PpeTrack("person")
+                state = tracks[track_id]
+                state.last_bbox = person_bbox
+                state.person_bbox = person_bbox
+                state.last_seen = now
+
+                gate = self._gate_for(camera_id, track_id)
+                confirmed = gate.register(True)
+                if confirmed:
+                    worker_id, worker_name = resolve_patrol_person_identity(
+                        person,
+                        camera_id,
+                        track_id,
+                    )
+                    det = person.model_copy(
+                        update={
+                            "worker_id": worker_id,
+                            "worker_name": worker_name,
+                            "scenario_id": "PERS-001",
+                        },
+                    )
+                    event = self.store.add_person(
+                        det,
+                        snapshot_source,
+                        camera_id=camera_id,
+                        track_id=track_id,
+                    )
+                    if event:
+                        new_events.append(event)
+                        logger.info(
+                            "Person event [%s] %s track=%s conf=%.0f%%",
+                            event.id,
+                            worker_id,
+                            track_id,
+                            event.confidence * 100,
+                        )
+
+            for track_id in list(tracks.keys()):
+                if not track_id.endswith(":person"):
+                    continue
+                if track_id in person_matched:
+                    continue
+                self._gate_for(camera_id, track_id).register(False)
 
         for track_id, state in list(tracks.items()):
             if now - state.last_seen > _TRACK_EXPIRE_SECONDS:

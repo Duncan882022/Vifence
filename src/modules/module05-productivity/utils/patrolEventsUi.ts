@@ -1,8 +1,8 @@
 import type { LucideIcon } from 'lucide-react'
-import { AlertTriangle, CheckCircle2, Clock3, ShieldAlert, Truck } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock3, ShieldAlert, Truck, Users } from 'lucide-react'
 import type { EventStatus, EventType } from '../data/patrolMockData'
 
-export const PATROL_EVENT_TYPES: EventType[] = ['PPE_VIOLATION', 'MACHINE_STOPPED']
+export const PATROL_EVENT_TYPES: EventType[] = ['PPE_VIOLATION', 'PERSON_DETECTED', 'MACHINE_STOPPED']
 
 export const PATROL_TYPE_META: Record<EventType, {
   id: string
@@ -30,6 +30,15 @@ export const PATROL_TYPE_META: Record<EventType, {
     badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
     borderAccent: 'border-l-amber-400',
     tooltip: 'Máy dừng >5 giây',
+  },
+  PERSON_DETECTED: {
+    id: 'PERS',
+    label: 'Persons',
+    icon: Users,
+    color: 'text-sky-400',
+    badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
+    borderAccent: 'border-l-sky-400',
+    tooltip: 'Phát hiện người',
   },
 }
 

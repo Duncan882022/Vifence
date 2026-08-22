@@ -60,6 +60,7 @@ function PatrolKPIs() {
   const live = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
   const mockAlerts = events.length
   const mockPpeCount = events.filter(e => e.type === 'PPE_VIOLATION').length
+  const mockPersonCount = events.filter(e => e.type === 'PERSON_DETECTED').length
   const mockMachineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
 
   const alertValue = live.streamOnline
@@ -82,7 +83,7 @@ function PatrolKPIs() {
     ? `${live.activePpeViolations} đang vi phạm · ${live.ppeAlertsToday} đã ghi (${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')})`
     : live.backendReachable
       ? `${live.ppeAlertsToday} sự kiện hôm nay · ${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')}`
-      : `${ppeCount} PPE · ${machineCount} Machine`
+      : `${ppeCount} PPE · ${mockPersonCount} Persons · ${machineCount} Machine`
 
   const kpis = [
     {
