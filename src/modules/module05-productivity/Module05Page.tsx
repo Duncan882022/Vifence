@@ -167,22 +167,28 @@ function HeatmapModal({ onClose }: { onClose: () => void }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 backdrop-blur-[2px] p-3 sm:p-5"
+      className="fixed inset-0 z-[200] flex items-stretch sm:items-center justify-center bg-black/80 sm:bg-black/75 backdrop-blur-[2px] p-0 sm:p-3 md:p-5"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="relative flex flex-col w-full max-w-5xl h-[90dvh] rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60 overflow-hidden"
+        className={cn(
+          'relative flex flex-col w-full overflow-hidden bg-[#0a0e17] shadow-2xl shadow-black/60',
+          'h-[100dvh] max-h-[100dvh] rounded-none border-0',
+          'sm:h-[90dvh] sm:max-w-5xl sm:rounded-xl sm:border sm:border-[#2a3855]',
+          'pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]',
+        )}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label="Heatmap tuần tra"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e2433] shrink-0">
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 border-b border-[#1e2433] shrink-0">
           <span className="text-[11px] font-bold tracking-widest text-foreground uppercase">HEATMAP</span>
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+            className="p-2 sm:p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             aria-label="Đóng"
           >
             <X className="w-4 h-4" />
@@ -190,7 +196,7 @@ function HeatmapModal({ onClose }: { onClose: () => void }) {
         </div>
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <PatrolDensityHeatmap />
+          <PatrolDensityHeatmap variant="modal" />
         </div>
       </div>
     </div>,
@@ -369,7 +375,8 @@ export function Module05Page() {
               title="HEATMAP"
               noPadding
               className={cn(
-                'flex flex-col overflow-hidden',
+                'flex flex-col overflow-hidden min-h-0',
+                'min-h-[min(46dvh,400px)] sm:min-h-[min(44dvh,440px)]',
                 'max-lg:!h-auto',
                 'lg:min-h-0 lg:h-full md:flex-[3]',
               )}

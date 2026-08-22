@@ -210,6 +210,8 @@ function MapInvalidator() {
 
     window.addEventListener('resize', invalidate)
     window.addEventListener('orientationchange', invalidate)
+    window.visualViewport?.addEventListener('resize', invalidate)
+    window.visualViewport?.addEventListener('scroll', invalidate)
 
     const container = map.getContainer().parentElement
     const observer = container ? new ResizeObserver(invalidate) : null
@@ -220,6 +222,8 @@ function MapInvalidator() {
       window.clearTimeout(t2)
       window.removeEventListener('resize', invalidate)
       window.removeEventListener('orientationchange', invalidate)
+      window.visualViewport?.removeEventListener('resize', invalidate)
+      window.visualViewport?.removeEventListener('scroll', invalidate)
       observer?.disconnect()
     }
   }, [map])
@@ -408,6 +412,10 @@ export interface PatrolGeoHeatmapProps {
   /** HC-02 chỉ hiện marker khi đã có GPS thật. */
   requireLiveGpsForHc02?: boolean
   hasHc02LiveGps?: boolean
+  /** Override zoom — từ usePatrolHeatmapViewport */
+  mapZoom?: number
+  /** Mobile/tablet — zoom góc trên, safe-area */
+  compactControls?: boolean
 }
 
 export function PatrolGeoHeatmap({
@@ -430,6 +438,8 @@ export function PatrolGeoHeatmap({
   helmetOnlineById,
   requireLiveGpsForHc02 = true,
   hasHc02LiveGps = false,
+  mapZoom: mapZoomProp,
+  compactControls = false,
 }: PatrolGeoHeatmapProps) {
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
 
@@ -460,11 +470,13 @@ export function PatrolGeoHeatmap({
     /* Mock dots tạm ẩn khi chế độ live HC-02 (density/heatmap cũ). */
     return []
   }, [liveDetectionDots])
-  const mapZoom = usePatrolMapZoom()
+  const mapZoomFallback = usePatrolMapZoom()
+  const mapZoom = mapZoomProp ?? mapZoomFallback
   const clipOverlays = !followLiveGps && (showZonePolygons || showDetections)
+  const zoomControlPosition = compactControls ? 'topleft' as const : 'bottomright' as const
 
   return (
-    <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px] overflow-hidden isolate">
+    <div className="relative w-full h-full min-h-[200px] overflow-hidden isolate supports-[height:100dvh]:min-h-[min(200px,32dvh)]">
       <style>{`
         @keyframes patrol-pulse {
           0%,100%{opacity:1;transform:scale(1)}
@@ -485,6 +497,19 @@ export function PatrolGeoHeatmap({
           background:#111827 !important;
           color:#e2e8f0 !important;
           border-color:#334155 !important;
+          ${compactControls ? 'width:34px !important;height:34px !important;line-height:34px !important;font-size:18px !important;' : ''}
+        }
+        .leaflet-top.leaflet-left {
+          top: max(8px, env(safe-area-inset-top, 0px));
+          left: max(8px, env(safe-area-inset-left, 0px));
+        }
+        .leaflet-bottom.leaflet-right {
+          bottom: max(8px, env(safe-area-inset-bottom, 0px));
+          right: max(8px, env(safe-area-inset-right, 0px));
+        }
+        .leaflet-bottom.leaflet-left {
+          bottom: max(8px, env(safe-area-inset-bottom, 0px));
+          left: max(8px, env(safe-area-inset-left, 0px));
         }
         .leaflet-control-attribution {
           display:none !important;
@@ -529,7 +554,7 @@ export function PatrolGeoHeatmap({
             crossOrigin=""
             keepBuffer={4}
           />
-          <ZoomControl position="bottomright" />
+          <ZoomControl position={zoomControlPosition} />
 
           {/* ── LAYER 1A: Site Boundary ──────────────────────── */}
           {showSiteBoundary && (
