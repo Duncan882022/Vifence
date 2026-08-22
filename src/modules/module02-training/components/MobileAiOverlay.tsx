@@ -1,4 +1,4 @@
-import { memo, useMemo, type RefObject } from 'react'
+import { memo, useEffect, useMemo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay } from '../utils/videoOverlayCoords'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
@@ -8,6 +8,13 @@ import { getCameraAiModelVisual } from '../data/cameraAiModelTokens'
 import { getOverlayBoxStyle, isAtldViolationBehavior } from '@/modules/module03-safety/utils/roiBoxRole'
 import { shouldShowOverlayBox } from '@/modules/module03-safety/utils/overlayCoverage'
 import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
+import { useRoiCycleDisplay } from '@/modules/module03-safety/hooks/useRoiCycleDisplay'
+import { ppeScanRank, ppeViolationRank } from '@/modules/module03-safety/utils/overlayScanOrder'
+import {
+  formatPersonOverlayBadge,
+  formatPpeViolationOverlayBadge,
+} from '@/modules/module03-safety/utils/personOverlayLabel'
+import { syncPersonOverlaySession } from '@/modules/module03-safety/utils/personOverlaySession'
 
 interface MobileAiOverlayProps {
   detections: MobileAiDetection[]
@@ -33,6 +40,27 @@ function resolveBehaviorStyle(modelId: CameraAiModelId, behavior: string) {
   }
 }
 
+function formatMobileDetectionBadge(det: MobileAiDetection, modelId: CameraAiModelId): string {
+  if (det.behavior === 'person') {
+    return formatPersonOverlayBadge(det.worker_name, det.confidence, '', {
+      workerId: det.worker_id,
+      workerName: det.worker_name,
+    })
+  }
+  if (modelId === 'ppe' && det.behavior.startsWith('no_')) {
+    return formatPpeViolationOverlayBadge({
+      behavior: det.behavior,
+      confidence: det.confidence,
+      worker_id: det.worker_id,
+      worker_name: det.worker_name,
+    })
+  }
+  return formatRoiOverlayBadge(
+    formatRoiOverlayCode(det.behavior),
+    det.confidence,
+  )
+}
+
 const DetectionBox = memo(function DetectionBox({
   det,
   frameWidth,
@@ -42,6 +70,7 @@ const DetectionBox = memo(function DetectionBox({
   modelId,
   videoFit = 'cover',
   videoObjectPosition = 'center',
+  pulse = false,
 }: {
   det: MobileAiDetection
   frameWidth: number
@@ -51,6 +80,7 @@ const DetectionBox = memo(function DetectionBox({
   modelId: CameraAiModelId
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
+  pulse?: boolean
 }) {
   const [x1, y1, x2, y2] = det.bbox
   const style = resolveBehaviorStyle(modelId, det.behavior)
@@ -75,24 +105,21 @@ const DetectionBox = memo(function DetectionBox({
 
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
-  const displayLabel = formatRoiOverlayBadge(
-    formatRoiOverlayCode(det.behavior),
-    det.confidence,
-  )
+  const displayLabel = formatMobileDetectionBadge(det, modelId)
 
   return (
     <div
-      className="absolute pointer-events-none"
+      className={cn('absolute pointer-events-none', pulse && 'animate-pulse')}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
         width: `${box.w}%`,
         height: `${box.h}%`,
-        zIndex: 9,
+        zIndex: det.behavior === 'person' ? 8 : 9,
       }}
     >
       <div className={cn(
-        'absolute inset-0 border rounded-sm',
+        'absolute inset-0 rounded-sm',
         style.border,
         style.fill,
       )} />
@@ -129,9 +156,32 @@ export function MobileAiOverlay({
     [detections],
   )
 
-  const { visible } = useViolationStickyOverlay(stickyInput, {
+  const isPpe = modelId === 'ppe'
+
+  useEffect(() => {
+    if (!isPpe) return
+    syncPersonOverlaySession(
+      stickyInput
+        .filter(d => d.behavior === 'person')
+        .map(d => d.worker_id),
+    )
+  }, [isPpe, stickyInput])
+
+  const { visible: stickyVisible } = useViolationStickyOverlay(stickyInput, {
     isViolation: d => isAtldViolationBehavior(d.behavior),
   })
+
+  const { visible: cycleVisible, pulse } = useRoiCycleDisplay(
+    stickyInput,
+    d => d.behavior.startsWith('no_'),
+    {
+      enabled: isPpe,
+      getScanRank: d => ppeScanRank(d.behavior, d.bbox),
+      getViolationRank: d => ppeViolationRank(d.behavior, d.bbox),
+    },
+  )
+
+  const visible = isPpe ? cycleVisible : stickyVisible
 
   if (visible.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
 
@@ -148,6 +198,7 @@ export function MobileAiOverlay({
           modelId={modelId}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          pulse={isPpe && pulse && det.behavior === 'person'}
         />
       ))}
     </div>
@@ -177,8 +228,9 @@ export function MobileAiAlertBadge({
           'rounded font-bold border px-1.5 py-0.5',
           smokingStyle.badge,
           compact ? 'text-[6px]' : 'text-[8px]',
-        )}>
-          PCCC-001
+        )}
+        >
+          Hút thuốc
         </span>
       )}
       {fire && (
@@ -186,8 +238,9 @@ export function MobileAiAlertBadge({
           'rounded font-bold border px-1.5 py-0.5',
           fireStyle.badge,
           compact ? 'text-[6px]' : 'text-[8px]',
-        )}>
-          PCCC-002
+        )}
+        >
+          Lửa
         </span>
       )}
     </div>

@@ -14,7 +14,7 @@ export const MACHINE_KIND_LABEL: Record<string, string> = {
 }
 
 const BEHAVIOR_ROI_CODE: Record<string, string> = {
-  person: 'NV',
+  person: 'person',
   unknown: '?',
   hard_hat: 'PPE+',
   safety_vest: 'PPE+',

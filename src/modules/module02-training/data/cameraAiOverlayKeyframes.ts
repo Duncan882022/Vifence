@@ -172,9 +172,9 @@ const LEGACY_BODY: Partial<Record<CameraFeedKey, AiOverlayBox[]>> = {
     { x: 54, y: 28, w: 13, h: 40, label: 'HV' },
   ],
   'safety-helmets': [
-    { x: 22, y: 30, w: 11, h: 36, label: 'NV' },
-    { x: 40, y: 28, w: 12, h: 38, label: 'NV' },
-    { x: 60, y: 32, w: 11, h: 34, label: 'NV' },
+    { x: 22, y: 30, w: 11, h: 36, label: 'person' },
+    { x: 40, y: 28, w: 12, h: 38, label: 'person' },
+    { x: 60, y: 32, w: 11, h: 34, label: 'person' },
   ],
   'yard-builders': [
     { x: 30, y: 34, w: 13, h: 34, label: 'Thợ' },
@@ -185,11 +185,11 @@ const LEGACY_BODY: Partial<Record<CameraFeedKey, AiOverlayBox[]>> = {
     { x: 64, y: 34, w: 12, h: 32, label: 'HV' },
   ],
   'site-gate': [
-    { x: 37, y: 38, w: 9, h: 26, label: 'NV' },
-    { x: 60, y: 36, w: 9, h: 28, label: 'NV' },
+    { x: 37, y: 38, w: 9, h: 26, label: 'person' },
+    { x: 60, y: 36, w: 9, h: 28, label: 'person' },
   ],
   'site-cranes': [
-    { x: 42, y: 42, w: 10, h: 24, label: 'NV' },
+    { x: 42, y: 42, w: 10, h: 24, label: 'person' },
   ],
 }
 

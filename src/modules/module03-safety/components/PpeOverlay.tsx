@@ -17,16 +17,22 @@ import { useVmsDetections } from '../context/VmsDetectionContext'
 import { useOverlaySceneReset } from '../hooks/useOverlaySceneReset'
 import { useStableOverlayDetections } from '../hooks/useStableOverlayDetections'
 import { useLiveOverlaySync } from '../hooks/useLiveOverlaySync'
+import { useRoiCycleDisplay } from '../hooks/useRoiCycleDisplay'
 import {
   flattenPpeViolationOverlayBoxes,
   groupHasViolation,
   groupPpeDetections,
-  primaryViolationInGroup,
 } from '../utils/ppeDetectionGroups'
 import { shouldShowOverlayBox } from '../utils/overlayCoverage'
-import { formatPpeViolationOverlayBadge } from '../utils/personOverlayLabel'
+import {
+  formatPersonOverlayBadge,
+  formatPpeViolationOverlayBadge,
+  tightenPersonOverlayBbox,
+} from '../utils/personOverlayLabel'
+import { syncPersonOverlaySession } from '../utils/personOverlaySession'
 import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
+import { ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
 
 interface PpeOverlayProps {
   cameraId: string
@@ -35,6 +41,58 @@ interface PpeOverlayProps {
   videoObjectPosition?: 'center' | 'bottom'
   enabled?: boolean
   compact?: boolean
+}
+
+function personOverlayDetection(person: PpeDetection): PpeDetection {
+  return {
+    ...person,
+    behavior: 'person',
+    bbox: tightenPersonOverlayBbox(person.bbox, person.subject_bbox),
+  }
+}
+
+function buildPpeCycleDetections(detections: PpeDetection[]): PpeDetection[] {
+  const groups = groupPpeDetections(detections)
+  const persons = groups.map(g => personOverlayDetection(g.person))
+  const violations = flattenPpeViolationOverlayBoxes(groups.filter(groupHasViolation))
+  const condition: PpeDetection[] = []
+  for (const group of groups) {
+    if (group.slots.head && !group.slots.head.behavior.startsWith('no_')) {
+      condition.push(group.slots.head)
+    }
+    if (group.slots.torso && !group.slots.torso.behavior.startsWith('no_')) {
+      condition.push(group.slots.torso)
+    }
+    for (const foot of group.slots.feet) {
+      if (!foot.behavior.startsWith('no_')) condition.push(foot)
+    }
+  }
+  return [...persons, ...condition, ...violations]
+}
+
+function formatPpeLiveBadge(detection: PpeDetection): string {
+  if (detection.behavior === 'person') {
+    return formatPersonOverlayBadge(
+      detection.worker_name,
+      detection.confidence,
+      '',
+      {
+        workerId: detection.worker_id,
+        workerName: detection.worker_name,
+        faceMatchConfidence: detection.face_match_confidence,
+        faceMatchSource: detection.face_match_source,
+      },
+    )
+  }
+  return formatPpeViolationOverlayBadge({
+    behavior: detection.behavior,
+    confidence: detection.confidence,
+    scenario_id: detection.scenario_id,
+    worker_id: detection.worker_id,
+    worker_name: detection.worker_name,
+    face_match_confidence: detection.face_match_confidence,
+    face_match_source: detection.face_match_source,
+  })
 }
 
 function PpeDetectionBox({
@@ -46,6 +104,7 @@ function PpeDetectionBox({
   videoFit,
   videoObjectPosition = 'center',
   snapOverlay = false,
+  pulse = false,
 }: {
   detection: PpeDetection
   frameWidth: number
@@ -55,6 +114,7 @@ function PpeDetectionBox({
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   snapOverlay?: boolean
+  pulse?: boolean
 }) {
   const style = getOverlayBoxStyle('ppe', detection.behavior)
   const video = videoRef.current
@@ -78,13 +138,13 @@ function PpeDetectionBox({
 
   return (
     <div
-      className={overlayBoxMotionClass(snapOverlay)}
+      className={cn(overlayBoxMotionClass(snapOverlay), pulse && 'animate-pulse')}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
         width: `${box.w}%`,
         height: `${box.h}%`,
-        zIndex: 8,
+        zIndex: detection.behavior === 'person' ? 7 : 8,
       }}
     >
       <div className={cn('absolute inset-0 rounded-sm', style.border, style.fill)} />
@@ -96,15 +156,7 @@ function PpeDetectionBox({
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
-        {formatPpeViolationOverlayBadge({
-          behavior: detection.behavior,
-          confidence: detection.confidence,
-          scenario_id: detection.scenario_id,
-          worker_id: detection.worker_id,
-          worker_name: detection.worker_name,
-          face_match_confidence: detection.face_match_confidence,
-          face_match_source: detection.face_match_source,
-        })}
+        {formatPpeLiveBadge(detection)}
       </span>
     </div>
   )
@@ -147,6 +199,7 @@ function usePpeState(
           scenario_id: d.scenario_id ?? '',
           confidence: d.confidence,
           bbox: d.bbox,
+          subject_bbox: d.subject_bbox,
           worker_id: d.worker_id,
           worker_name: d.worker_name,
           employee_code: d.employee_code,
@@ -240,21 +293,31 @@ export const PpeOverlay = memo(function PpeOverlay({
   const { syncKey, trackLock, snapOverlay } = useLiveOverlaySync()
   const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
 
-  const visibleBoxes = useMemo(() => {
-    const groups = groupPpeDetections(stableDetections).filter(group => {
-      if (!groupHasViolation(group)) return false
-      const violation = primaryViolationInGroup(group)
-      if (!violation) return false
-      return shouldShowOverlayBox(violation.confidence, violation.bbox)
-    })
-    return flattenPpeViolationOverlayBoxes(groups)
-  }, [stableDetections])
+  const cycleItems = useMemo(
+    () => buildPpeCycleDetections(stableDetections).filter(d =>
+      shouldShowOverlayBox(d.confidence, d.bbox),
+    ),
+    [stableDetections],
+  )
 
-  if (visibleBoxes.length === 0 || frameSize.width <= 0) return null
+  useEffect(() => {
+    syncPersonOverlaySession(
+      cycleItems
+        .filter(d => d.behavior === 'person')
+        .map(d => d.worker_id),
+    )
+  }, [cycleItems])
+
+  const { visible, pulse } = useRoiCycleDisplay(cycleItems, d => d.behavior.startsWith('no_'), {
+    getScanRank: d => ppeScanRank(d.behavior, d.bbox),
+    getViolationRank: d => ppeViolationRank(d.behavior, d.bbox),
+  })
+
+  if (visible.length === 0 || frameSize.width <= 0) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {visibleBoxes.map((detection, index) => (
+      {visible.map((detection, index) => (
         <PpeDetectionBox
           key={`${detection.behavior}-${index}-${Math.round(detection.bbox[0])}-${Math.round(detection.bbox[1])}-${layoutTick}`}
           detection={detection}
@@ -265,6 +328,7 @@ export const PpeOverlay = memo(function PpeOverlay({
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
           snapOverlay={snapOverlay}
+          pulse={pulse && detection.behavior === 'person'}
         />
       ))}
     </div>

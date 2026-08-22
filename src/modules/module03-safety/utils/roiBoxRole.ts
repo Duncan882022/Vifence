@@ -114,6 +114,15 @@ export function overlayBorderClass(role: RoiBoxRole): string {
   return role === 'violation' ? 'border-2 border-solid' : 'border border-dashed'
 }
 
+/** Person trên cam — xanh nét liền (không dashed info). */
+const PERSON_LIVE_BOX_STYLE: OverlayBoxStyle = {
+  border: 'border-2 border-solid border-green-400/95',
+  fill: 'bg-green-500/14',
+  label: 'text-green-100',
+  bg: 'bg-green-700/55',
+  role: 'info',
+}
+
 /** Màu + kiểu viền overlay camera — đồng bộ snapshot backend. */
 export function getOverlayBoxStyle(
   modelId: CameraAiModelId,
@@ -121,6 +130,9 @@ export function getOverlayBoxStyle(
   machineKind?: string | null,
 ): OverlayBoxStyle {
   const key = resolveBehaviorForRoiRole(behavior, machineKind)
+  if (key === 'person' || key === 'unknown') {
+    return PERSON_LIVE_BOX_STYLE
+  }
   const role = resolveRoiBoxRole(key)
   const atgtStyle = ATGT_BEHAVIOR_BOX_STYLES[key]
   if (atgtStyle) {

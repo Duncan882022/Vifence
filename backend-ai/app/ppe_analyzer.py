@@ -1424,13 +1424,25 @@ def _visible_person_display_bbox(
     frame_w: int,
     frame_h: int,
 ) -> tuple[float, float, float, float]:
-    """BBox person overlay — bám phần thân nhìn thấy, không kéo xuống chân ảo."""
+    """BBox person overlay — siết vào thân detect, không kéo xuống chân ảo."""
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
     if _feet_assessable(person_box, frame_w, frame_h):
-        return _clip_box_to_frame(person_box, frame_w, frame_h)
-    vis_y2 = min(y2, y1 + ph * 0.72, float(frame_h))
-    return _clip_box_to_frame((x1, y1, x2, vis_y2), frame_w, frame_h)
+        base = person_box
+    else:
+        vis_y2 = min(y2, y1 + ph * 0.72, float(frame_h))
+        base = (x1, y1, x2, vis_y2)
+    bx1, by1, bx2, by2 = base
+    bw = max(bx2 - bx1, 1.0)
+    bh = max(by2 - by1, 1.0)
+    tight = (
+        bx1 + bw * 0.05,
+        by1 + bh * 0.03,
+        bx2 - bw * 0.05,
+        by2 - bh * 0.02,
+    )
+    return _clip_box_to_frame(tight, frame_w, frame_h)
 
 
 def _plausible_person_box(

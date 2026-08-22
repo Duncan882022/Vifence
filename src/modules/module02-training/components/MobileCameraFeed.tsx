@@ -42,8 +42,9 @@ import {
   groupHasViolation,
   groupPpeDetections,
 } from '@/modules/module03-safety/utils/ppeDetectionGroups'
+import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
 
-/** HC-02 PPE — bbox overlay bám vùng vi phạm (mũ/áo/giày), khớp PpeOverlay desktop. */
+/** HC-02 PPE — person (xanh) + vi phạm; MobileAiOverlay cycle person → PPE. */
 function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
   const ppeDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
     behavior: d.behavior as PpeDetection['behavior'],
@@ -55,8 +56,17 @@ function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileA
     worker_id: d.worker_id,
     worker_name: d.worker_name,
   }))
-  const groups = groupPpeDetections(ppeDets).filter(groupHasViolation)
-  return flattenPpeViolationOverlayBoxes(groups).map(d => ({
+  const groups = groupPpeDetections(ppeDets)
+  const persons: MobileAiDetection[] = groups.map(g => ({
+    behavior: 'person',
+    label: g.person.label,
+    confidence: g.person.confidence,
+    bbox: tightenPersonOverlayBbox(g.person.bbox, g.person.subject_bbox),
+    subject_bbox: g.person.subject_bbox,
+    worker_id: g.person.worker_id,
+    worker_name: g.person.worker_name,
+  }))
+  const violations = flattenPpeViolationOverlayBoxes(groups.filter(groupHasViolation)).map(d => ({
     behavior: d.behavior,
     label: d.label,
     confidence: d.confidence,
@@ -65,6 +75,7 @@ function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileA
     worker_name: d.worker_name,
     subject_bbox: d.subject_bbox,
   }))
+  return [...persons, ...violations]
 }
 
 type MobileFeedStatus = 'idle' | 'scanning' | 'live' | 'error'
