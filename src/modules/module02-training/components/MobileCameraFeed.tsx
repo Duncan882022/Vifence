@@ -18,10 +18,14 @@ import {
 } from '../services/mobileAiBackend.service'
 import { MobileAiOverlay } from './MobileAiOverlay'
 import { isMobileSmokingFireCamera, isPpeCamera } from '../data/cameraAiRuntime'
-import { setPatrolMobileLiveSnapshot, clearPatrolMobileLiveSnapshot } from '@/services/patrolMobileMetricsBridge'
+import {
+  setPatrolMobileLiveSnapshot,
+  touchPatrolMobileStreamOnline,
+  scheduleClearPatrolMobileLiveSnapshot,
+  cancelScheduledClearPatrolMobile,
+} from '@/services/patrolMobileMetricsBridge'
 import { pushPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
 import {
-  clearPatrolHelmetGps,
   getPatrolHelmetGps,
   setPatrolHelmetGps,
 } from '@/services/patrolHelmetGpsBridge'
@@ -78,14 +82,15 @@ export function MobileCameraFeed({
     // Giữ mobile metrics + GPS — map vẫn cần person dots khi AI client restart.
   }, [])
 
-  const stopCapture = useCallback(() => {
+  const stopCapture = useCallback((opts?: { clearPatrol?: boolean }) => {
+    const clearPatrol = opts?.clearPatrol !== false
     stopAiClient()
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
-    if (cameraId === 'HC-02') {
-      clearPatrolMobileLiveSnapshot(cameraId)
-      clearPatrolHelmetGps(cameraId)
+    // Flip / maximize: delay clear — feed mới kịp heartbeat thì hủy
+    if (cameraId === 'HC-02' && clearPatrol) {
+      scheduleClearPatrolMobileLiveSnapshot(cameraId, 2500)
     }
   }, [cameraId, stopAiClient])
 
@@ -139,6 +144,7 @@ export function MobileCameraFeed({
             .filter((name): name is string => Boolean(name))
           setPatrolMobileLiveSnapshot({
             cameraId,
+            streamOnline: true,
             personCount,
             activePpeViolations: violations.length,
             identifiedWorkers: new Set(
@@ -176,7 +182,12 @@ export function MobileCameraFeed({
 
     setStatus('scanning')
     setErrorMsg(undefined)
-    stopCapture()
+    // Không schedule-clear khi restart cam (flip trước/sau)
+    stopCapture({ clearPatrol: false })
+    if (cameraId === 'HC-02') {
+      cancelScheduledClearPatrolMobile()
+      touchPatrolMobileStreamOnline(cameraId)
+    }
 
     try {
       const videoConstraints = await buildMobileCaptureConstraints(
@@ -231,6 +242,15 @@ export function MobileCameraFeed({
         updatedAt: reading.updatedAt,
       })
     })
+  }, [cameraId, status])
+
+  /* HC-02: heartbeat online — cam trước/sau đều tính live (kể cả lúc AI tạm dừng). */
+  useEffect(() => {
+    if (cameraId !== 'HC-02' || status !== 'live') return
+    cancelScheduledClearPatrolMobile()
+    touchPatrolMobileStreamOnline(cameraId)
+    const id = window.setInterval(() => touchPatrolMobileStreamOnline(cameraId), 2500)
+    return () => window.clearInterval(id)
   }, [cameraId, status])
 
   useEffect(() => {

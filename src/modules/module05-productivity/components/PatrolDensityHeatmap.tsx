@@ -56,7 +56,7 @@ export function PatrolDensityHeatmap() {
     route: true,
   })
   const [mobileHc02Live, setMobileHc02Live] = useState(
-    () => Boolean(getPatrolMobileLiveSnapshot('HC-02')),
+    () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
 
   const { liveZones, cameraPositions, routeHistory } = usePatrolWebSocket(
@@ -67,7 +67,7 @@ export function PatrolDensityHeatmap() {
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
-      setMobileHc02Live(Boolean(snap && snap.cameraId === 'HC-02'))
+      setMobileHc02Live(Boolean(snap && snap.cameraId === 'HC-02' && snap.streamOnline))
     })
   }, [])
 

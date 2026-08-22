@@ -3,6 +3,10 @@ import type { PatrolEvent } from '@/modules/module05-productivity/data/patrolMoc
 import { mapBackendEventToPatrolEvent } from '@/modules/module05-productivity/services/patrolLiveEvents.service'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import type { MobileAiViolationEvent } from '@/modules/module02-training/services/mobileAiBackend.service'
+import {
+  getPatrolHelmetGps,
+  getPatrolHelmetGpsLastKnown,
+} from '@/services/patrolHelmetGpsBridge'
 
 const MAX_EVENTS = 80
 const listeners = new Set<(events: PatrolEvent[]) => void>()
@@ -13,6 +17,27 @@ function notify(): void {
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
   listeners.forEach(fn => fn(list))
+}
+
+
+function resolveGpsForMobileEvent(
+  row: MobileAiViolationEvent,
+  cameraId: string,
+): { gps_lat: number | null; gps_lng: number | null } {
+  const lat = row.gps_lat
+  const lng = row.gps_lng
+  if (
+    typeof lat === 'number'
+    && typeof lng === 'number'
+    && Number.isFinite(lat)
+    && Number.isFinite(lng)
+    && !(lat === 0 && lng === 0)
+  ) {
+    return { gps_lat: lat, gps_lng: lng }
+  }
+  const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
+  if (snap) return { gps_lat: snap.lat, gps_lng: snap.lng }
+  return { gps_lat: null, gps_lng: null }
 }
 
 export function pushPatrolMobilePpeEvents(
@@ -29,6 +54,7 @@ export function pushPatrolMobilePpeEvents(
     if (!scenario.startsWith('PPE') && !['no_helmet', 'no_vest', 'no_shoes'].includes(row.behavior)) {
       continue
     }
+    const gps = resolveGpsForMobileEvent(row, cameraId)
     const mapped = mapBackendEventToPatrolEvent(
       {
         id: row.id,
@@ -40,6 +66,8 @@ export function pushPatrolMobilePpeEvents(
         created_at: row.created_at,
         confirmed_at: row.created_at,
         snapshot_file: row.snapshot_file,
+        gps_lat: gps.gps_lat,
+        gps_lng: gps.gps_lng,
       },
       backendUrl,
     )

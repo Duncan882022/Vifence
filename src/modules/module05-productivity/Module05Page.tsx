@@ -70,15 +70,13 @@ function PatrolKPIs() {
   const totalAlerts = alertValue
   const ppeCount = live.backendReachable ? live.ppeAlertsToday : mockPpeCount
   const machineCount = live.streamOnline ? 0 : mockMachineCount
-  const peopleValue = live.streamOnline
+  const peopleValue = live.backendReachable || live.streamOnline || live.personCount > 0
     ? live.personCount
-    : live.backendReachable
-      ? 0
-      : d.uniquePeople
+    : d.uniquePeople
   const peopleDetail = live.streamOnline
-    ? `${live.personCount} live · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count')}`
-    : live.backendReachable
-      ? `Offline — ${formatHelmetMetricBreakdown(live.perCamera, 'person_count') || 'chưa có live'}`
+    ? `${live.personCount} cộng dồn · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count')}`
+    : live.backendReachable || live.personCount > 0
+      ? `Cộng dồn phiên · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`}`
       : 'Unique trên công trường hôm nay'
   const alertDetail = live.streamOnline
     ? `${live.activePpeViolations} đang vi phạm · ${live.ppeAlertsToday} đã ghi (${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')})`

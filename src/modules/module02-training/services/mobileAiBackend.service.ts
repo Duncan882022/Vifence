@@ -39,6 +39,9 @@ export interface MobileAiViolationEvent {
   camera_id?: string
   event_date?: string
   snapshot_file?: string | null
+  /** GPS gắn lúc ghi sự kiện (HC-02) */
+  gps_lat?: number | null
+  gps_lng?: number | null
 }
 
 export interface MobileAiAnalyzeResult {

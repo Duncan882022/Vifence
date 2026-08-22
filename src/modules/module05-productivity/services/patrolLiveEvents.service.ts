@@ -1,5 +1,8 @@
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
-import { getPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
+import {
+  getPatrolHelmetGps,
+  getPatrolHelmetGpsLastKnown,
+} from '@/services/patrolHelmetGpsBridge'
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS } from '../data/patrolSiteMap'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
@@ -286,7 +289,7 @@ function resolveEventGps(
     return { lat, lng }
   }
   if (cameraId === 'HC-02') {
-    const snap = getPatrolHelmetGps(cameraId)
+    const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
     if (snap) return { lat: snap.lat, lng: snap.lng }
   }
   return { lat: 0, lng: 0 }

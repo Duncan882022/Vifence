@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, Play, X } from 'lucide-react'
+import { ExternalLink, MapPin, Play, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
@@ -15,6 +15,20 @@ interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
   onClose: () => void
   onPlayback?: (event: PatrolEvent) => void
+}
+
+
+function hasValidGps(gps: { lat: number; lng: number } | null | undefined): gps is { lat: number; lng: number } {
+  if (!gps) return false
+  const { lat, lng } = gps
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+  if (lat === 0 && lng === 0) return false
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false
+  return true
+}
+
+function mapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`
 }
 
 export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEventDetailModalProps) {
@@ -34,6 +48,7 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
   const meta = PATROL_TYPE_META[event.type]
   const TypeIcon = meta.icon
   const statusDisplay = getPatrolEventStatusDisplay(event.status)
+  const gpsOk = hasValidGps(event.gps)
 
   return createPortal(
     <div
@@ -82,13 +97,65 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
               ['Ghi nhận', formatEventDateTime(event.lockedAt)],
               ['Kết thúc', event.endedAt ? formatEventDateTime(event.endedAt) : '—'],
               ['Confidence', `${Math.round(event.confidence * 100)}%`],
-              ['GPS', `${event.gps.lat.toFixed(5)}, ${event.gps.lng.toFixed(5)}`],
             ].map(([k, v]) => (
               <div key={k}>
                 <span className="text-muted-foreground">{k}: </span>
                 <span className="text-foreground font-medium">{v}</span>
               </div>
             ))}
+          </div>
+
+          <div
+            className={cn(
+              'rounded-lg border px-3 py-2.5 space-y-1.5',
+              gpsOk ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5',
+            )}
+          >
+            <div className="flex items-center gap-1.5">
+              <MapPin className={cn('w-3.5 h-3.5 shrink-0', gpsOk ? 'text-emerald-400' : 'text-amber-400')} />
+              <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
+                GPS ghi nhận
+              </span>
+              <span
+                className={cn(
+                  'ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded',
+                  gpsOk ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400',
+                )}
+              >
+                {gpsOk ? 'Có toạ độ' : 'Thiếu GPS'}
+              </span>
+            </div>
+            {gpsOk ? (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                  <div>
+                    <span className="text-muted-foreground">Lat: </span>
+                    <span className="text-foreground font-semibold select-all">{event.gps.lat.toFixed(6)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Lng: </span>
+                    <span className="text-foreground font-semibold select-all">{event.gps.lng.toFixed(6)}</span>
+                  </div>
+                </div>
+                <p className="text-[9px] text-muted-foreground font-mono break-all select-all">
+                  {event.gps.lat.toFixed(6)}, {event.gps.lng.toFixed(6)}
+                </p>
+                <a
+                  href={mapsUrl(event.gps.lat, event.gps.lng)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[9px] font-medium text-sky-400 hover:text-sky-300"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Mở Google Maps
+                </a>
+              </>
+            ) : (
+              <p className="text-[9px] text-amber-200/80 leading-relaxed">
+                Sự kiện chưa gắn toạ độ GPS (chưa có fix / trong nhà / chưa cấp Location).
+                Bật Location trên HC-02 rồi tạo sự kiện mới để log GPS.
+              </p>
+            )}
           </div>
 
           <p className="text-[9px] text-muted-foreground">
@@ -107,13 +174,26 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
               <Play className="w-3 h-3" />
               Xem Playback
             </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-semibold border border-[#1e2433] text-muted-foreground hover:text-foreground hover:bg-[#1a2235]"
-            >
-              <MapPin className="w-3 h-3" />
-              Xem trên bản đồ
-            </button>
+            {gpsOk ? (
+              <a
+                href={mapsUrl(event.gps.lat, event.gps.lng)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-semibold border border-[#1e2433] text-muted-foreground hover:text-foreground hover:bg-[#1a2235]"
+              >
+                <MapPin className="w-3 h-3" />
+                Xem trên bản đồ
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-semibold border border-[#1e2433] text-muted-foreground/50 cursor-not-allowed"
+              >
+                <MapPin className="w-3 h-3" />
+                Chưa có GPS
+              </button>
+            )}
           </div>
         </div>
       </div>

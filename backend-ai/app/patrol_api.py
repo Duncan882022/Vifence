@@ -10,6 +10,10 @@ from fastapi import HTTPException
 PATROL_CAMERA_PREFIX = "HC-"
 PATROL_PPE_PREFIX = "PPE"
 PATROL_MOBILE_METRICS_TTL_SEC = 20.0
+# Flip cam / AI pause: vẫn coi stream online trong grace này
+PATROL_MOBILE_ONLINE_GRACE_SEC = 45.0
+# Giữ peak person_count sau khi cam tắt (báo cáo cộng dồn phiên)
+PATROL_MOBILE_PEAK_TTL_SEC = 3600.0
 
 _patrol_mobile_metrics: dict[str, dict[str, Any]] = {}
 _patrol_gps: dict[str, dict[str, Any]] = {}
@@ -71,7 +75,10 @@ def patrol_gps_payload(camera_id: str) -> dict[str, Any]:
 
 
 def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
-    """Cache metrics từ POST /analyze/frame (HC-02 mobile)."""
+    """Cache metrics từ POST /analyze/frame (HC-02 mobile).
+
+    person_count là peak phiên (cộng dồn) — không giảm khi frame trống / flip cam.
+    """
     if not is_patrol_camera_id(camera_id):
         return
     detections = result.get("detections") or []
@@ -91,12 +98,22 @@ def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
             identified_workers += 1
         if isinstance(worker_name, str) and worker_name.strip():
             worker_names.append(worker_name.strip())
+
+    frame_person = int(metrics.get("person_count") or len(persons))
+    prev = _patrol_mobile_metrics.get(camera_id) or {}
+    peak_person = max(int(prev.get("person_count") or 0), frame_person)
+    peak_identified = max(int(prev.get("identified_workers") or 0), identified_workers)
+    merged_names = list(
+        dict.fromkeys([*(prev.get("worker_names") or []), *worker_names]),
+    )[:5]
+
     _patrol_mobile_metrics[camera_id] = {
-        "person_count": int(metrics.get("person_count") or len(persons)),
+        "person_count": peak_person,
         "ppe_violations": int(metrics.get("ppe_violations") or len(violations)),
-        "identified_workers": identified_workers,
-        "worker_names": list(dict.fromkeys(worker_names))[:5],
+        "identified_workers": peak_identified,
+        "worker_names": merged_names,
         "updated_at": time.time(),
+        "last_frame_at": time.time(),
     }
 
 
@@ -165,18 +182,22 @@ def build_patrol_metrics_payload(
         }
 
     cached = _patrol_mobile_metrics.get(camera_id)
-    if cached and (time.time() - float(cached.get("updated_at") or 0)) <= PATROL_MOBILE_METRICS_TTL_SEC:
-        return {
-            "camera_id": camera_id,
-            "backend_reachable": True,
-            "stream_online": True,
-            "person_count": int(cached.get("person_count") or 0),
-            "ppe_violations": int(cached.get("ppe_violations") or 0),
-            "identified_workers": int(cached.get("identified_workers") or 0),
-            "worker_names": list(cached.get("worker_names") or []),
-            **patrol_gps_payload(camera_id),
-            "ppe_alerts_today": ppe_alerts_today,
-        }
+    if cached:
+        age = time.time() - float(cached.get("updated_at") or cached.get("last_frame_at") or 0)
+        stream_online = age <= PATROL_MOBILE_ONLINE_GRACE_SEC
+        keep_peak = age <= PATROL_MOBILE_PEAK_TTL_SEC
+        if stream_online or keep_peak:
+            return {
+                "camera_id": camera_id,
+                "backend_reachable": True,
+                "stream_online": stream_online,
+                "person_count": int(cached.get("person_count") or 0) if keep_peak else 0,
+                "ppe_violations": int(cached.get("ppe_violations") or 0) if stream_online else 0,
+                "identified_workers": int(cached.get("identified_workers") or 0) if keep_peak else 0,
+                "worker_names": list(cached.get("worker_names") or []) if keep_peak else [],
+                **patrol_gps_payload(camera_id),
+                "ppe_alerts_today": ppe_alerts_today,
+            }
 
     return {
         "camera_id": camera_id,
@@ -245,11 +266,12 @@ def build_patrol_aggregate_metrics_payload(
         )
         total_ppe_alerts += int(payload["ppe_alerts_today"])
         all_names.extend(payload.get("worker_names") or [])
+        # Cộng dồn person kể cả khi cam vừa flip / temporarily offline
+        total_person += int(payload["person_count"])
+        total_identified += int(payload["identified_workers"])
         if payload["stream_online"]:
             any_online = True
-            total_person += int(payload["person_count"])
             total_violations += int(payload["ppe_violations"])
-            total_identified += int(payload["identified_workers"])
 
     return {
         "cameras": per_camera,
