@@ -159,6 +159,7 @@ def draw_violation_roi_annotation(
     draw_atld_roi_box(frame, x1, y1, x2, y2, color, behavior, thickness=thickness)
     if (
         behavior.startswith("no_")
+        or behavior == "person"
         or is_atld_violation_behavior(behavior)
         or behavior in INFO_ROI_BEHAVIORS
     ):
@@ -248,6 +249,14 @@ def merge_bboxes(boxes: list[list[float]]) -> list[float] | None:
 
 def _focus_crop_profile(behavior: str) -> tuple[float, int, float]:
     """margin_ratio, min_side_px, max_frame_ratio — crop vùng vi phạm trên snapshot."""
+    if behavior == "person":
+        return 0.05, 96, 0.92
+    if behavior in ("no_vest", "safety_vest"):
+        return 0.08, 88, 0.72
+    if behavior in ("no_helmet", "hard_hat"):
+        return 0.10, 72, 0.55
+    if behavior in ("no_shoes", "safety_shoes"):
+        return 0.06, 80, 0.65
     if behavior in {"fire", "smoking"}:
         return 1.35, 220, 0.42
     if behavior in {"mesh_missing", "mesh_torn", "mesh_dirty"}:

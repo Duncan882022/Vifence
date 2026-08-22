@@ -583,8 +583,11 @@ export function PatrolGeoHeatmap({
               >
                 <Tooltip sticky className="patrol-zone-tip">
                   <span style={{ fontSize: 10 }}>
-                    {dot.type === 'person' ? 'Người (live)' : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
-                    Camera: {dot.cameraId} · ~1m quanh mũ
+                    {dot.type === 'person'
+                      ? (dot.label ? `${dot.label}` : 'Người')
+                      : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
+                    Camera: {dot.cameraId}
+                    {dot.zoneId === 'LIVE' ? ' · lịch sử phiên' : ''}
                   </span>
                 </Tooltip>
               </CircleMarker>

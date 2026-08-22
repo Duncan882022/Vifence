@@ -158,11 +158,12 @@ def _build_vms_workers() -> None:
         """Callback khi VMS worker xác nhận sự kiện."""
         logger.info("[VMS] Event confirmed: %s %s", ev.scenario_id, ev.id)
 
-    for cam_id, source_path in cam_map.items():
+    for cam_id, source_path, fallback_source in settings.vms_camera_entries:
         engines = cam_engines.get(cam_id, {})
         worker = CameraVmsWorker(
             camera_id=cam_id,
             source_path=source_path,
+            fallback_source=fallback_source,
             process_frame_fns=engines,
             on_event=on_event,
             ai_fps=settings.vms_ai_fps,

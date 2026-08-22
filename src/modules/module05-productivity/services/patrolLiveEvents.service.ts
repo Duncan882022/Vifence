@@ -79,10 +79,15 @@ function todayIsoDate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function isPatrolModuleBackendEvent(row: BackendViolationEvent): boolean {
+  if (!isPatrolHelmetCameraId(row.camera_id ?? '')) return false
+  const scenarioId = row.scenario_id ?? ''
+  return scenarioId.startsWith('PPE') || scenarioId.startsWith('PERS')
+}
+
+/** @deprecated use isPatrolModuleBackendEvent */
 function isPatrolPpeBackendEvent(row: BackendViolationEvent): boolean {
-  return isPatrolHelmetCameraId(row.camera_id ?? '')
-    && typeof row.scenario_id === 'string'
-    && row.scenario_id.startsWith('PPE')
+  return isPatrolModuleBackendEvent(row)
 }
 
 function patrolApiBase(backendUrl: string): string {
@@ -262,8 +267,9 @@ function buildSnapshotUrl(backendUrl: string, eventId: string, versionTs?: numbe
   return `${base}?v=${Math.floor(versionTs)}`
 }
 
-function eventTypeFromScenario(scenarioId: string | undefined): EventType {
+function eventTypeFromScenario(scenarioId: string | undefined, behavior?: string): EventType {
   if (scenarioId?.startsWith('PPE')) return 'PPE_VIOLATION'
+  if (scenarioId?.startsWith('PERS') || behavior === 'person') return 'PERSON_DETECTED'
   return 'MACHINE_STOPPED'
 }
 
@@ -304,17 +310,23 @@ export function mapBackendEventToPatrolEvent(
   const helmetNum = cameraId.replace('HC-', '')
   const ts = event.confirmed_at ?? event.created_at
   const workerLabel = event.worker_name?.trim() || event.worker_id?.trim() || 'Người chưa xác định'
+  const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
+  const objectId = event.worker_id?.trim()
+    || event.dedup_key?.split('|').pop()
+    || event.id.slice(0, 8)
 
   return {
     id: event.id,
-    type: eventTypeFromScenario(event.scenario_id),
+    type: eventType,
     cameraId,
     cameraName: `Helmet ${helmetNum}`,
     zoneId,
     zoneName,
-    objectId: event.dedup_key?.split('|').pop() ?? event.id.slice(0, 8),
+    objectId,
     objectLabel: workerLabel,
-    violationLabel: event.scenario_name ?? event.scenario_id ?? 'Vi phạm PPE',
+    violationLabel: event.scenario_name ?? event.scenario_id ?? (
+      eventType === 'PERSON_DETECTED' ? 'Phát hiện người' : 'Vi phạm PPE'
+    ),
     startedAt: unixToIso(event.created_at),
     lockedAt: unixToIso(ts),
     endedAt: null,
@@ -341,7 +353,7 @@ export async function fetchPatrolHelmetLiveEvents(
       { headers: TUNNEL_HEADERS, mode: 'cors' },
     )
     if (res.ok) {
-      rows = ((await res.json()) as BackendViolationEvent[]).filter(isPatrolPpeBackendEvent)
+      rows = ((await res.json()) as BackendViolationEvent[]).filter(isPatrolModuleBackendEvent)
     }
   } else {
     rows = await fetchLegacyHelmetEvents(cameraId, backendUrl)
@@ -371,7 +383,7 @@ export async function fetchPatrolHelmetAggregateLiveEvents(
       { headers: TUNNEL_HEADERS, mode: 'cors' },
     )
     if (res.ok) {
-      rows = ((await res.json()) as BackendViolationEvent[]).filter(isPatrolPpeBackendEvent)
+      rows = ((await res.json()) as BackendViolationEvent[]).filter(isPatrolModuleBackendEvent)
     }
   } else {
     rows = await fetchLegacyAggregateEvents(ids, backendUrl)

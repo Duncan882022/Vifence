@@ -723,6 +723,63 @@ def audit_ppe_bptc_smoke() -> list[CaseResult]:
     return results
 
 
+def audit_ppe_snapshot_bbox() -> list[CaseResult]:
+    """Snapshot PPE — bbox áo bám thân; góc bán thân không log thiếu giày."""
+    from app.ppe_analyzer import (
+        _feet_assessable,
+        _half_body_person,
+        _torso_violation_display_bbox,
+        analyze_ppe_frame,
+        ppe_violation_display_bbox,
+    )
+
+    results: list[CaseResult] = []
+
+    # Bbox áo phải nằm trong vùng quét vest (20–72% chiều cao người)
+    pb = (80.0, 120.0, 220.0, 420.0)
+    torso_scan = (80.0, 120.0 + 300 * 0.20, 220.0, 120.0 + 300 * 0.72)
+    vest_box = ppe_violation_display_bbox(pb, "no_vest", 480, scan_region=torso_scan)
+    vcy = (vest_box[1] + vest_box[3]) / 2
+    tcy = (torso_scan[1] + torso_scan[3]) / 2
+    ok_vest = abs(vcy - tcy) < (pb[3] - pb[1]) * 0.12
+    results.append(
+        CaseResult(
+            "ppe_vest_bbox_torso",
+            ok_vest,
+            f"vest_cy={vcy:.0f} torso_cy={tcy:.0f}",
+        ),
+    )
+
+    # Góc bán thân — đáy bbox trên 86% khung → không assess giày
+    half_pb = (60.0, 40.0, 260.0, 360.0)  # y2=360 trên frame 480
+    ok_half = _half_body_person(half_pb, 480)
+    ok_feet = _feet_assessable(half_pb, 320, 480, camera_id="HC-02")
+    results.append(
+        CaseResult(
+            "ppe_half_body_no_feet",
+            ok_half and not ok_feet,
+            f"half_body={ok_half} feet_ok={ok_feet}",
+        ),
+    )
+
+    # Synthetic frame — người fill nửa trên, nền xám phía dưới
+    frame = np.full((480, 320, 3), 90, dtype=np.uint8)
+    cv2.rectangle(frame, (90, 30), (230, 340), (140, 120, 100), -1)
+    cv2.rectangle(frame, (110, 50), (210, 120), (30, 30, 30), -1)  # tóc/đầu
+    r = analyze_ppe_frame(frame, "HC-02")
+    beh = {d["behavior"] for d in r.get("detections", [])}
+    ok_syn = "no_shoes" not in beh
+    results.append(
+        CaseResult(
+            "ppe_hc02_half_body_analyzer",
+            ok_syn,
+            f"beh={sorted(beh)} expect no no_shoes",
+        ),
+    )
+
+    return results
+
+
 def audit_event_date_vn() -> CaseResult:
     from datetime import datetime, timedelta, timezone
 
@@ -748,6 +805,7 @@ def main() -> int:
         ("Analyzer — 12 kịch bản video", audit_scenario_analyzer()),
         ("Engine debounce — log sự kiện", audit_scenario_engines()),
         ("Track riêng từng người", audit_per_person_tracks()),
+        ("PPE snapshot bbox / bán thân", audit_ppe_snapshot_bbox()),
         ("ATGT snapshots", audit_atgt()),
         ("WAH", audit_wah()),
         ("DZ snapshots", audit_dz()),

@@ -24,6 +24,7 @@ export interface MobileAiDetection {
   bbox: [number, number, number, number]
   worker_id?: string
   worker_name?: string
+  subject_bbox?: [number, number, number, number]
 }
 
 export interface MobileAiViolationEvent {
@@ -39,6 +40,8 @@ export interface MobileAiViolationEvent {
   camera_id?: string
   event_date?: string
   snapshot_file?: string | null
+  worker_id?: string | null
+  worker_name?: string | null
   /** GPS gắn lúc ghi sự kiện (HC-02) */
   gps_lat?: number | null
   gps_lng?: number | null

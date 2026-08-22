@@ -26,15 +26,25 @@ function pointInBbox(x: number, y: number, bbox: Bbox): boolean {
   return x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3]
 }
 
-/** Khớp backend ppe_engine._person_match_region — mũ có thể nằm trên đỉnh bbox YOLO. */
+/** Khớp backend ppe_analyzer — mũ có thể nằm trên đỉnh bbox YOLO. */
 function violationMatchesPerson(violation: PpeDetection, personBbox: Bbox): boolean {
   const [cx, cy] = bboxCenter(violation.bbox)
   if (pointInBbox(cx, cy, personBbox)) return true
-  if (violation.behavior !== 'no_helmet') return false
   const [x1, y1, x2, y2] = personBbox
   const ph = Math.max(y2 - y1, 1)
-  const headRegion: Bbox = [x1, Math.max(0, y1 - ph * 0.38), x2, y2]
-  return pointInBbox(cx, cy, headRegion)
+  if (violation.behavior === 'no_helmet' || violation.behavior === 'hard_hat') {
+    const headRegion: Bbox = [x1, Math.max(0, y1 - ph * 0.38), x2, y1 + ph * 0.08]
+    return pointInBbox(cx, cy, headRegion)
+  }
+  if (violation.behavior === 'no_vest' || violation.behavior === 'safety_vest') {
+    const torso: Bbox = [x1, y1 + ph * 0.20, x2, y1 + ph * 0.72]
+    return pointInBbox(cx, cy, torso)
+  }
+  if (violation.behavior === 'no_shoes' || violation.behavior === 'safety_shoes') {
+    const feet: Bbox = [x1, y1 + ph * 0.80, x2, y2]
+    return pointInBbox(cx, cy, feet)
+  }
+  return false
 }
 
 function mergePersonIdentity(violation: PpeDetection, person: PpeDetection): PpeDetection {
@@ -98,7 +108,7 @@ export function groupPpeDetections(
   const others = detections.filter(d => d.behavior !== 'person')
 
   return persons.map((person, index) => {
-    const pb = person.bbox
+    const pb = (person.subject_bbox?.length === 4 ? person.subject_bbox : person.bbox) as Bbox
     const group: PpePersonGroup = {
       id: person.trackId ?? `ppe-${index}-${Math.round(pb[0])}-${Math.round(pb[1])}`,
       person,

@@ -24,6 +24,8 @@ export interface PpeDetection {
   scenario_id: string
   confidence: number
   bbox: [number, number, number, number]
+  /** Bbox YOLO gốc — khớp backend subject_bbox (group PPE / snapshot). */
+  subject_bbox?: [number, number, number, number]
   worker_id?: string
   worker_name?: string
   employee_code?: string

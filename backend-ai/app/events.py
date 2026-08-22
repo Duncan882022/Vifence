@@ -539,7 +539,7 @@ class EventStore:
         dedup_key: Optional[str] = None,
         track_id: Optional[str] = None,
     ) -> Optional[ViolationEvent]:
-        from .ppe_analyzer import raw_person_bbox
+        from .ppe_analyzer import raw_person_bbox, snapshot_annotation_detection
 
         display_det = detection
         raw_pb = raw_person_bbox(detection)
@@ -567,9 +567,11 @@ class EventStore:
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         raw = frame.copy()
-        annotated = self._draw_ppe_bbox(raw, display_det, copy_frame=True, thickness=2)
-        snapshot = annotated
         h, w = raw.shape[:2]
+        annot_det = snapshot_annotation_detection(display_det, w, h)
+        event.bbox = [float(v) for v in annot_det.bbox]
+        annotated = self._draw_ppe_bbox(raw, annot_det, copy_frame=True, thickness=2)
+        snapshot = annotated
         return self._finalize_event(
             event,
             snapshot,
@@ -602,8 +604,11 @@ class EventStore:
         if gps_lat is not None and gps_lng is not None:
             event.gps_lat = gps_lat
             event.gps_lng = gps_lng
-        if detection.bbox and len(detection.bbox) >= 4:
-            event.subject_bbox = [float(v) for v in detection.bbox]
+        from .ppe_analyzer import raw_person_bbox
+
+        raw_pb = raw_person_bbox(detection)
+        if raw_pb and len(raw_pb) >= 4:
+            event.subject_bbox = [float(v) for v in raw_pb]
 
         stable_id = (detection.worker_id or track_id or "person").strip()
         key = build_dedup_key(camera_id, event.scenario_id, stable_id)
@@ -626,9 +631,13 @@ class EventStore:
         )
         existing = self._find_by_dedup_key(key)
         raw = frame.copy()
-        annotated = self._draw_ppe_bbox(raw, detection, copy_frame=True, thickness=2)
-        snapshot = annotated
         h, w = raw.shape[:2]
+        from .ppe_analyzer import snapshot_annotation_detection
+
+        annot_det = snapshot_annotation_detection(incoming, w, h)
+        incoming.bbox = [float(v) for v in annot_det.bbox]
+        annotated = self._draw_ppe_bbox(raw, annot_det, copy_frame=True, thickness=2)
+        snapshot = annotated
         frame_size = (int(w), int(h))
 
         if existing is not None:
@@ -651,11 +660,11 @@ class EventStore:
                 existing.gps_lat = incoming.gps_lat
                 existing.gps_lng = incoming.gps_lng
             existing.confirmed_at = now
-            if incoming.subject_bbox:
-                existing.subject_bbox = list(incoming.subject_bbox)
             if detection.confidence >= existing.confidence:
                 existing.confidence = detection.confidence
-                existing.bbox = list(detection.bbox)
+            existing.bbox = list(incoming.bbox)
+            if incoming.subject_bbox:
+                existing.subject_bbox = list(incoming.subject_bbox)
             return existing
 
         if not allow_create:

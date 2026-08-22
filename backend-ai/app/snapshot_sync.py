@@ -53,7 +53,11 @@ def bbox_iou(a: list[float] | tuple[float, ...], b: list[float] | tuple[float, .
 
 
 def scale_detection(det: T, sx: float, sy: float) -> T:
-    return det.model_copy(update={"bbox": scale_bbox(det.bbox, sx, sy)})  # type: ignore[attr-defined]
+    patch: dict = {"bbox": scale_bbox(det.bbox, sx, sy)}
+    sub = getattr(det, "subject_bbox", None)
+    if sub and len(sub) >= 4:
+        patch["subject_bbox"] = scale_bbox(sub, sx, sy)
+    return det.model_copy(update=patch)  # type: ignore[attr-defined]
 
 
 def build_snapshot_episode(
@@ -106,7 +110,13 @@ def pick_best_detection(
         elif person_bbox and behavior in ("no_helmet", "no_vest", "no_shoes"):
             cx, cy = bbox_center(det.bbox)
             px1, py1, px2, py2 = person_bbox
-            if not (px1 <= cx <= px2 and py1 - (py2 - py1) * 0.12 <= cy <= py1 + (py2 - py1) * 0.35):
+            if behavior == "no_helmet":
+                y_ok = py1 - (py2 - py1) * 0.12 <= cy <= py1 + (py2 - py1) * 0.35
+            elif behavior == "no_vest":
+                y_ok = py1 + (py2 - py1) * 0.18 <= cy <= py1 + (py2 - py1) * 0.66
+            else:
+                y_ok = py1 + (py2 - py1) * 0.72 <= cy <= py2 + (py2 - py1) * 0.06
+            if not (px1 <= cx <= px2 and y_ok):
                 score -= 2.0
         if score > best_score:
             best_score = score
@@ -153,20 +163,43 @@ def resync_ppe_episode(episode: dict[str, Any], camera_id: str) -> dict[str, Any
         person_match = None
         best_iou = 0.12
         for person in persons:
-            iou = bbox_iou(person.bbox, anchor_person)
+            from .ppe_analyzer import raw_person_bbox
+
+            iou = bbox_iou(raw_person_bbox(person), anchor_person)
             if iou > best_iou:
                 best_iou = iou
                 person_match = person
         if person_match is not None:
-            synced["person_bbox"] = scale_bbox(person_match.bbox, sx, sy)
-            from .ppe_analyzer import ppe_violation_display_bbox
+            from .ppe_analyzer import (
+                ppe_violation_display_bbox,
+                raw_person_bbox,
+                _cap_region_for_helmet,
+                _feet_region,
+                _torso_violation_scan_region,
+            )
 
+            raw_person = raw_person_bbox(person_match)
+            raw_tuple = tuple(float(v) for v in raw_person)
+            scan_region = None
+            if matched.behavior == "no_helmet":
+                scan_region = _cap_region_for_helmet(raw_tuple)
+            elif matched.behavior == "no_vest":
+                scan_region = _torso_violation_scan_region(raw_tuple)
+            elif matched.behavior == "no_shoes":
+                scan_region = _feet_region(raw_tuple, analyze_frame.shape[0])
             display = ppe_violation_display_bbox(
-                tuple(float(v) for v in person_match.bbox),
+                raw_tuple,
                 matched.behavior,
                 analyze_frame.shape[0],
+                scan_region=scan_region,
             )
-            matched = matched.model_copy(update={"bbox": [float(v) for v in display]})
+            matched = matched.model_copy(
+                update={
+                    "bbox": [float(v) for v in display],
+                    "subject_bbox": list(raw_person),
+                },
+            )
+            synced["person_bbox"] = scale_bbox(raw_person, sx, sy)
             synced_det = scale_detection(matched, sx, sy)
             if synced_det.behavior in ("no_helmet", "no_vest"):
                 synced_det.worker_id = person_match.worker_id

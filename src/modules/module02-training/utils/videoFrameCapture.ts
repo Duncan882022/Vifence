@@ -117,9 +117,10 @@ export function captureCameraAnalyzeFrame(
   cameraId: string,
   maxWidth = 640,
   quality = 0.72,
+  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'mobile',
 ): string | null {
   return captureVideoFrameBase64(video, maxWidth, quality, {
-    fit: getVideoObjectFitForCamera(cameraId),
-    objectPosition: getVideoObjectPositionForCamera(cameraId),
+    fit: getVideoObjectFitForCamera(cameraId, streamType),
+    objectPosition: getVideoObjectPositionForCamera(cameraId, streamType),
   })
 }

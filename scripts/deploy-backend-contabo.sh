@@ -47,6 +47,8 @@ rsync_cmd() {
     --exclude '__pycache__/' \
     --exclude '*.pyc' \
     --exclude '.env' \
+    --exclude '.tmp/' \
+    --exclude 'data/hls/' \
     --exclude 'data/events.jsonl' \
     --exclude 'data/events/**/*.jsonl' \
     --exclude 'data/snapshots/**/*.jpg' \
@@ -179,6 +181,11 @@ if [[ -n "${LOCAL_CAM04:-}" && -f "$LOCAL_CAM04" ]]; then
   echo "→ Upload cam04 video…"
   rsync_cmd_file "$LOCAL_CAM04" "${VPS_VIDEO_DIR}/cam04.mp4"
   clear_vms_hls_cache
+fi
+LOCAL_HC01_FALLBACK="${LOCAL_HC01_FALLBACK:-$ROOT/public/camera-feeds/bodycam-01.mp4}"
+if [[ -n "${VPS_HC01_FALLBACK_MP4:-}" && -f "$LOCAL_HC01_FALLBACK" ]]; then
+  echo "→ Upload HC-01 fallback bodycam video (chỉ khi VPS_HC01_FALLBACK_MP4=1)…"
+  rsync_cmd_file "$LOCAL_HC01_FALLBACK" "${VPS_VIDEO_DIR}/bodycam-01.mp4"
 fi
 
 echo "→ .env production…"

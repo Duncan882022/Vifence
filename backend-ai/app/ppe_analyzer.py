@@ -22,7 +22,7 @@ PPE_SCENARIO = {
     "no_vest": "PPE-002",
     "safety_shoes": "PPE-003",
     "no_shoes": "PPE-003",
-    "person": "PPE-001",
+    "person": "PERS-001",
 }
 
 PPE_LABELS = {
@@ -45,10 +45,62 @@ _MODEL_MIN_CONF = 0.62
 
 
 def _is_helmet_bodycam(camera_id: str) -> bool:
-    """HC-xx — góc bodycam cận cảnh, bbox người rộng/chiếm gần hết khung."""
+    """HC-xx patrol — góc cận (sát người) và góc rộng (đám đông xa) đều hợp lệ."""
     return camera_id.startswith("HC-")
 
 _person_detector: PersonDetector | None = None
+_hc_patrol_person_tracks: dict[str, dict[str, object]] = {}
+
+
+class _HcPersonTrackSlot:
+    __slots__ = ("person_bbox",)
+
+    def __init__(self, person_bbox: list[float]) -> None:
+        self.person_bbox = person_bbox
+
+
+def _assign_patrol_person_identity(
+    person_det: PpeDetection,
+    person_box: tuple[float, float, float, float],
+    *,
+    camera_id: str,
+    frame_w: int,
+    frame_h: int,
+    blocked: set[str],
+) -> None:
+    """HC-* — gán sgc-0xxxxxxx (hoặc gallery) lên detection trả về FE/heatmap."""
+    if not _is_helmet_bodycam(camera_id):
+        return
+    from .person_identity_registry import resolve_patrol_person_identity
+    from .track_matching import assign_person_track_id
+
+    tracks = _hc_patrol_person_tracks.setdefault(camera_id, {})
+    person_bbox = [float(v) for v in person_box]
+    track_id = assign_person_track_id(
+        person_bbox,
+        tracks,
+        behavior="person",
+        frame_w=frame_w,
+        frame_h=frame_h,
+        max_tracks=24,
+        blocked_tracks=blocked,
+    )
+    if track_id is None:
+        return
+    blocked.add(track_id)
+    if track_id not in tracks:
+        tracks[track_id] = _HcPersonTrackSlot(person_bbox)
+    else:
+        getattr(tracks[track_id], "person_bbox", person_bbox)
+        tracks[track_id] = _HcPersonTrackSlot(person_bbox)
+
+    worker_id, worker_name = resolve_patrol_person_identity(
+        person_det,
+        camera_id,
+        track_id,
+    )
+    person_det.worker_id = worker_id
+    person_det.worker_name = worker_name
 
 
 def _get_person_detector() -> PersonDetector:
@@ -84,27 +136,84 @@ def _head_region_for_helmet(person_box: tuple[float, float, float, float]) -> tu
     return _cap_region_for_helmet(person_box)
 
 
+def _torso_violation_scan_region(
+    person_box: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Vùng quét áo — khớp _sub_region trong analyze_ppe_frame."""
+    return _sub_region(person_box, 0.20, 0.72)
+
+
+def _torso_violation_display_bbox(
+    person_box: tuple[float, float, float, float],
+    *,
+    scan_region: tuple[float, float, float, float] | None = None,
+) -> tuple[float, float, float, float]:
+    """Vùng áo BHLD — bám vùng quét vest, không tràn xuống hông/chân."""
+    region = scan_region or _torso_violation_scan_region(person_box)
+    x1, y1, x2, y2 = region
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    return (
+        x1 + pw * 0.06,
+        y1 + ph * 0.04,
+        x2 - pw * 0.06,
+        y2 - ph * 0.06,
+    )
+
+
 def ppe_violation_display_bbox(
     person_box: tuple[float, float, float, float],
     behavior: str,
     frame_h: int,
+    *,
+    scan_region: tuple[float, float, float, float] | None = None,
 ) -> tuple[float, float, float, float]:
-    """BBox hiển thị snapshot/overlay — bám trên người, không tràn lên máy phía sau."""
+    """BBox hiển thị snapshot/overlay — bám vùng quét PPE thực tế."""
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
     pw = max(x2 - x1, 1.0)
     if behavior == "no_helmet":
-        # Chỉ top person bbox — không mở rộng lên (tránh ROI trôi lên cẩu/nền phía sau).
-        ix1 = x1 + pw * 0.12
-        ix2 = x2 - pw * 0.12
-        iy1 = y1
-        iy2 = y1 + ph * 0.22
-        return ix1, iy1, ix2, iy2
+        cap = _cap_region_for_helmet(person_box)
+        return cap
     if behavior == "no_vest":
-        return _sub_region(person_box, 0.20, 0.68)
+        return _torso_violation_display_bbox(
+            person_box,
+            scan_region=scan_region or _torso_violation_scan_region(person_box),
+        )
     if behavior == "no_shoes":
+        if scan_region and len(scan_region) >= 4:
+            return scan_region
         return _feet_region(person_box, frame_h)
     return person_box
+
+
+def snapshot_annotation_detection(
+    detection: PpeDetection,
+    frame_w: int,
+    frame_h: int,
+) -> PpeDetection:
+    """BBox vẽ ROI snapshot — giữ bbox analyzer (đã là vùng quét), chỉ clip khung."""
+    if detection.bbox and len(detection.bbox) >= 4:
+        clipped = _clip_box_to_frame(
+            tuple(float(v) for v in detection.bbox),
+            frame_w,
+            frame_h,
+        )
+        if detection.behavior == "person":
+            pb = _clip_box_to_frame(tuple(raw_person_bbox(detection)), frame_w, frame_h)
+            return detection.model_copy(update={"bbox": [float(v) for v in pb]})
+        return detection.model_copy(update={"bbox": [float(v) for v in clipped]})
+    if detection.behavior == "person":
+        pb = _clip_box_to_frame(tuple(raw_person_bbox(detection)), frame_w, frame_h)
+        return detection.model_copy(update={"bbox": [float(v) for v in pb]})
+    return detection
+
+
+def raw_person_bbox(det: PpeDetection) -> list[float]:
+    """BBox YOLO gốc — dùng cho snapshot PPE, không dùng bbox overlay đã cắt."""
+    if det.subject_bbox and len(det.subject_bbox) >= 4:
+        return [float(v) for v in det.subject_bbox]
+    return [float(v) for v in det.bbox]
 
 
 def _cap_region_for_helmet(person_box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
@@ -437,7 +546,12 @@ def _heuristic_helmet(frame: np.ndarray, head: tuple[float, float, float, float]
     return None
 
 
-def _heuristic_vest(frame: np.ndarray, torso: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
+def _heuristic_vest(
+    frame: np.ndarray,
+    torso: tuple[float, float, float, float],
+    *,
+    min_contour_area: float = 180.0,
+) -> tuple[float, float, float, float] | None:
     crop = _region_crop(frame, torso)
     if crop.size == 0:
         return None
@@ -451,11 +565,42 @@ def _heuristic_vest(frame: np.ndarray, torso: tuple[float, float, float, float])
     if not cnts:
         return None
     cnt = max(cnts, key=cv2.contourArea)
-    if cv2.contourArea(cnt) < 180:
+    if cv2.contourArea(cnt) < min_contour_area:
         return None
     x, y, bw, bh = cv2.boundingRect(cnt)
     tx1, ty1, _, _ = torso
     return tx1 + x, ty1 + y, tx1 + x + bw, ty1 + y + bh
+
+
+def _resolve_person_vest(
+    frame: np.ndarray,
+    torso: tuple[float, float, float, float],
+    vest_items: list,
+    *,
+    camera_id: str = "",
+) -> tuple[tuple[float, float, float, float], float] | None:
+    """Áo BHLD — bodycam HC-*: heuristic dễ FP, cần model hoặc blob vest đủ lớn."""
+    bodycam = _is_helmet_bodycam(camera_id)
+    model_min = 0.58 if bodycam else 0.70
+    model_vest = _best_in_region(vest_items, torso)
+    if model_vest and model_vest[1] >= model_min:
+        return model_vest
+
+    heuristic_min = 320.0 if bodycam else 180.0
+    vb = _heuristic_vest(frame, torso, min_contour_area=heuristic_min)
+    if vb is None:
+        return None
+    if not bodycam:
+        return (vb, 0.60)
+
+    tx1, ty1, tx2, ty2 = torso
+    tw = max(tx2 - tx1, 1.0)
+    th = max(ty2 - ty1, 1.0)
+    vw = max(vb[2] - vb[0], 0.0)
+    vh = max(vb[3] - vb[1], 0.0)
+    if vw >= tw * 0.28 and vh >= th * 0.18:
+        return (vb, 0.62)
+    return None
 
 
 def _feet_metrics(frame: np.ndarray, feet: tuple[float, float, float, float]) -> dict[str, float]:
@@ -936,7 +1081,59 @@ def _person_upper_body_signal(
     return personish_ratio >= 0.025 or green_ratio < 0.45
 
 
-def _plausible_person_box(
+def _clip_box_to_frame(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> tuple[float, float, float, float]:
+    x1, y1, x2, y2 = box
+    return (
+        max(0.0, min(float(frame_w), x1)),
+        max(0.0, min(float(frame_h), y1)),
+        max(0.0, min(float(frame_w), x2)),
+        max(0.0, min(float(frame_h), y2)),
+    )
+
+
+def _zone_visible_ratio(
+    zone: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> float:
+    """Tỷ lệ chiều cao vùng còn nằm trong khung hình (0–1)."""
+    _zx1, zy1, _zx2, zy2 = zone
+    raw_h = max(zy2 - zy1, 1.0)
+    _cx1, cy1, _cx2, cy2 = _clip_box_to_frame(zone, frame_w, frame_h)
+    if cy2 <= cy1:
+        return 0.0
+    return (cy2 - cy1) / raw_h
+
+
+def _plausible_bodycam_close(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    frame: np.ndarray | None = None,
+    strict: bool = False,
+) -> bool:
+    """Góc cận — bbox người lớn, chiếm phần lớn khung."""
+    _x1, _y1, _x2, _y2 = box
+    bw = max(_x2 - _x1, 1.0)
+    bh = max(_y2 - _y1, 1.0)
+    if bh < frame_h * 0.12 or bh > frame_h * 0.98:
+        return False
+    if bw < frame_w * 0.12 or bw > frame_w * 0.98:
+        return False
+    aspect = bh / bw
+    if aspect < 0.45 or aspect > 5.5:
+        return False
+    if frame is not None and strict and not _person_upper_body_signal(frame, box):
+        return False
+    return True
+
+
+def _plausible_patrol_wide(
     box: tuple[float, float, float, float],
     frame_w: int,
     frame_h: int,
@@ -944,23 +1141,11 @@ def _plausible_person_box(
     frame: np.ndarray | None = None,
     machinery: list[tuple[float, float, float, float]] | None = None,
     strict: bool = False,
-    bodycam: bool = False,
 ) -> bool:
-    """Loại bbox giả trên vật kiến trúc / máy thi công — chỉ giữ người có tỷ lệ hợp lý."""
+    """Góc rộng / đám đông — người nhỏ trong khung (CCTV-style)."""
     x1, y1, x2, y2 = box
     bw = max(x2 - x1, 1.0)
     bh = max(y2 - y1, 1.0)
-    if bodycam:
-        if bh < frame_h * 0.12 or bh > frame_h * 0.98:
-            return False
-        if bw < frame_w * 0.12 or bw > frame_w * 0.98:
-            return False
-        aspect = bh / bw
-        if aspect < 0.45 or aspect > 5.5:
-            return False
-        if frame is not None and strict and not _person_upper_body_signal(frame, box):
-            return False
-        return True
     if bh < frame_h * 0.07 or bh > frame_h * 0.62:
         return False
     if bw < frame_w * 0.04 or bw > frame_w * 0.42:
@@ -977,6 +1162,140 @@ def _plausible_person_box(
     if frame is not None and strict and not _person_upper_body_signal(frame, box):
         return False
     return True
+
+
+def _head_assessable(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    head = (x1 + pw * 0.12, y1, x2 - pw * 0.12, y1 + ph * 0.24)
+    return _zone_visible_ratio(head, frame_w, frame_h) >= 0.45
+
+
+def _torso_assessable(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str = "",
+) -> bool:
+    torso = _sub_region(person_box, 0.20, 0.72)
+    min_ratio = 0.36 if _is_helmet_bodycam(camera_id) else 0.42
+    if _zone_visible_ratio(torso, frame_w, frame_h) < min_ratio:
+        return False
+    _cx1, cy1, _cx2, cy2 = _clip_box_to_frame(torso, frame_w, frame_h)
+    min_h = frame_h * 0.045 if _is_helmet_bodycam(camera_id) else frame_h * 0.06
+    return (cy2 - cy1) >= min_h
+
+
+def _half_body_person(
+    person_box: tuple[float, float, float, float],
+    frame_h: int,
+) -> bool:
+    """Góc nửa thân — bbox YOLO thường kéo xuống đùi nhưng chân thật không có trong khung."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    feet = _feet_region(person_box, frame_h)
+    foot_h = max(feet[3] - feet[1], 0.0)
+
+    if y2 < frame_h * 0.86 and bh_ratio > 0.26:
+        return True
+    if foot_h < ph * 0.13 and bh_ratio > 0.30:
+        return True
+    if y2 < frame_h * 0.92 and foot_h < frame_h * 0.035:
+        return True
+    return False
+
+
+def _feet_assessable(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str = "",
+) -> bool:
+    """Chỉ chấm PPE giày khi vùng chân thật sự nằm trong khung."""
+    if _half_body_person(person_box, frame_h):
+        return False
+
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    bh_ratio = ph / max(float(frame_h), 1.0)
+
+    feet = _feet_region(person_box, frame_h)
+    if _zone_visible_ratio(feet, frame_w, frame_h) < 0.50:
+        return False
+    _fx1, fy1, fx2, fy2 = _clip_box_to_frame(feet, frame_w, frame_h)
+    if (fy2 - fy1) < frame_h * 0.035:
+        return False
+
+    if fy2 < y2 - ph * 0.03:
+        return False
+
+    if _is_helmet_bodycam(camera_id) and y2 < frame_h * 0.90:
+        return False
+
+    # Bbox lớn nhưng cắt trên đùi/gối — không chấm giày (góc nửa thân trên).
+    if bh_ratio > 0.34 and y2 < frame_h * 0.72:
+        return False
+    # Người cận chiếm khung — cần vùng chân chạm nửa dưới khung hình.
+    if bh_ratio > 0.38 and fy2 < frame_h * 0.78:
+        return False
+    if bh_ratio > 0.30 and y2 < frame_h * 0.88:
+        return False
+    return True
+
+
+def _visible_person_display_bbox(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> tuple[float, float, float, float]:
+    """BBox person overlay — bám phần thân nhìn thấy, không kéo xuống chân ảo."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    if _feet_assessable(person_box, frame_w, frame_h):
+        return _clip_box_to_frame(person_box, frame_w, frame_h)
+    vis_y2 = min(y2, y1 + ph * 0.72, float(frame_h))
+    return _clip_box_to_frame((x1, y1, x2, vis_y2), frame_w, frame_h)
+
+
+def _plausible_person_box(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    frame: np.ndarray | None = None,
+    machinery: list[tuple[float, float, float, float]] | None = None,
+    strict: bool = False,
+    bodycam: bool = False,
+) -> bool:
+    """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng."""
+    if bodycam:
+        close_ok = _plausible_bodycam_close(
+            box, frame_w, frame_h, frame=frame, strict=strict,
+        )
+        wide_ok = _plausible_patrol_wide(
+            box, frame_w, frame_h, frame=frame, machinery=None, strict=False,
+        )
+        if not (close_ok or wide_ok):
+            return False
+        if frame is not None and strict and not _person_upper_body_signal(frame, box):
+            return False
+        return True
+    return _plausible_patrol_wide(
+        box,
+        frame_w,
+        frame_h,
+        frame=frame,
+        machinery=machinery,
+        strict=strict,
+    )
 
 
 def _filter_persons(
@@ -1043,6 +1362,7 @@ def _build_person_only_result(
             scenario_id=PPE_SCENARIO["person"],
             confidence=round(person.person_conf, 3),
             bbox=[float(v) for v in pb],
+            subject_bbox=[float(v) for v in pb],
         )
         enrich_person_bbox(
             frame,
@@ -1104,6 +1424,7 @@ def _build_vest_only_result(
             scenario_id=PPE_SCENARIO["person"],
             confidence=round(person.person_conf, 3),
             bbox=[float(v) for v in pb],
+            subject_bbox=[float(v) for v in pb],
         )
         enrich_person_bbox(
             frame,
@@ -1114,14 +1435,7 @@ def _build_vest_only_result(
         )
         detections.append(person_det)
 
-        vest = None
-        vb = _heuristic_vest(frame, torso)
-        if vb:
-            vest = (vb, 0.60)
-        else:
-            model_vest = _best_in_region(vest_items, torso)
-            if model_vest and model_vest[1] >= 0.70:
-                vest = model_vest
+        vest = _resolve_person_vest(frame, torso, vest_items, camera_id=camera_id)
         if vest:
             box, conf = vest
             detections.append(
@@ -1194,9 +1508,16 @@ def analyze_ppe_frame(
 
     detections: list[PpeDetection] = []
     violations = 0
+    assigned_patrol_tracks: set[str] = set()
 
     for person_index, person in enumerate(persons):
         pb = person.person_box
+        display_pb = _visible_person_display_bbox(pb, w, h)
+        head_ok = _head_assessable(pb, w, h)
+        torso_ok = _torso_assessable(pb, w, h, camera_id=camera_id)
+        feet_ok = _feet_assessable(pb, w, h, camera_id=camera_id) and not _is_helmet_bodycam(
+            camera_id,
+        )
         head_scan = _cap_region_for_helmet(pb)
         torso = _sub_region(pb, 0.20, 0.72)
         feet = _feet_region(pb, h)
@@ -1206,7 +1527,8 @@ def analyze_ppe_frame(
             label=PPE_LABELS["person"],
             scenario_id=PPE_SCENARIO["person"],
             confidence=round(person.person_conf, 3),
-            bbox=[float(v) for v in pb],
+            bbox=[float(v) for v in display_pb],
+            subject_bbox=[float(v) for v in pb],
         )
         enrich_person_bbox(
             frame,
@@ -1215,107 +1537,121 @@ def analyze_ppe_frame(
             person_index=person_index,
             source_pts_sec=source_pts_sec,
         )
+        _assign_patrol_person_identity(
+            person_det,
+            pb,
+            camera_id=camera_id,
+            frame_w=w,
+            frame_h=h,
+            blocked=assigned_patrol_tracks,
+        )
         detections.append(person_det)
 
         def _append_violation(violation: PpeDetection) -> None:
             copy_worker_identity(person_det, violation)
             detections.append(violation)
 
-        helmet = _resolve_person_helmet(frame, pb, head_scan, helmet_items, camera_id=camera_id)
-        if helmet:
-            box, conf = helmet
-            detections.append(
-                PpeDetection(
-                    behavior="hard_hat",
-                    label=PPE_LABELS["hard_hat"],
-                    scenario_id=PPE_SCENARIO["hard_hat"],
-                    confidence=round(conf, 3),
-                    bbox=[float(v) for v in box],
-                )
-            )
-        else:
-            violations += 1
-            display = ppe_violation_display_bbox(pb, "no_helmet", h)
-            _append_violation(
-                PpeDetection(
-                    behavior="no_helmet",
-                    label=PPE_LABELS["no_helmet"],
-                    scenario_id=PPE_SCENARIO["no_helmet"],
-                    confidence=round(max(_VIOLATION_CONF, person.person_conf * 0.95), 3),
-                    bbox=[float(v) for v in display],
-                )
-            )
-        person_ppe_viol = helmet is None
+        person_ppe_viol = False
 
-        vest = None
-        vb = _heuristic_vest(frame, torso)
-        if vb:
-            vest = (vb, 0.60)
-        else:
-            model_vest = _best_in_region(vest_items, torso)
-            if model_vest and model_vest[1] >= 0.70:
-                vest = model_vest
-        if vest:
-            box, conf = vest
-            detections.append(
-                PpeDetection(
-                    behavior="safety_vest",
-                    label=PPE_LABELS["safety_vest"],
-                    scenario_id=PPE_SCENARIO["safety_vest"],
-                    confidence=round(conf, 3),
-                    bbox=[float(v) for v in box],
-                )
-            )
-        else:
-            violations += 1
-            person_ppe_viol = True
-            _append_violation(
-                PpeDetection(
-                    behavior="no_vest",
-                    label=PPE_LABELS["no_vest"],
-                    scenario_id=PPE_SCENARIO["no_vest"],
-                    confidence=round(
-                        max(_VIOLATION_CONF, VIOLATION_MIN_CONFIDENCE, person.person_conf * 0.93),
-                        3,
-                    ),
-                    bbox=[float(v) for v in ppe_violation_display_bbox(pb, "no_vest", h)],
-                )
-            )
-
-        shoe_items_det = _shoe_detections_for_person(
-            frame, feet, person.person_conf, shoe_items=shoe_items,
-        )
-        shoe_violation_logged = False
-        for behavior, box, conf in shoe_items_det:
-            if behavior == "safety_shoes":
+        if head_ok:
+            helmet = _resolve_person_helmet(frame, pb, head_scan, helmet_items, camera_id=camera_id)
+            if helmet:
+                box, conf = helmet
                 detections.append(
                     PpeDetection(
-                        behavior="safety_shoes",
-                        label=PPE_LABELS["safety_shoes"],
-                        scenario_id=PPE_SCENARIO["safety_shoes"],
+                        behavior="hard_hat",
+                        label=PPE_LABELS["hard_hat"],
+                        scenario_id=PPE_SCENARIO["hard_hat"],
                         confidence=round(conf, 3),
                         bbox=[float(v) for v in box],
                     )
                 )
-                continue
-            if not shoe_violation_logged:
+            else:
                 violations += 1
-                shoe_violation_logged = True
-            _append_violation(
-                PpeDetection(
-                    behavior="no_shoes",
-                    label=PPE_LABELS["no_shoes"],
-                    scenario_id=PPE_SCENARIO["no_shoes"],
-                    confidence=round(
-                        max(conf, _VIOLATION_CONF, VIOLATION_MIN_CONFIDENCE, person.person_conf * 0.90),
-                        3,
-                    ),
-                    bbox=[float(v) for v in box],
+                person_ppe_viol = True
+                display = ppe_violation_display_bbox(pb, "no_helmet", h, scan_region=head_scan)
+                _append_violation(
+                    PpeDetection(
+                        behavior="no_helmet",
+                        label=PPE_LABELS["no_helmet"],
+                        scenario_id=PPE_SCENARIO["no_helmet"],
+                        confidence=round(max(_VIOLATION_CONF, person.person_conf * 0.95), 3),
+                        bbox=[float(v) for v in display],
+                        subject_bbox=[float(v) for v in pb],
+                    )
                 )
+
+        if torso_ok:
+            vest = _resolve_person_vest(frame, torso, vest_items, camera_id=camera_id)
+            if vest:
+                box, conf = vest
+                detections.append(
+                    PpeDetection(
+                        behavior="safety_vest",
+                        label=PPE_LABELS["safety_vest"],
+                        scenario_id=PPE_SCENARIO["safety_vest"],
+                        confidence=round(conf, 3),
+                        bbox=[float(v) for v in box],
+                    )
+                )
+            else:
+                violations += 1
+                person_ppe_viol = True
+                _append_violation(
+                    PpeDetection(
+                        behavior="no_vest",
+                        label=PPE_LABELS["no_vest"],
+                        scenario_id=PPE_SCENARIO["no_vest"],
+                        confidence=round(
+                            max(_VIOLATION_CONF, VIOLATION_MIN_CONFIDENCE, person.person_conf * 0.93),
+                            3,
+                        ),
+                        bbox=[float(v) for v in ppe_violation_display_bbox(
+                            pb, "no_vest", h, scan_region=torso,
+                        )],
+                        subject_bbox=[float(v) for v in pb],
+                    )
+                )
+
+        shoe_items_det: list[tuple[str, tuple[float, float, float, float], float]] = []
+        shoe_violation_logged = False
+        if feet_ok:
+            shoe_items_det = _shoe_detections_for_person(
+                frame, feet, person.person_conf, shoe_items=shoe_items,
             )
+            for behavior, box, conf in shoe_items_det:
+                if behavior == "safety_shoes":
+                    detections.append(
+                        PpeDetection(
+                            behavior="safety_shoes",
+                            label=PPE_LABELS["safety_shoes"],
+                            scenario_id=PPE_SCENARIO["safety_shoes"],
+                            confidence=round(conf, 3),
+                            bbox=[float(v) for v in box],
+                        )
+                    )
+                    continue
+                if not shoe_violation_logged:
+                    violations += 1
+                    shoe_violation_logged = True
+                    person_ppe_viol = True
+                _append_violation(
+                    PpeDetection(
+                        behavior="no_shoes",
+                        label=PPE_LABELS["no_shoes"],
+                        scenario_id=PPE_SCENARIO["no_shoes"],
+                        confidence=round(
+                            max(conf, _VIOLATION_CONF, VIOLATION_MIN_CONFIDENCE, person.person_conf * 0.90),
+                            3,
+                        ),
+                        bbox=[float(v) for v in box],
+                        subject_bbox=[float(v) for v in pb],
+                    )
+                )
 
         if (
-            ppe_demo_scene
+            feet_ok
+            and ppe_demo_scene
             and person_ppe_viol
             and not shoe_violation_logged
             and not shoe_items_det
@@ -1331,11 +1667,13 @@ def analyze_ppe_frame(
                         max(_VIOLATION_CONF, VIOLATION_MIN_CONFIDENCE, person.person_conf * 0.88),
                         3,
                     ),
-                    bbox=[float(v) for v in feet],
+                    bbox=[float(v) for v in ppe_violation_display_bbox(
+                        pb, "no_shoes", h, scan_region=feet,
+                    )],
+                    subject_bbox=[float(v) for v in pb],
                 )
             )
 
-    h, w = frame.shape[:2]
     return {
         "type": "result",
         "camera_id": camera_id,

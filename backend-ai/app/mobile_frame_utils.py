@@ -29,7 +29,12 @@ def scale_result_to_frame(result: dict, frame: np.ndarray, small: np.ndarray) ->
     scaled_detections = []
     for d in result.get("detections", []):
         x1, y1, x2, y2 = d["bbox"]
-        scaled_detections.append({**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]})
+        patch = {**d, "bbox": [x1 * sx, y1 * sy, x2 * sx, y2 * sy]}
+        sub = d.get("subject_bbox")
+        if sub and len(sub) >= 4:
+            sx1, sy1, sx2, sy2 = sub
+            patch["subject_bbox"] = [sx1 * sx, sy1 * sy, sx2 * sx, sy2 * sy]
+        scaled_detections.append(patch)
     result["detections"] = scaled_detections
 
     scaled_events = []

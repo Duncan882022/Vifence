@@ -15,6 +15,8 @@ export interface DetectionDot {
   zoneId: string
   cameraId: string
   confidence: number
+  /** Nhãn hiển thị tooltip — sgc / tên gallery */
+  label?: string
 }
 
 /* ── Seeded LCG — deterministic, no Math.random() ───────────── */

@@ -1,7 +1,7 @@
 /**
- * HC-02 live map dots: person_count + GPS (live hoặc last-known) → chấm ≤ ~2m.
+ * HC-02 live map dots — lịch sử theo từng người (ID ổn định), chỉ cập nhật vị trí khi gặp lại.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { watchDeviceGps } from '@/modules/module02-training/services/deviceGps.service'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
@@ -12,16 +12,19 @@ import {
   subscribePatrolHelmetGps,
 } from '@/services/patrolHelmetGpsBridge'
 import {
+  getHeatmapPersonCount,
+  getHeatmapPersonDots,
+  subscribeHeatmapPersonRegistry,
+} from '@/services/patrolHeatmapPersonRegistry'
+import {
   getPatrolMobileLiveSnapshot,
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import type { DetectionDot } from '../data/patrolDetectionData'
 import { fetchPatrolHelmetMetrics } from '../services/patrolLiveEvents.service'
-import { buildPersonDotsAroundGps } from '../utils/patrolLivePersonDots'
 
 const HC02 = 'HC-02'
 const POLL_MS = 1800
-const PERSON_HOLD_MS = 10_000
 
 function isValidGps(lat: unknown, lng: unknown): lat is number {
   return typeof lat === 'number'
@@ -40,9 +43,11 @@ export interface Hc02LiveMapState {
   hasLiveGps: boolean
   lat: number | null
   lng: number | null
+  /** Số người trên frame hiện tại */
   personCount: number
+  /** Tổng dot lịch sử trên map (unique IDs) */
+  historicalDotCount: number
   dots: DetectionDot[]
-  /** Có người detect nhưng chưa có GPS để vẽ chấm */
   waitingGpsForDots: boolean
 }
 
@@ -50,23 +55,7 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [personCount, setPersonCount] = useState(0)
-  const heldRef = useRef({ count: 0, at: 0 })
-  const [displayCount, setDisplayCount] = useState(0)
-
-  const bumpDisplayCount = (n: number) => {
-    const now = Date.now()
-    if (n > 0) {
-      heldRef.current = { count: n, at: now }
-      setDisplayCount(n)
-      return
-    }
-    if (now - heldRef.current.at <= PERSON_HOLD_MS) {
-      setDisplayCount(heldRef.current.count)
-      return
-    }
-    heldRef.current = { count: 0, at: 0 }
-    setDisplayCount(0)
-  }
+  const [registryTick, setRegistryTick] = useState(0)
 
   const applyGps = (nextLat: number, nextLng: number) => {
     if (!isValidGps(nextLat, nextLng)) return
@@ -74,7 +63,10 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     setLng(nextLng)
   }
 
-  /* GPS watch ngay trên map — không phụ thuộc MobileCameraFeed */
+  useEffect(() => subscribeHeatmapPersonRegistry(() => {
+    setRegistryTick(t => t + 1)
+  }), [])
+
   useEffect(() => {
     return watchDeviceGps(reading => {
       setPatrolHelmetGps({
@@ -101,17 +93,14 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
 
   useEffect(() => {
     const applyPerson = (count: number) => {
-      const n = Math.max(0, Math.floor(count))
-      setPersonCount(n)
-      bumpDisplayCount(n)
+      setPersonCount(Math.max(0, Math.floor(count)))
     }
 
     const mobile = getPatrolMobileLiveSnapshot(HC02)
     if (mobile) applyPerson(mobile.personCount)
 
     return subscribePatrolMobileLiveSnapshot(snap => {
-      if (!snap) return
-      if (snap.cameraId !== HC02) return
+      if (!snap || snap.cameraId !== HC02) return
       applyPerson(snap.personCount)
     })
   }, [])
@@ -127,15 +116,11 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
         if (cancelled || !metrics) return
         const pair = asGpsPair(metrics.gps_lat, metrics.gps_lng)
         if (pair) applyGps(pair[0], pair[1])
-        const n = Math.max(0, Math.floor(Number(metrics.person_count ?? 0)))
-        // Ưu tiên bridge mobile nếu còn fresh — tránh poll 0 đè lên live count
         const mobile = getPatrolMobileLiveSnapshot(HC02)
-        if (mobile && mobile.personCount > 0) {
+        if (mobile) {
           setPersonCount(mobile.personCount)
-          bumpDisplayCount(mobile.personCount)
         } else {
-          setPersonCount(n)
-          bumpDisplayCount(n)
+          setPersonCount(Math.max(0, Math.floor(Number(metrics.person_count ?? 0))))
         }
       } catch {
         // giữ trạng thái cuối
@@ -152,30 +137,33 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
 
   useEffect(() => {
     const t = window.setInterval(() => {
-      bumpDisplayCount(personCount)
-      // Refresh last-known GPS vào state nếu watch chưa kịp
       if (!isValidGps(lat, lng)) {
         const known = getPatrolHelmetGpsLastKnown(HC02)
         if (known) applyGps(known.lat, known.lng)
       }
     }, 1000)
     return () => window.clearInterval(t)
-  }, [personCount, lat, lng])
+  }, [lat, lng])
 
   const hasGps = isValidGps(lat, lng)
 
   const dots = useMemo(() => {
-    if (!hasGps || lat == null || lng == null || displayCount <= 0) return []
-    // ~2m trên map cho dễ thấy; vẫn quanh vị trí mũ
-    return buildPersonDotsAroundGps(HC02, lat, lng, displayCount, 2)
-  }, [hasGps, lat, lng, displayCount])
+    void registryTick
+    return getHeatmapPersonDots(HC02)
+  }, [registryTick])
+
+  const historicalDotCount = useMemo(() => {
+    void registryTick
+    return getHeatmapPersonCount(HC02)
+  }, [registryTick])
 
   return {
     hasLiveGps: hasGps,
     lat,
     lng,
-    personCount: displayCount,
+    personCount,
+    historicalDotCount,
     dots,
-    waitingGpsForDots: displayCount > 0 && !hasGps,
+    waitingGpsForDots: personCount > 0 && historicalDotCount === 0 && !hasGps,
   }
 }

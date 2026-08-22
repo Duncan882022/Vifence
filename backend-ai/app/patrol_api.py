@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 PATROL_CAMERA_PREFIX = "HC-"
 PATROL_PPE_PREFIX = "PPE"
+PATROL_PERS_PREFIX = "PERS"
 PATROL_MOBILE_METRICS_TTL_SEC = 20.0
 # Flip cam / AI pause: vẫn coi stream online trong grace này
 PATROL_MOBILE_ONLINE_GRACE_SEC = 45.0
@@ -28,6 +29,16 @@ def is_patrol_ppe_event(event) -> bool:
     scenario_id = getattr(event, "scenario_id", None) or ""
     camera_id = getattr(event, "camera_id", None) or ""
     return camera_id.startswith(PATROL_CAMERA_PREFIX) and scenario_id.startswith(PATROL_PPE_PREFIX)
+
+
+def is_patrol_person_event(event) -> bool:
+    scenario_id = getattr(event, "scenario_id", None) or ""
+    camera_id = getattr(event, "camera_id", None) or ""
+    return camera_id.startswith(PATROL_CAMERA_PREFIX) and scenario_id.startswith(PATROL_PERS_PREFIX)
+
+
+def is_patrol_module_event(event) -> bool:
+    return is_patrol_ppe_event(event) or is_patrol_person_event(event)
 
 
 def today_iso_date() -> str:
@@ -94,9 +105,11 @@ def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
     for person in persons:
         worker_id = person.get("worker_id")
         worker_name = person.get("worker_name")
-        if worker_id:
+        from .person_identity_registry import is_identified_gallery_worker
+
+        if is_identified_gallery_worker(worker_id):
             identified_workers += 1
-        if isinstance(worker_name, str) and worker_name.strip():
+        if isinstance(worker_name, str) and worker_name.strip() and is_identified_gallery_worker(worker_id):
             worker_names.append(worker_name.strip())
 
     frame_person = int(metrics.get("person_count") or len(persons))
@@ -139,10 +152,12 @@ def _metrics_from_vms_overlay(overlay: dict) -> dict[str, Any]:
     worker_names: list[str] = []
     identified_workers = 0
     for person in persons:
-        if person.get("worker_id"):
+        from .person_identity_registry import is_identified_gallery_worker
+
+        if is_identified_gallery_worker(person.get("worker_id")):
             identified_workers += 1
         name = person.get("worker_name")
-        if isinstance(name, str) and name.strip():
+        if isinstance(name, str) and name.strip() and is_identified_gallery_worker(person.get("worker_id")):
             worker_names.append(name.strip())
 
     return {
@@ -224,7 +239,7 @@ def build_patrol_events_payload(
 
     target_date = date or today_iso_date()
     events = store.list_events(limit=limit, date=target_date, camera_id=camera_id)
-    patrol_rows = [event for event in events if is_patrol_ppe_event(event)]
+    patrol_rows = [event for event in events if is_patrol_module_event(event)]
     return [event.model_dump() for event in patrol_rows]
 
 

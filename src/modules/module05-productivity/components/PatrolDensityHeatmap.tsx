@@ -138,9 +138,13 @@ export function PatrolDensityHeatmap() {
           {hc02Live.hasLiveGps ? (
             <span className="text-sky-300/90">
               GPS: {hc02Live.lat?.toFixed(5)}, {hc02Live.lng?.toFixed(5)}
-              {hc02Live.personCount > 0
-                ? ` · ${hc02Live.personCount} người · ${hc02Live.dots.length} chấm`
-                : ''}
+              {hc02Live.historicalDotCount > 0
+                ? hc02Live.personCount > 0
+                  ? ` · ${hc02Live.personCount} đang thấy · ${hc02Live.historicalDotCount} trên map`
+                  : ` · ${hc02Live.historicalDotCount} người trên map`
+                : hc02Live.personCount > 0
+                  ? ` · ${hc02Live.personCount} người (chưa ghi map)`
+                  : ''}
             </span>
           ) : hc02Live.waitingGpsForDots ? (
             <span className="text-amber-400/90">

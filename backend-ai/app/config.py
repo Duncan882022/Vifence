@@ -180,8 +180,19 @@ class Settings(BaseSettings):
 
     @property
     def vms_camera_map(self) -> dict[str, str]:
-        """Parse VMS_CAMERA_SOURCES → dict camera_id → source_path."""
+        """Parse VMS_CAMERA_SOURCES → dict camera_id → source_path (bỏ phần |fallback)."""
         result: dict[str, str] = {}
+        for cam_id, primary, _fallback in self.vms_camera_entries:
+            result[cam_id] = primary
+        return result
+
+    @property
+    def vms_camera_entries(self) -> list[tuple[str, str, str | None]]:
+        """Parse VMS_CAMERA_SOURCES → (camera_id, primary, fallback_mp4|None).
+
+        Fallback (tuỳ chọn): HC-01:rtsp://host/path|/opt/videos/bodycam-01.mp4
+        """
+        rows: list[tuple[str, str, str | None]] = []
         for entry in self.vms_camera_sources.split(","):
             entry = entry.strip()
             if ":" not in entry:
@@ -189,9 +200,16 @@ class Settings(BaseSettings):
             cam_id, path = entry.split(":", 1)
             cam_id = cam_id.strip()
             path = path.strip()
-            if cam_id and path:
-                result[cam_id] = path
-        return result
+            if not cam_id or not path:
+                continue
+            fallback: str | None = None
+            if "|" in path:
+                path, fb = path.split("|", 1)
+                path = path.strip()
+                fb = fb.strip()
+                fallback = fb or None
+            rows.append((cam_id, path, fallback))
+        return rows
 
 
 settings = Settings()

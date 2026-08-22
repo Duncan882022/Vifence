@@ -50,6 +50,7 @@ class PpeDetection(BaseModel):
     scenario_id: str
     confidence: float
     bbox: list[float]
+    subject_bbox: Optional[list[float]] = None  # bbox YOLO gốc (snapshot PPE)
     worker_id: Optional[str] = None
     worker_name: Optional[str] = None
     employee_code: Optional[str] = None
@@ -198,6 +199,15 @@ PPE_SCENARIO_META = {
         "scenario_name": "Giày BHLD",
         "violation_type": "ppe",
         "group": "PPE",
+    },
+}
+
+PERSON_SCENARIO_META = {
+    "person": {
+        "scenario_id": "PERS-001",
+        "scenario_name": "Phát hiện người",
+        "violation_type": "person",
+        "group": "PERS",
     },
 }
 
@@ -411,6 +421,39 @@ class ViolationEvent(BaseModel):
             contractor_name=contractor_name,
             face_match_confidence=face_match_confidence,
             face_match_source=face_match_source,
+        )
+
+    @classmethod
+    def from_person_detection(
+        cls,
+        detection: PpeDetection,
+        snapshot_file: Optional[str],
+        event_date: Optional[str] = None,
+        camera_id: str = "HC-01",
+    ) -> "ViolationEvent":
+        meta = PERSON_SCENARIO_META["person"]
+        created = time.time()
+        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        worker_id = detection.worker_id
+        worker_name = detection.worker_name or worker_id or "Người chưa xác định"
+        return cls(
+            behavior=detection.behavior,
+            scenario_id=meta["scenario_id"],
+            scenario_name=meta["scenario_name"],
+            violation_type=meta["violation_type"],
+            group=meta["group"],
+            confidence=detection.confidence,
+            bbox=detection.bbox,
+            created_at=created,
+            event_date=day,
+            camera_id=camera_id,
+            snapshot_file=snapshot_file,
+            worker_id=worker_id,
+            worker_name=worker_name,
+            employee_code=detection.employee_code,
+            contractor_name=detection.contractor_name,
+            face_match_confidence=detection.face_match_confidence,
+            face_match_source=getattr(detection, "face_match_source", None),
         )
 
     @classmethod

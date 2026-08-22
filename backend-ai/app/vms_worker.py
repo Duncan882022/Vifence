@@ -66,9 +66,13 @@ class CameraVmsWorker:
         process_frame_fns: dict[str, Callable],
         on_event: Optional[Callable] = None,
         ai_fps: float = VMS_AI_FPS,
+        fallback_source: Optional[str] = None,
     ):
         self.camera_id = camera_id
         self.source_path = source_path
+        self._fallback_source = (fallback_source or "").strip() or None
+        self._active_source = source_path
+        self._using_fallback = False
         self._process_fns = process_frame_fns
         self._on_event = on_event
         self._ai_fps = ai_fps
@@ -98,9 +102,7 @@ class CameraVmsWorker:
         self._hls_restart_cooldown_until: float = 0.0
         self._hls_pipe_stdin = None
         self._hls_pipe_size: Optional[tuple[int, int]] = None
-        # RTSP thường chỉ 1 client — relay-only hoặc ingest+pipe HLS khi có AI.
-        self._live_hls_only = _is_live_stream_source(source_path) and not process_frame_fns
-        self._live_hls_from_pipe = _is_live_stream_source(source_path) and bool(process_frame_fns)
+        self._refresh_source_mode()
 
         self._overlay_lock = threading.Lock()
         self._latest_overlay: dict = {
@@ -120,6 +122,39 @@ class CameraVmsWorker:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _refresh_source_mode(self) -> None:
+        live = _is_live_stream_source(self._active_source)
+        self._live_hls_only = live and not self._process_fns
+        self._live_hls_from_pipe = live and bool(self._process_fns)
+
+    def _switch_to_fallback_source(self) -> bool:
+        if self._using_fallback or not self._fallback_source:
+            return False
+        fb = self._fallback_source
+        if not Path(fb).is_file():
+            logger.warning(
+                "[VMS %s] Fallback MP4 không tồn tại: %s",
+                self.camera_id,
+                fb,
+            )
+            return False
+        logger.warning(
+            "[VMS %s] RTSP/live lỗi — chuyển fallback MP4: %s (primary: %s)",
+            self.camera_id,
+            fb,
+            self.source_path,
+        )
+        self._using_fallback = True
+        self._active_source = fb
+        self._refresh_source_mode()
+        self._clear_frame_buffer()
+        with self._hls_lock:
+            self._stop_hls_unlocked()
+            if not self._live_hls_from_pipe:
+                self._start_hls(fresh_output=True)
+        self._probe_source_duration()
+        return True
 
     def seek_to_start(self) -> None:
         """Rewind MP4 về frame 0 — dùng khi arm grace / DELETE /events."""
@@ -190,7 +225,7 @@ class CameraVmsWorker:
     def hls_ready(self) -> bool:
         if not self.hls_index_path().is_file():
             return False
-        if not _is_live_stream_source(self.source_path):
+        if not _is_live_stream_source(self._active_source):
             return True
         # Live: phát miễn ffmpeg còn chạy — tránh 503 giữa chừng gây reload FE.
         return self._hls_proc is not None and self._hls_proc.poll() is None
@@ -218,7 +253,9 @@ class CameraVmsWorker:
         return base
 
     def is_stream_live(self) -> bool:
-        if not _is_live_stream_source(self.source_path):
+        if self._using_fallback:
+            return False
+        if not _is_live_stream_source(self._active_source):
             return True
         with self._frame_lock:
             if self._frame is None or self._frame_received_at <= 0:
@@ -262,7 +299,7 @@ class CameraVmsWorker:
 
     def _probe_source_duration(self) -> None:
         try:
-            cap = cv2.VideoCapture(self.source_path)
+            cap = cv2.VideoCapture(self._active_source)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             fc = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             cap.release()
@@ -273,20 +310,36 @@ class CameraVmsWorker:
 
     def _ingest_loop(self) -> None:
         retry_delay = 3.0
+        open_failures = 0
         while self._running:
-            cap = cv2.VideoCapture(self.source_path)
+            cap = cv2.VideoCapture(self._active_source)
             if not cap.isOpened():
-                logger.warning("[VMS %s] Không mở được source, retry %.1fs", self.camera_id, retry_delay)
-                if _is_live_stream_source(self.source_path):
+                open_failures += 1
+                logger.warning(
+                    "[VMS %s] Không mở được source (%s), retry %.1fs (#%d)",
+                    self.camera_id,
+                    self._active_source,
+                    retry_delay,
+                    open_failures,
+                )
+                if (
+                    _is_live_stream_source(self._active_source)
+                    and open_failures >= 3
+                    and self._switch_to_fallback_source()
+                ):
+                    open_failures = 0
+                    continue
+                if _is_live_stream_source(self._active_source):
                     self._clear_frame_buffer()
                 time.sleep(retry_delay)
                 continue
 
+            open_failures = 0
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             if fps <= 0 or fps > 120:
                 fps = 25.0
             frame_sleep = 1.0 / fps
-            live = _is_live_stream_source(self.source_path)
+            live = _is_live_stream_source(self._active_source)
 
             logger.info("[VMS %s] Ingest bắt đầu @ %.1f FPS", self.camera_id, fps)
 
@@ -313,7 +366,7 @@ class CameraVmsWorker:
 
                 ok, frame = cap.read()
                 if not ok or frame is None:
-                    if _is_live_stream_source(self.source_path):
+                    if _is_live_stream_source(self._active_source):
                         logger.warning("[VMS %s] Mất tín hiệu live — reconnect.", self.camera_id)
                         self._clear_frame_buffer()
                         break
@@ -385,7 +438,7 @@ class CameraVmsWorker:
                 frame = None if self._frame is None else self._frame.copy()
                 source_pts_sec = float(self._source_pts_sec)
                 frame_received_at = float(self._frame_received_at)
-            if frame is not None and _is_live_stream_source(self.source_path):
+            if frame is not None and _is_live_stream_source(self._active_source):
                 frame_age = time.time() - frame_received_at
                 if frame_received_at <= 0 or frame_age > LIVE_FRAME_STALE_SEC:
                     frame = None
@@ -529,7 +582,7 @@ class CameraVmsWorker:
         segment_pattern = str(self._hls_dir / "seg_%04d.ts")
 
         if fresh_output or (
-            _is_live_stream_source(self.source_path) and not self.hls_index_path().is_file()
+            _is_live_stream_source(self._active_source) and not self.hls_index_path().is_file()
         ):
             self._clear_hls_output()
 
@@ -550,19 +603,19 @@ class CameraVmsWorker:
             ])
             cmd.extend(self._live_hls_encode_args(segment_pattern, hls_out))
             stdin_mode = True
-        elif _is_live_stream_source(self.source_path):
+        elif _is_live_stream_source(self._active_source):
             cmd.extend([
                 "-fflags", "nobuffer",
                 "-flags", "low_delay",
                 "-probesize", "500000",
                 "-analyzeduration", "500000",
                 "-rtsp_transport", "tcp",
-                "-i", self.source_path,
+                "-i", self._active_source,
                 "-r", "25",
             ])
             cmd.extend(self._live_hls_encode_args(segment_pattern, hls_out))
         else:
-            cmd.extend(["-stream_loop", "-1", "-re", "-i", self.source_path])
+            cmd.extend(["-stream_loop", "-1", "-re", "-i", self._active_source])
             cmd.extend([
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
