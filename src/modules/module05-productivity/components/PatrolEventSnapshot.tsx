@@ -23,7 +23,9 @@ export function PatrolEventSnapshot({ event, className, onClick }: PatrolEventSn
         'absolute inset-0 opacity-90',
         event.type === 'PPE_VIOLATION'
           ? 'bg-gradient-to-br from-red-950/80 via-[#0a0e17] to-[#060b14]'
-          : 'bg-gradient-to-br from-amber-950/70 via-[#0a0e17] to-[#060b14]',
+          : event.type === 'PERSON_DETECTED'
+            ? 'bg-gradient-to-br from-sky-950/70 via-[#0a0e17] to-[#060b14]'
+            : 'bg-gradient-to-br from-amber-950/70 via-[#0a0e17] to-[#060b14]',
       )} />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 p-1">
         <Icon className={cn('w-4 h-4', meta.color)} aria-hidden />
@@ -38,7 +40,7 @@ export function PatrolEventSnapshot({ event, className, onClick }: PatrolEventSn
         <img
           src={event.snapshotUrl}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-contain"
           loading="lazy"
         />
       ) : placeholder}
