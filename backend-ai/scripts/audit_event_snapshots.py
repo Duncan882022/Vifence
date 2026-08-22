@@ -735,9 +735,9 @@ def audit_ppe_snapshot_bbox() -> list[CaseResult]:
 
     results: list[CaseResult] = []
 
-    # Bbox áo phải nằm trong vùng quét vest (20–72% chiều cao người)
+    # Bbox áo phải nằm trong vùng quét vest (30–58% chiều cao người)
     pb = (80.0, 120.0, 220.0, 420.0)
-    torso_scan = (80.0, 120.0 + 300 * 0.20, 220.0, 120.0 + 300 * 0.72)
+    torso_scan = (80.0, 120.0 + 300 * 0.30, 220.0, 120.0 + 300 * 0.58)
     vest_box = ppe_violation_display_bbox(pb, "no_vest", 480, scan_region=torso_scan)
     vcy = (vest_box[1] + vest_box[3]) / 2
     tcy = (torso_scan[1] + torso_scan[3]) / 2

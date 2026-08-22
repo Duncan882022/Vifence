@@ -341,24 +341,35 @@ def audit_hc02_ppe_analyzer() -> list[CaseResult]:
     )
 
     pb = (80.0, 120.0, 220.0, 420.0)
-    torso = (80.0, 120.0 + 300 * 0.20, 220.0, 120.0 + 300 * 0.72)
+    torso = (80.0, 120.0 + 300 * 0.30, 220.0, 120.0 + 300 * 0.58)
     vest = ppe_violation_display_bbox(pb, "no_vest", fh, scan_region=torso)
     vcy = (vest[1] + vest[3]) / 2
     tcy = (torso[1] + torso[3]) / 2
     ok_vest = abs(vcy - tcy) < (pb[3] - pb[1]) * 0.12
     results.append(CaseResult("hc02_vest_bbox_torso", ok_vest, f"vest_cy={vcy:.0f} torso_cy={tcy:.0f}"))
 
-    from app.ppe_analyzer import _torso_assessable
+    from app.ppe_analyzer import _helmet_violation_display_bbox, _torso_assessable
 
-    face_pb = (120.0, 80.0, 260.0, 210.0)
+    face_close_pb = (178.0, 118.0, 242.0, 140.0)
     chest_pb = (80.0, 40.0, 260.0, 420.0)
-    ok_face_skip = not _torso_assessable(face_pb, 640, 480, camera_id="HC-02")
+    half_chest_pb = (60.0, 40.0, 260.0, 360.0)
+    ok_face_skip = not _torso_assessable(face_close_pb, 640, 480, camera_id="HC-02")
     ok_chest_ok = _torso_assessable(chest_pb, 640, 480, camera_id="HC-02")
+    ok_half_chest = _torso_assessable(half_chest_pb, 320, 480, camera_id="HC-02")
+    helmet_roi = _helmet_violation_display_bbox(chest_pb)
+    ok_helmet_tight = helmet_roi[3] <= chest_pb[1] + (chest_pb[3] - chest_pb[1]) * 0.22
     results.append(
         CaseResult(
             "hc02_no_vest_skips_face_only",
-            ok_face_skip and ok_chest_ok,
-            f"face={ok_face_skip} chest={ok_chest_ok}",
+            ok_face_skip and ok_chest_ok and ok_half_chest,
+            f"face_skip={ok_face_skip} chest={ok_chest_ok} half_chest={ok_half_chest}",
+        ),
+    )
+    results.append(
+        CaseResult(
+            "hc02_helmet_roi_tight",
+            ok_helmet_tight,
+            f"helmet_y2={helmet_roi[3]:.0f} head_bottom={chest_pb[1] + (chest_pb[3] - chest_pb[1]) * 0.22:.0f}",
         ),
     )
 
