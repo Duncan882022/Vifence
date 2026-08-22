@@ -42,12 +42,17 @@ function buildInitialPositions(): CameraPositions {
   return pin ? { [HC01_CAMERA_ID]: pin.position } : {}
 }
 
-function isValidGps(lat: unknown, lng: unknown): lat is number {
-  return typeof lat === 'number'
-    && typeof lng === 'number'
-    && Number.isFinite(lat)
-    && Number.isFinite(lng)
-    && !(lat === 0 && lng === 0)
+function asGpsPair(lat: unknown, lng: unknown): [number, number] | null {
+  if (
+    typeof lat !== 'number'
+    || typeof lng !== 'number'
+    || !Number.isFinite(lat)
+    || !Number.isFinite(lng)
+    || (lat === 0 && lng === 0)
+  ) {
+    return null
+  }
+  return [lat, lng]
 }
 
 function appendRouteHistory(
@@ -80,7 +85,9 @@ export function usePatrolWebSocket(_patrolId: string): {
   )
   const [routeHistory, setRouteHistory] = useState<RouteHistory>(() => {
     const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
-    return pin ? { [HC01_CAMERA_ID]: [pin.position] } : {}
+    const initial: RouteHistory = {}
+    if (pin) initial[HC01_CAMERA_ID] = [pin.position]
+    return initial
   })
 
   const hc02PosRef = useRef<[number, number] | null>(null)
@@ -124,10 +131,8 @@ export function usePatrolWebSocket(_patrolId: string): {
       try {
         const metrics = await fetchPatrolHelmetMetrics(HC02_CAMERA_ID, backendUrl)
         if (cancelled || !metrics) return
-        const { gps_lat: lat, gps_lng: lng } = metrics
-        if (isValidGps(lat, lng)) {
-          applyHc02Position(lat, lng)
-        }
+        const pair = asGpsPair(metrics.gps_lat, metrics.gps_lng)
+        if (pair) applyHc02Position(pair[0], pair[1])
       } catch {
         // Backend offline — giữ vị trí cuối.
       }

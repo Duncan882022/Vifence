@@ -31,6 +31,11 @@ function isValidGps(lat: unknown, lng: unknown): lat is number {
     && !(lat === 0 && lng === 0)
 }
 
+function asGpsPair(lat: unknown, lng: unknown): [number, number] | null {
+  if (!isValidGps(lat, lng)) return null
+  return [lat, lng as number]
+}
+
 export interface Hc02LiveMapState {
   hasLiveGps: boolean
   lat: number | null
@@ -120,9 +125,8 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       try {
         const metrics = await fetchPatrolHelmetMetrics(HC02, backendUrl)
         if (cancelled || !metrics) return
-        if (isValidGps(metrics.gps_lat, metrics.gps_lng)) {
-          applyGps(metrics.gps_lat, metrics.gps_lng)
-        }
+        const pair = asGpsPair(metrics.gps_lat, metrics.gps_lng)
+        if (pair) applyGps(pair[0], pair[1])
         const n = Math.max(0, Math.floor(Number(metrics.person_count ?? 0)))
         // Ưu tiên bridge mobile nếu còn fresh — tránh poll 0 đè lên live count
         const mobile = getPatrolMobileLiveSnapshot(HC02)
@@ -161,7 +165,7 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   const hasGps = isValidGps(lat, lng)
 
   const dots = useMemo(() => {
-    if (!hasGps || displayCount <= 0) return []
+    if (!hasGps || lat == null || lng == null || displayCount <= 0) return []
     // ~2m trên map cho dễ thấy; vẫn quanh vị trí mũ
     return buildPersonDotsAroundGps(HC02, lat, lng, displayCount, 2)
   }, [hasGps, lat, lng, displayCount])
