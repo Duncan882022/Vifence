@@ -1,20 +1,24 @@
 /**
- * Mock WebSocket hook — HQCV §41.
- * Mỗi mũ tuần tra zigzag trong polygon khu phụ trách.
+ * Live map positions — chỉ HC-01 + HC-02.
+ * HC-02: GPS thật. HC-01: pin khu ZONE_A (không zigzag). HC-03…05 tạm ẩn.
  */
 import { useEffect, useRef, useState } from 'react'
+import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
+import { subscribePatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import { MOCK_PATROL_ZONES, type PatrolZone } from '../data/patrolMockData'
-import {
-  PATROL_HELMET_GPS_PINS,
-  PATROL_HELMET_ZONE_TRAILS,
-} from '../data/patrolSiteMap'
+import { PATROL_MAP_ACTIVE_HELMET_PINS } from '../data/patrolSiteMap'
+import { fetchPatrolHelmetMetrics } from './patrolLiveEvents.service'
 
 export type LivePatrolZone = PatrolZone
 
 export type CameraPositions = Record<string, [number, number]>
-export type RouteHistory    = Record<string, [number, number][]>
+export type RouteHistory = Record<string, [number, number][]>
 
 const MAX_HISTORY = 150
+const HC01_CAMERA_ID = 'HC-01'
+const HC02_CAMERA_ID = 'HC-02'
+const BACKEND_GPS_POLL_MS = 2500
 
 function jitter(value: number, max: number): number {
   if (max <= 0) return 0
@@ -34,9 +38,33 @@ function tickZones(zones: LivePatrolZone[]): LivePatrolZone[] {
 }
 
 function buildInitialPositions(): CameraPositions {
-  return Object.fromEntries(
-    PATROL_HELMET_GPS_PINS.map(p => [p.id, p.position]),
-  )
+  const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
+  return pin ? { [HC01_CAMERA_ID]: pin.position } : {}
+}
+
+function isValidGps(lat: unknown, lng: unknown): lat is number {
+  return typeof lat === 'number'
+    && typeof lng === 'number'
+    && Number.isFinite(lat)
+    && Number.isFinite(lng)
+    && !(lat === 0 && lng === 0)
+}
+
+function appendRouteHistory(
+  prev: RouteHistory,
+  cameraId: string,
+  pos: [number, number],
+): RouteHistory {
+  const hist = prev[cameraId] ?? []
+  const last = hist[hist.length - 1]
+  if (last && last[0] === pos[0] && last[1] === pos[1]) return prev
+  const updated = [...hist, pos]
+  return {
+    ...prev,
+    [cameraId]: updated.length > MAX_HISTORY
+      ? updated.slice(updated.length - MAX_HISTORY)
+      : updated,
+  }
 }
 
 export function usePatrolWebSocket(_patrolId: string): {
@@ -50,78 +78,75 @@ export function usePatrolWebSocket(_patrolId: string): {
   const [cameraPositions, setCameraPositions] = useState<CameraPositions>(
     buildInitialPositions,
   )
-  const [routeHistory, setRouteHistory] = useState<RouteHistory>(() =>
-    Object.fromEntries(PATROL_HELMET_GPS_PINS.map(p => [p.id, [p.position]])),
-  )
+  const [routeHistory, setRouteHistory] = useState<RouteHistory>(() => {
+    const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
+    return pin ? { [HC01_CAMERA_ID]: [pin.position] } : {}
+  })
 
-  const trailIndicesRef = useRef<Record<string, number>>(
-    Object.fromEntries(PATROL_HELMET_GPS_PINS.map(p => [p.id, 0])),
-  )
+  const hc02PosRef = useRef<[number, number] | null>(null)
 
-  /* zone_count_updated ── every 3.5 s */
+  const applyHc02Position = (lat: number, lng: number) => {
+    const pos: [number, number] = [lat, lng]
+    hc02PosRef.current = pos
+    setCameraPositions(prev => ({ ...prev, [HC02_CAMERA_ID]: pos }))
+    setRouteHistory(prev => appendRouteHistory(prev, HC02_CAMERA_ID, pos))
+  }
+
+  /* HC-01: giữ pin ZONE_A (offline khi cam tắt — không giả lập di chuyển) */
+  useEffect(() => {
+    const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
+    if (!pin) return
+    setCameraPositions(prev => {
+      const { [HC02_CAMERA_ID]: hc02, ...rest } = prev
+      return {
+        ...rest,
+        [HC01_CAMERA_ID]: pin.position,
+        ...(hc02 ? { [HC02_CAMERA_ID]: hc02 } : {}),
+      }
+    })
+  }, [])
+
+  /* HC-02: GPS từ thiết bị đang stream (cùng tab) */
+  useEffect(() => {
+    return subscribePatrolHelmetGps(snap => {
+      if (snap.cameraId !== HC02_CAMERA_ID) return
+      applyHc02Position(snap.lat, snap.lng)
+    })
+  }, [])
+
+  /* HC-02: poll backend cache */
+  useEffect(() => {
+    let cancelled = false
+
+    const poll = async () => {
+      const backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl()
+      if (!backendUrl) return
+      try {
+        const metrics = await fetchPatrolHelmetMetrics(HC02_CAMERA_ID, backendUrl)
+        if (cancelled || !metrics) return
+        const { gps_lat: lat, gps_lng: lng } = metrics
+        if (isValidGps(lat, lng)) {
+          applyHc02Position(lat, lng)
+        }
+      } catch {
+        // Backend offline — giữ vị trí cuối.
+      }
+    }
+
+    void poll()
+    const t = window.setInterval(() => { void poll() }, BACKEND_GPS_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(t)
+    }
+  }, [])
+
+  /* zone_count_updated ── every 3.5 s (chỉ khi bật polygon mock) */
   useEffect(() => {
     const t = window.setInterval(() => {
       setLiveZones(prev => tickZones(prev))
     }, 3500)
     return () => window.clearInterval(t)
-  }, [])
-
-  /* camera_position — mỗi mũ di chuyển, tích luỹ history */
-  useEffect(() => {
-    let historyTick = 0
-    const t = window.setInterval(() => {
-      const newPositions: CameraPositions = {}
-      for (const pin of PATROL_HELMET_GPS_PINS) {
-        const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
-        if (!trail?.length) continue
-        const idx = trailIndicesRef.current[pin.id] ?? 0
-        trailIndicesRef.current[pin.id] = (idx + 1) % trail.length
-        newPositions[pin.id] = trail[trailIndicesRef.current[pin.id]]
-      }
-      setCameraPositions(newPositions)
-
-      /* Cập nhật history mỗi 5 tick (~1.5s) để tránh re-render quá nhiều */
-      historyTick++
-      if (historyTick % 5 === 0) {
-        setRouteHistory(prev => {
-          const next = { ...prev }
-          for (const pin of PATROL_HELMET_GPS_PINS) {
-            const pos = newPositions[pin.id]
-            if (!pos) continue
-            const hist = prev[pin.id] ?? []
-            const updated = [...hist, pos]
-            next[pin.id] = updated.length > MAX_HISTORY
-              ? updated.slice(updated.length - MAX_HISTORY)
-              : updated
-          }
-          return next
-        })
-      }
-    }, 300)
-    return () => window.clearInterval(t)
-  }, [])
-
-  /* Stagger initial phase so 5 mũ không chồng vị trí */
-  useEffect(() => {
-    const offsets: Record<string, number> = {
-      'HC-01': 0,
-      'HC-02': 3,
-      'HC-03': 6,
-      'HC-04': 9,
-      'HC-05': 12,
-    }
-    trailIndicesRef.current = Object.fromEntries(
-      PATROL_HELMET_GPS_PINS.map(p => [p.id, offsets[p.id] ?? 0]),
-    )
-    setCameraPositions(() => {
-      const pos: CameraPositions = {}
-      for (const pin of PATROL_HELMET_GPS_PINS) {
-        const trail = PATROL_HELMET_ZONE_TRAILS[pin.id]
-        const idx = offsets[pin.id] ?? 0
-        pos[pin.id] = trail?.[idx] ?? pin.position
-      }
-      return pos
-    })
   }, [])
 
   return { liveZones, cameraPositions, routeHistory }

@@ -43,6 +43,14 @@ from .schemas import MobileAiConfigPayload, MobileFramePayload, WorkerGalleryEnr
 from .worker_identity.gallery import enroll_face, get_enrollment_status, resolve_worker_id
 from .worker_identity.recognizer import gallery_status, reload_gallery
 from .vms_worker import CameraVmsWorker, CLIPS_DIR
+from .patrol_api import (
+    build_patrol_aggregate_events_payload,
+    build_patrol_aggregate_metrics_payload,
+    build_patrol_events_payload,
+    build_patrol_metrics_payload,
+    update_patrol_gps,
+    update_patrol_mobile_metrics,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -319,8 +327,59 @@ def get_mobile_ai_config_history(date: str | None = None, limit: int = 50):
 
 
 @app.get("/events")
-def list_events(limit: int = 50, date: str | None = None):
-    return [e.model_dump() for e in engine.store.list_events(limit=limit, date=date)]
+def list_events(limit: int = 50, date: str | None = None, camera_id: str | None = None):
+    return [
+        e.model_dump()
+        for e in engine.store.list_events(limit=limit, date=date, camera_id=camera_id)
+    ]
+
+
+@app.get("/patrol/metrics")
+def patrol_aggregate_metrics(cameras: str = "HC-01,HC-02"):
+    """Module 05 — gộp đếm công nhân / PPE từ nhiều mũ HC-*."""
+    camera_ids = [cam.strip() for cam in cameras.split(",") if cam.strip()]
+    return build_patrol_aggregate_metrics_payload(
+        camera_ids,
+        store=engine.store,
+        vms_workers=_vms_workers,
+    )
+
+
+@app.get("/patrol/events")
+def patrol_aggregate_events(
+    cameras: str = "HC-01,HC-02",
+    date: str | None = None,
+    limit: int = 500,
+):
+    """Module 05 — gộp sự kiện PPE từ nhiều mũ HC-*."""
+    camera_ids = [cam.strip() for cam in cameras.split(",") if cam.strip()]
+    return build_patrol_aggregate_events_payload(
+        camera_ids,
+        store=engine.store,
+        date=date,
+        limit=limit,
+    )
+
+
+@app.get("/patrol/{camera_id}/events")
+def patrol_helmet_events(camera_id: str, date: str | None = None, limit: int = 500):
+    """Module 05 — chỉ sự kiện PPE của camera HC-* (không lẫn A-03/A-04)."""
+    return build_patrol_events_payload(
+        camera_id,
+        store=engine.store,
+        date=date,
+        limit=limit,
+    )
+
+
+@app.get("/patrol/{camera_id}/metrics")
+def patrol_helmet_metrics(camera_id: str):
+    """Module 05 — đếm công nhân / vi phạm PPE live theo từng mũ HC-*."""
+    return build_patrol_metrics_payload(
+        camera_id,
+        store=engine.store,
+        vms_workers=_vms_workers,
+    )
 
 
 @app.get("/events/dates")
@@ -336,8 +395,8 @@ def clear_events():
 
 @app.get("/events/{event_id}/snapshot")
 def event_snapshot(event_id: str):
-    events = engine.store.list_events(limit=200)
-    snapshot_file = next((e.snapshot_file for e in events if e.id == event_id), None)
+    event = engine.store.get_event(event_id)
+    snapshot_file = event.snapshot_file if event else None
     path = engine.store.resolve_snapshot_path(event_id, snapshot_file)
     if path is None or not path.exists():
         raise HTTPException(status_code=404, detail="Snapshot not found")
@@ -464,9 +523,10 @@ def vms_stream_detections(camera_id: str):
     if worker is None:
         raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
     payload = worker.get_latest_overlay()
+    stream_online = bool(payload.get("stream_online", True))
     return {
         "type": "detections",
-        "vms_ready": payload.get("updated_at", 0) > 0,
+        "vms_ready": stream_online and payload.get("updated_at", 0) > 0,
         **payload,
     }
 
@@ -490,6 +550,7 @@ def list_vms_cameras():
         {
             "camera_id": cam_id,
             "hls_ready": worker.hls_ready(),
+            "stream_online": worker.is_stream_live(),
             "hls_url": f"/stream/{cam_id}/index.m3u8",
             "source_path": worker.source_path,
         }
@@ -601,13 +662,18 @@ async def analyze_ppe_frame_endpoint(payload: MobileFramePayload):
         return {"type": "error", "message": "invalid_image"}
 
     camera_id = payload.camera_id or "A-04"
+    if payload.gps_lat is not None and payload.gps_lng is not None:
+        update_patrol_gps(camera_id, payload.gps_lat, payload.gps_lng)
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
+    result = await loop.run_in_executor(
         _analyze_executor,
         _analyze_ppe_frame,
         frame,
         camera_id,
     )
+    if isinstance(result, dict):
+        update_patrol_mobile_metrics(camera_id, result)
+    return result
 
 
 @app.post("/analyze/pccc/frame")
@@ -698,6 +764,8 @@ async def analyze_frame(payload: MobileFramePayload):
         return {"type": "error", "message": "invalid_image"}
 
     camera_id = payload.camera_id or "mobile"
+    if payload.gps_lat is not None and payload.gps_lng is not None:
+        update_patrol_gps(camera_id, payload.gps_lat, payload.gps_lng)
     loop = asyncio.get_event_loop()
     if payload.mode == "road":
         return await loop.run_in_executor(
@@ -714,12 +782,15 @@ async def analyze_frame(payload: MobileFramePayload):
             camera_id,
         )
     if payload.mode == "ppe":
-        return await loop.run_in_executor(
+        result = await loop.run_in_executor(
             _analyze_executor,
             _analyze_ppe_frame,
             frame,
             camera_id,
         )
+        if isinstance(result, dict):
+            update_patrol_mobile_metrics(camera_id, result)
+        return result
     return await loop.run_in_executor(
         _analyze_executor,
         _analyze_mobile_frame,

@@ -28,7 +28,7 @@ import {
   groupPatrolCamerasForSidebar,
   type PatrolCameraFilterTab,
 } from './data/patrolCameras'
-import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive } from './data/patrolHelmetStreams'
+import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import {
   fetchPatrolCameraRecords,
@@ -36,33 +36,55 @@ import {
   getPatrolDefaultPlaybackDate,
 } from './services/patrolCameraPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
+import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
-import { usePatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
+import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
+import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
+function formatHelmetMetricBreakdown(
+  perCamera: PatrolHelmetLiveMetrics['perCamera'],
+  field: 'person_count' | 'ppe_violations' | 'ppe_alerts_today',
+): string {
+  if (perCamera.length === 0) return ''
+  return perCamera
+    .map(row => `${row.camera_id.replace('HC-', 'H')}: ${row[field]}`)
+    .join(' · ')
+}
+
 function PatrolKPIs() {
   const d = MOCK_PATROL_DASHBOARD
   const events = MOCK_PATROL_EVENTS
-  const live = usePatrolHelmetLiveMetrics('HC-01')
+  const live = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
   const mockAlerts = events.length
   const mockPpeCount = events.filter(e => e.type === 'PPE_VIOLATION').length
   const mockMachineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
 
-  const alertValue = live.connected
+  const alertValue = live.streamOnline
     ? Math.max(live.ppeAlertsToday, live.activePpeViolations)
-    : mockAlerts
+    : live.backendReachable
+      ? live.ppeAlertsToday
+      : mockAlerts
   const totalAlerts = alertValue
-  const ppeCount = live.connected ? live.ppeAlertsToday : mockPpeCount
-  const machineCount = live.connected ? 0 : mockMachineCount
-  const peopleValue = live.connected ? live.personCount : d.uniquePeople
-  const peopleDetail = live.connected
-    ? `${live.personCount} trong khung · ${live.uniqueWorkers} unique · ${live.identifiedWorkers} đã nhận diện`
-    : 'Unique trên công trường hôm nay'
-  const alertDetail = live.connected
-    ? `${live.activePpeViolations} đang vi phạm · ${live.ppeAlertsToday} sự kiện đã ghi hôm nay`
-    : `${ppeCount} PPE · ${machineCount} Machine`
+  const ppeCount = live.backendReachable ? live.ppeAlertsToday : mockPpeCount
+  const machineCount = live.streamOnline ? 0 : mockMachineCount
+  const peopleValue = live.streamOnline
+    ? live.personCount
+    : live.backendReachable
+      ? 0
+      : d.uniquePeople
+  const peopleDetail = live.streamOnline
+    ? `${live.personCount} live · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count')}`
+    : live.backendReachable
+      ? `Offline — ${formatHelmetMetricBreakdown(live.perCamera, 'person_count') || 'chưa có live'}`
+      : 'Unique trên công trường hôm nay'
+  const alertDetail = live.streamOnline
+    ? `${live.activePpeViolations} đang vi phạm · ${live.ppeAlertsToday} đã ghi (${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')})`
+    : live.backendReachable
+      ? `${live.ppeAlertsToday} sự kiện hôm nay · ${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')}`
+      : `${ppeCount} PPE · ${machineCount} Machine`
 
   const kpis = [
     {
@@ -193,17 +215,20 @@ export function Module05Page() {
   const { cameras: visionCameras } = useCameras()
 
   const patrolCamerasLive = useMemo(
-    () => applyPatrolHelmetEnvLive(
-      mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+    () => applyPatrolHelmetMobileLive(
+      applyPatrolHelmetEnvLive(
+        mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+      ),
     ),
     [visionCameras],
   )
 
-  const liveHelmetEvents = usePatrolHelmetLiveEvents('HC-01')
-  const patrolEventsLive = useMemo(
-    () => (liveHelmetEvents.connected ? liveHelmetEvents.events : MOCK_PATROL_EVENTS),
-    [liveHelmetEvents.connected, liveHelmetEvents.events],
-  )
+  const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
+  const patrolEventsLive = useMemo(() => {
+    if (liveHelmetEvents.backendReachable) return liveHelmetEvents.events
+    if (getVmsBackendUrl()) return []
+    return MOCK_PATROL_EVENTS
+  }, [liveHelmetEvents.backendReachable, liveHelmetEvents.events])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
@@ -402,6 +427,8 @@ export function Module05Page() {
         onClose={() => setDetailEventId(null)}
         onPlayback={handleSelectEvent}
       />
+
+      <PatrolDevicePermissionGate />
 
       {heatmapExpanded && (
         <HeatmapModal onClose={() => setHeatmapExpanded(false)} />

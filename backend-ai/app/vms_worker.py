@@ -43,6 +43,8 @@ CLIP_PRE_SEC = 1.0
 CLIP_POST_SEC = 4.0
 # Ring buffer pts history (giây) — tìm source_pts khi clip
 PTS_HISTORY_SEC = 60.0
+# Live RTSP: không chạy AI trên frame đóng băng khi mất tín hiệu.
+LIVE_FRAME_STALE_SEC = 4.0
 
 
 class CameraVmsWorker:
@@ -73,6 +75,7 @@ class CameraVmsWorker:
 
         self._frame: Optional[np.ndarray] = None
         self._source_pts_sec: float = 0.0
+        self._frame_received_at: float = 0.0
         self._frame_lock = threading.Lock()
         self._running = False
         self._source_duration: float = 0.0
@@ -194,16 +197,53 @@ class CameraVmsWorker:
 
     def get_latest_overlay(self) -> dict:
         """Snapshot detections/zones mới nhất — FE poll để vẽ ROI (Option 2)."""
+        stream_online = self.is_stream_live()
+        frame_age_sec = self._frame_age_sec()
         with self._overlay_lock:
-            return {
+            base = {
                 "camera_id": self.camera_id,
                 "width": int(self._latest_overlay.get("width") or 0),
                 "height": int(self._latest_overlay.get("height") or 0),
                 "updated_at": float(self._latest_overlay.get("updated_at") or 0.0),
                 "source_pts_sec": float(self._latest_overlay.get("source_pts_sec") or 0.0),
+                "stream_online": stream_online,
+                "frame_age_sec": round(frame_age_sec, 2) if frame_age_sec >= 0 else None,
                 "detections": list(self._latest_overlay.get("detections") or []),
                 "roi_zones": list(self._latest_overlay.get("roi_zones") or []),
                 "metrics": dict(self._latest_overlay.get("metrics") or {}),
+            }
+        if not stream_online:
+            base["detections"] = []
+            base["metrics"] = {}
+        return base
+
+    def is_stream_live(self) -> bool:
+        if not _is_live_stream_source(self.source_path):
+            return True
+        with self._frame_lock:
+            if self._frame is None or self._frame_received_at <= 0:
+                return False
+            return (time.time() - self._frame_received_at) <= LIVE_FRAME_STALE_SEC
+
+    def _frame_age_sec(self) -> float:
+        with self._frame_lock:
+            if self._frame_received_at <= 0:
+                return -1.0
+            return time.time() - self._frame_received_at
+
+    def _clear_frame_buffer(self) -> None:
+        with self._frame_lock:
+            self._frame = None
+            self._source_pts_sec = 0.0
+            self._frame_received_at = 0.0
+        with self._overlay_lock:
+            self._latest_overlay = {
+                "width": 0,
+                "height": 0,
+                "detections": [],
+                "roi_zones": [],
+                "metrics": {},
+                "updated_at": 0.0,
             }
 
     @staticmethod
@@ -237,6 +277,8 @@ class CameraVmsWorker:
             cap = cv2.VideoCapture(self.source_path)
             if not cap.isOpened():
                 logger.warning("[VMS %s] Không mở được source, retry %.1fs", self.camera_id, retry_delay)
+                if _is_live_stream_source(self.source_path):
+                    self._clear_frame_buffer()
                 time.sleep(retry_delay)
                 continue
 
@@ -265,6 +307,7 @@ class CameraVmsWorker:
                     with self._frame_lock:
                         self._frame = frame
                         self._source_pts_sec = source_pts
+                        self._frame_received_at = time.time()
                     time.sleep(0.02)
                     continue
 
@@ -272,6 +315,7 @@ class CameraVmsWorker:
                 if not ok or frame is None:
                     if _is_live_stream_source(self.source_path):
                         logger.warning("[VMS %s] Mất tín hiệu live — reconnect.", self.camera_id)
+                        self._clear_frame_buffer()
                         break
                     from .vms_loop_state import register_video_loop
 
@@ -288,6 +332,7 @@ class CameraVmsWorker:
                 with self._frame_lock:
                     self._frame = frame
                     self._source_pts_sec = source_pts
+                    self._frame_received_at = time.time()
                 with self._pts_lock:
                     self._pts_history.append((wall_now, source_pts))
 
@@ -339,6 +384,11 @@ class CameraVmsWorker:
             with self._frame_lock:
                 frame = None if self._frame is None else self._frame.copy()
                 source_pts_sec = float(self._source_pts_sec)
+                frame_received_at = float(self._frame_received_at)
+            if frame is not None and _is_live_stream_source(self.source_path):
+                frame_age = time.time() - frame_received_at
+                if frame_received_at <= 0 or frame_age > LIVE_FRAME_STALE_SEC:
+                    frame = None
             if frame is not None:
                 h, w = frame.shape[:2]
                 frame_w, frame_h = w, h

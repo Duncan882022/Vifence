@@ -98,7 +98,8 @@ class PpeEngine:
             behavior = track_id.split(":")[1] if ":" in track_id else ""
             confirm = _CONFIRM_SECONDS
             if camera_id.startswith("HC-"):
-                confirm = 1.0
+                # Mobile helmet — log PPE nhanh hơn cam cố định
+                confirm = 0.45
             elif not settings.event_dedup_enabled() and behavior in ("no_vest", "no_shoes"):
                 confirm = 0.6
             self._gates[camera_id][track_id] = PersistenceDebouncer(

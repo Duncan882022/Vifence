@@ -179,6 +179,13 @@ function buildHelmetPins(): PatrolHelmetPin[] {
 
 export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
 
+/** Tạm chỉ HC-01 + HC-02 trên heatmap (ẩn giả lập HC-03…05). */
+export const PATROL_MAP_ACTIVE_HELMET_IDS = ['HC-01', 'HC-02'] as const
+
+export const PATROL_MAP_ACTIVE_HELMET_PINS: PatrolHelmetPin[] = PATROL_HELMET_GPS_PINS.filter(
+  pin => (PATROL_MAP_ACTIVE_HELMET_IDS as readonly string[]).includes(pin.id),
+)
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
@@ -304,6 +311,7 @@ export const PATROL_GPS_TRAIL = buildPatrolGpsTrail()
  */
 export {
   PATROL_SITE_BOUNDARY,
+  PATROL_SITE_CLIP_RING,
   isPointInSiteBoundary,
   clampPointToSiteBoundary,
   clipPolygonToSiteBoundary,

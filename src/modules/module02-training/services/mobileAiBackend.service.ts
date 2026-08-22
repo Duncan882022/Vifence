@@ -18,10 +18,12 @@ const TUNNEL_HEADERS: Record<string, string> = {
 }
 
 export interface MobileAiDetection {
-  behavior: 'smoking' | 'fire'
+  behavior: string
   label: string
   confidence: number
   bbox: [number, number, number, number]
+  worker_id?: string
+  worker_name?: string
 }
 
 export interface MobileAiViolationEvent {
@@ -129,11 +131,22 @@ export {
 
 export type MobileAiConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
+export type MobileAnalyzeMode = 'default' | 'ppe' | 'pccc' | 'road' | 'crane'
+
+/** MOB-* → hút thuốc/cháy; HC-02 patrol → PPE (cùng transport POST /analyze/frame). */
+export function resolveMobileAnalyzeMode(cameraId: string): MobileAnalyzeMode {
+  if (cameraId === 'HC-02') return 'ppe'
+  return 'default'
+}
+
 export interface MobileAiAnalyzeClientOptions {
   cameraId: string
   backendUrl: string
+  analyzeMode?: MobileAnalyzeMode
   onResult: (result: MobileAiAnalyzeResult) => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
+  /** GPS gửi kèm mỗi frame (HC-02 patrol). */
+  getGps?: () => { lat: number; lng: number } | null
   /** Chỉ gửi frame khi hàm trả true (vd đoạn PCCC trong video). */
   shouldAnalyze?: () => boolean
   intervalMs?: number
@@ -143,6 +156,8 @@ async function postAnalyzeFrame(
   backendUrl: string,
   cameraId: string,
   image: string,
+  analyzeMode: MobileAnalyzeMode = 'default',
+  gps?: { lat: number; lng: number } | null,
 ): Promise<MobileAiAnalyzeResult> {
   const res = await fetchWithTimeout(buildAnalyzeHttpUrl(backendUrl), {
     method: 'POST',
@@ -150,7 +165,13 @@ async function postAnalyzeFrame(
       ...TUNNEL_HEADERS,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ type: 'frame', camera_id: cameraId, image }),
+    body: JSON.stringify({
+      type: 'frame',
+      camera_id: cameraId,
+      image,
+      ...(analyzeMode !== 'default' ? { mode: analyzeMode } : {}),
+      ...(gps ? { gps_lat: gps.lat, gps_lng: gps.lng } : {}),
+    }),
     mode: 'cors',
   }, 90000)
   if (!res.ok) {
@@ -188,8 +209,10 @@ export function createMobileAiAnalyzeClient(
   const {
     cameraId,
     backendUrl,
+    analyzeMode = resolveMobileAnalyzeMode(cameraId),
     onResult,
     onStatusChange,
+    getGps,
     shouldAnalyze = () => true,
     intervalMs = 450,
   } = options
@@ -234,7 +257,13 @@ export function createMobileAiAnalyzeClient(
     if (!connectedOnce) onStatusChange('connecting')
     inFlight = true
     try {
-      const result = await postAnalyzeFrame(backendUrl, cameraId, image)
+      const result = await postAnalyzeFrame(
+        backendUrl,
+        cameraId,
+        image,
+        analyzeMode,
+        getGps?.() ?? null,
+      )
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')

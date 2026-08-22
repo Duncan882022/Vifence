@@ -14,6 +14,17 @@ const ZONE_LABELS: Record<string, string> = {
 
 function buildPatrolCamera(id: string, zoneId: string, online: boolean): TrainingCamera {
   const num = id.replace('HC-', '')
+  if (id === 'HC-02') {
+    return {
+      id,
+      name: `Helmet ${num}`,
+      location: `Phụ trách — ${ZONE_LABELS[zoneId] ?? zoneId}`,
+      zone: zoneId,
+      status: online ? 'online' : 'offline',
+      streamType: 'mobile',
+      assignee: 'Duncan iPhone',
+    }
+  }
   const streamUrl = online ? getPatrolHelmetStreamUrl(id) : undefined
   return {
     id,

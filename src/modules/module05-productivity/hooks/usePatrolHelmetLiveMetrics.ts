@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
+import { getMobileAiBackendUrl, pingMobileAiBackend } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 import {
-  fetchVmsDetections,
-  getVmsBackendUrl,
-  type VmsDetectionSnapshot,
-} from '@/modules/module03-safety/services/vmsDetections.service'
+  getPatrolMobileLiveSnapshot,
+  subscribePatrolMobileLiveSnapshot,
+  type PatrolMobileLiveSnapshot,
+} from '@/services/patrolMobileMetricsBridge'
+import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
+import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
+import {
+  fetchPatrolHelmetAggregateMetrics,
+  type PatrolHelmetCameraMetricsSlice,
+} from '../services/patrolLiveEvents.service'
 
 export interface PatrolHelmetLiveMetrics {
+  backendReachable: boolean
+  streamOnline: boolean
+  /** @deprecated dùng streamOnline */
   connected: boolean
   personCount: number
   uniqueWorkers: number
@@ -13,9 +24,13 @@ export interface PatrolHelmetLiveMetrics {
   activePpeViolations: number
   ppeAlertsToday: number
   workerNames: string[]
+  /** Chi tiết theo từng mũ — HC-01, HC-02, … */
+  perCamera: PatrolHelmetCameraMetricsSlice[]
 }
 
 const EMPTY: PatrolHelmetLiveMetrics = {
+  backendReachable: false,
+  streamOnline: false,
   connected: false,
   personCount: 0,
   uniqueWorkers: 0,
@@ -23,88 +38,85 @@ const EMPTY: PatrolHelmetLiveMetrics = {
   activePpeViolations: 0,
   ppeAlertsToday: 0,
   workerNames: [],
+  perCamera: [],
 }
 
-const PPE_VIOLATION_BEHAVIORS = new Set(['no_helmet', 'no_vest', 'no_shoes'])
-/** Giữ số người/vi phạm khi 1–2 frame AI miss — tránh KPI nhảy 1 → 0. */
-const PERSON_COUNT_HOLD_MS = 6000
-const VIOLATION_COUNT_HOLD_MS = 5000
+const PERSON_COUNT_HOLD_MS = 8000
+const VIOLATION_COUNT_HOLD_MS = 6000
+const HC02 = 'HC-02'
 
-function todayIsoDate(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+function mergeHc02Mobile(
+  base: PatrolHelmetLiveMetrics,
+  mobile: PatrolMobileLiveSnapshot | null,
+): PatrolHelmetLiveMetrics {
+  if (!mobile || mobile.cameraId !== HC02) return base
+  if (Date.now() - mobile.updatedAt > 10_000) return base
 
-function reduceSnapshot(
-  snapshot: VmsDetectionSnapshot,
-  workerIds: Set<string>,
-  workerNames: Map<string, string>,
-): Pick<
-  PatrolHelmetLiveMetrics,
-  'personCount' | 'uniqueWorkers' | 'identifiedWorkers' | 'activePpeViolations' | 'workerNames'
-> {
-  const ppeMetrics = snapshot.metrics.ppe as { person_count?: number; ppe_violations?: number } | undefined
-  const personDetections = snapshot.detections.filter(d => d.behavior === 'person')
-  let personCount = Number(ppeMetrics?.person_count ?? personDetections.length)
-  let activePpeViolations = Number(
-    ppeMetrics?.ppe_violations
-    ?? snapshot.detections.filter(d => PPE_VIOLATION_BEHAVIORS.has(d.behavior)).length,
-  )
-
-  for (const det of personDetections) {
-    if (det.worker_id) {
-      workerIds.add(det.worker_id)
-      if (det.worker_name) {
-        workerNames.set(det.worker_id, det.worker_name)
-      }
-    }
+  const perCamera = [...base.perCamera]
+  const idx = perCamera.findIndex(c => c.camera_id === HC02)
+  const hc02Slice: PatrolHelmetCameraMetricsSlice = {
+    camera_id: HC02,
+    stream_online: true,
+    person_count: Math.max(mobile.personCount, idx >= 0 ? perCamera[idx].person_count : 0),
+    ppe_violations: Math.max(mobile.activePpeViolations, idx >= 0 ? perCamera[idx].ppe_violations : 0),
+    identified_workers: Math.max(mobile.identifiedWorkers, idx >= 0 ? perCamera[idx].identified_workers : 0),
+    ppe_alerts_today: idx >= 0 ? perCamera[idx].ppe_alerts_today : 0,
   }
+  if (idx >= 0) perCamera[idx] = { ...perCamera[idx], ...hc02Slice }
+  else perCamera.push(hc02Slice)
+
+  const othersPerson = perCamera
+    .filter(c => c.camera_id !== HC02)
+    .reduce((s, c) => s + (c.stream_online ? c.person_count : 0), 0)
+  const othersViol = perCamera
+    .filter(c => c.camera_id !== HC02)
+    .reduce((s, c) => s + (c.stream_online ? c.ppe_violations : 0), 0)
+
+  const personCount = othersPerson + hc02Slice.person_count
+  const activePpeViolations = othersViol + hc02Slice.ppe_violations
+  const names = [
+    ...new Set([...(base.workerNames ?? []), ...mobile.workerNames]),
+  ].slice(0, 8)
 
   return {
+    ...base,
+    backendReachable: true,
+    streamOnline: true,
+    connected: true,
     personCount,
-    uniqueWorkers: workerIds.size,
-    identifiedWorkers: workerNames.size,
+    uniqueWorkers: personCount,
+    identifiedWorkers: Math.max(base.identifiedWorkers, mobile.identifiedWorkers),
     activePpeViolations,
-    workerNames: [...workerNames.values()].slice(0, 5),
+    workerNames: names,
+    perCamera,
   }
 }
 
-async function fetchPpeAlertCount(backendUrl: string, cameraId: string): Promise<number> {
-  const date = todayIsoDate()
-  const res = await fetch(`${backendUrl}/events?limit=200&date=${date}`, {
-    headers: { 'ngrok-skip-browser-warning': 'true' },
-    mode: 'cors',
-  })
-  if (!res.ok) return 0
-  const rows = await res.json() as Array<{ camera_id?: string; scenario_id?: string }>
-  return rows.filter(
-    row =>
-      row.camera_id === cameraId
-      && typeof row.scenario_id === 'string'
-      && row.scenario_id.startsWith('PPE'),
-  ).length
-}
-
-/** Live KPI từ VMS HC-01 — person count, gallery match, PPE alerts. */
+/** Live KPI Module 05 — backend aggregate + bridge HC-02 mobile cùng tab. */
 export function usePatrolHelmetLiveMetrics(
-  cameraId = 'HC-01',
+  cameraIds: readonly string[] = DEFAULT_PATROL_CAMERA_IDS,
   pollMs = 2200,
 ): PatrolHelmetLiveMetrics {
   const [metrics, setMetrics] = useState<PatrolHelmetLiveMetrics>(EMPTY)
-  const workerIdsRef = useRef(new Set<string>())
-  const workerNamesRef = useRef(new Map<string, string>())
   const backendLiveRef = useRef(false)
   const lastPersonCountRef = useRef(0)
   const lastPersonAtRef = useRef(0)
   const lastViolationCountRef = useRef(0)
   const lastViolationAtRef = useRef(0)
+  const baseRef = useRef<PatrolHelmetLiveMetrics>(EMPTY)
 
   useEffect(() => {
-    const backendUrl = getVmsBackendUrl()
-    if (!backendUrl) return
+    const applyMobile = (snap: PatrolMobileLiveSnapshot | null) => {
+      setMetrics(mergeHc02Mobile(baseRef.current, snap ?? getPatrolMobileLiveSnapshot(HC02)))
+    }
+    applyMobile(getPatrolMobileLiveSnapshot(HC02))
+    return subscribePatrolMobileLiveSnapshot(applyMobile)
+  }, [])
+
+  useEffect(() => {
+    const backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl()
+    const ids = cameraIds.filter(isPatrolHelmetCameraId)
+    if (!backendUrl || ids.length === 0) return
 
     let stopped = false
     let timerId = 0
@@ -131,39 +143,92 @@ export function usePatrolHelmetLiveMetrics(
     const tick = async () => {
       if (stopped) return
       try {
-        const [snapshot, ppeAlertsToday] = await Promise.all([
-          fetchVmsDetections(backendUrl, cameraId),
-          fetchPpeAlertCount(backendUrl, cameraId),
-        ])
+        const online = await pingMobileAiBackend(backendUrl)
         if (stopped) return
-        backendLiveRef.current = true
-        const reduced = reduceSnapshot(snapshot, workerIdsRef.current, workerNamesRef.current)
-        const personCount = applyHold(
-          reduced.personCount,
-          lastPersonCountRef,
-          lastPersonAtRef,
-          PERSON_COUNT_HOLD_MS,
-        )
-        const activePpeViolations = applyHold(
-          reduced.activePpeViolations,
-          lastViolationCountRef,
-          lastViolationAtRef,
-          VIOLATION_COUNT_HOLD_MS,
-        )
-        setMetrics({
-          connected: true,
-          ...reduced,
+        backendLiveRef.current = online
+        if (!online) {
+          // Backend down — vẫn giữ bridge mobile nếu đang stream cùng tab
+          const mobileOnly = mergeHc02Mobile(EMPTY, getPatrolMobileLiveSnapshot(HC02))
+          if (mobileOnly.streamOnline) {
+            baseRef.current = mobileOnly
+            setMetrics(mobileOnly)
+          } else {
+            lastPersonCountRef.current = 0
+            lastPersonAtRef.current = 0
+            lastViolationCountRef.current = 0
+            lastViolationAtRef.current = 0
+            baseRef.current = EMPTY
+            setMetrics(EMPTY)
+          }
+          timerId = window.setTimeout(tick, pollMs * 2)
+          return
+        }
+
+        const snapshot = await fetchPatrolHelmetAggregateMetrics(ids, backendUrl)
+        if (stopped) return
+
+        if (!snapshot) {
+          const merged = mergeHc02Mobile(
+            {
+              ...baseRef.current,
+              backendReachable: true,
+              streamOnline: false,
+              connected: false,
+            },
+            getPatrolMobileLiveSnapshot(HC02),
+          )
+          baseRef.current = merged
+          setMetrics(merged)
+          timerId = window.setTimeout(tick, pollMs * 2)
+          return
+        }
+
+        const streamOnline = Boolean(snapshot.stream_online)
+        if (!streamOnline) {
+          lastPersonCountRef.current = 0
+          lastPersonAtRef.current = 0
+          lastViolationCountRef.current = 0
+          lastViolationAtRef.current = 0
+        }
+
+        const rawPersonCount = Number(snapshot.person_count ?? 0)
+        const rawViolations = Number(snapshot.ppe_violations ?? 0)
+        const personCount = streamOnline
+          ? applyHold(rawPersonCount, lastPersonCountRef, lastPersonAtRef, PERSON_COUNT_HOLD_MS)
+          : 0
+        const activePpeViolations = streamOnline
+          ? applyHold(rawViolations, lastViolationCountRef, lastViolationAtRef, VIOLATION_COUNT_HOLD_MS)
+          : 0
+
+        const fromBackend: PatrolHelmetLiveMetrics = {
+          backendReachable: true,
+          streamOnline,
+          connected: streamOnline,
           personCount,
+          uniqueWorkers: rawPersonCount,
+          identifiedWorkers: Number(snapshot.identified_workers ?? 0),
           activePpeViolations,
-          ppeAlertsToday,
-        })
+          ppeAlertsToday: Number(snapshot.ppe_alerts_today ?? 0),
+          workerNames: snapshot.worker_names ?? [],
+          perCamera: snapshot.cameras ?? [],
+        }
+        const merged = mergeHc02Mobile(fromBackend, getPatrolMobileLiveSnapshot(HC02))
+        baseRef.current = merged
+        setMetrics(merged)
         timerId = window.setTimeout(tick, pollMs)
       } catch {
         if (stopped) return
-        setMetrics(prev => ({
-          ...prev,
-          connected: backendLiveRef.current,
-        }))
+        const merged = mergeHc02Mobile(
+          {
+            ...baseRef.current,
+            backendReachable: backendLiveRef.current,
+            streamOnline: false,
+            connected: false,
+          },
+          getPatrolMobileLiveSnapshot(HC02),
+        )
+        baseRef.current = merged
+        setMetrics(merged)
         timerId = window.setTimeout(tick, pollMs * 2)
       }
     }
@@ -172,15 +237,13 @@ export function usePatrolHelmetLiveMetrics(
     return () => {
       stopped = true
       window.clearTimeout(timerId)
-      workerIdsRef.current.clear()
-      workerNamesRef.current.clear()
       backendLiveRef.current = false
       lastPersonCountRef.current = 0
       lastPersonAtRef.current = 0
       lastViolationCountRef.current = 0
       lastViolationAtRef.current = 0
     }
-  }, [cameraId, pollMs])
+  }, [cameraIds.join(','), pollMs])
 
   return metrics
 }

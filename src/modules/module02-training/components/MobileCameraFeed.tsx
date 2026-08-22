@@ -15,7 +15,15 @@ import {
   type MobileAiDetection,
 } from '../services/mobileAiBackend.service'
 import { MobileAiOverlay } from './MobileAiOverlay'
-import { isMobileSmokingFireCamera } from '../data/cameraAiRuntime'
+import { isMobileSmokingFireCamera, isPpeCamera } from '../data/cameraAiRuntime'
+import { setPatrolMobileLiveSnapshot, clearPatrolMobileLiveSnapshot } from '@/services/patrolMobileMetricsBridge'
+import { pushPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
+import {
+  clearPatrolHelmetGps,
+  getPatrolHelmetGps,
+  setPatrolHelmetGps,
+} from '@/services/patrolHelmetGpsBridge'
+import { watchDeviceGps } from '../services/deviceGps.service'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 
@@ -56,13 +64,15 @@ export function MobileCameraFeed({
   const deviceIndexRef = useRef(0)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
   useCameraAiEnabledModels(cameraId)
-  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId)
+  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId) || isPpeCamera(cameraId)
+  const overlayModelId = isPpeCamera(cameraId) ? 'ppe' as const : 'mobile_smoking_fire' as const
   const showAiOverlay = aiEnabled && bboxVisible && mobileAiEnabled
 
   const stopAiClient = useCallback(() => {
     aiClientRef.current?.stop()
     aiClientRef.current = null
     setDetections([])
+    // Giữ mobile metrics + GPS — map vẫn cần person dots khi AI client restart.
   }, [])
 
   const stopCapture = useCallback(() => {
@@ -70,7 +80,11 @@ export function MobileCameraFeed({
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
-  }, [stopAiClient])
+    if (cameraId === 'HC-02') {
+      clearPatrolMobileLiveSnapshot(cameraId)
+      clearPatrolHelmetGps(cameraId)
+    }
+  }, [cameraId, stopAiClient])
 
   const startAiClient = useCallback(() => {
     stopAiClient()
@@ -81,8 +95,19 @@ export function MobileCameraFeed({
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl: url,
+      getGps: cameraId === 'HC-02'
+        ? () => {
+            const snap = getPatrolHelmetGps(cameraId)
+            return snap ? { lat: snap.lat, lng: snap.lng } : null
+          }
+        : undefined,
       onResult: (result: MobileAiAnalyzeResult) => {
         const minConf = (d: MobileAiDetection) => {
+          if (overlayModelId === 'ppe') {
+            if (d.behavior === 'person') return d.confidence >= 0.45
+            if (['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior)) return d.confidence >= 0.55
+            return d.confidence >= 0.5
+          }
           if (d.behavior === 'fire' && d.label.startsWith('flame')) return d.confidence >= 0.58
           if (d.behavior === 'fire') return d.confidence >= 0.62
           if (d.behavior === 'smoking') return d.confidence >= 0.42
@@ -97,6 +122,33 @@ export function MobileCameraFeed({
           setDetections(detectionHoldRef.current.items)
         } else {
           setDetections([])
+        }
+        if (cameraId === 'HC-02' && overlayModelId === 'ppe') {
+          // Đếm person từ raw detections (trước filter overlay) — map không miss khi conf thấp
+          const rawPersons = result.detections.filter(d => d.behavior === 'person')
+          const persons = filtered.filter(d => d.behavior === 'person')
+          const personCount = Math.max(rawPersons.length, persons.length)
+          const violations = filtered.filter(d =>
+            ['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior),
+          )
+          const workerNames = [...rawPersons, ...persons]
+            .map(d => d.worker_name?.trim())
+            .filter((name): name is string => Boolean(name))
+          setPatrolMobileLiveSnapshot({
+            cameraId,
+            personCount,
+            activePpeViolations: violations.length,
+            identifiedWorkers: new Set(
+              [...rawPersons, ...persons]
+                .map(d => d.worker_id)
+                .filter((id): id is string => Boolean(id)),
+            ).size,
+            workerNames: [...new Set(workerNames)].slice(0, 5),
+            updatedAt: now,
+          })
+          if (result.events?.length) {
+            pushPatrolMobilePpeEvents(result.events, cameraId)
+          }
         }
         setFrameSize({ width: result.width, height: result.height })
       },
@@ -156,6 +208,19 @@ export function MobileCameraFeed({
       }
     }
   }, [cameraId, stopCapture])
+
+  useEffect(() => {
+    if (cameraId !== 'HC-02' || status !== 'live') return
+    return watchDeviceGps(reading => {
+      setPatrolHelmetGps({
+        cameraId,
+        lat: reading.lat,
+        lng: reading.lng,
+        accuracyM: reading.accuracyM,
+        updatedAt: reading.updatedAt,
+      })
+    })
+  }, [cameraId, status])
 
   useEffect(() => {
     const bump = () => setBackendUrl(getMobileAiBackendUrl())
@@ -243,7 +308,7 @@ export function MobileCameraFeed({
           videoRef={videoRef}
           layoutTick={layoutTick}
           compact={compact}
-          modelId="mobile_smoking_fire"
+          modelId={overlayModelId}
         />
       )}
 

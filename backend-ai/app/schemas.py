@@ -13,6 +13,8 @@ class MobileFramePayload(BaseModel):
     camera_id: str = "mobile"
     image: str
     mode: Optional[str] = None  # "road" → phân tích lòng đường (Module 04)
+    gps_lat: Optional[float] = None
+    gps_lng: Optional[float] = None
 
 
 class RoadDetection(BaseModel):
@@ -254,6 +256,8 @@ class ViolationEvent(BaseModel):
     contractor_name: Optional[str] = None
     face_match_confidence: Optional[float] = None
     face_match_source: Optional[str] = None
+    gps_lat: Optional[float] = None
+    gps_lng: Optional[float] = None
 
     @classmethod
     def from_detection(

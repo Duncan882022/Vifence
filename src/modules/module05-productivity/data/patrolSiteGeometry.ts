@@ -15,7 +15,8 @@ export const PATROL_SITE_BOUNDARY: [number, number][] = [
 const SITE_RING = PATROL_SITE_BOUNDARY.slice(0, 4)
 
 /** ~3.5% inset toward centroid — fill không chạm/vượt viền đỏ khi render anti-alias. */
-const SITE_CLIP_RING: [number, number][] = (() => {
+/** Inset site ring — clip heatmap/detection so fill không vượt viền đỏ. */
+export const PATROL_SITE_CLIP_RING: [number, number][] = (() => {
   const cLat = SITE_RING.reduce((s, p) => s + p[0], 0) / SITE_RING.length
   const cLng = SITE_RING.reduce((s, p) => s + p[1], 0) / SITE_RING.length
   const inset = 0.035
@@ -67,7 +68,7 @@ function clipRingToEdge(subject: LngLat[], a: LngLat, b: LngLat): LngLat[] {
 export function clipPolygonToSiteBoundary(polygon: [number, number][]): [number, number][] {
   if (polygon.length < 3) return polygon
 
-  const clipRing: LngLat[] = SITE_CLIP_RING.map(([lat, lng]) => [lng, lat])
+  const clipRing: LngLat[] = PATROL_SITE_CLIP_RING.map(([lat, lng]) => [lng, lat])
   let subject: LngLat[] = polygon.map(([lat, lng]) => [lng, lat])
 
   for (let i = 0; i < clipRing.length; i += 1) {

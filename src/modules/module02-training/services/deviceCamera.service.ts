@@ -2,11 +2,13 @@
 const MOBILE_DEVICE_LABEL_MATCH: Record<string, RegExp> = {
   'MOB-01': /iphone|ipad|continuity/i,
   'MOB-02': /facetime|imac|built[- ]?in/i,
+  'HC-02': /iphone|ipad|continuity/i,
 }
 
 const MOBILE_DEVICE_INDEX: Record<string, number> = {
   'MOB-01': 0,
   'MOB-02': 1,
+  'HC-02': 0,
 }
 
 export function isDeviceCameraSupported(): boolean {

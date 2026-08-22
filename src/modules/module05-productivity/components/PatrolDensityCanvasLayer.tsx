@@ -7,7 +7,7 @@ import { useMap } from 'react-leaflet'
 import { useEffect } from 'react'
 import type { PatrolZone } from '../data/patrolMockData'
 import { PATROL_DETECTION_DOTS } from '../data/patrolDetectionData'
-import { isPointInSiteBoundary, PATROL_SITE_BOUNDARY } from '../data/patrolSiteGeometry'
+import { isPointInSiteBoundary, PATROL_SITE_CLIP_RING } from '../data/patrolSiteGeometry'
 import { PATROL_GPS_ZONES, patrolZoneInteriorPoint } from '../data/patrolSiteMap'
 import {
   getPatrolHeatmapRampRgb,
@@ -27,7 +27,7 @@ interface HeatSource {
 }
 
 function heatRadiusForZoom(zoom: number): number {
-  return 32 * 1.34 ** (zoom - 16)
+  return 22 * 1.28 ** (zoom - 16)
 }
 
 function pushSource(
@@ -68,7 +68,7 @@ function buildHeatSources(
     )
   }
 
-  const gridSteps = [0.18, 0.36, 0.54, 0.72, 0.86]
+  const gridSteps = [0.25, 0.5, 0.75]
 
   for (const gpsZone of PATROL_GPS_ZONES) {
     const zone = zoneMap.get(gpsZone.zone_id)
@@ -77,38 +77,27 @@ function buildHeatSources(
     const count = resolveCount(zone, layer, countMode)
     if (count === 0) continue
     const zoneT = count / maxCount
-    const peak = 0.42 + zoneT * 0.58
+    const peak = 0.28 + zoneT * 0.42
 
     pushSource(
       sources,
       gpsZone.center[0],
       gpsZone.center[1],
       peak,
-      baseR * (1.85 + zoneT * 1.35),
+      baseR * (1.15 + zoneT * 0.65),
     )
-
-    for (let ri = 1; ri <= 3; ri += 1) {
-      const falloff = 1 - ri * 0.22
-      pushSource(
-        sources,
-        gpsZone.center[0],
-        gpsZone.center[1],
-        peak * falloff * 0.72,
-        baseR * (1.35 + zoneT + ri * 0.25),
-      )
-    }
 
     for (const u of gridSteps) {
       for (const v of gridSteps) {
         if (gpsZone.polygon.length < 4) continue
         const [lat, lng] = patrolZoneInteriorPoint(gpsZone.polygon, u, v)
-        const edgeFalloff = 1 - Math.abs(u - 0.5) * 0.35 - Math.abs(v - 0.5) * 0.35
+        const edgeFalloff = 1 - Math.abs(u - 0.5) * 0.4 - Math.abs(v - 0.5) * 0.4
         pushSource(
           sources,
           lat,
           lng,
-          peak * 0.38 * edgeFalloff,
-          baseR * (1.05 + zoneT * 0.85),
+          peak * 0.32 * edgeFalloff,
+          baseR * (0.85 + zoneT * 0.45),
         )
       }
     }
@@ -117,10 +106,9 @@ function buildHeatSources(
   return sources
 }
 
-function clipSiteOnCtx(ctx: CanvasRenderingContext2D, map: L.Map): void {
-  const ring = PATROL_SITE_BOUNDARY.slice(0, 4)
+function fillSiteMaskPath(ctx: CanvasRenderingContext2D, map: L.Map): void {
   ctx.beginPath()
-  ring.forEach(([lat, lng], i) => {
+  PATROL_SITE_CLIP_RING.forEach(([lat, lng], i) => {
     const p = map.latLngToContainerPoint(L.latLng(lat, lng))
     if (i === 0) ctx.moveTo(p.x, p.y)
     else ctx.lineTo(p.x, p.y)
@@ -136,12 +124,12 @@ function drawIntensitySplats(
   height: number,
 ): void {
   ctx.clearRect(0, 0, width, height)
-  ctx.globalCompositeOperation = 'lighter'
+  ctx.globalCompositeOperation = 'source-over'
 
   for (const src of sources) {
     const pt = map.latLngToContainerPoint(L.latLng(src.lat, src.lng))
     const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, src.radius)
-    const a = Math.min(0.72, src.intensity * 0.62)
+    const a = Math.min(0.38, src.intensity * 0.34)
     grad.addColorStop(0, `rgba(255,255,255,${a})`)
     grad.addColorStop(0.4, `rgba(255,255,255,${a * 0.45})`)
     grad.addColorStop(0.72, `rgba(255,255,255,${a * 0.12})`)
@@ -168,7 +156,7 @@ function colorizeIntensity(
     const v = Math.max(src[i], src[i + 1], src[i + 2])
     if (v > maxVal) maxVal = v
   }
-  const norm = maxVal > 0 ? 255 / maxVal : 1
+  const norm = maxVal > 8 ? 255 / maxVal : 1
 
   for (let i = 0; i < src.length; i += 4) {
     const raw = Math.max(src[i], src[i + 1], src[i + 2]) * norm
@@ -194,44 +182,41 @@ function renderHeatCanvas(
   const size = map.getSize()
   if (size.x <= 0 || size.y <= 0) return
 
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const w = size.x
   const h = size.y
-  canvas.width = Math.round(w * dpr)
-  canvas.height = Math.round(h * dpr)
+  canvas.width = w
+  canvas.height = h
   canvas.style.width = `${w}px`
   canvas.style.height = `${h}px`
 
   const intensity = document.createElement('canvas')
-  intensity.width = canvas.width
-  intensity.height = canvas.height
+  intensity.width = w
+  intensity.height = h
   const iCtx = intensity.getContext('2d', { willReadFrequently: true })
   const blurred = document.createElement('canvas')
-  blurred.width = canvas.width
-  blurred.height = canvas.height
+  blurred.width = w
+  blurred.height = h
   const bCtx = blurred.getContext('2d')
   const ctx = canvas.getContext('2d')
   if (!iCtx || !bCtx || !ctx) return
 
-  iCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  bCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
   drawIntensitySplats(iCtx, map, sources, w, h)
 
-  const blurPx = Math.max(14, 10 + map.getZoom() * 1.1)
+  const blurPx = Math.max(10, 8 + map.getZoom() * 0.85)
   bCtx.filter = `blur(${blurPx}px)`
-  bCtx.drawImage(intensity, 0, 0, w, h)
+  bCtx.drawImage(intensity, 0, 0)
   bCtx.filter = 'none'
 
   const colored = colorizeIntensity(bCtx, w, h)
 
   ctx.clearRect(0, 0, w, h)
-  ctx.save()
-  clipSiteOnCtx(ctx, map)
-  ctx.clip()
   ctx.putImageData(colored, 0, 0)
-  ctx.restore()
+  /* putImageData ignores clip — mask bằng destination-in */
+  ctx.globalCompositeOperation = 'destination-in'
+  fillSiteMaskPath(ctx, map)
+  ctx.fillStyle = '#fff'
+  ctx.fill()
+  ctx.globalCompositeOperation = 'source-over'
 }
 
 export interface PatrolDensityCanvasLayerProps {

@@ -10,23 +10,23 @@ import 'leaflet/dist/leaflet.css'
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
-import { useEffect, useMemo, useState } from 'react'
-import { MOCK_HELMET_CAMERAS, type PatrolZone } from '../data/patrolMockData'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { PATROL_SITE_CLIP_RING } from '../data/patrolSiteGeometry'
+import type { PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
-  PATROL_HELMET_GPS_PINS,
+  PATROL_MAP_ACTIVE_HELMET_PINS,
   PATROL_SITE_BOUNDARY,
   PATROL_SITE_CENTER,
   PATROL_SITE_FOCUS_BOUNDS,
   PATROL_SITE_MAX_ZOOM,
   PATROL_SITE_MIN_ZOOM,
   getPatrolHelmetZoneName,
-  isPointInSiteBoundary,
   type PatrolHelmetPin,
 } from '../data/patrolSiteMap'
 import {
-  PATROL_DETECTION_DOTS,
   DETECTION_DOT_STYLE,
+  type DetectionDot,
 } from '../data/patrolDetectionData'
 import type { RouteHistory } from '../services/usePatrolWebSocket'
 import type { CameraPositions } from '../services/usePatrolWebSocket'
@@ -179,16 +179,20 @@ function createZoneStatIcon(
 function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
   const num = String(parseInt(pin.id.replace('HC-', ''), 10))
   const anim = isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : ''
+  const bg = isActive ? pin.color : '#475569'
+  const border = isActive ? 'rgba(255,255,255,0.85)' : 'rgba(148,163,184,0.55)'
+  const opacity = isActive ? '1' : '0.72'
   const html = `
     <div style="
-      background:${pin.color};
-      border:1.5px solid rgba(255,255,255,0.85);
+      background:${bg};
+      border:1.5px solid ${border};
       border-radius:50%;
       width:16px;height:16px;
       display:flex;align-items:center;justify-content:center;
       font-size:6.5px;font-weight:800;color:#fff;
       font-family:system-ui,sans-serif;
       box-shadow:0 1px 5px rgba(0,0,0,0.55);
+      opacity:${opacity};
       ${anim}
     ">${num}</div>`
   return L.divIcon(divIconOpts(html, [16, 16], [8, 8]))
@@ -223,18 +227,60 @@ function MapInvalidator() {
   return null
 }
 
-/** Giới hạn pan/zoom trong phạm vi công trường — cho phép kéo ngang/dọc. */
-function MapSiteBoundsConfig() {
+/** Giới hạn pan/zoom — tắt khi theo GPS live (có thể ngoài công trường mock). */
+function MapSiteBoundsConfig({ followLiveGps }: { followLiveGps?: boolean }) {
   const map = useMap()
 
   useEffect(() => {
-    map.setMaxBounds(L.latLngBounds(PATROL_SITE_FOCUS_BOUNDS))
-    map.setMinZoom(PATROL_SITE_MIN_ZOOM)
-    map.setMaxZoom(PATROL_SITE_MAX_ZOOM)
+    if (followLiveGps) {
+      map.setMaxBounds([[-85, -180], [85, 180]])
+      map.setMinZoom(3)
+      map.setMaxZoom(20)
+    } else {
+      map.setMaxBounds(L.latLngBounds(PATROL_SITE_FOCUS_BOUNDS))
+      map.setMinZoom(PATROL_SITE_MIN_ZOOM)
+      map.setMaxZoom(PATROL_SITE_MAX_ZOOM)
+    }
     map.dragging.enable()
     map.scrollWheelZoom.enable()
     map.touchZoom.enable()
-  }, [map])
+  }, [map, followLiveGps])
+
+  return null
+}
+
+/** Theo dõi GPS HC-02 — fly tới vị trí khi mới có GPS hoặc điểm ngoài viewport. */
+function MapFollowLiveGps({
+  enabled,
+  lat,
+  lng,
+}: {
+  enabled: boolean
+  lat: number | null
+  lng: number | null
+}) {
+  const map = useMap()
+  const acquiredRef = useRef(false)
+
+  useEffect(() => {
+    if (!enabled || lat == null || lng == null) return
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    const target = L.latLng(lat, lng)
+    if (!acquiredRef.current) {
+      acquiredRef.current = true
+      map.setView(target, Math.max(map.getZoom(), 18), { animate: true })
+      return
+    }
+
+    if (!map.getBounds().pad(0.15).contains(target)) {
+      map.panTo(target, { animate: true })
+    }
+  }, [map, enabled, lat, lng])
+
+  useEffect(() => {
+    if (!enabled) acquiredRef.current = false
+  }, [enabled])
 
   return null
 }
@@ -264,7 +310,7 @@ function MapSiteOverlayClip({ enabled }: { enabled: boolean }) {
     }
 
     const applyClip = () => {
-      const ring = PATROL_SITE_BOUNDARY.slice(0, 4)
+      const ring = PATROL_SITE_CLIP_RING
       const d = `M ${ring
         .map(([lat, lng]) => {
           const p = map.latLngToLayerPoint(L.latLng(lat, lng))
@@ -346,11 +392,22 @@ export interface PatrolGeoHeatmapProps {
   showZonePolygons: boolean
   /* Layer 2 — Detection dots */
   showDetections: boolean
+  /** Live dots (HC-02 GPS) — thay mock PATROL_DETECTION_DOTS khi có. */
+  liveDetectionDots?: DetectionDot[]
+  /** Theo GPS live: mở bounds + flyTo. */
+  followLiveGps?: boolean
+  liveGpsLat?: number | null
+  liveGpsLng?: number | null
   /* Layer 3 — Density heat blobs + zone stat cards */
   showDensity: boolean
   /* Layer 4 — Patrol route polyline + helmet markers */
   showRoute: boolean
   showCameras: boolean
+  /** Online theo stream live (HC-01 VMS / HC-02 mobile). */
+  helmetOnlineById?: Record<string, boolean>
+  /** HC-02 chỉ hiện marker khi đã có GPS thật. */
+  requireLiveGpsForHc02?: boolean
+  hasHc02LiveGps?: boolean
 }
 
 export function PatrolGeoHeatmap({
@@ -363,9 +420,16 @@ export function PatrolGeoHeatmap({
   showSiteBoundary,
   showZonePolygons,
   showDetections,
+  liveDetectionDots,
+  followLiveGps = false,
+  liveGpsLat = null,
+  liveGpsLng = null,
   showDensity,
   showRoute,
   showCameras,
+  helmetOnlineById,
+  requireLiveGpsForHc02 = true,
+  hasHc02LiveGps = false,
 }: PatrolGeoHeatmapProps) {
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
 
@@ -389,12 +453,15 @@ export function PatrolGeoHeatmap({
   }, [zones, layer, countMode, displayMode])
 
   const zoneMap = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
-  const visibleDetectionDots = useMemo(
-    () => PATROL_DETECTION_DOTS.filter(d => isPointInSiteBoundary(d.position[0], d.position[1])),
-    [],
-  )
+  const visibleDetectionDots = useMemo(() => {
+    if (liveDetectionDots && liveDetectionDots.length > 0) {
+      return liveDetectionDots
+    }
+    /* Mock dots tạm ẩn khi chế độ live HC-02 (density/heatmap cũ). */
+    return []
+  }, [liveDetectionDots])
   const mapZoom = usePatrolMapZoom()
-  const clipOverlays = showZonePolygons || showDetections
+  const clipOverlays = !followLiveGps && (showZonePolygons || showDetections)
 
   return (
     <div className="relative w-full h-full min-h-[240px] max-lg:min-h-[280px] overflow-hidden isolate">
@@ -438,14 +505,15 @@ export function PatrolGeoHeatmap({
           zoom={mapZoom}
           minZoom={PATROL_SITE_MIN_ZOOM}
           maxZoom={PATROL_SITE_MAX_ZOOM}
-          maxBounds={PATROL_SITE_FOCUS_BOUNDS}
-          maxBoundsViscosity={1.0}
+          maxBounds={followLiveGps ? undefined : PATROL_SITE_FOCUS_BOUNDS}
+          maxBoundsViscosity={followLiveGps ? 0 : 1.0}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
           attributionControl={false}
         >
           <MapInvalidator />
-          <MapSiteBoundsConfig />
+          <MapSiteBoundsConfig followLiveGps={followLiveGps} />
+          <MapFollowLiveGps enabled={followLiveGps} lat={liveGpsLat} lng={liveGpsLng} />
           <MapSiteOverlayClip enabled={clipOverlays} />
           <PatrolDensityCanvasLayer
             enabled={showDensity}
@@ -497,23 +565,26 @@ export function PatrolGeoHeatmap({
           {/* ── LAYER 2: Detection Dots ───────────────────────── */}
           {showDetections && visibleDetectionDots.map(dot => {
             const style = DETECTION_DOT_STYLE[dot.type]
+            const liveStyle = dot.zoneId === 'LIVE'
+              ? { ...style, radius: Math.max(style.radius, 8), weight: 2 }
+              : style
             return (
               <CircleMarker
                 key={dot.id}
                 center={dot.position}
-                radius={style.radius}
+                radius={liveStyle.radius}
                 pathOptions={{
-                  color: style.color,
-                  fillColor: style.color,
-                  fillOpacity: 0.65,
-                  weight: style.weight,
-                  opacity: 0.85,
+                  color: liveStyle.color,
+                  fillColor: liveStyle.color,
+                  fillOpacity: 0.75,
+                  weight: liveStyle.weight,
+                  opacity: 0.95,
                 }}
               >
                 <Tooltip sticky className="patrol-zone-tip">
                   <span style={{ fontSize: 10 }}>
-                    {dot.type === 'person' ? '👤 Người' : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
-                    Camera: {dot.cameraId} · {Math.round(dot.confidence * 100)}%
+                    {dot.type === 'person' ? 'Người (live)' : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
+                    Camera: {dot.cameraId} · ~1m quanh mũ
                   </span>
                 </Tooltip>
               </CircleMarker>
@@ -547,7 +618,10 @@ export function PatrolGeoHeatmap({
           })}
 
           {/* ── LAYER 4A: Patrol Route (accumulated history) ─── */}
-          {showRoute && PATROL_HELMET_GPS_PINS.map(pin => {
+          {showRoute && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
+            if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) {
+              return null
+            }
             const hist = routeHistory[pin.id]
             if (!hist?.length) return null
             return (
@@ -561,22 +635,30 @@ export function PatrolGeoHeatmap({
             )
           })}
 
-          {/* ── LAYER 4B: Helmet Markers ─────────────────────── */}
-          {showCameras && PATROL_HELMET_GPS_PINS.map(pin => {
+          {/* ── LAYER 4B: Helmet Markers (chỉ HC-01 + HC-02) ─── */}
+          {showCameras && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
+            if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) {
+              return null
+            }
             const livePos = cameraPositions[pin.id] ?? pin.position
             const zoneName = getPatrolHelmetZoneName(pin.id)
-            const cam = MOCK_HELMET_CAMERAS.find(c => c.id === pin.id)
-            const isActive = cam?.status === 'ONLINE'
+            const isActive = Boolean(helmetOnlineById?.[pin.id])
             return (
               <Marker
-                key={pin.id}
+                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
                 position={livePos}
                 icon={createHelmetIcon(pin, isActive)}
                 zIndexOffset={500}
+                opacity={isActive ? 1 : 0.85}
               >
                 <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
                   <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                    <strong>{pin.label}</strong><br />
+                    <strong>{pin.label}</strong>
+                    {' · '}
+                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+                      {isActive ? 'ONLINE' : 'OFFLINE'}
+                    </span>
+                    <br />
                     Phụ trách: {zoneName}
                   </span>
                 </Tooltip>

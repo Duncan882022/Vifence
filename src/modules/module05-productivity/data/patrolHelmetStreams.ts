@@ -29,12 +29,17 @@ export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
 /**
  * URL phát live cho helmet:
  * - HC-01: VITE_HC01_STREAM_URL (VMS relay local) — không fallback MP4 mock
- * - HC-02…: MP4 demo
+ * - HC-02: mobile only (MobileCameraFeed) — không MP4 mock
+ * - HC-03…: MP4 demo (nếu chưa có nguồn live)
  */
 export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   if (cameraId === 'HC-01') {
     const override = (import.meta.env.VITE_HC01_STREAM_URL as string | undefined)?.trim()
     if (override) return override
+    return undefined
+  }
+
+  if (cameraId === 'HC-02') {
     return undefined
   }
 
@@ -79,4 +84,26 @@ export function applyPatrolHelmetEnvLive<T extends { id: string; streamUrl?: str
       ? { ...cam, wsUrl: hc01Ws, streamUrl: undefined }
       : cam,
   )
+}
+
+/** HC-02 luôn mobile — gỡ streamUrl/wsUrl mock nếu catalog cũ còn gắn MP4. */
+export function applyPatrolHelmetMobileLive<
+  T extends {
+    id: string
+    streamType?: string
+    streamUrl?: string
+    wsUrl?: string | null
+    assignee?: string
+  },
+>(cameras: T[]): T[] {
+  return cameras.map(cam => {
+    if (cam.id !== 'HC-02') return cam
+    return {
+      ...cam,
+      streamType: 'mobile',
+      assignee: cam.assignee ?? 'Duncan iPhone',
+      streamUrl: undefined,
+      wsUrl: undefined,
+    }
+  })
 }

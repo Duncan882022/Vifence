@@ -49,6 +49,9 @@ export interface VmsDetectionSnapshot {
   /** Vị trí trong file nguồn (giây) lúc AI chạy — đồng bộ overlay live. */
   source_pts_sec?: number
   vms_ready: boolean
+  /** Live RTSP còn frame mới — false khi mũ tắt / mất tín hiệu. */
+  stream_online?: boolean
+  frame_age_sec?: number | null
   detections: VmsOverlayDetection[]
   roi_zones: RoadAnalysisRoiZone[]
   metrics: Record<string, unknown>
@@ -143,6 +146,8 @@ export async function fetchVmsDetections(
     updated_at?: number
     source_pts_sec?: number
     vms_ready?: boolean
+    stream_online?: boolean
+    frame_age_sec?: number | null
     detections?: Record<string, unknown>[]
     roi_zones?: RoadAnalysisRoiZone[]
     metrics?: Record<string, unknown>
@@ -159,6 +164,8 @@ export async function fetchVmsDetections(
     updated_at: Number(data.updated_at ?? 0),
     source_pts_sec: data.source_pts_sec != null ? Number(data.source_pts_sec) : undefined,
     vms_ready: Boolean(data.vms_ready),
+    stream_online: data.stream_online,
+    frame_age_sec: data.frame_age_sec ?? null,
     detections,
     roi_zones: data.roi_zones ?? [],
     metrics: data.metrics ?? {},

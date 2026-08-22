@@ -240,10 +240,15 @@ class EventStore:
             "vehicle_plate",
             "vehicle_type",
             "driver_name",
+            "gps_lat",
+            "gps_lng",
         ):
             new_val = getattr(incoming, field, None)
             if new_val is not None and getattr(existing, field, None) in (None, "", 0, 0.0):
                 setattr(existing, field, new_val)
+        if incoming.gps_lat is not None and incoming.gps_lng is not None:
+            existing.gps_lat = incoming.gps_lat
+            existing.gps_lng = incoming.gps_lng
 
         logger.info(
             "Refresh snapshot event=%s key=%s (giữ created_at=%.0f)",
@@ -552,6 +557,12 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
+        from .patrol_api import get_patrol_gps
+
+        gps_lat, gps_lng = get_patrol_gps(camera_id)
+        if gps_lat is not None and gps_lng is not None:
+            event.gps_lat = gps_lat
+            event.gps_lng = gps_lng
         if person_bbox and len(person_bbox) >= 4:
             event.subject_bbox = [float(v) for v in person_bbox]
         stable_track = track_id or detection.behavior
@@ -937,7 +948,12 @@ class EventStore:
         except OSError as exc:
             logger.warning("Không ghi được events theo ngày (%s): %s", day, exc)
 
-    def list_events(self, limit: int = 50, date: Optional[str] = None) -> list[ViolationEvent]:
+    def list_events(
+        self,
+        limit: int = 50,
+        date: Optional[str] = None,
+        camera_id: Optional[str] = None,
+    ) -> list[ViolationEvent]:
         if date:
             rows = self._read_events_file(_daily_events_file(date))
             with self._lock:
@@ -952,7 +968,23 @@ class EventStore:
             window_seconds=settings.event_first_seen_window_effective,
         )
         deduped.sort(key=lambda e: e.created_at, reverse=True)
+        if camera_id:
+            deduped = [event for event in deduped if event.camera_id == camera_id]
         return deduped[:limit]
+
+    def get_event(self, event_id: str) -> Optional[ViolationEvent]:
+        with self._lock:
+            for event in self._events:
+                if event.id == event_id:
+                    return event
+        if EVENTS_DIR.exists():
+            for day_dir in sorted(EVENTS_DIR.iterdir(), reverse=True):
+                if not day_dir.is_dir():
+                    continue
+                for event in self._read_events_file(day_dir / "events.jsonl"):
+                    if event.id == event_id:
+                        return event
+        return None
 
     def list_event_dates(self) -> list[str]:
         dates: set[str] = set()
