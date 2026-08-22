@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
@@ -17,6 +17,10 @@ import {
   type MobileAiDetection,
 } from '../services/mobileAiBackend.service'
 import { MobileAiOverlay } from './MobileAiOverlay'
+import {
+  getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
+} from '../data/trainingCameraFeeds'
 import { isMobileSmokingFireCamera, isPpeCamera } from '../data/cameraAiRuntime'
 import {
   setPatrolMobileLiveSnapshot,
@@ -32,6 +36,36 @@ import {
 import { watchDeviceGps } from '../services/deviceGps.service'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
+import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend.service'
+import {
+  flattenPpeViolationOverlayBoxes,
+  groupHasViolation,
+  groupPpeDetections,
+} from '@/modules/module03-safety/utils/ppeDetectionGroups'
+
+/** HC-02 PPE — bbox overlay bám vùng vi phạm (mũ/áo/giày), khớp PpeOverlay desktop. */
+function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
+  const ppeDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
+    behavior: d.behavior as PpeDetection['behavior'],
+    label: d.label,
+    scenario_id: 'PPE-001',
+    confidence: d.confidence,
+    bbox: d.bbox,
+    subject_bbox: d.subject_bbox,
+    worker_id: d.worker_id,
+    worker_name: d.worker_name,
+  }))
+  const groups = groupPpeDetections(ppeDets).filter(groupHasViolation)
+  return flattenPpeViolationOverlayBoxes(groups).map(d => ({
+    behavior: d.behavior,
+    label: d.label,
+    confidence: d.confidence,
+    bbox: d.bbox,
+    worker_id: d.worker_id,
+    worker_name: d.worker_name,
+    subject_bbox: d.subject_bbox,
+  }))
+}
 
 type MobileFeedStatus = 'idle' | 'scanning' | 'live' | 'error'
 
@@ -73,7 +107,13 @@ export function MobileCameraFeed({
   useCameraAiEnabledModels(cameraId)
   const mobileAiEnabled = isMobileSmokingFireCamera(cameraId) || isPpeCamera(cameraId)
   const overlayModelId = isPpeCamera(cameraId) ? 'ppe' as const : 'mobile_smoking_fire' as const
+  const videoFit = getVideoObjectFitForCamera(cameraId, 'mobile')
+  const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, 'mobile')
   const showAiOverlay = aiEnabled && bboxVisible && mobileAiEnabled
+  const overlayDetections = useMemo(
+    () => (overlayModelId === 'ppe' ? mapMobilePpeOverlayDetections(detections) : detections),
+    [detections, overlayModelId],
+  )
 
   const stopAiClient = useCallback(() => {
     aiClientRef.current?.stop()
@@ -150,11 +190,12 @@ export function MobileCameraFeed({
             identifiedWorkers: new Set(
               [...rawPersons, ...persons]
                 .map(d => d.worker_id)
-                .filter((id): id is string => Boolean(id)),
+                .filter((id): id is string => Boolean(id && id !== 'unknown')),
             ).size,
             workerNames: [...new Set(workerNames)].slice(0, 5),
             updatedAt: now,
           })
+
           if (result.events?.length) {
             pushPatrolMobilePpeEvents(result.events, cameraId)
           }
@@ -338,7 +379,8 @@ export function MobileCameraFeed({
         muted
         playsInline
         className={cn(
-          'absolute inset-0 h-full w-full object-cover bg-black',
+          'absolute inset-0 h-full w-full bg-black',
+          videoFit === 'contain' ? 'object-contain' : 'object-cover',
           status !== 'live' && 'opacity-0',
         )}
       />
@@ -354,13 +396,15 @@ export function MobileCameraFeed({
 
       {status === 'live' && showAiOverlay && (
         <MobileAiOverlay
-          detections={detections}
+          detections={overlayDetections}
           frameWidth={frameSize.width}
           frameHeight={frameSize.height}
           videoRef={videoRef}
           layoutTick={layoutTick}
           compact={compact}
           modelId={overlayModelId}
+          videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
         />
       )}
 

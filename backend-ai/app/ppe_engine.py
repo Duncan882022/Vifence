@@ -112,7 +112,10 @@ class PpeEngine:
                 min_duration_seconds=settings.event_debounce_min_seconds(confirm),
                 cooldown_seconds=settings.event_repeat_seconds(_REPEAT_SECONDS),
                 max_gap_seconds=_MAX_GAP_SECONDS,
-                one_event_per_episode=settings.event_log_one_per_episode,
+                one_event_per_episode=(
+                    settings.event_log_one_per_episode
+                    and not (behavior == "person" and camera_id.startswith("HC-"))
+                ),
             )
         return self._gates[camera_id][track_id]
 
@@ -275,6 +278,7 @@ class PpeEngine:
                 state.episode_best = None
 
         if camera_id.startswith("HC-"):
+            from .event_dedup import build_dedup_key
             from .person_identity_registry import resolve_patrol_person_identity
 
             person_matched: set[str] = set()
@@ -312,29 +316,38 @@ class PpeEngine:
                 state.person_bbox = person_bbox
                 state.last_seen = now
 
+                worker_id, worker_name = resolve_patrol_person_identity(
+                    person,
+                    camera_id,
+                    track_id,
+                )
+                det = person.model_copy(
+                    update={
+                        "worker_id": worker_id,
+                        "worker_name": worker_name,
+                        "scenario_id": "PERS-001",
+                    },
+                )
+                stable_id = (worker_id or track_id or "person").strip()
+                dedup_key = build_dedup_key(camera_id, "PERS-001", stable_id)
+                existing = self.store.find_by_dedup_key(dedup_key)
+
                 gate = self._gate_for(camera_id, track_id)
                 confirmed = gate.register(True)
-                if confirmed:
-                    worker_id, worker_name = resolve_patrol_person_identity(
-                        person,
-                        camera_id,
-                        track_id,
-                    )
-                    det = person.model_copy(
-                        update={
-                            "worker_id": worker_id,
-                            "worker_name": worker_name,
-                            "scenario_id": "PERS-001",
-                        },
-                    )
-                    event = self.store.add_person(
-                        det,
-                        snapshot_source,
-                        camera_id=camera_id,
-                        track_id=track_id,
-                    )
-                    if event:
-                        new_events.append(event)
+
+                if existing is None and not confirmed:
+                    continue
+
+                event = self.store.upsert_patrol_person(
+                    det,
+                    snapshot_source,
+                    camera_id=camera_id,
+                    track_id=track_id,
+                    allow_create=existing is None,
+                )
+                if event:
+                    new_events.append(event)
+                    if existing is None:
                         logger.info(
                             "Person event [%s] %s track=%s conf=%.0f%%",
                             event.id,

@@ -1,4 +1,4 @@
-/** Sự kiện PPE từ MobileCameraFeed (HC-02) → panel Sự kiện Module 05. */
+/** Sự kiện patrol từ MobileCameraFeed (HC-02) → panel Sự kiện Module 05 + heatmap dots. */
 import type { PatrolEvent } from '@/modules/module05-productivity/data/patrolMockData'
 import { mapBackendEventToPatrolEvent } from '@/modules/module05-productivity/services/patrolLiveEvents.service'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -7,6 +7,7 @@ import {
   getPatrolHelmetGps,
   getPatrolHelmetGpsLastKnown,
 } from '@/services/patrolHelmetGpsBridge'
+import { syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
 
 const MAX_EVENTS = 80
 const listeners = new Set<(events: PatrolEvent[]) => void>()
@@ -16,9 +17,9 @@ function notify(): void {
   const list = [...eventsById.values()].sort(
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
+  syncPatrolPersonEventsToHeatmap(list)
   listeners.forEach(fn => fn(list))
 }
-
 
 function resolveGpsForMobileEvent(
   row: MobileAiViolationEvent,
@@ -40,20 +41,25 @@ function resolveGpsForMobileEvent(
   return { gps_lat: null, gps_lng: null }
 }
 
+function isPatrolBackendRow(row: MobileAiViolationEvent): boolean {
+  const scenario = row.scenario_id ?? ''
+  const behavior = row.behavior ?? ''
+  return scenario.startsWith('PPE')
+    || scenario.startsWith('PERS')
+    || ['no_helmet', 'no_vest', 'no_shoes', 'person'].includes(behavior)
+}
+
 export function pushPatrolMobilePpeEvents(
   rows: MobileAiViolationEvent[],
   cameraId = 'HC-02',
 ): void {
   if (!rows.length) return
   const backendUrl = getMobileAiBackendUrl() || ''
-  let added = false
+  let changed = false
+
   for (const row of rows) {
-    if (!row.id) continue
-    if (eventsById.has(row.id)) continue
-    const scenario = row.scenario_id ?? ''
-    if (!scenario.startsWith('PPE') && !['no_helmet', 'no_vest', 'no_shoes'].includes(row.behavior)) {
-      continue
-    }
+    if (!row.id || !isPatrolBackendRow(row)) continue
+
     const gps = resolveGpsForMobileEvent(row, cameraId)
     const mapped = mapBackendEventToPatrolEvent(
       {
@@ -66,15 +72,31 @@ export function pushPatrolMobilePpeEvents(
         created_at: row.created_at,
         confirmed_at: row.created_at,
         snapshot_file: row.snapshot_file,
+        worker_id: row.worker_id,
+        worker_name: row.worker_name,
         gps_lat: gps.gps_lat,
         gps_lng: gps.gps_lng,
       },
       backendUrl,
     )
+
+    const prev = eventsById.get(mapped.id)
+    if (
+      prev
+      && prev.lockedAt === mapped.lockedAt
+      && prev.gps.lat === mapped.gps.lat
+      && prev.gps.lng === mapped.gps.lng
+      && prev.snapshotUrl === mapped.snapshotUrl
+    ) {
+      continue
+    }
+
     eventsById.set(mapped.id, mapped)
-    added = true
+    changed = true
   }
-  if (!added) return
+
+  if (!changed) return
+
   if (eventsById.size > MAX_EVENTS) {
     const sorted = [...eventsById.values()].sort(
       (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),

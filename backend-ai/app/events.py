@@ -190,6 +190,9 @@ class EventStore:
                     return event
         return None
 
+    def find_by_dedup_key(self, dedup_key: str) -> Optional[ViolationEvent]:
+        return self._find_by_dedup_key(dedup_key)
+
     def _refresh_existing_snapshot(
         self,
         existing: ViolationEvent,
@@ -275,6 +278,8 @@ class EventStore:
                 self._refresh_existing_snapshot(
                     existing, snapshot_image, event, frame_size=frame_size,
                 )
+                if event.behavior == "person":
+                    return existing
             return None
 
         event_date = event.event_date or _event_date(event.created_at)
@@ -534,21 +539,15 @@ class EventStore:
         dedup_key: Optional[str] = None,
         track_id: Optional[str] = None,
     ) -> Optional[ViolationEvent]:
-        from .ppe_analyzer import ppe_violation_display_bbox
+        from .ppe_analyzer import raw_person_bbox
 
         display_det = detection
-        if (
-            person_bbox
-            and len(person_bbox) >= 4
-            and detection.behavior in ("no_helmet", "no_vest", "no_shoes")
-        ):
-            h = frame.shape[0]
-            display = ppe_violation_display_bbox(
-                tuple(float(v) for v in person_bbox),
-                detection.behavior,
-                h,
-            )
-            display_det = detection.model_copy(update={"bbox": [float(v) for v in display]})
+        raw_pb = raw_person_bbox(detection)
+        if person_bbox and len(person_bbox) >= 4:
+            if detection.subject_bbox and len(detection.subject_bbox) >= 4:
+                raw_pb = [float(v) for v in detection.subject_bbox]
+            else:
+                raw_pb = [float(v) for v in person_bbox]
 
         event_date = _event_date()
         event = ViolationEvent.from_ppe_detection(
@@ -563,13 +562,14 @@ class EventStore:
         if gps_lat is not None and gps_lng is not None:
             event.gps_lat = gps_lat
             event.gps_lng = gps_lng
-        if person_bbox and len(person_bbox) >= 4:
-            event.subject_bbox = [float(v) for v in person_bbox]
+        if raw_pb and len(raw_pb) >= 4:
+            event.subject_bbox = [float(v) for v in raw_pb]
         stable_track = track_id or detection.behavior
         key = dedup_key or build_dedup_key(camera_id, event.scenario_id, stable_track)
         raw = frame.copy()
-        annotated = self._draw_ppe_snapshot(raw, display_det, person_bbox)
-        snapshot = self._compose_event_snapshot(raw, annotated, event, behavior=detection.behavior)
+        annotated = self._draw_ppe_bbox(raw, display_det, copy_frame=True, thickness=2)
+        snapshot = annotated
+        h, w = raw.shape[:2]
         return self._finalize_event(
             event,
             snapshot,
@@ -579,7 +579,116 @@ class EventStore:
             event.scenario_name,
             event.id,
             event.confidence,
-            frame_size=self._frame_size(raw),
+            frame_size=(int(w), int(h)),
+        )
+
+    def _person_incoming_event(
+        self,
+        detection: PpeDetection,
+        *,
+        camera_id: str,
+        track_id: Optional[str] = None,
+    ) -> tuple[ViolationEvent, str]:
+        event_date = _event_date()
+        event = ViolationEvent.from_person_detection(
+            detection,
+            snapshot_file=None,
+            event_date=event_date,
+            camera_id=camera_id,
+        )
+        from .patrol_api import get_patrol_gps
+
+        gps_lat, gps_lng = get_patrol_gps(camera_id)
+        if gps_lat is not None and gps_lng is not None:
+            event.gps_lat = gps_lat
+            event.gps_lng = gps_lng
+        if detection.bbox and len(detection.bbox) >= 4:
+            event.subject_bbox = [float(v) for v in detection.bbox]
+
+        stable_id = (detection.worker_id or track_id or "person").strip()
+        key = build_dedup_key(camera_id, event.scenario_id, stable_id)
+        return event, key
+
+    def upsert_patrol_person(
+        self,
+        detection: PpeDetection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "HC-01",
+        track_id: Optional[str] = None,
+        allow_create: bool = True,
+    ) -> Optional[ViolationEvent]:
+        """Tạo hoặc cập nhật PERS-001 — 1 người = 1 sự kiện, gặp lại cập nhật GPS/dot."""
+        incoming, key = self._person_incoming_event(
+            detection,
+            camera_id=camera_id,
+            track_id=track_id,
+        )
+        existing = self._find_by_dedup_key(key)
+        raw = frame.copy()
+        annotated = self._draw_ppe_bbox(raw, detection, copy_frame=True, thickness=2)
+        snapshot = annotated
+        h, w = raw.shape[:2]
+        frame_size = (int(w), int(h))
+
+        if existing is not None:
+            now = time.time()
+            last_touch = float(existing.confirmed_at or existing.created_at or 0)
+            if now - last_touch >= 3.0:
+                refreshed = self._finalize_event(
+                    incoming,
+                    snapshot,
+                    key,
+                    "Refresh Person [%s]: %s conf=%.2f",
+                    incoming.event_date or _event_date(),
+                    existing.worker_name or existing.scenario_name,
+                    existing.confidence,
+                    frame_size=frame_size,
+                )
+                return refreshed or existing
+
+            if incoming.gps_lat is not None and incoming.gps_lng is not None:
+                existing.gps_lat = incoming.gps_lat
+                existing.gps_lng = incoming.gps_lng
+            existing.confirmed_at = now
+            if incoming.subject_bbox:
+                existing.subject_bbox = list(incoming.subject_bbox)
+            if detection.confidence >= existing.confidence:
+                existing.confidence = detection.confidence
+                existing.bbox = list(detection.bbox)
+            return existing
+
+        if not allow_create:
+            return None
+
+        return self._finalize_event(
+            incoming,
+            snapshot,
+            key,
+            "Sự kiện Person [%s]: %s (%s) conf=%.2f",
+            incoming.event_date or _event_date(),
+            incoming.worker_name or incoming.scenario_name,
+            incoming.id,
+            incoming.confidence,
+            frame_size=frame_size,
+        )
+
+    def add_person(
+        self,
+        detection: PpeDetection,
+        frame: np.ndarray,
+        *,
+        camera_id: str = "HC-01",
+        dedup_key: Optional[str] = None,
+        track_id: Optional[str] = None,
+    ) -> Optional[ViolationEvent]:
+        _ = dedup_key
+        return self.upsert_patrol_person(
+            detection,
+            frame,
+            camera_id=camera_id,
+            track_id=track_id,
+            allow_create=True,
         )
 
     def add_wah(

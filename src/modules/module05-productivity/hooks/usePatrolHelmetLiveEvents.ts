@@ -12,6 +12,7 @@ import {
   getPatrolMobilePpeEvents,
   subscribePatrolMobilePpeEvents,
 } from '@/services/patrolMobileEventsBridge'
+import { syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
 
 function mergeEvents(backend: PatrolEvent[], mobile: PatrolEvent[]): PatrolEvent[] {
   const byId = new Map<string, PatrolEvent>()
@@ -88,6 +89,10 @@ export function usePatrolHelmetLiveEvents(
 
   const events = mergeEvents(backendEvents, mobileEvents)
   const online = streamOnline || mobileEvents.length > 0
+
+  useEffect(() => {
+    syncPatrolPersonEventsToHeatmap(events)
+  }, [events])
 
   return { backendReachable: backendReachable || mobileEvents.length > 0, streamOnline: online, events }
 }
