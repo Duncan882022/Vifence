@@ -4,6 +4,7 @@
  */
 import {
   getStreamUrlForCamera,
+  getVmsHlsUrl,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
 
 /** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → dùng VMS HLS relay). */
@@ -28,7 +29,7 @@ export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
 
 /**
  * URL phát live cho helmet:
- * - HC-01: VITE_HC01_STREAM_URL (VMS relay local) — không fallback MP4 mock
+ * - HC-01: VITE_HC01_STREAM_URL hoặc VMS HLS relay (Contabo) — không fallback MP4 mock
  * - HC-02: mobile only (MobileCameraFeed) — không MP4 mock
  * - HC-03…: MP4 demo (nếu chưa có nguồn live)
  */
@@ -36,7 +37,7 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   if (cameraId === 'HC-01') {
     const override = (import.meta.env.VITE_HC01_STREAM_URL as string | undefined)?.trim()
     if (override) return override
-    return undefined
+    return getVmsHlsUrl('HC-01')
   }
 
   if (cameraId === 'HC-02') {
