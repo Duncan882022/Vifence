@@ -126,17 +126,32 @@ def audit_sgc_identity() -> list[CaseResult]:
             confidence=0.9,
             bbox=[10.0, 10.0, 100.0, 200.0],
         )
-        w1, n1 = resolve_patrol_person_identity(det, "HC-02", "p01:person")
-        w2, n2 = resolve_patrol_person_identity(det, "HC-02", "p01:person")
-        w3, n3 = resolve_patrol_person_identity(det, "HC-02", "p02:person")
+        w1, n1 = resolve_patrol_person_identity(
+            det, "HC-02", "p01:person", person_bbox=[10.0, 10.0, 100.0, 200.0],
+        )
+        w2, n2 = resolve_patrol_person_identity(
+            det, "HC-02", "p01:person", person_bbox=[10.0, 10.0, 100.0, 200.0],
+        )
+        w3, n3 = resolve_patrol_person_identity(
+            det, "HC-02", "p02:person", person_bbox=[10.0, 10.0, 100.0, 200.0],
+        )
+        det_far = det.model_copy(update={"bbox": [400.0, 10.0, 500.0, 200.0]})
+        w4, n4 = resolve_patrol_person_identity(
+            det_far,
+            "HC-02",
+            "p03:person",
+            person_bbox=[400.0, 10.0, 500.0, 200.0],
+        )
 
         ok_fmt = is_sgc_worker_id(w1) and w1 == n1 and w1.startswith("sgc-0") and len(w1) == 12
         ok_stable = w1 == w2
-        ok_new = w3 != w1 and is_sgc_worker_id(w3)
+        ok_reuse = w3 == w1
+        ok_new = w4 != w1 and is_sgc_worker_id(w4)
 
         results.append(CaseResult("sgc_id_format", ok_fmt, f"id={w1}"))
         results.append(CaseResult("sgc_id_stable_track", ok_stable, f"track p01 → {w1}"))
-        results.append(CaseResult("sgc_id_new_track", ok_new, f"p02 → {w3}"))
+        results.append(CaseResult("sgc_id_reuse_nearby_track", ok_reuse, f"p02 same bbox → {w3}"))
+        results.append(CaseResult("sgc_id_new_far_person", ok_new, f"far → {w4}"))
 
     return results
 

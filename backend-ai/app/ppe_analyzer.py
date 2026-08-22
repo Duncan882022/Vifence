@@ -98,6 +98,9 @@ def _assign_patrol_person_identity(
         person_det,
         camera_id,
         track_id,
+        person_bbox=person_bbox,
+        frame_w=frame_w,
+        frame_h=frame_h,
     )
     person_det.worker_id = worker_id
     person_det.worker_name = worker_name

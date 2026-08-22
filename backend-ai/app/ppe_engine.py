@@ -316,11 +316,29 @@ class PpeEngine:
                 state.person_bbox = person_bbox
                 state.last_seen = now
 
-                worker_id, worker_name = resolve_patrol_person_identity(
-                    person,
-                    camera_id,
-                    track_id,
-                )
+                existing_wid = (person.worker_id or "").strip()
+                if existing_wid and existing_wid not in ("", "unknown"):
+                    worker_id = existing_wid
+                    worker_name = (person.worker_name or worker_id).strip()
+                    from .person_identity_registry import bind_patrol_track_identity
+
+                    bind_patrol_track_identity(
+                        camera_id,
+                        track_id,
+                        worker_id,
+                        person_bbox=person_bbox,
+                        frame_w=frame_w,
+                        frame_h=frame_h,
+                    )
+                else:
+                    worker_id, worker_name = resolve_patrol_person_identity(
+                        person,
+                        camera_id,
+                        track_id,
+                        person_bbox=person_bbox,
+                        frame_w=frame_w,
+                        frame_h=frame_h,
+                    )
                 det = person.model_copy(
                     update={
                         "worker_id": worker_id,
