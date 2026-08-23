@@ -290,13 +290,11 @@ export function Module05Page() {
           'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
           isMobileLayout && 'pb-[env(safe-area-inset-bottom,0px)]',
         )}>
-          {/* Tier 2 — Camera */}
+          {/* Tier 2 — Camera (compact — nhường chỗ heatmap/sự kiện) */}
           <div className={cn(
             'flex flex-col min-h-0 shrink-0',
-            tier2Open && !isMobileLayout && cn(
-              'min-h-0 flex-[6]',
-              cameraMode === 'playback' ? 'lg:flex-[12]' : 'lg:flex-[10]',
-            ),
+            tier2Open && isMobileLayout && 'max-h-[min(24dvh,200px)]',
+            tier2Open && !isMobileLayout && 'max-h-[min(34vh,340px)]',
           )}>
             <Panel
               title="Camera"
@@ -304,8 +302,9 @@ export function Module05Page() {
               fit={!tier2Open || isMobileLayout}
               noPadding
               className={cn(
-                tier2Open && !isMobileLayout && 'flex-1 min-h-0 h-full',
-                tier2Open && isMobileLayout && 'max-h-[min(34dvh,300px)]',
+                tier2Open && 'overflow-hidden',
+                tier2Open && isMobileLayout && 'max-h-[min(24dvh,200px)]',
+                tier2Open && !isMobileLayout && 'max-h-[min(34vh,340px)]',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -326,7 +325,7 @@ export function Module05Page() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden">
+                <div className="flex flex-col min-h-0 w-full overflow-hidden">
                   {cameraMode === 'live' ? (
                     <TrainingCameraPanel
                       selectedId={selectedCamId}
@@ -335,7 +334,7 @@ export function Module05Page() {
                       cameras={patrolCamerasLive}
                       defaultCameraIds={patrolDefaultCameraIds}
                       defaultSidebarOpen={false}
-                      mobileCompactVideo={isMobileLayout}
+                      mobileCompactVideo
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}

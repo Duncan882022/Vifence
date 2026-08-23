@@ -142,8 +142,8 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
   const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
+    <div className="relative w-full h-full overflow-hidden rounded-lg bg-black border border-[#1e2433]">
+      <div className="absolute inset-0 bg-black" />
       {isOffline ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 z-[5]">
           <span className="text-xs font-bold tracking-[0.2em] uppercase">Offline</span>
@@ -198,13 +198,15 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId }: {
+function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   onCloseMaximize: () => void
   stackedPortrait: boolean
   fillHeight: boolean
   forceSingleCol?: boolean
+  /** Module 05 — giới hạn chiều cao ô, letterbox đen (aspect-video). */
+  compactVideo?: boolean
   /** Camera đang phóng to — giữ nguyên instance feed, không mount stream mới. */
   focusedCamId?: string | null
 }) {
@@ -229,8 +231,15 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
         const isFocused = focusedCamId === cam.id
         const isBackground = Boolean(focusedCamId && focusedCamId !== cam.id)
         const cellShellClass = cn(
-          'relative w-full min-w-0 shrink-0',
-          fillHeight ? 'h-full min-h-[120px]' : 'aspect-video max-h-[min(36dvh,280px)]',
+          'relative w-full min-w-0 shrink-0 bg-black',
+          fillHeight
+            ? 'h-full min-h-[120px]'
+            : cn(
+              'aspect-video',
+              compactVideo
+                ? 'max-h-[min(22dvh,180px)] sm:max-h-[min(26dvh,200px)] lg:max-h-[min(30vh,240px)]'
+                : 'max-h-[min(36dvh,280px)]',
+            ),
         )
         return (
           <div key={cam.id} className="relative min-w-0">
@@ -310,7 +319,7 @@ interface TrainingCameraPanelProps {
   groupFn?: (cameras: TrainingCamera[], tab: string) => { key: string; cameras: TrainingCamera[] }[]
   /** Mặc định thu gọn danh sách camera bên phải */
   defaultSidebarOpen?: boolean
-  /** Mobile: aspect-video + giới hạn hàng — không fill hết chiều cao màn hình (Module 05). */
+  /** Mobile/Module 05: aspect-video + letterbox — không fill hết chiều cao panel. */
   mobileCompactVideo?: boolean
 }
 
@@ -378,8 +387,8 @@ export function TrainingCameraPanel({
     ? catalog.filter(c => (defaultCameraIds as readonly string[]).includes(c.id))
     : catalog.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
-  /** Desktop: fill panel; mobile compact: aspect-video theo chiều ngang. */
-  const fillHeightMain = mobileCompactVideo ? isDesktop : true
+  /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
+  const fillHeightMain = !mobileCompactVideo
   const portraitMaxRows = mobileCompactVideo && !isDesktop
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
@@ -470,8 +479,10 @@ export function TrainingCameraPanel({
   return (
     <>
       <div className={cn(
-        'w-full min-h-0 h-full',
-        'flex flex-col lg:flex-row lg:flex-1 lg:min-h-0',
+        'w-full min-h-0',
+        mobileCompactVideo ? 'h-auto' : 'h-full',
+        'flex flex-col lg:flex-row',
+        mobileCompactVideo ? 'lg:h-auto' : 'lg:flex-1 lg:min-h-0',
         'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
         'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
       )}>
@@ -492,6 +503,7 @@ export function TrainingCameraPanel({
               onCloseMaximize={() => setFocusedCam(null)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
+              compactVideo={mobileCompactVideo}
               focusedCamId={focusedCam?.id}
             />
           </div>

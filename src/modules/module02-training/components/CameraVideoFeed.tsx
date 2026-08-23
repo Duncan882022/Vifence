@@ -221,7 +221,7 @@ export function CameraVideoFeed({
   }, [src, playing, isDesktop, streamIndex, isHls])
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden bg-black">
       <video
         ref={videoRef}
         src={isHls ? undefined : src}
