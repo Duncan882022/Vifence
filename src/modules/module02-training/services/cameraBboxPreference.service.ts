@@ -1,3 +1,5 @@
+import { shouldHidePatrolCameraRoi } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
+
 const STORAGE_KEY = 'vifence_camera_bbox_visible'
 
 export const CAMERA_BBOX_PREFERENCE_CHANGED = 'vifence-camera-bbox-changed'
@@ -24,10 +26,12 @@ export function notifyCameraBboxPreferenceChanged(): void {
   window.dispatchEvent(new CustomEvent(CAMERA_BBOX_PREFERENCE_CHANGED))
 }
 
-/** Mặc định bật bbox khi chưa cấu hình. */
+/** Mặc định bật bbox; HC-* (Module 05 ẩn ROI) mặc định tắt. */
 export function getCameraBboxVisible(cameraId: string): boolean {
   const map = readMap()
-  if (!(cameraId in map)) return true
+  if (!(cameraId in map)) {
+    return shouldHidePatrolCameraRoi(cameraId) ? false : true
+  }
   return map[cameraId] !== false
 }
 
