@@ -150,16 +150,13 @@ export interface PatrolHelmetPin {
   position: [number, number]
 }
 
-/** Khu phụ trách của từng mũ — 5 helmet / 5 zone chính. */
+/** Khu phụ trách — chỉ HC-01 + HC-02 (Cầu Sông Hốt). */
 export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
   helmetId: string
   zoneId: string
 }[] = [
   { helmetId: 'HC-01', zoneId: 'ZONE_A' },
-  { helmetId: 'HC-02', zoneId: 'ZONE_B' },
-  { helmetId: 'HC-03', zoneId: 'ZONE_C' },
-  { helmetId: 'HC-04', zoneId: 'ZONE_D' },
-  { helmetId: 'HC-05', zoneId: 'ZONE_E' },
+  { helmetId: 'HC-02', zoneId: 'ZONE_A' },
 ] as const
 
 function buildHelmetPins(): PatrolHelmetPin[] {

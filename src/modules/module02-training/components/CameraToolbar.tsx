@@ -20,6 +20,18 @@ export function CameraLiveBadge({ compact }: CameraLiveBadgeProps) {
   )
 }
 
+export function CameraOfflineBadge({ compact }: CameraLiveBadgeProps) {
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1 rounded font-bold tracking-wide uppercase border',
+      'bg-[#0a0e17]/90 text-muted-foreground border-[#334155]',
+      compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]',
+    )}>
+      OFFLINE
+    </span>
+  )
+}
+
 interface CameraInfoBarProps {
   cam: TrainingCamera
   compact?: boolean
@@ -135,13 +147,17 @@ interface CameraChromeProps {
 
 /** LIVE + toolbar + thông tin cam — dùng chung mọi luồng. */
 export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraChromeProps) {
+  const isOffline = cam.status === 'offline'
+
   return (
     <>
       <div className={cn(
         'absolute z-[8] pointer-events-none flex items-center gap-1',
         compact ? 'top-1.5 left-1.5' : 'top-2 left-2',
       )}>
-        <CameraLiveBadge compact={compact} />
+        {isOffline
+          ? <CameraOfflineBadge compact={compact} />
+          : <CameraLiveBadge compact={compact} />}
       </div>
       <CameraToolbar
         cameraId={cam.id}

@@ -1,45 +1,37 @@
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
 import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
-import { PATROL_HELMET_ZONE_ASSIGNMENTS } from './patrolSiteMap'
 
 export type PatrolCameraFilterTab = 'Tất cả' | 'Online' | 'Offline'
 
-const ZONE_LABELS: Record<string, string> = {
-  ZONE_A: 'Khu thi công móng',
-  ZONE_B: 'Khu lắp dựng tầng',
-  ZONE_C: 'Khu hoàn thiện',
-  ZONE_D: 'Khu kho vật tư',
-  ZONE_E: 'Khu văn phòng công trường',
-}
+export const PATROL_SITE_AREA = 'Cầu Sông Hốt'
 
-function buildPatrolCamera(id: string, zoneId: string, online: boolean): TrainingCamera {
-  const num = id.replace('HC-', '')
-  if (id === 'HC-02') {
-    return {
-      id,
-      name: `Helmet ${num}`,
-      location: `Phụ trách — ${ZONE_LABELS[zoneId] ?? zoneId}`,
-      zone: zoneId,
-      status: online ? 'online' : 'offline',
-      streamType: 'mobile',
-      assignee: 'Duncan iPhone',
-    }
-  }
-  const streamUrl = online ? getPatrolHelmetStreamUrl(id) : undefined
+const PATROL_BODY_CAMERAS: readonly { id: string; assignee: string; streamType: 'bodycam' | 'mobile' }[] = [
+  { id: 'HC-01', assignee: 'Helmet 01', streamType: 'bodycam' },
+  { id: 'HC-02', assignee: 'Duncan iPhone', streamType: 'mobile' },
+]
+
+function buildPatrolCamera(
+  id: string,
+  assignee: string,
+  streamType: 'bodycam' | 'mobile',
+): TrainingCamera {
+  const streamUrl = streamType === 'bodycam' ? getPatrolHelmetStreamUrl(id) : undefined
   return {
     id,
-    name: `Helmet ${num}`,
-    location: `Phụ trách — ${ZONE_LABELS[zoneId] ?? zoneId}`,
-    zone: zoneId,
-    status: online ? 'online' : 'offline',
-    streamType: 'bodycam',
+    name: assignee,
+    assignee,
+    location: PATROL_SITE_AREA,
+    zone: 'ZONE_A',
+    status: 'offline',
+    streamType,
     ...(streamUrl ? { streamUrl } : {}),
   }
 }
 
-/** 5 camera mũ — mỗi mũ phụ trách 1 khu (ZONE_A … ZONE_E). */
-export const PATROL_CAMERAS: TrainingCamera[] = PATROL_HELMET_ZONE_ASSIGNMENTS.map(
-  ({ helmetId, zoneId }) => buildPatrolCamera(helmetId, zoneId, true),
+/** Chỉ Helmet 01 + Duncan iPhone — khu Cầu Sông Hốt. */
+export const PATROL_CAMERAS: TrainingCamera[] = PATROL_BODY_CAMERAS.map(
+  ({ id, assignee, streamType }) => buildPatrolCamera(id, assignee, streamType),
 )
 
 export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
@@ -50,31 +42,41 @@ export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = [
   'Offline',
 ]
 
-export function filterPatrolCameras(tab: PatrolCameraFilterTab): TrainingCamera[] {
+export function filterPatrolCameras(
+  tab: PatrolCameraFilterTab,
+  cameras: TrainingCamera[] = PATROL_CAMERAS,
+): TrainingCamera[] {
   switch (tab) {
     case 'Online':
-      return PATROL_CAMERAS.filter(c => c.status === 'online')
+      return cameras.filter(c => c.status === 'online')
     case 'Offline':
-      return PATROL_CAMERAS.filter(c => c.status === 'offline')
+      return cameras.filter(c => c.status === 'offline')
     default:
-      return PATROL_CAMERAS
+      return cameras
   }
 }
 
 export function groupPatrolCamerasForSidebar(
   cameras: TrainingCamera[],
 ): { key: string; cameras: TrainingCamera[] }[] {
-  const byZone = PATROL_HELMET_ZONE_ASSIGNMENTS.map(({ zoneId, helmetId }) => {
-    const cam = cameras.find(c => c.id === helmetId)
-    return cam ? { zoneId, cam } : null
-  }).filter((x): x is { zoneId: string; cam: TrainingCamera } => !!x)
+  if (cameras.length === 0) return []
+  return [{ key: 'Bodycam', cameras }]
+}
 
-  if (byZone.length === 0) {
-    return [{ key: 'Helmet', cameras }]
+/** Gắn online/offline thật từ metrics backend + bridge HC-02 mobile. */
+export function applyPatrolCameraStreamStatus(
+  cameras: TrainingCamera[],
+  perCamera: PatrolHelmetCameraMetricsSlice[],
+  hc02MobileOnline = false,
+): TrainingCamera[] {
+  const onlineById = new Map<string, boolean>()
+  for (const row of perCamera) {
+    onlineById.set(row.camera_id, Boolean(row.stream_online))
   }
+  if (hc02MobileOnline) onlineById.set('HC-02', true)
 
-  return byZone.map(({ zoneId, cam }) => ({
-    key: ZONE_LABELS[zoneId]?.split(' ').slice(-2).join(' ') ?? zoneId,
-    cameras: [cam],
-  }))
+  return cameras.map(cam => {
+    const online = onlineById.get(cam.id) ?? false
+    return { ...cam, status: online ? 'online' : 'offline' }
+  })
 }

@@ -9,7 +9,6 @@ import {
   getPatrolMobileLiveSnapshot,
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
-import { MOCK_PATROL_DASHBOARD } from '../data/patrolMockData'
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
@@ -92,9 +91,7 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
     [workforce.objects],
   )
 
-  const { liveZones, cameraPositions, routeHistory } = usePatrolWebSocket(
-    MOCK_PATROL_DASHBOARD.sessionLabel,
-  )
+  const { liveZones, cameraPositions, routeHistory } = usePatrolWebSocket('PATROL_LIVE')
   const hc02Live = useHc02LiveDetectionDots()
   const metrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
 

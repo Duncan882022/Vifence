@@ -5,7 +5,7 @@ import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
 import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJsmpegFeed'
-import { CameraChrome, CameraLiveBadge } from './CameraToolbar'
+import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
@@ -64,6 +64,8 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
 function CameraThumb({ cam, selected, onClick, compact = false, strip = false }: {
   cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean
 }) {
+  const isOffline = cam.status === 'offline'
+
   return (
     <div
       onClick={onClick}
@@ -77,14 +79,19 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
       )}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed cam={cam} playing={false} compact aiOverlay={false} />
+      {!isOffline && <CameraLiveFeed cam={cam} playing={false} compact aiOverlay={false} />}
+      {isOffline && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-[8px] font-bold tracking-widest text-muted-foreground/50 uppercase">Offline</span>
+        </div>
+      )}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
 
-      {(cam.streamType !== 'mobile' || selected) && (
-        <span className="absolute top-0.5 left-0.5 z-[1]">
-          <CameraLiveBadge compact={compact} />
-        </span>
-      )}
+      <span className="absolute top-0.5 left-0.5 z-[1]">
+        {isOffline
+          ? <CameraOfflineBadge compact={compact} />
+          : ((cam.streamType !== 'mobile' || selected) && <CameraLiveBadge compact={compact} />)}
+      </span>
 
       <div className={cn(
         'absolute top-0.5 right-0.5 rounded-sm border-2 flex items-center justify-center transition-all',
@@ -129,17 +136,26 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
   /** false khi mobile đang mở fullscreen — tránh 2 getUserMedia (iPhone tile đen) */
   playing?: boolean
 }) {
+  const isOffline = cam.status === 'offline'
+
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
-      <CameraLiveFeed
-        cam={cam}
-        playing={playing}
-        compact={compact}
-        aiOverlay={playing}
-        analyzeThrottle={analyzeThrottle}
-        streamIndex={streamIndex}
-      />
+      {isOffline ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 z-[5]">
+          <span className="text-xs font-bold tracking-[0.2em] uppercase">Offline</span>
+          <span className="text-[10px] text-muted-foreground/40">{cameraDisplayLabel(cam)}</span>
+        </div>
+      ) : (
+        <CameraLiveFeed
+          cam={cam}
+          playing={playing}
+          compact={compact}
+          aiOverlay={playing}
+          analyzeThrottle={analyzeThrottle}
+          streamIndex={streamIndex}
+        />
+      )}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
       <CameraChrome
         cam={cam}
@@ -275,6 +291,8 @@ interface TrainingCameraPanelProps {
   filterTabs?: string[]
   filterFn?: (tab: string) => TrainingCamera[]
   groupFn?: (cameras: TrainingCamera[], tab: string) => { key: string; cameras: TrainingCamera[] }[]
+  /** Mặc định thu gọn danh sách camera bên phải */
+  defaultSidebarOpen?: boolean
 }
 
 export function TrainingCameraPanel({
@@ -286,6 +304,7 @@ export function TrainingCameraPanel({
   filterTabs,
   filterFn,
   groupFn,
+  defaultSidebarOpen = true,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
   const tabs = filterTabs ?? CAMERA_FILTER_TABS
@@ -302,7 +321,7 @@ export function TrainingCameraPanel({
     }
     return base.length > 0 ? base : (selectedId ? [selectedId] : [])
   })
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(defaultSidebarOpen)
   const [filterTab, setFilterTab] = useState<string>('Tất cả')
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const videoGridRef = useRef<HTMLDivElement>(null)

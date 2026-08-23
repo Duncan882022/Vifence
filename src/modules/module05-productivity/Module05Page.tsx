@@ -15,19 +15,24 @@ import { TrainingCameraPanel } from '@/modules/module02-training/components/Trai
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { cn } from '@/utils/cn'
+import { useAppStore } from '@/store/app.store'
 import {
-  MOCK_PATROL_DASHBOARD,
-  MOCK_PATROL_EVENTS,
+  getPatrolMobileLiveSnapshot,
+  subscribePatrolMobileLiveSnapshot,
+} from '@/services/patrolMobileMetricsBridge'
+import {
   type PatrolEvent,
 } from './data/patrolMockData'
 import {
   DEFAULT_PATROL_CAMERA_IDS,
   PATROL_CAMERAS,
   PATROL_CAMERA_FILTER_TABS,
+  applyPatrolCameraStreamStatus,
   filterPatrolCameras,
   groupPatrolCamerasForSidebar,
   type PatrolCameraFilterTab,
 } from './data/patrolCameras'
+import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
 import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import {
@@ -44,7 +49,7 @@ import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
-import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
+import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
 function formatHelmetMetricBreakdown(
@@ -57,39 +62,38 @@ function formatHelmetMetricBreakdown(
     .join(' · ')
 }
 
-function PatrolKPIs() {
-  const d = MOCK_PATROL_DASHBOARD
-  const events = MOCK_PATROL_EVENTS
-  const live = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
-  const mockAlerts = events.filter(e => e.type !== 'PPE_VIOLATION' && e.type !== 'PERSON_DETECTED').length
-  const mockMachineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
+function PatrolKPIs({
+  live,
+  workforce,
+}: {
+  live: PatrolHelmetLiveMetrics
+  workforce: WorkforceSnapshot
+}) {
+  const zoneEntries = Object.values(workforce.zonePopulation)
+  const visitedZones = zoneEntries.filter(
+    z => z.observed_count > 0 || z.kpi.peak > 0,
+  ).length
+  const totalZones = zoneEntries.length > 0 ? zoneEntries.length : PATROL_GPS_ZONES.length
+  const coveragePercent = totalZones > 0
+    ? Math.round((visitedZones / totalZones) * 100)
+    : 0
 
-  // PPE ẩn trên Module 05 — KPI cảnh báo không đếm PPE.
-  const alertValue = live.streamOnline
-    ? mockMachineCount
-    : live.backendReachable
-      ? mockMachineCount
-      : mockAlerts
-  const totalAlerts = alertValue
-  const machineCount = live.streamOnline ? 0 : mockMachineCount
-  const peopleValue = live.backendReachable || live.streamOnline || live.personCount > 0
-    ? live.personCount
-    : d.uniquePeople
-  const peopleDetail = live.streamOnline
-    ? `${live.personCount} cộng dồn · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count')}`
-    : live.backendReachable || live.personCount > 0
-      ? `Cộng dồn phiên · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`}`
-      : 'Unique trên công trường hôm nay'
-  const alertDetail = live.streamOnline || live.backendReachable
-    ? `${machineCount} máy dừng · sự kiện PPE đã tắt`
-    : `${mockMachineCount} Machine · sự kiện PPE đã tắt`
+  const alertCount = workforce.events.filter(e => e.event_type !== 'PPE_VIOLATION').length
+
+  const peopleDetail = live.perCamera.length > 0
+    ? formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`
+    : live.backendReachable || live.streamOnline
+      ? 'Đang chờ phát hiện'
+      : 'Chưa có luồng live'
 
   const kpis = [
     {
       label: 'Khu vực tuần tra',
-      value: `${d.visitedZones}/${d.totalZones}`,
+      value: `${visitedZones}/${totalZones}`,
       unit: 'khu vực',
-      detail: `${d.coveragePercent}% diện tích đã phủ`,
+      detail: visitedZones > 0
+        ? `${coveragePercent}% diện tích đã phủ`
+        : 'Chưa có dữ liệu tuần tra',
       change: 0,
       changeType: 'neutral' as const,
       icon: MapPin,
@@ -98,36 +102,33 @@ function PatrolKPIs() {
     },
     {
       label: 'Công nhân',
-      value: peopleValue,
+      value: live.personCount,
       unit: 'người',
       detail: peopleDetail,
-      change: 12,
-      changeType: 'increase' as const,
-      previousValue: 171,
+      change: 0,
+      changeType: 'neutral' as const,
       icon: Users,
       iconBg: 'bg-sky-400/10',
       iconColor: 'text-sky-400',
     },
     {
       label: 'Máy móc',
-      value: d.uniqueVehicles,
+      value: 0,
       unit: 'máy',
-      detail: 'Máy unique đang hoạt động',
-      change: 3,
-      changeType: 'increase' as const,
-      previousValue: 34,
+      detail: 'Đang chờ dữ liệu live',
+      change: 0,
+      changeType: 'neutral' as const,
       icon: Truck,
       iconBg: 'bg-amber-400/10',
       iconColor: 'text-amber-400',
     },
     {
       label: 'Cảnh báo',
-      value: totalAlerts,
+      value: alertCount,
       unit: 'sự kiện',
-      detail: alertDetail,
-      change: 1,
-      changeType: 'increase' as const,
-      previousValue: totalAlerts - 1,
+      detail: 'Sự kiện PPE đã tắt',
+      change: 0,
+      changeType: 'neutral' as const,
       icon: AlertTriangle,
       iconBg: 'bg-red-400/10',
       iconColor: 'text-red-400',
@@ -205,6 +206,7 @@ function HeatmapModal({ onClose }: { onClose: () => void }) {
 
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
+  const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
@@ -217,22 +219,41 @@ export function Module05Page() {
 
   const playbackDate = getPatrolDefaultPlaybackDate()
   const { cameras: visionCameras } = useCameras()
+  const liveMetrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
+  const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
+
+  const [hc02MobileOnline, setHc02MobileOnline] = useState(
+    () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
+  )
+
+  useEffect(() => {
+    setSidebarCollapsed(true)
+  }, [setSidebarCollapsed])
+
+  useEffect(() => {
+    return subscribePatrolMobileLiveSnapshot(snap => {
+      if (snap?.cameraId === 'HC-02') {
+        setHc02MobileOnline(Boolean(snap.streamOnline))
+      }
+    })
+  }, [])
 
   const patrolCamerasLive = useMemo(
-    () => applyPatrolHelmetMobileLive(
-      applyPatrolHelmetEnvLive(
-        mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+    () => applyPatrolCameraStreamStatus(
+      applyPatrolHelmetMobileLive(
+        applyPatrolHelmetEnvLive(
+          mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+        ),
       ),
+      liveMetrics.perCamera,
+      hc02MobileOnline,
     ),
-    [visionCameras],
+    [visionCameras, liveMetrics.perCamera, hc02MobileOnline],
   )
 
   const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
-  const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
   const patrolEventsLive = useMemo(() => {
-    const base = liveHelmetEvents.backendReachable
-      ? liveHelmetEvents.events
-      : (getVmsBackendUrl() ? [] : MOCK_PATROL_EVENTS)
+    const base = liveHelmetEvents.backendReachable ? liveHelmetEvents.events : []
     return stripPatrolPpeEvents(mergePatrolAndWorkforceEvents(base, workforceSnap.events))
   }, [liveHelmetEvents.backendReachable, liveHelmetEvents.events, workforceSnap.events])
 
@@ -277,7 +298,7 @@ export function Module05Page() {
           {tier1Open && (
             <div className="p-2 sm:p-3">
               <Tier1 className="grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-                <PatrolKPIs />
+                <PatrolKPIs live={liveMetrics} workforce={workforceSnap} />
               </Tier1>
             </div>
           )}
@@ -340,8 +361,9 @@ export function Module05Page() {
                       onStreamCountChange={setActiveStreamCount}
                       cameras={patrolCamerasLive}
                       defaultCameraIds={DEFAULT_PATROL_CAMERA_IDS}
+                      defaultSidebarOpen={false}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
-                      filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab)}
+                      filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
                     />
                   ) : (
@@ -353,7 +375,7 @@ export function Module05Page() {
                       maxDate={playbackDate}
                       selectedRecordId={selectedEventId}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
-                      filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab)}
+                      filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
                       fetchRecords={fetchPatrolCameraRecords}
                       fetchDetections={fetchPatrolRecordDetections}
