@@ -47,7 +47,7 @@ import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
+import { filterPatrolEvidenceEvents } from './utils/patrolEventsFeed'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
@@ -253,10 +253,8 @@ export function Module05Page() {
 
   const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
   const patrolEventsLive = useMemo(() => {
-    return stripPatrolPpeEvents(
-      mergePatrolAndWorkforceEvents(liveHelmetEvents.events, workforceSnap.events),
-    )
-  }, [liveHelmetEvents.events, workforceSnap.events])
+    return filterPatrolEvidenceEvents(stripPatrolPpeEvents(liveHelmetEvents.events))
+  }, [liveHelmetEvents.events])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,

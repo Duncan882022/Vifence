@@ -68,6 +68,7 @@ export function pushPatrolMobilePpeEvents(
 
   for (const row of rows) {
     if (!row.id || !isPatrolBackendRow(row)) continue
+    if (!row.snapshot_file?.trim()) continue
 
     const gps = resolveGpsForMobileEvent(row, cameraId)
     const mapped = mapBackendEventToPatrolEvent(
@@ -88,6 +89,7 @@ export function pushPatrolMobilePpeEvents(
       },
       backendUrl,
     )
+    if (!mapped) continue
 
     const prev = eventsById.get(mapped.id)
     if (

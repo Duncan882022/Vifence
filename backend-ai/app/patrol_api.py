@@ -316,7 +316,10 @@ def build_patrol_events_payload(
 
     target_date = date or today_iso_date()
     events = store.list_events(limit=limit, date=target_date, camera_id=camera_id)
-    patrol_rows = [event for event in events if is_patrol_module_event(event)]
+    patrol_rows = [
+        event for event in events
+        if is_patrol_module_event(event) and getattr(event, "snapshot_file", None)
+    ]
     return [event.model_dump() for event in patrol_rows]
 
 

@@ -8,6 +8,7 @@ import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patr
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
+import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFeed'
 
 const ZONE_LABELS: Record<string, string> = {
   ZONE_SITE: 'Cầu Sông Hốt',
@@ -80,6 +81,7 @@ function todayIsoDate(): string {
 
 function isPatrolModuleBackendEvent(row: BackendViolationEvent): boolean {
   if (!isPatrolHelmetCameraId(row.camera_id ?? '')) return false
+  if (!row.snapshot_file?.trim()) return false
   const scenarioId = row.scenario_id ?? ''
   if (PATROL_PPE_UI_HIDDEN && scenarioId.startsWith('PPE')) return false
   return scenarioId.startsWith('PPE') || scenarioId.startsWith('PERS')
@@ -256,15 +258,10 @@ export async function fetchPatrolHelmetPpeAlertCount(
   return metrics?.ppe_alerts_today ?? 0
 }
 
-function unixToIso(ts: number | undefined): string {
-  if (!ts || !Number.isFinite(ts)) return new Date().toISOString()
-  return new Date(ts * 1000).toISOString()
-}
-
-function buildSnapshotUrl(backendUrl: string, eventId: string, versionTs?: number): string {
+function buildSnapshotUrl(backendUrl: string, eventId: string, snapshotFile: string, versionTs?: number): string {
   const base = `${patrolApiBase(backendUrl)}/events/${eventId}/snapshot`
-  if (!versionTs) return base
-  return `${base}?v=${Math.floor(versionTs)}`
+  const v = versionTs ?? snapshotFile
+  return `${base}?v=${encodeURIComponent(String(v))}`
 }
 
 function eventTypeFromScenario(scenarioId: string | undefined, behavior?: string): EventType {
@@ -305,15 +302,23 @@ function resolveEventGps(
 export function mapBackendEventToPatrolEvent(
   event: BackendViolationEvent,
   backendUrl: string,
-): PatrolEvent {
+): PatrolEvent | null {
   const cameraId = event.camera_id ?? 'HC-01'
-  const { zoneId, zoneName } = zoneMetaForCamera(cameraId)
+  const snapshotFile = event.snapshot_file?.trim()
+  if (!snapshotFile) return null
+
   const ts = event.confirmed_at ?? event.created_at
+  const lockedIso = unixSecondsToIso(ts)
+  const createdIso = unixSecondsToIso(event.created_at) ?? lockedIso
+  if (!lockedIso || !createdIso) return null
+
+  const { zoneId, zoneName } = zoneMetaForCamera(cameraId)
   const workerLabel = event.worker_name?.trim() || event.worker_id?.trim() || 'Người chưa xác định'
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
   const objectId = event.worker_id?.trim()
     || event.dedup_key?.split('|').pop()
     || event.id.slice(0, 8)
+  const versionTs = normalizeUnixSeconds(ts) ?? undefined
 
   return {
     id: event.id,
@@ -322,20 +327,26 @@ export function mapBackendEventToPatrolEvent(
     cameraName: PATROL_BODYCAM_LABELS[cameraId] ?? cameraId,
     zoneId,
     zoneName,
-    objectId,
     objectLabel: workerLabel,
+    objectId,
     violationLabel: event.scenario_name ?? event.scenario_id ?? (
       eventType === 'PERSON_DETECTED' ? 'Phát hiện người' : 'Vi phạm PPE'
     ),
-    startedAt: unixToIso(event.created_at),
-    lockedAt: unixToIso(ts),
+    startedAt: createdIso,
+    lockedAt: lockedIso,
     endedAt: null,
     durationSeconds: null,
     status: 'LOCKED',
     confidence: Number(event.confidence ?? 0),
     gps: resolveEventGps(event, cameraId),
-    snapshotUrl: buildSnapshotUrl(backendUrl, event.id, ts),
+    snapshotUrl: buildSnapshotUrl(backendUrl, event.id, snapshotFile, versionTs),
   }
+}
+
+function mapBackendRows(rows: BackendViolationEvent[], backendUrl: string): PatrolEvent[] {
+  return rows
+    .map(row => mapBackendEventToPatrolEvent(row, backendUrl))
+    .filter((ev): ev is PatrolEvent => ev != null)
 }
 
 export async function fetchPatrolHelmetLiveEvents(
@@ -358,7 +369,7 @@ export async function fetchPatrolHelmetLiveEvents(
   } else {
     rows = await fetchLegacyHelmetEvents(cameraId, backendUrl)
   }
-  return rows.map(row => mapBackendEventToPatrolEvent(row, backendUrl))
+  return mapBackendRows(rows, backendUrl)
 }
 
 export async function fetchPatrolHelmetAggregateLiveEvents(
@@ -389,5 +400,5 @@ export async function fetchPatrolHelmetAggregateLiveEvents(
     rows = await fetchLegacyAggregateEvents(ids, backendUrl)
   }
 
-  return rows.map(row => mapBackendEventToPatrolEvent(row, backendUrl))
+  return mapBackendRows(rows, backendUrl)
 }

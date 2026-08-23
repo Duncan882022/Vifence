@@ -11,6 +11,8 @@ import {
   getPatrolEventStatusDisplay,
   shouldShowPatrolStatusBadge,
 } from '../utils/patrolEventsUi'
+import { isPatrolEvidenceEvent } from '../utils/patrolEventsFeed'
+import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 
 interface PatrolEventsPanelProps {
   events: PatrolEvent[]
@@ -32,11 +34,10 @@ const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [
 ]
 
 /**
- * Main feed: ẩn raw PERSON_DETECTED + PPE (theo yêu cầu ẩn PPE trên Sự kiện Module 05).
- * Hệ thống chỉ còn MACHINE_STOPPED (và loại tương tự, không PPE).
+ * Feed chỉ hiển thị sự kiện đã lọc evidence (snapshot + thời gian) ở Module05Page.
  */
 function isMeaningfulFeedEvent(event: PatrolEvent): boolean {
-  return event.type !== 'PERSON_DETECTED' && event.type !== 'PPE_VIOLATION'
+  return isPatrolEvidenceEvent(event)
 }
 
 const INITIAL_COUNT = 6
@@ -169,6 +170,12 @@ function PatrolEventCard({
       onKeyDown={e => e.key === 'Enter' && onSelect?.(event)}
     >
       <div className="flex gap-2 p-2 min-w-0 items-stretch">
+        <PatrolEventSnapshot
+          event={event}
+          className="self-stretch w-[80px]"
+          onClick={onDetailClick}
+        />
+
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex flex-wrap items-center gap-1 min-w-0">
@@ -215,7 +222,11 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
   const feed = events.filter(isMeaningfulFeedEvent)
   switch (tab) {
     case 'workforce':
-      return feed.filter(e => e.type === 'POPULATION_OBSERVED' || e.type === 'POPULATION_CHANGE')
+      return feed.filter(e =>
+        e.type === 'POPULATION_OBSERVED'
+        || e.type === 'POPULATION_CHANGE'
+        || e.type === 'PERSON_DETECTED',
+      )
     case 'identity':
       return feed.filter(e => e.type === 'IDENTITY_VERIFIED')
     case 'density':
@@ -246,7 +257,11 @@ export function PatrolEventsPanel({
     const feed = events.filter(isMeaningfulFeedEvent)
     return {
       all: feed.length,
-      workforce: feed.filter(e => e.type === 'POPULATION_OBSERVED' || e.type === 'POPULATION_CHANGE').length,
+      workforce: feed.filter(e =>
+        e.type === 'POPULATION_OBSERVED'
+        || e.type === 'POPULATION_CHANGE'
+        || e.type === 'PERSON_DETECTED',
+      ).length,
       identity: feed.filter(e => e.type === 'IDENTITY_VERIFIED').length,
       density: feed.filter(e => e.type === 'HIGH_DENSITY').length,
       system: feed.filter(e => e.type === 'MACHINE_STOPPED').length,
@@ -312,7 +327,7 @@ export function PatrolEventsPanel({
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
         {events.filter(isMeaningfulFeedEvent).length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
-            Chưa có sự kiện live — đang chờ backend Contabo
+            Chưa có sự kiện có ảnh evidence — đang chờ backend ghi snapshot
           </p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
