@@ -259,6 +259,7 @@ export const PATROL_HELMET_ZONE_TRAILS: Record<string, [number, number][]> =
   )
 
 export function getPatrolHelmetZoneName(helmetId: string): string {
+  if (helmetId === 'HC-01' || helmetId === 'HC-02') return 'Cầu Sông Hốt'
   const pin = PATROL_HELMET_GPS_PINS.find(p => p.id === helmetId)
   if (!pin) return helmetId
   return PATROL_GPS_ZONES.find(z => z.zone_id === pin.zoneId)?.name ?? pin.zoneId

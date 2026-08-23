@@ -2,7 +2,7 @@ import type { TrainingCamera } from '@/modules/module02-training/data/trainingCa
 import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
 import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
 
-export type PatrolCameraFilterTab = 'Tất cả' | 'Online' | 'Offline'
+export type PatrolCameraFilterTab = 'Bodycam'
 
 export const PATROL_SITE_AREA = 'Cầu Sông Hốt'
 
@@ -34,26 +34,21 @@ export const PATROL_CAMERAS: TrainingCamera[] = PATROL_BODY_CAMERAS.map(
   ({ id, assignee, streamType }) => buildPatrolCamera(id, assignee, streamType),
 )
 
+export const PATROL_BODYCAM_LABELS: Record<string, string> = {
+  'HC-01': 'Helmet 01',
+  'HC-02': 'Duncan iPhone',
+}
+
 export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
 
-export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = [
-  'Tất cả',
-  'Online',
-  'Offline',
-]
+export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = ['Bodycam']
 
+/** Tab Bodycam — luôn trả cả Helmet 01 + Duncan iPhone. */
 export function filterPatrolCameras(
-  tab: PatrolCameraFilterTab,
+  _tab: PatrolCameraFilterTab,
   cameras: TrainingCamera[] = PATROL_CAMERAS,
 ): TrainingCamera[] {
-  switch (tab) {
-    case 'Online':
-      return cameras.filter(c => c.status === 'online')
-    case 'Offline':
-      return cameras.filter(c => c.status === 'offline')
-    default:
-      return cameras
-  }
+  return cameras
 }
 
 export function groupPatrolCamerasForSidebar(

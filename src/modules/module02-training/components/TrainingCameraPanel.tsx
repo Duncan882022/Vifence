@@ -322,7 +322,13 @@ export function TrainingCameraPanel({
     return base.length > 0 ? base : (selectedId ? [selectedId] : [])
   })
   const [sidebarOpen, setSidebarOpen] = useState(defaultSidebarOpen)
-  const [filterTab, setFilterTab] = useState<string>('Tất cả')
+  const [filterTab, setFilterTab] = useState<string>(() => tabs[0] ?? 'Tất cả')
+
+  useEffect(() => {
+    if (!tabs.includes(filterTab)) {
+      setFilterTab(tabs[0] ?? 'Tất cả')
+    }
+  }, [tabs, filterTab])
   const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const videoGridRef = useRef<HTMLDivElement>(null)
   const [landscapeSidebarH, setLandscapeSidebarH] = useState<number | null>(null)

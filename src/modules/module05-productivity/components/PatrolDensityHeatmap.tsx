@@ -9,7 +9,7 @@ import {
   getPatrolMobileLiveSnapshot,
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
-import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
+import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS, PATROL_SITE_AREA } from '../data/patrolCameras'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
@@ -247,22 +247,48 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
   }, [hc02Helmet?.zone_id, liveZones])
 
   const hc02Online = Boolean(hc02Helmet?.online) || helmetOnlineById['HC-02']
+  const bodycamOnlineById = useMemo(() => ({
+    'HC-01': Boolean(helmetOnlineById['HC-01']),
+    'HC-02': hc02Online,
+  }), [helmetOnlineById, hc02Online])
+  const bodycamOnlineCount = DEFAULT_PATROL_CAMERA_IDS.filter(
+    id => bodycamOnlineById[id as keyof typeof bodycamOnlineById],
+  ).length
 
   return (
     <div className="flex flex-col overflow-hidden lg:h-full lg:min-h-0 min-h-0">
       <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-2 space-y-1.5">
         <div className="flex items-start gap-2 flex-wrap min-w-0">
-          <span className={cn(
-            'inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold shrink-0',
-            hc02Online ? 'text-emerald-400' : 'text-slate-500',
-          )}>
-            HC-02
-            <span className={cn(
-              'w-1.5 h-1.5 rounded-full',
-              hc02Online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500',
-            )} />
-            {hc02Online ? 'ONLINE' : 'OFFLINE'}
-          </span>
+          <div className="flex flex-col gap-1.5 min-w-0 shrink-0">
+            <span className="text-[8px] sm:text-[9px] font-bold text-muted-foreground/70 uppercase tracking-widest">
+              Bodycam
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {DEFAULT_PATROL_CAMERA_IDS.map(id => {
+                const online = bodycamOnlineById[id as keyof typeof bodycamOnlineById]
+                const label = PATROL_BODYCAM_LABELS[id] ?? id
+                return (
+                  <span
+                    key={id}
+                    className={cn(
+                      'inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold shrink-0',
+                      online ? 'text-emerald-400' : 'text-slate-500',
+                    )}
+                  >
+                    {label}
+                    <span className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500',
+                    )} />
+                    {online ? 'ONLINE' : 'OFFLINE'}
+                  </span>
+                )
+              })}
+            </div>
+            <span className="text-[9px] text-muted-foreground/60 tabular-nums">
+              {bodycamOnlineCount}/{DEFAULT_PATROL_CAMERA_IDS.length} luồng · {PATROL_SITE_AREA}
+            </span>
+          </div>
           <span className="text-[10px] sm:text-[11px] text-[#94a3b8] min-w-0">
             Zone {activeZoneName}
             <span className="text-[#334155] mx-1">·</span>
@@ -295,12 +321,6 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
             <>
               <span className="text-[#334155]">·</span>
               <span>Last: {lastUpdateLabel}</span>
-            </>
-          )}
-          {helmetOnlineById['HC-01'] && (
-            <>
-              <span className="text-[#334155]">·</span>
-              <span className="text-emerald-400/70">HC-01 ONLINE</span>
             </>
           )}
         </div>
