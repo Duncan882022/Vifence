@@ -1,6 +1,6 @@
 /**
  * PatrolDensityHeatmap — Module 05 UI per
- * docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
+ * specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
  */
 import { useEffect, useMemo, useState } from 'react'
 

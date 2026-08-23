@@ -21,7 +21,7 @@ interface PatrolEventsPanelProps {
   onPlayback?: (event: PatrolEvent) => void
 }
 
-/** Temporary filters per REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §8/§18 */
+/** Temporary filters per specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §8/§18 */
 type PatrolFilterTab = 'all' | 'workforce' | 'identity' | 'density' | 'system'
 
 const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [

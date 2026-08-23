@@ -1,6 +1,6 @@
 """
 Module 05 — Workforce engine unit tests
-docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §3–§10
+specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §3–§10
 """
 from __future__ import annotations
 

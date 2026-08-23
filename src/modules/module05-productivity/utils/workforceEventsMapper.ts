@@ -1,6 +1,6 @@
 /**
  * Map workforce engine events → PatrolEvent for Module 05 feed.
- * docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §8
+ * specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §8
  */
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { WorkforceEventState, WorkforceEventType } from '../types/workforceHeatmap'

@@ -1,6 +1,6 @@
 /**
  * Module 05 — temporary UI helpers aligned with
- * docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
+ * specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
  */
 
 export type HeatmapTimeWindow = 'live' | '5m' | '15m' | '1h' | 'shift'

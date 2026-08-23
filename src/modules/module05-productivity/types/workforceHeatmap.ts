@@ -1,6 +1,6 @@
 /**
  * Module 05 — Realtime Workforce Heatmap types
- * docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
+ * specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
  */
 
 export type ObservationMode = 'FULL_BODY' | 'UPPER_BODY' | 'FACE_CLOSEUP' | 'PARTIAL_BODY'

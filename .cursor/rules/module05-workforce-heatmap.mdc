@@ -8,7 +8,7 @@ alwaysApply: false
 
 Khi làm Module 05 (Hiệu quả công việc / Smart Helmet patrol):
 
-1. Đọc và tuân thủ `docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md`.
+1. Đọc và tuân thủ `specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md`.
 2. **Không** lấy raw person detection làm workforce count hay Event Feed chính.
 3. Identity hierarchy: Track ID → Object ID → Worker ID.
 4. Population chỉ update khi Scene Observability HIGH/MEDIUM.

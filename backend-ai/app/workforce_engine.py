@@ -1,6 +1,6 @@
 """
 Realtime Workforce Heatmap — Module 05 engines
-docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
+specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
 """
 from __future__ import annotations
 

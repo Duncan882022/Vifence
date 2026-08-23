@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Auto-audit Module 05 Realtime Workforce Heatmap vs MD.
-docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
+specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
 
 Outputs JSON scorecard + runs BE/FE test suites.
 Usage:
@@ -273,7 +273,7 @@ def summarize(items: list[Item], be_tests: dict, fe_tests: dict) -> dict:
     partial = [asdict(i) for i in items if i.status == "PARTIAL"]
 
     return {
-        "spec": "docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md",
+        "spec": "specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md",
         "checklist_pct": checklist_pct,
         "test_pct": round(test_pct, 1),
         "effectiveness_pct": effectiveness,
