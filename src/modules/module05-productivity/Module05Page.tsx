@@ -444,7 +444,7 @@ export function Module05Page() {
                 events={patrolEventsLive}
                 selectedId={selectedEventId}
                 onSelect={handleSelectEvent}
-                onSnapshotClick={ev => setDetailEventId(ev.id)}
+                onDetailClick={ev => setDetailEventId(ev.id)}
                 onPlayback={handleSelectEvent}
               />
             </Panel>

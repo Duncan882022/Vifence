@@ -9,14 +9,14 @@ import {
   getPatrolMobileLiveSnapshot,
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
-import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS, PATROL_SITE_AREA } from '../data/patrolCameras'
+import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import {
   DETECTION_DOT_IN_VIEW_MS,
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   type DetectionDot,
 } from '../data/patrolDetectionData'
-import { PATROL_SITE_CENTER, PATROL_SITE_NAME } from '../data/patrolSiteMap'
+import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
@@ -28,7 +28,6 @@ import {
   HEATMAP_TIME_TABS,
   heatmapWindowMs,
   isVerifiedWorkerLabel,
-  stubObservabilityBand,
   type HeatmapTimeWindow,
 } from '../utils/workforceHeatmapUi'
 import type { ObjectState } from '../types/workforceHeatmap'
@@ -263,116 +262,42 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
     return filteredDots.filter(d => isVerifiedWorkerLabel(d.label)).length
   }, [zonePop, liveObjects, filteredDots])
 
-  const observability = zonePop?.observability_band
-    ?? stubObservabilityBand({
-      personCount: hc02Live.personCount,
-      historicalDotCount: hc02Live.historicalDotCount,
-      hasGps: hc02Live.hasLiveGps,
-    })
-
-  const lastUpdateLabel = useMemo(() => {
-    const ts = hc02Helmet?.timestamp || zonePop?.timestamp || workforce.server_time
-    if (!ts) return null
-    const ageSec = Math.max(0, Math.round((Date.now() - Date.parse(ts)) / 1000))
-    if (!Number.isFinite(ageSec)) return null
-    return ageSec <= 1 ? '1s' : `${ageSec}s`
-  }, [hc02Helmet?.timestamp, zonePop?.timestamp, workforce.server_time])
-
-  const activeZoneName = useMemo(() => {
-    if (hc02Helmet?.zone_id) return PATROL_SITE_NAME
-    const zone = liveZones.find(z => (z.peopleCurrent ?? 0) > 0)
-      ?? liveZones.find(z => z.coverage === 'VISITED')
-      ?? liveZones[0]
-    return zone?.name ?? PATROL_SITE_NAME
-  }, [hc02Helmet?.zone_id, liveZones])
-
   const hc02Online = Boolean(hc02Helmet?.online) || helmetOnlineById['HC-02']
   const bodycamOnlineById = useMemo(() => ({
     'HC-01': Boolean(helmetOnlineById['HC-01']),
     'HC-02': hc02Online,
   }), [helmetOnlineById, hc02Online])
-  const bodycamOnlineCount = DEFAULT_PATROL_CAMERA_IDS.filter(
-    id => bodycamOnlineById[id as keyof typeof bodycamOnlineById],
-  ).length
 
   return (
     <div className="flex flex-col overflow-hidden lg:h-full lg:min-h-0 min-h-0">
-      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-2 space-y-1.5">
-        <div className="flex items-start gap-2 flex-wrap min-w-0">
-          <div className="flex flex-col gap-1.5 min-w-0 shrink-0">
-            <span className="text-[8px] sm:text-[9px] font-bold text-muted-foreground/70 uppercase tracking-widest">
-              Bodycam
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              {DEFAULT_PATROL_CAMERA_IDS.map(id => {
-                const online = bodycamOnlineById[id as keyof typeof bodycamOnlineById]
-                const label = PATROL_BODYCAM_LABELS[id] ?? id
-                return (
-                  <span
-                    key={id}
-                    className={cn(
-                      'inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold shrink-0',
-                      online ? 'text-emerald-400' : 'text-slate-500',
-                    )}
-                  >
-                    {label}
-                    <span className={cn(
-                      'w-1.5 h-1.5 rounded-full',
-                      online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500',
-                    )} />
-                    {online ? 'ONLINE' : 'OFFLINE'}
-                  </span>
-                )
-              })}
-            </div>
-            <span className="text-[9px] text-muted-foreground/60 tabular-nums">
-              {bodycamOnlineCount}/{DEFAULT_PATROL_CAMERA_IDS.length} luồng · {PATROL_SITE_AREA}
-            </span>
-          </div>
-          <span className="text-[10px] sm:text-[11px] text-[#94a3b8] min-w-0">
-            Zone {activeZoneName}
-            <span className="text-[#334155] mx-1">·</span>
-            <span className="text-sky-300/90 tabular-nums">{observedCount} người quan sát</span>
-            <span className="text-[#334155] mx-1">·</span>
-            <span className="text-violet-300/90 tabular-nums">{identifiedCount} đã định danh</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-x-2 gap-y-0.5 text-[9px] sm:text-[10px] text-[#64748b] flex-wrap min-w-0">
-          {hc02Live.hasLiveGps ? (
-            <span className="text-sky-300/80 tabular-nums">
-              GPS: {hc02Live.lat?.toFixed(5)}, {hc02Live.lng?.toFixed(5)}
-              {headingDeg != null && Number.isFinite(headingDeg) ? ` · Heading ${Math.round(headingDeg)}°` : ''}
-            </span>
-          ) : hc02Live.usingDefaultGps ? (
-            <span className="text-amber-400/80 tabular-nums">
-              GPS mặc định: {hc02Live.lat?.toFixed(5)}, {hc02Live.lng?.toFixed(5)}
-            </span>
-          ) : hc02Live.waitingGpsForDots ? (
-            <span className="text-amber-400/80">Detect {hc02Live.personCount} — chờ GPS…</span>
-          ) : (
-            <span className="text-amber-400/80">Chờ GPS…</span>
-          )}
+      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-1.5 space-y-1">
+        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-[10px] min-w-0">
+          {DEFAULT_PATROL_CAMERA_IDS.map(id => {
+            const online = bodycamOnlineById[id as keyof typeof bodycamOnlineById]
+            const label = PATROL_BODYCAM_LABELS[id] ?? id
+            return (
+              <span
+                key={id}
+                className={cn(
+                  'inline-flex items-center gap-1 font-semibold shrink-0',
+                  online ? 'text-emerald-400' : 'text-slate-500',
+                )}
+              >
+                <span className={cn(
+                  'w-1.5 h-1.5 rounded-full',
+                  online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500',
+                )} />
+                {label}
+              </span>
+            )
+          })}
+          <span className="text-[#334155] hidden sm:inline">·</span>
+          <span className="text-sky-300/90 tabular-nums shrink-0">{observedCount} quan sát</span>
           <span className="text-[#334155]">·</span>
-          <span className={cn(
-            observability === 'HIGH' && 'text-emerald-400/90',
-            observability === 'MEDIUM' && 'text-amber-400/90',
-            observability === 'LOW' && 'text-slate-500',
-          )}>
-            Observability: {observability}
-          </span>
-          {lastUpdateLabel && (
-            <>
-              <span className="text-[#334155]">·</span>
-              <span>Last: {lastUpdateLabel}</span>
-            </>
-          )}
+          <span className="text-violet-300/90 tabular-nums shrink-0">{identifiedCount} định danh</span>
         </div>
 
         <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-[8px] sm:text-[9px] text-[#475569] font-semibold tracking-wider uppercase mr-0.5 shrink-0">
-            Thời gian
-          </span>
           {HEATMAP_TIME_TABS.map(tab => (
             <button
               key={tab.key}
@@ -388,40 +313,12 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
               {tab.label}
             </button>
           ))}
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[8px] sm:text-[9px] text-[#475569] font-semibold tracking-wider uppercase mr-0.5 shrink-0">
-            Lớp
-          </span>
+          <span className="w-px h-3.5 bg-[#334155] mx-0.5 shrink-0" aria-hidden />
           <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
           <LayerToggle compact={viewport.compactChrome} active={layers.detection} color="#38bdf8" onClick={() => toggleLayer('detection')}>Người</LayerToggle>
           <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.route} color="#22c55e" onClick={() => toggleLayer('route')}>Mũ/Lộ trình</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.route} color="#22c55e" onClick={() => toggleLayer('route')}>Mũ</LayerToggle>
         </div>
-
-        {liveObjects.length > 0 && (
-          <div className="flex items-center gap-1 flex-wrap">
-            <span className="text-[8px] text-[#475569] font-semibold uppercase mr-0.5">Objects</span>
-            {liveObjects.slice(0, 8).map(obj => (
-              <button
-                key={obj.object_id}
-                type="button"
-                onClick={() => setSelectedObject(obj)}
-                className={cn(
-                  'px-1.5 py-0.5 rounded text-[8px] border tabular-nums',
-                  obj.identity_status === 'VERIFIED'
-                    ? 'border-violet-500/40 text-violet-300 bg-violet-500/10'
-                    : obj.status === 'ACTIVE'
-                      ? 'border-sky-500/40 text-sky-300 bg-sky-500/10'
-                      : 'border-slate-600 text-slate-400 bg-slate-800/40 opacity-70',
-                )}
-              >
-                {obj.worker_name || obj.object_id.replace(/^OBJ-\d+-/, 'OBJ-')}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <div

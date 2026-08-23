@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Loader2, Play, User } from 'lucide-react'
+import { Clock, Info, Loader2, Play, User } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
-import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import {
   PATROL_TYPE_META,
   getPatrolEventPlace,
@@ -17,7 +16,7 @@ interface PatrolEventsPanelProps {
   events: PatrolEvent[]
   selectedId?: string | null
   onSelect?: (event: PatrolEvent) => void
-  onSnapshotClick?: (event: PatrolEvent) => void
+  onDetailClick?: (event: PatrolEvent) => void
   onPlayback?: (event: PatrolEvent) => void
 }
 
@@ -99,13 +98,28 @@ function StatusTag({
 
 function PatrolEventCardActions({
   onPlayback,
+  onDetailClick,
   event,
 }: {
   onPlayback?: (event: PatrolEvent) => void
+  onDetailClick?: (event: PatrolEvent) => void
   event: PatrolEvent
 }) {
   return (
     <div className="flex items-center gap-0.5 shrink-0">
+      {onDetailClick && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDetailClick(event)
+          }}
+          className="flex items-center justify-center rounded-md transition-colors border w-7 h-7 hover:bg-[#1e2433]/80 text-muted-foreground hover:text-foreground border-[#1e2433]/60"
+          title="Chi tiết"
+        >
+          <Info className="w-3 h-3" />
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
@@ -125,13 +139,13 @@ function PatrolEventCard({
   event,
   selected,
   onSelect,
-  onSnapshotClick,
+  onDetailClick,
   onPlayback,
 }: {
   event: PatrolEvent
   selected?: boolean
   onSelect?: (event: PatrolEvent) => void
-  onSnapshotClick?: (event: PatrolEvent) => void
+  onDetailClick?: (event: PatrolEvent) => void
   onPlayback?: (event: PatrolEvent) => void
 }) {
   const typeMeta = PATROL_TYPE_META[event.type]
@@ -155,12 +169,6 @@ function PatrolEventCard({
       onKeyDown={e => e.key === 'Enter' && onSelect?.(event)}
     >
       <div className="flex gap-2 p-2 min-w-0 items-stretch">
-        <PatrolEventSnapshot
-          event={event}
-          className="self-stretch"
-          onClick={onSnapshotClick}
-        />
-
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex flex-wrap items-center gap-1 min-w-0">
@@ -174,7 +182,7 @@ function PatrolEventCard({
                 />
               )}
             </div>
-            <PatrolEventCardActions event={event} onPlayback={onPlayback} />
+            <PatrolEventCardActions event={event} onDetailClick={onDetailClick} onPlayback={onPlayback} />
           </div>
 
           <h3 className="text-[11px] font-semibold text-foreground leading-snug line-clamp-2 pr-1">
@@ -224,7 +232,7 @@ export function PatrolEventsPanel({
   events,
   selectedId,
   onSelect,
-  onSnapshotClick,
+  onDetailClick,
   onPlayback,
 }: PatrolEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<PatrolFilterTab>('all')
@@ -320,7 +328,7 @@ export function PatrolEventsPanel({
                 event={event}
                 selected={selectedId === event.id}
                 onSelect={onSelect}
-                onSnapshotClick={onSnapshotClick}
+                onDetailClick={onDetailClick}
                 onPlayback={onPlayback}
               />
             ))}

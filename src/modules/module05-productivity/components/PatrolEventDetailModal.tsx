@@ -4,7 +4,6 @@ import { MapPin, Play, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
-import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import {
   PATROL_TYPE_META,
   getPatrolEventPlace,
@@ -87,8 +86,6 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3">
-          <PatrolEventSnapshot event={event} className="w-full min-h-[140px] max-w-[220px]" />
-
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
             {[
               ['Trạng thái', statusDisplay.label],

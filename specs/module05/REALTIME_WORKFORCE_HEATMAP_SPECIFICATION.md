@@ -168,11 +168,12 @@ Forward geodesic: Bearing = Heading_H + Δθ; Lat/Lon worker từ (Lat_H, Lon_H,
 ### 7.4. Time filter
 `Live | 5 phút | 15 phút | 1 giờ | Ca`
 
-### 7.5. Header
+### 7.5. Header (compact)
 ```
-HC-02 ● ONLINE · Cầu Sông Hốt · 28 người quan sát · 11 đã định danh
-GPS: … · Observability: HIGH · Last: 2s
+Helmet 01 ● · Duncan iPhone ● · 28 quan sát · 11 định danh
+[Live|5p|15p|1h|Ca] | [Khu vực|Người|Mật độ|Mũ]
 ```
+Không hiển thị GPS/Observability/Objects chips trên chrome — thông tin đó nằm trên map.
 
 ---
 
@@ -240,7 +241,7 @@ heatPoints = []
 - Zone: luôn `Cầu Sông Hốt` (`PATROL_SITE_NAME`, `ZONE_SITE`)
 - GPS HC-02: GPS thật từ backend/bridge; fallback `PATROL_SITE_CENTER` khi stream online nhưng thiếu fix
 
-**Popup chi tiết (`PatrolEventDetailModal`):** một lần mỗi trường — loại (badge), tiêu đề, snapshot, trạng thái, vị trí (camera · zone), đối tượng, thời gian, confidence, GPS, actions Playback / Bản đồ.
+**Popup chi tiết (`PatrolEventDetailModal`):** loại, tiêu đề, trạng thái, vị trí, đối tượng, thời gian, confidence, GPS, actions — **không snapshot** (backend chưa cung cấp ảnh sự kiện).
 
 **Mock còn lại (không vào feed):** `MOCK_PATROL_EVENTS` chỉ dùng cho playback timeline stub (`patrolCameraPlayback.service`).
 
