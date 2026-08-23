@@ -1,3 +1,7 @@
+/**
+ * @deprecated Dùng `personRoi/personRoiTracker` — engine patrol thống nhất overlay + heatmap.
+ * Giữ file để tránh break import cũ; không dùng trong luồng mới.
+ */
 import type { MobileAiDetection } from '@/modules/module02-training/services/mobileAiBackend.service'
 
 const TRACK_EXPIRE_MS = 12_000
@@ -40,12 +44,30 @@ function canonicalPersonId(track: PersonTrack): string {
 
 let nextTrackSeq = 1
 
+const PPE_PERSON_PROXY_BEHAVIORS = new Set([
+  'no_helmet',
+  'no_vest',
+  'no_shoes',
+  'hard_hat',
+  'safety_vest',
+  'safety_shoes',
+])
+
+/** Person bbox hoặc PPE trên cùng subject khi backend không emit `person`. */
+function personLikeDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
+  const persons = detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4)
+  if (persons.length > 0) return persons
+  return detections
+    .filter(d => PPE_PERSON_PROXY_BEHAVIORS.has(d.behavior) && d.bbox?.length === 4)
+    .map(d => ({ ...d, behavior: 'person' as const }))
+}
+
 export function matchPersonTracks(
   detections: MobileAiDetection[],
   tracks: Map<string, PersonTrack>,
   now = Date.now(),
 ): Array<{ personId: string; label: string; confidence: number }> {
-  const persons = detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4)
+  const persons = personLikeDetections(detections)
   const matchedTrackIds = new Set<string>()
   const out: Array<{ personId: string; label: string; confidence: number }> = []
 

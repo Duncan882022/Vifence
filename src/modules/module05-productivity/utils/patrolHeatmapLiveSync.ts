@@ -1,49 +1,60 @@
-/**
- * Đồng bộ person detect live (HC-01 VMS / HC-02 mobile) → dot trên heatmap.
- */
 import type { MobileAiDetection } from '@/modules/module02-training/services/mobileAiBackend.service'
-import {
-  getPatrolHelmetGps,
-  getPatrolHelmetGpsLastKnown,
-} from '@/services/patrolHelmetGpsBridge'
 import { upsertHeatmapPersons } from '@/services/patrolHeatmapPersonRegistry'
 import { getPatrolMobileLiveSnapshot } from '@/services/patrolMobileMetricsBridge'
+import { getPatrolPersonRoiEngine, clearPatrolPersonRoiEngine } from '../personRoi/patrolPersonRoiEngine'
+import { normalizePersonRoiDetections } from '../personRoi/personRoiTracker'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
-import {
-  PATROL_HELMET_ZONE_ASSIGNMENTS,
-  PATROL_MAP_ACTIVE_HELMET_PINS,
-  PATROL_SITE_CENTER,
-} from '../data/patrolSiteMap'
-import { matchPersonTracks, type PersonTrack } from './patrolHeatmapPersonTracker'
+import { PATROL_HELMET_ZONE_ASSIGNMENTS } from '../data/patrolSiteMap'
+import { resolvePatrolHeatmapGps } from './patrolHeatmapGps'
 import { mapMatchPosition } from './positionEngine'
 
-const tracksByCamera = new Map<string, Map<string, PersonTrack>>()
-
-function isValidGps(lat: number, lng: number): boolean {
-  return Number.isFinite(lat)
-    && Number.isFinite(lng)
-    && !(lat === 0 && lng === 0)
+function isKnownWorker(id?: string | null): id is string {
+  return Boolean(id && id.trim() && id !== 'unknown')
 }
 
-export function resolvePatrolHeatmapGps(cameraId: string): { lat: number; lng: number } | null {
-  if (cameraId === 'HC-02') {
-    const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
-    if (snap && isValidGps(snap.lat, snap.lng)) {
-      return { lat: snap.lat, lng: snap.lng }
-    }
-    const mobile = getPatrolMobileLiveSnapshot('HC-02')
-    if (mobile?.streamOnline) {
-      return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
-    }
-    return snap && isValidGps(snap.lat, snap.lng)
-      ? { lat: snap.lat, lng: snap.lng }
-      : null
-  }
-
-  const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === cameraId)
-  if (pin) return { lat: pin.position[0], lng: pin.position[1] }
-  return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
+function personsFromRawDetections(
+  detections: MobileAiDetection[],
+): Array<{ personId: string; label: string; confidence: number }> {
+  return normalizePersonRoiDetections(detections).map((d, i) => ({
+    personId: isKnownWorker(d.worker_id) ? d.worker_id!.trim() : `PTR-LIVE-${i + 1}`,
+    label: d.worker_name?.trim() || d.label?.trim() || 'person',
+    confidence: d.confidence,
+  }))
 }
+
+function personsFromObservedCount(
+  cameraId: string,
+  count: number,
+): Array<{ personId: string; label: string; confidence: number }> {
+  const n = Math.max(0, Math.min(Math.floor(count), 24))
+  return Array.from({ length: n }, (_, i) => ({
+    personId: `OBS-${cameraId}-${i + 1}`,
+    label: `Quan sát #${i + 1}`,
+    confidence: 0.82,
+  }))
+}
+
+function upsertPersonsAtPatrolGps(
+  cameraId: string,
+  persons: Array<{ personId: string; label: string; confidence: number }>,
+): void {
+  if (persons.length === 0) return
+
+  const gps = resolvePatrolHeatmapGps(cameraId)
+  const zoneId = PATROL_HELMET_ZONE_ASSIGNMENTS.find(z => z.helmetId === cameraId)?.zoneId
+    ?? 'ZONE_SITE'
+  const [lat, lng] = mapMatchPosition(gps.lat, gps.lng)
+
+  upsertHeatmapPersons({
+    cameraId,
+    lat,
+    lng,
+    zoneId,
+    persons,
+  })
+}
+
+export { resolvePatrolHeatmapGps, resolvePatrolHeatmapGpsOrNull } from './patrolHeatmapGps'
 
 export function syncLivePatrolPersonDetectionsToHeatmap(
   cameraId: string,
@@ -51,33 +62,38 @@ export function syncLivePatrolPersonDetectionsToHeatmap(
 ): void {
   if (!isPatrolHelmetCameraId(cameraId)) return
 
-  const gps = resolvePatrolHeatmapGps(cameraId)
-  if (!gps) return
+  const engine = getPatrolPersonRoiEngine(cameraId)
+  engine.ingest(detections)
 
-  const tracks = tracksByCamera.get(cameraId) ?? new Map<string, PersonTrack>()
-  tracksByCamera.set(cameraId, tracks)
+  let persons = engine.getHeatmapPersons()
+  if (persons.length === 0) {
+    persons = personsFromRawDetections(detections)
+  }
+  if (persons.length === 0) {
+    const snap = getPatrolMobileLiveSnapshot(cameraId)
+    const count = snap?.personCount ?? 0
+    if (count > 0) {
+      persons = personsFromObservedCount(cameraId, count)
+    }
+  }
 
-  const persons = matchPersonTracks(detections, tracks)
-  if (persons.length === 0) return
+  upsertPersonsAtPatrolGps(cameraId, persons)
+}
 
-  const zoneId = PATROL_HELMET_ZONE_ASSIGNMENTS.find(z => z.helmetId === cameraId)?.zoneId
-    ?? 'ZONE_SITE'
+/** Đồng bộ số quan sát (population KPI / sự kiện) → dot tại Cầu Sông Hốt khi chưa có track chi tiết. */
+export function syncPatrolPopulationObservedToHeatmap(
+  cameraId: string,
+  observedCount: number,
+): void {
+  if (!isPatrolHelmetCameraId(cameraId) || observedCount <= 0) return
 
-  const [matchedLat, matchedLng] = mapMatchPosition(gps.lat, gps.lng)
+  const engine = getPatrolPersonRoiEngine(cameraId)
+  const tracked = engine.getHeatmapPersons()
+  if (tracked.length > 0) return
 
-  upsertHeatmapPersons({
-    cameraId,
-    lat: matchedLat,
-    lng: matchedLng,
-    zoneId,
-    persons,
-  })
+  upsertPersonsAtPatrolGps(cameraId, personsFromObservedCount(cameraId, observedCount))
 }
 
 export function clearPatrolHeatmapLiveTracks(cameraId?: string): void {
-  if (!cameraId) {
-    tracksByCamera.clear()
-    return
-  }
-  tracksByCamera.delete(cameraId)
+  clearPatrolPersonRoiEngine(cameraId)
 }

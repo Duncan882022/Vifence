@@ -61,9 +61,6 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [personCount, setPersonCount] = useState(0)
-  const [streamOnline, setStreamOnline] = useState(
-    () => Boolean(getPatrolMobileLiveSnapshot(HC02)?.streamOnline),
-  )
   const [registryTick, setRegistryTick] = useState(0)
 
   const applyGps = (nextLat: number, nextLng: number) => {
@@ -108,13 +105,11 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     const mobile = getPatrolMobileLiveSnapshot(HC02)
     if (mobile) {
       applyPerson(mobile.personCount)
-      setStreamOnline(Boolean(mobile.streamOnline))
     }
 
     return subscribePatrolMobileLiveSnapshot(snap => {
       if (!snap || snap.cameraId !== HC02) return
       applyPerson(snap.personCount)
-      setStreamOnline(Boolean(snap.streamOnline))
     })
   }, [])
 
@@ -132,10 +127,8 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
         const mobile = getPatrolMobileLiveSnapshot(HC02)
         if (mobile) {
           setPersonCount(mobile.personCount)
-          setStreamOnline(Boolean(mobile.streamOnline))
         } else {
           setPersonCount(Math.max(0, Math.floor(Number(metrics.person_count ?? 0))))
-          setStreamOnline(Boolean(metrics.stream_online))
         }
       } catch {
         // giữ trạng thái cuối
@@ -161,18 +154,11 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   }, [lat, lng])
 
   const hasLiveGps = isValidGps(lat, lng)
-  const usingDefaultGps = streamOnline && !hasLiveGps
-  const hasMapPosition = hasLiveGps || usingDefaultGps
-  const effectiveLat = hasLiveGps
-    ? lat
-    : usingDefaultGps
-      ? PATROL_SITE_CENTER[0]
-      : null
-  const effectiveLng = hasLiveGps
-    ? lng
-    : usingDefaultGps
-      ? PATROL_SITE_CENTER[1]
-      : null
+  /** Không GPS → mặc định Cầu Sông Hốt (cùng neo với dot/sự kiện). */
+  const usingDefaultGps = !hasLiveGps
+  const hasMapPosition = true
+  const effectiveLat = hasLiveGps ? lat! : PATROL_SITE_CENTER[0]
+  const effectiveLng = hasLiveGps ? lng! : PATROL_SITE_CENTER[1]
 
   const dots = useMemo(() => {
     void registryTick
@@ -193,6 +179,6 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     personCount,
     historicalDotCount,
     dots,
-    waitingGpsForDots: personCount > 0 && historicalDotCount === 0 && !hasMapPosition,
+    waitingGpsForDots: personCount > 0 && historicalDotCount === 0,
   }
 }

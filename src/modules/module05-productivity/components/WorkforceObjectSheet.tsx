@@ -6,6 +6,7 @@ import {
   needsPatrolManualIdentity,
   isPatrolManuallyIdentified,
   subscribePatrolManualIdentity,
+  suggestPatrolWorkerId,
 } from '../services/patrolManualIdentity.service'
 import { manualIdentityDisplayForObject } from '../utils/patrolManualIdentityUi'
 import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
@@ -73,6 +74,7 @@ export function WorkforceObjectSheet({ object, onClose }: Props) {
         {showIdentify && (
           <PatrolManualIdentityPanel
             objectKey={object.object_id}
+            suggestedWorkerId={suggestPatrolWorkerId(object.object_id, object.worker_id)}
             onAssigned={() => setIdentityTick(t => t + 1)}
           />
         )}

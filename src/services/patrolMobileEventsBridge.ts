@@ -9,6 +9,8 @@ import {
 } from '@/services/patrolHelmetGpsBridge'
 import { syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
 import { PATROL_SITE_CENTER } from '@/modules/module05-productivity/data/patrolSiteMap'
+import { applyManualIdentityToPatrolEvent } from '@/modules/module05-productivity/utils/patrolManualIdentityUi'
+import { subscribePatrolManualIdentity } from '@/modules/module05-productivity/services/patrolManualIdentity.service'
 
 import {
   PATROL_PPE_UI_HIDDEN,
@@ -62,6 +64,16 @@ function isPatrolBackendRow(row: MobileAiViolationEvent): boolean {
     || ['no_helmet', 'no_vest', 'no_shoes', 'person'].includes(behavior)
 }
 
+export function refreshPatrolMobileEventsIdentity(): void {
+  if (eventsById.size === 0) return
+  const next = new Map<string, PatrolEvent>()
+  for (const [id, ev] of eventsById) {
+    next.set(id, applyManualIdentityToPatrolEvent(ev))
+  }
+  eventsById = next
+  notify()
+}
+
 export function pushPatrolMobilePpeEvents(
   rows: MobileAiViolationEvent[],
   cameraId = 'HC-02',
@@ -88,6 +100,8 @@ export function pushPatrolMobilePpeEvents(
         snapshot_file: row.snapshot_file,
         worker_id: row.worker_id,
         worker_name: row.worker_name,
+        track_id: row.track_id ?? null,
+        object_id: row.object_id ?? null,
         gps_lat: gps.gps_lat,
         gps_lng: gps.gps_lng,
       },
@@ -139,3 +153,14 @@ export function clearPatrolMobilePpeEvents(): void {
   eventsById = new Map()
   notify()
 }
+
+let identityUnsub: (() => void) | null = null
+
+function ensureIdentitySubscription(): void {
+  if (identityUnsub) return
+  identityUnsub = subscribePatrolManualIdentity(() => {
+    refreshPatrolMobileEventsIdentity()
+  })
+}
+
+ensureIdentitySubscription()

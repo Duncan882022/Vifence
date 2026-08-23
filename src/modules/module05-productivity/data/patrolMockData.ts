@@ -54,6 +54,8 @@ export interface PatrolEvent {
   gps: { lat: number; lng: number }
   /** Snapshot từ backend VMS — `/events/{id}/snapshot` */
   snapshotUrl?: string
+  /** Mã ẩn danh sgc-* khi objectId đã promote sang OBJ-* */
+  trackWorkerId?: string
 }
 
 export interface PatrolDashboard {

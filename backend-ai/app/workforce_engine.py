@@ -462,6 +462,11 @@ class WorkforceEngine:
         face_conf = row.get("face_confidence") or row.get("identity_confidence")
         wid = str(worker_id).strip() if worker_id else ""
         is_gallery = bool(wid) and not wid.startswith("sgc-") and not wid.startswith("OBJ-")
+        from .person_identity_registry import is_sgc_worker_id
+
+        if wid and is_sgc_worker_id(wid) and obj.identity_status != "VERIFIED":
+            obj.worker_id = wid
+            obj.worker_name = obj.worker_name or wid
         if worker_name and is_gallery:
             fc = float(face_conf) if face_conf is not None else 0.95
             if fc >= FACE_VERIFY:

@@ -20,7 +20,7 @@ const captureStateByVideo = new WeakMap<HTMLVideoElement, VideoCaptureState>()
 const analyzeIntervalScaleByVideo = new WeakMap<HTMLVideoElement, number>()
 
 /** Khoảng cách tối thiểu giữa 2 lần drawImage thực sự (ms). */
-const MIN_CAPTURE_GAP_MS = 160
+const MIN_CAPTURE_GAP_MS = 96
 
 export interface VideoCaptureViewport {
   fit: 'cover' | 'contain'

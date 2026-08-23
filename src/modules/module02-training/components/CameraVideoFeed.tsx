@@ -21,6 +21,8 @@ import {
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
+import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
@@ -87,16 +89,17 @@ export function CameraVideoFeed({
     overlayActive && !overlayDisabled && (roadAnalysis || showA03RoadRoiLayer),
   )
   const showCraneOverlay = Boolean(overlayActive && craneProximity && !overlayDisabled)
-  const showPpeOverlay = Boolean(
-    overlayActive && (ppeAnalysis || patrolPersonAnalysis) && !overlayDisabled,
-  )
   const runPatrolHeatmapAnalyze = Boolean(
     runPatrolAnalyze && patrolPersonAnalysis && !overlayDisabled,
+  )
+  const showPatrolPersonRoi = Boolean(runPatrolHeatmapAnalyze && overlayActive && isPatrolHelmetCameraId(cameraId))
+  const showPpeOverlay = Boolean(
+    overlayActive && (ppeAnalysis || patrolPersonAnalysis) && !overlayDisabled && !runPatrolHeatmapAnalyze,
   )
   const showPcccOverlay = Boolean(overlayActive && pcccAnalysis && !overlayDisabled)
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
-  const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPcccOverlay || showWahOverlay || showAtgtOverlay
+  const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
   const vmsFeed = useVmsDetectionFeed(
     cameraId,
@@ -268,6 +271,17 @@ export function CameraVideoFeed({
             videoFit={videoFit}
             videoObjectPosition={videoObjectPosition}
             enabled={playing && overlayActive}
+          />
+        )}
+        {showPatrolPersonRoi && (
+          <PatrolPersonRoiOverlay
+            cameraId={cameraId}
+            frameWidth={vmsFeed.snapshot?.width ?? 0}
+            frameHeight={vmsFeed.snapshot?.height ?? 0}
+            videoRef={videoRef}
+            compact={compact}
+            videoFit={videoFit}
+            videoObjectPosition={videoObjectPosition}
           />
         )}
         {showPpeOverlay && (

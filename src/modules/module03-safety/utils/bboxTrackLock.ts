@@ -19,6 +19,8 @@ export interface TrackLockConfig {
   minConfidence: number
   /** Chỉ match detection cùng behavior */
   matchSameBehavior: boolean
+  /** Khoảng cách tâm / kích thước bbox — match khi IoU thấp (di chuyển nhanh). */
+  centerMatchRatio?: number
 }
 
 export const DEFAULT_TRACK_LOCK_CONFIG: TrackLockConfig = {
@@ -88,15 +90,45 @@ function shiftBbox(b: Bbox, dx: number, dy: number): Bbox {
   return [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy]
 }
 
-function updateVelocity(prev: Bbox, next: Bbox, prevVel: [number, number], alpha = 0.65): [number, number] {
+function bboxScale(b: Bbox): number {
+  return Math.max(12, Math.max(b[2] - b[0], b[3] - b[1]))
+}
+
+function centerDistanceRatio(a: Bbox, b: Bbox): number {
+  const [ax, ay] = bboxCenter(a)
+  const [bx, by] = bboxCenter(b)
+  const scale = (bboxScale(a) + bboxScale(b)) / 2
+  return Math.hypot(ax - bx, ay - by) / scale
+}
+
+/** Vận tốc tâm bbox theo px/ms — dùng rAF chase giữa các lần analyze. */
+function updateVelocity(
+  prev: Bbox,
+  next: Bbox,
+  prevVel: [number, number],
+  dtMs: number,
+  alpha = 0.78,
+): [number, number] {
+  const safeDt = Math.max(8, dtMs)
   const [px, py] = bboxCenter(prev)
   const [nx, ny] = bboxCenter(next)
-  const dx = nx - px
-  const dy = ny - py
+  const vx = (nx - px) / safeDt
+  const vy = (ny - py) / safeDt
   return [
-    prevVel[0] * (1 - alpha) + dx * alpha,
-    prevVel[1] * (1 - alpha) + dy * alpha,
+    prevVel[0] * (1 - alpha) + vx * alpha,
+    prevVel[1] * (1 - alpha) + vy * alpha,
   ]
+}
+
+function matchesTrack(
+  trackBbox: Bbox,
+  detBbox: Bbox,
+  iou: number,
+  config: TrackLockConfig,
+): boolean {
+  if (iou >= config.matchIouMin) return true
+  if (config.centerMatchRatio == null) return false
+  return iou >= config.unlockIouMin && centerDistanceRatio(trackBbox, detBbox) <= config.centerMatchRatio
 }
 
 function canMatchBehavior(track: BboxDetection, det: BboxDetection, sameBehavior: boolean): boolean {
@@ -120,6 +152,7 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
   prevTracks: Map<string, TrackLockState<T>>,
   detections: T[],
   config: TrackLockConfig = DEFAULT_TRACK_LOCK_CONFIG,
+  dtMs = 450,
 ): { tracks: Map<string, TrackLockState<T>>; output: Array<T & TrackedDetection<T>> } {
   const pairs: MatchPair[] = []
 
@@ -127,7 +160,7 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
     detections.forEach((det, detIndex) => {
       if (!canMatchBehavior(track.detection, det, config.matchSameBehavior)) return
       const iou = bboxIou(track.smoothedBbox, det.bbox)
-      if (iou >= config.matchIouMin) {
+      if (matchesTrack(track.smoothedBbox, det.bbox, iou, config)) {
         pairs.push({ trackId, detIndex, iou })
       }
     })
@@ -157,7 +190,7 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
         continue
       }
       const smoothedBbox = blendBbox(hit.det.bbox, track.smoothedBbox, config.smoothAlpha)
-      const velocity = updateVelocity(track.smoothedBbox, smoothedBbox, track.velocity ?? [0, 0])
+      const velocity = updateVelocity(track.smoothedBbox, smoothedBbox, track.velocity ?? [0, 0], dtMs)
       const merged = {
         ...hit.det,
         bbox: smoothedBbox,
@@ -168,13 +201,13 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
         smoothedBbox,
         missCount: 0,
         lastMatchIou: hit.iou,
-        locked: hit.iou >= config.matchIouMin,
+        locked: true,
         velocity,
       })
       output.push({
         ...merged,
         trackId,
-        trackLocked: hit.iou >= config.matchIouMin,
+        trackLocked: true,
         trackScore: hit.iou,
       })
       continue
@@ -188,10 +221,11 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
       && detectionConfidence(track.detection) >= config.minConfidence
 
     if (canCoast) {
-      const decay = Math.max(0.35, 1 - missCount * 0.12)
+      const coastMs = Math.min(dtMs * missCount, 680)
+      const decay = Math.max(0.42, 1 - missCount * 0.08)
       const [vx, vy] = track.velocity ?? [0, 0]
-      const predicted = shiftBbox(track.smoothedBbox, vx * decay, vy * decay)
-      const velocity: [number, number] = [vx * 0.92, vy * 0.92]
+      const predicted = shiftBbox(track.smoothedBbox, vx * coastMs * decay, vy * coastMs * decay)
+      const velocity: [number, number] = [vx * 0.96, vy * 0.96]
       nextTracks.set(trackId, {
         ...track,
         missCount,
@@ -232,4 +266,28 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
   })
 
   return { tracks: nextTracks, output }
+}
+
+/** Dự đoán vị trí bbox giữa các lần analyze — rAF chase object. */
+export function extrapolateTrackLockOutput<T extends BboxDetection>(
+  tracks: Map<string, TrackLockState<T>>,
+  elapsedMs: number,
+  maxExtrapolateMs = 820,
+): Array<T & TrackedDetection<T>> {
+  const dt = Math.min(Math.max(0, elapsedMs), maxExtrapolateMs)
+  if (dt <= 0 || tracks.size === 0) return []
+
+  const output: Array<T & TrackedDetection<T>> = []
+  for (const track of tracks.values()) {
+    const [vx, vy] = track.velocity ?? [0, 0]
+    const predicted = shiftBbox(track.smoothedBbox, vx * dt, vy * dt)
+    output.push({
+      ...track.detection,
+      bbox: predicted,
+      trackId: track.id,
+      trackLocked: track.locked,
+      trackScore: track.lastMatchIou,
+    })
+  }
+  return output
 }

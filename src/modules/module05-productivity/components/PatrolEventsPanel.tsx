@@ -224,10 +224,14 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
     case 'workforce':
       return feed.filter(e =>
         e.type === 'POPULATION_OBSERVED'
-        || e.type === 'POPULATION_CHANGE',
+        || e.type === 'POPULATION_CHANGE'
+        || e.type === 'PERSON_DETECTED',
       )
     case 'identity':
-      return feed.filter(e => e.type === 'IDENTITY_VERIFIED')
+      return feed.filter(e =>
+        e.type === 'IDENTITY_VERIFIED'
+        || (e.type === 'PERSON_DETECTED' && /^obj-/i.test(e.objectId ?? '')),
+      )
     case 'density':
       return feed.filter(e => e.type === 'HIGH_DENSITY')
     case 'system':

@@ -42,6 +42,8 @@ export interface MobileAiViolationEvent {
   snapshot_file?: string | null
   worker_id?: string | null
   worker_name?: string | null
+  track_id?: string | null
+  object_id?: string | null
   /** GPS gắn lúc ghi sự kiện (HC-02) */
   gps_lat?: number | null
   gps_lng?: number | null
@@ -280,7 +282,7 @@ export function createMobileAiAnalyzeClient(
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(120)
+      scheduleNext(intervalMs < 350 ? 65 : 120)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

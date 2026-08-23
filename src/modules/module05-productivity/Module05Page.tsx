@@ -51,6 +51,7 @@ import { filterPatrolEvidenceEvents, summarizePatrolAlertEvents } from './utils/
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
+import { enrichPatrolEventsWithWorkforceObjects } from './utils/patrolWorkforceEventLabels'
 import { subscribePatrolManualIdentity } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
@@ -225,8 +226,12 @@ export function Module05Page() {
       stripPatrolPpeEvents(liveHelmetEvents.events),
       workforceSnap.events,
     )
-    return applyManualIdentityToPatrolEvents(filterPatrolEvidenceEvents(merged))
-  }, [liveHelmetEvents.events, workforceSnap.events, identityRevision])
+    const enriched = enrichPatrolEventsWithWorkforceObjects(
+      merged,
+      Object.values(workforceSnap.objects),
+    )
+    return applyManualIdentityToPatrolEvents(filterPatrolEvidenceEvents(enriched))
+  }, [liveHelmetEvents.events, workforceSnap.events, workforceSnap.objects, identityRevision])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
@@ -250,7 +255,7 @@ export function Module05Page() {
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
       />
-      <PageLayout scrollable={isMobileLayout && !cameraCollapsed}>
+      <PageLayout scrollable={false}>
         {/* Tier 1 — KPIs */}
         <Panel
           title="Tổng Quan"
@@ -277,33 +282,25 @@ export function Module05Page() {
 
         {/* Tier 2 + Tier 3 — desktop: flex pool; mobile: scroll + min-height cho heatmap/sự kiện */}
         <div className={cn(
-          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0',
-          isMobileLayout && !cameraCollapsed
-            ? 'pb-[env(safe-area-inset-bottom,0px)]'
-            : 'overflow-hidden',
+          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
+          isMobileLayout && 'pb-[env(safe-area-inset-bottom,0px)]',
         )}>
           {/* Tier 2 — Camera */}
           <div className={cn(
-            'flex flex-col min-h-0',
-            tier2Open
-              ? cn(
-                'min-h-0',
-                isMobileLayout
-                  ? 'flex-none max-h-[40dvh] shrink-0'
-                  : cn(
-                    'flex-[6]',
-                    cameraMode === 'playback' ? 'lg:flex-[12]' : 'lg:flex-[10]',
-                  ),
-              )
-              : 'shrink-0',
+            'flex flex-col min-h-0 shrink-0',
+            tier2Open && !isMobileLayout && cn(
+              'min-h-0 flex-[6]',
+              cameraMode === 'playback' ? 'lg:flex-[12]' : 'lg:flex-[10]',
+            ),
           )}>
             <Panel
               title="Camera"
               expandable={tier2Open}
-              fit={!tier2Open}
+              fit={!tier2Open || isMobileLayout}
               noPadding
               className={cn(
-                tier2Open && 'flex-1 min-h-0 h-full',
+                tier2Open && !isMobileLayout && 'flex-1 min-h-0 h-full',
+                tier2Open && isMobileLayout && 'max-h-[min(34dvh,300px)]',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -333,6 +330,7 @@ export function Module05Page() {
                       cameras={patrolCamerasLive}
                       defaultCameraIds={DEFAULT_PATROL_CAMERA_IDS}
                       defaultSidebarOpen={false}
+                      mobileCompactVideo={isMobileLayout}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
@@ -361,14 +359,13 @@ export function Module05Page() {
           {/* Tier 3 — 2 separate panels: [HEATMAP] | [SỰ KIỆN] */}
           <div className={cn(
             'flex gap-2 sm:gap-3 flex-col md:flex-row flex-1 min-h-0 overflow-hidden',
-            !cameraCollapsed && isMobileLayout && 'shrink-0 min-h-[min(72dvh,640px)]',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
-                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[280px] h-[min(42dvh,360px)]',
+                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[160px]',
               )}
               headerRight={
                 <button
@@ -394,7 +391,7 @@ export function Module05Page() {
               noPadding
               className={cn(
                 'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
-                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[220px] h-[min(38dvh,320px)]',
+                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[140px]',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
               headerRight={

@@ -619,9 +619,43 @@ class EventStore:
         if raw_pb and len(raw_pb) >= 4:
             event.subject_bbox = [float(v) for v in raw_pb]
 
+        if track_id:
+            event.track_id = str(track_id).strip()
+        oid = self._resolve_workforce_object_id(
+            camera_id,
+            detection.worker_id,
+            event.track_id,
+        )
+        if oid:
+            event.object_id = oid
+
         stable_id = (detection.worker_id or track_id or "person").strip()
         key = build_dedup_key(camera_id, event.scenario_id, stable_id)
         return event, key
+
+    @staticmethod
+    def _resolve_workforce_object_id(
+        camera_id: str,
+        worker_id: Optional[str],
+        track_id: Optional[str],
+    ) -> Optional[str]:
+        try:
+            from .workforce_engine import workforce_engine
+        except Exception:
+            return None
+        tid = (track_id or "").strip()
+        if tid:
+            track_key = f"{camera_id}:{tid}"
+            oid = workforce_engine.track_to_object.get(track_key)
+            if oid:
+                return oid
+        wid = (worker_id or "").strip()
+        if not wid:
+            return None
+        for obj in workforce_engine.objects.values():
+            if obj.helmet_id == camera_id and obj.worker_id == wid:
+                return obj.object_id
+        return None
 
     def upsert_patrol_person(
         self,
@@ -674,6 +708,10 @@ class EventStore:
             existing.bbox = list(incoming.bbox)
             if incoming.subject_bbox:
                 existing.subject_bbox = list(incoming.subject_bbox)
+            if incoming.track_id:
+                existing.track_id = incoming.track_id
+            if incoming.object_id:
+                existing.object_id = incoming.object_id
             return existing
 
         if not allow_create:

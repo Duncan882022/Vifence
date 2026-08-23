@@ -22,6 +22,7 @@ import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
+import { syncPatrolPopulationObservedToHeatmap } from '../utils/patrolHeatmapLiveSync'
 import { usePatrolWebSocket } from '../services/usePatrolWebSocket'
 import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
@@ -32,6 +33,7 @@ import {
 import {
   isPatrolManuallyIdentified,
   resolvePatrolObjectLabel,
+  resolvePatrolWorkerId,
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
 import type { ObjectState } from '../types/workforceHeatmap'
@@ -120,6 +122,15 @@ export function PatrolDensityHeatmap({
       setMobileHc02Live(Boolean(snap && snap.cameraId === 'HC-02' && snap.streamOnline))
     })
   }, [])
+
+  /** Population / personCount → dot tại Cầu Sông Hốt khi chưa có track chi tiết. */
+  useEffect(() => {
+    const count = zonePop?.observed_count ?? hc02Live.personCount ?? 0
+    if (count <= 0) return
+    for (const camId of DEFAULT_PATROL_CAMERA_IDS) {
+      syncPatrolPopulationObservedToHeatmap(camId, count)
+    }
+  }, [zonePop?.observed_count, hc02Live.personCount])
 
   const helmetOnlineById = useMemo(() => {
     const map: Record<string, boolean> = { 'HC-01': false, 'HC-02': false }
@@ -218,19 +229,25 @@ export function PatrolDensityHeatmap({
           confidence: o.position_confidence,
           label: resolvePatrolObjectLabel(o.object_id, fallback),
           lastSeenAt: Date.parse(o.last_seen) || Date.now(),
-          objectId: o.object_id,
+          objectId: resolvePatrolWorkerId(o.object_id, o.worker_id) ?? o.object_id,
           verified: o.identity_status === 'VERIFIED' || manual,
           inCameraView: o.status === 'ACTIVE',
         })
       })
 
-    if (objectDots.length > 0) {
-      return objectDots
-    }
-
-    return hc02Live.dots
+    const registryDots = hc02Live.dots
       .filter(d => d.lastSeenAt != null && now - d.lastSeenAt < DETECTION_DOT_IN_VIEW_MS * 4)
       .map(d => markInView(d))
+
+    if (objectDots.length === 0) {
+      return registryDots
+    }
+
+    // Gộp workforce + registry — tránh mất dot khi BE chưa gán lat/lon cho object.
+    const merged = new Map<string, DetectionDot>()
+    for (const dot of registryDots) merged.set(dot.objectId ?? dot.id, dot)
+    for (const dot of objectDots) merged.set(dot.objectId ?? dot.id, dot)
+    return [...merged.values()]
   }, [hc02Live.dots, liveObjects, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
@@ -341,7 +358,7 @@ export function PatrolDensityHeatmap({
           helmetOnlineById={helmetOnlineById}
           helmetHeadingById={helmetHeadingById}
           onDetectionClick={onDetectionClick}
-          requireLiveGpsForHc02
+          requireLiveGpsForHc02={false}
           hasHc02LiveGps={hc02Live.hasMapPosition}
           mapZoom={viewport.mapZoom}
           compactControls={viewport.compactChrome}

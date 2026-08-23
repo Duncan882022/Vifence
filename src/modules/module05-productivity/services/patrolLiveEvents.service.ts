@@ -10,6 +10,12 @@ import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFeed'
+import {
+  formatPatrolPersonDetectedEvent,
+  isPatrolObjectId,
+  isPatrolSgcWorkerId,
+  patrolWorkforceEventTitle,
+} from '../utils/patrolWorkforceEventLabels'
 
 const ZONE_LABELS: Record<string, string> = {
   ZONE_SITE: 'Cầu Sông Hốt',
@@ -33,6 +39,8 @@ interface BackendViolationEvent {
   worker_id?: string | null
   worker_name?: string | null
   dedup_key?: string | null
+  track_id?: string | null
+  object_id?: string | null
   gps_lat?: number | null
   gps_lng?: number | null
 }
@@ -317,25 +325,29 @@ export function mapBackendEventToPatrolEvent(
   if (!lockedIso || !createdIso) return null
 
   const { zoneId, zoneName } = zoneMetaForCamera(cameraId)
-  const workerLabel = event.worker_name?.trim() || event.worker_id?.trim() || 'Người chưa xác định'
+  const workerIdRaw = event.worker_id?.trim() ?? ''
+  const objectIdRaw = event.object_id?.trim()
+  const trackWorkerId = isPatrolSgcWorkerId(workerIdRaw) ? workerIdRaw : undefined
+  const objectId = objectIdRaw && isPatrolObjectId(objectIdRaw)
+    ? objectIdRaw
+    : ((trackWorkerId ?? workerIdRaw) || event.dedup_key?.split('|').pop() || event.id.slice(0, 8))
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
-  const objectId = event.worker_id?.trim()
-    || event.dedup_key?.split('|').pop()
-    || event.id.slice(0, 8)
+  const title = patrolWorkforceEventTitle(eventType, objectId, workerIdRaw)
   const versionTs = normalizeUnixSeconds(ts) ?? undefined
 
-  return {
+  const mapped: PatrolEvent = {
     id: event.id,
     type: eventType,
     cameraId,
     cameraName: PATROL_BODYCAM_LABELS[cameraId] ?? cameraId,
     zoneId,
     zoneName,
-    objectLabel: workerLabel,
+    objectLabel: objectId,
     objectId,
-    violationLabel: event.scenario_name ?? event.scenario_id ?? (
-      eventType === 'PERSON_DETECTED' ? 'Phát hiện người' : 'Vi phạm PPE'
-    ),
+    trackWorkerId,
+    violationLabel: eventType === 'PERSON_DETECTED'
+      ? title
+      : (event.scenario_name ?? event.scenario_id ?? 'Vi phạm PPE'),
     startedAt: createdIso,
     lockedAt: lockedIso,
     endedAt: null,
@@ -345,6 +357,10 @@ export function mapBackendEventToPatrolEvent(
     gps: resolveEventGps(event, cameraId),
     snapshotUrl: buildSnapshotUrl(backendUrl, event.id, snapshotFile, versionTs),
   }
+
+  return eventType === 'PERSON_DETECTED'
+    ? formatPatrolPersonDetectedEvent(mapped)
+    : mapped
 }
 
 function mapBackendRows(rows: BackendViolationEvent[], backendUrl: string): PatrolEvent[] {

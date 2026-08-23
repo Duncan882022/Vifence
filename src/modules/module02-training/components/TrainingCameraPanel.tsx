@@ -228,7 +228,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
         const isBackground = Boolean(focusedCamId && focusedCamId !== cam.id)
         const cellShellClass = cn(
           'relative w-full min-w-0 shrink-0',
-          fillHeight ? 'h-full min-h-[120px]' : 'aspect-video max-h-[min(72vh,720px)]',
+          fillHeight ? 'h-full min-h-[120px]' : 'aspect-video max-h-[min(36dvh,280px)]',
         )
         return (
           <div key={cam.id} className="relative min-w-0">
@@ -308,6 +308,8 @@ interface TrainingCameraPanelProps {
   groupFn?: (cameras: TrainingCamera[], tab: string) => { key: string; cameras: TrainingCamera[] }[]
   /** Mặc định thu gọn danh sách camera bên phải */
   defaultSidebarOpen?: boolean
+  /** Mobile: aspect-video + giới hạn hàng — không fill hết chiều cao màn hình (Module 05). */
+  mobileCompactVideo?: boolean
 }
 
 export function TrainingCameraPanel({
@@ -320,6 +322,7 @@ export function TrainingCameraPanel({
   filterFn,
   groupFn,
   defaultSidebarOpen = true,
+  mobileCompactVideo = false,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
   const tabs = filterTabs ?? CAMERA_FILTER_TABS
@@ -373,8 +376,11 @@ export function TrainingCameraPanel({
     ? catalog.filter(c => (defaultCameraIds as readonly string[]).includes(c.id))
     : catalog.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
-  /** Fill chiều cao panel — object-contain trên feed giữ tỷ lệ khung hình. */
-  const fillHeightMain = true
+  /** Desktop: fill panel; mobile compact: aspect-video theo chiều ngang. */
+  const fillHeightMain = mobileCompactVideo ? isDesktop : true
+  const portraitMaxRows = mobileCompactVideo && !isDesktop
+    ? 1
+    : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
 
   const gridCols = useMemo(
     () => getGridCols(safeCams.length, stackedPortrait),
@@ -405,7 +411,7 @@ export function TrainingCameraPanel({
 
       const maxRows = landscapeMq.matches
         ? MOBILE_LANDSCAPE_MAX_VISIBLE_ROWS
-        : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
+        : portraitMaxRows
       const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
       setMobileViewportH(viewportH)
 
@@ -426,7 +432,7 @@ export function TrainingCameraPanel({
       mobileMq.removeEventListener('change', sync)
       landscapeMq.removeEventListener('change', sync)
     }
-  }, [isDesktop, gridCols, gridRows, safeCams.length, selectedIds.join(','), sidebarOpen])
+  }, [isDesktop, gridCols, gridRows, safeCams.length, selectedIds.join(','), sidebarOpen, portraitMaxRows, mobileCompactVideo])
 
   useEffect(() => {
     setSelectedIds(prev => (prev.length === 0 ? [...defaultIds] : prev))

@@ -2,6 +2,7 @@
  * Lịch sử chấm người trên heatmap — mỗi ID một dot, giữ vị trí cho đến khi gặp lại.
  */
 import type { DetectionDot } from '@/modules/module05-productivity/data/patrolDetectionData'
+import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/patrolHeatmapGps'
 import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patrolLivePersonDots'
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v1'
@@ -203,6 +204,23 @@ export function subscribeHeatmapPersonRegistry(listener: () => void): () => void
   return () => listeners.delete(listener)
 }
 
+function resolveEventGps(
+  event: { cameraId: string; gps?: { lat: number; lng: number } },
+): { lat: number; lng: number } {
+  const lat = event.gps?.lat
+  const lng = event.gps?.lng
+  if (
+    typeof lat === 'number'
+    && typeof lng === 'number'
+    && Number.isFinite(lat)
+    && Number.isFinite(lng)
+    && !(lat === 0 && lng === 0)
+  ) {
+    return { lat, lng }
+  }
+  return resolvePatrolHeatmapGps(event.cameraId)
+}
+
 /** 1 sự kiện PERS = 1 dot — gặp lại cùng worker_id thì cập nhật vị trí dot. */
 export function syncPatrolPersonEventsToHeatmap(
   events: Array<{
@@ -218,17 +236,8 @@ export function syncPatrolPersonEventsToHeatmap(
 ): void {
   for (const event of events) {
     if (event.type !== 'PERSON_DETECTED') continue
-    const lat = event.gps?.lat
-    const lng = event.gps?.lng
-    if (
-      typeof lat !== 'number'
-      || typeof lng !== 'number'
-      || !Number.isFinite(lat)
-      || !Number.isFinite(lng)
-      || (lat === 0 && lng === 0)
-    ) {
-      continue
-    }
+    const resolved = resolveEventGps(event)
+    const { lat, lng } = resolved
     const personId = event.objectId?.trim() || event.id
     upsertHeatmapPersons({
       cameraId: event.cameraId,

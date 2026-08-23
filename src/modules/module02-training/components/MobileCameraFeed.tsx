@@ -42,6 +42,8 @@ import { groupPpeDetections } from '@/modules/module03-safety/utils/ppeDetection
 import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
 import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
+import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /**
@@ -120,9 +122,13 @@ export function MobileCameraFeed({
   /** Analyze vẫn chạy khi ẩn ROI — heatmap/personCount cần detections. */
   const runAiAnalyze = aiEnabled && mobileAiEnabled
   const showAiOverlay = runAiAnalyze && bboxVisible
+  /** Module 05 patrol — Kalman/ByteTrack ROI, không dùng ATLĐ bboxTrackLock. */
+  const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && overlayModelId === 'ppe'
   const overlayDetections = useMemo(
-    () => (overlayModelId === 'ppe' ? mapMobilePpeOverlayDetections(detections) : detections),
-    [detections, overlayModelId],
+    () => (overlayModelId === 'ppe' && !usePatrolPersonRoi
+      ? mapMobilePpeOverlayDetections(detections)
+      : detections),
+    [detections, overlayModelId, usePatrolPersonRoi],
   )
 
   const stopAiClient = useCallback(() => {
@@ -153,6 +159,7 @@ export function MobileCameraFeed({
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl: url,
+      intervalMs: cameraId === 'HC-02' ? 260 : 450,
       getGps: cameraId === 'HC-02'
         ? () => {
             const snap = getPatrolHelmetGps(cameraId)
@@ -175,12 +182,12 @@ export function MobileCameraFeed({
         const filtered = result.detections.filter(minConf)
         const now = Date.now()
         const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
-        /** Giữ bbox ngắn — tránh ROI đứng yên khi người di chuyển; track lock coast khi empty. */
-        const holdMs = isPatrolPerson ? 320 : 1800
+        /** Giữ bbox ngắn — overlay track lock + rAF chase khi frame trống. */
+        const holdMs = isPatrolPerson ? 720 : 1800
         if (filtered.length > 0) {
           detectionHoldRef.current = { until: now + holdMs, items: filtered }
           setDetections(filtered)
-        } else if (now < detectionHoldRef.current.until && !isPatrolPerson) {
+        } else if (now < detectionHoldRef.current.until) {
           setDetections(detectionHoldRef.current.items)
         } else {
           setDetections([])
@@ -190,13 +197,13 @@ export function MobileCameraFeed({
           const rawPersons = result.detections.filter(d => d.behavior === 'person')
           const persons = filtered.filter(d => d.behavior === 'person')
           const personCount = Math.max(rawPersons.length, persons.length)
-          syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections)
           const violations = filtered.filter(d =>
             ['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior),
           )
           const workerNames = [...rawPersons, ...persons]
             .map(d => d.worker_name?.trim())
             .filter((name): name is string => Boolean(name))
+          // streamOnline trước sync — resolvePatrolHeatmapGps đọc snapshot cho site-center fallback.
           setPatrolMobileLiveSnapshot({
             cameraId,
             streamOnline: true,
@@ -211,6 +218,7 @@ export function MobileCameraFeed({
             workerNames: [...new Set(workerNames)].slice(0, 5),
             updatedAt: now,
           })
+          syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections)
 
           if (result.events?.length && !PATROL_PPE_UI_HIDDEN) {
             pushPatrolMobilePpeEvents(result.events, cameraId)
@@ -423,7 +431,19 @@ export function MobileCameraFeed({
         </span>
       )}
 
-      {status === 'live' && showAiOverlay && (
+      {status === 'live' && showAiOverlay && usePatrolPersonRoi && (
+        <PatrolPersonRoiOverlay
+          cameraId={cameraId}
+          frameWidth={frameSize.width}
+          frameHeight={frameSize.height}
+          videoRef={videoRef}
+          compact={compact}
+          videoFit={videoFit}
+          videoObjectPosition={videoObjectPosition}
+        />
+      )}
+
+      {status === 'live' && showAiOverlay && !usePatrolPersonRoi && (
         <MobileAiOverlay
           detections={overlayDetections}
           frameWidth={frameSize.width}
@@ -434,7 +454,6 @@ export function MobileCameraFeed({
           modelId={overlayModelId}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
-          objectTracking={overlayModelId === 'ppe'}
         />
       )}
 

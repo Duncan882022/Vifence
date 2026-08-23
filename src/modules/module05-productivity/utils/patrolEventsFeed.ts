@@ -35,7 +35,9 @@ export function isValidPatrolEventTime(iso: string): boolean {
 
 /** Loại sự kiện được phép trên feed chính (spec §8.1 / §8.4). */
 export function isPatrolFeedEventType(event: PatrolEvent): boolean {
-  if (event.type === 'PERSON_DETECTED') return false
+  if (event.type === 'PERSON_DETECTED') {
+    return hasPatrolEventSnapshot(event)
+  }
   if (event.type === 'PPE_VIOLATION') return !PATROL_PPE_UI_HIDDEN
   return [
     'POPULATION_OBSERVED',

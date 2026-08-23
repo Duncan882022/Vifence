@@ -6,7 +6,7 @@ import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
-import { needsPatrolManualIdentity, isPatrolManuallyIdentified } from '../services/patrolManualIdentity.service'
+import { needsPatrolManualIdentity, isPatrolManuallyIdentified, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
 import { resolveEventObjectDisplay } from '../utils/patrolManualIdentityUi'
 import {
   PATROL_TYPE_META,
@@ -110,6 +110,7 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
             {[
               ['Trạng thái', statusDisplay.label],
               ['Vị trí', eventPlace],
+              ...(objectDisplay.workerId ? [['Mã định danh', objectDisplay.workerId] as const] : []),
               ['Đối tượng', objectDisplay.label],
               ...(objectDisplay.unit ? [['Đơn vị', objectDisplay.unit] as const] : []),
               ['Ghi nhận', formatEventDateTime(event.lockedAt)],
@@ -158,6 +159,7 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
           {showIdentify && (
             <PatrolManualIdentityPanel
               objectKey={objectKey}
+              suggestedWorkerId={suggestPatrolWorkerId(objectKey, event.objectId)}
               onAssigned={() => setIdentityTick(t => t + 1)}
             />
           )}

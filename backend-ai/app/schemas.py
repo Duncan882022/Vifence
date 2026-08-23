@@ -209,7 +209,7 @@ PPE_SCENARIO_META = {
 PERSON_SCENARIO_META = {
     "person": {
         "scenario_id": "PERS-001",
-        "scenario_name": "Phát hiện người",
+        "scenario_name": "Nhân lực",
         "violation_type": "person",
         "group": "PERS",
     },
@@ -272,6 +272,8 @@ class ViolationEvent(BaseModel):
     face_match_source: Optional[str] = None
     gps_lat: Optional[float] = None
     gps_lng: Optional[float] = None
+    track_id: Optional[str] = None
+    object_id: Optional[str] = None
 
     @classmethod
     def from_detection(

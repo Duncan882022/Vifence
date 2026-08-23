@@ -59,12 +59,12 @@ export const PATROL_TYPE_META: Record<EventType, {
   },
   PERSON_DETECTED: {
     id: 'PERS',
-    label: 'Persons',
+    label: 'Nhân lực',
     icon: Users,
     color: 'text-sky-400',
     badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
     borderAccent: 'border-l-sky-400',
-    tooltip: 'Raw detection — không hiển thị Event Feed chính (spec Module 05)',
+    tooltip: 'Quét nhân lực — snapshot ROI + mã workerId',
   },
   POPULATION_OBSERVED: {
     id: 'POP',
