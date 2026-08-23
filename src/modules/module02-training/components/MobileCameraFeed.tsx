@@ -174,10 +174,13 @@ export function MobileCameraFeed({
         }
         const filtered = result.detections.filter(minConf)
         const now = Date.now()
+        const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
+        /** Giữ bbox ngắn — tránh ROI đứng yên khi người di chuyển; track lock coast khi empty. */
+        const holdMs = isPatrolPerson ? 320 : 1800
         if (filtered.length > 0) {
-          detectionHoldRef.current = { until: now + 1800, items: filtered }
+          detectionHoldRef.current = { until: now + holdMs, items: filtered }
           setDetections(filtered)
-        } else if (now < detectionHoldRef.current.until) {
+        } else if (now < detectionHoldRef.current.until && !isPatrolPerson) {
           setDetections(detectionHoldRef.current.items)
         } else {
           setDetections([])

@@ -37,6 +37,8 @@ export interface TrackLockState<T extends BboxDetection> {
   missCount: number
   lastMatchIou: number
   locked: boolean
+  /** Vận tốc tâm bbox (px/frame analyze) — dùng coast khi mất detect. */
+  velocity: [number, number]
 }
 
 export interface TrackedDetection<T extends BboxDetection> extends BboxDetection {
@@ -75,6 +77,25 @@ function blendBbox(current: Bbox, previous: Bbox, alpha: number): Bbox {
     current[1] * alpha + previous[1] * beta,
     current[2] * alpha + previous[2] * beta,
     current[3] * alpha + previous[3] * beta,
+  ]
+}
+
+function bboxCenter(b: Bbox): [number, number] {
+  return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]
+}
+
+function shiftBbox(b: Bbox, dx: number, dy: number): Bbox {
+  return [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy]
+}
+
+function updateVelocity(prev: Bbox, next: Bbox, prevVel: [number, number], alpha = 0.65): [number, number] {
+  const [px, py] = bboxCenter(prev)
+  const [nx, ny] = bboxCenter(next)
+  const dx = nx - px
+  const dy = ny - py
+  return [
+    prevVel[0] * (1 - alpha) + dx * alpha,
+    prevVel[1] * (1 - alpha) + dy * alpha,
   ]
 }
 
@@ -136,6 +157,7 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
         continue
       }
       const smoothedBbox = blendBbox(hit.det.bbox, track.smoothedBbox, config.smoothAlpha)
+      const velocity = updateVelocity(track.smoothedBbox, smoothedBbox, track.velocity ?? [0, 0])
       const merged = {
         ...hit.det,
         bbox: smoothedBbox,
@@ -147,6 +169,7 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
         missCount: 0,
         lastMatchIou: hit.iou,
         locked: hit.iou >= config.matchIouMin,
+        velocity,
       })
       output.push({
         ...merged,
@@ -160,27 +183,30 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
     const missCount = track.missCount + 1
     const canCoast =
       config.maxMissFrames > 0
-      && missCount <= 1
+      && missCount <= config.maxMissFrames
       && track.lastMatchIou >= config.unlockIouMin
       && detectionConfidence(track.detection) >= config.minConfidence
 
     if (canCoast) {
+      const decay = Math.max(0.35, 1 - missCount * 0.12)
+      const [vx, vy] = track.velocity ?? [0, 0]
+      const predicted = shiftBbox(track.smoothedBbox, vx * decay, vy * decay)
+      const velocity: [number, number] = [vx * 0.92, vy * 0.92]
       nextTracks.set(trackId, {
         ...track,
         missCount,
+        smoothedBbox: predicted,
+        detection: { ...track.detection, bbox: predicted },
+        velocity,
       })
       output.push({
         ...track.detection,
-        bbox: track.smoothedBbox,
+        bbox: predicted,
         trackId,
         trackLocked: track.locked,
         trackScore: track.lastMatchIou,
       })
       continue
-    }
-
-    if (missCount <= config.maxMissFrames && track.lastMatchIou >= config.unlockIouMin) {
-      nextTracks.set(trackId, { ...track, missCount })
     }
   }
 
@@ -195,6 +221,7 @@ export function advanceBboxTrackLock<T extends BboxDetection>(
       missCount: 0,
       lastMatchIou: 1,
       locked: false,
+      velocity: [0, 0],
     })
     output.push({
       ...det,

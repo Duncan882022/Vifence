@@ -15,11 +15,11 @@ export const LIVE_MISS_GRACE_FRAMES = 2
 
 /** Bodycam HC-* — IoU + EMA giữa các frame analyze (~2–5 FPS). */
 export const MOBILE_TRACK_LOCK_CONFIG: Partial<TrackLockConfig> = {
-  matchIouMin: 0.2,
-  unlockIouMin: 0.08,
-  maxMissFrames: 5,
-  smoothAlpha: 0.52,
-  minConfidence: 0.42,
+  matchIouMin: 0.14,
+  unlockIouMin: 0.06,
+  maxMissFrames: 8,
+  smoothAlpha: 0.82,
+  minConfidence: 0.4,
   matchSameBehavior: true,
 }
 

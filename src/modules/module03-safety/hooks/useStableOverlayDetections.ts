@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   advanceBboxTrackLock,
   DEFAULT_TRACK_LOCK_CONFIG,
@@ -14,6 +14,8 @@ export interface StableOverlayOptions {
   trackLock?: Partial<TrackLockConfig>
   /** Đổi key → xóa track lock (VMS poll mới). */
   syncKey?: string
+  /** Dự đoán bbox giữa các poll analyze (bodycam mobile). */
+  predictBetweenFrames?: boolean
 }
 
 /**
@@ -29,6 +31,24 @@ export function useStableOverlayDetections<T extends BboxDetection>(
   const optionsRef = useRef(options)
   optionsRef.current = options
   const syncKey = options?.syncKey
+  const predictBetweenFrames = options?.predictBetweenFrames ?? Boolean(options?.trackLock)
+
+  const [predictTick, setPredictTick] = useState(0)
+
+  useEffect(() => {
+    if (!predictBetweenFrames) return
+    let raf = 0
+    let last = 0
+    const loop = (now: number) => {
+      if (now - last >= 33) {
+        last = now
+        setPredictTick(t => (t + 1) % 1_000_000)
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [predictBetweenFrames])
 
   return useMemo(() => {
     if (syncKey !== undefined && syncKey !== lastSyncKeyRef.current) {
@@ -42,5 +62,5 @@ export function useStableOverlayDetections<T extends BboxDetection>(
     const { tracks, output } = advanceBboxTrackLock(tracksRef.current, detections, config)
     tracksRef.current = tracks
     return output
-  }, [detections, syncKey])
+  }, [detections, syncKey, predictTick, predictBetweenFrames])
 }

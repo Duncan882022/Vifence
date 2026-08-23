@@ -16,7 +16,7 @@ import {
   formatPpeViolationOverlayBadge,
 } from '@/modules/module03-safety/utils/personOverlayLabel'
 import { syncPersonOverlaySession } from '@/modules/module03-safety/utils/personOverlaySession'
-import { overlayBoxMotionClass } from '@/modules/module03-safety/utils/overlayBoxMotion'
+import { overlayBoxMotionClass, overlayBoxTrackingClass } from '@/modules/module03-safety/utils/overlayBoxMotion'
 import { MOBILE_TRACK_LOCK_CONFIG } from '@/modules/module03-safety/utils/liveOverlaySync'
 
 interface MobileAiOverlayProps {
@@ -77,6 +77,7 @@ const DetectionBox = memo(function DetectionBox({
   videoObjectPosition = 'center',
   pulse = false,
   trackId,
+  snapMotion = false,
 }: {
   det: MobileAiDetection
   frameWidth: number
@@ -88,6 +89,7 @@ const DetectionBox = memo(function DetectionBox({
   videoObjectPosition?: 'center' | 'bottom'
   pulse?: boolean
   trackId?: string
+  snapMotion?: boolean
 }) {
   const [x1, y1, x2, y2] = det.bbox
   const style = resolveBehaviorStyle(modelId, det.behavior)
@@ -116,7 +118,7 @@ const DetectionBox = memo(function DetectionBox({
 
   return (
     <div
-      className={cn(overlayBoxMotionClass(false), pulse && 'animate-pulse')}
+      className={cn(snapMotion ? overlayBoxTrackingClass() : overlayBoxMotionClass(false), pulse && 'animate-pulse')}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -167,7 +169,7 @@ export function MobileAiOverlay({
       [detections],
     ),
     objectTracking
-      ? { trackLock: MOBILE_TRACK_LOCK_CONFIG }
+      ? { trackLock: MOBILE_TRACK_LOCK_CONFIG, predictBetweenFrames: true }
       : undefined,
   )
 
@@ -230,6 +232,7 @@ export function MobileAiOverlay({
           videoObjectPosition={videoObjectPosition}
           pulse={!objectTracking && isPpe && pulse && det.behavior === 'person'}
           trackId={trackId}
+          snapMotion={objectTracking}
         />
         )
       })}
