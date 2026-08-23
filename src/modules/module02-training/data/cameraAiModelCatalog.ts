@@ -59,6 +59,18 @@ export const CAMERA_AI_MODEL_CATALOG: CameraAiModelDefinition[] = [
     modelMetric: 'helmet 0.66 · vest 0.73 · shoes 0.92',
   },
   {
+    id: 'patrol_person',
+    label: 'Nhận diện người',
+    groupId: 'DEMO',
+    scenarioIds: ['PERS-001'],
+    description: 'Đếm người quan sát, workforce heatmap, sự kiện nhân lực (POPULATION_* / IDENTITY_*).',
+    needsPolygon: false,
+    endpoint: '/analyze/frame',
+    overlayKind: 'patrol',
+    modelVersion: 'patrol',
+    modelMetric: 'person · workforce engine',
+  },
+  {
     id: 'pccc',
     label: 'PCCC',
     groupId: 'PCCC',

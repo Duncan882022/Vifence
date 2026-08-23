@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { PatrolCameraAiConfigModal } from '@/modules/module05-productivity/components/PatrolCameraAiConfigModal'
 import { createPortal } from 'react-dom'
 import { Check, Cpu, MapPin, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -283,6 +285,7 @@ interface CameraAiConfigButtonProps {
 
 export function CameraAiConfigButton({ cameraId, compact, className }: CameraAiConfigButtonProps) {
   const [open, setOpen] = useState(false)
+  const isPatrol = isPatrolHelmetCameraId(cameraId)
 
   return (
     <>
@@ -300,7 +303,11 @@ export function CameraAiConfigButton({ cameraId, compact, className }: CameraAiC
       >
         <Cpu className={cameraToolbarIconSize(compact)} aria-hidden />
       </button>
-      <CameraAiConfigModal cameraId={cameraId} open={open} onClose={() => setOpen(false)} />
+      {isPatrol ? (
+        <PatrolCameraAiConfigModal cameraId={cameraId} open={open} onClose={() => setOpen(false)} />
+      ) : (
+        <CameraAiConfigModal cameraId={cameraId} open={open} onClose={() => setOpen(false)} />
+      )}
     </>
   )
 }

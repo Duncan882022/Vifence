@@ -4,8 +4,8 @@ import type { CameraAiConfigMap, CameraAiModelId } from '../types/cameraAi.types
 export const DEFAULT_CAMERA_AI_ENABLED: Record<string, CameraAiModelId[]> = {
   'A-03': ['road_material', 'atgt_traffic'],
   'A-04': ['crane_proximity', 'ppe', 'pccc', 'wah'],
-  'HC-01': ['ppe'],
-  'HC-02': ['ppe'],
+  'HC-01': ['patrol_person', 'ppe'],
+  'HC-02': ['patrol_person', 'ppe'],
   'MOB-01': ['mobile_smoking_fire'],
   'MOB-02': ['mobile_smoking_fire'],
 }

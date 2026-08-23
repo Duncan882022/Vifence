@@ -1,5 +1,6 @@
 import { getDefaultEnabledModels } from '../data/cameraAiDefaultConfig'
 import { getCameraAiModel } from '../data/cameraAiModelCatalog'
+import { listModelsForCamera } from '../data/cameraAiModelTokens'
 import { getDefaultRoiZonesForModel } from '../data/cameraAiRoiDefaults'
 import type { CameraAiConfigMap, CameraAiModelId, CameraAiRoiZone } from '../types/cameraAi.types'
 
@@ -35,9 +36,11 @@ export function notifyCameraAiConfigChanged(): void {
 }
 
 export function getEnabledModelsForCamera(cameraId: string): CameraAiModelId[] {
+  const allowed = new Set(listModelsForCamera(cameraId))
   const stored = readAll()[cameraId]?.enabledModels
-  if (stored && stored.length > 0) return stored
-  return getDefaultEnabledModels(cameraId)
+  const raw = stored && stored.length > 0 ? stored : getDefaultEnabledModels(cameraId)
+  const filtered = raw.filter(id => allowed.has(id))
+  return filtered.length > 0 ? filtered : getDefaultEnabledModels(cameraId).filter(id => allowed.has(id))
 }
 
 export function setEnabledModelsForCamera(cameraId: string, models: CameraAiModelId[]): void {

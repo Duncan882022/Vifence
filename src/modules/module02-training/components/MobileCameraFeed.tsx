@@ -21,7 +21,7 @@ import {
   getVideoObjectFitForCamera,
   getVideoObjectPositionForCamera,
 } from '../data/trainingCameraFeeds'
-import { isMobileSmokingFireCamera, isPpeCamera } from '../data/cameraAiRuntime'
+import { isMobileSmokingFireCamera, isPatrolPersonCamera, isPpeCamera } from '../data/cameraAiRuntime'
 import {
   setPatrolMobileLiveSnapshot,
   touchPatrolMobileStreamOnline,
@@ -107,7 +107,9 @@ export function MobileCameraFeed({
   const deviceIndexRef = useRef(0)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
   useCameraAiEnabledModels(cameraId)
-  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId) || isPpeCamera(cameraId)
+  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId)
+    || isPpeCamera(cameraId)
+    || isPatrolPersonCamera(cameraId)
   const overlayModelId = isPpeCamera(cameraId) ? 'ppe' as const : 'mobile_smoking_fire' as const
   const videoFit = getVideoObjectFitForCamera(cameraId, 'mobile')
   const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, 'mobile')
@@ -176,7 +178,7 @@ export function MobileCameraFeed({
         } else {
           setDetections([])
         }
-        if (cameraId === 'HC-02' && overlayModelId === 'ppe') {
+        if (cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))) {
           // Đếm person từ raw detections (trước filter overlay) — map không miss khi conf thấp
           const rawPersons = result.detections.filter(d => d.behavior === 'person')
           const persons = filtered.filter(d => d.behavior === 'person')

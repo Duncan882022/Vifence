@@ -169,6 +169,18 @@ export const CAMERA_AI_MODEL_VISUAL: Record<CameraAiModelId, CameraAiModelVisual
   road_material: buildVisual('BPTC'),
   crane_proximity: buildVisual('DZ'),
   ppe: buildVisual('PPE'),
+  patrol_person: {
+    ...DEMO_VISUAL,
+    groupId: 'DEMO',
+    text: 'text-emerald-300',
+    badge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+    cardChecked: 'border-emerald-500/45 bg-emerald-500/10',
+    button: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30',
+    subjectBorder: 'border-emerald-400/80',
+    subjectFill: 'bg-emerald-400/10',
+    subjectLabel: 'text-emerald-200',
+    subjectBg: 'bg-emerald-600/30',
+  },
   pccc: buildVisual('PCCC'),
   wah: buildVisual('WAH'),
   atgt_traffic: buildVisual('ATGT'),
@@ -205,6 +217,20 @@ export const CAMERA_AI_CONFIG_SECTIONS: Record<string, CameraAiConfigSection[]> 
   ],
   'MOB-02': [
     { title: 'Camera thiết bị', subtitle: 'PCCC · Hút thuốc / cháy', modelIds: ['mobile_smoking_fire'] },
+  ],
+  'HC-01': [
+    {
+      title: 'Tuần tra bodycam',
+      subtitle: 'Helmet 01 · Cầu Sông Hốt',
+      modelIds: ['patrol_person', 'ppe'],
+    },
+  ],
+  'HC-02': [
+    {
+      title: 'Tuần tra mobile',
+      subtitle: 'Duncan iPhone · GPS + workforce',
+      modelIds: ['patrol_person', 'ppe'],
+    },
   ],
 }
 

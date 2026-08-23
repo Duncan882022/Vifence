@@ -6,12 +6,13 @@ export type CameraAiModelId =
   | 'road_material'
   | 'crane_proximity'
   | 'ppe'
+  | 'patrol_person'
   | 'pccc'
   | 'wah'
   | 'atgt_traffic'
   | 'mobile_smoking_fire'
 
-export type CameraAiOverlayKind = 'face' | 'road' | 'crane' | 'ppe' | 'pccc' | 'wah' | 'atgt' | 'mobile'
+export type CameraAiOverlayKind = 'face' | 'road' | 'crane' | 'ppe' | 'patrol' | 'pccc' | 'wah' | 'atgt' | 'mobile'
 
 export interface CameraAiVideoSegment {
   startSec: number
