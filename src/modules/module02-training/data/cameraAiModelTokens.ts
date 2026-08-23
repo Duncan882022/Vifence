@@ -228,7 +228,7 @@ export const CAMERA_AI_CONFIG_SECTIONS: Record<string, CameraAiConfigSection[]> 
   'HC-02': [
     {
       title: 'Tuần tra mobile',
-      subtitle: 'Duncan iPhone · GPS + workforce',
+      subtitle: 'Helmet 02 · GPS + workforce',
       modelIds: ['patrol_person', 'ppe'],
     },
   ],

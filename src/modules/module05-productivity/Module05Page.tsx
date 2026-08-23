@@ -13,6 +13,7 @@ import { TierCollapseButton } from '@/modules/module02-training/components/TierC
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { cn } from '@/utils/cn'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useAppStore } from '@/store/app.store'
@@ -181,6 +182,10 @@ export function Module05Page() {
 
   const playbackDate = getPatrolDefaultPlaybackDate()
   const { cameras: visionCameras } = useCameras()
+  const patrolDefaultCameraIds = useMemo(
+    () => (isHandheldDevice() ? (['HC-02'] as const) : DEFAULT_PATROL_CAMERA_IDS),
+    [],
+  )
   const liveMetrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
   const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
 
@@ -328,7 +333,7 @@ export function Module05Page() {
                       onSelectCamera={handleSelectCamera}
                       onStreamCountChange={setActiveStreamCount}
                       cameras={patrolCamerasLive}
-                      defaultCameraIds={DEFAULT_PATROL_CAMERA_IDS}
+                      defaultCameraIds={patrolDefaultCameraIds}
                       defaultSidebarOpen={false}
                       mobileCompactVideo={isMobileLayout}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}

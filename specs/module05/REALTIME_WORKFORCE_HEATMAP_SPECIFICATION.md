@@ -170,7 +170,7 @@ Forward geodesic: Bearing = Heading_H + Δθ; Lat/Lon worker từ (Lat_H, Lon_H,
 
 ### 7.5. Header (compact)
 ```
-Helmet 01 ● · Duncan iPhone ● · 28 quan sát · 11 định danh
+Helmet 01 ● · Helmet 02 ● · 28 quan sát · 11 định danh
 [Live|5p|15p|1h|Ca] | [Khu vực|Người|Mật độ|Mũ]
 ```
 Không hiển thị GPS/Observability/Objects chips trên chrome — thông tin đó nằm trên map.
@@ -237,7 +237,7 @@ heatPoints = []
 | Hệ thống | `MACHINE_STOPPED` |
 
 **Camera / zone hiển thị (live):**
-- Camera: `PATROL_BODYCAM_LABELS` — `HC-01` → Helmet 01, `HC-02` → Duncan iPhone
+- Camera: `PATROL_BODYCAM_LABELS` — `HC-01` → Helmet 01, `HC-02` → Helmet 02
 - Zone: luôn `Cầu Sông Hốt` (`PATROL_SITE_NAME`, `ZONE_SITE`)
 - GPS HC-02: GPS thật từ backend/bridge; fallback `PATROL_SITE_CENTER` khi stream online nhưng thiếu fix
 

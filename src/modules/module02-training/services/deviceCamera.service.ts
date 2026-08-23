@@ -2,7 +2,7 @@
 const MOBILE_DEVICE_LABEL_MATCH: Record<string, RegExp> = {
   'MOB-01': /iphone|ipad|continuity/i,
   'MOB-02': /facetime|imac|built[- ]?in/i,
-  'HC-02': /iphone|ipad|continuity/i,
+  /** HC-02 Helmet — không ép label iPhone; dùng facingMode / device index. */
 }
 
 const MOBILE_DEVICE_INDEX: Record<string, number> = {

@@ -9,7 +9,7 @@ export const PATROL_SITE_AREA = PATROL_SITE_NAME
 
 const PATROL_BODY_CAMERAS: readonly { id: string; assignee: string; streamType: 'bodycam' | 'mobile' }[] = [
   { id: 'HC-01', assignee: 'Helmet 01', streamType: 'bodycam' },
-  { id: 'HC-02', assignee: 'Duncan iPhone', streamType: 'mobile' },
+  { id: 'HC-02', assignee: 'Helmet 02', streamType: 'mobile' },
 ]
 
 function buildPatrolCamera(
@@ -30,21 +30,21 @@ function buildPatrolCamera(
   }
 }
 
-/** Chỉ Helmet 01 + Duncan iPhone — khu Cầu Sông Hốt. */
+/** Chỉ Helmet 01 + Helmet 02 — khu Cầu Sông Hốt. */
 export const PATROL_CAMERAS: TrainingCamera[] = PATROL_BODY_CAMERAS.map(
   ({ id, assignee, streamType }) => buildPatrolCamera(id, assignee, streamType),
 )
 
 export const PATROL_BODYCAM_LABELS: Record<string, string> = {
   'HC-01': 'Helmet 01',
-  'HC-02': 'Duncan iPhone',
+  'HC-02': 'Helmet 02',
 }
 
 export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
 
 export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = ['Bodycam']
 
-/** Tab Bodycam — luôn trả cả Helmet 01 + Duncan iPhone. */
+/** Tab Bodycam — luôn trả cả Helmet 01 + Helmet 02. */
 export function filterPatrolCameras(
   _tab: PatrolCameraFilterTab,
   cameras: TrainingCamera[] = PATROL_CAMERAS,
@@ -72,6 +72,9 @@ export function applyPatrolCameraStreamStatus(
   if (hc02MobileOnline) onlineById.set('HC-02', true)
 
   return cameras.map(cam => {
+    if (cam.streamType === 'mobile') {
+      return { ...cam, status: 'online' as const }
+    }
     const online = onlineById.get(cam.id) ?? false
     return { ...cam, status: online ? 'online' : 'offline' }
   })

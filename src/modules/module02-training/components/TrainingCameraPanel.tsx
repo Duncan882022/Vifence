@@ -65,7 +65,8 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
 function CameraThumb({ cam, selected, onClick, compact = false, strip = false }: {
   cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean
 }) {
-  const isOffline = cam.status === 'offline'
+  /** Mobile bodycam — luôn thử getUserMedia, không khóa bởi stream_online backend. */
+  const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
 
   return (
     <div
@@ -137,7 +138,8 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
   /** false khi mobile đang mở fullscreen — tránh 2 getUserMedia (iPhone tile đen) */
   playing?: boolean
 }) {
-  const isOffline = cam.status === 'offline'
+  /** Mobile bodycam — luôn mount feed; offline chỉ áp dụng luồng remote (HLS/WS). */
+  const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-[#060b14] border border-[#1e2433]">

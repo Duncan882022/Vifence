@@ -102,7 +102,7 @@ export function applyPatrolHelmetMobileLive<
     return {
       ...cam,
       streamType: 'mobile',
-      assignee: cam.assignee ?? 'Duncan iPhone',
+      assignee: cam.assignee ?? 'Helmet 02',
       streamUrl: undefined,
       wsUrl: undefined,
     }
