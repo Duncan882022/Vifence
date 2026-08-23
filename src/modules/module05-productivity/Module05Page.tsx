@@ -54,7 +54,7 @@ import { resetPatrolTestData } from './services/patrolReset.service'
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
-import { enrichPatrolEventsWithWorkforceObjects } from './utils/patrolWorkforceEventLabels'
+import { enrichPatrolEventsWithWorkforceObjects, dedupePatrolEventsByMasterEntity } from './utils/patrolWorkforceEventLabels'
 import { subscribePatrolManualIdentity } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
@@ -259,8 +259,10 @@ export function Module05Page() {
       merged,
       Object.values(workforceSnap.objects),
     )
-    return applyManualIdentityToPatrolEvents(
-      filterPatrolEvidenceEvents(enriched).filter(isPatrolPersonLifecycleWithSnapshot),
+    return dedupePatrolEventsByMasterEntity(
+      applyManualIdentityToPatrolEvents(
+        filterPatrolEvidenceEvents(enriched).filter(isPatrolPersonLifecycleWithSnapshot),
+      ),
     )
   }, [liveHelmetEvents.events, workforceSnap.events, workforceSnap.objects, identityRevision])
 
@@ -347,13 +349,13 @@ export function Module05Page() {
             ? 'pb-[env(safe-area-inset-bottom,0px)]'
             : 'overflow-hidden',
         )}>
-          {/* Tier 2 — Camera (~70% chiều cao còn lại) */}
+          {/* Tier 2 — Camera (~64% chiều cao còn lại) */}
           <div className={cn(
             'flex flex-col min-h-0',
             tier2Open && (
               isMobileLayout
-                ? 'shrink-0 flex-1 min-h-[min(48dvh,400px)] max-h-[min(58dvh,480px)] max-lg:landscape:min-h-[min(36dvh,300px)] max-lg:landscape:max-h-[min(44dvh,380px)]'
-                : 'flex-[5] min-h-[min(50vh,500px)] max-h-[min(68vh,720px)]'
+                ? 'shrink-0 flex-1 min-h-[min(43dvh,360px)] max-h-[min(52dvh,432px)] max-lg:landscape:min-h-[min(32dvh,270px)] max-lg:landscape:max-h-[min(40dvh,342px)]'
+                : 'flex-[9] min-h-[min(45vh,450px)] max-h-[min(61vh,648px)]'
             ),
             !tier2Open && 'shrink-0',
           )}>
@@ -394,7 +396,7 @@ export function Module05Page() {
                       defaultCameraIds={patrolDefaultCameraIds}
                       defaultSidebarOpen={false}
                       mobileCompactVideo={isMobileLayout}
-                      compactVideoMaxClass="max-h-[min(46dvh,400px)] sm:max-h-[min(50dvh,440px)] max-lg:landscape:max-h-[min(36dvh,320px)]"
+                      compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
@@ -420,12 +422,12 @@ export function Module05Page() {
             </Panel>
           </div>
 
-          {/* Tier 3 — HEATMAP | SỰ KIỆN (~30% thấp hơn, nhường camera) */}
+          {/* Tier 3 — HEATMAP | SỰ KIỆN (~36%) */}
           <div className={cn(
             'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0 shrink-0',
             isMobileLayout && !cameraCollapsed
-              ? 'min-h-[min(25dvh,220px)]'
-              : 'flex-[2] overflow-hidden max-h-[min(32vh,360px)]',
+              ? 'min-h-[min(28dvh,250px)]'
+              : 'flex-[5] overflow-hidden max-h-[min(36vh,400px)]',
           )}>
             <Panel
               title="HEATMAP"
@@ -435,7 +437,7 @@ export function Module05Page() {
                 cameraCollapsed
                   ? 'h-full'
                   : isMobileLayout
-                    ? 'min-h-[112px] h-[min(18dvh,154px)] md:min-h-0 md:h-full'
+                    ? 'min-h-[112px] h-[min(20dvh,170px)] md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
               )}
               headerRight={
@@ -465,7 +467,7 @@ export function Module05Page() {
                 cameraCollapsed
                   ? 'h-full'
                   : isMobileLayout
-                    ? 'min-h-[91px] h-[min(15dvh,126px)] md:min-h-0 md:h-full'
+                    ? 'min-h-[91px] h-[min(17dvh,143px)] md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}

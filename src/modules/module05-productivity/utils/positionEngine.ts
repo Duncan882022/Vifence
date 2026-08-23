@@ -8,12 +8,22 @@ import {
   PATROL_SITE_CORNERS,
 } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { isPatrolRelativeGpsCamera } from './patrolGpsConfig'
 
 const M_PER_DEG_LAT = 111_320
 const GPS_DEFAULT_ACCURACY_M = 8
 const MAX_PREDICT_DT_S = 0.5
+/** Giới hạn drift tương đối (~120m) — tránh GPS nhảy xa khỏi công trường. */
+const MAX_RELATIVE_OFFSET_M = 120
 
-export type HelmetPositionMethod = 'raw' | 'ekf' | 'ekf_map' | 'map' | 'imu_only'
+export type HelmetPositionMethod =
+  | 'raw'
+  | 'ekf'
+  | 'ekf_map'
+  | 'map'
+  | 'imu_only'
+  | 'relative'
+  | 'relative_ekf'
 
 function latLonToEnu(
   lat: number,
@@ -161,6 +171,40 @@ class HelmetEkf {
 }
 
 const ekfByHelmet = new Map<string, HelmetEkf>()
+/** Mốc GPS thật lần đầu — delta cộng vào PATROL_SITE_CENTER. */
+const gpsAnchorByHelmet = new Map<string, { lat: number; lng: number }>()
+
+function clampRelativeOffsetMeters(eastM: number, northM: number): [number, number] {
+  const dist = Math.hypot(eastM, northM)
+  if (dist <= MAX_RELATIVE_OFFSET_M || dist <= 1e-6) return [eastM, northM]
+  const scale = MAX_RELATIVE_OFFSET_M / dist
+  return [eastM * scale, northM * scale]
+}
+
+/**
+ * Demo GPS: vị trí hiển thị = site center + (GPS hiện tại − GPS mốc ban đầu).
+ * Lần fix đầu → neo tại center; đi bộ ở Hà Nội vẫn thấy di chuyển trong Cầu Sông Hốt.
+ */
+export function mapRelativeGpsToSite(
+  cameraId: string,
+  lat: number,
+  lng: number,
+): [number, number] {
+  const anchor = gpsAnchorByHelmet.get(cameraId)
+  if (!anchor) {
+    gpsAnchorByHelmet.set(cameraId, { lat, lng })
+    return [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]]
+  }
+
+  const [dEast, dNorth] = latLonToEnu(lat, lng, anchor.lat, anchor.lng)
+  const [cEast, cNorth] = clampRelativeOffsetMeters(dEast, dNorth)
+  return enuToLatLon(
+    cEast,
+    cNorth,
+    PATROL_SITE_CENTER[0],
+    PATROL_SITE_CENTER[1],
+  )
+}
 
 function getEkf(helmetId: string): HelmetEkf {
   let ekf = ekfByHelmet.get(helmetId)
@@ -202,9 +246,24 @@ export function fuseHelmetPose(input: FuseHelmetPoseInput): FusedHelmetPose {
     ? ((input.heading! % 360) + 360) % 360
     : ekf.headingDeg
 
-  if (input.lat != null && input.lng != null && isValidGps(input.lat, input.lng)) {
-    ekf.updateGps(input.lat, input.lng, input.accuracyM ?? GPS_DEFAULT_ACCURACY_M)
-    method = 'ekf'
+  let gpsLat = input.lat
+  let gpsLng = input.lng
+  const useRelative = isPatrolRelativeGpsCamera(input.cameraId)
+
+  if (
+    useRelative
+    && gpsLat != null
+    && gpsLng != null
+    && isValidGps(gpsLat, gpsLng)
+  ) {
+    ;[gpsLat, gpsLng] = mapRelativeGpsToSite(input.cameraId, gpsLat, gpsLng)
+    method = 'relative'
+  }
+
+  if (gpsLat != null && gpsLng != null && isValidGps(gpsLat, gpsLng)) {
+    ekf.updateGps(gpsLat, gpsLng, input.accuracyM ?? GPS_DEFAULT_ACCURACY_M)
+    if (method === 'relative') method = 'relative_ekf'
+    else method = 'ekf'
     const pair = ekf.latLng()
     if (pair) {
       outLat = pair[0]
@@ -222,12 +281,13 @@ export function fuseHelmetPose(input: FuseHelmetPoseInput): FusedHelmetPose {
     const [mLat, mLng] = snapPointToSite(outLat, outLng)
     outLat = mLat
     outLng = mLng
-    if (method === 'ekf') method = 'ekf_map'
-  } else if (input.lat != null && input.lng != null && isValidGps(input.lat, input.lng)) {
-    const [mLat, mLng] = snapPointToSite(input.lat, input.lng)
+    if (method === 'relative_ekf') method = 'relative_ekf'
+    else if (method === 'ekf') method = 'ekf_map'
+  } else if (gpsLat != null && gpsLng != null && isValidGps(gpsLat, gpsLng)) {
+    const [mLat, mLng] = snapPointToSite(gpsLat, gpsLng)
     outLat = mLat
     outLng = mLng
-    method = 'map'
+    method = useRelative ? 'relative' : 'map'
   }
 
   if (input.heading != null && Number.isFinite(input.heading)) {
@@ -255,7 +315,9 @@ export function ingestHelmetImu(cameraId: string, heading: number, ts = Date.now
 export function resetHelmetPositionEngine(cameraId?: string): void {
   if (!cameraId) {
     ekfByHelmet.clear()
+    gpsAnchorByHelmet.clear()
     return
   }
   ekfByHelmet.delete(cameraId)
+  gpsAnchorByHelmet.delete(cameraId)
 }

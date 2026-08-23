@@ -5,6 +5,8 @@
  * - Xóa sessionStorage heatmap registry
  */
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { clearPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
+import { resetHelmetPositionEngine } from '../utils/positionEngine'
 
 const PATROL_LS_KEYS = [
   'vifence_patrol_manual_identity_v2',
@@ -60,6 +62,8 @@ export async function resetPatrolTestData(): Promise<PatrolResetResult> {
 
   clearPatrolLocalStorage()
   clearPatrolSessionStorage()
+  clearPatrolHelmetGps('HC-02')
+  resetHelmetPositionEngine('HC-02')
 
   return { ok: true, backend }
 }

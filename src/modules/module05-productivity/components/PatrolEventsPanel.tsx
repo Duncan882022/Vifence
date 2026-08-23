@@ -14,6 +14,7 @@ import {
 import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
 import {
   countUniquePatrolTabEntities,
+  dedupePatrolEventsByMasterEntity,
   resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
@@ -40,7 +41,9 @@ function isPersonEvent(event: PatrolEvent): boolean {
 }
 
 function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
-  const feed = events.filter(isPatrolPersonLifecycleWithSnapshot)
+  const feed = dedupePatrolEventsByMasterEntity(
+    events.filter(isPatrolPersonLifecycleWithSnapshot),
+  )
   switch (tab) {
     case 'object':
       return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'object')
@@ -348,7 +351,7 @@ export function PatrolEventsPanel({
             {!hasMore && (
               <div className="flex items-center justify-center py-3">
                 <span className="text-[9px] text-muted-foreground/35">
-                  — {activeItems.length} sự kiện —
+                  — {tabCounts[filterTab]} entity —
                 </span>
               </div>
             )}

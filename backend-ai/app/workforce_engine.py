@@ -426,11 +426,23 @@ class WorkforceEngine:
                     break
 
         if object_id is None:
-            if mode == "FACE_CLOSEUP":
-                nearest = self._nearest_active(helmet_id, now)
-                object_id = nearest.object_id if nearest else self._new_object_id()
-            else:
-                object_id = self._new_object_id()
+            wid = str(row.get("worker_id") or "").strip()
+            if wid:
+                for oid, obj in self.objects.items():
+                    if (
+                        obj.helmet_id == helmet_id
+                        and obj.worker_id == wid
+                        and obj.live_status(now) != "EXPIRED"
+                    ):
+                        object_id = oid
+                        break
+
+            if object_id is None:
+                if mode == "FACE_CLOSEUP":
+                    nearest = self._nearest_active(helmet_id, now)
+                    object_id = nearest.object_id if nearest else self._new_object_id()
+                else:
+                    object_id = self._new_object_id()
 
         obj = self.objects.get(object_id)
         if obj is None:

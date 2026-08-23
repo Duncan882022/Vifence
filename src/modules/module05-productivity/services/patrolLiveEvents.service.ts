@@ -332,7 +332,7 @@ export function mapBackendEventToPatrolEvent(
     ? objectIdRaw
     : ((trackWorkerId ?? workerIdRaw) || event.dedup_key?.split('|').pop() || event.id.slice(0, 8))
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
-  const title = patrolWorkforceEventTitle(eventType, objectId, workerIdRaw)
+  const title = patrolWorkforceEventTitle(eventType, objectId, workerIdRaw, trackWorkerId)
   const versionTs = normalizeUnixSeconds(ts) ?? undefined
 
   const mapped: PatrolEvent = {

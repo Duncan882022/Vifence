@@ -40,10 +40,7 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
     return 'profile'
   }
 
-  // OBJ-* = workforce engine đã re-id đủ tiêu chí (face/FULL_BODY/UPPER_BODY)
-  if (isPatrolObjectId(objectId)) return 'person'
-
-  // sgc-* = anonymous scan nhưng có mã ổn định
+  // Tab Người = có mã sgc ổn định. OBJ-only / mặt chưa đủ → Đối tượng.
   if (isPatrolSgcWorkerId(objectId)) return 'person'
   if (isPatrolSgcWorkerId(trackWorkerId)) return 'person'
 
@@ -55,11 +52,12 @@ export function patrolWorkforceEventTitle(
   type: PatrolEvent['type'],
   objectId?: string | null,
   objectLabel?: string | null,
+  trackWorkerId?: string | null,
 ): string {
   if (type === 'IDENTITY_VERIFIED') return 'Định danh'
   if (type === 'PERSON_DETECTED') {
-    if (isPatrolObjectId(objectId)) return 'Người'
     if (isPatrolSgcWorkerId(objectId)) return 'Người'
+    if (isPatrolSgcWorkerId(trackWorkerId)) return 'Người'
     if (isVerifiedWorkerLabel(objectLabel ?? '')
       && !isPatrolSgcWorkerId(objectLabel)
       && !isPatrolObjectId(objectLabel)) {
@@ -70,17 +68,25 @@ export function patrolWorkforceEventTitle(
   return ''
 }
 
-/** Dòng phụ — hiển thị workerId (sgc) hoặc objectId (OBJ). */
+/** Dòng phụ — sgc master; OBJ hiển thị phụ khi có. */
 export function patrolWorkforceEventSubjectId(
   objectId?: string | null,
   trackWorkerId?: string | null,
 ): string {
-  const primary = objectId?.trim() ?? ''
-  if (isPatrolObjectId(primary)) return primary
-  if (isPatrolSgcWorkerId(primary)) return primary
-  const track = trackWorkerId?.trim()
+  const oid = objectId?.trim() ?? ''
+  const track = trackWorkerId?.trim() ?? ''
+  const sgc = isPatrolSgcWorkerId(track)
+    ? track
+    : isPatrolSgcWorkerId(oid)
+      ? oid
+      : ''
+  const obj = isPatrolObjectId(oid) ? oid : ''
+
+  if (sgc && obj) return `${sgc} · ${obj}`
+  if (sgc) return sgc
+  if (obj) return obj
   if (track) return track
-  return primary || '—'
+  return oid || '—'
 }
 
 export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent {
@@ -88,7 +94,12 @@ export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent
 
   const trackWorkerId = event.trackWorkerId
     ?? (isPatrolSgcWorkerId(event.objectId) ? event.objectId : undefined)
-  const title = patrolWorkforceEventTitle(event.type, event.objectId, event.objectLabel)
+  const title = patrolWorkforceEventTitle(
+    event.type,
+    event.objectId,
+    event.objectLabel,
+    trackWorkerId,
+  )
   const subjectId = patrolWorkforceEventSubjectId(event.objectId, trackWorkerId)
 
   return {
@@ -149,6 +160,38 @@ export function enrichPatrolPersonEventWithWorkforceObject(
   return formatPatrolPersonDetectedEvent(enriched)
 }
 
+/** Khóa master dedup — ưu tiên sgc; nhiều OBJ cùng sgc → 1 entity. */
+export function patrolEventMasterEntityKey(event: PatrolEvent): string {
+  const objectId = event.objectId?.trim() ?? ''
+  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
+
+  if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
+  if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
+  if (objectId && isPatrolManuallyIdentified(objectId)) return objectId.toUpperCase()
+  if (trackWorkerId && isPatrolManuallyIdentified(trackWorkerId)) return trackWorkerId.toUpperCase()
+
+  // Chưa có sgc — mỗi sự kiện riêng (partial / track tạm)
+  return `EV:${event.id}`
+}
+
+/** Gộp list — giữ snapshot mới nhất theo master key. */
+export function dedupePatrolEventsByMasterEntity(events: PatrolEvent[]): PatrolEvent[] {
+  const byKey = new Map<string, PatrolEvent>()
+  for (const event of events) {
+    const key = patrolEventMasterEntityKey(event)
+    const prev = byKey.get(key)
+    if (
+      !prev
+      || new Date(event.lockedAt).getTime() > new Date(prev.lockedAt).getTime()
+    ) {
+      byKey.set(key, event)
+    }
+  }
+  return [...byKey.values()].sort(
+    (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
+  )
+}
+
 export function enrichPatrolEventsWithWorkforceObjects(
   events: PatrolEvent[],
   objects: ObjectState[],
@@ -162,17 +205,9 @@ export function enrichPatrolEventsWithWorkforceObjects(
   return events.map(ev => enrichPatrolPersonEventWithWorkforceObject(ev, objects, sgcToObject))
 }
 
-/** Khóa unique để đếm entity (tab badge + KPI) — gộp sgc/OBJ cùng người. */
+/** @deprecated dùng patrolEventMasterEntityKey */
 export function patrolEventEntityKey(event: PatrolEvent): string {
-  const objectId = event.objectId?.trim() ?? ''
-  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
-
-  if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
-  if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
-  if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
-  if (objectId) return objectId.toUpperCase()
-  if (trackWorkerId) return trackWorkerId.toUpperCase()
-  return event.id
+  return patrolEventMasterEntityKey(event)
 }
 
 export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'
@@ -202,7 +237,7 @@ export function countUniquePatrolTabEntities(
   const keys = new Set<string>()
   for (const event of events) {
     if (!matchesPatrolEventsTab(event, tab)) continue
-    keys.add(patrolEventEntityKey(event))
+    keys.add(patrolEventMasterEntityKey(event))
   }
   return keys.size
 }
