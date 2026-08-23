@@ -237,7 +237,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
             : cn(
               'aspect-video',
               compactVideo
-                ? 'max-h-[min(22dvh,180px)] sm:max-h-[min(26dvh,200px)] lg:max-h-[min(30vh,240px)]'
+                ? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]'
                 : 'max-h-[min(36dvh,280px)]',
             ),
         )
@@ -480,9 +480,9 @@ export function TrainingCameraPanel({
     <>
       <div className={cn(
         'w-full min-h-0',
-        mobileCompactVideo ? 'h-auto' : 'h-full',
+        mobileCompactVideo ? 'h-auto max-h-full' : 'h-full',
         'flex flex-col lg:flex-row',
-        mobileCompactVideo ? 'lg:h-auto' : 'lg:flex-1 lg:min-h-0',
+        mobileCompactVideo ? 'lg:h-auto lg:max-h-full' : 'lg:flex-1 lg:min-h-0',
         'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
         'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
       )}>
@@ -515,6 +515,7 @@ export function TrainingCameraPanel({
             'border-t lg:border-t-0 lg:border-l',
             'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
             'lg:overflow-hidden',
+            mobileCompactVideo && !sidebarOpen && 'max-lg:[@media(orientation:portrait)]:hidden',
             sidebarOpen
               ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
               : 'w-full shrink-0 lg:flex lg:w-8 lg:h-full lg:min-h-0',

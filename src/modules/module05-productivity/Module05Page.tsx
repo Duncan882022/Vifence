@@ -260,7 +260,7 @@ export function Module05Page() {
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
       />
-      <PageLayout scrollable={false}>
+      <PageLayout scrollable={isMobileLayout && !cameraCollapsed}>
         {/* Tier 1 — KPIs */}
         <Panel
           title="Tổng Quan"
@@ -285,16 +285,23 @@ export function Module05Page() {
           )}
         </Panel>
 
-        {/* Tier 2 + Tier 3 — desktop: flex pool; mobile: scroll + min-height cho heatmap/sự kiện */}
+        {/* Tier 2 + Tier 3 */}
         <div className={cn(
-          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
-          isMobileLayout && 'pb-[env(safe-area-inset-bottom,0px)]',
+          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0',
+          isMobileLayout && !cameraCollapsed
+            ? 'pb-[env(safe-area-inset-bottom,0px)]'
+            : 'overflow-hidden',
         )}>
-          {/* Tier 2 — Camera (compact — nhường chỗ heatmap/sự kiện) */}
+          {/* Tier 2 — Camera (compact, letterbox — nhường chỗ heatmap/sự kiện) */}
           <div className={cn(
-            'flex flex-col min-h-0 shrink-0',
-            tier2Open && isMobileLayout && 'max-h-[min(24dvh,200px)]',
-            tier2Open && !isMobileLayout && 'max-h-[min(34vh,340px)]',
+            'flex flex-col min-h-0',
+            tier2Open
+              ? cn(
+                isMobileLayout
+                  ? 'flex-none shrink-0 max-h-[min(28dvh,220px)] max-lg:landscape:max-h-[min(22dvh,168px)]'
+                  : 'flex-none shrink-0 max-h-[min(34vh,360px)]',
+              )
+              : 'shrink-0',
           )}>
             <Panel
               title="Camera"
@@ -302,9 +309,8 @@ export function Module05Page() {
               fit={!tier2Open || isMobileLayout}
               noPadding
               className={cn(
-                tier2Open && 'overflow-hidden',
-                tier2Open && isMobileLayout && 'max-h-[min(24dvh,200px)]',
-                tier2Open && !isMobileLayout && 'max-h-[min(34vh,340px)]',
+                tier2Open && !isMobileLayout && 'h-full max-h-[min(34vh,360px)] overflow-hidden',
+                tier2Open && isMobileLayout && 'overflow-hidden',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -325,7 +331,7 @@ export function Module05Page() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col min-h-0 w-full overflow-hidden">
+                <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
                   {cameraMode === 'live' ? (
                     <TrainingCameraPanel
                       selectedId={selectedCamId}
@@ -360,16 +366,22 @@ export function Module05Page() {
             </Panel>
           </div>
 
-          {/* Tier 3 — 2 separate panels: [HEATMAP] | [SỰ KIỆN] */}
+          {/* Tier 3 — HEATMAP | SỰ KIỆN */}
           <div className={cn(
-            'flex gap-2 sm:gap-3 flex-col md:flex-row flex-1 min-h-0 overflow-hidden',
+            'flex gap-2 sm:gap-3 flex-col md:flex-row flex-1 min-h-0',
+            isMobileLayout && !cameraCollapsed && 'shrink-0 min-h-[min(68dvh,560px)]',
+            !isMobileLayout && 'overflow-hidden',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
-                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[160px]',
+                cameraCollapsed
+                  ? 'h-full'
+                  : isMobileLayout
+                    ? 'min-h-[240px] h-[min(40dvh,340px)] md:min-h-0 md:h-full'
+                    : 'min-h-0 h-full',
               )}
               headerRight={
                 <button
@@ -395,7 +407,11 @@ export function Module05Page() {
               noPadding
               className={cn(
                 'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
-                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[140px]',
+                cameraCollapsed
+                  ? 'h-full'
+                  : isMobileLayout
+                    ? 'min-h-[200px] h-[min(36dvh,300px)] md:min-h-0 md:h-full'
+                    : 'min-h-0 h-full',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
               headerRight={
