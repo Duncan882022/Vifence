@@ -4,7 +4,8 @@
  */
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { WorkforceEventState, WorkforceEventType } from '../types/workforceHeatmap'
-import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
+import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
+import { PATROL_SITE_CENTER, PATROL_SITE_NAME } from '../data/patrolSiteMap'
 
 const WORKFORCE_FEED_TYPES = new Set<WorkforceEventType>([
   'POPULATION_OBSERVED',
@@ -18,15 +19,37 @@ export function isWorkforceFeedEventType(type: string): type is WorkforceEventTy
   return WORKFORCE_FEED_TYPES.has(type as WorkforceEventType)
 }
 
+function isValidGps(lat: number, lng: number): boolean {
+  return Number.isFinite(lat)
+    && Number.isFinite(lng)
+    && !(lat === 0 && lng === 0)
+    && Math.abs(lat) <= 90
+    && Math.abs(lng) <= 180
+}
+
+function resolveWorkforceEventGps(
+  ev: WorkforceEventState,
+  cameraId: string,
+): { lat: number; lng: number } {
+  const lat = Number(ev.payload?.lat ?? 0)
+  const lng = Number(ev.payload?.lon ?? ev.payload?.lng ?? 0)
+  if (isValidGps(lat, lng)) return { lat, lng }
+  if (cameraId === 'HC-02') {
+    return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
+  }
+  return { lat: 0, lng: 0 }
+}
+
 export function workforceEventToPatrolEvent(ev: WorkforceEventState): PatrolEvent | null {
   if (!isWorkforceFeedEventType(ev.event_type)) return null
   const cameraId = ev.helmet_id || 'HC-02'
+  const cameraName = PATROL_BODYCAM_LABELS[cameraId] ?? cameraId
   const ts = ev.timestamp
   return {
     id: ev.event_id,
     type: ev.event_type as PatrolEvent['type'],
     cameraId,
-    cameraName: cameraId,
+    cameraName,
     zoneId: ev.zone_id,
     zoneName: PATROL_SITE_NAME,
     objectId: String(ev.payload?.object_id ?? ev.event_id),
@@ -38,10 +61,7 @@ export function workforceEventToPatrolEvent(ev: WorkforceEventState): PatrolEven
     durationSeconds: null,
     status: 'LOCKED',
     confidence: Number(ev.payload?.confidence ?? 0.9),
-    gps: {
-      lat: Number(ev.payload?.lat ?? 0),
-      lng: Number(ev.payload?.lon ?? ev.payload?.lng ?? 0),
-    },
+    gps: resolveWorkforceEventGps(ev, cameraId),
   }
 }
 

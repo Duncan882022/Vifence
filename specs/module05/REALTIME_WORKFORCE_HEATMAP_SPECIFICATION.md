@@ -170,7 +170,7 @@ Forward geodesic: Bearing = Heading_H + Δθ; Lat/Lon worker từ (Lat_H, Lon_H,
 
 ### 7.5. Header
 ```
-HC-02 ● ONLINE · Zone A3 · 28 người quan sát · 11 đã định danh
+HC-02 ● ONLINE · Cầu Sông Hốt · 28 người quan sát · 11 đã định danh
 GPS: … · Observability: HIGH · Last: 2s
 ```
 
@@ -193,7 +193,7 @@ GPS: … · Observability: HIGH · Last: 2s
 
 **Không** dùng tab Persons / raw "Phát hiện người".
 
-### 8.3. WebSocket channels
+### 8.3. WebSocket channels (mục tiêu)
 `HELMET_STATE` · `OBJECT_STATE` · `POPULATION_STATE` · `EVENT`
 
 Frontend state (KV, không append detection vô hạn):
@@ -205,6 +205,44 @@ zonePopulation = {}
 events = []
 heatPoints = []
 ```
+
+### 8.4. Triển khai FE hiện tại (Module 05 — **live only, không mock feed**)
+
+**Component:** `PatrolEventsPanel` (không dùng shared `EventList`).
+
+**Nguồn dữ liệu (poll ~3s, merge theo `event.id`):**
+
+| Nguồn | Hook / service | Endpoint / bridge |
+|-------|----------------|-------------------|
+| Backend helmet | `usePatrolHelmetLiveEvents` → `patrolLiveEvents.service` | `GET /patrol/events?cameras=HC-01,HC-02` hoặc legacy `/events?camera_id=` |
+| Mobile HC-02 | `patrolMobileEventsBridge` | `pushPatrolMobilePpeEvents()` từ `MobileCameraFeed` |
+| Workforce engine | `useWorkforceRealtimeState` → `workforceState.service` | `GET /patrol/workforce/state?cameras=HC-01,HC-02` |
+| Merge | `mergePatrolAndWorkforceEvents` | Dedupe + sort `lockedAt` desc |
+
+**Không có fallback mock** trong tab Sự kiện. Khi chưa có dữ liệu: *「Chưa có sự kiện live — đang chờ backend Contabo」*.
+
+**Ẩn khỏi feed chính** (`isMeaningfulFeedEvent`):
+- `PERSON_DETECTED` — raw detection, không hiển thị
+- `PPE_VIOLATION` — khi `PATROL_PPE_UI_HIDDEN = true` (Module 05 hiện tại)
+
+**Tab filter §8.2 → loại sự kiện:**
+
+| Tab | `EventType` |
+|-----|-------------|
+| Tất cả | Mọi loại meaningful (trừ PERS/PPE ẩn) |
+| Nhân lực | `POPULATION_OBSERVED`, `POPULATION_CHANGE` |
+| Định danh | `IDENTITY_VERIFIED` |
+| Mật độ | `HIGH_DENSITY` |
+| Hệ thống | `MACHINE_STOPPED` |
+
+**Camera / zone hiển thị (live):**
+- Camera: `PATROL_BODYCAM_LABELS` — `HC-01` → Helmet 01, `HC-02` → Duncan iPhone
+- Zone: luôn `Cầu Sông Hốt` (`PATROL_SITE_NAME`, `ZONE_SITE`)
+- GPS HC-02: GPS thật từ backend/bridge; fallback `PATROL_SITE_CENTER` khi stream online nhưng thiếu fix
+
+**Popup chi tiết (`PatrolEventDetailModal`):** một lần mỗi trường — loại (badge), tiêu đề, snapshot, trạng thái, vị trí (camera · zone), đối tượng, thời gian, confidence, GPS, actions Playback / Bản đồ.
+
+**Mock còn lại (không vào feed):** `MOCK_PATROL_EVENTS` chỉ dùng cho playback timeline stub (`patrolCameraPlayback.service`).
 
 ---
 
@@ -253,14 +291,18 @@ HEATMAP      EVENT ENGINE
 
 ---
 
-## 12. GHI CHÚ TRIỂN KHAI TẠM (Module 05 FE)
+## 12. GHI CHÚ TRIỂN KHAI (Module 05 FE — cập nhật 2026-08-23)
 
-| Hạng mục | Tạm thời |
-|----------|----------|
-| Population / Observability BE | Stub UI từ personCount + historical dots |
-| Event POPULATION_* / IDENTITY_* | Filter UI sẵn; ẩn raw PERSON_DETECTED khỏi feed chính |
-| PPE / Máy dừng | Gom tab **Hệ thống** (có thể bật lại category riêng sau) |
-| Heading cone | Dùng khi có IMU heading từ stream |
-| Object bottom sheet | Phase 2 nếu chưa có click handler |
+| Hạng mục | Trạng thái |
+|----------|------------|
+| Tab Sự kiện | **Live** — backend + workforce poll; không mock |
+| Population / Observability | Live từ `/patrol/workforce/state` + metrics HC-01/HC-02 |
+| Event POPULATION_* / IDENTITY_* | Workforce engine → `workforceEventsMapper` |
+| PPE / PERSON_DETECTED | Ẩn khỏi feed (`PATROL_PPE_UI_HIDDEN`, `isMeaningfulFeedEvent`) |
+| MACHINE_STOPPED | Tab **Hệ thống** — backend + workforce |
+| WebSocket §8.3 | Chưa — thay bằng poll HTTP |
+| Playback timeline | Vẫn stub `MOCK_PATROL_EVENTS` (tách khỏi feed live) |
+| Heading cone | Khi có IMU heading từ stream |
+| Object bottom sheet | `WorkforceObjectSheet` trên heatmap |
 
 *Tài liệu chuẩn hóa Realtime Workforce Heatmap & Event — Smart Helmet Cam.*

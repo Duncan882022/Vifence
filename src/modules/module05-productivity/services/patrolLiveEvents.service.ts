@@ -5,6 +5,7 @@ import {
 } from '@/services/patrolHelmetGpsBridge'
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 
@@ -307,7 +308,6 @@ export function mapBackendEventToPatrolEvent(
 ): PatrolEvent {
   const cameraId = event.camera_id ?? 'HC-01'
   const { zoneId, zoneName } = zoneMetaForCamera(cameraId)
-  const helmetNum = cameraId.replace('HC-', '')
   const ts = event.confirmed_at ?? event.created_at
   const workerLabel = event.worker_name?.trim() || event.worker_id?.trim() || 'Người chưa xác định'
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
@@ -319,7 +319,7 @@ export function mapBackendEventToPatrolEvent(
     id: event.id,
     type: eventType,
     cameraId,
-    cameraName: `Helmet ${helmetNum}`,
+    cameraName: PATROL_BODYCAM_LABELS[cameraId] ?? cameraId,
     zoneId,
     zoneName,
     objectId,

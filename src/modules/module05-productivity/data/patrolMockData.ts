@@ -1,4 +1,4 @@
-/** Module 05 – Helmet Camera Patrol Intelligence — mock data */
+/** Module 05 – Patrol types + mock fixtures (playback/legacy API only — tab Sự kiện dùng live) */
 
 export type CameraStatus = 'ONLINE' | 'OFFLINE'
 export type ZoneCoverage = 'VISITED' | 'NOT_VISITED'

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ExternalLink, MapPin, Play, X } from 'lucide-react'
+import { MapPin, Play, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
@@ -49,6 +49,7 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
   const TypeIcon = meta.icon
   const statusDisplay = getPatrolEventStatusDisplay(event.status)
   const gpsOk = hasValidGps(event.gps)
+  const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
 
   return createPortal(
     <div
@@ -72,6 +73,7 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
               <p id="patrol-event-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
                 {event.violationLabel}
               </p>
+              <p className="text-[9px] text-muted-foreground mt-0.5">{meta.label}</p>
             </div>
           </div>
           <button
@@ -90,15 +92,14 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
             {[
               ['Trạng thái', statusDisplay.label],
-              ['Camera', event.cameraName],
-              ['Zone', event.zoneName],
-              ['Object ID', event.objectLabel],
-              ['Bắt đầu', formatEventDateTime(event.startedAt)],
+              ['Vị trí', eventPlace],
+              ['Đối tượng', event.objectLabel],
               ['Ghi nhận', formatEventDateTime(event.lockedAt)],
+              ['Bắt đầu', formatEventDateTime(event.startedAt)],
               ['Kết thúc', event.endedAt ? formatEventDateTime(event.endedAt) : '—'],
               ['Confidence', `${Math.round(event.confidence * 100)}%`],
             ].map(([k, v]) => (
-              <div key={k}>
+              <div key={k} className={k === 'Vị trí' ? 'col-span-2' : undefined}>
                 <span className="text-muted-foreground">{k}: </span>
                 <span className="text-foreground font-medium">{v}</span>
               </div>
@@ -126,41 +127,15 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
               </span>
             </div>
             {gpsOk ? (
-              <>
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                  <div>
-                    <span className="text-muted-foreground">Lat: </span>
-                    <span className="text-foreground font-semibold select-all">{event.gps.lat.toFixed(6)}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Lng: </span>
-                    <span className="text-foreground font-semibold select-all">{event.gps.lng.toFixed(6)}</span>
-                  </div>
-                </div>
-                <p className="text-[9px] text-muted-foreground font-mono break-all select-all">
-                  {event.gps.lat.toFixed(6)}, {event.gps.lng.toFixed(6)}
-                </p>
-                <a
-                  href={mapsUrl(event.gps.lat, event.gps.lng)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[9px] font-medium text-sky-400 hover:text-sky-300"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Mở Google Maps
-                </a>
-              </>
+              <p className="text-[10px] text-foreground font-mono select-all">
+                {event.gps.lat.toFixed(6)}, {event.gps.lng.toFixed(6)}
+              </p>
             ) : (
               <p className="text-[9px] text-amber-200/80 leading-relaxed">
-                Sự kiện chưa gắn toạ độ GPS (chưa có fix / trong nhà / chưa cấp Location).
-                Bật Location trên HC-02 rồi tạo sự kiện mới để log GPS.
+                Sự kiện chưa gắn toạ độ GPS. Bật Location trên HC-02 để log GPS cho sự kiện mới.
               </p>
             )}
           </div>
-
-          <p className="text-[9px] text-muted-foreground">
-            {getPatrolEventPlace(event.cameraName, event.zoneName)}
-          </p>
 
           <div className="flex flex-wrap gap-2 pt-1">
             <button
