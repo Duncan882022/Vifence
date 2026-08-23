@@ -188,15 +188,14 @@ check('Module05Page merges workforce events', () => {
   assert.match(src, /useWorkforceRealtimeState/)
 })
 
-check('Heatmap has 4 layers + time tabs + object sheet', () => {
+check('Heatmap has layer toggles + object sheet (live-only)', () => {
   const src = readFileSync(join(root, 'src/modules/module05-productivity/components/PatrolDensityHeatmap.tsx'), 'utf8')
   assert.match(src, /Khu vực/)
   assert.match(src, /Người/)
-  assert.match(src, /Mật độ/)
-  assert.match(src, /Mũ\/Lộ trình/)
-  assert.match(src, /HEATMAP_TIME_TABS/)
+  assert.match(src, /Mũ/)
+  assert.doesNotMatch(src, /HEATMAP_TIME_TABS/)
   assert.match(src, /WorkforceObjectSheet/)
-  assert.match(src, /headingConePositions|helmetHeadingById/)
+  assert.match(src, /helmetHeadingById/)
 })
 
 check('FE filters EXPIRED from live layer OR BE snapshot omits EXPIRED', () => {
