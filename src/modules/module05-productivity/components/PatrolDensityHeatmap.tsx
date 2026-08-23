@@ -27,10 +27,7 @@ import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
 import { WorkforceObjectSheet } from './WorkforceObjectSheet'
 import {
-  HEATMAP_TIME_TABS,
-  heatmapWindowMs,
   isVerifiedWorkerLabel,
-  type HeatmapTimeWindow,
 } from '../utils/workforceHeatmapUi'
 import {
   isPatrolManuallyIdentified,
@@ -86,10 +83,8 @@ export function PatrolDensityHeatmap({
   const [layers, setLayers] = useState({
     polygon: true,
     detection: true,
-    density: true,
     route: true,
   })
-  const [timeWindow, setTimeWindow] = useState<HeatmapTimeWindow>('live')
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
   const [mobileHc02Live, setMobileHc02Live] = useState(
@@ -189,7 +184,6 @@ export function PatrolDensityHeatmap({
 
   const filteredDots = useMemo(() => {
     void identityRevision
-    const cutoff = Date.now() - heatmapWindowMs(timeWindow)
     const now = Date.now()
     const activeObjectIds = new Set(
       liveObjects.filter(o => o.status === 'ACTIVE').map(o => o.object_id),
@@ -209,11 +203,6 @@ export function PatrolDensityHeatmap({
         opacity: inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
       }
     }
-
-    const hist = hc02Live.dots.filter(d => {
-      if (d.lastSeenAt == null) return timeWindow !== 'live'
-      return d.lastSeenAt >= cutoff
-    }).map(d => markInView(d))
 
     const objectDots = liveObjects
       .filter(o => o.lat != null && o.lon != null)
@@ -235,34 +224,14 @@ export function PatrolDensityHeatmap({
         })
       })
 
-    if (timeWindow === 'live' && objectDots.length > 0) {
+    if (objectDots.length > 0) {
       return objectDots
     }
-    const byId = new Map(hist.map(d => [d.id, d]))
-    for (const od of objectDots) byId.set(od.id, od)
-    if (timeWindow !== 'live') {
-      for (const hp of workforce.heatPoints) {
-        const ts = Date.parse(hp.timestamp)
-        if (!Number.isFinite(ts) || ts < cutoff) continue
-        const id = `heat-${hp.object_id}-${ts}`
-        if (byId.has(id)) continue
-        byId.set(id, markInView({
-          id,
-          type: 'person',
-          position: [hp.lat, hp.lon],
-          zoneId: hp.zone_id,
-          cameraId: 'HC-02',
-          confidence: hp.weight,
-          label: resolvePatrolObjectLabel(hp.object_id, hp.object_id),
-          lastSeenAt: ts,
-          objectId: hp.object_id,
-          verified: isPatrolManuallyIdentified(hp.object_id),
-          inCameraView: false,
-        }))
-      }
-    }
-    return [...byId.values()]
-  }, [hc02Live.dots, timeWindow, liveObjects, workforce.heatPoints, identityRevision])
+
+    return hc02Live.dots
+      .filter(d => d.lastSeenAt != null && now - d.lastSeenAt < DETECTION_DOT_IN_VIEW_MS * 4)
+      .map(d => markInView(d))
+  }, [hc02Live.dots, liveObjects, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -284,9 +253,9 @@ export function PatrolDensityHeatmap({
 
   const observedCount = useMemo(() => {
     if (zonePop) return zonePop.observed_count
-    if (timeWindow === 'live' && hc02Live.personCount > 0) return hc02Live.personCount
+    if (hc02Live.personCount > 0) return hc02Live.personCount
     return filteredDots.length || hc02Live.historicalDotCount
-  }, [zonePop, timeWindow, hc02Live.personCount, hc02Live.historicalDotCount, filteredDots.length])
+  }, [zonePop, hc02Live.personCount, hc02Live.historicalDotCount, filteredDots.length])
 
   const identifiedCount = useMemo(() => {
     if (zonePop) return zonePop.breakdown.verified_identities
@@ -345,25 +314,8 @@ export function PatrolDensityHeatmap({
         </div>
 
         <div className="flex items-center gap-1 flex-wrap">
-          {HEATMAP_TIME_TABS.map(tab => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setTimeWindow(tab.key)}
-              className={cn(
-                'px-2 py-0.5 rounded text-[9px] font-medium border transition-colors shrink-0',
-                timeWindow === tab.key
-                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                  : 'bg-transparent text-[#64748b] border-[#334155] hover:border-[#475569]',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-          <span className="w-px h-3.5 bg-[#334155] mx-0.5 shrink-0" aria-hidden />
           <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
           <LayerToggle compact={viewport.compactChrome} active={layers.detection} color="#38bdf8" onClick={() => toggleLayer('detection')}>Người</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
           <LayerToggle compact={viewport.compactChrome} active={layers.route} color="#22c55e" onClick={() => toggleLayer('route')}>Mũ</LayerToggle>
         </div>
       </div>
@@ -383,7 +335,7 @@ export function PatrolDensityHeatmap({
           followLiveGps={hc02Live.hasLiveGps}
           liveGpsLat={hc02Live.lat}
           liveGpsLng={hc02Live.lng}
-          showDensity={layers.density && timeWindow !== 'live'}
+          showDensity={false}
           showRoute={layers.route}
           showCameras={layers.route}
           helmetOnlineById={helmetOnlineById}
