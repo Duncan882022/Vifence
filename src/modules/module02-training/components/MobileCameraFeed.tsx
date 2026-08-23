@@ -38,14 +38,14 @@ import { getLastDeviceHeading, watchDeviceHeading } from '../services/deviceHead
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend.service'
-import {
-  flattenPpeViolationOverlayBoxes,
-  groupHasViolation,
-  groupPpeDetections,
-} from '@/modules/module03-safety/utils/ppeDetectionGroups'
+import { groupPpeDetections } from '@/modules/module03-safety/utils/ppeDetectionGroups'
 import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
+import { PATROL_PPE_UI_HIDDEN, shouldHidePatrolCameraRoi } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 
-/** HC-02 PPE — person (xanh) + vi phạm; MobileAiOverlay cycle person → PPE. */
+/**
+ * HC bodycam — chỉ bbox person (xanh).
+ * PPE violation overlay ẩn theo yêu cầu Module 05 (PATROL_PPE_UI_HIDDEN).
+ */
 function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
   const ppeDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
     behavior: d.behavior as PpeDetection['behavior'],
@@ -58,8 +58,8 @@ function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileA
     worker_name: d.worker_name,
   }))
   const groups = groupPpeDetections(ppeDets)
-  const persons: MobileAiDetection[] = groups.map(g => ({
-    behavior: 'person',
+  return groups.map(g => ({
+    behavior: 'person' as const,
     label: g.person.label,
     confidence: g.person.confidence,
     bbox: tightenPersonOverlayBbox(g.person.bbox, g.person.subject_bbox),
@@ -67,16 +67,6 @@ function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileA
     worker_id: g.person.worker_id,
     worker_name: g.person.worker_name,
   }))
-  const violations = flattenPpeViolationOverlayBoxes(groups.filter(groupHasViolation)).map(d => ({
-    behavior: d.behavior,
-    label: d.label,
-    confidence: d.confidence,
-    bbox: d.bbox,
-    worker_id: d.worker_id,
-    worker_name: d.worker_name,
-    subject_bbox: d.subject_bbox,
-  }))
-  return [...persons, ...violations]
 }
 
 type MobileFeedStatus = 'idle' | 'scanning' | 'live' | 'error'
@@ -121,7 +111,9 @@ export function MobileCameraFeed({
   const overlayModelId = isPpeCamera(cameraId) ? 'ppe' as const : 'mobile_smoking_fire' as const
   const videoFit = getVideoObjectFitForCamera(cameraId, 'mobile')
   const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, 'mobile')
-  const showAiOverlay = aiEnabled && bboxVisible && mobileAiEnabled
+  /** Analyze vẫn chạy khi ẩn ROI — heatmap/personCount cần detections. */
+  const runAiAnalyze = aiEnabled && mobileAiEnabled
+  const showAiOverlay = runAiAnalyze && bboxVisible && !shouldHidePatrolCameraRoi(cameraId)
   const overlayDetections = useMemo(
     () => (overlayModelId === 'ppe' ? mapMobilePpeOverlayDetections(detections) : detections),
     [detections, overlayModelId],
@@ -150,7 +142,7 @@ export function MobileCameraFeed({
     stopAiClient()
     const video = videoRef.current
     const url = getMobileAiBackendUrl()
-    if (!showAiOverlay || !video || !url || status !== 'live') return
+    if (!runAiAnalyze || !video || !url || status !== 'live') return
 
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
@@ -199,7 +191,8 @@ export function MobileCameraFeed({
             cameraId,
             streamOnline: true,
             personCount,
-            activePpeViolations: violations.length,
+            // PPE ẩn trên Module 05 — không đẩy số vi phạm PPE lên KPI/live.
+            activePpeViolations: PATROL_PPE_UI_HIDDEN ? 0 : violations.length,
             identifiedWorkers: new Set(
               [...rawPersons, ...persons]
                 .map(d => d.worker_id)
@@ -209,7 +202,7 @@ export function MobileCameraFeed({
             updatedAt: now,
           })
 
-          if (result.events?.length) {
+          if (result.events?.length && !PATROL_PPE_UI_HIDDEN) {
             pushPatrolMobilePpeEvents(result.events, cameraId)
           }
         }
@@ -219,7 +212,7 @@ export function MobileCameraFeed({
         // Trạng thái backend hiển thị qua toolbar ngrok trên CameraChrome.
       },
     })
-  }, [showAiOverlay, cameraId, status, stopAiClient])
+  }, [runAiAnalyze, cameraId, status, stopAiClient])
 
   const startCapture = useCallback(async (
     nextFacing?: CameraFacing,
@@ -349,13 +342,13 @@ export function MobileCameraFeed({
   }, [playing, cameraId, autoStartCapture])
 
   useEffect(() => {
-    if (status === 'live' && showAiOverlay && backendUrl) {
+    if (status === 'live' && runAiAnalyze && backendUrl) {
       startAiClient()
     } else {
       stopAiClient()
     }
     return stopAiClient
-  }, [status, showAiOverlay, backendUrl, startAiClient, stopAiClient])
+  }, [status, runAiAnalyze, backendUrl, startAiClient, stopAiClient])
 
   useEffect(() => {
     const video = videoRef.current

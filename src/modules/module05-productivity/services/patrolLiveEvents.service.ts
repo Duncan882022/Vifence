@@ -6,6 +6,7 @@ import {
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS } from '../data/patrolSiteMap'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
+import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 
 const ZONE_LABELS: Record<string, string> = {
   ZONE_A: 'Khu thi công móng',
@@ -82,6 +83,7 @@ function todayIsoDate(): string {
 function isPatrolModuleBackendEvent(row: BackendViolationEvent): boolean {
   if (!isPatrolHelmetCameraId(row.camera_id ?? '')) return false
   const scenarioId = row.scenario_id ?? ''
+  if (PATROL_PPE_UI_HIDDEN && scenarioId.startsWith('PPE')) return false
   return scenarioId.startsWith('PPE') || scenarioId.startsWith('PERS')
 }
 

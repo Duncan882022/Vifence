@@ -9,12 +9,18 @@ import {
 } from '@/services/patrolHelmetGpsBridge'
 import { syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
 
+import {
+  PATROL_PPE_UI_HIDDEN,
+  isPatrolPpeScenarioOrBehavior,
+  stripPatrolPpeEvents,
+} from '@/modules/module05-productivity/utils/patrolPpeVisibility'
+
 const MAX_EVENTS = 80
 const listeners = new Set<(events: PatrolEvent[]) => void>()
 let eventsById = new Map<string, PatrolEvent>()
 
 function notify(): void {
-  const list = [...eventsById.values()].sort(
+  const list = stripPatrolPpeEvents([...eventsById.values()]).sort(
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
   syncPatrolPersonEventsToHeatmap(list)
@@ -44,6 +50,9 @@ function resolveGpsForMobileEvent(
 function isPatrolBackendRow(row: MobileAiViolationEvent): boolean {
   const scenario = row.scenario_id ?? ''
   const behavior = row.behavior ?? ''
+  if (PATROL_PPE_UI_HIDDEN && isPatrolPpeScenarioOrBehavior(scenario, behavior)) {
+    return false
+  }
   return scenario.startsWith('PPE')
     || scenario.startsWith('PERS')
     || ['no_helmet', 'no_vest', 'no_shoes', 'person'].includes(behavior)

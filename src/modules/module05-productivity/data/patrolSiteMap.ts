@@ -2,32 +2,32 @@
  *  Coordinate system: [lat, lng] throughout (Leaflet convention).
  *  GeoJSON consumers must swap to [lng, lat] per RFC 7946.
  *
- *  Site: Vinhomes Ocean Park 1 (OCP1), Gia Lâm, Hà Nội
- *  Center: 21.003560°N, 105.947157°E
- *  Site perimeter (rotated quad — corners from field survey):
- *    TOP  21.004587, 105.947314  |  RIGHT 21.003598, 105.948614
- *    LEFT 21.003712, 105.945782  |  BOT   21.002343, 105.946914
+ *  Site: công trường hiện tại (heatmap origin)
+ *  Center: 20.943460°N, 106.911301°E
+ *  Site perimeter (rotated quad — translated with site center):
+ *    TOP  20.944487, 106.911458  |  RIGHT 20.943498, 106.912758
+ *    LEFT 20.943612, 106.909926  |  BOT   20.942243, 106.911058
  */
 
 /** Field-surveyed polygons — fixed, do not regenerate. */
 const SURVEYED_ZONE_POLYGONS = {
   ZONE_A: [
-    [21.003764, 105.947262],
-    [21.003487, 105.947495],
-    [21.003215, 105.947086],
-    [21.003590, 105.947037],
+    [20.943664, 106.911406],
+    [20.943387, 106.911639],
+    [20.943115, 106.911230],
+    [20.943490, 106.911181],
   ],
   ZONE_D: [
-    [21.003335, 105.947520],
-    [21.003004, 105.947813],
-    [21.002779, 105.947453],
-    [21.003098, 105.947179],
+    [20.943235, 106.911664],
+    [20.942904, 106.911957],
+    [20.942679, 106.911597],
+    [20.942998, 106.911323],
   ],
   ZONE_E: [
-    [21.004405, 105.947320],
-    [21.003780, 105.948162],
-    [21.003531, 105.947989],
-    [21.004156, 105.947137],
+    [20.944305, 106.911464],
+    [20.943680, 106.912306],
+    [20.943431, 106.912133],
+    [20.944056, 106.911281],
   ],
 } as const satisfies Record<string, [number, number][]>
 
@@ -37,41 +37,41 @@ const SURVEYED_ZONE_POLYGONS = {
  */
 const INTERP_ZONE_POLYGONS = {
   ZONE_B: [
-    [21.003250, 105.946760],
-    [21.003760, 105.946760],
-    [21.003760, 105.946960],
-    [21.003250, 105.946960],
+    [20.943150, 106.910904],
+    [20.943660, 106.910904],
+    [20.943660, 106.911104],
+    [20.943150, 106.911104],
   ],
   ZONE_C: [
-    [21.003800, 105.946060],
-    [21.004080, 105.946060],
-    [21.004080, 105.946720],
-    [21.003800, 105.946720],
+    [20.943700, 106.910204],
+    [20.943980, 106.910204],
+    [20.943980, 106.910864],
+    [20.943700, 106.910864],
   ],
   ZONE_F: [
-    [21.004130, 105.946060],
-    [21.004587, 105.946720],
-    [21.004120, 105.946720],
-    [21.004120, 105.946060],
+    [20.944030, 106.910204],
+    [20.944487, 106.910864],
+    [20.944020, 106.910864],
+    [20.944020, 106.910204],
   ],
   ZONE_G: [
-    [21.002550, 105.945800],
-    [21.003220, 105.946420],
-    [21.002600, 105.946180],
-    [21.002950, 105.945780],
+    [20.942450, 106.909944],
+    [20.943120, 106.910564],
+    [20.942500, 106.910324],
+    [20.942850, 106.909924],
   ],
   ZONE_H: [
-    [21.004405, 105.948150],
-    [21.004350, 105.948550],
-    [21.003760, 105.948400],
-    [21.003760, 105.948150],
+    [20.944305, 106.912294],
+    [20.944250, 106.912694],
+    [20.943660, 106.912544],
+    [20.943660, 106.912294],
   ],
 } as const satisfies Record<string, [number, number][]>
 
 import { clipPolygonToSiteBoundary } from './patrolSiteGeometry'
 
 function polygonCenter(polygon: [number, number][]): [number, number] {
-  if (polygon.length === 0) return [21.00356, 105.947157]
+  if (polygon.length === 0) return [20.943460, 106.911301]
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
@@ -318,12 +318,12 @@ export {
 } from './patrolSiteGeometry'
 
 /** Map centre for Leaflet MapContainer — geometric centroid of the site quad. */
-export const PATROL_SITE_CENTER: [number, number] = [21.003560, 105.947157]
+export const PATROL_SITE_CENTER: [number, number] = [20.943460, 106.911301]
 
 /** Giới hạn pan/zoom — chỉ trong phạm vi công trường [SW, NE]. */
 export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
-  [21.001800, 105.944900],
-  [21.005300, 105.949500],
+  [20.941700, 106.909044],
+  [20.945200, 106.913644],
 ]
 
 export const PATROL_SITE_MIN_ZOOM = 15

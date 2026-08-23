@@ -32,9 +32,12 @@ const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [
   { key: 'system', label: 'Hệ thống' },
 ]
 
-/** Raw PERSON_DETECTED stays out of the main meaningful-event feed. */
+/**
+ * Main feed: ẩn raw PERSON_DETECTED + PPE (theo yêu cầu ẩn PPE trên Sự kiện Module 05).
+ * Hệ thống chỉ còn MACHINE_STOPPED (và loại tương tự, không PPE).
+ */
 function isMeaningfulFeedEvent(event: PatrolEvent): boolean {
-  return event.type !== 'PERSON_DETECTED'
+  return event.type !== 'PERSON_DETECTED' && event.type !== 'PPE_VIOLATION'
 }
 
 const INITIAL_COUNT = 6
@@ -210,7 +213,7 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
     case 'density':
       return feed.filter(e => e.type === 'HIGH_DENSITY')
     case 'system':
-      return feed.filter(e => e.type === 'PPE_VIOLATION' || e.type === 'MACHINE_STOPPED')
+      return feed.filter(e => e.type === 'MACHINE_STOPPED')
     case 'all':
     default:
       return feed
@@ -238,7 +241,7 @@ export function PatrolEventsPanel({
       workforce: feed.filter(e => e.type === 'POPULATION_OBSERVED' || e.type === 'POPULATION_CHANGE').length,
       identity: feed.filter(e => e.type === 'IDENTITY_VERIFIED').length,
       density: feed.filter(e => e.type === 'HIGH_DENSITY').length,
-      system: feed.filter(e => e.type === 'PPE_VIOLATION' || e.type === 'MACHINE_STOPPED').length,
+      system: feed.filter(e => e.type === 'MACHINE_STOPPED').length,
     }
   }, [events])
 

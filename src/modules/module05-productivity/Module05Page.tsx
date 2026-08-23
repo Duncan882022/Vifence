@@ -43,6 +43,7 @@ import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hook
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
+import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
@@ -60,18 +61,16 @@ function PatrolKPIs() {
   const d = MOCK_PATROL_DASHBOARD
   const events = MOCK_PATROL_EVENTS
   const live = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
-  const mockAlerts = events.length
-  const mockPpeCount = events.filter(e => e.type === 'PPE_VIOLATION').length
-  const mockPersonCount = events.filter(e => e.type === 'PERSON_DETECTED').length
+  const mockAlerts = events.filter(e => e.type !== 'PPE_VIOLATION' && e.type !== 'PERSON_DETECTED').length
   const mockMachineCount = events.filter(e => e.type === 'MACHINE_STOPPED').length
 
+  // PPE ẩn trên Module 05 — KPI cảnh báo không đếm PPE.
   const alertValue = live.streamOnline
-    ? Math.max(live.ppeAlertsToday, live.activePpeViolations)
+    ? mockMachineCount
     : live.backendReachable
-      ? live.ppeAlertsToday
+      ? mockMachineCount
       : mockAlerts
   const totalAlerts = alertValue
-  const ppeCount = live.backendReachable ? live.ppeAlertsToday : mockPpeCount
   const machineCount = live.streamOnline ? 0 : mockMachineCount
   const peopleValue = live.backendReachable || live.streamOnline || live.personCount > 0
     ? live.personCount
@@ -81,11 +80,9 @@ function PatrolKPIs() {
     : live.backendReachable || live.personCount > 0
       ? `Cộng dồn phiên · ${formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`}`
       : 'Unique trên công trường hôm nay'
-  const alertDetail = live.streamOnline
-    ? `${live.activePpeViolations} đang vi phạm · ${live.ppeAlertsToday} đã ghi (${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')})`
-    : live.backendReachable
-      ? `${live.ppeAlertsToday} sự kiện hôm nay · ${formatHelmetMetricBreakdown(live.perCamera, 'ppe_alerts_today')}`
-      : `${ppeCount} PPE · ${mockPersonCount} Persons · ${machineCount} Machine`
+  const alertDetail = live.streamOnline || live.backendReachable
+    ? `${machineCount} máy dừng · sự kiện PPE đã tắt`
+    : `${mockMachineCount} Machine · sự kiện PPE đã tắt`
 
   const kpis = [
     {
@@ -236,7 +233,7 @@ export function Module05Page() {
     const base = liveHelmetEvents.backendReachable
       ? liveHelmetEvents.events
       : (getVmsBackendUrl() ? [] : MOCK_PATROL_EVENTS)
-    return mergePatrolAndWorkforceEvents(base, workforceSnap.events)
+    return stripPatrolPpeEvents(mergePatrolAndWorkforceEvents(base, workforceSnap.events))
   }, [liveHelmetEvents.backendReachable, liveHelmetEvents.events, workforceSnap.events])
 
   const detailEvent = useMemo(
