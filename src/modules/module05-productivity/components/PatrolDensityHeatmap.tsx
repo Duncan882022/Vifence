@@ -362,9 +362,6 @@ export function PatrolDensityHeatmap({
         />,
         document.body,
       )}
-      {expanded && (
-        <div className="flex-1 min-h-[180px] invisible pointer-events-none" aria-hidden />
-      )}
       <div
         className={cn(
           'flex flex-col overflow-hidden h-full min-h-0 flex-1',

@@ -169,6 +169,7 @@ export function Module05Page() {
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
+  const cameraCollapsed = !tier2Open
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-01')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -249,7 +250,7 @@ export function Module05Page() {
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
       />
-      <PageLayout scrollable={isMobileLayout}>
+      <PageLayout scrollable={isMobileLayout && !cameraCollapsed}>
         {/* Tier 1 — KPIs */}
         <Panel
           title="Tổng Quan"
@@ -276,10 +277,10 @@ export function Module05Page() {
 
         {/* Tier 2 + Tier 3 — desktop: flex pool; mobile: scroll + min-height cho heatmap/sự kiện */}
         <div className={cn(
-          'flex flex-col gap-2 sm:gap-3',
-          isMobileLayout
-            ? 'min-h-0 pb-[env(safe-area-inset-bottom,0px)]'
-            : 'flex-1 min-h-0 overflow-hidden',
+          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0',
+          isMobileLayout && !cameraCollapsed
+            ? 'pb-[env(safe-area-inset-bottom,0px)]'
+            : 'overflow-hidden',
         )}>
           {/* Tier 2 — Camera */}
           <div className={cn(
@@ -359,20 +360,15 @@ export function Module05Page() {
 
           {/* Tier 3 — 2 separate panels: [HEATMAP] | [SỰ KIỆN] */}
           <div className={cn(
-            'flex gap-2 sm:gap-3 flex-col md:flex-row',
-            isMobileLayout
-              ? 'min-h-[min(72dvh,640px)] shrink-0'
-              : cn(
-                'min-h-0 flex-1 overflow-hidden',
-                tier2Open ? 'lg:flex-[10]' : 'lg:flex-1',
-              ),
+            'flex gap-2 sm:gap-3 flex-col md:flex-row flex-1 min-h-0 overflow-hidden',
+            !cameraCollapsed && isMobileLayout && 'shrink-0 min-h-[min(72dvh,640px)]',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
-                isMobileLayout && 'min-h-[280px] h-[min(42dvh,360px)]',
+                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[280px] h-[min(42dvh,360px)]',
               )}
               headerRight={
                 <button
@@ -398,7 +394,7 @@ export function Module05Page() {
               noPadding
               className={cn(
                 'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
-                isMobileLayout && 'min-h-[220px] h-[min(38dvh,320px)]',
+                cameraCollapsed ? 'h-full' : isMobileLayout && 'min-h-[220px] h-[min(38dvh,320px)]',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
               headerRight={
