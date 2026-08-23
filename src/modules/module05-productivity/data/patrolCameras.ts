@@ -1,10 +1,11 @@
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
+import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
 import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
 
 export type PatrolCameraFilterTab = 'Bodycam'
 
-export const PATROL_SITE_AREA = 'Cầu Sông Hốt'
+export const PATROL_SITE_AREA = PATROL_SITE_NAME
 
 const PATROL_BODY_CAMERAS: readonly { id: string; assignee: string; streamType: 'bodycam' | 'mobile' }[] = [
   { id: 'HC-01', assignee: 'Helmet 01', streamType: 'bodycam' },
@@ -21,8 +22,8 @@ function buildPatrolCamera(
     id,
     name: assignee,
     assignee,
-    location: PATROL_SITE_AREA,
-    zone: 'ZONE_A',
+    location: PATROL_SITE_NAME,
+    zone: PATROL_SITE_ZONE_ID,
     status: 'offline',
     streamType,
     ...(streamUrl ? { streamUrl } : {}),

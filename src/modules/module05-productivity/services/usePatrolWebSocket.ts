@@ -99,7 +99,7 @@ export function usePatrolWebSocket(_patrolId: string): {
     setRouteHistory(prev => appendRouteHistory(prev, HC02_CAMERA_ID, pos))
   }
 
-  /* HC-01: giữ pin ZONE_A (offline khi cam tắt — không giả lập di chuyển) */
+  /* HC-01: giữ pin tại center công trường (offline khi cam tắt — không giả lập di chuyển) */
   useEffect(() => {
     const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
     if (!pin) return

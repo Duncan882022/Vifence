@@ -83,14 +83,7 @@ interface ZoneDetectionConfig {
 }
 
 const ZONE_DETECTION_CONFIG: ZoneDetectionConfig[] = [
-  { zoneId: 'ZONE_A', personCount: 18, vehicleCount: 6, equipmentCount: 2, cameras: ['HC-01'] },
-  { zoneId: 'ZONE_B', personCount: 22, vehicleCount: 8, equipmentCount: 3, cameras: ['HC-02'] },
-  { zoneId: 'ZONE_C', personCount: 14, vehicleCount: 4, equipmentCount: 1, cameras: ['HC-03'] },
-  { zoneId: 'ZONE_D', personCount: 9,  vehicleCount: 2, equipmentCount: 1, cameras: ['HC-04'] },
-  { zoneId: 'ZONE_E', personCount: 6,  vehicleCount: 1, equipmentCount: 0, cameras: ['HC-05'] },
-  { zoneId: 'ZONE_F', personCount: 4,  vehicleCount: 4, equipmentCount: 2, cameras: ['HC-01', 'HC-03'] },
-  { zoneId: 'ZONE_G', personCount: 5,  vehicleCount: 2, equipmentCount: 0, cameras: ['HC-04', 'HC-05'] },
-  { zoneId: 'ZONE_H', personCount: 10, vehicleCount: 5, equipmentCount: 2, cameras: ['HC-02', 'HC-03'] },
+  { zoneId: 'ZONE_SITE', personCount: 24, vehicleCount: 8, equipmentCount: 3, cameras: ['HC-01', 'HC-02'] },
 ]
 
 function buildDetectionDots(): DetectionDot[] {

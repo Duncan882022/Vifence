@@ -9,11 +9,8 @@ import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 
 const ZONE_LABELS: Record<string, string> = {
-  ZONE_A: 'Khu thi công móng',
-  ZONE_B: 'Khu lắp dựng tầng',
-  ZONE_C: 'Khu hoàn thiện',
-  ZONE_D: 'Khu kho vật tư',
-  ZONE_E: 'Khu văn phòng công trường',
+  ZONE_SITE: 'Cầu Sông Hốt',
+  ZONE_A: 'Cầu Sông Hốt',
 }
 
 const TUNNEL_HEADERS: Record<string, string> = {
@@ -277,7 +274,7 @@ function eventTypeFromScenario(scenarioId: string | undefined, behavior?: string
 
 function zoneMetaForCamera(cameraId: string): { zoneId: string; zoneName: string } {
   const row = PATROL_HELMET_ZONE_ASSIGNMENTS.find(z => z.helmetId === cameraId)
-  const zoneId = row?.zoneId ?? 'ZONE_A'
+  const zoneId = row?.zoneId ?? 'ZONE_SITE'
   return { zoneId, zoneName: ZONE_LABELS[zoneId] ?? zoneId }
 }
 

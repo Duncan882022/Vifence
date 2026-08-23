@@ -1,80 +1,40 @@
 /** Module 05 — Site Map: GPS zones, helmet pins, patrol trail.
  *  Coordinate system: [lat, lng] throughout (Leaflet convention).
- *  GeoJSON consumers must swap to [lng, lat] per RFC 7946.
  *
- *  Site: công trường hiện tại (heatmap origin)
- *  Center: 20.943460°N, 106.911301°E
- *  Site perimeter (rotated quad — translated with site center):
- *    TOP  20.944487, 106.911458  |  RIGHT 20.943498, 106.912758
- *    LEFT 20.943612, 106.909926  |  BOT   20.942243, 106.911058
+ *  Công trường: Cầu Sông Hốt
+ *  Center: 20.933094°N, 106.923950°E
+ *  ROI: PATROL_SITE_CORNERS in patrolSiteGeometry.ts
  */
 
-/** Field-surveyed polygons — fixed, do not regenerate. */
-const SURVEYED_ZONE_POLYGONS = {
-  ZONE_A: [
-    [20.943664, 106.911406],
-    [20.943387, 106.911639],
-    [20.943115, 106.911230],
-    [20.943490, 106.911181],
-  ],
-  ZONE_D: [
-    [20.943235, 106.911664],
-    [20.942904, 106.911957],
-    [20.942679, 106.911597],
-    [20.942998, 106.911323],
-  ],
-  ZONE_E: [
-    [20.944305, 106.911464],
-    [20.943680, 106.912306],
-    [20.943431, 106.912133],
-    [20.944056, 106.911281],
-  ],
-} as const satisfies Record<string, [number, number][]>
+import {
+  clipPolygonToSiteBoundary,
+  PATROL_SITE_CLIP_RING,
+  PATROL_SITE_CORNERS,
+} from './patrolSiteGeometry'
 
-/**
- * Interpolated polygons — hand-placed in gaps between surveyed zones.
- * Validated: no bbox overlap with ZONE_A/D/E or each other.
- */
-const INTERP_ZONE_POLYGONS = {
-  ZONE_B: [
-    [20.943150, 106.910904],
-    [20.943660, 106.910904],
-    [20.943660, 106.911104],
-    [20.943150, 106.911104],
-  ],
-  ZONE_C: [
-    [20.943700, 106.910204],
-    [20.943980, 106.910204],
-    [20.943980, 106.910864],
-    [20.943700, 106.910864],
-  ],
-  ZONE_F: [
-    [20.944030, 106.910204],
-    [20.944487, 106.910864],
-    [20.944020, 106.910864],
-    [20.944020, 106.910204],
-  ],
-  ZONE_G: [
-    [20.942450, 106.909944],
-    [20.943120, 106.910564],
-    [20.942500, 106.910324],
-    [20.942850, 106.909924],
-  ],
-  ZONE_H: [
-    [20.944305, 106.912294],
-    [20.944250, 106.912694],
-    [20.943660, 106.912544],
-    [20.943660, 106.912294],
-  ],
-} as const satisfies Record<string, [number, number][]>
+export const PATROL_SITE_NAME = 'Cầu Sông Hốt'
+export const PATROL_SITE_ZONE_ID = 'ZONE_SITE'
 
-import { clipPolygonToSiteBoundary } from './patrolSiteGeometry'
+/** Map centre — tọa độ mặc định công trường. */
+export const PATROL_SITE_CENTER: [number, number] = [20.933094, 106.923950]
 
 function polygonCenter(polygon: [number, number][]): [number, number] {
-  if (polygon.length === 0) return [20.943460, 106.911301]
+  if (polygon.length === 0) return PATROL_SITE_CENTER
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+function insetPolygonRing(
+  ring: readonly [number, number][],
+  insetRatio: number,
+): [number, number][] {
+  const cLat = ring.reduce((s, p) => s + p[0], 0) / ring.length
+  const cLng = ring.reduce((s, p) => s + p[1], 0) / ring.length
+  return ring.map(([lat, lng]) => [
+    parseFloat((lat + (cLat - lat) * insetRatio).toFixed(6)),
+    parseFloat((lng + (cLng - lng) * insetRatio).toFixed(6)),
+  ])
 }
 
 /* ── GPS Zone type ──────────────────────────────────────────── */
@@ -92,10 +52,6 @@ export interface PatrolGpsZone {
   center: [number, number]
 }
 
-function buildZonePolygon(raw: readonly [number, number][]): [number, number][] {
-  return clipPolygonToSiteBoundary([...raw])
-}
-
 function buildGpsZone(
   zone_id: string,
   name: string,
@@ -105,7 +61,7 @@ function buildGpsZone(
   tier: 'primary' | 'secondary',
   borderColor: string,
 ): PatrolGpsZone {
-  const polygon = buildZonePolygon(rawPolygon)
+  const polygon = clipPolygonToSiteBoundary([...rawPolygon])
   return {
     zone_id,
     name,
@@ -118,26 +74,21 @@ function buildGpsZone(
   }
 }
 
-/* ── 8 GPS Zones ────────────────────────────────────────────── */
 /**
- * Layout (geographic, no overlap):
- *
- *  [ Cẩu F ] [ HT C  ] [ Cọc H ]     ← west / north / NE tip
- *  [ Móng A] [ Tầng B] [ VP  E ]     ← surveyed A + interp B + surveyed E
- *  [ Kho D ] [    Cổng G          ]  ← surveyed D + interp G
- *
- *  ZONE_A / D / E: field-surveyed (fixed)
- *  ZONE_B / C / F / G / H: interpolated in remaining gaps
+ * Chưa chia khu — một zone duy nhất = tên công trường, nằm trong ROI (inset ~6%).
  */
+const SITE_ZONE_RAW = insetPolygonRing(PATROL_SITE_CLIP_RING, 0.06)
+
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
-  buildGpsZone('ZONE_A', 'Khu thi công móng', 'Móng', SURVEYED_ZONE_POLYGONS.ZONE_A, 1200, 'primary', '#ef4444'),
-  buildGpsZone('ZONE_B', 'Khu lắp dựng tầng', 'Tầng', INTERP_ZONE_POLYGONS.ZONE_B, 850, 'primary', '#eab308'),
-  buildGpsZone('ZONE_C', 'Khu hoàn thiện', 'HT', INTERP_ZONE_POLYGONS.ZONE_C, 1450, 'primary', '#22c55e'),
-  buildGpsZone('ZONE_D', 'Khu kho vật tư', 'Kho', SURVEYED_ZONE_POLYGONS.ZONE_D, 600, 'primary', '#3b82f6'),
-  buildGpsZone('ZONE_E', 'Khu văn phòng công trường', 'VP', SURVEYED_ZONE_POLYGONS.ZONE_E, 400, 'primary', '#a855f7'),
-  buildGpsZone('ZONE_F', 'Sân cẩu', 'Cẩu', INTERP_ZONE_POLYGONS.ZONE_F, 700, 'secondary', '#06b6d4'),
-  buildGpsZone('ZONE_G', 'Cổng ra vào', 'Cổng', INTERP_ZONE_POLYGONS.ZONE_G, 300, 'secondary', '#f59e0b'),
-  buildGpsZone('ZONE_H', 'Khu đúc cọc', 'Cọc', INTERP_ZONE_POLYGONS.ZONE_H, 980, 'secondary', '#64748b'),
+  buildGpsZone(
+    PATROL_SITE_ZONE_ID,
+    PATROL_SITE_NAME,
+    PATROL_SITE_NAME,
+    SITE_ZONE_RAW,
+    5200,
+    'primary',
+    '#ef4444',
+  ),
 ]
 
 /* ── Helmet GPS pins ────────────────────────────────────────── */
@@ -155,28 +106,27 @@ export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
   helmetId: string
   zoneId: string
 }[] = [
-  { helmetId: 'HC-01', zoneId: 'ZONE_A' },
-  { helmetId: 'HC-02', zoneId: 'ZONE_A' },
+  { helmetId: 'HC-01', zoneId: PATROL_SITE_ZONE_ID },
+  { helmetId: 'HC-02', zoneId: PATROL_SITE_ZONE_ID },
 ] as const
 
 function buildHelmetPins(): PatrolHelmetPin[] {
+  const zone = PATROL_GPS_ZONES[0]
   return (PATROL_HELMET_ZONE_ASSIGNMENTS as readonly { helmetId: string; zoneId: string }[]).map(({ helmetId, zoneId }) => {
-    const zone = PATROL_GPS_ZONES.find(z => z.zone_id === zoneId)
-    if (!zone) throw new Error(`Missing zone ${zoneId} for ${helmetId}`)
     const num = helmetId.replace('HC-', '')
     return {
       id: helmetId,
       label: `Helmet ${num}`,
       zoneId,
       color: zone.borderColor,
-      position: zone.center,
+      position: PATROL_SITE_CENTER,
     }
   })
 }
 
 export const PATROL_HELMET_GPS_PINS: PatrolHelmetPin[] = buildHelmetPins()
 
-/** Tạm chỉ HC-01 + HC-02 trên heatmap (ẩn giả lập HC-03…05). */
+/** Tạm chỉ HC-01 + HC-02 trên heatmap. */
 export const PATROL_MAP_ACTIVE_HELMET_IDS = ['HC-01', 'HC-02'] as const
 
 export const PATROL_MAP_ACTIVE_HELMET_PINS: PatrolHelmetPin[] = PATROL_HELMET_GPS_PINS.filter(
@@ -210,10 +160,6 @@ export function patrolZoneInteriorPoint(
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
-/**
- * Lộ trình tuần tra tự nhiên trong zone — zigzag nội bộ, không vòng tròn.
- * Mỗi mũ lệch phase để 5 route không trùng nhau.
- */
 export function buildHelmetZoneTrail(
   polygon: [number, number][],
   phaseSeed = 0,
@@ -248,7 +194,6 @@ export function buildHelmetZoneTrail(
   return trail
 }
 
-/** Lộ trình tuần tra theo khu — mỗi mũ zigzag trong polygon zone được giao. */
 export const PATROL_HELMET_ZONE_TRAILS: Record<string, [number, number][]> =
   Object.fromEntries(
     PATROL_HELMET_GPS_PINS.map(pin => {
@@ -259,38 +204,19 @@ export const PATROL_HELMET_ZONE_TRAILS: Record<string, [number, number][]> =
   )
 
 export function getPatrolHelmetZoneName(helmetId: string): string {
-  if (helmetId === 'HC-01' || helmetId === 'HC-02') return 'Cầu Sông Hốt'
-  const pin = PATROL_HELMET_GPS_PINS.find(p => p.id === helmetId)
-  if (!pin) return helmetId
-  return PATROL_GPS_ZONES.find(z => z.zone_id === pin.zoneId)?.name ?? pin.zoneId
+  void helmetId
+  return PATROL_SITE_NAME
 }
-
-/* ── GPS Patrol Trail ────────────────────────────────────────── */
-/**
- * Generates 80 GPS points (2s interval) forming a patrol loop:
- * A → B → E → H → C → F → D → G → A
- *
- * Each waypoint is a zone centre; 10 steps between each.
- */
-const TRAIL_ZONE_IDS = ['ZONE_A', 'ZONE_B', 'ZONE_E', 'ZONE_H', 'ZONE_C', 'ZONE_F', 'ZONE_D', 'ZONE_G'] as const
-
-function zoneCenter(zoneId: string): [number, number] {
-  const z = PATROL_GPS_ZONES.find(g => g.zone_id === zoneId)
-  if (!z) throw new Error(`Missing zone ${zoneId}`)
-  return z.center
-}
-
-const TRAIL_WAYPOINTS: [number, number][] = [
-  ...TRAIL_ZONE_IDS.map(zoneCenter),
-  zoneCenter('ZONE_A'),
-]
 
 export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
+  const zone = PATROL_GPS_ZONES[0]
+  const ring = zone.polygon.length >= 4 ? zone.polygon : [...PATROL_SITE_CORNERS]
+  const waypoints = [...ring.slice(0, 4), ring[0]]
   const trail: [number, number][] = []
-  for (let i = 0; i < TRAIL_WAYPOINTS.length - 1; i++) {
-    const [lat1, lng1] = TRAIL_WAYPOINTS[i]
-    const [lat2, lng2] = TRAIL_WAYPOINTS[i + 1]
-    for (let s = 0; s < stepsPerSegment; s++) {
+  for (let i = 0; i < waypoints.length - 1; i += 1) {
+    const [lat1, lng1] = waypoints[i]
+    const [lat2, lng2] = waypoints[i + 1]
+    for (let s = 0; s < stepsPerSegment; s += 1) {
       const t = s / stepsPerSegment
       trail.push([
         parseFloat(lerp(lat1, lat2, t).toFixed(6)),
@@ -301,12 +227,8 @@ export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
   return trail
 }
 
-/** Flat list of GPS trail positions (used for polyline rendering). */
 export const PATROL_GPS_TRAIL = buildPatrolGpsTrail()
 
-/**
- * Ranh giới toàn công trường — re-export from patrolSiteGeometry.
- */
 export {
   PATROL_SITE_BOUNDARY,
   PATROL_SITE_CLIP_RING,
@@ -315,19 +237,24 @@ export {
   clipPolygonToSiteBoundary,
 } from './patrolSiteGeometry'
 
-/** Map centre for Leaflet MapContainer — geometric centroid of the site quad. */
-export const PATROL_SITE_CENTER: [number, number] = [20.943460, 106.911301]
+const SITE_PAD = 0.00085
 
 /** Giới hạn pan/zoom — chỉ trong phạm vi công trường [SW, NE]. */
 export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
-  [20.941700, 106.909044],
-  [20.945200, 106.913644],
+  [
+    Math.min(...PATROL_SITE_CORNERS.map(p => p[0])) - SITE_PAD,
+    Math.min(...PATROL_SITE_CORNERS.map(p => p[1])) - SITE_PAD,
+  ],
+  [
+    Math.max(...PATROL_SITE_CORNERS.map(p => p[0])) + SITE_PAD,
+    Math.max(...PATROL_SITE_CORNERS.map(p => p[1])) + SITE_PAD,
+  ],
 ]
 
 export const PATROL_SITE_MIN_ZOOM = 15
 export const PATROL_SITE_MAX_ZOOM = 19
 
-/* ── Legacy exports (kept for backward compat with old SVG components) ── */
+/* ── Legacy exports (backward compat) ── */
 
 export type PatrolZoneDisplayTier = 'primary' | 'secondary'
 
@@ -345,14 +272,17 @@ export interface PatrolHeatmapZoneShape {
 
 /** @deprecated — dùng PATROL_GPS_ZONES */
 export const PATROL_HEATMAP_ZONE_SHAPES: PatrolHeatmapZoneShape[] = [
-  { id: 'ZONE_A', label: 'ZONE_A', sublabel: 'Khu thi công móng', polygon: [{ x: 10, y: 18 }, { x: 34, y: 16 }, { x: 36, y: 38 }, { x: 12, y: 40 }], cx: 23, cy: 28, displayTier: 'primary', borderColor: '#ef4444', cardAnchor: { x: 23, y: 28 } },
-  { id: 'ZONE_B', label: 'ZONE_B', sublabel: 'Khu lắp dựng tầng', polygon: [{ x: 36, y: 12 }, { x: 58, y: 12 }, { x: 56, y: 34 }, { x: 34, y: 36 }], cx: 45, cy: 23, displayTier: 'primary', borderColor: '#eab308', cardAnchor: { x: 45, y: 23 } },
-  { id: 'ZONE_C', label: 'ZONE_C', sublabel: 'Khu hoàn thiện', polygon: [{ x: 58, y: 22 }, { x: 82, y: 24 }, { x: 80, y: 46 }, { x: 56, y: 44 }], cx: 69, cy: 34, displayTier: 'primary', borderColor: '#22c55e', cardAnchor: { x: 69, y: 34 } },
-  { id: 'ZONE_D', label: 'ZONE_D', sublabel: 'Khu kho vật tư', polygon: [{ x: 8, y: 52 }, { x: 30, y: 50 }, { x: 32, y: 72 }, { x: 10, y: 74 }], cx: 20, cy: 62, displayTier: 'primary', borderColor: '#3b82f6', cardAnchor: { x: 20, y: 62 } },
-  { id: 'ZONE_E', label: 'ZONE_E', sublabel: 'Khu VP công trường', polygon: [{ x: 34, y: 54 }, { x: 54, y: 52 }, { x: 52, y: 74 }, { x: 32, y: 76 }], cx: 43, cy: 63, displayTier: 'primary', borderColor: '#a855f7', cardAnchor: { x: 43, y: 63 } },
-  { id: 'ZONE_F', label: 'ZONE_F', sublabel: 'Sân cẩu', polygon: [{ x: 54, y: 52 }, { x: 72, y: 50 }, { x: 74, y: 72 }, { x: 56, y: 74 }], cx: 63, cy: 62, displayTier: 'secondary', borderColor: '#64748b', cardAnchor: { x: 63, y: 62 } },
-  { id: 'ZONE_G', label: 'ZONE_G', sublabel: 'Cổng ra vào', polygon: [{ x: 66, y: 8 }, { x: 88, y: 8 }, { x: 88, y: 22 }, { x: 66, y: 22 }], cx: 77, cy: 15, displayTier: 'secondary', borderColor: '#64748b', cardAnchor: { x: 77, y: 15 } },
-  { id: 'ZONE_H', label: 'ZONE_H', sublabel: 'Khu đúc cọc', polygon: [{ x: 10, y: 38 }, { x: 34, y: 36 }, { x: 32, y: 50 }, { x: 8, y: 52 }], cx: 21, cy: 44, displayTier: 'secondary', borderColor: '#64748b', cardAnchor: { x: 21, y: 44 } },
+  {
+    id: PATROL_SITE_ZONE_ID,
+    label: PATROL_SITE_ZONE_ID,
+    sublabel: PATROL_SITE_NAME,
+    polygon: [{ x: 12, y: 14 }, { x: 88, y: 12 }, { x: 86, y: 86 }, { x: 10, y: 88 }],
+    cx: 50,
+    cy: 50,
+    displayTier: 'primary',
+    borderColor: '#ef4444',
+    cardAnchor: { x: 50, y: 50 },
+  },
 ]
 
 export const PATROL_PRIMARY_ZONE_IDS = PATROL_GPS_ZONES
@@ -366,13 +296,10 @@ export function getPatrolZoneShape(zoneId: string): PatrolHeatmapZoneShape | und
   return PATROL_HEATMAP_ZONE_SHAPES.find(z => z.id === zoneId)
 }
 
-/** @deprecated — dùng PATROL_HELMET_GPS_PINS */
+/** @deprecated */
 export const PATROL_HELMET_MARKERS = [
-  { id: 'HC-01', zoneId: 'ZONE_A', label: 'HC-01', x: 23, y: 30, color: '#ef4444' },
-  { id: 'HC-02', zoneId: 'ZONE_B', label: 'HC-02', x: 45, y: 25, color: '#eab308' },
-  { id: 'HC-03', zoneId: 'ZONE_C', label: 'HC-03', x: 69, y: 36, color: '#22c55e' },
-  { id: 'HC-04', zoneId: 'ZONE_D', label: 'HC-04', x: 20, y: 64, color: '#3b82f6' },
-  { id: 'HC-05', zoneId: 'ZONE_E', label: 'HC-05', x: 43, y: 65, color: '#a855f7' },
+  { id: 'HC-01', zoneId: PATROL_SITE_ZONE_ID, label: 'HC-01', x: 45, y: 48, color: '#ef4444' },
+  { id: 'HC-02', zoneId: PATROL_SITE_ZONE_ID, label: 'HC-02', x: 55, y: 52, color: '#ef4444' },
 ] as const
 
 export const PATROL_HELMET_IDS = PATROL_HELMET_GPS_PINS.map(p => p.id)
@@ -394,7 +321,7 @@ export function buildPatrolRouteSegments(
   return segments
 }
 
-export const PATROL_TRAIL_ZONE_IDS = ['ZONE_A', 'ZONE_B', 'ZONE_C', 'ZONE_D', 'ZONE_E'] as const
+export const PATROL_TRAIL_ZONE_IDS = [PATROL_SITE_ZONE_ID] as const
 
 /** @deprecated */
 export const PATROL_HELMET_MAP_PINS: Record<string, { zoneId: string; label: string }> =

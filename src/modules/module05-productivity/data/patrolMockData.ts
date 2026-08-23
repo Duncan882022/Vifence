@@ -77,14 +77,14 @@ export const MOCK_PATROL_DASHBOARD: PatrolDashboard = {
   sessionLabel: 'PATROL_20260820_0800',
 }
 
-/* ── Cameras ── GPS updated to match GPS zone grid ─────────── */
+/* ── Cameras ── GPS tại Cầu Sông Hốt ───────────────────────── */
 export const MOCK_HELMET_CAMERAS: HelmetCamera[] = [
   {
     id: 'HC-01',
     name: 'Helmet 01',
     status: 'ONLINE',
-    currentZone: 'ZONE_A',
-    gps: { lat: 20.943667, lng: 106.910054 },
+    currentZone: 'ZONE_SITE',
+    gps: { lat: 20.933094, lng: 106.923950 },
     activeSeconds: 2884,
     patrolSessionId: 'PATROL_20260820_0800',
   },
@@ -92,50 +92,27 @@ export const MOCK_HELMET_CAMERAS: HelmetCamera[] = [
     id: 'HC-02',
     name: 'Helmet 02',
     status: 'ONLINE',
-    currentZone: 'ZONE_B',
-    gps: { lat: 20.943667, lng: 106.911321 },
+    currentZone: 'ZONE_SITE',
+    gps: { lat: 20.933120, lng: 106.924010 },
     activeSeconds: 2585,
     patrolSessionId: 'PATROL_20260820_0815',
   },
-  {
-    id: 'HC-03',
-    name: 'Helmet 03',
-    status: 'ONLINE',
-    currentZone: 'ZONE_C',
-    gps: { lat: 20.944567, lng: 106.911321 },
-    activeSeconds: 2410,
-    patrolSessionId: 'PATROL_20260820_0822',
-  },
-  {
-    id: 'HC-04',
-    name: 'Helmet 04',
-    status: 'ONLINE',
-    currentZone: 'ZONE_D',
-    gps: { lat: 20.942767, lng: 106.910054 },
-    activeSeconds: 1980,
-    patrolSessionId: 'PATROL_20260820_0830',
-  },
-  {
-    id: 'HC-05',
-    name: 'Helmet 05',
-    status: 'ONLINE',
-    currentZone: 'ZONE_E',
-    gps: { lat: 20.943667, lng: 106.912587 },
-    activeSeconds: 1755,
-    patrolSessionId: 'PATROL_20260820_0840',
-  },
 ]
 
-/* ── Zones ─────────────────────────────────────────────────── */
+/* ── Zones — chưa chia khu, một zone = công trường ─────────── */
 export const MOCK_PATROL_ZONES: PatrolZone[] = [
-  { id: 'ZONE_A', name: 'Khu thi công móng',       shortName: 'Móng', coverage: 'VISITED',     dwellSeconds: 624, peopleCurrent: 42, vehiclesCurrent: 8,  uniquePeople: 58, uniqueVehicles: 11, areaSqm: 1200 },
-  { id: 'ZONE_B', name: 'Khu lắp dựng tầng',       shortName: 'Tầng', coverage: 'VISITED',     dwellSeconds: 380, peopleCurrent: 61, vehiclesCurrent: 14, uniquePeople: 29, uniqueVehicles: 5,  areaSqm: 850  },
-  { id: 'ZONE_C', name: 'Khu hoàn thiện',           shortName: 'HT',   coverage: 'VISITED',     dwellSeconds: 512, peopleCurrent: 35, vehiclesCurrent: 6,  uniquePeople: 48, uniqueVehicles: 12, areaSqm: 1450 },
-  { id: 'ZONE_D', name: 'Khu kho vật tư',           shortName: 'Kho',  coverage: 'VISITED',     dwellSeconds: 186, peopleCurrent: 18, vehiclesCurrent: 3,  uniquePeople: 9,  uniqueVehicles: 2,  areaSqm: 600  },
-  { id: 'ZONE_E', name: 'Khu văn phòng công trường',shortName: 'VP',   coverage: 'VISITED',     dwellSeconds: 220, peopleCurrent: 12, vehiclesCurrent: 2,  uniquePeople: 12, uniqueVehicles: 3,  areaSqm: 400  },
-  { id: 'ZONE_F', name: 'Sân cẩu',                  shortName: 'Cẩu',  coverage: 'VISITED',     dwellSeconds: 340, peopleCurrent: 8,  vehiclesCurrent: 6,  uniquePeople: 11, uniqueVehicles: 7,  areaSqm: 700  },
-  { id: 'ZONE_G', name: 'Cổng ra vào',              shortName: 'Cổng', coverage: 'VISITED',     dwellSeconds: 98,  peopleCurrent: 12, vehiclesCurrent: 4,  uniquePeople: 16, uniqueVehicles: 5,  areaSqm: 300  },
-  { id: 'ZONE_H', name: 'Khu đúc cọc',              shortName: 'Cọc',  coverage: 'VISITED',     dwellSeconds: 460, peopleCurrent: 22, vehiclesCurrent: 9,  uniquePeople: 27, uniqueVehicles: 10, areaSqm: 980  },
+  {
+    id: 'ZONE_SITE',
+    name: 'Cầu Sông Hốt',
+    shortName: 'Cầu Sông Hốt',
+    coverage: 'VISITED',
+    dwellSeconds: 624,
+    peopleCurrent: 42,
+    vehiclesCurrent: 8,
+    uniquePeople: 58,
+    uniqueVehicles: 11,
+    areaSqm: 5200,
+  },
 ]
 
 /* ── Events — GPS updated to match GPS zone grid ───────────── */

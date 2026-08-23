@@ -1,21 +1,27 @@
 /**
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
+ *
+ * Công trường Cầu Sông Hốt — center 20.933094, 106.923950
  */
 
-/** Ranh giới công trường — 4 góc thực đo (TOP → RIGHT → BOTTOM → LEFT → close). */
-export const PATROL_SITE_BOUNDARY: [number, number][] = [
-  [20.944487, 106.911458],
-  [20.943498, 106.912758],
-  [20.942243, 106.911058],
-  [20.943612, 106.909926],
-  [20.944487, 106.911458],
+/** 4 góc ROI công trường (user survey) — đóng vòng tại điểm đầu. */
+export const PATROL_SITE_CORNERS: [number, number][] = [
+  [20.934409, 106.925451],
+  [20.932911, 106.926792],
+  [20.931753, 106.921778],
+  [20.933707, 106.921705],
 ]
 
-const SITE_RING = PATROL_SITE_BOUNDARY.slice(0, 4)
+/** Ranh giới công trường — polygon đỏ trên heatmap. */
+export const PATROL_SITE_BOUNDARY: [number, number][] = [
+  ...PATROL_SITE_CORNERS,
+  PATROL_SITE_CORNERS[0],
+]
 
-/** ~3.5% inset toward centroid — fill không chạm/vượt viền đỏ khi render anti-alias. */
-/** Inset site ring — clip heatmap/detection so fill không vượt viền đỏ. */
+const SITE_RING = PATROL_SITE_CORNERS
+
+/** ~3.5% inset toward centroid — clip heatmap/detection không vượt viền đỏ. */
 export const PATROL_SITE_CLIP_RING: [number, number][] = (() => {
   const cLat = SITE_RING.reduce((s, p) => s + p[0], 0) / SITE_RING.length
   const cLng = SITE_RING.reduce((s, p) => s + p[1], 0) / SITE_RING.length

@@ -10,6 +10,7 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS, PATROL_SITE_AREA } from '../data/patrolCameras'
+import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
@@ -239,11 +240,11 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
   }, [hc02Helmet?.timestamp, zonePop?.timestamp, workforce.server_time])
 
   const activeZoneName = useMemo(() => {
-    if (hc02Helmet?.zone_id) return hc02Helmet.zone_id.replace(/^ZONE-?/, '')
+    if (hc02Helmet?.zone_id) return PATROL_SITE_NAME
     const zone = liveZones.find(z => (z.peopleCurrent ?? 0) > 0)
       ?? liveZones.find(z => z.coverage === 'VISITED')
       ?? liveZones[0]
-    return zone?.shortName ?? zone?.name ?? '—'
+    return zone?.name ?? PATROL_SITE_NAME
   }, [hc02Helmet?.zone_id, liveZones])
 
   const hc02Online = Boolean(hc02Helmet?.online) || helmetOnlineById['HC-02']
