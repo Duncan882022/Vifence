@@ -21,6 +21,7 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import type { DetectionDot } from '../data/patrolDetectionData'
+import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { fetchPatrolHelmetMetrics } from '../services/patrolLiveEvents.service'
 
 const HC02 = 'HC-02'
@@ -40,7 +41,12 @@ function asGpsPair(lat: unknown, lng: unknown): [number, number] | null {
 }
 
 export interface Hc02LiveMapState {
+  /** GPS thật từ thiết bị / backend */
   hasLiveGps: boolean
+  /** Stream online nhưng chưa có GPS — dùng PATROL_SITE_CENTER */
+  usingDefaultGps: boolean
+  /** Có tọa độ hiển thị trên map (GPS thật hoặc mặc định) */
+  hasMapPosition: boolean
   lat: number | null
   lng: number | null
   /** Số người trên frame hiện tại */
@@ -55,6 +61,9 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [personCount, setPersonCount] = useState(0)
+  const [streamOnline, setStreamOnline] = useState(
+    () => Boolean(getPatrolMobileLiveSnapshot(HC02)?.streamOnline),
+  )
   const [registryTick, setRegistryTick] = useState(0)
 
   const applyGps = (nextLat: number, nextLng: number) => {
@@ -97,11 +106,15 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     }
 
     const mobile = getPatrolMobileLiveSnapshot(HC02)
-    if (mobile) applyPerson(mobile.personCount)
+    if (mobile) {
+      applyPerson(mobile.personCount)
+      setStreamOnline(Boolean(mobile.streamOnline))
+    }
 
     return subscribePatrolMobileLiveSnapshot(snap => {
       if (!snap || snap.cameraId !== HC02) return
       applyPerson(snap.personCount)
+      setStreamOnline(Boolean(snap.streamOnline))
     })
   }, [])
 
@@ -119,8 +132,10 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
         const mobile = getPatrolMobileLiveSnapshot(HC02)
         if (mobile) {
           setPersonCount(mobile.personCount)
+          setStreamOnline(Boolean(mobile.streamOnline))
         } else {
           setPersonCount(Math.max(0, Math.floor(Number(metrics.person_count ?? 0))))
+          setStreamOnline(Boolean(metrics.stream_online))
         }
       } catch {
         // giữ trạng thái cuối
@@ -145,7 +160,19 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     return () => window.clearInterval(t)
   }, [lat, lng])
 
-  const hasGps = isValidGps(lat, lng)
+  const hasLiveGps = isValidGps(lat, lng)
+  const usingDefaultGps = streamOnline && !hasLiveGps
+  const hasMapPosition = hasLiveGps || usingDefaultGps
+  const effectiveLat = hasLiveGps
+    ? lat
+    : usingDefaultGps
+      ? PATROL_SITE_CENTER[0]
+      : null
+  const effectiveLng = hasLiveGps
+    ? lng
+    : usingDefaultGps
+      ? PATROL_SITE_CENTER[1]
+      : null
 
   const dots = useMemo(() => {
     void registryTick
@@ -158,12 +185,14 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   }, [registryTick])
 
   return {
-    hasLiveGps: hasGps,
-    lat,
-    lng,
+    hasLiveGps,
+    usingDefaultGps,
+    hasMapPosition,
+    lat: effectiveLat,
+    lng: effectiveLng,
     personCount,
     historicalDotCount,
     dots,
-    waitingGpsForDots: personCount > 0 && historicalDotCount === 0 && !hasGps,
+    waitingGpsForDots: personCount > 0 && historicalDotCount === 0 && !hasMapPosition,
   }
 }

@@ -16,7 +16,7 @@ import {
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   type DetectionDot,
 } from '../data/patrolDetectionData'
-import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
+import { PATROL_SITE_CENTER, PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
@@ -119,13 +119,25 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
 
   const mergedCameraPositions = useMemo(() => {
     const next = { ...cameraPositions }
-    if (hc02Live.hasLiveGps && hc02Live.lat != null && hc02Live.lng != null) {
+    if (helmetOnlineById['HC-02']) {
+      next['HC-02'] = hc02Live.lat != null && hc02Live.lng != null
+        ? [hc02Live.lat, hc02Live.lng]
+        : PATROL_SITE_CENTER
+    } else if (hc02Live.hasLiveGps && hc02Live.lat != null && hc02Live.lng != null) {
       next['HC-02'] = [hc02Live.lat, hc02Live.lng]
     } else if (hc02Helmet?.lat != null && hc02Helmet?.lon != null) {
       next['HC-02'] = [hc02Helmet.lat, hc02Helmet.lon]
     }
     return next
-  }, [cameraPositions, hc02Live.hasLiveGps, hc02Live.lat, hc02Live.lng, hc02Helmet?.lat, hc02Helmet?.lon])
+  }, [
+    cameraPositions,
+    helmetOnlineById,
+    hc02Live.hasLiveGps,
+    hc02Live.lat,
+    hc02Live.lng,
+    hc02Helmet?.lat,
+    hc02Helmet?.lon,
+  ])
 
   const mergedRouteHistory = useMemo(() => {
     if (!hc02Live.hasLiveGps || hc02Live.lat == null || hc02Live.lng == null) {
@@ -332,6 +344,10 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
               GPS: {hc02Live.lat?.toFixed(5)}, {hc02Live.lng?.toFixed(5)}
               {headingDeg != null && Number.isFinite(headingDeg) ? ` · Heading ${Math.round(headingDeg)}°` : ''}
             </span>
+          ) : hc02Live.usingDefaultGps ? (
+            <span className="text-amber-400/80 tabular-nums">
+              GPS mặc định: {hc02Live.lat?.toFixed(5)}, {hc02Live.lng?.toFixed(5)}
+            </span>
           ) : hc02Live.waitingGpsForDots ? (
             <span className="text-amber-400/80">Detect {hc02Live.personCount} — chờ GPS…</span>
           ) : (
@@ -435,7 +451,7 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
           helmetHeadingById={helmetHeadingById}
           onDetectionClick={onDetectionClick}
           requireLiveGpsForHc02
-          hasHc02LiveGps={hc02Live.hasLiveGps}
+          hasHc02LiveGps={hc02Live.hasMapPosition}
           mapZoom={viewport.mapZoom}
           compactControls={viewport.compactChrome}
         />

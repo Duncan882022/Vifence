@@ -4,7 +4,7 @@ import {
   getPatrolHelmetGpsLastKnown,
 } from '@/services/patrolHelmetGpsBridge'
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
-import { PATROL_HELMET_ZONE_ASSIGNMENTS } from '../data/patrolSiteMap'
+import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 
@@ -296,6 +296,7 @@ function resolveEventGps(
   if (cameraId === 'HC-02') {
     const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
     if (snap) return { lat: snap.lat, lng: snap.lng }
+    return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
   }
   return { lat: 0, lng: 0 }
 }
