@@ -25,7 +25,13 @@ export function PatrolEventSnapshot({ event, className, onClick }: PatrolEventSn
           ? 'bg-gradient-to-br from-red-950/80 via-[#0a0e17] to-[#060b14]'
           : event.type === 'PERSON_DETECTED'
             ? 'bg-gradient-to-br from-sky-950/70 via-[#0a0e17] to-[#060b14]'
-            : 'bg-gradient-to-br from-amber-950/70 via-[#0a0e17] to-[#060b14]',
+            : event.type === 'IDENTITY_VERIFIED'
+              ? 'bg-gradient-to-br from-violet-950/70 via-[#0a0e17] to-[#060b14]'
+              : event.type === 'HIGH_DENSITY'
+                ? 'bg-gradient-to-br from-orange-950/70 via-[#0a0e17] to-[#060b14]'
+                : event.type === 'POPULATION_OBSERVED' || event.type === 'POPULATION_CHANGE'
+                  ? 'bg-gradient-to-br from-emerald-950/70 via-[#0a0e17] to-[#060b14]'
+                  : 'bg-gradient-to-br from-amber-950/70 via-[#0a0e17] to-[#060b14]',
       )} />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 p-1">
         <Icon className={cn('w-4 h-4', meta.color)} aria-hidden />

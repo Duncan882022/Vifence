@@ -34,6 +34,7 @@ import {
   setPatrolHelmetGps,
 } from '@/services/patrolHelmetGpsBridge'
 import { watchDeviceGps } from '../services/deviceGps.service'
+import { getLastDeviceHeading, watchDeviceHeading } from '../services/deviceHeading.service'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend.service'
@@ -160,6 +161,7 @@ export function MobileCameraFeed({
             return snap ? { lat: snap.lat, lng: snap.lng } : null
           }
         : undefined,
+      getHeading: cameraId === 'HC-02' ? () => getLastDeviceHeading() : undefined,
       onResult: (result: MobileAiAnalyzeResult) => {
         const minConf = (d: MobileAiDetection) => {
           if (overlayModelId === 'ppe') {
@@ -294,6 +296,11 @@ export function MobileCameraFeed({
         updatedAt: reading.updatedAt,
       })
     })
+  }, [cameraId, status])
+
+  useEffect(() => {
+    if (cameraId !== 'HC-02' || status !== 'live') return
+    return watchDeviceHeading()
   }, [cameraId, status])
 
   /* HC-02: heartbeat online — cam trước/sau đều tính live (kể cả lúc AI tạm dừng). */

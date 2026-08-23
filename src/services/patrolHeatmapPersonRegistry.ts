@@ -170,6 +170,7 @@ export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
     cameraId: row.cameraId,
     confidence: row.confidence,
     label: row.label,
+    lastSeenAt: row.lastSeenAt,
   }))
 }
 

@@ -47,11 +47,30 @@ def today_iso_date() -> str:
     return _event_date()
 
 
-def update_patrol_gps(camera_id: str, gps_lat: float | None, gps_lng: float | None) -> None:
-    """GPS từ mobile frame — gắn vào sự kiện PPE HC-*."""
+def update_patrol_gps(
+    camera_id: str,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    *,
+    heading: float | None = None,
+    pitch: float | None = None,
+    roll: float | None = None,
+) -> None:
+    """GPS (+ optional heading) từ mobile frame — gắn sự kiện PPE HC-*."""
     if not is_patrol_camera_id(camera_id):
         return
     if gps_lat is None or gps_lng is None:
+        # Heading-only update
+        if heading is None and pitch is None and roll is None:
+            return
+        from .workforce_engine import workforce_engine
+        workforce_engine.update_helmet(
+            camera_id,
+            heading=heading,
+            pitch=pitch,
+            roll=roll,
+            online=True,
+        )
         return
     try:
         lat = float(gps_lat)
@@ -62,11 +81,40 @@ def update_patrol_gps(camera_id: str, gps_lat: float | None, gps_lng: float | No
         return
     if lat == 0.0 and lng == 0.0:
         return
-    _patrol_gps[camera_id] = {
+    entry: dict[str, Any] = {
         "gps_lat": lat,
         "gps_lng": lng,
         "updated_at": time.time(),
     }
+    if heading is not None:
+        try:
+            entry["heading"] = float(heading) % 360.0
+        except (TypeError, ValueError):
+            pass
+    if pitch is not None:
+        try:
+            entry["pitch"] = float(pitch)
+        except (TypeError, ValueError):
+            pass
+    if roll is not None:
+        try:
+            entry["roll"] = float(roll)
+        except (TypeError, ValueError):
+            pass
+    _patrol_gps[camera_id] = entry
+    try:
+        from .workforce_engine import workforce_engine
+        workforce_engine.update_helmet(
+            camera_id,
+            lat=lat,
+            lon=lng,
+            heading=entry.get("heading"),
+            pitch=entry.get("pitch"),
+            roll=entry.get("roll"),
+            online=True,
+        )
+    except Exception:
+        pass
 
 
 def get_patrol_gps(camera_id: str) -> tuple[float | None, float | None]:
@@ -78,11 +126,22 @@ def get_patrol_gps(camera_id: str) -> tuple[float | None, float | None]:
     return entry.get("gps_lat"), entry.get("gps_lng")
 
 
+def get_patrol_heading(camera_id: str) -> float | None:
+    entry = _patrol_gps.get(camera_id)
+    if not entry:
+        return None
+    if (time.time() - float(entry.get("updated_at") or 0)) > PATROL_GPS_TTL_SEC:
+        return None
+    h = entry.get("heading")
+    return float(h) if h is not None else None
+
+
 def patrol_gps_payload(camera_id: str) -> dict[str, Any]:
     lat, lng = get_patrol_gps(camera_id)
+    heading = get_patrol_heading(camera_id)
     if lat is None or lng is None:
-        return {"gps_lat": None, "gps_lng": None}
-    return {"gps_lat": lat, "gps_lng": lng}
+        return {"gps_lat": None, "gps_lng": None, "heading": heading}
+    return {"gps_lat": lat, "gps_lng": lng, "heading": heading}
 
 
 def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
@@ -128,6 +187,24 @@ def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
         "updated_at": time.time(),
         "last_frame_at": time.time(),
     }
+
+    # Workforce heatmap engines (observability / objects / population / events)
+    try:
+        from .workforce_engine import ingest_patrol_analyze_result
+
+        lat, lng = get_patrol_gps(camera_id)
+        heading = get_patrol_heading(camera_id)
+        wf = ingest_patrol_analyze_result(
+            camera_id,
+            result,
+            gps_lat=lat,
+            gps_lng=lng,
+            heading=heading,
+        )
+        if wf and isinstance(result, dict):
+            result["workforce"] = wf
+    except Exception:
+        pass
 
 
 def _metrics_from_vms_overlay(overlay: dict) -> dict[str, Any]:

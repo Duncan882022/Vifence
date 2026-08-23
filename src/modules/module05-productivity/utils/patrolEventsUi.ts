@@ -1,8 +1,34 @@
 import type { LucideIcon } from 'lucide-react'
-import { AlertTriangle, CheckCircle2, Clock3, ShieldAlert, Truck, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  ShieldAlert,
+  Truck,
+  Users,
+  UserCheck,
+  Activity,
+  TrendingUp,
+  Flame,
+} from 'lucide-react'
 import type { EventStatus, EventType } from '../data/patrolMockData'
 
-export const PATROL_EVENT_TYPES: EventType[] = ['PPE_VIOLATION', 'PERSON_DETECTED', 'MACHINE_STOPPED']
+export const PATROL_EVENT_TYPES: EventType[] = [
+  'PPE_VIOLATION',
+  'PERSON_DETECTED',
+  'MACHINE_STOPPED',
+  'POPULATION_OBSERVED',
+  'POPULATION_CHANGE',
+  'HIGH_DENSITY',
+  'IDENTITY_VERIFIED',
+]
+
+export const WORKFORCE_EVENT_TYPES: EventType[] = [
+  'POPULATION_OBSERVED',
+  'POPULATION_CHANGE',
+  'HIGH_DENSITY',
+  'IDENTITY_VERIFIED',
+]
 
 export const PATROL_TYPE_META: Record<EventType, {
   id: string
@@ -38,7 +64,43 @@ export const PATROL_TYPE_META: Record<EventType, {
     color: 'text-sky-400',
     badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
     borderAccent: 'border-l-sky-400',
-    tooltip: 'Phát hiện người',
+    tooltip: 'Raw detection — không hiển thị Event Feed chính (spec Module 05)',
+  },
+  POPULATION_OBSERVED: {
+    id: 'POP',
+    label: 'Nhân lực',
+    icon: Activity,
+    color: 'text-emerald-400',
+    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    borderAccent: 'border-l-emerald-400',
+    tooltip: 'Quan sát nhân lực (S_obs cao)',
+  },
+  POPULATION_CHANGE: {
+    id: 'ΔPOP',
+    label: 'Thay đổi',
+    icon: TrendingUp,
+    color: 'text-lime-400',
+    badge: 'bg-lime-500/10 text-lime-400 border-lime-500/30',
+    borderAccent: 'border-l-lime-400',
+    tooltip: 'Thay đổi dân số quan sát đáng kể',
+  },
+  HIGH_DENSITY: {
+    id: 'DENSE',
+    label: 'Mật độ',
+    icon: Flame,
+    color: 'text-orange-400',
+    badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+    borderAccent: 'border-l-orange-400',
+    tooltip: 'Mật độ nhân lực cao',
+  },
+  IDENTITY_VERIFIED: {
+    id: 'ID',
+    label: 'Định danh',
+    icon: UserCheck,
+    color: 'text-violet-400',
+    badge: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
+    borderAccent: 'border-l-violet-400',
+    tooltip: 'Đã xác minh danh tính (Face)',
   },
 }
 

@@ -1,0 +1,18 @@
+---
+description: Module 05 (Hiệu quả công việc) tạm thời theo Realtime Workforce Heatmap spec
+globs: src/modules/module05-productivity/**/*
+alwaysApply: false
+---
+
+# Module 05 — Temporary Spec Source of Truth
+
+Khi làm Module 05 (Hiệu quả công việc / Smart Helmet patrol):
+
+1. Đọc và tuân thủ `docs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md`.
+2. **Không** lấy raw person detection làm workforce count hay Event Feed chính.
+3. Identity hierarchy: Track ID → Object ID → Worker ID.
+4. Population chỉ update khi Scene Observability HIGH/MEDIUM.
+5. Heatmap 4 layer: Khu vực | Người | Mật độ | Mũ/Lộ trình.
+6. Time filter: Live | 5 phút | 15 phút | 1 giờ | Ca.
+7. Event filter: Tất cả | Nhân lực | Định danh | Mật độ | Hệ thống.
+8. Backend engines (Population / Observability / Deferred Dedup / Geodesic) có thể stub FE cho tới khi BE sẵn sàng.

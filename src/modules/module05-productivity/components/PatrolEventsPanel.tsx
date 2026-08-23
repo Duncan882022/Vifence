@@ -7,7 +7,6 @@ import { formatEventDateTime } from '@/utils/format'
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import {
-  PATROL_EVENT_TYPES,
   PATROL_TYPE_META,
   getPatrolEventPlace,
   getPatrolEventStatusDisplay,
@@ -22,16 +21,21 @@ interface PatrolEventsPanelProps {
   onPlayback?: (event: PatrolEvent) => void
 }
 
-type PatrolFilterTab = 'all' | EventType | 'locked' | 'ended'
+/** Temporary filters per REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §8/§18 */
+type PatrolFilterTab = 'all' | 'workforce' | 'identity' | 'density' | 'system'
 
 const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'PPE_VIOLATION', label: 'PPE' },
-  { key: 'PERSON_DETECTED', label: 'Persons' },
-  { key: 'MACHINE_STOPPED', label: 'Máy dừng' },
-  { key: 'locked', label: 'Ghi nhận' },
-  { key: 'ended', label: 'Đã kết thúc' },
+  { key: 'workforce', label: 'Nhân lực' },
+  { key: 'identity', label: 'Định danh' },
+  { key: 'density', label: 'Mật độ' },
+  { key: 'system', label: 'Hệ thống' },
 ]
+
+/** Raw PERSON_DETECTED stays out of the main meaningful-event feed. */
+function isMeaningfulFeedEvent(event: PatrolEvent): boolean {
+  return event.type !== 'PERSON_DETECTED'
+}
 
 const INITIAL_COUNT = 6
 const BATCH_SIZE = 4
@@ -197,19 +201,19 @@ function PatrolEventCard({
 }
 
 function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
+  const feed = events.filter(isMeaningfulFeedEvent)
   switch (tab) {
-    case 'PPE_VIOLATION':
-      return events.filter(e => e.type === 'PPE_VIOLATION')
-    case 'PERSON_DETECTED':
-      return events.filter(e => e.type === 'PERSON_DETECTED')
-    case 'MACHINE_STOPPED':
-      return events.filter(e => e.type === 'MACHINE_STOPPED')
-    case 'locked':
-      return events.filter(e => e.status === 'LOCKED')
-    case 'ended':
-      return events.filter(e => e.status === 'ENDED')
+    case 'workforce':
+      return feed.filter(e => e.type === 'POPULATION_OBSERVED' || e.type === 'POPULATION_CHANGE')
+    case 'identity':
+      return feed.filter(e => e.type === 'IDENTITY_VERIFIED')
+    case 'density':
+      return feed.filter(e => e.type === 'HIGH_DENSITY')
+    case 'system':
+      return feed.filter(e => e.type === 'PPE_VIOLATION' || e.type === 'MACHINE_STOPPED')
+    case 'all':
     default:
-      return events
+      return feed
   }
 }
 
@@ -221,38 +225,26 @@ export function PatrolEventsPanel({
   onPlayback,
 }: PatrolEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<PatrolFilterTab>('all')
-  const [typeQuickFilters, setTypeQuickFilters] = useState<Set<EventType>>(new Set())
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
   const [loading, setLoading] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const filterPool = useMemo(() => filterByTab(events, filterTab), [events, filterTab])
+  const activeItems = useMemo(() => filterByTab(events, filterTab), [events, filterTab])
 
-  const typeCounts = useMemo(() => {
-    const counts = Object.fromEntries(PATROL_EVENT_TYPES.map(t => [t, 0])) as Record<EventType, number>
-    filterPool.forEach(e => { counts[e.type]++ })
-    return counts
-  }, [filterPool])
-
-  const tabCounts = useMemo(() => ({
-    all: events.length,
-    PPE_VIOLATION: events.filter(e => e.type === 'PPE_VIOLATION').length,
-    PERSON_DETECTED: events.filter(e => e.type === 'PERSON_DETECTED').length,
-    MACHINE_STOPPED: events.filter(e => e.type === 'MACHINE_STOPPED').length,
-    locked: events.filter(e => e.status === 'LOCKED').length,
-    ended: events.filter(e => e.status === 'ENDED').length,
-  }), [events])
-
-  const activeItems = useMemo(() => {
-    return filterPool.filter(e => {
-      if (typeQuickFilters.size === 0) return true
-      return typeQuickFilters.has(e.type)
-    })
-  }, [filterPool, typeQuickFilters])
+  const tabCounts = useMemo(() => {
+    const feed = events.filter(isMeaningfulFeedEvent)
+    return {
+      all: feed.length,
+      workforce: feed.filter(e => e.type === 'POPULATION_OBSERVED' || e.type === 'POPULATION_CHANGE').length,
+      identity: feed.filter(e => e.type === 'IDENTITY_VERIFIED').length,
+      density: feed.filter(e => e.type === 'HIGH_DENSITY').length,
+      system: feed.filter(e => e.type === 'PPE_VIOLATION' || e.type === 'MACHINE_STOPPED').length,
+    }
+  }, [events])
 
   useEffect(() => {
     setVisibleCount(INITIAL_COUNT)
-  }, [filterTab, typeQuickFilters, activeItems.length])
+  }, [filterTab, activeItems.length])
 
   const visibleItems = useMemo(
     () => activeItems.slice(0, visibleCount),
@@ -278,120 +270,74 @@ export function PatrolEventsPanel({
     return () => observer.disconnect()
   }, [hasMore, loading])
 
-  const toggleTypeQuick = (type: EventType) => {
-    setTypeQuickFilters(prev => {
-      const next = new Set(prev)
-      if (next.has(type)) next.delete(type)
-      else next.add(type)
-      return next
-    })
-  }
-
-  const typeFilterBar = (
-    <div className="flex flex-wrap gap-1 px-1.5 py-1 border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none">
-      {PATROL_EVENT_TYPES.map(type => {
-        const meta = PATROL_TYPE_META[type]
-        const Icon = meta.icon
-        const active = typeQuickFilters.has(type)
-        const count = typeCounts[type]
-
-        return (
-          <button
-            key={type}
-            type="button"
-            onClick={() => toggleTypeQuick(type)}
-            title={meta.tooltip}
-            disabled={count === 0 && !active && type !== 'PERSON_DETECTED'}
-            className={cn(
-              'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-colors tabular-nums shrink-0',
-              active
-                ? meta.badge
-                : count > 0 || type === 'PERSON_DETECTED'
-                  ? 'border-[#1e2433] text-muted-foreground hover:border-[#2a3855] hover:text-foreground'
-                  : 'border-[#1e2433]/50 text-muted-foreground/40 cursor-default',
-            )}
-            aria-pressed={active}
-          >
-            <Icon className={cn(
-              'w-2.5 h-2.5 shrink-0',
-              active || count > 0 || type === 'PERSON_DETECTED' ? meta.color : 'opacity-40',
-            )} aria-hidden />
-            {meta.id}
-            {count > 0 && <span>{count}</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
-
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none overscroll-x-contain snap-x snap-mandatory">
-          {FILTER_TABS.map(t => {
-            const count = tabCounts[t.key]
-            const active = filterTab === t.key
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setFilterTab(t.key)}
-                className={cn(
-                  'px-2.5 sm:px-3 py-2 text-[9px] sm:text-[10px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px snap-start shrink-0',
-                  active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t.label}
-                <span className={cn(
-                  'ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold tabular-nums',
-                  active ? 'bg-primary/20 text-primary' : 'bg-[#1a2235] text-muted-foreground',
-                )}>
-                  {count}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        {typeFilterBar}
-
-        <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
-          {events.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground text-center py-8">Không có sự kiện</p>
-          ) : activeItems.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground text-center py-8">
-              Không có mục phù hợp bộ lọc
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {visibleItems.map(event => (
-                <PatrolEventCard
-                  key={event.id}
-                  event={event}
-                  selected={selectedId === event.id}
-                  onSelect={onSelect}
-                  onSnapshotClick={onSnapshotClick}
-                  onPlayback={onPlayback}
-                />
-              ))}
-
-              {hasMore && (
-                <div ref={sentinelRef} className="flex items-center justify-center py-3">
-                  {loading
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                    : <div className="h-3.5" />}
-                </div>
+        {FILTER_TABS.map(t => {
+          const count = tabCounts[t.key]
+          const active = filterTab === t.key
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setFilterTab(t.key)}
+              className={cn(
+                'px-2.5 sm:px-3 py-2 text-[9px] sm:text-[10px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px snap-start shrink-0',
+                active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
-
-              {!hasMore && (
-                <div className="flex items-center justify-center py-3">
-                  <span className="text-[9px] text-muted-foreground/35">
-                    — {activeItems.length} sự kiện —
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            >
+              {t.label}
+              <span className={cn(
+                'ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold tabular-nums',
+                active ? 'bg-primary/20 text-primary' : 'bg-[#1a2235] text-muted-foreground',
+              )}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
+        {events.filter(isMeaningfulFeedEvent).length === 0 ? (
+          <p className="text-[10px] text-muted-foreground text-center py-8">Không có sự kiện</p>
+        ) : activeItems.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground text-center py-8">
+            {filterTab === 'workforce' || filterTab === 'identity' || filterTab === 'density'
+              ? 'Chưa có sự kiện loại này'
+              : 'Không có mục phù hợp bộ lọc'}
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {visibleItems.map(event => (
+              <PatrolEventCard
+                key={event.id}
+                event={event}
+                selected={selectedId === event.id}
+                onSelect={onSelect}
+                onSnapshotClick={onSnapshotClick}
+                onPlayback={onPlayback}
+              />
+            ))}
+
+            {hasMore && (
+              <div ref={sentinelRef} className="flex items-center justify-center py-3">
+                {loading
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  : <div className="h-3.5" />}
+              </div>
+            )}
+
+            {!hasMore && (
+              <div className="flex items-center justify-center py-3">
+                <span className="text-[9px] text-muted-foreground/35">
+                  — {activeItems.length} sự kiện —
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

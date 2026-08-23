@@ -51,6 +51,7 @@ from .patrol_api import (
     update_patrol_gps,
     update_patrol_mobile_metrics,
 )
+from .workforce_engine import workforce_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -362,6 +363,49 @@ def patrol_aggregate_events(
     )
 
 
+@app.get("/patrol/workforce/state")
+def patrol_workforce_state(cameras: str = "HC-01,HC-02"):
+    """Module 05 — snapshot HELMET/OBJECT/POPULATION/HEAT/EVENT (spec MD)."""
+    camera_ids = [c.strip() for c in cameras.split(",") if c.strip()]
+    if len(camera_ids) == 1:
+        return workforce_engine.snapshot(camera_ids[0])
+    # Merge multi-helmet snapshot
+    merged: dict = {
+        "helmets": {},
+        "objects": {},
+        "zonePopulation": {},
+        "heatPoints": [],
+        "events": [],
+        "server_time": None,
+    }
+    for cam in camera_ids:
+        snap = workforce_engine.snapshot(cam)
+        merged["helmets"].update(snap.get("helmets") or {})
+        merged["objects"].update(snap.get("objects") or {})
+        merged["zonePopulation"].update(snap.get("zonePopulation") or {})
+        merged["heatPoints"].extend(snap.get("heatPoints") or [])
+        merged["events"].extend(snap.get("events") or [])
+        merged["server_time"] = snap.get("server_time")
+    # Dedupe events by id, newest first
+    seen = set()
+    uniq = []
+    for ev in sorted(merged["events"], key=lambda e: e.get("timestamp") or "", reverse=True):
+        eid = ev.get("event_id")
+        if eid in seen:
+            continue
+        seen.add(eid)
+        uniq.append(ev)
+    merged["events"] = uniq[:80]
+    return merged
+
+
+@app.get("/patrol/workforce/events")
+def patrol_workforce_events(limit: int = 50):
+    """Meaningful workforce events only (no raw PERSON_DETECTED)."""
+    snap = workforce_engine.snapshot()
+    return (snap.get("events") or [])[: max(1, min(limit, 200))]
+
+
 @app.get("/patrol/{camera_id}/events")
 def patrol_helmet_events(camera_id: str, date: str | None = None, limit: int = 500):
     """Module 05 — chỉ sự kiện PPE của camera HC-* (không lẫn A-03/A-04)."""
@@ -664,7 +708,14 @@ async def analyze_ppe_frame_endpoint(payload: MobileFramePayload):
 
     camera_id = payload.camera_id or "A-04"
     if payload.gps_lat is not None and payload.gps_lng is not None:
-        update_patrol_gps(camera_id, payload.gps_lat, payload.gps_lng)
+        update_patrol_gps(
+            camera_id,
+            payload.gps_lat,
+            payload.gps_lng,
+            heading=getattr(payload, "heading", None),
+            pitch=getattr(payload, "pitch", None),
+            roll=getattr(payload, "roll", None),
+        )
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         _analyze_executor,
@@ -766,7 +817,14 @@ async def analyze_frame(payload: MobileFramePayload):
 
     camera_id = payload.camera_id or "mobile"
     if payload.gps_lat is not None and payload.gps_lng is not None:
-        update_patrol_gps(camera_id, payload.gps_lat, payload.gps_lng)
+        update_patrol_gps(
+            camera_id,
+            payload.gps_lat,
+            payload.gps_lng,
+            heading=getattr(payload, "heading", None),
+            pitch=getattr(payload, "pitch", None),
+            roll=getattr(payload, "roll", None),
+        )
     loop = asyncio.get_event_loop()
     if payload.mode == "road":
         return await loop.run_in_executor(

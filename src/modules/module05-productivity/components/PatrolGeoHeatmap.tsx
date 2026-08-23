@@ -198,6 +198,28 @@ function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
   return L.divIcon(divIconOpts(html, [16, 16], [8, 8]))
 }
 
+/** Heading cone tip ~18m ahead, ±22° FOV wedge (MD §7.1 layer Mũ). */
+function headingConePositions(
+  lat: number,
+  lng: number,
+  headingDeg: number,
+  distM = 18,
+  halfFovDeg = 22,
+): [number, number][] {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dest = (bearing: number): [number, number] => {
+    const br = toRad(bearing)
+    const dLat = (distM * Math.cos(br)) / 111_320
+    const dLng = (distM * Math.sin(br)) / (111_320 * Math.cos(toRad(lat)))
+    return [lat + dLat, lng + dLng]
+  }
+  return [
+    [lat, lng],
+    dest(headingDeg - halfFovDeg),
+    dest(headingDeg + halfFovDeg),
+  ]
+}
+
 /* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
 function MapInvalidator() {
   const map = useMap()
@@ -409,6 +431,10 @@ export interface PatrolGeoHeatmapProps {
   showCameras: boolean
   /** Online theo stream live (HC-01 VMS / HC-02 mobile). */
   helmetOnlineById?: Record<string, boolean>
+  /** Heading degrees 0–360 per helmet — cone FOV on map. */
+  helmetHeadingById?: Record<string, number | null | undefined>
+  /** Click Object / detection with objectId → bottom sheet. */
+  onDetectionClick?: (dot: DetectionDot) => void
   /** HC-02 chỉ hiện marker khi đã có GPS thật. */
   requireLiveGpsForHc02?: boolean
   hasHc02LiveGps?: boolean
@@ -436,6 +462,8 @@ export function PatrolGeoHeatmap({
   showRoute,
   showCameras,
   helmetOnlineById,
+  helmetHeadingById,
+  onDetectionClick,
   requireLiveGpsForHc02 = true,
   hasHc02LiveGps = false,
   mapZoom: mapZoomProp,
@@ -587,24 +615,32 @@ export function PatrolGeoHeatmap({
             />
           )}
 
-          {/* ── LAYER 2: Detection Dots ───────────────────────── */}
+          {/* ── LAYER 2: Detection / Object Dots (TTL opacity) ── */}
           {showDetections && visibleDetectionDots.map(dot => {
             const style = DETECTION_DOT_STYLE[dot.type]
-            const liveStyle = dot.zoneId === 'LIVE'
-              ? { ...style, radius: Math.max(style.radius, 8), weight: 2 }
+            const liveStyle = dot.zoneId === 'LIVE' || dot.objectId
+              ? { ...style, radius: Math.max(style.radius, dot.verified ? 9 : 8), weight: 2 }
               : style
+            const fillOp = dot.opacity ?? 0.75
+            const strokeOp = Math.min(0.95, (dot.opacity ?? 0.95))
+            const color = dot.verified ? '#a78bfa' : liveStyle.color
             return (
               <CircleMarker
                 key={dot.id}
                 center={dot.position}
                 radius={liveStyle.radius}
                 pathOptions={{
-                  color: liveStyle.color,
-                  fillColor: liveStyle.color,
-                  fillOpacity: 0.75,
+                  color,
+                  fillColor: color,
+                  fillOpacity: fillOp,
                   weight: liveStyle.weight,
-                  opacity: 0.95,
+                  opacity: strokeOp,
                 }}
+                eventHandlers={
+                  onDetectionClick && (dot.objectId || dot.type === 'person')
+                    ? { click: () => onDetectionClick(dot) }
+                    : undefined
+                }
               >
                 <Tooltip sticky className="patrol-zone-tip">
                   <span style={{ fontSize: 10 }}>
@@ -612,6 +648,7 @@ export function PatrolGeoHeatmap({
                       ? (dot.label ? `${dot.label}` : 'Người')
                       : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
                     Camera: {dot.cameraId}
+                    {dot.objectId ? ` · ${dot.objectId}` : ''}
                     {dot.zoneId === 'LIVE' ? ' · lịch sử phiên' : ''}
                   </span>
                 </Tooltip>
@@ -671,26 +708,48 @@ export function PatrolGeoHeatmap({
             const livePos = cameraPositions[pin.id] ?? pin.position
             const zoneName = getPatrolHelmetZoneName(pin.id)
             const isActive = Boolean(helmetOnlineById?.[pin.id])
+            const heading = helmetHeadingById?.[pin.id]
             return (
-              <Marker
-                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
-                position={livePos}
-                icon={createHelmetIcon(pin, isActive)}
-                zIndexOffset={500}
-                opacity={isActive ? 1 : 0.85}
-              >
-                <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
-                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                    <strong>{pin.label}</strong>
-                    {' · '}
-                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                      {isActive ? 'ONLINE' : 'OFFLINE'}
+              <>
+                {heading != null && Number.isFinite(heading) && (
+                  <Polygon
+                    key={`cone-${pin.id}`}
+                    positions={headingConePositions(livePos[0], livePos[1], heading)}
+                    pathOptions={{
+                      color: pin.color,
+                      weight: 1,
+                      opacity: 0.55,
+                      fillColor: pin.color,
+                      fillOpacity: 0.18,
+                    }}
+                  />
+                )}
+                <Marker
+                  key={`${pin.id}-${isActive ? 'on' : 'off'}`}
+                  position={livePos}
+                  icon={createHelmetIcon(pin, isActive)}
+                  zIndexOffset={500}
+                  opacity={isActive ? 1 : 0.85}
+                >
+                  <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
+                    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+                      <strong>{pin.label}</strong>
+                      {' · '}
+                      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+                        {isActive ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                      {heading != null && Number.isFinite(heading) && (
+                        <>
+                          <br />
+                          Heading: {Math.round(heading)}°
+                        </>
+                      )}
+                      <br />
+                      Phụ trách: {zoneName}
                     </span>
-                    <br />
-                    Phụ trách: {zoneName}
-                  </span>
-                </Tooltip>
-              </Marker>
+                  </Tooltip>
+                </Marker>
+              </>
             )
           })}
         </MapContainer>

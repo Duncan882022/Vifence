@@ -41,6 +41,8 @@ import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
+import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
+import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
@@ -229,11 +231,13 @@ export function Module05Page() {
   )
 
   const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
+  const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
   const patrolEventsLive = useMemo(() => {
-    if (liveHelmetEvents.backendReachable) return liveHelmetEvents.events
-    if (getVmsBackendUrl()) return []
-    return MOCK_PATROL_EVENTS
-  }, [liveHelmetEvents.backendReachable, liveHelmetEvents.events])
+    const base = liveHelmetEvents.backendReachable
+      ? liveHelmetEvents.events
+      : (getVmsBackendUrl() ? [] : MOCK_PATROL_EVENTS)
+    return mergePatrolAndWorkforceEvents(base, workforceSnap.events)
+  }, [liveHelmetEvents.backendReachable, liveHelmetEvents.events, workforceSnap.events])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,

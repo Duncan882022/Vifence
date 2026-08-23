@@ -153,6 +153,8 @@ export interface MobileAiAnalyzeClientOptions {
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
   /** GPS gửi kèm mỗi frame (HC-02 patrol). */
   getGps?: () => { lat: number; lng: number } | null
+  /** Compass heading 0–360° (IMU / DeviceOrientation) — Workforce Heatmap MD §6. */
+  getHeading?: () => number | null
   /** Chỉ gửi frame khi hàm trả true (vd đoạn PCCC trong video). */
   shouldAnalyze?: () => boolean
   intervalMs?: number
@@ -164,6 +166,7 @@ async function postAnalyzeFrame(
   image: string,
   analyzeMode: MobileAnalyzeMode = 'default',
   gps?: { lat: number; lng: number } | null,
+  heading?: number | null,
 ): Promise<MobileAiAnalyzeResult> {
   const res = await fetchWithTimeout(buildAnalyzeHttpUrl(backendUrl), {
     method: 'POST',
@@ -177,6 +180,7 @@ async function postAnalyzeFrame(
       image,
       ...(analyzeMode !== 'default' ? { mode: analyzeMode } : {}),
       ...(gps ? { gps_lat: gps.lat, gps_lng: gps.lng } : {}),
+      ...(heading != null && Number.isFinite(heading) ? { heading } : {}),
     }),
     mode: 'cors',
   }, 90000)
@@ -219,6 +223,7 @@ export function createMobileAiAnalyzeClient(
     onResult,
     onStatusChange,
     getGps,
+    getHeading,
     shouldAnalyze = () => true,
     intervalMs = 450,
   } = options
@@ -269,6 +274,7 @@ export function createMobileAiAnalyzeClient(
         image,
         analyzeMode,
         getGps?.() ?? null,
+        getHeading?.() ?? null,
       )
       if (stopped) return
       connectedOnce = true

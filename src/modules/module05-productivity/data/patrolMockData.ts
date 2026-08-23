@@ -2,7 +2,14 @@
 
 export type CameraStatus = 'ONLINE' | 'OFFLINE'
 export type ZoneCoverage = 'VISITED' | 'NOT_VISITED'
-export type EventType = 'PPE_VIOLATION' | 'MACHINE_STOPPED' | 'PERSON_DETECTED'
+export type EventType =
+  | 'PPE_VIOLATION'
+  | 'MACHINE_STOPPED'
+  | 'PERSON_DETECTED'
+  | 'POPULATION_OBSERVED'
+  | 'POPULATION_CHANGE'
+  | 'HIGH_DENSITY'
+  | 'IDENTITY_VERIFIED'
 export type EventStatus = 'DETECTED' | 'PENDING' | 'LOCKED' | 'ENDED'
 
 export interface HelmetCamera {

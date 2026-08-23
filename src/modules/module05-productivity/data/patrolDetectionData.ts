@@ -17,6 +17,13 @@ export interface DetectionDot {
   confidence: number
   /** Nhãn hiển thị tooltip — sgc / tên gallery */
   label?: string
+  /** Epoch ms — dùng TTL / time filter heatmap (spec Module 05) */
+  lastSeenAt?: number
+  /** ACTIVE 0–30s → cao; RECENTLY_OBSERVED 30–120s → TB (spec §7.2) */
+  opacity?: number
+  /** Object ID — click mở bottom sheet */
+  objectId?: string
+  verified?: boolean
 }
 
 /* ── Seeded LCG — deterministic, no Math.random() ───────────── */
