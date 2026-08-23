@@ -162,16 +162,23 @@ export function getHeatmapPersonRecords(cameraId?: string): PatrolHeatmapPersonR
 }
 
 export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
-  return getHeatmapPersonRecords(cameraId).map(row => ({
-    id: `hist-${row.id}`,
-    type: 'person' as const,
-    position: row.position,
-    zoneId: row.zoneId,
-    cameraId: row.cameraId,
-    confidence: row.confidence,
-    label: row.label,
-    lastSeenAt: row.lastSeenAt,
-  }))
+  const now = Date.now()
+  return getHeatmapPersonRecords(cameraId).map(row => {
+    const inCameraView = now - row.lastSeenAt < 8000
+    return {
+      id: `hist-${row.id}`,
+      type: 'person' as const,
+      position: row.position,
+      zoneId: row.zoneId,
+      cameraId: row.cameraId,
+      confidence: row.confidence,
+      label: row.label,
+      lastSeenAt: row.lastSeenAt,
+      objectId: row.id,
+      inCameraView,
+      opacity: inCameraView ? 0.92 : 0.28,
+    }
+  })
 }
 
 export function getHeatmapPersonCount(cameraId?: string): number {

@@ -303,7 +303,9 @@ export function PatrolEventsPanel({
 
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
         {events.filter(isMeaningfulFeedEvent).length === 0 ? (
-          <p className="text-[10px] text-muted-foreground text-center py-8">Không có sự kiện</p>
+          <p className="text-[10px] text-muted-foreground text-center py-8">
+            Chưa có sự kiện live — đang chờ backend Contabo
+          </p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
             {filterTab === 'workforce' || filterTab === 'identity' || filterTab === 'density'

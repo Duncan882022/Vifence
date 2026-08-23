@@ -24,6 +24,8 @@ export interface DetectionDot {
   /** Object ID — click mở bottom sheet */
   objectId?: string
   verified?: boolean
+  /** true = đang trong tầm nhìn camera (ACTIVE / vừa detect) */
+  inCameraView?: boolean
 }
 
 /* ── Seeded LCG — deterministic, no Math.random() ───────────── */
@@ -127,7 +129,12 @@ export function getZoneDetectionCounts(zoneId: string): {
 
 /* ── Visual config per type ─────────────────────────────────── */
 export const DETECTION_DOT_STYLE: Record<DetectionType, { color: string; radius: number; weight: number }> = {
-  person:    { color: '#38bdf8', radius: 1.5, weight: 0.5 },
-  vehicle:   { color: '#f97316', radius: 2,   weight: 0.5 },
-  equipment: { color: '#a78bfa', radius: 2,   weight: 0.5 },
+  person:    { color: '#38bdf8', radius: 3, weight: 1 },
+  vehicle:   { color: '#f97316', radius: 3, weight: 1 },
+  equipment: { color: '#a78bfa', radius: 3, weight: 1 },
 }
+
+/** Dot trong FOV camera — nhấp nháy; ngoài FOV — mờ. */
+export const DETECTION_DOT_IN_VIEW_MS = 8000
+export const DETECTION_DOT_OPACITY_IN_VIEW = 0.92
+export const DETECTION_DOT_OPACITY_OUT_OF_VIEW = 0.28

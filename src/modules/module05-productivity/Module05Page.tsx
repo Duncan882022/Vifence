@@ -253,9 +253,10 @@ export function Module05Page() {
 
   const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
   const patrolEventsLive = useMemo(() => {
-    const base = liveHelmetEvents.backendReachable ? liveHelmetEvents.events : []
-    return stripPatrolPpeEvents(mergePatrolAndWorkforceEvents(base, workforceSnap.events))
-  }, [liveHelmetEvents.backendReachable, liveHelmetEvents.events, workforceSnap.events])
+    return stripPatrolPpeEvents(
+      mergePatrolAndWorkforceEvents(liveHelmetEvents.events, workforceSnap.events),
+    )
+  }, [liveHelmetEvents.events, workforceSnap.events])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,

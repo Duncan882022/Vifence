@@ -4,12 +4,14 @@
  */
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { WorkforceEventState, WorkforceEventType } from '../types/workforceHeatmap'
+import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
 
 const WORKFORCE_FEED_TYPES = new Set<WorkforceEventType>([
   'POPULATION_OBSERVED',
   'POPULATION_CHANGE',
   'HIGH_DENSITY',
   'IDENTITY_VERIFIED',
+  'MACHINE_STOPPED',
 ])
 
 export function isWorkforceFeedEventType(type: string): type is WorkforceEventType {
@@ -26,7 +28,7 @@ export function workforceEventToPatrolEvent(ev: WorkforceEventState): PatrolEven
     cameraId,
     cameraName: cameraId,
     zoneId: ev.zone_id,
-    zoneName: ev.zone_id.replace(/^ZONE-?/, 'Zone '),
+    zoneName: PATROL_SITE_NAME,
     objectId: String(ev.payload?.object_id ?? ev.event_id),
     objectLabel: String(ev.payload?.worker_name ?? ev.payload?.object_id ?? ev.zone_id),
     violationLabel: ev.title || ev.description,

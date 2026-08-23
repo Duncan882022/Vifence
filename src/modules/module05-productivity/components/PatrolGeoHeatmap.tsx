@@ -175,6 +175,29 @@ function createZoneStatIcon(
   return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
+/* ── Detection dot — nhỏ; trong FOV nhấp nháy, ngoài FOV mờ ── */
+function createDetectionDotIcon(
+  inCameraView: boolean,
+  verified: boolean,
+  type: DetectionDot['type'],
+): L.DivIcon {
+  const style = DETECTION_DOT_STYLE[type]
+  const color = verified && type === 'person' ? '#a78bfa' : style.color
+  const size = 7
+  const anim = inCameraView ? 'animation:patrol-dot-blink 1.15s ease-in-out infinite;' : ''
+  const opacity = inCameraView ? 0.95 : 0.32
+  const html = `
+    <div style="
+      width:${size}px;height:${size}px;border-radius:50%;
+      background:${color};
+      border:1px solid rgba(255,255,255,${inCameraView ? 0.85 : 0.35});
+      box-shadow:0 0 ${inCameraView ? 3 : 1}px ${color}${inCameraView ? '99' : '44'};
+      opacity:${opacity};
+      ${anim}
+    "></div>`
+  return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
+}
+
 /* ── Helmet marker icon ─────────────────────────────────────── */
 function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
   const num = String(parseInt(pin.id.replace('HC-', ''), 10))
@@ -506,6 +529,10 @@ export function PatrolGeoHeatmap({
   return (
     <div className="relative w-full h-full min-h-[200px] overflow-hidden isolate supports-[height:100dvh]:min-h-[min(200px,32dvh)]">
       <style>{`
+        @keyframes patrol-dot-blink {
+          0%,100%{opacity:0.95;transform:scale(1)}
+          50%{opacity:0.35;transform:scale(1.35)}
+        }
         @keyframes patrol-pulse {
           0%,100%{opacity:1;transform:scale(1)}
           50%{opacity:.35;transform:scale(1.7)}
@@ -615,41 +642,58 @@ export function PatrolGeoHeatmap({
             />
           )}
 
-          {/* ── LAYER 2: Detection / Object Dots (TTL opacity) ── */}
+          {/* ── LAYER 2: Detection / Object Dots — nhỏ, FOV blink ── */}
           {showDetections && visibleDetectionDots.map(dot => {
+            const inView = dot.inCameraView ?? false
+            if (dot.type === 'person') {
+              return (
+                <Marker
+                  key={dot.id}
+                  position={dot.position}
+                  icon={createDetectionDotIcon(inView, Boolean(dot.verified), dot.type)}
+                  zIndexOffset={inView ? 420 : 380}
+                  eventHandlers={
+                    onDetectionClick && (dot.objectId || dot.type === 'person')
+                      ? { click: () => onDetectionClick(dot) }
+                      : undefined
+                  }
+                >
+                  <Tooltip sticky className="patrol-zone-tip">
+                    <span style={{ fontSize: 10 }}>
+                      {dot.label ? dot.label : 'Người'}<br />
+                      Camera: {dot.cameraId}
+                      {dot.objectId ? ` · ${dot.objectId}` : ''}
+                      <br />
+                      {inView ? 'Đang trong FOV' : 'Ngoài FOV / lịch sử'}
+                    </span>
+                  </Tooltip>
+                </Marker>
+              )
+            }
             const style = DETECTION_DOT_STYLE[dot.type]
-            const liveStyle = dot.zoneId === 'LIVE' || dot.objectId
-              ? { ...style, radius: Math.max(style.radius, dot.verified ? 9 : 8), weight: 2 }
-              : style
-            const fillOp = dot.opacity ?? 0.75
-            const strokeOp = Math.min(0.95, (dot.opacity ?? 0.95))
-            const color = dot.verified ? '#a78bfa' : liveStyle.color
+            const fillOp = dot.opacity ?? (inView ? 0.85 : 0.3)
             return (
               <CircleMarker
                 key={dot.id}
                 center={dot.position}
-                radius={liveStyle.radius}
+                radius={style.radius}
                 pathOptions={{
-                  color,
-                  fillColor: color,
+                  color: style.color,
+                  fillColor: style.color,
                   fillOpacity: fillOp,
-                  weight: liveStyle.weight,
-                  opacity: strokeOp,
+                  weight: style.weight,
+                  opacity: fillOp,
                 }}
                 eventHandlers={
-                  onDetectionClick && (dot.objectId || dot.type === 'person')
+                  onDetectionClick
                     ? { click: () => onDetectionClick(dot) }
                     : undefined
                 }
               >
                 <Tooltip sticky className="patrol-zone-tip">
                   <span style={{ fontSize: 10 }}>
-                    {dot.type === 'person'
-                      ? (dot.label ? `${dot.label}` : 'Người')
-                      : dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
+                    {dot.type === 'vehicle' ? '🚛 Máy' : '🔧 Thiết bị'}<br />
                     Camera: {dot.cameraId}
-                    {dot.objectId ? ` · ${dot.objectId}` : ''}
-                    {dot.zoneId === 'LIVE' ? ' · lịch sử phiên' : ''}
                   </span>
                 </Tooltip>
               </CircleMarker>

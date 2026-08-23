@@ -10,6 +10,12 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS, PATROL_SITE_AREA } from '../data/patrolCameras'
+import {
+  DETECTION_DOT_IN_VIEW_MS,
+  DETECTION_DOT_OPACITY_IN_VIEW,
+  DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+  type DetectionDot,
+} from '../data/patrolDetectionData'
 import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
@@ -145,13 +151,34 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
 
   const filteredDots = useMemo(() => {
     const cutoff = Date.now() - heatmapWindowMs(timeWindow)
+    const now = Date.now()
+    const activeObjectIds = new Set(
+      liveObjects.filter(o => o.status === 'ACTIVE').map(o => o.object_id),
+    )
+
+    const markInView = (dot: DetectionDot): DetectionDot => {
+      let inCameraView = dot.inCameraView
+      if (inCameraView == null) {
+        inCameraView = Boolean(
+          (dot.objectId && activeObjectIds.has(dot.objectId))
+          || (dot.lastSeenAt != null && now - dot.lastSeenAt < DETECTION_DOT_IN_VIEW_MS),
+        )
+      }
+      return {
+        ...dot,
+        inCameraView,
+        opacity: inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+      }
+    }
+
     const hist = hc02Live.dots.filter(d => {
       if (d.lastSeenAt == null) return timeWindow !== 'live'
       return d.lastSeenAt >= cutoff
-    })
+    }).map(d => markInView(d))
+
     const objectDots = liveObjects
       .filter(o => o.lat != null && o.lon != null)
-      .map(o => ({
+      .map(o => markInView({
         id: o.object_id,
         type: 'person' as const,
         position: [o.lat!, o.lon!] as [number, number],
@@ -160,23 +187,23 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
         confidence: o.position_confidence,
         label: o.worker_name || o.object_id,
         lastSeenAt: Date.parse(o.last_seen) || Date.now(),
-        opacity: o.status === 'ACTIVE' ? 0.92 : 0.48,
         objectId: o.object_id,
         verified: o.identity_status === 'VERIFIED',
+        inCameraView: o.status === 'ACTIVE',
       }))
+
     if (timeWindow === 'live' && objectDots.length > 0) {
       return objectDots
     }
-    const byId = new Map(hist.map(d => [d.id, { ...d, opacity: d.opacity ?? 0.72 }]))
+    const byId = new Map(hist.map(d => [d.id, d]))
     for (const od of objectDots) byId.set(od.id, od)
-    // Spec §7.3 — heat samples for non-live windows (1/object/3s backend)
     if (timeWindow !== 'live') {
       for (const hp of workforce.heatPoints) {
         const ts = Date.parse(hp.timestamp)
         if (!Number.isFinite(ts) || ts < cutoff) continue
         const id = `heat-${hp.object_id}-${ts}`
         if (byId.has(id)) continue
-        byId.set(id, {
+        byId.set(id, markInView({
           id,
           type: 'person',
           position: [hp.lat, hp.lon],
@@ -185,9 +212,9 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
           confidence: hp.weight,
           label: hp.object_id,
           lastSeenAt: ts,
-          opacity: Math.min(0.55, 0.2 + hp.weight * 0.35),
           objectId: hp.object_id,
-        })
+          inCameraView: false,
+        }))
       }
     }
     return [...byId.values()]
