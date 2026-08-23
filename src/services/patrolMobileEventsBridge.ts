@@ -8,6 +8,7 @@ import {
   getPatrolHelmetGpsLastKnown,
 } from '@/services/patrolHelmetGpsBridge'
 import { syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
+import { PATROL_SITE_CENTER } from '@/modules/module05-productivity/data/patrolSiteMap'
 
 import {
   PATROL_PPE_UI_HIDDEN,
@@ -44,6 +45,9 @@ function resolveGpsForMobileEvent(
   }
   const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
   if (snap) return { gps_lat: snap.lat, gps_lng: snap.lng }
+  if (cameraId === 'HC-01' || cameraId === 'HC-02') {
+    return { gps_lat: PATROL_SITE_CENTER[0], gps_lng: PATROL_SITE_CENTER[1] }
+  }
   return { gps_lat: null, gps_lng: null }
 }
 

@@ -345,12 +345,11 @@ export function CameraPlaybackPanel({
       )}
     >
       <div className={cn(
-        'flex flex-col w-full min-h-0',
-        isDesktop ? 'h-full flex-1 gap-1' : 'gap-1.5 h-auto',
+        'flex flex-col w-full min-h-0 flex-1 h-full overflow-hidden',
+        isDesktop ? 'gap-1' : 'gap-1.5',
       )}>
         <div className={cn(
-          'relative w-full min-h-0',
-          isDesktop ? 'flex-1 min-h-0' : 'aspect-video shrink-0',
+          'relative w-full min-h-0 flex-1',
         )}
         style={isDesktop && videoAreaFlex < 80 ? { flex: `1 1 ${videoAreaFlex}%` } : undefined}
         >

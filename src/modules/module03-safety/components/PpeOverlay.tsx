@@ -312,7 +312,10 @@ export const PpeOverlay = memo(function PpeOverlay({
     )
   }, [cycleItems])
 
+  const patrolPersonOnly = shouldHidePatrolPpeViolationOverlay(cameraId)
+
   const { visible, pulse } = useRoiCycleDisplay(cycleItems, d => d.behavior.startsWith('no_'), {
+    enabled: !patrolPersonOnly,
     getScanRank: d => ppeScanRank(d.behavior, d.bbox),
     getViolationRank: d => ppeViolationRank(d.behavior, d.bbox),
   })
@@ -321,9 +324,13 @@ export const PpeOverlay = memo(function PpeOverlay({
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[2]">
-      {visible.map((detection, index) => (
+      {visible.map((detection, index) => {
+        const trackKey = 'trackId' in detection && typeof detection.trackId === 'string'
+          ? detection.trackId
+          : `${detection.behavior}-${index}-${layoutTick}`
+        return (
         <PpeDetectionBox
-          key={`${detection.behavior}-${index}-${Math.round(detection.bbox[0])}-${Math.round(detection.bbox[1])}-${layoutTick}`}
+          key={trackKey}
           detection={detection}
           frameWidth={frameSize.width}
           frameHeight={frameSize.height}
@@ -332,9 +339,10 @@ export const PpeOverlay = memo(function PpeOverlay({
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
           snapOverlay={snapOverlay}
-          pulse={pulse && detection.behavior === 'person'}
+          pulse={!patrolPersonOnly && pulse && detection.behavior === 'person'}
         />
-      ))}
+        )
+      })}
     </div>
   )
 })

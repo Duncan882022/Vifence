@@ -176,12 +176,12 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
 
   const dots = useMemo(() => {
     void registryTick
-    return getHeatmapPersonDots(HC02)
+    return getHeatmapPersonDots()
   }, [registryTick])
 
   const historicalDotCount = useMemo(() => {
     void registryTick
-    return getHeatmapPersonCount(HC02)
+    return getHeatmapPersonCount()
   }, [registryTick])
 
   return {

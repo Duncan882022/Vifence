@@ -23,10 +23,9 @@ export function PageLayout({ children, className, scrollable = false }: LayoutPr
       <div
         className={cn(
           'flex flex-col gap-3 p-3 sm:p-4',
-          'min-h-[calc(100vh-64px)] overflow-y-auto',
           scrollable
-            ? 'lg:min-h-[calc(100vh-64px)] lg:overflow-y-auto'
-            : 'lg:h-[calc(100vh-64px)] lg:overflow-hidden max-lg:landscape:min-h-[calc(100dvh-64px)]',
+            ? 'min-h-[calc(100dvh-64px)] overflow-y-auto lg:min-h-[calc(100vh-64px)]'
+            : 'h-[calc(100dvh-64px)] overflow-hidden',
         )}
       >
         {children}
@@ -92,8 +91,9 @@ interface PanelProps {
 
 export function Panel({
   title, children, className, headerRight, noPadding, fit = false, expandable = false,
-  expandedContent, overflowVisible = false,
+  expandedContent: _expandedContent, overflowVisible = false,
 }: PanelProps) {
+  void _expandedContent
   const [expanded, setExpanded] = useState(false)
 
   /* Close on Escape */
@@ -101,7 +101,11 @@ export function Panel({
     if (!expanded) return
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false) }
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handler)
+      document.body.style.overflow = ''
+    }
   }, [expanded])
 
   const showBody = Boolean(children)
@@ -139,52 +143,29 @@ export function Panel({
 
   /* ── Normal panel ── */
   const normalPanel = (
-    <div className={cn(
-      'bg-[#0d1117] border border-[#1e2433] rounded-lg flex flex-col',
-      !overflowVisible && 'overflow-hidden',
-      fit ? '' : 'h-full',
-      className,
-    )}>
-      {headerContent(() => setExpanded(true), false)}
-      {showBody && <div className={bodyClass}>{children}</div>}
-    </div>
-  )
-
-  if (!expanded) return normalPanel
-
-  /* ── Expanded: placeholder in layout + portal fullscreen ── */
-  return (
     <>
-      {/* Keep the layout slot occupied */}
-      <div className={cn(
-        'bg-[#0d1117]/40 border border-[#1e2433]/40 rounded-lg',
-        fit ? '' : 'h-full',
-        className,
-      )} />
-
-      {createPortal(
-        <div className="fixed inset-0 z-50">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
-            onClick={() => setExpanded(false)}
-          />
-          {/* Expanded panel */}
-          <div className="absolute inset-4 bg-[#0d1117] border border-[#1e2433] rounded-xl flex flex-col overflow-hidden shadow-2xl">
-            {headerContent(() => setExpanded(false), true)}
-            <div className={cn(
-              'flex-1 min-h-0 flex flex-col',
-              !overflowVisible && 'overflow-hidden',
-              !noPadding && 'p-3',
-            )}>
-              {expandedContent ?? children}
-            </div>
-          </div>
-        </div>,
+      {expanded && createPortal(
+        <div
+          className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm"
+          onClick={() => setExpanded(false)}
+          aria-hidden
+        />,
         document.body,
       )}
+      <div className={cn(
+        'bg-[#0d1117] border border-[#1e2433] rounded-lg flex flex-col',
+        !overflowVisible && 'overflow-hidden',
+        fit && !expanded ? '' : 'h-full',
+        expanded && 'fixed inset-4 z-50 shadow-2xl',
+        className,
+      )}>
+        {headerContent(() => setExpanded(v => !v), expanded)}
+        {showBody && <div className={bodyClass}>{children}</div>}
+      </div>
     </>
   )
+
+  return normalPanel
 }
 
 /* ── Legacy aliases ── */

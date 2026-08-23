@@ -194,28 +194,23 @@ export function CameraPanelShell({
 
   return (
     <div className={cn(
-      stackedMobile
-        ? 'flex max-lg:flex-col max-lg:h-auto max-lg:flex-none max-lg:min-h-0'
-        : 'flex flex-1 min-h-0 h-full w-full',
+      'flex flex-1 min-h-0 h-full w-full',
+      stackedMobile && 'flex-col',
       liveLandscapeGrid && 'grid min-h-0 h-full grid-rows-[1fr_auto]',
-      isLandscapeMobile && !liveLandscapeGrid && 'flex flex-col h-auto max-lg:min-h-0',
+      isLandscapeMobile && !liveLandscapeGrid && 'flex-col min-h-0',
       !stackedMobile && !isLandscapeMobile && 'flex-col max-lg:landscape:flex-row lg:flex-row',
     )}>
       <div className={cn(
-        'min-h-0 min-w-0',
-        liveLandscapeGrid && 'row-start-1 flex items-center justify-center overflow-hidden p-1',
-        isLandscapeMobile && !liveLandscapeGrid && 'flex items-center justify-center p-1 shrink-0',
-        !isLandscapeMobile && 'p-2 lg:flex-1 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
-        stackedMobile && 'max-lg:flex-none max-lg:shrink-0',
-        !isLandscapeMobile && !stackedMobile && 'max-lg:landscape:flex-1 max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
+        'min-h-0 min-w-0 flex-1 flex flex-col',
+        liveLandscapeGrid && 'row-start-1 overflow-hidden p-1',
+        isLandscapeMobile && !liveLandscapeGrid && 'overflow-hidden p-1',
+        !isLandscapeMobile && 'p-2 lg:min-w-0 lg:min-h-0 max-lg:pb-1',
+        !isLandscapeMobile && !stackedMobile && 'max-lg:landscape:min-h-0 max-lg:landscape:min-w-0',
       )}>
         <div className={cn(
-          'min-h-0 min-w-0 w-full',
-          stackedMobile && 'max-lg:h-auto max-lg:overflow-visible',
-          liveLandscapeGrid && 'h-full flex items-center justify-center',
-          isLandscapeMobile && !liveLandscapeGrid && 'w-full max-w-[min(100%,calc((100dvh-64px)*16/9))]',
-          !isLandscapeMobile && !stackedMobile && 'h-full max-lg:landscape:overflow-y-auto max-lg:landscape:overflow-x-hidden max-lg:landscape:overscroll-y-contain',
-          'lg:min-h-0 lg:h-full lg:overflow-hidden lg:flex lg:flex-col',
+          'min-h-0 min-w-0 w-full flex-1 flex flex-col overflow-hidden',
+          liveLandscapeGrid && 'h-full',
+          isLandscapeMobile && !liveLandscapeGrid && 'w-full max-w-[min(100%,calc((100dvh-64px)*16/9))] mx-auto',
         )}>
           {children}
         </div>

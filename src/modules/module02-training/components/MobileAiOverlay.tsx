@@ -9,12 +9,15 @@ import { getOverlayBoxStyle, isAtldViolationBehavior } from '@/modules/module03-
 import { shouldShowOverlayBox } from '@/modules/module03-safety/utils/overlayCoverage'
 import { useViolationStickyOverlay } from '@/modules/module03-safety/hooks/useViolationStickyOverlay'
 import { useRoiCycleDisplay } from '@/modules/module03-safety/hooks/useRoiCycleDisplay'
+import { useStableOverlayDetections } from '@/modules/module03-safety/hooks/useStableOverlayDetections'
 import { ppeScanRank, ppeViolationRank } from '@/modules/module03-safety/utils/overlayScanOrder'
 import {
   formatPersonOverlayBadge,
   formatPpeViolationOverlayBadge,
 } from '@/modules/module03-safety/utils/personOverlayLabel'
 import { syncPersonOverlaySession } from '@/modules/module03-safety/utils/personOverlaySession'
+import { overlayBoxMotionClass } from '@/modules/module03-safety/utils/overlayBoxMotion'
+import { MOBILE_TRACK_LOCK_CONFIG } from '@/modules/module03-safety/utils/liveOverlaySync'
 
 interface MobileAiOverlayProps {
   detections: MobileAiDetection[]
@@ -26,6 +29,8 @@ interface MobileAiOverlayProps {
   modelId?: CameraAiModelId
   videoFit?: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
+  /** Bám đối tượng IoU + làm mượt bbox (HC bodycam person ROI). */
+  objectTracking?: boolean
 }
 
 function resolveBehaviorStyle(modelId: CameraAiModelId, behavior: string) {
@@ -71,6 +76,7 @@ const DetectionBox = memo(function DetectionBox({
   videoFit = 'cover',
   videoObjectPosition = 'center',
   pulse = false,
+  trackId,
 }: {
   det: MobileAiDetection
   frameWidth: number
@@ -81,6 +87,7 @@ const DetectionBox = memo(function DetectionBox({
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
   pulse?: boolean
+  trackId?: string
 }) {
   const [x1, y1, x2, y2] = det.bbox
   const style = resolveBehaviorStyle(modelId, det.behavior)
@@ -109,7 +116,7 @@ const DetectionBox = memo(function DetectionBox({
 
   return (
     <div
-      className={cn('absolute pointer-events-none', pulse && 'animate-pulse')}
+      className={cn(overlayBoxMotionClass(false), pulse && 'animate-pulse')}
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -117,6 +124,7 @@ const DetectionBox = memo(function DetectionBox({
         height: `${box.h}%`,
         zIndex: det.behavior === 'person' ? 8 : 9,
       }}
+      data-track-id={trackId}
     >
       <div className={cn(
         'absolute inset-0 rounded-sm',
@@ -146,17 +154,33 @@ export function MobileAiOverlay({
   modelId = 'pccc',
   videoFit = 'cover',
   videoObjectPosition = 'center',
+  objectTracking = false,
 }: MobileAiOverlayProps) {
+  const isPpe = modelId === 'ppe'
+  const trackedDetections = useStableOverlayDetections(
+    useMemo(
+      () => detections.map(d => ({
+        ...d,
+        confidence: d.confidence,
+        bbox: d.bbox as [number, number, number, number],
+      })),
+      [detections],
+    ),
+    objectTracking
+      ? { trackLock: MOBILE_TRACK_LOCK_CONFIG }
+      : undefined,
+  )
+
+  const sourceDetections = objectTracking ? trackedDetections : detections
+
   const stickyInput = useMemo(
-    () => detections.map(d => ({
+    () => sourceDetections.map(d => ({
       ...d,
       confidence: d.confidence,
       bbox: d.bbox as [number, number, number, number],
     })),
-    [detections],
+    [sourceDetections],
   )
-
-  const isPpe = modelId === 'ppe'
 
   useEffect(() => {
     if (!isPpe) return
@@ -175,21 +199,27 @@ export function MobileAiOverlay({
     stickyInput,
     d => d.behavior.startsWith('no_'),
     {
-      enabled: isPpe,
+      enabled: isPpe && !objectTracking,
       getScanRank: d => ppeScanRank(d.behavior, d.bbox),
       getViolationRank: d => ppeViolationRank(d.behavior, d.bbox),
     },
   )
 
-  const visible = isPpe ? cycleVisible : stickyVisible
+  const visible = objectTracking
+    ? stickyInput.filter(d => shouldShowOverlayBox(d.confidence, d.bbox))
+    : isPpe
+      ? cycleVisible
+      : stickyVisible
 
   if (visible.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[9]">
-      {visible.map((det, i) => (
+      {visible.map((det, i) => {
+        const trackId = 'trackId' in det ? (det as { trackId?: string }).trackId : undefined
+        return (
         <DetectionBox
-          key={`${det.behavior}-${det.label}-${i}-${Math.round(det.bbox[0])}-${layoutTick}`}
+          key={trackId ?? `${det.behavior}-${det.label}-${i}-${layoutTick}`}
           det={det}
           frameWidth={frameWidth}
           frameHeight={frameHeight}
@@ -198,9 +228,11 @@ export function MobileAiOverlay({
           modelId={modelId}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
-          pulse={isPpe && pulse && det.behavior === 'person'}
+          pulse={!objectTracking && isPpe && pulse && det.behavior === 'person'}
+          trackId={trackId}
         />
-      ))}
+        )
+      })}
     </div>
   )
 }

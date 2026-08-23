@@ -113,19 +113,21 @@ export function useRoiCycleDisplay<T extends BboxItem>(
 
     if (phase === 'scan') {
       if (subjectItems.length === 0 && conditionItems.length === 0) {
-        setPhase('violation')
+        if (violationItems.length > 0) setPhase('violation')
         return
       }
       const timer = window.setTimeout(() => {
         if (tierIndex === 0) {
           if (conditionItems.length > 0) {
             setTierIndex(1)
-          } else {
+          } else if (violationItems.length > 0) {
             setPhase('violation')
           }
           return
         }
-        setPhase('violation')
+        if (violationItems.length > 0) {
+          setPhase('violation')
+        }
       }, stepMs)
       return () => window.clearTimeout(timer)
     }
@@ -155,6 +157,10 @@ export function useRoiCycleDisplay<T extends BboxItem>(
   const activeTierIndex = useSharedClock ? sync.tierIndex : tierIndex
 
   if (activePhase === 'violation') {
+    if (violationItems.length === 0) {
+      const fallback = subjectItems.length > 0 ? subjectItems : conditionItems
+      return { visible: fallback.length > 0 ? fallback : items, phase: 'scan', pulse: false }
+    }
     return { visible: violationItems, phase: 'violation', pulse: false }
   }
 
@@ -168,6 +174,6 @@ export function useRoiCycleDisplay<T extends BboxItem>(
   return {
     visible: tierItems,
     phase: 'scan',
-    pulse: true,
+    pulse: violationItems.length > 0,
   }
 }

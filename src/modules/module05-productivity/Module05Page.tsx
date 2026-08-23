@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import {
-  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2, X,
+  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -47,8 +46,11 @@ import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { filterPatrolEvidenceEvents } from './utils/patrolEventsFeed'
+import { filterPatrolEvidenceEvents, summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
+import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
+import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
+import { subscribePatrolManualIdentity } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
@@ -65,9 +67,11 @@ function formatHelmetMetricBreakdown(
 function PatrolKPIs({
   live,
   workforce,
+  events,
 }: {
   live: PatrolHelmetLiveMetrics
   workforce: WorkforceSnapshot
+  events: PatrolEvent[]
 }) {
   const zoneEntries = Object.values(workforce.zonePopulation)
   const visitedZones = zoneEntries.filter(
@@ -78,13 +82,18 @@ function PatrolKPIs({
     ? Math.round((visitedZones / totalZones) * 100)
     : 0
 
-  const alertCount = workforce.events.filter(e => e.event_type !== 'PPE_VIOLATION').length
+  const alertCount = events.length
 
-  const peopleDetail = live.perCamera.length > 0
-    ? formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`
-    : live.backendReachable || live.streamOnline
-      ? 'Đang chờ phát hiện'
-      : 'Chưa có luồng live'
+  const zonePop = Object.values(workforce.zonePopulation)[0]
+  const observedCount = zonePop?.observed_count ?? live.personCount
+
+  const peopleDetail = zonePop
+    ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
+    : live.perCamera.length > 0
+      ? formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`
+      : live.backendReachable || live.streamOnline
+        ? 'Đang chờ phát hiện'
+        : 'Chưa có luồng live'
 
   const kpis = [
     {
@@ -102,7 +111,7 @@ function PatrolKPIs({
     },
     {
       label: 'Công nhân',
-      value: live.personCount,
+      value: observedCount,
       unit: 'người',
       detail: peopleDetail,
       change: 0,
@@ -126,7 +135,7 @@ function PatrolKPIs({
       label: 'Cảnh báo',
       value: alertCount,
       unit: 'sự kiện',
-      detail: 'Sự kiện PPE đã tắt',
+      detail: summarizePatrolAlertEvents(events),
       change: 0,
       changeType: 'neutral' as const,
       icon: AlertTriangle,
@@ -150,57 +159,6 @@ function PatrolKPIs({
         )
       })}
     </>
-  )
-}
-
-/* ── Heatmap fullscreen modal ─────────────────────────────────── */
-function HeatmapModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
-  }, [onClose])
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-stretch sm:items-center justify-center bg-black/80 sm:bg-black/75 backdrop-blur-[2px] p-0 sm:p-3 md:p-5"
-      onClick={onClose}
-      role="presentation"
-    >
-      <div
-        className={cn(
-          'relative flex flex-col w-full overflow-hidden bg-[#0a0e17] shadow-2xl shadow-black/60',
-          'h-[100dvh] max-h-[100dvh] rounded-none border-0',
-          'sm:h-[90dvh] sm:max-w-5xl sm:rounded-xl sm:border sm:border-[#2a3855]',
-          'pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]',
-        )}
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Heatmap tuần tra"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 border-b border-[#1e2433] shrink-0">
-          <span className="text-[11px] font-bold tracking-widest text-foreground uppercase">HEATMAP</span>
-          <button
-            onClick={onClose}
-            className="p-2 sm:p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
-            aria-label="Đóng"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        {/* Content */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <PatrolDensityHeatmap variant="modal" />
-        </div>
-      </div>
-    </div>,
-    document.body,
   )
 }
 
@@ -252,9 +210,20 @@ export function Module05Page() {
   )
 
   const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
+  const [identityRevision, setIdentityRevision] = useState(0)
+
+  useEffect(() => {
+    return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
+  }, [])
+
   const patrolEventsLive = useMemo(() => {
-    return filterPatrolEvidenceEvents(stripPatrolPpeEvents(liveHelmetEvents.events))
-  }, [liveHelmetEvents.events])
+    void identityRevision
+    const merged = mergePatrolAndWorkforceEvents(
+      stripPatrolPpeEvents(liveHelmetEvents.events),
+      workforceSnap.events,
+    )
+    return applyManualIdentityToPatrolEvents(filterPatrolEvidenceEvents(merged))
+  }, [liveHelmetEvents.events, workforceSnap.events, identityRevision])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
@@ -297,7 +266,7 @@ export function Module05Page() {
           {tier1Open && (
             <div className="p-2 sm:p-3">
               <Tier1 className="grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-                <PatrolKPIs live={liveMetrics} workforce={workforceSnap} />
+                <PatrolKPIs live={liveMetrics} workforce={workforceSnap} events={patrolEventsLive} />
               </Tier1>
             </div>
           )}
@@ -305,16 +274,14 @@ export function Module05Page() {
 
         {/* Tier 2 + Tier 3 — shared height pool */}
         <div className={cn(
-          'flex flex-col gap-3',
-          'max-lg:flex-none',
-          'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
+          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
         )}>
           {/* Tier 2 — Camera */}
           <div className={cn(
             'flex flex-col min-h-0',
             tier2Open
               ? cn(
-                'max-lg:flex-none max-lg:min-h-[280px]',
+                'flex-[6] min-h-0',
                 cameraMode === 'playback' ? 'lg:flex-[12]' : 'lg:flex-[10]',
               )
               : 'shrink-0',
@@ -325,10 +292,7 @@ export function Module05Page() {
               fit={!tier2Open}
               noPadding
               className={cn(
-                tier2Open && 'lg:flex-1 lg:min-h-[260px]',
-                tier2Open && 'max-lg:!h-auto max-lg:min-h-[280px] max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
-                tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible max-lg:[&>div:last-child]:min-h-[240px]',
-                !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
+                tier2Open && 'flex-1 min-h-0 h-full',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -349,10 +313,7 @@ export function Module05Page() {
               }
             >
               {tier2Open && (
-                <div className={cn(
-                  'flex flex-col flex-1 min-h-0 h-full w-full max-lg:min-h-[240px]',
-                  'max-lg:h-auto max-lg:flex-none',
-                )}>
+                <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden">
                   {cameraMode === 'live' ? (
                     <TrainingCameraPanel
                       selectedId={selectedCamId}
@@ -388,41 +349,41 @@ export function Module05Page() {
 
           {/* Tier 3 — 2 separate panels: [HEATMAP] | [SỰ KIỆN] */}
           <div className={cn(
-            'flex min-h-0 gap-2 sm:gap-3',
+            'flex min-h-0 gap-2 sm:gap-3 flex-1 overflow-hidden',
             'flex-col md:flex-row',
-            'max-lg:flex-none',
             tier2Open ? 'lg:flex-[10]' : 'lg:flex-1',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
-                'flex flex-col overflow-hidden min-h-0',
-                'min-h-[min(46dvh,400px)] sm:min-h-[min(44dvh,440px)]',
-                'max-lg:!h-auto',
-                'lg:min-h-0 lg:h-full md:flex-[3]',
+                'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
               )}
               headerRight={
                 <button
-                  onClick={() => setHeatmapExpanded(true)}
+                  onClick={() => setHeatmapExpanded(v => !v)}
                   className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                  title="Phóng to"
-                  aria-label="Phóng to heatmap"
+                  title={heatmapExpanded ? 'Thu nhỏ' : 'Phóng to'}
+                  aria-label={heatmapExpanded ? 'Thu nhỏ heatmap' : 'Phóng to heatmap'}
                 >
-                  <Maximize2 className="w-3.5 h-3.5" />
+                  {heatmapExpanded
+                    ? <Minimize2 className="w-3.5 h-3.5" />
+                    : <Maximize2 className="w-3.5 h-3.5" />}
                 </button>
               }
             >
-              <PatrolDensityHeatmap />
+              <PatrolDensityHeatmap
+                expanded={heatmapExpanded}
+                onCloseExpand={() => setHeatmapExpanded(false)}
+              />
             </Panel>
 
             <Panel
               title="SỰ KIỆN"
               noPadding
               className={cn(
-                'min-h-0 flex flex-col overflow-hidden',
-                'min-h-[220px] sm:min-h-[260px] md:min-h-0 md:flex-[2]',
-                tier3Focus === 'events' && 'flex-1',
+                'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
+                tier3Focus === 'events' && 'md:flex-[3]',
               )}
               headerRight={
                 <button
@@ -457,10 +418,6 @@ export function Module05Page() {
       />
 
       <PatrolDevicePermissionGate />
-
-      {heatmapExpanded && (
-        <HeatmapModal onClose={() => setHeatmapExpanded(false)} />
-      )}
     </>
   )
 }

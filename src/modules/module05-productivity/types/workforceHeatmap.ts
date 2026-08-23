@@ -28,6 +28,7 @@ export interface HelmetState {
   roll?: number | null
   zone_id: string
   online: boolean
+  position_method?: string
 }
 
 export interface ObjectState {

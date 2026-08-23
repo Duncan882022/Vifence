@@ -33,19 +33,51 @@ export function isValidPatrolEventTime(iso: string): boolean {
   return true
 }
 
-/** Ẩn PPE/PERS raw khi cấu hình; workforce synthetic không có ảnh — loại ở tầng merge. */
+/** Loại sự kiện được phép trên feed chính (spec §8.1 / §8.4). */
 export function isPatrolFeedEventType(event: PatrolEvent): boolean {
-  if (event.type === 'PERSON_DETECTED') return true
+  if (event.type === 'PERSON_DETECTED') return false
   if (event.type === 'PPE_VIOLATION') return !PATROL_PPE_UI_HIDDEN
-  return !['POPULATION_OBSERVED', 'POPULATION_CHANGE', 'HIGH_DENSITY', 'IDENTITY_VERIFIED'].includes(event.type)
+  return [
+    'POPULATION_OBSERVED',
+    'POPULATION_CHANGE',
+    'HIGH_DENSITY',
+    'IDENTITY_VERIFIED',
+    'MACHINE_STOPPED',
+  ].includes(event.type)
 }
 
+const WORKFORCE_FEED_TYPES = new Set<PatrolEvent['type']>([
+  'POPULATION_OBSERVED',
+  'POPULATION_CHANGE',
+  'HIGH_DENSITY',
+  'IDENTITY_VERIFIED',
+  'MACHINE_STOPPED',
+])
+
 export function isPatrolEvidenceEvent(event: PatrolEvent): boolean {
+  if (!isPatrolFeedEventType(event)) return false
+  if (!isValidPatrolEventTime(event.lockedAt)) return false
+  if (WORKFORCE_FEED_TYPES.has(event.type)) return true
   return hasPatrolEventSnapshot(event)
-    && isValidPatrolEventTime(event.lockedAt)
-    && isPatrolFeedEventType(event)
 }
 
 export function filterPatrolEvidenceEvents(events: PatrolEvent[]): PatrolEvent[] {
   return events.filter(isPatrolEvidenceEvent)
+}
+
+/** KPI Cảnh báo — cùng tập sự kiện với panel Sự kiện. */
+export function summarizePatrolAlertEvents(events: PatrolEvent[]): string {
+  if (events.length === 0) return 'Chưa có sự kiện'
+  const workforce = events.filter(e =>
+    ['POPULATION_OBSERVED', 'POPULATION_CHANGE', 'HIGH_DENSITY'].includes(e.type),
+  ).length
+  const identity = events.filter(e => e.type === 'IDENTITY_VERIFIED').length
+  const machine = events.filter(e => e.type === 'MACHINE_STOPPED').length
+  const withSnapshot = events.filter(e => hasPatrolEventSnapshot(e)).length
+  const parts: string[] = []
+  if (workforce > 0) parts.push(`${workforce} nhân lực`)
+  if (identity > 0) parts.push(`${identity} định danh`)
+  if (machine > 0) parts.push(`${machine} máy`)
+  if (withSnapshot > 0 && parts.length === 0) parts.push(`${withSnapshot} có ảnh`)
+  return parts.length > 0 ? parts.join(' · ') : `${events.length} sự kiện`
 }

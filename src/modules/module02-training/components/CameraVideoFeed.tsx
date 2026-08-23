@@ -17,8 +17,10 @@ import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/
 import { isHlsStreamUrl, useHlsVideoSource } from '../hooks/useHlsVideoSource'
 import {
   isAiOverlayDisabledCamera,
+  isPatrolHelmetAiCamera,
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
+import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
@@ -60,6 +62,9 @@ export function CameraVideoFeed({
   const { isDesktop } = useShellLayout()
   const { enabledModels } = useCameraAiEnabledModels(cameraId)
   const overlayActive = Boolean(aiOverlay && bboxVisible)
+  const runPatrolAnalyze = Boolean(
+    playing && aiOverlay && isPatrolHelmetAiCamera(cameraId) && isVmsLiveCamera(cameraId),
+  )
   const feedKey = getFeedKeyForCamera(cameraId)
   const posterUrl = feedKey ? getCameraFeedPosterUrl(feedKey) : undefined
   const overlayDisabled = isAiOverlayDisabledCamera(cameraId)
@@ -85,12 +90,33 @@ export function CameraVideoFeed({
   const showPpeOverlay = Boolean(
     overlayActive && (ppeAnalysis || patrolPersonAnalysis) && !overlayDisabled,
   )
+  const runPatrolHeatmapAnalyze = Boolean(
+    runPatrolAnalyze && patrolPersonAnalysis && !overlayDisabled,
+  )
   const showPcccOverlay = Boolean(overlayActive && pcccAnalysis && !overlayDisabled)
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const vmsFeed = useVmsDetectionFeed(cameraId, Boolean(overlayActive && isVmsLiveCamera(cameraId)))
+  const vmsFeed = useVmsDetectionFeed(
+    cameraId,
+    Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
+  )
+
+  useEffect(() => {
+    if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
+    syncLivePatrolPersonDetectionsToHeatmap(
+      cameraId,
+      vmsFeed.snapshot.detections.map(d => ({
+        behavior: d.behavior,
+        label: d.label ?? d.behavior,
+        confidence: d.confidence,
+        bbox: d.bbox,
+        worker_id: d.worker_id,
+        worker_name: d.worker_name,
+      })),
+    )
+  }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at])
 
   useHlsVideoSource(videoRef, src, playing)
 

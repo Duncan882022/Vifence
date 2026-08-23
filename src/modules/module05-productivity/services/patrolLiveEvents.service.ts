@@ -1,4 +1,5 @@
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
+import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
   getPatrolHelmetGps,
   getPatrolHelmetGpsLastKnown,
@@ -296,6 +297,9 @@ function resolveEventGps(
     if (snap) return { lat: snap.lat, lng: snap.lng }
     return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
   }
+  if (cameraId === 'HC-01') {
+    return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
+  }
   return { lat: 0, lng: 0 }
 }
 
@@ -401,4 +405,27 @@ export async function fetchPatrolHelmetAggregateLiveEvents(
   }
 
   return mapBackendRows(rows, backendUrl)
+}
+
+export interface ClearBackendEventsResult {
+  memory: number
+  files: number
+  dedup_keys: number
+}
+
+/** DELETE /events — xóa RAM + JSONL + snapshot trên backend (test mới). */
+export async function clearAllPatrolBackendEvents(
+  backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl(),
+): Promise<ClearBackendEventsResult | null> {
+  const base = backendUrl?.replace(/\/$/, '')
+  if (!base) return null
+  const res = await fetch(`${base}/events`, {
+    method: 'DELETE',
+    headers: TUNNEL_HEADERS,
+    mode: 'cors',
+  })
+  if (!res.ok) {
+    throw new Error(`clear events failed: HTTP ${res.status}`)
+  }
+  return (await res.json()) as ClearBackendEventsResult
 }

@@ -34,7 +34,7 @@ function resolveWorkforceEventGps(
   const lat = Number(ev.payload?.lat ?? 0)
   const lng = Number(ev.payload?.lon ?? ev.payload?.lng ?? 0)
   if (isValidGps(lat, lng)) return { lat, lng }
-  if (cameraId === 'HC-02') {
+  if (cameraId === 'HC-02' || cameraId === 'HC-01') {
     return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
   }
   return { lat: 0, lng: 0 }

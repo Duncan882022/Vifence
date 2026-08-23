@@ -64,13 +64,11 @@ export function Module02DashboardPage() {
         </Panel>
 
         <div className={cn(
-          'flex flex-col gap-3',
-          'max-lg:flex-none',
-          'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
+          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
         )}>
           <div className={cn(
             'flex flex-col min-h-0',
-            tier2Open ? 'lg:flex-[11] max-lg:flex-none' : 'shrink-0',
+            tier2Open ? 'flex-[6] lg:flex-[11] min-h-0' : 'shrink-0',
           )}>
             <Panel
               title="Camera"
@@ -78,10 +76,7 @@ export function Module02DashboardPage() {
               fit={!tier2Open}
               noPadding
               className={cn(
-                tier2Open && 'lg:flex-1 lg:min-h-0',
-                tier2Open && 'max-lg:!h-auto max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
-                tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible',
-                !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
+                tier2Open && 'flex-1 min-h-0 h-full',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -99,7 +94,7 @@ export function Module02DashboardPage() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col flex-1 min-h-0 h-full w-full max-lg:min-h-0">
+                <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden">
                   <TrainingCameraPanel
                     selectedId={selectedCamId}
                     onSelectCamera={cam => setSelectedCamId(cam.id)}
@@ -111,23 +106,21 @@ export function Module02DashboardPage() {
           </div>
 
           <div className={cn(
-            'flex flex-col lg:flex-row gap-3 min-h-0',
-            'max-lg:flex-none',
+            'flex flex-col lg:flex-row gap-2 sm:gap-3 min-h-0 flex-1 overflow-hidden',
             tier2Open ? 'lg:flex-[9]' : 'lg:flex-1',
           )}>
             {showCourses && (
               <div className={cn(
-                'w-full lg:flex-[42] min-w-0 min-h-0 max-lg:landscape:min-h-[240px] lg:min-h-0 flex flex-col gap-3',
-                !coursesPanelOpen && 'lg:min-h-0',
+                'w-full lg:flex-[42] min-w-0 min-h-0 flex flex-col gap-2 sm:gap-3 overflow-hidden',
+                coursesPanelOpen && 'flex-1',
+                !coursesPanelOpen && 'shrink-0',
               )}>
                 <Panel
                   title="Danh Sách Khóa Học"
                   fit={!coursesPanelOpen}
                   noPadding
                   className={cn(
-                    coursesPanelOpen
-                      ? 'flex-1 min-h-0 max-lg:portrait:flex-none max-lg:portrait:!h-auto'
-                      : 'shrink-0',
+                    coursesPanelOpen && 'flex-1 min-h-0 h-full',
                   )}
                   headerRight={
                     <div className="flex items-center gap-2 min-w-0">
@@ -163,14 +156,13 @@ export function Module02DashboardPage() {
             </div>
 
             <div className={cn(
-              'w-full lg:flex-[58] min-w-0 flex flex-col',
-              eventsPanelOpen ? 'min-h-[320px] lg:min-h-0' : 'min-h-0',
+              'w-full lg:flex-[58] min-w-0 flex flex-col flex-1 min-h-0 overflow-hidden',
             )}>
               <Panel
                 title="Sự Kiện Đào Tạo"
                 fit={!eventsPanelOpen}
                 noPadding
-                className={cn(eventsPanelOpen ? 'flex-1 min-h-0' : 'shrink-0')}
+                className={cn(eventsPanelOpen ? 'flex-1 min-h-0 h-full' : 'shrink-0')}
                 headerRight={
                   <div className="flex items-center gap-2 min-w-0">
                     {!eventsPanelOpen && (

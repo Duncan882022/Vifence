@@ -224,8 +224,7 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
     case 'workforce':
       return feed.filter(e =>
         e.type === 'POPULATION_OBSERVED'
-        || e.type === 'POPULATION_CHANGE'
-        || e.type === 'PERSON_DETECTED',
+        || e.type === 'POPULATION_CHANGE',
       )
     case 'identity':
       return feed.filter(e => e.type === 'IDENTITY_VERIFIED')
@@ -259,8 +258,7 @@ export function PatrolEventsPanel({
       all: feed.length,
       workforce: feed.filter(e =>
         e.type === 'POPULATION_OBSERVED'
-        || e.type === 'POPULATION_CHANGE'
-        || e.type === 'PERSON_DETECTED',
+        || e.type === 'POPULATION_CHANGE',
       ).length,
       identity: feed.filter(e => e.type === 'IDENTITY_VERIFIED').length,
       density: feed.filter(e => e.type === 'HIGH_DENSITY').length,
@@ -327,7 +325,7 @@ export function PatrolEventsPanel({
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
         {events.filter(isMeaningfulFeedEvent).length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
-            Chưa có sự kiện có ảnh evidence — đang chờ backend ghi snapshot
+            Chưa có sự kiện live — đang chờ backend Contabo / workforce engine
           </p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">

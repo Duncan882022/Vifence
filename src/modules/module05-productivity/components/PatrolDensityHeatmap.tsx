@@ -3,6 +3,8 @@
  * specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
  */
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 
 import { cn } from '@/utils/cn'
 import {
@@ -30,6 +32,11 @@ import {
   isVerifiedWorkerLabel,
   type HeatmapTimeWindow,
 } from '../utils/workforceHeatmapUi'
+import {
+  isPatrolManuallyIdentified,
+  resolvePatrolObjectLabel,
+  subscribePatrolManualIdentity,
+} from '../services/patrolManualIdentity.service'
 import type { ObjectState } from '../types/workforceHeatmap'
 
 function LayerToggle({
@@ -67,7 +74,14 @@ function LayerToggle({
   )
 }
 
-export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embedded' | 'modal' }) {
+export function PatrolDensityHeatmap({
+  expanded = false,
+  onCloseExpand,
+}: {
+  /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
+  expanded?: boolean
+  onCloseExpand?: () => void
+}) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
     polygon: true,
@@ -77,6 +91,7 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
   })
   const [timeWindow, setTimeWindow] = useState<HeatmapTimeWindow>('live')
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
+  const [identityRevision, setIdentityRevision] = useState(0)
   const [mobileHc02Live, setMobileHc02Live] = useState(
     () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
@@ -102,6 +117,10 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
   const metrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
 
   useEffect(() => {
+    return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
+  }, [])
+
+  useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
       setMobileHc02Live(Boolean(snap && snap.cameraId === 'HC-02' && snap.streamOnline))
     })
@@ -118,24 +137,32 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
 
   const mergedCameraPositions = useMemo(() => {
     const next = { ...cameraPositions }
+    const hc01Wf = workforce.helmets['HC-01']
+    if (helmetOnlineById['HC-01'] && hc01Wf?.lat != null && hc01Wf?.lon != null) {
+      next['HC-01'] = [hc01Wf.lat, hc01Wf.lon]
+    }
+    const hc02Wf = workforce.helmets['HC-02']
     if (helmetOnlineById['HC-02']) {
-      next['HC-02'] = hc02Live.lat != null && hc02Live.lng != null
-        ? [hc02Live.lat, hc02Live.lng]
-        : PATROL_SITE_CENTER
+      if (hc02Wf?.lat != null && hc02Wf?.lon != null) {
+        next['HC-02'] = [hc02Wf.lat, hc02Wf.lon]
+      } else if (hc02Live.lat != null && hc02Live.lng != null) {
+        next['HC-02'] = [hc02Live.lat, hc02Live.lng]
+      } else {
+        next['HC-02'] = PATROL_SITE_CENTER
+      }
     } else if (hc02Live.hasLiveGps && hc02Live.lat != null && hc02Live.lng != null) {
       next['HC-02'] = [hc02Live.lat, hc02Live.lng]
-    } else if (hc02Helmet?.lat != null && hc02Helmet?.lon != null) {
-      next['HC-02'] = [hc02Helmet.lat, hc02Helmet.lon]
+    } else if (hc02Wf?.lat != null && hc02Wf?.lon != null) {
+      next['HC-02'] = [hc02Wf.lat, hc02Wf.lon]
     }
     return next
   }, [
     cameraPositions,
     helmetOnlineById,
+    workforce.helmets,
     hc02Live.hasLiveGps,
     hc02Live.lat,
     hc02Live.lng,
-    hc02Helmet?.lat,
-    hc02Helmet?.lon,
   ])
 
   const mergedRouteHistory = useMemo(() => {
@@ -161,6 +188,7 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
   const filteredDots = useMemo(() => {
+    void identityRevision
     const cutoff = Date.now() - heatmapWindowMs(timeWindow)
     const now = Date.now()
     const activeObjectIds = new Set(
@@ -189,19 +217,23 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
 
     const objectDots = liveObjects
       .filter(o => o.lat != null && o.lon != null)
-      .map(o => markInView({
-        id: o.object_id,
-        type: 'person' as const,
-        position: [o.lat!, o.lon!] as [number, number],
-        zoneId: o.zone_id,
-        cameraId: o.helmet_id,
-        confidence: o.position_confidence,
-        label: o.worker_name || o.object_id,
-        lastSeenAt: Date.parse(o.last_seen) || Date.now(),
-        objectId: o.object_id,
-        verified: o.identity_status === 'VERIFIED',
-        inCameraView: o.status === 'ACTIVE',
-      }))
+      .map(o => {
+        const fallback = o.worker_name || o.object_id
+        const manual = isPatrolManuallyIdentified(o.object_id)
+        return markInView({
+          id: o.object_id,
+          type: 'person' as const,
+          position: [o.lat!, o.lon!] as [number, number],
+          zoneId: o.zone_id,
+          cameraId: o.helmet_id,
+          confidence: o.position_confidence,
+          label: resolvePatrolObjectLabel(o.object_id, fallback),
+          lastSeenAt: Date.parse(o.last_seen) || Date.now(),
+          objectId: o.object_id,
+          verified: o.identity_status === 'VERIFIED' || manual,
+          inCameraView: o.status === 'ACTIVE',
+        })
+      })
 
     if (timeWindow === 'live' && objectDots.length > 0) {
       return objectDots
@@ -221,15 +253,16 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
           zoneId: hp.zone_id,
           cameraId: 'HC-02',
           confidence: hp.weight,
-          label: hp.object_id,
+          label: resolvePatrolObjectLabel(hp.object_id, hp.object_id),
           lastSeenAt: ts,
           objectId: hp.object_id,
+          verified: isPatrolManuallyIdentified(hp.object_id),
           inCameraView: false,
         }))
       }
     }
     return [...byId.values()]
-  }, [hc02Live.dots, timeWindow, liveObjects, workforce.heatPoints])
+  }, [hc02Live.dots, timeWindow, liveObjects, workforce.heatPoints, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -257,10 +290,13 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
 
   const identifiedCount = useMemo(() => {
     if (zonePop) return zonePop.breakdown.verified_identities
-    const fromObjects = liveObjects.filter(o => o.identity_status === 'VERIFIED').length
+    void identityRevision
+    const fromObjects = liveObjects.filter(
+      o => o.identity_status === 'VERIFIED' || isPatrolManuallyIdentified(o.object_id),
+    ).length
     if (fromObjects > 0) return fromObjects
-    return filteredDots.filter(d => isVerifiedWorkerLabel(d.label)).length
-  }, [zonePop, liveObjects, filteredDots])
+    return filteredDots.filter(d => d.verified || isVerifiedWorkerLabel(d.label)).length
+  }, [zonePop, liveObjects, filteredDots, identityRevision])
 
   const hc02Online = Boolean(hc02Helmet?.online) || helmetOnlineById['HC-02']
   const bodycamOnlineById = useMemo(() => ({
@@ -268,8 +304,19 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
     'HC-02': hc02Online,
   }), [helmetOnlineById, hc02Online])
 
-  return (
-    <div className="flex flex-col overflow-hidden lg:h-full lg:min-h-0 min-h-0">
+  useEffect(() => {
+    if (!expanded) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseExpand?.() }
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [expanded, onCloseExpand])
+
+  const mapBody = (
+    <>
       <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-1.5 space-y-1">
         <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-[10px] min-w-0">
           {DEFAULT_PATROL_CAMERA_IDS.map(id => {
@@ -321,12 +368,7 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
         </div>
       </div>
 
-      <div
-        className={cn(
-          'min-w-0 relative min-h-0',
-          variant === 'modal' ? viewport.modalMapClass : viewport.embeddedMapClass,
-        )}
-      >
+      <div className="min-w-0 relative min-h-0 flex-1 h-full w-full">
         <PatrolGeoHeatmap
           zones={liveZones}
           cameraPositions={mergedCameraPositions}
@@ -354,6 +396,52 @@ export function PatrolDensityHeatmap({ variant = 'embedded' }: { variant?: 'embe
         />
         <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      {expanded && createPortal(
+        <div
+          className="fixed inset-0 z-[110] bg-black/80 sm:bg-black/75 backdrop-blur-[2px]"
+          onClick={() => onCloseExpand?.()}
+          role="presentation"
+          aria-hidden
+        />,
+        document.body,
+      )}
+      {expanded && (
+        <div className="flex-1 min-h-[180px] invisible pointer-events-none" aria-hidden />
+      )}
+      <div
+        className={cn(
+          'flex flex-col overflow-hidden h-full min-h-0 flex-1',
+          expanded && [
+            'fixed inset-0 z-[120] bg-[#0a0e17] shadow-2xl shadow-black/60',
+            'pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]',
+            'sm:inset-4 sm:rounded-xl sm:border sm:border-[#2a3855]',
+          ],
+        )}
+        onClick={expanded ? e => e.stopPropagation() : undefined}
+        role={expanded ? 'dialog' : undefined}
+        aria-modal={expanded || undefined}
+        aria-label={expanded ? 'Heatmap tuần tra' : undefined}
+      >
+        {expanded && (
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-[#1e2433] shrink-0">
+            <span className="text-[11px] font-bold tracking-widest text-foreground uppercase">Heatmap</span>
+            <button
+              type="button"
+              onClick={() => onCloseExpand?.()}
+              className="p-2 sm:p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              aria-label="Đóng"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        {mapBody}
+      </div>
+    </>
   )
 }

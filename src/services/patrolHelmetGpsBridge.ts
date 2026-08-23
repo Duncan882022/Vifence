@@ -1,10 +1,14 @@
-/** GPS live từ thiết bị HC-02 → map / analyze payload. */
+/** GPS live từ thiết bị HC-02 → map / analyze payload (EKF + map match §6). */
+import { fuseHelmetPose } from '@/modules/module05-productivity/utils/positionEngine'
+
 export interface PatrolHelmetGpsSnapshot {
   cameraId: string
   lat: number
   lng: number
   accuracyM?: number
   updatedAt: number
+  /** raw | ekf | ekf_map | map */
+  positionMethod?: string
 }
 
 const FRESH_TTL_MS = 45_000
@@ -14,8 +18,21 @@ let lastSnapshot: PatrolHelmetGpsSnapshot | null = null
 const listeners = new Set<(snap: PatrolHelmetGpsSnapshot) => void>()
 
 export function setPatrolHelmetGps(snapshot: PatrolHelmetGpsSnapshot): void {
-  lastSnapshot = snapshot
-  listeners.forEach(fn => fn(snapshot))
+  const fused = fuseHelmetPose({
+    cameraId: snapshot.cameraId,
+    lat: snapshot.lat,
+    lng: snapshot.lng,
+    accuracyM: snapshot.accuracyM,
+    ts: snapshot.updatedAt,
+  })
+  if (fused.lat == null || fused.lng == null) return
+  lastSnapshot = {
+    ...snapshot,
+    lat: fused.lat,
+    lng: fused.lng,
+    positionMethod: fused.method,
+  }
+  listeners.forEach(fn => fn(lastSnapshot!))
 }
 
 export function getPatrolHelmetGps(cameraId: string): PatrolHelmetGpsSnapshot | null {

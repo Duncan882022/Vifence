@@ -41,6 +41,8 @@ import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend
 import { groupPpeDetections } from '@/modules/module03-safety/utils/ppeDetectionGroups'
 import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
 import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
+import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
+import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /**
  * HC bodycam — chỉ bbox person (xanh).
@@ -185,6 +187,7 @@ export function MobileCameraFeed({
           const rawPersons = result.detections.filter(d => d.behavior === 'person')
           const persons = filtered.filter(d => d.behavior === 'person')
           const personCount = Math.max(rawPersons.length, persons.length)
+          syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections)
           const violations = filtered.filter(d =>
             ['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior),
           )
@@ -297,7 +300,15 @@ export function MobileCameraFeed({
 
   useEffect(() => {
     if (cameraId !== 'HC-02' || status !== 'live') return
-    return watchDeviceHeading()
+    const unsubHeading = watchDeviceHeading()
+    const imuTick = window.setInterval(() => {
+      const h = getLastDeviceHeading()
+      if (h != null) ingestHelmetImu(cameraId, h)
+    }, 50)
+    return () => {
+      unsubHeading()
+      window.clearInterval(imuTick)
+    }
   }, [cameraId, status])
 
   /* HC-02: heartbeat online — cam trước/sau đều tính live (kể cả lúc AI tạm dừng). */
@@ -420,6 +431,7 @@ export function MobileCameraFeed({
           modelId={overlayModelId}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          objectTracking={overlayModelId === 'ppe'}
         />
       )}
 

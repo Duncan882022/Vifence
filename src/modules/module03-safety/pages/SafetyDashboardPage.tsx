@@ -166,16 +166,14 @@ export function SafetyDashboardPage() {
       </Panel>
 
       <div className={cn(
-        'flex flex-col gap-3',
-        'max-lg:flex-none',
-        'lg:flex-1 lg:min-h-0 lg:overflow-hidden',
+        'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
       )}>
           {/* Camera — ưu tiên chiều cao khi mở (LIVE phải thấy rõ, giống Module 02) */}
         <div className={cn(
           'flex flex-col min-h-0',
             tier2Open
               ? cn(
-                'max-lg:flex-none max-lg:min-h-[280px]',
+                'flex-[6] min-h-0',
                 cameraMode === 'playback' ? 'lg:flex-[13]' : 'lg:flex-[11]',
               )
               : 'shrink-0',
@@ -186,10 +184,7 @@ export function SafetyDashboardPage() {
             fit={!tier2Open}
             noPadding
             className={cn(
-                tier2Open && 'lg:flex-1 lg:min-h-[260px]',
-                tier2Open && 'max-lg:!h-auto max-lg:min-h-[280px] max-lg:overflow-visible max-lg:[&>div:last-child]:!h-auto',
-                tier2Open && 'max-lg:[&>div:last-child]:flex-none max-lg:[&>div:last-child]:overflow-visible max-lg:[&>div:last-child]:min-h-[240px]',
-              !tier2Open && 'max-lg:!h-auto max-lg:min-h-0',
+                tier2Open && 'flex-1 min-h-0 h-full',
             )}
             headerRight={
               <div className="flex items-center gap-2 min-w-0">
@@ -210,11 +205,7 @@ export function SafetyDashboardPage() {
             }
           >
             {tier2Open && (
-                <div className={cn(
-                  'flex flex-col flex-1 min-h-0 h-full w-full max-lg:min-h-[240px]',
-                  cameraMode === 'live' && 'max-lg:h-auto max-lg:flex-none',
-                  cameraMode === 'playback' && 'max-lg:h-auto max-lg:flex-none',
-                )}>
+                <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden">
                   {cameraMode === 'live' ? (
                     <TrainingCameraPanel
                   selectedId={selectedCamId}
@@ -249,10 +240,9 @@ export function SafetyDashboardPage() {
 
           {/* Nhóm ATLĐ + Sự kiện — mobile & desktop: nhóm trước */}
         <div className={cn(
-          'flex flex-col lg:flex-row gap-3 min-h-0',
-          'max-lg:flex-none',
+          'flex flex-col lg:flex-row gap-2 sm:gap-3 min-h-0 flex-1 overflow-hidden',
             bothLowerCollapsed
-              ? 'lg:flex-1 lg:min-h-0'
+              ? 'lg:flex-1'
               : tier2Open
                 ? cameraMode === 'playback' ? 'lg:flex-[7]' : 'lg:flex-[9]'
                 : eventsPanelOpen
@@ -260,10 +250,7 @@ export function SafetyDashboardPage() {
                   : 'lg:flex-1',
           )}>
             <div className={cn(
-              'w-full lg:flex-[58] min-w-0 flex flex-col',
-              bothLowerCollapsed
-                ? 'lg:min-h-0 lg:flex-1'
-                : 'max-lg:min-h-0 lg:min-h-0',
+              'w-full lg:flex-[58] min-w-0 flex flex-col flex-1 min-h-0 overflow-hidden',
             )}>
               <Panel
                 title="Nhóm ATLĐ"
@@ -271,8 +258,8 @@ export function SafetyDashboardPage() {
                 expandable={groupPanelExpanded}
                 fit={!isDesktop || !groupPanelOpen}
                 className={cn(
-                  isDesktop && 'flex-1 min-h-0 overflow-hidden',
-                  !isDesktop && 'shrink-0 max-lg:!h-auto',
+                  groupPanelOpen && 'flex-1 min-h-0 overflow-hidden h-full',
+                  !groupPanelOpen && 'shrink-0',
                 )}
                 headerRight={
                   !isDesktop ? (
@@ -294,10 +281,7 @@ export function SafetyDashboardPage() {
             </div>
 
             <div className={cn(
-              'w-full lg:flex-[42] min-w-0 flex flex-col',
-              bothLowerCollapsed
-                ? 'lg:min-h-0 lg:flex-1'
-                : 'max-lg:min-h-[320px] lg:min-h-0',
+              'w-full lg:flex-[42] min-w-0 flex flex-col flex-1 min-h-0 overflow-hidden',
             )}>
               <SafetyEventsPanel
                 all={alerts.all}

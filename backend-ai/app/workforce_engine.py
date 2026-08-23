@@ -4,6 +4,8 @@ specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md
 """
 from __future__ import annotations
 
+from .position_engine import fuse_helmet_pose, map_match_position
+
 import math
 import time
 import uuid
@@ -262,6 +264,7 @@ class HelmetPose:
     zone_id: str = DEFAULT_ZONE
     online: bool = False
     updated_at: float = 0.0
+    position_method: str = "raw"
 
 
 class WorkforceEngine:
@@ -287,11 +290,30 @@ class WorkforceEngine:
         roll: float | None = None,
         online: bool = True,
         zone_id: str | None = None,
+        accuracy_m: float | None = None,
     ) -> HelmetPose:
         pose = self.helmets.get(helmet_id) or HelmetPose(helmet_id=helmet_id)
-        if lat is not None and lon is not None:
-            pose.lat, pose.lon = float(lat), float(lon)
-        if heading is not None:
+        now = _now()
+        fused_lat, fused_lon, fused_heading, method = fuse_helmet_pose(
+            helmet_id,
+            lat=lat,
+            lon=lon,
+            heading=heading,
+            pitch=pitch,
+            roll=roll,
+            accuracy_m=accuracy_m,
+            ts=now,
+        )
+        if fused_lat is not None and fused_lon is not None:
+            pose.lat, pose.lon = fused_lat, fused_lon
+            pose.position_method = method
+        elif lat is not None and lon is not None and not (lat == 0 and lon == 0):
+            matched_lat, matched_lon = map_match_position(float(lat), float(lon))
+            pose.lat, pose.lon = matched_lat, matched_lon
+            pose.position_method = "map"
+        if fused_heading is not None:
+            pose.heading = fused_heading
+        elif heading is not None:
             pose.heading = float(heading) % 360.0
         if pitch is not None:
             pose.pitch = float(pitch)
@@ -300,7 +322,7 @@ class WorkforceEngine:
         pose.online = online
         if zone_id:
             pose.zone_id = zone_id
-        pose.updated_at = _now()
+        pose.updated_at = now
         self.helmets[helmet_id] = pose
         return pose
 
@@ -459,6 +481,7 @@ class WorkforceEngine:
             dist = estimate_distance_m(mode, bbox, frame_h)
             if dist is not None:
                 lat2, lon2 = forward_geodesic(pose.lat, pose.lon, bearing, dist)
+                lat2, lon2 = map_match_position(lat2, lon2)
                 prev_ll = (obj.lat, obj.lon) if obj.lat is not None and obj.lon is not None else None
                 lat2, lon2 = lowpass_latlon(prev_ll, (lat2, lon2), mode)
                 obj.lat, obj.lon = lat2, lon2
@@ -666,6 +689,7 @@ class WorkforceEngine:
                 "lat": pose.lat, "lon": pose.lon, "heading": pose.heading,
                 "pitch": pose.pitch, "roll": pose.roll, "zone_id": pose.zone_id,
                 "online": pose.online and (t - pose.updated_at) < 45.0,
+                "position_method": pose.position_method,
             }
         objects_out: dict[str, Any] = {}
         for oid, obj in self.objects.items():

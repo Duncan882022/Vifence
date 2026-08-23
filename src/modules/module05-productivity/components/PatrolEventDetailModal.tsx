@@ -1,10 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, Play, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
+import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
+import { needsPatrolManualIdentity, isPatrolManuallyIdentified } from '../services/patrolManualIdentity.service'
+import { resolveEventObjectDisplay } from '../utils/patrolManualIdentityUi'
 import {
   PATROL_TYPE_META,
   getPatrolEventPlace,
@@ -32,6 +35,8 @@ function mapsUrl(lat: number, lng: number): string {
 }
 
 export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEventDetailModalProps) {
+  const [identityTick, setIdentityTick] = useState(0)
+
   useEffect(() => {
     if (!event) return
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -44,12 +49,17 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
   }, [event, onClose])
 
   if (!event) return null
+  void identityTick
 
   const meta = PATROL_TYPE_META[event.type]
   const TypeIcon = meta.icon
   const statusDisplay = getPatrolEventStatusDisplay(event.status)
   const gpsOk = hasValidGps(event.gps)
   const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
+  const objectKey = event.objectId?.trim() || event.id
+  const objectDisplay = resolveEventObjectDisplay(event)
+  const showIdentify = needsPatrolManualIdentity(objectKey, event.objectLabel)
+    || isPatrolManuallyIdentified(objectKey)
 
   return createPortal(
     <div
@@ -58,7 +68,10 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
       role="presentation"
     >
       <div
-        className="relative flex flex-col overflow-hidden w-full sm:max-w-lg max-h-[92dvh] sm:max-h-[88vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60"
+        className={cn(
+          'relative flex flex-col w-full max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60',
+          event.snapshotUrl ? 'sm:max-w-3xl lg:max-w-4xl' : 'sm:max-w-lg',
+        )}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -86,16 +99,19 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {event.snapshotUrl && (
-            <PatrolEventSnapshot event={event} className="w-full min-h-[160px] max-w-full" />
+            <div className="shrink-0 space-y-1">
+              <PatrolEventSnapshot event={event} variant="detail" />
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
             {[
               ['Trạng thái', statusDisplay.label],
               ['Vị trí', eventPlace],
-              ['Đối tượng', event.objectLabel],
+              ['Đối tượng', objectDisplay.label],
+              ...(objectDisplay.unit ? [['Đơn vị', objectDisplay.unit] as const] : []),
               ['Ghi nhận', formatEventDateTime(event.lockedAt)],
               ['Bắt đầu', formatEventDateTime(event.startedAt)],
               ['Kết thúc', event.endedAt ? formatEventDateTime(event.endedAt) : '—'],
@@ -138,6 +154,13 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
               </p>
             )}
           </div>
+
+          {showIdentify && (
+            <PatrolManualIdentityPanel
+              objectKey={objectKey}
+              onAssigned={() => setIdentityTick(t => t + 1)}
+            />
+          )}
 
           <div className="flex flex-wrap gap-2 pt-1">
             <button
