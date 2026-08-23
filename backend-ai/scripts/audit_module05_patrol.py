@@ -607,7 +607,7 @@ def audit_no_vest_snapshot_roi() -> list[CaseResult]:
         person_bbox=list(face_pb),
         track_id="p_face:no_vest",
     )
-    face_roi_skipped = (
+    face_roi_skipped = face_event is None or (
         face_event is not None
         and (
             face_event.bbox[2] - face_event.bbox[0] < 4
@@ -633,7 +633,8 @@ def audit_no_vest_snapshot_roi() -> list[CaseResult]:
         track_id="p_chest:no_vest",
     )
     chest_cy = (chest_event.bbox[1] + chest_event.bbox[3]) / 2.0 if chest_event else 0.0
-    expect_cy = chest_pb[1] + chest_ph * 0.44
+    # HC bodycam chest band 42–68% → tâm ~55%
+    expect_cy = chest_pb[1] + chest_ph * 0.55
     chest_roi_ok = (
         chest_event is not None
         and chest_event.bbox[2] - chest_event.bbox[0] >= 4

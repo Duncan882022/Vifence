@@ -169,8 +169,15 @@ def _head_region_for_helmet(person_box: tuple[float, float, float, float]) -> tu
 
 def _chest_scan_region(
     person_box: tuple[float, float, float, float],
+    *,
+    camera_id: str = "",
 ) -> tuple[float, float, float, float]:
-    """Vùng ngực áo BHLD — tránh cổ/mặt (trên) và bụng (dưới)."""
+    """Vùng ngực áo BHLD — tránh cổ/mặt (trên) và bụng (dưới).
+
+    Bodycam HC-* cận mặt: hạ band xuống 42–68% để không khoanh mắt/trán.
+    """
+    if _is_helmet_bodycam(camera_id):
+        return _sub_region(person_box, 0.42, 0.68)
     return _sub_region(person_box, 0.30, 0.58)
 
 
@@ -239,22 +246,47 @@ def ppe_violation_display_bbox(
     return person_box
 
 
+def _face_dominant_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """True khi bbox người gần như chỉ mặt/đầu — không đủ ngực để chấm áo."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    aspect = pw / ph
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    # Cận mặt: khung vuông/ngang hoặc thân thấp trên nửa trên ảnh.
+    if aspect >= 0.72 and bh_ratio < 0.62:
+        return True
+    if y1 < frame_h * 0.12 and y2 < frame_h * 0.62 and bh_ratio < 0.55:
+        return True
+    if aspect >= 0.55 and bh_ratio < 0.42:
+        return True
+    return False
+
+
 def _vest_roi_overlaps_face(
     person_box: tuple[float, float, float, float],
     roi_box: tuple[float, float, float, float],
     *,
     max_head_overlap_ratio: float = 0.18,
+    camera_id: str = "",
 ) -> bool:
     """ROI áo trùng vùng mặt/đầu — không vẽ snapshot."""
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
     pw = max(x2 - x1, 1.0)
-    head = (x1 + pw * 0.08, y1, x2 - pw * 0.08, y1 + ph * 0.26)
+    # Bodycam: đầu/cổ ~ top 36% — đủ chặn mắt/trán, không nuốt band ngực 42–68%.
+    head_frac = 0.36 if _is_helmet_bodycam(camera_id) else 0.26
+    head = (x1 + pw * 0.08, y1, x2 - pw * 0.08, y1 + ph * head_frac)
     roi_area = max((roi_box[2] - roi_box[0]) * (roi_box[3] - roi_box[1]), 1.0)
     if _intersection_area(roi_box, head) / roi_area > max_head_overlap_ratio:
         return True
     rcy = (roi_box[1] + roi_box[3]) / 2.0
-    if rcy < y1 + ph * 0.28:
+    min_rcy_frac = 0.45 if _is_helmet_bodycam(camera_id) else 0.28
+    if rcy < y1 + ph * min_rcy_frac:
         return True
     return False
 
@@ -267,13 +299,19 @@ def _resolve_vest_snapshot_bbox(
     camera_id: str = "",
 ) -> tuple[float, float, float, float] | None:
     """BBox ROI snapshot no_vest — luôn bám ngực, không khoanh mặt."""
+    if _face_dominant_person_box(person_box, frame_w, frame_h):
+        return None
+    if not _torso_assessable(person_box, frame_w, frame_h, camera_id=camera_id):
+        return None
+
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
-    chest = _chest_scan_region(person_box)
+    chest = _chest_scan_region(person_box, camera_id=camera_id)
     display = _torso_violation_display_bbox(person_box, scan_region=chest)
     clipped = _clip_box_to_frame(display, frame_w, frame_h)
 
-    min_y1 = y1 + ph * 0.30
+    min_y1_frac = 0.42 if _is_helmet_bodycam(camera_id) else 0.30
+    min_y1 = y1 + ph * min_y1_frac
     if clipped[1] < min_y1:
         clipped = (clipped[0], min_y1, clipped[2], clipped[3])
 
@@ -283,16 +321,12 @@ def _resolve_vest_snapshot_bbox(
     if (clipped[3] - clipped[1]) < min_h:
         return None
 
-    if _vest_roi_overlaps_face(person_box, clipped):
+    if _vest_roi_overlaps_face(person_box, clipped, camera_id=camera_id):
         return None
 
     if _is_helmet_bodycam(camera_id):
         rcy = (clipped[1] + clipped[3]) / 2.0
-        if rcy < y1 + ph * 0.40:
-            return None
-
-    if not _torso_assessable(person_box, frame_w, frame_h, camera_id=camera_id):
-        if _vest_roi_overlaps_face(person_box, clipped, max_head_overlap_ratio=0.10):
+        if rcy < y1 + ph * 0.45:
             return None
 
     return clipped
@@ -1322,40 +1356,39 @@ def _torso_assessable(
     *,
     camera_id: str = "",
 ) -> bool:
-    """Chỉ đánh giá áo BHLD khi vùng ngực (30–58%) đủ rõ — không log nếu ROI rơi vào mặt."""
+    """Chỉ đánh giá áo BHLD khi vùng ngực đủ rõ — không log nếu ROI rơi vào mặt."""
+    if _face_dominant_person_box(person_box, frame_w, frame_h):
+        return False
+
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
     pw = max(x2 - x1, 1.0)
-    chest = _chest_scan_region(person_box)
+    bodycam = _is_helmet_bodycam(camera_id)
+    chest = _chest_scan_region(person_box, camera_id=camera_id)
 
     if _zone_visible_ratio(chest, frame_w, frame_h) < 0.45:
         return False
 
     _cx1, cy1, _cx2, cy2 = _clip_box_to_frame(chest, frame_w, frame_h)
     min_chest_h = frame_h * 0.05
-    if _is_helmet_bodycam(camera_id):
-        min_chest_h = max(frame_h * 0.042, ph * 0.11)
+    if bodycam:
+        min_chest_h = max(frame_h * 0.045, ph * 0.12)
     if (cy2 - cy1) < min_chest_h:
         return False
 
     display = _torso_violation_display_bbox(person_box, scan_region=chest)
     clipped = _clip_box_to_frame(display, frame_w, frame_h)
-    roi_area = max((clipped[2] - clipped[0]) * (clipped[3] - clipped[1]), 1.0)
-
-    head = (x1 + pw * 0.08, y1, x2 - pw * 0.08, y1 + ph * 0.26)
-    if _intersection_area(clipped, head) / roi_area > 0.18:
+    if _vest_roi_overlaps_face(person_box, clipped, camera_id=camera_id):
         return False
 
     rcy = (clipped[1] + clipped[3]) / 2.0
-    chest_top = y1 + ph * 0.28
-    chest_bottom = y1 + ph * 0.60
+    chest_top = y1 + ph * (0.42 if bodycam else 0.28)
+    chest_bottom = y1 + ph * (0.72 if bodycam else 0.60)
     if rcy < chest_top or rcy > chest_bottom:
         return False
 
-    if _is_helmet_bodycam(camera_id):
-        # Bodycam cận mặt — tâm ROI phải nằm ngực trên, không phải cổ/mặt.
-        if rcy < y1 + ph * 0.40:
-            return False
+    if bodycam and rcy < y1 + ph * 0.45:
+        return False
 
     return True
 
@@ -1597,7 +1630,7 @@ def _build_vest_only_result(
 
     for person_index, person in enumerate(persons):
         pb = person.person_box
-        torso = _chest_scan_region(pb)
+        torso = _chest_scan_region(pb, camera_id=camera_id)
         person_det = PpeDetection(
             behavior="person",
             label=PPE_LABELS["person"],
@@ -1707,7 +1740,7 @@ def analyze_ppe_frame(
             camera_id,
         )
         head_scan = _cap_region_for_helmet(pb)
-        torso = _chest_scan_region(pb)
+        torso = _chest_scan_region(pb, camera_id=camera_id)
         feet = _feet_region(pb, h)
 
         person_det = PpeDetection(

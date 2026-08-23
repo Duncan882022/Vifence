@@ -570,7 +570,16 @@ class EventStore:
         h, w = raw.shape[:2]
         annot_det = snapshot_annotation_detection(display_det, w, h, camera_id=camera_id)
         event.bbox = [float(v) for v in annot_det.bbox]
-        annotated = self._draw_ppe_bbox(raw, annot_det, copy_frame=True, thickness=2)
+        # Không tạo no_vest nếu không gắn được ROI ngực (tránh khoanh mặt cận).
+        if detection.behavior == "no_vest" and (
+            len(annot_det.bbox) < 4
+            or annot_det.bbox[2] - annot_det.bbox[0] < 4
+            or annot_det.bbox[3] - annot_det.bbox[1] < 4
+        ):
+            return None
+        annotated = self._draw_ppe_bbox(
+            raw, annot_det, copy_frame=True, thickness=2, camera_id=camera_id,
+        )
         snapshot = annotated
         return self._finalize_event(
             event,
@@ -878,6 +887,7 @@ class EventStore:
         *,
         copy_frame: bool = True,
         thickness: int = 2,
+        camera_id: str = "",
     ) -> np.ndarray:
         annotated = frame.copy() if copy_frame else frame
         if detection.behavior in ("no_vest", "safety_vest"):
@@ -893,6 +903,7 @@ class EventStore:
             if len(pb) >= 4 and _vest_roi_overlaps_face(
                 tuple(float(v) for v in pb),
                 tuple(float(v) for v in detection.bbox),
+                camera_id=camera_id,
             ):
                 return annotated
         x1, y1, x2, y2 = [int(v) for v in detection.bbox]
