@@ -368,7 +368,7 @@ export function PatrolDensityHeatmap({
         </div>
       </div>
 
-      <div className="min-w-0 relative min-h-0 flex-1 h-full w-full">
+      <div className={cn('min-w-0 relative', viewport.embeddedMapClass)}>
         <PatrolGeoHeatmap
           zones={liveZones}
           cameraPositions={mergedCameraPositions}

@@ -14,6 +14,7 @@ import { TrainingCameraPanel } from '@/modules/module02-training/components/Trai
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { cn } from '@/utils/cn'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useAppStore } from '@/store/app.store'
 import {
   getPatrolMobileLiveSnapshot,
@@ -164,6 +165,7 @@ function PatrolKPIs({
 
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
+  const isMobileLayout = useMediaQuery('(max-width: 1023px)')
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
@@ -247,7 +249,7 @@ export function Module05Page() {
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
       />
-      <PageLayout>
+      <PageLayout scrollable={isMobileLayout}>
         {/* Tier 1 — KPIs */}
         <Panel
           title="Tổng Quan"
@@ -272,17 +274,25 @@ export function Module05Page() {
           )}
         </Panel>
 
-        {/* Tier 2 + Tier 3 — shared height pool */}
+        {/* Tier 2 + Tier 3 — desktop: flex pool; mobile: scroll + min-height cho heatmap/sự kiện */}
         <div className={cn(
-          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0 overflow-hidden',
+          'flex flex-col gap-2 sm:gap-3',
+          isMobileLayout
+            ? 'min-h-0 pb-[env(safe-area-inset-bottom,0px)]'
+            : 'flex-1 min-h-0 overflow-hidden',
         )}>
           {/* Tier 2 — Camera */}
           <div className={cn(
             'flex flex-col min-h-0',
             tier2Open
               ? cn(
-                'flex-[6] min-h-0',
-                cameraMode === 'playback' ? 'lg:flex-[12]' : 'lg:flex-[10]',
+                'min-h-0',
+                isMobileLayout
+                  ? 'flex-none max-h-[40dvh] shrink-0'
+                  : cn(
+                    'flex-[6]',
+                    cameraMode === 'playback' ? 'lg:flex-[12]' : 'lg:flex-[10]',
+                  ),
               )
               : 'shrink-0',
           )}>
@@ -349,15 +359,20 @@ export function Module05Page() {
 
           {/* Tier 3 — 2 separate panels: [HEATMAP] | [SỰ KIỆN] */}
           <div className={cn(
-            'flex min-h-0 gap-2 sm:gap-3 flex-1 overflow-hidden',
-            'flex-col md:flex-row',
-            tier2Open ? 'lg:flex-[10]' : 'lg:flex-1',
+            'flex gap-2 sm:gap-3 flex-col md:flex-row',
+            isMobileLayout
+              ? 'min-h-[min(72dvh,640px)] shrink-0'
+              : cn(
+                'min-h-0 flex-1 overflow-hidden',
+                tier2Open ? 'lg:flex-[10]' : 'lg:flex-1',
+              ),
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
+                isMobileLayout && 'min-h-[280px] h-[min(42dvh,360px)]',
               )}
               headerRight={
                 <button
@@ -383,6 +398,7 @@ export function Module05Page() {
               noPadding
               className={cn(
                 'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
+                isMobileLayout && 'min-h-[220px] h-[min(38dvh,320px)]',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
               headerRight={
