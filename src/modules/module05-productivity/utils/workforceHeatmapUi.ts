@@ -53,12 +53,5 @@ export function isVerifiedWorkerLabel(label?: string | null): boolean {
   return true
 }
 
-export type WorkforceEventCategory = 'all' | 'workforce' | 'identity' | 'density' | 'system'
-
-export const WORKFORCE_EVENT_FILTER_TABS: { key: WorkforceEventCategory; label: string }[] = [
-  { key: 'all', label: 'Tất cả' },
-  { key: 'workforce', label: 'Nhân lực' },
-  { key: 'identity', label: 'Định danh' },
-  { key: 'density', label: 'Mật độ' },
-  { key: 'system', label: 'Hệ thống' },
-]
+/** @deprecated Dùng PatrolEventsPanel FILTER_TABS (object/person/identity). */
+export type WorkforceEventCategory = 'all' | 'object' | 'person' | 'identity'

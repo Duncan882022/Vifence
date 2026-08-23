@@ -1,13 +1,15 @@
 /**
  * Module 05 — nhãn sự kiện nhân lực theo vòng đời:
- * scan (sgc) → định danh khuôn mặt (OBJ) → gán profile thủ công.
+ *   Đối tượng (chưa đủ định danh) → Người (mã tạm ổn định, re-id) → Định danh (có Tên + Đơn vị)
  */
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { ObjectState } from '../types/workforceHeatmap'
 import { rememberPatrolSgcObjectLink } from '../services/patrolSgcObjectLink.service'
+import { isPatrolManuallyIdentified } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 
-export type PatrolWorkforceIdentityStage = 'scan' | 'identified' | 'profile'
+/** 3 giai đoạn nhận diện người — dùng cho tab panel sự kiện và KPI. */
+export type PatrolPersonStage = 'object' | 'person' | 'profile'
 
 export function isPatrolSgcWorkerId(id?: string | null): boolean {
   return Boolean(id && /^sgc-/i.test(id.trim()))
@@ -17,21 +19,38 @@ export function isPatrolObjectId(id?: string | null): boolean {
   return Boolean(id && /^obj-/i.test(id.trim()))
 }
 
-export function patrolWorkforceIdentityStage(
-  objectId?: string | null,
-  objectLabel?: string | null,
-): PatrolWorkforceIdentityStage {
-  const id = objectId?.trim() ?? ''
-  const label = objectLabel?.trim() ?? ''
-  if (isVerifiedWorkerLabel(label) && !isPatrolSgcWorkerId(label) && !isPatrolObjectId(label)) {
+/**
+ * Phân loại giai đoạn nhận diện của một sự kiện PERSON_DETECTED:
+ * - profile: đã gán Tên + Đơn vị thủ công
+ * - person:  có mã ổn định (OBJ-* hoặc sgc-*) — biết lại được nhưng chưa profile
+ * - object:  chưa đủ tiêu chí — bán thân, quay lưng, track tạm
+ */
+export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
+  const objectId = event.objectId?.trim() ?? ''
+  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
+
+  // Kiểm tra profile thủ công trên mọi alias
+  if (objectId && isPatrolManuallyIdentified(objectId)) return 'profile'
+  if (trackWorkerId && isPatrolManuallyIdentified(trackWorkerId)) return 'profile'
+
+  // Kiểm tra đã verified label (gallery)
+  if (isVerifiedWorkerLabel(event.objectLabel)
+    && !isPatrolSgcWorkerId(event.objectLabel)
+    && !isPatrolObjectId(event.objectLabel)) {
     return 'profile'
   }
-  if (isPatrolObjectId(id)) return 'identified'
-  if (isPatrolSgcWorkerId(id)) return 'scan'
-  return 'scan'
+
+  // OBJ-* = workforce engine đã re-id đủ tiêu chí (face/FULL_BODY/UPPER_BODY)
+  if (isPatrolObjectId(objectId)) return 'person'
+
+  // sgc-* = anonymous scan nhưng có mã ổn định
+  if (isPatrolSgcWorkerId(objectId)) return 'person'
+  if (isPatrolSgcWorkerId(trackWorkerId)) return 'person'
+
+  return 'object'
 }
 
-/** Tiêu đề card — spec: Nhân lực (scan) / Định danh (OBJ). */
+/** Tiêu đề card theo giai đoạn. */
 export function patrolWorkforceEventTitle(
   type: PatrolEvent['type'],
   objectId?: string | null,
@@ -39,9 +58,14 @@ export function patrolWorkforceEventTitle(
 ): string {
   if (type === 'IDENTITY_VERIFIED') return 'Định danh'
   if (type === 'PERSON_DETECTED') {
-    const stage = patrolWorkforceIdentityStage(objectId, objectLabel)
-    if (stage === 'identified') return 'Định danh'
-    return 'Nhân lực'
+    if (isPatrolObjectId(objectId)) return 'Người'
+    if (isPatrolSgcWorkerId(objectId)) return 'Người'
+    if (isVerifiedWorkerLabel(objectLabel ?? '')
+      && !isPatrolSgcWorkerId(objectLabel)
+      && !isPatrolObjectId(objectLabel)) {
+      return 'Người'
+    }
+    return 'Đối tượng'
   }
   return ''
 }
@@ -136,6 +160,51 @@ export function enrichPatrolEventsWithWorkforceObjects(
   }
   const sgcToObject = buildSgcToObjectIdMap(objects)
   return events.map(ev => enrichPatrolPersonEventWithWorkforceObject(ev, objects, sgcToObject))
+}
+
+/** Khóa unique để đếm entity (tab badge + KPI) — gộp sgc/OBJ cùng người. */
+export function patrolEventEntityKey(event: PatrolEvent): string {
+  const objectId = event.objectId?.trim() ?? ''
+  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
+
+  if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
+  if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
+  if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
+  if (objectId) return objectId.toUpperCase()
+  if (trackWorkerId) return trackWorkerId.toUpperCase()
+  return event.id
+}
+
+export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'
+
+function hasPatrolSnapshot(event: PatrolEvent): boolean {
+  return Boolean(event.snapshotUrl?.trim())
+}
+
+function matchesPatrolEventsTab(event: PatrolEvent, tab: PatrolEventsTabKey): boolean {
+  if (!hasPatrolSnapshot(event)) return false
+  if (tab === 'all') {
+    return event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
+  }
+  if (tab === 'identity') {
+    return event.type === 'IDENTITY_VERIFIED'
+      || (event.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(event) === 'profile')
+  }
+  if (event.type !== 'PERSON_DETECTED') return false
+  return resolvePatrolPersonStage(event) === tab
+}
+
+/** Đếm unique entity theo tab — không đếm raw event rows. */
+export function countUniquePatrolTabEntities(
+  events: PatrolEvent[],
+  tab: PatrolEventsTabKey,
+): number {
+  const keys = new Set<string>()
+  for (const event of events) {
+    if (!matchesPatrolEventsTab(event, tab)) continue
+    keys.add(patrolEventEntityKey(event))
+  }
+  return keys.size
 }
 
 /** Mọi khóa alias có thể tra lịch sử (sgc + OBJ). */

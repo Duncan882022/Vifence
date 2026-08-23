@@ -11,7 +11,11 @@ import {
   getPatrolEventStatusDisplay,
   shouldShowPatrolStatusBadge,
 } from '../utils/patrolEventsUi'
-import { isPatrolEvidenceEvent } from '../utils/patrolEventsFeed'
+import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
+import {
+  countUniquePatrolTabEntities,
+  resolvePatrolPersonStage,
+} from '../utils/patrolWorkforceEventLabels'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 
 interface PatrolEventsPanelProps {
@@ -22,22 +26,35 @@ interface PatrolEventsPanelProps {
   onPlayback?: (event: PatrolEvent) => void
 }
 
-/** Filter tabs per specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md §8.2 */
-type PatrolFilterTab = 'all' | 'workforce' | 'identity' | 'density' | 'system'
+type PatrolFilterTab = 'all' | 'object' | 'person' | 'identity'
 
 const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'workforce', label: 'Nhân lực' },
+  { key: 'object', label: 'Đối tượng' },
+  { key: 'person', label: 'Người' },
   { key: 'identity', label: 'Định danh' },
-  { key: 'density', label: 'Mật độ' },
-  { key: 'system', label: 'Hệ thống' },
 ]
 
-/**
- * Feed chỉ hiển thị sự kiện đã lọc evidence (snapshot + thời gian) ở Module05Page.
- */
-function isMeaningfulFeedEvent(event: PatrolEvent): boolean {
-  return isPatrolEvidenceEvent(event)
+function isPersonEvent(event: PatrolEvent): boolean {
+  return event.type === 'PERSON_DETECTED'
+}
+
+function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
+  const feed = events.filter(isPatrolPersonLifecycleWithSnapshot)
+  switch (tab) {
+    case 'object':
+      return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'object')
+    case 'person':
+      return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'person')
+    case 'identity':
+      return feed.filter(e =>
+        e.type === 'IDENTITY_VERIFIED'
+        || (isPersonEvent(e) && resolvePatrolPersonStage(e) === 'profile'),
+      )
+    case 'all':
+    default:
+      return feed
+  }
 }
 
 const INITIAL_COUNT = 6
@@ -218,30 +235,6 @@ function PatrolEventCard({
   )
 }
 
-function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
-  const feed = events.filter(isMeaningfulFeedEvent)
-  switch (tab) {
-    case 'workforce':
-      return feed.filter(e =>
-        e.type === 'POPULATION_OBSERVED'
-        || e.type === 'POPULATION_CHANGE'
-        || e.type === 'PERSON_DETECTED',
-      )
-    case 'identity':
-      return feed.filter(e =>
-        e.type === 'IDENTITY_VERIFIED'
-        || (e.type === 'PERSON_DETECTED' && /^obj-/i.test(e.objectId ?? '')),
-      )
-    case 'density':
-      return feed.filter(e => e.type === 'HIGH_DENSITY')
-    case 'system':
-      return feed.filter(e => e.type === 'MACHINE_STOPPED')
-    case 'all':
-    default:
-      return feed
-  }
-}
-
 export function PatrolEventsPanel({
   events,
   selectedId,
@@ -257,16 +250,12 @@ export function PatrolEventsPanel({
   const activeItems = useMemo(() => filterByTab(events, filterTab), [events, filterTab])
 
   const tabCounts = useMemo(() => {
-    const feed = events.filter(isMeaningfulFeedEvent)
+    const feed = events.filter(isPatrolPersonLifecycleWithSnapshot)
     return {
-      all: feed.length,
-      workforce: feed.filter(e =>
-        e.type === 'POPULATION_OBSERVED'
-        || e.type === 'POPULATION_CHANGE',
-      ).length,
-      identity: feed.filter(e => e.type === 'IDENTITY_VERIFIED').length,
-      density: feed.filter(e => e.type === 'HIGH_DENSITY').length,
-      system: feed.filter(e => e.type === 'MACHINE_STOPPED').length,
+      all: countUniquePatrolTabEntities(feed, 'all'),
+      object: countUniquePatrolTabEntities(feed, 'object'),
+      person: countUniquePatrolTabEntities(feed, 'person'),
+      identity: countUniquePatrolTabEntities(feed, 'identity'),
     }
   }, [events])
 
@@ -290,7 +279,7 @@ export function PatrolEventsPanel({
         setTimeout(() => {
           setVisibleCount(c => c + BATCH_SIZE)
           setLoading(false)
-        }, 350)
+        }, 300)
       },
       { threshold: 0.1 },
     )
@@ -327,15 +316,13 @@ export function PatrolEventsPanel({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
-        {events.filter(isMeaningfulFeedEvent).length === 0 ? (
+        {events.filter(isPatrolPersonLifecycleWithSnapshot).length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
-            Chưa có sự kiện live — đang chờ backend Contabo / workforce engine
+            Chưa có sự kiện — đang chờ backend / workforce engine
           </p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
-            {filterTab === 'workforce' || filterTab === 'identity' || filterTab === 'density'
-              ? 'Chưa có sự kiện loại này'
-              : 'Không có mục phù hợp bộ lọc'}
+            Chưa có sự kiện loại này
           </p>
         ) : (
           <div className="space-y-1.5">

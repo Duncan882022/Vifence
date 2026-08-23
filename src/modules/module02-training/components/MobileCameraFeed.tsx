@@ -159,7 +159,7 @@ export function MobileCameraFeed({
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl: url,
-      intervalMs: cameraId === 'HC-02' ? 260 : 450,
+      intervalMs: cameraId === 'HC-02' ? 220 : 450,
       getGps: cameraId === 'HC-02'
         ? () => {
             const snap = getPatrolHelmetGps(cameraId)
@@ -182,8 +182,8 @@ export function MobileCameraFeed({
         const filtered = result.detections.filter(minConf)
         const now = Date.now()
         const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
-        /** Giữ bbox ngắn — overlay track lock + rAF chase khi frame trống. */
-        const holdMs = isPatrolPerson ? 720 : 1800
+        /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */
+        const holdMs = isPatrolPerson ? 1100 : 1800
         if (filtered.length > 0) {
           detectionHoldRef.current = { until: now + holdMs, items: filtered }
           setDetections(filtered)
@@ -220,7 +220,8 @@ export function MobileCameraFeed({
           })
           syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections)
 
-          if (result.events?.length && !PATROL_PPE_UI_HIDDEN) {
+          if (result.events?.length) {
+            // Bridge lọc PPE khi PATROL_PPE_UI_HIDDEN — vẫn đẩy PERS/person lên panel Người.
             pushPatrolMobilePpeEvents(result.events, cameraId)
           }
         }

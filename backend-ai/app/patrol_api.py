@@ -144,6 +144,13 @@ def patrol_gps_payload(camera_id: str) -> dict[str, Any]:
     return {"gps_lat": lat, "gps_lng": lng, "heading": heading}
 
 
+def clear_patrol_mobile_metrics() -> int:
+    """Xóa toàn bộ mobile metrics trong RAM — dùng khi reset test data."""
+    count = len(_patrol_mobile_metrics)
+    _patrol_mobile_metrics.clear()
+    return count
+
+
 def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
     """Cache metrics từ POST /analyze/frame (HC-02 mobile).
 

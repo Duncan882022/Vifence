@@ -7,7 +7,8 @@ import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobi
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 import { subscribePatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import { MOCK_PATROL_ZONES, type PatrolZone } from '../data/patrolMockData'
-import { PATROL_MAP_ACTIVE_HELMET_PINS } from '../data/patrolSiteMap'
+import { PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
+import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { fetchPatrolHelmetMetrics } from './patrolLiveEvents.service'
 
 export type LivePatrolZone = PatrolZone
@@ -38,8 +39,11 @@ function tickZones(zones: LivePatrolZone[]): LivePatrolZone[] {
 }
 
 function buildInitialPositions(): CameraPositions {
-  const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
-  return pin ? { [HC01_CAMERA_ID]: pin.position } : {}
+  const positions: CameraPositions = {}
+  for (const pin of PATROL_MAP_ACTIVE_HELMET_PINS) {
+    positions[pin.id] = pin.position
+  }
+  return positions
 }
 
 function asGpsPair(lat: unknown, lng: unknown): [number, number] | null {
@@ -93,7 +97,7 @@ export function usePatrolWebSocket(_patrolId: string): {
   const hc02PosRef = useRef<[number, number] | null>(null)
 
   const applyHc02Position = (lat: number, lng: number) => {
-    const pos: [number, number] = [lat, lng]
+    const pos = resolvePatrolHelmetMapPosition(lat, lng, PATROL_HELMET_02_FALLBACK)
     hc02PosRef.current = pos
     setCameraPositions(prev => ({ ...prev, [HC02_CAMERA_ID]: pos }))
     setRouteHistory(prev => appendRouteHistory(prev, HC02_CAMERA_ID, pos))

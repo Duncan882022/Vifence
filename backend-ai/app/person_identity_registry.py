@@ -54,6 +54,19 @@ def _format_sgc(seq: int) -> str:
     return f"sgc-0{seq:07d}"
 
 
+def clear_registry() -> int:
+    """Xóa toàn bộ registry sgc-* trong RAM và file — dùng khi reset test data."""
+    global _state
+    with _lock:
+        count = len((_state or {}).get("tracks", {}))
+        _state = {"next_seq": 1, "tracks": {}, "track_meta": {}}
+        REGISTRY_FILE.write_text(
+            json.dumps(_state, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    return count
+
+
 def _track_key(camera_id: str, track_id: str) -> str:
     return f"{camera_id}|{track_id}"
 

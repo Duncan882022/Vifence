@@ -261,7 +261,9 @@ export function createMobileAiAnalyzeClient(
       return
     }
 
-    const image = captureCameraAnalyzeFrame(video, cameraId, 640, 0.72)
+    // HC-* patrol — 480px JPEG 0.65 giảm payload ~40%, rút ngắn round-trip, ROI mượt hơn
+    const isHelmet = cameraId.startsWith('HC-')
+    const image = captureCameraAnalyzeFrame(video, cameraId, isHelmet ? 480 : 640, isHelmet ? 0.65 : 0.72)
     if (!image) {
       scheduleNext(500)
       return
@@ -282,7 +284,7 @@ export function createMobileAiAnalyzeClient(
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(intervalMs < 350 ? 65 : 120)
+      scheduleNext(intervalMs < 350 ? 40 : 120)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

@@ -58,6 +58,14 @@ def reset_hc_patrol_face_assignments(camera_id: str) -> None:
     _hc_frame_face_assignments[camera_id] = {}
 
 
+def reset_all_hc_patrol_state() -> int:
+    """Xóa toàn bộ patrol person tracks và face assignments — dùng khi reset test data."""
+    count = sum(len(v) for v in _hc_patrol_person_tracks.values())
+    _hc_patrol_person_tracks.clear()
+    _hc_frame_face_assignments.clear()
+    return count
+
+
 class _HcPersonTrackSlot:
     __slots__ = ("person_bbox",)
 
@@ -1600,6 +1608,78 @@ def _build_person_only_result(
     }
 
 
+def _build_patrol_bodycam_result(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    source_pts_sec: float | None = None,
+) -> dict:
+    """Helmet bodycam path — person detection + patrol identity, zero PPE model inference.
+
+    HC-* streams come from the mobile client at ~220ms intervals. Running 3 extra YOLO models
+    (helmet/vest/shoes) doubles the GPU time per frame without adding UX value because
+    PATROL_PPE_UI_HIDDEN is true. This function keeps the full patrol identity pipeline while
+    skipping the three PPE inference calls.
+    """
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
+    detector = _get_person_detector()
+    h, w = frame.shape[:2]
+    persons = _filter_persons(
+        frame,
+        camera_id,
+        detector.predict(frame),
+        source_pts_sec=source_pts_sec,
+        strict=False,
+    )
+
+    detections: list[PpeDetection] = []
+    assigned_patrol_tracks: set[str] = set()
+    reset_hc_patrol_face_assignments(camera_id)
+
+    for person_index, person in enumerate(persons):
+        pb = person.person_box
+        display_pb = _visible_person_display_bbox(pb, w, h)
+        person_det = PpeDetection(
+            behavior="person",
+            label=PPE_LABELS["person"],
+            scenario_id=PPE_SCENARIO["person"],
+            confidence=round(person.person_conf, 3),
+            bbox=[float(v) for v in display_pb],
+            subject_bbox=[float(v) for v in pb],
+        )
+        enrich_person_bbox(
+            frame,
+            person_det,
+            camera_id=camera_id,
+            person_index=person_index,
+            source_pts_sec=source_pts_sec,
+        )
+        _assign_patrol_person_identity(
+            person_det,
+            pb,
+            frame=frame,
+            camera_id=camera_id,
+            frame_w=w,
+            frame_h=h,
+            blocked=assigned_patrol_tracks,
+        )
+        detections.append(person_det)
+
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": len(persons),
+            "ppe_violations": 0,
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
 def _build_vest_only_result(
     frame: np.ndarray,
     camera_id: str,
@@ -1700,6 +1780,10 @@ def analyze_ppe_frame(
     source_pts_sec: float | None = None,
 ) -> dict:
     from .cam04_ppe_demo import is_cam04_ppe_scene, resolve_cam04_ppe_demo
+
+    # Helmet bodycam — skip PPE model inference entirely for better frame throughput
+    if _is_helmet_bodycam(camera_id):
+        return _build_patrol_bodycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
 
     demo_action = resolve_cam04_ppe_demo(camera_id, frame, source_pts_sec=source_pts_sec)
     if demo_action == "suppress":

@@ -18,11 +18,11 @@ import {
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   type DetectionDot,
 } from '../data/patrolDetectionData'
-import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
+import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
-import { syncPatrolPopulationObservedToHeatmap } from '../utils/patrolHeatmapLiveSync'
 import { usePatrolWebSocket } from '../services/usePatrolWebSocket'
 import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
@@ -123,14 +123,6 @@ export function PatrolDensityHeatmap({
     })
   }, [])
 
-  /** Population / personCount → dot tại Cầu Sông Hốt khi chưa có track chi tiết. */
-  useEffect(() => {
-    const count = zonePop?.observed_count ?? hc02Live.personCount ?? 0
-    if (count <= 0) return
-    for (const camId of DEFAULT_PATROL_CAMERA_IDS) {
-      syncPatrolPopulationObservedToHeatmap(camId, count)
-    }
-  }, [zonePop?.observed_count, hc02Live.personCount])
 
   const helmetOnlineById = useMemo(() => {
     const map: Record<string, boolean> = { 'HC-01': false, 'HC-02': false }
@@ -145,38 +137,29 @@ export function PatrolDensityHeatmap({
     const next = { ...cameraPositions }
     const hc01Wf = workforce.helmets['HC-01']
     if (helmetOnlineById['HC-01'] && hc01Wf?.lat != null && hc01Wf?.lon != null) {
-      next['HC-01'] = [hc01Wf.lat, hc01Wf.lon]
+      next['HC-01'] = resolvePatrolHelmetMapPosition(hc01Wf.lat, hc01Wf.lon, PATROL_SITE_CENTER)
+    } else {
+      next['HC-01'] = PATROL_SITE_CENTER
     }
     const hc02Wf = workforce.helmets['HC-02']
-    if (helmetOnlineById['HC-02']) {
-      if (hc02Wf?.lat != null && hc02Wf?.lon != null) {
-        next['HC-02'] = [hc02Wf.lat, hc02Wf.lon]
-      } else if (hc02Live.lat != null && hc02Live.lng != null) {
-        next['HC-02'] = [hc02Live.lat, hc02Live.lng]
-      } else {
-        next['HC-02'] = PATROL_SITE_CENTER
-      }
-    } else if (hc02Live.hasLiveGps && hc02Live.lat != null && hc02Live.lng != null) {
-      next['HC-02'] = [hc02Live.lat, hc02Live.lng]
-    } else if (hc02Wf?.lat != null && hc02Wf?.lon != null) {
-      next['HC-02'] = [hc02Wf.lat, hc02Wf.lon]
-    }
+    const hc02Lat = hc02Wf?.lat ?? hc02Live.lat
+    const hc02Lng = hc02Wf?.lon ?? hc02Live.lng
+    next['HC-02'] = resolvePatrolHelmetMapPosition(hc02Lat, hc02Lng, PATROL_HELMET_02_FALLBACK)
     return next
   }, [
     cameraPositions,
     helmetOnlineById,
     workforce.helmets,
-    hc02Live.hasLiveGps,
     hc02Live.lat,
     hc02Live.lng,
   ])
 
   const mergedRouteHistory = useMemo(() => {
-    if (!hc02Live.hasLiveGps || hc02Live.lat == null || hc02Live.lng == null) {
+    if (hc02Live.lat == null || hc02Live.lng == null) {
       const { 'HC-02': _drop, ...rest } = routeHistory
       return rest
     }
-    const pos: [number, number] = [hc02Live.lat, hc02Live.lng]
+    const pos = resolvePatrolHelmetMapPosition(hc02Live.lat, hc02Live.lng, PATROL_HELMET_02_FALLBACK)
     const hist = routeHistory['HC-02'] ?? []
     const filtered = hist.filter(([la, ln]) => {
       const dLat = (la - pos[0]) * 111_320
@@ -188,7 +171,7 @@ export function PatrolDensityHeatmap({
       return { ...routeHistory, 'HC-02': filtered }
     }
     return { ...routeHistory, 'HC-02': [...filtered, pos].slice(-150) }
-  }, [routeHistory, hc02Live.hasLiveGps, hc02Live.lat, hc02Live.lng])
+  }, [routeHistory, hc02Live.lat, hc02Live.lng])
 
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))

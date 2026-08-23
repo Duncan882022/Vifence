@@ -8,11 +8,7 @@ import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { PATROL_SITE_CENTER, PATROL_SITE_NAME } from '../data/patrolSiteMap'
 
 const WORKFORCE_FEED_TYPES = new Set<WorkforceEventType>([
-  'POPULATION_OBSERVED',
-  'POPULATION_CHANGE',
-  'HIGH_DENSITY',
   'IDENTITY_VERIFIED',
-  'MACHINE_STOPPED',
 ])
 
 export function isWorkforceFeedEventType(type: string): type is WorkforceEventType {
@@ -45,6 +41,8 @@ export function workforceEventToPatrolEvent(ev: WorkforceEventState): PatrolEven
   const cameraId = ev.helmet_id || 'HC-02'
   const cameraName = PATROL_BODYCAM_LABELS[cameraId] ?? cameraId
   const ts = ev.timestamp
+  const snapshotFile = String(ev.payload?.snapshot_file ?? ev.payload?.snapshot_url ?? '').trim()
+  const snapshotUrl = snapshotFile.startsWith('http') ? snapshotFile : undefined
   return {
     id: ev.event_id,
     type: ev.event_type as PatrolEvent['type'],
@@ -62,6 +60,7 @@ export function workforceEventToPatrolEvent(ev: WorkforceEventState): PatrolEven
     status: 'LOCKED',
     confidence: Number(ev.payload?.confidence ?? 0.9),
     gps: resolveWorkforceEventGps(ev, cameraId),
+    snapshotUrl,
   }
 }
 
@@ -71,9 +70,29 @@ export function mergePatrolAndWorkforceEvents(
 ): PatrolEvent[] {
   const byId = new Map<string, PatrolEvent>()
   for (const ev of patrol) byId.set(ev.id, ev)
+
+  const snapshotByAlias = new Map<string, string>()
+  for (const ev of patrol) {
+    const url = ev.snapshotUrl?.trim()
+    if (!url) continue
+    for (const key of [ev.objectId, ev.trackWorkerId]) {
+      const alias = key?.trim().toUpperCase()
+      if (alias) snapshotByAlias.set(alias, url)
+    }
+  }
+
   for (const raw of workforce) {
     const mapped = workforceEventToPatrolEvent(raw)
-    if (mapped) byId.set(mapped.id, mapped)
+    if (!mapped) continue
+    if (!mapped.snapshotUrl?.trim()) {
+      const oid = mapped.objectId?.trim().toUpperCase()
+      const wid = String(raw.payload?.worker_id ?? '').trim().toUpperCase()
+      mapped.snapshotUrl = (oid && snapshotByAlias.get(oid))
+        || (wid && snapshotByAlias.get(wid))
+        || undefined
+    }
+    if (!mapped.snapshotUrl?.trim()) continue
+    byId.set(mapped.id, mapped)
   }
   return [...byId.values()].sort(
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),

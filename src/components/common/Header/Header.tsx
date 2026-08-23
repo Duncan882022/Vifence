@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Bell, Menu } from 'lucide-react'
 import { useAppStore } from '@/store/app.store'
 import { cn } from '@/utils/cn'
@@ -9,9 +10,10 @@ import { UserMenu } from './UserMenu'
 interface HeaderProps {
   title: string
   subtitle?: string
+  headerRight?: React.ReactNode
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
+export function Header({ title, subtitle, headerRight }: HeaderProps) {
   const { notifications } = useAppStore()
   const { sidebarInset, openMobileNav } = useShellLayout()
   const { visible: trialVisible, show: showTrial, dismiss: dismissTrial } = useTrialLock()
@@ -40,6 +42,12 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 shrink-0">
+        {headerRight && (
+          <>
+            {headerRight}
+            <div className="w-px h-5 bg-[#1e2433] shrink-0" aria-hidden />
+          </>
+        )}
         <button
           type="button"
           onClick={showTrial}

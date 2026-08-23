@@ -204,7 +204,7 @@ function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
   const anim = isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : ''
   const bg = isActive ? pin.color : '#475569'
   const border = isActive ? 'rgba(255,255,255,0.85)' : 'rgba(148,163,184,0.55)'
-  const opacity = isActive ? '1' : '0.72'
+  const opacity = isActive ? '1' : '0.42'
   const html = `
     <div style="
       background:${bg};
@@ -773,7 +773,7 @@ export function PatrolGeoHeatmap({
                   position={livePos}
                   icon={createHelmetIcon(pin, isActive)}
                   zIndexOffset={500}
-                  opacity={isActive ? 1 : 0.85}
+                  opacity={isActive ? 1 : 0.38}
                 >
                   <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
                     <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>

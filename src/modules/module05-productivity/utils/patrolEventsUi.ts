@@ -23,13 +23,6 @@ export const PATROL_EVENT_TYPES: EventType[] = [
   'IDENTITY_VERIFIED',
 ]
 
-export const WORKFORCE_EVENT_TYPES: EventType[] = [
-  'POPULATION_OBSERVED',
-  'POPULATION_CHANGE',
-  'HIGH_DENSITY',
-  'IDENTITY_VERIFIED',
-]
-
 export const PATROL_TYPE_META: Record<EventType, {
   id: string
   label: string

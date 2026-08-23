@@ -18,6 +18,12 @@ export const PATROL_SITE_ZONE_ID = 'ZONE_SITE'
 /** Map centre — tọa độ mặc định công trường. */
 export const PATROL_SITE_CENTER: [number, number] = [20.933094, 106.923950]
 
+/** HC-02 không GPS → neo cạnh HC-01 tại công trường (~8m offset). */
+export const PATROL_HELMET_02_FALLBACK: [number, number] = [
+  parseFloat((PATROL_SITE_CENTER[0] + 0.00006).toFixed(6)),
+  parseFloat((PATROL_SITE_CENTER[1] + 0.00004).toFixed(6)),
+]
+
 function polygonCenter(polygon: [number, number][]): [number, number] {
   if (polygon.length === 0) return PATROL_SITE_CENTER
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
@@ -119,7 +125,7 @@ function buildHelmetPins(): PatrolHelmetPin[] {
       label: `Helmet ${num}`,
       zoneId,
       color: zone.borderColor,
-      position: PATROL_SITE_CENTER,
+      position: helmetId === 'HC-02' ? PATROL_HELMET_02_FALLBACK : PATROL_SITE_CENTER,
     }
   })
 }

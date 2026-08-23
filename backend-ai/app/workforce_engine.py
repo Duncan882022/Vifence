@@ -610,6 +610,7 @@ class WorkforceEngine:
             f"{zone_id}: {obs.observed_count} người quan sát",
             f"{obs.observed_count} người ({sign} so với lần trước)",
             {"observed_count": obs.observed_count, "delta": delta, "observability": obs.observability},
+            show_in_ui=False,
         )
 
     def _maybe_pop_change(self, zone_id: str, prev: PopulationObservation, cur: PopulationObservation) -> None:
@@ -628,6 +629,7 @@ class WorkforceEngine:
             f"Nhân lực {direction} tại {zone_id}",
             f"{older.observed_count} → {cur.observed_count} trong 15 phút",
             {"previous_count": older.observed_count, "current_count": cur.observed_count, "time_window_minutes": 15},
+            show_in_ui=False,
         )
 
     def _emit_high_density(self, zone_id: str, obs: PopulationObservation, density: float) -> None:
@@ -638,6 +640,7 @@ class WorkforceEngine:
             f"Mật độ cao — {zone_id}",
             f"~{obs.observed_count} người ({density:.2f}/m²)",
             {"observed_count": obs.observed_count, "density_per_sqm": density},
+            show_in_ui=False,
         )
 
     def _emit_identity_verified(self, obj: WorkforceObject, zone_id: str) -> None:
@@ -682,6 +685,20 @@ class WorkforceEngine:
                 "peak": max(counts) if counts else 0,
             },
         }
+
+    def clear_all(self) -> int:
+        """Reset toàn bộ state workforce — dùng khi reset test data."""
+        count = len(self.objects) + len(self.events)
+        self.helmets.clear()
+        self.objects.clear()
+        self.track_to_object.clear()
+        self.population_timeline.clear()
+        self.latest_population.clear()
+        self.events.clear()
+        self.heat_points.clear()
+        self._cooldown.clear()
+        self._audit.clear()
+        return count
 
     def snapshot(self, helmet_id: str | None = None, *, now: float | None = None) -> dict[str, Any]:
         t = now or _now()
@@ -743,7 +760,8 @@ class WorkforceEngine:
                 "title": e.title, "description": e.description, "payload": e.payload,
                 "helmet_id": e.helmet_id,
             }
-            for e in self.events if e.show_in_ui
+            for e in self.events
+            if e.show_in_ui and e.event_type == "IDENTITY_VERIFIED"
         ][:80]
         return {
             "helmets": helmets_out, "objects": objects_out, "zonePopulation": population_out,

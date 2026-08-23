@@ -198,7 +198,7 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo }: {
+function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   onCloseMaximize: () => void
@@ -207,6 +207,8 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
   forceSingleCol?: boolean
   /** Module 05 — giới hạn chiều cao ô, letterbox đen (aspect-video). */
   compactVideo?: boolean
+  /** Override max-height class khi compactVideo — Module 05 patrol layout cao hơn. */
+  compactVideoMaxClass?: string
   /** Camera đang phóng to — giữ nguyên instance feed, không mount stream mới. */
   focusedCamId?: string | null
 }) {
@@ -237,7 +239,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
             : cn(
               'aspect-video',
               compactVideo
-                ? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]'
+                ? (compactVideoMaxClass ?? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]')
                 : 'max-h-[min(36dvh,280px)]',
             ),
         )
@@ -321,6 +323,8 @@ interface TrainingCameraPanelProps {
   defaultSidebarOpen?: boolean
   /** Mobile/Module 05: aspect-video + letterbox — không fill hết chiều cao panel. */
   mobileCompactVideo?: boolean
+  /** Override max-h ô video khi mobileCompactVideo — dùng cho Module 05 patrol. */
+  compactVideoMaxClass?: string
 }
 
 export function TrainingCameraPanel({
@@ -334,6 +338,7 @@ export function TrainingCameraPanel({
   groupFn,
   defaultSidebarOpen = true,
   mobileCompactVideo = false,
+  compactVideoMaxClass,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
   const tabs = filterTabs ?? CAMERA_FILTER_TABS
@@ -504,6 +509,7 @@ export function TrainingCameraPanel({
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
               compactVideo={mobileCompactVideo}
+              compactVideoMaxClass={compactVideoMaxClass}
               focusedCamId={focusedCam?.id}
             />
           </div>

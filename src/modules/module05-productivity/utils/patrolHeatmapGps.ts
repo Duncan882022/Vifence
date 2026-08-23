@@ -17,6 +17,18 @@ function isValidGps(lat: number, lng: number): boolean {
     && !(lat === 0 && lng === 0)
 }
 
+/** Có GPS hợp lệ → dùng thật; không có → fallback (mặc định cạnh HC-01). */
+export function resolvePatrolHelmetMapPosition(
+  lat: number | null | undefined,
+  lng: number | null | undefined,
+  fallback: [number, number] = PATROL_SITE_CENTER,
+): [number, number] {
+  if (lat != null && lng != null && isValidGps(lat, lng)) {
+    return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+  }
+  return fallback
+}
+
 /** Luôn trả tọa độ — HC-* không GPS → neo công trường Cầu Sông Hốt. */
 export function resolvePatrolHeatmapGps(cameraId: string): { lat: number; lng: number } {
   if (isPatrolHelmetCameraId(cameraId)) {

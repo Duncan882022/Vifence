@@ -2,6 +2,7 @@
  * Module 05 — feed sự kiện: chỉ bản có snapshot + thời gian hợp lệ (evidence).
  */
 import type { PatrolEvent } from '../data/patrolMockData'
+import { patrolEventEntityKey } from './patrolWorkforceEventLabels'
 import { PATROL_PPE_UI_HIDDEN } from './patrolPpeVisibility'
 
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000
@@ -33,33 +34,24 @@ export function isValidPatrolEventTime(iso: string): boolean {
   return true
 }
 
-/** Loại sự kiện được phép trên feed chính (spec §8.1 / §8.4). */
-export function isPatrolFeedEventType(event: PatrolEvent): boolean {
-  if (event.type === 'PERSON_DETECTED') {
-    return hasPatrolEventSnapshot(event)
-  }
-  if (event.type === 'PPE_VIOLATION') return !PATROL_PPE_UI_HIDDEN
-  return [
-    'POPULATION_OBSERVED',
-    'POPULATION_CHANGE',
-    'HIGH_DENSITY',
-    'IDENTITY_VERIFIED',
-    'MACHINE_STOPPED',
-  ].includes(event.type)
+/** Sự kiện vòng đời người (3 tab) — bắt buộc có snapshot evidence. */
+export function isPatrolPersonLifecycleWithSnapshot(event: PatrolEvent): boolean {
+  if (event.type !== 'PERSON_DETECTED' && event.type !== 'IDENTITY_VERIFIED') return false
+  return hasPatrolEventSnapshot(event)
 }
 
-const WORKFORCE_FEED_TYPES = new Set<PatrolEvent['type']>([
-  'POPULATION_OBSERVED',
-  'POPULATION_CHANGE',
-  'HIGH_DENSITY',
-  'IDENTITY_VERIFIED',
-  'MACHINE_STOPPED',
-])
+/** Loại sự kiện được phép trên feed chính (spec §8.1 / §8.4). */
+export function isPatrolFeedEventType(event: PatrolEvent): boolean {
+  if (event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED') {
+    return hasPatrolEventSnapshot(event)
+  }
+  if (event.type === 'PPE_VIOLATION') return !PATROL_PPE_UI_HIDDEN && hasPatrolEventSnapshot(event)
+  return false
+}
 
 export function isPatrolEvidenceEvent(event: PatrolEvent): boolean {
   if (!isPatrolFeedEventType(event)) return false
   if (!isValidPatrolEventTime(event.lockedAt)) return false
-  if (WORKFORCE_FEED_TYPES.has(event.type)) return true
   return hasPatrolEventSnapshot(event)
 }
 
@@ -67,19 +59,14 @@ export function filterPatrolEvidenceEvents(events: PatrolEvent[]): PatrolEvent[]
   return events.filter(isPatrolEvidenceEvent)
 }
 
-/** KPI Cảnh báo — cùng tập sự kiện với panel Sự kiện. */
+/** KPI Cảnh báo — unique entities Người + Định danh (có snapshot). */
 export function summarizePatrolAlertEvents(events: PatrolEvent[]): string {
   if (events.length === 0) return 'Chưa có sự kiện'
-  const workforce = events.filter(e =>
-    ['POPULATION_OBSERVED', 'POPULATION_CHANGE', 'HIGH_DENSITY'].includes(e.type),
-  ).length
-  const identity = events.filter(e => e.type === 'IDENTITY_VERIFIED').length
-  const machine = events.filter(e => e.type === 'MACHINE_STOPPED').length
-  const withSnapshot = events.filter(e => hasPatrolEventSnapshot(e)).length
-  const parts: string[] = []
-  if (workforce > 0) parts.push(`${workforce} nhân lực`)
-  if (identity > 0) parts.push(`${identity} định danh`)
-  if (machine > 0) parts.push(`${machine} máy`)
-  if (withSnapshot > 0 && parts.length === 0) parts.push(`${withSnapshot} có ảnh`)
-  return parts.length > 0 ? parts.join(' · ') : `${events.length} sự kiện`
+  const alertKeys = new Set(
+    events
+      .filter(isPatrolPersonLifecycleWithSnapshot)
+      .map(patrolEventEntityKey),
+  )
+  if (alertKeys.size === 0) return 'Chưa có sự kiện'
+  return `${alertKeys.size} sự kiện`
 }

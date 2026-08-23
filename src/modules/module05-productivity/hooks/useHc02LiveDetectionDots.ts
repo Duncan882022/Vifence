@@ -21,7 +21,8 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import type { DetectionDot } from '../data/patrolDetectionData'
-import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
+import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { fetchPatrolHelmetMetrics } from '../services/patrolLiveEvents.service'
 
 const HC02 = 'HC-02'
@@ -154,11 +155,9 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   }, [lat, lng])
 
   const hasLiveGps = isValidGps(lat, lng)
-  /** Không GPS → mặc định Cầu Sông Hốt (cùng neo với dot/sự kiện). */
   const usingDefaultGps = !hasLiveGps
   const hasMapPosition = true
-  const effectiveLat = hasLiveGps ? lat! : PATROL_SITE_CENTER[0]
-  const effectiveLng = hasLiveGps ? lng! : PATROL_SITE_CENTER[1]
+  const [effectiveLat, effectiveLng] = resolvePatrolHelmetMapPosition(lat, lng, PATROL_HELMET_02_FALLBACK)
 
   const dots = useMemo(() => {
     void registryTick

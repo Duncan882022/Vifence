@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2,
+  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2, Trash2,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -48,7 +48,9 @@ import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { filterPatrolEvidenceEvents, summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
+import { filterPatrolEvidenceEvents, isPatrolPersonLifecycleWithSnapshot, summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
+import { patrolEventEntityKey, resolvePatrolPersonStage } from './utils/patrolWorkforceEventLabels'
+import { resetPatrolTestData } from './services/patrolReset.service'
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
@@ -85,18 +87,40 @@ function PatrolKPIs({
     ? Math.round((visitedZones / totalZones) * 100)
     : 0
 
-  const alertCount = events.length
+  // Công nhân = unique entities tab Người (stage person — chưa profile)
+  const workerEntityCount = new Set(
+    events
+      .filter(e => e.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(e) === 'person')
+      .map(patrolEventEntityKey),
+  ).size
+
+  // Sự kiện = unique entities tab Người + Định danh
+  const alertCount = new Set(
+    events
+      .filter(e =>
+        e.type === 'IDENTITY_VERIFIED'
+        || (e.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(e) !== 'object'),
+      )
+      .map(patrolEventEntityKey),
+  ).size
 
   const zonePop = Object.values(workforce.zonePopulation)[0]
-  const observedCount = zonePop?.observed_count ?? live.personCount
+  // Ưu tiên live.personCount từ stream thực tế, fallback sang workforce + event count
+  const observedCount = live.personCount > 0
+    ? live.personCount
+    : workerEntityCount > 0
+      ? workerEntityCount
+      : zonePop?.observed_count ?? 0
 
   const peopleDetail = zonePop
     ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
-    : live.perCamera.length > 0
-      ? formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`
-      : live.backendReachable || live.streamOnline
-        ? 'Đang chờ phát hiện'
-        : 'Chưa có luồng live'
+    : workerEntityCount > 0
+      ? `${workerEntityCount} người đã nhận diện`
+      : live.perCamera.length > 0
+        ? formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`
+        : live.backendReachable || live.streamOnline
+          ? 'Đang chờ phát hiện'
+          : 'Chưa có luồng live'
 
   const kpis = [
     {
@@ -235,13 +259,32 @@ export function Module05Page() {
       merged,
       Object.values(workforceSnap.objects),
     )
-    return applyManualIdentityToPatrolEvents(filterPatrolEvidenceEvents(enriched))
+    return applyManualIdentityToPatrolEvents(
+      filterPatrolEvidenceEvents(enriched).filter(isPatrolPersonLifecycleWithSnapshot),
+    )
   }, [liveHelmetEvents.events, workforceSnap.events, workforceSnap.objects, identityRevision])
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
     [detailEventId, patrolEventsLive],
   )
+
+  const [resetting, setResetting] = useState(false)
+
+  async function handleResetTestData() {
+    if (!window.confirm('Xóa toàn bộ dữ liệu patrol (events, sgc, heatmap)?\nTrang sẽ tự reload sau khi xong.')) return
+    setResetting(true)
+    try {
+      const result = await resetPatrolTestData()
+      const be = result.backend
+      const summary = be
+        ? `Backend: ${be.events_cleared} events, ${be.sgc_tracks_cleared} sgc, ${be.hc_tracks_cleared} HC tracks`
+        : 'Backend không kết nối (FE đã xoá)'
+      console.info('[patrolReset] Đã xoá:', summary)
+    } finally {
+      window.location.reload()
+    }
+  }
 
   const handleSelectCamera = (cam: TrainingCamera) => {
     setSelectedCamId(cam.id)
@@ -259,6 +302,18 @@ export function Module05Page() {
       <Header
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
+        headerRight={
+          <button
+            type="button"
+            onClick={handleResetTestData}
+            disabled={resetting}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[9px] text-muted-foreground/60 hover:text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
+            title="Xóa dữ liệu test (events, sgc, heatmap)"
+          >
+            <Trash2 className="w-3 h-3" />
+            {resetting ? 'Đang xóa…' : 'Reset test'}
+          </button>
+        }
       />
       <PageLayout scrollable={isMobileLayout && !cameraCollapsed}>
         {/* Tier 1 — KPIs */}
@@ -292,25 +347,23 @@ export function Module05Page() {
             ? 'pb-[env(safe-area-inset-bottom,0px)]'
             : 'overflow-hidden',
         )}>
-          {/* Tier 2 — Camera (compact, letterbox — nhường chỗ heatmap/sự kiện) */}
+          {/* Tier 2 — Camera (~70% chiều cao còn lại) */}
           <div className={cn(
             'flex flex-col min-h-0',
-            tier2Open
-              ? cn(
-                isMobileLayout
-                  ? 'flex-none shrink-0 max-h-[min(28dvh,220px)] max-lg:landscape:max-h-[min(22dvh,168px)]'
-                  : 'flex-none shrink-0 max-h-[min(34vh,360px)]',
-              )
-              : 'shrink-0',
+            tier2Open && (
+              isMobileLayout
+                ? 'shrink-0 flex-1 min-h-[min(48dvh,400px)] max-h-[min(58dvh,480px)] max-lg:landscape:min-h-[min(36dvh,300px)] max-lg:landscape:max-h-[min(44dvh,380px)]'
+                : 'flex-[5] min-h-[min(50vh,500px)] max-h-[min(68vh,720px)]'
+            ),
+            !tier2Open && 'shrink-0',
           )}>
             <Panel
               title="Camera"
               expandable={tier2Open}
-              fit={!tier2Open || isMobileLayout}
+              fit={!tier2Open}
               noPadding
               className={cn(
-                tier2Open && !isMobileLayout && 'h-full max-h-[min(34vh,360px)] overflow-hidden',
-                tier2Open && isMobileLayout && 'overflow-hidden',
+                tier2Open && 'h-full min-h-0 overflow-hidden',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -340,7 +393,8 @@ export function Module05Page() {
                       cameras={patrolCamerasLive}
                       defaultCameraIds={patrolDefaultCameraIds}
                       defaultSidebarOpen={false}
-                      mobileCompactVideo
+                      mobileCompactVideo={isMobileLayout}
+                      compactVideoMaxClass="max-h-[min(46dvh,400px)] sm:max-h-[min(50dvh,440px)] max-lg:landscape:max-h-[min(36dvh,320px)]"
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
@@ -366,11 +420,12 @@ export function Module05Page() {
             </Panel>
           </div>
 
-          {/* Tier 3 — HEATMAP | SỰ KIỆN */}
+          {/* Tier 3 — HEATMAP | SỰ KIỆN (~30% thấp hơn, nhường camera) */}
           <div className={cn(
-            'flex gap-2 sm:gap-3 flex-col md:flex-row flex-1 min-h-0',
-            isMobileLayout && !cameraCollapsed && 'shrink-0 min-h-[min(68dvh,560px)]',
-            !isMobileLayout && 'overflow-hidden',
+            'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0 shrink-0',
+            isMobileLayout && !cameraCollapsed
+              ? 'min-h-[min(25dvh,220px)]'
+              : 'flex-[2] overflow-hidden max-h-[min(32vh,360px)]',
           )}>
             <Panel
               title="HEATMAP"
@@ -380,7 +435,7 @@ export function Module05Page() {
                 cameraCollapsed
                   ? 'h-full'
                   : isMobileLayout
-                    ? 'min-h-[240px] h-[min(40dvh,340px)] md:min-h-0 md:h-full'
+                    ? 'min-h-[112px] h-[min(18dvh,154px)] md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
               )}
               headerRight={
@@ -410,7 +465,7 @@ export function Module05Page() {
                 cameraCollapsed
                   ? 'h-full'
                   : isMobileLayout
-                    ? 'min-h-[200px] h-[min(36dvh,300px)] md:min-h-0 md:h-full'
+                    ? 'min-h-[91px] h-[min(15dvh,126px)] md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
