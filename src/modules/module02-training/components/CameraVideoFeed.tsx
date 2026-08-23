@@ -17,8 +17,8 @@ import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/
 import { isHlsStreamUrl, useHlsVideoSource } from '../hooks/useHlsVideoSource'
 import {
   isAiOverlayDisabledCamera,
+  isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
-import { shouldHidePatrolCameraRoi } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
@@ -66,6 +66,7 @@ export function CameraVideoFeed({
   const roadAnalysis = enabledModels.includes('road_material')
   const craneProximity = enabledModels.includes('crane_proximity')
   const ppeAnalysis = enabledModels.includes('ppe')
+  const patrolPersonAnalysis = isPatrolPersonCamera(cameraId)
   const pcccAnalysis = enabledModels.includes('pccc')
   const wahAnalysis = enabledModels.includes('wah')
   const atgtAnalysis = enabledModels.includes('atgt_traffic')
@@ -82,7 +83,7 @@ export function CameraVideoFeed({
   )
   const showCraneOverlay = Boolean(overlayActive && craneProximity && !overlayDisabled)
   const showPpeOverlay = Boolean(
-    overlayActive && ppeAnalysis && !overlayDisabled && !shouldHidePatrolCameraRoi(cameraId),
+    overlayActive && (ppeAnalysis || patrolPersonAnalysis) && !overlayDisabled,
   )
   const showPcccOverlay = Boolean(overlayActive && pcccAnalysis && !overlayDisabled)
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)

@@ -40,7 +40,7 @@ import { useCameraBboxVisible } from './CameraBboxToggle'
 import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend.service'
 import { groupPpeDetections } from '@/modules/module03-safety/utils/ppeDetectionGroups'
 import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
-import { PATROL_PPE_UI_HIDDEN, shouldHidePatrolCameraRoi } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
+import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 
 /**
  * HC bodycam — chỉ bbox person (xanh).
@@ -110,12 +110,14 @@ export function MobileCameraFeed({
   const mobileAiEnabled = isMobileSmokingFireCamera(cameraId)
     || isPpeCamera(cameraId)
     || isPatrolPersonCamera(cameraId)
-  const overlayModelId = isPpeCamera(cameraId) ? 'ppe' as const : 'mobile_smoking_fire' as const
+  const overlayModelId = isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId)
+    ? 'ppe' as const
+    : 'mobile_smoking_fire' as const
   const videoFit = getVideoObjectFitForCamera(cameraId, 'mobile')
   const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, 'mobile')
   /** Analyze vẫn chạy khi ẩn ROI — heatmap/personCount cần detections. */
   const runAiAnalyze = aiEnabled && mobileAiEnabled
-  const showAiOverlay = runAiAnalyze && bboxVisible && !shouldHidePatrolCameraRoi(cameraId)
+  const showAiOverlay = runAiAnalyze && bboxVisible
   const overlayDetections = useMemo(
     () => (overlayModelId === 'ppe' ? mapMobilePpeOverlayDetections(detections) : detections),
     [detections, overlayModelId],

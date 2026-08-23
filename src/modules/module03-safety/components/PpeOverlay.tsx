@@ -33,6 +33,7 @@ import { syncPersonOverlaySession } from '../utils/personOverlaySession'
 import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 import { ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
+import { shouldHidePatrolPpeViolationOverlay } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 
 interface PpeOverlayProps {
   cameraId: string
@@ -293,12 +294,15 @@ export const PpeOverlay = memo(function PpeOverlay({
   const { syncKey, trackLock, snapOverlay } = useLiveOverlaySync()
   const stableDetections = useStableOverlayDetections(detections, { syncKey, trackLock })
 
-  const cycleItems = useMemo(
-    () => buildPpeCycleDetections(stableDetections).filter(d =>
+  const cycleItems = useMemo(() => {
+    let items = buildPpeCycleDetections(stableDetections).filter(d =>
       shouldShowOverlayBox(d.confidence, d.bbox),
-    ),
-    [stableDetections],
-  )
+    )
+    if (shouldHidePatrolPpeViolationOverlay(cameraId)) {
+      items = items.filter(d => d.behavior === 'person')
+    }
+    return items
+  }, [stableDetections, cameraId])
 
   useEffect(() => {
     syncPersonOverlaySession(

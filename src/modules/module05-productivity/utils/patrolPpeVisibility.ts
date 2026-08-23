@@ -1,11 +1,16 @@
 /**
- * Module 05 / mũ HC — tạm ẩn toàn bộ PPE + ROI overlay trên camera và feed Sự kiện.
- * AI analyze vẫn chạy ngầm (person count / workforce); chỉ không vẽ box trên cam.
+ * Module 05 / mũ HC — ẩn vi phạm PPE + sự kiện PPE; vẫn vẽ bbox person trên camera.
+ * AI analyze vẫn chạy ngầm (person count / workforce).
  */
 export const PATROL_PPE_UI_HIDDEN = true
 
-/** Ẩn mọi ROI/bbox trên camera mũ HC-* (kể cả person). */
-export function shouldHidePatrolCameraRoi(cameraId: string): boolean {
+/** @deprecated Dùng shouldHidePatrolPpeViolationOverlay — person ROI luôn được phép trên HC-*. */
+export function shouldHidePatrolCameraRoi(_cameraId: string): boolean {
+  return false
+}
+
+/** Ẩn bbox vi phạm PPE (no_helmet, no_vest…) — không ẩn bbox person. */
+export function shouldHidePatrolPpeViolationOverlay(cameraId: string): boolean {
   if (!PATROL_PPE_UI_HIDDEN) return false
   return cameraId.startsWith('HC-')
 }
