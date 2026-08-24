@@ -82,17 +82,27 @@ def unknown_worker_match(match_source: str = "unknown") -> WorkerMatch:
     )
 
 
-def _best_face_in_crop(crop: np.ndarray, *, score_threshold: float = 0.65) -> np.ndarray | None:
+def _best_face_in_crop(
+    crop: np.ndarray,
+    *,
+    score_threshold: float = 0.65,
+    selfie_mode: bool = False,
+) -> np.ndarray | None:
     crop_h, crop_w = crop.shape[:2]
-    head_h = max(int(crop_h * 0.42), 48)
-    search = crop[:head_h, :]
+    if selfie_mode or crop_h < 300:
+        search = crop
+        max_cy_frac = 0.92
+    else:
+        head_h = max(int(crop_h * 0.42), 48)
+        search = crop[:head_h, :]
+        max_cy_frac = 0.58
     ok, faces = detect_faces(search, score_threshold=score_threshold)
     if not ok or faces is None or len(faces) == 0:
         return None
     best = None
     best_score = 0.0
     search_h = search.shape[0]
-    min_face_h = max(16.0, search_h * 0.08)
+    min_face_h = max(12.0, search_h * 0.06)
     for face in faces:
         x, y, fw, fh = face[:4]
         score = float(face[14]) if len(face) > 14 else float(face[4] if len(face) > 4 else 0.0)
@@ -101,10 +111,10 @@ def _best_face_in_crop(crop: np.ndarray, *, score_threshold: float = 0.65) -> np
         if fh < min_face_h:
             continue
         aspect = fw / max(fh, 1.0)
-        if aspect < 0.55 or aspect > 1.85:
+        if aspect < 0.45 or aspect > 2.05:
             continue
         face_cy = y + fh / 2.0
-        if face_cy > search_h * 0.58:
+        if face_cy > search_h * max_cy_frac:
             continue
         area = float(fw * fh)
         rank = area + score * 40.0
@@ -252,7 +262,10 @@ def extract_person_face_embedding(
     crop = _crop_person(frame, person_bbox)
     if crop is None:
         return None
+    crop_h = crop.shape[0]
     face = _best_face_in_crop(crop)
+    if face is None and crop_h < 420:
+        face = _best_face_in_crop(crop, score_threshold=0.55, selfie_mode=True)
     if face is None:
         return None
     from .gallery import face_histogram_embedding

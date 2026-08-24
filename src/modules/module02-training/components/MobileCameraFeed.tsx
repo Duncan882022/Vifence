@@ -133,6 +133,15 @@ export function MobileCameraFeed({
   const showAiOverlay = runAiAnalyze && bboxVisible
   /** Module 05 patrol — Kalman/ByteTrack ROI, không dùng ATLĐ bboxTrackLock. */
   const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && overlayModelId === 'ppe'
+  /** ROI cần frame size — fallback video native trước khi backend trả width/height. */
+  const overlayFrameSize = useMemo(() => {
+    if (frameSize.width > 0 && frameSize.height > 0) return frameSize
+    const v = videoRef.current
+    if (v?.videoWidth && v?.videoHeight) {
+      return { width: v.videoWidth, height: v.videoHeight }
+    }
+    return frameSize
+  }, [frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = overlayModelId === 'ppe' && !usePatrolPersonRoi
       ? mapMobilePpeOverlayDetections(detections)
@@ -194,7 +203,7 @@ export function MobileCameraFeed({
         const now = Date.now()
         const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
         /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */
-        const holdMs = isPatrolPerson ? 1100 : 1800
+        const holdMs = isPatrolPerson ? 2200 : 1800
         if (filtered.length > 0) {
           detectionHoldRef.current = { until: now + holdMs, items: filtered }
           setDetections(filtered)
@@ -447,8 +456,8 @@ export function MobileCameraFeed({
       {status === 'live' && showAiOverlay && usePatrolPersonRoi && (
         <PatrolPersonRoiOverlay
           cameraId={cameraId}
-          frameWidth={frameSize.width}
-          frameHeight={frameSize.height}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
@@ -459,8 +468,8 @@ export function MobileCameraFeed({
       {status === 'live' && showAiOverlay && !usePatrolPersonRoi && (
         <MobileAiOverlay
           detections={overlayDetections}
-          frameWidth={frameSize.width}
-          frameHeight={frameSize.height}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           layoutTick={layoutTick}
           compact={compact}

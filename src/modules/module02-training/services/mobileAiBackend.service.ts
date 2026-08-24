@@ -102,13 +102,17 @@ export function buildAnalyzeWsUrl(baseUrl: string): string {
 }
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+  const externalSignal = init.signal
+  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal && !externalSignal) {
     return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
   }
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  const onExternalAbort = () => controller.abort()
+  externalSignal?.addEventListener('abort', onExternalAbort)
   return fetch(url, { ...init, signal: controller.signal }).finally(() => {
     window.clearTimeout(timer)
+    externalSignal?.removeEventListener('abort', onExternalAbort)
   })
 }
 
@@ -143,9 +147,9 @@ export type MobileAiConnectionStatus = 'idle' | 'connecting' | 'connected' | 'er
 
 export type MobileAnalyzeMode = 'default' | 'ppe' | 'person' | 'pccc' | 'road' | 'crane'
 
-/** MOB-* → hút thuốc/cháy; HC-02 patrol → person-only (nhanh, đủ đếm người). */
+/** MOB-* → hút thuốc/cháy; HC-* patrol → person-only (nhanh, bỏ PPE models). */
 export function resolveMobileAnalyzeMode(cameraId: string): MobileAnalyzeMode {
-  if (cameraId === 'HC-02') return 'person'
+  if (cameraId.startsWith('HC-')) return 'person'
   return 'default'
 }
 
@@ -171,6 +175,8 @@ async function postAnalyzeFrame(
   analyzeMode: MobileAnalyzeMode = 'default',
   gps?: { lat: number; lng: number } | null,
   heading?: number | null,
+  timeoutMs = 90000,
+  signal?: AbortSignal,
 ): Promise<MobileAiAnalyzeResult> {
   const res = await fetchWithTimeout(buildAnalyzeHttpUrl(backendUrl), {
     method: 'POST',
@@ -187,7 +193,8 @@ async function postAnalyzeFrame(
       ...(heading != null && Number.isFinite(heading) ? { heading } : {}),
     }),
     mode: 'cors',
-  }, 90000)
+    signal,
+  }, timeoutMs)
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }
@@ -241,6 +248,8 @@ export function createMobileAiAnalyzeClient(
   let inFlight = false
   let timerId = 0
   let connectedOnce = false
+  let abortController: AbortController | null = null
+  const isPatrolHelmet = cameraId.startsWith('HC-')
 
   const scheduleNext = (delay = intervalMs) => {
     if (stopped) return
@@ -248,7 +257,12 @@ export function createMobileAiAnalyzeClient(
   }
 
   const tick = async () => {
-    if (stopped || inFlight) {
+    if (stopped) return
+
+    // HC-*: abort request cũ, gửi frame mới — tránh ROI đứng im khi round-trip chậm.
+    if (inFlight && isPatrolHelmet) {
+      abortController?.abort()
+    } else if (inFlight) {
       scheduleNext(400)
       return
     }
@@ -273,14 +287,19 @@ export function createMobileAiAnalyzeClient(
 
     if (!connectedOnce) onStatusChange('connecting')
     inFlight = true
+    abortController = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const gps = getGps?.() ?? null
+    const heading = getHeading?.() ?? null
     try {
       const result = await postAnalyzeFrame(
         backendUrl,
         cameraId,
         image,
         analyzeMode,
-        getGps?.() ?? null,
-        getHeading?.() ?? null,
+        gps,
+        heading,
+        isPatrolHelmet ? 45000 : 90000,
+        abortController?.signal,
       )
       if (stopped) return
       connectedOnce = true
@@ -289,6 +308,10 @@ export function createMobileAiAnalyzeClient(
       scheduleNext(analyzeMode === 'person' || intervalMs < 350 ? 40 : 120)
     } catch (err) {
       if (stopped) return
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        scheduleNext(60)
+        return
+      }
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'
       onStatusChange('error', msg)
       scheduleNext(3000)
