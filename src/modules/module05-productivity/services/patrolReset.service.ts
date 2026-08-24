@@ -1,7 +1,7 @@
 /**
  * Reset toàn bộ dữ liệu patrol để kiểm tra sạch:
  * - Gọi DELETE /patrol/reset trên backend (events + sgc registry + mobile metrics + HC tracks)
- * - Xóa localStorage patrol (sgc→OBJ link) — giữ định danh thủ công v2 (Duncan)
+ * - Xóa localStorage patrol (sgc→OBJ link + định danh thủ công)
  * - Xóa sessionStorage heatmap registry
  */
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -10,6 +10,7 @@ import { resetHelmetPositionEngine } from '../utils/positionEngine'
 
 const PATROL_LS_KEYS = [
   'vifence_patrol_manual_identity_v1',
+  'vifence_patrol_manual_identity_v2',
   'vifence_patrol_sgc_object_link_v1',
 ]
 
@@ -61,7 +62,9 @@ export async function resetPatrolTestData(): Promise<PatrolResetResult> {
 
   clearPatrolLocalStorage()
   clearPatrolSessionStorage()
+  clearPatrolHelmetGps('HC-01')
   clearPatrolHelmetGps('HC-02')
+  resetHelmetPositionEngine('HC-01')
   resetHelmetPositionEngine('HC-02')
 
   return { ok: true, backend }

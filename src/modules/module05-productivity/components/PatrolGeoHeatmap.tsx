@@ -11,7 +11,7 @@ import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, T
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { PATROL_SITE_CLIP_RING } from '../data/patrolSiteGeometry'
+import { PATROL_SITE_CLIP_RING, clampPointToSiteInterior, isPointInSiteBoundary } from '../data/patrolSiteGeometry'
 import type { PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
@@ -202,9 +202,8 @@ function createDetectionDotIcon(
 function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
   const num = String(parseInt(pin.id.replace('HC-', ''), 10))
   const anim = isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : ''
-  const bg = isActive ? pin.color : '#475569'
-  const border = isActive ? 'rgba(255,255,255,0.85)' : 'rgba(148,163,184,0.55)'
-  const opacity = isActive ? '1' : '0.42'
+  const bg = isActive ? pin.color : '#64748b'
+  const border = isActive ? 'rgba(255,255,255,0.85)' : 'rgba(203,213,225,0.75)'
   const html = `
     <div style="
       background:${bg};
@@ -215,7 +214,6 @@ function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
       font-size:6.5px;font-weight:800;color:#fff;
       font-family:system-ui,sans-serif;
       box-shadow:0 1px 5px rgba(0,0,0,0.55);
-      opacity:${opacity};
       ${anim}
     ">${num}</div>`
   return L.divIcon(divIconOpts(html, [16, 16], [8, 8]))
@@ -451,11 +449,20 @@ export interface PatrolGeoHeatmapProps {
   showDensity: boolean
   /* Layer 4 — Patrol route polyline + helmet markers */
   showRoute: boolean
+  /** Marker mũ HC-* — luôn hiện kể cả offline (tách khỏi layer route). */
+  showHelmetMarkers?: boolean
   showCameras: boolean
   /** Online theo stream live (HC-01 VMS / HC-02 mobile). */
   helmetOnlineById?: Record<string, boolean>
   /** Heading degrees 0–360 per helmet — cone FOV on map. */
   helmetHeadingById?: Record<string, number | null | undefined>
+  /** Tổng hợp nhân lực công trường — hiển thị trên tooltip mũ. */
+  siteHeadcount?: {
+    observed: number
+    identified: number
+    objects: number
+    persons: number
+  }
   /** Click Object / detection with objectId → bottom sheet. */
   onDetectionClick?: (dot: DetectionDot) => void
   /** HC-02 luôn hiện marker (off = xám); false = ẩn khi chưa GPS. */
@@ -483,9 +490,11 @@ export function PatrolGeoHeatmap({
   liveGpsLng = null,
   showDensity,
   showRoute,
+  showHelmetMarkers = true,
   showCameras,
   helmetOnlineById,
   helmetHeadingById,
+  siteHeadcount,
   onDetectionClick,
   requireLiveGpsForHc02 = false,
   hasHc02LiveGps = false,
@@ -515,11 +524,15 @@ export function PatrolGeoHeatmap({
 
   const zoneMap = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
   const visibleDetectionDots = useMemo(() => {
-    if (liveDetectionDots && liveDetectionDots.length > 0) {
-      return liveDetectionDots
-    }
-    /* Mock dots tạm ẩn khi chế độ live HC-02 (density/heatmap cũ). */
-    return []
+    const raw = liveDetectionDots && liveDetectionDots.length > 0
+      ? liveDetectionDots
+      : []
+    return raw
+      .map(dot => {
+        const [lat, lng] = clampPointToSiteInterior(dot.position[0], dot.position[1])
+        return { ...dot, position: [lat, lng] as [number, number] }
+      })
+      .filter(dot => isPointInSiteBoundary(dot.position[0], dot.position[1]))
   }, [liveDetectionDots])
   const mapZoomFallback = usePatrolMapZoom()
   const mapZoom = mapZoomProp ?? mapZoomFallback
@@ -745,13 +758,15 @@ export function PatrolGeoHeatmap({
             )
           })}
 
-          {/* ── LAYER 4B: Helmet Markers (chỉ HC-01 + HC-02) ─── */}
-          {showCameras && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
-            const livePos = cameraPositions[pin.id] ?? pin.position
+          {/* ── LAYER 4B: Helmet Markers — HC-01/02 luôn hiện (offline = xám) ─── */}
+          {(showHelmetMarkers || showCameras) && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
+            const fallback = pin.position
+            const rawPos = cameraPositions[pin.id] ?? fallback
+            const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
             const zoneName = getPatrolHelmetZoneName(pin.id)
             const isActive = Boolean(helmetOnlineById?.[pin.id])
             const heading = helmetHeadingById?.[pin.id]
-            const hc02Muted = pin.id === 'HC-02' && !isActive
+            const markerOpacity = isActive ? 1 : 0.88
             return (
               <>
                 {heading != null && Number.isFinite(heading) && isActive && (
@@ -772,7 +787,7 @@ export function PatrolGeoHeatmap({
                   position={livePos}
                   icon={createHelmetIcon(pin, isActive)}
                   zIndexOffset={500}
-                  opacity={hc02Muted ? 0.42 : isActive ? 1 : 0.38}
+                  opacity={markerOpacity}
                 >
                   <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
                     <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
@@ -789,6 +804,21 @@ export function PatrolGeoHeatmap({
                       )}
                       <br />
                       Phụ trách: {zoneName}
+                      {siteHeadcount && (
+                        <>
+                          <br />
+                          <span style={{ color: '#94a3b8' }}>
+                            Công trường: {siteHeadcount.observed} quan sát
+                            {' · '}{siteHeadcount.identified} định danh
+                          </span>
+                          <br />
+                          <span style={{ color: '#64748b', fontSize: 9 }}>
+                            Đối tượng {siteHeadcount.objects}
+                            {' · '}Người {siteHeadcount.persons}
+                            {' · '}Định danh {siteHeadcount.identified}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </Tooltip>
                 </Marker>

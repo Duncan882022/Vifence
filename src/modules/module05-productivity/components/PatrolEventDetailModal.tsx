@@ -160,6 +160,9 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
             <PatrolManualIdentityPanel
               objectKey={objectKey}
               suggestedWorkerId={suggestPatrolWorkerId(objectKey, event.objectId)}
+              snapshotUrl={event.snapshotUrl}
+              cameraId={event.cameraId}
+              trackId={event.trackWorkerId}
               onAssigned={() => setIdentityTick(t => t + 1)}
             />
           )}

@@ -18,7 +18,7 @@ import {
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   type DetectionDot,
 } from '../data/patrolDetectionData'
-import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
+import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
@@ -135,11 +135,13 @@ export function PatrolDensityHeatmap({
 
   const mergedCameraPositions = useMemo(() => {
     const next = { ...cameraPositions }
+    const hc01Pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === 'HC-01')
+    const hc01Default = hc01Pin?.position ?? PATROL_SITE_CENTER
     const hc01Wf = workforce.helmets['HC-01']
     if (helmetOnlineById['HC-01'] && hc01Wf?.lat != null && hc01Wf?.lon != null) {
-      next['HC-01'] = resolvePatrolHelmetMapPosition(hc01Wf.lat, hc01Wf.lon, PATROL_SITE_CENTER)
+      next['HC-01'] = resolvePatrolHelmetMapPosition(hc01Wf.lat, hc01Wf.lon, hc01Default)
     } else {
-      next['HC-01'] = PATROL_SITE_CENTER
+      next['HC-01'] = hc01Default
     }
     const hc02Wf = workforce.helmets['HC-02']
     const hc02Lat = hc02Wf?.lat ?? hc02Live.lat
@@ -269,6 +271,34 @@ export function PatrolDensityHeatmap({
     return filteredDots.filter(d => d.verified || isVerifiedWorkerLabel(d.label)).length
   }, [zonePop, liveObjects, filteredDots, identityRevision])
 
+  const siteHeadcount = useMemo(() => {
+    void identityRevision
+    let objects = 0
+    let persons = 0
+    let identified = 0
+    for (const o of liveObjects) {
+      const wid = o.worker_id?.trim() ?? ''
+      const manual = isPatrolManuallyIdentified(o.object_id)
+      const verified = o.identity_status === 'VERIFIED' || manual
+      if (verified) {
+        identified += 1
+      } else if (/^sgc-/i.test(wid)) {
+        persons += 1
+      } else {
+        objects += 1
+      }
+    }
+    const observed = zonePop?.observed_count
+      ?? Math.max(objects + persons + identified, filteredDots.length)
+    if (identified === 0 && identifiedCount > 0) identified = identifiedCount
+    return {
+      observed,
+      identified: Math.max(identified, identifiedCount),
+      objects: zonePop?.breakdown.unknown_objects ?? objects,
+      persons: Math.max(0, observed - identifiedCount - (zonePop?.breakdown.unknown_objects ?? objects)),
+    }
+  }, [zonePop, liveObjects, filteredDots, identifiedCount, identityRevision])
+
   const hc02Online = Boolean(hc02Helmet?.online) || helmetOnlineById['HC-02']
   const bodycamOnlineById = useMemo(() => ({
     'HC-01': Boolean(helmetOnlineById['HC-01']),
@@ -339,9 +369,11 @@ export function PatrolDensityHeatmap({
           liveGpsLng={hc02Live.lng}
           showDensity={false}
           showRoute={layers.route}
+          showHelmetMarkers
           showCameras={layers.route}
           helmetOnlineById={helmetOnlineById}
           helmetHeadingById={helmetHeadingById}
+          siteHeadcount={siteHeadcount}
           onDetectionClick={onDetectionClick}
           requireLiveGpsForHc02={false}
           hasHc02LiveGps={hc02Live.hasMapPosition}

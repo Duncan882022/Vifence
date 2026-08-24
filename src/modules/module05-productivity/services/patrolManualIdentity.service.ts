@@ -1,10 +1,16 @@
 /**
  * Định danh thủ công Module 05 — mã workerId ổn định + alias track/object.
  * Gặp lại cùng mã → load tên/đơn vị và gộp lịch sử dot/sự kiện.
+ * Gán qua BE enroll gallery khi có snapshot.
  */
 import { rekeyHeatmapPerson } from '@/services/patrolHeatmapPersonRegistry'
 import { isVerifiedWorkerLabel } from '../utils/workforceHeatmapUi'
 import { expandPatrolIdentityAliasKeys } from './patrolSgcObjectLink.service'
+import {
+  assignPatrolIdentityOnBackend,
+  fetchPatrolIdentityBindings,
+  type PatrolIdentityAssignResult,
+} from './patrolIdentityAssign.service'
 
 const STORAGE_KEY = 'vifence_patrol_manual_identity_v2'
 const LEGACY_STORAGE_KEY = 'vifence_patrol_manual_identity_v1'
@@ -133,9 +139,11 @@ export function findPatrolIdentityByWorkerId(workerId: string): PatrolManualIden
 }
 
 export function getPatrolManualIdentity(objectKey: string): PatrolManualIdentity | null {
-  const workerId = resolveWorkerIdForObject(objectKey)
-  if (!workerId) return null
-  return readStore().byWorkerId[workerId] ?? null
+  const key = normalizePatrolIdentityKey(objectKey)
+  if (!key) return null
+  const workerId = resolveWorkerIdForObject(key)
+  if (workerId) return readStore().byWorkerId[workerId] ?? null
+  return findPatrolIdentityByWorkerId(key)
 }
 
 export function isPatrolManuallyIdentified(objectKey: string): boolean {
@@ -206,6 +214,63 @@ export function assignPatrolManualIdentity(input: {
   writeStore(store)
   notify()
   return identity
+}
+
+/** Gán định danh — enroll mặt BE + lưu alias local. */
+export async function assignPatrolManualIdentityWithBackend(input: {
+  objectKey: string
+  workerId: string
+  workerName: string
+  unitName: string
+  snapshotUrl?: string | null
+  cameraId?: string | null
+  trackId?: string | null
+}): Promise<{ identity: PatrolManualIdentity | null; backend: PatrolIdentityAssignResult }> {
+  const employeeCode = normalizePatrolWorkerId(input.workerId)
+  const backend = await assignPatrolIdentityOnBackend({
+    objectKey: input.objectKey,
+    workerName: input.workerName,
+    employeeCode,
+    contractorName: input.unitName,
+    snapshotUrl: input.snapshotUrl,
+    cameraId: input.cameraId,
+    trackId: input.trackId,
+  })
+
+  const galleryWorkerId = backend.ok && backend.gallery_worker_id
+    ? normalizePatrolWorkerId(backend.gallery_worker_id)
+    : employeeCode
+
+  const identity = assignPatrolManualIdentity({
+    objectKey: input.objectKey,
+    workerId: galleryWorkerId,
+    workerName: input.workerName,
+    unitName: input.unitName,
+  })
+
+  return { identity, backend }
+}
+
+/** Đồng bộ bindings từ BE → local alias (sau reload / thiết bị khác). */
+export async function syncPatrolIdentityBindingsFromBackend(): Promise<number> {
+  const bindings = await fetchPatrolIdentityBindings()
+  let count = 0
+  for (const row of bindings) {
+    const workerId = normalizePatrolWorkerId(row.gallery_worker_id)
+    const workerName = (row.worker_name ?? '').trim()
+    const unitName = (row.contractor_name ?? '').trim()
+    if (!workerId || !workerName || !unitName) continue
+    for (const alias of row.aliases ?? []) {
+      assignPatrolManualIdentity({
+        objectKey: alias,
+        workerId,
+        workerName,
+        unitName,
+      })
+      count += 1
+    }
+  }
+  return count
 }
 
 export function resolvePatrolObjectLabel(objectKey: string, fallback: string): string {

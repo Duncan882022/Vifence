@@ -412,3 +412,89 @@ def build_patrol_aggregate_events_payload(
         )
     merged.sort(key=lambda row: float(row.get("created_at") or 0), reverse=True)
     return merged[:limit]
+
+
+def assign_patrol_identity(payload: dict) -> dict[str, Any]:
+    """Enroll khuôn mặt gallery + bind sgc/OBJ → gallery worker (DB file)."""
+    import base64
+
+    import cv2
+    import numpy as np
+
+    from .patrol_identity_store import (
+        bind_patrol_identity,
+        list_patrol_identity_bindings,
+        patrol_gallery_worker_id,
+    )
+    from .person_identity_registry import bind_patrol_track_identity
+    from .worker_identity.gallery import enroll_face
+    from .worker_identity.recognizer import reload_gallery
+
+    def _decode_frame(image_b64: str) -> np.ndarray | None:
+        try:
+            raw = base64.b64decode(image_b64)
+            arr = np.frombuffer(raw, dtype=np.uint8)
+            return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception:
+            return None
+
+    object_key = str(payload.get("object_key") or "").strip()
+    worker_name = str(payload.get("worker_name") or "").strip()
+    employee_code = str(payload.get("employee_code") or "").strip()
+    contractor_name = str(payload.get("contractor_name") or "").strip()
+    image_b64 = payload.get("image_b64")
+    alias_keys = list(payload.get("alias_keys") or [])
+    camera_id = str(payload.get("camera_id") or "").strip() or None
+    track_id = str(payload.get("track_id") or "").strip() or None
+
+    if not object_key or not worker_name or not employee_code or not contractor_name:
+        return {"ok": False, "error": "missing_fields"}
+
+    gallery_worker_id = patrol_gallery_worker_id(employee_code)
+    aliases = sorted({object_key, *alias_keys, gallery_worker_id})
+
+    face_enrolled = False
+    enrollment = None
+    if image_b64:
+        frame = _decode_frame(str(image_b64))
+        if frame is not None:
+            try:
+                enrollment = enroll_face(
+                    gallery_worker_id,
+                    worker_name,
+                    employee_code,
+                    frame,
+                    contractor_name=contractor_name,
+                    pose_slot=1,
+                )
+                reload_gallery()
+                face_enrolled = True
+            except Exception as exc:
+                return {"ok": False, "error": f"enroll_failed:{exc}"}
+
+    row = bind_patrol_identity(
+        gallery_worker_id=gallery_worker_id,
+        worker_name=worker_name,
+        employee_code=employee_code,
+        contractor_name=contractor_name,
+        alias_keys=aliases,
+    )
+
+    if camera_id and track_id:
+        bind_patrol_track_identity(
+            camera_id,
+            track_id,
+            gallery_worker_id,
+        )
+
+    return {
+        "ok": True,
+        "gallery_worker_id": gallery_worker_id,
+        "worker_name": worker_name,
+        "employee_code": employee_code,
+        "contractor_name": contractor_name,
+        "face_enrolled": face_enrolled,
+        "enrollment": enrollment,
+        "binding": row,
+        "bindings_count": len(list_patrol_identity_bindings()),
+    }

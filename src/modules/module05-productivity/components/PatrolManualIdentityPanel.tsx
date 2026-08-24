@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { UserCheck } from 'lucide-react'
+import { UserCheck, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
-  assignPatrolManualIdentity,
+  assignPatrolManualIdentityWithBackend,
   findPatrolIdentityByWorkerId,
   getPatrolManualIdentity,
   normalizePatrolWorkerId,
@@ -12,6 +12,9 @@ import {
 interface PatrolManualIdentityPanelProps {
   objectKey: string
   suggestedWorkerId?: string | null
+  snapshotUrl?: string | null
+  cameraId?: string | null
+  trackId?: string | null
   compact?: boolean
   onAssigned?: (identity: PatrolManualIdentity) => void
 }
@@ -19,6 +22,9 @@ interface PatrolManualIdentityPanelProps {
 export function PatrolManualIdentityPanel({
   objectKey,
   suggestedWorkerId,
+  snapshotUrl,
+  cameraId,
+  trackId,
   compact,
   onAssigned,
 }: PatrolManualIdentityPanelProps) {
@@ -27,6 +33,7 @@ export function PatrolManualIdentityPanel({
   const [name, setName] = useState('')
   const [unit, setUnit] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const existing = getPatrolManualIdentity(objectKey)
 
   useEffect(() => {
@@ -47,7 +54,7 @@ export function PatrolManualIdentityPanel({
     if (!keepNameIfFilled || !unit.trim()) setUnit(found.unitName)
   }
 
-  const submit = () => {
+  const submit = async () => {
     const code = normalizePatrolWorkerId(workerId)
     const workerName = name.trim()
     const unitName = unit.trim()
@@ -63,19 +70,31 @@ export function PatrolManualIdentityPanel({
       setError('Nhập đơn vị')
       return
     }
-    const row = assignPatrolManualIdentity({
-      objectKey,
-      workerId: code,
-      workerName,
-      unitName,
-    })
-    if (!row) {
-      setError('Không lưu được — thử lại')
-      return
-    }
-    setOpen(false)
+    setSaving(true)
     setError(null)
-    onAssigned?.(row)
+    try {
+      const { identity: row, backend } = await assignPatrolManualIdentityWithBackend({
+        objectKey,
+        workerId: code,
+        workerName,
+        unitName,
+        snapshotUrl,
+        cameraId,
+        trackId,
+      })
+      if (!row) {
+        setError('Không lưu được — thử lại')
+        return
+      }
+      if (!backend.ok && backend.error !== 'no_backend') {
+        setError('Đã lưu local — BE chưa enroll mặt')
+      }
+      setOpen(false)
+      setError(null)
+      onAssigned?.(row)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (existing && !open) {
@@ -162,11 +181,12 @@ export function PatrolManualIdentityPanel({
       <div className="flex flex-wrap gap-2 pt-0.5">
         <button
           type="button"
-          onClick={submit}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-violet-500 text-white hover:opacity-90"
+          onClick={() => void submit()}
+          disabled={saving}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-violet-500 text-white hover:opacity-90 disabled:opacity-60"
         >
-          <UserCheck className="w-3 h-3" />
-          Lưu
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
+          {saving ? 'Đang lưu…' : 'Lưu'}
         </button>
         <button
           type="button"

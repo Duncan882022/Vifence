@@ -75,6 +75,7 @@ export function WorkforceObjectSheet({ object, onClose }: Props) {
           <PatrolManualIdentityPanel
             objectKey={object.object_id}
             suggestedWorkerId={suggestPatrolWorkerId(object.object_id, object.worker_id)}
+            cameraId={object.helmet_id}
             onAssigned={() => setIdentityTick(t => t + 1)}
           />
         )}

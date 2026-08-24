@@ -39,7 +39,7 @@ from .pccc_engine import PcccEngine
 from .wah_engine import WahEngine
 from .atgt_engine import AtgtEngine
 from .mobile_frame_utils import analyze_engine_frame, downscale_for_mobile
-from .schemas import MobileAiConfigPayload, MobileFramePayload, WorkerGalleryEnrollPayload
+from .schemas import MobileAiConfigPayload, MobileFramePayload, PatrolIdentityAssignPayload, WorkerGalleryEnrollPayload
 from .worker_identity.gallery import enroll_face, get_enrollment_status, resolve_worker_id
 from .worker_identity.recognizer import gallery_status, reload_gallery
 from .vms_worker import CameraVmsWorker, CLIPS_DIR
@@ -406,6 +406,25 @@ def patrol_workforce_events(limit: int = 50):
     return (snap.get("events") or [])[: max(1, min(limit, 200))]
 
 
+@app.get("/patrol/identity/bindings")
+def patrol_identity_bindings():
+    """Module 05 — danh sách định danh patrol đã lưu DB (gallery + alias)."""
+    from .patrol_identity_store import list_patrol_identity_bindings
+
+    return {"ok": True, "bindings": list_patrol_identity_bindings()}
+
+
+@app.post("/patrol/identity/assign")
+def patrol_identity_assign(payload: PatrolIdentityAssignPayload):
+    """Enroll khuôn mặt + bind sgc/OBJ → gallery worker."""
+    from .patrol_api import assign_patrol_identity
+
+    result = assign_patrol_identity(payload.model_dump())
+    if not result.get("ok"):
+        return result
+    return result
+
+
 @app.get("/patrol/{camera_id}/events")
 def patrol_helmet_events(camera_id: str, date: str | None = None, limit: int = 500):
     """Module 05 — chỉ sự kiện PPE của camera HC-* (không lẫn A-03/A-04)."""
@@ -448,12 +467,14 @@ def patrol_reset_all():
     - Xóa config/mobile_ai history
     """
     from .person_identity_registry import clear_registry
+    from .patrol_identity_store import clear_patrol_identity_bindings
     from .ppe_analyzer import reset_all_hc_patrol_state
     from .patrol_api import clear_patrol_mobile_metrics
     from .workforce_engine import workforce_engine
 
     events_result = engine.store.clear_all()
     sgc_count = clear_registry()
+    identity_bindings = clear_patrol_identity_bindings()
     mobile_count = clear_patrol_mobile_metrics()
     hc_count = reset_all_hc_patrol_state()
     workforce_count = workforce_engine.clear_all()
@@ -467,6 +488,7 @@ def patrol_reset_all():
         "ok": True,
         "events_cleared": events_result.get("memory", 0),
         "sgc_tracks_cleared": sgc_count,
+        "identity_bindings_cleared": identity_bindings,
         "mobile_metrics_cleared": mobile_count,
         "hc_tracks_cleared": hc_count,
         "workforce_cleared": workforce_count,

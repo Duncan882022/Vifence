@@ -16,6 +16,7 @@ import {
   isPatrolSgcWorkerId,
   patrolWorkforceEventTitle,
 } from '../utils/patrolWorkforceEventLabels'
+import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 
 const ZONE_LABELS: Record<string, string> = {
   ZONE_SITE: 'Cầu Sông Hốt',
@@ -326,13 +327,18 @@ export function mapBackendEventToPatrolEvent(
 
   const { zoneId, zoneName } = zoneMetaForCamera(cameraId)
   const workerIdRaw = event.worker_id?.trim() ?? ''
+  const workerNameRaw = event.worker_name?.trim() ?? ''
   const objectIdRaw = event.object_id?.trim()
+  const isGalleryWorker = isPatrolGalleryWorkerId(workerIdRaw)
   const trackWorkerId = isPatrolSgcWorkerId(workerIdRaw) ? workerIdRaw : undefined
   const objectId = objectIdRaw && isPatrolObjectId(objectIdRaw)
     ? objectIdRaw
-    : ((trackWorkerId ?? workerIdRaw) || event.dedup_key?.split('|').pop() || event.id.slice(0, 8))
+    : isGalleryWorker
+      ? workerIdRaw
+      : ((trackWorkerId ?? workerIdRaw) || event.dedup_key?.split('|').pop() || event.id.slice(0, 8))
+  const objectLabelHint = isGalleryWorker && workerNameRaw ? workerNameRaw : undefined
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
-  const title = patrolWorkforceEventTitle(eventType, objectId, workerIdRaw, trackWorkerId)
+  const title = patrolWorkforceEventTitle(eventType, objectId, objectLabelHint ?? workerIdRaw, trackWorkerId)
   const versionTs = normalizeUnixSeconds(ts) ?? undefined
 
   const mapped: PatrolEvent = {
@@ -342,9 +348,9 @@ export function mapBackendEventToPatrolEvent(
     cameraName: PATROL_BODYCAM_LABELS[cameraId] ?? cameraId,
     zoneId,
     zoneName,
-    objectLabel: objectId,
+    objectLabel: objectLabelHint ?? objectId,
     objectId,
-    trackWorkerId,
+    trackWorkerId: isGalleryWorker ? undefined : trackWorkerId,
     violationLabel: eventType === 'PERSON_DETECTED'
       ? title
       : (event.scenario_name ?? event.scenario_id ?? 'Vi phạm PPE'),

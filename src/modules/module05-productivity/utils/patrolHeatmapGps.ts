@@ -10,6 +10,7 @@ import {
   PATROL_MAP_ACTIVE_HELMET_PINS,
   PATROL_SITE_CENTER,
 } from '../data/patrolSiteMap'
+import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 
 function isValidGps(lat: number, lng: number): boolean {
   return Number.isFinite(lat)
@@ -24,7 +25,8 @@ export function resolvePatrolHelmetMapPosition(
   fallback: [number, number] = PATROL_SITE_CENTER,
 ): [number, number] {
   if (lat != null && lng != null && isValidGps(lat, lng)) {
-    return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+    const [clat, clng] = clampPointToSiteInterior(lat, lng)
+    return [clat, clng]
   }
   return fallback
 }

@@ -3,14 +3,12 @@
  */
 import type { DetectionDot } from '@/modules/module05-productivity/data/patrolDetectionData'
 import {
-  clampPointToSiteBoundary,
+  clampPointToSiteInterior,
   isPointInSiteBoundary,
 } from '@/modules/module05-productivity/data/patrolSiteGeometry'
 import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/patrolHeatmapGps'
 import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patrolLivePersonDots'
-import {
-  getPatrolSgcKeysForObject,
-} from '@/modules/module05-productivity/services/patrolSgcObjectLink.service'
+import { resolveHeatmapEntityMasterId } from '@/modules/module05-productivity/utils/patrolIdentityEntity'
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v1'
 const MAX_PERSONS = 48
@@ -38,17 +36,9 @@ function notify(): void {
   listeners.forEach(fn => fn())
 }
 
-/** Gộp PTR / OBJ / sgc cùng một người → một dot. */
+/** Gộp PTR / OBJ / sgc / gallery cùng một người → một dot. */
 export function resolveHeatmapDotMasterId(rawId: string): string {
-  const id = rawId.trim()
-  if (!id) return id
-  if (/^sgc-/i.test(id)) return id.toUpperCase()
-  if (/^OBJ-/i.test(id)) {
-    const sgcs = getPatrolSgcKeysForObject(id)
-    if (sgcs[0]) return sgcs[0].toUpperCase()
-    return id
-  }
-  return id
+  return resolveHeatmapEntityMasterId(rawId)
 }
 
 function hashOffset(personId: string): [number, number] {
@@ -83,7 +73,8 @@ function restore(): void {
     for (const row of rows) {
       if (!row?.id || !row.position?.length) continue
       const master = resolveHeatmapDotMasterId(row.id)
-      registry.set(master, { ...row, id: master })
+      const [lat, lng] = clampPointToSiteInterior(row.position[0], row.position[1])
+      registry.set(master, { ...row, id: master, position: [lat, lng] })
     }
   } catch {
     registry.clear()
@@ -99,7 +90,7 @@ function positionForPerson(
 ): [number, number] {
   const [eastM, northM] = hashOffset(personId)
   const [lat2, lng2] = offsetLatLngByMeters(lat, lng, eastM, northM)
-  return clampPointToSiteBoundary(lat2, lng2)
+  return clampPointToSiteInterior(lat2, lng2)
 }
 
 export function upsertHeatmapPersons(input: {
@@ -231,11 +222,12 @@ export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
     .filter(row => now - row.lastSeenAt < HISTORY_DOT_MS)
     .filter(row => isPointInSiteBoundary(row.position[0], row.position[1]))
     .map(row => {
+      const [lat, lng] = clampPointToSiteInterior(row.position[0], row.position[1])
       const inCameraView = now - row.lastSeenAt < LIVE_DOT_MS
       return {
         id: `hist-${row.id}`,
         type: 'person' as const,
-        position: row.position,
+        position: [lat, lng] as [number, number],
         zoneId: row.zoneId,
         cameraId: row.cameraId,
         confidence: row.confidence,

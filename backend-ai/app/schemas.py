@@ -524,3 +524,15 @@ class WorkerGalleryEnrollPayload(BaseModel):
     contractor_name: Optional[str] = None
     image_b64: str
     pose_slot: int = Field(ge=1, le=3)
+
+
+class PatrolIdentityAssignPayload(BaseModel):
+    """Gán định danh patrol — enroll mặt gallery + bind alias sgc/OBJ."""
+    object_key: str
+    worker_name: str
+    employee_code: str
+    contractor_name: str
+    image_b64: Optional[str] = None
+    alias_keys: list[str] = Field(default_factory=list)
+    camera_id: Optional[str] = None
+    track_id: Optional[str] = None

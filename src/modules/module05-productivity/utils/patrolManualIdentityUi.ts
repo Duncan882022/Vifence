@@ -23,6 +23,7 @@ export function applyManualIdentityToPatrolEvent(event: PatrolEvent): PatrolEven
   return {
     ...event,
     objectId: manual.workerId,
+    trackWorkerId: undefined,
     objectLabel: `${manual.workerName}${unitSuffix}`,
     violationLabel: event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
       ? manual.workerName

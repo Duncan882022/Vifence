@@ -249,6 +249,21 @@ def _find_reusable_worker_id(
     return best_wid
 
 
+def _gallery_from_patrol_binding(worker_id: str) -> tuple[str, str] | None:
+    """sgc/OBJ đã gán gallery → trả (gallery_id, worker_name)."""
+    from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
+
+    wid = (worker_id or "").strip()
+    if not wid:
+        return None
+    gallery_id = lookup_gallery_worker(wid)
+    if not gallery_id:
+        return None
+    row = lookup_patrol_identity(gallery_id) or {}
+    name = str(row.get("worker_name") or gallery_id).strip()
+    return gallery_id, name
+
+
 def bind_patrol_track_identity(
     camera_id: str,
     track_id: str,
@@ -323,6 +338,14 @@ def resolve_patrol_person_identity(
         existing = state["tracks"].get(key)
         if isinstance(existing, str) and existing.strip():
             existing = existing.strip()
+            bound = _gallery_from_patrol_binding(existing)
+            if bound:
+                gallery_id, gallery_name = bound
+                state["tracks"][key] = gallery_id
+                if pb and len(pb) >= 4:
+                    _remember_track_meta(state, key, gallery_id, pb, face_emb)
+                _save(state)
+                return gallery_id, gallery_name
             if not is_sgc_worker_id(existing):
                 existing = ""
             else:
@@ -332,6 +355,9 @@ def resolve_patrol_person_identity(
             if existing and pb and len(pb) >= 4:
                 _remember_track_meta(state, key, existing, pb, face_emb)
                 _save(state)
+                bound = _gallery_from_patrol_binding(existing)
+                if bound:
+                    return bound[0], bound[1]
                 return existing, existing
 
         if pb and len(pb) >= 4:
@@ -345,10 +371,13 @@ def resolve_patrol_person_identity(
                 frame_face_assignments=frame_face_assignments,
             )
             if reused:
-                state["tracks"][key] = reused
-                _remember_track_meta(state, key, reused, pb, face_emb)
+                bound = _gallery_from_patrol_binding(reused)
+                final_id = bound[0] if bound else reused
+                final_name = bound[1] if bound else reused
+                state["tracks"][key] = final_id
+                _remember_track_meta(state, key, final_id, pb, face_emb)
                 _save(state)
-                return reused, reused
+                return final_id, final_name
 
         seq = max(int(state.get("next_seq") or 1), 1)
         sgc = _format_sgc(seq)

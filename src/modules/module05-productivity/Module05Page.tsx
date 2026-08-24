@@ -55,7 +55,7 @@ import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityU
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
 import { enrichPatrolEventsWithWorkforceObjects, dedupePatrolEventsByMasterEntity } from './utils/patrolWorkforceEventLabels'
-import { subscribePatrolManualIdentity } from './services/patrolManualIdentity.service'
+import { subscribePatrolManualIdentity, syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
 /* ── Tier 1 KPIs ─────────────────────────────────────────────── */
@@ -247,6 +247,10 @@ export function Module05Page() {
 
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
+  }, [])
+
+  useEffect(() => {
+    void syncPatrolIdentityBindingsFromBackend()
   }, [])
 
   const patrolEventsLive = useMemo(() => {

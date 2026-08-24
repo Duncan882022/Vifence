@@ -109,6 +109,24 @@ export function isPointInSiteBoundary(lat: number, lng: number): boolean {
   return isInsideSiteRing(lat, lng, SITE_RING)
 }
 
+/** Pull point inside inset clip ring (không dính sát viền đỏ). */
+export function clampPointToSiteInterior(lat: number, lng: number): [number, number] {
+  if (isInsideSiteRing(lat, lng, PATROL_SITE_CLIP_RING)) {
+    return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+  }
+  const clamped = clampPointToSiteBoundary(lat, lng)
+  const cLat = PATROL_SITE_CLIP_RING.reduce((s, p) => s + p[0], 0) / PATROL_SITE_CLIP_RING.length
+  const cLng = PATROL_SITE_CLIP_RING.reduce((s, p) => s + p[1], 0) / PATROL_SITE_CLIP_RING.length
+  for (let t = 0.08; t <= 1; t += 0.04) {
+    const pLat = clamped[0] + (cLat - clamped[0]) * t
+    const pLng = clamped[1] + (cLng - clamped[1]) * t
+    if (isInsideSiteRing(pLat, pLng, PATROL_SITE_CLIP_RING)) {
+      return [parseFloat(pLat.toFixed(6)), parseFloat(pLng.toFixed(6))]
+    }
+  }
+  return [parseFloat(cLat.toFixed(6)), parseFloat(cLng.toFixed(6))]
+}
+
 /** Pull an out-of-bounds point toward site centroid until inside (fallback). */
 export function clampPointToSiteBoundary(lat: number, lng: number): [number, number] {
   if (isPointInSiteBoundary(lat, lng)) {
