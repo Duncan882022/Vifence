@@ -243,6 +243,53 @@ def _find_reusable_worker_id(
     return best_wid
 
 
+def _match_patrol_gallery_from_embedding(
+    face_emb: np.ndarray,
+    *,
+    camera_id: str,
+    frame_face_assignments: dict[str, list[float]] | None = None,
+) -> tuple[str, str, float] | None:
+    """Khớp histogram mặt với gallery — trả (gallery_id, worker_name, score)."""
+    from .patrol_identity_store import lookup_patrol_identity
+    from .worker_identity.gallery import load_gallery, match_embedding
+
+    load_gallery()
+    min_conf = settings.worker_match_min_confidence
+    min_margin = settings.worker_match_min_margin
+    if camera_id.startswith("HC-"):
+        min_conf = max(min_conf, settings.patrol_gallery_min_confidence)
+        min_margin = max(min_margin, settings.patrol_gallery_min_margin)
+
+    matched = match_embedding(
+        face_emb,
+        min_confidence=min_conf,
+        min_margin=min_margin,
+    )
+    if matched is None:
+        return None
+    profile, score = matched
+    gallery_id = str(profile.worker_id or "").strip()
+    if not gallery_id:
+        return None
+    if _conflicts_frame_faces(gallery_id, face_emb, frame_face_assignments):
+        return None
+    row = lookup_patrol_identity(gallery_id) or {}
+    name = str(row.get("worker_name") or profile.worker_name or gallery_id).strip()
+    return gallery_id, name, float(score)
+
+
+def _apply_patrol_gallery_to_detection(
+    detection: PpeDetection,
+    gallery_id: str,
+    gallery_name: str,
+    score: float,
+) -> None:
+    detection.worker_id = gallery_id
+    detection.worker_name = gallery_name
+    detection.face_match_confidence = round(score, 3)
+    detection.face_match_source = "face"
+
+
 def _gallery_from_patrol_binding(worker_id: str) -> tuple[str, str] | None:
     """sgc/OBJ đã gán gallery → trả (gallery_id, worker_name)."""
     from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
@@ -395,6 +442,24 @@ def resolve_patrol_person_identity(
         pb = [float(v) for v in detection.subject_bbox]
     elif pb is None and detection.bbox and len(detection.bbox) >= 4:
         pb = [float(v) for v in detection.bbox]
+
+    if query_emb is not None:
+        gallery_hit = _match_patrol_gallery_from_embedding(
+            query_emb,
+            camera_id=camera_id,
+            frame_face_assignments=frame_face_assignments,
+        )
+        if gallery_hit is not None:
+            gallery_id, gallery_name, score = gallery_hit
+            key = _track_key(camera_id, track_id)
+            with _lock:
+                state = _load()
+                state["tracks"][key] = gallery_id
+                if pb and len(pb) >= 4:
+                    _remember_track_meta(state, key, gallery_id, pb, face_emb)
+                _save(state)
+            _apply_patrol_gallery_to_detection(detection, gallery_id, gallery_name, score)
+            return gallery_id, gallery_name
 
     # Không có embedding mặt — giữ sgc/gallery đã gán; HC cận mặt vẫn cấp sgc mới.
     if query_emb is None:

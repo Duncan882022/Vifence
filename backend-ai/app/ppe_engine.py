@@ -427,7 +427,9 @@ class PpeEngine:
                 if face_eligible and face_emb is not None and worker_id:
                     frame_face_assignments[worker_id] = face_emb
 
-                is_gallery = gallery_verified and bool(worker_id)
+                is_gallery = bool(worker_id) and (
+                    gallery_verified or is_patrol_gallery_id(worker_id)
+                )
                 is_sgc = is_sgc_worker_id(worker_id)
 
                 from .ppe_analyzer import _face_dominant_person_box, raw_person_bbox
@@ -494,6 +496,15 @@ class PpeEngine:
                         "worker_id": worker_id,
                         "worker_name": worker_name,
                         "scenario_id": "PERS-001",
+                        **(
+                            {
+                                "face_match_confidence": person.face_match_confidence,
+                                "face_match_source": person.face_match_source,
+                            }
+                            if is_patrol_gallery_id(worker_id)
+                            and (person.face_match_source or "") == "face"
+                            else {}
+                        ),
                     },
                 )
 
