@@ -30,7 +30,7 @@ interface PatrolEventsPanelProps {
 
 type PatrolFilterTab = 'all' | 'object' | 'person' | 'identity'
 
-const FILTER_TABS: { key: PatrolFilterTab; label: string; icon: LucideIcon }[] = [
+const FILTER_TABS: { key: PatrolFilterTab; label: string; icon: LucideIcon; color: string; inactiveColor: string }[] = [
   { key: 'all', ...PATROL_EVENTS_TAB_META.all },
   { key: 'object', ...PATROL_EVENTS_TAB_META.object },
   { key: 'person', ...PATROL_EVENTS_TAB_META.person },
@@ -309,7 +309,10 @@ export function PatrolEventsPanel({
                 active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
             >
-              <TabIcon className="w-3 h-3 shrink-0 opacity-80" aria-hidden />
+              <TabIcon
+                className={cn('w-3.5 h-3.5 shrink-0', active ? t.color : t.inactiveColor)}
+                aria-hidden
+              />
               {t.label}
               <span className={cn(
                 'ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold tabular-nums',

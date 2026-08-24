@@ -54,11 +54,33 @@ export const PATROL_PERSON_STAGE_META: Record<PatrolPersonStage, {
 export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'identity', {
   label: string
   icon: LucideIcon
+  color: string
+  inactiveColor: string
 }> = {
-  all: { label: 'Tất cả', icon: LayoutGrid },
-  object: { label: 'Đối tượng', icon: PATROL_PERSON_STAGE_META.object.icon },
-  person: { label: 'Người', icon: PATROL_PERSON_STAGE_META.person.icon },
-  identity: { label: 'Định danh', icon: PATROL_PERSON_STAGE_META.profile.icon },
+  all: {
+    label: 'Tất cả',
+    icon: LayoutGrid,
+    color: 'text-primary',
+    inactiveColor: 'text-muted-foreground',
+  },
+  object: {
+    label: 'Đối tượng',
+    icon: PATROL_PERSON_STAGE_META.object.icon,
+    color: PATROL_PERSON_STAGE_META.object.color,
+    inactiveColor: 'text-slate-500',
+  },
+  person: {
+    label: 'Người',
+    icon: PATROL_PERSON_STAGE_META.person.icon,
+    color: PATROL_PERSON_STAGE_META.person.color,
+    inactiveColor: 'text-sky-500/70',
+  },
+  identity: {
+    label: 'Định danh',
+    icon: PATROL_PERSON_STAGE_META.profile.icon,
+    color: PATROL_PERSON_STAGE_META.profile.color,
+    inactiveColor: 'text-violet-500/70',
+  },
 }
 
 /** Icon/badge card sự kiện — theo giai đoạn tab, không dùng chung「Nhân lực」. */
