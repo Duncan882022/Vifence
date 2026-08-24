@@ -37,10 +37,10 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence, clearHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
+import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence, getHeatmapPersonDots, syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
 import { countPatrolGlobalWorkers, isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
-import { isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
+import { countUniquePatrolTabEntities, isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { ObjectState } from '../types/workforceHeatmap'
 
@@ -225,27 +225,31 @@ export function PatrolDensityHeatmap({
     if (hc01Online) return
     syncHeatmapFramePresence('HC-01', [])
     clearPatrolHeatmapLiveTracks('HC-01')
-    clearHeatmapPersonRegistry('HC-01')
   }, [hc01Online])
 
   useEffect(() => {
     if (hc02Online) return
     syncHeatmapFramePresence('HC-02', [])
     clearPatrolHeatmapLiveTracks('HC-02')
-    clearHeatmapPersonRegistry('HC-02')
   }, [hc02Online])
 
   useEffect(() => {
-    if (anyCameraOnline) return
-    clearHeatmapPersonRegistry()
-  }, [anyCameraOnline])
+    syncPatrolPersonEventsToHeatmap(patrolEvents)
+  }, [patrolEvents])
 
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
   const filteredDots = useMemo(() => {
-    if (!anyCameraOnline) return []
     void identityRevision
+    if (!anyCameraOnline) {
+      return getHeatmapPersonDots().map(dot => ({
+        ...dot,
+        inCameraView: false,
+        opacity: DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+      }))
+    }
+
     const activeObjectIds = new Set(
       liveObjects.filter(o => o.status === 'ACTIVE').map(o => o.object_id),
     )
@@ -332,7 +336,9 @@ export function PatrolDensityHeatmap({
   }, [anyCameraOnline, patrolEvents, pinTick, zonePop, hc02Live.historicalDotCount])
 
   const identifiedCount = useMemo(() => {
-    if (!anyCameraOnline) return 0
+    if (!anyCameraOnline) {
+      return countUniquePatrolTabEntities(patrolEvents, 'identity')
+    }
     if (zonePop) return zonePop.breakdown.verified_identities
     void identityRevision
     const fromObjects = liveObjects.filter(
@@ -340,11 +346,18 @@ export function PatrolDensityHeatmap({
     ).length
     if (fromObjects > 0) return fromObjects
     return filteredDots.filter(d => d.verified || isVerifiedWorkerLabel(d.label)).length
-  }, [anyCameraOnline, zonePop, liveObjects, filteredDots, identityRevision])
+  }, [anyCameraOnline, patrolEvents, zonePop, liveObjects, filteredDots, identityRevision])
 
   const siteHeadcount = useMemo(() => {
     if (!anyCameraOnline) {
-      return { observed: 0, identified: 0, objects: 0, persons: 0 }
+      const sessionObserved = countPatrolGlobalWorkers(patrolEvents, { liveOnly: false })
+      const sessionIdentified = countUniquePatrolTabEntities(patrolEvents, 'identity')
+      return {
+        observed: sessionObserved,
+        identified: sessionIdentified,
+        objects: 0,
+        persons: Math.max(0, sessionObserved - sessionIdentified),
+      }
     }
     void identityRevision
     let objects = 0
