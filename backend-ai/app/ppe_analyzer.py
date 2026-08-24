@@ -1509,8 +1509,12 @@ def _plausible_person_box(
         )
         if not (close_ok or wide_ok):
             return False
-        if frame is not None and strict and not _person_upper_body_signal(frame, box):
-            return False
+        if frame is not None:
+            # Góc rộng (quạt, máy…) — bắt buộc có tín hiệu da/áo phản quang.
+            if wide_ok and not close_ok and not _person_upper_body_signal(frame, box):
+                return False
+            if strict and not _person_upper_body_signal(frame, box):
+                return False
         return True
     return _plausible_patrol_wide(
         box,
