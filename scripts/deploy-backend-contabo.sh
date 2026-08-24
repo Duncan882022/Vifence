@@ -2,6 +2,7 @@
 # Deploy backend-ai lên Contabo VPS (Ubuntu 22/24).
 # Usage:
 #   SSH_KEY=~/.ssh/vifence_contabo ./scripts/deploy-backend-contabo.sh
+#   VIFENCE_CONTABO_SSH_PRIVATE_KEY=... ./scripts/deploy-backend-contabo.sh  # Cloud Agent runtime secret
 #   SSHPASS='...' ./scripts/deploy-backend-contabo.sh   # fallback password
 set -euo pipefail
 
@@ -13,6 +14,23 @@ VPS_USER="${VPS_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/vifence/backend-ai}"
 API_DOMAIN="${API_DOMAIN:-217.217.253.247.nip.io}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/vifence_contabo}"
+
+materialize_contabo_ssh_key() {
+  if [[ -f "$SSH_KEY" ]]; then
+    return 0
+  fi
+  if [[ -z "${VIFENCE_CONTABO_SSH_PRIVATE_KEY:-}" ]]; then
+    return 1
+  fi
+  mkdir -p "$(dirname "$SSH_KEY")"
+  chmod 700 "$(dirname "$SSH_KEY")"
+  # Runtime secret — hỗ trợ PEM nhiều dòng hoặc \n escaped trong dashboard.
+  printf '%b\n' "$VIFENCE_CONTABO_SSH_PRIVATE_KEY" > "$SSH_KEY"
+  chmod 600 "$SSH_KEY"
+  export SSH_KEY
+}
+
+materialize_contabo_ssh_key || true
 
 ssh_cmd() {
   if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
