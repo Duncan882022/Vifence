@@ -271,9 +271,11 @@ def _match_patrol_gallery_from_embedding(
     gallery_id = str(profile.worker_id or "").strip()
     if not gallery_id:
         return None
+    row = lookup_patrol_identity(gallery_id)
+    if not row:
+        return None
     if _conflicts_frame_faces(gallery_id, face_emb, frame_face_assignments):
         return None
-    row = lookup_patrol_identity(gallery_id) or {}
     name = str(row.get("worker_name") or profile.worker_name or gallery_id).strip()
     return gallery_id, name, float(score)
 

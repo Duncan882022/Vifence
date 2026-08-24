@@ -146,6 +146,38 @@ export function getPatrolManualIdentity(objectKey: string): PatrolManualIdentity
   return findPatrolIdentityByWorkerId(key)
 }
 
+/** Chỉ áp dụng định danh đã gán trực tiếp lên sgc — không kéo từ OBJ dùng chung. */
+export function getPatrolManualIdentityForSgc(sgcKey: string): PatrolManualIdentity | null {
+  const key = normalizePatrolIdentityKey(sgcKey)
+  if (!key || !/^sgc-/i.test(key)) return null
+  const workerId = resolveWorkerIdForObject(key)
+  if (!workerId) return null
+  const identity = readStore().byWorkerId[workerId]
+  if (!identity) return null
+  const hasDirectAlias = identity.objectKeys.some(
+    alias => normalizePatrolIdentityKey(alias).toLowerCase() === key.toLowerCase(),
+  )
+  return hasDirectAlias ? identity : null
+}
+
+export function getPatrolManualIdentityForPatrolEvent(event: {
+  id: string
+  objectId?: string | null
+  trackWorkerId?: string | null
+}): PatrolManualIdentity | null {
+  const track = event.trackWorkerId?.trim() ?? ''
+  if (track && /^sgc-/i.test(track)) {
+    const bound = getPatrolManualIdentityForSgc(track)
+    if (bound) return bound
+    return null
+  }
+  for (const key of [event.objectId?.trim(), track].filter(Boolean) as string[]) {
+    const manual = getPatrolManualIdentity(key)
+    if (manual) return manual
+  }
+  return getPatrolManualIdentity(event.id)
+}
+
 export function isPatrolManuallyIdentified(objectKey: string): boolean {
   return Boolean(getPatrolManualIdentity(objectKey))
 }

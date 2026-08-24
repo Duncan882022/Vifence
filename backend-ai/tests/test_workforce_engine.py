@@ -129,6 +129,36 @@ class TestAcceptanceCriteria(unittest.TestCase):
         self.assertEqual(next(iter(self.eng.objects)), oid1)
         self.assertEqual(self.eng.objects[oid1].observation_mode, "FACE_CLOSEUP")
 
+    def test_face_closeup_distinct_sgc_gets_distinct_objects(self):
+        oid1 = self.eng.ensure_patrol_track_object(
+            "HC-01",
+            "p1:person",
+            {
+                "behavior": "person",
+                "bbox": _closeup_bbox(),
+                "worker_id": "sgc-00000001",
+                "confidence": 0.9,
+            },
+            frame_w=1280,
+            frame_h=720,
+        )
+        oid2 = self.eng.ensure_patrol_track_object(
+            "HC-01",
+            "p2:person",
+            {
+                "behavior": "person",
+                "bbox": _closeup_bbox(),
+                "worker_id": "sgc-00000002",
+                "confidence": 0.9,
+            },
+            frame_w=1280,
+            frame_h=720,
+        )
+        self.assertIsNotNone(oid1)
+        self.assertIsNotNone(oid2)
+        self.assertNotEqual(oid1, oid2)
+        self.assertEqual(len(self.eng.objects), 2)
+
     def test_ac4_closeup_does_not_drop_population(self):
         full = [_person(_full_body_bbox(), track_id=f"t{i}") for i in range(3)]
         out1 = self.eng.ingest_frame("HC-02", full, frame_w=1280, frame_h=720)

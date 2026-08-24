@@ -457,7 +457,15 @@ class WorkforceEngine:
             if object_id is None:
                 if mode == "FACE_CLOSEUP":
                     nearest = self._nearest_active(helmet_id, now)
-                    object_id = nearest.object_id if nearest else self._new_object_id()
+                    row_wid = str(row.get("worker_id") or "").strip()
+                    if (
+                        nearest
+                        and row_wid
+                        and str(nearest.worker_id or "").strip() == row_wid
+                    ):
+                        object_id = nearest.object_id
+                    else:
+                        object_id = self._new_object_id()
                 elif bbox and len(bbox) >= 4:
                     object_id = self._match_active_object_by_bbox(helmet_id, bbox, now)
                     if object_id is None:

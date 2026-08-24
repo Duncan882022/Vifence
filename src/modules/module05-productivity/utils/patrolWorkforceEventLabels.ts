@@ -7,7 +7,7 @@ import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { ObjectState } from '../types/workforceHeatmap'
 import { rememberPatrolSgcObjectLink } from '../services/patrolSgcObjectLink.service'
-import { getPatrolManualIdentity, isPatrolManuallyIdentified } from '../services/patrolManualIdentity.service'
+import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIdentityForSgc } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import {
   isPatrolGalleryWorkerId,
@@ -128,10 +128,10 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
 
-  // Định danh — gallery hoặc gán thủ công (exclusive với tab Người)
+  // Định danh — gallery hoặc gán thủ công trực tiếp lên sgc (không kéo từ OBJ dùng chung)
   if (resolvePatrolProfileEntityKey(event)) return 'profile'
-  if (objectId && isPatrolManuallyIdentified(objectId)) return 'profile'
-  if (trackWorkerId && isPatrolManuallyIdentified(trackWorkerId)) return 'profile'
+  if (trackWorkerId && getPatrolManualIdentityForSgc(trackWorkerId)) return 'profile'
+  if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolSgcWorkerId(trackWorkerId)) return 'profile'
   if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return 'profile'
   // Chỉ coi label là định danh khi đã có manual/gallery — không dùng hex event id
 

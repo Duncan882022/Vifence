@@ -2,6 +2,7 @@ import type { PatrolEvent } from '../data/patrolMockData'
 import type { ObjectState } from '../types/workforceHeatmap'
 import {
   getPatrolManualIdentity,
+  getPatrolManualIdentityForPatrolEvent,
   resolvePatrolObjectLabel,
   resolvePatrolObjectUnit,
   resolvePatrolWorkerId,
@@ -14,11 +15,7 @@ import {
 } from './patrolWorkforceEventLabels'
 
 function findManualIdentityForEvent(event: PatrolEvent) {
-  for (const key of patrolEventIdentityKeys(event)) {
-    const manual = getPatrolManualIdentity(key)
-    if (manual) return manual
-  }
-  return getPatrolManualIdentity(event.id)
+  return getPatrolManualIdentityForPatrolEvent(event)
 }
 
 export function applyManualIdentityToPatrolEvent(event: PatrolEvent): PatrolEvent {
