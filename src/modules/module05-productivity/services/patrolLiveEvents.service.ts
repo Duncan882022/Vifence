@@ -17,6 +17,7 @@ import {
   patrolWorkforceEventTitle,
 } from '../utils/patrolWorkforceEventLabels'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
+import { findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 
 const ZONE_LABELS: Record<string, string> = {
   ZONE_SITE: 'Cầu Sông Hốt',
@@ -331,7 +332,7 @@ export function mapBackendEventToPatrolEvent(
   const objectIdRaw = event.object_id?.trim()
   const dedupTail = event.dedup_key?.split('|').pop()?.trim() ?? ''
   const isGalleryWorker = isPatrolGalleryWorkerId(workerIdRaw)
-  const trackWorkerId = isPatrolSgcWorkerId(workerIdRaw) ? workerIdRaw : undefined
+  let trackWorkerId = isPatrolSgcWorkerId(workerIdRaw) ? workerIdRaw : undefined
   const objectId = objectIdRaw && isPatrolObjectId(objectIdRaw)
     ? objectIdRaw
     : isGalleryWorker
@@ -340,6 +341,11 @@ export function mapBackendEventToPatrolEvent(
         ?? ((workerIdRaw && !/^[0-9a-f]{6,16}$/i.test(workerIdRaw) ? workerIdRaw : '')
           || dedupTail
           || ''))
+  if (isGalleryWorker && !trackWorkerId) {
+    const manual = findPatrolIdentityByWorkerId(workerIdRaw)
+    const sgcAlias = manual?.objectKeys.find(k => isPatrolSgcWorkerId(k))
+    if (sgcAlias) trackWorkerId = sgcAlias
+  }
   const objectLabelHint = isGalleryWorker && workerNameRaw ? workerNameRaw : undefined
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
   const title = patrolWorkforceEventTitle(eventType, objectId, objectLabelHint ?? workerIdRaw, trackWorkerId)

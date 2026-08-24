@@ -19,6 +19,37 @@ def is_patrol_gallery_id(worker_id: str | None) -> bool:
         return False
 
 
+def _resolve_patrol_sgc_canonical(
+    worker_id: str | None,
+    object_id: str | None,
+) -> str | None:
+    """Một sgc-* = một người — dùng làm khóa dedup dù gán nhiều tên/OBJ."""
+    wid = (worker_id or "").strip()
+    oid = (object_id or "").strip()
+    if is_sgc_worker_id(wid):
+        return wid.lower()
+    if is_sgc_worker_id(oid):
+        return oid.lower()
+    try:
+        from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
+    except Exception:
+        return None
+    for alias in (wid, oid):
+        if not alias:
+            continue
+        if alias.lower().startswith("sgc-"):
+            return alias.lower()
+        gallery = lookup_gallery_worker(alias)
+        if not gallery:
+            continue
+        row = lookup_patrol_identity(gallery) or {}
+        for key in row.get("aliases") or []:
+            key_s = str(key).strip()
+            if is_sgc_worker_id(key_s):
+                return key_s.lower()
+    return None
+
+
 def resolve_patrol_dedup_stable_id(
     worker_id: str | None,
     object_id: str | None,
@@ -28,7 +59,10 @@ def resolve_patrol_dedup_stable_id(
     frame_w: int = 0,
     frame_h: int = 0,
 ) -> str:
-    """Stable id cho dedup_key — gallery/sgc > OBJ > slot > track."""
+    """Stable id cho dedup_key — sgc canonical > gallery > OBJ > slot > track."""
+    sgc = _resolve_patrol_sgc_canonical(worker_id, object_id)
+    if sgc:
+        return sgc
     wid = (worker_id or "").strip()
     if wid and wid not in ("unknown", ""):
         return wid
@@ -52,7 +86,10 @@ def resolve_patrol_master_id(
     object_id: str | None,
     track_id: str | None,
 ) -> str:
-    """Master id cho appearance log — gallery > sgc > OBJ > track."""
+    """Master id cho appearance log — sgc canonical > gallery > OBJ > track."""
+    sgc = _resolve_patrol_sgc_canonical(worker_id, object_id)
+    if sgc:
+        return sgc
     wid = (worker_id or "").strip()
     if is_patrol_gallery_id(wid):
         return wid

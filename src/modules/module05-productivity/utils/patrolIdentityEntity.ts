@@ -1,7 +1,51 @@
 import { getPatrolManualIdentity, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
-import { getPatrolSgcKeysForObject } from '../services/patrolSgcObjectLink.service'
+import { expandPatrolIdentityAliasKeys, getPatrolSgcKeysForObject } from '../services/patrolSgcObjectLink.service'
 import { isPatrolObjectId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
+
+/** sgc-* gắn với event — từ track, object hoặc alias gallery/manual. */
+export function resolvePatrolEventSgcKey(event: {
+  objectId?: string | null
+  trackWorkerId?: string | null
+}): string | null {
+  for (const raw of [event.trackWorkerId, event.objectId]) {
+    const key = raw?.trim() ?? ''
+    if (isPatrolSgcWorkerId(key)) return key.toUpperCase()
+  }
+  for (const raw of [event.objectId, event.trackWorkerId]) {
+    const key = raw?.trim() ?? ''
+    if (!key) continue
+    for (const alias of expandPatrolIdentityAliasKeys(key)) {
+      if (isPatrolSgcWorkerId(alias)) return alias.toUpperCase()
+    }
+    if (isPatrolObjectId(key)) {
+      for (const sgc of getPatrolSgcKeysForObject(key)) {
+        if (isPatrolSgcWorkerId(sgc)) return sgc.toUpperCase()
+      }
+    }
+  }
+  return null
+}
+
+/** Khóa dedup thống nhất — một sgc = một entity dù nhiều OBJ/tên. */
+export function resolvePatrolCanonicalEntityKey(event: {
+  objectId?: string | null
+  trackWorkerId?: string | null
+  objectLabel?: string | null
+}): string {
+  const sgc = resolvePatrolEventSgcKey(event)
+  if (sgc) return sgc
+  const profileKey = resolvePatrolProfileEntityKey(event)
+  if (profileKey) return profileKey.toUpperCase()
+  const objectId = event.objectId?.trim() ?? ''
+  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
+  if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
+  if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
+  if (isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
+  if (isPatrolGalleryWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
+  if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
+  return objectId.toUpperCase() || trackWorkerId || 'UNKNOWN'
+}
 
 /** Gallery worker id (p-*, w-*, c-*, u-*) — không phải sgc/OBJ. */
 export function isPatrolGalleryWorkerId(id?: string | null): boolean {
@@ -27,6 +71,13 @@ export function resolvePatrolProfileEntityKey(event: {
   trackWorkerId?: string | null
   objectLabel?: string | null
 }): string | null {
+  const sgc = resolvePatrolEventSgcKey(event)
+  if (sgc) {
+    for (const alias of expandPatrolIdentityAliasKeys(sgc)) {
+      const manual = getPatrolManualIdentity(alias)
+      if (manual) return manual.workerId.toUpperCase()
+    }
+  }
   for (const raw of [event.objectId, event.trackWorkerId]) {
     const key = raw?.trim() ?? ''
     if (!key) continue

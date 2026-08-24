@@ -11,6 +11,8 @@ import { getPatrolManualIdentity, isPatrolManuallyIdentified } from '../services
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import {
   isPatrolGalleryWorkerId,
+  resolvePatrolCanonicalEntityKey,
+  resolvePatrolEventSgcKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
 
@@ -227,7 +229,16 @@ export function enrichPatrolPersonEventWithWorkforceObject(
 ): PatrolEvent {
   if (event.type !== 'PERSON_DETECTED') return event
 
-  const sgcKey = (event.trackWorkerId ?? event.objectId)?.trim()
+  let trackWorkerId = event.trackWorkerId
+  const eventOid = event.objectId?.trim()
+  if (eventOid && isPatrolObjectId(eventOid)) {
+    const wfObj = objects.find(o => o.object_id === eventOid)
+    if (wfObj?.worker_id && isPatrolSgcWorkerId(wfObj.worker_id)) {
+      trackWorkerId = wfObj.worker_id.trim()
+    }
+  }
+
+  const sgcKey = (trackWorkerId ?? event.objectId)?.trim()
   const sgcUpper = sgcKey?.toUpperCase()
   let objectId = sgcUpper ? sgcToObject.get(sgcUpper) : undefined
 
@@ -244,45 +255,28 @@ export function enrichPatrolPersonEventWithWorkforceObject(
     return formatPatrolPersonDetectedEvent(event)
   }
 
-  const trackWorkerId = isPatrolSgcWorkerId(sgcKey) ? sgcKey : event.trackWorkerId
-  if (trackWorkerId && isPatrolSgcWorkerId(trackWorkerId)) {
-    rememberPatrolSgcObjectLink(trackWorkerId, objectId)
+  const trackWorkerIdFinal = isPatrolSgcWorkerId(sgcKey) ? sgcKey : trackWorkerId
+  if (trackWorkerIdFinal && isPatrolSgcWorkerId(trackWorkerIdFinal)) {
+    rememberPatrolSgcObjectLink(trackWorkerIdFinal, objectId)
   }
 
   const enriched: PatrolEvent = {
     ...event,
     objectId,
-    trackWorkerId,
+    trackWorkerId: trackWorkerIdFinal,
   }
   return formatPatrolPersonDetectedEvent(enriched)
 }
 
-/** Khóa master dedup — profile worker > sgc > OBJ > event (chỉ khi chưa có id ổn định). */
+/** Khóa master dedup — sgc canonical > profile worker > sgc > OBJ > event. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
-  const profileKey = resolvePatrolProfileEntityKey(event)
-  if (profileKey) return profileKey.toUpperCase()
-
-  const objectId = event.objectId?.trim() ?? ''
-  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
-
-  if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
-  if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
-  if (isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
-  if (isPatrolGalleryWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
-  if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
-
-  const stage = resolvePatrolPersonStage(event)
-  if (stage === 'object') {
-    if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
-    if (isPatrolObjectId(trackWorkerId)) return trackWorkerId.toUpperCase()
-    return objectId.toUpperCase() || trackWorkerId || `EV:${event.id}`
-  }
-
-  return `EV:${event.id}`
+  return resolvePatrolCanonicalEntityKey(event)
 }
 
 /** Master id tra lịch sử xuất hiện (popup). */
 export function patrolEventAppearanceMasterId(event: PatrolEvent): string {
+  const sgc = resolvePatrolEventSgcKey(event)
+  if (sgc) return sgc
   const key = patrolEventMasterEntityKey(event)
   if (key.startsWith('EV:')) {
     const oid = event.objectId?.trim()
