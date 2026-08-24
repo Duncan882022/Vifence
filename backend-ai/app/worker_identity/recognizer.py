@@ -118,6 +118,58 @@ def _best_face_in_crop(crop: np.ndarray, *, score_threshold: float = 0.65) -> np
     return best
 
 
+def assess_patrol_face(
+    frame: np.ndarray,
+    person_bbox: list[float] | None,
+) -> tuple[np.ndarray | None, float, bool]:
+    """Trả (embedding, score, eligible) — chỉ eligible mới cấp sgc / tab Người."""
+    if not person_bbox or len(person_bbox) < 4:
+        return None, 0.0, False
+    crop = _crop_person(frame, person_bbox)
+    if crop is None:
+        return None, 0.0, False
+    crop_h, crop_w = crop.shape[:2]
+    head_h = max(int(crop_h * 0.42), 48)
+    search = crop[:head_h, :]
+    ok, faces = detect_faces(search, score_threshold=0.65)
+    if not ok or faces is None or len(faces) == 0:
+        return None, 0.0, False
+
+    best_face: np.ndarray | None = None
+    best_det_score = 0.0
+    search_h = search.shape[0]
+    min_face_h = max(16.0, search_h * 0.08)
+    for face in faces:
+        x, y, fw, fh = face[:4]
+        score = float(face[14]) if len(face) > 14 else float(face[4] if len(face) > 4 else 0.0)
+        if score < 0.65:
+            continue
+        if fh < min_face_h:
+            continue
+        aspect = fw / max(fh, 1.0)
+        if aspect < 0.55 or aspect > 1.85:
+            continue
+        face_cy = y + fh / 2.0
+        if face_cy > search_h * 0.58:
+            continue
+        if score > best_det_score:
+            best_det_score = score
+            x1, y1 = max(0, int(x)), max(0, int(y))
+            x2 = min(crop_w, int(x + fw))
+            y2 = min(crop_h, int(y + fh))
+            if x2 - x1 >= 8 and y2 - y1 >= 8:
+                best_face = crop[y1:y2, x1:x2]
+
+    min_eligible = settings.patrol_gallery_min_confidence
+    eligible = best_face is not None and best_det_score >= min_eligible
+    if not eligible or best_face is None:
+        return None, best_det_score, False
+
+    from .gallery import face_histogram_embedding
+
+    return face_histogram_embedding(best_face), best_det_score, True
+
+
 def _match_face_crop(face: np.ndarray, *, camera_id: str = "") -> WorkerMatch | None:
     if face is None or face.size == 0:
         return None

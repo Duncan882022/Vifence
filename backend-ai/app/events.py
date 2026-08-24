@@ -629,7 +629,13 @@ class EventStore:
         if oid:
             event.object_id = oid
 
-        stable_id = (detection.worker_id or track_id or "person").strip()
+        from .patrol_entity import resolve_patrol_dedup_stable_id
+
+        stable_id = resolve_patrol_dedup_stable_id(
+            detection.worker_id,
+            event.object_id,
+            track_id,
+        )
         key = build_dedup_key(camera_id, event.scenario_id, stable_id)
         return event, key
 

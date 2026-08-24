@@ -414,6 +414,14 @@ def patrol_identity_bindings():
     return {"ok": True, "bindings": list_patrol_identity_bindings()}
 
 
+@app.get("/patrol/appearances")
+def patrol_appearances(master_id: str, date: str | None = None):
+    """Lịch sử xuất hiện theo master_id (sgc / gallery) — blocks popup."""
+    from .patrol_api import list_patrol_appearances_payload
+
+    return list_patrol_appearances_payload(master_id, date=date)
+
+
 @app.post("/patrol/identity/assign")
 def patrol_identity_assign(payload: PatrolIdentityAssignPayload):
     """Enroll khuôn mặt + bind sgc/OBJ → gallery worker."""
@@ -467,6 +475,7 @@ def patrol_reset_all():
     - Xóa config/mobile_ai history
     """
     from .person_identity_registry import clear_registry
+    from .patrol_appearance_store import clear_patrol_appearances
     from .patrol_identity_store import clear_patrol_identity_bindings
     from .ppe_analyzer import reset_all_hc_patrol_state
     from .patrol_api import clear_patrol_mobile_metrics
@@ -474,6 +483,7 @@ def patrol_reset_all():
 
     events_result = engine.store.clear_all()
     sgc_count = clear_registry()
+    appearance_count = clear_patrol_appearances()
     identity_bindings = clear_patrol_identity_bindings()
     mobile_count = clear_patrol_mobile_metrics()
     hc_count = reset_all_hc_patrol_state()
@@ -488,6 +498,7 @@ def patrol_reset_all():
         "ok": True,
         "events_cleared": events_result.get("memory", 0),
         "sgc_tracks_cleared": sgc_count,
+        "appearances_cleared": appearance_count,
         "identity_bindings_cleared": identity_bindings,
         "mobile_metrics_cleared": mobile_count,
         "hc_tracks_cleared": hc_count,

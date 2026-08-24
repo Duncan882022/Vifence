@@ -6,7 +6,12 @@ import {
   resolvePatrolObjectUnit,
   resolvePatrolWorkerId,
 } from '../services/patrolManualIdentity.service'
-import { patrolEventIdentityKeys } from './patrolWorkforceEventLabels'
+import {
+  isPatrolSgcWorkerId,
+  patrolEventIdentityKeys,
+  resolvePatrolPersonStage,
+  type PatrolPersonStage,
+} from './patrolWorkforceEventLabels'
 
 function findManualIdentityForEvent(event: PatrolEvent) {
   for (const key of patrolEventIdentityKeys(event)) {
@@ -89,5 +94,47 @@ export function resolveEventObjectDisplay(event: PatrolEvent): {
       : resolvePatrolObjectLabel(primaryKey, event.objectLabel),
     unit: manual?.unitName ?? resolvePatrolObjectUnit(primaryKey),
     workerId: manual?.workerId ?? resolvePatrolWorkerId(primaryKey, event.objectId),
+  }
+}
+
+/** Card list — tab Người / Định danh dùng chung layout. */
+export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
+  title: string
+  subtitle: string
+  unit: string | null
+  workerId: string | null
+  stage: PatrolPersonStage
+} {
+  const stage = resolvePatrolPersonStage(event)
+  const display = resolveEventObjectDisplay(event)
+
+  if (stage === 'profile') {
+    return {
+      title: display.label,
+      subtitle: display.workerId ? `Mã: ${display.workerId}` : '—',
+      unit: display.unit,
+      workerId: display.workerId,
+      stage,
+    }
+  }
+
+  if (stage === 'person') {
+    const sgc = (event.trackWorkerId ?? event.objectId ?? '').trim()
+    const code = isPatrolSgcWorkerId(sgc) ? sgc : (display.workerId ?? sgc)
+    return {
+      title: 'Người',
+      subtitle: code ? `Mã: ${code}` : '—',
+      unit: null,
+      workerId: code || null,
+      stage,
+    }
+  }
+
+  return {
+    title: 'Đối tượng',
+    subtitle: display.workerId ? `Mã: ${display.workerId}` : (event.objectLabel?.trim() || '—'),
+    unit: null,
+    workerId: display.workerId,
+    stage,
   }
 }

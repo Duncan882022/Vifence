@@ -432,9 +432,6 @@ class WorkforceEngine:
         track_id = str(track_raw).strip() if track_raw else None
         track_key = f"{helmet_id}:{track_id}" if track_id else None
 
-        if mode == "PARTIAL_BODY" and not (track_key and track_key in self.track_to_object):
-            return None
-
         object_id: str | None = None
         if track_key and track_key in self.track_to_object:
             object_id = self.track_to_object[track_key]

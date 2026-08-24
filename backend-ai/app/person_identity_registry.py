@@ -264,6 +264,44 @@ def _gallery_from_patrol_binding(worker_id: str) -> tuple[str, str] | None:
     return gallery_id, name
 
 
+def list_track_aliases_for_worker(worker_or_alias: str) -> list[str]:
+    """Trả mọi track key / worker id liên quan trong registry."""
+    from .patrol_identity_store import lookup_gallery_worker
+
+    needle = (worker_or_alias or "").strip()
+    if not needle:
+        return []
+    gallery = lookup_gallery_worker(needle) or needle
+    out: set[str] = {needle, gallery}
+    with _lock:
+        state = _load()
+        for key, wid in (state.get("tracks") or {}).items():
+            w = str(wid or "").strip()
+            if w in (needle, gallery) or w.upper() == needle.upper():
+                out.add(w)
+                if ":" in key:
+                    out.add(key.split("|", 1)[-1])
+    return sorted(out)
+
+
+def bind_all_tracks_for_aliases(aliases: list[str], gallery_worker_id: str) -> int:
+    """Gắn mọi track trong registry khớp alias → gallery worker."""
+    wid = gallery_worker_id.strip()
+    if not wid:
+        return 0
+    alias_set = {a.strip() for a in aliases if a and a.strip()}
+    bound = 0
+    with _lock:
+        state = _load()
+        for key, existing in list((state.get("tracks") or {}).items()):
+            ex = str(existing or "").strip()
+            if ex in alias_set or ex.upper() in {a.upper() for a in alias_set}:
+                state["tracks"][key] = wid
+                bound += 1
+        _save(state)
+    return bound
+
+
 def bind_patrol_track_identity(
     camera_id: str,
     track_id: str,

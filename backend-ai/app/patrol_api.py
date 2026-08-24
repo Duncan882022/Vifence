@@ -451,7 +451,8 @@ def assign_patrol_identity(payload: dict) -> dict[str, Any]:
         return {"ok": False, "error": "missing_fields"}
 
     gallery_worker_id = patrol_gallery_worker_id(employee_code)
-    aliases = sorted({object_key, *alias_keys, gallery_worker_id})
+    aliases = _collect_patrol_identity_alias_keys(object_key, alias_keys)
+    aliases = sorted({object_key, *aliases, gallery_worker_id})
 
     face_enrolled = False
     enrollment = None
@@ -487,6 +488,10 @@ def assign_patrol_identity(payload: dict) -> dict[str, Any]:
             gallery_worker_id,
         )
 
+    from .person_identity_registry import bind_all_tracks_for_aliases
+
+    bind_all_tracks_for_aliases(aliases, gallery_worker_id)
+
     return {
         "ok": True,
         "gallery_worker_id": gallery_worker_id,
@@ -498,3 +503,40 @@ def assign_patrol_identity(payload: dict) -> dict[str, Any]:
         "binding": row,
         "bindings_count": len(list_patrol_identity_bindings()),
     }
+
+
+def list_patrol_appearances_payload(master_id: str, *, date: str | None = None) -> dict[str, Any]:
+    from .patrol_appearance_store import list_appearances
+
+    mid = (master_id or "").strip()
+    if not mid:
+        return {"ok": False, "error": "missing_master_id"}
+    segments = list_appearances(mid, date=date)
+    by_camera: dict[str, list[dict[str, Any]]] = {}
+    for seg in segments:
+        cam = str(seg.get("camera_id") or "HC-02")
+        by_camera.setdefault(cam, []).append({
+            "id": seg.get("id"),
+            "started_at": seg.get("started_at"),
+            "ended_at": seg.get("ended_at"),
+            "zone_id": seg.get("zone_id"),
+            "tier": seg.get("tier"),
+            "event_id": seg.get("event_id"),
+        })
+    return {"ok": True, "master_id": mid, "date": date, "by_camera": by_camera, "segments": segments}
+
+
+def _collect_patrol_identity_alias_keys(object_key: str, alias_keys: list[str]) -> list[str]:
+    """Gom track/sgc/OBJ đang biết từ registry + bindings."""
+    from .patrol_identity_store import lookup_gallery_worker, normalize_alias_key
+    from .person_identity_registry import list_track_aliases_for_worker
+
+    keys = {normalize_alias_key(k) for k in [object_key, *alias_keys] if k and str(k).strip()}
+    expanded: set[str] = set(keys)
+    for key in list(keys):
+        gallery = lookup_gallery_worker(key)
+        if gallery:
+            expanded.add(normalize_alias_key(gallery))
+        for alias in list_track_aliases_for_worker(key):
+            expanded.add(normalize_alias_key(alias))
+    return sorted(expanded)

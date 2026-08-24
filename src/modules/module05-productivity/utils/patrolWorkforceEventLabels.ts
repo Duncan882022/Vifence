@@ -261,19 +261,38 @@ export function enrichPatrolPersonEventWithWorkforceObject(
   return formatPatrolPersonDetectedEvent(enriched)
 }
 
-/** Khóa master dedup — profile worker > sgc > OBJ > event. */
+/** Khóa master dedup — profile worker > sgc > OBJ > event (chỉ khi chưa có id ổn định). */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   const profileKey = resolvePatrolProfileEntityKey(event)
-  if (profileKey) return profileKey
+  if (profileKey) return profileKey.toUpperCase()
 
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
 
   if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
   if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
+  if (isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
+  if (isPatrolGalleryWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
   if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
 
+  const stage = resolvePatrolPersonStage(event)
+  if (stage === 'object') return objectId.toUpperCase() || trackWorkerId || `EV:${event.id}`
+
   return `EV:${event.id}`
+}
+
+/** Master id tra lịch sử xuất hiện (popup). */
+export function patrolEventAppearanceMasterId(event: PatrolEvent): string {
+  const key = patrolEventMasterEntityKey(event)
+  if (key.startsWith('EV:')) {
+    const oid = event.objectId?.trim()
+    const track = event.trackWorkerId?.trim()
+    if (track && isPatrolSgcWorkerId(track)) return track.toUpperCase()
+    if (oid && isPatrolSgcWorkerId(oid)) return oid.toUpperCase()
+    if (oid && isPatrolGalleryWorkerId(oid)) return oid.toUpperCase()
+    return oid || track || event.id
+  }
+  return key
 }
 
 /** Gộp list — giữ snapshot mới nhất theo master key. */
@@ -324,8 +343,7 @@ function matchesPatrolEventsTab(event: PatrolEvent, tab: PatrolEventsTabKey): bo
     return event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
   }
   if (tab === 'identity') {
-    return event.type === 'IDENTITY_VERIFIED'
-      || (event.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(event) === 'profile')
+    return event.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(event) === 'profile'
   }
   if (event.type !== 'PERSON_DETECTED') return false
   return resolvePatrolPersonStage(event) === tab

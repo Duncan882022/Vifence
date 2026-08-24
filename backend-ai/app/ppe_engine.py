@@ -28,7 +28,7 @@ _MAX_TRACKS = 36
 
 
 class _PpeTrack:
-    __slots__ = ("episode_best", "last_bbox", "last_seen", "behavior", "person_bbox")
+    __slots__ = ("episode_best", "last_bbox", "last_seen", "behavior", "person_bbox", "person_first_seen")
 
     def __init__(self, behavior: str) -> None:
         self.behavior = behavior
@@ -36,6 +36,7 @@ class _PpeTrack:
         self.last_bbox: list[float] = []
         self.last_seen: float = time.time()
         self.person_bbox: list[float] = []
+        self.person_first_seen: float | None = None
 
 
 def _bbox_center(bbox: list[float] | tuple[float, ...]) -> tuple[float, float]:
@@ -102,7 +103,7 @@ class PpeEngine:
             behavior = track_id.split(":")[1] if ":" in track_id else ""
             confirm = _CONFIRM_SECONDS
             if behavior == "person" and camera_id.startswith("HC-"):
-                confirm = 0.15
+                confirm = settings.patrol_person_confirm_seconds
             elif camera_id.startswith("HC-"):
                 # Mobile helmet — log PPE nhanh hơn cam cố định
                 confirm = 0.45
@@ -279,9 +280,20 @@ class PpeEngine:
 
         if camera_id.startswith("HC-"):
             from .event_dedup import build_dedup_key
-            from .person_identity_registry import resolve_patrol_person_identity
+            from .patrol_appearance_store import touch_appearance
+            from .patrol_entity import (
+                patrol_tier_label,
+                resolve_patrol_dedup_stable_id,
+                resolve_patrol_master_id,
+            )
+            from .person_identity_registry import (
+                bind_patrol_track_identity,
+                is_sgc_worker_id,
+                resolve_patrol_person_identity,
+            )
             from .ppe_analyzer import reset_hc_patrol_face_assignments
-            from .worker_identity.recognizer import extract_person_face_embedding
+            from .worker_identity.recognizer import assess_patrol_face
+            from .worker_identity.verify import is_verified_face_match, worker_match_from_detection
 
             reset_hc_patrol_face_assignments(camera_id)
             person_matched: set[str] = set()
@@ -292,6 +304,8 @@ class PpeEngine:
                 frame_persons = sorted(frame_persons, key=lambda d: d.confidence, reverse=True)[
                     :_MAX_TRACKS
                 ]
+
+            object_confirm = settings.patrol_object_confirm_seconds
 
             for person in frame_persons:
                 from .ppe_analyzer import raw_person_bbox
@@ -319,15 +333,20 @@ class PpeEngine:
                 state.last_bbox = person_bbox
                 state.person_bbox = person_bbox
                 state.last_seen = now
+                if state.person_first_seen is None:
+                    state.person_first_seen = now
+                track_duration = now - float(state.person_first_seen or now)
+
+                gallery_match = worker_match_from_detection(person)
+                gallery_verified = is_verified_face_match(gallery_match)
+
+                face_vec, _face_score, face_eligible = assess_patrol_face(frame, person_bbox)
+                face_emb = face_vec.tolist() if face_vec is not None else None
 
                 existing_wid = (person.worker_id or "").strip()
-                face_vec = extract_person_face_embedding(frame, person_bbox)
-                face_emb = face_vec.tolist() if face_vec is not None else None
-                if existing_wid and existing_wid not in ("", "unknown"):
+                if existing_wid and existing_wid not in ("", "unknown") and gallery_verified:
                     worker_id = existing_wid
                     worker_name = (person.worker_name or worker_id).strip()
-                    from .person_identity_registry import bind_patrol_track_identity
-
                     bind_patrol_track_identity(
                         camera_id,
                         track_id,
@@ -337,7 +356,7 @@ class PpeEngine:
                         frame_w=frame_w,
                         frame_h=frame_h,
                     )
-                else:
+                elif face_eligible and face_emb is not None:
                     worker_id, worker_name = resolve_patrol_person_identity(
                         person,
                         camera_id,
@@ -348,8 +367,25 @@ class PpeEngine:
                         frame_w=frame_w,
                         frame_h=frame_h,
                     )
-                if face_emb is not None:
+                else:
+                    worker_id = ""
+                    worker_name = ""
+
+                if face_eligible and face_emb is not None and worker_id:
                     frame_face_assignments[worker_id] = face_emb
+
+                is_gallery = gallery_verified and bool(worker_id)
+                is_sgc = is_sgc_worker_id(worker_id)
+
+                should_log = False
+                if is_gallery or is_sgc:
+                    should_log = True
+                elif track_duration >= object_confirm:
+                    should_log = True
+
+                if not should_log:
+                    continue
+
                 det = person.model_copy(
                     update={
                         "worker_id": worker_id,
@@ -357,14 +393,27 @@ class PpeEngine:
                         "scenario_id": "PERS-001",
                     },
                 )
-                stable_id = (worker_id or track_id or "person").strip()
+
+                oid_for_stable: str | None = None
+                if not worker_id:
+                    try:
+                        from .workforce_engine import workforce_engine
+
+                        tk = f"{camera_id}:{track_id}"
+                        oid_for_stable = workforce_engine.track_to_object.get(tk)
+                    except Exception:
+                        oid_for_stable = None
+
+                stable_id = resolve_patrol_dedup_stable_id(worker_id, oid_for_stable, track_id)
                 dedup_key = build_dedup_key(camera_id, "PERS-001", stable_id)
                 existing = self.store.find_by_dedup_key(dedup_key)
 
                 gate = self._gate_for(camera_id, track_id)
-                confirmed = gate.register(True)
-
-                if existing is None and not confirmed:
+                if is_gallery or is_sgc:
+                    confirmed = gate.register(True)
+                    if existing is None and not confirmed:
+                        continue
+                elif existing is None and track_duration < object_confirm:
                     continue
 
                 event = self.store.upsert_patrol_person(
@@ -375,13 +424,28 @@ class PpeEngine:
                     allow_create=existing is None,
                 )
                 if event:
+                    master_id = resolve_patrol_master_id(
+                        event.worker_id or worker_id,
+                        event.object_id,
+                        track_id,
+                    )
+                    tier = patrol_tier_label(event.worker_id or worker_id)
+                    touch_appearance(
+                        master_id=master_id,
+                        camera_id=camera_id,
+                        zone_id=getattr(event, "zone_id", None),
+                        event_id=event.id,
+                        tier=tier,
+                        now=now,
+                    )
                     new_events.append(event)
                     if existing is None:
                         logger.info(
-                            "Person event [%s] %s track=%s conf=%.0f%%",
+                            "Person event [%s] %s track=%s tier=%s conf=%.0f%%",
                             event.id,
-                            worker_id,
+                            worker_id or stable_id,
                             track_id,
+                            tier,
                             event.confidence * 100,
                         )
 

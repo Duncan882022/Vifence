@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     patrol_face_reuse_min_margin: float = 0.07
     patrol_gallery_min_confidence: float = 0.74
     patrol_gallery_min_margin: float = 0.12
+    # Tab Đối tượng — bám track ≥ N giây không đủ mặt mới log PERS-001.
+    patrol_object_confirm_seconds: float = 5.0
+    # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí.
+    patrol_person_confirm_seconds: float = 0.15
 
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True

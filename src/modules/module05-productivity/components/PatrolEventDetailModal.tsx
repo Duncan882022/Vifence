@@ -1,19 +1,29 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, Play, X } from 'lucide-react'
+import { Clock, MapPin, Play, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
 import { needsPatrolManualIdentity, isPatrolManuallyIdentified, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
-import { resolveEventObjectDisplay } from '../utils/patrolManualIdentityUi'
+import {
+  fetchPatrolAppearances,
+  formatAppearanceTimeRange,
+  type PatrolAppearancesByCamera,
+} from '../services/patrolAppearances.service'
+import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import {
   PATROL_TYPE_META,
   getPatrolEventPlace,
   getPatrolEventStatusDisplay,
 } from '../utils/patrolEventsUi'
-import { resolvePatrolEventDisplayMeta } from '../utils/patrolWorkforceEventLabels'
+import {
+  patrolEventAppearanceMasterId,
+  resolvePatrolEventDisplayMeta,
+  resolvePatrolPersonStage,
+} from '../utils/patrolWorkforceEventLabels'
+import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
@@ -37,6 +47,7 @@ function mapsUrl(lat: number, lng: number): string {
 
 export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEventDetailModalProps) {
   const [identityTick, setIdentityTick] = useState(0)
+  const [appearances, setAppearances] = useState<PatrolAppearancesByCamera>({})
 
   useEffect(() => {
     if (!event) return
@@ -48,6 +59,19 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
       document.body.style.overflow = ''
     }
   }, [event, onClose])
+
+  useEffect(() => {
+    if (!event) return
+    const stage = resolvePatrolPersonStage(event)
+    if (stage !== 'person' && stage !== 'profile') {
+      setAppearances({})
+      return
+    }
+    const masterId = patrolEventAppearanceMasterId(event)
+    void fetchPatrolAppearances(masterId).then(({ byCamera }) => {
+      setAppearances(byCamera)
+    })
+  }, [event, identityTick])
 
   if (!event) return null
   void identityTick
@@ -61,8 +85,13 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
   const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
   const objectKey = event.objectId?.trim() || event.id
   const objectDisplay = resolveEventObjectDisplay(event)
+  const cardDisplay = resolvePatrolPersonCardDisplay(event)
+  const stage = resolvePatrolPersonStage(event)
+  const modalTitle = (stage === 'person' || stage === 'profile') ? cardDisplay.title : event.violationLabel
   const showIdentify = needsPatrolManualIdentity(objectKey, event.objectLabel)
     || isPatrolManuallyIdentified(objectKey)
+  const appearanceCameras = Object.keys(appearances)
+  const hasAppearanceHistory = appearanceCameras.length > 0
 
   return createPortal(
     <div
@@ -87,9 +116,14 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
             </div>
             <div className="min-w-0">
               <p id="patrol-event-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
-                {event.violationLabel}
+                {modalTitle}
               </p>
-              <p className="text-[9px] text-muted-foreground mt-0.5">{meta.label}</p>
+              <p className="text-[9px] text-muted-foreground mt-0.5">
+                {meta.label}
+                {(stage === 'person' || stage === 'profile') && cardDisplay.subtitle !== '—'
+                  ? ` · ${cardDisplay.subtitle}`
+                  : ''}
+              </p>
             </div>
           </div>
           <button
@@ -127,6 +161,41 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
               </div>
             ))}
           </div>
+
+          {hasAppearanceHistory && (
+            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
+                <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
+                  Lịch sử xuất hiện
+                </span>
+              </div>
+              <div className="space-y-2">
+                {appearanceCameras.map(cameraId => {
+                  const blocks = appearances[cameraId] ?? []
+                  const camLabel = PATROL_BODYCAM_LABELS[cameraId] ?? cameraId
+                  return (
+                    <div key={cameraId} className="space-y-1">
+                      <p className="text-[9px] font-medium text-muted-foreground">{camLabel}</p>
+                      {blocks.map(block => (
+                        <div
+                          key={block.id}
+                          className="rounded border border-[#1e2433] bg-[#0a0e17] px-2 py-1.5 text-[9px] text-foreground/90"
+                        >
+                          <span className="tabular-nums font-medium">
+                            {formatAppearanceTimeRange(block.started_at, block.ended_at)}
+                          </span>
+                          {block.zone_id && (
+                            <span className="text-muted-foreground ml-1.5">· {block.zone_id}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div
             className={cn(

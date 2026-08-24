@@ -18,6 +18,7 @@ import {
   resolvePatrolEventDisplayMeta,
   resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
+import { resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 
 interface PatrolEventsPanelProps {
@@ -51,10 +52,7 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
     case 'person':
       return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'person')
     case 'identity':
-      return feed.filter(e =>
-        e.type === 'IDENTITY_VERIFIED'
-        || (isPersonEvent(e) && resolvePatrolPersonStage(e) === 'profile'),
-      )
+      return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'profile')
     case 'all':
     default:
       return feed
@@ -175,6 +173,12 @@ function PatrolEventCard({
   const statusDisplay = getPatrolEventStatusDisplay(event.status)
   const eventDateTime = formatEventDateTime(event.lockedAt)
   const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
+  const stage = resolvePatrolPersonStage(event)
+  const cardDisplay = resolvePatrolPersonCardDisplay(event)
+  const usePersonCard = stage === 'person' || stage === 'profile'
+  const cardTitle = usePersonCard ? cardDisplay.title : event.violationLabel
+  const cardSubtitle = usePersonCard ? cardDisplay.subtitle : event.objectLabel
+  const cardUnit = usePersonCard && cardDisplay.unit ? cardDisplay.unit : null
 
   return (
     <article
@@ -215,16 +219,21 @@ function PatrolEventCard({
           </div>
 
           <h3 className="text-[11px] font-semibold text-foreground leading-snug line-clamp-2 pr-1">
-            {event.violationLabel}
+            {cardTitle}
           </h3>
 
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <SubjectIcon className={cn('w-2.5 h-2.5 shrink-0', displayMeta.color)} aria-hidden />
               <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
-                {event.objectLabel}
+                {cardSubtitle}
               </p>
             </div>
+            {cardUnit && (
+              <p className="text-[8px] min-w-0 truncate text-muted-foreground pl-4">
+                {cardUnit}
+              </p>
+            )}
             <div className="flex items-start gap-1.5 min-w-0">
               <Clock className="w-2.5 h-2.5 shrink-0 mt-px text-muted-foreground/45" aria-hidden />
               <p className="text-[8px] min-w-0 leading-snug">
