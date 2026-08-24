@@ -1729,6 +1729,17 @@ def _build_patrol_bodycam_result(
             min_conf=_PERSON_CONF_BODYCAM,
         )
     )
+    from .patrol_face_anchor import anchor_patrol_person_boxes_to_faces
+
+    anchored = anchor_patrol_person_boxes_to_faces(
+        frame,
+        [(p.person_box, p.person_conf) for p in persons],
+        camera_id=camera_id,
+    )
+    persons = [
+        _PersonPpe(person_box=box, person_conf=conf)
+        for box, conf in anchored
+    ]
 
     detections: list[PpeDetection] = []
     assigned_patrol_tracks: set[str] = set()
