@@ -1,4 +1,4 @@
-import { getPatrolManualIdentity, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
+import { getPatrolManualIdentity, getPatrolManualIdentityForSgc, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 import { expandPatrolIdentityAliasKeys, getPatrolSgcKeysForObject } from '../services/patrolSgcObjectLink.service'
 import { isPatrolObjectId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
@@ -73,10 +73,8 @@ export function resolvePatrolProfileEntityKey(event: {
 }): string | null {
   const sgc = resolvePatrolEventSgcKey(event)
   if (sgc) {
-    for (const alias of expandPatrolIdentityAliasKeys(sgc)) {
-      const manual = getPatrolManualIdentity(alias)
-      if (manual) return manual.workerId.toUpperCase()
-    }
+    const direct = getPatrolManualIdentityForSgc(sgc)
+    if (direct) return direct.workerId.toUpperCase()
   }
   for (const raw of [event.objectId, event.trackWorkerId]) {
     const key = raw?.trim() ?? ''
