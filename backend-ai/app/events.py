@@ -85,7 +85,8 @@ class PersistenceDebouncer:
         self._reset_episode()
         self._last_confirmed_at = 0.0
 
-    def register(self, hit: bool) -> bool:
+    def note_hit(self, hit: bool) -> None:
+        """Cập nhật hit/debounce timing — không consume confirm."""
         now = time.time()
 
         if hit and self._last_hit_at is not None and now - self._last_hit_at > self.max_gap_seconds:
@@ -98,22 +99,21 @@ class PersistenceDebouncer:
         elif self._last_hit_at is not None and now - self._last_hit_at > self.max_gap_seconds:
             self._reset_episode()
 
-        if not hit or self._active_since is None:
+    def consume_confirm(self, now: Optional[float] = None) -> bool:
+        """Đánh dấu đã confirm sau khi persist sự kiện thành công."""
+        ts = now if now is not None else time.time()
+        if not self.snapshot(ts)["ready_to_confirm"]:
             return False
-
-        if self.one_event_per_episode and self._logged_this_episode:
-            return False
-
-        if now - self._active_since < self.min_duration_seconds:
-            return False
-
-        if not self.one_event_per_episode and now - self._last_confirmed_at < self.cooldown_seconds:
-            return False
-
-        self._last_confirmed_at = now
+        self._last_confirmed_at = ts
         if self.one_event_per_episode:
             self._logged_this_episode = True
         return True
+
+    def register(self, hit: bool) -> bool:
+        self.note_hit(hit)
+        if not hit or self._active_since is None:
+            return False
+        return self.consume_confirm()
 
     def snapshot(self, now: Optional[float] = None) -> dict:
         """Trạng thái debounce — dùng khi test timing sự kiện."""
