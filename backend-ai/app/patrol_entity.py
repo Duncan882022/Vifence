@@ -53,11 +53,20 @@ def resolve_patrol_master_id(
     return tid or "unknown"
 
 
-def patrol_tier_label(worker_id: str | None) -> str:
+def patrol_tier_label(worker_id: str | None, face_confidence: float | None = None) -> str:
+    """
+    Phân tier patrol person:
+    - identity: đã định danh (gallery match)
+    - person: sgc-* ID hoặc face detected > 0.5
+    - object: không nhận diện được
+    """
     wid = (worker_id or "").strip()
     if is_patrol_gallery_id(wid):
         return "identity"
     if is_sgc_worker_id(wid):
+        return "person"
+    # Nếu detect được khuôn mặt với confidence > 0.5 → chắc chắn là NGƯỜI
+    if face_confidence is not None and face_confidence > 0.5:
         return "person"
     return "object"
 

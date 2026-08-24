@@ -452,7 +452,8 @@ class PpeEngine:
                         event.object_id,
                         track_id,
                     )
-                    tier = patrol_tier_label(event.worker_id or worker_id)
+                    face_conf = getattr(event, "face_match_confidence", None)
+                    tier = patrol_tier_label(event.worker_id or worker_id, face_conf)
                     touch_appearance(
                         master_id=master_id,
                         camera_id=camera_id,
