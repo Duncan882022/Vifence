@@ -159,14 +159,13 @@ export function pruneHeatmapActivePersons(
   const activeMasters = new Set(
     activePersonIds.map(id => resolveHeatmapDotMasterId(id)).filter(Boolean),
   )
-  if (activeMasters.size === 0) return
 
   let changed = false
   const now = Date.now()
   for (const [id, row] of registry.entries()) {
     if (row.cameraId !== cameraId) continue
     const master = resolveHeatmapDotMasterId(id)
-    if (activeMasters.has(master)) continue
+    if (activeMasters.size > 0 && activeMasters.has(master)) continue
     if (now - row.lastSeenAt > 4_000) {
       registry.delete(id)
       changed = true

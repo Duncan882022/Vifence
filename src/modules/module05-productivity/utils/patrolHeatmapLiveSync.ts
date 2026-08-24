@@ -33,11 +33,11 @@ export function syncLivePatrolPersonDetectionsToHeatmap(
   const persons = engine.getHeatmapPersons()
   if (persons.length > 0) {
     upsertPersonsAtPatrolGps(cameraId, persons)
-    pruneHeatmapActivePersons(
-      cameraId,
-      persons.map(p => p.personId),
-    )
   }
+  pruneHeatmapActivePersons(
+    cameraId,
+    persons.map(p => p.personId),
+  )
 }
 
 export function clearPatrolHeatmapLiveTracks(cameraId?: string): void {

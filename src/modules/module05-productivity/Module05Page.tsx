@@ -95,14 +95,19 @@ function PatrolKPIs({
   const alertCount = countPatrolAlertEntities(events)
 
   const zonePop = Object.values(workforce.zonePopulation)[0]
-  // Ưu tiên live.personCount từ stream thực tế, fallback sang workforce + event count
-  const observedCount = live.personCount > 0
-    ? live.personCount
-    : workerEntityCount > 0
-      ? workerEntityCount
-      : zonePop?.observed_count ?? 0
+  const anyCameraOnline = live.perCamera.some(row => row.stream_online)
+  // Không dùng zonePop / event count cũ khi cả hai mũ đều offline.
+  const observedCount = !anyCameraOnline
+    ? 0
+    : live.personCount > 0
+      ? live.personCount
+      : workerEntityCount > 0
+        ? workerEntityCount
+        : zonePop?.observed_count ?? 0
 
-  const peopleDetail = zonePop
+  const peopleDetail = !anyCameraOnline
+    ? 'Chưa có luồng live'
+    : zonePop
     ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
     : workerEntityCount > 0
       ? `${workerEntityCount} người đã nhận diện`

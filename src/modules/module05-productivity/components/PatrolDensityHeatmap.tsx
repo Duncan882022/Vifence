@@ -159,7 +159,9 @@ export function PatrolDensityHeatmap({
     return map
   }, [metrics.perCamera, hc02Helmet?.online, mobileHc02Live])
 
+  const hc01Online = Boolean(helmetOnlineById['HC-01'])
   const hc02Online = Boolean(helmetOnlineById['HC-02'])
+  const anyCameraOnline = hc01Online || hc02Online
 
   const mergedCameraPositions = useMemo(() => {
     const next = { ...cameraPositions }
@@ -215,6 +217,12 @@ export function PatrolDensityHeatmap({
   }, [routeHistory, hc02Live.lat, hc02Live.lng, hc02Online])
 
   useEffect(() => {
+    if (hc01Online) return
+    clearHeatmapPersonRegistry('HC-01')
+    clearPatrolHeatmapLiveTracks('HC-01')
+  }, [hc01Online])
+
+  useEffect(() => {
     if (hc02Online) return
     clearHeatmapPersonRegistry('HC-02')
     clearPatrolHeatmapLiveTracks('HC-02')
@@ -224,6 +232,7 @@ export function PatrolDensityHeatmap({
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
   const filteredDots = useMemo(() => {
+    if (!anyCameraOnline) return []
     void identityRevision
     const now = Date.now()
     const activeObjectIds = new Set(
@@ -288,7 +297,7 @@ export function PatrolDensityHeatmap({
       return registryDots
     }
     return objectDots
-  }, [hc02Live.dots, hc02Online, liveObjects, identityRevision])
+  }, [anyCameraOnline, hc02Live.dots, hc02Online, liveObjects, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -309,14 +318,16 @@ export function PatrolDensityHeatmap({
   }
 
   const observedCount = useMemo(() => {
+    if (!anyCameraOnline) return 0
     if (zonePop) return zonePop.observed_count
     const onMap = filteredDots.length
     if (onMap > 0) return onMap
     if (hc02Live.historicalDotCount > 0) return hc02Live.historicalDotCount
     return Math.max(0, hc02Live.personCount)
-  }, [zonePop, hc02Live.personCount, hc02Live.historicalDotCount, filteredDots.length])
+  }, [anyCameraOnline, zonePop, hc02Live.personCount, hc02Live.historicalDotCount, filteredDots.length])
 
   const identifiedCount = useMemo(() => {
+    if (!anyCameraOnline) return 0
     if (zonePop) return zonePop.breakdown.verified_identities
     void identityRevision
     const fromObjects = liveObjects.filter(
@@ -324,9 +335,12 @@ export function PatrolDensityHeatmap({
     ).length
     if (fromObjects > 0) return fromObjects
     return filteredDots.filter(d => d.verified || isVerifiedWorkerLabel(d.label)).length
-  }, [zonePop, liveObjects, filteredDots, identityRevision])
+  }, [anyCameraOnline, zonePop, liveObjects, filteredDots, identityRevision])
 
   const siteHeadcount = useMemo(() => {
+    if (!anyCameraOnline) {
+      return { observed: 0, identified: 0, objects: 0, persons: 0 }
+    }
     void identityRevision
     let objects = 0
     let persons = 0
@@ -352,7 +366,7 @@ export function PatrolDensityHeatmap({
       objects: zonePop?.breakdown.unknown_objects ?? objects,
       persons: Math.max(0, observed - identifiedCount - (zonePop?.breakdown.unknown_objects ?? objects)),
     }
-  }, [zonePop, liveObjects, filteredDots, identifiedCount, identityRevision])
+  }, [anyCameraOnline, zonePop, liveObjects, filteredDots, identifiedCount, identityRevision])
 
   const bodycamOnlineById = useMemo(() => ({
     'HC-01': Boolean(helmetOnlineById['HC-01']),
