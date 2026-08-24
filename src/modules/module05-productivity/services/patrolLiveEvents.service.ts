@@ -329,13 +329,17 @@ export function mapBackendEventToPatrolEvent(
   const workerIdRaw = event.worker_id?.trim() ?? ''
   const workerNameRaw = event.worker_name?.trim() ?? ''
   const objectIdRaw = event.object_id?.trim()
+  const dedupTail = event.dedup_key?.split('|').pop()?.trim() ?? ''
   const isGalleryWorker = isPatrolGalleryWorkerId(workerIdRaw)
   const trackWorkerId = isPatrolSgcWorkerId(workerIdRaw) ? workerIdRaw : undefined
   const objectId = objectIdRaw && isPatrolObjectId(objectIdRaw)
     ? objectIdRaw
     : isGalleryWorker
       ? workerIdRaw
-      : ((trackWorkerId ?? workerIdRaw) || event.dedup_key?.split('|').pop() || event.id.slice(0, 8))
+      : (trackWorkerId
+        ?? ((workerIdRaw && !/^[0-9a-f]{6,16}$/i.test(workerIdRaw) ? workerIdRaw : '')
+          || dedupTail
+          || ''))
   const objectLabelHint = isGalleryWorker && workerNameRaw ? workerNameRaw : undefined
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)
   const title = patrolWorkforceEventTitle(eventType, objectId, objectLabelHint ?? workerIdRaw, trackWorkerId)

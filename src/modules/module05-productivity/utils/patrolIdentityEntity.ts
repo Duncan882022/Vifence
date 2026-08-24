@@ -38,7 +38,12 @@ export function resolvePatrolProfileEntityKey(event: {
   if (isPatrolGalleryWorkerId(oid)) return oid.toUpperCase()
   if (isPatrolGalleryWorkerId(track)) return track.toUpperCase()
   const label = event.objectLabel?.trim() ?? ''
-  if (isVerifiedWorkerLabel(label) && !isPatrolSgcWorkerId(label) && !isPatrolObjectId(label)) {
+  if (
+    isVerifiedWorkerLabel(label)
+    && !isPatrolSgcWorkerId(label)
+    && !isPatrolObjectId(label)
+    && (getPatrolManualIdentity(label) || isPatrolGalleryWorkerId(label))
+  ) {
     return label
   }
   return null

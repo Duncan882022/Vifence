@@ -131,11 +131,7 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
   if (objectId && isPatrolManuallyIdentified(objectId)) return 'profile'
   if (trackWorkerId && isPatrolManuallyIdentified(trackWorkerId)) return 'profile'
   if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return 'profile'
-  if (isVerifiedWorkerLabel(event.objectLabel)
-    && !isPatrolSgcWorkerId(event.objectLabel)
-    && !isPatrolObjectId(event.objectLabel)) {
-    return 'profile'
-  }
+  // Chỉ coi label là định danh khi đã có manual/gallery — không dùng hex event id
 
   // Tab Người = có mã sgc (mặt đủ tiêu chí). Không trùng profile.
   if (isPatrolSgcWorkerId(objectId)) return 'person'
