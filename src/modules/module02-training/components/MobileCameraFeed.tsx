@@ -46,11 +46,17 @@ import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRo
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
-/**
- * HC bodycam — chỉ bbox person (xanh).
- * PPE violation overlay ẩn theo yêu cầu Module 05 (PATROL_PPE_UI_HIDDEN).
- */
-function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
+/** Ngưỡng overlay HC-02 — person từ 0.35 (vàng nếu <0.45). */
+const HC02_PERSON_MIN_CONF = 0.35
+const HC02_PERSON_STRONG_CONF = 0.45
+
+function tagHc02PersonDetections(items: MobileAiDetection[]): MobileAiDetection[] {
+  return items.map(d => {
+    if (d.behavior !== 'person') return d
+    const weak = d.confidence >= HC02_PERSON_MIN_CONF && d.confidence < HC02_PERSON_STRONG_CONF
+    return weak ? { ...d, weak: true } : d
+  })
+}
   const ppeDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
     behavior: d.behavior as PpeDetection['behavior'],
     label: d.label,
@@ -124,12 +130,12 @@ export function MobileCameraFeed({
   const showAiOverlay = runAiAnalyze && bboxVisible
   /** Module 05 patrol — Kalman/ByteTrack ROI, không dùng ATLĐ bboxTrackLock. */
   const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && overlayModelId === 'ppe'
-  const overlayDetections = useMemo(
-    () => (overlayModelId === 'ppe' && !usePatrolPersonRoi
+  const overlayDetections = useMemo(() => {
+    const mapped = overlayModelId === 'ppe' && !usePatrolPersonRoi
       ? mapMobilePpeOverlayDetections(detections)
-      : detections),
-    [detections, overlayModelId, usePatrolPersonRoi],
-  )
+      : detections
+    return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped
+  }, [detections, overlayModelId, usePatrolPersonRoi, cameraId])
 
   const stopAiClient = useCallback(() => {
     aiClientRef.current?.stop()
@@ -170,7 +176,9 @@ export function MobileCameraFeed({
       onResult: (result: MobileAiAnalyzeResult) => {
         const minConf = (d: MobileAiDetection) => {
           if (overlayModelId === 'ppe') {
-            if (d.behavior === 'person') return d.confidence >= 0.45
+            if (d.behavior === 'person') {
+              return d.confidence >= (cameraId === 'HC-02' ? HC02_PERSON_MIN_CONF : 0.45)
+            }
             if (['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior)) return d.confidence >= 0.55
             return d.confidence >= 0.5
           }
@@ -194,7 +202,8 @@ export function MobileCameraFeed({
         }
         if (cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))) {
           // Đếm person từ raw detections (trước filter overlay) — map không miss khi conf thấp
-          const rawPersons = result.detections.filter(d => d.behavior === 'person')
+          const rawPersons = result.detections.filter(d => d.behavior === 'person'
+            && d.confidence >= HC02_PERSON_MIN_CONF)
           const persons = filtered.filter(d => d.behavior === 'person')
           const personCount = Math.max(rawPersons.length, persons.length)
           const violations = filtered.filter(d =>

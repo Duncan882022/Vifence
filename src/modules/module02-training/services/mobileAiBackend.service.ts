@@ -25,6 +25,8 @@ export interface MobileAiDetection {
   worker_id?: string
   worker_name?: string
   subject_bbox?: [number, number, number, number]
+  /** HC-02 — conf 0.35–0.44, hiển thị bbox vàng (YOLO yếu). */
+  weak?: boolean
 }
 
 export interface MobileAiViolationEvent {
@@ -139,11 +141,11 @@ export {
 
 export type MobileAiConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
-export type MobileAnalyzeMode = 'default' | 'ppe' | 'pccc' | 'road' | 'crane'
+export type MobileAnalyzeMode = 'default' | 'ppe' | 'person' | 'pccc' | 'road' | 'crane'
 
-/** MOB-* → hút thuốc/cháy; HC-02 patrol → PPE (cùng transport POST /analyze/frame). */
+/** MOB-* → hút thuốc/cháy; HC-02 patrol → person-only (nhanh, đủ đếm người). */
 export function resolveMobileAnalyzeMode(cameraId: string): MobileAnalyzeMode {
-  if (cameraId === 'HC-02') return 'ppe'
+  if (cameraId === 'HC-02') return 'person'
   return 'default'
 }
 
@@ -227,7 +229,7 @@ export function createMobileAiAnalyzeClient(
     getGps,
     getHeading,
     shouldAnalyze = () => true,
-    intervalMs = 450,
+    intervalMs = 320,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
@@ -284,7 +286,7 @@ export function createMobileAiAnalyzeClient(
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(intervalMs < 350 ? 40 : 120)
+      scheduleNext(analyzeMode === 'person' || intervalMs < 350 ? 40 : 120)
     } catch (err) {
       if (stopped) return
       const msg = err instanceof Error ? err.message : 'Không kết nối được backend.'

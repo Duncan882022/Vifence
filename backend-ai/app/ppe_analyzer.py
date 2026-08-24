@@ -36,6 +36,7 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
+_PERSON_CONF_BODYCAM = 0.35
 _PERSON_CONF_STRICT = 0.48
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
@@ -1322,12 +1323,13 @@ def _plausible_patrol_wide(
     frame: np.ndarray | None = None,
     machinery: list[tuple[float, float, float, float]] | None = None,
     strict: bool = False,
+    min_bh_frac: float = 0.07,
 ) -> bool:
     """Góc rộng / đám đông — người nhỏ trong khung (CCTV-style)."""
     x1, y1, x2, y2 = box
     bw = max(x2 - x1, 1.0)
     bh = max(y2 - y1, 1.0)
-    if bh < frame_h * 0.07 or bh > frame_h * 0.62:
+    if bh < frame_h * min_bh_frac or bh > frame_h * 0.62:
         return False
     if bw < frame_w * 0.04 or bw > frame_w * 0.42:
         return False
@@ -1503,6 +1505,7 @@ def _plausible_person_box(
         )
         wide_ok = _plausible_patrol_wide(
             box, frame_w, frame_h, frame=frame, machinery=None, strict=False,
+            min_bh_frac=0.05,
         )
         if not (close_ok or wide_ok):
             return False
@@ -1532,7 +1535,7 @@ def _filter_persons(
     bodycam = _is_helmet_bodycam(camera_id)
     identity_strict = (strict or camera_id in ("A-04", "HC-01")) and not bodycam
     if bodycam:
-        conf_floor = min_conf if min_conf is not None else _PERSON_CONF
+        conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
     else:
         conf_floor = min_conf if min_conf is not None else (_PERSON_CONF_STRICT if identity_strict else _PERSON_CONF)
     machinery = _machinery_bboxes(frame, camera_id, source_pts_sec=source_pts_sec) if identity_strict else []
@@ -1616,10 +1619,8 @@ def _build_patrol_bodycam_result(
 ) -> dict:
     """Helmet bodycam path — person detection + patrol identity, zero PPE model inference.
 
-    HC-* streams come from the mobile client at ~220ms intervals. Running 3 extra YOLO models
-    (helmet/vest/shoes) doubles the GPU time per frame without adding UX value because
-    PATROL_PPE_UI_HIDDEN is true. This function keeps the full patrol identity pipeline while
-    skipping the three PPE inference calls.
+    HC-* streams come from the mobile client at ~220–320ms intervals. Running 3 extra YOLO models
+    (helmet/vest/shoes) doubles inference time per frame without UX value when PATROL_PPE_UI_HIDDEN.
     """
     from .worker_identity.detection_enrich import enrich_person_bbox
 
@@ -1628,9 +1629,10 @@ def _build_patrol_bodycam_result(
     persons = _filter_persons(
         frame,
         camera_id,
-        detector.predict(frame),
+        detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
         source_pts_sec=source_pts_sec,
         strict=False,
+        min_conf=_PERSON_CONF_BODYCAM,
     )
 
     detections: list[PpeDetection] = []
@@ -1679,6 +1681,8 @@ def _build_patrol_bodycam_result(
         "events": [],
     }
 
+
+analyze_patrol_person_frame = _build_patrol_bodycam_result
 
 def _build_vest_only_result(
     frame: np.ndarray,

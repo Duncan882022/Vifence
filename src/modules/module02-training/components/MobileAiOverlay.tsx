@@ -47,7 +47,8 @@ function resolveBehaviorStyle(modelId: CameraAiModelId, behavior: string) {
 
 function formatMobileDetectionBadge(det: MobileAiDetection, modelId: CameraAiModelId): string {
   if (det.behavior === 'person') {
-    return formatPersonOverlayBadge(det.worker_name, det.confidence, '', {
+    const suffix = det.weak ? ' ?' : ''
+    return formatPersonOverlayBadge(det.worker_name, det.confidence, suffix, {
       workerId: det.worker_id,
       workerName: det.worker_name,
     })
@@ -92,14 +93,25 @@ const DetectionBox = memo(function DetectionBox({
   snapMotion?: boolean
 }) {
   const [x1, y1, x2, y2] = det.bbox
-  const style = resolveBehaviorStyle(modelId, det.behavior)
+  const isWeakPerson = det.behavior === 'person' && Boolean(det.weak)
+  const style = isWeakPerson
+    ? {
+        border: 'border-2 border-amber-400/90',
+        fill: 'bg-amber-400/12',
+        label: 'bg-amber-950/85 text-amber-200',
+        badge: '',
+        role: 'info' as const,
+      }
+    : resolveBehaviorStyle(modelId, det.behavior)
   const video = videoRef.current
 
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
 
-  if (!shouldShowOverlayBox(det.confidence, det.bbox as [number, number, number, number])) {
+  if (isWeakPerson) {
+    if (det.confidence < 0.35) return null
+  } else if (!shouldShowOverlayBox(det.confidence, det.bbox as [number, number, number, number])) {
     return null
   }
 
