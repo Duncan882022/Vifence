@@ -57,6 +57,9 @@ function tagHc02PersonDetections(items: MobileAiDetection[]): MobileAiDetection[
     return weak ? { ...d, weak: true } : d
   })
 }
+
+/** HC bodycam — chỉ bbox person (xanh / vàng nếu conf yếu). */
+function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
   const ppeDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
     behavior: d.behavior as PpeDetection['behavior'],
     label: d.label,
