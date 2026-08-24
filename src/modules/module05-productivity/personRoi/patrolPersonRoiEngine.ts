@@ -1,6 +1,7 @@
 import { advancePersonRoiTracks, predictPersonRoiTracks } from './personRoiTracker'
 import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
 import type { PersonRoiDetection, PersonRoiDisplay, PersonRoiTrack } from './types'
+import { isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
 
 /**
  * Engine singleton per camera — overlay + heatmap dùng chung track state.
@@ -37,7 +38,7 @@ export class PatrolPersonRoiEngine {
 
   getHeatmapPersons(): Array<{ personId: string; label: string; confidence: number }> {
     return this.displayCache
-      .filter(t => t.state === 'confirmed')
+      .filter(t => t.state === 'confirmed' && isPatrolHeatmapEligibleId(t.personId))
       .map(t => ({
         personId: t.personId,
         label: t.label,

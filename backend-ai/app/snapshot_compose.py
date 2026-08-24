@@ -154,6 +154,9 @@ def draw_violation_roi_annotation(
     thickness: int = 2,
     machine_kind: str | None = None,
     suffix: str = "",
+    worker_id: str | None = None,
+    worker_name: str | None = None,
+    object_id: str | None = None,
 ) -> None:
     """Snapshot vi phạm — viền liền + nhãn mã kịch bản (vd BPTC-001 88%)."""
     draw_atld_roi_box(frame, x1, y1, x2, y2, color, behavior, thickness=thickness)
@@ -175,6 +178,9 @@ def draw_violation_roi_annotation(
             behavior=behavior,
             machine_kind=machine_kind,
             suffix=suffix,
+            worker_id=worker_id,
+            worker_name=worker_name,
+            object_id=object_id,
         )
 
 
@@ -183,6 +189,9 @@ def format_snapshot_code(
     scenario_id: str | None = None,
     *,
     machine_kind: str | None = None,
+    worker_id: str | None = None,
+    worker_name: str | None = None,
+    object_id: str | None = None,
 ) -> str:
     sid = (scenario_id or "").strip()
     if behavior == "crane_proximity":
@@ -190,7 +199,9 @@ def format_snapshot_code(
             return sid
         return BEHAVIOR_ROI_CODE.get("crane_proximity", "DZ-003")
     if behavior == "person":
-        return BEHAVIOR_ROI_CODE.get("person", "NV")
+        from .patrol_entity import format_patrol_person_snapshot_label
+
+        return format_patrol_person_snapshot_label(worker_id, worker_name, object_id)
     if behavior == "crane" and machine_kind:
         return MACHINERY_LABELS.get(machine_kind, BEHAVIOR_ROI_CODE.get("crane", "Máy thi công"))
     if machine_kind and machine_kind in BEHAVIOR_ROI_CODE:
@@ -221,9 +232,19 @@ def draw_snapshot_roi_badge(
     behavior: str,
     machine_kind: str | None = None,
     suffix: str = "",
+    worker_id: str | None = None,
+    worker_name: str | None = None,
+    object_id: str | None = None,
 ) -> None:
     """Nhãn ngắn trên bbox snapshot — mã kịch bản + % (đồng bộ overlay live)."""
-    code = format_snapshot_code(behavior, scenario_id, machine_kind=machine_kind)
+    code = format_snapshot_code(
+        behavior,
+        scenario_id,
+        machine_kind=machine_kind,
+        worker_id=worker_id,
+        worker_name=worker_name,
+        object_id=object_id,
+    )
     badge = format_snapshot_badge(code, confidence, suffix)
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = 0.45

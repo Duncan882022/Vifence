@@ -718,6 +718,10 @@ class EventStore:
                 existing.track_id = incoming.track_id
             if incoming.object_id:
                 existing.object_id = incoming.object_id
+            incoming_wid = (detection.worker_id or "").strip()
+            if incoming_wid and incoming_wid not in ("", "unknown"):
+                existing.worker_id = incoming_wid
+                existing.worker_name = (detection.worker_name or incoming_wid).strip()
             return existing
 
         if not allow_create:
@@ -975,6 +979,9 @@ class EventStore:
             scenario_id=getattr(detection, "scenario_id", None),
             confidence=float(detection.confidence),
             thickness=thickness,
+            worker_id=getattr(detection, "worker_id", None),
+            worker_name=getattr(detection, "worker_name", None),
+            object_id=getattr(detection, "object_id", None),
         )
         return annotated
 

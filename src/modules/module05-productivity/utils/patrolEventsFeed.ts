@@ -2,7 +2,10 @@
  * Module 05 — feed sự kiện: chỉ bản có snapshot + thời gian hợp lệ (evidence).
  */
 import type { PatrolEvent } from '../data/patrolMockData'
-import { patrolEventEntityKey } from './patrolWorkforceEventLabels'
+import {
+  isPatrolHeatmapEligibleEvent,
+  summarizePatrolAlertCount,
+} from './patrolPatrolCounts'
 import { PATROL_PPE_UI_HIDDEN } from './patrolPpeVisibility'
 
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000
@@ -61,12 +64,8 @@ export function filterPatrolEvidenceEvents(events: PatrolEvent[]): PatrolEvent[]
 
 /** KPI Cảnh báo — unique entities Người + Định danh (có snapshot). */
 export function summarizePatrolAlertEvents(events: PatrolEvent[]): string {
-  if (events.length === 0) return 'Chưa có sự kiện'
-  const alertKeys = new Set(
-    events
-      .filter(isPatrolPersonLifecycleWithSnapshot)
-      .map(patrolEventEntityKey),
+  const eligible = events.filter(
+    e => isPatrolPersonLifecycleWithSnapshot(e) && isPatrolHeatmapEligibleEvent(e),
   )
-  if (alertKeys.size === 0) return 'Chưa có sự kiện'
-  return `${alertKeys.size} sự kiện`
+  return summarizePatrolAlertCount(eligible)
 }

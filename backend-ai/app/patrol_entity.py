@@ -60,3 +60,21 @@ def patrol_tier_label(worker_id: str | None) -> str:
     if is_sgc_worker_id(wid):
         return "person"
     return "object"
+
+
+def format_patrol_person_snapshot_label(
+    worker_id: str | None,
+    worker_name: str | None,
+    object_id: str | None = None,
+) -> str:
+    """Nhãn ROI snapshot PERS-001 — Đối tượng / Người / tên định danh."""
+    wid = (worker_id or "").strip()
+    wname = (worker_name or "").strip()
+    if is_patrol_gallery_id(wid):
+        return wname or wid
+    if is_sgc_worker_id(wid):
+        return wid
+    oid = (object_id or "").strip()
+    if oid.upper().startswith("OBJ-"):
+        return oid
+    return "Đối tượng"

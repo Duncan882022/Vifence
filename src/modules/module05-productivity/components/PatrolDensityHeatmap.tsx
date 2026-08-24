@@ -36,6 +36,11 @@ import {
   resolvePatrolWorkerId,
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
+import type { PatrolEvent } from '../data/patrolMockData'
+import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
+import { isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
+import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
+import { isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
 import type { ObjectState } from '../types/workforceHeatmap'
 
 function LayerToggle({
@@ -76,10 +81,13 @@ function LayerToggle({
 export function PatrolDensityHeatmap({
   expanded = false,
   onCloseExpand,
+  patrolEvents = [],
 }: {
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
   onCloseExpand?: () => void
+  /** Feed sự kiện deduped — tooltip mũ + KPI detect (tránh fetch thêm). */
+  patrolEvents?: PatrolEvent[]
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
@@ -111,6 +119,12 @@ export function PatrolDensityHeatmap({
 
   const { liveZones, cameraPositions, routeHistory } = usePatrolWebSocket('PATROL_LIVE')
   const hc02Live = useHc02LiveDetectionDots()
+
+  const helmetDetectCountsById = useMemo(
+    () => buildHelmetDetectCountsById(patrolEvents, DEFAULT_PATROL_CAMERA_IDS),
+    [patrolEvents],
+  )
+
   const metrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
 
   useEffect(() => {
@@ -202,6 +216,14 @@ export function PatrolDensityHeatmap({
 
     const objectDots = liveObjects
       .filter(o => o.lat != null && o.lon != null)
+      .filter(o => {
+        const wid = o.worker_id?.trim() ?? ''
+        const manual = isPatrolManuallyIdentified(o.object_id)
+        return manual
+          || isPatrolSgcWorkerId(wid)
+          || isPatrolGalleryWorkerId(wid)
+          || isPatrolHeatmapEligibleId(o.object_id)
+      })
       .map(o => {
         const fallback = o.worker_name || o.object_id
         const manual = isPatrolManuallyIdentified(o.object_id)
@@ -374,6 +396,7 @@ export function PatrolDensityHeatmap({
           helmetOnlineById={helmetOnlineById}
           helmetHeadingById={helmetHeadingById}
           siteHeadcount={siteHeadcount}
+          helmetDetectCountsById={helmetDetectCountsById}
           onDetectionClick={onDetectionClick}
           requireLiveGpsForHc02={false}
           hasHc02LiveGps={hc02Live.hasMapPosition}

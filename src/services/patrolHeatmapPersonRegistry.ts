@@ -9,6 +9,9 @@ import {
 import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/patrolHeatmapGps'
 import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patrolLivePersonDots'
 import { resolveHeatmapEntityMasterId } from '@/modules/module05-productivity/utils/patrolIdentityEntity'
+import {
+  isPatrolHeatmapEligibleId,
+} from '@/modules/module05-productivity/utils/patrolPatrolCounts'
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v1'
 const MAX_PERSONS = 48
@@ -108,7 +111,7 @@ export function upsertHeatmapPersons(input: {
 
   for (const person of input.persons) {
     const masterId = resolveHeatmapDotMasterId(person.personId)
-    if (!masterId) continue
+    if (!masterId || !isPatrolHeatmapEligibleId(masterId)) continue
     const position = positionForPerson(masterId, input.lat, input.lng)
     const label = person.label?.trim() || masterId
     const confidence = Number.isFinite(person.confidence) ? person.confidence! : 0.9
@@ -294,7 +297,10 @@ export function syncPatrolPersonEventsToHeatmap(
   }>,
 ): void {
   for (const event of events) {
-    if (event.type !== 'PERSON_DETECTED') continue
+    if (event.type !== 'PERSON_DETECTED' && event.type !== 'IDENTITY_VERIFIED') continue
+    const track = event.trackWorkerId?.trim() ?? ''
+    const oid = event.objectId?.trim() ?? ''
+    if (!isPatrolHeatmapEligibleId(track) && !isPatrolHeatmapEligibleId(oid)) continue
     const resolved = resolveEventGps(event)
     const { lat, lng } = resolved
     const rawId = event.trackWorkerId?.trim()

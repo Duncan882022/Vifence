@@ -49,7 +49,8 @@ import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hook
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import { filterPatrolEvidenceEvents, isPatrolPersonLifecycleWithSnapshot, summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
-import { patrolEventEntityKey, resolvePatrolPersonStage } from './utils/patrolWorkforceEventLabels'
+import { countPatrolAlertEntities } from './utils/patrolPatrolCounts'
+import { countUniquePatrolTabEntities } from './utils/patrolWorkforceEventLabels'
 import { resetPatrolTestData } from './services/patrolReset.service'
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
@@ -87,22 +88,11 @@ function PatrolKPIs({
     ? Math.round((visitedZones / totalZones) * 100)
     : 0
 
-  // Công nhân = unique entities tab Người (stage person — chưa profile)
-  const workerEntityCount = new Set(
-    events
-      .filter(e => e.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(e) === 'person')
-      .map(patrolEventEntityKey),
-  ).size
+  // Công nhân = unique entities tab Người
+  const workerEntityCount = countUniquePatrolTabEntities(events, 'person')
 
   // Sự kiện = unique entities tab Người + Định danh
-  const alertCount = new Set(
-    events
-      .filter(e =>
-        e.type === 'IDENTITY_VERIFIED'
-        || (e.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(e) !== 'object'),
-      )
-      .map(patrolEventEntityKey),
-  ).size
+  const alertCount = countPatrolAlertEntities(events)
 
   const zonePop = Object.values(workforce.zonePopulation)[0]
   // Ưu tiên live.personCount từ stream thực tế, fallback sang workforce + event count
@@ -461,6 +451,7 @@ export function Module05Page() {
               <PatrolDensityHeatmap
                 expanded={heatmapExpanded}
                 onCloseExpand={() => setHeatmapExpanded(false)}
+                patrolEvents={patrolEventsLive}
               />
             </Panel>
 

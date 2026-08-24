@@ -463,6 +463,7 @@ export interface PatrolGeoHeatmapProps {
     objects: number
     persons: number
   }
+  helmetDetectCountsById?: Record<string, { person: number; identity: number; total: number }>
   /** Click Object / detection with objectId → bottom sheet. */
   onDetectionClick?: (dot: DetectionDot) => void
   /** HC-02 luôn hiện marker (off = xám); false = ẩn khi chưa GPS. */
@@ -495,6 +496,7 @@ export function PatrolGeoHeatmap({
   helmetOnlineById,
   helmetHeadingById,
   siteHeadcount,
+  helmetDetectCountsById,
   onDetectionClick,
   requireLiveGpsForHc02 = false,
   hasHc02LiveGps = false,
@@ -502,6 +504,7 @@ export function PatrolGeoHeatmap({
   compactControls = false,
 }: PatrolGeoHeatmapProps) {
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
+  const [openHelmetTipId, setOpenHelmetTipId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!showDensity) setExpandedZoneId(null)
@@ -777,6 +780,8 @@ export function PatrolGeoHeatmap({
             const isActive = Boolean(helmetOnlineById?.[pin.id])
             const heading = helmetHeadingById?.[pin.id]
             const markerOpacity = isActive ? 1 : 0.88
+            const detect = helmetDetectCountsById?.[pin.id]
+            const tipOpen = openHelmetTipId === pin.id
             return (
               <>
                 {heading != null && Number.isFinite(heading) && isActive && (
@@ -798,8 +803,16 @@ export function PatrolGeoHeatmap({
                   icon={createHelmetIcon(pin, isActive)}
                   zIndexOffset={isActive ? 700 : 400}
                   opacity={markerOpacity}
+                  eventHandlers={{
+                    click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
+                  }}
                 >
-                  <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -14]}
+                    opacity={0.95}
+                    permanent={tipOpen}
+                  >
                     <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
                       <strong>{pin.label}</strong>
                       {' · '}
@@ -814,6 +827,18 @@ export function PatrolGeoHeatmap({
                       )}
                       <br />
                       Phụ trách: {zoneName}
+                      {detect != null && (
+                        <>
+                          <br />
+                          <span style={{ color: '#38bdf8' }}>
+                            Đã detect: {detect.total} người
+                          </span>
+                          <br />
+                          <span style={{ color: '#64748b', fontSize: 9 }}>
+                            {detect.person} Người · {detect.identity} Định danh
+                          </span>
+                        </>
+                      )}
                       {siteHeadcount && (
                         <>
                           <br />
@@ -821,12 +846,12 @@ export function PatrolGeoHeatmap({
                             Công trường: {siteHeadcount.observed} quan sát
                             {' · '}{siteHeadcount.identified} định danh
                           </span>
+                        </>
+                      )}
+                      {!tipOpen && (
+                        <>
                           <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>
-                            Đối tượng {siteHeadcount.objects}
-                            {' · '}Người {siteHeadcount.persons}
-                            {' · '}Định danh {siteHeadcount.identified}
-                          </span>
+                          <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
                         </>
                       )}
                     </span>

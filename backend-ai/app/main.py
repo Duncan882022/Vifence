@@ -472,6 +472,7 @@ def patrol_reset_all():
     - Reset sgc person_identity_registry (RAM + file)
     - Xóa patrol mobile metrics cache
     - Xóa HC-* patrol person tracks + face assignments
+    - Xóa worker gallery (workers.json + ảnh faces/)
     - Xóa config/mobile_ai history
     """
     from .person_identity_registry import clear_registry
@@ -480,11 +481,13 @@ def patrol_reset_all():
     from .ppe_analyzer import reset_all_hc_patrol_state
     from .patrol_api import clear_patrol_mobile_metrics
     from .workforce_engine import workforce_engine
+    from .worker_identity.gallery import clear_gallery_storage
 
     events_result = engine.store.clear_all()
     sgc_count = clear_registry()
     appearance_count = clear_patrol_appearances()
     identity_bindings = clear_patrol_identity_bindings()
+    gallery_cleared = clear_gallery_storage()
     mobile_count = clear_patrol_mobile_metrics()
     hc_count = reset_all_hc_patrol_state()
     workforce_count = workforce_engine.clear_all()
@@ -500,6 +503,7 @@ def patrol_reset_all():
         "sgc_tracks_cleared": sgc_count,
         "appearances_cleared": appearance_count,
         "identity_bindings_cleared": identity_bindings,
+        "gallery_cleared": gallery_cleared,
         "mobile_metrics_cleared": mobile_count,
         "hc_tracks_cleared": hc_count,
         "workforce_cleared": workforce_count,

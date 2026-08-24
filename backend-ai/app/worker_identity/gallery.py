@@ -243,3 +243,25 @@ def enroll_face(
     load_gallery()
     logger.info("[worker_identity] Enroll %s pose=%d → %s", worker_id, pose_slot, filename)
     return get_enrollment_status(worker_id)
+
+
+def clear_gallery_storage() -> dict[str, int]:
+    """Xóa toàn bộ workers.json + ảnh faces/ và làm trống registry RAM."""
+    global _REGISTRY  # noqa: PLW0603
+    root = gallery_dir()
+    faces_dir = root / "faces"
+    removed_faces = 0
+    if faces_dir.is_dir():
+        for path in faces_dir.iterdir():
+            if path.is_file():
+                path.unlink()
+                removed_faces += 1
+    prev_count = len(registry_rows())
+    _write_registry([])
+    _REGISTRY = []
+    logger.info(
+        "[worker_identity] Gallery cleared: %d workers, %d face files removed.",
+        prev_count,
+        removed_faces,
+    )
+    return {"workers_cleared": prev_count, "face_files_removed": removed_faces}

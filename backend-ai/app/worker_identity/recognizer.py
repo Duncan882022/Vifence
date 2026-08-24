@@ -150,7 +150,8 @@ def assess_patrol_face(
         if aspect < 0.55 or aspect > 1.85:
             continue
         face_cy = y + fh / 2.0
-        if face_cy > search_h * 0.58:
+        max_cy_frac = 0.72 if crop_h < 200 else 0.62
+        if face_cy > search_h * max_cy_frac:
             continue
         if score > best_det_score:
             best_det_score = score
@@ -160,8 +161,9 @@ def assess_patrol_face(
             if x2 - x1 >= 8 and y2 - y1 >= 8:
                 best_face = crop[y1:y2, x1:x2]
 
-    min_eligible = settings.patrol_gallery_min_confidence
-    eligible = best_face is not None and best_det_score >= min_eligible
+    # Tab Người — ngưỡng 0.65 (gallery match vẫn dùng patrol_gallery_min_confidence riêng).
+    patrol_eligible_min = min(settings.patrol_gallery_min_confidence, 0.65)
+    eligible = best_face is not None and best_det_score >= patrol_eligible_min
     if not eligible or best_face is None:
         return None, best_det_score, False
 

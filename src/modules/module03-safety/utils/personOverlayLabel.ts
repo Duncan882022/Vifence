@@ -1,9 +1,5 @@
 import { displayUnknown } from './displayUnknown'
 import { formatRoiOverlayBadge, formatViolationRoiBadge } from './roiOverlayCode'
-import {
-  hasPersonObjectReturned,
-  isSgcWorkerId,
-} from './personOverlaySession'
 
 export interface PersonOverlayIdentity {
   workerId?: string | null
@@ -25,7 +21,7 @@ function isUnknownWorkerName(name?: string | null): boolean {
 export function isRecognizedWorker(identity: PersonOverlayIdentity): boolean {
   const id = identity.workerId?.trim()
   if (!id || id === 'unknown') return false
-  if (isSgcWorkerId(id)) return false
+  if (/^sgc-/i.test(id)) return false
   if (isUnknownWorkerName(identity.workerName)) return false
   const source = identity.faceMatchSource?.trim()
   if (source && source !== 'face') return false
@@ -36,10 +32,10 @@ export function isRecognizedWorker(identity: PersonOverlayIdentity): boolean {
 }
 
 /**
- * Nhãn bbox người trên cam:
- * - đã nhận diện gallery → tên
- * - objectID (sgc) đã gặp lại → objectID
- * - lần đầu / chưa có ID → person
+ * Nhãn bbox người trên cam (Module 05):
+ * - định danh / gallery → tên
+ * - Người (sgc) → mã sgc
+ * - Đối tượng → OBJ-* hoặc 「Đối tượng」
  */
 export function formatPersonOverlayLabel(
   workerName: string | null | undefined,
@@ -52,10 +48,8 @@ export function formatPersonOverlayLabel(
     return displayUnknown(resolvedIdentity.workerName)
   }
   const wid = resolvedIdentity.workerId?.trim()
-  if (wid && isSgcWorkerId(wid) && hasPersonObjectReturned(wid)) {
-    return wid
-  }
-  return 'person'
+  if (wid && /^sgc-/i.test(wid)) return wid
+  return 'Đối tượng'
 }
 
 /** Nhãn bbox người — badge kèm conf. */

@@ -286,6 +286,7 @@ class PpeEngine:
                 resolve_patrol_dedup_stable_id,
                 resolve_patrol_master_id,
             )
+            from .patrol_entity import is_patrol_gallery_id
             from .person_identity_registry import (
                 bind_patrol_track_identity,
                 is_sgc_worker_id,
@@ -356,6 +357,21 @@ class PpeEngine:
                         frame_w=frame_w,
                         frame_h=frame_h,
                     )
+                elif existing_wid and (
+                    is_sgc_worker_id(existing_wid) or is_patrol_gallery_id(existing_wid)
+                ):
+                    worker_id = existing_wid
+                    worker_name = (person.worker_name or worker_id).strip()
+                    if face_emb is not None:
+                        bind_patrol_track_identity(
+                            camera_id,
+                            track_id,
+                            worker_id,
+                            person_bbox=person_bbox,
+                            face_emb=face_emb,
+                            frame_w=frame_w,
+                            frame_h=frame_h,
+                        )
                 elif face_eligible and face_emb is not None:
                     worker_id, worker_name = resolve_patrol_person_identity(
                         person,
@@ -368,8 +384,8 @@ class PpeEngine:
                         frame_h=frame_h,
                     )
                 else:
-                    worker_id = ""
-                    worker_name = ""
+                    worker_id = existing_wid if is_sgc_worker_id(existing_wid) else ""
+                    worker_name = (person.worker_name or worker_id).strip() if worker_id else ""
 
                 if face_eligible and face_emb is not None and worker_id:
                     frame_face_assignments[worker_id] = face_emb
@@ -407,6 +423,13 @@ class PpeEngine:
                 stable_id = resolve_patrol_dedup_stable_id(worker_id, oid_for_stable, track_id)
                 dedup_key = build_dedup_key(camera_id, "PERS-001", stable_id)
                 existing = self.store.find_by_dedup_key(dedup_key)
+                if existing is None and is_sgc and oid_for_stable:
+                    obj_key = build_dedup_key(
+                        camera_id,
+                        "PERS-001",
+                        resolve_patrol_dedup_stable_id("", oid_for_stable, track_id),
+                    )
+                    existing = self.store.find_by_dedup_key(obj_key)
 
                 gate = self._gate_for(camera_id, track_id)
                 if is_gallery or is_sgc:
