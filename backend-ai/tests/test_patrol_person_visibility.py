@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.patrol_person_visibility import (
+    legs_only_person_box,
     patrol_person_meets_detection_gate,
     resolve_patrol_person_snapshot_bbox,
     upper_body_third_with_head_visible,
@@ -26,7 +27,17 @@ class TestPatrolPersonVisibility(unittest.TestCase):
     def test_legs_only_fails(self):
         fw, fh = 1280, 720
         bbox = (fw * 0.45, fh * 0.80, fw * 0.52, fh * 0.92)
+        self.assertTrue(legs_only_person_box(bbox, fw, fh))
         self.assertFalse(upper_body_third_with_head_visible(bbox, fw, fh))
+        self.assertFalse(patrol_person_meets_detection_gate(bbox, fw, fh))
+
+    def test_feet_at_bottom_fails(self):
+        fw, fh = 1280, 720
+        feet = (fw * 0.30, fh * 0.58, fw * 0.72, fh * 0.96)
+        self.assertTrue(legs_only_person_box(feet, fw, fh))
+        self.assertIsNone(
+            resolve_patrol_person_snapshot_bbox(None, feet, fw, fh, camera_id="HC-02"),
+        )
 
     def test_head_cropped_fails(self):
         fw, fh = 1280, 720
@@ -61,8 +72,8 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         fw, fh = 1280, 720
         bbox = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
         ph = bbox[3] - bbox[1]
-        upper_h = ph * 0.55
-        self.assertGreaterEqual(upper_h, fh * 0.12)
+        upper_h = ph * 0.38
+        self.assertGreaterEqual(upper_h, fh * 0.10)
         self.assertTrue(upper_body_third_with_head_visible(bbox, fw, fh))
 
 

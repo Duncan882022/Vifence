@@ -395,6 +395,7 @@ class PpeEngine:
 
                 from .ppe_analyzer import _face_dominant_person_box, raw_person_bbox
                 from .patrol_person_visibility import (
+                    legs_only_person_box,
                     patrol_person_meets_detection_gate,
                     resolve_patrol_person_snapshot_bbox,
                     upper_body_third_with_head_visible,
@@ -412,16 +413,24 @@ class PpeEngine:
                     has_stable_id=is_gallery or is_sgc,
                 ):
                     continue
-                if camera_id.startswith("HC-") and is_sgc and not is_gallery:
-                    if not face_eligible and not upper_body_third_with_head_visible(
-                        box, frame_w, frame_h,
-                    ):
+                if camera_id.startswith("HC-"):
+                    if legs_only_person_box(box, frame_w, frame_h):
                         continue
-                    area_ratio = (box[2] - box[0]) * (box[3] - box[1]) / max(
-                        float(frame_w * frame_h), 1.0,
-                    )
-                    if not face_eligible and area_ratio > 0.45:
-                        continue
+                    if is_sgc and not is_gallery:
+                        if not face_eligible and not upper_body_third_with_head_visible(
+                            box, frame_w, frame_h,
+                        ):
+                            continue
+                        area_ratio = (box[2] - box[0]) * (box[3] - box[1]) / max(
+                            float(frame_w * frame_h), 1.0,
+                        )
+                        if not face_eligible and area_ratio > 0.45:
+                            continue
+                    elif not is_gallery and not is_sgc:
+                        if not face_eligible and not upper_body_third_with_head_visible(
+                            box, frame_w, frame_h,
+                        ):
+                            continue
                     if resolve_patrol_person_snapshot_bbox(
                         frame, box, frame_w, frame_h, camera_id=camera_id,
                     ) is None:

@@ -20,6 +20,23 @@ function zoneVisibleRatio(zone: Bbox4, frameW: number, frameH: number): number {
   return (cy2 - cy1) / rawH
 }
 
+export function patrolPersonLegsOnlyBbox(bbox: Bbox4, frameW: number, frameH: number): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const ph = Math.max(y2 - y1, 1)
+  const pw = Math.max(x2 - x1, 1)
+  const cy = (y1 + y2) / 2
+  const headCy = y1 + ph * 0.12
+  const y1Ratio = y1 / Math.max(frameH, 1)
+  const y2Ratio = y2 / Math.max(frameH, 1)
+  const aspect = ph / Math.max(pw, 1)
+
+  if (headCy > frameH * 0.54) return true
+  if (cy > frameH * 0.66) return true
+  if (y2Ratio > 0.86 && y1Ratio > 0.46 && aspect < 2.6) return true
+  if (y1Ratio > 0.50 && y2Ratio > 0.88) return true
+  return false
+}
+
 export function patrolPersonFaceDominantBbox(bbox: Bbox4, _frameW: number, frameH: number): boolean {
   const [x1, y1, x2, y2] = bbox
   const ph = Math.max(y2 - y1, 1)
@@ -50,6 +67,7 @@ export function patrolPersonMeetsUpperBodyGate(
   frameH: number,
 ): boolean {
   if (frameW <= 0 || frameH <= 0) return false
+  if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
   const upperFrac = 0.50
   const headFrac = 0.24
   const minVisible = 0.33
@@ -87,6 +105,7 @@ export interface PatrolPersonDetectionGateInput {
 
 export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateInput): boolean {
   const { bbox, frameW, frameH, workerId } = input
+  if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
   if (!plausiblePersonSilhouette(bbox, frameW, frameH)) return false
   const wid = workerId?.trim() ?? ''
   if (wid && wid !== 'unknown' && /^sgc-/i.test(wid)) return true

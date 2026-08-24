@@ -31,6 +31,32 @@ def zone_visible_ratio(
     return (cy2 - cy1) / raw_h
 
 
+def legs_only_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """YOLO hay gán bbox chân/thân dưới — vùng 'đầu' giả ở đầu bbox thực ra là đùi/gối."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    cy = (y1 + y2) / 2.0
+    head_cy = y1 + ph * 0.12
+    y1_ratio = y1 / max(float(frame_h), 1.0)
+    y2_ratio = y2 / max(float(frame_h), 1.0)
+    aspect = ph / max(pw, 1.0)
+
+    if head_cy > frame_h * 0.54:
+        return True
+    if cy > frame_h * 0.66:
+        return True
+    if y2_ratio > 0.86 and y1_ratio > 0.46 and aspect < 2.6:
+        return True
+    if y1_ratio > 0.50 and y2_ratio > 0.88:
+        return True
+    return False
+
+
 def upper_body_third_with_head_visible(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -43,6 +69,8 @@ def upper_body_third_with_head_visible(
     min_head_px_frac: float = 0.04,
 ) -> bool:
     """Đối tượng patrol — cần ≥1/3 thân trên (vùng có đầu) còn trong khung."""
+    if legs_only_person_box(person_box, frame_w, frame_h):
+        return False
     x1, y1, x2, y2 = person_box
     ph = max(y2 - y1, 1.0)
     pw = max(x2 - x1, 1.0)
@@ -98,6 +126,8 @@ def patrol_person_meets_detection_gate(
     has_stable_id: bool = False,
 ) -> bool:
     """Gate hiển thị/đếm — cận mặt hoặc đã có sgc/gallery thì bỏ qua rule 1/3 thân trên."""
+    if legs_only_person_box(person_box, frame_w, frame_h):
+        return False
     if not plausible_person_silhouette(person_box, frame_w, frame_h):
         return False
     if face_dominant or has_stable_id:
@@ -154,8 +184,10 @@ def resolve_patrol_person_snapshot_bbox(
     *,
     camera_id: str = "",
 ) -> tuple[float, float, float, float] | None:
-    """ROI snapshot PERS — ưu tiên mặt, không crop tay/mép góc."""
+    """ROI snapshot PERS — ưu tiên mặt, không crop tay/mép góc/chân."""
     if _is_edge_sliver_person_box(person_box, frame_w, frame_h):
+        return None
+    if legs_only_person_box(person_box, frame_w, frame_h):
         return None
 
     import numpy as np
@@ -186,9 +218,9 @@ def resolve_patrol_person_snapshot_bbox(
     pw = max(x2 - x1, 1.0)
 
     if upper_body_third_with_head_visible(person_box, frame_w, frame_h):
-        upper = (x1 + pw * 0.05, y1, x2 - pw * 0.05, y1 + ph * 0.55)
+        upper = (x1 + pw * 0.05, y1, x2 - pw * 0.05, y1 + ph * 0.38)
         clipped = _clip_box_to_frame(upper, frame_w, frame_h)
-        if (clipped[3] - clipped[1]) >= frame_h * 0.12:
+        if (clipped[3] - clipped[1]) >= frame_h * 0.10:
             return clipped
 
     if _face_dominant_person_box(person_box, frame_w, frame_h):
