@@ -336,6 +336,9 @@ def _bodycam_face_dominant_bbox(
     pw = max(x2 - x1, 1.0)
     aspect = pw / ph
     bh_ratio = ph / max(float(frame_h), 1.0)
+    # Selfie cam trước — bbox lớn, gần vuông
+    if bh_ratio >= 0.38 and 0.42 <= aspect <= 1.35:
+        return True
     if aspect >= 0.72 and bh_ratio < 0.62:
         return True
     if y1 < frame_h * 0.12 and y2 < frame_h * 0.62 and bh_ratio < 0.55:

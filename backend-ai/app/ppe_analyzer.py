@@ -1179,6 +1179,48 @@ class _PersonPpe:
     person_conf: float
 
 
+def _bbox_containment(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    """Tỉ lệ diện tích bbox nhỏ hơn nằm trong giao — bắt nested YOLO trùng người."""
+    inter = _intersection_area(a, b)
+    if inter <= 0:
+        return 0.0
+    area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
+    area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+    smaller = min(area_a, area_b)
+    return inter / smaller if smaller > 0 else 0.0
+
+
+def _dedupe_person_boxes(
+    persons: list[_PersonPpe],
+    *,
+    iou_threshold: float = 0.35,
+    containment_threshold: float = 0.45,
+) -> list[_PersonPpe]:
+    """Một người — một bbox: loại box nhỏ lồng/trùng box lớn hơn."""
+    if len(persons) <= 1:
+        return persons
+
+    def _area(p: _PersonPpe) -> float:
+        x1, y1, x2, y2 = p.person_box
+        return max(0.0, x2 - x1) * max(0.0, y2 - y1)
+
+    ranked = sorted(persons, key=lambda p: (_area(p), p.person_conf), reverse=True)
+    kept: list[_PersonPpe] = []
+    for candidate in ranked:
+        box = candidate.person_box
+        if any(
+            _iou(box, kept_person.person_box) >= iou_threshold
+            or _bbox_containment(box, kept_person.person_box) >= containment_threshold
+            for kept_person in kept
+        ):
+            continue
+        kept.append(candidate)
+    return kept
+
+
 def _bbox_iou(
     a: tuple[float, float, float, float],
     b: tuple[float, float, float, float],
@@ -1630,13 +1672,15 @@ def _build_patrol_bodycam_result(
 
     detector = _get_person_detector()
     h, w = frame.shape[:2]
-    persons = _filter_persons(
-        frame,
-        camera_id,
-        detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
-        source_pts_sec=source_pts_sec,
-        strict=False,
-        min_conf=_PERSON_CONF_BODYCAM,
+    persons = _dedupe_person_boxes(
+        _filter_persons(
+            frame,
+            camera_id,
+            detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
+            source_pts_sec=source_pts_sec,
+            strict=False,
+            min_conf=_PERSON_CONF_BODYCAM,
+        )
     )
 
     detections: list[PpeDetection] = []
