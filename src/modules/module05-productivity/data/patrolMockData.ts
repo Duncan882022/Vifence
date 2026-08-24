@@ -113,7 +113,7 @@ export const MOCK_PATROL_ZONES: PatrolZone[] = [
     vehiclesCurrent: 8,
     uniquePeople: 58,
     uniqueVehicles: 11,
-    areaSqm: 5200,
+    areaSqm: 98_000,
   },
 ]
 

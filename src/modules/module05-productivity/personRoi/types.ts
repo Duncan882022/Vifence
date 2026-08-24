@@ -10,6 +10,7 @@ export interface PersonRoiDetection {
   label: string
   confidence: number
   bbox: Bbox
+  subject_bbox?: Bbox
   worker_id?: string
   worker_name?: string
 }
@@ -26,6 +27,7 @@ export interface PersonRoiTrack {
   label: string
   workerId?: string
   workerName?: string
+  subjectBbox?: Bbox
   kalman: KalmanBox2D
 }
 
@@ -40,4 +42,5 @@ export interface PersonRoiDisplay {
   locked: boolean
   workerId?: string
   workerName?: string
+  subjectBbox?: Bbox
 }

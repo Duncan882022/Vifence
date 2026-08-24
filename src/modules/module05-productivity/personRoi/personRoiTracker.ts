@@ -112,6 +112,9 @@ function greedyAssign(
 }
 
 function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
+  if (det.subject_bbox && det.subject_bbox.length >= 4) {
+    track.subjectBbox = det.subject_bbox
+  }
   if (isKnownWorker(det.worker_id)) {
     track.workerId = det.worker_id!.trim()
     track.workerName = det.worker_name?.trim() || track.workerName
@@ -249,6 +252,7 @@ export function predictPersonRoiTracks(
       locked: track.state === 'confirmed',
       workerId: track.workerId,
       workerName: track.workerName,
+      subjectBbox: track.subjectBbox,
     })
   }
 

@@ -10,8 +10,9 @@ import { shouldShowOverlayBox } from '@/modules/module03-safety/utils/overlayCov
 import {
   formatPersonOverlayBadge,
   formatPersonOverlayLabel,
+  tightenPersonOverlayBbox,
 } from '@/modules/module03-safety/utils/personOverlayLabel'
-import { resolvePatrolObjectLabel } from '../services/patrolManualIdentity.service'
+import { resolvePatrolObjectLabel, getPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import { usePatrolPersonRoiTracks } from './usePatrolPersonRoiTracks'
 import type { PersonRoiDisplay } from './types'
 
@@ -48,8 +49,9 @@ const PersonRoiBox = memo(function PersonRoiBox({
   }
   if (!shouldShowOverlayBox(track.confidence, track.bbox)) return null
 
+  const tightBbox = tightenPersonOverlayBbox(track.bbox, track.subjectBbox)
   const box = mapBackendBboxToOverlay(
-    track.bbox,
+    tightBbox,
     frameWidth,
     frameHeight,
     video,
@@ -60,11 +62,13 @@ const PersonRoiBox = memo(function PersonRoiBox({
 
   const style = getOverlayBoxStyle('ppe', 'person')
   const identityKey = track.workerId?.trim() || track.personId
+  const manualName = getPatrolManualIdentity(identityKey)?.workerName
   const baseLabel = formatPersonOverlayLabel(track.workerName, {
     workerId: track.workerId,
     workerName: track.workerName,
+    manualDisplayName: manualName,
   })
-  const displayLabel = resolvePatrolObjectLabel(identityKey, baseLabel)
+  const displayLabel = manualName ?? resolvePatrolObjectLabel(identityKey, baseLabel)
   const badge = formatPersonOverlayBadge(displayLabel, track.confidence, '', {
     workerId: track.workerId,
     workerName: displayLabel,

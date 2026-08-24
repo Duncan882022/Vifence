@@ -10,6 +10,8 @@ export interface PersonOverlayIdentity {
   workerName?: string | null
   faceMatchConfidence?: number | null
   faceMatchSource?: string | null
+  /** Module 05 định danh thủ công — ưu tiên trước gallery/sgc. */
+  manualDisplayName?: string | null
 }
 
 const FACE_MATCH_MIN = 0.72
@@ -44,6 +46,8 @@ export function formatPersonOverlayLabel(
   identity?: PersonOverlayIdentity,
 ): string {
   const resolvedIdentity: PersonOverlayIdentity = identity ?? { workerName }
+  const manual = resolvedIdentity.manualDisplayName?.trim()
+  if (manual) return manual
   if (isRecognizedWorker(resolvedIdentity)) {
     return displayUnknown(resolvedIdentity.workerName)
   }

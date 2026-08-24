@@ -7,7 +7,7 @@
  * HQCV §12–16
  */
 import 'leaflet/dist/leaflet.css'
-import { CircleMarker, GeoJSON, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -458,7 +458,7 @@ export interface PatrolGeoHeatmapProps {
   helmetHeadingById?: Record<string, number | null | undefined>
   /** Click Object / detection with objectId → bottom sheet. */
   onDetectionClick?: (dot: DetectionDot) => void
-  /** HC-02 chỉ hiện marker khi đã có GPS thật. */
+  /** HC-02 luôn hiện marker (off = xám); false = ẩn khi chưa GPS. */
   requireLiveGpsForHc02?: boolean
   hasHc02LiveGps?: boolean
   /** Override zoom — từ usePatrolHeatmapViewport */
@@ -487,7 +487,7 @@ export function PatrolGeoHeatmap({
   helmetOnlineById,
   helmetHeadingById,
   onDetectionClick,
-  requireLiveGpsForHc02 = true,
+  requireLiveGpsForHc02 = false,
   hasHc02LiveGps = false,
   mapZoom: mapZoomProp,
   compactControls = false,
@@ -523,7 +523,7 @@ export function PatrolGeoHeatmap({
   }, [liveDetectionDots])
   const mapZoomFallback = usePatrolMapZoom()
   const mapZoom = mapZoomProp ?? mapZoomFallback
-  const clipOverlays = !followLiveGps && (showZonePolygons || showDetections)
+  const clipOverlays = !followLiveGps && showDetections
   const zoomControlPosition = compactControls ? 'topleft' as const : 'bottomright' as const
 
   return (
@@ -611,18 +611,21 @@ export function PatrolGeoHeatmap({
           />
           <ZoomControl position={zoomControlPosition} />
 
-          {/* ── LAYER 1A: Site Boundary ──────────────────────── */}
+          {/* ── LAYER 1A: Site Boundary (pane riêng — không bị SVG clip) ── */}
           {showSiteBoundary && (
-            <Polygon
-              positions={PATROL_SITE_BOUNDARY}
-              pathOptions={{
-                color: '#ef4444',
-                weight: 2.5,
-                dashArray: '10 6',
-                opacity: 0.9,
-                fillOpacity: 0,
-              }}
-            />
+            <Pane name="patrol-site-boundary" style={{ zIndex: 450 }}>
+              <Polygon
+                positions={PATROL_SITE_BOUNDARY}
+                pathOptions={{
+                  color: '#ef4444',
+                  weight: 3,
+                  dashArray: '10 6',
+                  opacity: 0.95,
+                  fillColor: '#ef4444',
+                  fillOpacity: 0.07,
+                }}
+              />
+            </Pane>
           )}
 
           {/* ── LAYER 1B: Zone polygons (viền khu — tách khỏi mật độ) ── */}
@@ -728,11 +731,9 @@ export function PatrolGeoHeatmap({
 
           {/* ── LAYER 4A: Patrol Route (accumulated history) ─── */}
           {showRoute && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
-            if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) {
-              return null
-            }
             const hist = routeHistory[pin.id]
             if (!hist?.length) return null
+            if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) return null
             return (
               <Polyline
                 key={`route-hist-${pin.id}`}
@@ -746,16 +747,14 @@ export function PatrolGeoHeatmap({
 
           {/* ── LAYER 4B: Helmet Markers (chỉ HC-01 + HC-02) ─── */}
           {showCameras && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
-            if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) {
-              return null
-            }
             const livePos = cameraPositions[pin.id] ?? pin.position
             const zoneName = getPatrolHelmetZoneName(pin.id)
             const isActive = Boolean(helmetOnlineById?.[pin.id])
             const heading = helmetHeadingById?.[pin.id]
+            const hc02Muted = pin.id === 'HC-02' && !isActive
             return (
               <>
-                {heading != null && Number.isFinite(heading) && (
+                {heading != null && Number.isFinite(heading) && isActive && (
                   <Polygon
                     key={`cone-${pin.id}`}
                     positions={headingConePositions(livePos[0], livePos[1], heading)}
@@ -773,7 +772,7 @@ export function PatrolGeoHeatmap({
                   position={livePos}
                   icon={createHelmetIcon(pin, isActive)}
                   zIndexOffset={500}
-                  opacity={isActive ? 1 : 0.38}
+                  opacity={hc02Muted ? 0.42 : isActive ? 1 : 0.38}
                 >
                   <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
                     <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>

@@ -226,17 +226,11 @@ export function PatrolDensityHeatmap({
       return registryDots
     }
 
-    // Registry (quanh mũ) ưu tiên — workforce object có thể snap mép ROI.
-    const merged = new Map<string, DetectionDot>()
-    for (const dot of objectDots) {
-      const key = dot.objectId ?? dot.id
-      merged.set(key, dot)
+    // Chỉ registry (quanh mũ GPS) — workforce lat/lon hay snap mép ROI.
+    if (registryDots.length > 0) {
+      return registryDots
     }
-    for (const dot of registryDots) {
-      const key = dot.objectId ?? dot.id
-      merged.set(key, dot)
-    }
-    return [...merged.values()]
+    return objectDots
   }, [hc02Live.dots, liveObjects, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
@@ -259,8 +253,10 @@ export function PatrolDensityHeatmap({
 
   const observedCount = useMemo(() => {
     if (zonePop) return zonePop.observed_count
-    if (hc02Live.personCount > 0) return hc02Live.personCount
-    return filteredDots.length || hc02Live.historicalDotCount
+    const onMap = filteredDots.length
+    if (onMap > 0) return onMap
+    if (hc02Live.historicalDotCount > 0) return hc02Live.historicalDotCount
+    return Math.max(0, hc02Live.personCount)
   }, [zonePop, hc02Live.personCount, hc02Live.historicalDotCount, filteredDots.length])
 
   const identifiedCount = useMemo(() => {

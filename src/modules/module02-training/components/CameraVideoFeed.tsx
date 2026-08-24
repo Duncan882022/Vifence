@@ -115,6 +115,7 @@ export function CameraVideoFeed({
         label: d.label ?? d.behavior,
         confidence: d.confidence,
         bbox: d.bbox,
+        subject_bbox: d.subject_bbox,
         worker_id: d.worker_id,
         worker_name: d.worker_name,
       })),
