@@ -9,7 +9,7 @@ import {
 
 /** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → dùng VMS HLS relay). */
 export const PATROL_HELMET_RTSP_SOURCES: Record<string, string> = {
-  'HC-01': 'rtsp://157.66.100.182:8554/866926048126907',
+  'HC-01': 'rtsp://157.66.100.182:8554/866926048126915',
 }
 
 const MEDIAMTX_HLS_PORT =
@@ -47,7 +47,7 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   return getStreamUrlForCamera(cameraId)
 }
 
-/** RTSP path suffix — khớp camera Vision API (vd 866926048126907). */
+/** RTSP path suffix — khớp camera Vision API (vd 866926048126915). */
 export function getPatrolHelmetRtspPath(cameraId: string): string | undefined {
   const rtsp = PATROL_HELMET_RTSP_SOURCES[cameraId]
   if (!rtsp) return undefined
