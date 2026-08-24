@@ -680,6 +680,15 @@ def _analyze_ppe_frame(frame: np.ndarray, camera_id: str) -> dict:
     )
 
 
+def _analyze_patrol_person_frame(frame: np.ndarray, camera_id: str) -> dict:
+    from .ppe_analyzer import analyze_patrol_person_frame
+
+    def _process(small: np.ndarray, cam_id: str, **kwargs: object) -> tuple[dict, list]:
+        return analyze_patrol_person_frame(small, cam_id), []
+
+    return analyze_engine_frame(frame, camera_id, _process)
+
+
 def _analyze_pccc_frame(frame: np.ndarray, camera_id: str) -> dict:
     return analyze_engine_frame(frame, camera_id, pccc_engine.process_frame)
 
@@ -844,6 +853,16 @@ async def analyze_frame(payload: MobileFramePayload):
         result = await loop.run_in_executor(
             _analyze_executor,
             _analyze_ppe_frame,
+            frame,
+            camera_id,
+        )
+        if isinstance(result, dict):
+            update_patrol_mobile_metrics(camera_id, result)
+        return result
+    if payload.mode == "person":
+        result = await loop.run_in_executor(
+            _analyze_executor,
+            _analyze_patrol_person_frame,
             frame,
             camera_id,
         )

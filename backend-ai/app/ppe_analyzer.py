@@ -36,6 +36,7 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
+_PERSON_CONF_BODYCAM = 0.35
 _PERSON_CONF_STRICT = 0.48
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
@@ -1314,12 +1315,13 @@ def _plausible_patrol_wide(
     frame: np.ndarray | None = None,
     machinery: list[tuple[float, float, float, float]] | None = None,
     strict: bool = False,
+    min_bh_frac: float = 0.07,
 ) -> bool:
     """Góc rộng / đám đông — người nhỏ trong khung (CCTV-style)."""
     x1, y1, x2, y2 = box
     bw = max(x2 - x1, 1.0)
     bh = max(y2 - y1, 1.0)
-    if bh < frame_h * 0.07 or bh > frame_h * 0.62:
+    if bh < frame_h * min_bh_frac or bh > frame_h * 0.62:
         return False
     if bw < frame_w * 0.04 or bw > frame_w * 0.42:
         return False
@@ -1495,6 +1497,7 @@ def _plausible_person_box(
         )
         wide_ok = _plausible_patrol_wide(
             box, frame_w, frame_h, frame=frame, machinery=None, strict=False,
+            min_bh_frac=0.05,
         )
         if not (close_ok or wide_ok):
             return False
@@ -1524,7 +1527,7 @@ def _filter_persons(
     bodycam = _is_helmet_bodycam(camera_id)
     identity_strict = (strict or camera_id in ("A-04", "HC-01")) and not bodycam
     if bodycam:
-        conf_floor = min_conf if min_conf is not None else _PERSON_CONF
+        conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
     else:
         conf_floor = min_conf if min_conf is not None else (_PERSON_CONF_STRICT if identity_strict else _PERSON_CONF)
     machinery = _machinery_bboxes(frame, camera_id, source_pts_sec=source_pts_sec) if identity_strict else []
@@ -1583,6 +1586,76 @@ def _build_person_only_result(
             camera_id=camera_id,
             person_index=person_index,
             source_pts_sec=source_pts_sec,
+        )
+        detections.append(person_det)
+
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": len(persons),
+            "ppe_violations": 0,
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
+def analyze_patrol_person_frame(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    source_pts_sec: float | None = None,
+) -> dict:
+    """HC-* live overlay — chỉ YOLO person (bỏ PPE models, nhanh hơn ~3–5×)."""
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
+    if not _is_helmet_bodycam(camera_id):
+        return _build_person_only_result(frame, camera_id, source_pts_sec=source_pts_sec)
+
+    detector = _get_person_detector()
+    h, w = frame.shape[:2]
+    persons = _filter_persons(
+        frame,
+        camera_id,
+        detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
+        source_pts_sec=source_pts_sec,
+        strict=False,
+        min_conf=_PERSON_CONF_BODYCAM,
+    )
+
+    detections: list[PpeDetection] = []
+    assigned_patrol_tracks: set[str] = set()
+    reset_hc_patrol_face_assignments(camera_id)
+
+    for person_index, person in enumerate(persons):
+        pb = person.person_box
+        display_pb = _visible_person_display_bbox(pb, w, h)
+        person_det = PpeDetection(
+            behavior="person",
+            label=PPE_LABELS["person"],
+            scenario_id=PPE_SCENARIO["person"],
+            confidence=round(person.person_conf, 3),
+            bbox=[float(v) for v in display_pb],
+            subject_bbox=[float(v) for v in pb],
+        )
+        enrich_person_bbox(
+            frame,
+            person_det,
+            camera_id=camera_id,
+            person_index=person_index,
+            source_pts_sec=source_pts_sec,
+        )
+        _assign_patrol_person_identity(
+            person_det,
+            pb,
+            frame=frame,
+            camera_id=camera_id,
+            frame_w=w,
+            frame_h=h,
+            blocked=assigned_patrol_tracks,
         )
         detections.append(person_det)
 

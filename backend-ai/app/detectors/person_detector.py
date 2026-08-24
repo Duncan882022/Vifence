@@ -35,11 +35,12 @@ class PersonDetector:
             self.ready = False
             logger.error("[person] Không load được YOLOv8n: %s", exc)
 
-    def predict(self, frame: np.ndarray) -> list[Detection]:
+    def predict(self, frame: np.ndarray, *, conf: float | None = None) -> list[Detection]:
         if not self.ready or self._model is None:
             return []
 
-        results = self._model.predict(frame, conf=self.conf_threshold, verbose=False)
+        threshold = self.conf_threshold if conf is None else conf
+        results = self._model.predict(frame, conf=threshold, verbose=False)
         if not results or results[0].boxes is None:
             return []
 

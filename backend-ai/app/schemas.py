@@ -12,7 +12,7 @@ class MobileFramePayload(BaseModel):
     type: str = "frame"
     camera_id: str = "mobile"
     image: str
-    mode: Optional[str] = None  # "road" → phân tích lòng đường (Module 04)
+    mode: Optional[str] = None  # "road" | "ppe" | "person" (HC-* person-only, nhanh)
     gps_lat: Optional[float] = None
     gps_lng: Optional[float] = None
     # Compass heading degrees 0–360 (optional IMU / device)
