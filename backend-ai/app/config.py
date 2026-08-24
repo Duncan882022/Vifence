@@ -131,6 +131,7 @@ class Settings(BaseSettings):
     patrol_gallery_min_margin: float = 0.12
     # Tab Đối tượng — bám track ≥ N giây không đủ mặt mới log PERS-001.
     patrol_object_confirm_seconds: float = 5.0
+    patrol_face_object_confirm_seconds: float = 2.0
     # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí.
     patrol_person_confirm_seconds: float = 0.15
 

@@ -93,6 +93,10 @@ export function patrolPersonMeetsUpperBodyGate(
   const bhRatio = ph / frameH
   if (y1Ratio > 0.62 && bhRatio < 0.18) return false
 
+  const headCy = y1 + ph * headFrac * 0.5
+  if (headCy > frameH * 0.50) return false
+  if (y1 > frameH * 0.40) return false
+
   return true
 }
 

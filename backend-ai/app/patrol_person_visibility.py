@@ -82,7 +82,13 @@ def upper_body_third_with_head_visible(
     if head_vis < min_visible or upper_vis < min_visible:
         return False
 
-    # Loại bbox thân dưới/chân — “đầu” giả ở mép trên bbox (YOLO chỉ bắt chân).
+    head_cy = y1 + ph * head_frac * 0.5
+    if head_cy > frame_h * 0.50:
+        return False
+    if y1 > frame_h * 0.40:
+        return False
+
+    # Loại bbox thân dưới/chân
     visible_upper_h = upper_vis * ph * upper_frac
     visible_head_h = head_vis * ph * head_frac
     if visible_upper_h < frame_h * min_upper_px_frac:

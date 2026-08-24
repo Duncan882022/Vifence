@@ -44,6 +44,11 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         bbox = (fw * 0.42, -fh * 0.15, fw * 0.58, fh * 0.45)
         self.assertFalse(upper_body_third_with_head_visible(bbox, fw, fh))
 
+    def test_mid_body_without_head_fails(self):
+        fw, fh = 1280, 720
+        torso = (fw * 0.35, fh * 0.42, fw * 0.65, fh * 0.72)
+        self.assertFalse(upper_body_third_with_head_visible(torso, fw, fh))
+
     def test_face_dominant_bypasses_upper_body(self):
         fw, fh = 1280, 720
         close = (fw * 0.20, fh * 0.10, fw * 0.80, fh * 0.70)

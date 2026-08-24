@@ -307,6 +307,7 @@ class PpeEngine:
                 ]
 
             object_confirm = settings.patrol_object_confirm_seconds
+            face_object_confirm = settings.patrol_face_object_confirm_seconds
 
             for person in frame_persons:
                 from .ppe_analyzer import raw_person_bbox
@@ -427,9 +428,7 @@ class PpeEngine:
                         if not face_eligible and area_ratio > 0.45:
                             continue
                     elif not is_gallery and not is_sgc:
-                        if not face_eligible and not upper_body_third_with_head_visible(
-                            box, frame_w, frame_h,
-                        ):
+                        if not face_eligible:
                             continue
                     if resolve_patrol_person_snapshot_bbox(
                         frame, box, frame_w, frame_h, camera_id=camera_id,
@@ -439,7 +438,7 @@ class PpeEngine:
                 should_log = False
                 if is_gallery or is_sgc:
                     should_log = True
-                elif track_duration >= object_confirm:
+                elif face_eligible and track_duration >= face_object_confirm:
                     should_log = True
 
                 if not should_log:
@@ -479,7 +478,14 @@ class PpeEngine:
                     confirmed = gate.register(True)
                     if existing is None and not confirmed:
                         continue
-                elif existing is None and track_duration < object_confirm:
+                elif existing is None and not face_eligible and track_duration < object_confirm:
+                    continue
+                elif (
+                    existing is None
+                    and face_eligible
+                    and not (is_gallery or is_sgc)
+                    and track_duration < face_object_confirm
+                ):
                     continue
 
                 event = self.store.upsert_patrol_person(
