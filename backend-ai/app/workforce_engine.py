@@ -224,6 +224,7 @@ class WorkforceObject:
     zone_id: str = DEFAULT_ZONE
     detector_confidence: float = 0.0
     last_heat_at: float = 0.0
+    last_bbox: list[float] | None = None
 
     def live_status(self, now: float | None = None) -> LiveStatus:
         age = (now or _now()) - self.last_seen
@@ -457,6 +458,10 @@ class WorkforceEngine:
                 if mode == "FACE_CLOSEUP":
                     nearest = self._nearest_active(helmet_id, now)
                     object_id = nearest.object_id if nearest else self._new_object_id()
+                elif bbox and len(bbox) >= 4:
+                    object_id = self._match_active_object_by_bbox(helmet_id, bbox, now)
+                    if object_id is None:
+                        object_id = self._new_object_id()
                 else:
                     object_id = self._new_object_id()
 
@@ -484,6 +489,8 @@ class WorkforceEngine:
 
         conf = float(row.get("confidence") or row.get("score") or 0.6)
         obj.detector_confidence = conf
+        if bbox and len(bbox) >= 4:
+            obj.last_bbox = [float(v) for v in bbox[:4]]
 
         worker_id = row.get("worker_id")
         worker_name = row.get("worker_name")
@@ -524,6 +531,49 @@ class WorkforceEngine:
 
     def _new_object_id(self) -> str:
         return f"OBJ-{time.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+
+    def _match_active_object_by_bbox(
+        self,
+        helmet_id: str,
+        bbox: list[float] | tuple[float, ...],
+        now: float,
+        *,
+        iou_threshold: float = 0.22,
+    ) -> str | None:
+        from .track_matching import bbox_iou
+
+        best_oid: str | None = None
+        best_iou = iou_threshold
+        for obj in self.objects.values():
+            if obj.helmet_id != helmet_id or obj.live_status(now) != "ACTIVE":
+                continue
+            ob = obj.last_bbox
+            if not ob or len(ob) < 4:
+                continue
+            iou = bbox_iou(bbox, ob)
+            if iou > best_iou:
+                best_iou = iou
+                best_oid = obj.object_id
+        return best_oid
+
+    def ensure_patrol_track_object(
+        self,
+        helmet_id: str,
+        track_id: str | None,
+        row: dict[str, Any],
+        *,
+        frame_w: float = 1280.0,
+        frame_h: float = 720.0,
+        zone_id: str | None = None,
+    ) -> str | None:
+        """Gán OBJ-* ổn định cho track trước khi ghi PERS-001 — tránh lặp Đối tượng."""
+        now = _now()
+        pose = self.helmets.get(helmet_id) or HelmetPose(helmet_id=helmet_id, online=True)
+        zid = zone_id or pose.zone_id or DEFAULT_ZONE
+        bbox = row.get("bbox") or row.get("subject_bbox")
+        mode = row.get("observation_mode") or classify_observation_mode(bbox, frame_w, frame_h)
+        payload = {**row, "observation_mode": mode, "bbox": bbox, "track_id": track_id}
+        return self._upsert_object(helmet_id, payload, pose, frame_w, frame_h, zid, now, 0.5)
 
     def _nearest_active(self, helmet_id: str, now: float) -> WorkforceObject | None:
         cands = [o for o in self.objects.values() if o.helmet_id == helmet_id and o.live_status(now) == "ACTIVE"]

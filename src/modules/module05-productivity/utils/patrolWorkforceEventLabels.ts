@@ -272,7 +272,11 @@ export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
 
   const stage = resolvePatrolPersonStage(event)
-  if (stage === 'object') return objectId.toUpperCase() || trackWorkerId || `EV:${event.id}`
+  if (stage === 'object') {
+    if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
+    if (isPatrolObjectId(trackWorkerId)) return trackWorkerId.toUpperCase()
+    return objectId.toUpperCase() || trackWorkerId || `EV:${event.id}`
+  }
 
   return `EV:${event.id}`
 }

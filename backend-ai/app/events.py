@@ -599,6 +599,8 @@ class EventStore:
         *,
         camera_id: str,
         track_id: Optional[str] = None,
+        frame_w: int = 0,
+        frame_h: int = 0,
     ) -> tuple[ViolationEvent, str]:
         event_date = _event_date()
         event = ViolationEvent.from_person_detection(
@@ -635,6 +637,9 @@ class EventStore:
             detection.worker_id,
             event.object_id,
             track_id,
+            person_bbox=raw_pb,
+            frame_w=frame_w,
+            frame_h=frame_h,
         )
         key = build_dedup_key(camera_id, event.scenario_id, stable_id)
         return event, key
@@ -673,14 +678,16 @@ class EventStore:
         allow_create: bool = True,
     ) -> Optional[ViolationEvent]:
         """Tạo hoặc cập nhật PERS-001 — 1 người = 1 sự kiện, gặp lại cập nhật GPS/dot."""
+        raw = frame.copy()
+        h, w = raw.shape[:2]
         incoming, key = self._person_incoming_event(
             detection,
             camera_id=camera_id,
             track_id=track_id,
+            frame_w=int(w),
+            frame_h=int(h),
         )
         existing = self._find_by_dedup_key(key)
-        raw = frame.copy()
-        h, w = raw.shape[:2]
         from .ppe_analyzer import snapshot_annotation_detection
 
         annot_det = snapshot_annotation_detection(

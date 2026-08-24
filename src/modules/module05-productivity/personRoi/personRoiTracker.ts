@@ -151,7 +151,10 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   }
   if (isKnownWorker(det.worker_id)) {
     track.workerId = det.worker_id!.trim()
-    track.workerName = det.worker_name?.trim() || track.workerName
+    const name = det.worker_name?.trim()
+    if (name && name.toLowerCase() !== 'unknown') {
+      track.workerName = name
+    }
   }
   track.label = track.workerName?.trim()
     || (isKnownWorker(track.workerId) ? track.workerId! : track.label)

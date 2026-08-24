@@ -23,8 +23,12 @@ def resolve_patrol_dedup_stable_id(
     worker_id: str | None,
     object_id: str | None,
     track_id: str | None,
+    *,
+    person_bbox: list[float] | tuple[float, ...] | None = None,
+    frame_w: int = 0,
+    frame_h: int = 0,
 ) -> str:
-    """Stable id cho dedup_key — gallery/sgc > OBJ > track."""
+    """Stable id cho dedup_key — gallery/sgc > OBJ > slot > track."""
     wid = (worker_id or "").strip()
     if wid and wid not in ("unknown", ""):
         return wid
@@ -32,6 +36,14 @@ def resolve_patrol_dedup_stable_id(
     if oid.upper().startswith("OBJ-"):
         return oid
     tid = (track_id or "").strip()
+    if tid.endswith(":person"):
+        slot = tid.split(":")[0]
+        if slot.startswith("p"):
+            return f"slot:{slot}"
+    if person_bbox and len(person_bbox) >= 4 and frame_w > 0 and frame_h > 0:
+        from .track_matching import _person_slot
+
+        return f"slot:{_person_slot(list(person_bbox), frame_w, frame_h)}"
     return tid or "person"
 
 

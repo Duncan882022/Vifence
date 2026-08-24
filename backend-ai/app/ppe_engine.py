@@ -480,24 +480,46 @@ class PpeEngine:
                     },
                 )
 
-                oid_for_stable: str | None = None
-                if not worker_id:
-                    try:
-                        from .workforce_engine import workforce_engine
+                from .workforce_engine import workforce_engine
 
-                        tk = f"{camera_id}:{track_id}"
-                        oid_for_stable = workforce_engine.track_to_object.get(tk)
-                    except Exception:
-                        oid_for_stable = None
+                oid_for_stable = workforce_engine.ensure_patrol_track_object(
+                    camera_id,
+                    track_id,
+                    {
+                        "behavior": "person",
+                        "bbox": list(pb),
+                        "track_id": track_id,
+                        "worker_id": worker_id or person.worker_id,
+                        "worker_name": worker_name or person.worker_name,
+                        "confidence": person.confidence,
+                        "face_confidence": person.face_match_confidence,
+                    },
+                    frame_w=frame_w,
+                    frame_h=frame_h,
+                )
 
-                stable_id = resolve_patrol_dedup_stable_id(worker_id, oid_for_stable, track_id)
+                stable_id = resolve_patrol_dedup_stable_id(
+                    worker_id,
+                    oid_for_stable,
+                    track_id,
+                    person_bbox=list(pb),
+                    frame_w=frame_w,
+                    frame_h=frame_h,
+                )
                 dedup_key = build_dedup_key(camera_id, "PERS-001", stable_id)
                 existing = self.store.find_by_dedup_key(dedup_key)
                 if existing is None and is_sgc and oid_for_stable:
                     obj_key = build_dedup_key(
                         camera_id,
                         "PERS-001",
-                        resolve_patrol_dedup_stable_id("", oid_for_stable, track_id),
+                        resolve_patrol_dedup_stable_id(
+                            "",
+                            oid_for_stable,
+                            track_id,
+                            person_bbox=list(pb),
+                            frame_w=frame_w,
+                            frame_h=frame_h,
+                        ),
                     )
                     existing = self.store.find_by_dedup_key(obj_key)
 

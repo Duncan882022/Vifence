@@ -13,7 +13,8 @@ import {
   formatPersonOverlayLabel,
   tightenPersonOverlayBbox,
 } from '@/modules/module03-safety/utils/personOverlayLabel'
-import { resolvePatrolObjectLabel, getPatrolManualIdentity } from '../services/patrolManualIdentity.service'
+import { resolvePatrolObjectLabel, getPatrolManualIdentity, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
+import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { usePatrolPersonRoiTracks } from './usePatrolPersonRoiTracks'
 import type { PersonRoiDisplay } from './types'
 
@@ -66,13 +67,22 @@ const PersonRoiBox = memo(function PersonRoiBox({
 
   const style = getOverlayBoxStyle('ppe', 'person')
   const identityKey = track.workerId?.trim() || track.personId
-  const manualName = getPatrolManualIdentity(identityKey)?.workerName
-  const baseLabel = formatPersonOverlayLabel(track.workerName, {
-    workerId: track.workerId,
-    workerName: track.workerName,
-    manualDisplayName: manualName,
-  })
-  const displayLabel = manualName ?? resolvePatrolObjectLabel(identityKey, baseLabel)
+  const manual = getPatrolManualIdentity(identityKey)
+  const wid = track.workerId?.trim() ?? ''
+  const profileName = isPatrolGalleryWorkerId(wid)
+    ? (
+        track.workerName?.trim() && track.workerName.trim().toLowerCase() !== 'unknown'
+          ? track.workerName.trim()
+          : findPatrolIdentityByWorkerId(wid)?.workerName
+      )
+    : undefined
+  const displayLabel = manual?.workerName
+    ?? profileName
+    ?? resolvePatrolObjectLabel(identityKey, formatPersonOverlayLabel(track.workerName, {
+      workerId: track.workerId,
+      workerName: profileName ?? track.workerName,
+      manualDisplayName: manual?.workerName,
+    }))
   const badge = formatPersonOverlayBadge(displayLabel, track.confidence, '', {
     workerId: track.workerId,
     workerName: displayLabel,

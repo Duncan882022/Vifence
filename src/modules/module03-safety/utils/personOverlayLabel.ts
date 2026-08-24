@@ -18,10 +18,21 @@ function isUnknownWorkerName(name?: string | null): boolean {
 }
 
 /** Chỉ gắn tên công nhân khi khớp mặt gallery — không demo roster / cache khi quay lưng. */
+export function isPatrolGalleryWorkerIdForOverlay(id?: string | null): boolean {
+  if (!id) return false
+  const t = id.trim()
+  if (!t || t === 'unknown') return false
+  if (/^sgc-/i.test(t) || /^obj-/i.test(t)) return false
+  return /^(p-|w-|c-|u-|man-)/i.test(t)
+}
+
 export function isRecognizedWorker(identity: PersonOverlayIdentity): boolean {
   const id = identity.workerId?.trim()
   if (!id || id === 'unknown') return false
   if (/^sgc-/i.test(id)) return false
+  if (isPatrolGalleryWorkerIdForOverlay(id)) {
+    return !isUnknownWorkerName(identity.workerName)
+  }
   if (isUnknownWorkerName(identity.workerName)) return false
   const source = identity.faceMatchSource?.trim()
   if (source && source !== 'face') return false
