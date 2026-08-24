@@ -90,7 +90,7 @@ export function summarizePatrolGlobalWorkers(
     ? getHeatmapInFrameMasterIds().length
     : getHeatmapSessionMasterIds().length
   return {
-    total: countPatrolGlobalWorkers(events),
+    total: countPatrolGlobalWorkers(events, opts),
     person,
     identity,
     fromPins,

@@ -86,21 +86,21 @@ function PatrolKPIs({
   void pinTick
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
   const workerSummary = summarizePatrolGlobalWorkers(events, { liveOnly: anyCameraOnline })
-  const observedCount = anyCameraOnline ? workerSummary.total : 0
+  const observedCount = workerSummary.total
 
   // Sự kiện = unique entities tab Người + Định danh (feed có snapshot)
   const alertCount = countPatrolAlertEntities(events)
 
   const zonePop = Object.values(workforce.zonePopulation)[0]
-  const peopleDetail = !anyCameraOnline
-    ? 'Chưa có luồng live'
-    : observedCount > 0
-      ? `${observedCount} trong ca · ${workerSummary.person} Người · ${workerSummary.identity} Định danh`
-      : zonePop?.observed_count
+  const peopleDetail = observedCount > 0
+    ? `${observedCount} ${anyCameraOnline ? 'đang quan sát' : 'trong ca'} · ${workerSummary.person} Người · ${workerSummary.identity} Định danh`
+    : anyCameraOnline
+      ? zonePop?.observed_count
         ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
         : live.backendReachable || live.streamOnline
           ? 'Đang chờ phát hiện'
           : 'Chưa có luồng live'
+      : 'Chưa có dữ liệu phiên'
 
   const kpis = [
     {

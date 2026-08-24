@@ -328,9 +328,9 @@ export function PatrolDensityHeatmap({
 
   const observedCount = useMemo(() => {
     void pinTick
-    if (!anyCameraOnline) return 0
-    const global = countPatrolGlobalWorkers(patrolEvents, { liveOnly: true })
+    const global = countPatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline })
     if (global > 0) return global
+    if (!anyCameraOnline) return 0
     if (zonePop?.observed_count) return zonePop.observed_count
     return hc02Live.historicalDotCount
   }, [anyCameraOnline, patrolEvents, pinTick, zonePop, hc02Live.historicalDotCount])
