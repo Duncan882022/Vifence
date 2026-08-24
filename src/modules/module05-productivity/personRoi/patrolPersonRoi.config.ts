@@ -4,8 +4,8 @@
  * HC-02 analyze qua HTTP ~220ms/frame → Kalman coast dài hơn để ROI mượt.
  */
 export const PATROL_PERSON_ROI_CONFIG = {
-  /** Conf tối thiểu tạo track mới */
-  birthMinConfidence: 0.38,
+  /** Conf tối thiểu tạo track + vẽ ROI — khớp HC02_PERSON_MIN_CONF (0.35) */
+  birthMinConfidence: 0.35,
   /** Conf cao — ưu tiên gán trước (ByteTrack high-conf pool) */
   highConfidenceMin: 0.46,
   /** Số hit liên tiếp để confirmed */

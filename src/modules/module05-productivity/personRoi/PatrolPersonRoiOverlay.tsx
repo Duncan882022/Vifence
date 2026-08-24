@@ -6,7 +6,8 @@ import { memo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { getOverlayBoxStyle } from '@/modules/module03-safety/utils/roiBoxRole'
-import { shouldShowOverlayBox } from '@/modules/module03-safety/utils/overlayCoverage'
+import { passesOverlayConfidence } from '@/modules/module03-safety/utils/overlayCoverage'
+import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
 import {
   formatPersonOverlayBadge,
   formatPersonOverlayLabel,
@@ -47,7 +48,10 @@ const PersonRoiBox = memo(function PersonRoiBox({
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
-  if (!shouldShowOverlayBox(track.confidence, track.bbox)) return null
+  // HC-* person YOLO 0.35–0.65 — không dùng OVERLAY_MIN_CONFIDENCE (0.70) của PPE/vi phạm.
+  if (!passesOverlayConfidence(track.confidence, PATROL_PERSON_ROI_CONFIG.birthMinConfidence)) {
+    return null
+  }
 
   const tightBbox = tightenPersonOverlayBbox(track.bbox, track.subjectBbox)
   const box = mapBackendBboxToOverlay(
