@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Info, Loader2, Play, User } from 'lucide-react'
+import { Clock, Info, Loader2, Play } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
-import type { EventType, PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolMockData'
 import {
-  PATROL_TYPE_META,
   getPatrolEventPlace,
   getPatrolEventStatusDisplay,
   shouldShowPatrolStatusBadge,
 } from '../utils/patrolEventsUi'
 import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
 import {
+  PATROL_EVENTS_TAB_META,
   countUniquePatrolTabEntities,
   dedupePatrolEventsByMasterEntity,
+  resolvePatrolEventDisplayMeta,
   resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
@@ -29,11 +30,11 @@ interface PatrolEventsPanelProps {
 
 type PatrolFilterTab = 'all' | 'object' | 'person' | 'identity'
 
-const FILTER_TABS: { key: PatrolFilterTab; label: string }[] = [
-  { key: 'all', label: 'Tất cả' },
-  { key: 'object', label: 'Đối tượng' },
-  { key: 'person', label: 'Người' },
-  { key: 'identity', label: 'Định danh' },
+const FILTER_TABS: { key: PatrolFilterTab; label: string; icon: LucideIcon }[] = [
+  { key: 'all', ...PATROL_EVENTS_TAB_META.all },
+  { key: 'object', ...PATROL_EVENTS_TAB_META.object },
+  { key: 'person', ...PATROL_EVENTS_TAB_META.person },
+  { key: 'identity', ...PATROL_EVENTS_TAB_META.identity },
 ]
 
 function isPersonEvent(event: PatrolEvent): boolean {
@@ -63,8 +64,8 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
 const INITIAL_COUNT = 6
 const BATCH_SIZE = 4
 
-function PatrolTypeBadge({ type, showLabel = true }: { type: EventType; showLabel?: boolean }) {
-  const meta = PATROL_TYPE_META[type]
+function PatrolStageBadge({ event }: { event: PatrolEvent }) {
+  const meta = resolvePatrolEventDisplayMeta(event)
   const Icon = meta.icon
 
   return (
@@ -74,7 +75,7 @@ function PatrolTypeBadge({ type, showLabel = true }: { type: EventType; showLabe
         meta.badge,
       )}>
         <Icon className={cn('w-2.5 h-2.5 shrink-0', meta.color)} aria-hidden />
-        {showLabel && meta.label}
+        {meta.label}
       </span>
     </TagTooltip>
   )
@@ -169,7 +170,8 @@ function PatrolEventCard({
   onDetailClick?: (event: PatrolEvent) => void
   onPlayback?: (event: PatrolEvent) => void
 }) {
-  const typeMeta = PATROL_TYPE_META[event.type]
+  const displayMeta = resolvePatrolEventDisplayMeta(event)
+  const SubjectIcon = displayMeta.icon
   const statusDisplay = getPatrolEventStatusDisplay(event.status)
   const eventDateTime = formatEventDateTime(event.lockedAt)
   const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
@@ -184,7 +186,7 @@ function PatrolEventCard({
         selected
           ? 'border-primary/50 ring-1 ring-primary/25 bg-[#0c1019]'
           : 'border-[#1e2433]',
-        typeMeta.borderAccent,
+        displayMeta.borderAccent,
       )}
       onClick={() => onSelect?.(event)}
       onKeyDown={e => e.key === 'Enter' && onSelect?.(event)}
@@ -199,7 +201,7 @@ function PatrolEventCard({
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex flex-wrap items-center gap-1 min-w-0">
-              <PatrolTypeBadge type={event.type} />
+              <PatrolStageBadge event={event} />
               {shouldShowPatrolStatusBadge(event.status) && (
                 <StatusTag
                   label={statusDisplay.label}
@@ -218,7 +220,7 @@ function PatrolEventCard({
 
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <User className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
+              <SubjectIcon className={cn('w-2.5 h-2.5 shrink-0', displayMeta.color)} aria-hidden />
               <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
                 {event.objectLabel}
               </p>
@@ -296,16 +298,18 @@ export function PatrolEventsPanel({
         {FILTER_TABS.map(t => {
           const count = tabCounts[t.key]
           const active = filterTab === t.key
+          const TabIcon = t.icon
           return (
             <button
               key={t.key}
               type="button"
               onClick={() => setFilterTab(t.key)}
               className={cn(
-                'px-2.5 sm:px-3 py-2 text-[9px] sm:text-[10px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px snap-start shrink-0',
+                'inline-flex items-center gap-1 px-2.5 sm:px-3 py-2 text-[9px] sm:text-[10px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px snap-start shrink-0',
                 active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
             >
+              <TabIcon className="w-3 h-3 shrink-0 opacity-80" aria-hidden />
               {t.label}
               <span className={cn(
                 'ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold tabular-nums',

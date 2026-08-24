@@ -13,6 +13,7 @@ import {
   getPatrolEventPlace,
   getPatrolEventStatusDisplay,
 } from '../utils/patrolEventsUi'
+import { resolvePatrolEventDisplayMeta } from '../utils/patrolWorkforceEventLabels'
 
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
@@ -51,7 +52,9 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
   if (!event) return null
   void identityTick
 
-  const meta = PATROL_TYPE_META[event.type]
+  const meta = event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
+    ? resolvePatrolEventDisplayMeta(event)
+    : PATROL_TYPE_META[event.type]
   const TypeIcon = meta.icon
   const statusDisplay = getPatrolEventStatusDisplay(event.status)
   const gpsOk = hasValidGps(event.gps)

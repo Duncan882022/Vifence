@@ -2,6 +2,8 @@
  * Module 05 — nhãn sự kiện nhân lực theo vòng đời:
  *   Đối tượng (chưa đủ định danh) → Người (mã tạm ổn định, re-id) → Định danh (có Tên + Đơn vị)
  */
+import type { LucideIcon } from 'lucide-react'
+import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { ObjectState } from '../types/workforceHeatmap'
 import { rememberPatrolSgcObjectLink } from '../services/patrolSgcObjectLink.service'
@@ -14,6 +16,75 @@ import {
 
 /** 3 giai đoạn nhận diện người — dùng cho tab panel sự kiện và KPI. */
 export type PatrolPersonStage = 'object' | 'person' | 'profile'
+
+export const PATROL_PERSON_STAGE_META: Record<PatrolPersonStage, {
+  label: string
+  icon: LucideIcon
+  color: string
+  badge: string
+  borderAccent: string
+  tooltip: string
+}> = {
+  object: {
+    label: 'Đối tượng',
+    icon: UserRound,
+    color: 'text-slate-400',
+    badge: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+    borderAccent: 'border-l-slate-400',
+    tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / chưa có mặt',
+  },
+  person: {
+    label: 'Người',
+    icon: Users,
+    color: 'text-sky-400',
+    badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
+    borderAccent: 'border-l-sky-400',
+    tooltip: 'Mã sgc ổn định — chưa gán profile',
+  },
+  profile: {
+    label: 'Định danh',
+    icon: UserCheck,
+    color: 'text-violet-400',
+    badge: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
+    borderAccent: 'border-l-violet-400',
+    tooltip: 'Đã xác minh danh tính (gallery / gán tên)',
+  },
+}
+
+export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'identity', {
+  label: string
+  icon: LucideIcon
+}> = {
+  all: { label: 'Tất cả', icon: LayoutGrid },
+  object: { label: 'Đối tượng', icon: PATROL_PERSON_STAGE_META.object.icon },
+  person: { label: 'Người', icon: PATROL_PERSON_STAGE_META.person.icon },
+  identity: { label: 'Định danh', icon: PATROL_PERSON_STAGE_META.profile.icon },
+}
+
+/** Icon/badge card sự kiện — theo giai đoạn tab, không dùng chung「Nhân lực」. */
+export function resolvePatrolEventDisplayMeta(event: PatrolEvent): {
+  label: string
+  icon: LucideIcon
+  color: string
+  badge: string
+  borderAccent: string
+  tooltip: string
+} {
+  if (event.type === 'IDENTITY_VERIFIED') {
+    return PATROL_PERSON_STAGE_META.profile
+  }
+  if (event.type === 'PERSON_DETECTED') {
+    return PATROL_PERSON_STAGE_META[resolvePatrolPersonStage(event)]
+  }
+  return {
+    label: event.type,
+    icon: Users,
+    color: 'text-sky-400',
+    badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
+    borderAccent: 'border-l-sky-400',
+    tooltip: event.type,
+  }
+}
 
 export function isPatrolSgcWorkerId(id?: string | null): boolean {
   return Boolean(id && /^sgc-/i.test(id.trim()))

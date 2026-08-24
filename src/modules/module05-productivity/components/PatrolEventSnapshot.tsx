@@ -80,16 +80,6 @@ export function PatrolEventSnapshot({
     return (
       <div className={frameClass}>
         {content}
-        {isDetail && (
-          <a
-            href={event.snapshotUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1.5 inline-flex text-[9px] text-sky-400/90 hover:text-sky-300 underline-offset-2 hover:underline px-1"
-          >
-            Xem ảnh gốc
-          </a>
-        )}
       </div>
     )
   }
