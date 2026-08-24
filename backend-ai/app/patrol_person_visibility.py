@@ -48,7 +48,7 @@ def legs_only_person_box(
 
     if head_cy > frame_h * 0.54:
         return True
-    if cy > frame_h * 0.66:
+    if cy > frame_h * 0.72:
         return True
     if y2_ratio > 0.86 and y1_ratio > 0.46 and aspect < 2.6:
         return True
@@ -83,9 +83,9 @@ def upper_body_third_with_head_visible(
         return False
 
     head_cy = y1 + ph * head_frac * 0.5
-    if head_cy > frame_h * 0.50:
+    if head_cy > frame_h * 0.58:
         return False
-    if y1 > frame_h * 0.40:
+    if y1 > frame_h * 0.52:
         return False
 
     # Loại bbox thân dưới/chân
@@ -118,7 +118,33 @@ def plausible_person_silhouette(
         return False
     if pw < max(12.0, frame_w * 0.035):
         return False
-    if ph < max(16.0, frame_h * 0.06):
+    if ph < max(14.0, frame_h * 0.04):
+        return False
+    return True
+
+
+def wide_crowd_rider_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Người nhỏ/xa trên đường (quay lưng, xe máy) — không cần tín hiệu da."""
+    if legs_only_person_box(person_box, frame_w, frame_h):
+        return False
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    bw_ratio = pw / max(float(frame_w), 1.0)
+    aspect = ph / pw
+    if bh_ratio < 0.035 or bh_ratio > 0.58:
+        return False
+    if bw_ratio < 0.022 or bw_ratio > 0.40:
+        return False
+    if aspect < 0.80 or aspect > 4.8:
+        return False
+    cy = (y1 + y2) / 2.0
+    if cy < frame_h * 0.06 or cy > frame_h * 0.82:
         return False
     return True
 
@@ -137,6 +163,8 @@ def patrol_person_meets_detection_gate(
     if not plausible_person_silhouette(person_box, frame_w, frame_h):
         return False
     if face_dominant or has_stable_id:
+        return True
+    if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True
     return upper_body_third_with_head_visible(person_box, frame_w, frame_h)
 

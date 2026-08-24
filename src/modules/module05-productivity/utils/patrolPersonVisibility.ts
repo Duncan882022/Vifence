@@ -31,7 +31,7 @@ export function patrolPersonLegsOnlyBbox(bbox: Bbox4, _frameW: number, frameH: n
   const aspect = ph / Math.max(pw, 1)
 
   if (headCy > frameH * 0.54) return true
-  if (cy > frameH * 0.66) return true
+  if (cy > frameH * 0.72) return true
   if (y2Ratio > 0.86 && y1Ratio > 0.46 && aspect < 2.6) return true
   if (y1Ratio > 0.50 && y2Ratio > 0.88) return true
   return false
@@ -57,7 +57,24 @@ function plausiblePersonSilhouette(bbox: Bbox4, frameW: number, frameH: number):
   const aspect = ph / pw
   if (aspect > 4.2 || aspect < 0.28) return false
   if (pw < Math.max(12, frameW * 0.035)) return false
-  if (ph < Math.max(16, frameH * 0.06)) return false
+  if (ph < Math.max(14, frameH * 0.04)) return false
+  return true
+}
+
+/** Người nhỏ/xa trên đường — quay lưng, không cần tín hiệu da (mirror BE). */
+export function patrolWideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
+  if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
+  const [x1, y1, x2, y2] = bbox
+  const ph = Math.max(y2 - y1, 1)
+  const pw = Math.max(x2 - x1, 1)
+  const bhRatio = ph / Math.max(frameH, 1)
+  const bwRatio = pw / Math.max(frameW, 1)
+  const aspect = ph / pw
+  if (bhRatio < 0.035 || bhRatio > 0.58) return false
+  if (bwRatio < 0.022 || bwRatio > 0.40) return false
+  if (aspect < 0.80 || aspect > 4.8) return false
+  const cy = (y1 + y2) / 2
+  if (cy < frameH * 0.06 || cy > frameH * 0.82) return false
   return true
 }
 
@@ -94,8 +111,8 @@ export function patrolPersonMeetsUpperBodyGate(
   if (y1Ratio > 0.62 && bhRatio < 0.18) return false
 
   const headCy = y1 + ph * headFrac * 0.5
-  if (headCy > frameH * 0.50) return false
-  if (y1 > frameH * 0.40) return false
+  if (headCy > frameH * 0.58) return false
+  if (y1 > frameH * 0.52) return false
 
   return true
 }
@@ -114,6 +131,7 @@ export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateI
   const wid = workerId?.trim() ?? ''
   if (wid && wid !== 'unknown' && /^sgc-/i.test(wid)) return true
   if (patrolPersonFaceDominantBbox(bbox, frameW, frameH)) return true
+  if (patrolWideCrowdRiderBox(bbox, frameW, frameH)) return true
   return patrolPersonMeetsUpperBodyGate(bbox, frameW, frameH)
 }
 

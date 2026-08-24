@@ -71,8 +71,8 @@ function dedupeOverlappingPersonDetections(detections: PersonRoiDetection[]): Pe
   for (const candidate of ranked) {
     const duplicate = kept.some(
       keptDet =>
-        bboxIou(candidate.bbox, keptDet.bbox) >= 0.48
-        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.58,
+        bboxIou(candidate.bbox, keptDet.bbox) >= 0.34
+        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.46,
     )
     if (!duplicate) kept.push(candidate)
   }

@@ -36,7 +36,7 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
-_PERSON_CONF_BODYCAM = 0.35
+_PERSON_CONF_BODYCAM = 0.28
 _PERSON_CONF_STRICT = 0.48
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
@@ -1219,8 +1219,8 @@ def _dedupe_person_boxes(
 ) -> list[_PersonPpe]:
     """Một người — một bbox: loại box nhỏ lồng/trùng box lớn hơn."""
     if camera_id.startswith("HC-"):
-        iou_threshold = 0.48
-        containment_threshold = 0.58
+        iou_threshold = 0.34
+        containment_threshold = 0.46
     if len(persons) <= 1:
         return persons
 
@@ -1392,9 +1392,9 @@ def _plausible_patrol_wide(
     x1, y1, x2, y2 = box
     bw = max(x2 - x1, 1.0)
     bh = max(y2 - y1, 1.0)
-    if bh < frame_h * min_bh_frac or bh > frame_h * 0.62:
+    if bh < frame_h * min_bh_frac or bh > frame_h * 0.68:
         return False
-    if bw < frame_w * 0.04 or bw > frame_w * 0.42:
+    if bw < frame_w * 0.028 or bw > frame_w * 0.44:
         return False
     aspect = bh / bw
     min_aspect = 1.35 if strict else 1.05
@@ -1589,7 +1589,7 @@ def _plausible_person_box(
         )
         wide_ok = _plausible_patrol_wide(
             box, frame_w, frame_h, frame=frame, machinery=None, strict=False,
-            min_bh_frac=0.05,
+            min_bh_frac=0.035,
         )
         if not (close_ok or wide_ok):
             return False
@@ -1602,12 +1602,8 @@ def _plausible_person_box(
             face_dominant=_face_dominant_person_box(box, frame_w, frame_h),
         ):
             return False
-        if frame is not None:
-            # Góc rộng (quạt, máy…) — bắt buộc có tín hiệu da/áo phản quang.
-            if wide_ok and not close_ok and not _person_upper_body_signal(frame, box):
-                return False
-            if strict and not _person_upper_body_signal(frame, box):
-                return False
+        if frame is not None and strict and not _person_upper_body_signal(frame, box):
+            return False
         return True
     return _plausible_patrol_wide(
         box,

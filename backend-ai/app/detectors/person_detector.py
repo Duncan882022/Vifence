@@ -40,7 +40,13 @@ class PersonDetector:
             return []
 
         threshold = self.conf_threshold if conf is None else conf
-        results = self._model.predict(frame, conf=threshold, verbose=False)
+        results = self._model.predict(
+            frame,
+            conf=threshold,
+            verbose=False,
+            imgsz=640,
+            max_det=48,
+        )
         if not results or results[0].boxes is None:
             return []
 

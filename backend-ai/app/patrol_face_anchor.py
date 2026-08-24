@@ -22,7 +22,7 @@ class _FrameFace:
 def _list_frame_faces(
     frame: np.ndarray,
     *,
-    score_threshold: float = 0.55,
+    score_threshold: float = 0.50,
 ) -> list[_FrameFace]:
     from .detectors.face_guard import detect_faces
 
@@ -112,11 +112,11 @@ def _yolo_plausible_without_face(
     bh_ratio = ph / max(float(frame_h), 1.0)
     bw_ratio = pw / max(float(frame_w), 1.0)
     area_ratio = (pw * ph) / max(float(frame_w * frame_h), 1.0)
-    if area_ratio > 0.26 or area_ratio < 0.035:
+    if area_ratio > 0.28 or area_ratio < 0.018:
         return False
-    if bh_ratio > 0.72 or bh_ratio < 0.28:
+    if bh_ratio > 0.72 or bh_ratio < 0.12:
         return False
-    if bw_ratio > 0.34 or bw_ratio < 0.07:
+    if bw_ratio > 0.36 or bw_ratio < 0.04:
         return False
     return True
 
@@ -159,7 +159,7 @@ def anchor_patrol_person_boxes_to_faces(
         if face_index in covered_face_indices:
             continue
         synth_box = _person_box_from_face(face, w, h)
-        if any(_bbox_iou(synth_box, box) >= 0.42 for box, _ in matched_yolo):
+        if any(_bbox_iou(synth_box, box) >= 0.34 for box, _ in matched_yolo):
             continue
         synth_conf = min(0.92, 0.52 + face.score * 0.38)
         synth_boxes.append((synth_box, synth_conf))
