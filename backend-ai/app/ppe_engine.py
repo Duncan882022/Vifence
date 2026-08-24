@@ -298,6 +298,8 @@ class PpeEngine:
                 bind_patrol_track_identity,
                 is_sgc_worker_id,
                 resolve_patrol_person_identity,
+                _as_emb,
+                _conflicts_frame_faces,
             )
             from .ppe_analyzer import reset_hc_patrol_face_assignments
             from .worker_identity.recognizer import assess_patrol_face
@@ -366,17 +368,32 @@ class PpeEngine:
 
                 existing_wid = (person.worker_id or "").strip()
                 if existing_wid and existing_wid not in ("", "unknown") and gallery_verified:
-                    worker_id = existing_wid
-                    worker_name = (person.worker_name or worker_id).strip()
-                    bind_patrol_track_identity(
-                        camera_id,
-                        track_id,
-                        worker_id,
-                        person_bbox=person_bbox,
-                        face_emb=face_emb,
-                        frame_w=frame_w,
-                        frame_h=frame_h,
-                    )
+                    emb = _as_emb(face_emb)
+                    if emb is not None and _conflicts_frame_faces(
+                        existing_wid, emb, frame_face_assignments,
+                    ):
+                        worker_id, worker_name = resolve_patrol_person_identity(
+                            person,
+                            camera_id,
+                            track_id,
+                            person_bbox=person_bbox,
+                            face_emb=face_emb,
+                            frame_face_assignments=frame_face_assignments,
+                            frame_w=frame_w,
+                            frame_h=frame_h,
+                        )
+                    else:
+                        worker_id = existing_wid
+                        worker_name = (person.worker_name or worker_id).strip()
+                        bind_patrol_track_identity(
+                            camera_id,
+                            track_id,
+                            worker_id,
+                            person_bbox=person_bbox,
+                            face_emb=face_emb,
+                            frame_w=frame_w,
+                            frame_h=frame_h,
+                        )
                 elif existing_wid and (
                     is_sgc_worker_id(existing_wid) or is_patrol_gallery_id(existing_wid)
                 ):

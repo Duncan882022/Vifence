@@ -119,19 +119,13 @@ def _conflicts_frame_faces(
     face_emb: np.ndarray,
     frame_face_assignments: dict[str, list[float]] | None,
 ) -> bool:
-    """True nếu worker_id đã gán cho mặt khác trong cùng frame — tránh 2 người → 1 ID."""
+    """True nếu worker_id đã gán cho mặt khác không tương thích — tránh 2 người → 1 ID."""
     if not frame_face_assignments:
         return False
-    for wid, emb_list in frame_face_assignments.items():
-        if wid == worker_id:
-            continue
-        other = _as_emb(emb_list)
-        if other is None:
-            continue
-        if _face_compatible(face_emb, other, for_merge=True):
-            continue
-        return True
-    return False
+    existing = _as_emb(frame_face_assignments.get(worker_id))
+    if existing is None:
+        return False
+    return not _face_compatible(face_emb, existing, for_merge=True)
 
 
 def _remember_track_meta(
@@ -378,7 +372,15 @@ def resolve_patrol_person_identity(
     wid = (detection.worker_id or "").strip()
     wname = (detection.worker_name or "").strip()
     match = worker_match_from_detection(detection)
-    if wid and wid != "unknown" and is_verified_face_match(match):
+    gallery_verified = bool(wid and wid != "unknown" and is_verified_face_match(match))
+    if (
+        gallery_verified
+        and query_emb is not None
+        and _conflicts_frame_faces(wid, query_emb, frame_face_assignments)
+    ):
+        gallery_verified = False
+
+    if gallery_verified:
         key = _track_key(camera_id, track_id)
         with _lock:
             state = _load()
