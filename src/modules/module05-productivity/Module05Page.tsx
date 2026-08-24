@@ -84,8 +84,8 @@ function PatrolKPIs({
 
   // Công nhân global — Người + Định danh dedupe, mọi mũ HC-* (không YOLO raw count)
   void pinTick
-  const workerSummary = summarizePatrolGlobalWorkers(events)
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
+  const workerSummary = summarizePatrolGlobalWorkers(events, { liveOnly: anyCameraOnline })
   const observedCount = anyCameraOnline ? workerSummary.total : 0
 
   // Sự kiện = unique entities tab Người + Định danh (feed có snapshot)
@@ -203,9 +203,11 @@ export function Module05Page() {
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
-      if (snap?.cameraId === 'HC-02') {
-        setHc02MobileOnline(Boolean(snap.streamOnline))
+      if (!snap || snap.cameraId !== 'HC-02') {
+        setHc02MobileOnline(false)
+        return
       }
+      setHc02MobileOnline(Boolean(snap.streamOnline))
     })
   }, [])
 

@@ -11,7 +11,7 @@ import {
 } from './patrolWorkforceEventLabels'
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
 import { isPatrolManuallyIdentified } from '../services/patrolManualIdentity.service'
-import { getHeatmapSessionMasterIds } from '@/services/patrolHeatmapPersonRegistry'
+import { getHeatmapInFrameMasterIds, getHeatmapSessionMasterIds } from '@/services/patrolHeatmapPersonRegistry'
 
 export function isPatrolHeatmapEligibleId(rawId?: string | null): boolean {
   const id = rawId?.trim() ?? ''
@@ -61,7 +61,13 @@ export function collectPatrolWorkerMasterIds(events: PatrolEvent[]): Set<string>
  * KPI Công nhân global — dedupe Người + Định danh, gộp mọi mũ HC-*.
  * Union events + dot pin ca hiện tại (registry); không dùng YOLO personCount.
  */
-export function countPatrolGlobalWorkers(events: PatrolEvent[]): number {
+export function countPatrolGlobalWorkers(
+  events: PatrolEvent[],
+  opts?: { liveOnly?: boolean },
+): number {
+  if (opts?.liveOnly) {
+    return new Set(getHeatmapInFrameMasterIds()).size
+  }
   const keys = collectPatrolWorkerMasterIds(events)
   for (const masterId of getHeatmapSessionMasterIds()) {
     keys.add(masterId)
@@ -69,7 +75,10 @@ export function countPatrolGlobalWorkers(events: PatrolEvent[]): number {
   return keys.size
 }
 
-export function summarizePatrolGlobalWorkers(events: PatrolEvent[]): {
+export function summarizePatrolGlobalWorkers(
+  events: PatrolEvent[],
+  opts?: { liveOnly?: boolean },
+): {
   total: number
   person: number
   identity: number
@@ -77,7 +86,9 @@ export function summarizePatrolGlobalWorkers(events: PatrolEvent[]): {
 } {
   const person = countUniquePatrolTabEntities(events, 'person')
   const identity = countUniquePatrolTabEntities(events, 'identity')
-  const fromPins = getHeatmapSessionMasterIds().length
+  const fromPins = opts?.liveOnly
+    ? getHeatmapInFrameMasterIds().length
+    : getHeatmapSessionMasterIds().length
   return {
     total: countPatrolGlobalWorkers(events),
     person,

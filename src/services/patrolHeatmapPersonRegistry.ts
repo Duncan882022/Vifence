@@ -283,6 +283,13 @@ export function getHeatmapPersonRecords(cameraId?: string): PatrolHeatmapPersonR
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
 }
 
+/** Master IDs pin đang in_frame — chỉ đếm khi cam live. */
+export function getHeatmapInFrameMasterIds(cameraId?: string): string[] {
+  return getHeatmapPersonRecords(cameraId)
+    .filter(row => row.status === 'in_frame')
+    .map(row => resolveHeatmapDotMasterId(row.id))
+}
+
 /** Master IDs pin trong ca — dùng KPI global multi-mũ. */
 export function getHeatmapSessionMasterIds(cameraId?: string): string[] {
   return getHeatmapPersonRecords(cameraId).map(row => resolveHeatmapDotMasterId(row.id))

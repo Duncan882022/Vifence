@@ -27,6 +27,7 @@ import {
   touchPatrolMobileStreamOnline,
   scheduleClearPatrolMobileLiveSnapshot,
   cancelScheduledClearPatrolMobile,
+  clearPatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { pushPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
 import {
@@ -169,6 +170,13 @@ export function MobileCameraFeed({
     }
   }, [cameraId, stopAiClient])
 
+  useEffect(() => {
+    if (cameraId !== 'HC-02') return
+    if (status === 'live') return
+    cancelScheduledClearPatrolMobile()
+    clearPatrolMobileLiveSnapshot(cameraId)
+  }, [cameraId, status])
+
   const startAiClient = useCallback(() => {
     stopAiClient()
     const video = videoRef.current
@@ -288,7 +296,6 @@ export function MobileCameraFeed({
     stopCapture({ clearPatrol: false })
     if (cameraId === 'HC-02') {
       cancelScheduledClearPatrolMobile()
-      touchPatrolMobileStreamOnline(cameraId)
     }
 
     try {
@@ -322,6 +329,10 @@ export function MobileCameraFeed({
       })
     } catch (err) {
       setStatus('error')
+      if (cameraId === 'HC-02') {
+        cancelScheduledClearPatrolMobile()
+        clearPatrolMobileLiveSnapshot(cameraId)
+      }
       const msg = err instanceof Error ? err.message : 'Không mở được camera.'
       if (msg.includes('Permission') || msg.includes('NotAllowed')) {
         setErrorMsg('Cần cấp quyền camera cho trình duyệt.')

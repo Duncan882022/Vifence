@@ -37,7 +37,7 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence } from '@/services/patrolHeatmapPersonRegistry'
+import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence, clearHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { countPatrolGlobalWorkers, isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
@@ -139,7 +139,11 @@ export function PatrolDensityHeatmap({
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
-      setMobileHc02Live(Boolean(snap && snap.cameraId === 'HC-02' && snap.streamOnline))
+      if (!snap || snap.cameraId !== 'HC-02') {
+        setMobileHc02Live(false)
+        return
+      }
+      setMobileHc02Live(Boolean(snap.streamOnline))
     })
   }, [])
 
@@ -157,11 +161,8 @@ export function PatrolDensityHeatmap({
     ) {
       map['HC-02'] = true
     }
-    if (hc02Helmet?.online) {
-      map['HC-02'] = true
-    }
     return map
-  }, [metrics.perCamera, hc02Helmet?.online, mobileHc02Live])
+  }, [metrics.perCamera, mobileHc02Live])
 
   const hc01Online = Boolean(helmetOnlineById['HC-01'])
   const hc02Online = Boolean(helmetOnlineById['HC-02'])
@@ -224,13 +225,20 @@ export function PatrolDensityHeatmap({
     if (hc01Online) return
     syncHeatmapFramePresence('HC-01', [])
     clearPatrolHeatmapLiveTracks('HC-01')
+    clearHeatmapPersonRegistry('HC-01')
   }, [hc01Online])
 
   useEffect(() => {
     if (hc02Online) return
     syncHeatmapFramePresence('HC-02', [])
     clearPatrolHeatmapLiveTracks('HC-02')
+    clearHeatmapPersonRegistry('HC-02')
   }, [hc02Online])
+
+  useEffect(() => {
+    if (anyCameraOnline) return
+    clearHeatmapPersonRegistry()
+  }, [anyCameraOnline])
 
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
@@ -317,9 +325,9 @@ export function PatrolDensityHeatmap({
   const observedCount = useMemo(() => {
     void pinTick
     if (!anyCameraOnline) return 0
-    const global = countPatrolGlobalWorkers(patrolEvents)
+    const global = countPatrolGlobalWorkers(patrolEvents, { liveOnly: true })
     if (global > 0) return global
-    if (zonePop) return zonePop.observed_count
+    if (zonePop?.observed_count) return zonePop.observed_count
     return hc02Live.historicalDotCount
   }, [anyCameraOnline, patrolEvents, pinTick, zonePop, hc02Live.historicalDotCount])
 
