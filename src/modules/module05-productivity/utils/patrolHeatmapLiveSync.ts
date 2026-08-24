@@ -1,4 +1,7 @@
-import { upsertHeatmapPersons, pruneHeatmapActivePersons } from '@/services/patrolHeatmapPersonRegistry'
+import {
+  upsertHeatmapPersons,
+  syncHeatmapFramePresence,
+} from '@/services/patrolHeatmapPersonRegistry'
 import type { MobileAiDetection } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getPatrolPersonRoiEngine, clearPatrolPersonRoiEngine } from '../personRoi/patrolPersonRoiEngine'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
@@ -15,13 +18,19 @@ function upsertPersonsAtPatrolGps(
   const gps = resolvePatrolHeatmapGps(cameraId)
   const zoneId = PATROL_HELMET_ZONE_ASSIGNMENTS.find(z => z.helmetId === cameraId)?.zoneId
     ?? 'ZONE_SITE'
-  const [lat, lng] = [gps.lat, gps.lng]
-  upsertHeatmapPersons({ cameraId, lat, lng, zoneId, persons })
+  upsertHeatmapPersons({
+    cameraId,
+    lat: gps.lat,
+    lng: gps.lng,
+    zoneId,
+    inFrame: true,
+    persons,
+  })
 }
 
 /**
- * Sync live detections từ HC-* vào heatmap — chỉ dùng ROI-tracked persons (Người stage).
- * Không fallback sang PTR-LIVE hay OBS-* fake counts để giữ heatmap đúng spec.
+ * Sync live detections từ HC-* — in_frame blink; rời frame → inactive đến EOD.
+ * Heat grid sample tách riêng (patrolHeatGrid) — re-pin không mất mật độ.
  */
 export function syncLivePatrolPersonDetectionsToHeatmap(
   cameraId: string,
@@ -34,7 +43,7 @@ export function syncLivePatrolPersonDetectionsToHeatmap(
   if (persons.length > 0) {
     upsertPersonsAtPatrolGps(cameraId, persons)
   }
-  pruneHeatmapActivePersons(
+  syncHeatmapFramePresence(
     cameraId,
     persons.map(p => p.personId),
   )

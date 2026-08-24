@@ -1,10 +1,10 @@
 /**
  * Canvas density heatmap — 2-pass: intensity splats → blur → color ramp (lam→đỏ).
- * Hiệu ứng chuyển vùng liên tục giống reference HQCV, clip trong polygon đỏ.
+ * Nguồn mật độ người: patrolHeatGrid (tích lũy ca) + zone fallback.
  */
 import L from 'leaflet'
 import { useMap } from 'react-leaflet'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { PatrolZone } from '../data/patrolMockData'
 import { PATROL_DETECTION_DOTS } from '../data/patrolDetectionData'
 import { isPointInSiteBoundary, PATROL_SITE_CLIP_RING } from '../data/patrolSiteGeometry'
@@ -15,13 +15,18 @@ import {
   type PatrolCountMode,
   type PatrolDensityLayer,
 } from '../services/patrolHeatmap.service'
+import {
+  getPatrolHeatSources,
+  subscribePatrolHeatGrid,
+  type PatrolHeatSource,
+} from '@/services/patrolHeatGrid'
+import { heatmapWindowMs, type HeatmapTimeWindow } from '../utils/workforceHeatmapUi'
 
 export const PATROL_DENSITY_PANE = 'patrolDensityPane'
 
 interface HeatSource {
   lat: number
   lng: number
-  /** Cường độ điểm nóng 0..1 — quyết định màu sau colorize. */
   intensity: number
   radius: number
 }
@@ -41,31 +46,47 @@ function pushSource(
   sources.push({ lat, lng, intensity, radius })
 }
 
+function mergeGridSources(
+  sources: HeatSource[],
+  gridSources: PatrolHeatSource[],
+): void {
+  for (const src of gridSources) {
+    pushSource(sources, src.lat, src.lng, src.intensity, src.radius)
+  }
+}
+
 function buildHeatSources(
   zones: PatrolZone[],
   layer: PatrolDensityLayer,
   countMode: PatrolCountMode,
   zoom: number,
+  heatWindowMs: number,
 ): HeatSource[] {
   const zoneMap = new Map(zones.map(z => [z.id, z]))
   const maxCount = Math.max(...zones.map(z => resolveCount(z, layer, countMode)), 1)
   const baseR = heatRadiusForZoom(zoom)
   const sources: HeatSource[] = []
 
-  for (const dot of PATROL_DETECTION_DOTS) {
-    const zone = zoneMap.get(dot.zoneId)
-    if (!zone || zone.coverage !== 'VISITED') continue
-    const count = resolveCount(zone, layer, countMode)
-    if (count === 0) continue
-    const zoneT = count / maxCount
-    const typeW = dot.type === 'vehicle' ? 0.85 : dot.type === 'person' ? 0.55 : 0.4
-    pushSource(
-      sources,
-      dot.position[0],
-      dot.position[1],
-      (0.18 + zoneT * 0.55) * typeW,
-      baseR * (0.75 + typeW * 0.45),
-    )
+  if (layer === 'people' || layer === 'combined') {
+    mergeGridSources(sources, getPatrolHeatSources(heatWindowMs, zoom))
+  }
+
+  if (sources.length === 0) {
+    for (const dot of PATROL_DETECTION_DOTS) {
+      const zone = zoneMap.get(dot.zoneId)
+      if (!zone || zone.coverage !== 'VISITED') continue
+      const count = resolveCount(zone, layer, countMode)
+      if (count === 0) continue
+      const zoneT = count / maxCount
+      const typeW = dot.type === 'vehicle' ? 0.85 : dot.type === 'person' ? 0.55 : 0.4
+      pushSource(
+        sources,
+        dot.position[0],
+        dot.position[1],
+        (0.18 + zoneT * 0.55) * typeW,
+        baseR * (0.75 + typeW * 0.45),
+      )
+    }
   }
 
   const gridSteps = [0.25, 0.5, 0.75]
@@ -83,7 +104,7 @@ function buildHeatSources(
       sources,
       gpsZone.center[0],
       gpsZone.center[1],
-      peak,
+      peak * (sources.length > 0 ? 0.45 : 1),
       baseR * (1.15 + zoneT * 0.65),
     )
 
@@ -96,7 +117,7 @@ function buildHeatSources(
           sources,
           lat,
           lng,
-          peak * 0.32 * edgeFalloff,
+          peak * 0.32 * edgeFalloff * (sources.length > 0 ? 0.45 : 1),
           baseR * (0.85 + zoneT * 0.45),
         )
       }
@@ -159,8 +180,8 @@ function colorizeIntensity(
   const norm = maxVal > 8 ? 255 / maxVal : 1
 
   for (let i = 0; i < src.length; i += 4) {
-    const raw = Math.max(src[i], src[i + 1], src[i + 2]) * norm
-    const alpha = raw / 255
+    const rawVal = Math.max(src[i], src[i + 1], src[i + 2]) * norm
+    const alpha = rawVal / 255
     if (alpha < 0.025) continue
 
     const t = Math.min(1, alpha * 0.95)
@@ -211,7 +232,6 @@ function renderHeatCanvas(
 
   ctx.clearRect(0, 0, w, h)
   ctx.putImageData(colored, 0, 0)
-  /* putImageData ignores clip — mask bằng destination-in */
   ctx.globalCompositeOperation = 'destination-in'
   fillSiteMaskPath(ctx, map)
   ctx.fillStyle = '#fff'
@@ -224,6 +244,7 @@ export interface PatrolDensityCanvasLayerProps {
   zones: PatrolZone[]
   layer: PatrolDensityLayer
   countMode: PatrolCountMode
+  heatWindow?: HeatmapTimeWindow
 }
 
 export function PatrolDensityCanvasLayer({
@@ -231,8 +252,15 @@ export function PatrolDensityCanvasLayer({
   zones,
   layer,
   countMode,
+  heatWindow = 'shift',
 }: PatrolDensityCanvasLayerProps) {
   const map = useMap()
+  const [heatTick, setHeatTick] = useState(0)
+  const heatWindowMs = heatmapWindowMs(heatWindow)
+
+  useEffect(() => subscribePatrolHeatGrid(() => {
+    setHeatTick(t => t + 1)
+  }), [])
 
   useEffect(() => {
     if (!map.getPane(PATROL_DENSITY_PANE)) {
@@ -260,7 +288,7 @@ export function PatrolDensityCanvasLayer({
         if (c) c.clearRect(0, 0, canvas!.width, canvas!.height)
         return
       }
-      const src = buildHeatSources(zones, layer, countMode, map.getZoom())
+      const src = buildHeatSources(zones, layer, countMode, map.getZoom(), heatWindowMs)
       if (src.length === 0) {
         const c = canvas!.getContext('2d')
         if (c) c.clearRect(0, 0, canvas!.width, canvas!.height)
@@ -274,15 +302,17 @@ export function PatrolDensityCanvasLayer({
     map.on('move zoom moveend zoomend viewreset resize load', schedule)
     const t1 = window.setTimeout(schedule, 80)
     const t2 = window.setTimeout(schedule, 400)
+    const t3 = window.setInterval(schedule, 4_000)
 
     return () => {
       window.clearTimeout(t1)
       window.clearTimeout(t2)
+      window.clearInterval(t3)
       map.off('move zoom moveend zoomend viewreset resize load', schedule)
       const c = canvas?.getContext('2d')
       if (c && canvas) c.clearRect(0, 0, canvas.width, canvas.height)
     }
-  }, [map, enabled, zones, layer, countMode])
+  }, [map, enabled, zones, layer, countMode, heatWindowMs, heatTick])
 
   return null
 }

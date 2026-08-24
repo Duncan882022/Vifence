@@ -1,5 +1,6 @@
 /**
- * Lịch sử chấm người trên heatmap — 1 master ID = 1 dot, quanh mũ HC-*.
+ * Dot pin patrol — 1 master ID / ngày; blink khi in_frame, inactive đến EOD.
+ * Mật độ: patrolHeatGrid.ts (tách biệt — xóa/re-pin dot không ảnh hưởng heat).
  */
 import type { DetectionDot } from '@/modules/module05-productivity/data/patrolDetectionData'
 import {
@@ -9,17 +10,15 @@ import {
 import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/patrolHeatmapGps'
 import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patrolLivePersonDots'
 import { resolveHeatmapEntityMasterId } from '@/modules/module05-productivity/utils/patrolIdentityEntity'
-import {
-  isPatrolHeatmapEligibleId,
-} from '@/modules/module05-productivity/utils/patrolPatrolCounts'
+import { isPatrolHeatmapEligibleId } from '@/modules/module05-productivity/utils/patrolPatrolCounts'
+import { appendPatrolHeatSample, patrolSessionDateLocal } from '@/services/patrolHeatGrid'
 
-const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v1'
-const MAX_PERSONS = 48
-/** Góc nhìn mũ ~2–3 m — người trước mũ cách vài mét, không 25 m. */
+const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v2'
+const MAX_PERSONS = 256
 const DOT_RADIUS_MIN_M = 1.0
 const DOT_RADIUS_MAX_M = 4.0
-const LIVE_DOT_MS = 3_500
-const HISTORY_DOT_MS = 90_000
+
+export type PatrolDotPinStatus = 'in_frame' | 'inactive'
 
 export interface PatrolHeatmapPersonRecord {
   id: string
@@ -30,6 +29,9 @@ export interface PatrolHeatmapPersonRecord {
   confidence: number
   firstSeenAt: number
   lastSeenAt: number
+  lastInFrameAt: number
+  status: PatrolDotPinStatus
+  sessionDate: string
 }
 
 const registry = new Map<string, PatrolHeatmapPersonRecord>()
@@ -39,7 +41,6 @@ function notify(): void {
   listeners.forEach(fn => fn())
 }
 
-/** Gộp PTR / OBJ / sgc / gallery cùng một người → một dot. */
 export function resolveHeatmapDotMasterId(rawId: string): string {
   return resolveHeatmapEntityMasterId(rawId)
 }
@@ -59,25 +60,49 @@ function hashOffset(personId: string): [number, number] {
 function persist(): void {
   if (typeof sessionStorage === 'undefined') return
   try {
-    const rows = [...registry.values()].slice(0, MAX_PERSONS)
+    const today = patrolSessionDateLocal()
+    const rows = [...registry.values()]
+      .filter(row => row.sessionDate === today)
+      .slice(0, MAX_PERSONS)
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(rows))
   } catch {
     // quota / private mode
   }
 }
 
+function purgeExpiredSessions(now = Date.now()): void {
+  const today = patrolSessionDateLocal(now)
+  let changed = false
+  for (const [id, row] of registry.entries()) {
+    if (row.sessionDate !== today) {
+      registry.delete(id)
+      changed = true
+    }
+  }
+  if (changed) persist()
+}
+
 function restore(): void {
   if (typeof sessionStorage === 'undefined') return
   try {
+    purgeExpiredSessions()
     const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return
     const rows = JSON.parse(raw) as PatrolHeatmapPersonRecord[]
     registry.clear()
+    const today = patrolSessionDateLocal()
     for (const row of rows) {
-      if (!row?.id || !row.position?.length) continue
+      if (!row?.id || !row.position?.length || row.sessionDate !== today) continue
       const master = resolveHeatmapDotMasterId(row.id)
       const [lat, lng] = clampPointToSiteInterior(row.position[0], row.position[1])
-      registry.set(master, { ...row, id: master, position: [lat, lng] })
+      registry.set(master, {
+        ...row,
+        id: master,
+        position: [lat, lng],
+        status: row.status === 'in_frame' ? 'inactive' : (row.status ?? 'inactive'),
+        sessionDate: today,
+        lastInFrameAt: row.lastInFrameAt ?? row.lastSeenAt ?? Date.now(),
+      })
     }
   } catch {
     registry.clear()
@@ -96,17 +121,34 @@ function positionForPerson(
   return clampPointToSiteInterior(lat2, lng2)
 }
 
+function recordHeatSample(
+  masterId: string,
+  position: [number, number],
+  confidence: number,
+): void {
+  appendPatrolHeatSample({
+    masterId,
+    lat: position[0],
+    lng: position[1],
+    confidence,
+  })
+}
+
 export function upsertHeatmapPersons(input: {
   cameraId: string
   lat: number
   lng: number
   zoneId?: string
   persons: Array<{ personId: string; label?: string; confidence?: number }>
+  inFrame?: boolean
 }): void {
   if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) return
   if (input.lat === 0 && input.lng === 0) return
 
+  purgeExpiredSessions()
   const now = Date.now()
+  const today = patrolSessionDateLocal(now)
+  const inFrame = input.inFrame !== false
   let changed = false
 
   for (const person of input.persons) {
@@ -118,12 +160,23 @@ export function upsertHeatmapPersons(input: {
     const existing = registry.get(masterId)
 
     if (existing) {
-      existing.position = position
-      existing.lastSeenAt = now
-      existing.confidence = Math.max(existing.confidence, confidence)
-      if (label && label !== existing.label) existing.label = label
-      changed = true
-      continue
+      if (existing.sessionDate !== today) {
+        registry.delete(masterId)
+      } else {
+        existing.position = position
+        existing.lastSeenAt = now
+        existing.confidence = Math.max(existing.confidence, confidence)
+        if (label && label !== existing.label) existing.label = label
+        existing.cameraId = input.cameraId
+        if (input.zoneId) existing.zoneId = input.zoneId
+        if (inFrame) {
+          existing.status = 'in_frame'
+          existing.lastInFrameAt = now
+        }
+        recordHeatSample(masterId, position, confidence)
+        changed = true
+        continue
+      }
     }
 
     registry.set(masterId, {
@@ -135,7 +188,11 @@ export function upsertHeatmapPersons(input: {
       confidence,
       firstSeenAt: now,
       lastSeenAt: now,
+      lastInFrameAt: inFrame ? now : 0,
+      status: inFrame ? 'in_frame' : 'inactive',
+      sessionDate: today,
     })
+    recordHeatSample(masterId, position, confidence)
     changed = true
   }
 
@@ -143,41 +200,51 @@ export function upsertHeatmapPersons(input: {
 
   if (registry.size > MAX_PERSONS) {
     const sorted = [...registry.values()].sort((a, b) => a.firstSeenAt - b.firstSeenAt)
-    const drop = sorted.slice(0, registry.size - MAX_PERSONS)
-    drop.forEach(row => registry.delete(row.id))
+    sorted.slice(0, registry.size - MAX_PERSONS).forEach(row => registry.delete(row.id))
   }
 
   persist()
   notify()
 }
 
-/** Live frame — xóa dot cũ (PTR/OBJ orphan) không còn trong frame. */
-export function pruneHeatmapActivePersons(
+/**
+ * Sau mỗi frame live — entity không còn trong frame → inactive (giữ pin đến EOD).
+ */
+export function syncHeatmapFramePresence(
   cameraId: string,
   activePersonIds: string[],
 ): void {
+  purgeExpiredSessions()
   const activeMasters = new Set(
     activePersonIds.map(id => resolveHeatmapDotMasterId(id)).filter(Boolean),
   )
-
+  const today = patrolSessionDateLocal()
   let changed = false
-  const now = Date.now()
-  for (const [id, row] of registry.entries()) {
-    if (row.cameraId !== cameraId) continue
-    const master = resolveHeatmapDotMasterId(id)
-    if (activeMasters.size > 0 && activeMasters.has(master)) continue
-    if (now - row.lastSeenAt > 4_000) {
-      registry.delete(id)
+
+  for (const row of registry.values()) {
+    if (row.cameraId !== cameraId || row.sessionDate !== today) continue
+    const master = resolveHeatmapDotMasterId(row.id)
+    if (activeMasters.has(master)) continue
+    if (row.status === 'in_frame') {
+      row.status = 'inactive'
       changed = true
     }
   }
+
   if (changed) {
     persist()
     notify()
   }
 }
 
-/** Gộp track tạm → ID gallery / sgc khi backend gán danh tính. */
+/** @deprecated Dùng syncHeatmapFramePresence — không xóa dot inactive. */
+export function pruneHeatmapActivePersons(
+  cameraId: string,
+  activePersonIds: string[],
+): void {
+  syncHeatmapFramePresence(cameraId, activePersonIds)
+}
+
 export function rekeyHeatmapPerson(fromId: string, toId: string): void {
   const src = resolveHeatmapDotMasterId(fromId)
   const dst = resolveHeatmapDotMasterId(toId)
@@ -189,10 +256,16 @@ export function rekeyHeatmapPerson(fromId: string, toId: string): void {
 
   if (existingSrc && existingDst) {
     existingDst.lastSeenAt = Math.max(existingSrc.lastSeenAt, existingDst.lastSeenAt)
+    existingDst.lastInFrameAt = Math.max(existingSrc.lastInFrameAt, existingDst.lastInFrameAt)
     existingDst.confidence = Math.max(existingSrc.confidence, existingDst.confidence)
+    if (existingSrc.status === 'in_frame') existingDst.status = 'in_frame'
     registry.delete(src)
   } else if (existingSrc) {
-    registry.set(dst, { ...existingSrc, id: dst, label: dst.startsWith('SGC-') ? dst : existingSrc.label })
+    registry.set(dst, {
+      ...existingSrc,
+      id: dst,
+      label: dst.startsWith('SGC-') ? dst : existingSrc.label,
+    })
     registry.delete(src)
   }
 
@@ -201,18 +274,27 @@ export function rekeyHeatmapPerson(fromId: string, toId: string): void {
 }
 
 export function getHeatmapPersonRecords(cameraId?: string): PatrolHeatmapPersonRecord[] {
-  const rows = [...registry.values()]
+  purgeExpiredSessions()
+  const today = patrolSessionDateLocal()
+  const rows = [...registry.values()].filter(row => row.sessionDate === today)
   if (!cameraId) return rows.sort((a, b) => b.lastSeenAt - a.lastSeenAt)
   return rows
     .filter(row => row.cameraId === cameraId)
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
 }
 
+/** Master IDs pin trong ca — dùng KPI global multi-mũ. */
+export function getHeatmapSessionMasterIds(cameraId?: string): string[] {
+  return getHeatmapPersonRecords(cameraId).map(row => resolveHeatmapDotMasterId(row.id))
+}
+
 export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
-  const now = Date.now()
+  purgeExpiredSessions()
+  const today = patrolSessionDateLocal()
   const byMaster = new Map<string, PatrolHeatmapPersonRecord>()
 
   for (const row of getHeatmapPersonRecords(cameraId)) {
+    if (row.sessionDate !== today) continue
     const master = resolveHeatmapDotMasterId(row.id)
     const prev = byMaster.get(master)
     if (!prev || row.lastSeenAt > prev.lastSeenAt) {
@@ -221,13 +303,12 @@ export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
   }
 
   return [...byMaster.values()]
-    .filter(row => now - row.lastSeenAt < HISTORY_DOT_MS)
     .filter(row => isPointInSiteBoundary(row.position[0], row.position[1]))
     .map(row => {
       const [lat, lng] = clampPointToSiteInterior(row.position[0], row.position[1])
-      const inCameraView = now - row.lastSeenAt < LIVE_DOT_MS
+      const inCameraView = row.status === 'in_frame'
       return {
-        id: `hist-${row.id}`,
+        id: `pin-${row.id}`,
         type: 'person' as const,
         position: [lat, lng] as [number, number],
         zoneId: row.zoneId,
@@ -237,13 +318,17 @@ export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
         lastSeenAt: row.lastSeenAt,
         objectId: row.id,
         inCameraView,
-        opacity: inCameraView ? 0.92 : 0.22,
+        opacity: inCameraView ? 0.92 : 0.28,
       }
     })
 }
 
 export function getHeatmapPersonCount(cameraId?: string): number {
   return getHeatmapPersonDots(cameraId).length
+}
+
+export function getHeatmapInFrameCount(cameraId?: string): number {
+  return getHeatmapPersonDots(cameraId).filter(d => d.inCameraView).length
 }
 
 export function clearHeatmapPersonRegistry(cameraId?: string): void {
@@ -281,7 +366,6 @@ function resolveEventGps(
   return resolvePatrolHeatmapGps(event.cameraId)
 }
 
-/** 1 sự kiện PERS = 1 dot master — OBJ gộp vào sgc khi có. */
 export function syncPatrolPersonEventsToHeatmap(
   events: Array<{
     type: string
@@ -300,8 +384,7 @@ export function syncPatrolPersonEventsToHeatmap(
     const track = event.trackWorkerId?.trim() ?? ''
     const oid = event.objectId?.trim() ?? ''
     if (!isPatrolHeatmapEligibleId(track) && !isPatrolHeatmapEligibleId(oid)) continue
-    const resolved = resolveEventGps(event)
-    const { lat, lng } = resolved
+    const { lat, lng } = resolveEventGps(event)
     const rawId = event.trackWorkerId?.trim()
       || event.objectId?.trim()
       || event.id
@@ -311,6 +394,7 @@ export function syncPatrolPersonEventsToHeatmap(
       lat,
       lng,
       zoneId: event.zoneId,
+      inFrame: false,
       persons: [{
         personId,
         label: event.objectLabel?.trim() || personId,

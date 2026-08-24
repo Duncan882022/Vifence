@@ -7,6 +7,8 @@
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { clearPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import { clearPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
+import { clearHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
+import { clearPatrolHeatGrid } from '@/services/patrolHeatGrid'
 import { resetHelmetPositionEngine } from '../utils/positionEngine'
 
 const PATROL_LS_KEYS = [
@@ -17,6 +19,8 @@ const PATROL_LS_KEYS = [
 
 const PATROL_SS_KEYS = [
   'vifence_patrol_heatmap_persons_v1',
+  'vifence_patrol_heatmap_persons_v2',
+  'vifence_patrol_heat_grid_v1',
 ]
 
 function clearPatrolLocalStorage(): void {
@@ -63,6 +67,8 @@ export async function resetPatrolTestData(): Promise<PatrolResetResult> {
 
   clearPatrolLocalStorage()
   clearPatrolSessionStorage()
+  clearHeatmapPersonRegistry()
+  clearPatrolHeatGrid()
   clearPatrolMobilePpeEvents()
   clearPatrolHelmetGps('HC-01')
   clearPatrolHelmetGps('HC-02')

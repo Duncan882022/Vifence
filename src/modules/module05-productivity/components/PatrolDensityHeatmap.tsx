@@ -13,7 +13,6 @@ import {
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import {
-  DETECTION_DOT_IN_VIEW_MS,
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   type DetectionDot,
@@ -38,11 +37,11 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
+import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence } from '@/services/patrolHeatmapPersonRegistry'
+import { countPatrolGlobalWorkers, isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
-import { clearHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import type { ObjectState } from '../types/workforceHeatmap'
 
 function LayerToggle({
@@ -99,6 +98,7 @@ export function PatrolDensityHeatmap({
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
+  const [pinTick, setPinTick] = useState(0)
   const [mobileHc02Live, setMobileHc02Live] = useState(
     () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
@@ -132,6 +132,10 @@ export function PatrolDensityHeatmap({
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
   }, [])
+
+  useEffect(() => subscribeHeatmapPersonRegistry(() => {
+    setPinTick(t => t + 1)
+  }), [])
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
@@ -218,13 +222,13 @@ export function PatrolDensityHeatmap({
 
   useEffect(() => {
     if (hc01Online) return
-    clearHeatmapPersonRegistry('HC-01')
+    syncHeatmapFramePresence('HC-01', [])
     clearPatrolHeatmapLiveTracks('HC-01')
   }, [hc01Online])
 
   useEffect(() => {
     if (hc02Online) return
-    clearHeatmapPersonRegistry('HC-02')
+    syncHeatmapFramePresence('HC-02', [])
     clearPatrolHeatmapLiveTracks('HC-02')
   }, [hc02Online])
 
@@ -234,19 +238,14 @@ export function PatrolDensityHeatmap({
   const filteredDots = useMemo(() => {
     if (!anyCameraOnline) return []
     void identityRevision
-    const now = Date.now()
     const activeObjectIds = new Set(
       liveObjects.filter(o => o.status === 'ACTIVE').map(o => o.object_id),
     )
 
     const markInView = (dot: DetectionDot): DetectionDot => {
-      let inCameraView = dot.inCameraView
-      if (inCameraView == null) {
-        inCameraView = Boolean(
-          (dot.objectId && activeObjectIds.has(dot.objectId))
-          || (dot.lastSeenAt != null && now - dot.lastSeenAt < DETECTION_DOT_IN_VIEW_MS),
-        )
-      }
+      const inCameraView = dot.inCameraView ?? Boolean(
+        dot.objectId && activeObjectIds.has(dot.objectId),
+      )
       return {
         ...dot,
         inCameraView,
@@ -283,9 +282,7 @@ export function PatrolDensityHeatmap({
       })
 
     const registryDots = hc02Online
-      ? hc02Live.dots
-        .filter(d => d.lastSeenAt != null && now - d.lastSeenAt < DETECTION_DOT_IN_VIEW_MS * 2)
-        .map(d => markInView(d))
+      ? hc02Live.dots.map(d => markInView(d))
       : []
 
     if (objectDots.length === 0) {
@@ -318,13 +315,13 @@ export function PatrolDensityHeatmap({
   }
 
   const observedCount = useMemo(() => {
+    void pinTick
     if (!anyCameraOnline) return 0
+    const global = countPatrolGlobalWorkers(patrolEvents)
+    if (global > 0) return global
     if (zonePop) return zonePop.observed_count
-    const onMap = filteredDots.length
-    if (onMap > 0) return onMap
-    if (hc02Live.historicalDotCount > 0) return hc02Live.historicalDotCount
-    return Math.max(0, hc02Live.personCount)
-  }, [anyCameraOnline, zonePop, hc02Live.personCount, hc02Live.historicalDotCount, filteredDots.length])
+    return hc02Live.historicalDotCount
+  }, [anyCameraOnline, patrolEvents, pinTick, zonePop, hc02Live.historicalDotCount])
 
   const identifiedCount = useMemo(() => {
     if (!anyCameraOnline) return 0

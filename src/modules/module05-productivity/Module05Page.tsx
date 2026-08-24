@@ -49,8 +49,8 @@ import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hook
 import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import { filterPatrolEvidenceEvents, isPatrolPersonLifecycleWithSnapshot, summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
-import { countPatrolAlertEntities } from './utils/patrolPatrolCounts'
-import { countUniquePatrolTabEntities } from './utils/patrolWorkforceEventLabels'
+import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/patrolPatrolCounts'
+import { subscribeHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { resetPatrolTestData } from './services/patrolReset.service'
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
 import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
@@ -58,17 +58,6 @@ import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
 import { enrichPatrolEventsWithWorkforceObjects, dedupePatrolEventsByMasterEntity } from './utils/patrolWorkforceEventLabels'
 import { subscribePatrolManualIdentity, syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
-
-/* ── Tier 1 KPIs ─────────────────────────────────────────────── */
-function formatHelmetMetricBreakdown(
-  perCamera: PatrolHelmetLiveMetrics['perCamera'],
-  field: 'person_count' | 'ppe_violations' | 'ppe_alerts_today',
-): string {
-  if (perCamera.length === 0) return ''
-  return perCamera
-    .map(row => `${row.camera_id.replace('HC-', 'H')}: ${row[field]}`)
-    .join(' · ')
-}
 
 function PatrolKPIs({
   live,
@@ -79,6 +68,11 @@ function PatrolKPIs({
   workforce: WorkforceSnapshot
   events: PatrolEvent[]
 }) {
+  const [pinTick, setPinTick] = useState(0)
+  useEffect(() => subscribeHeatmapPersonRegistry(() => {
+    setPinTick(t => t + 1)
+  }), [])
+
   const zoneEntries = Object.values(workforce.zonePopulation)
   const visitedZones = zoneEntries.filter(
     z => z.observed_count > 0 || z.kpi.peak > 0,
@@ -88,31 +82,22 @@ function PatrolKPIs({
     ? Math.round((visitedZones / totalZones) * 100)
     : 0
 
-  // Công nhân = unique entities tab Người
-  const workerEntityCount = countUniquePatrolTabEntities(events, 'person')
+  // Công nhân global — Người + Định danh dedupe, mọi mũ HC-* (không YOLO raw count)
+  void pinTick
+  const workerSummary = summarizePatrolGlobalWorkers(events)
+  const anyCameraOnline = live.perCamera.some(row => row.stream_online)
+  const observedCount = anyCameraOnline ? workerSummary.total : 0
 
-  // Sự kiện = unique entities tab Người + Định danh
+  // Sự kiện = unique entities tab Người + Định danh (feed có snapshot)
   const alertCount = countPatrolAlertEntities(events)
 
   const zonePop = Object.values(workforce.zonePopulation)[0]
-  const anyCameraOnline = live.perCamera.some(row => row.stream_online)
-  // Không dùng zonePop / event count cũ khi cả hai mũ đều offline.
-  const observedCount = !anyCameraOnline
-    ? 0
-    : live.personCount > 0
-      ? live.personCount
-      : workerEntityCount > 0
-        ? workerEntityCount
-        : zonePop?.observed_count ?? 0
-
   const peopleDetail = !anyCameraOnline
     ? 'Chưa có luồng live'
-    : zonePop
-    ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
-    : workerEntityCount > 0
-      ? `${workerEntityCount} người đã nhận diện`
-      : live.perCamera.length > 0
-        ? formatHelmetMetricBreakdown(live.perCamera, 'person_count') || `${live.personCount} người`
+    : observedCount > 0
+      ? `${observedCount} trong ca · ${workerSummary.person} Người · ${workerSummary.identity} Định danh`
+      : zonePop?.observed_count
+        ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
         : live.backendReachable || live.streamOnline
           ? 'Đang chờ phát hiện'
           : 'Chưa có luồng live'
