@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .patrol_person_visibility import _clip_box_to_frame
+from .patrol_person_visibility import (
+    _clip_box_to_frame,
+    legs_only_person_box,
+    upper_body_third_with_head_visible,
+)
 
 
 @dataclass(frozen=True)
@@ -92,24 +96,55 @@ def _person_box_from_face(
     return _clip_box_to_frame(raw, frame_w, frame_h)
 
 
+def _yolo_plausible_without_face(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Quay lưng / không thấy mặt — vẫn giữ nếu đủ thân trên (tab Đối tượng)."""
+    if legs_only_person_box(box, frame_w, frame_h):
+        return False
+    if not upper_body_third_with_head_visible(box, frame_w, frame_h):
+        return False
+    x1, y1, x2, y2 = box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    bw_ratio = pw / max(float(frame_w), 1.0)
+    area_ratio = (pw * ph) / max(float(frame_w * frame_h), 1.0)
+    if area_ratio > 0.26 or area_ratio < 0.035:
+        return False
+    if bh_ratio > 0.72 or bh_ratio < 0.28:
+        return False
+    if bw_ratio > 0.34 or bw_ratio < 0.07:
+        return False
+    return True
+
+
 def anchor_patrol_person_boxes_to_faces(
     frame: np.ndarray,
     person_boxes: list[tuple[tuple[float, float, float, float], float]],
     *,
     camera_id: str,
 ) -> list[tuple[tuple[float, float, float, float], float]]:
-    """Giữ bbox YOLO có mặt; thêm bbox synth cho mỗi mặt chưa có YOLO; loại FP vải."""
+    """Giữ bbox YOLO có mặt hoặc đủ thân trên; synth mỗi mặt chưa có YOLO; loại FP vải."""
     if not camera_id.startswith("HC-"):
         return person_boxes
 
     faces = _list_frame_faces(frame)
-    if not faces:
-        return person_boxes
-
     h, w = frame.shape[:2]
+    if not faces:
+        return [
+            (box, conf)
+            for box, conf in person_boxes
+            if _yolo_plausible_without_face(box, w, h)
+        ]
+
     matched_yolo: list[tuple[tuple[float, float, float, float], float]] = []
     for box, conf in person_boxes:
         if any(_face_center_in_box(face, box) for face in faces):
+            matched_yolo.append((box, conf))
+        elif _yolo_plausible_without_face(box, w, h):
             matched_yolo.append((box, conf))
 
     covered_face_indices: set[int] = set()

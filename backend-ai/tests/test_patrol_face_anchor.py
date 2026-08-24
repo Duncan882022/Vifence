@@ -74,5 +74,32 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertIn(person, [box for box, _ in out])
 
 
+    def test_yolo_back_turn_kept_when_upper_body_visible(self):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        face_other = _FrameFace(box=(1120.0, 200.0, 1200.0, 340.0), score=0.85)
+        back_turn = (180.0, 140.0, 420.0, 620.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_other]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(back_turn, 0.68)],
+                camera_id="HC-02",
+            )
+        boxes = [box for box, _ in out]
+        self.assertIn(back_turn, boxes)
+        self.assertGreaterEqual(len(out), 2)
+
+    def test_fabric_yolo_rejected_without_face(self):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        face = _FrameFace(box=(320.0, 180.0, 520.0, 420.0), score=0.88)
+        fabric = (900.0, 80.0, 1100.0, 620.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(fabric, 0.55)],
+                camera_id="HC-02",
+            )
+        self.assertNotIn(fabric, [box for box, _ in out])
+
+
 if __name__ == "__main__":
     unittest.main()
