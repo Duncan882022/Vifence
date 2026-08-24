@@ -347,6 +347,7 @@ def snapshot_annotation_detection(
     frame_h: int,
     *,
     camera_id: str = "",
+    frame: object | None = None,
 ) -> PpeDetection:
     """BBox vẽ ROI snapshot — vest/helmet tái tính từ bbox người, không dùng bbox lệch."""
     if detection.behavior in ("no_vest", "safety_vest"):
@@ -375,19 +376,35 @@ def snapshot_annotation_detection(
             )
             return detection.model_copy(update={"bbox": [float(v) for v in helmet]})
 
+    if detection.behavior == "person":
+        pb = raw_person_bbox(detection)
+        if pb and len(pb) >= 4:
+            person_tuple = tuple(float(v) for v in pb)
+            if frame is not None:
+                from .patrol_person_visibility import resolve_patrol_person_snapshot_bbox
+
+                resolved = resolve_patrol_person_snapshot_bbox(
+                    frame,
+                    person_tuple,
+                    frame_w,
+                    frame_h,
+                    camera_id=camera_id,
+                )
+                if resolved is not None:
+                    return detection.model_copy(
+                        update={"bbox": [float(v) for v in resolved]},
+                    )
+                return detection.model_copy(update={"bbox": [0.0, 0.0, 0.0, 0.0]})
+            clipped = _clip_box_to_frame(person_tuple, frame_w, frame_h)
+            return detection.model_copy(update={"bbox": [float(v) for v in clipped]})
+
     if detection.bbox and len(detection.bbox) >= 4:
         clipped = _clip_box_to_frame(
             tuple(float(v) for v in detection.bbox),
             frame_w,
             frame_h,
         )
-        if detection.behavior == "person":
-            pb = _clip_box_to_frame(tuple(raw_person_bbox(detection)), frame_w, frame_h)
-            return detection.model_copy(update={"bbox": [float(v) for v in pb]})
         return detection.model_copy(update={"bbox": [float(v) for v in clipped]})
-    if detection.behavior == "person":
-        pb = _clip_box_to_frame(tuple(raw_person_bbox(detection)), frame_w, frame_h)
-        return detection.model_copy(update={"bbox": [float(v) for v in pb]})
     return detection
 
 

@@ -103,3 +103,103 @@ def patrol_person_meets_detection_gate(
     if face_dominant or has_stable_id:
         return True
     return upper_body_third_with_head_visible(person_box, frame_w, frame_h)
+
+
+def _is_edge_sliver_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Loại bbox nhỏ dính mép — YOLO hay nhầm tay/cánh tay góc khung."""
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    area_ratio = (pw * ph) / max(float(frame_w * frame_h), 1.0)
+    at_right = x1 >= frame_w * 0.72
+    at_left = x2 <= frame_w * 0.28
+    at_top = y1 <= frame_h * 0.04 and y2 <= frame_h * 0.42
+    if area_ratio < 0.14 and (at_right or at_left or at_top):
+        return True
+    if area_ratio < 0.08:
+        return True
+    return False
+
+
+def _face_dominant_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    aspect = pw / ph
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    if bh_ratio >= 0.38 and 0.42 <= aspect <= 1.35:
+        return True
+    if aspect >= 0.72 and bh_ratio < 0.62:
+        return True
+    if y1 < frame_h * 0.12 and y2 < frame_h * 0.62 and bh_ratio < 0.55:
+        return True
+    if aspect >= 0.55 and bh_ratio < 0.42:
+        return True
+    return False
+
+
+def resolve_patrol_person_snapshot_bbox(
+    frame: object,
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str = "",
+) -> tuple[float, float, float, float] | None:
+    """ROI snapshot PERS — ưu tiên mặt, không crop tay/mép góc."""
+    if _is_edge_sliver_person_box(person_box, frame_w, frame_h):
+        return None
+
+    import numpy as np
+
+    from .worker_identity.recognizer import patrol_face_bbox_in_frame
+
+    if frame is None or not isinstance(frame, np.ndarray):
+        return None
+
+    _ = camera_id
+    face_box = patrol_face_bbox_in_frame(frame, [float(v) for v in person_box])
+    if face_box is not None:
+        fx1, fy1, fx2, fy2 = face_box
+        fw = max(fx2 - fx1, 1.0)
+        fh = max(fy2 - fy1, 1.0)
+        expanded = (
+            fx1 - fw * 0.40,
+            fy1 - fh * 0.50,
+            fx2 + fw * 0.40,
+            fy2 + fh * 0.65,
+        )
+        clipped = _clip_box_to_frame(expanded, frame_w, frame_h)
+        if (clipped[3] - clipped[1]) >= frame_h * 0.10:
+            return clipped
+
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+
+    if upper_body_third_with_head_visible(person_box, frame_w, frame_h):
+        upper = (x1 + pw * 0.05, y1, x2 - pw * 0.05, y1 + ph * 0.55)
+        clipped = _clip_box_to_frame(upper, frame_w, frame_h)
+        if (clipped[3] - clipped[1]) >= frame_h * 0.12:
+            return clipped
+
+    if _face_dominant_person_box(person_box, frame_w, frame_h):
+        head_shoulder = (
+            x1 + pw * 0.06,
+            y1,
+            x2 - pw * 0.06,
+            y1 + ph * 0.50,
+        )
+        clipped = _clip_box_to_frame(head_shoulder, frame_w, frame_h)
+        if (clipped[3] - clipped[1]) >= frame_h * 0.14:
+            return clipped
+
+    return None

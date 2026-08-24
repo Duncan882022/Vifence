@@ -689,7 +689,9 @@ def audit_person_snapshot_crop() -> list[CaseResult]:
     )
     event = store.add_person(det, frame, camera_id="HC-02", track_id="p11:person")
     h, w = frame.shape[:2]
-    expect = snapshot_annotation_detection(det, w, h).bbox
+    expect = snapshot_annotation_detection(
+        det, w, h, camera_id="HC-02", frame=frame,
+    ).bbox
     ok_roi = event is not None and all(abs(a - b) < 0.5 for a, b in zip(event.bbox, expect))
     ok_full = event is not None and event.frame_width == w and event.frame_height == h
     ok = (

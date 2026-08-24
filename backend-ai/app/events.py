@@ -683,10 +683,21 @@ class EventStore:
         h, w = raw.shape[:2]
         from .ppe_analyzer import snapshot_annotation_detection
 
-        annot_det = snapshot_annotation_detection(incoming, w, h, camera_id=camera_id)
+        annot_det = snapshot_annotation_detection(
+            incoming, w, h, camera_id=camera_id, frame=raw,
+        )
+        if (
+            annot_det.bbox[2] <= annot_det.bbox[0]
+            or annot_det.bbox[3] <= annot_det.bbox[1]
+        ):
+            if existing is not None:
+                return existing
+            return None
         incoming.bbox = [float(v) for v in annot_det.bbox]
         annotated = self._draw_ppe_bbox(raw, annot_det, copy_frame=True, thickness=2)
-        snapshot = annotated
+        from .snapshot_compose import crop_to_focus
+
+        snapshot = crop_to_focus(annotated, list(incoming.bbox), behavior="person")
         frame_size = (int(w), int(h))
 
         if existing is not None:

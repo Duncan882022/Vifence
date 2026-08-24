@@ -393,6 +393,40 @@ class PpeEngine:
                 is_gallery = gallery_verified and bool(worker_id)
                 is_sgc = is_sgc_worker_id(worker_id)
 
+                from .ppe_analyzer import _face_dominant_person_box, raw_person_bbox
+                from .patrol_person_visibility import (
+                    patrol_person_meets_detection_gate,
+                    resolve_patrol_person_snapshot_bbox,
+                    upper_body_third_with_head_visible,
+                )
+
+                pb = raw_person_bbox(person)
+                if not pb or len(pb) < 4:
+                    continue
+                box = tuple(float(v) for v in pb)
+                if not patrol_person_meets_detection_gate(
+                    box,
+                    frame_w,
+                    frame_h,
+                    face_dominant=_face_dominant_person_box(box, frame_w, frame_h),
+                    has_stable_id=is_gallery or is_sgc,
+                ):
+                    continue
+                if camera_id.startswith("HC-") and is_sgc and not is_gallery:
+                    if not face_eligible and not upper_body_third_with_head_visible(
+                        box, frame_w, frame_h,
+                    ):
+                        continue
+                    area_ratio = (box[2] - box[0]) * (box[3] - box[1]) / max(
+                        float(frame_w * frame_h), 1.0,
+                    )
+                    if not face_eligible and area_ratio > 0.45:
+                        continue
+                    if resolve_patrol_person_snapshot_bbox(
+                        frame, box, frame_w, frame_h, camera_id=camera_id,
+                    ) is None:
+                        continue
+
                 should_log = False
                 if is_gallery or is_sgc:
                     should_log = True
