@@ -93,6 +93,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
       <span
         className={cn(
           'absolute -top-3 left-0 px-1 py-px font-mono whitespace-nowrap rounded-sm',
+          style.bg,
           style.label,
           compact ? 'text-[5px]' : 'text-[7px]',
         )}

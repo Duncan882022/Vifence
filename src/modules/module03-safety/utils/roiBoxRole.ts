@@ -118,8 +118,8 @@ export function overlayBorderClass(role: RoiBoxRole): string {
 const PERSON_LIVE_BOX_STYLE: OverlayBoxStyle = {
   border: 'border-2 border-solid border-green-400/95',
   fill: 'bg-green-500/14',
-  label: 'text-green-100',
-  bg: 'bg-green-700/55',
+  label: 'text-green-50',
+  bg: 'bg-green-900/95',
   role: 'info',
 }
 
