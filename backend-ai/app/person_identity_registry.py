@@ -325,6 +325,37 @@ def bind_patrol_track_identity(
         _save(state)
 
 
+def _bodycam_face_dominant_bbox(
+    person_bbox: list[float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Cận mặt cam trước HC-* — đủ tiêu chí cấp sgc dù face embed fail 1 frame."""
+    x1, y1, x2, y2 = (float(v) for v in person_bbox[:4])
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    aspect = pw / ph
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    if aspect >= 0.72 and bh_ratio < 0.62:
+        return True
+    if y1 < frame_h * 0.12 and y2 < frame_h * 0.62 and bh_ratio < 0.55:
+        return True
+    if aspect >= 0.55 and bh_ratio < 0.42:
+        return True
+    return False
+
+
+def _assign_new_sgc(state: dict, key: str, pb: list[float] | None, face_emb: list[float] | None) -> tuple[str, str]:
+    seq = max(int(state.get("next_seq") or 1), 1)
+    sgc = _format_sgc(seq)
+    state["next_seq"] = seq + 1
+    state["tracks"][key] = sgc
+    if pb and len(pb) >= 4:
+        _remember_track_meta(state, key, sgc, pb, face_emb)
+    _save(state)
+    return sgc, sgc
+
+
 def resolve_patrol_person_identity(
     detection: PpeDetection,
     camera_id: str,
@@ -360,11 +391,40 @@ def resolve_patrol_person_identity(
     elif pb is None and detection.bbox and len(detection.bbox) >= 4:
         pb = [float(v) for v in detection.bbox]
 
-    # Không có embedding mặt → chưa cấp sgc (tab Đối tượng / OBJ-only).
+    # Không có embedding mặt — giữ sgc/gallery đã gán; HC cận mặt vẫn cấp sgc mới.
     if query_emb is None:
         key = _track_key(camera_id, track_id)
         with _lock:
             state = _load()
+            existing = state["tracks"].get(key)
+            if isinstance(existing, str) and existing.strip():
+                existing = existing.strip()
+                from .patrol_entity import is_patrol_gallery_id
+
+                bound = _gallery_from_patrol_binding(existing)
+                if bound:
+                    gallery_id, gallery_name = bound
+                    state["tracks"][key] = gallery_id
+                    if pb and len(pb) >= 4:
+                        _remember_track_meta(state, key, gallery_id, pb, None)
+                    _save(state)
+                    return gallery_id, gallery_name
+                if is_sgc_worker_id(existing) or is_patrol_gallery_id(existing):
+                    if pb and len(pb) >= 4:
+                        _remember_track_meta(state, key, existing, pb, None)
+                        _save(state)
+                    return existing, existing
+
+            conf = float(detection.confidence or 0.0)
+            if (
+                camera_id.startswith("HC-")
+                and pb
+                and len(pb) >= 4
+                and conf >= 0.55
+                and _bodycam_face_dominant_bbox(pb, frame_w, frame_h)
+            ):
+                return _assign_new_sgc(state, key, pb, None)
+
             if pb and len(pb) >= 4:
                 _remember_track_meta(state, key, "", pb, None)
                 _save(state)
