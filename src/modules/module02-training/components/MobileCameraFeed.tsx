@@ -43,7 +43,7 @@ import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/person
 import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import { patrolPersonMeetsUpperBodyGate } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
+import { patrolPersonMeetsDetectionGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
@@ -206,13 +206,14 @@ export function MobileCameraFeed({
         const patrolVisible = (d: MobileAiDetection) => {
           if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
           if (!d.bbox || d.bbox.length < 4 || frameW <= 0 || frameH <= 0) return false
-          return patrolPersonMeetsUpperBodyGate(
-            [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
+          return patrolPersonMeetsDetectionGate({
+            bbox: [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
             frameW,
             frameH,
-          )
+            workerId: d.worker_id,
+          })
         }
-        const gated = filtered.filter(patrolVisible)
+        const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible))
         const now = Date.now()
         const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
         /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */

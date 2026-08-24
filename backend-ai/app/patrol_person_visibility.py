@@ -68,3 +68,38 @@ def upper_body_third_with_head_visible(
         return False
 
     return True
+
+
+def plausible_person_silhouette(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Loại dải dọc/ngang quá hẹp — YOLO FP mép khung."""
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    if aspect > 4.2 or aspect < 0.28:
+        return False
+    if pw < max(12.0, frame_w * 0.035):
+        return False
+    if ph < max(16.0, frame_h * 0.06):
+        return False
+    return True
+
+
+def patrol_person_meets_detection_gate(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    face_dominant: bool = False,
+    has_stable_id: bool = False,
+) -> bool:
+    """Gate hiển thị/đếm — cận mặt hoặc đã có sgc/gallery thì bỏ qua rule 1/3 thân trên."""
+    if not plausible_person_silhouette(person_box, frame_w, frame_h):
+        return False
+    if face_dominant or has_stable_id:
+        return True
+    return upper_body_third_with_head_visible(person_box, frame_w, frame_h)

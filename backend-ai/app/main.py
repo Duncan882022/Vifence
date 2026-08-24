@@ -753,12 +753,12 @@ def _analyze_ppe_frame(frame: np.ndarray, camera_id: str) -> dict:
 
 
 def _analyze_patrol_person_frame(frame: np.ndarray, camera_id: str) -> dict:
-    from .ppe_analyzer import analyze_patrol_person_frame
-
-    def _process(small: np.ndarray, cam_id: str, **kwargs: object) -> tuple[dict, list]:
-        return analyze_patrol_person_frame(small, cam_id), []
-
-    return analyze_engine_frame(frame, camera_id, _process)
+    """HC-* person mode — detect + gán sgc + log PERS-001 qua ppe_engine."""
+    return analyze_engine_frame(
+        frame,
+        camera_id,
+        ppe_engine.process_frame,
+    )
 
 
 def _analyze_pccc_frame(frame: np.ndarray, camera_id: str) -> dict:

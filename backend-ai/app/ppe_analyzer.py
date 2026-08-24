@@ -1572,7 +1572,14 @@ def _plausible_person_box(
         )
         if not (close_ok or wide_ok):
             return False
-        if not _upper_body_third_with_head_visible(box, frame_w, frame_h):
+        from .patrol_person_visibility import patrol_person_meets_detection_gate
+
+        if not patrol_person_meets_detection_gate(
+            box,
+            frame_w,
+            frame_h,
+            face_dominant=_face_dominant_person_box(box, frame_w, frame_h),
+        ):
             return False
         if frame is not None:
             # Góc rộng (quạt, máy…) — bắt buộc có tín hiệu da/áo phản quang.
