@@ -5,21 +5,21 @@
  */
 export const PATROL_PERSON_ROI_CONFIG = {
   /** Conf tối thiểu tạo track + vẽ ROI — khớp HC02_PERSON_MIN_CONF (0.35) */
-  birthMinConfidence: 0.35,
+  birthMinConfidence: 0.33,
   /** Conf cao — ưu tiên gán trước (ByteTrack high-conf pool) */
-  highConfidenceMin: 0.46,
+  highConfidenceMin: 0.36,
   /** Số hit liên tiếp để confirmed */
   confirmHits: 1,
   /** IoU tối thiểu match track ↔ detection */
   matchIouMin: 0.07,
   /** Match theo khoảng cách tâm / kích thước bbox (di chuyển nhanh) */
-  matchCenterRatio: 0.60,
+  matchCenterRatio: 0.65,
   /** Frame analyze miss liên tiếp trước khi chuyển lost */
-  maxMissFrames: 24,
+  maxMissFrames: 30,
   /** Thời gian coast sau lost (ms) — Kalman predict trên overlay, tăng để smooth qua latency mạng */
-  maxLostMs: 4800,
+  maxLostMs: 5600,
   /** Giới hạn extrapolate rAF (ms) — cao hơn để mượt khi round-trip chậm */
-  maxPredictMs: 2200,
+  maxPredictMs: 2600,
   /** Kalman — processNoise thấp → track ổn định hơn giữa 2 detect */
   processNoise: 0.08,
   measureNoise: 0.20,

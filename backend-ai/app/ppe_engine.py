@@ -13,7 +13,13 @@ from .ppe_analyzer import analyze_ppe_frame
 from .schemas import PpeDetection, ViolationEvent
 from .track_matching import assign_person_track_id
 from .worker_identity.detection_enrich import copy_worker_identity
-from .snapshot_sync import build_snapshot_episode, merge_episode_best, resync_ppe_episode
+from .snapshot_sync import (
+    build_snapshot_episode,
+    frame_scale,
+    merge_episode_best,
+    resync_ppe_episode,
+    scale_detection,
+)
 from .violation_thresholds import VIOLATION_CONFIRM_SECONDS, VIOLATION_MAX_GAP_SECONDS, VIOLATION_MIN_CONFIDENCE
 
 logger = logging.getLogger("ppe_engine")
@@ -151,6 +157,7 @@ class PpeEngine:
             self._active_segment[camera_id] = seg
 
         snapshot_source = capture_frame if capture_frame is not None else frame
+        sx, sy = frame_scale(frame, snapshot_source) if capture_frame is not None else (1.0, 1.0)
         from .cam04_ppe_demo import is_cam04_ppe_violation_segment
 
         result = analyze_ppe_frame(frame, camera_id, source_pts_sec=source_pts_sec)
@@ -342,8 +349,20 @@ class PpeEngine:
                 gallery_match = worker_match_from_detection(person)
                 gallery_verified = is_verified_face_match(gallery_match)
 
-                face_vec, _face_score, face_eligible = assess_patrol_face(frame, person_bbox)
-                face_emb = face_vec.tolist() if face_vec is not None else None
+                pre_wid = (person.worker_id or "").strip()
+                skip_face_assess = bool(
+                    pre_wid
+                    and (
+                        is_sgc_worker_id(pre_wid)
+                        or is_patrol_gallery_id(pre_wid)
+                        or (gallery_verified and pre_wid not in ("", "unknown"))
+                    )
+                )
+                if skip_face_assess:
+                    face_vec, face_emb, face_eligible = None, None, True
+                else:
+                    face_vec, _face_score, face_eligible = assess_patrol_face(frame, person_bbox)
+                    face_emb = face_vec.tolist() if face_vec is not None else None
 
                 existing_wid = (person.worker_id or "").strip()
                 if existing_wid and existing_wid not in ("", "unknown") and gallery_verified:
@@ -475,8 +494,8 @@ class PpeEngine:
 
                 gate = self._gate_for(camera_id, track_id)
                 if is_gallery or is_sgc:
-                    confirmed = gate.register(True)
-                    if existing is None and not confirmed:
+                    gate.note_hit(True)
+                    if existing is None and not gate.snapshot(now)["ready_to_confirm"]:
                         continue
                 elif existing is None and not face_eligible and track_duration < object_confirm:
                     continue
@@ -488,14 +507,19 @@ class PpeEngine:
                 ):
                     continue
 
+                det_for_snapshot = (
+                    scale_detection(det, sx, sy) if sx != 1.0 or sy != 1.0 else det
+                )
                 event = self.store.upsert_patrol_person(
-                    det,
+                    det_for_snapshot,
                     snapshot_source,
                     camera_id=camera_id,
                     track_id=track_id,
                     allow_create=existing is None,
                 )
                 if event:
+                    if existing is None and (is_gallery or is_sgc):
+                        gate.consume_confirm(now)
                     master_id = resolve_patrol_master_id(
                         event.worker_id or worker_id,
                         event.object_id,

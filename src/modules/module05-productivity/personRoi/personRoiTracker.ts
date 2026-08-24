@@ -71,8 +71,8 @@ function dedupeOverlappingPersonDetections(detections: PersonRoiDetection[]): Pe
   for (const candidate of ranked) {
     const duplicate = kept.some(
       keptDet =>
-        bboxIou(candidate.bbox, keptDet.bbox) >= 0.35
-        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.45,
+        bboxIou(candidate.bbox, keptDet.bbox) >= 0.48
+        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.58,
     )
     if (!duplicate) kept.push(candidate)
   }
@@ -232,6 +232,35 @@ export function advancePersonRoiTracks(
   // Unmatched high-conf detections → new tentative tracks
   high.forEach((det, index) => {
     if (matchedDets.has(index)) return
+    if (det.confidence < cfg.birthMinConfidence) return
+    const id = nextTrackId()
+    const kalman = new KalmanBox2D(
+      det.bbox,
+      cfg.processNoise,
+      cfg.measureNoise,
+      cfg.velocityDamping,
+    )
+    const track: PersonRoiTrack = {
+      id,
+      state: 'tentative',
+      hits: 1,
+      missStreak: 0,
+      lastSeenAt: now,
+      lastMeasureAt: now,
+      confidence: det.confidence,
+      label: det.worker_name?.trim() || det.label || id,
+      workerId: isKnownWorker(det.worker_id) ? det.worker_id!.trim() : undefined,
+      workerName: det.worker_name?.trim(),
+      kalman,
+    }
+    applyIdentity(track, det)
+    next.set(id, track)
+  })
+
+  // Unmatched low-conf — distant crowd / partial body (ByteTrack birth extension)
+  low.forEach((det, index) => {
+    const globalIndex = high.length + index
+    if (matchedDets.has(globalIndex)) return
     if (det.confidence < cfg.birthMinConfidence) return
     const id = nextTrackId()
     const kalman = new KalmanBox2D(

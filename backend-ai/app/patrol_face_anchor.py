@@ -53,6 +53,24 @@ def _face_center_in_box(face: _FrameFace, person_box: tuple[float, float, float,
     return x1 <= cx <= x2 and y1 <= cy <= y2
 
 
+def _bbox_iou(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
 def _person_box_from_face(
     face: _FrameFace,
     frame_w: int,
@@ -80,7 +98,7 @@ def anchor_patrol_person_boxes_to_faces(
     *,
     camera_id: str,
 ) -> list[tuple[tuple[float, float, float, float], float]]:
-    """Giữ bbox có mặt bên trong; nếu YOLO trượt mặt thì tạo bbox từ YuNet."""
+    """Giữ bbox YOLO có mặt; thêm bbox synth cho mỗi mặt chưa có YOLO; loại FP vải."""
     if not camera_id.startswith("HC-"):
         return person_boxes
 
@@ -89,13 +107,30 @@ def anchor_patrol_person_boxes_to_faces(
         return person_boxes
 
     h, w = frame.shape[:2]
-    matched: list[tuple[tuple[float, float, float, float], float]] = []
+    matched_yolo: list[tuple[tuple[float, float, float, float], float]] = []
     for box, conf in person_boxes:
         if any(_face_center_in_box(face, box) for face in faces):
-            matched.append((box, conf))
+            matched_yolo.append((box, conf))
 
-    if matched:
-        return matched
+    covered_face_indices: set[int] = set()
+    for face_index, face in enumerate(faces):
+        for box, _ in matched_yolo:
+            if _face_center_in_box(face, box):
+                covered_face_indices.add(face_index)
+                break
+
+    synth_boxes: list[tuple[tuple[float, float, float, float], float]] = []
+    for face_index, face in enumerate(faces):
+        if face_index in covered_face_indices:
+            continue
+        synth_box = _person_box_from_face(face, w, h)
+        if any(_bbox_iou(synth_box, box) >= 0.42 for box, _ in matched_yolo):
+            continue
+        synth_conf = min(0.92, 0.52 + face.score * 0.38)
+        synth_boxes.append((synth_box, synth_conf))
+
+    if matched_yolo or synth_boxes:
+        return matched_yolo + synth_boxes
 
     best = max(faces, key=lambda f: f.score * (f.box[2] - f.box[0]) * (f.box[3] - f.box[1]))
     synth_box = _person_box_from_face(best, w, h)

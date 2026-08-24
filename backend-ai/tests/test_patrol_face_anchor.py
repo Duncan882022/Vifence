@@ -48,6 +48,31 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0][0], person)
 
+    def test_multiple_faces_yield_multiple_boxes(self):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        face_a = _FrameFace(box=(120.0, 180.0, 220.0, 320.0), score=0.88)
+        face_b = _FrameFace(box=(820.0, 200.0, 920.0, 340.0), score=0.85)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_a, face_b]):
+            out = anchor_patrol_person_boxes_to_faces(frame, [], camera_id="HC-02")
+        self.assertEqual(len(out), 2)
+        centers = sorted((box[0] + box[2]) / 2 for box, _ in out)
+        self.assertLess(centers[0], 400.0)
+        self.assertGreater(centers[1], 700.0)
+
+    def test_yolo_plus_unmatched_face_keeps_both(self):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        person = (280.0, 120.0, 620.0, 680.0)
+        face_in = _FrameFace(box=(380.0, 180.0, 520.0, 360.0), score=0.9)
+        face_far = _FrameFace(box=(900.0, 200.0, 1000.0, 340.0), score=0.82)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_in, face_far]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(person, 0.72)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 2)
+        self.assertIn(person, [box for box, _ in out])
+
 
 if __name__ == "__main__":
     unittest.main()

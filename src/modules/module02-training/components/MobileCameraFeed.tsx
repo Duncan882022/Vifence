@@ -178,7 +178,7 @@ export function MobileCameraFeed({
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl: url,
-      intervalMs: cameraId === 'HC-02' ? 220 : 450,
+      intervalMs: cameraId === 'HC-02' ? 180 : 450,
       getGps: cameraId === 'HC-02'
         ? () => {
             const snap = getPatrolHelmetGps(cameraId)

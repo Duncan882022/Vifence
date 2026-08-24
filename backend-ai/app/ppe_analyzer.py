@@ -1215,8 +1215,12 @@ def _dedupe_person_boxes(
     *,
     iou_threshold: float = 0.35,
     containment_threshold: float = 0.45,
+    camera_id: str = "",
 ) -> list[_PersonPpe]:
     """Một người — một bbox: loại box nhỏ lồng/trùng box lớn hơn."""
+    if camera_id.startswith("HC-"):
+        iou_threshold = 0.48
+        containment_threshold = 0.58
     if len(persons) <= 1:
         return persons
 
@@ -1727,7 +1731,8 @@ def _build_patrol_bodycam_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_BODYCAM,
-        )
+        ),
+        camera_id=camera_id,
     )
     from .patrol_face_anchor import anchor_patrol_person_boxes_to_faces
 

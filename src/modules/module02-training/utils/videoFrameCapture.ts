@@ -20,7 +20,9 @@ const captureStateByVideo = new WeakMap<HTMLVideoElement, VideoCaptureState>()
 const analyzeIntervalScaleByVideo = new WeakMap<HTMLVideoElement, number>()
 
 /** Khoảng cách tối thiểu giữa 2 lần drawImage thực sự (ms). */
-const MIN_CAPTURE_GAP_MS = 96
+const MIN_CAPTURE_GAP_MS = 64
+/** HC patrol — frame mới thường xuyên hơn để ROI bám video. */
+const PATROL_CAPTURE_GAP_MS = 40
 
 export interface VideoCaptureViewport {
   fit: 'cover' | 'contain'
@@ -62,6 +64,7 @@ export function captureVideoFrameBase64(
   maxWidth = 480,
   quality = 0.52,
   viewport?: VideoCaptureViewport,
+  minCaptureGapMs = MIN_CAPTURE_GAP_MS,
 ): string | null {
   const region = resolveCaptureRegion(video, viewport)
   if (region.width <= 0 || region.height <= 0) return null
@@ -74,7 +77,7 @@ export function captureVideoFrameBase64(
     state
     && state.cacheKey === cacheKey
     && state.lastBase64
-    && now - state.lastAt < MIN_CAPTURE_GAP_MS
+    && now - state.lastAt < minCaptureGapMs
   ) {
     return state.lastBase64
   }
@@ -119,8 +122,9 @@ export function captureCameraAnalyzeFrame(
   quality = 0.72,
   streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'mobile',
 ): string | null {
+  const isPatrolHelmet = cameraId.startsWith('HC-')
   return captureVideoFrameBase64(video, maxWidth, quality, {
     fit: getVideoObjectFitForCamera(cameraId, streamType),
     objectPosition: getVideoObjectPositionForCamera(cameraId, streamType),
-  })
+  }, isPatrolHelmet ? PATROL_CAPTURE_GAP_MS : MIN_CAPTURE_GAP_MS)
 }

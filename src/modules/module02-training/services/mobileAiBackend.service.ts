@@ -249,6 +249,8 @@ export function createMobileAiAnalyzeClient(
   let timerId = 0
   let connectedOnce = false
   let abortController: AbortController | null = null
+  let pendingAfterInFlight = false
+  let lastRoundTripMs = intervalMs
   const isPatrolHelmet = cameraId.startsWith('HC-')
 
   const scheduleNext = (delay = intervalMs) => {
@@ -259,13 +261,16 @@ export function createMobileAiAnalyzeClient(
   const tick = async () => {
     if (stopped) return
 
-    // HC-*: abort request cũ, gửi frame mới — tránh ROI đứng im khi round-trip chậm.
+    // HC-*: chờ response thay vì abort liên tục — tránh mất bbox khi backend chậm.
     if (inFlight && isPatrolHelmet) {
-      abortController?.abort()
+      pendingAfterInFlight = true
+      scheduleNext(60)
+      return
     } else if (inFlight) {
       scheduleNext(400)
       return
     }
+    pendingAfterInFlight = false
 
     if (typeof document !== 'undefined' && document.hidden) {
       scheduleNext(2000)
@@ -290,6 +295,7 @@ export function createMobileAiAnalyzeClient(
     abortController = typeof AbortController !== 'undefined' ? new AbortController() : null
     const gps = getGps?.() ?? null
     const heading = getHeading?.() ?? null
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
     try {
       const result = await postAnalyzeFrame(
         backendUrl,
@@ -305,7 +311,12 @@ export function createMobileAiAnalyzeClient(
       connectedOnce = true
       onStatusChange('connected')
       onResult(result)
-      scheduleNext(analyzeMode === 'person' || intervalMs < 350 ? 40 : 120)
+      const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      lastRoundTripMs = Math.max(intervalMs, finishedAt - startedAt)
+      const adaptiveGap = isPatrolHelmet
+        ? Math.min(120, Math.max(24, Math.round(lastRoundTripMs * 0.12)))
+        : (analyzeMode === 'person' || intervalMs < 350 ? 40 : 120)
+      scheduleNext(adaptiveGap)
     } catch (err) {
       if (stopped) return
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -317,6 +328,10 @@ export function createMobileAiAnalyzeClient(
       scheduleNext(3000)
     } finally {
       inFlight = false
+      if (pendingAfterInFlight && !stopped) {
+        pendingAfterInFlight = false
+        scheduleNext(20)
+      }
     }
   }
 
