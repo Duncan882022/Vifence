@@ -37,7 +37,7 @@ export class PatrolPersonRoiEngine {
 
   getHeatmapPersons(): Array<{ personId: string; label: string; confidence: number }> {
     return this.displayCache
-      .filter(t => t.state !== 'tentative' || t.confidence >= PATROL_PERSON_ROI_CONFIG.birthMinConfidence)
+      .filter(t => t.state === 'confirmed')
       .map(t => ({
         personId: t.personId,
         label: t.label,

@@ -1,4 +1,4 @@
-import { upsertHeatmapPersons } from '@/services/patrolHeatmapPersonRegistry'
+import { upsertHeatmapPersons, pruneHeatmapActivePersons } from '@/services/patrolHeatmapPersonRegistry'
 import type { MobileAiDetection } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getPatrolPersonRoiEngine, clearPatrolPersonRoiEngine } from '../personRoi/patrolPersonRoiEngine'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
@@ -33,6 +33,10 @@ export function syncLivePatrolPersonDetectionsToHeatmap(
   const persons = engine.getHeatmapPersons()
   if (persons.length > 0) {
     upsertPersonsAtPatrolGps(cameraId, persons)
+    pruneHeatmapActivePersons(
+      cameraId,
+      persons.map(p => p.personId),
+    )
   }
 }
 

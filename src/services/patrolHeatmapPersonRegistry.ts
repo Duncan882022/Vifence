@@ -1,14 +1,24 @@
 /**
- * Lịch sử chấm người trên heatmap — mỗi ID một dot, giữ vị trí cho đến khi gặp lại.
+ * Lịch sử chấm người trên heatmap — 1 master ID = 1 dot, quanh mũ HC-*.
  */
 import type { DetectionDot } from '@/modules/module05-productivity/data/patrolDetectionData'
+import {
+  clampPointToSiteBoundary,
+  isPointInSiteBoundary,
+} from '@/modules/module05-productivity/data/patrolSiteGeometry'
 import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/patrolHeatmapGps'
 import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patrolLivePersonDots'
+import {
+  getPatrolSgcKeysForObject,
+} from '@/modules/module05-productivity/services/patrolSgcObjectLink.service'
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v1'
-const MAX_PERSONS = 120
+const MAX_PERSONS = 48
+/** Góc nhìn mũ ~2–3 m — người trước mũ cách vài mét, không 25 m. */
 const DOT_RADIUS_MIN_M = 1.0
-const DOT_RADIUS_MAX_M = 25.0
+const DOT_RADIUS_MAX_M = 4.0
+const LIVE_DOT_MS = 3_500
+const HISTORY_DOT_MS = 90_000
 
 export interface PatrolHeatmapPersonRecord {
   id: string
@@ -26,6 +36,19 @@ const listeners = new Set<() => void>()
 
 function notify(): void {
   listeners.forEach(fn => fn())
+}
+
+/** Gộp PTR / OBJ / sgc cùng một người → một dot. */
+export function resolveHeatmapDotMasterId(rawId: string): string {
+  const id = rawId.trim()
+  if (!id) return id
+  if (/^sgc-/i.test(id)) return id.toUpperCase()
+  if (/^OBJ-/i.test(id)) {
+    const sgcs = getPatrolSgcKeysForObject(id)
+    if (sgcs[0]) return sgcs[0].toUpperCase()
+    return id
+  }
+  return id
 }
 
 function hashOffset(personId: string): [number, number] {
@@ -59,7 +82,8 @@ function restore(): void {
     registry.clear()
     for (const row of rows) {
       if (!row?.id || !row.position?.length) continue
-      registry.set(row.id, row)
+      const master = resolveHeatmapDotMasterId(row.id)
+      registry.set(master, { ...row, id: master })
     }
   } catch {
     registry.clear()
@@ -74,7 +98,8 @@ function positionForPerson(
   lng: number,
 ): [number, number] {
   const [eastM, northM] = hashOffset(personId)
-  return offsetLatLngByMeters(lat, lng, eastM, northM)
+  const [lat2, lng2] = offsetLatLngByMeters(lat, lng, eastM, northM)
+  return clampPointToSiteBoundary(lat2, lng2)
 }
 
 export function upsertHeatmapPersons(input: {
@@ -91,12 +116,12 @@ export function upsertHeatmapPersons(input: {
   let changed = false
 
   for (const person of input.persons) {
-    const id = person.personId.trim()
-    if (!id) continue
-    const position = positionForPerson(id, input.lat, input.lng)
-    const label = person.label?.trim() || id
+    const masterId = resolveHeatmapDotMasterId(person.personId)
+    if (!masterId) continue
+    const position = positionForPerson(masterId, input.lat, input.lng)
+    const label = person.label?.trim() || masterId
     const confidence = Number.isFinite(person.confidence) ? person.confidence! : 0.9
-    const existing = registry.get(id)
+    const existing = registry.get(masterId)
 
     if (existing) {
       existing.position = position
@@ -107,8 +132,8 @@ export function upsertHeatmapPersons(input: {
       continue
     }
 
-    registry.set(id, {
-      id,
+    registry.set(masterId, {
+      id: masterId,
       label,
       position,
       cameraId: input.cameraId,
@@ -132,10 +157,37 @@ export function upsertHeatmapPersons(input: {
   notify()
 }
 
+/** Live frame — xóa dot cũ (PTR/OBJ orphan) không còn trong frame. */
+export function pruneHeatmapActivePersons(
+  cameraId: string,
+  activePersonIds: string[],
+): void {
+  const activeMasters = new Set(
+    activePersonIds.map(id => resolveHeatmapDotMasterId(id)).filter(Boolean),
+  )
+  if (activeMasters.size === 0) return
+
+  let changed = false
+  const now = Date.now()
+  for (const [id, row] of registry.entries()) {
+    if (row.cameraId !== cameraId) continue
+    const master = resolveHeatmapDotMasterId(id)
+    if (activeMasters.has(master)) continue
+    if (now - row.lastSeenAt > 4_000) {
+      registry.delete(id)
+      changed = true
+    }
+  }
+  if (changed) {
+    persist()
+    notify()
+  }
+}
+
 /** Gộp track tạm → ID gallery / sgc khi backend gán danh tính. */
 export function rekeyHeatmapPerson(fromId: string, toId: string): void {
-  const src = fromId.trim()
-  const dst = toId.trim()
+  const src = resolveHeatmapDotMasterId(fromId)
+  const dst = resolveHeatmapDotMasterId(toId)
   if (!src || !dst || src === dst) return
 
   const existingSrc = registry.get(src)
@@ -147,7 +199,7 @@ export function rekeyHeatmapPerson(fromId: string, toId: string): void {
     existingDst.confidence = Math.max(existingSrc.confidence, existingDst.confidence)
     registry.delete(src)
   } else if (existingSrc) {
-    registry.set(dst, { ...existingSrc, id: dst, label: dst.startsWith('sgc-') ? dst : existingSrc.label })
+    registry.set(dst, { ...existingSrc, id: dst, label: dst.startsWith('SGC-') ? dst : existingSrc.label })
     registry.delete(src)
   }
 
@@ -165,26 +217,39 @@ export function getHeatmapPersonRecords(cameraId?: string): PatrolHeatmapPersonR
 
 export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
   const now = Date.now()
-  return getHeatmapPersonRecords(cameraId).map(row => {
-    const inCameraView = now - row.lastSeenAt < 8000
-    return {
-      id: `hist-${row.id}`,
-      type: 'person' as const,
-      position: row.position,
-      zoneId: row.zoneId,
-      cameraId: row.cameraId,
-      confidence: row.confidence,
-      label: row.label,
-      lastSeenAt: row.lastSeenAt,
-      objectId: row.id,
-      inCameraView,
-      opacity: inCameraView ? 0.92 : 0.28,
+  const byMaster = new Map<string, PatrolHeatmapPersonRecord>()
+
+  for (const row of getHeatmapPersonRecords(cameraId)) {
+    const master = resolveHeatmapDotMasterId(row.id)
+    const prev = byMaster.get(master)
+    if (!prev || row.lastSeenAt > prev.lastSeenAt) {
+      byMaster.set(master, { ...row, id: master })
     }
-  })
+  }
+
+  return [...byMaster.values()]
+    .filter(row => now - row.lastSeenAt < HISTORY_DOT_MS)
+    .filter(row => isPointInSiteBoundary(row.position[0], row.position[1]))
+    .map(row => {
+      const inCameraView = now - row.lastSeenAt < LIVE_DOT_MS
+      return {
+        id: `hist-${row.id}`,
+        type: 'person' as const,
+        position: row.position,
+        zoneId: row.zoneId,
+        cameraId: row.cameraId,
+        confidence: row.confidence,
+        label: row.label,
+        lastSeenAt: row.lastSeenAt,
+        objectId: row.id,
+        inCameraView,
+        opacity: inCameraView ? 0.92 : 0.22,
+      }
+    })
 }
 
 export function getHeatmapPersonCount(cameraId?: string): number {
-  return getHeatmapPersonRecords(cameraId).length
+  return getHeatmapPersonDots(cameraId).length
 }
 
 export function clearHeatmapPersonRegistry(cameraId?: string): void {
@@ -222,7 +287,7 @@ function resolveEventGps(
   return resolvePatrolHeatmapGps(event.cameraId)
 }
 
-/** 1 sự kiện PERS = 1 dot — gặp lại cùng worker_id thì cập nhật vị trí dot. */
+/** 1 sự kiện PERS = 1 dot master — OBJ gộp vào sgc khi có. */
 export function syncPatrolPersonEventsToHeatmap(
   events: Array<{
     type: string
@@ -231,6 +296,7 @@ export function syncPatrolPersonEventsToHeatmap(
     zoneId?: string
     objectId?: string
     objectLabel?: string
+    trackWorkerId?: string
     confidence?: number
     gps?: { lat: number; lng: number }
   }>,
@@ -239,7 +305,10 @@ export function syncPatrolPersonEventsToHeatmap(
     if (event.type !== 'PERSON_DETECTED') continue
     const resolved = resolveEventGps(event)
     const { lat, lng } = resolved
-    const personId = event.objectId?.trim() || event.id
+    const rawId = event.trackWorkerId?.trim()
+      || event.objectId?.trim()
+      || event.id
+    const personId = resolveHeatmapDotMasterId(rawId)
     upsertHeatmapPersons({
       cameraId: event.cameraId,
       lat,

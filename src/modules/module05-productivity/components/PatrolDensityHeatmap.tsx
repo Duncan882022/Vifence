@@ -219,7 +219,7 @@ export function PatrolDensityHeatmap({
       })
 
     const registryDots = hc02Live.dots
-      .filter(d => d.lastSeenAt != null && now - d.lastSeenAt < DETECTION_DOT_IN_VIEW_MS * 4)
+      .filter(d => d.lastSeenAt != null && now - d.lastSeenAt < DETECTION_DOT_IN_VIEW_MS * 2)
       .map(d => markInView(d))
 
     if (objectDots.length === 0) {
