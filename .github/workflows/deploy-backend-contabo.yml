@@ -1,0 +1,35 @@
+name: Deploy Backend Contabo
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-contabo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        env:
+          VIFENCE_CONTABO_SSH_PRIVATE_KEY: ${{ secrets.VIFENCE_CONTABO_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$VIFENCE_CONTABO_SSH_PRIVATE_KEY" ]; then
+            echo "Missing GitHub secret VIFENCE_CONTABO_SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%b\n' "$VIFENCE_CONTABO_SSH_PRIVATE_KEY" > ~/.ssh/vifence_contabo
+          chmod 600 ~/.ssh/vifence_contabo
+
+      - name: Deploy to Contabo VPS
+        env:
+          SKIP_PRE_DEPLOY_AUDIT: "1"
+          SSH_KEY: ~/.ssh/vifence_contabo
+        run: bash scripts/deploy-backend-contabo.sh
