@@ -20,7 +20,7 @@ function zoneVisibleRatio(zone: Bbox4, frameW: number, frameH: number): number {
   return (cy2 - cy1) / rawH
 }
 
-export function patrolPersonLegsOnlyBbox(bbox: Bbox4, frameW: number, frameH: number): boolean {
+export function patrolPersonLegsOnlyBbox(bbox: Bbox4, _frameW: number, frameH: number): boolean {
   const [x1, y1, x2, y2] = bbox
   const ph = Math.max(y2 - y1, 1)
   const pw = Math.max(x2 - x1, 1)
