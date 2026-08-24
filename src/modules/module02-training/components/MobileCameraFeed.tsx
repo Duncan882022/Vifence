@@ -43,6 +43,7 @@ import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/person
 import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { patrolPersonMeetsUpperBodyGate } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
@@ -200,13 +201,25 @@ export function MobileCameraFeed({
           return d.confidence >= 0.5
         }
         const filtered = result.detections.filter(minConf)
+        const frameW = result.width > 0 ? result.width : (videoRef.current?.videoWidth ?? 0)
+        const frameH = result.height > 0 ? result.height : (videoRef.current?.videoHeight ?? 0)
+        const patrolVisible = (d: MobileAiDetection) => {
+          if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
+          if (!d.bbox || d.bbox.length < 4 || frameW <= 0 || frameH <= 0) return false
+          return patrolPersonMeetsUpperBodyGate(
+            [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
+            frameW,
+            frameH,
+          )
+        }
+        const gated = filtered.filter(patrolVisible)
         const now = Date.now()
         const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
         /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */
         const holdMs = isPatrolPerson ? 2200 : 1800
-        if (filtered.length > 0) {
-          detectionHoldRef.current = { until: now + holdMs, items: filtered }
-          setDetections(filtered)
+        if (gated.length > 0) {
+          detectionHoldRef.current = { until: now + holdMs, items: gated }
+          setDetections(gated)
         } else if (now < detectionHoldRef.current.until) {
           setDetections(detectionHoldRef.current.items)
         } else {
@@ -215,8 +228,9 @@ export function MobileCameraFeed({
         if (cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))) {
           // Đếm person từ raw detections (trước filter overlay) — map không miss khi conf thấp
           const rawPersons = result.detections.filter(d => d.behavior === 'person'
-            && d.confidence >= HC02_PERSON_MIN_CONF)
-          const persons = filtered.filter(d => d.behavior === 'person')
+            && d.confidence >= HC02_PERSON_MIN_CONF
+            && patrolVisible(d))
+          const persons = gated.filter(d => d.behavior === 'person')
           const personCount = Math.max(rawPersons.length, persons.length)
           const violations = filtered.filter(d =>
             ['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior),
@@ -239,7 +253,7 @@ export function MobileCameraFeed({
             workerNames: [...new Set(workerNames)].slice(0, 5),
             updatedAt: now,
           })
-          syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections)
+          syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections.filter(patrolVisible))
 
           if (result.events?.length) {
             // Bridge lọc PPE khi PATROL_PPE_UI_HIDDEN — vẫn đẩy PERS/person lên panel Người.

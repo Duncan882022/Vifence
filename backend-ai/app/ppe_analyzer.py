@@ -1401,6 +1401,27 @@ def _head_assessable(
     return _zone_visible_ratio(head, frame_w, frame_h) >= 0.45
 
 
+def _upper_body_third_with_head_visible(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    upper_frac: float = 0.50,
+    head_frac: float = 0.24,
+    min_visible: float = 0.33,
+) -> bool:
+    from .patrol_person_visibility import upper_body_third_with_head_visible
+
+    return upper_body_third_with_head_visible(
+        person_box,
+        frame_w,
+        frame_h,
+        upper_frac=upper_frac,
+        head_frac=head_frac,
+        min_visible=min_visible,
+    )
+
+
 def _torso_assessable(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -1550,6 +1571,8 @@ def _plausible_person_box(
             min_bh_frac=0.05,
         )
         if not (close_ok or wide_ok):
+            return False
+        if not _upper_body_third_with_head_visible(box, frame_w, frame_h):
             return False
         if frame is not None:
             # Góc rộng (quạt, máy…) — bắt buộc có tín hiệu da/áo phản quang.

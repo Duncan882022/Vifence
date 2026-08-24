@@ -426,7 +426,11 @@ def resolve_patrol_person_identity(
                 and conf >= 0.55
                 and _bodycam_face_dominant_bbox(pb, frame_w, frame_h)
             ):
-                return _assign_new_sgc(state, key, pb, None)
+                from .patrol_person_visibility import upper_body_third_with_head_visible
+
+                box = (float(pb[0]), float(pb[1]), float(pb[2]), float(pb[3]))
+                if upper_body_third_with_head_visible(box, frame_w, frame_h):
+                    return _assign_new_sgc(state, key, pb, None)
 
             if pb and len(pb) >= 4:
                 _remember_track_meta(state, key, "", pb, None)
