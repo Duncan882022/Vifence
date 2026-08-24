@@ -6,6 +6,7 @@
  */
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { clearPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
+import { clearPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
 import { resetHelmetPositionEngine } from '../utils/positionEngine'
 
 const PATROL_LS_KEYS = [
@@ -62,6 +63,7 @@ export async function resetPatrolTestData(): Promise<PatrolResetResult> {
 
   clearPatrolLocalStorage()
   clearPatrolSessionStorage()
+  clearPatrolMobilePpeEvents()
   clearPatrolHelmetGps('HC-01')
   clearPatrolHelmetGps('HC-02')
   resetHelmetPositionEngine('HC-01')

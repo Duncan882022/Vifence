@@ -534,6 +534,16 @@ export function PatrolGeoHeatmap({
       })
       .filter(dot => isPointInSiteBoundary(dot.position[0], dot.position[1]))
   }, [liveDetectionDots])
+
+  /** Offline vẽ trước, online vẽ sau + z-index cao hơn — mũ online luôn nằm trên. */
+  const sortedHelmetPins = useMemo(() => {
+    return [...PATROL_MAP_ACTIVE_HELMET_PINS].sort((a, b) => {
+      const aOnline = Boolean(helmetOnlineById?.[a.id])
+      const bOnline = Boolean(helmetOnlineById?.[b.id])
+      if (aOnline === bOnline) return a.id.localeCompare(b.id)
+      return aOnline ? 1 : -1
+    })
+  }, [helmetOnlineById])
   const mapZoomFallback = usePatrolMapZoom()
   const mapZoom = mapZoomProp ?? mapZoomFallback
   const clipOverlays = !followLiveGps && showDetections
@@ -759,7 +769,7 @@ export function PatrolGeoHeatmap({
           })}
 
           {/* ── LAYER 4B: Helmet Markers — HC-01/02 luôn hiện (offline = xám) ─── */}
-          {(showHelmetMarkers || showCameras) && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
+          {(showHelmetMarkers || showCameras) && sortedHelmetPins.map(pin => {
             const fallback = pin.position
             const rawPos = cameraPositions[pin.id] ?? fallback
             const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
@@ -786,7 +796,7 @@ export function PatrolGeoHeatmap({
                   key={`${pin.id}-${isActive ? 'on' : 'off'}`}
                   position={livePos}
                   icon={createHelmetIcon(pin, isActive)}
-                  zIndexOffset={500}
+                  zIndexOffset={isActive ? 700 : 400}
                   opacity={markerOpacity}
                 >
                   <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
