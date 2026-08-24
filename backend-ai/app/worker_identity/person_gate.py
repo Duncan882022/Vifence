@@ -48,6 +48,8 @@ def person_eligible_for_face_identity(
         _plausible_person_box,
     )
 
+    from ..ppe_analyzer import _face_dominant_person_box, _is_helmet_bodycam
+
     h, w = frame.shape[:2]
     box = (float(person_bbox[0]), float(person_bbox[1]), float(person_bbox[2]), float(person_bbox[3]))
     machinery = _machinery_bboxes(frame, camera_id, source_pts_sec=source_pts_sec)
@@ -58,15 +60,19 @@ def person_eligible_for_face_identity(
     )
     if machinery and not in_crane_segment and not _person_clear_of_machinery(box, machinery, max_iou=0.08):
         return False
+    bodycam = _is_helmet_bodycam(camera_id)
     if not _plausible_person_box(
         box,
         w,
         h,
         frame=frame,
         machinery=machinery,
-        strict=True,
+        strict=not bodycam,
+        bodycam=bodycam,
     ):
         return False
+    if bodycam and _face_dominant_person_box(box, w, h):
+        return True
     if not _person_upper_body_signal(frame, box):
         return False
     return True

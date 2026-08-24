@@ -146,6 +146,37 @@ class PersonIdentityRegistryFrameSplitTests(unittest.TestCase):
         self.assertEqual(w_son, "w-son")
         self.assertNotEqual(w_trung, w_son)
 
+    def test_gallery_embedding_match_promotes_to_bound_identity(self) -> None:
+        emb = _test_face_emb(3)
+        det = PpeDetection(
+            behavior="person",
+            label="person",
+            scenario_id="PERS-001",
+            confidence=0.88,
+            bbox=[100.0, 80.0, 900.0, 700.0],
+            worker_id="unknown",
+            worker_name="",
+            face_match_confidence=0.0,
+            face_match_source="person_ineligible",
+        )
+        gallery_id = "p-OBJ-20260824-7D8FAE"
+        with patch(
+            "app.person_identity_registry._match_patrol_gallery_from_embedding",
+            return_value=(gallery_id, "Duncan", 0.91),
+        ):
+            wid, name = resolve_patrol_person_identity(
+                det,
+                "HC-01",
+                "p43:person:03",
+                person_bbox=[100.0, 80.0, 900.0, 700.0],
+                face_emb=emb,
+            )
+        self.assertEqual(wid, gallery_id)
+        self.assertEqual(name, "Duncan")
+        self.assertEqual(det.worker_id, gallery_id)
+        self.assertEqual(det.face_match_source, "face")
+        self.assertGreaterEqual(float(det.face_match_confidence or 0), 0.9)
+
 
 if __name__ == "__main__":
     unittest.main()
