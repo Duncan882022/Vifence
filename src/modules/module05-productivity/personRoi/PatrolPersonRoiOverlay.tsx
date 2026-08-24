@@ -9,7 +9,9 @@ import { getOverlayBoxStyle } from '@/modules/module03-safety/utils/roiBoxRole'
 import { shouldShowOverlayBox } from '@/modules/module03-safety/utils/overlayCoverage'
 import {
   formatPersonOverlayBadge,
+  formatPersonOverlayLabel,
 } from '@/modules/module03-safety/utils/personOverlayLabel'
+import { resolvePatrolObjectLabel } from '../services/patrolManualIdentity.service'
 import { usePatrolPersonRoiTracks } from './usePatrolPersonRoiTracks'
 import type { PersonRoiDisplay } from './types'
 
@@ -57,9 +59,15 @@ const PersonRoiBox = memo(function PersonRoiBox({
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
   const style = getOverlayBoxStyle('ppe', 'person')
-  const badge = formatPersonOverlayBadge(track.workerName, track.confidence, '', {
+  const identityKey = track.workerId?.trim() || track.personId
+  const baseLabel = formatPersonOverlayLabel(track.workerName, {
     workerId: track.workerId,
     workerName: track.workerName,
+  })
+  const displayLabel = resolvePatrolObjectLabel(identityKey, baseLabel)
+  const badge = formatPersonOverlayBadge(displayLabel, track.confidence, '', {
+    workerId: track.workerId,
+    workerName: displayLabel,
   })
   const opacity = track.state === 'lost' ? 0.72 : 1
 
@@ -77,7 +85,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
       data-track-id={track.trackId}
       data-person-id={track.personId}
     >
-      <div className={cn('absolute inset-0 rounded-sm', style.border, style.fill)} />
+      <div className={cn('absolute inset-0 rounded-sm', style.border)} />
       <span
         className={cn(
           'absolute -top-3 left-0 px-1 py-px font-mono whitespace-nowrap rounded-sm',

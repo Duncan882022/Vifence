@@ -163,6 +163,25 @@ def forward_geodesic(lat: float, lon: float, bearing_deg: float, dist_m: float) 
     return math.degrees(lat2), (math.degrees(lon2) + 540.0) % 360.0 - 180.0
 
 
+def _place_object_near_helmet(
+    pose_lat: float,
+    pose_lon: float,
+    bearing: float,
+    dist_m: float,
+) -> tuple[float, float]:
+    """Đặt object quanh mũ — không snap mép ROI khi ngoài polygon."""
+    from .patrol_site_geometry import is_point_in_site
+
+    lat2, lon2 = forward_geodesic(pose_lat, pose_lon, bearing, dist_m)
+    if is_point_in_site(lat2, lon2):
+        return lat2, lon2
+    capped = min(float(dist_m), 4.0)
+    lat2, lon2 = forward_geodesic(pose_lat, pose_lon, bearing, capped)
+    if is_point_in_site(lat2, lon2):
+        return lat2, lon2
+    return float(pose_lat), float(pose_lon)
+
+
 def position_confidence(mode: ObservationMode, det_conf: float) -> float:
     dc = _clamp01(det_conf)
     if mode == "FULL_BODY":
@@ -497,8 +516,7 @@ class WorkforceEngine:
             bearing = bearing_from_bbox(bbox, frame_w, heading)
             dist = estimate_distance_m(mode, bbox, frame_h)
             if dist is not None:
-                lat2, lon2 = forward_geodesic(pose.lat, pose.lon, bearing, dist)
-                lat2, lon2 = map_match_position(lat2, lon2)
+                lat2, lon2 = _place_object_near_helmet(pose.lat, pose.lon, bearing, dist)
                 prev_ll = (obj.lat, obj.lon) if obj.lat is not None and obj.lon is not None else None
                 lat2, lon2 = lowpass_latlon(prev_ll, (lat2, lon2), mode)
                 obj.lat, obj.lon = lat2, lon2

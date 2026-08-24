@@ -355,7 +355,7 @@ export function Module05Page() {
             tier2Open && (
               isMobileLayout
                 ? 'shrink-0 flex-1 min-h-[min(43dvh,360px)] max-h-[min(52dvh,432px)] max-lg:landscape:min-h-[min(32dvh,270px)] max-lg:landscape:max-h-[min(40dvh,342px)]'
-                : 'flex-[9] min-h-[min(45vh,450px)] max-h-[min(61vh,648px)]'
+                : 'flex-[8] min-h-[min(40vh,400px)] max-h-[min(55vh,594px)]'
             ),
             !tier2Open && 'shrink-0',
           )}>
@@ -396,6 +396,7 @@ export function Module05Page() {
                       defaultCameraIds={patrolDefaultCameraIds}
                       defaultSidebarOpen={false}
                       mobileCompactVideo={isMobileLayout}
+                      mobileStackedNoScroll={isMobileLayout}
                       compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
@@ -427,7 +428,7 @@ export function Module05Page() {
             'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0 shrink-0',
             isMobileLayout && !cameraCollapsed
               ? 'min-h-[min(28dvh,250px)]'
-              : 'flex-[5] overflow-hidden max-h-[min(36vh,400px)]',
+              : 'flex-[6] overflow-hidden max-h-[min(40vh,440px)]',
           )}>
             <Panel
               title="HEATMAP"

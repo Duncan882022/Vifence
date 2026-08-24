@@ -4,7 +4,6 @@ import { getPatrolPersonRoiEngine, clearPatrolPersonRoiEngine } from '../personR
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS } from '../data/patrolSiteMap'
 import { resolvePatrolHeatmapGps } from './patrolHeatmapGps'
-import { mapMatchPosition } from './positionEngine'
 
 export { resolvePatrolHeatmapGps, resolvePatrolHeatmapGpsOrNull } from './patrolHeatmapGps'
 
@@ -16,7 +15,7 @@ function upsertPersonsAtPatrolGps(
   const gps = resolvePatrolHeatmapGps(cameraId)
   const zoneId = PATROL_HELMET_ZONE_ASSIGNMENTS.find(z => z.helmetId === cameraId)?.zoneId
     ?? 'ZONE_SITE'
-  const [lat, lng] = mapMatchPosition(gps.lat, gps.lng)
+  const [lat, lng] = [gps.lat, gps.lng]
   upsertHeatmapPersons({ cameraId, lat, lng, zoneId, persons })
 }
 

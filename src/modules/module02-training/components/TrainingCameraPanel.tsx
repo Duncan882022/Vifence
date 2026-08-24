@@ -325,6 +325,8 @@ interface TrainingCameraPanelProps {
   mobileCompactVideo?: boolean
   /** Override max-h ô video khi mobileCompactVideo — dùng cho Module 05 patrol. */
   compactVideoMaxClass?: string
+  /** Module 05 mobile: stack 16:9, không scroll lồng trong grid video. */
+  mobileStackedNoScroll?: boolean
 }
 
 export function TrainingCameraPanel({
@@ -339,6 +341,7 @@ export function TrainingCameraPanel({
   defaultSidebarOpen = true,
   mobileCompactVideo = false,
   compactVideoMaxClass,
+  mobileStackedNoScroll = false,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
   const tabs = filterTabs ?? CAMERA_FILTER_TABS
@@ -393,8 +396,8 @@ export function TrainingCameraPanel({
     : catalog.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
   /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
-  const fillHeightMain = !mobileCompactVideo
-  const portraitMaxRows = mobileCompactVideo && !isDesktop
+  const fillHeightMain = !mobileCompactVideo || mobileStackedNoScroll
+  const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
 
@@ -409,7 +412,7 @@ export function TrainingCameraPanel({
 
   useEffect(() => {
     const scrollNode = videoGridRef.current
-    if (!scrollNode || isDesktop || fillHeightMain) {
+    if (!scrollNode || isDesktop || fillHeightMain || mobileStackedNoScroll) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
       return
@@ -508,7 +511,8 @@ export function TrainingCameraPanel({
               onCloseMaximize={() => setFocusedCam(null)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
-              compactVideo={mobileCompactVideo}
+              forceSingleCol={mobileStackedNoScroll && !isDesktop}
+              compactVideo={mobileCompactVideo && !mobileStackedNoScroll}
               compactVideoMaxClass={compactVideoMaxClass}
               focusedCamId={focusedCam?.id}
             />

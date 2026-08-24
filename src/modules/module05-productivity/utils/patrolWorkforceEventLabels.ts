@@ -92,8 +92,11 @@ export function patrolWorkforceEventSubjectId(
 export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent {
   if (event.type !== 'PERSON_DETECTED') return event
 
-  const trackWorkerId = event.trackWorkerId
-    ?? (isPatrolSgcWorkerId(event.objectId) ? event.objectId : undefined)
+  const trackWorkerId = isPatrolSgcWorkerId(event.trackWorkerId)
+    ? event.trackWorkerId
+    : isPatrolSgcWorkerId(event.objectId)
+      ? event.objectId
+      : undefined
   const title = patrolWorkforceEventTitle(
     event.type,
     event.objectId,

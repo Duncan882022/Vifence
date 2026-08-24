@@ -8,7 +8,6 @@
 
 import {
   clipPolygonToSiteBoundary,
-  PATROL_SITE_CLIP_RING,
   PATROL_SITE_CORNERS,
 } from './patrolSiteGeometry'
 
@@ -29,18 +28,6 @@ function polygonCenter(polygon: [number, number][]): [number, number] {
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
-}
-
-function insetPolygonRing(
-  ring: readonly [number, number][],
-  insetRatio: number,
-): [number, number][] {
-  const cLat = ring.reduce((s, p) => s + p[0], 0) / ring.length
-  const cLng = ring.reduce((s, p) => s + p[1], 0) / ring.length
-  return ring.map(([lat, lng]) => [
-    parseFloat((lat + (cLat - lat) * insetRatio).toFixed(6)),
-    parseFloat((lng + (cLng - lng) * insetRatio).toFixed(6)),
-  ])
 }
 
 /* ── GPS Zone type ──────────────────────────────────────────── */
@@ -81,9 +68,11 @@ function buildGpsZone(
 }
 
 /**
- * Chưa chia khu — một zone duy nhất = tên công trường, nằm trong ROI (inset ~6%).
+ * Chưa chia khu — một zone duy nhất = 4 góc survey công trường.
  */
-const SITE_ZONE_RAW = insetPolygonRing(PATROL_SITE_CLIP_RING, 0.06)
+const SITE_ZONE_RAW = [...PATROL_SITE_CORNERS] as [number, number][]
+
+export const PATROL_SITE_AREA_M2 = 98_000
 
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
   buildGpsZone(
@@ -91,7 +80,7 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
     PATROL_SITE_NAME,
     PATROL_SITE_NAME,
     SITE_ZONE_RAW,
-    5200,
+    PATROL_SITE_AREA_M2,
     'primary',
     '#ef4444',
   ),

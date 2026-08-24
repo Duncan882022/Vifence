@@ -7,7 +7,8 @@ import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patr
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v1'
 const MAX_PERSONS = 120
-const DOT_RADIUS_M = 1.8
+const DOT_RADIUS_MIN_M = 1.0
+const DOT_RADIUS_MAX_M = 25.0
 
 export interface PatrolHeatmapPersonRecord {
   id: string
@@ -34,8 +35,8 @@ function hashOffset(personId: string): [number, number] {
     h = Math.imul(h, 16777619)
   }
   const angle = ((h >>> 0) % 360) * (Math.PI / 180)
-  const ring = 0.45 + ((h >>> 8) % 100) / 100 * 0.55
-  const r = DOT_RADIUS_M * ring
+  const ring = ((h >>> 8) % 100) / 100
+  const r = DOT_RADIUS_MIN_M + ring * (DOT_RADIUS_MAX_M - DOT_RADIUS_MIN_M)
   return [Math.cos(angle) * r, Math.sin(angle) * r]
 }
 

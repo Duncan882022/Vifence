@@ -226,10 +226,16 @@ export function PatrolDensityHeatmap({
       return registryDots
     }
 
-    // Gộp workforce + registry — tránh mất dot khi BE chưa gán lat/lon cho object.
+    // Registry (quanh mũ) ưu tiên — workforce object có thể snap mép ROI.
     const merged = new Map<string, DetectionDot>()
-    for (const dot of registryDots) merged.set(dot.objectId ?? dot.id, dot)
-    for (const dot of objectDots) merged.set(dot.objectId ?? dot.id, dot)
+    for (const dot of objectDots) {
+      const key = dot.objectId ?? dot.id
+      merged.set(key, dot)
+    }
+    for (const dot of registryDots) {
+      const key = dot.objectId ?? dot.id
+      merged.set(key, dot)
+    }
     return [...merged.values()]
   }, [hc02Live.dots, liveObjects, identityRevision])
 
@@ -329,7 +335,7 @@ export function PatrolDensityHeatmap({
           displayMode="count"
           countMode="current"
           showSiteBoundary={layers.polygon}
-          showZonePolygons={layers.polygon}
+          showZonePolygons={false}
           showDetections={layers.detection}
           liveDetectionDots={filteredDots}
           followLiveGps={hc02Live.hasLiveGps}

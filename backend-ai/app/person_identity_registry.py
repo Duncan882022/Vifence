@@ -307,13 +307,25 @@ def resolve_patrol_person_identity(
     elif pb is None and detection.bbox and len(detection.bbox) >= 4:
         pb = [float(v) for v in detection.bbox]
 
+    # Không có embedding mặt → chưa cấp sgc (tab Đối tượng / OBJ-only).
+    if query_emb is None:
+        key = _track_key(camera_id, track_id)
+        with _lock:
+            state = _load()
+            if pb and len(pb) >= 4:
+                _remember_track_meta(state, key, "", pb, None)
+                _save(state)
+        return "", ""
+
     key = _track_key(camera_id, track_id)
     with _lock:
         state = _load()
         existing = state["tracks"].get(key)
         if isinstance(existing, str) and existing.strip():
             existing = existing.strip()
-            if query_emb is not None:
+            if not is_sgc_worker_id(existing):
+                existing = ""
+            else:
                 holder_emb = _identity_face_emb(state, camera_id, existing)
                 if holder_emb is not None and not _face_compatible(query_emb, holder_emb, for_merge=True):
                     existing = ""
