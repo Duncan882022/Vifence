@@ -63,8 +63,12 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   const [lng, setLng] = useState<number | null>(null)
   const [personCount, setPersonCount] = useState(0)
   const [registryTick, setRegistryTick] = useState(0)
+  const [streamOnline, setStreamOnline] = useState(
+    () => Boolean(getPatrolMobileLiveSnapshot(HC02)?.streamOnline),
+  )
 
   const applyGps = (nextLat: number, nextLng: number) => {
+    if (!streamOnline) return
     if (!isValidGps(nextLat, nextLng)) return
     setLat(nextLat)
     setLng(nextLng)
@@ -75,6 +79,19 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   }), [])
 
   useEffect(() => {
+    return subscribePatrolMobileLiveSnapshot(snap => {
+      const online = Boolean(snap && snap.cameraId === HC02 && snap.streamOnline)
+      setStreamOnline(online)
+      if (!online) {
+        setPersonCount(0)
+        setLat(null)
+        setLng(null)
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!streamOnline) return
     return watchDeviceGps(reading => {
       setPatrolHelmetGps({
         cameraId: HC02,
@@ -85,9 +102,10 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       })
       applyGps(reading.lat, reading.lng)
     })
-  }, [])
+  }, [streamOnline])
 
   useEffect(() => {
+    if (!streamOnline) return
     const fresh = getPatrolHelmetGps(HC02)
     const known = fresh ?? getPatrolHelmetGpsLastKnown(HC02)
     if (known) applyGps(known.lat, known.lng)
@@ -96,10 +114,14 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       if (snap.cameraId !== HC02) return
       applyGps(snap.lat, snap.lng)
     })
-  }, [])
+  }, [streamOnline])
 
   useEffect(() => {
     const applyPerson = (count: number) => {
+      if (!streamOnline) {
+        setPersonCount(0)
+        return
+      }
       setPersonCount(Math.max(0, Math.floor(count)))
     }
 
@@ -110,11 +132,13 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
 
     return subscribePatrolMobileLiveSnapshot(snap => {
       if (!snap || snap.cameraId !== HC02) return
+      setStreamOnline(Boolean(snap.streamOnline))
       applyPerson(snap.personCount)
     })
-  }, [])
+  }, [streamOnline])
 
   useEffect(() => {
+    if (!streamOnline) return
     let cancelled = false
 
     const poll = async () => {
@@ -142,9 +166,10 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       cancelled = true
       window.clearInterval(t)
     }
-  }, [])
+  }, [streamOnline])
 
   useEffect(() => {
+    if (!streamOnline) return
     const t = window.setInterval(() => {
       if (!isValidGps(lat, lng)) {
         const known = getPatrolHelmetGpsLastKnown(HC02)
@@ -152,22 +177,26 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       }
     }, 1000)
     return () => window.clearInterval(t)
-  }, [lat, lng])
+  }, [lat, lng, streamOnline])
 
-  const hasLiveGps = isValidGps(lat, lng)
+  const hasLiveGps = streamOnline && isValidGps(lat, lng)
   const usingDefaultGps = !hasLiveGps
-  const hasMapPosition = true
-  const [effectiveLat, effectiveLng] = resolvePatrolHelmetMapPosition(lat, lng, PATROL_HELMET_02_FALLBACK)
+  const hasMapPosition = streamOnline || isValidGps(lat, lng)
+  const [effectiveLat, effectiveLng] = streamOnline
+    ? resolvePatrolHelmetMapPosition(lat, lng, PATROL_HELMET_02_FALLBACK)
+    : PATROL_HELMET_02_FALLBACK
 
   const dots = useMemo(() => {
+    if (!streamOnline) return []
     void registryTick
-    return getHeatmapPersonDots()
-  }, [registryTick])
+    return getHeatmapPersonDots(HC02)
+  }, [registryTick, streamOnline])
 
   const historicalDotCount = useMemo(() => {
+    if (!streamOnline) return 0
     void registryTick
-    return getHeatmapPersonCount()
-  }, [registryTick])
+    return getHeatmapPersonCount(HC02)
+  }, [registryTick, streamOnline])
 
   return {
     hasLiveGps,

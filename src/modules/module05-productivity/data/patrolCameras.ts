@@ -72,10 +72,7 @@ export function applyPatrolCameraStreamStatus(
   if (hc02MobileOnline) onlineById.set('HC-02', true)
 
   return cameras.map(cam => {
-    if (cam.streamType === 'mobile') {
-      return { ...cam, status: 'online' as const }
-    }
     const online = onlineById.get(cam.id) ?? false
-    return { ...cam, status: online ? 'online' : 'offline' }
+    return { ...cam, status: online ? 'online' as const : 'offline' as const }
   })
 }

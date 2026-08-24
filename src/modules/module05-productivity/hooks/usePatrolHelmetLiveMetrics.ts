@@ -68,7 +68,7 @@ function mergeHc02Mobile(
 
   const hc02Slice: PatrolHelmetCameraMetricsSlice = {
     camera_id: HC02,
-    stream_online: Boolean(mobile.streamOnline) || Boolean(prevSlice?.stream_online),
+    stream_online: Boolean(mobile.streamOnline),
     person_count: Math.max(hc02Person, sessionPeakRef.current),
     ppe_violations: Math.max(mobile.activePpeViolations, prevSlice?.ppe_violations ?? 0),
     identified_workers: Math.max(mobile.identifiedWorkers, prevSlice?.identified_workers ?? 0),
@@ -223,7 +223,7 @@ export function usePatrolHelmetLiveMetrics(
           const prev = baseRef.current.perCamera.find(c => c.camera_id === HC02)
           return {
             ...row,
-            stream_online: Boolean(row.stream_online) || Boolean(prev?.stream_online),
+            stream_online: Boolean(row.stream_online),
             person_count: Math.max(
               Number(row.person_count ?? 0),
               prev?.person_count ?? 0,
