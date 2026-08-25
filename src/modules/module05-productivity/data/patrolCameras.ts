@@ -2,7 +2,7 @@ import type { TrainingCamera } from '@/modules/module02-training/data/trainingCa
 import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
 import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
 import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
-import { getHelmetWhepUrl, isLegacyMobileHelmet } from './helmetIngest'
+import { isLegacyMobileHelmet } from './helmetIngest'
 
 export type PatrolCameraFilterTab = 'Bodycam'
 
@@ -24,7 +24,8 @@ function resolveStreamType(id: string): 'bodycam' | 'mobile' {
 function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
   const streamType = resolveStreamType(id)
   const streamUrl = streamType === 'bodycam' ? getPatrolHelmetStreamUrl(id) : undefined
-  const whepUrl = streamType === 'bodycam' ? getHelmetWhepUrl(id) : undefined
+  // CMS xem qua backend HLS relay — WHEP để dành cho tối ưu latency sau;
+  // hiện WHEP hay báo connected nhưng màn đen trên desktop viewer.
 
   return {
     id,
@@ -35,7 +36,6 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
     status: 'offline',
     streamType,
     ...(streamUrl ? { streamUrl } : {}),
-    ...(whepUrl ? { whepUrl } : {}),
   }
 }
 

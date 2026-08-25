@@ -46,6 +46,11 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
     return undefined
   }
 
+  // WHIP helmet: backend VMS relay RTSP → HLS — ổn định trên CMS desktop.
+  // MediaMTX HLS/WHEP hay gây màn đen (UDP/firewall) dù trạng thái vẫn LIVE.
+  const vmsHls = getVmsHlsUrl(cameraId)
+  if (vmsHls) return vmsHls
+
   const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
   if (mediaMtxHls) return mediaMtxHls
 

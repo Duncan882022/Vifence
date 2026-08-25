@@ -86,6 +86,21 @@ export function useLowLatencyVideoSource(
     }
   }, [whepUrl, mode, playing, videoRef])
 
+  // WHEP có thể báo connected nhưng không nhận frame (UDP/firewall) → fallback HLS.
+  useEffect(() => {
+    if (mode !== 'whep' || !whepConnected || !playing) return
+
+    const timer = window.setTimeout(() => {
+      const video = videoRef.current
+      if (!video || video.videoWidth > 0) return
+      if (video.srcObject) video.srcObject = null
+      setWhepConnected(false)
+      setMode('hls')
+    }, 4000)
+
+    return () => window.clearTimeout(timer)
+  }, [mode, whepConnected, playing, videoRef])
+
   // Hook HLS luôn được gọi (quy tắc hooks); src rỗng khi đang dùng WHEP.
   const hlsClock = useHlsVideoSource(videoRef, mode === 'hls' ? hlsSrc : '', playing)
 
