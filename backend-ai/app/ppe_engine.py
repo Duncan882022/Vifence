@@ -463,19 +463,16 @@ class PpeEngine:
                 ) is None:
                     continue
 
-                should_log = False
-                if is_gallery and (face_eligible or has_head_body):
-                    should_log = True
-                elif is_sgc and face_eligible and not is_gallery:
-                    should_log = True
-                elif (
-                    not face_eligible
-                    and has_head_body
-                    and not is_gallery
-                    and not is_sgc
-                    and track_duration >= object_confirm
-                ):
-                    should_log = True
+                # Ba tầng theo quy ước nghiệp vụ:
+                #  - Định danh: khớp gallery
+                #  - Người: đã đủ mặt để nhận diện nhưng chưa có trong gallery
+                #  - Đối tượng: quay lưng, không thấy mặt, đủ đầu + 1/3 thân trên
+                # Đã lên tầng Người/Định danh thì giữ nguyên khi quay lưng, không
+                # tụt về Đối tượng chỉ vì khung hình này không thấy mặt.
+                if is_gallery or is_sgc:
+                    should_log = face_eligible or has_head_body
+                else:
+                    should_log = has_head_body and track_duration >= object_confirm
 
                 if not should_log:
                     continue
