@@ -9,6 +9,7 @@ import {
   CameraModeToggle,
   type CameraPanelMode,
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
+import { LocalBroadcastControl } from './components/LocalBroadcastControl'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
@@ -360,6 +361,9 @@ export function Module05Page() {
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
+                  {tier2Open && cameraMode === 'live' && (
+                    <LocalBroadcastControl />
+                  )}
                   {tier2Open && (
                     <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
                   )}

@@ -23,6 +23,10 @@ import {
 } from '@/services/helmetTelemetrySocket'
 import { setPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import {
+  clearHelmetLocalBroadcast,
+  setHelmetLocalBroadcast,
+} from '@/services/helmetLocalBroadcast'
+import {
   startWhipPublisher,
   EMPTY_WHIP_STATS,
   type WhipConnectionState,
@@ -126,10 +130,11 @@ export function useHelmetPublisher({
     publisherRef.current = null
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
+    clearHelmetLocalBroadcast(helmetId)
     const video = videoRef.current
     if (video) video.srcObject = null
     releaseWakeLock()
-  }, [releaseWakeLock, videoRef])
+  }, [releaseWakeLock, videoRef, helmetId])
 
   const scheduleReconnect = useCallback((delayMs: number) => {
     if (manualStopRef.current) return
@@ -170,6 +175,8 @@ export function useHelmetPublisher({
         audio: false,
       })
       streamRef.current = stream
+      // Tile HC-02 trong CMS cùng tab dùng lại đúng luồng này thay vì tải HLS.
+      setHelmetLocalBroadcast({ helmetId, status: 'starting', stream })
 
       const video = videoRef.current
       if (video) {
@@ -192,6 +199,11 @@ export function useHelmetPublisher({
             stallStrikesRef.current = 0
             setStatus('live')
             setErrorMessage(undefined)
+            setHelmetLocalBroadcast({
+              helmetId,
+              status: 'live',
+              stream: streamRef.current,
+            })
             return
           }
 
@@ -276,6 +288,7 @@ export function useHelmetPublisher({
         await publisherRef.current.replaceVideoTrack(nextTrack)
         streamRef.current.getVideoTracks().forEach(t => t.stop())
         streamRef.current = nextStream
+        setHelmetLocalBroadcast({ helmetId, status: 'live', stream: nextStream })
 
         const video = videoRef.current
         if (video) {

@@ -5,6 +5,7 @@ import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { useHelmetLocalStream } from '@/hooks/useHelmetLocalStream'
 import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJsmpegFeed'
 import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
@@ -30,6 +31,25 @@ const CCTV_SCANLINE = {
 function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle, streamIndex }: {
   cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean; streamIndex?: number
 }) {
+  const localStream = useHelmetLocalStream(cam.id)
+
+  // Mũ và CMS cùng một máy: dùng thẳng camera đang phát, không vòng qua server.
+  if (localStream) {
+    return (
+      <CameraVideoFeed
+        src=""
+        localStream={localStream}
+        cameraId={cam.id}
+        streamType={cam.streamType}
+        playing={playing}
+        aiOverlay={aiOverlay}
+        compact={compact}
+        analyzeThrottle={analyzeThrottle}
+        streamIndex={streamIndex}
+      />
+    )
+  }
+
   if (cam.streamType === 'mobile') {
     return (
       <MobileCameraFeed

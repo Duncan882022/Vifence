@@ -43,6 +43,11 @@ interface CameraVideoFeedProps {
   whepUrl?: string
   /** HLS dự phòng khi `src` trả 503 / chưa sẵn sàng. */
   hlsFallbackSrc?: string
+  /**
+   * Luồng camera của chính thiết bị này (mũ và CMS cùng một máy).
+   * Có thì phát thẳng, bỏ qua WHEP/HLS — không vòng qua server.
+   */
+  localStream?: MediaStream | null
   playing?: boolean
   /** Bật AI detect + vẽ box — chỉ dùng trên luồng đang chọn (grid chính) */
   aiOverlay?: boolean
@@ -60,6 +65,7 @@ export function CameraVideoFeed({
   src,
   whepUrl,
   hlsFallbackSrc,
+  localStream,
   playing = true,
   aiOverlay = false,
   compact,
@@ -108,15 +114,28 @@ export function CameraVideoFeed({
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
-  const isHls = isHlsStreamUrl(src)
+  const usingLocalStream = Boolean(localStream)
+  const isHls = !usingLocalStream && isHlsStreamUrl(src)
   const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
-    whepUrl,
-    hlsSrc: src,
-    hlsFallbackSrc,
+    whepUrl: usingLocalStream ? undefined : whepUrl,
+    hlsSrc: usingLocalStream ? '' : src,
+    hlsFallbackSrc: usingLocalStream ? undefined : hlsFallbackSrc,
     playing,
   })
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !localStream) return
+    video.srcObject = localStream
+    video.muted = true
+    video.setAttribute('playsinline', 'true')
+    if (playing) void video.play().catch(() => {})
+    return () => {
+      if (video.srcObject === localStream) video.srcObject = null
+    }
+  }, [localStream, playing])
   const framesReady = useVideoFramesReady(videoRef, playing)
-  const waitingForSignal = isHls && playing && !framesReady
+  const waitingForSignal = (isHls || usingLocalStream) && playing && !framesReady
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
@@ -241,8 +260,8 @@ export function CameraVideoFeed({
     <div className="absolute inset-0 overflow-hidden bg-black">
       <video
         ref={videoRef}
-        src={isHls ? undefined : src}
-        poster={posterUrl}
+        src={isHls || usingLocalStream ? undefined : src}
+        poster={usingLocalStream ? undefined : posterUrl}
         autoPlay
         muted
         loop={!isHls}
@@ -260,11 +279,13 @@ export function CameraVideoFeed({
         <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4">
           <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white/70 animate-spin" aria-hidden />
           <span className="text-[11px] font-semibold tracking-wide text-white/80">
-            Đang chờ tín hiệu từ mũ
+            {usingLocalStream ? 'Đang mở camera thiết bị' : 'Đang chờ tín hiệu từ mũ'}
           </span>
-          <span className="text-[9px] leading-relaxed text-white/45">
-            Mũ phải đang phát sóng ở trang Phát sóng
-          </span>
+          {!usingLocalStream && (
+            <span className="text-[9px] leading-relaxed text-white/45">
+              Mũ phải đang phát sóng ở trang Phát sóng
+            </span>
+          )}
         </div>
       )}
       <VmsDetectionProvider value={vmsFeed.active ? vmsFeed : null}>
