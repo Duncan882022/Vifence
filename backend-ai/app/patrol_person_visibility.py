@@ -57,6 +57,17 @@ def legs_only_person_box(
     return False
 
 
+def mid_frame_torso_sliver(
+    person_box: tuple[float, float, float, float],
+    frame_h: int,
+) -> bool:
+    """Mảnh thân giữa khung, rộng hơn cao — bụng/đùi, không phải đầu + thân trên."""
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    return y1 / max(float(frame_h), 1.0) > 0.35 and ph / pw < 1.0
+
+
 def upper_body_third_with_head_visible(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -101,8 +112,7 @@ def upper_body_third_with_head_visible(
     if y1_ratio > 0.62 and bh_ratio < 0.18:
         return False
 
-    # Mảnh thân giữa khung, rộng hơn cao — bụng/đùi chứ không phải đầu + thân trên.
-    if y1_ratio > 0.35 and ph / pw < 1.0:
+    if mid_frame_torso_sliver(person_box, frame_h):
         return False
 
     return True
@@ -181,14 +191,20 @@ def patrol_person_meets_detection_gate(
     has_stable_id: bool = False,
     face_eligible: bool = False,
 ) -> bool:
-    """Gate hiển thị — cần đầu + thân (≥30%) hoặc mặt rõ; loại chân/tay."""
+    """Gate ghi sự kiện — cần đầu + thân (≥30%) hoặc mặt rõ; loại chân/tay."""
     if legs_only_person_box(person_box, frame_w, frame_h):
         return False
     if not plausible_person_silhouette(person_box, frame_w, frame_h):
         return False
     if has_stable_id:
         return True
-    if face_eligible or face_dominant:
+    if face_eligible:
+        return True
+    # Chỉ mặt thật hoặc mã đã biết mới được bỏ qua hình học — suy đoán "cận mặt"
+    # theo tỉ lệ khung không đủ căn cứ, bụng/đùi giữa khung cũng lọt.
+    if mid_frame_torso_sliver(person_box, frame_h):
+        return False
+    if face_dominant:
         return True
     return upper_body_third_with_head_visible(person_box, frame_w, frame_h)
 

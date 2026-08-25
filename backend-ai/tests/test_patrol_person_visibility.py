@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.patrol_person_visibility import (
     legs_only_person_box,
+    mid_frame_torso_sliver,
     patrol_person_meets_detection_gate,
     resolve_patrol_person_snapshot_bbox,
     upper_body_third_with_head_visible,
@@ -56,6 +57,23 @@ class TestPatrolPersonVisibility(unittest.TestCase):
             patrol_person_meets_detection_gate(
                 close, fw, fh, face_dominant=True,
             )
+        )
+
+    def test_mid_frame_torso_not_bypassed_by_face_dominant(self):
+        """Bụng/đùi giữa khung rộng hơn cao — không phải cận mặt, không ghi sự kiện."""
+        fw, fh = 1280, 720
+        torso = (fw * 0.35, fh * 0.42, fw * 0.65, fh * 0.72)
+        self.assertTrue(mid_frame_torso_sliver(torso, fh))
+        self.assertFalse(
+            patrol_person_meets_detection_gate(torso, fw, fh, face_dominant=True)
+        )
+
+    def test_mid_frame_torso_passes_when_face_seen(self):
+        """Backend thấy mặt thật thì vẫn tính — hình học không được lấn quyền."""
+        fw, fh = 1280, 720
+        torso = (fw * 0.35, fh * 0.42, fw * 0.65, fh * 0.72)
+        self.assertTrue(
+            patrol_person_meets_detection_gate(torso, fw, fh, face_eligible=True)
         )
 
     def test_narrow_strip_fails(self):

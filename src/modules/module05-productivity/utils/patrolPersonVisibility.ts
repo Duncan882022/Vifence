@@ -80,6 +80,17 @@ export function patrolWideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: num
   return true
 }
 
+/**
+ * Mảnh thân nằm giữa khung và rộng hơn cao — bụng/đùi chứ không phải đầu +
+ * thân trên, cũng không phải cận mặt. Mirror `patrol_person_visibility.py` (BE).
+ */
+export function patrolPersonMidFrameTorsoSliver(bbox: Bbox4, frameH: number): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  return y1 / Math.max(frameH, 1) > 0.35 && ph / pw < 1.0
+}
+
 export function patrolPersonMeetsUpperBodyGate(
   bbox: Bbox4,
   frameW: number,
@@ -87,6 +98,7 @@ export function patrolPersonMeetsUpperBodyGate(
 ): boolean {
   if (frameW <= 0 || frameH <= 0) return false
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
+  if (patrolPersonMidFrameTorsoSliver(bbox, frameH)) return false
   const upperFrac = 0.30
   const headFrac = 0.24
   const minVisible = 0.33
@@ -128,6 +140,19 @@ export interface PatrolPersonDetectionGateInput {
   faceEligible?: boolean
 }
 
+/**
+ * Gate vẽ ROI — rộng hơn gate ghi sự kiện.
+ * Yêu cầu nghiệp vụ: khung hình bbox mọi người nhìn thấy được, còn "đầu + 30%
+ * thân" chỉ quyết định có ghi sự kiện hay không (backend lo phần đó).
+ * Ở đây chỉ loại mảnh chân/tay và khung không thể là người.
+ */
+export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
+  const { bbox, frameW, frameH } = input
+  if (frameW <= 0 || frameH <= 0) return false
+  if (!plausiblePersonSilhouette(bbox, frameW, frameH)) return false
+  return !patrolPersonLegsOnlyBbox(bbox, frameW, frameH)
+}
+
 export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateInput): boolean {
   const { bbox, frameW, frameH, workerId, faceEligible } = input
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
@@ -135,6 +160,9 @@ export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateI
   const wid = workerId?.trim() ?? ''
   if (wid && wid !== 'unknown' && isPatrolGalleryWorkerId(wid)) return true
   if (faceEligible) return true
+  // Chỉ mặt thật (faceEligible) hoặc mã đã biết mới được bỏ qua hình học —
+  // suy đoán "cận mặt" theo tỉ lệ khung không đủ căn cứ để ghi sự kiện.
+  if (patrolPersonMidFrameTorsoSliver(bbox, frameH)) return false
   if (patrolPersonFaceDominantBbox(bbox, frameW, frameH)) return true
   return patrolPersonMeetsUpperBodyGate(bbox, frameW, frameH)
 }
