@@ -32,6 +32,38 @@ def _test_face_emb(seed: int) -> list[float]:
     return vec.tolist()
 
 
+class ClearRegistryTests(unittest.TestCase):
+    """Reset không được cấp lại ID cũ — alias thủ công cũ sẽ dán nhầm người mới."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._reg_file = Path(self._tmpdir.name) / "person_identity_registry.json"
+        self._reg_file.write_text(
+            json.dumps(
+                {"next_seq": 42, "tracks": {"HC-02|t1": "sgc-00000041"}, "track_meta": {}},
+            ),
+            encoding="utf-8",
+        )
+        self._patches = [
+            patch("app.person_identity_registry.REGISTRY_FILE", self._reg_file),
+            patch("app.person_identity_registry._state", None),
+        ]
+        for p in self._patches:
+            p.start()
+
+    def tearDown(self) -> None:
+        for p in reversed(self._patches):
+            p.stop()
+        self._tmpdir.cleanup()
+
+    def test_clear_preserves_next_seq(self) -> None:
+        cleared = clear_registry()
+        self.assertEqual(cleared, 1)
+        state = json.loads(self._reg_file.read_text(encoding="utf-8"))
+        self.assertEqual(state["tracks"], {})
+        self.assertEqual(state["next_seq"], 42)
+
+
 class PersonIdentityRegistryFrameSplitTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()

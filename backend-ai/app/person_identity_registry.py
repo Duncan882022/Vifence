@@ -54,11 +54,17 @@ def _format_sgc(seq: int) -> str:
 
 
 def clear_registry() -> int:
-    """Xóa toàn bộ registry sgc-* trong RAM và file — dùng khi reset test data."""
+    """Xóa toàn bộ registry sgc-* trong RAM và file — dùng khi reset test data.
+
+    Giữ next_seq để ID không bao giờ bị cấp lại: alias thủ công cũ còn trong
+    localStorage sẽ không dán tên người cũ lên người mới sau khi reset.
+    """
     global _state
     with _lock:
-        count = len((_state or {}).get("tracks", {}))
-        _state = {"next_seq": 1, "tracks": {}, "track_meta": {}}
+        current = _load()
+        count = len(current.get("tracks", {}))
+        next_seq = int(current.get("next_seq") or 1)
+        _state = {"next_seq": next_seq, "tracks": {}, "track_meta": {}}
         REGISTRY_FILE.write_text(
             json.dumps(_state, ensure_ascii=False, indent=2),
             encoding="utf-8",
