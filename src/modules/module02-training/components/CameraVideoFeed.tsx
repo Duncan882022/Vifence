@@ -15,7 +15,8 @@ import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetection
 import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlayCycleSync'
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
-import { isHlsStreamUrl, useHlsVideoSource } from '../hooks/useHlsVideoSource'
+import { isHlsStreamUrl } from '../hooks/useHlsVideoSource'
+import { useLowLatencyVideoSource } from '../hooks/useLowLatencyVideoSource'
 import {
   isAiOverlayDisabledCamera,
   isPatrolHelmetAiCamera,
@@ -38,6 +39,8 @@ interface CameraVideoFeedProps {
   cameraId: string
   streamType?: 'fixed' | 'bodycam' | 'flycam' | 'mobile'
   src: string
+  /** Endpoint WHEP — có thì phát WebRTC độ trễ thấp, lỗi thì tự về `src` (HLS). */
+  whepUrl?: string
   playing?: boolean
   /** Bật AI detect + vẽ box — chỉ dùng trên luồng đang chọn (grid chính) */
   aiOverlay?: boolean
@@ -53,6 +56,7 @@ export function CameraVideoFeed({
   cameraId,
   streamType = 'fixed',
   src,
+  whepUrl,
   playing = true,
   aiOverlay = false,
   compact,
@@ -102,7 +106,11 @@ export function CameraVideoFeed({
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const videoClock = useHlsVideoSource(videoRef, src, playing)
+  const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
+    whepUrl,
+    hlsSrc: src,
+    playing,
+  })
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),

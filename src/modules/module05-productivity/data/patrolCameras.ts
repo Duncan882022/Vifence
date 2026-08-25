@@ -2,22 +2,30 @@ import type { TrainingCamera } from '@/modules/module02-training/data/trainingCa
 import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
 import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
 import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
+import { getHelmetWhepUrl, isLegacyMobileHelmet } from './helmetIngest'
 
 export type PatrolCameraFilterTab = 'Bodycam'
 
 export const PATROL_SITE_AREA = PATROL_SITE_NAME
 
-const PATROL_BODY_CAMERAS: readonly { id: string; assignee: string; streamType: 'bodycam' | 'mobile' }[] = [
-  { id: 'HC-01', assignee: 'Helmet 01', streamType: 'bodycam' },
-  { id: 'HC-02', assignee: 'Helmet 02', streamType: 'mobile' },
+const PATROL_BODY_CAMERAS: readonly { id: string; assignee: string }[] = [
+  { id: 'HC-01', assignee: 'Helmet 01' },
+  { id: 'HC-02', assignee: 'Helmet 02' },
 ]
 
-function buildPatrolCamera(
-  id: string,
-  assignee: string,
-  streamType: 'bodycam' | 'mobile',
-): TrainingCamera {
+/**
+ * `streamType` suy ra từ cấu hình ingest, không hardcode theo id.
+ * Mũ nào cũng là bodycam trừ khi còn phải chạy luồng cũ (chưa có MediaMTX).
+ */
+function resolveStreamType(id: string): 'bodycam' | 'mobile' {
+  return isLegacyMobileHelmet(id) ? 'mobile' : 'bodycam'
+}
+
+function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
+  const streamType = resolveStreamType(id)
   const streamUrl = streamType === 'bodycam' ? getPatrolHelmetStreamUrl(id) : undefined
+  const whepUrl = streamType === 'bodycam' ? getHelmetWhepUrl(id) : undefined
+
   return {
     id,
     name: assignee,
@@ -27,12 +35,13 @@ function buildPatrolCamera(
     status: 'offline',
     streamType,
     ...(streamUrl ? { streamUrl } : {}),
+    ...(whepUrl ? { whepUrl } : {}),
   }
 }
 
 /** Chỉ Helmet 01 + Helmet 02 — khu Cầu Sông Hốt. */
 export const PATROL_CAMERAS: TrainingCamera[] = PATROL_BODY_CAMERAS.map(
-  ({ id, assignee, streamType }) => buildPatrolCamera(id, assignee, streamType),
+  ({ id, assignee }) => buildPatrolCamera(id, assignee),
 )
 
 export const PATROL_BODYCAM_LABELS: Record<string, string> = {
