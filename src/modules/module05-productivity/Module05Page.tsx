@@ -27,6 +27,7 @@ import {
 } from './data/patrolMockData'
 import {
   DEFAULT_PATROL_CAMERA_IDS,
+  DEFAULT_PATROL_GRID_CAMERA_IDS,
   PATROL_CAMERAS,
   PATROL_CAMERA_FILTER_TABS,
   applyPatrolCameraStreamStatus,
@@ -188,12 +189,12 @@ export function Module05Page() {
 
   const playbackDate = getPatrolDefaultPlaybackDate()
   const { cameras: visionCameras } = useCameras()
-  // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ. Chỉ khi còn mũ chạy luồng
-  // cũ (điện thoại vừa là camera vừa là màn hình) mới phải ưu tiên mũ đó.
+  // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
+  // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.
   const patrolDefaultCameraIds = useMemo(
     () => (hasLegacyMobileHelmet() && isHandheldDevice()
       ? (legacyMobileHelmetIds() as readonly string[])
-      : DEFAULT_PATROL_CAMERA_IDS),
+      : DEFAULT_PATROL_GRID_CAMERA_IDS),
     [],
   )
   const liveMetrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)

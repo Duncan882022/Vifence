@@ -3,8 +3,14 @@ import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvent
 import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
 import { getPatrolHelmetStreamUrl, getPatrolHelmetStreamFallbackUrl } from './patrolHelmetStreams'
 import { isLegacyMobileHelmet } from './helmetIngest'
+import {
+  PATROL_DRONE_IDS,
+  PATROL_DRONE_LABELS,
+  getPatrolDroneStreamFallbackUrl,
+  getPatrolDroneStreamUrl,
+} from './patrolDrones'
 
-export type PatrolCameraFilterTab = 'Bodycam'
+export type PatrolCameraFilterTab = 'Bodycam' | 'Flycam'
 
 export const PATROL_SITE_AREA = PATROL_SITE_NAME
 
@@ -41,33 +47,68 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
   }
 }
 
-/** Chỉ Helmet 01 + Helmet 02 — khu Cầu Sông Hốt. */
-export const PATROL_CAMERAS: TrainingCamera[] = PATROL_BODY_CAMERAS.map(
-  ({ id, assignee }) => buildPatrolCamera(id, assignee),
-)
+/**
+ * Flycam chưa có nguồn thật vẫn giữ streamUrl: tile sẽ thử HLS rồi hiện
+ * "Đang chờ tín hiệu" thay vì chết hẳn ở màn Offline, và tự lên sóng ngay khi
+ * MediaMTX/VMS bắt đầu phát path tương ứng.
+ */
+function buildPatrolDroneCamera(id: string): TrainingCamera {
+  const name = PATROL_DRONE_LABELS[id] ?? id
+  const streamUrl = getPatrolDroneStreamUrl(id)
+  const streamFallbackUrl = getPatrolDroneStreamFallbackUrl(id)
+
+  return {
+    id,
+    name,
+    assignee: name,
+    location: PATROL_SITE_NAME,
+    zone: PATROL_SITE_ZONE_ID,
+    status: 'offline',
+    streamType: 'flycam',
+    ...(streamUrl ? { streamUrl } : {}),
+    ...(streamFallbackUrl ? { streamFallbackUrl } : {}),
+  }
+}
+
+/** Helmet 01 + Helmet 02 + Drone 03 — khu Cầu Sông Hốt. */
+export const PATROL_CAMERAS: TrainingCamera[] = [
+  ...PATROL_BODY_CAMERAS.map(({ id, assignee }) => buildPatrolCamera(id, assignee)),
+  ...PATROL_DRONE_IDS.map(id => buildPatrolDroneCamera(id)),
+]
 
 export const PATROL_BODYCAM_LABELS: Record<string, string> = {
   'HC-01': 'Helmet 01',
   'HC-02': 'Helmet 02',
 }
 
+/** Mũ tuần tra — danh sách dùng cho KPI, sự kiện và workforce (backend chỉ nhận HC-*). */
 export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
 
-export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = ['Bodycam']
+/** Camera mở sẵn trên lưới — gồm cả flycam. */
+export const DEFAULT_PATROL_GRID_CAMERA_IDS: readonly string[] = [
+  ...DEFAULT_PATROL_CAMERA_IDS,
+  ...PATROL_DRONE_IDS,
+]
 
-/** Tab Bodycam — luôn trả cả Helmet 01 + Helmet 02. */
+export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = ['Bodycam', 'Flycam']
+
+function patrolCameraTab(camera: TrainingCamera): PatrolCameraFilterTab {
+  return camera.streamType === 'flycam' ? 'Flycam' : 'Bodycam'
+}
+
 export function filterPatrolCameras(
-  _tab: PatrolCameraFilterTab,
+  tab: PatrolCameraFilterTab,
   cameras: TrainingCamera[] = PATROL_CAMERAS,
 ): TrainingCamera[] {
-  return cameras
+  return cameras.filter(cam => patrolCameraTab(cam) === tab)
 }
 
 export function groupPatrolCamerasForSidebar(
   cameras: TrainingCamera[],
 ): { key: string; cameras: TrainingCamera[] }[] {
-  if (cameras.length === 0) return []
-  return [{ key: 'Bodycam', cameras }]
+  return PATROL_CAMERA_FILTER_TABS
+    .map(key => ({ key, cameras: cameras.filter(cam => patrolCameraTab(cam) === key) }))
+    .filter(group => group.cameras.length > 0)
 }
 
 /** Gắn online/offline thật từ metrics backend + bridge HC-02 mobile. */

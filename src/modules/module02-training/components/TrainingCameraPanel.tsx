@@ -164,7 +164,9 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
   /** Mobile bodycam — luôn mount feed; offline chỉ áp dụng luồng remote (HLS/WS). */
   const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
   const tryStreamDespiteOffline = Boolean(
-    streamWhenOffline && cam.streamType === 'bodycam' && cam.streamUrl,
+    streamWhenOffline
+      && (cam.streamType === 'bodycam' || cam.streamType === 'flycam')
+      && cam.streamUrl,
   )
   const blockFeed = isOffline && !tryStreamDespiteOffline
 
@@ -356,7 +358,7 @@ interface TrainingCameraPanelProps {
   compactVideoMaxClass?: string
   /** Module 05 mobile: stack 16:9, không scroll lồng trong grid video. */
   mobileStackedNoScroll?: boolean
-  /** Patrol helmet: vẫn thử load HLS khi badge offline (metrics trễ hơn WHIP). */
+  /** Patrol bodycam/flycam: vẫn thử load HLS khi badge offline (metrics trễ hơn nguồn). */
   streamWhenOffline?: boolean
 }
 

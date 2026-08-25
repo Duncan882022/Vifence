@@ -279,9 +279,13 @@ export function CameraVideoFeed({
         <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4">
           <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white/70 animate-spin" aria-hidden />
           <span className="text-[11px] font-semibold tracking-wide text-white/80">
-            {usingLocalStream ? 'Đang mở camera thiết bị' : 'Đang chờ tín hiệu từ mũ'}
+            {usingLocalStream
+              ? 'Đang mở camera thiết bị'
+              : streamType === 'bodycam'
+                ? 'Đang chờ tín hiệu từ mũ'
+                : 'Đang chờ tín hiệu'}
           </span>
-          {!usingLocalStream && (
+          {!usingLocalStream && streamType === 'bodycam' && (
             <span className="text-[9px] leading-relaxed text-white/45">
               Mũ phải đang phát sóng ở trang Phát sóng
             </span>
