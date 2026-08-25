@@ -61,6 +61,9 @@ class PpeDetection(BaseModel):
     contractor_name: Optional[str] = None
     face_match_confidence: Optional[float] = None
     face_match_source: Optional[str] = None
+    # HC-* — track ổn định phía BE để FE khoá ROI, không phải đoán lại bằng IoU.
+    track_id: Optional[str] = None
+    face_eligible: Optional[bool] = None
 
 
 class MobileAiConfigPayload(BaseModel):

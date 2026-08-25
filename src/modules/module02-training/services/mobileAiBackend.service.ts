@@ -27,6 +27,10 @@ export interface MobileAiDetection {
   subject_bbox?: [number, number, number, number]
   /** HC-02 — conf 0.35–0.44, hiển thị bbox vàng (YOLO yếu). */
   weak?: boolean
+  /** HC-* — track ổn định phía BE, FE khoá ROI theo id này thay vì đoán bằng IoU. */
+  track_id?: string
+  /** BE đã thấy mặt rõ trong bbox — quyết định tab Người / ghi sự kiện. */
+  face_eligible?: boolean
 }
 
 export interface MobileAiViolationEvent {

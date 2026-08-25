@@ -128,6 +128,8 @@ def _assign_patrol_person_identity(
         frame_faces[worker_id] = face_emb
     person_det.worker_id = worker_id
     person_det.worker_name = worker_name
+    person_det.track_id = track_id
+    person_det.face_eligible = face_emb is not None
 
 
 def _get_person_detector() -> PersonDetector:
