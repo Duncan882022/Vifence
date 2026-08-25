@@ -407,6 +407,11 @@ class CameraVmsWorker:
                     if _is_live_stream_source(self._active_source):
                         logger.warning("[VMS %s] Mất tín hiệu live — reconnect.", self.camera_id)
                         self._clear_frame_buffer()
+                        # Đóng luôn ffmpeg: để nó sống chỉ tổ giữ playlist đứng
+                        # hình, người xem tưởng còn LIVE. _ensure_pipe_hls mở
+                        # lại ngay khi mũ phát tiếp.
+                        if self._live_hls_from_pipe:
+                            self._stop_hls()
                         break
                     from .vms_loop_state import register_video_loop
 
