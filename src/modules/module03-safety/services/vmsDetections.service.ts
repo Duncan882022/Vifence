@@ -72,6 +72,11 @@ export interface VmsDetectionSnapshot {
   updated_at: number
   /** Vị trí trong file nguồn (giây) lúc AI chạy — đồng bộ overlay live. */
   source_pts_sec?: number
+  /**
+   * Wallclock (ms) lúc backend nhận frame từ camera.
+   * Khớp với EXT-X-PROGRAM-DATE-TIME của HLS để vẽ bbox đúng khung hình đang phát.
+   */
+  frame_wallclock_ms?: number
   vms_ready: boolean
   /** Live RTSP còn frame mới — false khi mũ tắt / mất tín hiệu. */
   stream_online?: boolean
@@ -157,6 +162,7 @@ interface RawVmsDetectionPayload {
   height?: number
   updated_at?: number
   source_pts_sec?: number
+  frame_wallclock_ms?: number
   vms_ready?: boolean
   stream_online?: boolean
   frame_age_sec?: number | null
@@ -182,6 +188,9 @@ export function normalizeVmsDetectionSnapshot(
     height: Number(data.height ?? 0),
     updated_at: Number(data.updated_at ?? 0),
     source_pts_sec: data.source_pts_sec != null ? Number(data.source_pts_sec) : undefined,
+    frame_wallclock_ms: data.frame_wallclock_ms != null
+      ? Number(data.frame_wallclock_ms)
+      : undefined,
     vms_ready: Boolean(data.vms_ready),
     stream_online: data.stream_online,
     frame_age_sec: data.frame_age_sec ?? null,

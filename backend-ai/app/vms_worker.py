@@ -242,6 +242,7 @@ class CameraVmsWorker:
                 "height": int(self._latest_overlay.get("height") or 0),
                 "updated_at": float(self._latest_overlay.get("updated_at") or 0.0),
                 "source_pts_sec": float(self._latest_overlay.get("source_pts_sec") or 0.0),
+                "frame_wallclock_ms": float(self._latest_overlay.get("frame_wallclock_ms") or 0.0),
                 "stream_online": stream_online,
                 "frame_age_sec": round(frame_age_sec, 2) if frame_age_sec >= 0 else None,
                 "detections": list(self._latest_overlay.get("detections") or []),
@@ -495,6 +496,9 @@ class CameraVmsWorker:
                         "metrics": merged_metrics,
                         "updated_at": time.time(),
                         "source_pts_sec": round(source_pts_sec, 3),
+                        # Wallclock lúc nhận frame từ camera — khớp với
+                        # EXT-X-PROGRAM-DATE-TIME của HLS để FE đồng bộ bbox.
+                        "frame_wallclock_ms": round(frame_received_at * 1000.0),
                     }
 
                 # Đánh thức WebSocket subscribers — FE nhận bbox ngay, không chờ nhịp poll.
@@ -553,7 +557,13 @@ class CameraVmsWorker:
             "-muxpreload", "0",
             "-hls_time", "1",
             "-hls_list_size", "3",
-            "-hls_flags", "split_by_time+delete_segments+append_list+omit_endlist+independent_segments",
+            # program_date_time: gắn EXT-X-PROGRAM-DATE-TIME vào playlist để FE biết
+            # wallclock của frame đang phát, nhờ đó khớp bbox đúng thời điểm thay vì
+            # vẽ detections mới nhất lên hình ảnh đã trễ vài giây.
+            "-hls_flags", (
+                "split_by_time+delete_segments+append_list+omit_endlist"
+                "+independent_segments+program_date_time"
+            ),
             "-hls_segment_filename", segment_pattern,
             hls_out,
         ]
@@ -632,7 +642,7 @@ class CameraVmsWorker:
                 "-an",
                 "-hls_time", "2",
                 "-hls_list_size", "6",
-                "-hls_flags", "delete_segments+independent_segments",
+                "-hls_flags", "delete_segments+independent_segments+program_date_time",
                 "-hls_segment_filename", segment_pattern,
                 hls_out,
             ])

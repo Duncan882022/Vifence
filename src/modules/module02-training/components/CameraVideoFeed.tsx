@@ -10,6 +10,7 @@ import { WahOverlay } from '@/modules/module03-safety/components/WahOverlay'
 import { AtgtOverlay } from '@/modules/module03-safety/components/AtgtOverlay'
 import { VmsDetectionProvider } from '@/modules/module03-safety/context/VmsDetectionContext'
 import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetectionFeed'
+import { useSyncedVmsDetections } from '@/modules/module03-safety/hooks/useSyncedVmsDetections'
 import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlayCycleSync'
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
@@ -101,10 +102,13 @@ export function CameraVideoFeed({
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const vmsFeed = useVmsDetectionFeed(
+  const videoClock = useHlsVideoSource(videoRef, src, playing)
+  const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
   )
+  // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
+  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock)
 
   useEffect(() => {
     if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
@@ -121,8 +125,6 @@ export function CameraVideoFeed({
       })),
     )
   }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at])
-
-  useHlsVideoSource(videoRef, src, playing)
 
   useEffect(() => {
     const video = videoRef.current
