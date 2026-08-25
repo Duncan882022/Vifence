@@ -60,6 +60,8 @@ RTSP_TIMEOUT_MS = 5000.0
 # Nguồn ở xa (bodycam qua internet) giữ nhịp thưa, tránh nện liên tục.
 LOCAL_SOURCE_RETRY_SEC = 0.4
 REMOTE_SOURCE_RETRY_SEC = 3.0
+# Số lần đọc rỗng liên tiếp trước khi mở lại nguồn live (mỗi lần cách 50ms).
+PREGATE_IDLE_READS = 40
 
 
 def _is_local_source(source_path: str) -> bool:
@@ -409,6 +411,7 @@ class CameraVmsWorker:
             live = _is_live_stream_source(self._active_source)
 
             logger.info("[VMS %s] Ingest bắt đầu @ %.1f FPS", self.camera_id, fps)
+            idle_reads = 0
 
             while self._running:
                 with self._seek_lock:
@@ -421,8 +424,21 @@ class CameraVmsWorker:
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ok, frame = cap.read()
                     if not ok or frame is None:
+                        # RTSP mở được nhưng chưa có khung hình là chuyện thường
+                        # khi mũ chưa bật camera. Nằm chờ mãi trên một capture
+                        # câm thì mũ có phát lại cũng không nhận được gì — phải
+                        # mở lại kết nối.
+                        idle_reads += 1
+                        if live and idle_reads >= PREGATE_IDLE_READS:
+                            logger.warning(
+                                "[VMS %s] Nguồn mở được nhưng không có khung hình — mở lại.",
+                                self.camera_id,
+                            )
+                            self._clear_frame_buffer()
+                            break
                         time.sleep(0.05)
                         continue
+                    idle_reads = 0
                     source_pts = 0.0
                     with self._frame_lock:
                         self._frame = frame
