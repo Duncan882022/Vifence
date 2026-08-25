@@ -21,6 +21,8 @@
     "start:backend": "bash scripts/start-backend-ngrok.sh",
     "pack:pages": "npm run build:pages && cd docs && zip -r ../vifence-pages.zip . && echo '→ Upload nội dung vifence-pages.zip lên root repo GitHub (duncan882022/Vifence)'",
     "lint": "eslint .",
+    "verify:overlay-sync": "node scripts/verify-overlay-sync.mjs",
+    "test:backend": "cd backend-ai && python3 -m unittest discover -s tests -v",
     "preview": "vite preview"
   },
   "dependencies": {

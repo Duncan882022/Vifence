@@ -6,6 +6,7 @@ import {
   getStreamUrlForCamera,
   getVmsHlsUrl,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
+import { getHelmetMediaMtxHlsUrl, isLegacyMobileHelmet } from './helmetIngest'
 
 /** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → dùng VMS HLS relay). */
 export const PATROL_HELMET_RTSP_SOURCES: Record<string, string> = {
@@ -28,9 +29,10 @@ export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
 }
 
 /**
- * URL phát live cho helmet:
+ * URL phát live cho helmet (HLS — dự phòng khi WHEP không kết nối được):
  * - HC-01: VITE_HC01_STREAM_URL hoặc VMS HLS relay (Contabo) — không fallback MP4 mock
- * - HC-02: mobile only (MobileCameraFeed) — không MP4 mock
+ * - Mũ publish qua WHIP: HLS của MediaMTX cùng path
+ * - Mũ còn chạy luồng cũ: undefined (MobileCameraFeed lo phần hiển thị)
  * - HC-03…: MP4 demo (nếu chưa có nguồn live)
  */
 export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
@@ -40,9 +42,12 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
     return getVmsHlsUrl('HC-01')
   }
 
-  if (cameraId === 'HC-02') {
+  if (isLegacyMobileHelmet(cameraId)) {
     return undefined
   }
+
+  const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
+  if (mediaMtxHls) return mediaMtxHls
 
   return getStreamUrlForCamera(cameraId)
 }
@@ -87,7 +92,11 @@ export function applyPatrolHelmetEnvLive<T extends { id: string; streamUrl?: str
   )
 }
 
-/** HC-02 luôn mobile — gỡ streamUrl/wsUrl mock nếu catalog cũ còn gắn MP4. */
+/**
+ * Ép mobile cho mũ còn chạy luồng cũ — gỡ streamUrl/wsUrl mock nếu catalog cũ gắn MP4.
+ * Khi MediaMTX sẵn sàng, hàm này không đụng vào mũ nào nữa: mọi mũ đều là bodycam
+ * và đi chung đường WHEP/HLS như HC-01.
+ */
 export function applyPatrolHelmetMobileLive<
   T extends {
     id: string
@@ -98,13 +107,17 @@ export function applyPatrolHelmetMobileLive<
   },
 >(cameras: T[]): T[] {
   return cameras.map(cam => {
-    if (cam.id !== 'HC-02') return cam
+    if (!isLegacyMobileHelmet(cam.id)) return cam
     return {
       ...cam,
       streamType: 'mobile',
-      assignee: cam.assignee ?? 'Helmet 02',
+      assignee: cam.assignee ?? PATROL_BODYCAM_FALLBACK_LABEL[cam.id] ?? cam.assignee,
       streamUrl: undefined,
       wsUrl: undefined,
     }
   })
+}
+
+const PATROL_BODYCAM_FALLBACK_LABEL: Record<string, string> = {
+  'HC-02': 'Helmet 02',
 }

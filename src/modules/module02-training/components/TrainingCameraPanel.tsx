@@ -47,10 +47,11 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
       <CameraJsmpegFeed wsUrl={cam.wsUrl} cameraId={cam.id} />
     )
   }
-  if (!cam.streamUrl) return null
+  if (!cam.streamUrl && !cam.whepUrl) return null
   return (
     <CameraVideoFeed
-      src={cam.streamUrl}
+      src={cam.streamUrl ?? ''}
+      whepUrl={cam.whepUrl}
       cameraId={cam.id}
       streamType={cam.streamType}
       playing={playing}

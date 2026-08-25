@@ -1,24 +1,45 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
+
+/** Trình phát cần đọc được wallclock khung hình đang hiển thị để đồng bộ overlay. */
+export interface VideoClockSource {
+  /**
+   * Wallclock (ms) của khung hình đang phát, lấy từ EXT-X-PROGRAM-DATE-TIME.
+   * Trả null khi playlist không có PDT (backend cũ) — caller rơi về snapshot mới nhất.
+   */
+  getDisplayWallclockMs: () => number | null
+}
+
+interface HlsInstance {
+  destroy: () => void
+  startLoad: () => void
+  recoverMediaError: () => void
+  playingDate: Date | null
+}
+
+/** Safari phát HLS native — getStartDate() cho mốc PDT của đầu luồng. */
+function nativeStartDateMs(video: HTMLVideoElement): number | null {
+  const withStartDate = video as HTMLVideoElement & { getStartDate?: () => Date }
+  if (typeof withStartDate.getStartDate !== 'function') return null
+  const start = withStartDate.getStartDate()
+  const ms = start?.getTime?.()
+  return typeof ms === 'number' && Number.isFinite(ms) ? ms : null
+}
 
 /** Gắn HLS (.m3u8) hoặc MP4 thuần vào <video>. Safari native HLS; Chrome dùng hls.js. */
 export function useHlsVideoSource(
   videoRef: RefObject<HTMLVideoElement | null>,
   src: string,
   playing: boolean,
-) {
+): VideoClockSource {
   const isHls = src.includes('.m3u8')
+  const hlsRef = useRef<HlsInstance | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
     if (!video || !src) return
 
     let destroyed = false
-    let hlsInstance: {
-      destroy: () => void
-      startLoad: () => void
-      recoverMediaError: () => void
-    } | null = null
 
     const attachMp4 = () => {
       video.src = src
@@ -64,7 +85,7 @@ export function useHlsVideoSource(
             hls.recoverMediaError()
           }
         })
-        hlsInstance = hls
+        hlsRef.current = hls as unknown as HlsInstance
       } catch {
         attachMp4()
       }
@@ -74,8 +95,8 @@ export function useHlsVideoSource(
 
     return () => {
       destroyed = true
-      hlsInstance?.destroy()
-      hlsInstance = null
+      hlsRef.current?.destroy()
+      hlsRef.current = null
     }
   }, [videoRef, src, isHls])
 
@@ -86,6 +107,24 @@ export function useHlsVideoSource(
       video.pause()
     }
   }, [playing, videoRef])
+
+  const getDisplayWallclockMs = useCallback((): number | null => {
+    if (!isHls) return null
+
+    const playingDate = hlsRef.current?.playingDate
+    if (playingDate) {
+      const ms = playingDate.getTime()
+      if (Number.isFinite(ms)) return ms
+    }
+
+    const video = videoRef.current
+    if (!video) return null
+    const startMs = nativeStartDateMs(video)
+    if (startMs === null) return null
+    return startMs + video.currentTime * 1000
+  }, [isHls, videoRef])
+
+  return { getDisplayWallclockMs }
 }
 
 export function isHlsStreamUrl(src: string): boolean {

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Sidebar } from '@/components/common/Sidebar/Sidebar'
 import { Module01Page } from '@/modules/module01-access-control/Module01Page'
@@ -14,7 +15,14 @@ import { ProfilePage } from '@/modules/auth/ProfilePage'
 import { ScannerPage } from '@/modules/auth/ScannerPage'
 import { DEFAULT_HOME_PATH } from '@/config'
 
-const KIOSK_PATHS = new Set(['/scanner', '/vifence/scanner'])
+/** Trang phát sóng chỉ dùng trên điện thoại người đeo mũ — tách chunk khỏi CMS. */
+const HelmetPublisherPage = lazy(() =>
+  import('@/modules/module05-productivity/publisher/HelmetPublisherPage')
+    .then(m => ({ default: m.HelmetPublisherPage })),
+)
+
+/** Trang toàn màn hình, không có Sidebar. */
+const KIOSK_PATHS = new Set(['/scanner', '/vifence/scanner', '/phat-song'])
 
 function AppRoutes() {
   const location = useLocation()
@@ -29,6 +37,15 @@ function AppRoutes() {
 
         <Route path="/scanner" element={<ScannerPage />} />
         <Route path="/vifence/scanner" element={<ScannerPage />} />
+
+        <Route
+          path="/phat-song"
+          element={(
+            <Suspense fallback={<div className="min-h-screen bg-[#0a0f16]" />}>
+              <HelmetPublisherPage />
+            </Suspense>
+          )}
+        />
 
         <Route path="/equipment/*" element={<EquipmentPage />} />
         <Route path="/equipmentpro" element={<EquipmentProductivityPage />} />

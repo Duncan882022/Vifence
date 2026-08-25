@@ -12,6 +12,8 @@ export interface TrainingCamera extends Camera {
   courseName?: string
   /** Người mang body cam / dùng app Mobile HSE — không gắn khoá cố định */
   assignee?: string
+  /** Endpoint WHEP (WebRTC) — ưu tiên hơn streamUrl khi hạ tầng có MediaMTX. */
+  whepUrl?: string
 }
 
 const RAW_CAMERAS: Omit<TrainingCamera, 'streamUrl'>[] = [
