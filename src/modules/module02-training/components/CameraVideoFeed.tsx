@@ -24,6 +24,7 @@ import {
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
   getCameraFeedPosterUrl,
@@ -136,15 +137,21 @@ export function CameraVideoFeed({
   }, [localStream, playing])
   const framesReady = useVideoFramesReady(videoRef, playing)
   const waitingForSignal = (isHls || usingLocalStream) && playing && !framesReady
+  /**
+   * Mũ phát từ chính máy này: detections của worker VMS mô tả khung hình cũ hơn
+   * khung đang hiển thị cả giây, nên ROI chạy thẳng trên khung của tile.
+   */
+  const localPatrolAnalyze = Boolean(usingLocalStream && runPatrolHeatmapAnalyze && playing)
+  const localFrameSize = usePatrolLocalFrameAnalyze(cameraId, videoRef, localPatrolAnalyze)
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
-    Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
+    Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId) && !localPatrolAnalyze),
   )
   // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock)
 
   useEffect(() => {
-    if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
+    if (!runPatrolHeatmapAnalyze || localPatrolAnalyze || !vmsFeed.snapshot) return
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
       vmsFeed.snapshot.detections.map(d => ({
@@ -157,7 +164,7 @@ export function CameraVideoFeed({
         worker_name: d.worker_name,
       })),
     )
-  }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at])
+  }, [runPatrolHeatmapAnalyze, localPatrolAnalyze, cameraId, vmsFeed.snapshot?.updated_at])
 
   useEffect(() => {
     const video = videoRef.current
@@ -325,8 +332,8 @@ export function CameraVideoFeed({
         {showPatrolPersonRoi && (
           <PatrolPersonRoiOverlay
             cameraId={cameraId}
-            frameWidth={vmsFeed.snapshot?.width ?? 0}
-            frameHeight={vmsFeed.snapshot?.height ?? 0}
+            frameWidth={localPatrolAnalyze ? localFrameSize.width : (vmsFeed.snapshot?.width ?? 0)}
+            frameHeight={localPatrolAnalyze ? localFrameSize.height : (vmsFeed.snapshot?.height ?? 0)}
             videoRef={videoRef}
             compact={compact}
             videoFit={videoFit}
