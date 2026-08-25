@@ -43,11 +43,6 @@ interface CameraVideoFeedProps {
   whepUrl?: string
   /** HLS dự phòng khi `src` trả 503 / chưa sẵn sàng. */
   hlsFallbackSrc?: string
-  /**
-   * Luồng camera của chính thiết bị này (mũ và CMS cùng một máy).
-   * Có thì phát thẳng, bỏ qua WHEP/HLS — không vòng qua server.
-   */
-  localStream?: MediaStream | null
   playing?: boolean
   /** Bật AI detect + vẽ box — chỉ dùng trên luồng đang chọn (grid chính) */
   aiOverlay?: boolean
@@ -65,7 +60,6 @@ export function CameraVideoFeed({
   src,
   whepUrl,
   hlsFallbackSrc,
-  localStream,
   playing = true,
   aiOverlay = false,
   compact,
@@ -114,29 +108,16 @@ export function CameraVideoFeed({
   const showWahOverlay = Boolean(overlayActive && wahAnalysis && !overlayDisabled)
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
-  const usingLocalStream = Boolean(localStream)
-  const isHls = !usingLocalStream && isHlsStreamUrl(src)
+  const isHls = isHlsStreamUrl(src)
   const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
-    whepUrl: usingLocalStream ? undefined : whepUrl,
-    hlsSrc: usingLocalStream ? '' : src,
-    hlsFallbackSrc: usingLocalStream ? undefined : hlsFallbackSrc,
+    whepUrl,
+    hlsSrc: src,
+    hlsFallbackSrc,
     playing,
   })
 
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !localStream) return
-    video.srcObject = localStream
-    video.muted = true
-    video.setAttribute('playsinline', 'true')
-    if (playing) void video.play().catch(() => {})
-    return () => {
-      if (video.srcObject === localStream) video.srcObject = null
-    }
-  }, [localStream, playing])
   const framesReady = useVideoFramesReady(videoRef, playing)
-  const localOpening = usingLocalStream && playing && !framesReady
-  const remoteWaiting = Boolean(playing && !usingLocalStream && (isHls || Boolean(whepUrl)))
+  const remoteWaiting = Boolean(playing && (isHls || Boolean(whepUrl)))
   const signalPhase = useStreamSignalPhase(
     framesReady,
     playing,
@@ -221,8 +202,14 @@ export function CameraVideoFeed({
       }
     }
 
+    /**
+     * MediaStream không có gì để tải lại: `load()` chỉ đưa readyState về
+     * HAVE_NOTHING và bỏ luồng đang gắn, khiến tile đứng ở màn chờ vĩnh viễn.
+     */
+    const isStreamSource = () => Boolean(video.srcObject)
+
     const onStalled = () => {
-      if (isHls) return
+      if (isHls || isStreamSource()) return
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         video.load()
         tryPlay()
@@ -230,7 +217,7 @@ export function CameraVideoFeed({
     }
 
     const onError = () => {
-      if (isHls) return
+      if (isHls || isStreamSource()) return
       retryTimer = window.setTimeout(() => {
         video.load()
         tryPlay()
@@ -269,8 +256,8 @@ export function CameraVideoFeed({
     <div className="absolute inset-0 overflow-hidden bg-black">
       <video
         ref={videoRef}
-        src={isHls || usingLocalStream ? undefined : src}
-        poster={usingLocalStream ? undefined : posterUrl}
+        src={isHls ? undefined : src}
+        poster={posterUrl}
         autoPlay
         muted
         loop={!isHls}
@@ -284,14 +271,6 @@ export function CameraVideoFeed({
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
-      {localOpening && (
-        <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4">
-          <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white/70 animate-spin" aria-hidden />
-          <span className="text-[11px] font-semibold tracking-wide text-white/80">
-            Đang mở camera thiết bị
-          </span>
-        </div>
-      )}
       {waitingForSignal && (
         <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4">
           <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white/70 animate-spin" aria-hidden />

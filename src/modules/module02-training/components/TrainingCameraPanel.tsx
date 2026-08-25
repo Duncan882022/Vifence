@@ -33,19 +33,21 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
 }) {
   const localStream = useHelmetLocalStream(cam.id)
 
-  // Mũ và CMS cùng một máy: dùng thẳng camera đang phát, không vòng qua server.
+  /**
+   * Mũ và CMS cùng một máy: dùng thẳng camera đang phát, không vòng qua server.
+   * Phải đi qua MobileCameraFeed — chỉ thành phần này chạy vòng phân tích AI trên
+   * khung hình tại chỗ. CameraVideoFeed chỉ đọc detection do backend trả về, nên
+   * tile sẽ có hình mà không bao giờ có ROI khi luồng chưa lên tới server.
+   */
   if (localStream) {
     return (
-      <CameraVideoFeed
-        src=""
-        localStream={localStream}
+      <MobileCameraFeed
         cameraId={cam.id}
-        streamType={cam.streamType}
+        label={cam.assignee ?? cam.name}
         playing={playing}
-        aiOverlay={aiOverlay}
+        externalStream={localStream}
         compact={compact}
-        analyzeThrottle={analyzeThrottle}
-        streamIndex={streamIndex}
+        aiEnabled={aiOverlay}
       />
     )
   }
