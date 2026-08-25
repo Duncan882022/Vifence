@@ -15,11 +15,17 @@ export const PATROL_PERSON_ROI_CONFIG = {
   /** Match theo khoảng cách tâm / kích thước bbox (di chuyển nhanh) */
   matchCenterRatio: 0.65,
   /** Frame analyze miss liên tiếp trước khi chuyển lost */
-  maxMissFrames: 30,
-  /** Thời gian coast sau lost (ms) — Kalman predict trên overlay, tăng để smooth qua latency mạng */
-  maxLostMs: 5600,
-  /** Giới hạn extrapolate rAF (ms) — cao hơn để mượt khi round-trip chậm */
-  maxPredictMs: 2600,
+  maxMissFrames: 4,
+  /**
+   * Thời gian coast sau lost (ms).
+   *
+   * Mũ vừa quay là cảnh đổi hẳn, nên khung Kalman còn giữ vận tốc cũ sẽ trôi
+   * sang chỗ không có ai — thà mất khung một nhịp còn hơn khoanh sai. Chỉ đủ
+   * che một vài nhịp analyze bị rớt.
+   */
+  maxLostMs: 900,
+  /** Giới hạn extrapolate rAF (ms) — vừa đủ mượt giữa hai nhịp analyze */
+  maxPredictMs: 320,
   /** Kalman — processNoise thấp → track ổn định hơn giữa 2 detect */
   processNoise: 0.08,
   measureNoise: 0.20,
