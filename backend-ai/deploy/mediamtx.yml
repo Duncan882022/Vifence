@@ -1,0 +1,93 @@
+# MediaMTX — ingest thống nhất cho helmet camera.
+#
+# Vai trò: nhận luồng từ mọi loại mũ (bodycam RTSP hoặc điện thoại WHIP), rồi
+# fan-out cho ba nhánh tiêu thụ độc lập:
+#
+#   record (copy, không re-encode) ──▶ playback / xuất clip, chất lượng nguyên bản
+#   RTSP nội bộ ──────────────────────▶ backend AI decode ở chất lượng đầy đủ
+#   WHEP + HLS ───────────────────────▶ CMS xem live
+#
+# Nguyên tắc: KHÔNG cho AI đọc luồng đã hạ chất lượng. Việc giảm chất lượng chỉ
+# phục vụ mắt người xem, không phục vụ detect.
+#
+# Chạy: mediamtx /path/to/mediamtx.yml
+
+logLevel: info
+
+###############################################
+# Giao thức
+
+# RTSP — bodycam phần cứng publish vào đây, và backend AI pull từ đây.
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp, udp]
+
+# WebRTC — WHIP (điện thoại publish) + WHEP (CMS xem).
+webrtc: yes
+webrtcAddress: :8889
+# Địa chỉ công khai để ICE hoạt động sau NAT — đổi thành IP/hostname thật.
+webrtcAdditionalHosts: [157.66.100.182]
+# Bật khi client ở sau NAT đối xứng (4G nhà mạng):
+# webrtcICEServers2:
+#   - url: turn:turn.vifence.io:3478
+#     username: vifence
+#     password: doi-mat-khau-nay
+
+# HLS — dự phòng khi UDP bị chặn (firewall văn phòng).
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsPartDuration: 200ms
+hlsSegmentDuration: 1s
+hlsSegmentCount: 7
+hlsAlwaysRemux: no
+
+rtmp: no
+srt: no
+
+###############################################
+# Ghi hình — nguyên bản, phục vụ playback
+
+pathDefaults:
+  # Copy stream vào file, không re-encode: giữ đúng chất lượng đã phát lên và
+  # gần như không tốn CPU.
+  record: yes
+  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 10m
+  # Giữ 7 ngày — chỉnh theo dung lượng đĩa VPS.
+  recordDeleteAfter: 168h
+
+###############################################
+# Path theo từng mũ
+
+paths:
+  # HC-01 — bodycam phần cứng tự publish RTSP.
+  # Nếu bodycam nằm ở nơi khác, dùng `source: rtsp://…` để MediaMTX pull về.
+  hc-01:
+    source: publisher
+
+  # HC-02 — điện thoại publish qua WHIP tại /hc-02/whip.
+  # Khi có bodycam thật, cấu hình y hệt hc-01, phía CMS không đổi gì.
+  hc-02:
+    source: publisher
+
+  # Chặn path lạ tự tạo — chỉ nhận đúng mũ đã khai báo.
+  all_others:
+    source: publisher
+    record: no
+
+###############################################
+# Xác thực — BẮT BUỘC đổi trước khi mở ra internet
+#
+# authInternalUsers:
+#   - user: helmet
+#     pass: doi-mat-khau-nay
+#     ips: []
+#     permissions:
+#       - action: publish
+#   - user: cms
+#     pass: doi-mat-khau-nay
+#     permissions:
+#       - action: read

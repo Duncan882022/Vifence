@@ -153,3 +153,17 @@ export function isBrowserPublishHelmet(helmetId: string): boolean {
   const kind = getHelmetIngest(helmetId).kind
   return kind === 'whip' || kind === 'legacy-mobile'
 }
+
+/** Mũ còn phải chạy luồng cũ — CMS phải giữ các nhánh xử lý riêng cho chúng. */
+export function legacyMobileHelmetIds(): string[] {
+  return PATROL_HELMET_IDS.filter(isLegacyMobileHelmet)
+}
+
+/**
+ * Còn mũ nào chưa lên pipeline mới không.
+ * false → CMS bỏ hết nhánh đặc thù mobile: không popup quyền, không ưu tiên
+ * một mũ trên điện thoại, mọi tile hiển thị như nhau.
+ */
+export function hasLegacyMobileHelmet(): boolean {
+  return PATROL_HELMET_IDS.some(isLegacyMobileHelmet)
+}
