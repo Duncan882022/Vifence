@@ -49,8 +49,26 @@ PTS_HISTORY_SEC = 60.0
 LIVE_FRAME_STALE_SEC = 4.0
 # RTSP không timeout thì cap.read() treo vĩnh viễn khi mũ tắt sóng giữa chừng:
 # luồng ingest đứng im, AI ngừng chạy và không bao giờ tự nối lại.
-RTSP_CAPTURE_OPTIONS = "rtsp_transport;tcp|timeout;5000000"
+# probesize/analyzeduration mặc định của FFmpeg là vài giây — với mũ thì đó là
+# vài giây màn hình trống trước khi AI có khung hình đầu tiên.
+RTSP_CAPTURE_OPTIONS = (
+    "rtsp_transport;tcp|timeout;5000000"
+    "|probesize;100000|analyzeduration;200000|fflags;nobuffer|flags;low_delay"
+)
 RTSP_TIMEOUT_MS = 5000.0
+# MediaMTX chạy cùng máy: thử lại dày để mũ vừa lên sóng là bắt được ngay.
+# Nguồn ở xa (bodycam qua internet) giữ nhịp thưa, tránh nện liên tục.
+LOCAL_SOURCE_RETRY_SEC = 0.4
+REMOTE_SOURCE_RETRY_SEC = 3.0
+
+
+def _is_local_source(source_path: str) -> bool:
+    p = source_path.lower()
+    return "://127.0.0.1" in p or "://localhost" in p or "://[::1]" in p
+
+
+def _source_retry_delay(source_path: str) -> float:
+    return LOCAL_SOURCE_RETRY_SEC if _is_local_source(source_path) else REMOTE_SOURCE_RETRY_SEC
 
 
 def _open_capture(source: str) -> cv2.VideoCapture:
@@ -336,6 +354,11 @@ class CameraVmsWorker:
     # ------------------------------------------------------------------
 
     def _probe_source_duration(self) -> None:
+        # Luồng trực tiếp không có độ dài. Mở thử lúc mũ chưa phát chỉ tổ chặn
+        # worker vài giây trước khi kịp chạy luồng ingest.
+        if _is_live_stream_source(self._active_source):
+            self._source_duration = 0.0
+            return
         try:
             cap = _open_capture(self._active_source)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
@@ -347,22 +370,28 @@ class CameraVmsWorker:
             logger.warning("[VMS %s] Không probe được duration: %s", self.camera_id, exc)
 
     def _ingest_loop(self) -> None:
-        retry_delay = 3.0
         open_failures = 0
+        last_fail_log = 0.0
         while self._running:
+            retry_delay = _source_retry_delay(self._active_source)
+            # Nhịp thử dày thì đếm lần không còn nói lên thời gian — quy về giây.
+            fallback_after = max(3, int(6.0 / retry_delay))
             cap = _open_capture(self._active_source)
             if not cap.isOpened():
                 open_failures += 1
-                logger.warning(
-                    "[VMS %s] Không mở được source (%s), retry %.1fs (#%d)",
-                    self.camera_id,
-                    self._active_source,
-                    retry_delay,
-                    open_failures,
-                )
+                now = time.monotonic()
+                if open_failures == 1 or now - last_fail_log >= 15.0:
+                    last_fail_log = now
+                    logger.warning(
+                        "[VMS %s] Không mở được source (%s), retry %.1fs (#%d)",
+                        self.camera_id,
+                        self._active_source,
+                        retry_delay,
+                        open_failures,
+                    )
                 if (
                     _is_live_stream_source(self._active_source)
-                    and open_failures >= 3
+                    and open_failures >= fallback_after
                     and self._switch_to_fallback_source()
                 ):
                     open_failures = 0
