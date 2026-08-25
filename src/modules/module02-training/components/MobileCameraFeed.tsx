@@ -44,7 +44,7 @@ import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/person
 import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import { patrolPersonMeetsDetectionGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
+import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
@@ -211,7 +211,19 @@ export function MobileCameraFeed({
         const filtered = result.detections.filter(minConf)
         const frameW = result.width > 0 ? result.width : (videoRef.current?.videoWidth ?? 0)
         const frameH = result.height > 0 ? result.height : (videoRef.current?.videoHeight ?? 0)
+        /** Vẽ ROI cho mọi người nhìn thấy được — chỉ loại mảnh chân/tay. */
         const patrolVisible = (d: MobileAiDetection) => {
+          if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
+          if (!d.bbox || d.bbox.length < 4 || frameW <= 0 || frameH <= 0) return false
+          return patrolPersonMeetsDisplayGate({
+            bbox: [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
+            frameW,
+            frameH,
+            workerId: d.worker_id,
+          })
+        }
+        /** Đếm KPI vẫn theo tiêu chí sự kiện: đầu + ≥30% thân, hoặc đã có mặt/mã. */
+        const patrolCountable = (d: MobileAiDetection) => {
           if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
           if (!d.bbox || d.bbox.length < 4 || frameW <= 0 || frameH <= 0) return false
           return patrolPersonMeetsDetectionGate({
@@ -219,6 +231,7 @@ export function MobileCameraFeed({
             frameW,
             frameH,
             workerId: d.worker_id,
+            faceEligible: d.face_eligible,
           })
         }
         const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible))
@@ -238,8 +251,8 @@ export function MobileCameraFeed({
           // Đếm person từ raw detections (trước filter overlay) — map không miss khi conf thấp
           const rawPersons = result.detections.filter(d => d.behavior === 'person'
             && d.confidence >= HC02_PERSON_MIN_CONF
-            && patrolVisible(d))
-          const persons = gated.filter(d => d.behavior === 'person')
+            && patrolCountable(d))
+          const persons = gated.filter(d => d.behavior === 'person' && patrolCountable(d))
           const personCount = Math.max(rawPersons.length, persons.length)
           const violations = filtered.filter(d =>
             ['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior),
