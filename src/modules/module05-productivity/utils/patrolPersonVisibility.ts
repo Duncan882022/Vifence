@@ -1,5 +1,7 @@
 /** Patrol — gate hiển thị person HC-* (thân trên / cận mặt / đã có mã). */
 
+import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
+
 export type Bbox4 = [number, number, number, number]
 
 function clipBoxToFrame(box: Bbox4, frameW: number, frameH: number): Bbox4 {
@@ -129,7 +131,7 @@ export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateI
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
   if (!plausiblePersonSilhouette(bbox, frameW, frameH)) return false
   const wid = workerId?.trim() ?? ''
-  if (wid && wid !== 'unknown' && /^sgc-/i.test(wid)) return true
+  if (wid && wid !== 'unknown' && isPatrolGalleryWorkerId(wid)) return true
   if (patrolPersonFaceDominantBbox(bbox, frameW, frameH)) return true
   if (patrolWideCrowdRiderBox(bbox, frameW, frameH)) return true
   return patrolPersonMeetsUpperBodyGate(bbox, frameW, frameH)

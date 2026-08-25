@@ -48,9 +48,9 @@ import { patrolPersonMeetsDetectionGate, suppressPatrolObjectOverlappingIdentifi
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
-/** Ngưỡng overlay HC-02 — person từ 0.28 (vàng nếu <0.42). */
-const HC02_PERSON_MIN_CONF = 0.28
-const HC02_PERSON_STRONG_CONF = 0.42
+/** Ngưỡng overlay HC-02 — person từ 0.34 (vàng nếu <0.48). */
+const HC02_PERSON_MIN_CONF = 0.34
+const HC02_PERSON_STRONG_CONF = 0.48
 
 function tagHc02PersonDetections(items: MobileAiDetection[]): MobileAiDetection[] {
   return items.map(d => {

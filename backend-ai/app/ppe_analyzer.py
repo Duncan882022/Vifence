@@ -36,7 +36,7 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
-_PERSON_CONF_BODYCAM = 0.28
+_PERSON_CONF_BODYCAM = 0.34
 _PERSON_CONF_STRICT = 0.48
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
@@ -1602,6 +1602,11 @@ def _plausible_person_box(
             face_dominant=_face_dominant_person_box(box, frame_w, frame_h),
         ):
             return False
+        if frame is not None:
+            from .patrol_person_visibility import wide_crowd_rider_box
+
+            if not wide_crowd_rider_box(box, w, h) and not _person_upper_body_signal(frame, box):
+                return False
         if frame is not None and strict and not _person_upper_body_signal(frame, box):
             return False
         return True

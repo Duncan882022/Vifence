@@ -449,7 +449,7 @@ class PpeEngine:
                     frame_w,
                     frame_h,
                     face_dominant=_face_dominant_person_box(box, frame_w, frame_h),
-                    has_stable_id=is_gallery or is_sgc,
+                    has_stable_id=is_gallery,
                 ):
                     continue
                 if camera_id.startswith("HC-"):

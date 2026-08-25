@@ -123,6 +123,25 @@ def plausible_person_silhouette(
     return True
 
 
+def background_clutter_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Kệ/cây/vách nền — YOLO hay gán person trên vật tĩnh phía sau."""
+    x1, y1, x2, y2 = person_box
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    area_ratio = (pw * ph) / max(float(frame_w * frame_h), 1.0)
+    cy = (y1 + y2) / 2.0
+    aspect = ph / pw
+    if cy < frame_h * 0.44 and area_ratio < 0.11 and aspect < 1.20:
+        return True
+    if y1 < frame_h * 0.10 and area_ratio < 0.07:
+        return True
+    return False
+
+
 def wide_crowd_rider_box(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -157,12 +176,14 @@ def patrol_person_meets_detection_gate(
     face_dominant: bool = False,
     has_stable_id: bool = False,
 ) -> bool:
-    """Gate hiển thị/đếm — cận mặt hoặc đã có sgc/gallery thì bỏ qua rule 1/3 thân trên."""
+    """Gate hiển thị/đếm — gallery đã xác minh hoặc cận mặt thì bỏ qua rule 1/3 thân trên."""
     if legs_only_person_box(person_box, frame_w, frame_h):
         return False
     if not plausible_person_silhouette(person_box, frame_w, frame_h):
         return False
-    if face_dominant or has_stable_id:
+    if face_dominant:
+        return True
+    if has_stable_id:
         return True
     if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True

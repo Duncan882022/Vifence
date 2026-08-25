@@ -8,6 +8,7 @@ import numpy as np
 
 from .patrol_person_visibility import (
     _clip_box_to_frame,
+    background_clutter_person_box,
     legs_only_person_box,
     upper_body_third_with_head_visible,
 )
@@ -102,6 +103,8 @@ def _yolo_plausible_without_face(
     frame_h: int,
 ) -> bool:
     """Quay lưng / không thấy mặt — vẫn giữ nếu đủ thân trên (tab Đối tượng)."""
+    if background_clutter_person_box(box, frame_w, frame_h):
+        return False
     if legs_only_person_box(box, frame_w, frame_h):
         return False
     if not upper_body_third_with_head_visible(box, frame_w, frame_h):
@@ -137,14 +140,14 @@ def anchor_patrol_person_boxes_to_faces(
         return [
             (box, conf)
             for box, conf in person_boxes
-            if _yolo_plausible_without_face(box, w, h)
+            if conf >= 0.48 and _yolo_plausible_without_face(box, w, h)
         ]
 
     matched_yolo: list[tuple[tuple[float, float, float, float], float]] = []
     for box, conf in person_boxes:
         if any(_face_center_in_box(face, box) for face in faces):
             matched_yolo.append((box, conf))
-        elif _yolo_plausible_without_face(box, w, h):
+        elif conf >= 0.48 and _yolo_plausible_without_face(box, w, h):
             matched_yolo.append((box, conf))
 
     covered_face_indices: set[int] = set()

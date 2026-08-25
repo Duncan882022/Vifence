@@ -18,8 +18,8 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 REGISTRY_FILE = DATA_DIR / "person_identity_registry.json"
 
 _TRACK_META_TTL_SEC = 180.0
-_REUSE_IOU = 0.16
-_REUSE_CENTER_NORM = 0.13
+_REUSE_IOU = 0.22
+_REUSE_CENTER_NORM = 0.11
 
 _lock = threading.Lock()
 _state: dict | None = None
@@ -486,20 +486,6 @@ def resolve_patrol_person_identity(
                         _remember_track_meta(state, key, existing, pb, None)
                         _save(state)
                     return existing, existing
-
-            conf = float(detection.confidence or 0.0)
-            if (
-                camera_id.startswith("HC-")
-                and pb
-                and len(pb) >= 4
-                and conf >= 0.55
-                and _bodycam_face_dominant_bbox(pb, frame_w, frame_h)
-            ):
-                from .patrol_person_visibility import upper_body_third_with_head_visible
-
-                box = (float(pb[0]), float(pb[1]), float(pb[2]), float(pb[3]))
-                if upper_body_third_with_head_visible(box, frame_w, frame_h):
-                    return _assign_new_sgc(state, key, pb, None)
 
             if pb and len(pb) >= 4:
                 _remember_track_meta(state, key, "", pb, None)
