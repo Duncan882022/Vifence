@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
+import type { DetectionsTransport } from '../services/detectionsSocket.service'
 import type { VmsDetectionSnapshot } from '../services/vmsDetections.service'
 
 export interface VmsDetectionFeed {
@@ -7,6 +8,8 @@ export interface VmsDetectionFeed {
   status: MobileAiConnectionStatus
   statusMsg?: string
   snapshot: VmsDetectionSnapshot | null
+  /** WS push hay HTTP poll — overlay dùng để chọn mức nội suy. */
+  transport?: DetectionsTransport
 }
 
 const VmsDetectionContext = createContext<VmsDetectionFeed | null>(null)

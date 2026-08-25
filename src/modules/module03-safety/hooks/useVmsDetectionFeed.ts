@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MobileAiConnectionStatus } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
-  createVmsDetectionPoller,
+  createDetectionsFeed,
+  type DetectionsTransport,
+} from '../services/detectionsSocket.service'
+import {
   getVmsBackendUrl,
   isVmsLiveCamera,
   type VmsDetectionSnapshot,
@@ -9,25 +12,26 @@ import {
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 
 export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDetectionFeed {
-  const pollerRef = useRef<{ stop: () => void } | null>(null)
+  const feedRef = useRef<{ stop: () => void } | null>(null)
   const [status, setStatus] = useState<MobileAiConnectionStatus>('idle')
   const [statusMsg, setStatusMsg] = useState<string>()
   const [snapshot, setSnapshot] = useState<VmsDetectionSnapshot | null>(null)
+  const [transport, setTransport] = useState<DetectionsTransport>('polling')
 
   const active = enabled && isVmsLiveCamera(cameraId)
 
   useEffect(() => {
     if (!active) {
-      pollerRef.current?.stop()
-      pollerRef.current = null
+      feedRef.current?.stop()
+      feedRef.current = null
       setSnapshot(null)
       setStatus('idle')
       setStatusMsg(undefined)
       return
     }
 
-    pollerRef.current?.stop()
-    pollerRef.current = createVmsDetectionPoller({
+    feedRef.current?.stop()
+    feedRef.current = createDetectionsFeed({
       cameraId,
       backendUrl: getVmsBackendUrl(),
       onSnapshot: setSnapshot,
@@ -35,13 +39,14 @@ export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDete
         setStatus(next)
         setStatusMsg(msg)
       },
+      onTransportChange: setTransport,
     })
 
     return () => {
-      pollerRef.current?.stop()
-      pollerRef.current = null
+      feedRef.current?.stop()
+      feedRef.current = null
     }
   }, [active, cameraId])
 
-  return { active, status, statusMsg, snapshot }
+  return { active, status, statusMsg, snapshot, transport }
 }

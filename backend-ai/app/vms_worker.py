@@ -24,6 +24,7 @@ from typing import Callable, Optional
 import cv2
 import numpy as np
 
+from . import overlay_bus
 from .auto_train.frame_collectors import collect_vms_engine_sample
 
 logger = logging.getLogger("vms_worker")
@@ -495,6 +496,9 @@ class CameraVmsWorker:
                         "updated_at": time.time(),
                         "source_pts_sec": round(source_pts_sec, 3),
                     }
+
+                # Đánh thức WebSocket subscribers — FE nhận bbox ngay, không chờ nhịp poll.
+                overlay_bus.notify(self.camera_id)
 
             elapsed = time.monotonic() - t0
             sleep_time = max(0.0, interval - elapsed)

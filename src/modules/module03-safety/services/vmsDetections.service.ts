@@ -3,12 +3,36 @@ import {
   type MobileAiConnectionStatus,
 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import type { RoadAnalysisRoiZone } from '@/modules/module04-housekeeping/services/roadAnalysisBackend.service'
+import {
+  isLegacyMobileHelmet,
+  PATROL_HELMET_IDS,
+} from '@/modules/module05-productivity/data/helmetIngest'
 
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
 }
 
-const VMS_CAMERA_IDS = new Set(['A-03', 'A-04', 'HC-01'])
+const BASE_VMS_CAMERA_IDS = ['A-03', 'A-04', 'HC-01']
+
+/**
+ * Camera có VMS worker server-side.
+ * Helmet publish qua WHIP cũng chạy trên worker → thêm vào khi MediaMTX sẵn sàng,
+ * nhờ đó HC-02 dùng chung đường detections với HC-01 thay vì analyze từng frame.
+ */
+function resolveVmsCameraIds(): Set<string> {
+  const ids = new Set(BASE_VMS_CAMERA_IDS)
+
+  const extra = (import.meta.env.VITE_VMS_CAMERA_IDS as string | undefined)?.trim()
+  if (extra) {
+    extra.split(',').map(s => s.trim()).filter(Boolean).forEach(id => ids.add(id))
+  }
+
+  for (const helmetId of PATROL_HELMET_IDS) {
+    if (!isLegacyMobileHelmet(helmetId)) ids.add(helmetId)
+  }
+
+  return ids
+}
 
 /** Cam VMS luôn vẽ polygon ROI mặc định trên live tile — sau sẽ cấu hình per-cam. */
 const VMS_LIVE_ROI_OVERLAY_CAMERAS = new Set(['A-03'])
@@ -72,7 +96,7 @@ export function getVmsBackendUrl(): string {
 }
 
 export function isVmsLiveCamera(cameraId: string): boolean {
-  return VMS_CAMERA_IDS.has(cameraId) && Boolean(getVmsBackendUrl())
+  return resolveVmsCameraIds().has(cameraId) && Boolean(getVmsBackendUrl())
 }
 
 export function buildVmsDetectionsUrl(backendUrl: string, cameraId: string): string {
@@ -126,32 +150,27 @@ function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null 
   }
 }
 
-export async function fetchVmsDetections(
-  backendUrl: string,
+interface RawVmsDetectionPayload {
+  type?: string
+  camera_id?: string
+  width?: number
+  height?: number
+  updated_at?: number
+  source_pts_sec?: number
+  vms_ready?: boolean
+  stream_online?: boolean
+  frame_age_sec?: number | null
+  detections?: Record<string, unknown>[]
+  roi_zones?: RoadAnalysisRoiZone[]
+  metrics?: Record<string, unknown>
+}
+
+/** Chuẩn hoá payload backend — dùng chung cho HTTP poll và WebSocket push. */
+export function normalizeVmsDetectionSnapshot(
+  raw: unknown,
   cameraId: string,
-): Promise<VmsDetectionSnapshot> {
-  const res = await fetchWithTimeout(buildVmsDetectionsUrl(backendUrl, cameraId), {
-    method: 'GET',
-    headers: TUNNEL_HEADERS,
-    mode: 'cors',
-  }, 15000)
-
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-  const data = await res.json() as {
-    type?: string
-    camera_id?: string
-    width?: number
-    height?: number
-    updated_at?: number
-    source_pts_sec?: number
-    vms_ready?: boolean
-    stream_online?: boolean
-    frame_age_sec?: number | null
-    detections?: Record<string, unknown>[]
-    roi_zones?: RoadAnalysisRoiZone[]
-    metrics?: Record<string, unknown>
-  }
+): VmsDetectionSnapshot {
+  const data = (raw ?? {}) as RawVmsDetectionPayload
 
   const detections = (data.detections ?? [])
     .map(row => mapDetection(row))
@@ -170,6 +189,21 @@ export async function fetchVmsDetections(
     roi_zones: data.roi_zones ?? [],
     metrics: data.metrics ?? {},
   }
+}
+
+export async function fetchVmsDetections(
+  backendUrl: string,
+  cameraId: string,
+): Promise<VmsDetectionSnapshot> {
+  const res = await fetchWithTimeout(buildVmsDetectionsUrl(backendUrl, cameraId), {
+    method: 'GET',
+    headers: TUNNEL_HEADERS,
+    mode: 'cors',
+  }, 15000)
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+  return normalizeVmsDetectionSnapshot(await res.json(), cameraId)
 }
 
 export interface VmsDetectionPollerOptions {
