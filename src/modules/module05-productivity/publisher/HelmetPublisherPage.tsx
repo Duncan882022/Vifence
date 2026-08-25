@@ -144,8 +144,8 @@ export function HelmetPublisherPage() {
     : '—'
 
   return (
-    <div className="min-h-screen bg-[#0a0f16] text-white flex flex-col items-center px-4 py-5">
-      <div className="w-full max-w-md space-y-3">
+    <div className="min-h-dvh bg-[#0a0f16] text-white flex flex-col items-center px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="w-full max-w-md space-y-2.5">
         <header className="flex items-center justify-between">
           <div>
             <h1 className="text-[15px] font-semibold">{label}</h1>
@@ -158,7 +158,9 @@ export function HelmetPublisherPage() {
 
         <StatusBanner state={state} />
 
-        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black">
+        {/* Trần chiều cao để nút Dừng luôn nằm trong tầm tay, không phải cuộn —
+            người đeo mũ thường thao tác một tay giữa công trường. */}
+        <div className="relative aspect-[3/4] max-h-[42dvh] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black">
           <video
             ref={videoRef}
             autoPlay
