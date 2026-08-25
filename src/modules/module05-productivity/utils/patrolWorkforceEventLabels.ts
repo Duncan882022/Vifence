@@ -120,9 +120,9 @@ export function isPatrolObjectId(id?: string | null): boolean {
 
 /**
  * Phân loại giai đoạn nhận diện của một sự kiện PERSON_DETECTED:
- * - profile: đã gán Tên + Đơn vị thủ công
- * - person:  có mã ổn định (OBJ-* hoặc sgc-*) — biết lại được nhưng chưa profile
- * - object:  chưa đủ tiêu chí — bán thân, quay lưng, track tạm
+ * - profile: khớp thư viện mặt hoặc đã gán Tên + Đơn vị thủ công → ROI hiện tên
+ * - person:  đã đủ mặt để nhận diện (có mã sgc) nhưng chưa có trong thư viện
+ * - object:  quay lưng / không thấy mặt, chỉ đủ đầu + 1/3 thân trên
  */
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
   const objectId = event.objectId?.trim() ?? ''
