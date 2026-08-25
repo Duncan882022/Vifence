@@ -20,6 +20,7 @@
     "start:fe": "bash scripts/start-fe-remote.sh",
     "start:backend": "bash scripts/start-backend-ngrok.sh",
     "pack:pages": "npm run build:pages && cd docs && zip -r ../vifence-pages.zip . && echo '→ Upload nội dung vifence-pages.zip lên root repo GitHub (duncan882022/Vifence)'",
+    "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -72,6 +73,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "^4.1.11"
   }
 }
