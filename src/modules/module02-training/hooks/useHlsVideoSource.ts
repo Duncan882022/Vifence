@@ -22,6 +22,46 @@ const WATCHDOG_MS = 4000
 /** Số nhịp liên tiếp không có khung hình thì gắn lại nguồn (tránh cắt ngang lúc đang tải). */
 const WATCHDOG_STRIKES = 2
 
+/** Thời gian chờ tín hiệu (retry HLS) trước khi tile chuyển Offline. */
+export const STREAM_SIGNAL_WAIT_MS = 8000
+
+export type StreamSignalPhase = 'idle' | 'waiting' | 'ready' | 'offline'
+
+/**
+ * Trạng thái chờ tín hiệu remote — sau vài giây không có khung hình thì Offline,
+ * thay vì spinner vô hạn. Retry nền vẫn chạy; có hình là tự lên lại.
+ */
+export function useStreamSignalPhase(
+  framesReady: boolean,
+  playing: boolean,
+  /** Chỉ áp dụng cho luồng remote đang chờ (HLS/WHEP), không dùng cho MP4 loop. */
+  waitingEnabled: boolean,
+  resetKey: string,
+  waitMs: number = STREAM_SIGNAL_WAIT_MS,
+): StreamSignalPhase {
+  const [phase, setPhase] = useState<StreamSignalPhase>('idle')
+
+  useEffect(() => {
+    if (!playing || !waitingEnabled) {
+      setPhase('idle')
+      return
+    }
+    if (framesReady) {
+      setPhase('ready')
+      return
+    }
+
+    setPhase('waiting')
+    const timer = window.setTimeout(() => {
+      setPhase(prev => (prev === 'waiting' ? 'offline' : prev))
+    }, waitMs)
+
+    return () => window.clearTimeout(timer)
+  }, [playing, waitingEnabled, framesReady, waitMs, resetKey])
+
+  return phase
+}
+
 /** MediaMTX LL-HLS — backend VMS relay dùng HLS thường (không EXT-X-PART). */
 function isLowLatencyHlsUrl(url: string): boolean {
   return url.includes('/mediamtx/hls/')

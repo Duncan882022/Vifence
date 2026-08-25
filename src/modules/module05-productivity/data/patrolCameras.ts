@@ -48,9 +48,8 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
 }
 
 /**
- * Flycam chưa có nguồn thật vẫn giữ streamUrl: tile sẽ thử HLS rồi hiện
- * "Đang chờ tín hiệu" thay vì chết hẳn ở màn Offline, và tự lên sóng ngay khi
- * MediaMTX/VMS bắt đầu phát path tương ứng.
+ * Flycam chưa có nguồn: tile thử HLS, hiện "Đang chờ tín hiệu" ~8s rồi Offline.
+ * Có nguồn thì tự lên sóng — retry nền vẫn chạy sau khi đã Offline.
  */
 function buildPatrolDroneCamera(id: string): TrainingCamera {
   const name = PATROL_DRONE_LABELS[id] ?? id

@@ -10,7 +10,7 @@
  *    (`VMS_CAMERA_SOURCES=DR-03:rtsp://…`).
  *
  * Tile thử VMS trước rồi rơi về MediaMTX, nên chỉ cần một trong hai đường sống.
- * Chưa có nguồn thật thì cả hai cùng 404 và tile hiện "Đang chờ tín hiệu".
+ * Chưa có nguồn thật thì retry HLS ~8s rồi tile chuyển Offline (retry nền vẫn chạy).
  */
 import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { getMediaMtxHlsBase } from './helmetIngest'
