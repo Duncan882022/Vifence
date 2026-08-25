@@ -87,9 +87,16 @@ const StatusBanner = memo(function StatusBanner({
 
   if (state.status === 'starting') {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2">
-        <RefreshCw className="w-4 h-4 text-sky-400 animate-spin" aria-hidden />
-        <span className="text-[12px] font-semibold text-sky-300">Đang kết nối…</span>
+      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 text-sky-400 animate-spin" aria-hidden />
+          <span className="text-[12px] font-semibold text-sky-300">Đang kết nối…</span>
+        </div>
+        {state.errorMessage && (
+          <p className="mt-1 text-[11px] leading-relaxed text-sky-200/80">
+            {state.errorMessage}
+          </p>
+        )}
       </div>
     )
   }

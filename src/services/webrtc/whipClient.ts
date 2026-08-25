@@ -63,6 +63,15 @@ export interface WhipPublisher {
 const DEFAULT_MAX_BITRATE = 2_500_000
 const ICE_GATHER_TIMEOUT_MS = 3000
 
+/**
+ * STUN mặc định — điện thoại 4G nằm sau NAT của nhà mạng nên chỉ có host
+ * candidate (IP nội bộ). Không có srflx thì kết nối chỉ dựa vào peer-reflexive,
+ * và mỗi lần NAT đổi cổng là mất sóng vĩnh viễn.
+ */
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+]
+
 /** Chờ ICE gathering xong (non-trickle) — MediaMTX chấp nhận offer đầy đủ. */
 function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
   if (pc.iceGatheringState === 'complete') return Promise.resolve()
@@ -196,7 +205,7 @@ export async function startWhipPublisher(
     endpoint,
     stream,
     maxBitrateBps = DEFAULT_MAX_BITRATE,
-    iceServers = [],
+    iceServers = DEFAULT_ICE_SERVERS,
     onStateChange,
     onStats,
     statsIntervalMs = 2000,
@@ -242,6 +251,9 @@ export async function startWhipPublisher(
     if (pc.connectionState === 'connected') setState('connected')
     else if (pc.connectionState === 'disconnected') setState('reconnecting', 'Mất kết nối tạm thời.')
     else if (pc.connectionState === 'failed') setState('failed', 'Kết nối WebRTC thất bại.')
+    // Server đóng session (NAT rebinding, ICE consent hết hạn) — caller phải
+    // publish lại, nếu bỏ qua thì trang vẫn báo "đang phát" mà CMS không có hình.
+    else if (pc.connectionState === 'closed') setState('closed', 'Máy chủ đã đóng phiên phát.')
   })
 
   const offer = await pc.createOffer()

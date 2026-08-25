@@ -27,7 +27,11 @@ webrtc: yes
 webrtcAddress: :8889
 # Địa chỉ công khai để ICE hoạt động sau NAT — IP của chính VPS chạy MediaMTX.
 webrtcAdditionalHosts: [217.217.253.247]
-# Bật khi client ở sau NAT đối xứng (4G nhà mạng):
+# STUN — điện thoại 4G chỉ có host candidate (IP nội bộ nhà mạng). Thiếu srflx
+# thì phiên phát sống nhờ peer-reflexive và chết hẳn mỗi lần NAT đổi cổng.
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+# Bật thêm TURN khi mũ chạy sau NAT đối xứng (một số nhà mạng 4G):
 # webrtcICEServers2:
 #   - url: turn:turn.vifence.io:3478
 #     username: vifence

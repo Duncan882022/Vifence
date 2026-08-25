@@ -100,6 +100,7 @@ class CameraVmsWorker:
         self._hls_proc: Optional[subprocess.Popen] = None
         self._hls_lock = threading.Lock()
         self._hls_started_at: float = 0.0
+        self._hls_started_wall: float = 0.0
         self._hls_restart_cooldown_until: float = 0.0
         self._hls_pipe_stdin = None
         self._hls_pipe_size: Optional[tuple[int, int]] = None
@@ -671,6 +672,7 @@ class CameraVmsWorker:
             self._hls_proc = subprocess.Popen(cmd, **popen_kwargs)
             self._hls_pipe_stdin = self._hls_proc.stdin if stdin_mode else None
             self._hls_started_at = time.monotonic()
+            self._hls_started_wall = time.time()
             mode = "pipe" if stdin_mode else "direct"
             logger.info(
                 "[VMS %s] HLS ffmpeg PID %d khởi động (%s).",
@@ -703,13 +705,17 @@ class CameraVmsWorker:
             dead = proc is None or proc.poll() is not None
             startup_grace = time.monotonic() - self._hls_started_at < 25.0
 
-            if not dead and not startup_grace:
-                idle_sec = time.time() - self._latest_hls_activity()
-                if idle_sec > 40.0:
-                    self._restart_hls(f"không segment mới {idle_sec:.0f}s")
-            elif dead and not startup_grace:
+            if dead and not startup_grace:
                 code = proc.returncode if proc is not None else "none"
                 self._restart_hls(f"ffmpeg thoát (code={code})")
+            elif not dead and not startup_grace and self.is_stream_live():
+                # Chỉ coi là treo khi nguồn vẫn đang gửi frame. Mũ tắt sóng thì
+                # không có segment là đúng — restart lúc đó chỉ làm nhiễu log.
+                last_activity = self._latest_hls_activity()
+                baseline = last_activity if last_activity > 0 else self._hls_started_wall
+                idle_sec = time.time() - baseline if baseline > 0 else 0.0
+                if idle_sec > 40.0:
+                    self._restart_hls(f"không segment mới {idle_sec:.0f}s")
 
             time.sleep(6.0)
 

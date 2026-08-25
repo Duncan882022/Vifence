@@ -63,6 +63,15 @@ interface UseHelmetPublisherOptions {
 const HEADING_SAMPLE_MS = 1000
 /** Tự thử phát lại sau khi WebRTC hỏng (ms). */
 const RECONNECT_DELAY_MS = 3000
+/**
+ * `disconnected` thường tự hồi sau vài giây (ICE restart nội bộ). Quá ngưỡng này
+ * mà chưa `connected` lại thì publish mới hẳn — mạng 4G đổi NAT không tự hồi.
+ */
+const DISCONNECT_GRACE_MS = 8000
+/** Chu kỳ watchdog kiểm tra luồng còn gửi byte hay không. */
+const STALL_CHECK_MS = 5000
+/** Số lần liên tiếp bitrate = 0 thì coi như luồng chết dù trạng thái vẫn connected. */
+const STALL_STRIKES = 3
 
 export function useHelmetPublisher({
   helmetId,
@@ -78,6 +87,14 @@ export function useHelmetPublisher({
   const reconnectTimerRef = useRef(0)
   /** Người dùng chủ động dừng — không tự kết nối lại. */
   const manualStopRef = useRef(false)
+  /**
+   * Mỗi lần start() tăng một nấc. Publisher cũ bị teardown vẫn bắn state
+   * `closed`; không có mốc này thì lần phát mới lập tức bị lên lịch phát lại.
+   */
+  const sessionRef = useRef(0)
+  const statsRef = useRef<WhipPublishStats>(EMPTY_WHIP_STATS)
+  const stallStrikesRef = useRef(0)
+  const startRef = useRef<((facing?: CameraFacing) => Promise<void>) | null>(null)
 
   const [status, setStatus] = useState<PublisherStatus>('idle')
   const [connection, setConnection] = useState<WhipConnectionState>('idle')
@@ -114,9 +131,20 @@ export function useHelmetPublisher({
     releaseWakeLock()
   }, [releaseWakeLock, videoRef])
 
+  const scheduleReconnect = useCallback((delayMs: number) => {
+    if (manualStopRef.current) return
+    window.clearTimeout(reconnectTimerRef.current)
+    reconnectTimerRef.current = window.setTimeout(() => {
+      void startRef.current?.(facingRef.current)
+    }, delayMs)
+  }, [])
+
   const start = useCallback(async (nextFacing?: CameraFacing) => {
     const useFacing = nextFacing ?? facingRef.current
     manualStopRef.current = false
+    const session = ++sessionRef.current
+    stallStrikesRef.current = 0
+    statsRef.current = EMPTY_WHIP_STATS
 
     const endpoint = getHelmetWhipUrl(helmetId)
     if (!endpoint) {
@@ -155,44 +183,75 @@ export function useHelmetPublisher({
         stream,
         maxBitrateBps,
         onStateChange: (next, message) => {
+          // State của publisher đã bị thay thế — bỏ qua, tránh phát lại nhầm.
+          if (session !== sessionRef.current) return
           setConnection(next)
+
           if (next === 'connected') {
+            window.clearTimeout(reconnectTimerRef.current)
+            stallStrikesRef.current = 0
             setStatus('live')
             setErrorMessage(undefined)
+            return
           }
-          if (next === 'failed') {
-            setStatus('error')
-            setErrorMessage(message ?? 'Mất kết nối tới máy chủ.')
-            if (!manualStopRef.current) {
-              reconnectTimerRef.current = window.setTimeout(() => {
-                void start(facingRef.current)
-              }, RECONNECT_DELAY_MS)
-            }
+
+          if (next === 'reconnecting') {
+            setStatus('starting')
+            setErrorMessage(undefined)
+            scheduleReconnect(DISCONNECT_GRACE_MS)
+            return
+          }
+
+          if (next === 'failed' || next === 'closed') {
+            if (manualStopRef.current) return
+            setStatus('starting')
+            setErrorMessage(message ?? 'Mất kết nối tới máy chủ — đang phát lại.')
+            scheduleReconnect(RECONNECT_DELAY_MS)
           }
         },
-        onStats: setStats,
+        onStats: next => {
+          statsRef.current = next
+          setStats(next)
+        },
       })
 
       facingRef.current = useFacing
       setFacing(useFacing)
-      startedAtRef.current = Date.now()
+      // Phát lại sau khi rớt sóng vẫn là cùng một ca — không đếm lại từ 0.
+      if (startedAtRef.current === 0) startedAtRef.current = Date.now()
       void acquireWakeLock()
       void requestDeviceHeadingPermission()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Không mở được camera.'
-      setStatus('error')
+      const needsUserAction = msg.includes('Permission')
+        || msg.includes('NotAllowed')
+        || msg.includes('NotFound')
+        || msg.includes('DevicesNotFound')
+
       if (msg.includes('Permission') || msg.includes('NotAllowed')) {
         setErrorMessage('Cần cấp quyền camera cho trình duyệt.')
       } else if (msg.includes('NotFound') || msg.includes('DevicesNotFound')) {
         setErrorMessage('Không tìm thấy camera trên thiết bị.')
       } else {
-        setErrorMessage(msg)
+        setErrorMessage(`${msg} — đang thử lại.`)
+      }
+
+      // Lỗi mạng khi gọi WHIP thì tự thử lại; thiếu quyền thì phải chờ người dùng.
+      if (needsUserAction) {
+        setStatus('error')
+      } else {
+        setStatus('starting')
+        scheduleReconnect(RECONNECT_DELAY_MS)
       }
     }
-  }, [helmetId, maxBitrateBps, teardown, videoRef, acquireWakeLock])
+  }, [helmetId, maxBitrateBps, teardown, videoRef, acquireWakeLock, scheduleReconnect])
+
+  startRef.current = start
 
   const stop = useCallback(() => {
     manualStopRef.current = true
+    sessionRef.current += 1
+    startedAtRef.current = 0
     teardown()
     setStatus('idle')
     setConnection('closed')
@@ -303,16 +362,63 @@ export function useHelmetPublisher({
     return () => window.clearInterval(timer)
   }, [status])
 
-  /* Màn hình khoá rồi mở lại → xin lại wake lock. */
+  /**
+   * WebRTC có thể giữ `connected` nhưng ngừng gửi byte (encoder treo, track bị
+   * hệ điều hành thu hồi khi khoá màn hình). Trang vẫn báo "đang phát sóng" còn
+   * CMS thì đen — nên phải tự phát lại khi bitrate đứng ở 0.
+   */
+  useEffect(() => {
+    if (status !== 'live') return
+
+    const timer = window.setInterval(() => {
+      const track = streamRef.current?.getVideoTracks()[0]
+      const trackDead = Boolean(track) && (track!.readyState === 'ended' || !track!.enabled)
+      const noBytes = statsRef.current.bitrateKbps <= 0
+
+      if (!trackDead && !noBytes) {
+        stallStrikesRef.current = 0
+        return
+      }
+
+      stallStrikesRef.current += 1
+      if (trackDead || stallStrikesRef.current >= STALL_STRIKES) {
+        stallStrikesRef.current = 0
+        setStatus('starting')
+        setErrorMessage('Luồng bị gián đoạn — đang phát lại.')
+        scheduleReconnect(0)
+      }
+    }, STALL_CHECK_MS)
+
+    return () => window.clearInterval(timer)
+  }, [status, scheduleReconnect])
+
+  /**
+   * Màn hình khoá rồi mở lại → xin lại wake lock. iOS/Android thường huỷ luôn
+   * phiên WebRTC lúc nền, nên quay lại mà publisher đã chết thì phải phát lại.
+   */
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === 'visible' && status === 'live') {
-        void acquireWakeLock()
+      if (document.visibilityState !== 'visible') return
+      if (status !== 'live' && status !== 'starting') return
+
+      void acquireWakeLock()
+
+      const publisherState = publisherRef.current?.getState()
+      const track = streamRef.current?.getVideoTracks()[0]
+      const broken = !publisherRef.current
+        || publisherState === 'failed'
+        || publisherState === 'closed'
+        || track?.readyState === 'ended'
+
+      if (broken) {
+        setStatus('starting')
+        setErrorMessage('Kết nối bị ngắt khi tắt màn hình — đang phát lại.')
+        scheduleReconnect(0)
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [status, acquireWakeLock])
+  }, [status, acquireWakeLock, scheduleReconnect])
 
   useEffect(() => teardown, [teardown])
 
