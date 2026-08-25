@@ -25,8 +25,8 @@ rtspTransports: [tcp, udp]
 # WebRTC — WHIP (điện thoại publish) + WHEP (CMS xem).
 webrtc: yes
 webrtcAddress: :8889
-# Địa chỉ công khai để ICE hoạt động sau NAT — đổi thành IP/hostname thật.
-webrtcAdditionalHosts: [157.66.100.182]
+# Địa chỉ công khai để ICE hoạt động sau NAT — IP của chính VPS chạy MediaMTX.
+webrtcAdditionalHosts: [217.217.253.247]
 # Bật khi client ở sau NAT đối xứng (4G nhà mạng):
 # webrtcICEServers2:
 #   - url: turn:turn.vifence.io:3478
@@ -63,13 +63,16 @@ pathDefaults:
 # Path theo từng mũ
 
 paths:
-  # HC-01 — bodycam phần cứng tự publish RTSP.
-  # Nếu bodycam nằm ở nơi khác, dùng `source: rtsp://…` để MediaMTX pull về.
+  # HC-01 — bodycam của hãng phát RTSP ở gateway riêng, MediaMTX pull về.
+  # sourceOnDemand: no để luôn có luồng sẵn cho AI worker, không chờ viewer đầu tiên.
   hc-01:
-    source: publisher
+    source: rtsp://157.66.100.182:8554/866926048126915
+    sourceProtocol: tcp
+    sourceOnDemand: no
 
   # HC-02 — điện thoại publish qua WHIP tại /hc-02/whip.
-  # Khi có bodycam thật, cấu hình y hệt hc-01, phía CMS không đổi gì.
+  # Khi có bodycam thật, đổi thành `source: rtsp://…` y như hc-01.
+  # Phía CMS không cần sửa gì.
   hc-02:
     source: publisher
 
@@ -77,6 +80,26 @@ paths:
   all_others:
     source: publisher
     record: no
+
+###############################################
+# TLS — BẮT BUỘC khi CMS chạy trên HTTPS (GitHub Pages)
+#
+# Trang HTTPS không gọi được endpoint HTTP (mixed content) và getUserMedia cũng
+# đòi secure context. Hai cách:
+#
+#   1. Proxy qua nginx sẵn có trên VPS (khuyến nghị — dùng luôn cert nip.io):
+#        location /mediamtx/webrtc/ { proxy_pass http://127.0.0.1:8889/; }
+#        location /mediamtx/hls/    { proxy_pass http://127.0.0.1:8888/; }
+#      rồi đặt VITE_MEDIAMTX_WEBRTC_URL=https://<host>/mediamtx/webrtc
+#      Nhớ bật WebSocket upgrade và tắt buffering cho hai location này.
+#
+#   2. Cho MediaMTX tự nắm cert:
+#        webrtcEncryption: yes
+#        webrtcServerCert: /etc/letsencrypt/live/<host>/fullchain.pem
+#        webrtcServerKey:  /etc/letsencrypt/live/<host>/privkey.pem
+#
+# Lưu ý: proxy chỉ lo phần signaling. Media WebRTC vẫn đi UDP trực tiếp nên
+# phải mở dải cổng ICE (mặc định 8189/udp) trên firewall.
 
 ###############################################
 # Xác thực — BẮT BUỘC đổi trước khi mở ra internet

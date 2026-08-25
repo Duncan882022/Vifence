@@ -95,32 +95,109 @@ FE tự rơi về polling sau 3 lần WS thất bại (ngrok free, proxy công t
 
 ## 6. Bật kiến trúc mới
 
-Đặt `VITE_MEDIAMTX_HOST` là đủ. Không đặt → HC-02 giữ nguyên luồng cũ, demo
-hiện tại không gãy.
+Merge code **không** tự bật gì cả. Không có `VITE_MEDIAMTX_HOST` thì HC-02 giữ
+nguyên luồng cũ — chủ ý như vậy để bản demo đang chạy không gãy.
+
+Cần đủ ba bước dưới đây, thiếu bước nào cũng không hoạt động.
+
+### Bước 1 — Cài MediaMTX trên VPS
+
+Chạy cùng máy với backend AI để backend pull RTSP qua `127.0.0.1` (không tốn
+băng thông ra ngoài, không phụ thuộc mạng công cộng).
 
 ```bash
-VITE_MEDIAMTX_HOST=157.66.100.182
-VITE_MEDIAMTX_WEBRTC_PORT=8889
-VITE_MEDIAMTX_HLS_PORT=8888
+cd /opt/vifence
+curl -L -o mediamtx.tar.gz \
+  https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_linux_amd64.tar.gz
+tar xzf mediamtx.tar.gz
+cp /opt/vifence/backend-ai/deploy/mediamtx.yml /opt/vifence/mediamtx.yml
 ```
 
-Backend cần thêm HC-02 vào `VMS_CAMERA_SOURCES` để AI chạy trên luồng đó:
+systemd unit:
+
+```ini
+[Unit]
+Description=MediaMTX
+After=network.target
+
+[Service]
+ExecStart=/opt/vifence/mediamtx /opt/vifence/mediamtx.yml
+Restart=always
+WorkingDirectory=/opt/vifence
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Mở firewall: `8889/tcp` (WebRTC signaling), `8888/tcp` (HLS), `8189/udp` (ICE),
+`8554/tcp` (RTSP nội bộ — chỉ mở nếu cần truy cập từ ngoài).
+
+### Bước 2 — Backend chạy AI trên luồng HC-02
+
+Thêm HC-02 vào `VMS_CAMERA_SOURCES` trong `scripts/deploy-backend-contabo.sh`
+(dòng ghi `.env` production):
 
 ```bash
-VMS_CAMERA_SOURCES=...,HC-02:rtsp://127.0.0.1:8554/hc-02
+VMS_CAMERA_SOURCES=A-03:...,A-04:...,HC-01:rtsp://127.0.0.1:8554/hc-01,HC-02:rtsp://127.0.0.1:8554/hc-02
 ```
 
-Cấu hình MediaMTX mẫu: `backend-ai/deploy/mediamtx.yml`.
+Sau khi có MediaMTX, HC-01 cũng nên trỏ về `127.0.0.1:8554/hc-01` thay vì gateway
+của hãng — MediaMTX pull một lần rồi fan-out, thay vì mỗi consumer tự kéo.
+
+### Bước 3 — Frontend biết địa chỉ MediaMTX
+
+Thêm vào `.env.ghpages` rồi build lại:
+
+```bash
+VITE_MEDIAMTX_WEBRTC_URL=https://217.217.253.247.nip.io/mediamtx/webrtc
+VITE_MEDIAMTX_HLS_URL=https://217.217.253.247.nip.io/mediamtx/hls
+```
+
+> **Bắt buộc dùng HTTPS.** CMS chạy trên GitHub Pages (HTTPS) nên không gọi được
+> endpoint HTTP — trình duyệt chặn mixed content. `getUserMedia` ở trang phát
+> sóng cũng đòi secure context. Cách dựng TLS: xem phần cuối `mediamtx.yml`.
+
+### Kiểm tra sau khi bật
+
+```bash
+curl -s https://<host>/health | jq '.cameras'   # phải thấy HC-02
+```
+
+`stream_online: true` nghĩa là MediaMTX đang nhận luồng và AI worker đọc được.
 
 ---
 
-## 7. Vận hành
+## 6b. Triển khai code
 
-Người đeo mũ mở `/phat-song?helmet=HC-02` trên điện thoại, bấm **Bắt đầu phát
-sóng**. Trang này giữ màn hình sáng và tự phát lại khi có mạng trở lại.
+| Thành phần | Cách deploy | Kích hoạt |
+|---|---|---|
+| Frontend | `.github/workflows/deploy-pages.yml` | Tự chạy khi push `main` |
+| Backend | `.github/workflows/deploy-backend-contabo.yml` | Thủ công (`workflow_dispatch`) |
+| MediaMTX | Cài tay trên VPS | Bước 1 ở trên |
 
-CMS không còn hỏi quyền camera/GPS khi kiến trúc mới đã bật — việc đó thuộc về
-trang phát sóng.
+Backend phải deploy **trước** frontend: FE build mới sẽ gọi `/ws/stream/...`, nếu
+backend chưa có endpoint đó thì FE rơi về polling (không gãy, nhưng mất lợi ích).
+
+---
+
+## 7. Vận hành hằng ngày
+
+**Người đeo mũ** mở trên điện thoại:
+
+```
+https://duncan882022.github.io/Vifence/phat-song?helmet=HC-02
+```
+
+Bấm **Bắt đầu phát sóng**, cấp quyền camera + vị trí, để máy trong túi áo. Trang
+giữ màn hình sáng suốt ca và tự phát lại khi có mạng trở lại. Hết ca bấm **Dừng
+phát sóng**.
+
+Nếu nút hiện **"Chưa sẵn sàng phát sóng"** thì chưa cấu hình xong MediaMTX —
+xem lại mục 6.
+
+**Người giám sát** mở CMS như bình thường. Module 05 hiện cả hai mũ trong lưới
+camera, không cần thao tác gì thêm. CMS không còn hỏi quyền camera/GPS khi kiến
+trúc mới đã bật — việc đó thuộc về trang phát sóng.
 
 ---
 
