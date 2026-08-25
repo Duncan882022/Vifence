@@ -467,9 +467,15 @@ class WorkforceEngine:
                     else:
                         object_id = self._new_object_id()
                 elif bbox and len(bbox) >= 4:
-                    object_id = self._match_active_object_by_bbox(helmet_id, bbox, now)
+                    object_id = self._match_active_object_by_bbox(
+                        helmet_id, bbox, now, worker_id=wid,
+                    )
                     if object_id is None:
+                        if mode == "PARTIAL_BODY":
+                            return None
                         object_id = self._new_object_id()
+                elif mode == "PARTIAL_BODY":
+                    return None
                 else:
                     object_id = self._new_object_id()
 
@@ -547,6 +553,7 @@ class WorkforceEngine:
         now: float,
         *,
         iou_threshold: float = 0.22,
+        worker_id: str = "",
     ) -> str | None:
         from .track_matching import bbox_iou
 
@@ -554,6 +561,10 @@ class WorkforceEngine:
         best_iou = iou_threshold
         for obj in self.objects.values():
             if obj.helmet_id != helmet_id or obj.live_status(now) != "ACTIVE":
+                continue
+            # Hai danh tính khác nhau chồng bbox — không gộp, nếu không 2 người thành 1 tên.
+            other_wid = str(obj.worker_id or "").strip()
+            if worker_id and other_wid and other_wid != worker_id:
                 continue
             ob = obj.last_bbox
             if not ob or len(ob) < 4:

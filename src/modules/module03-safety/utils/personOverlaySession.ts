@@ -8,7 +8,7 @@ const seenAndLeftIds = new Set<string>()
 
 function isSgcObjectId(id: string | null | undefined): id is string {
   const trimmed = id?.trim()
-  return Boolean(trimmed && trimmed.startsWith('sgc-0'))
+  return Boolean(trimmed && trimmed.startsWith('sgc-'))
 }
 
 /** Gọi mỗi frame với danh sách worker_id person đang thấy trên cam. */

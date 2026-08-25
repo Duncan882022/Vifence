@@ -101,6 +101,10 @@ def upper_body_third_with_head_visible(
     if y1_ratio > 0.62 and bh_ratio < 0.18:
         return False
 
+    # Mảnh thân giữa khung, rộng hơn cao — bụng/đùi chứ không phải đầu + thân trên.
+    if y1_ratio > 0.35 and ph / pw < 1.0:
+        return False
+
     return True
 
 
