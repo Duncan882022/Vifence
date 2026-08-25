@@ -13,20 +13,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.patrol_face_anchor import (  # noqa: E402
+    BACK_TURN_MIN_CONF,
     _FrameFace,
     anchor_patrol_person_boxes_to_faces,
 )
 
 
 class TestPatrolFaceAnchor(unittest.TestCase):
-    def test_rejects_person_box_without_face(self):
+    def test_rejects_implausible_silhouette_without_face(self):
+        """Dải hẹp cao (rèm/cột) không phải dáng người — loại dù không có mặt."""
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        fabric = (900.0, 80.0, 1100.0, 620.0)
+        strip = (900.0, 40.0, 960.0, 700.0)
         face = _FrameFace(box=(320.0, 180.0, 520.0, 420.0), score=0.88)
         with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face]):
             out = anchor_patrol_person_boxes_to_faces(
                 frame,
-                [(fabric, 0.55)],
+                [(strip, 0.55)],
                 camera_id="HC-02",
             )
         self.assertEqual(len(out), 1)
@@ -88,17 +90,78 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertIn(back_turn, boxes)
         self.assertGreaterEqual(len(out), 2)
 
-    def test_fabric_yolo_rejected_without_face(self):
+    def test_back_turn_close_to_camera_kept(self):
+        """Bodycam hay bắt người rất gần — bbox cao gần hết khung vẫn phải giữ."""
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        face = _FrameFace(box=(320.0, 180.0, 520.0, 420.0), score=0.88)
-        fabric = (900.0, 80.0, 1100.0, 620.0)
-        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face]):
+        close_back_turn = (420.0, 60.0, 760.0, 660.0)
+        face_other = _FrameFace(box=(1120.0, 200.0, 1200.0, 340.0), score=0.85)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_other]):
             out = anchor_patrol_person_boxes_to_faces(
                 frame,
-                [(fabric, 0.55)],
+                [(close_back_turn, 0.44)],
                 camera_id="HC-02",
             )
-        self.assertNotIn(fabric, [box for box, _ in out])
+        self.assertIn(close_back_turn, [box for box, _ in out])
+
+    def test_back_turn_kept_at_yolo_confidence_floor(self):
+        """Ngưỡng quay lưng không được cao hơn sàn YOLO bodycam."""
+        self.assertLessEqual(BACK_TURN_MIN_CONF, 0.30)
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        back_turn = (180.0, 140.0, 420.0, 620.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(back_turn, BACK_TURN_MIN_CONF)],
+                camera_id="HC-02",
+            )
+        self.assertIn(back_turn, [box for box, _ in out])
+
+    def test_back_turn_without_head_rejected(self):
+        """Chỉ thấy chân thì không phải Đối tượng."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        legs = (560.0, 520.0, 660.0, 706.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(legs, 0.6)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(out, [])
+
+
+class TestFabricRejectedByAppearance(unittest.TestCase):
+    """Bạt/tường bị loại ở _filter_persons (chạy trước anchor) bằng màu sắc —
+    hình học không tách được bạt treo với người quay lưng."""
+
+    @staticmethod
+    def _frame_with(color_bgr, box):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        x1, y1, x2, y2 = (int(v) for v in box)
+        frame[y1:y2, x1:x2] = color_bgr
+        return frame
+
+    def test_green_tarp_and_gray_wall_rejected(self):
+        from app.ppe_analyzer import _person_upper_body_signal
+
+        box = (900.0, 80.0, 1100.0, 620.0)
+        self.assertFalse(
+            _person_upper_body_signal(self._frame_with((40, 140, 40), box), box)
+        )
+        self.assertFalse(
+            _person_upper_body_signal(self._frame_with((150, 150, 150), box), box)
+        )
+
+    def test_person_kept_including_dark_clothing(self):
+        from app.ppe_analyzer import _person_upper_body_signal
+
+        box = (900.0, 80.0, 1100.0, 620.0)
+        self.assertTrue(
+            _person_upper_body_signal(self._frame_with((150, 190, 225), box), box)
+        )
+        # Quay lưng, mặc đồ tối — vẫn phải qua được.
+        self.assertTrue(
+            _person_upper_body_signal(self._frame_with((25, 25, 28), box), box)
+        )
 
 
 if __name__ == "__main__":

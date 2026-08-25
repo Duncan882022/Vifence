@@ -10,8 +10,13 @@ from .patrol_person_visibility import (
     _clip_box_to_frame,
     background_clutter_person_box,
     legs_only_person_box,
+    plausible_person_silhouette,
     upper_body_third_with_head_visible,
 )
+
+# Quay lưng chỉ cần vượt sàn YOLO bodycam — đặt cao hơn sẽ âm thầm bỏ rơi
+# người đủ đầu + 1/3 thân trên mà YOLO chấm 0.30–0.38.
+BACK_TURN_MIN_CONF = 0.30
 
 
 @dataclass(frozen=True)
@@ -106,26 +111,19 @@ def _yolo_plausible_without_face(
     frame_w: int,
     frame_h: int,
 ) -> bool:
-    """Quay lưng — không thấy mặt nhưng đủ đầu + 30% thân (tab Đối tượng)."""
+    """Quay lưng — không thấy mặt nhưng đủ đầu + 1/3 thân trên (tab Đối tượng).
+
+    Chỉ áp đúng tiêu chí nghiệp vụ. Các dải diện tích/tỉ lệ từng thêm ở đây để
+    chặn FP thời histogram lại loại cả người đứng gần (bbox lớn) lẫn người đứng
+    xa (bbox nhỏ), nên bỏ — FP đã do clutter/silhouette và model mặt lo.
+    """
     if background_clutter_person_box(box, frame_w, frame_h):
         return False
     if legs_only_person_box(box, frame_w, frame_h):
         return False
-    if not upper_body_third_with_head_visible(box, frame_w, frame_h):
+    if not plausible_person_silhouette(box, frame_w, frame_h):
         return False
-    x1, y1, x2, y2 = box
-    ph = max(y2 - y1, 1.0)
-    pw = max(x2 - x1, 1.0)
-    bh_ratio = ph / max(float(frame_h), 1.0)
-    bw_ratio = pw / max(float(frame_w), 1.0)
-    area_ratio = (pw * ph) / max(float(frame_w * frame_h), 1.0)
-    if area_ratio > 0.28 or area_ratio < 0.018:
-        return False
-    if bh_ratio > 0.72 or bh_ratio < 0.12:
-        return False
-    if bw_ratio > 0.36 or bw_ratio < 0.04:
-        return False
-    return True
+    return upper_body_third_with_head_visible(box, frame_w, frame_h)
 
 
 def anchor_patrol_person_boxes_to_faces(
@@ -144,7 +142,7 @@ def anchor_patrol_person_boxes_to_faces(
         return [
             (box, conf)
             for box, conf in person_boxes
-            if conf >= 0.38 and _yolo_plausible_without_face(box, w, h)
+            if conf >= BACK_TURN_MIN_CONF and _yolo_plausible_without_face(box, w, h)
         ]
 
     matched_yolo: list[tuple[tuple[float, float, float, float], float]] = []
@@ -181,7 +179,7 @@ def anchor_patrol_person_boxes_to_faces(
     for box, conf in person_boxes:
         if any(_face_center_in_box(face, box) for face in faces):
             continue
-        if conf < 0.38 or not _yolo_plausible_without_face(box, w, h):
+        if conf < BACK_TURN_MIN_CONF or not _yolo_plausible_without_face(box, w, h):
             continue
         if any(_bbox_iou(box, other) >= 0.34 for other in existing_boxes):
             continue
