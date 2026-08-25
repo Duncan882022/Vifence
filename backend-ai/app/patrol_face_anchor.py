@@ -140,14 +140,14 @@ def anchor_patrol_person_boxes_to_faces(
         return [
             (box, conf)
             for box, conf in person_boxes
-            if conf >= 0.48 and _yolo_plausible_without_face(box, w, h)
+            if conf >= 0.38 and _yolo_plausible_without_face(box, w, h)
         ]
 
     matched_yolo: list[tuple[tuple[float, float, float, float], float]] = []
     for box, conf in person_boxes:
         if any(_face_center_in_box(face, box) for face in faces):
             matched_yolo.append((box, conf))
-        elif conf >= 0.48 and _yolo_plausible_without_face(box, w, h):
+        elif conf >= 0.38 and _yolo_plausible_without_face(box, w, h):
             matched_yolo.append((box, conf))
 
     covered_face_indices: set[int] = set()
