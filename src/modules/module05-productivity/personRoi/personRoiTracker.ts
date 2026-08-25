@@ -69,11 +69,16 @@ function dedupeOverlappingPersonDetections(detections: PersonRoiDetection[]): Pe
   })
   const kept: PersonRoiDetection[] = []
   for (const candidate of ranked) {
-    const duplicate = kept.some(
-      keptDet =>
+    const candidateKey = personRoiAnchorKey(candidate)
+    const duplicate = kept.some(keptDet => {
+      // Backend đã tách thành hai track — hai người đứng chồng nhau, không gộp.
+      const keptKey = personRoiAnchorKey(keptDet)
+      if (candidateKey && keptKey && candidateKey !== keptKey) return false
+      return (
         bboxIou(candidate.bbox, keptDet.bbox) >= 0.34
-        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.46,
-    )
+        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.46
+      )
+    })
     if (!duplicate) kept.push(candidate)
   }
   return kept
@@ -105,6 +110,30 @@ function isKnownWorker(id?: string): id is string {
   return Boolean(id && id.trim() && id !== 'unknown')
 }
 
+/**
+ * Khoá ROI theo id ổn định của backend. Bodycam rung/xoay làm bbox giữa hai
+ * lần analyze không còn chồng nhau, IoU trượt và track bị cấp id mới — id thì
+ * không đổi nên bám đúng người.
+ */
+export function personRoiAnchorKey(det: PersonRoiDetection): string | undefined {
+  const track = det.track_id?.trim()
+  if (track) return `trk:${track}`
+  const workerId = det.worker_id?.trim()
+  if (isKnownWorker(workerId)) return `wid:${workerId}`
+  return undefined
+}
+
+function createKalman(bbox: Bbox, cfg: PatrolPersonRoiConfig): KalmanBox2D {
+  return new KalmanBox2D(bbox, {
+    processNoise: cfg.processNoise,
+    measureNoise: cfg.measureNoise,
+    velocityDamping: cfg.velocityDamping,
+    sizeGain: cfg.sizeGain,
+    velocitySmoothing: cfg.velocitySmoothing,
+    maxSpeedBoxPerSec: cfg.maxSpeedBoxPerSec,
+  })
+}
+
 function canonicalPersonId(track: PersonRoiTrack): string {
   if (isKnownWorker(track.workerId)) return track.workerId!.trim()
   return track.id
@@ -121,10 +150,12 @@ function greedyAssign(
   detections: PersonRoiDetection[],
   cfg: PatrolPersonRoiConfig,
   allowedStates: Set<PersonRoiTrackState>,
+  excludeTrackIds: Set<string>,
 ): Map<string, number> {
   const pairs: MatchPair[] = []
   for (const track of tracks) {
     if (!allowedStates.has(track.state)) continue
+    if (excludeTrackIds.has(track.id)) continue
     const tb = track.kalman.getBbox()
     detections.forEach((det, detIndex) => {
       const cost = matchCost(tb, det.bbox, cfg)
@@ -146,6 +177,8 @@ function greedyAssign(
 }
 
 function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
+  const anchor = personRoiAnchorKey(det)
+  if (anchor) track.anchorKey = anchor
   if (det.subject_bbox && det.subject_bbox.length >= 4) {
     track.subjectBbox = det.subject_bbox
   }
@@ -181,12 +214,48 @@ export function advancePersonRoiTracks(
   const next = new Map<string, PersonRoiTrack>()
   const matchedDets = new Set<number>()
 
+  const applyMeasurement = (track: PersonRoiTrack, det: PersonRoiDetection) => {
+    track.kalman.update(det.bbox, dtMs)
+    track.hits += 1
+    track.missStreak = 0
+    track.lastSeenAt = now
+    track.lastMeasureAt = now
+    applyIdentity(track, det)
+    if (track.state === 'lost') {
+      track.state = 'confirmed'
+    } else if (
+      track.state === 'tentative'
+      && (track.hits >= cfg.confirmHits || Boolean(track.anchorKey))
+    ) {
+      track.state = 'confirmed'
+    }
+  }
+
+  // 0) Khoá theo track id backend — chạy trước IoU vì bodycam rung làm bbox trượt.
+  const byAnchor = new Map<string, PersonRoiTrack>()
+  for (const track of trackList) {
+    if (track.anchorKey) byAnchor.set(track.anchorKey, track)
+  }
+  const indexed = [
+    ...high.map((det, index) => ({ det, globalIndex: index })),
+    ...low.map((det, index) => ({ det, globalIndex: high.length + index })),
+  ]
+  for (const { det, globalIndex } of indexed) {
+    const key = personRoiAnchorKey(det)
+    if (!key) continue
+    const track = byAnchor.get(key)
+    if (!track || next.has(track.id)) continue
+    applyMeasurement(track, det)
+    matchedDets.add(globalIndex)
+    next.set(track.id, track)
+  }
+
   const assignPool = (
     pool: PersonRoiDetection[],
     states: PersonRoiTrackState[],
     offset = 0,
   ) => {
-    const assignment = greedyAssign(trackList, pool, cfg, new Set(states))
+    const assignment = greedyAssign(trackList, pool, cfg, new Set(states), new Set(next.keys()))
     for (const [trackId, detIndex] of assignment) {
       const track = prevTracks.get(trackId)
       const det = pool[detIndex]
@@ -194,18 +263,7 @@ export function advancePersonRoiTracks(
       const globalIndex = offset + detIndex
       if (matchedDets.has(globalIndex)) continue
       matchedDets.add(globalIndex)
-
-      track.kalman.update(det.bbox, dtMs)
-      track.hits += 1
-      track.missStreak = 0
-      track.lastSeenAt = now
-      track.lastMeasureAt = now
-      applyIdentity(track, det)
-      if (track.state === 'tentative' && track.hits >= cfg.confirmHits) {
-        track.state = 'confirmed'
-      } else if (track.state === 'lost') {
-        track.state = 'confirmed'
-      }
+      applyMeasurement(track, det)
       next.set(trackId, track)
     }
   }
@@ -232,61 +290,39 @@ export function advancePersonRoiTracks(
     // Drop track
   }
 
-  // Unmatched high-conf detections → new tentative tracks
+  // Detection chưa ghép → track mới. Có track id BE thì confirmed ngay để ROI
+  // hiện từ frame đầu; không có thì chờ đủ confirmHits cho khỏi nhấp nháy.
+  const birth = (det: PersonRoiDetection) => {
+    if (det.confidence < cfg.birthMinConfidence) return
+    const id = nextTrackId()
+    const anchorKey = personRoiAnchorKey(det)
+    const track: PersonRoiTrack = {
+      id,
+      state: anchorKey ? 'confirmed' : 'tentative',
+      hits: 1,
+      missStreak: 0,
+      lastSeenAt: now,
+      lastMeasureAt: now,
+      confidence: det.confidence,
+      label: det.worker_name?.trim() || det.label || id,
+      workerId: isKnownWorker(det.worker_id) ? det.worker_id!.trim() : undefined,
+      workerName: det.worker_name?.trim(),
+      anchorKey,
+      kalman: createKalman(det.bbox, cfg),
+    }
+    applyIdentity(track, det)
+    next.set(id, track)
+  }
+
   high.forEach((det, index) => {
     if (matchedDets.has(index)) return
-    if (det.confidence < cfg.birthMinConfidence) return
-    const id = nextTrackId()
-    const kalman = new KalmanBox2D(
-      det.bbox,
-      cfg.processNoise,
-      cfg.measureNoise,
-      cfg.velocityDamping,
-    )
-    const track: PersonRoiTrack = {
-      id,
-      state: 'tentative',
-      hits: 1,
-      missStreak: 0,
-      lastSeenAt: now,
-      lastMeasureAt: now,
-      confidence: det.confidence,
-      label: det.worker_name?.trim() || det.label || id,
-      workerId: isKnownWorker(det.worker_id) ? det.worker_id!.trim() : undefined,
-      workerName: det.worker_name?.trim(),
-      kalman,
-    }
-    applyIdentity(track, det)
-    next.set(id, track)
+    birth(det)
   })
 
-  // Unmatched low-conf — distant crowd / partial body (ByteTrack birth extension)
+  // Low-conf — distant crowd / partial body (ByteTrack birth extension)
   low.forEach((det, index) => {
-    const globalIndex = high.length + index
-    if (matchedDets.has(globalIndex)) return
-    if (det.confidence < cfg.birthMinConfidence) return
-    const id = nextTrackId()
-    const kalman = new KalmanBox2D(
-      det.bbox,
-      cfg.processNoise,
-      cfg.measureNoise,
-      cfg.velocityDamping,
-    )
-    const track: PersonRoiTrack = {
-      id,
-      state: 'tentative',
-      hits: 1,
-      missStreak: 0,
-      lastSeenAt: now,
-      lastMeasureAt: now,
-      confidence: det.confidence,
-      label: det.worker_name?.trim() || det.label || id,
-      workerId: isKnownWorker(det.worker_id) ? det.worker_id!.trim() : undefined,
-      workerName: det.worker_name?.trim(),
-      kalman,
-    }
-    applyIdentity(track, det)
-    next.set(id, track)
+    if (matchedDets.has(high.length + index)) return
+    birth(det)
   })
 
   return next

@@ -15,6 +15,31 @@ function cxCyWhToBbox(cx: number, cy: number, w: number, h: number): Bbox {
   return [cx - hw, cy - hh, cx + hw, cy + hh]
 }
 
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v))
+}
+
+export interface KalmanBox2DTuning {
+  processNoise: number
+  measureNoise: number
+  velocityDamping: number
+  /** Trọng số đo trên kích thước — thấp thì ROI không phình/co giật theo YOLO. */
+  sizeGain: number
+  /** Giữ lại bao nhiêu vận tốc cũ mỗi lần đo. */
+  velocitySmoothing: number
+  /** Trần tốc độ tính theo số lần cạnh bbox mỗi giây — chặn box bay khi đo nhiễu. */
+  maxSpeedBoxPerSec: number
+}
+
+const DEFAULT_TUNING: KalmanBox2DTuning = {
+  processNoise: 0.08,
+  measureNoise: 0.2,
+  velocityDamping: 0.978,
+  sizeGain: 0.35,
+  velocitySmoothing: 0.72,
+  maxSpeedBoxPerSec: 2.5,
+}
+
 /**
  * Constant-velocity Kalman cho tâm bbox + EMA kích thước.
  * Mô hình chuẩn SORT/DeepSORT (2D position + velocity).
@@ -29,12 +54,9 @@ export class KalmanBox2D {
   /** Position uncertainty (scalar) */
   p: number
 
-  constructor(
-    bbox: Bbox,
-    private processNoise: number,
-    private measureNoise: number,
-    private velocityDamping: number,
-  ) {
+  private tuning: KalmanBox2DTuning
+
+  constructor(bbox: Bbox, tuning: Partial<KalmanBox2DTuning> = {}) {
     const [cx, cy, w, h] = bboxToCxCyWh(bbox)
     this.cx = cx
     this.cy = cy
@@ -43,21 +65,26 @@ export class KalmanBox2D {
     this.w = w
     this.h = h
     this.p = 1
+    this.tuning = { ...DEFAULT_TUNING, ...tuning }
+  }
+
+  private maxSpeed(): number {
+    return Math.max(this.w, this.h) * this.tuning.maxSpeedBoxPerSec
   }
 
   predict(dtMs: number): Bbox {
-    const dt = Math.min(Math.max(dtMs, 0), 1200) / 1000
+    const dt = clamp(dtMs, 0, 1200) / 1000
     this.cx += this.vx * dt
     this.cy += this.vy * dt
-    this.vx *= this.velocityDamping
-    this.vy *= this.velocityDamping
-    this.p += this.processNoise * dt
+    this.vx *= this.tuning.velocityDamping
+    this.vy *= this.tuning.velocityDamping
+    this.p += this.tuning.processNoise * dt
     return this.getBbox()
   }
 
   /** Dự đoán cho hiển thị rAF — không mutate state. */
   getPredictedBbox(dtMs: number): Bbox {
-    const dt = Math.min(Math.max(dtMs, 0), 1200) / 1000
+    const dt = clamp(dtMs, 0, 1200) / 1000
     const cx = this.cx + this.vx * dt
     const cy = this.cy + this.vy * dt
     return cxCyWhToBbox(cx, cy, this.w, this.h)
@@ -66,16 +93,23 @@ export class KalmanBox2D {
   update(bbox: Bbox, dtMs: number): Bbox {
     const [mx, my, mw, mh] = bboxToCxCyWh(bbox)
     const dt = Math.max(8, dtMs) / 1000
-    const k = this.p / (this.p + this.measureNoise)
+    const k = this.p / (this.p + this.tuning.measureNoise)
 
-    const dx = mx - this.cx
-    const dy = my - this.cy
-    this.cx += k * dx
-    this.cy += k * dy
-    this.vx = this.vx * 0.35 + (dx / dt) * 0.65
-    this.vy = this.vy * 0.35 + (dy / dt) * 0.65
-    this.w = this.w * 0.25 + mw * 0.75
-    this.h = this.h * 0.25 + mh * 0.75
+    const appliedX = k * (mx - this.cx)
+    const appliedY = k * (my - this.cy)
+    this.cx += appliedX
+    this.cy += appliedY
+
+    // Vận tốc lấy từ dịch chuyển đã lọc: innovation thô chia dt khuếch đại
+    // nhiễu đo lên nhiều lần, kéo theo bbox bay khi extrapolate.
+    const keep = this.tuning.velocitySmoothing
+    const limit = this.maxSpeed()
+    this.vx = clamp(this.vx * keep + (appliedX / dt) * (1 - keep), -limit, limit)
+    this.vy = clamp(this.vy * keep + (appliedY / dt) * (1 - keep), -limit, limit)
+
+    const sizeGain = this.tuning.sizeGain
+    this.w = this.w * (1 - sizeGain) + mw * sizeGain
+    this.h = this.h * (1 - sizeGain) + mh * sizeGain
     this.p = Math.max(0.05, (1 - k) * this.p)
 
     return this.getBbox()

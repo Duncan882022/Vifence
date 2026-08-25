@@ -13,6 +13,9 @@ export interface PersonRoiDetection {
   subject_bbox?: Bbox
   worker_id?: string
   worker_name?: string
+  /** Track ổn định phía BE — khoá ROI theo id này thay vì đoán lại bằng IoU. */
+  track_id?: string
+  face_eligible?: boolean
 }
 
 /** Track nội bộ — Kalman + lifecycle. */
@@ -28,6 +31,8 @@ export interface PersonRoiTrack {
   workerId?: string
   workerName?: string
   subjectBbox?: Bbox
+  /** Khoá theo track BE — ưu tiên hơn IoU khi bodycam rung/xoay. */
+  anchorKey?: string
   kalman: KalmanBox2D
 }
 
