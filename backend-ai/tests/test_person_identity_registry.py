@@ -23,8 +23,12 @@ from app.schemas import PpeDetection  # noqa: E402
 
 
 def _test_face_emb(seed: int) -> list[float]:
-    vec = np.zeros(32, dtype=np.float64)
-    vec[int(seed) % 32] = 1.0
+    """Vector one-hot theo đúng chiều của model mặt đang chạy (SFace 128-D)."""
+    from app.person_identity_registry import _expected_emb_dim
+
+    dim = _expected_emb_dim()
+    vec = np.zeros(dim, dtype=np.float64)
+    vec[int(seed) % dim] = 1.0
     return vec.tolist()
 
 

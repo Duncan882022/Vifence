@@ -9,7 +9,6 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import settings
 from .schemas import PpeDetection
 from .track_matching import bbox_iou
 from .worker_identity.gallery import embedding_similarity
@@ -72,7 +71,7 @@ def _track_key(camera_id: str, track_id: str) -> str:
 
 
 def is_sgc_worker_id(worker_id: str | None) -> bool:
-    return bool(worker_id and str(worker_id).startswith("sgc-0"))
+    return bool(worker_id and str(worker_id).startswith("sgc-"))
 
 
 def is_identified_gallery_worker(worker_id: str | None) -> bool:
@@ -96,8 +95,21 @@ def _center_distance_norm(
     ) ** 0.5
 
 
+def _expected_emb_dim() -> int:
+    from .worker_identity.face_embedder import (
+        HISTOGRAM_EMBED_DIM,
+        SFACE_EMBED_DIM,
+        is_deep_face_model_ready,
+    )
+
+    return SFACE_EMBED_DIM if is_deep_face_model_ready() else HISTOGRAM_EMBED_DIM
+
+
 def _as_emb(vec: list[float] | None) -> np.ndarray | None:
     if not vec or len(vec) < 8:
+        return None
+    # Embedding lưu từ model cũ khác chiều — bỏ qua thay vì so sánh sai không gian.
+    if len(vec) != _expected_emb_dim():
         return None
     return np.asarray(vec, dtype=np.float64)
 
@@ -108,10 +120,12 @@ def _face_compatible(
     *,
     for_merge: bool,
 ) -> bool:
+    from .worker_identity import face_thresholds
+
     sim = embedding_similarity(query, other)
     if for_merge:
-        return sim >= settings.patrol_face_reuse_min_similarity
-    return sim >= settings.patrol_face_split_max_similarity
+        return sim >= face_thresholds.reuse_min_similarity()
+    return sim >= face_thresholds.split_max_similarity()
 
 
 def _conflicts_frame_faces(
@@ -180,6 +194,8 @@ def _find_reusable_worker_id(
     frame_face_assignments: dict[str, list[float]] | None = None,
 ) -> str | None:
     """Tái dùng ID — ưu tiên mặt; bbox chỉ khi không có mặt hoặc mặt khớp."""
+    from .worker_identity import face_thresholds
+
     now = time.time()
     meta = state.get("track_meta") or {}
     prefix = f"{camera_id}|"
@@ -196,15 +212,18 @@ def _find_reusable_worker_id(
             if not wid or stored is None:
                 continue
             sim = embedding_similarity(face_emb, stored)
-            if sim < settings.patrol_face_reuse_min_similarity:
+            if sim < face_thresholds.reuse_min_similarity():
                 continue
             face_candidates.append((wid, sim))
 
         if face_candidates:
             face_candidates.sort(key=lambda item: item[1], reverse=True)
             best_wid, best_sim = face_candidates[0]
-            second_sim = face_candidates[1][1] if len(face_candidates) >= 2 else 0.0
-            if best_sim - second_sim >= settings.patrol_face_reuse_min_margin:
+            rival = next(
+                (sim for wid, sim in face_candidates[1:] if wid != best_wid),
+                0.0,
+            )
+            if best_sim - rival >= face_thresholds.reuse_min_margin():
                 if not _conflicts_frame_faces(best_wid, face_emb, frame_face_assignments):
                     return best_wid
 
@@ -251,19 +270,14 @@ def _match_patrol_gallery_from_embedding(
 ) -> tuple[str, str, float] | None:
     """Khớp histogram mặt với gallery — trả (gallery_id, worker_name, score)."""
     from .patrol_identity_store import lookup_patrol_identity
+    from .worker_identity import face_thresholds
     from .worker_identity.gallery import load_gallery, match_embedding
 
     load_gallery()
-    min_conf = settings.worker_match_min_confidence
-    min_margin = settings.worker_match_min_margin
-    if camera_id.startswith("HC-"):
-        min_conf = max(min_conf, settings.patrol_gallery_min_confidence)
-        min_margin = max(min_margin, settings.patrol_gallery_min_margin)
-
     matched = match_embedding(
         face_emb,
-        min_confidence=min_conf,
-        min_margin=min_margin,
+        min_confidence=face_thresholds.gallery_min_confidence(camera_id),
+        min_margin=face_thresholds.gallery_min_margin(camera_id),
     )
     if matched is None:
         return None
@@ -421,7 +435,7 @@ def resolve_patrol_person_identity(
     wid = (detection.worker_id or "").strip()
     wname = (detection.worker_name or "").strip()
     match = worker_match_from_detection(detection)
-    gallery_verified = bool(wid and wid != "unknown" and is_verified_face_match(match))
+    gallery_verified = bool(wid and wid != "unknown" and is_verified_face_match(match, camera_id))
     if (
         gallery_verified
         and query_emb is not None
