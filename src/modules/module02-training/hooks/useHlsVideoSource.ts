@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 /** Trình phát cần đọc được wallclock khung hình đang hiển thị để đồng bộ overlay. */
@@ -16,6 +16,11 @@ interface HlsInstance {
   recoverMediaError: () => void
   playingDate: Date | null
 }
+
+/** Chu kỳ kiểm tra luồng đã ra khung hình chưa. */
+const WATCHDOG_MS = 4000
+/** Số nhịp liên tiếp không có khung hình thì gắn lại nguồn (tránh cắt ngang lúc đang tải). */
+const WATCHDOG_STRIKES = 2
 
 /** MediaMTX LL-HLS — backend VMS relay dùng HLS thường (không EXT-X-PART). */
 function isLowLatencyHlsUrl(url: string): boolean {
@@ -39,6 +44,35 @@ function tryPlayVideo(video: HTMLVideoElement): void {
   void video.play().catch(() => {})
 }
 
+/** Luồng đã decode được khung hình chưa — dùng cho watchdog và overlay chờ tín hiệu. */
+function hasDecodedFrame(video: HTMLVideoElement): boolean {
+  return video.videoWidth > 0 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+}
+
+/**
+ * Theo dõi tile đã có hình chưa — để hiện trạng thái chờ thay vì ô đen im lặng.
+ */
+export function useVideoFramesReady(
+  videoRef: RefObject<HTMLVideoElement | null>,
+  playing: boolean,
+): boolean {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    if (!playing) {
+      setReady(false)
+      return
+    }
+    const timer = window.setInterval(() => {
+      const video = videoRef.current
+      setReady(Boolean(video && hasDecodedFrame(video)))
+    }, 700)
+    return () => window.clearInterval(timer)
+  }, [videoRef, playing])
+
+  return ready
+}
+
 /** Gắn HLS (.m3u8) hoặc MP4 thuần vào <video>. Safari native HLS; Chrome dùng hls.js. */
 export function useHlsVideoSource(
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -46,27 +80,31 @@ export function useHlsVideoSource(
   playing: boolean,
   fallbackSrc?: string,
 ): VideoClockSource {
-  const [activeSrc, setActiveSrc] = useState(src)
-  const primaryRef = useRef(src)
-  const fallbackRef = useRef(fallbackSrc)
-  const usedFallbackRef = useRef(false)
-
-  useEffect(() => {
-    primaryRef.current = src
-    fallbackRef.current = fallbackSrc
-    usedFallbackRef.current = false
-    setActiveSrc(src)
+  /**
+   * Mũ chưa phát thì backend trả 503; Safari native HLS gặp lỗi là bỏ hẳn, không
+   * thử lại. Nên phải tự luân phiên nguồn và gắn lại cho tới khi có khung hình.
+   */
+  const candidates = useMemo(() => {
+    const list = [src]
+    if (fallbackSrc && fallbackSrc !== src) list.push(fallbackSrc)
+    return list
   }, [src, fallbackSrc])
 
+  const [attempt, setAttempt] = useState(0)
+  const strikesRef = useRef(0)
+
+  useEffect(() => {
+    setAttempt(0)
+    strikesRef.current = 0
+  }, [candidates])
+
+  const activeSrc = candidates[attempt % candidates.length] ?? src
   const isHls = activeSrc.includes('.m3u8')
   const hlsRef = useRef<HlsInstance | null>(null)
 
-  const switchToFallback = useCallback(() => {
-    const fb = fallbackRef.current
-    if (!fb || usedFallbackRef.current || fb === primaryRef.current) return false
-    usedFallbackRef.current = true
-    setActiveSrc(fb)
-    return true
+  const retry = useCallback(() => {
+    strikesRef.current = 0
+    setAttempt(a => a + 1)
   }, [])
 
   useEffect(() => {
@@ -81,24 +119,19 @@ export function useHlsVideoSource(
       if (playing) tryPlayVideo(video)
     }
 
-    const attachHls = async () => {
+    const attachHls = async (): Promise<(() => void) | undefined> => {
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = activeSrc
         video.load()
-        const onNativeCanPlay = () => {
+        const onCanPlay = () => {
           if (destroyed || !playing) return
           tryPlayVideo(video)
         }
-        const onNativeError = () => {
-          if (destroyed) return
-          if (switchToFallback()) return
-          video.removeEventListener('error', onNativeError)
-        }
-        video.addEventListener('canplay', onNativeCanPlay)
-        video.addEventListener('error', onNativeError)
+        video.addEventListener('canplay', onCanPlay)
+        video.addEventListener('loadeddata', onCanPlay)
         return () => {
-          video.removeEventListener('canplay', onNativeCanPlay)
-          video.removeEventListener('error', onNativeError)
+          video.removeEventListener('canplay', onCanPlay)
+          video.removeEventListener('loadeddata', onCanPlay)
         }
       }
 
@@ -106,22 +139,22 @@ export function useHlsVideoSource(
         const { default: Hls } = await import('hls.js')
         if (destroyed || !Hls.isSupported()) {
           attachMp4()
-          return
+          return undefined
         }
         const llHls = isLowLatencyHlsUrl(activeSrc)
         const hls = new Hls({
           enableWorker: true,
-          // Backend VMS relay = HLS thường — lowLatencyMode gây màn đen trên Chrome.
+          // Backend VMS relay là HLS thường — lowLatencyMode gây màn đen trên Chrome.
           lowLatencyMode: llHls,
           liveSyncDurationCount: llHls ? 1 : 3,
           liveMaxLatencyDurationCount: llHls ? 3 : 6,
           maxLiveSyncPlaybackRate: 1.5,
           maxBufferLength: llHls ? 4 : 10,
           backBufferLength: 0,
-          manifestLoadingMaxRetry: 12,
+          manifestLoadingMaxRetry: 4,
           manifestLoadingRetryDelay: 1000,
-          levelLoadingMaxRetry: 8,
-          fragLoadingMaxRetry: 10,
+          levelLoadingMaxRetry: 4,
+          fragLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 800,
         })
         hls.loadSource(activeSrc)
@@ -131,26 +164,25 @@ export function useHlsVideoSource(
         })
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (destroyed || !data.fatal) return
-          if (switchToFallback()) return
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            window.setTimeout(() => hls.startLoad(), 1000)
-            return
-          }
           if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             hls.recoverMediaError()
+            return
           }
+          // Nguồn hỏng — để watchdog luân phiên sang URL còn lại.
+          hls.startLoad()
         })
         hlsRef.current = hls as unknown as HlsInstance
+        return undefined
       } catch {
-        if (switchToFallback()) return
         attachMp4()
+        return undefined
       }
     }
 
     let cleanupNative: (() => void) | undefined
     void (async () => {
       if (isHls) {
-        cleanupNative = await attachHls() ?? undefined
+        cleanupNative = await attachHls()
       } else {
         attachMp4()
       }
@@ -162,7 +194,28 @@ export function useHlsVideoSource(
       hlsRef.current?.destroy()
       hlsRef.current = null
     }
-  }, [videoRef, activeSrc, isHls, switchToFallback, playing])
+  }, [videoRef, activeSrc, isHls, attempt, playing])
+
+  /**
+   * Không có khung hình sau vài nhịp → gắn lại (và đổi nguồn nếu có dự phòng).
+   * Nhờ vậy tile tự lên hình ngay khi mũ bắt đầu phát, không cần tải lại trang.
+   */
+  useEffect(() => {
+    if (!playing || !isHls) return
+
+    const timer = window.setInterval(() => {
+      const video = videoRef.current
+      if (!video) return
+      if (hasDecodedFrame(video)) {
+        strikesRef.current = 0
+        return
+      }
+      strikesRef.current += 1
+      if (strikesRef.current >= WATCHDOG_STRIKES) retry()
+    }, WATCHDOG_MS)
+
+    return () => window.clearInterval(timer)
+  }, [playing, isHls, videoRef, retry])
 
   useEffect(() => {
     const video = videoRef.current

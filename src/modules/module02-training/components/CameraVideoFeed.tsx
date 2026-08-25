@@ -15,7 +15,7 @@ import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetection
 import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlayCycleSync'
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
-import { isHlsStreamUrl } from '../hooks/useHlsVideoSource'
+import { isHlsStreamUrl, useVideoFramesReady } from '../hooks/useHlsVideoSource'
 import { useLowLatencyVideoSource } from '../hooks/useLowLatencyVideoSource'
 import {
   isAiOverlayDisabledCamera,
@@ -115,6 +115,8 @@ export function CameraVideoFeed({
     hlsFallbackSrc,
     playing,
   })
+  const framesReady = useVideoFramesReady(videoRef, playing)
+  const waitingForSignal = isHls && playing && !framesReady
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
@@ -254,6 +256,17 @@ export function CameraVideoFeed({
           'saturate-[0.82] contrast-[1.06] brightness-[0.9]',
         )}
       />
+      {waitingForSignal && (
+        <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4">
+          <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white/70 animate-spin" aria-hidden />
+          <span className="text-[11px] font-semibold tracking-wide text-white/80">
+            Đang chờ tín hiệu từ mũ
+          </span>
+          <span className="text-[9px] leading-relaxed text-white/45">
+            Mũ phải đang phát sóng ở trang Phát sóng
+          </span>
+        </div>
+      )}
       <VmsDetectionProvider value={vmsFeed.active ? vmsFeed : null}>
       {showFaceOverlay && feedKey && (
         <CameraAiOverlay

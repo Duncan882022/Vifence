@@ -273,6 +273,13 @@ export function HelmetPublisherPage() {
           </button>
         )}
 
+        {isBroadcasting && (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
+            Giữ nguyên trang này trên màn hình. Chuyển sang tab hoặc ứng dụng khác là
+            điện thoại tắt camera và mất sóng — muốn theo dõi CMS thì mở trên máy khác.
+          </p>
+        )}
+
         <p className="px-1 text-[10px] leading-relaxed text-[#475569]">
           Giữ màn hình bật trong ca trực. Mất sóng thì hệ thống tự phát lại khi có mạng.
         </p>
