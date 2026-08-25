@@ -444,46 +444,35 @@ class PpeEngine:
                 if not pb or len(pb) < 4:
                     continue
                 box = tuple(float(v) for v in pb)
+                has_head_body = upper_body_third_with_head_visible(box, frame_w, frame_h)
+                if legs_only_person_box(box, frame_w, frame_h):
+                    continue
+                if not face_eligible and not has_head_body:
+                    continue
                 if not patrol_person_meets_detection_gate(
                     box,
                     frame_w,
                     frame_h,
                     face_dominant=_face_dominant_person_box(box, frame_w, frame_h),
                     has_stable_id=is_gallery,
+                    face_eligible=face_eligible,
                 ):
                     continue
-                if camera_id.startswith("HC-"):
-                    if legs_only_person_box(box, frame_w, frame_h):
-                        continue
-                    if is_sgc and not is_gallery:
-                        if not face_eligible and not upper_body_third_with_head_visible(
-                            box, frame_w, frame_h,
-                        ):
-                            continue
-                        area_ratio = (box[2] - box[0]) * (box[3] - box[1]) / max(
-                            float(frame_w * frame_h), 1.0,
-                        )
-                        if not face_eligible and area_ratio > 0.45:
-                            continue
-                    elif not is_gallery and not is_sgc:
-                        if not face_eligible and not upper_body_third_with_head_visible(
-                            box, frame_w, frame_h,
-                        ):
-                            continue
-                    if resolve_patrol_person_snapshot_bbox(
-                        frame, box, frame_w, frame_h, camera_id=camera_id,
-                    ) is None:
-                        continue
+                if resolve_patrol_person_snapshot_bbox(
+                    frame, box, frame_w, frame_h, camera_id=camera_id,
+                ) is None:
+                    continue
 
                 should_log = False
-                if is_gallery or is_sgc:
+                if is_gallery and (face_eligible or has_head_body):
                     should_log = True
-                elif face_eligible and track_duration >= face_object_confirm:
+                elif is_sgc and face_eligible and not is_gallery:
                     should_log = True
                 elif (
                     not face_eligible
-                    and not (is_gallery or is_sgc)
-                    and upper_body_third_with_head_visible(box, frame_w, frame_h)
+                    and has_head_body
+                    and not is_gallery
+                    and not is_sgc
                     and track_duration >= object_confirm
                 ):
                     should_log = True

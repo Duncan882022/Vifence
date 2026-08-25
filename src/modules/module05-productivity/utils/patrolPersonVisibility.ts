@@ -87,10 +87,10 @@ export function patrolPersonMeetsUpperBodyGate(
 ): boolean {
   if (frameW <= 0 || frameH <= 0) return false
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
-  const upperFrac = 0.50
+  const upperFrac = 0.30
   const headFrac = 0.24
   const minVisible = 0.33
-  const minUpperPxFrac = 0.08
+  const minUpperPxFrac = 0.06
   const minHeadPxFrac = 0.04
 
   const [x1, y1, x2, y2] = bbox
@@ -124,16 +124,18 @@ export interface PatrolPersonDetectionGateInput {
   frameW: number
   frameH: number
   workerId?: string | null
+  /** Backend đã assess mặt — tab Người */
+  faceEligible?: boolean
 }
 
 export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateInput): boolean {
-  const { bbox, frameW, frameH, workerId } = input
+  const { bbox, frameW, frameH, workerId, faceEligible } = input
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
   if (!plausiblePersonSilhouette(bbox, frameW, frameH)) return false
   const wid = workerId?.trim() ?? ''
   if (wid && wid !== 'unknown' && isPatrolGalleryWorkerId(wid)) return true
+  if (faceEligible) return true
   if (patrolPersonFaceDominantBbox(bbox, frameW, frameH)) return true
-  if (patrolWideCrowdRiderBox(bbox, frameW, frameH)) return true
   return patrolPersonMeetsUpperBodyGate(bbox, frameW, frameH)
 }
 

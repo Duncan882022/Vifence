@@ -62,13 +62,13 @@ def upper_body_third_with_head_visible(
     frame_w: int,
     frame_h: int,
     *,
-    upper_frac: float = 0.50,
+    upper_frac: float = 0.30,
     head_frac: float = 0.24,
     min_visible: float = 0.33,
-    min_upper_px_frac: float = 0.08,
+    min_upper_px_frac: float = 0.06,
     min_head_px_frac: float = 0.04,
 ) -> bool:
-    """Đối tượng patrol — cần ≥1/3 thân trên (vùng có đầu) còn trong khung."""
+    """Đối tượng patrol — ≥30% thân trên + vùng đầu còn trong khung (không chân/tay)."""
     if legs_only_person_box(person_box, frame_w, frame_h):
         return False
     x1, y1, x2, y2 = person_box
@@ -175,17 +175,16 @@ def patrol_person_meets_detection_gate(
     *,
     face_dominant: bool = False,
     has_stable_id: bool = False,
+    face_eligible: bool = False,
 ) -> bool:
-    """Gate hiển thị/đếm — gallery đã xác minh hoặc cận mặt thì bỏ qua rule 1/3 thân trên."""
+    """Gate hiển thị — cần đầu + thân (≥30%) hoặc mặt rõ; loại chân/tay."""
     if legs_only_person_box(person_box, frame_w, frame_h):
         return False
     if not plausible_person_silhouette(person_box, frame_w, frame_h):
         return False
-    if face_dominant:
-        return True
     if has_stable_id:
         return True
-    if wide_crowd_rider_box(person_box, frame_w, frame_h):
+    if face_eligible or face_dominant:
         return True
     return upper_body_third_with_head_visible(person_box, frame_w, frame_h)
 
@@ -273,7 +272,7 @@ def resolve_patrol_person_snapshot_bbox(
     pw = max(x2 - x1, 1.0)
 
     if upper_body_third_with_head_visible(person_box, frame_w, frame_h):
-        upper = (x1 + pw * 0.05, y1, x2 - pw * 0.05, y1 + ph * 0.38)
+        upper = (x1 + pw * 0.05, y1, x2 - pw * 0.05, y1 + ph * 0.30)
         clipped = _clip_box_to_frame(upper, frame_w, frame_h)
         if (clipped[3] - clipped[1]) >= frame_h * 0.10:
             return clipped
