@@ -344,10 +344,10 @@ server {
     location /mediamtx/webrtc/ {
         proxy_pass http://127.0.0.1:8889/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
         client_max_body_size 1M;
@@ -356,8 +356,8 @@ server {
     location /mediamtx/hls/ {
         proxy_pass http://127.0.0.1:8888/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
         proxy_buffering off;
         add_header Cache-Control "no-cache, no-store";
     }
@@ -402,10 +402,10 @@ server {
     location /mediamtx/webrtc/ {
         proxy_pass http://127.0.0.1:8889/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
         client_max_body_size 1M;
@@ -414,8 +414,8 @@ server {
     location /mediamtx/hls/ {
         proxy_pass http://127.0.0.1:8888/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
         proxy_buffering off;
         add_header Cache-Control "no-cache, no-store";
     }
@@ -491,10 +491,10 @@ server {
     location /mediamtx/webrtc/ {
         proxy_pass http://127.0.0.1:8889/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
         client_max_body_size 1M;
@@ -503,8 +503,8 @@ server {
     location /mediamtx/hls/ {
         proxy_pass http://127.0.0.1:8888/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
         proxy_buffering off;
         add_header Cache-Control "no-cache, no-store";
     }
