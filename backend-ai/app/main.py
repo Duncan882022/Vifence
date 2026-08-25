@@ -673,6 +673,42 @@ def vms_stream_detections(camera_id: str):
     }
 
 
+@app.websocket("/ws/helmet/{camera_id}/telemetry")
+async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str):
+    """GPS + IMU từ mũ — kênh riêng, không đi kèm frame video.
+
+    Tách khỏi video có hai lợi ích: vị trí vẫn cập nhật khi sóng yếu không đẩy
+    được video, và mọi người xem đều thấy vị trí thay vì chỉ tab đang mở camera.
+    """
+    await websocket.accept()
+
+    try:
+        while True:
+            payload = await websocket.receive_json()
+            if not isinstance(payload, dict):
+                continue
+
+            lat = payload.get("lat")
+            lng = payload.get("lng")
+            heading = payload.get("heading")
+            pitch = payload.get("pitch")
+            roll = payload.get("roll")
+
+            update_patrol_gps(
+                camera_id,
+                float(lat) if isinstance(lat, (int, float)) else None,
+                float(lng) if isinstance(lng, (int, float)) else None,
+                heading=float(heading) if isinstance(heading, (int, float)) else None,
+                pitch=float(pitch) if isinstance(pitch, (int, float)) else None,
+                roll=float(roll) if isinstance(roll, (int, float)) else None,
+            )
+            await websocket.send_json({"type": "ack", "camera_id": camera_id})
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.info("[ws telemetry %s] đóng: %s", camera_id, exc)
+
+
 @app.websocket("/ws/stream/{camera_id}/detections")
 async def ws_stream_detections(websocket: WebSocket, camera_id: str):
     """Push detections theo sự kiện — thay cho FE poll 450ms.
