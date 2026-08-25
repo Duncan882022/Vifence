@@ -178,7 +178,7 @@ export function Module05Page() {
   const [tier2Open, setTier2Open] = useState(true)
   const cameraCollapsed = !tier2Open
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
-  const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-01')
+  const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-02')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [detailEventId, setDetailEventId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
@@ -388,6 +388,7 @@ export function Module05Page() {
                       defaultSidebarOpen={false}
                       mobileCompactVideo={isMobileLayout}
                       mobileStackedNoScroll={isMobileLayout}
+                      streamWhenOffline
                       compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}

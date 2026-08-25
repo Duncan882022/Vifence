@@ -17,6 +17,11 @@ interface HlsInstance {
   playingDate: Date | null
 }
 
+/** MediaMTX LL-HLS — backend VMS relay dùng HLS thường (không EXT-X-PART). */
+function isLowLatencyHlsUrl(url: string): boolean {
+  return url.includes('/mediamtx/hls/')
+}
+
 /** Safari phát HLS native — getStartDate() cho mốc PDT của đầu luồng. */
 function nativeStartDateMs(video: HTMLVideoElement): number | null {
   const withStartDate = video as HTMLVideoElement & { getStartDate?: () => Date }
@@ -24,6 +29,14 @@ function nativeStartDateMs(video: HTMLVideoElement): number | null {
   const start = withStartDate.getStartDate()
   const ms = start?.getTime?.()
   return typeof ms === 'number' && Number.isFinite(ms) ? ms : null
+}
+
+function tryPlayVideo(video: HTMLVideoElement): void {
+  video.muted = true
+  video.defaultMuted = true
+  video.setAttribute('playsinline', 'true')
+  video.setAttribute('webkit-playsinline', 'true')
+  void video.play().catch(() => {})
 }
 
 /** Gắn HLS (.m3u8) hoặc MP4 thuần vào <video>. Safari native HLS; Chrome dùng hls.js. */
@@ -65,19 +78,28 @@ export function useHlsVideoSource(
     const attachMp4 = () => {
       video.src = activeSrc
       video.load()
+      if (playing) tryPlayVideo(video)
     }
 
     const attachHls = async () => {
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = activeSrc
         video.load()
+        const onNativeCanPlay = () => {
+          if (destroyed || !playing) return
+          tryPlayVideo(video)
+        }
         const onNativeError = () => {
           if (destroyed) return
           if (switchToFallback()) return
           video.removeEventListener('error', onNativeError)
         }
+        video.addEventListener('canplay', onNativeCanPlay)
         video.addEventListener('error', onNativeError)
-        return () => video.removeEventListener('error', onNativeError)
+        return () => {
+          video.removeEventListener('canplay', onNativeCanPlay)
+          video.removeEventListener('error', onNativeError)
+        }
       }
 
       try {
@@ -86,27 +108,32 @@ export function useHlsVideoSource(
           attachMp4()
           return
         }
+        const llHls = isLowLatencyHlsUrl(activeSrc)
         const hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: true,
-          liveSyncDurationCount: 1,
-          liveMaxLatencyDurationCount: 3,
+          // Backend VMS relay = HLS thường — lowLatencyMode gây màn đen trên Chrome.
+          lowLatencyMode: llHls,
+          liveSyncDurationCount: llHls ? 1 : 3,
+          liveMaxLatencyDurationCount: llHls ? 3 : 6,
           maxLiveSyncPlaybackRate: 1.5,
-          maxBufferLength: 4,
+          maxBufferLength: llHls ? 4 : 10,
           backBufferLength: 0,
-          manifestLoadingMaxRetry: 8,
-          manifestLoadingRetryDelay: 800,
-          levelLoadingMaxRetry: 6,
-          fragLoadingMaxRetry: 8,
-          fragLoadingRetryDelay: 600,
+          manifestLoadingMaxRetry: 12,
+          manifestLoadingRetryDelay: 1000,
+          levelLoadingMaxRetry: 8,
+          fragLoadingMaxRetry: 10,
+          fragLoadingRetryDelay: 800,
         })
         hls.loadSource(activeSrc)
         hls.attachMedia(video)
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (!destroyed && playing) tryPlayVideo(video)
+        })
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (destroyed || !data.fatal) return
+          if (switchToFallback()) return
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            if (switchToFallback()) return
-            window.setTimeout(() => hls.startLoad(), 800)
+            window.setTimeout(() => hls.startLoad(), 1000)
             return
           }
           if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -135,15 +162,17 @@ export function useHlsVideoSource(
       hlsRef.current?.destroy()
       hlsRef.current = null
     }
-  }, [videoRef, activeSrc, isHls, switchToFallback])
+  }, [videoRef, activeSrc, isHls, switchToFallback, playing])
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    if (!playing) {
+    if (playing) {
+      tryPlayVideo(video)
+    } else {
       video.pause()
     }
-  }, [playing, videoRef])
+  }, [playing, videoRef, activeSrc])
 
   const getDisplayWallclockMs = useCallback((): number | null => {
     if (!isHls) return null
