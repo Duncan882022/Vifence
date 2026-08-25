@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from ..config import settings
+from . import face_thresholds
 from .models import WorkerMatch
 
 # Chỉ mũ/áo gắn danh tính — giày (PPE-003) không đủ căn cứ nhận diện mặt.
 PPE_IDENTITY_BEHAVIORS = frozenset({"no_helmet", "no_vest"})
 
 
-def is_verified_face_match(match: WorkerMatch) -> bool:
+def is_verified_face_match(match: WorkerMatch, camera_id: str = "") -> bool:
     return (
         match.worker_id != "unknown"
         and match.match_source == "face"
-        and match.confidence >= settings.worker_match_min_confidence
+        and match.confidence >= face_thresholds.gallery_min_confidence(camera_id)
     )
 
 

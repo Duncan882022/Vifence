@@ -124,11 +124,23 @@ class Settings(BaseSettings):
     worker_gallery_dir: str = "data/worker_gallery"
 
     # Patrol HC-* — tiêu chí mặt cho 1 người / 1 ID (sgc hoặc gallery).
+    # Thang histogram (chỉ dùng khi thiếu model SFace) — xem worker_identity/face_thresholds.py.
     patrol_face_reuse_min_similarity: float = 0.76
     patrol_face_split_max_similarity: float = 0.62
     patrol_face_reuse_min_margin: float = 0.07
     patrol_gallery_min_confidence: float = 0.74
     patrol_gallery_min_margin: float = 0.12
+
+    # Thang cosine SFace — cùng người ~0.4–0.7, khác người < 0.3.
+    face_deep_gallery_min_confidence: float = 0.42
+    face_deep_gallery_min_margin: float = 0.05
+    face_deep_patrol_gallery_min_confidence: float = 0.50
+    face_deep_patrol_gallery_min_margin: float = 0.08
+    face_deep_reuse_min_similarity: float = 0.46
+    face_deep_split_max_similarity: float = 0.34
+    face_deep_reuse_min_margin: float = 0.05
+    # Điểm YuNet tối thiểu để coi là "thấy mặt" (cấp sgc) — độc lập ngưỡng khớp gallery.
+    patrol_face_detect_min_score: float = 0.65
     # Tab Đối tượng — đầu + ≥30% thân, không đủ mặt, bám track ≥ N giây.
     patrol_object_confirm_seconds: float = 3.0
     patrol_face_object_confirm_seconds: float = 1.5

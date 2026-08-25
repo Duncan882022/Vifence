@@ -349,7 +349,7 @@ class PpeEngine:
                 track_duration = now - float(state.person_first_seen or now)
 
                 gallery_match = worker_match_from_detection(person)
-                gallery_verified = is_verified_face_match(gallery_match)
+                gallery_verified = is_verified_face_match(gallery_match, camera_id)
 
                 pre_wid = (person.worker_id or "").strip()
                 skip_face_assess = bool(

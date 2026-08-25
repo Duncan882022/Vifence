@@ -68,12 +68,22 @@ def _face_paths_for_row(row: dict) -> list[str]:
     return deduped
 
 
-def _face_embedding(face_bgr: np.ndarray) -> np.ndarray:
+def _histogram_embedding(face_bgr: np.ndarray) -> np.ndarray:
+    """Dự phòng khi thiếu SFace — chỉ mô tả độ sáng, không phân biệt được người."""
     gray = cv2.cvtColor(face_bgr, cv2.COLOR_BGR2GRAY)
     resized = cv2.resize(gray, (64, 64), interpolation=cv2.INTER_AREA)
     hist = cv2.calcHist([resized], [0], None, [32], [0, 256])
     cv2.normalize(hist, hist)
     return hist.flatten()
+
+
+def _face_embedding(face_bgr: np.ndarray) -> np.ndarray:
+    from .face_embedder import embed_face_image
+
+    deep = embed_face_image(face_bgr)
+    if deep is not None:
+        return deep
+    return _histogram_embedding(face_bgr)
 
 
 def _similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -84,7 +94,9 @@ def _similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def embedding_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Cosine similarity histogram mặt — dùng patrol dedup & gallery."""
+    """Cosine mặt — 0.0 khi hai vector khác không gian (histogram cũ vs SFace)."""
+    if a is None or b is None or len(a) != len(b):
+        return 0.0
     return _similarity(a, b)
 
 
@@ -136,13 +148,20 @@ def match_embedding(
         return None
     ranked: list[tuple[WorkerProfile, float]] = []
     for profile, emb in _REGISTRY:
+        if len(emb) != len(query):
+            continue
         ranked.append((profile, _similarity(query, emb)))
     ranked.sort(key=lambda item: item[1], reverse=True)
     if not ranked or ranked[0][1] < min_confidence:
         return None
-    if len(ranked) >= 2 and min_margin > 0.0:
-        if ranked[0][1] - ranked[1][1] < min_margin:
-            return None
+    # Margin so với người KHÁC — nhiều pose cùng worker không được coi là đối thủ.
+    best_profile = ranked[0][0]
+    rival = next(
+        (score for profile, score in ranked[1:] if profile.worker_id != best_profile.worker_id),
+        None,
+    )
+    if rival is not None and min_margin > 0.0 and ranked[0][1] - rival < min_margin:
+        return None
     return ranked[0]
 
 

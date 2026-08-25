@@ -11,6 +11,8 @@ import numpy as np
 from ..config import settings
 from ..detectors.face_guard import detect_faces
 from ..unknown_detection import UNKNOWN_LABEL
+from . import face_thresholds
+from .face_embedder import embed_aligned_face
 from .gallery import _face_embedding, gallery_dir, load_gallery, match_embedding, registry_rows
 from .models import WorkerMatch
 
@@ -200,10 +202,12 @@ def assess_patrol_face(
     crop_h, crop_w = crop.shape[:2]
     head_h = max(int(crop_h * 0.42), 48)
     search = crop[:head_h, :]
-    ok, faces = detect_faces(search, score_threshold=0.65)
+    detect_min = settings.patrol_face_detect_min_score
+    ok, faces = detect_faces(search, score_threshold=detect_min)
     if not ok or faces is None or len(faces) == 0:
         return None, 0.0, False
 
+    best_row = None
     best_face: np.ndarray | None = None
     best_det_score = 0.0
     search_h = search.shape[0]
@@ -211,7 +215,7 @@ def assess_patrol_face(
     for face in faces:
         x, y, fw, fh = face[:4]
         score = float(face[14]) if len(face) > 14 else float(face[4] if len(face) > 4 else 0.0)
-        if score < 0.65:
+        if score < detect_min:
             continue
         if fh < min_face_h:
             continue
@@ -223,37 +227,32 @@ def assess_patrol_face(
         if face_cy > search_h * max_cy_frac:
             continue
         if score > best_det_score:
-            best_det_score = score
             x1, y1 = max(0, int(x)), max(0, int(y))
             x2 = min(crop_w, int(x + fw))
             y2 = min(crop_h, int(y + fh))
             if x2 - x1 >= 8 and y2 - y1 >= 8:
+                best_det_score = score
+                best_row = face
                 best_face = crop[y1:y2, x1:x2]
 
-    # Tab Người — ngưỡng 0.65 (gallery match vẫn dùng patrol_gallery_min_confidence riêng).
-    patrol_eligible_min = min(settings.patrol_gallery_min_confidence, 0.65)
-    eligible = best_face is not None and best_det_score >= patrol_eligible_min
-    if not eligible or best_face is None:
+    if best_face is None:
         return None, best_det_score, False
 
-    from .gallery import face_histogram_embedding
-
-    return face_histogram_embedding(best_face), best_det_score, True
+    # Landmark YuNet cho phép căn mặt trước khi trích đặc trưng — chính xác hơn crop thô.
+    embedding = embed_aligned_face(search, best_row) if best_row is not None else None
+    if embedding is None:
+        embedding = _face_embedding(best_face)
+    return embedding, best_det_score, True
 
 
 def _match_face_crop(face: np.ndarray, *, camera_id: str = "") -> WorkerMatch | None:
     if face is None or face.size == 0:
         return None
     query = _face_embedding(face)
-    min_conf = settings.worker_match_min_confidence
-    min_margin = settings.worker_match_min_margin
-    if camera_id.startswith("HC-"):
-        min_conf = max(min_conf, settings.patrol_gallery_min_confidence)
-        min_margin = max(min_margin, settings.patrol_gallery_min_margin)
     matched = match_embedding(
         query,
-        min_confidence=min_conf,
-        min_margin=min_margin,
+        min_confidence=face_thresholds.gallery_min_confidence(camera_id),
+        min_margin=face_thresholds.gallery_min_margin(camera_id),
     )
     if matched is None:
         return None
@@ -315,7 +314,7 @@ def extract_person_face_embedding(
     frame: np.ndarray,
     person_bbox: list[float] | None,
 ) -> np.ndarray | None:
-    """Histogram mặt trong bbox người — dùng dedup patrol (không cần khớp gallery)."""
+    """Embedding mặt trong bbox người — dùng dedup patrol (không cần khớp gallery)."""
     if not person_bbox or len(person_bbox) < 4:
         return None
     crop = _crop_person(frame, person_bbox)
@@ -327,6 +326,4 @@ def extract_person_face_embedding(
         face = _best_face_in_crop(crop, score_threshold=0.55, selfie_mode=True)
     if face is None:
         return None
-    from .gallery import face_histogram_embedding
-
-    return face_histogram_embedding(face)
+    return _face_embedding(face)
