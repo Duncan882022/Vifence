@@ -34,6 +34,7 @@ import {
   type WhipPublisher,
 } from '@/services/webrtc/whipClient'
 import { getHelmetWhipUrl } from '../data/helmetIngest'
+import { canReuseOpenCamera } from './cameraReuse'
 
 export type PublisherStatus = 'idle' | 'starting' | 'live' | 'error'
 
@@ -124,17 +125,26 @@ export function useHelmetPublisher({
     }
   }, [])
 
-  const teardown = useCallback(() => {
+  /**
+   * Chỉ hạ WebRTC, giữ nguyên camera. Rớt sóng là lỗi đường truyền, không phải
+   * lỗi camera — tắt track ở đây sẽ làm đèn camera nháy tắt/bật mỗi lần phát
+   * lại và cắt luồng mà tile CMS cùng máy đang dùng.
+   */
+  const stopPublisherOnly = useCallback(() => {
     window.clearTimeout(reconnectTimerRef.current)
     void publisherRef.current?.stop()
     publisherRef.current = null
+  }, [])
+
+  const teardown = useCallback(() => {
+    stopPublisherOnly()
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
     clearHelmetLocalBroadcast(helmetId)
     const video = videoRef.current
     if (video) video.srcObject = null
     releaseWakeLock()
-  }, [releaseWakeLock, videoRef, helmetId])
+  }, [stopPublisherOnly, releaseWakeLock, videoRef, helmetId])
 
   const scheduleReconnect = useCallback((delayMs: number) => {
     if (manualStopRef.current) return
@@ -165,22 +175,35 @@ export function useHelmetPublisher({
 
     setStatus('starting')
     setErrorMessage(undefined)
-    teardown()
+    stopPublisherOnly()
 
     try {
-      const videoConstraints = await buildMobileCaptureConstraints(helmetId, useFacing)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        // Độ phân giải cao giữ cho AI detect chính xác; bitrate mới là thứ bị chặn.
-        video: { ...videoConstraints, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      })
-      streamRef.current = stream
+      // Camera còn sống và không đổi mặt trước/sau → dùng lại, chỉ dựng lại WebRTC.
+      const reusable = canReuseOpenCamera(
+        streamRef.current?.getVideoTracks()[0],
+        useFacing,
+        facingRef.current,
+      )
+
+      let stream = streamRef.current
+      if (!reusable) {
+        streamRef.current?.getTracks().forEach(track => track.stop())
+        const videoConstraints = await buildMobileCaptureConstraints(helmetId, useFacing)
+        stream = await navigator.mediaDevices.getUserMedia({
+          // Độ phân giải cao giữ cho AI detect chính xác; bitrate mới là thứ bị chặn.
+          video: { ...videoConstraints, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        })
+        streamRef.current = stream
+      }
+      if (!stream) throw new Error('Không mở được camera.')
       // Tile HC-02 trong CMS cùng tab dùng lại đúng luồng này thay vì tải HLS.
+      // Phát lại giữ nguyên đối tượng stream nên tile không bị gắn lại nguồn.
       setHelmetLocalBroadcast({ helmetId, status: 'starting', stream })
 
       const video = videoRef.current
       if (video) {
-        video.srcObject = stream
+        if (video.srcObject !== stream) video.srcObject = stream
         video.muted = true
         await video.play().catch(() => {})
       }
@@ -256,7 +279,7 @@ export function useHelmetPublisher({
         scheduleReconnect(RECONNECT_DELAY_MS)
       }
     }
-  }, [helmetId, maxBitrateBps, teardown, videoRef, acquireWakeLock, scheduleReconnect])
+  }, [helmetId, maxBitrateBps, stopPublisherOnly, videoRef, acquireWakeLock, scheduleReconnect])
 
   startRef.current = start
 
