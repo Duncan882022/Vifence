@@ -234,8 +234,19 @@ export function useHelmetPublisher({
     await start(next)
   }, [helmetId, start, videoRef])
 
-  /* Telemetry — chạy độc lập với video, giữ vị trí ngay cả khi video rớt. */
+  /**
+   * Telemetry — kênh riêng nên vị trí vẫn về trung tâm khi video rớt sóng.
+   * Chỉ mở khi đang phát: lúc chưa phát mà vẫn retry WebSocket thì chỉ tốn pin
+   * và rác console, không ai cần vị trí của mũ chưa vào ca.
+   */
+  const broadcasting = status === 'live' || status === 'starting'
+
   useEffect(() => {
+    if (!broadcasting) {
+      setTelemetryConnected(false)
+      return
+    }
+
     const backendUrl = getVmsBackendUrl()
     if (!backendUrl) return
 
@@ -250,7 +261,7 @@ export function useHelmetPublisher({
       sender.stop()
       telemetryRef.current = null
     }
-  }, [helmetId])
+  }, [helmetId, broadcasting])
 
   useEffect(() => {
     return watchDeviceGps(reading => {

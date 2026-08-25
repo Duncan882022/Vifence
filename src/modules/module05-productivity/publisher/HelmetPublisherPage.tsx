@@ -18,7 +18,11 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
-import { getHelmetWhipUrl, PATROL_HELMET_IDS } from '../data/helmetIngest'
+import {
+  getHelmetWhipUrl,
+  isBrowserPublishHelmet,
+  PATROL_HELMET_IDS,
+} from '../data/helmetIngest'
 import { useHelmetPublisher, type HelmetPublisherState } from './useHelmetPublisher'
 
 const DEFAULT_HELMET_ID = 'HC-02'
@@ -129,7 +133,9 @@ export function HelmetPublisherPage() {
   const { state, start, stop, flipCamera } = useHelmetPublisher({ helmetId, videoRef })
 
   const label = PATROL_BODYCAM_LABELS[helmetId] ?? helmetId
-  const configured = Boolean(getHelmetWhipUrl(helmetId))
+  // Bodycam phần cứng tự publish RTSP — không ai phải mở trang này cho nó.
+  const publishesFromBrowser = isBrowserPublishHelmet(helmetId)
+  const configured = publishesFromBrowser && Boolean(getHelmetWhipUrl(helmetId))
   const isBroadcasting = state.status === 'live' || state.status === 'starting'
   const limitation = qualityLabel(state.stats.qualityLimitation)
 
@@ -220,7 +226,14 @@ export function HelmetPublisherPage() {
           <MapPin className="ml-auto w-3 h-3" aria-hidden />
         </div>
 
-        {!configured && (
+        {!publishesFromBrowser && (
+          <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200/90">
+            {label} là body cam phần cứng, tự phát sóng liên tục — không cần mở trang
+            này. Xem trực tiếp trong mục Camera của CMS.
+          </p>
+        )}
+
+        {publishesFromBrowser && !configured && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
             Chưa cấu hình máy chủ phát sóng. Đặt <code>VITE_MEDIAMTX_HOST</code> hoặc{' '}
             <code>VITE_MEDIAMTX_WEBRTC_URL</code> rồi build lại.
@@ -240,9 +253,14 @@ export function HelmetPublisherPage() {
             type="button"
             onClick={() => { void start() }}
             disabled={!configured}
-            className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/15 py-3 text-[13px] font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className={cn(
+              'w-full rounded-lg border py-3 text-[13px] font-semibold transition-colors',
+              configured
+                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                : 'cursor-not-allowed border-[#1f2937] bg-[#0d1117] text-[#475569]',
+            )}
           >
-            Bắt đầu phát sóng
+            {configured ? 'Bắt đầu phát sóng' : 'Chưa sẵn sàng phát sóng'}
           </button>
         )}
 
