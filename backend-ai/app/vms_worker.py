@@ -426,12 +426,26 @@ class CameraVmsWorker:
 
         warmup_frame = self.get_frame()
         if warmup_frame is not None:
-            self._warmup_engines(warmup_frame)
             if self._live_hls_from_pipe:
                 hh, ww = warmup_frame.shape[:2]
                 self._start_hls(fresh_output=True, pipe_size=(ww, hh))
-            logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
-        self._ingest_gate.set()
+                self._ingest_gate.set()
+                threading.Thread(
+                    target=self._warmup_engines,
+                    args=(warmup_frame,),
+                    name=f"vms-warmup-{self.camera_id}",
+                    daemon=True,
+                ).start()
+                logger.info(
+                    "[VMS %s] Live HLS mở ngay — warmup AI chạy nền.",
+                    self.camera_id,
+                )
+            else:
+                self._warmup_engines(warmup_frame)
+                logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
+                self._ingest_gate.set()
+        else:
+            self._ingest_gate.set()
 
         while self._running:
             t0 = time.monotonic()

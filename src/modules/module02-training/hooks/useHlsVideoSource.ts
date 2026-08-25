@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 /** Trình phát cần đọc được wallclock khung hình đang hiển thị để đồng bộ overlay. */
@@ -31,26 +31,53 @@ export function useHlsVideoSource(
   videoRef: RefObject<HTMLVideoElement | null>,
   src: string,
   playing: boolean,
+  fallbackSrc?: string,
 ): VideoClockSource {
-  const isHls = src.includes('.m3u8')
+  const [activeSrc, setActiveSrc] = useState(src)
+  const primaryRef = useRef(src)
+  const fallbackRef = useRef(fallbackSrc)
+  const usedFallbackRef = useRef(false)
+
+  useEffect(() => {
+    primaryRef.current = src
+    fallbackRef.current = fallbackSrc
+    usedFallbackRef.current = false
+    setActiveSrc(src)
+  }, [src, fallbackSrc])
+
+  const isHls = activeSrc.includes('.m3u8')
   const hlsRef = useRef<HlsInstance | null>(null)
+
+  const switchToFallback = useCallback(() => {
+    const fb = fallbackRef.current
+    if (!fb || usedFallbackRef.current || fb === primaryRef.current) return false
+    usedFallbackRef.current = true
+    setActiveSrc(fb)
+    return true
+  }, [])
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !src) return
+    if (!video || !activeSrc) return
 
     let destroyed = false
 
     const attachMp4 = () => {
-      video.src = src
+      video.src = activeSrc
       video.load()
     }
 
     const attachHls = async () => {
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = src
+        video.src = activeSrc
         video.load()
-        return
+        const onNativeError = () => {
+          if (destroyed) return
+          if (switchToFallback()) return
+          video.removeEventListener('error', onNativeError)
+        }
+        video.addEventListener('error', onNativeError)
+        return () => video.removeEventListener('error', onNativeError)
       }
 
       try {
@@ -73,11 +100,12 @@ export function useHlsVideoSource(
           fragLoadingMaxRetry: 8,
           fragLoadingRetryDelay: 600,
         })
-        hls.loadSource(src)
+        hls.loadSource(activeSrc)
         hls.attachMedia(video)
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (destroyed || !data.fatal) return
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            if (switchToFallback()) return
             window.setTimeout(() => hls.startLoad(), 800)
             return
           }
@@ -87,18 +115,27 @@ export function useHlsVideoSource(
         })
         hlsRef.current = hls as unknown as HlsInstance
       } catch {
+        if (switchToFallback()) return
         attachMp4()
       }
     }
 
-    void (isHls ? attachHls() : attachMp4())
+    let cleanupNative: (() => void) | undefined
+    void (async () => {
+      if (isHls) {
+        cleanupNative = await attachHls() ?? undefined
+      } else {
+        attachMp4()
+      }
+    })()
 
     return () => {
       destroyed = true
+      cleanupNative?.()
       hlsRef.current?.destroy()
       hlsRef.current = null
     }
-  }, [videoRef, src, isHls])
+  }, [videoRef, activeSrc, isHls, switchToFallback])
 
   useEffect(() => {
     const video = videoRef.current

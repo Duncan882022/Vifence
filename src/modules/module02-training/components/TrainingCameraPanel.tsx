@@ -52,6 +52,7 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
     <CameraVideoFeed
       src={cam.streamUrl ?? ''}
       whepUrl={cam.whepUrl}
+      hlsFallbackSrc={cam.streamFallbackUrl}
       cameraId={cam.id}
       streamType={cam.streamType}
       playing={playing}

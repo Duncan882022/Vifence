@@ -25,10 +25,11 @@ export function useLowLatencyVideoSource(
   options: {
     whepUrl?: string
     hlsSrc: string
+    hlsFallbackSrc?: string
     playing: boolean
   },
 ): LowLatencyVideoSource {
-  const { whepUrl, hlsSrc, playing } = options
+  const { whepUrl, hlsSrc, hlsFallbackSrc, playing } = options
 
   const [mode, setMode] = useState<VideoSourceMode>(whepUrl ? 'whep' : 'hls')
   const [whepConnected, setWhepConnected] = useState(false)
@@ -102,7 +103,12 @@ export function useLowLatencyVideoSource(
   }, [mode, whepConnected, playing, videoRef])
 
   // Hook HLS luôn được gọi (quy tắc hooks); src rỗng khi đang dùng WHEP.
-  const hlsClock = useHlsVideoSource(videoRef, mode === 'hls' ? hlsSrc : '', playing)
+  const hlsClock = useHlsVideoSource(
+    videoRef,
+    mode === 'hls' ? hlsSrc : '',
+    playing,
+    mode === 'hls' ? hlsFallbackSrc : undefined,
+  )
 
   return useMemo(() => ({
     mode,

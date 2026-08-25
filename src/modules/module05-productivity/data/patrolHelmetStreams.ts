@@ -57,6 +57,16 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   return getStreamUrlForCamera(cameraId)
 }
 
+/** HLS dự phòng khi VMS relay chưa sẵn sàng (503) — thường là MediaMTX trực tiếp. */
+export function getPatrolHelmetStreamFallbackUrl(cameraId: string): string | undefined {
+  if (cameraId === 'HC-01') return undefined
+  if (isLegacyMobileHelmet(cameraId)) return undefined
+  const primary = getPatrolHelmetStreamUrl(cameraId)
+  const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
+  if (!mediaMtxHls || mediaMtxHls === primary) return undefined
+  return mediaMtxHls
+}
+
 /** RTSP path suffix — khớp camera Vision API (vd 866926048126915). */
 export function getPatrolHelmetRtspPath(cameraId: string): string | undefined {
   const rtsp = PATROL_HELMET_RTSP_SOURCES[cameraId]

@@ -41,6 +41,8 @@ interface CameraVideoFeedProps {
   src: string
   /** Endpoint WHEP — có thì phát WebRTC độ trễ thấp, lỗi thì tự về `src` (HLS). */
   whepUrl?: string
+  /** HLS dự phòng khi `src` trả 503 / chưa sẵn sàng. */
+  hlsFallbackSrc?: string
   playing?: boolean
   /** Bật AI detect + vẽ box — chỉ dùng trên luồng đang chọn (grid chính) */
   aiOverlay?: boolean
@@ -57,6 +59,7 @@ export function CameraVideoFeed({
   streamType = 'fixed',
   src,
   whepUrl,
+  hlsFallbackSrc,
   playing = true,
   aiOverlay = false,
   compact,
@@ -109,6 +112,7 @@ export function CameraVideoFeed({
   const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
     whepUrl,
     hlsSrc: src,
+    hlsFallbackSrc,
     playing,
   })
   const rawVmsFeed = useVmsDetectionFeed(
