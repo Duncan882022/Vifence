@@ -19,6 +19,8 @@ PATROL_MOBILE_PEAK_TTL_SEC = 3600.0
 _patrol_mobile_metrics: dict[str, dict[str, Any]] = {}
 _patrol_gps: dict[str, dict[str, Any]] = {}
 PATROL_GPS_TTL_SEC = 30.0
+# WHIP publish: telemetry GPS gần đây = đang phát (trước khi VMS ingest kịp frame đầu).
+HELMET_TELEMETRY_ONLINE_SEC = 15.0
 
 
 def is_patrol_camera_id(camera_id: str) -> bool:
@@ -134,6 +136,16 @@ def get_patrol_heading(camera_id: str) -> float | None:
         return None
     h = entry.get("heading")
     return float(h) if h is not None else None
+
+
+def helmet_publish_active(camera_id: str) -> bool:
+    """Điện thoại đang gửi telemetry qua /ws/helmet — coi là online dù AI chưa kịp frame."""
+    if not is_patrol_camera_id(camera_id):
+        return False
+    entry = _patrol_gps.get(camera_id)
+    if not entry:
+        return False
+    return (time.time() - float(entry.get("updated_at") or 0)) <= HELMET_TELEMETRY_ONLINE_SEC
 
 
 def patrol_gps_payload(camera_id: str) -> dict[str, Any]:
@@ -272,6 +284,8 @@ def build_patrol_metrics_payload(
     worker = vms_workers.get(camera_id)
     if worker is not None:
         live = _metrics_from_vms_overlay(worker.get_latest_overlay())
+        if not live["stream_online"] and helmet_publish_active(camera_id):
+            live = {**live, "stream_online": True}
         return {
             "camera_id": camera_id,
             "backend_reachable": True,

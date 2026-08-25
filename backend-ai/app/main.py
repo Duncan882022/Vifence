@@ -142,6 +142,9 @@ def _build_vms_workers() -> None:
         return
 
     # Cấu hình engines per camera theo ma trận (Spec §4)
+    patrol_helmet_engines = {
+        "ppe": ppe_engine.process_frame,
+    }
     cam_engines: dict[str, dict[str, object]] = {
         "A-03": {
             "atgt": atgt_engine.process_frame,
@@ -154,9 +157,8 @@ def _build_vms_workers() -> None:
             "wah": wah_engine.process_frame,
             "crane": crane_engine.process_frame,
         },
-        "HC-01": {
-            "ppe": ppe_engine.process_frame,
-        },
+        "HC-01": dict(patrol_helmet_engines),
+        "HC-02": dict(patrol_helmet_engines),
     }
 
     def on_event(ev):
