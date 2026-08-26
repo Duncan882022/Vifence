@@ -649,9 +649,9 @@ class CameraVmsWorker:
     def _live_hls_encode_args(self, segment_pattern: str, hls_out: str) -> list[str]:
         # Flycam DR-* — nguồn 720p từ DJI; 800k ultrafast gây mờ/giật rõ trên CMS.
         is_flycam = self.camera_id.startswith("DR-")
-        bitrate = "2500k" if is_flycam else "800k"
-        maxrate = "2800k" if is_flycam else "900k"
-        bufsize = "3500k" if is_flycam else "900k"
+        bitrate = "2500k" if is_flycam else "1200k"
+        maxrate = "2800k" if is_flycam else "1400k"
+        bufsize = "3500k" if is_flycam else "1800k"
         preset = "veryfast" if is_flycam else "ultrafast"
         return [
             "-c:v", "libx264",
@@ -660,13 +660,13 @@ class CameraVmsWorker:
             "-b:v", bitrate,
             "-maxrate", maxrate,
             "-bufsize", bufsize,
-            "-g", "12",
+            "-g", "6",
             "-sc_threshold", "0",
             "-an",
             "-muxdelay", "0",
             "-muxpreload", "0",
-            "-hls_time", "1",
-            "-hls_list_size", "3",
+            "-hls_time", "0.5",
+            "-hls_list_size", "2",
             # program_date_time: gắn EXT-X-PROGRAM-DATE-TIME vào playlist để FE biết
             # wallclock của frame đang phát, nhờ đó khớp bbox đúng thời điểm thay vì
             # vẽ detections mới nhất lên hình ảnh đã trễ vài giây.

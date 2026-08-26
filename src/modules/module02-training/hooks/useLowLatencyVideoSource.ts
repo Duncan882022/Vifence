@@ -11,6 +11,8 @@ import type { RefObject } from 'react'
 import { startWhepSubscriber, type WhepSubscriber } from '@/services/webrtc/whepClient'
 import { useHlsVideoSource, type VideoClockSource } from './useHlsVideoSource'
 
+const WHEP_NO_FRAME_FALLBACK_MS = 2500
+
 export type VideoSourceMode = 'whep' | 'hls'
 
 export interface LowLatencyVideoSource {
@@ -87,19 +89,35 @@ export function useLowLatencyVideoSource(
     }
   }, [whepUrl, mode, playing, videoRef])
 
-  // WHEP có thể báo connected nhưng không nhận frame (UDP/firewall) → fallback HLS.
+  // WHEP connected nhưng không nhận frame (UDP/firewall) → fallback HLS nhanh.
   useEffect(() => {
     if (mode !== 'whep' || !whepConnected || !playing) return
 
-    const timer = window.setTimeout(() => {
-      const video = videoRef.current
-      if (!video || video.videoWidth > 0) return
+    const video = videoRef.current
+    if (!video) return
+
+    let fallbackTimer = 0
+
+    const fallbackToHls = () => {
+      if (video.videoWidth > 0) return
       if (video.srcObject) video.srcObject = null
       setWhepConnected(false)
       setMode('hls')
-    }, 4000)
+    }
 
-    return () => window.clearTimeout(timer)
+    const onFirstFrame = () => {
+      window.clearTimeout(fallbackTimer)
+    }
+
+    video.addEventListener('loadeddata', onFirstFrame)
+    video.addEventListener('playing', onFirstFrame)
+    fallbackTimer = window.setTimeout(fallbackToHls, WHEP_NO_FRAME_FALLBACK_MS)
+
+    return () => {
+      window.clearTimeout(fallbackTimer)
+      video.removeEventListener('loadeddata', onFirstFrame)
+      video.removeEventListener('playing', onFirstFrame)
+    }
   }, [mode, whepConnected, playing, videoRef])
 
   // Hook HLS luôn được gọi (quy tắc hooks); src rỗng khi đang dùng WHEP.

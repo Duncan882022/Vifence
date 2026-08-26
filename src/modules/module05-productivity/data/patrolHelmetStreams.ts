@@ -1,6 +1,10 @@
 /**
- * Helmet camera live streams — RTSP nguồn + HLS cho browser.
- * HC-01: bodycam RTSP trên MediaMTX (157.66.100.182).
+ * Helmet camera live streams — RTSP nguồn + HLS/WHEP cho browser.
+ *
+ * Thứ tự ưu tiên xem live (CameraVideoFeed):
+ *   1. WHEP WebRTC (~200–500ms) — patrolCameras gắn whepUrl
+ *   2. MediaMTX LL-HLS (~1–2s) — không re-encode
+ *   3. VMS relay HLS (~3–5s) — fallback khi MediaMTX chưa sẵn sàng
  */
 import {
   getStreamUrlForCamera,
@@ -8,13 +12,18 @@ import {
 } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { getHelmetMediaMtxHlsUrl, isLegacyMobileHelmet } from './helmetIngest'
 
-/** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → dùng VMS HLS relay). */
+/** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → backend pull qua MediaMTX). */
 export const PATROL_HELMET_RTSP_SOURCES: Record<string, string> = {
   'HC-01': 'rtsp://157.66.100.182:8554/866926048126915',
 }
 
 const MEDIAMTX_HLS_PORT =
   (import.meta.env.VITE_MEDIAMTX_HLS_PORT as string | undefined)?.trim() || '8888'
+
+function readEnv(key: string): string | undefined {
+  const raw = import.meta.env[key as keyof ImportMetaEnv]
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
+}
 
 /** Chuyển RTSP MediaMTX → HLS cùng path (port 8888 mặc định). */
 export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
@@ -29,42 +38,30 @@ export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
 }
 
 /**
- * URL phát live cho helmet (HLS — dự phòng khi WHEP không kết nối được):
- * - HC-01: VITE_HC01_STREAM_URL hoặc VMS HLS relay (Contabo) — không fallback MP4 mock
- * - Mũ publish qua WHIP: HLS của MediaMTX cùng path
- * - Mũ còn chạy luồng cũ: undefined (MobileCameraFeed lo phần hiển thị)
- * - HC-03…: MP4 demo (nếu chưa có nguồn live)
+ * HLS chính — override env, mặc định MediaMTX LL-HLS (không re-encode VMS).
  */
 export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
-  if (cameraId === 'HC-01') {
-    const override = (import.meta.env.VITE_HC01_STREAM_URL as string | undefined)?.trim()
-    if (override) return override
-    return getVmsHlsUrl('HC-01')
-  }
+  const envKey = `VITE_${cameraId.replace('-', '')}_STREAM_URL`
+  const override = readEnv(envKey)
+  if (override) return override
 
   if (isLegacyMobileHelmet(cameraId)) {
     return undefined
   }
 
-  // WHIP helmet: backend VMS relay RTSP → HLS — ổn định trên CMS desktop.
-  // MediaMTX HLS/WHEP hay gây màn đen (UDP/firewall) dù trạng thái vẫn LIVE.
-  const vmsHls = getVmsHlsUrl(cameraId)
-  if (vmsHls) return vmsHls
-
   const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
   if (mediaMtxHls) return mediaMtxHls
 
-  return getStreamUrlForCamera(cameraId)
+  return getVmsHlsUrl(cameraId) ?? getStreamUrlForCamera(cameraId)
 }
 
-/** HLS dự phòng khi VMS relay chưa sẵn sàng (503) — thường là MediaMTX trực tiếp. */
+/** HLS dự phòng — VMS relay khi MediaMTX LL-HLS chưa sẵn sàng. */
 export function getPatrolHelmetStreamFallbackUrl(cameraId: string): string | undefined {
-  if (cameraId === 'HC-01') return undefined
   if (isLegacyMobileHelmet(cameraId)) return undefined
   const primary = getPatrolHelmetStreamUrl(cameraId)
-  const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
-  if (!mediaMtxHls || mediaMtxHls === primary) return undefined
-  return mediaMtxHls
+  const vmsHls = getVmsHlsUrl(cameraId)
+  if (!vmsHls || vmsHls === primary) return undefined
+  return vmsHls
 }
 
 /** RTSP path suffix — khớp camera Vision API (vd 866926048126915). */
@@ -98,7 +95,7 @@ export function mergePatrolCamerasWithVisionLive<T extends { id: string; streamU
 export function applyPatrolHelmetEnvLive<T extends { id: string; streamUrl?: string; wsUrl?: string | null }>(
   cameras: T[],
 ): T[] {
-  const hc01Ws = (import.meta.env.VITE_HC01_WS_URL as string | undefined)?.trim()
+  const hc01Ws = readEnv('VITE_HC01_WS_URL')
   if (!hc01Ws) return cameras
   return cameras.map(cam =>
     cam.id === 'HC-01' && !cam.wsUrl
@@ -109,8 +106,6 @@ export function applyPatrolHelmetEnvLive<T extends { id: string; streamUrl?: str
 
 /**
  * Ép mobile cho mũ còn chạy luồng cũ — gỡ streamUrl/wsUrl mock nếu catalog cũ gắn MP4.
- * Khi MediaMTX sẵn sàng, hàm này không đụng vào mũ nào nữa: mọi mũ đều là bodycam
- * và đi chung đường WHEP/HLS như HC-01.
  */
 export function applyPatrolHelmetMobileLive<
   T extends {

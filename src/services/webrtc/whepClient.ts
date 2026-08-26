@@ -30,6 +30,11 @@ export interface WhepSubscriber {
   getPlayoutDelayMs: () => number | null
 }
 
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+]
+
 const ICE_GATHER_TIMEOUT_MS = 3000
 const DEFAULT_CONNECT_TIMEOUT_MS = 8000
 
@@ -67,7 +72,7 @@ export async function startWhepSubscriber(
 ): Promise<WhepSubscriber> {
   const {
     endpoint,
-    iceServers = [],
+    iceServers = DEFAULT_ICE_SERVERS,
     onTrack,
     onStateChange,
     connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,

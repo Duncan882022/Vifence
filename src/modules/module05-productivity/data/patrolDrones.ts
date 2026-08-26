@@ -12,7 +12,7 @@
  * Chưa có nguồn thật thì retry HLS ~8s rồi tile chuyển Offline (retry nền vẫn chạy).
  */
 import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
-import { getMediaMtxHlsBase } from './helmetIngest'
+import { getMediaMtxHlsBase, getMediaMtxWebrtcBase } from './helmetIngest'
 
 /** Camera thuộc nhóm flycam của Module 05. */
 export const PATROL_DRONE_CAMERA_PREFIX = 'DR-'
@@ -57,6 +57,13 @@ function getPatrolDroneMediaMtxHlsUrl(cameraId: string): string | undefined {
   const base = getMediaMtxHlsBase()
   if (!base) return undefined
   return `${base}/${getPatrolDroneMediaMtxPath(cameraId)}/index.m3u8`
+}
+
+/** WHEP WebRTC — độ trễ ~200–500ms, ưu tiên hơn LL-HLS. */
+export function getPatrolDroneWhepUrl(cameraId: string): string | undefined {
+  const base = getMediaMtxWebrtcBase()
+  if (!base) return undefined
+  return `${base}/${getPatrolDroneMediaMtxPath(cameraId)}/whep`
 }
 
 /** HLS chính — override bằng env, mặc định MediaMTX (không re-encode, nét hơn VMS relay). */

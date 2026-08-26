@@ -62,9 +62,48 @@ export function useStreamSignalPhase(
   return phase
 }
 
-/** MediaMTX LL-HLS — backend VMS relay dùng HLS thường (không EXT-X-PART). */
+/** MediaMTX LL-HLS — có EXT-X-PART, segment 1s. */
 function isLowLatencyHlsUrl(url: string): boolean {
   return url.includes('/mediamtx/hls/')
+}
+
+/** VMS relay HLS — re-encode backend, không có PART nhưng vẫn giảm buffer. */
+function isVmsRelayHlsUrl(url: string): boolean {
+  return url.includes('/stream/') && url.includes('.m3u8')
+}
+
+function resolveHlsLatencyProfile(url: string): {
+  lowLatencyMode: boolean
+  liveSyncDurationCount: number
+  liveMaxLatencyDurationCount: number
+  maxBufferLength: number
+  maxMaxBufferLength: number
+} {
+  if (isLowLatencyHlsUrl(url)) {
+    return {
+      lowLatencyMode: true,
+      liveSyncDurationCount: 1,
+      liveMaxLatencyDurationCount: 3,
+      maxBufferLength: 3,
+      maxMaxBufferLength: 4,
+    }
+  }
+  if (isVmsRelayHlsUrl(url)) {
+    return {
+      lowLatencyMode: false,
+      liveSyncDurationCount: 2,
+      liveMaxLatencyDurationCount: 4,
+      maxBufferLength: 5,
+      maxMaxBufferLength: 6,
+    }
+  }
+  return {
+    lowLatencyMode: false,
+    liveSyncDurationCount: 3,
+    liveMaxLatencyDurationCount: 6,
+    maxBufferLength: 10,
+    maxMaxBufferLength: 12,
+  }
 }
 
 /** Safari phát HLS native — getStartDate() cho mốc PDT của đầu luồng. */
@@ -181,21 +220,22 @@ export function useHlsVideoSource(
           attachMp4()
           return undefined
         }
-        const llHls = isLowLatencyHlsUrl(activeSrc)
+        const latency = resolveHlsLatencyProfile(activeSrc)
         const hls = new Hls({
           enableWorker: true,
-          // Backend VMS relay là HLS thường — lowLatencyMode gây màn đen trên Chrome.
-          lowLatencyMode: llHls,
-          liveSyncDurationCount: llHls ? 1 : 3,
-          liveMaxLatencyDurationCount: llHls ? 3 : 6,
+          lowLatencyMode: latency.lowLatencyMode,
+          liveSyncDurationCount: latency.liveSyncDurationCount,
+          liveMaxLatencyDurationCount: latency.liveMaxLatencyDurationCount,
           maxLiveSyncPlaybackRate: 1.5,
-          maxBufferLength: llHls ? 4 : 10,
+          maxBufferLength: latency.maxBufferLength,
+          maxMaxBufferLength: latency.maxMaxBufferLength,
           backBufferLength: 0,
+          liveBackBufferLength: 0,
           manifestLoadingMaxRetry: 4,
-          manifestLoadingRetryDelay: 1000,
+          manifestLoadingRetryDelay: 800,
           levelLoadingMaxRetry: 4,
           fragLoadingMaxRetry: 6,
-          fragLoadingRetryDelay: 800,
+          fragLoadingRetryDelay: 600,
         })
         hls.loadSource(activeSrc)
         hls.attachMedia(video)

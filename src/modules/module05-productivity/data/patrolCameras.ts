@@ -2,12 +2,13 @@ import type { TrainingCamera } from '@/modules/module02-training/data/trainingCa
 import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
 import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
 import { getPatrolHelmetStreamUrl, getPatrolHelmetStreamFallbackUrl } from './patrolHelmetStreams'
-import { isLegacyMobileHelmet } from './helmetIngest'
+import { getHelmetWhepUrl, isLegacyMobileHelmet } from './helmetIngest'
 import {
   PATROL_DRONE_IDS,
   PATROL_DRONE_LABELS,
   getPatrolDroneStreamFallbackUrl,
   getPatrolDroneStreamUrl,
+  getPatrolDroneWhepUrl,
 } from './patrolDrones'
 
 export type PatrolCameraFilterTab = 'Bodycam' | 'Flycam'
@@ -31,8 +32,7 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
   const streamType = resolveStreamType(id)
   const streamUrl = streamType === 'bodycam' ? getPatrolHelmetStreamUrl(id) : undefined
   const streamFallbackUrl = streamType === 'bodycam' ? getPatrolHelmetStreamFallbackUrl(id) : undefined
-  // CMS xem qua backend HLS relay — WHEP để dành cho tối ưu latency sau;
-  // hiện WHEP hay báo connected nhưng màn đen trên desktop viewer.
+  const whepUrl = streamType === 'bodycam' ? getHelmetWhepUrl(id) : undefined
 
   return {
     id,
@@ -44,6 +44,7 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
     streamType,
     ...(streamUrl ? { streamUrl } : {}),
     ...(streamFallbackUrl ? { streamFallbackUrl } : {}),
+    ...(whepUrl ? { whepUrl } : {}),
   }
 }
 
@@ -55,6 +56,7 @@ function buildPatrolDroneCamera(id: string): TrainingCamera {
   const name = PATROL_DRONE_LABELS[id] ?? id
   const streamUrl = getPatrolDroneStreamUrl(id)
   const streamFallbackUrl = getPatrolDroneStreamFallbackUrl(id)
+  const whepUrl = getPatrolDroneWhepUrl(id)
 
   return {
     id,
@@ -66,6 +68,7 @@ function buildPatrolDroneCamera(id: string): TrainingCamera {
     streamType: 'flycam',
     ...(streamUrl ? { streamUrl } : {}),
     ...(streamFallbackUrl ? { streamFallbackUrl } : {}),
+    ...(whepUrl ? { whepUrl } : {}),
   }
 }
 
