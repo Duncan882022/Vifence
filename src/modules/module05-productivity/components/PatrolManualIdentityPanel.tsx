@@ -8,6 +8,23 @@ import {
   normalizePatrolWorkerId,
   type PatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
+import { identifyPatrolPerson } from '../services/patrolDayEvents.service'
+
+/** Ảnh thẻ → base64 để server nhúng thành vector khuôn mặt. */
+async function snapshotAsBase64(url?: string | null): Promise<string | null> {
+  const src = url?.trim()
+  if (!src) return null
+  try {
+    const res = await fetch(src, { mode: 'cors', signal: AbortSignal.timeout(12_000) })
+    if (!res.ok) return null
+    const buf = new Uint8Array(await res.arrayBuffer())
+    let binary = ''
+    for (let i = 0; i < buf.length; i += 1) binary += String.fromCharCode(buf[i])
+    return btoa(binary)
+  } catch {
+    return null
+  }
+}
 
 interface PatrolManualIdentityPanelProps {
   objectKey: string
@@ -16,7 +33,8 @@ interface PatrolManualIdentityPanelProps {
   cameraId?: string | null
   trackId?: string | null
   compact?: boolean
-  onAssigned?: (identity: PatrolManualIdentity) => void
+  /** `null` khi định danh lưu ở server — không có bản ghi local để trả về. */
+  onAssigned?: (identity: PatrolManualIdentity | null) => void
 }
 
 export function PatrolManualIdentityPanel({
@@ -73,6 +91,26 @@ export function PatrolManualIdentityPanel({
     setSaving(true)
     setError(null)
     try {
+      // Mã `pers-*` đi thẳng vào kho tuần tra: tên và khuôn mặt lưu ở server
+      // nên gặp lại là tự nhận, kể cả hôm sau và kể cả trên mũ khác.
+      if (objectKey.toLowerCase().startsWith('pers-')) {
+        const res = await identifyPatrolPerson({
+          persId: objectKey,
+          fullName: workerName,
+          employeeCode: code,
+          contractor: unitName,
+          imageB64: await snapshotAsBase64(snapshotUrl),
+        })
+        if (!res.ok) {
+          setError(res.error ?? 'Không lưu được — thử lại')
+          return
+        }
+        setOpen(false)
+        setError(null)
+        onAssigned?.(null)
+        return
+      }
+
       const { identity: row, backend } = await assignPatrolManualIdentityWithBackend({
         objectKey,
         workerId: code,

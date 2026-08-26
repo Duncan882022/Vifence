@@ -106,6 +106,10 @@ export function isPatrolObjectId(id?: string | null): boolean {
  * - object:  quay lưng / không thấy mặt, chỉ đủ đầu + 1/3 thân trên
  */
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
+  // Server đã chốt tầng thì tin server. Suy lại ở đây chỉ đúng khi mã và
+  // localStorage cùng khớp, mà đó là hai nguồn có thể lệch nhau.
+  if (event.stage) return event.stage
+
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
 

@@ -60,6 +60,14 @@ export interface PatrolEvent {
   snapshotUrl?: string
   /** Mã ẩn danh sgc-* khi objectId đã promote sang OBJ-* */
   trackWorkerId?: string
+  /**
+   * Tầng do server quyết: `object` | `person` | `profile`.
+   *
+   * Có trường này thì frontend không phải suy lại tầng từ hình dạng mã và
+   * localStorage nữa — chính chỗ suy lại đó đã đẩy nhầm thẻ sang tab Định danh
+   * khi một alias cũ còn kẹt trong trình duyệt.
+   */
+  stage?: 'object' | 'person' | 'profile'
 }
 
 export interface PatrolDashboard {

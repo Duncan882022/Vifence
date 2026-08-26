@@ -39,6 +39,7 @@ import { PATROL_DRONE_IDS } from './data/patrolDrones'
 import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
 import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
+import { usePatrolDayEvents } from './hooks/usePatrolDayEvents'
 import {
   fetchPatrolPlaybackRecords,
   fetchPatrolPlaybackDetections,
@@ -50,16 +51,12 @@ import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetInges
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
-import { usePatrolHelmetLiveEvents } from './hooks/usePatrolHelmetLiveEvents'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { filterPatrolEvidenceEvents, isPatrolPersonLifecycleWithSnapshot, summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
+import { summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
 import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/patrolPatrolCounts'
 import { subscribeHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { resetPatrolTestData } from './services/patrolReset.service'
-import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
-import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
-import { enrichPatrolEventsWithWorkforceObjects, dedupePatrolEventsByMasterEntity } from './utils/patrolWorkforceEventLabels'
-import { subscribePatrolManualIdentity, syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
+import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
 function PatrolKPIs({
@@ -235,33 +232,14 @@ export function Module05Page() {
     [visionCameras, liveMetrics.perCamera, hc02MobileOnline],
   )
 
-  const liveHelmetEvents = usePatrolHelmetLiveEvents(DEFAULT_PATROL_CAMERA_IDS)
-  const [identityRevision, setIdentityRevision] = useState(0)
-
-  useEffect(() => {
-    return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
-  }, [])
-
   useEffect(() => {
     void syncPatrolIdentityBindingsFromBackend()
   }, [])
 
-  const patrolEventsLive = useMemo(() => {
-    void identityRevision
-    const merged = mergePatrolAndWorkforceEvents(
-      liveHelmetEvents.events,
-      workforceSnap.events,
-    )
-    const enriched = enrichPatrolEventsWithWorkforceObjects(
-      merged,
-      Object.values(workforceSnap.objects),
-    )
-    return dedupePatrolEventsByMasterEntity(
-      applyManualIdentityToPatrolEvents(
-        filterPatrolEvidenceEvents(enriched).filter(isPatrolPersonLifecycleWithSnapshot),
-      ),
-    )
-  }, [liveHelmetEvents.events, workforceSnap.events, workforceSnap.objects, identityRevision])
+  // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
+  // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
+  const dayEvents = usePatrolDayEvents()
+  const patrolEventsLive = dayEvents.events
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
