@@ -101,6 +101,10 @@ export function isPatrolPersId(id?: string | null): boolean {
   return Boolean(id && /^pers-/i.test(id.trim()))
 }
 
+export function isPatrolIdenId(id?: string | null): boolean {
+  return Boolean(id && /^iden-/i.test(id.trim()))
+}
+
 /**
  * Phân loại giai đoạn nhận diện của một sự kiện PERSON_DETECTED:
  * - profile: khớp thư viện mặt hoặc đã gán Tên + Đơn vị thủ công → ROI hiện tên
@@ -122,9 +126,11 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
   if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return 'profile'
   // Chỉ coi label là định danh khi đã có manual/gallery — không dùng hex event id
 
-  // Tab Người = có mã sgc (mặt đủ tiêu chí). Không trùng profile.
+  // Tab Người — mã pers-* (SQLite) hoặc sgc-* (live legacy).
+  if (isPatrolPersId(objectId)) return 'person'
   if (isPatrolSgcWorkerId(objectId)) return 'person'
   if (isPatrolSgcWorkerId(trackWorkerId)) return 'person'
+  if (isPatrolIdenId(objectId)) return 'profile'
 
   return 'object'
 }
@@ -146,6 +152,7 @@ export function patrolWorkforceEventTitle(
       return 'Định danh'
     }
     if (isPatrolSgcWorkerId(objectId) || isPatrolSgcWorkerId(trackWorkerId)) return 'Người'
+    if (isPatrolPersId(objectId) || isPatrolPersId(trackWorkerId)) return 'Người'
     return 'Đối tượng'
   }
   return ''
@@ -196,8 +203,10 @@ export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent
   }
 }
 
-/** Khóa master dedup — profile worker > sgc canonical > OBJ > event. */
+/** Khóa master dedup — pers day card > profile worker > sgc > OBJ. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
+  const fromDayCard = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
+  if (fromDayCard) return fromDayCard.toLowerCase()
   return resolvePatrolCanonicalEntityKey(event)
 }
 

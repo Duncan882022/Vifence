@@ -54,7 +54,6 @@ import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hook
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import { summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
 import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/patrolPatrolCounts'
-import { subscribeHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
@@ -67,11 +66,6 @@ function PatrolKPIs({
   workforce: WorkforceSnapshot
   events: PatrolEvent[]
 }) {
-  const [pinTick, setPinTick] = useState(0)
-  useEffect(() => subscribeHeatmapPersonRegistry(() => {
-    setPinTick(t => t + 1)
-  }), [])
-
   const zoneEntries = Object.values(workforce.zonePopulation)
   const visitedZones = zoneEntries.filter(
     z => z.observed_count > 0 || z.kpi.peak > 0,
@@ -81,8 +75,7 @@ function PatrolKPIs({
     ? Math.round((visitedZones / totalZones) * 100)
     : 0
 
-  // Công nhân global — Người + Định danh dedupe, mọi mũ HC-* (không YOLO raw count)
-  void pinTick
+  // Công nhân — dedupe từ SQLite day events (khớp panel sự kiện)
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
   const workerSummary = summarizePatrolGlobalWorkers(events, { liveOnly: anyCameraOnline })
   const observedCount = workerSummary.total

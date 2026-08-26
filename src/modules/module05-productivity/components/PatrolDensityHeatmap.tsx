@@ -16,7 +16,6 @@ import { PATROL_DRONE_IDS } from '../data/patrolDrones'
 import {
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
-  type DetectionDot,
 } from '../data/patrolDetectionData'
 import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
@@ -28,21 +27,13 @@ import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
 import { WorkforceObjectSheet } from './WorkforceObjectSheet'
 import {
-  isVerifiedWorkerLabel,
-} from '../utils/workforceHeatmapUi'
-import {
-  isPatrolManuallyIdentified,
-  resolvePatrolObjectLabel,
-  resolvePatrolWorkerId,
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
-import { resolveHeatmapEntityMasterId } from '../utils/patrolIdentityEntity'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence, getHeatmapPersonDots, syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
-import { countPatrolGlobalWorkers, isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
-import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
-import { countUniquePatrolTabEntities, isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
+import { buildPatrolDayHeatmapDots } from '../utils/patrolDayHeatmapDots'
+import { countPatrolGlobalWorkers, summarizePatrolGlobalWorkers } from '../utils/patrolPatrolCounts'
+import { countUniquePatrolTabEntities } from '../utils/patrolWorkforceEventLabels'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { ObjectState } from '../types/workforceHeatmap'
 
@@ -111,7 +102,6 @@ export function PatrolDensityHeatmap({
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
-  const [pinTick, setPinTick] = useState(0)
   const [mobileHc02Live, setMobileHc02Live] = useState(
     () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
@@ -146,10 +136,6 @@ export function PatrolDensityHeatmap({
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
   }, [])
-
-  useEffect(() => subscribeHeatmapPersonRegistry(() => {
-    setPinTick(t => t + 1)
-  }), [])
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
@@ -240,107 +226,35 @@ export function PatrolDensityHeatmap({
 
   useEffect(() => {
     if (hc01Online) return
-    syncHeatmapFramePresence('HC-01', [])
     clearPatrolHeatmapLiveTracks('HC-01')
   }, [hc01Online])
 
   useEffect(() => {
     if (hc02Online) return
-    syncHeatmapFramePresence('HC-02', [])
     clearPatrolHeatmapLiveTracks('HC-02')
   }, [hc02Online])
 
   useEffect(() => {
     if (droneOnline) return
     for (const id of PATROL_DRONE_IDS) {
-      syncHeatmapFramePresence(id, [])
       clearPatrolHeatmapLiveTracks(id)
     }
   }, [droneOnline])
-
-  useEffect(() => {
-    syncPatrolPersonEventsToHeatmap(patrolEvents)
-  }, [patrolEvents])
 
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
   const filteredDots = useMemo(() => {
     void identityRevision
-    if (!anyCameraOnline) {
-      return getHeatmapPersonDots().map(dot => ({
-        ...dot,
-        inCameraView: false,
-        opacity: DETECTION_DOT_OPACITY_OUT_OF_VIEW,
-      }))
-    }
-
-    const activeObjectIds = new Set(
-      liveObjects.filter(o => o.status === 'ACTIVE').map(o => o.object_id),
-    )
-
-    const markInView = (dot: DetectionDot): DetectionDot => {
-      const inCameraView = dot.inCameraView ?? Boolean(
-        dot.objectId && activeObjectIds.has(dot.objectId),
-      )
-      return {
-        ...dot,
-        inCameraView,
-        opacity: inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
-      }
-    }
-
-    const objectDots = liveObjects
-      .filter(o => o.lat != null && o.lon != null)
-      .filter(o => {
-        const wid = o.worker_id?.trim() ?? ''
-        const manual = isPatrolManuallyIdentified(o.object_id)
-        return manual
-          || isPatrolSgcWorkerId(wid)
-          || isPatrolGalleryWorkerId(wid)
-          || isPatrolHeatmapEligibleId(o.object_id)
-      })
-      .map(o => {
-        const fallback = o.worker_name || o.object_id
-        const manual = isPatrolManuallyIdentified(o.object_id)
-        return markInView({
-          id: o.object_id,
-          type: 'person' as const,
-          position: [o.lat!, o.lon!] as [number, number],
-          zoneId: o.zone_id,
-          cameraId: o.helmet_id,
-          confidence: o.position_confidence,
-          label: resolvePatrolObjectLabel(o.object_id, fallback),
-          lastSeenAt: Date.parse(o.last_seen) || Date.now(),
-          objectId: resolvePatrolWorkerId(o.object_id, o.worker_id) ?? o.object_id,
-          verified: o.identity_status === 'VERIFIED' || manual,
-          inCameraView: o.status === 'ACTIVE',
-        })
-      })
-
-    // Toạ độ backend đã suy từ hướng + khoảng cách của bbox, tức là vị trí
-    // *người được nhìn thấy*. Registry chỉ neo quanh GPS của mũ, nên ưu tiên
-    // toạ độ backend khi có, còn lại mới rơi về neo quanh mũ.
-    const backendPositionByMaster = new Map<string, [number, number]>()
-    for (const o of liveObjects) {
-      if (o.lat == null || o.lon == null) continue
-      const master = resolveHeatmapEntityMasterId(
-        resolvePatrolWorkerId(o.object_id, o.worker_id) ?? o.object_id,
-      )
-      if (master) backendPositionByMaster.set(master, [o.lat, o.lon])
-    }
-
-    // Lấy chấm của **mọi** camera. Trước đây chỉ đọc registry của HC-02 nên
-    // người do HC-01 và drone phát hiện vẫn được ghi nhưng không bao giờ vẽ.
-    const registryDots = getHeatmapPersonDots().map(d => {
-      const master = resolveHeatmapEntityMasterId(d.objectId ?? d.id)
-      const backendPos = master ? backendPositionByMaster.get(master) : undefined
-      return markInView(backendPos ? { ...d, position: backendPos } : d)
-    })
-
-    if (registryDots.length > 0) return registryDots
-    return objectDots
-  }, [anyCameraOnline, liveObjects, identityRevision, pinTick])
+    const dots = buildPatrolDayHeatmapDots(patrolEvents, { liveOnly: anyCameraOnline })
+    return dots.map(dot => ({
+      ...dot,
+      inCameraView: anyCameraOnline ? Boolean(dot.inCameraView) : false,
+      opacity: anyCameraOnline && dot.inCameraView
+        ? DETECTION_DOT_OPACITY_IN_VIEW
+        : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+    }))
+  }, [patrolEvents, anyCameraOnline, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -360,65 +274,31 @@ export function PatrolDensityHeatmap({
     if (obj) setSelectedObject(obj)
   }
 
-  const observedCount = useMemo(() => {
-    void pinTick
-    const global = countPatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline })
-    if (global > 0) return global
-    if (!anyCameraOnline) return 0
-    if (zonePop?.observed_count) return zonePop.observed_count
-    return hc02Live.historicalDotCount
-  }, [anyCameraOnline, patrolEvents, pinTick, zonePop, hc02Live.historicalDotCount])
+  const observedCount = useMemo(
+    () => countPatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline }),
+    [patrolEvents, anyCameraOnline],
+  )
 
   const identifiedCount = useMemo(() => {
-    if (!anyCameraOnline) {
-      return countUniquePatrolTabEntities(patrolEvents, 'identity')
-    }
-    if (zonePop) return zonePop.breakdown.verified_identities
     void identityRevision
-    const fromObjects = liveObjects.filter(
-      o => o.identity_status === 'VERIFIED' || isPatrolManuallyIdentified(o.object_id),
-    ).length
-    if (fromObjects > 0) return fromObjects
-    return filteredDots.filter(d => d.verified || isVerifiedWorkerLabel(d.label)).length
-  }, [anyCameraOnline, patrolEvents, zonePop, liveObjects, filteredDots, identityRevision])
+    const scoped = anyCameraOnline
+      ? buildPatrolDayHeatmapDots(patrolEvents, { liveOnly: true })
+      : null
+    if (scoped) {
+      return scoped.filter(d => d.verified).length
+    }
+    return countUniquePatrolTabEntities(patrolEvents, 'identity')
+  }, [anyCameraOnline, patrolEvents, identityRevision])
 
   const siteHeadcount = useMemo(() => {
-    if (!anyCameraOnline) {
-      const sessionObserved = countPatrolGlobalWorkers(patrolEvents, { liveOnly: false })
-      const sessionIdentified = countUniquePatrolTabEntities(patrolEvents, 'identity')
-      return {
-        observed: sessionObserved,
-        identified: sessionIdentified,
-        objects: 0,
-        persons: Math.max(0, sessionObserved - sessionIdentified),
-      }
-    }
-    void identityRevision
-    let objects = 0
-    let persons = 0
-    let identified = 0
-    for (const o of liveObjects) {
-      const wid = o.worker_id?.trim() ?? ''
-      const manual = isPatrolManuallyIdentified(o.object_id)
-      const verified = o.identity_status === 'VERIFIED' || manual
-      if (verified) {
-        identified += 1
-      } else if (/^sgc-/i.test(wid)) {
-        persons += 1
-      } else {
-        objects += 1
-      }
-    }
-    const observed = zonePop?.observed_count
-      ?? Math.max(objects + persons + identified, filteredDots.length)
-    if (identified === 0 && identifiedCount > 0) identified = identifiedCount
+    const summary = summarizePatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline })
     return {
-      observed,
-      identified: Math.max(identified, identifiedCount),
-      objects: zonePop?.breakdown.unknown_objects ?? objects,
-      persons: Math.max(0, observed - identifiedCount - (zonePop?.breakdown.unknown_objects ?? objects)),
+      observed: summary.total,
+      identified: summary.identity,
+      objects: 0,
+      persons: summary.person,
     }
-  }, [anyCameraOnline, zonePop, liveObjects, filteredDots, identifiedCount, identityRevision])
+  }, [patrolEvents, anyCameraOnline])
 
   const bodycamOnlineById = useMemo(() => ({
     'HC-01': Boolean(helmetOnlineById['HC-01']),
