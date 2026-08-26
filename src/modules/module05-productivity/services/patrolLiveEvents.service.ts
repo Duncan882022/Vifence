@@ -217,7 +217,7 @@ export async function fetchPatrolHelmetMetrics(
     })
     if (!res.ok) return null
     const raw = await res.json() as Record<string, unknown>
-    return normalizeMetricsResponse(raw) as PatrolHelmetMetricsResponse
+    return normalizeMetricsResponse(raw) as unknown as PatrolHelmetMetricsResponse
   }
 
   const events = await fetchLegacyHelmetEvents(cameraId, backendUrl, 500)
@@ -254,7 +254,7 @@ export async function fetchPatrolHelmetAggregateMetrics(
     const cameras = Array.isArray(raw.cameras)
       ? raw.cameras.map(row => normalizeCameraSlice(row as Record<string, unknown>))
       : []
-    return normalizeMetricsResponse({ ...raw, cameras }) as PatrolHelmetAggregateMetricsResponse
+    return normalizeMetricsResponse({ ...raw, cameras }) as unknown as PatrolHelmetAggregateMetricsResponse
   }
 
   return fetchLegacyAggregateMetrics(ids, backendUrl)
