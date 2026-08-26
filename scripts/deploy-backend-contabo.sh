@@ -269,7 +269,14 @@ VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-true}"
 VPS_VIDEO_A03="${VPS_VIDEO_A03:-${VPS_VIDEO_DIR}/cam03.mp4}"
 VPS_VIDEO_A04="${VPS_VIDEO_A04:-${VPS_VIDEO_DIR}/cam04.mp4}"
 VPS_DR03_RTSP="${VPS_DR03_RTSP:-rtsp://127.0.0.1:8554/dr03}"
-VPS_PATROL_SOURCES="HC-01:rtsp://157.66.100.182:8554/866926048126915,HC-02:rtsp://127.0.0.1:8554/hc-02,DR-03:${VPS_DR03_RTSP}"
+# Mọi camera pull qua MediaMTX nội bộ, KHÔNG pull thẳng nguồn gốc.
+#
+# Gateway bodycam HC-01 chỉ phục vụ được một phiên RTSP: khi MediaMTX và VMS
+# worker cùng nối tới `157.66.100.182`, hai bên liên tục đá nhau ra và log đầy
+# `[RTSP source] EOF` mỗi ~20 giây — chính là cú khựng người xem thấy.
+# MediaMTX là client duy nhất của nguồn gốc; worker và CMS đều đọc lại từ nó.
+VPS_HC01_RTSP="${VPS_HC01_RTSP:-rtsp://127.0.0.1:8554/hc-01}"
+VPS_PATROL_SOURCES="HC-01:${VPS_HC01_RTSP},HC-02:rtsp://127.0.0.1:8554/hc-02,DR-03:${VPS_DR03_RTSP}"
 
 if [[ "$PRIORITIZE_MODULE05" == "1" ]]; then
   VPS_CAMERA_SOURCES="${VPS_PATROL_SOURCES}"
