@@ -52,6 +52,16 @@ describe('ba tầng nhận diện HC-02', () => {
     expect(resolvePatrolPersonStage(event)).toBe('person')
   })
 
+  it('mã pers-* từ SQLite day card → Người', () => {
+    const event = makeEvent({
+      id: 'pers:pers-0007',
+      objectId: 'pers-0007',
+      stage: undefined,
+    })
+    expect(resolvePatrolPersonStage(event)).toBe('person')
+    expect(patrolEventMasterEntityKey(event)).toBe('pers-0007')
+  })
+
   it('khớp thư viện mặt → Định danh, tiêu đề hiện tên', () => {
     const event = makeEvent({ objectId: 'p-102', objectLabel: 'Nguyễn Văn Trung' })
     expect(resolvePatrolPersonStage(event)).toBe('profile')

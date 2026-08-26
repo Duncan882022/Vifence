@@ -1,9 +1,12 @@
 /**
  * Đếm entity patrol theo tier — dùng chung KPI, tooltip mũ, heatmap gate.
+ * Nguồn sự thật: thẻ SQLite trong ngày (pers-* / iden-*), không union registry sgc-*.
  */
 import type { PatrolEvent } from '../data/patrolMockData'
 import {
   countUniquePatrolTabEntities,
+  isPatrolIdenId,
+  isPatrolPersId,
   isPatrolSgcWorkerId,
   patrolEventMasterEntityKey,
   resolvePatrolPersonStage,
@@ -11,11 +14,13 @@ import {
 } from './patrolWorkforceEventLabels'
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
 import { isPatrolManuallyIdentified } from '../services/patrolManualIdentity.service'
-import { getHeatmapInFrameMasterIds, getHeatmapSessionMasterIds } from '@/services/patrolHeatmapPersonRegistry'
+import { filterRecentPatrolWorkerEvents } from './patrolDayHeatmapDots'
 
 export function isPatrolHeatmapEligibleId(rawId?: string | null): boolean {
   const id = rawId?.trim() ?? ''
   if (!id) return false
+  if (isPatrolPersId(id)) return true
+  if (isPatrolIdenId(id)) return true
   if (isPatrolSgcWorkerId(id)) return true
   if (isPatrolGalleryWorkerId(id)) return true
   if (isPatrolManuallyIdentified(id)) return true
@@ -28,13 +33,22 @@ export function isPatrolHeatmapEligibleEvent(event: PatrolEvent): boolean {
   return stage === 'person' || stage === 'profile'
 }
 
+function scopePatrolWorkerEvents(
+  events: PatrolEvent[],
+  opts?: { liveOnly?: boolean },
+): PatrolEvent[] {
+  return opts?.liveOnly ? filterRecentPatrolWorkerEvents(events) : events
+}
+
 export function countPatrolDetectedByCamera(
   events: PatrolEvent[],
   cameraId?: string,
+  opts?: { liveOnly?: boolean },
 ): { person: number; identity: number; total: number } {
-  const scoped = cameraId
-    ? events.filter(e => e.cameraId === cameraId)
-    : events
+  const scoped = scopePatrolWorkerEvents(
+    cameraId ? events.filter(e => e.cameraId === cameraId) : events,
+    opts,
+  )
   const person = countUniquePatrolTabEntities(scoped, 'person')
   const identity = countUniquePatrolTabEntities(scoped, 'identity')
   return { person, identity, total: person + identity }
@@ -46,9 +60,12 @@ export function countPatrolAlertEntities(events: PatrolEvent[]): number {
 }
 
 /** Master keys Người + Định danh từ events (không cần snapshot — dùng KPI). */
-export function collectPatrolWorkerMasterIds(events: PatrolEvent[]): Set<string> {
+export function collectPatrolWorkerMasterIds(
+  events: PatrolEvent[],
+  opts?: { liveOnly?: boolean },
+): Set<string> {
   const keys = new Set<string>()
-  for (const event of events) {
+  for (const event of scopePatrolWorkerEvents(events, opts)) {
     if (event.type !== 'PERSON_DETECTED' && event.type !== 'IDENTITY_VERIFIED') continue
     const stage = resolvePatrolPersonStage(event)
     if (stage !== 'person' && stage !== 'profile') continue
@@ -58,21 +75,14 @@ export function collectPatrolWorkerMasterIds(events: PatrolEvent[]): Set<string>
 }
 
 /**
- * KPI Công nhân global — dedupe Người + Định danh, gộp mọi mũ HC-*.
- * Union events + dot pin ca hiện tại (registry); không dùng YOLO personCount.
+ * KPI Công nhân — dedupe Người + Định danh từ SQLite day events.
+ * liveOnly: chỉ người có lastSeen trong ~2 phút gần nhất.
  */
 export function countPatrolGlobalWorkers(
   events: PatrolEvent[],
   opts?: { liveOnly?: boolean },
 ): number {
-  if (opts?.liveOnly) {
-    return new Set(getHeatmapInFrameMasterIds()).size
-  }
-  const keys = collectPatrolWorkerMasterIds(events)
-  for (const masterId of getHeatmapSessionMasterIds()) {
-    keys.add(masterId)
-  }
-  return keys.size
+  return collectPatrolWorkerMasterIds(events, opts).size
 }
 
 export function summarizePatrolGlobalWorkers(
@@ -82,18 +92,12 @@ export function summarizePatrolGlobalWorkers(
   total: number
   person: number
   identity: number
-  fromPins: number
 } {
-  const person = countUniquePatrolTabEntities(events, 'person')
-  const identity = countUniquePatrolTabEntities(events, 'identity')
-  const fromPins = opts?.liveOnly
-    ? getHeatmapInFrameMasterIds().length
-    : getHeatmapSessionMasterIds().length
+  const scoped = scopePatrolWorkerEvents(events, opts)
   return {
-    total: countPatrolGlobalWorkers(events, opts),
-    person,
-    identity,
-    fromPins,
+    total: collectPatrolWorkerMasterIds(events, opts).size,
+    person: countUniquePatrolTabEntities(scoped, 'person'),
+    identity: countUniquePatrolTabEntities(scoped, 'identity'),
   }
 }
 

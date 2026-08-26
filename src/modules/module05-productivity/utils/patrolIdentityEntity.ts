@@ -1,6 +1,6 @@
 import { getPatrolManualIdentity, getPatrolManualIdentityForSgc, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 import { expandPatrolIdentityAliasKeys, getPatrolSgcKeysForObject } from '../services/patrolSgcObjectLink.service'
-import { isPatrolObjectId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
+import { isPatrolObjectId, isPatrolPersId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 
 /** sgc-* gắn với event — từ track, object hoặc alias gallery/manual. */
@@ -49,6 +49,8 @@ export function resolvePatrolCanonicalEntityKey(event: {
   if (sgc) return sgc
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
+  if (isPatrolPersId(objectId)) return objectId.toLowerCase()
+  if (isPatrolPersId(trackWorkerId)) return trackWorkerId.toLowerCase()
   if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
   if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
   if (isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
