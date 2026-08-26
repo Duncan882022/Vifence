@@ -516,51 +516,6 @@ def clear_events():
     return engine.store.clear_all()
 
 
-@app.delete("/patrol/reset")
-def patrol_reset_all():
-    """Reset toàn bộ dữ liệu patrol cho test sạch:
-    - Xóa events + snapshots + dedup (đồng bộ với DELETE /events)
-    - Reset sgc person_identity_registry (RAM + file)
-    - Xóa patrol mobile metrics cache
-    - Xóa HC-* patrol person tracks + face assignments
-    - Xóa worker gallery (workers.json + ảnh faces/)
-    - Xóa config/mobile_ai history
-    """
-    from .person_identity_registry import clear_registry
-    from .patrol_appearance_store import clear_patrol_appearances
-    from .patrol_identity_store import clear_patrol_identity_bindings
-    from .ppe_analyzer import reset_all_hc_patrol_state
-    from .patrol_api import clear_patrol_mobile_metrics
-    from .workforce_engine import workforce_engine
-    from .worker_identity.gallery import clear_gallery_storage
-
-    events_result = engine.store.clear_all()
-    sgc_count = clear_registry()
-    appearance_count = clear_patrol_appearances()
-    identity_bindings = clear_patrol_identity_bindings()
-    gallery_cleared = clear_gallery_storage()
-    mobile_count = clear_patrol_mobile_metrics()
-    hc_count = reset_all_hc_patrol_state()
-    workforce_count = workforce_engine.clear_all()
-
-    # Xóa mobile_ai config history
-    config_dir = Path(__file__).resolve().parent.parent / "data" / "config"
-    history_file = config_dir / "mobile_ai_history.jsonl"
-    history_file.unlink(missing_ok=True)
-
-    return {
-        "ok": True,
-        "events_cleared": events_result.get("memory", 0),
-        "sgc_tracks_cleared": sgc_count,
-        "appearances_cleared": appearance_count,
-        "identity_bindings_cleared": identity_bindings,
-        "gallery_cleared": gallery_cleared,
-        "mobile_metrics_cleared": mobile_count,
-        "hc_tracks_cleared": hc_count,
-        "workforce_cleared": workforce_count,
-    }
-
-
 @app.get("/events/{event_id}/snapshot")
 def event_snapshot(event_id: str):
     event = engine.store.get_event(event_id)
