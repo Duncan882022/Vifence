@@ -26,6 +26,8 @@ from .auto_train.frame_collectors import (
 from .auto_train.scheduler import scheduler as auto_train_scheduler
 from . import machinery_detector
 from . import overlay_bus
+from .patrol import db as patrol_db
+from .patrol.api import router as patrol_api_router
 from .camera_stream import CameraStream
 from .config import settings
 from .crane_proximity_engine import CraneProximityEngine
@@ -248,6 +250,14 @@ async def lifespan(app: FastAPI):
         ).start()
     else:
         logger.info("OWLv2 (crane/machinery) tắt — nhường CPU cho luồng live.")
+
+    # Đối tượng chỉ sống trong ngày. Dọn lúc khởi động là đủ: tiến trình chạy
+    # qua nửa đêm thì lượt ghi đầu của ngày mới tự tạo phân vùng ngày mới.
+    try:
+        removed = patrol_db.purge_old_days()
+        logger.info("Patrol DB sẵn sàng — xoá %d đối tượng của ngày trước.", removed)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Không mở được patrol DB: %s", exc)
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     if settings.event_test_mode:
         logger.warning(
@@ -274,6 +284,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(patrol_api_router)
 
 
 @app.get("/")

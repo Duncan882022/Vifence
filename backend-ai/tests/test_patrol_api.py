@@ -1,0 +1,113 @@
+"""API Module 05 — đọc/ghi SQLite qua HTTP."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.patrol import daystore, db, identity
+from app.patrol.api import router
+
+
+def _vec(seed: int, dim: int = 128) -> list[float]:
+    rng = np.random.default_rng(seed)
+    v = rng.normal(size=dim).astype(np.float32)
+    return (v / np.linalg.norm(v)).tolist()
+
+
+class PatrolApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        db.get_conn()
+
+        app = FastAPI()
+        app.include_router(router)
+        self.client = TestClient(app)
+
+    def tearDown(self) -> None:
+        db.close()
+        self._tmp.cleanup()
+
+    def test_person_list_splits_by_status(self) -> None:
+        a, _ = identity.observe_face(_vec(1), quality=0.8)
+        b, _ = identity.observe_face(_vec(2), quality=0.8)
+        identity.identify(b, full_name="Nguyễn A", employee_code="NV001")
+
+        people = self.client.get("/patrol/persons?status=person").json()
+        ids = self.client.get("/patrol/persons?status=identified").json()
+
+        self.assertEqual([r["pers_id"] for r in people["items"]], [a])
+        self.assertEqual([r["pers_id"] for r in ids["items"]], [b])
+        self.assertEqual(ids["items"][0]["display_name"], "Nguyễn A")
+        self.assertTrue(ids["items"][0]["iden_code"].startswith("iden-"))
+
+    def test_identify_endpoint_promotes(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(3), quality=0.8)
+        res = self.client.post(
+            f"/patrol/persons/{pers_id}/identify",
+            json={"full_name": "Trần B", "employee_code": "NV002", "contractor": "Nhà thầu X"},
+        ).json()
+
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["person"]["status"], "identified")
+        self.assertEqual(res["person"]["display_name"], "Trần B")
+
+    def test_identify_missing_fields_rejected(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(4), quality=0.8)
+        res = self.client.post(
+            f"/patrol/persons/{pers_id}/identify", json={"full_name": "Thiếu mã"}
+        ).json()
+        self.assertFalse(res["ok"])
+
+    def test_day_events_reflect_identity_change(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(5), quality=0.8)
+        daystore.touch_person_event(pers_id, camera_id="HC-01")
+
+        before = self.client.get("/patrol/day/events").json()
+        self.assertEqual(before["items"][0]["status"], "person")
+
+        self.client.post(
+            f"/patrol/persons/{pers_id}/identify",
+            json={"full_name": "Lê C", "employee_code": "NV003"},
+        )
+        after = self.client.get("/patrol/day/events").json()
+        self.assertEqual(after["items"][0]["status"], "identified")
+        self.assertEqual(after["items"][0]["display_name"], "Lê C")
+
+    def test_appearances_grouped_by_camera(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(6), quality=0.8)
+        daystore.touch_person_event(pers_id, camera_id="HC-01")
+        daystore.touch_person_event(pers_id, camera_id="DR-03")
+
+        res = self.client.get(f"/patrol/day/appearances?subject_id={pers_id}").json()
+        self.assertTrue(res["ok"])
+        self.assertEqual(sorted(res["by_camera"]), ["DR-03", "HC-01"])
+
+    def test_merge_endpoint_keeps_old_code_resolvable(self) -> None:
+        a, _ = identity.observe_face(_vec(7), quality=0.8)
+        b, _ = identity.observe_face(_vec(8), quality=0.8)
+        res = self.client.post("/patrol/persons/merge", json={"keep": a, "drop": b}).json()
+        self.assertTrue(res["ok"])
+
+        looked_up = self.client.get(f"/patrol/persons/{b}").json()
+        self.assertEqual(looked_up["person"]["pers_id"], a)
+
+    def test_objects_listed_and_reset(self) -> None:
+        daystore.touch_object(None, camera_id="HC-02")
+        self.assertEqual(len(self.client.get("/patrol/day/objects").json()["items"]), 1)
+
+        self.client.delete("/patrol/day/reset")
+        self.assertEqual(self.client.get("/patrol/day/objects").json()["items"], [])
+        self.assertEqual(self.client.get("/patrol/persons").json()["items"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()
