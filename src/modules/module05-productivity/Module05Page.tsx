@@ -35,6 +35,7 @@ import {
   groupPatrolCamerasForSidebar,
   type PatrolCameraFilterTab,
 } from './data/patrolCameras'
+import { PATROL_DRONE_IDS } from './data/patrolDrones'
 import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
 import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
@@ -197,7 +198,11 @@ export function Module05Page() {
       : DEFAULT_PATROL_GRID_CAMERA_IDS),
     [],
   )
-  const liveMetrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
+  const patrolStreamMetricsIds = useMemo(
+    () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
+    [],
+  )
+  const liveMetrics = usePatrolHelmetLiveMetrics(patrolStreamMetricsIds)
   const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
 
   const [hc02MobileOnline, setHc02MobileOnline] = useState(

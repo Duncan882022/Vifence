@@ -20,11 +20,12 @@ import { useLowLatencyVideoSource } from '../hooks/useLowLatencyVideoSource'
 import {
   isAiOverlayDisabledCamera,
   isPatrolHelmetAiCamera,
+  isPatrolFlycamAiCamera,
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
@@ -73,7 +74,7 @@ export function CameraVideoFeed({
   const { enabledModels } = useCameraAiEnabledModels(cameraId)
   const overlayActive = Boolean(aiOverlay && bboxVisible)
   const runPatrolAnalyze = Boolean(
-    playing && aiOverlay && isPatrolHelmetAiCamera(cameraId) && isVmsLiveCamera(cameraId),
+    playing && aiOverlay && (isPatrolHelmetAiCamera(cameraId) || isPatrolFlycamAiCamera(cameraId)) && isVmsLiveCamera(cameraId),
   )
   const feedKey = getFeedKeyForCamera(cameraId)
   const posterUrl = feedKey ? getCameraFeedPosterUrl(feedKey) : undefined
@@ -100,7 +101,7 @@ export function CameraVideoFeed({
   const runPatrolHeatmapAnalyze = Boolean(
     runPatrolAnalyze && patrolPersonAnalysis && !overlayDisabled,
   )
-  const showPatrolPersonRoi = Boolean(runPatrolHeatmapAnalyze && overlayActive && isPatrolHelmetCameraId(cameraId))
+  const showPatrolPersonRoi = Boolean(runPatrolHeatmapAnalyze && overlayActive && isPatrolPersonRoiCameraId(cameraId))
   const showPpeOverlay = Boolean(
     overlayActive && (ppeAnalysis || patrolPersonAnalysis) && !overlayDisabled && !runPatrolHeatmapAnalyze,
   )

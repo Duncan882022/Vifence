@@ -35,6 +35,10 @@ export function isPatrolHelmetAiCamera(cameraId: string): boolean {
     && (isPatrolPersonCamera(cameraId) || isPpeCamera(cameraId))
 }
 
+export function isPatrolFlycamAiCamera(cameraId: string): boolean {
+  return cameraId.startsWith('DR-') && isPatrolPersonCamera(cameraId)
+}
+
 export function isPcccCamera(cameraId: string): boolean {
   return isCameraAiModelEnabled(cameraId, 'pccc')
 }

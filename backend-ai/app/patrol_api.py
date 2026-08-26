@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 
 PATROL_CAMERA_PREFIX = "HC-"
+PATROL_DRONE_PREFIX = "DR-"
 PATROL_PPE_PREFIX = "PPE"
 PATROL_PERS_PREFIX = "PERS"
 PATROL_MOBILE_METRICS_TTL_SEC = 20.0
@@ -27,6 +28,13 @@ def is_patrol_camera_id(camera_id: str) -> bool:
     return camera_id.startswith(PATROL_CAMERA_PREFIX)
 
 
+def is_patrol_metrics_camera_id(camera_id: str) -> bool:
+    """HC-* + DR-* — KPI/stream online trên lưới Module 05."""
+    return camera_id.startswith(PATROL_CAMERA_PREFIX) or camera_id.startswith(
+        PATROL_DRONE_PREFIX,
+    )
+
+
 def is_patrol_ppe_event(event) -> bool:
     scenario_id = getattr(event, "scenario_id", None) or ""
     camera_id = getattr(event, "camera_id", None) or ""
@@ -36,7 +44,10 @@ def is_patrol_ppe_event(event) -> bool:
 def is_patrol_person_event(event) -> bool:
     scenario_id = getattr(event, "scenario_id", None) or ""
     camera_id = getattr(event, "camera_id", None) or ""
-    return camera_id.startswith(PATROL_CAMERA_PREFIX) and scenario_id.startswith(PATROL_PERS_PREFIX)
+    patrol_cam = camera_id.startswith(PATROL_CAMERA_PREFIX) or camera_id.startswith(
+        PATROL_DRONE_PREFIX,
+    )
+    return patrol_cam and scenario_id.startswith(PATROL_PERS_PREFIX)
 
 
 def is_patrol_module_event(event) -> bool:
@@ -271,8 +282,8 @@ def build_patrol_metrics_payload(
     store,
     vms_workers: dict,
 ) -> dict[str, Any]:
-    if not is_patrol_camera_id(camera_id):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ camera HC-* (Module 05)")
+    if not is_patrol_metrics_camera_id(camera_id):
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ camera HC-* / DR-* (Module 05)")
 
     target_date = today_iso_date()
     ppe_alerts_today = len([
@@ -332,8 +343,8 @@ def build_patrol_events_payload(
     date: str | None = None,
     limit: int = 500,
 ) -> list[dict]:
-    if not is_patrol_camera_id(camera_id):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ camera HC-* (Module 05)")
+    if not is_patrol_metrics_camera_id(camera_id):
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ camera HC-* / DR-* (Module 05)")
 
     target_date = date or today_iso_date()
     events = store.list_events(limit=limit, date=target_date, camera_id=camera_id)
@@ -350,9 +361,9 @@ def build_patrol_aggregate_metrics_payload(
     store,
     vms_workers: dict,
 ) -> dict[str, Any]:
-    valid_ids = [cam_id for cam_id in camera_ids if is_patrol_camera_id(cam_id)]
+    valid_ids = [cam_id for cam_id in camera_ids if is_patrol_metrics_camera_id(cam_id)]
     if not valid_ids:
-        raise HTTPException(status_code=400, detail="Cần ít nhất một camera HC-*")
+        raise HTTPException(status_code=400, detail="Cần ít nhất một camera HC-* hoặc DR-*")
 
     per_camera: list[dict[str, Any]] = []
     total_person = 0
@@ -408,9 +419,9 @@ def build_patrol_aggregate_events_payload(
     date: str | None = None,
     limit: int = 500,
 ) -> list[dict]:
-    valid_ids = [cam_id for cam_id in camera_ids if is_patrol_camera_id(cam_id)]
+    valid_ids = [cam_id for cam_id in camera_ids if is_patrol_metrics_camera_id(cam_id)]
     if not valid_ids:
-        raise HTTPException(status_code=400, detail="Cần ít nhất một camera HC-*")
+        raise HTTPException(status_code=400, detail="Cần ít nhất một camera HC-* hoặc DR-*")
 
     target_date = date or today_iso_date()
     per_cam_limit = max(limit // len(valid_ids), 50)

@@ -159,6 +159,7 @@ def _build_vms_workers() -> None:
         },
         "HC-01": dict(patrol_helmet_engines),
         "HC-02": dict(patrol_helmet_engines),
+        "DR-03": dict(patrol_helmet_engines),
     }
 
     def on_event(ev):

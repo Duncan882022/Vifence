@@ -7,7 +7,7 @@ import {
 import type { EventType, PatrolEvent } from '../data/patrolMockData'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
-import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
+import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFeed'
 import {
@@ -212,7 +212,7 @@ export async function fetchPatrolHelmetMetrics(
   cameraId: string,
   backendUrl = getVmsBackendUrl(),
 ): Promise<PatrolHelmetMetricsResponse | null> {
-  if (!backendUrl || !isPatrolHelmetCameraId(cameraId)) return null
+  if (!backendUrl || !isPatrolMetricsCameraId(cameraId)) return null
 
   const hasPatrol = await probePatrolApi(backendUrl)
   if (hasPatrol) {
@@ -244,7 +244,7 @@ export async function fetchPatrolHelmetAggregateMetrics(
   cameraIds: readonly string[],
   backendUrl = getVmsBackendUrl(),
 ): Promise<PatrolHelmetAggregateMetricsResponse | null> {
-  const ids = cameraIds.filter(isPatrolHelmetCameraId)
+  const ids = cameraIds.filter(isPatrolMetricsCameraId)
   if (!backendUrl || ids.length === 0) return null
 
   const hasPatrol = await probePatrolApi(backendUrl)

@@ -7,6 +7,7 @@ import {
   isLegacyMobileHelmet,
   PATROL_HELMET_IDS,
 } from '@/modules/module05-productivity/data/helmetIngest'
+import { PATROL_DRONE_IDS } from '@/modules/module05-productivity/data/patrolDrones'
 
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',
@@ -29,6 +30,10 @@ function resolveVmsCameraIds(): Set<string> {
 
   for (const helmetId of PATROL_HELMET_IDS) {
     if (!isLegacyMobileHelmet(helmetId)) ids.add(helmetId)
+  }
+
+  for (const droneId of PATROL_DRONE_IDS) {
+    ids.add(droneId)
   }
 
   return ids

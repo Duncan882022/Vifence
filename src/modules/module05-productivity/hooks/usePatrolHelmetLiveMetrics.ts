@@ -7,7 +7,7 @@ import {
   type PatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
-import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
+import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 import {
   fetchPatrolHelmetAggregateMetrics,
   type PatrolHelmetCameraMetricsSlice,
@@ -138,7 +138,7 @@ export function usePatrolHelmetLiveMetrics(
 
   useEffect(() => {
     const backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl()
-    const ids = cameraIds.filter(isPatrolHelmetCameraId)
+    const ids = cameraIds.filter(isPatrolMetricsCameraId)
     if (!backendUrl || ids.length === 0) return
 
     let stopped = false

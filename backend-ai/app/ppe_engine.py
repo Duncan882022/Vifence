@@ -285,7 +285,7 @@ class PpeEngine:
             if was_active and not gate.snapshot()["active"]:
                 state.episode_best = None
 
-        if camera_id.startswith("HC-"):
+        if camera_id.startswith("HC-") or camera_id.startswith("DR-"):
             from .event_dedup import build_dedup_key
             from .patrol_appearance_store import touch_appearance
             from .patrol_entity import (

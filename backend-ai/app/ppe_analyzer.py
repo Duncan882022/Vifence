@@ -49,6 +49,11 @@ def _is_helmet_bodycam(camera_id: str) -> bool:
     """HC-xx patrol — góc cận (sát người) và góc rộng (đám đông xa) đều hợp lệ."""
     return camera_id.startswith("HC-")
 
+
+def _is_patrol_flycam(camera_id: str) -> bool:
+    """DR-* flycam tuần tra — góc cao, người nhỏ, không anchor mặt."""
+    return camera_id.startswith("DR-")
+
 _person_detector: PersonDetector | None = None
 _hc_patrol_person_tracks: dict[str, dict[str, object]] = {}
 _hc_frame_face_assignments: dict[str, dict[str, list[float]]] = {}
@@ -84,8 +89,8 @@ def _assign_patrol_person_identity(
     frame_h: int,
     blocked: set[str],
 ) -> None:
-    """HC-* — gán sgc-0xxxxxxx (hoặc gallery) lên detection trả về FE/heatmap."""
-    if not _is_helmet_bodycam(camera_id):
+    """HC-* / DR-* — gán sgc hoặc để trống (Đối tượng) lên detection trả về FE."""
+    if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
         return
     from .person_identity_registry import (
         peek_patrol_track_identity,
@@ -1819,6 +1824,76 @@ def _build_patrol_bodycam_result(
     }
 
 
+def _build_patrol_flycam_result(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    source_pts_sec: float | None = None,
+) -> dict:
+    """Flycam DR-* — YOLO person only; góc cao nên bỏ face-anchor bodycam."""
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
+    detector = _get_person_detector()
+    h, w = frame.shape[:2]
+    persons = _dedupe_person_boxes(
+        _filter_persons(
+            frame,
+            camera_id,
+            detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
+            source_pts_sec=source_pts_sec,
+            strict=False,
+            min_conf=_PERSON_CONF_BODYCAM,
+        ),
+        camera_id=camera_id,
+    )
+
+    detections: list[PpeDetection] = []
+    assigned_patrol_tracks: set[str] = set()
+    reset_hc_patrol_face_assignments(camera_id)
+
+    for person_index, person in enumerate(persons):
+        pb = person.person_box
+        display_pb = _visible_person_display_bbox(pb, w, h)
+        person_det = PpeDetection(
+            behavior="person",
+            label=PPE_LABELS["person"],
+            scenario_id=PPE_SCENARIO["person"],
+            confidence=round(person.person_conf, 3),
+            bbox=[float(v) for v in display_pb],
+            subject_bbox=[float(v) for v in pb],
+        )
+        enrich_person_bbox(
+            frame,
+            person_det,
+            camera_id=camera_id,
+            person_index=person_index,
+            source_pts_sec=source_pts_sec,
+        )
+        _assign_patrol_person_identity(
+            person_det,
+            pb,
+            frame=frame,
+            camera_id=camera_id,
+            frame_w=w,
+            frame_h=h,
+            blocked=assigned_patrol_tracks,
+        )
+        detections.append(person_det)
+
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": len(persons),
+            "ppe_violations": 0,
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
 analyze_patrol_person_frame = _build_patrol_bodycam_result
 
 def _build_vest_only_result(
@@ -1925,6 +2000,8 @@ def analyze_ppe_frame(
     # Helmet bodycam — skip PPE model inference entirely for better frame throughput
     if _is_helmet_bodycam(camera_id):
         return _build_patrol_bodycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
+    if _is_patrol_flycam(camera_id):
+        return _build_patrol_flycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
 
     demo_action = resolve_cam04_ppe_demo(camera_id, frame, source_pts_sec=source_pts_sec)
     if demo_action == "suppress":

@@ -315,6 +315,9 @@ class CameraVmsWorker:
             return False
         if not _is_live_stream_source(self._active_source):
             return True
+        # Live HLS-only (0 engine): không có ingest → dùng ffmpeg còn chạy.
+        if self._live_hls_only:
+            return self.hls_ready()
         with self._frame_lock:
             if self._frame is None or self._frame_received_at <= 0:
                 return False
