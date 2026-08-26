@@ -10,7 +10,7 @@
  */
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { clearPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
-import { clearPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
+import { clearPatrolMobilePersonEvents } from '@/services/patrolPersonEventsBridge'
 import { clearHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { clearPatrolHeatGrid } from '@/services/patrolHeatGrid'
 import { resetHelmetPositionEngine } from '../utils/positionEngine'
@@ -84,7 +84,7 @@ export async function resetPatrolTestData(): Promise<PatrolResetResult> {
   clearPatrolSessionStorage()
   clearHeatmapPersonRegistry()
   clearPatrolHeatGrid()
-  clearPatrolMobilePpeEvents()
+  clearPatrolMobilePersonEvents()
   clearPatrolHelmetGps('HC-01')
   clearPatrolHelmetGps('HC-02')
   resetHelmetPositionEngine('HC-01')

@@ -51,10 +51,9 @@ export interface PatrolHelmetMetricsResponse {
   backend_reachable: boolean
   stream_online: boolean
   person_count: number
-  ppe_violations: number
   identified_workers: number
   worker_names: string[]
-  ppe_alerts_today: number
+  person_events_today: number
   gps_lat?: number | null
   gps_lng?: number | null
 }
@@ -63,9 +62,8 @@ export interface PatrolHelmetCameraMetricsSlice {
   camera_id: string
   stream_online: boolean
   person_count: number
-  ppe_violations: number
   identified_workers: number
-  ppe_alerts_today: number
+  person_events_today: number
   gps_lat?: number | null
   gps_lng?: number | null
 }
@@ -75,10 +73,36 @@ export interface PatrolHelmetAggregateMetricsResponse {
   backend_reachable: boolean
   stream_online: boolean
   person_count: number
-  ppe_violations: number
   identified_workers: number
   worker_names: string[]
-  ppe_alerts_today: number
+  person_events_today: number
+}
+
+function normalizePersonEventsToday(row: Record<string, unknown>): number {
+  const primary = row.person_events_today
+  if (typeof primary === 'number' && Number.isFinite(primary)) return primary
+  const legacy = row.ppe_alerts_today
+  if (typeof legacy === 'number' && Number.isFinite(legacy)) return legacy
+  return 0
+}
+
+function normalizeMetricsResponse<T extends Record<string, unknown>>(row: T): T {
+  return {
+    ...row,
+    person_events_today: normalizePersonEventsToday(row),
+  }
+}
+
+function normalizeCameraSlice(row: Record<string, unknown>): PatrolHelmetCameraMetricsSlice {
+  return {
+    camera_id: String(row.camera_id ?? ''),
+    stream_online: Boolean(row.stream_online),
+    person_count: Number(row.person_count ?? 0),
+    identified_workers: Number(row.identified_workers ?? 0),
+    person_events_today: normalizePersonEventsToday(row),
+    gps_lat: row.gps_lat as number | null | undefined,
+    gps_lng: row.gps_lng as number | null | undefined,
+  }
 }
 
 /** Contabo cũ chưa deploy /patrol/* — cache để tránh spam 404. */
@@ -141,33 +165,13 @@ async function fetchLegacyHelmetEvents(
   return rows.filter(isPatrolModuleBackendEvent)
 }
 
-async function fetchLegacyAggregateEvents(
-  cameraIds: readonly string[],
-  backendUrl: string,
-  limit = 500,
-): Promise<BackendViolationEvent[]> {
-  const ids = cameraIds.filter(isPatrolHelmetCameraId)
-  if (ids.length === 0) return []
-  const chunks = await Promise.all(
-    ids.map(id => fetchLegacyHelmetEvents(id, backendUrl, limit)),
-  )
-  const byId = new Map<string, BackendViolationEvent>()
-  for (const rows of chunks) {
-    for (const row of rows) byId.set(row.id, row)
-  }
-  return [...byId.values()].sort(
-    (a, b) => Number(b.confirmed_at ?? b.created_at ?? 0) - Number(a.confirmed_at ?? a.created_at ?? 0),
-  )
-}
-
-function emptyCameraMetrics(cameraId: string, alertsToday = 0): PatrolHelmetCameraMetricsSlice {
+function emptyCameraMetrics(cameraId: string, eventsToday = 0): PatrolHelmetCameraMetricsSlice {
   return {
     camera_id: cameraId,
     stream_online: false,
     person_count: 0,
-    ppe_violations: 0,
     identified_workers: 0,
-    ppe_alerts_today: alertsToday,
+    person_events_today: eventsToday,
     gps_lat: null,
     gps_lng: null,
   }
@@ -180,13 +184,12 @@ async function fetchLegacyAggregateMetrics(
 ): Promise<PatrolHelmetAggregateMetricsResponse> {
   const ids = cameraIds.filter(isPatrolHelmetCameraId)
   const cameras: PatrolHelmetCameraMetricsSlice[] = []
-  let totalAlerts = 0
+  let totalEvents = 0
 
   for (const id of ids) {
     const events = await fetchLegacyHelmetEvents(id, backendUrl, 500)
-    const alerts = events.length
-    totalAlerts += alerts
-    cameras.push(emptyCameraMetrics(id, alerts))
+    totalEvents += events.length
+    cameras.push(emptyCameraMetrics(id, events.length))
   }
 
   return {
@@ -194,10 +197,9 @@ async function fetchLegacyAggregateMetrics(
     backend_reachable: true,
     stream_online: false,
     person_count: 0,
-    ppe_violations: 0,
     identified_workers: 0,
     worker_names: [],
-    ppe_alerts_today: totalAlerts,
+    person_events_today: totalEvents,
   }
 }
 
@@ -214,7 +216,8 @@ export async function fetchPatrolHelmetMetrics(
       mode: 'cors',
     })
     if (!res.ok) return null
-    return res.json() as Promise<PatrolHelmetMetricsResponse>
+    const raw = await res.json() as Record<string, unknown>
+    return normalizeMetricsResponse(raw) as PatrolHelmetMetricsResponse
   }
 
   const events = await fetchLegacyHelmetEvents(cameraId, backendUrl, 500)
@@ -224,10 +227,9 @@ export async function fetchPatrolHelmetMetrics(
     backend_reachable: true,
     stream_online: false,
     person_count: 0,
-    ppe_violations: 0,
     identified_workers: 0,
     worker_names: [],
-    ppe_alerts_today: events.length,
+    person_events_today: events.length,
     gps_lat: gps?.lat ?? null,
     gps_lng: gps?.lng ?? null,
   }
@@ -248,7 +250,11 @@ export async function fetchPatrolHelmetAggregateMetrics(
       mode: 'cors',
     })
     if (!res.ok) return null
-    return res.json() as Promise<PatrolHelmetAggregateMetricsResponse>
+    const raw = await res.json() as Record<string, unknown>
+    const cameras = Array.isArray(raw.cameras)
+      ? raw.cameras.map(row => normalizeCameraSlice(row as Record<string, unknown>))
+      : []
+    return normalizeMetricsResponse({ ...raw, cameras }) as PatrolHelmetAggregateMetricsResponse
   }
 
   return fetchLegacyAggregateMetrics(ids, backendUrl)
@@ -362,66 +368,6 @@ export function mapBackendEventToPatrolEvent(
   return eventType === 'PERSON_DETECTED'
     ? formatPatrolPersonDetectedEvent(mapped)
     : mapped
-}
-
-function mapBackendRows(rows: BackendViolationEvent[], backendUrl: string): PatrolEvent[] {
-  return rows
-    .map(row => mapBackendEventToPatrolEvent(row, backendUrl))
-    .filter((ev): ev is PatrolEvent => ev != null)
-}
-
-export async function fetchPatrolHelmetLiveEvents(
-  cameraId = 'HC-01',
-  backendUrl = getVmsBackendUrl(),
-): Promise<PatrolEvent[]> {
-  if (!backendUrl || !isPatrolHelmetCameraId(cameraId)) return []
-  const hasPatrol = await probePatrolApi(backendUrl)
-  let rows: BackendViolationEvent[] = []
-  if (hasPatrol) {
-    const date = todayIsoDate()
-    const params = new URLSearchParams({ limit: '500', date })
-    const res = await fetch(
-      `${patrolApiBase(backendUrl)}/patrol/${cameraId}/events?${params.toString()}`,
-      { headers: TUNNEL_HEADERS, mode: 'cors' },
-    )
-    if (res.ok) {
-      rows = ((await res.json()) as BackendViolationEvent[]).filter(isPatrolModuleBackendEvent)
-    }
-  } else {
-    rows = await fetchLegacyHelmetEvents(cameraId, backendUrl)
-  }
-  return mapBackendRows(rows, backendUrl)
-}
-
-export async function fetchPatrolHelmetAggregateLiveEvents(
-  cameraIds: readonly string[],
-  backendUrl = getVmsBackendUrl(),
-): Promise<PatrolEvent[]> {
-  const ids = cameraIds.filter(isPatrolHelmetCameraId)
-  if (!backendUrl || ids.length === 0) return []
-
-  const hasPatrol = await probePatrolApi(backendUrl)
-  let rows: BackendViolationEvent[] = []
-
-  if (hasPatrol) {
-    const date = todayIsoDate()
-    const params = new URLSearchParams({
-      cameras: ids.join(','),
-      date,
-      limit: '500',
-    })
-    const res = await fetch(
-      `${patrolApiBase(backendUrl)}/patrol/events?${params.toString()}`,
-      { headers: TUNNEL_HEADERS, mode: 'cors' },
-    )
-    if (res.ok) {
-      rows = ((await res.json()) as BackendViolationEvent[]).filter(isPatrolModuleBackendEvent)
-    }
-  } else {
-    rows = await fetchLegacyAggregateEvents(ids, backendUrl)
-  }
-
-  return mapBackendRows(rows, backendUrl)
 }
 
 export interface ClearBackendEventsResult {

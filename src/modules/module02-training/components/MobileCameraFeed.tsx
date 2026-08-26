@@ -29,7 +29,7 @@ import {
   cancelScheduledClearPatrolMobile,
   clearPatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
-import { pushPatrolMobilePpeEvents } from '@/services/patrolMobileEventsBridge'
+import { pushPatrolMobilePersonEvents } from '@/services/patrolPersonEventsBridge'
 import {
   getPatrolHelmetGps,
   setPatrolHelmetGps,
@@ -60,18 +60,18 @@ function tagHc02PersonDetections(items: MobileAiDetection[]): MobileAiDetection[
 }
 
 /** HC bodycam — chỉ bbox person (xanh / vàng nếu conf yếu). */
-function mapMobilePpeOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
-  const ppeDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
+function mapMobilePatrolOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
+  const personDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
     behavior: d.behavior as PpeDetection['behavior'],
     label: d.label,
-    scenario_id: 'PPE-001',
+    scenario_id: 'PERS-001',
     confidence: d.confidence,
     bbox: d.bbox,
     subject_bbox: d.subject_bbox,
     worker_id: d.worker_id,
     worker_name: d.worker_name,
   }))
-  const groups = groupPpeDetections(ppeDets)
+  const groups = groupPpeDetections(personDets)
   return groups.map(g => ({
     behavior: 'person' as const,
     label: g.person.label,
@@ -156,7 +156,7 @@ export function MobileCameraFeed({
   }, [frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = overlayModelId === 'ppe' && !usePatrolPersonRoi
-      ? mapMobilePpeOverlayDetections(detections)
+      ? mapMobilePatrolOverlayDetections(detections)
       : detections
     return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped
   }, [detections, overlayModelId, usePatrolPersonRoi, cameraId])
@@ -276,8 +276,6 @@ export function MobileCameraFeed({
             cameraId,
             streamOnline: true,
             personCount,
-            // Module 05 chỉ theo dõi người — không có khái niệm vi phạm PPE.
-            activePpeViolations: 0,
             identifiedWorkers: new Set(
               [...rawPersons, ...persons]
                 .map(d => d.worker_id)
@@ -289,8 +287,7 @@ export function MobileCameraFeed({
           syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections.filter(patrolVisible))
 
           if (result.events?.length) {
-            // Bridge tự loại kịch bản PPE — chỉ PERS/person lên panel Người.
-            pushPatrolMobilePpeEvents(result.events, cameraId)
+            pushPatrolMobilePersonEvents(result.events, cameraId)
           }
         }
         setFrameSize({ width: result.width, height: result.height })

@@ -84,7 +84,6 @@ def audit_patrol_filters() -> list[CaseResult]:
         is_patrol_camera_id,
         is_patrol_module_event,
         is_patrol_person_event,
-        is_patrol_ppe_event,
     )
 
     results: list[CaseResult] = []
@@ -97,13 +96,13 @@ def audit_patrol_filters() -> list[CaseResult]:
     ppe_a04 = SimpleNamespace(scenario_id="PPE-002", camera_id="A-04")
 
     ok_evt = (
-        is_patrol_ppe_event(ppe_hc)
+        not is_patrol_person_event(ppe_hc)
         and is_patrol_person_event(pers_hc)
-        and is_patrol_module_event(ppe_hc)
+        and not is_patrol_module_event(ppe_hc)
         and is_patrol_module_event(pers_hc)
         and not is_patrol_module_event(ppe_a04)
     )
-    results.append(CaseResult("patrol_event_ppe_pers_filter", ok_evt, "HC PPE+PERS · A-04 excluded"))
+    results.append(CaseResult("patrol_event_person_filter", ok_evt, "HC PERS only · PPE excluded"))
 
     return results
 

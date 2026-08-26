@@ -19,9 +19,9 @@ function slice(id: string, online: boolean): PatrolHelmetCameraMetricsSlice {
     camera_id: id,
     stream_online: online,
     person_count: 0,
-    ppe_violations: 0,
     identified_workers: 0,
-  } as PatrolHelmetCameraMetricsSlice
+    person_events_today: 0,
+  }
 }
 
 describe('applyPatrolCameraStreamStatus', () => {

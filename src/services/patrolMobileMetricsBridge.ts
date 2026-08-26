@@ -7,7 +7,6 @@ export interface PatrolMobileLiveSnapshot {
   personCount: number
   /** Peak cộng dồn phiên — KPI báo cáo, không giảm về 0. */
   peakPersonCount: number
-  activePpeViolations: number
   identifiedWorkers: number
   workerNames: string[]
   updatedAt: number
@@ -28,7 +27,6 @@ export function setPatrolMobileLiveSnapshot(snapshot: {
   cameraId: string
   streamOnline: boolean
   personCount: number
-  activePpeViolations: number
   identifiedWorkers?: number
   workerNames?: string[]
   updatedAt: number
@@ -53,7 +51,6 @@ export function setPatrolMobileLiveSnapshot(snapshot: {
     streamOnline: snapshot.streamOnline,
     personCount,
     peakPersonCount,
-    activePpeViolations: Math.max(0, Math.floor(snapshot.activePpeViolations)),
     identifiedWorkers,
     workerNames,
     updatedAt: snapshot.updatedAt,
@@ -76,7 +73,6 @@ export function touchPatrolMobileStreamOnline(cameraId: string): void {
       streamOnline: true,
       personCount: 0,
       peakPersonCount: 0,
-      activePpeViolations: 0,
       identifiedWorkers: 0,
       workerNames: [],
       updatedAt: now,

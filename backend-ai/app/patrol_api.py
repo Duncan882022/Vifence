@@ -1,4 +1,4 @@
-"""API Module 05 — chỉ camera HC-* và sự kiện PPE tuần tra."""
+"""API Module 05 — camera tuần tra HC-* / DR-* và sự kiện vòng đời người (PERS-*)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from fastapi import HTTPException
 
 PATROL_CAMERA_PREFIX = "HC-"
 PATROL_DRONE_PREFIX = "DR-"
-PATROL_PPE_PREFIX = "PPE"
 PATROL_PERS_PREFIX = "PERS"
 PATROL_MOBILE_METRICS_TTL_SEC = 20.0
 # Flip cam / AI pause: vẫn coi stream online trong grace này
@@ -35,12 +34,6 @@ def is_patrol_metrics_camera_id(camera_id: str) -> bool:
     )
 
 
-def is_patrol_ppe_event(event) -> bool:
-    scenario_id = getattr(event, "scenario_id", None) or ""
-    camera_id = getattr(event, "camera_id", None) or ""
-    return camera_id.startswith(PATROL_CAMERA_PREFIX) and scenario_id.startswith(PATROL_PPE_PREFIX)
-
-
 def is_patrol_person_event(event) -> bool:
     scenario_id = getattr(event, "scenario_id", None) or ""
     camera_id = getattr(event, "camera_id", None) or ""
@@ -51,7 +44,8 @@ def is_patrol_person_event(event) -> bool:
 
 
 def is_patrol_module_event(event) -> bool:
-    return is_patrol_ppe_event(event) or is_patrol_person_event(event)
+    """Alias — Module 05 chỉ còn sự kiện người (PERS-*)."""
+    return is_patrol_person_event(event)
 
 
 def today_iso_date() -> str:
@@ -69,7 +63,7 @@ def update_patrol_gps(
     pitch: float | None = None,
     roll: float | None = None,
 ) -> None:
-    """GPS (+ optional heading) từ mobile frame — gắn sự kiện PPE HC-*."""
+    """GPS (+ optional heading) từ mobile frame — gắn sự kiện tuần tra HC-*."""
     if not is_patrol_camera_id(camera_id):
         return
     if gps_lat is None or gps_lng is None:
@@ -184,11 +178,6 @@ def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
     detections = result.get("detections") or []
     metrics = result.get("metrics") or {}
     persons = [row for row in detections if row.get("behavior") == "person"]
-    violations = [
-        row
-        for row in detections
-        if row.get("behavior") in ("no_helmet", "no_vest", "no_shoes")
-    ]
     worker_names: list[str] = []
     identified_workers = 0
     for person in persons:
@@ -211,7 +200,6 @@ def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
 
     _patrol_mobile_metrics[camera_id] = {
         "person_count": peak_person,
-        "ppe_violations": int(metrics.get("ppe_violations") or len(violations)),
         "identified_workers": peak_identified,
         "worker_names": merged_names,
         "updated_at": time.time(),
@@ -243,19 +231,13 @@ def _metrics_from_vms_overlay(overlay: dict) -> dict[str, Any]:
         return {
             "stream_online": False,
             "person_count": 0,
-            "ppe_violations": 0,
             "identified_workers": 0,
             "worker_names": [],
         }
 
-    ppe_metrics = (overlay.get("metrics") or {}).get("ppe") or {}
+    patrol_metrics = (overlay.get("metrics") or {}).get("ppe") or {}
     detections = overlay.get("detections") or []
     persons = [row for row in detections if row.get("behavior") == "person"]
-    violations = [
-        row
-        for row in detections
-        if row.get("behavior") in ("no_helmet", "no_vest", "no_shoes")
-    ]
     worker_names: list[str] = []
     identified_workers = 0
     for person in persons:
@@ -269,8 +251,7 @@ def _metrics_from_vms_overlay(overlay: dict) -> dict[str, Any]:
 
     return {
         "stream_online": True,
-        "person_count": int(ppe_metrics.get("person_count") or len(persons)),
-        "ppe_violations": int(ppe_metrics.get("ppe_violations") or len(violations)),
+        "person_count": int(patrol_metrics.get("person_count") or len(persons)),
         "identified_workers": identified_workers,
         "worker_names": list(dict.fromkeys(worker_names))[:5],
     }
@@ -286,10 +267,10 @@ def build_patrol_metrics_payload(
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ camera HC-* / DR-* (Module 05)")
 
     target_date = today_iso_date()
-    ppe_alerts_today = len([
+    person_events_today = len([
         event
         for event in store.list_events(limit=500, date=target_date, camera_id=camera_id)
-        if is_patrol_ppe_event(event)
+        if is_patrol_person_event(event)
     ])
 
     worker = vms_workers.get(camera_id)
@@ -302,7 +283,7 @@ def build_patrol_metrics_payload(
             "backend_reachable": True,
             **live,
             **patrol_gps_payload(camera_id),
-            "ppe_alerts_today": ppe_alerts_today,
+            "person_events_today": person_events_today,
         }
 
     cached = _patrol_mobile_metrics.get(camera_id)
@@ -316,11 +297,10 @@ def build_patrol_metrics_payload(
                 "backend_reachable": True,
                 "stream_online": stream_online,
                 "person_count": int(cached.get("person_count") or 0) if keep_peak else 0,
-                "ppe_violations": int(cached.get("ppe_violations") or 0) if stream_online else 0,
                 "identified_workers": int(cached.get("identified_workers") or 0) if keep_peak else 0,
                 "worker_names": list(cached.get("worker_names") or []) if keep_peak else [],
                 **patrol_gps_payload(camera_id),
-                "ppe_alerts_today": ppe_alerts_today,
+                "person_events_today": person_events_today,
             }
 
     return {
@@ -328,11 +308,10 @@ def build_patrol_metrics_payload(
         "backend_reachable": True,
         "stream_online": False,
         "person_count": 0,
-        "ppe_violations": 0,
         "identified_workers": 0,
         "worker_names": [],
         **patrol_gps_payload(camera_id),
-        "ppe_alerts_today": ppe_alerts_today,
+        "person_events_today": person_events_today,
     }
 
 
@@ -350,7 +329,7 @@ def build_patrol_events_payload(
     events = store.list_events(limit=limit, date=target_date, camera_id=camera_id)
     patrol_rows = [
         event for event in events
-        if is_patrol_module_event(event) and getattr(event, "snapshot_file", None)
+        if is_patrol_person_event(event) and getattr(event, "snapshot_file", None)
     ]
     return [event.model_dump() for event in patrol_rows]
 
@@ -367,9 +346,8 @@ def build_patrol_aggregate_metrics_payload(
 
     per_camera: list[dict[str, Any]] = []
     total_person = 0
-    total_violations = 0
     total_identified = 0
-    total_ppe_alerts = 0
+    total_person_events = 0
     all_names: list[str] = []
     any_online = False
 
@@ -384,31 +362,27 @@ def build_patrol_aggregate_metrics_payload(
                 "camera_id": cam_id,
                 "stream_online": payload["stream_online"],
                 "person_count": payload["person_count"],
-                "ppe_violations": payload["ppe_violations"],
                 "identified_workers": payload["identified_workers"],
-                "ppe_alerts_today": payload["ppe_alerts_today"],
+                "person_events_today": payload["person_events_today"],
                 "gps_lat": payload.get("gps_lat"),
                 "gps_lng": payload.get("gps_lng"),
             },
         )
-        total_ppe_alerts += int(payload["ppe_alerts_today"])
+        total_person_events += int(payload["person_events_today"])
         all_names.extend(payload.get("worker_names") or [])
-        # Cộng dồn person kể cả khi cam vừa flip / temporarily offline
         total_person += int(payload["person_count"])
         total_identified += int(payload["identified_workers"])
         if payload["stream_online"]:
             any_online = True
-            total_violations += int(payload["ppe_violations"])
 
     return {
         "cameras": per_camera,
         "backend_reachable": True,
         "stream_online": any_online,
         "person_count": total_person,
-        "ppe_violations": total_violations,
         "identified_workers": total_identified,
         "worker_names": list(dict.fromkeys(all_names))[:8],
-        "ppe_alerts_today": total_ppe_alerts,
+        "person_events_today": total_person_events,
     }
 
 
