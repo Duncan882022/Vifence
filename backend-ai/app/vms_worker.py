@@ -647,13 +647,19 @@ class CameraVmsWorker:
         return latest
 
     def _live_hls_encode_args(self, segment_pattern: str, hls_out: str) -> list[str]:
+        # Flycam DR-* — nguồn 720p từ DJI; 800k ultrafast gây mờ/giật rõ trên CMS.
+        is_flycam = self.camera_id.startswith("DR-")
+        bitrate = "2500k" if is_flycam else "800k"
+        maxrate = "2800k" if is_flycam else "900k"
+        bufsize = "3500k" if is_flycam else "900k"
+        preset = "veryfast" if is_flycam else "ultrafast"
         return [
             "-c:v", "libx264",
-            "-preset", "ultrafast",
+            "-preset", preset,
             "-tune", "zerolatency",
-            "-b:v", "800k",
-            "-maxrate", "900k",
-            "-bufsize", "900k",
+            "-b:v", bitrate,
+            "-maxrate", maxrate,
+            "-bufsize", bufsize,
             "-g", "12",
             "-sc_threshold", "0",
             "-an",

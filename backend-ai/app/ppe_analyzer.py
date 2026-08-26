@@ -37,6 +37,7 @@ PPE_LABELS = {
 
 _PERSON_CONF = 0.40
 _PERSON_CONF_BODYCAM = 0.30
+_PERSON_CONF_FLYCAM = 0.18
 _PERSON_CONF_STRICT = 0.48
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
@@ -1590,6 +1591,25 @@ def _visible_person_display_bbox(
     return _clip_box_to_frame(tight, frame_w, frame_h)
 
 
+def _plausible_flycam_aerial(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Góc drone cao — người rất nhỏ trong khung (1–2% chiều cao)."""
+    x1, y1, x2, y2 = box
+    bw = max(x2 - x1, 1.0)
+    bh = max(y2 - y1, 1.0)
+    if bh < frame_h * 0.010 or bh > frame_h * 0.55:
+        return False
+    if bw < frame_w * 0.006 or bw > frame_w * 0.38:
+        return False
+    aspect = bh / bw
+    if aspect < 0.22 or aspect > 5.8:
+        return False
+    return True
+
+
 def _plausible_person_box(
     box: tuple[float, float, float, float],
     frame_w: int,
@@ -1599,8 +1619,11 @@ def _plausible_person_box(
     machinery: list[tuple[float, float, float, float]] | None = None,
     strict: bool = False,
     bodycam: bool = False,
+    flycam: bool = False,
 ) -> bool:
     """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng."""
+    if flycam:
+        return _plausible_flycam_aerial(box, frame_w, frame_h)
     if bodycam:
         close_ok = _plausible_bodycam_close(
             box, frame_w, frame_h, frame=frame, strict=strict,
@@ -1644,8 +1667,11 @@ def _filter_persons(
 ) -> list[_PersonPpe]:
     h, w = frame.shape[:2]
     bodycam = _is_helmet_bodycam(camera_id)
-    identity_strict = (strict or camera_id in ("A-04", "HC-01")) and not bodycam
-    if bodycam:
+    flycam = _is_patrol_flycam(camera_id)
+    identity_strict = (strict or camera_id in ("A-04", "HC-01")) and not bodycam and not flycam
+    if flycam:
+        conf_floor = min_conf if min_conf is not None else _PERSON_CONF_FLYCAM
+    elif bodycam:
         conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
     else:
         conf_floor = min_conf if min_conf is not None else (_PERSON_CONF_STRICT if identity_strict else _PERSON_CONF)
@@ -1663,6 +1689,7 @@ def _filter_persons(
             machinery=machinery,
             strict=identity_strict,
             bodycam=bodycam,
+            flycam=flycam,
         ):
             continue
         if bodycam and frame is not None:
@@ -1839,10 +1866,10 @@ def _build_patrol_flycam_result(
         _filter_persons(
             frame,
             camera_id,
-            detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
+            detector.predict(frame, conf=_PERSON_CONF_FLYCAM),
             source_pts_sec=source_pts_sec,
             strict=False,
-            min_conf=_PERSON_CONF_BODYCAM,
+            min_conf=_PERSON_CONF_FLYCAM,
         ),
         camera_id=camera_id,
     )
