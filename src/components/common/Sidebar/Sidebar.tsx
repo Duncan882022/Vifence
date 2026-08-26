@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard,
   DoorOpen, GraduationCap, ShieldAlert, Sparkles,
   TrendingUp, Package, ClipboardCheck, BarChart3, Cpu,
-  Lock, Activity, Gauge,
+  Lock, Activity, Gauge, Users, ScanFace,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -44,7 +44,13 @@ const navItems: NavItem[] = [
     ],
   },
   { path: '/module04', label: 'Vệ sinh công trường',  icon: Sparkles,       available: false },
-  { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: true },
+  { path: '/module05', label: 'Hiệu quả công việc',   icon: TrendingUp,     available: true,
+    children: [
+      { path: '/module05', label: 'Tuần tra', icon: TrendingUp, available: true },
+      { path: '/module05/ho-so', label: 'Hồ sơ công nhân', icon: Users, available: true },
+      { path: '/module05/quet-mat', label: 'Quét mặt', icon: ScanFace, available: true },
+    ],
+  },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
   { path: '/module07', label: 'Nghiệm thu',            icon: ClipboardCheck, available: false },
   { path: '/module08', label: 'Báo cáo điều hành',    icon: BarChart3,      available: false },
@@ -60,15 +66,20 @@ export function Sidebar() {
   const isDrawerOpen = !isDesktop && mobileNavOpen
 
   const isEquipmentActive = location.pathname.startsWith('/equipment') || location.pathname.startsWith('/equipmentpro')
-  const [equipmentOpen, setEquipmentOpen] = useState(isEquipmentActive)
+  const isModule05Active = location.pathname.startsWith('/module05')
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    '/equipment-group': isEquipmentActive,
+    '/module05': isModule05Active,
+  })
 
   useEffect(() => {
     closeMobileNav()
   }, [location.pathname, closeMobileNav])
 
   useEffect(() => {
-    if (isEquipmentActive) setEquipmentOpen(true)
-  }, [isEquipmentActive])
+    if (isEquipmentActive) setOpenGroups(g => ({ ...g, '/equipment-group': true }))
+    if (isModule05Active) setOpenGroups(g => ({ ...g, '/module05': true }))
+  }, [isEquipmentActive, isModule05Active])
 
   return (
     <>
@@ -110,14 +121,14 @@ export function Sidebar() {
               /* ── Group item with children ── */
               if (item.children) {
                 const isGroupActive = item.children.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
-                const isOpen = equipmentOpen
+                const isOpen = openGroups[item.path] ?? isGroupActive
 
                 return (
                   <li key={item.path}>
                     <button
                       type="button"
                       title={!showLabels ? item.label : undefined}
-                      onClick={() => setEquipmentOpen(o => !o)}
+                      onClick={() => setOpenGroups(g => ({ ...g, [item.path]: !(g[item.path] ?? isGroupActive) }))}
                       className={cn(
                         'w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-md transition-colors group',
                         isGroupActive
@@ -147,7 +158,9 @@ export function Sidebar() {
                       <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-[#1e2433]/60 pl-2">
                         {item.children.map(child => {
                           const ChildIcon = child.icon
-                          const isChildActive = location.pathname === child.path || location.pathname.startsWith(child.path + '/')
+                          const isChildActive = child.path === '/module05'
+                            ? location.pathname === '/module05'
+                            : location.pathname === child.path || location.pathname.startsWith(`${child.path}/`)
 
                           return (
                             <li key={child.path}>

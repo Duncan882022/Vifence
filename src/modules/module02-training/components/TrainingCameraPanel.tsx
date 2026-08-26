@@ -236,7 +236,7 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, streamWhenOffline }: {
+function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, streamWhenOffline }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   onCloseMaximize: () => void
@@ -247,6 +247,8 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
   compactVideo?: boolean
   /** Override max-height class khi compactVideo — Module 05 patrol layout cao hơn. */
   compactVideoMaxClass?: string
+  /** Patrol grid: luôn 16:9, không giới hạn max-h trên desktop. */
+  aspectVideoGrid?: boolean
   /** Camera đang phóng to — giữ nguyên instance feed, không mount stream mới. */
   focusedCamId?: string | null
   streamWhenOffline?: boolean
@@ -279,7 +281,9 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
               'aspect-video',
               compactVideo
                 ? (compactVideoMaxClass ?? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]')
-                : 'max-h-[min(36dvh,280px)]',
+                : aspectVideoGrid
+                  ? undefined
+                  : 'max-h-[min(36dvh,280px)]',
             ),
         )
         return (
@@ -367,6 +371,8 @@ interface TrainingCameraPanelProps {
   compactVideoMaxClass?: string
   /** Module 05 mobile: stack 16:9, không scroll lồng trong grid video. */
   mobileStackedNoScroll?: boolean
+  /** Module 05 patrol: ô camera luôn 16:9 — không kéo giãn theo chiều cao panel. */
+  aspectVideoGrid?: boolean
   /** Patrol bodycam/flycam: vẫn thử load HLS khi badge offline (metrics trễ hơn nguồn). */
   streamWhenOffline?: boolean
 }
@@ -384,6 +390,7 @@ export function TrainingCameraPanel({
   mobileCompactVideo = false,
   compactVideoMaxClass,
   mobileStackedNoScroll = false,
+  aspectVideoGrid = false,
   streamWhenOffline = false,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
@@ -439,7 +446,8 @@ export function TrainingCameraPanel({
     : catalog.filter(c => isDefaultCourseCamera(c.id))
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
   /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
-  const fillHeightMain = !mobileCompactVideo || mobileStackedNoScroll
+  const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
+  const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll) || (aspectVideoGrid && !isDesktop)
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
@@ -531,9 +539,10 @@ export function TrainingCameraPanel({
     <>
       <div className={cn(
         'w-full min-h-0',
-        mobileCompactVideo ? 'h-auto max-h-full' : 'h-full',
+        (mobileCompactVideo || aspectVideoGrid) ? 'h-auto max-h-full' : 'h-full',
         'flex flex-col lg:flex-row',
-        mobileCompactVideo ? 'lg:h-auto lg:max-h-full' : 'lg:flex-1 lg:min-h-0',
+        (mobileCompactVideo || aspectVideoGrid) ? 'lg:h-auto lg:max-h-full' : 'lg:flex-1 lg:min-h-0',
+        aspectVideoGrid && 'lg:items-start',
         'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
         'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
       )}>
@@ -555,8 +564,9 @@ export function TrainingCameraPanel({
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
               forceSingleCol={mobileStackedNoScroll && !isDesktop}
-              compactVideo={mobileCompactVideo && !mobileStackedNoScroll}
+              compactVideo={useCompactVideoCaps}
               compactVideoMaxClass={compactVideoMaxClass}
+              aspectVideoGrid={aspectVideoGrid}
               focusedCamId={focusedCam?.id}
               streamWhenOffline={streamWhenOffline}
             />

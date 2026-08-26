@@ -19,7 +19,7 @@ import {
   resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
 import { resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
-import { PatrolEventSnapshot } from './PatrolEventSnapshot'
+import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
 
 interface PatrolEventsPanelProps {
   events: PatrolEvent[]
@@ -130,8 +130,11 @@ function PatrolEventCardActions({
       {onDetailClick && (
         <button
           type="button"
+          onMouseEnter={() => preloadPatrolEventSnapshot(event.snapshotUrl)}
+          onFocus={() => preloadPatrolEventSnapshot(event.snapshotUrl)}
           onClick={(e) => {
             e.stopPropagation()
+            preloadPatrolEventSnapshot(event.snapshotUrl)
             onDetailClick(event)
           }}
           className="flex items-center justify-center rounded-md transition-colors border w-7 h-7 hover:bg-[#1e2433]/80 text-muted-foreground hover:text-foreground border-[#1e2433]/60"
@@ -199,7 +202,12 @@ function PatrolEventCard({
         <PatrolEventSnapshot
           event={event}
           className="self-stretch w-[80px]"
-          onClick={onDetailClick}
+          onClick={onDetailClick
+            ? (ev) => {
+              preloadPatrolEventSnapshot(ev.snapshotUrl)
+              onDetailClick(ev)
+            }
+            : undefined}
         />
 
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">

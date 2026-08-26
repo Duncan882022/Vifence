@@ -1,4 +1,5 @@
-import { Camera, ImageOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { PatrolEvent } from '../data/patrolMockData'
 
@@ -10,6 +11,15 @@ interface PatrolEventSnapshotProps {
   onClick?: (event: PatrolEvent) => void
 }
 
+/** Prefetch snapshot — gọi trước khi mở popup để ảnh lên ngay từ cache. */
+export function preloadPatrolEventSnapshot(url?: string | null): void {
+  const src = url?.trim()
+  if (!src) return
+  const img = new Image()
+  img.decoding = 'async'
+  img.src = src
+}
+
 export function PatrolEventSnapshot({
   event,
   variant = 'thumb',
@@ -17,10 +27,17 @@ export function PatrolEventSnapshot({
   onClick,
 }: PatrolEventSnapshotProps) {
   const isDetail = variant === 'detail'
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setLoaded(false)
+    setFailed(false)
+  }, [event.snapshotUrl])
 
   const frameClass = cn(
     isDetail
-      ? 'relative shrink-0 w-full bg-black rounded-lg border border-[#1e2433]'
+      ? 'relative shrink-0 w-full bg-black rounded-lg border border-[#1e2433] min-h-[120px]'
       : 'relative shrink-0 w-[72px] min-h-[58px] overflow-hidden rounded-md border border-[#1e2433]/90 bg-black shadow-inner',
     className,
   )
@@ -31,48 +48,68 @@ export function PatrolEventSnapshot({
 
   const content = (
     <>
+      {!loaded && !failed && (
+        <div
+          className={cn(
+            'absolute inset-0 flex items-center justify-center bg-[#0a0e17]',
+            isDetail && 'rounded-lg',
+          )}
+          aria-hidden
+        >
+          <Loader2 className={cn('animate-spin text-muted-foreground/50', isDetail ? 'w-6 h-6' : 'w-3.5 h-3.5')} />
+        </div>
+      )}
       <img
         src={event.snapshotUrl}
         alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
         className={cn(
           isDetail
-            ? 'block w-full h-auto max-h-[min(72dvh,920px)] object-contain mx-auto bg-black'
+            ? 'block w-full h-auto max-h-[min(48dvh,420px)] object-contain mx-auto bg-black'
             : 'absolute inset-0 h-full w-full object-cover',
+          !loaded && !failed && 'opacity-0',
         )}
-        loading="lazy"
-        onError={(e) => {
-          e.currentTarget.style.display = 'none'
-          const fallback = e.currentTarget.nextElementSibling
-          if (fallback instanceof HTMLElement) fallback.style.display = 'flex'
+        loading={isDetail ? 'eager' : 'lazy'}
+        decoding="async"
+        fetchPriority={isDetail ? 'high' : 'auto'}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          setFailed(true)
+          setLoaded(true)
         }}
       />
-      <div
-        className={cn(
-          'absolute inset-0 hidden flex-col items-center justify-center gap-0.5 bg-[#0a0e17] text-muted-foreground',
-          isDetail && 'rounded-lg',
-        )}
-        aria-hidden
-      >
-        <ImageOff className={cn('opacity-50', isDetail ? 'w-8 h-8' : 'w-4 h-4')} />
-        <span className={isDetail ? 'text-[10px]' : 'text-[6px]'}>Không tải được</span>
-      </div>
-      <span
-        className={cn(
-          'absolute font-mono text-white/55 px-0.5 bg-black/50 rounded',
-          isDetail
-            ? 'bottom-1.5 left-1.5 text-[9px] py-0.5 px-1'
-            : 'bottom-0.5 left-0.5 text-[6px]',
-        )}
-      >
-        {event.cameraId}
-      </span>
-      <Camera
-        className={cn(
-          'absolute text-white/35',
-          isDetail ? 'top-1.5 right-1.5 w-3.5 h-3.5' : 'top-0.5 right-0.5 w-2.5 h-2.5',
-        )}
-        aria-hidden
-      />
+      {failed && (
+        <div
+          className={cn(
+            'absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-[#0a0e17] text-muted-foreground',
+            isDetail && 'rounded-lg',
+          )}
+          aria-hidden
+        >
+          <ImageOff className={cn('opacity-50', isDetail ? 'w-8 h-8' : 'w-4 h-4')} />
+          <span className={isDetail ? 'text-[10px]' : 'text-[6px]'}>Không tải được</span>
+        </div>
+      )}
+      {loaded && !failed && (
+        <>
+          <span
+            className={cn(
+              'absolute font-mono text-white/55 px-0.5 bg-black/50 rounded',
+              isDetail
+                ? 'bottom-1.5 left-1.5 text-[9px] py-0.5 px-1'
+                : 'bottom-0.5 left-0.5 text-[6px]',
+            )}
+          >
+            {event.cameraId || '—'}
+          </span>
+          <Camera
+            className={cn(
+              'absolute text-white/35',
+              isDetail ? 'top-1.5 right-1.5 w-3.5 h-3.5' : 'top-0.5 right-0.5 w-2.5 h-2.5',
+            )}
+            aria-hidden
+          />
+        </>
+      )}
     </>
   )
 

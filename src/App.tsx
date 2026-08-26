@@ -5,7 +5,7 @@ import { Module01Page } from '@/modules/module01-access-control/Module01Page'
 import { DTTTPage } from '@/modules/dao-tao-tuan-thu/DTTTPage'
 import { Module03Page } from '@/modules/module03-safety/Module03Page'
 import { Module04Page } from '@/modules/module04-housekeeping/Module04Page'
-import { Module05Page } from '@/modules/module05-productivity/Module05Page'
+import { Module05Routes } from '@/modules/module05-productivity/Module05Routes'
 import { Module06Page } from '@/modules/module06-assets/Module06Page'
 import { Module07Page } from '@/modules/module07-inspection/Module07Page'
 import { Module08Page } from '@/modules/module08-reporting/Module08Page'
@@ -58,7 +58,7 @@ function AppRoutes() {
         <Route path="/dttt/*" element={<DTTTPage />} />
         <Route path="/module03/*" element={<Module03Page />} />
         <Route path="/module04/*" element={<Module04Page />} />
-        <Route path="/module05/*" element={<Module05Page />} />
+        <Route path="/module05/*" element={<Module05Routes />} />
         <Route path="/module06/*" element={<Module06Page />} />
         <Route path="/module07/*" element={<Module07Page />} />
         <Route path="/module08/*" element={<Module08Page />} />

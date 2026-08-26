@@ -14,6 +14,7 @@ import {
   type PatrolDayObject,
   type PatrolDayPerson,
 } from '../services/patrolDayEvents.service'
+import { filterPatrolDayObjectsForDisplay } from '../utils/patrolDayObjectFilter'
 
 const POLL_MS = 3000
 
@@ -91,10 +92,11 @@ export function usePatrolDayEvents(date?: string): PatrolDayEventsState {
         fetchPatrolDayObjects(date),
       ])
       if (stopped.current) return
-      setReachable(persons.length > 0 || objects.length > 0 || true)
+      const displayObjects = filterPatrolDayObjectsForDisplay(objects, persons)
+      setReachable(persons.length > 0 || displayObjects.length > 0 || true)
       setEvents([
         ...persons.map(personToEvent),
-        ...objects.map(objectToEvent),
+        ...displayObjects.map(objectToEvent),
       ].sort((a, b) => Date.parse(b.lockedAt) - Date.parse(a.lockedAt)))
       setLoading(false)
     }

@@ -93,6 +93,58 @@ def list_persons(status: str | None = None) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+SCAN_FACES_REQUIRED = 3
+SCAN_POSE_LABELS = ("Chính diện", "Nghiêng trái", "Nghiêng phải")
+
+
+def find_by_employee_code(employee_code: str) -> dict[str, Any] | None:
+    code = employee_code.strip()
+    if not code:
+        return None
+    row = db.query_one("SELECT * FROM persons WHERE employee_code = ?", (code,))
+    return dict(row) if row else None
+
+
+def face_count(pers_id: str) -> int:
+    pid = resolve_alias(pers_id)
+    row = db.query_one(
+        "SELECT COUNT(*) AS c FROM person_faces WHERE pers_id = ?", (pid,)
+    )
+    return int(row["c"]) if row else 0
+
+
+def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
+    """Trạng thái quét mặt cho trang enroll — 3 góc tối thiểu."""
+    pid = resolve_alias(pers_id)
+    person = get_person(pid)
+    count = face_count(pid)
+    rows = db.query(
+        "SELECT id, quality, source, created_at FROM person_faces"
+        " WHERE pers_id = ? ORDER BY created_at ASC",
+        (pid,),
+    )
+    poses: list[dict[str, Any]] = []
+    for slot in range(1, SCAN_FACES_REQUIRED + 1):
+        captured = count >= slot
+        poses.append({
+            "slot": slot,
+            "label": SCAN_POSE_LABELS[slot - 1],
+            "captured": captured,
+        })
+    return {
+        "pers_id": pid,
+        "full_name": person.get("full_name") if person else None,
+        "employee_code": person.get("employee_code") if person else None,
+        "contractor": person.get("contractor") if person else None,
+        "status": person.get("status") if person else None,
+        "faces_captured": count,
+        "faces_required": SCAN_FACES_REQUIRED,
+        "complete": count >= SCAN_FACES_REQUIRED,
+        "poses": poses,
+        "face_records": len(rows),
+    }
+
+
 def display_name(person: dict[str, Any] | None) -> str:
     """Nhãn hiện trên ROI và thẻ sự kiện."""
     if not person:

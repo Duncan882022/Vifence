@@ -17,8 +17,8 @@ from . import daystore, db, identity
 router = APIRouter(prefix="/patrol", tags=["patrol"])
 
 
-def _person_payload(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> dict[str, Any]:
+    payload = {
         "pers_id": row["pers_id"],
         "status": row["status"],
         "iden_code": row.get("iden_code"),
@@ -31,13 +31,33 @@ def _person_payload(row: dict[str, Any]) -> dict[str, Any]:
         "last_seen": row.get("last_seen"),
         "identified_at": row.get("identified_at"),
     }
+    if with_face_stats:
+        count = identity.face_count(str(row["pers_id"]))
+        payload["face_count"] = count
+        payload["face_enrollment_complete"] = count >= identity.SCAN_FACES_REQUIRED
+    return payload
 
 
 @router.get("/persons")
 def list_persons(status: str | None = None) -> dict[str, Any]:
     """Danh sách Người (`status=person`) hoặc Định danh (`status=identified`)."""
     rows = identity.list_persons(status)
-    return {"ok": True, "items": [_person_payload(r) for r in rows]}
+    return {
+        "ok": True,
+        "items": [_person_payload(r, with_face_stats=True) for r in rows],
+    }
+
+
+@router.get("/persons/lookup")
+def lookup_person(employee_code: str) -> dict[str, Any]:
+    """Tra cứu hồ sơ theo mã nhân viên — dùng trước khi quét mặt."""
+    code = (employee_code or "").strip()
+    if not code:
+        return {"ok": False, "error": "missing_employee_code"}
+    row = identity.find_by_employee_code(code)
+    if row is None:
+        return {"ok": False, "error": "not_found"}
+    return {"ok": True, "person": _person_payload(row)}
 
 
 @router.get("/persons/{pers_id}")
@@ -46,6 +66,14 @@ def get_person(pers_id: str) -> dict[str, Any]:
     if row is None:
         return {"ok": False, "error": "not_found"}
     return {"ok": True, "person": _person_payload(row)}
+
+
+@router.get("/persons/{pers_id}/enrollment")
+def person_enrollment(pers_id: str) -> dict[str, Any]:
+    row = identity.get_person(pers_id)
+    if row is None:
+        return {"ok": False, "error": "not_found"}
+    return {"ok": True, "enrollment": identity.get_scan_enrollment(pers_id)}
 
 
 @router.get("/day/events")
@@ -88,6 +116,96 @@ def day_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
         return {"ok": False, "error": "missing_subject_id"}
     result = daystore.list_appearances(sid, date)
     return {"ok": True, "subject_id": sid, "date": date or db.today_vn(), **result}
+
+
+@router.post("/persons/import")
+def import_persons(payload: dict) -> dict[str, Any]:
+    """Nhập hàng loạt từ Excel — upsert theo `employee_code`."""
+    items = payload.get("items") or []
+    if not isinstance(items, list):
+        return {"ok": False, "error": "invalid_items"}
+
+    results: list[dict[str, Any]] = []
+    success = 0
+    for raw in items:
+        full_name = str(raw.get("full_name") or raw.get("ho_ten") or "").strip()
+        employee_code = str(raw.get("employee_code") or raw.get("ma_nv") or "").strip()
+        contractor = str(raw.get("contractor") or raw.get("don_vi") or "").strip()
+        image_b64 = raw.get("image_b64")
+
+        if not full_name or not employee_code:
+            results.append({
+                "ok": False,
+                "employee_code": employee_code or None,
+                "error": "missing_fields",
+            })
+            continue
+
+        embedding = None
+        if image_b64:
+            embedding = _embed_face_b64(str(image_b64))
+
+        try:
+            row = identity.import_identity(
+                full_name=full_name,
+                employee_code=employee_code,
+                contractor=contractor,
+                embedding=embedding,
+                source="excel",
+            )
+            results.append({
+                "ok": True,
+                "employee_code": employee_code,
+                "pers_id": row["pers_id"],
+                "face_added": embedding is not None,
+            })
+            success += 1
+        except Exception as exc:  # noqa: BLE001
+            results.append({
+                "ok": False,
+                "employee_code": employee_code,
+                "error": str(exc),
+            })
+
+    return {
+        "ok": True,
+        "total": len(items),
+        "success": success,
+        "failed": len(items) - success,
+        "results": results,
+    }
+
+
+@router.post("/persons/{pers_id}/scan")
+def scan_person_face(pers_id: str, payload: dict) -> dict[str, Any]:
+    """Quét thêm góc mặt — vector lưu vào `person_faces` cho nhận diện tuần tra."""
+    if identity.get_person(pers_id) is None:
+        return {"ok": False, "error": "not_found"}
+
+    image_b64 = payload.get("image_b64")
+    if not image_b64:
+        return {"ok": False, "error": "missing_image"}
+
+    emb = _embed_face_b64(str(image_b64))
+    if emb is None:
+        return {"ok": False, "error": "no_face_detected"}
+
+    added = identity.add_face_angle(
+        pers_id, emb, quality=1.0, camera_id="SCAN", now=time.time()
+    )
+    if not added:
+        return {
+            "ok": True,
+            "face_added": False,
+            "message": "duplicate_angle",
+            "enrollment": identity.get_scan_enrollment(pers_id),
+        }
+
+    return {
+        "ok": True,
+        "face_added": True,
+        "enrollment": identity.get_scan_enrollment(pers_id),
+    }
 
 
 @router.post("/persons/{pers_id}/identify")

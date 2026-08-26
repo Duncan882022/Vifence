@@ -29,6 +29,8 @@ export interface PatrolDayObject {
   firstSeen: number
   lastSeen: number
   snapshotUrl?: string
+  /** face_quality×2 + confidence — mặt rõ thì không thuộc tab Đối tượng. */
+  snapshotScore?: number
 }
 
 export interface PatrolAppearanceSegment {
@@ -97,6 +99,7 @@ export async function fetchPatrolDayObjects(date?: string): Promise<PatrolDayObj
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
     snapshotUrl: snapshotUrl(row.snapshot_path as string | null),
+    snapshotScore: Number(row.snapshot_score ?? 0),
   }))
 }
 

@@ -76,6 +76,8 @@ def resolve_snapshot_path(relative: str) -> Path | None:
 # Track của tracker chỉ sống trong phiên và được đánh lại số sau mỗi lần khởi
 # động, nên không lưu xuống đĩa. Hai map này chỉ để biết một track đang được
 # đại diện bởi Đối tượng nào, hoặc đã thăng lên Người nào.
+# Ngưỡng chất lượng mặt — dưới đây coi là chưa đủ mặt cho tab Đối tượng.
+_OBJECT_FACE_QUALITY_MAX = 0.2
 _track_to_object: dict[str, str] = {}
 _track_to_person: dict[str, str] = {}
 _lock = threading.Lock()
@@ -189,16 +191,18 @@ def record_observation(
     )
     with _lock:
         _track_to_object[key] = obj_id
-    path, shot_score = _shot(obj_id)
-    if path:
-        daystore.touch_object(
-            obj_id,
-            camera_id=camera_id,
-            zone_id=zone_id,
-            snapshot_path=path,
-            snapshot_score=shot_score,
-            now=now,
-        )
+    # Không gắn ảnh portrait lên thẻ Đối tượng — mặt đủ rõ thuộc tab Người.
+    if face_quality < _OBJECT_FACE_QUALITY_MAX:
+        path, shot_score = _shot(obj_id)
+        if path:
+            daystore.touch_object(
+                obj_id,
+                camera_id=camera_id,
+                zone_id=zone_id,
+                snapshot_path=path,
+                snapshot_score=shot_score,
+                now=now,
+            )
     return obj_id
 
 
