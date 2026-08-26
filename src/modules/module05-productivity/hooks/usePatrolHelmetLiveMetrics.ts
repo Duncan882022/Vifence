@@ -7,7 +7,7 @@ import {
   type PatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
-import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
+import { isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 import {
   fetchPatrolHelmetAggregateMetrics,
   type PatrolHelmetCameraMetricsSlice,
