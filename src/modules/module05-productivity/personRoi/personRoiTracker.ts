@@ -139,6 +139,7 @@ function createKalman(bbox: Bbox, cfg: PatrolPersonRoiConfig): KalmanBox2D {
     velocitySmoothing: cfg.velocitySmoothing,
     maxSpeedBoxPerSec: cfg.maxSpeedBoxPerSec,
     minMeasureGain: cfg.minMeasureGain,
+    anchoredMinMeasureGain: cfg.anchoredMinMeasureGain,
   })
 }
 
@@ -228,7 +229,9 @@ export function advancePersonRoiTracks(
   const matchedDets = new Set<number>()
 
   const applyMeasurement = (track: PersonRoiTrack, det: PersonRoiDetection) => {
-    track.kalman.update(det.bbox, dtMs)
+    const anchorKey = personRoiAnchorKey(det) ?? track.anchorKey
+    const gainOverride = anchorKey ? cfg.anchoredMinMeasureGain : undefined
+    track.kalman.update(det.bbox, dtMs, gainOverride)
     // Backend ước lượng vận tốc trên chuỗi frame liên tục với dt đều; FE chỉ có
     // nhịp snapshot tới nơi, vốn dao động theo mạng. Có số của backend thì dùng.
     if (det.velocity && det.velocity.length >= 2) {

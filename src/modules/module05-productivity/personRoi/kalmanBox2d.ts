@@ -31,6 +31,8 @@ export interface KalmanBox2DTuning {
   maxSpeedBoxPerSec: number
   /** Sàn hệ số lọc vị trí — chặn độ trễ khi `p` đã tụt xuống đáy. */
   minMeasureGain: number
+  /** Sàn cao hơn khi track đã khoá theo id backend. */
+  anchoredMinMeasureGain?: number
 }
 
 const DEFAULT_TUNING: KalmanBox2DTuning = {
@@ -41,6 +43,7 @@ const DEFAULT_TUNING: KalmanBox2DTuning = {
   velocitySmoothing: 0.72,
   maxSpeedBoxPerSec: 2.5,
   minMeasureGain: 0.55,
+  anchoredMinMeasureGain: 0.82,
 }
 
 /**
@@ -93,11 +96,12 @@ export class KalmanBox2D {
     return cxCyWhToBbox(cx, cy, this.w, this.h)
   }
 
-  update(bbox: Bbox, dtMs: number): Bbox {
+  update(bbox: Bbox, dtMs: number, minGainOverride?: number): Bbox {
     const [mx, my, mw, mh] = bboxToCxCyWh(bbox)
     const dt = Math.max(8, dtMs) / 1000
+    const gainFloor = minGainOverride ?? this.tuning.minMeasureGain
     const k = Math.max(
-      this.tuning.minMeasureGain,
+      gainFloor,
       this.p / (this.p + this.tuning.measureNoise),
     )
 
