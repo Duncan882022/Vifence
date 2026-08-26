@@ -116,15 +116,30 @@ def record_observation(
         return path, score if path else 0.0
 
     if face_embedding is not None and len(face_embedding) > 0:
-        with _lock:
-            obj_id = _track_to_object.pop(key, None)
-        pers_id, _created = identity.observe_face(
-            face_embedding, quality=face_quality, camera_id=camera_id, now=now
-        )
-        if obj_id:
-            daystore.promote_object(obj_id, pers_id, now=now)
-        with _lock:
-            _track_to_person[key] = pers_id
+        # Trong một track, danh tính chỉ được quyết **một lần**.
+        #
+        # Tracker đã bảo đảm đây vẫn là người lúc nãy; chạy lại so khớp mỗi
+        # khung hình ở 6 FPS chỉ tạo thêm cơ hội hụt ngưỡng, mà hụt một lần là
+        # đẻ ra một mã mới cho chính người đang đứng đó. Đúng cách đã sinh ra
+        # pers-0001 tới pers-0011 cho cùng một người.
+        bound = _known_person_for_track(key)
+        if bound:
+            pers_id = bound
+            # Góc mặt mới của người đã biết là thứ quý nhất: lần sau gặp lại
+            # bằng track khác sẽ có nhiều góc để đối chiếu.
+            identity.add_face_angle(
+                pers_id, face_embedding, quality=face_quality, camera_id=camera_id
+            )
+        else:
+            with _lock:
+                obj_id = _track_to_object.pop(key, None)
+            pers_id, _created = identity.observe_face(
+                face_embedding, quality=face_quality, camera_id=camera_id, now=now
+            )
+            if obj_id:
+                daystore.promote_object(obj_id, pers_id, now=now)
+            with _lock:
+                _track_to_person[key] = pers_id
         path, shot_score = _shot(pers_id)
         daystore.touch_person_event(
             pers_id,

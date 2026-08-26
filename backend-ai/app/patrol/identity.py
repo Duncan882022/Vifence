@@ -19,16 +19,27 @@ import numpy as np
 
 from . import db
 
-# Ngưỡng nhận lại người cũ. Đặt chặt là chủ ý: nhầm hai người thành một thì
-# chấm công ghi sai người và rất khó phát hiện, còn cấp trùng mã thì người trực
-# gộp lại được ngay trong popup.
-MATCH_MIN_SIMILARITY = 0.62
-# Phải hơn ứng viên kế tiếp ngần này mới dám nhận — đám đông đội mũ giống nhau
-# hay cho ra vài khuôn mặt cùng điểm.
-MATCH_MIN_MARGIN = 0.05
-# Trần số vector giữ cho mỗi người. Nhiều góc mặt thì nhận chắc hơn, nhưng quá
-# nhiều chỉ làm chậm vòng so khớp mà không thêm thông tin.
-MAX_FACES_PER_PERSON = 12
+# Ngưỡng nhận lại người cũ.
+#
+# Đo trên dữ liệu thật của bodycam: hai lần thấy **cùng một người** ở góc khác
+# nhau chỉ đạt tương đồng 0,39 (trung vị) tới 0,60 (cao nhất). Khuôn mặt chụp
+# từ mũ đội đầu vốn nhỏ, nhoè và lệch góc, nên embedding rời rạc hơn hẳn ảnh
+# chân dung. Để 0,62 là gần như không bao giờ khớp — đúng cái đã làm một người
+# bị tách thành pers-0001 … pers-0011.
+MATCH_MIN_SIMILARITY = 0.52
+# Phải hơn ứng viên kế tiếp ngần này mới dám nhận.
+#
+# Giữ nhỏ có lý do: khi một người lỡ bị tách thành vài mã, các mã đó trở thành
+# "đối thủ" của nhau và biên độ lớn sẽ chặn mọi lần khớp — càng tách càng không
+# gộp lại được. Người trực gộp tay được, còn nhập nhầm hai người thì khó thấy,
+# nên vẫn giữ một khoảng cách tối thiểu.
+MATCH_MIN_MARGIN = 0.03
+# Trần số vector giữ cho mỗi người. Nhiều góc mặt thì nhận chắc hơn hẳn: lần
+# gặp sau chỉ cần khớp **một** góc bất kỳ trong số đã lưu.
+MAX_FACES_PER_PERSON = 24
+# Góc mới giống góc đã có tới mức này thì không thêm — không mang thêm thông
+# tin mà chỉ làm chậm vòng so khớp.
+FACE_ANGLE_DEDUPE_SIM = 0.88
 
 STATUS_PERSON = "person"
 STATUS_IDENTIFIED = "identified"
@@ -238,6 +249,47 @@ def touch_person(pers_id: str, now: float | None = None) -> None:
         )
 
 
+def add_face_angle(
+    pers_id: str,
+    embedding: Sequence[float],
+    *,
+    quality: float = 0.0,
+    camera_id: str | None = None,
+    now: float | None = None,
+) -> bool:
+    """Bổ sung một góc mặt cho người đã biết. Trả True nếu có lưu thêm.
+
+    Chỉ nhận góc **khác** với những gì đã có. Điều kiện cũ ("rõ hơn hẳn góc tốt
+    nhất") gần như không bao giờ đúng — điểm chất lượng nằm quanh 0.86–0.93 nên
+    đòi hơn 1,1 lần là bất khả — và hậu quả là mỗi người mãi chỉ có đúng một
+    vector. Một vector thì gặp lại ở góc khác là trượt.
+    """
+    ts = now or time.time()
+    pid = resolve_alias(pers_id)
+
+    rows = db.query(
+        "SELECT embedding, dim FROM person_faces WHERE pers_id = ?", (pid,)
+    )
+    if len(rows) >= MAX_FACES_PER_PERSON:
+        return False
+
+    probe = np.asarray(embedding, dtype=np.float32).ravel()
+    norm = float(np.linalg.norm(probe))
+    if norm <= 0:
+        return False
+    probe = probe / norm
+
+    for r in rows:
+        vec = _from_blob(r["embedding"], int(r["dim"]))
+        if vec.size == probe.size and float(np.dot(probe, vec)) > FACE_ANGLE_DEDUPE_SIM:
+            return False
+
+    add_face(pid, embedding, quality=quality, camera_id=camera_id)
+    with db.tx() as c:
+        c.execute("UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid))
+    return True
+
+
 def observe_face(
     embedding: Sequence[float],
     *,
@@ -245,31 +297,21 @@ def observe_face(
     camera_id: str | None = None,
     now: float | None = None,
 ) -> tuple[str, bool]:
-    """Thấy một khuôn mặt → trả `(pers_id, vừa tạo mới)`.
+    """Thấy một khuôn mặt của track **chưa biết là ai** → `(pers_id, vừa tạo)`.
 
-    Khớp được người cũ thì chỉ bổ sung vector khi góc mặt này rõ hơn hẳn — mỗi
-    frame thêm một vector sẽ làm phình bảng mà không thêm thông tin.
+    Chỉ gọi khi một track lần đầu bắt được mặt. Track đã có chủ thì dùng
+    `add_face_angle` — xem ghi chú ở `sink.record_observation`.
     """
     ts = now or time.time()
-    matched, sim = match_face(embedding)
+    matched, _sim = match_face(embedding)
     if matched:
         with db.tx() as c:
             c.execute(
                 "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, matched)
             )
-            row = c.execute(
-                "SELECT COUNT(*) n, COALESCE(MAX(quality), 0) q"
-                " FROM person_faces WHERE pers_id = ?",
-                (matched,),
-            ).fetchone()
-            if int(row["n"]) < MAX_FACES_PER_PERSON and quality > float(row["q"]) * 1.1:
-                add_face(
-                    matched,
-                    embedding,
-                    quality=quality,
-                    camera_id=camera_id,
-                    conn=c,
-                )
+        add_face_angle(
+            matched, embedding, quality=quality, camera_id=camera_id, now=ts
+        )
         return matched, False
 
     with db.tx() as c:
