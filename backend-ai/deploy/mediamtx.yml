@@ -46,7 +46,8 @@ hlsSegmentDuration: 1s
 hlsSegmentCount: 7
 hlsAlwaysRemux: no
 
-rtmp: no
+rtmp: yes
+rtmpAddress: :1935
 srt: no
 
 ###############################################
@@ -78,6 +79,11 @@ paths:
   # Khi có bodycam thật, đổi thành `source: rtsp://…` y như hc-01.
   # Phía CMS không cần sửa gì.
   hc-02:
+    source: publisher
+
+  # DR-03 — flycam DJI Mavic Air push RTMP vào đây (rtmp://<vps>:1935/dr-03).
+  # Backend VMS pull RTSP nội bộ → relay HLS cho CMS.
+  dr-03:
     source: publisher
 
   # Chặn path lạ tự tạo — chỉ nhận đúng mũ đã khai báo.

@@ -6,8 +6,8 @@
  *
  *  - MediaMTX phát lại path `dr-03` — drone (hoặc điện thoại cầm tay điều khiển)
  *    publish thẳng vào, không cần backend biết gì.
- *  - VMS relay `/stream/DR-03/index.m3u8` — backend pull RTMP
- *    (`VMS_CAMERA_SOURCES=DR-03:rtmp://157.66.190.182/flycam`).
+ *  - VMS relay `/stream/DR-03/index.m3u8` — drone push RTMP vào MediaMTX VPS
+ *    (`rtmp://217.217.253.247:1935/dr-03`), backend pull `rtsp://127.0.0.1:8554/dr-03`.
  *
  * Tile thử VMS trước rồi rơi về MediaMTX, nên chỉ cần một trong hai đường sống.
  * Chưa có nguồn thật thì retry HLS ~8s rồi tile chuyển Offline (retry nền vẫn chạy).
