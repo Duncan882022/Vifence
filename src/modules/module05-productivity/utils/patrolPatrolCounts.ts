@@ -105,23 +105,4 @@ export function summarizePatrolAlertCount(events: PatrolEvent[]): string {
   return `${total} người (${person} Người · ${identity} Định danh)`
 }
 
-export function patrolRoiLabelFromParts(input: {
-  workerId?: string | null
-  workerName?: string | null
-  objectId?: string | null
-  manualName?: string | null
-}): string {
-  const manual = input.manualName?.trim()
-  if (manual) return manual
-  const wid = input.workerId?.trim() ?? ''
-  const wname = input.workerName?.trim() ?? ''
-  if (isPatrolGalleryWorkerId(wid) || isPatrolManuallyIdentified(wid)) {
-    return wname || wid
-  }
-  if (isPatrolSgcWorkerId(wid)) return wid
-  const oid = input.objectId?.trim() ?? ''
-  if (/^OBJ-/i.test(oid)) return oid
-  return 'Đối tượng'
-}
-
 export type PatrolDetectedTabKey = Extract<PatrolEventsTabKey, 'person' | 'identity'>

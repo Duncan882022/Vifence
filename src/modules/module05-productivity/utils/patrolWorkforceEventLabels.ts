@@ -301,11 +301,6 @@ export function enrichPatrolEventsWithWorkforceObjects(
   return events.map(ev => enrichPatrolPersonEventWithWorkforceObject(ev, objects, sgcToObject))
 }
 
-/** @deprecated dùng patrolEventMasterEntityKey */
-export function patrolEventEntityKey(event: PatrolEvent): string {
-  return patrolEventMasterEntityKey(event)
-}
-
 export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'
 
 function hasPatrolSnapshot(event: PatrolEvent): boolean {

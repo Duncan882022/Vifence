@@ -261,14 +261,6 @@ export async function fetchPatrolHelmetAggregateMetrics(
   return fetchLegacyAggregateMetrics(ids, backendUrl)
 }
 
-export async function fetchPatrolHelmetPpeAlertCount(
-  cameraId: string,
-  backendUrl = getVmsBackendUrl(),
-): Promise<number> {
-  const metrics = await fetchPatrolHelmetMetrics(cameraId, backendUrl)
-  return metrics?.ppe_alerts_today ?? 0
-}
-
 function buildSnapshotUrl(backendUrl: string, eventId: string, snapshotFile: string, versionTs?: number): string {
   const base = `${patrolApiBase(backendUrl)}/events/${eventId}/snapshot`
   const v = versionTs ?? snapshotFile
