@@ -448,6 +448,7 @@ export function TrainingCameraPanel({
   /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
   const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
   const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll) || (aspectVideoGrid && !isDesktop)
+  const aspectGridInTier = aspectVideoGrid && isDesktop
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
@@ -539,10 +540,13 @@ export function TrainingCameraPanel({
     <>
       <div className={cn(
         'w-full min-h-0',
-        (mobileCompactVideo || aspectVideoGrid) ? 'h-auto max-h-full' : 'h-full',
+        mobileCompactVideo && !isDesktop ? 'h-auto max-h-full' : 'h-full',
         'flex flex-col lg:flex-row',
-        (mobileCompactVideo || aspectVideoGrid) ? 'lg:h-auto lg:max-h-full' : 'lg:flex-1 lg:min-h-0',
-        aspectVideoGrid && 'lg:items-start',
+        aspectGridInTier
+          ? 'lg:flex-1 lg:min-h-0'
+          : mobileCompactVideo
+            ? 'lg:h-auto lg:max-h-full'
+            : 'lg:flex-1 lg:min-h-0',
         'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
         'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
       )}>
