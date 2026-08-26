@@ -93,8 +93,22 @@ export function clearPatrolMobileLiveSnapshot(cameraId?: string): void {
     clearTimer = null
   }
   if (!cameraId || lastSnapshot?.cameraId === cameraId) {
-    lastSnapshot = null
-    emit(null)
+    // Giữ snapshot offline trong TTL — heatmap không tin backend grace sau khi tắt cam.
+    if (cameraId) {
+      lastSnapshot = {
+        cameraId,
+        streamOnline: false,
+        personCount: 0,
+        peakPersonCount: 0,
+        identifiedWorkers: 0,
+        workerNames: [],
+        updatedAt: Date.now(),
+      }
+      emit(lastSnapshot)
+    } else {
+      lastSnapshot = null
+      emit(null)
+    }
   }
 }
 

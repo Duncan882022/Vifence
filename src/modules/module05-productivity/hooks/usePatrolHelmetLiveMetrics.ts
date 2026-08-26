@@ -49,13 +49,33 @@ function mergeHc02Mobile(
 ): PatrolHelmetLiveMetrics {
   if (!mobile || mobile.cameraId !== HC02) return base
   if (Date.now() - mobile.updatedAt > 45_000) return base
-  if (!mobile.streamOnline && mobile.personCount <= 0 && mobile.peakPersonCount <= 0) {
-    return base
+
+  const perCameraBase = [...base.perCamera]
+  const idxBase = perCameraBase.findIndex(c => c.camera_id === HC02)
+  const prevSlice = idxBase >= 0 ? perCameraBase[idxBase] : null
+
+  if (!mobile.streamOnline) {
+    const hc02Offline: PatrolHelmetCameraMetricsSlice = {
+      camera_id: HC02,
+      stream_online: false,
+      person_count: 0,
+      identified_workers: 0,
+      person_events_today: prevSlice?.person_events_today ?? 0,
+    }
+    if (idxBase >= 0) perCameraBase[idxBase] = { ...perCameraBase[idxBase], ...hc02Offline }
+    else perCameraBase.push(hc02Offline)
+
+    const anyOtherOnline = perCameraBase.some(
+      c => c.camera_id !== HC02 && Boolean(c.stream_online),
+    )
+    return {
+      ...base,
+      streamOnline: anyOtherOnline,
+      connected: anyOtherOnline,
+      perCamera: perCameraBase,
+    }
   }
 
-  const perCamera = [...base.perCamera]
-  const idx = perCamera.findIndex(c => c.camera_id === HC02)
-  const prevSlice = idx >= 0 ? perCamera[idx] : null
   const hc02Person = Math.max(
     mobile.peakPersonCount,
     mobile.personCount,
@@ -65,15 +85,15 @@ function mergeHc02Mobile(
 
   const hc02Slice: PatrolHelmetCameraMetricsSlice = {
     camera_id: HC02,
-    stream_online: Boolean(mobile.streamOnline),
+    stream_online: true,
     person_count: Math.max(hc02Person, sessionPeakRef.current),
     identified_workers: Math.max(mobile.identifiedWorkers, prevSlice?.identified_workers ?? 0),
     person_events_today: prevSlice?.person_events_today ?? 0,
   }
-  if (idx >= 0) perCamera[idx] = { ...perCamera[idx], ...hc02Slice }
-  else perCamera.push(hc02Slice)
+  if (idxBase >= 0) perCameraBase[idxBase] = { ...perCameraBase[idxBase], ...hc02Slice }
+  else perCameraBase.push(hc02Slice)
 
-  const othersPerson = perCamera
+  const othersPerson = perCameraBase
     .filter(c => c.camera_id !== HC02)
     .reduce((s, c) => s + Math.max(0, c.person_count), 0)
 
@@ -88,16 +108,18 @@ function mergeHc02Mobile(
     ...new Set([...(base.workerNames ?? []), ...mobile.workerNames]),
   ].slice(0, 8)
 
+  const anyOnline = perCameraBase.some(c => Boolean(c.stream_online))
+
   return {
     ...base,
     backendReachable: true,
-    streamOnline: Boolean(mobile.streamOnline) || base.streamOnline,
-    connected: Boolean(mobile.streamOnline) || base.connected,
+    streamOnline: anyOnline,
+    connected: anyOnline,
     personCount,
     uniqueWorkers: personCount,
     identifiedWorkers: Math.max(base.identifiedWorkers, mobile.identifiedWorkers),
     workerNames: names,
-    perCamera,
+    perCamera: perCameraBase,
   }
 }
 

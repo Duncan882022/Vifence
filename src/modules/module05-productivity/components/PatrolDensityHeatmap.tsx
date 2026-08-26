@@ -147,13 +147,10 @@ export function PatrolDensityHeatmap({
     for (const row of metrics.perCamera) {
       map[row.camera_id] = Boolean(row.stream_online)
     }
+    // HC-02 bodycam: CMS bridge là nguồn sự thật khi tab đã từng mở/tắt cam.
     const mobile = getPatrolMobileLiveSnapshot('HC-02')
-    if (
-      mobile
-      && mobile.streamOnline
-      && Date.now() - mobile.updatedAt <= 45_000
-    ) {
-      map['HC-02'] = true
+    if (mobile) {
+      map['HC-02'] = Boolean(mobile.streamOnline)
     }
     return map
   }, [metrics.perCamera, mobileHc02Live])
@@ -238,15 +235,17 @@ export function PatrolDensityHeatmap({
 
   const filteredDots = useMemo(() => {
     void identityRevision
-    const dots = buildPatrolDayHeatmapDots(patrolEvents, { liveOnly: anyCameraOnline })
+    const dots = buildPatrolDayHeatmapDots(patrolEvents, {
+      liveOnly: anyCameraOnline,
+      cameraOnlineById: helmetOnlineById,
+    })
     return dots.map(dot => ({
       ...dot,
-      inCameraView: anyCameraOnline ? Boolean(dot.inCameraView) : false,
-      opacity: anyCameraOnline && dot.inCameraView
+      opacity: dot.inCameraView
         ? DETECTION_DOT_OPACITY_IN_VIEW
         : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
     }))
-  }, [patrolEvents, anyCameraOnline, identityRevision])
+  }, [patrolEvents, anyCameraOnline, helmetOnlineById, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -274,13 +273,16 @@ export function PatrolDensityHeatmap({
   const identifiedCount = useMemo(() => {
     void identityRevision
     const scoped = anyCameraOnline
-      ? buildPatrolDayHeatmapDots(patrolEvents, { liveOnly: true })
+      ? buildPatrolDayHeatmapDots(patrolEvents, {
+        liveOnly: true,
+        cameraOnlineById: helmetOnlineById,
+      })
       : null
     if (scoped) {
       return scoped.filter(d => d.verified).length
     }
     return countUniquePatrolTabEntities(patrolEvents, 'identity')
-  }, [anyCameraOnline, patrolEvents, identityRevision])
+  }, [anyCameraOnline, patrolEvents, helmetOnlineById, identityRevision])
 
   const siteHeadcount = useMemo(() => {
     const summary = summarizePatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline })
