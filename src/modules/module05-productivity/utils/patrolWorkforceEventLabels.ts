@@ -249,7 +249,7 @@ export function enrichPatrolPersonEventWithWorkforceObject(
   return formatPatrolPersonDetectedEvent(enriched)
 }
 
-/** Khóa master dedup — sgc canonical > profile worker > sgc > OBJ > event. */
+/** Khóa master dedup — profile worker > sgc canonical > OBJ > event. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   return resolvePatrolCanonicalEntityKey(event)
 }
