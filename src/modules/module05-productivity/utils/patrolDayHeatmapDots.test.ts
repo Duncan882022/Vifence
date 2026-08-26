@@ -49,6 +49,38 @@ describe('patrolDayHeatmapDots', () => {
     expect(scoped).toHaveLength(1)
     expect(scoped[0].objectId).toBe('pers-0003')
   })
+
+  it('inCameraView chỉ true khi gần đây và camera nguồn online', () => {
+    const now = Date.parse('2026-08-26T10:00:00Z')
+    const recent = makeDayEvent({
+      cameraId: 'HC-02',
+      lockedAt: '2026-08-26T09:59:30Z',
+    })
+    const offline = buildPatrolDayHeatmapDots([recent], {
+      now,
+      cameraOnlineById: { 'HC-02': false },
+    })
+    expect(offline[0].inCameraView).toBe(false)
+
+    const online = buildPatrolDayHeatmapDots([recent], {
+      now,
+      cameraOnlineById: { 'HC-02': true },
+    })
+    expect(online[0].inCameraView).toBe(true)
+  })
+
+  it('camera HC-01 online không làm chấm HC-02 nhấp nháy', () => {
+    const now = Date.parse('2026-08-26T10:00:00Z')
+    const recent = makeDayEvent({
+      cameraId: 'HC-02',
+      lockedAt: '2026-08-26T09:59:30Z',
+    })
+    const dots = buildPatrolDayHeatmapDots([recent], {
+      now,
+      cameraOnlineById: { 'HC-01': true, 'HC-02': false },
+    })
+    expect(dots[0].inCameraView).toBe(false)
+  })
 })
 
 describe('countPatrolGlobalWorkers SQLite-first', () => {

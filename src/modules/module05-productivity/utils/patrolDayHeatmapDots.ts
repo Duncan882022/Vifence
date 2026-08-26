@@ -54,10 +54,23 @@ export function filterRecentPatrolWorkerEvents(
   })
 }
 
+function isCameraOnlineForHeatmap(
+  cameraId: string,
+  onlineById?: Record<string, boolean>,
+): boolean {
+  if (!cameraId) return false
+  return Boolean(onlineById?.[cameraId])
+}
+
 /** Một chấm / pers-* (hoặc iden-* qua resolvePatrolAppearanceSubjectId). */
 export function buildPatrolDayHeatmapDots(
   events: PatrolEvent[],
-  opts?: { liveOnly?: boolean; now?: number },
+  opts?: {
+    liveOnly?: boolean
+    now?: number
+    /** Chấm nhấp nháy chỉ khi camera nguồn đang online. */
+    cameraOnlineById?: Record<string, boolean>
+  },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
   const scoped = opts?.liveOnly
@@ -73,6 +86,8 @@ export function buildPatrolDayHeatmapDots(
 
     const lastSeen = Date.parse(event.lockedAt) || now
     const recent = now - lastSeen <= PATROL_LIVE_RECENT_MS
+    const cameraOnline = isCameraOnlineForHeatmap(event.cameraId || '', opts?.cameraOnlineById)
+    const inCameraView = recent && cameraOnline
     const stage = resolvePatrolPersonStage(event)
     const master = subjectId.toLowerCase()
     const prev = byMaster.get(master)
@@ -89,8 +104,8 @@ export function buildPatrolDayHeatmapDots(
       lastSeenAt: lastSeen,
       objectId: master,
       verified: stage === 'profile',
-      inCameraView: recent,
-      opacity: recent ? 0.92 : 0.45,
+      inCameraView,
+      opacity: inCameraView ? 0.92 : 0.45,
     })
   }
 
