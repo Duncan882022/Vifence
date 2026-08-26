@@ -400,6 +400,16 @@ server {
         add_header Cache-Control "no-cache, no-store";
     }
 
+    # Playback Server — đọc lại băng đã ghi (MediaMTX :9996).
+    # Không thêm Access-Control-Allow-Origin: MediaMTX đã gửi sẵn, thêm nữa
+    # là hai header trùng nhau và trình duyệt từ chối hẳn request.
+    location /mediamtx/playback/ {
+        proxy_pass http://127.0.0.1:9996/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_buffering off;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -456,6 +466,16 @@ server {
         proxy_set_header X-Real-IP \\\$remote_addr;
         proxy_buffering off;
         add_header Cache-Control "no-cache, no-store";
+    }
+
+    # Playback Server — đọc lại băng đã ghi (MediaMTX :9996).
+    # Không thêm Access-Control-Allow-Origin: MediaMTX đã gửi sẵn, thêm nữa
+    # là hai header trùng nhau và trình duyệt từ chối hẳn request.
+    location /mediamtx/playback/ {
+        proxy_pass http://127.0.0.1:9996/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_buffering off;
     }
 
     location / {
@@ -545,6 +565,16 @@ server {
         proxy_set_header X-Real-IP \\\$remote_addr;
         proxy_buffering off;
         add_header Cache-Control "no-cache, no-store";
+    }
+
+    # Playback Server — đọc lại băng đã ghi (MediaMTX :9996).
+    # Không thêm Access-Control-Allow-Origin: MediaMTX đã gửi sẵn, thêm nữa
+    # là hai header trùng nhau và trình duyệt từ chối hẳn request.
+    location /mediamtx/playback/ {
+        proxy_pass http://127.0.0.1:9996/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_buffering off;
     }
 
     location / {
