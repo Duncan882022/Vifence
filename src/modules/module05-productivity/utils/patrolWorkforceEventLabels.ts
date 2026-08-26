@@ -9,6 +9,7 @@ import type { ObjectState } from '../types/workforceHeatmap'
 import { rememberPatrolSgcObjectLink } from '../services/patrolSgcObjectLink.service'
 import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIdentityForSgc } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
+import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
   isPatrolGalleryWorkerId,
   resolvePatrolCanonicalEntityKey,
@@ -27,30 +28,10 @@ export const PATROL_PERSON_STAGE_META: Record<PatrolPersonStage, {
   borderAccent: string
   tooltip: string
 }> = {
-  object: {
-    label: 'Đối tượng',
-    icon: UserRound,
-    color: 'text-slate-400',
-    badge: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
-    borderAccent: 'border-l-slate-400',
-    tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / chưa có mặt',
-  },
-  person: {
-    label: 'Người',
-    icon: Users,
-    color: 'text-sky-400',
-    badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
-    borderAccent: 'border-l-sky-400',
-    tooltip: 'Mã sgc ổn định — chưa gán profile',
-  },
-  profile: {
-    label: 'Định danh',
-    icon: UserCheck,
-    color: 'text-violet-400',
-    badge: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
-    borderAccent: 'border-l-violet-400',
-    tooltip: 'Đã xác minh danh tính (gallery / gán tên)',
-  },
+  object: { ...PATROL_TIER_TOKENS.object, icon: UserRound },
+  person: { ...PATROL_TIER_TOKENS.person, icon: Users },
+  // `profile` là tên cũ của tầng thứ ba trong panel; token dùng chung với ROI.
+  profile: { ...PATROL_TIER_TOKENS.identity, icon: UserCheck },
 }
 
 export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'identity', {

@@ -119,17 +119,97 @@ describe('bbox mượt', () => {
   })
 })
 
+describe('tầng định danh từ backend', () => {
+  it('mặc định là Đối tượng khi backend chưa gửi tier', () => {
+    const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    expect(predictPersonRoiTracks(tracks, 0, 1_000)[0].tier).toBe('object')
+  })
+
+  it('đi lên theo backend: Đối tượng → Người → Định danh', () => {
+    let tracks = advance(
+      empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'object' })], 1_000,
+    )
+    expect(predictPersonRoiTracks(tracks, 0, 1_000)[0].tier).toBe('object')
+
+    tracks = advance(
+      tracks, [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person' })], 1_180,
+    )
+    expect(predictPersonRoiTracks(tracks, 0, 1_180)[0].tier).toBe('person')
+
+    tracks = advance(
+      tracks, [person([108, 104, 208, 404], { track_id: 'p1', tier: 'identity' })], 1_360,
+    )
+    expect(predictPersonRoiTracks(tracks, 0, 1_360)[0].tier).toBe('identity')
+  })
+
+  it('payload trễ nhịp không kéo nhãn tụt xuống', () => {
+    let tracks = advance(
+      empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'identity' })], 1_000,
+    )
+    tracks = advance(
+      tracks, [person([104, 102, 204, 402], { track_id: 'p1', tier: 'object' })], 1_180,
+    )
+    expect(predictPersonRoiTracks(tracks, 0, 1_180)[0].tier).toBe('identity')
+  })
+})
+
+describe('mồi vận tốc từ backend', () => {
+  it('track mới đã có vận tốc nên không trễ một nhịp analyze', () => {
+    const tracks = advance(
+      empty(),
+      [person([100, 100, 200, 400], { track_id: 'p1', velocity: [240, 0] })],
+      1_000,
+    )
+    const kalman = [...tracks.values()][0].kalman
+    expect(kalman.vx).toBeGreaterThan(0)
+
+    const [still, moved] = [
+      predictPersonRoiTracks(tracks, 0, 1_000)[0].bbox,
+      predictPersonRoiTracks(tracks, 200, 1_000)[0].bbox,
+    ]
+    expect(moved[0]).toBeGreaterThan(still[0])
+  })
+
+  it('vận tốc backend vẫn bị chặn theo trần tốc độ', () => {
+    const tracks = advance(
+      empty(),
+      [person([100, 100, 200, 400], { track_id: 'p1', velocity: [999_999, 0] })],
+      1_000,
+    )
+    const kalman = [...tracks.values()][0].kalman
+    const maxSpeed = Math.max(kalman.w, kalman.h) * PATROL_PERSON_ROI_CONFIG.maxSpeedBoxPerSec
+    expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
+  })
+})
+
 describe('vòng đời track', () => {
-  it('track mất hẳn thì bbox ma biến mất trong khoảng maxLostMs', () => {
-    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    tracks = advance(tracks, [], 1_180)
+  it('track không có id backend coast theo maxLostMs', () => {
+    // Không có anchor thì phải đủ confirmHits mới được vẽ, nên đo hai nhịp trước.
+    let tracks = advance(empty(), [person([100, 100, 200, 400])], 1_000)
+    tracks = advance(tracks, [person([104, 102, 204, 402])], 1_180)
+    expect([...tracks.values()][0].state).toBe('confirmed')
+
+    tracks = advance(tracks, [], 1_360)
     expect([...tracks.values()][0].state).toBe('lost')
 
-    const stillShown = predictPersonRoiTracks(tracks, 0, 1_000 + PATROL_PERSON_ROI_CONFIG.maxLostMs - 50)
+    const base = 1_180
+    const stillShown = predictPersonRoiTracks(tracks, 0, base + PATROL_PERSON_ROI_CONFIG.maxLostMs - 50)
     expect(stillShown).toHaveLength(1)
 
-    const gone = predictPersonRoiTracks(tracks, 0, 1_000 + PATROL_PERSON_ROI_CONFIG.maxLostMs + 50)
+    const gone = predictPersonRoiTracks(tracks, 0, base + PATROL_PERSON_ROI_CONFIG.maxLostMs + 50)
     expect(gone).toHaveLength(0)
+  })
+
+  it('track có id backend biến mất sớm hơn — backend đã coast sẵn', () => {
+    const anchored = PATROL_PERSON_ROI_CONFIG.maxLostAnchoredMs
+    expect(anchored).toBeLessThan(PATROL_PERSON_ROI_CONFIG.maxLostMs)
+
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    tracks = advance(tracks, [], 1_180)
+
+    expect(predictPersonRoiTracks(tracks, 0, 1_000 + anchored - 50)).toHaveLength(1)
+    // Backend bỏ track rồi mà FE còn giữ thêm nửa giây nữa thì đó là bbox ma.
+    expect(predictPersonRoiTracks(tracks, 0, 1_000 + anchored + 50)).toHaveLength(0)
   })
 
   it('track quay lại sau khi mất vẫn giữ nguyên id', () => {

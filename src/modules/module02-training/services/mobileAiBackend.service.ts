@@ -31,6 +31,10 @@ export interface MobileAiDetection {
   track_id?: string
   /** BE đã thấy mặt rõ trong bbox — quyết định tab Người / ghi sự kiện. */
   face_eligible?: boolean
+  /** Tầng đã ổn định của track: object | person | identity. */
+  tier?: 'object' | 'person' | 'identity'
+  /** px/giây theo hệ toạ độ frame AI — mồi vận tốc cho ROI khỏi trễ một nhịp. */
+  velocity?: [number, number]
 }
 
 export interface MobileAiViolationEvent {

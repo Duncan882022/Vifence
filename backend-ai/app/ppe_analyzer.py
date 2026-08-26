@@ -57,7 +57,6 @@ def _is_patrol_flycam(camera_id: str) -> bool:
     return camera_id.startswith("DR-")
 
 _person_detector: PersonDetector | None = None
-_hc_patrol_person_tracks: dict[str, dict[str, object]] = {}
 _hc_frame_face_assignments: dict[str, dict[str, list[float]]] = {}
 
 
@@ -71,10 +70,8 @@ def reset_all_hc_patrol_state() -> int:
     from .patrol_identity_lifecycle import reset as reset_identity_lifecycle
     from .patrol_tracker import reset_patrol_trackers
 
-    count = sum(len(v) for v in _hc_patrol_person_tracks.values())
-    count += reset_patrol_trackers()
+    count = reset_patrol_trackers()
     reset_identity_lifecycle()
-    _hc_patrol_person_tracks.clear()
     _hc_frame_face_assignments.clear()
     return count
 

@@ -115,6 +115,19 @@ export class KalmanBox2D {
     return this.getBbox()
   }
 
+  /**
+   * Nạp vận tốc backend đã ước lượng (px/giây).
+   *
+   * Track mới sinh ra với vận tốc 0 nên nhịp analyze đầu tiên ROI luôn tụt lại
+   * sau người đang đi. Backend đã chạy Kalman trên chuỗi frame liên tục và biết
+   * vận tốc thật ngay lúc đó — mồi lại rẻ hơn nhiều so với để FE tự đoán lại.
+   */
+  seedVelocity(vx: number, vy: number): void {
+    const limit = this.maxSpeed()
+    this.vx = clamp(vx, -limit, limit)
+    this.vy = clamp(vy, -limit, limit)
+  }
+
   getBbox(): Bbox {
     return cxCyWhToBbox(this.cx, this.cy, this.w, this.h)
   }

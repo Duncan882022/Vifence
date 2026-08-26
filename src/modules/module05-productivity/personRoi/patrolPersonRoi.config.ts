@@ -5,8 +5,15 @@
  * track id backend, IoU chỉ là phương án dự phòng.
  */
 export const PATROL_PERSON_ROI_CONFIG = {
-  /** Conf tối thiểu tạo track + vẽ ROI — khớp HC02_PERSON_MIN_CONF (0.30) */
-  birthMinConfidence: 0.28,
+  /**
+   * Sàn conf để vẽ ROI. Backend đã lọc hai lớp (gate hiển thị + xác nhận track),
+   * nên đây chỉ là lưới an toàn cho detection không mang track id.
+   *
+   * Giữ 0.28 như trước là chặn mất chính flycam: DR-* nhận người từ 0.18 vì
+   * người trên không chỉ cao 1–2% khung, nên phần lớn box hợp lệ nằm dưới ngưỡng
+   * và không bao giờ được vẽ.
+   */
+  birthMinConfidence: 0.15,
   /** Conf cao — ưu tiên gán trước (ByteTrack high-conf pool) */
   highConfidenceMin: 0.34,
   /** Số hit liên tiếp để confirmed — detection có track id BE confirm ngay */
@@ -17,8 +24,13 @@ export const PATROL_PERSON_ROI_CONFIG = {
   matchCenterRatio: 0.9,
   /** Frame analyze miss liên tiếp trước khi bỏ track */
   maxMissFrames: 8,
-  /** Thời gian coast sau lost (ms) — quá dài sẽ để lại bbox ma trên khung */
+  /**
+   * Thời gian coast sau lost (ms) — quá dài sẽ để lại bbox ma trên khung.
+   * Track có id backend đã được backend coast sẵn, biến mất khỏi payload nghĩa
+   * là backend bỏ hẳn; giữ thêm ở FE chỉ tạo bóng ma nên dùng mốc ngắn hơn.
+   */
   maxLostMs: 1200,
+  maxLostAnchoredMs: 600,
   /** Giới hạn extrapolate rAF (ms) — chỉ bù đúng một nhịp analyze */
   maxPredictMs: 260,
   /** Kalman — processNoise thấp → track ổn định hơn giữa 2 detect */

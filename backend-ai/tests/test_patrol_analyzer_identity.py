@@ -60,9 +60,8 @@ class PatrolAnalyzerIdentityTests(unittest.TestCase):
         self.frame = np.zeros((720, 1280, 3), dtype=np.uint8)
         from app.patrol_identity_lifecycle import reset as reset_lifecycle
         from app.patrol_tracker import reset_patrol_trackers
-        from app.ppe_analyzer import _hc_frame_face_assignments, _hc_patrol_person_tracks
+        from app.ppe_analyzer import _hc_frame_face_assignments
 
-        _hc_patrol_person_tracks.clear()
         _hc_frame_face_assignments.clear()
         reset_patrol_trackers()
         reset_lifecycle()

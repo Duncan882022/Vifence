@@ -285,7 +285,10 @@ if [[ "$PRIORITIZE_MODULE05" == "1" ]]; then
   VPS_CAMERA_SOURCES="${VPS_PATROL_SOURCES}"
   VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-false}"
   VPS_MACHINERY_ENABLED="${VPS_MACHINERY_ENABLED:-false}"
-  VPS_AI_FPS="${VPS_AI_FPS:-5.0}"
+  # 5 FPS để lại 200ms giữa hai lần detect — đủ để người đi bộ trượt khỏi cổng
+  # ghép và ROI phải ngoại suy gần hết quãng đó. Sau khi cắt OWLv2 và reel
+  # A-03/A-04, tải VPS còn ~2.3/6 vCPU nên có chỗ cho nhịp dày hơn.
+  VPS_AI_FPS="${VPS_AI_FPS:-8.0}"
   echo "   Ưu tiên Module 05: chỉ HC-01, HC-02, DR-03 (bỏ reel A-03/A-04, OWLv2, auto-train)"
 else
   VPS_CAMERA_SOURCES="A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},${VPS_PATROL_SOURCES}"
