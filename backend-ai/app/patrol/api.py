@@ -152,13 +152,6 @@ def patrol_snapshot(path: str):
     return FileResponse(str(full), media_type="image/jpeg")
 
 
-@router.delete("/day/reset")
-def reset_patrol_db() -> dict[str, Any]:
-    """Xoá sạch dữ liệu tuần tra. Bộ đếm giữ nguyên để mã không cấp lại."""
-    counts = db.reset_all(keep_counters=True)
-    return {"ok": True, **counts}
-
-
 def _embed_face_b64(image_b64: str) -> list[float] | None:
     """Ảnh base64 → vector khuôn mặt. Không thấy mặt thì trả None."""
     import cv2
