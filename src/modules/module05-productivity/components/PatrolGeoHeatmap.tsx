@@ -15,6 +15,7 @@ import { PATROL_SITE_CLIP_RING, clampPointToSiteInterior, isPointInSiteBoundary 
 import type { PatrolZone } from '../data/patrolMockData'
 import {
   PATROL_GPS_ZONES,
+  PATROL_MAP_ACTIVE_DRONE_PINS,
   PATROL_MAP_ACTIVE_HELMET_PINS,
   PATROL_SITE_BOUNDARY,
   PATROL_SITE_CENTER,
@@ -22,6 +23,8 @@ import {
   PATROL_SITE_MAX_ZOOM,
   PATROL_SITE_MIN_ZOOM,
   getPatrolHelmetZoneName,
+  getPatrolMapDeviceBadgeNum,
+  type PatrolDronePin,
   type PatrolHelmetPin,
 } from '../data/patrolSiteMap'
 import {
@@ -198,25 +201,64 @@ function createDetectionDotIcon(
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
-/* ── Helmet marker icon ─────────────────────────────────────── */
+/* ── Device marker icons (helmet 1/2, drone 3) ──────────────── */
+const MAP_DEVICE_ICON_W = 22
+const MAP_DEVICE_ICON_H = 26
+
+function deviceMarkerColors(isActive: boolean, accent: string) {
+  return {
+    fill: isActive ? accent : '#64748b',
+    stroke: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(203,213,225,0.8)',
+    glow: isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : '',
+  }
+}
+
 function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
-  const num = String(parseInt(pin.id.replace('HC-', ''), 10))
-  const anim = isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : ''
-  const bg = isActive ? pin.color : '#64748b'
-  const border = isActive ? 'rgba(255,255,255,0.85)' : 'rgba(203,213,225,0.75)'
+  const num = getPatrolMapDeviceBadgeNum(pin.id)
+  const { fill, stroke, glow } = deviceMarkerColors(isActive, pin.color)
   const html = `
-    <div style="
-      background:${bg};
-      border:1.5px solid ${border};
-      border-radius:50%;
-      width:16px;height:16px;
-      display:flex;align-items:center;justify-content:center;
-      font-size:6.5px;font-weight:800;color:#fff;
-      font-family:system-ui,sans-serif;
-      box-shadow:0 1px 5px rgba(0,0,0,0.55);
-      ${anim}
-    ">${num}</div>`
-  return L.divIcon(divIconOpts(html, [16, 16], [8, 8]))
+    <div style="width:${MAP_DEVICE_ICON_W}px;height:${MAP_DEVICE_ICON_H}px;${glow}">
+      <svg viewBox="0 0 24 28" width="${MAP_DEVICE_ICON_W}" height="${MAP_DEVICE_ICON_H}" aria-hidden="true">
+        <path
+          d="M4 15v-2.2c0-3.4 2.8-6.2 6.2-6.2h3.6c3.4 0 6.2 2.8 6.2 6.2V15"
+          fill="${fill}" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round"
+        />
+        <path
+          d="M2.5 15.2h19v2.4a1.2 1.2 0 0 1-1.2 1.2H3.7a1.2 1.2 0 0 1-1.2-1.2v-2.4z"
+          fill="${fill}" stroke="${stroke}" stroke-width="1.2"
+        />
+        <rect x="10.2" y="7.2" width="3.6" height="2.2" rx="0.6" fill="${stroke}" opacity="0.85"/>
+        <text
+          x="12" y="18.2" text-anchor="middle"
+          font-size="8.5" font-weight="800" fill="#fff"
+          font-family="system-ui,sans-serif"
+        >${num}</text>
+      </svg>
+    </div>`
+  return L.divIcon(divIconOpts(html, [MAP_DEVICE_ICON_W, MAP_DEVICE_ICON_H], [MAP_DEVICE_ICON_W / 2, MAP_DEVICE_ICON_H / 2]))
+}
+
+function createDroneIcon(pin: PatrolDronePin, isActive: boolean) {
+  const num = getPatrolMapDeviceBadgeNum(pin.id)
+  const { fill, stroke, glow } = deviceMarkerColors(isActive, pin.color)
+  const html = `
+    <div style="width:${MAP_DEVICE_ICON_W}px;height:${MAP_DEVICE_ICON_H}px;${glow}">
+      <svg viewBox="0 0 24 28" width="${MAP_DEVICE_ICON_W}" height="${MAP_DEVICE_ICON_H}" aria-hidden="true">
+        <line x1="6" y1="8" x2="18" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="18" y1="8" x2="6" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="6" cy="8" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <circle cx="18" cy="8" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <circle cx="6" cy="20" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <circle cx="18" cy="20" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <rect x="9.2" y="12.2" width="5.6" height="3.6" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <text
+          x="12" y="15.1" text-anchor="middle"
+          font-size="7.5" font-weight="800" fill="#fff"
+          font-family="system-ui,sans-serif"
+        >${num}</text>
+      </svg>
+    </div>`
+  return L.divIcon(divIconOpts(html, [MAP_DEVICE_ICON_W, MAP_DEVICE_ICON_H], [MAP_DEVICE_ICON_W / 2, MAP_DEVICE_ICON_H / 2]))
 }
 
 /** Heading cone tip ~18m ahead, ±22° FOV wedge (MD §7.1 layer Mũ). */
@@ -547,6 +589,15 @@ export function PatrolGeoHeatmap({
       return aOnline ? 1 : -1
     })
   }, [helmetOnlineById])
+
+  const sortedDronePins = useMemo(() => {
+    return [...PATROL_MAP_ACTIVE_DRONE_PINS].sort((a, b) => {
+      const aOnline = Boolean(helmetOnlineById?.[a.id])
+      const bOnline = Boolean(helmetOnlineById?.[b.id])
+      if (aOnline === bOnline) return a.id.localeCompare(b.id)
+      return aOnline ? 1 : -1
+    })
+  }, [helmetOnlineById])
   const mapZoomFallback = usePatrolMapZoom()
   const mapZoom = mapZoomProp ?? mapZoomFallback
   const clipOverlays = !followLiveGps && showDetections
@@ -858,6 +909,65 @@ export function PatrolGeoHeatmap({
                   </Tooltip>
                 </Marker>
               </>
+            )
+          })}
+
+          {/* ── LAYER 4C: Drone Markers — DR-03 badge số 3 ──────────────── */}
+          {(showHelmetMarkers || showCameras) && sortedDronePins.map(pin => {
+            const fallback = pin.position
+            const rawPos = cameraPositions[pin.id] ?? fallback
+            const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
+            const zoneName = getPatrolHelmetZoneName(pin.id)
+            const isActive = Boolean(helmetOnlineById?.[pin.id])
+            const markerOpacity = isActive ? 1 : 0.88
+            const detect = helmetDetectCountsById?.[pin.id]
+            const tipOpen = openHelmetTipId === pin.id
+            return (
+              <Marker
+                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
+                position={livePos}
+                icon={createDroneIcon(pin, isActive)}
+                zIndexOffset={isActive ? 720 : 420}
+                opacity={markerOpacity}
+                eventHandlers={{
+                  click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
+                }}
+              >
+                <Tooltip
+                  direction="top"
+                  offset={[0, -16]}
+                  opacity={0.95}
+                  permanent={tipOpen}
+                >
+                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+                    <strong>{pin.label}</strong>
+                    {' · '}
+                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+                      {isActive ? 'ONLINE' : 'OFFLINE'}
+                    </span>
+                    <br />
+                    Phụ trách: {zoneName}
+                    {detect != null && (
+                      <>
+                        <br />
+                        <span style={{ color: '#38bdf8' }}>
+                          Đã detect: {detect.total} người
+                        </span>
+                        <br />
+                        <span style={{ color: '#64748b', fontSize: 9 }}>
+                          {detect.person} Người · {detect.identity} Định danh
+                        </span>
+                      </>
+                    )}
+                    {!tipOpen && (
+                      <>
+                        <br />
+                        <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
+                      </>
+                    )}
+                  </span>
+                </Tooltip>
+              </Marker>
             )
           })}
         </MapContainer>
