@@ -285,10 +285,11 @@ if [[ "$PRIORITIZE_MODULE05" == "1" ]]; then
   VPS_CAMERA_SOURCES="${VPS_PATROL_SOURCES}"
   VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-false}"
   VPS_MACHINERY_ENABLED="${VPS_MACHINERY_ENABLED:-false}"
-  # 5 FPS để lại 200ms giữa hai lần detect — đủ để người đi bộ trượt khỏi cổng
-  # ghép và ROI phải ngoại suy gần hết quãng đó. Sau khi cắt OWLv2 và reel
-  # A-03/A-04, tải VPS còn ~2.3/6 vCPU nên có chỗ cho nhịp dày hơn.
-  VPS_AI_FPS="${VPS_AI_FPS:-8.0}"
+  # Đo trên VPS: mỗi camera tốn ~1.3 lõi cho YOLO ở 960px. Ba camera cùng phát ở
+  # 8 FPS là chạm trần 6 vCPU, mà quá tải thì hỏng cả luồng live lẫn AI. Tracker
+  # mới ghép được cả ở nhịp thưa (test có người chạy ~720 px/s ở 8 FPS vẫn giữ
+  # nguyên ID), nên nhịp dày không còn là thứ quyết định chất lượng bám.
+  VPS_AI_FPS="${VPS_AI_FPS:-6.0}"
   echo "   Ưu tiên Module 05: chỉ HC-01, HC-02, DR-03 (bỏ reel A-03/A-04, OWLv2, auto-train)"
 else
   VPS_CAMERA_SOURCES="A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},${VPS_PATROL_SOURCES}"
