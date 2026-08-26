@@ -152,6 +152,9 @@ class Settings(BaseSettings):
     # Thà bỏ sót một khuôn mặt mờ — track vẫn nằm ở tab Đối tượng và được cấp mã
     # ngay khi bắt được góc rõ hơn.
     patrol_face_detect_min_score: float = 0.82
+    # Bodycam HC-* — webcam/indoor, YuNet thường 0.55–0.75 dù mắt người thấy rõ.
+    # 0.82 để lại cho flycam/ cố định; bodycam dùng ngưỡng riêng.
+    patrol_face_detect_min_score_bodycam: float = 0.62
     # Tab Đối tượng — đầu + ≥30% thân, không đủ mặt, bám track ≥ N giây.
     patrol_object_confirm_seconds: float = 3.0
     patrol_face_object_confirm_seconds: float = 1.5
