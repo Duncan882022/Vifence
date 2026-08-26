@@ -227,19 +227,23 @@ class PatrolTrack:
         """Bbox đã làm mượt — dùng để hiển thị."""
         return self.kalman.bbox()
 
-    def gate_bbox(self, now: float) -> Bbox:
-        """Bbox dùng để ghép — vị trí đo lần cuối, đẩy tiếp theo vận tốc.
+    def gate_bbox(self, now: float, ego: tuple[float, float] = (0.0, 0.0)) -> Bbox:
+        """Bbox dùng để ghép — vị trí đo lần cuối, đẩy theo vận tốc và theo camera.
 
         Không dùng bbox Kalman ở đây: bộ lọc cố tình bám chậm để hình đỡ giật,
         nên với người đang đi nó luôn nằm sau vị trí thật. Lấy nó làm mốc ghép
         thì khoảng cách tới detection mới cứ nới ra từng frame cho tới lúc vượt
         cổng, và track đứt ngay giữa lúc người vẫn đang trong khung.
+
+        `ego` là dịch chuyển của cả khung hình từ lần đo cuối tới giờ. Thiếu nó
+        thì một cú lia mũ bị hiểu thành người dịch chuyển tức thời — vượt cổng,
+        đứt track, cấp mã mới cho đúng người vừa đứng đó.
         """
         age = _clamp(now - self.last_measured_at, 0.0, 1.2)
-        if age <= 0.0:
+        dx = self.kalman.vx * age + ego[0]
+        dy = self.kalman.vy * age + ego[1]
+        if dx == 0.0 and dy == 0.0:
             return self.measured_bbox
-        dx = self.kalman.vx * age
-        dy = self.kalman.vy * age
         x1, y1, x2, y2 = self.measured_bbox
         return (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
 
@@ -264,6 +268,30 @@ class PatrolTracker:
     tracks: dict[str, PatrolTrack] = field(default_factory=dict)
     _seq: int = 0
     _last_update_at: float = 0.0
+    # Lịch sử dịch chuyển của khung hình: (thời điểm, dx, dy). Track mất dấu
+    # vài nhịp phải cộng dồn cả quãng camera đã lia trong lúc đó.
+    _ego_log: list[tuple[float, float, float]] = field(default_factory=list)
+
+    def note_camera_shift(self, dx: float, dy: float, *, now: float) -> None:
+        """Ghi dịch chuyển toàn cục của khung hình vừa xử lý."""
+        if dx == 0.0 and dy == 0.0:
+            self._ego_log.append((now, 0.0, 0.0))
+        else:
+            self._ego_log.append((now, dx, dy))
+        cutoff = now - max(self.profile.lost_keep_sec, 1.0) - 1.0
+        if len(self._ego_log) > 240:
+            self._ego_log = [row for row in self._ego_log if row[0] >= cutoff]
+
+    def _ego_since(self, since: float) -> tuple[float, float]:
+        if not self._ego_log:
+            return 0.0, 0.0
+        dx = dy = 0.0
+        for ts, sx, sy in reversed(self._ego_log):
+            if ts <= since:
+                break
+            dx += sx
+            dy += sy
+        return dx, dy
 
     def _next_id(self) -> str:
         self._seq += 1
@@ -273,7 +301,7 @@ class PatrolTracker:
 
     def _match_cost(self, track: PatrolTrack, det: Bbox, now: float) -> float | None:
         prof = self.profile
-        tb = track.gate_bbox(now)
+        tb = track.gate_bbox(now, self._ego_since(track.last_measured_at))
 
         size_min = prof.size_ratio_min
         center_max = prof.center_ratio_max
@@ -335,14 +363,20 @@ class PatrolTracker:
         *,
         now: float,
         high_conf: float | None = None,
+        camera_shift: tuple[float, float] = (0.0, 0.0),
     ) -> list[str | None]:
         """Ghép detections của frame này vào track.
+
+        `camera_shift` là dịch chuyển của cả khung hình so với lần gọi trước.
+        Nó được cộng vào mốc ghép và trừ khỏi vận tốc đo được, để tracker phân
+        biệt "người đi" với "camera lia".
 
         Trả về list track_id **cùng thứ tự với `detections`** (None khi không cấp
         được track, ví dụ đã chạm trần `_MAX_TRACKS`).
         """
         dt = 0.0 if self._last_update_at <= 0 else max(0.0, now - self._last_update_at)
         self._last_update_at = now
+        self.note_camera_shift(camera_shift[0], camera_shift[1], now=now)
 
         for track in self.tracks.values():
             track.kalman.predict(dt)
@@ -379,7 +413,14 @@ class PatrolTracker:
             if gap > 1e-3:
                 pcx, pcy = _center(track.measured_bbox)
                 ncx, ncy = _center(bbox)
-                measured_velocity = ((ncx - pcx) / gap, (ncy - pcy) / gap)
+                # Trừ phần do camera lia: nếu không, vận tốc học được là vận
+                # tốc của cái mũ chứ không phải của người. Frontend nội suy
+                # theo số đó sẽ đẩy ROI bay đi lúc người đứng yên.
+                ex, ey = self._ego_since(track.last_measured_at)
+                measured_velocity = (
+                    (ncx - pcx - ex) / gap,
+                    (ncy - pcy - ey) / gap,
+                )
             track.kalman.update(bbox, measure_dt, measured_velocity)
             track.hits += 1
             track.miss_streak = 0

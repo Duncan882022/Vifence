@@ -83,20 +83,31 @@ def assign_patrol_track_ids(
     person_boxes: list[tuple[tuple[float, float, float, float], float]],
     *,
     now: float | None = None,
+    frame: np.ndarray | None = None,
 ) -> list[str | None]:
     """Gán track cho **cả frame** một lượt qua ByteTrack (`patrol_tracker`).
 
     Phải ghép theo cả khung mới đúng: gán tuần tự từng người rồi chặn lẫn nhau
     (cách cũ) khiến người vào sau cướp track của người kia tuỳ thứ tự YOLO trả về.
+
+    Có `frame` thì ước lượng luôn dịch chuyển của cả khung hình, để tracker
+    phân biệt "người đi" với "người đeo lia mũ".
     """
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
         return [None] * len(person_boxes)
     from .patrol_tracker import get_patrol_tracker
 
+    shift = (0.0, 0.0)
+    if frame is not None:
+        from .patrol.egomotion import estimate_shift
+
+        shift = estimate_shift(camera_id, frame)
+
     tracker = get_patrol_tracker(camera_id)
     return tracker.update(
         [(tuple(float(v) for v in box), float(conf)) for box, conf in person_boxes],
         now=now if now is not None else time.time(),
+        camera_shift=shift,
     )
 
 
@@ -162,6 +173,47 @@ def _assign_patrol_person_identity(
     person_det.track_id = track_id
     person_det.tier = resolved.tier
     person_det.face_eligible = face_eligible and face_emb is not None
+
+
+def _patrol_person_passes_event_gate(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    from .patrol_person_visibility import patrol_person_meets_detection_gate
+
+    return patrol_person_meets_detection_gate(
+        person_box,
+        frame_w,
+        frame_h,
+        face_dominant=_face_dominant_person_box(person_box, frame_w, frame_h),
+    )
+
+
+def _assign_patrol_person_display_only(
+    person_det: PpeDetection,
+    *,
+    camera_id: str,
+    track_id: str | None,
+) -> None:
+    """ROI-only — track id + nhãn đã cache, không chạy face/embed lại.
+
+    Sau khi tách gate hiển thị, mỗi frame có thể mang nhiều box chỉ để vẽ ROI
+    (người ngồi, mảnh thân…). Chạy assess_patrol_face + registry trên tất cả
+    làm AI loop HC-* chậm hẳn (~300ms → 600ms+) và ROI giật theo nhịp analyze.
+    """
+    if not track_id:
+        return
+    from .patrol_identity_lifecycle import peek as peek_track_identity
+
+    person_det.track_id = track_id
+    cached = peek_track_identity(camera_id, track_id)
+    if cached is not None:
+        person_det.worker_id = cached.worker_id
+        person_det.worker_name = cached.worker_name
+        person_det.tier = cached.tier
+    else:
+        person_det.tier = "object"
 
 
 def _get_person_detector() -> PersonDetector:
@@ -1894,13 +1946,15 @@ def _build_patrol_person_detections(
 
     Track được gán **một lượt cho cả frame** trước khi vào vòng lặp, nên thứ tự
     YOLO trả về không còn ảnh hưởng tới việc ai giữ track nào.
-    """
-    from .worker_identity.detection_enrich import enrich_person_bbox
 
+    Face/embed chỉ chạy trên người đủ gate ghi sự kiện; box display-only vẫn
+    mang track_id + velocity để FE vẽ ROI mượt mà không làm chậm nhịp analyze.
+    """
     reset_hc_patrol_face_assignments(camera_id)
     track_ids = assign_patrol_track_ids(
         camera_id,
         [(p.person_box, p.person_conf) for p in persons],
+        frame=frame,
     )
 
     detections: list[PpeDetection] = []
@@ -1915,23 +1969,23 @@ def _build_patrol_person_detections(
             bbox=[float(v) for v in display_pb],
             subject_bbox=[float(v) for v in pb],
         )
-        enrich_person_bbox(
-            frame,
-            person_det,
-            camera_id=camera_id,
-            person_index=person_index,
-            source_pts_sec=source_pts_sec,
-        )
         track_id = track_ids[person_index] if person_index < len(track_ids) else None
-        _assign_patrol_person_identity(
-            person_det,
-            pb,
-            frame=frame,
-            camera_id=camera_id,
-            frame_w=frame_w,
-            frame_h=frame_h,
-            track_id=track_id,
-        )
+        if _patrol_person_passes_event_gate(pb, frame_w, frame_h):
+            _assign_patrol_person_identity(
+                person_det,
+                pb,
+                frame=frame,
+                camera_id=camera_id,
+                frame_w=frame_w,
+                frame_h=frame_h,
+                track_id=track_id,
+            )
+        else:
+            _assign_patrol_person_display_only(
+                person_det,
+                camera_id=camera_id,
+                track_id=track_id,
+            )
         _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)
 

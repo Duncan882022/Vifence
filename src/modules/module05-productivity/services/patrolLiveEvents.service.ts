@@ -8,7 +8,6 @@ import type { EventType, PatrolEvent } from '../data/patrolMockData'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
-import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFeed'
 import {
   formatPatrolPersonDetectedEvent,
@@ -90,17 +89,11 @@ function todayIsoDate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Module 05 chỉ nhận vòng đời người (PERS-*) — kịch bản PPE chặn ngay tại biên. */
 function isPatrolModuleBackendEvent(row: BackendViolationEvent): boolean {
   if (!isPatrolHelmetCameraId(row.camera_id ?? '')) return false
   if (!row.snapshot_file?.trim()) return false
-  const scenarioId = row.scenario_id ?? ''
-  if (PATROL_PPE_UI_HIDDEN && scenarioId.startsWith('PPE')) return false
-  return scenarioId.startsWith('PPE') || scenarioId.startsWith('PERS')
-}
-
-/** @deprecated use isPatrolModuleBackendEvent */
-function isPatrolPpeBackendEvent(row: BackendViolationEvent): boolean {
-  return isPatrolModuleBackendEvent(row)
+  return (row.scenario_id ?? '').toUpperCase().startsWith('PERS')
 }
 
 function patrolApiBase(backendUrl: string): string {
@@ -145,7 +138,7 @@ async function fetchLegacyHelmetEvents(
   })
   if (!res.ok) return []
   const rows = await res.json() as BackendViolationEvent[]
-  return rows.filter(isPatrolPpeBackendEvent)
+  return rows.filter(isPatrolModuleBackendEvent)
 }
 
 async function fetchLegacyAggregateEvents(
@@ -261,14 +254,6 @@ export async function fetchPatrolHelmetAggregateMetrics(
   return fetchLegacyAggregateMetrics(ids, backendUrl)
 }
 
-export async function fetchPatrolHelmetPpeAlertCount(
-  cameraId: string,
-  backendUrl = getVmsBackendUrl(),
-): Promise<number> {
-  const metrics = await fetchPatrolHelmetMetrics(cameraId, backendUrl)
-  return metrics?.ppe_alerts_today ?? 0
-}
-
 function buildSnapshotUrl(backendUrl: string, eventId: string, snapshotFile: string, versionTs?: number): string {
   const base = `${patrolApiBase(backendUrl)}/events/${eventId}/snapshot`
   const v = versionTs ?? snapshotFile
@@ -276,9 +261,9 @@ function buildSnapshotUrl(backendUrl: string, eventId: string, snapshotFile: str
 }
 
 function eventTypeFromScenario(scenarioId: string | undefined, behavior?: string): EventType {
-  if (scenarioId?.startsWith('PPE')) return 'PPE_VIOLATION'
-  if (scenarioId?.startsWith('PERS') || behavior === 'person') return 'PERSON_DETECTED'
-  return 'MACHINE_STOPPED'
+  if (scenarioId?.startsWith('IDEN')) return 'IDENTITY_VERIFIED'
+  if (behavior === 'population') return 'POPULATION_OBSERVED'
+  return 'PERSON_DETECTED'
 }
 
 function zoneMetaForCamera(cameraId: string): { zoneId: string; zoneName: string } {
@@ -363,7 +348,7 @@ export function mapBackendEventToPatrolEvent(
     trackWorkerId: isGalleryWorker ? undefined : trackWorkerId,
     violationLabel: eventType === 'PERSON_DETECTED'
       ? title
-      : (event.scenario_name ?? event.scenario_id ?? 'Vi phạm PPE'),
+      : (event.scenario_name ?? event.scenario_id ?? 'Phát hiện người'),
     startedAt: createdIso,
     lockedAt: lockedIso,
     endedAt: null,

@@ -40,10 +40,10 @@ import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
 import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import {
-  fetchPatrolCameraRecords,
-  fetchPatrolRecordDetections,
+  fetchPatrolPlaybackRecords,
+  fetchPatrolPlaybackDetections,
   getPatrolDefaultPlaybackDate,
-} from './services/patrolCameraPlayback.service'
+} from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
@@ -57,7 +57,6 @@ import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/
 import { subscribeHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { resetPatrolTestData } from './services/patrolReset.service'
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
-import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
 import { enrichPatrolEventsWithWorkforceObjects, dedupePatrolEventsByMasterEntity } from './utils/patrolWorkforceEventLabels'
 import { subscribePatrolManualIdentity, syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
@@ -250,7 +249,7 @@ export function Module05Page() {
   const patrolEventsLive = useMemo(() => {
     void identityRevision
     const merged = mergePatrolAndWorkforceEvents(
-      stripPatrolPpeEvents(liveHelmetEvents.events),
+      liveHelmetEvents.events,
       workforceSnap.events,
     )
     const enriched = enrichPatrolEventsWithWorkforceObjects(
@@ -272,18 +271,27 @@ export function Module05Page() {
   const [resetting, setResetting] = useState(false)
 
   async function handleResetTestData() {
-    if (!window.confirm('Xóa toàn bộ dữ liệu patrol (events, sgc, heatmap)?\nTrang sẽ tự reload sau khi xong.')) return
+    if (!window.confirm('Xóa toàn bộ dữ liệu patrol (events, sgc, thư viện mặt, định danh)?\nTrang sẽ tự reload sau khi xong.')) return
     setResetting(true)
+    let result: Awaited<ReturnType<typeof resetPatrolTestData>>
     try {
-      const result = await resetPatrolTestData()
-      const be = result.backend
-      const summary = be
-        ? `Backend: ${be.events_cleared} events, ${be.sgc_tracks_cleared} sgc, ${be.hc_tracks_cleared} HC tracks`
-        : 'Backend không kết nối (FE đã xoá)'
-      console.info('[patrolReset] Đã xoá:', summary)
+      result = await resetPatrolTestData()
     } finally {
-      window.location.reload()
+      setResetting(false)
     }
+
+    // Backend chưa xoá mà reload thì lần tải trang sau đồng bộ ngược bindings cũ
+    // về localStorage — dữ liệu quay lại nguyên vẹn và người trực tưởng đã xoá.
+    if (!result.ok) {
+      window.alert(
+        `Chưa xoá được dữ liệu.\n\n${result.error ?? 'Không rõ nguyên nhân.'}\n\n`
+        + 'Dữ liệu trên máy chủ vẫn còn nên trang không reload. '
+        + 'Kiểm tra backend rồi thử lại.',
+      )
+      return
+    }
+
+    window.location.reload()
   }
 
   const handleSelectCamera = (cam: TrainingCamera) => {
@@ -415,8 +423,8 @@ export function Module05Page() {
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
-                      fetchRecords={fetchPatrolCameraRecords}
-                      fetchDetections={fetchPatrolRecordDetections}
+                      fetchRecords={fetchPatrolPlaybackRecords}
+                      fetchDetections={fetchPatrolPlaybackDetections}
                       videoAreaFlex={82}
                     />
                   )}

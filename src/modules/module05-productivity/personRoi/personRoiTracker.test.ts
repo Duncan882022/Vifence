@@ -110,23 +110,24 @@ describe('bbox mượt', () => {
     expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
   })
 
-  it('bám kịp người đi đều, không tụt lại sau nhiều nhịp', () => {
-    // Bẫy cũ: processNoise thấp làm p tụt xuống sàn, hệ số lọc còn ~0.2 nên box
-    // chỉ tiến 1/5 quãng mỗi nhịp và khoảng tụt cứ nới ra mãi.
-    let tracks = empty()
+  it('track có id backend bám nhanh hơn khi người đi đều', () => {
+    let anchored = empty()
+    let plain = empty()
     let now = 1_000
     let x = 100
-    for (let i = 0; i < 12; i += 1) {
-      tracks = advance(tracks, [person([x, 100, x + 100, 400], { track_id: 'p1' })], now)
+    for (let i = 0; i < 8; i += 1) {
+      anchored = advance(anchored, [person([x, 100, x + 100, 400], { track_id: 'p1' })], now)
+      plain = advance(plain, [person([x, 100, x + 100, 400])], now)
       now += 180
       x += 60
     }
 
     const measuredCx = (x - 60) + 50
-    const kalman = [...tracks.values()][0].kalman
-    const lag = measuredCx - kalman.cx
+    const anchoredLag = measuredCx - [...anchored.values()][0].kalman.cx
+    const plainLag = measuredCx - [...plain.values()][0].kalman.cx
 
-    expect(lag).toBeLessThan(60)
+    expect(anchoredLag).toBeLessThan(plainLag)
+    expect(anchoredLag).toBeLessThan(45)
   })
 
   it('extrapolate giới hạn trong một nhịp analyze', () => {
@@ -135,6 +136,19 @@ describe('bbox mượt', () => {
     const far = predictPersonRoiTracks(tracks, 5_000, 1_000)
     const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs, 1_000)
     expect(far[0].bbox).toEqual(capped[0].bbox)
+  })
+
+  it('track mất dấu không bị dự đoán hai lần', () => {
+    // Người đang đi rồi biến mất khỏi payload: track coast bằng `predict` mỗi
+    // nhịp ingest. Nội suy rAF thêm lần nữa là bbox ma trôi khỏi người.
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    tracks = advance(tracks, [person([220, 100, 320, 400], { track_id: 'p1' })], 1_180)
+    tracks = advance(tracks, [], 1_360)
+    expect([...tracks.values()][0].state).toBe('lost')
+
+    const held = predictPersonRoiTracks(tracks, 0, 1_400)
+    const rafd = predictPersonRoiTracks(tracks, 300, 1_400)
+    expect(rafd[0].bbox).toEqual(held[0].bbox)
   })
 })
 

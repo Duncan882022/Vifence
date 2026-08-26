@@ -3,8 +3,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
-  ShieldAlert,
-  Truck,
   Users,
   UserCheck,
   Activity,
@@ -14,9 +12,7 @@ import {
 import type { EventStatus, EventType } from '../data/patrolMockData'
 
 export const PATROL_EVENT_TYPES: EventType[] = [
-  'PPE_VIOLATION',
   'PERSON_DETECTED',
-  'MACHINE_STOPPED',
   'POPULATION_OBSERVED',
   'POPULATION_CHANGE',
   'HIGH_DENSITY',
@@ -32,24 +28,6 @@ export const PATROL_TYPE_META: Record<EventType, {
   borderAccent: string
   tooltip: string
 }> = {
-  PPE_VIOLATION: {
-    id: 'PPE',
-    label: 'PPE',
-    icon: ShieldAlert,
-    color: 'text-red-400',
-    badge: 'bg-red-500/10 text-red-400 border-red-500/30',
-    borderAccent: 'border-l-red-400',
-    tooltip: 'Vi phạm PPE',
-  },
-  MACHINE_STOPPED: {
-    id: 'MACHINE',
-    label: 'Máy dừng',
-    icon: Truck,
-    color: 'text-amber-400',
-    badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    borderAccent: 'border-l-amber-400',
-    tooltip: 'Máy dừng >5 giây',
-  },
   PERSON_DETECTED: {
     id: 'PERS',
     label: 'Nhân lực',

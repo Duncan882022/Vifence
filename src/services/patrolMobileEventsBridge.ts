@@ -12,18 +12,12 @@ import { PATROL_SITE_CENTER } from '@/modules/module05-productivity/data/patrolS
 import { applyManualIdentityToPatrolEvent } from '@/modules/module05-productivity/utils/patrolManualIdentityUi'
 import { subscribePatrolManualIdentity } from '@/modules/module05-productivity/services/patrolManualIdentity.service'
 
-import {
-  PATROL_PPE_UI_HIDDEN,
-  isPatrolPpeScenarioOrBehavior,
-  stripPatrolPpeEvents,
-} from '@/modules/module05-productivity/utils/patrolPpeVisibility'
-
 const MAX_EVENTS = 80
 const listeners = new Set<(events: PatrolEvent[]) => void>()
 let eventsById = new Map<string, PatrolEvent>()
 
 function notify(): void {
-  const list = stripPatrolPpeEvents([...eventsById.values()]).sort(
+  const list = [...eventsById.values()].sort(
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
   syncPatrolPersonEventsToHeatmap(list)
@@ -53,15 +47,15 @@ function resolveGpsForMobileEvent(
   return { gps_lat: null, gps_lng: null }
 }
 
+/**
+ * Module 05 chỉ nhận sự kiện vòng đời người. Backend cũ có thể còn đẩy kèm
+ * kịch bản PPE — chặn ngay tại biên thay vì lọc lại ở từng nơi hiển thị.
+ */
 function isPatrolBackendRow(row: MobileAiViolationEvent): boolean {
-  const scenario = row.scenario_id ?? ''
-  const behavior = row.behavior ?? ''
-  if (PATROL_PPE_UI_HIDDEN && isPatrolPpeScenarioOrBehavior(scenario, behavior)) {
-    return false
-  }
-  return scenario.startsWith('PPE')
-    || scenario.startsWith('PERS')
-    || ['no_helmet', 'no_vest', 'no_shoes', 'person'].includes(behavior)
+  const scenario = (row.scenario_id ?? '').toUpperCase()
+  const behavior = (row.behavior ?? '').toLowerCase()
+  if (scenario.startsWith('PPE')) return false
+  return scenario.startsWith('PERS') || behavior === 'person'
 }
 
 export function refreshPatrolMobileEventsIdentity(): void {

@@ -249,7 +249,7 @@ export function enrichPatrolPersonEventWithWorkforceObject(
   return formatPatrolPersonDetectedEvent(enriched)
 }
 
-/** Khóa master dedup — sgc canonical > profile worker > sgc > OBJ > event. */
+/** Khóa master dedup — profile worker > sgc canonical > OBJ > event. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   return resolvePatrolCanonicalEntityKey(event)
 }
@@ -299,11 +299,6 @@ export function enrichPatrolEventsWithWorkforceObjects(
   }
   const sgcToObject = buildSgcToObjectIdMap(objects)
   return events.map(ev => enrichPatrolPersonEventWithWorkforceObject(ev, objects, sgcToObject))
-}
-
-/** @deprecated dùng patrolEventMasterEntityKey */
-export function patrolEventEntityKey(event: PatrolEvent): string {
-  return patrolEventMasterEntityKey(event)
 }
 
 export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'

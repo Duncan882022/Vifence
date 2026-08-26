@@ -41,7 +41,6 @@ import { useCameraBboxVisible } from './CameraBboxToggle'
 import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend.service'
 import { groupPpeDetections } from '@/modules/module03-safety/utils/ppeDetectionGroups'
 import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
-import { PATROL_PPE_UI_HIDDEN } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
@@ -269,9 +268,6 @@ export function MobileCameraFeed({
             && patrolCountable(d))
           const persons = gated.filter(d => d.behavior === 'person' && patrolCountable(d))
           const personCount = Math.max(rawPersons.length, persons.length)
-          const violations = filtered.filter(d =>
-            ['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior),
-          )
           const workerNames = [...rawPersons, ...persons]
             .map(d => d.worker_name?.trim())
             .filter((name): name is string => Boolean(name))
@@ -280,8 +276,8 @@ export function MobileCameraFeed({
             cameraId,
             streamOnline: true,
             personCount,
-            // PPE ẩn trên Module 05 — không đẩy số vi phạm PPE lên KPI/live.
-            activePpeViolations: PATROL_PPE_UI_HIDDEN ? 0 : violations.length,
+            // Module 05 chỉ theo dõi người — không có khái niệm vi phạm PPE.
+            activePpeViolations: 0,
             identifiedWorkers: new Set(
               [...rawPersons, ...persons]
                 .map(d => d.worker_id)
@@ -293,7 +289,7 @@ export function MobileCameraFeed({
           syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections.filter(patrolVisible))
 
           if (result.events?.length) {
-            // Bridge lọc PPE khi PATROL_PPE_UI_HIDDEN — vẫn đẩy PERS/person lên panel Người.
+            // Bridge tự loại kịch bản PPE — chỉ PERS/person lên panel Người.
             pushPatrolMobilePpeEvents(result.events, cameraId)
           }
         }

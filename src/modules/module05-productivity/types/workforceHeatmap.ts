@@ -14,8 +14,6 @@ export type WorkforceEventType =
   | 'HIGH_DENSITY'
   | 'IDENTITY_VERIFIED'
   | 'OBJECT_MERGED'
-  | 'PPE_VIOLATION'
-  | 'MACHINE_STOPPED'
 
 export interface HelmetState {
   type: 'HELMET_STATE'

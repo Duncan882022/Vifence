@@ -1,8 +1,12 @@
 /**
  * Reset toàn bộ dữ liệu patrol để kiểm tra sạch:
- * - Gọi DELETE /patrol/reset trên backend (events + sgc registry + mobile metrics + HC tracks)
+ * - Gọi DELETE /patrol/reset trên backend (events + sgc registry + thư viện mặt
+ *   + bindings định danh + mobile metrics + HC tracks)
  * - Xóa localStorage patrol (sgc→OBJ link + định danh thủ công)
  * - Xóa sessionStorage heatmap registry
+ *
+ * Thứ tự bắt buộc: backend trước, trình duyệt sau. Backend còn dữ liệu mà đã
+ * xoá localStorage thì lần tải trang kế tiếp sẽ đồng bộ ngược trở lại.
  */
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { clearPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
@@ -44,25 +48,36 @@ export interface PatrolResetResult {
     sgc_tracks_cleared: number
     mobile_metrics_cleared: number
     hc_tracks_cleared: number
+    identity_bindings_cleared?: number
+    gallery_cleared?: number
   }
   error?: string
 }
 
+/**
+ * Xoá dữ liệu patrol. `ok` chỉ đúng khi **backend cũng đã xoá**.
+ *
+ * Thư viện mặt và bindings nằm ở backend. Xoá mỗi phía trình duyệt thì lần
+ * tải trang sau `syncPatrolIdentityBindingsFromBackend()` lại kéo nguyên bộ
+ * cũ về localStorage — người dùng bấm xoá bao nhiêu lần cũng thấy y như cũ.
+ * Nên backend hỏng phải báo ra, không được nuốt vào console.
+ */
 export async function resetPatrolTestData(): Promise<PatrolResetResult> {
-  let backend: PatrolResetResult['backend'] | undefined
-
   const url = getMobileAiBackendUrl()
-  if (url) {
-    try {
-      const res = await fetch(`${url}/patrol/reset`, { method: 'DELETE' })
-      if (res.ok) {
-        backend = await res.json()
-      } else {
-        console.warn('[patrolReset] backend trả', res.status)
-      }
-    } catch (err) {
-      console.warn('[patrolReset] không kết nối được backend:', err)
+  if (!url) {
+    return { ok: false, error: 'Chưa cấu hình URL backend — không xoá được dữ liệu trên máy chủ.' }
+  }
+
+  let backend: PatrolResetResult['backend']
+  try {
+    const res = await fetch(`${url}/patrol/reset`, { method: 'DELETE' })
+    if (!res.ok) {
+      return { ok: false, error: `Backend từ chối xoá (HTTP ${res.status}).` }
     }
+    backend = await res.json()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `Không kết nối được backend để xoá: ${detail}` }
   }
 
   clearPatrolLocalStorage()

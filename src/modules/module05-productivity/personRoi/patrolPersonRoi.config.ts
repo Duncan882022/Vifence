@@ -31,8 +31,12 @@ export const PATROL_PERSON_ROI_CONFIG = {
    */
   maxLostMs: 1200,
   maxLostAnchoredMs: 600,
-  /** Giới hạn extrapolate rAF (ms) — chỉ bù đúng một nhịp analyze */
-  maxPredictMs: 260,
+  /**
+   * Trần nội suy rAF (ms). Đủ bù một nhịp analyze bodycam (180–400ms) nhưng
+   * không hơn: vận tốc hiện còn lẫn chuyển động của chính camera (chưa bù
+   * ego-motion), nên nội suy dài chỉ đẩy hộp ra chỗ không có ai.
+   */
+  maxPredictMs: 320,
   /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
   processNoise: 0.08,
   measureNoise: 0.2,
@@ -45,6 +49,11 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * bám lệt bệt sau người và càng đi nhanh càng tụt. Có sàn thì độ trễ bị chặn.
    */
   minMeasureGain: 0.55,
+  /**
+   * Track đã khoá theo track id backend — BE đã Kalman + vận tốc, FE chỉ nội suy
+   * giữa hai snapshot. Bám nhanh hơn để ROI không tụt sau người trên bodycam rung.
+   */
+  anchoredMinMeasureGain: 0.82,
   velocityDamping: 0.978,
   /** Trọng số đo trên kích thước — thấp thì ROI không phình/co giật theo YOLO */
   sizeGain: 0.35,

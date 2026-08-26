@@ -1,13 +1,12 @@
 import { useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Activity, Check, Cpu, ShieldAlert, Users, X } from 'lucide-react'
+import { Activity, Check, Cpu, Users, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { getCameraAiModel } from '@/modules/module02-training/data/cameraAiModelCatalog'
 import { getCameraAiConfigSections } from '@/modules/module02-training/data/cameraAiModelTokens'
 import { useCameraAiEnabledModels } from '@/modules/module02-training/hooks/useCameraAiConfig'
 import type { CameraAiModelId } from '@/modules/module02-training/types/cameraAi.types'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
-import { PATROL_PPE_UI_HIDDEN } from '../utils/patrolPpeVisibility'
 
 interface PatrolCameraAiConfigModalProps {
   cameraId: string
@@ -17,7 +16,6 @@ interface PatrolCameraAiConfigModalProps {
 
 const PATROL_MODEL_META: Partial<Record<CameraAiModelId, { icon: typeof Users; accent: string }>> = {
   patrol_person: { icon: Users, accent: 'text-emerald-400' },
-  ppe: { icon: ShieldAlert, accent: 'text-sky-400' },
 }
 
 export function PatrolCameraAiConfigModal({ cameraId, open, onClose }: PatrolCameraAiConfigModalProps) {
@@ -120,11 +118,6 @@ export function PatrolCameraAiConfigModal({ cameraId, open, onClose }: PatrolCam
                           <span className="flex flex-wrap items-center gap-1.5">
                             <Icon className={cn('w-3 h-3 shrink-0', meta?.accent ?? 'text-emerald-400')} aria-hidden />
                             <span className="text-[11px] font-semibold text-foreground">{model.label}</span>
-                            {model.id === 'ppe' && PATROL_PPE_UI_HIDDEN && (
-                              <span className="text-[7px] px-1 py-px rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 font-bold">
-                                Ẩn overlay
-                              </span>
-                            )}
                           </span>
                           <span className="block text-[9px] text-muted-foreground mt-0.5 leading-snug">
                             {model.description}

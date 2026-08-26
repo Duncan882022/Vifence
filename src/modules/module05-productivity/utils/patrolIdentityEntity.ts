@@ -27,16 +27,26 @@ export function resolvePatrolEventSgcKey(event: {
   return null
 }
 
-/** Khóa dedup thống nhất — một sgc = một entity dù nhiều OBJ/tên. */
+/**
+ * Khóa dedup thống nhất — một người là một entity dù mang nhiều sgc/OBJ/tên.
+ *
+ * Mã hồ sơ (gallery / gán tay) phải thắng sgc. Một người có thể được cấp nhiều
+ * sgc trong ca — mỗi lần bị che khuất hay camera lia đủ mạnh là tracker đứt và
+ * cấp mã mới. Lấy sgc làm khoá thì cùng một người đã định danh vẫn tách thành
+ * nhiều dòng trong tab Định danh: dòng còn sgc và dòng đã mang mã gallery.
+ *
+ * Cùng thứ tự ưu tiên với `resolveHeatmapEntityMasterId` để bảng sự kiện và
+ * bản đồ nhiệt không đếm ra hai con số khác nhau.
+ */
 export function resolvePatrolCanonicalEntityKey(event: {
   objectId?: string | null
   trackWorkerId?: string | null
   objectLabel?: string | null
 }): string {
-  const sgc = resolvePatrolEventSgcKey(event)
-  if (sgc) return sgc
   const profileKey = resolvePatrolProfileEntityKey(event)
   if (profileKey) return profileKey.toUpperCase()
+  const sgc = resolvePatrolEventSgcKey(event)
+  if (sgc) return sgc
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
   if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()

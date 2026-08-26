@@ -1,4 +1,11 @@
-/** GPS live từ thiết bị HC-02 → map / analyze payload (EKF + map match §6). */
+/**
+ * GPS live của từng camera tuần tra → bản đồ + payload analyze (EKF + map match §6).
+ *
+ * Lưu theo từng camera. Bản trước giữ đúng **một** biến chung cho mọi mũ, nên
+ * HC-01 và HC-02 ghi đè lẫn nhau: `getPatrolHelmetGps('HC-01')` trả null trừ
+ * khi HC-01 tình cờ là bên ghi sau cùng, và chấm của mũ này có thể mọc lên
+ * đúng vị trí của mũ kia.
+ */
 import { fuseHelmetPose } from '@/modules/module05-productivity/utils/positionEngine'
 
 export interface PatrolHelmetGpsSnapshot {
@@ -14,7 +21,7 @@ export interface PatrolHelmetGpsSnapshot {
 const FRESH_TTL_MS = 45_000
 const LAST_KNOWN_TTL_MS = 30 * 60_000
 
-let lastSnapshot: PatrolHelmetGpsSnapshot | null = null
+const byCamera = new Map<string, PatrolHelmetGpsSnapshot>()
 const listeners = new Set<(snap: PatrolHelmetGpsSnapshot) => void>()
 
 export function setPatrolHelmetGps(snapshot: PatrolHelmetGpsSnapshot): void {
@@ -26,38 +33,46 @@ export function setPatrolHelmetGps(snapshot: PatrolHelmetGpsSnapshot): void {
     ts: snapshot.updatedAt,
   })
   if (fused.lat == null || fused.lng == null) return
-  lastSnapshot = {
+  const next: PatrolHelmetGpsSnapshot = {
     ...snapshot,
     lat: fused.lat,
     lng: fused.lng,
     positionMethod: fused.method,
   }
-  listeners.forEach(fn => fn(lastSnapshot!))
+  byCamera.set(snapshot.cameraId, next)
+  listeners.forEach(fn => fn(next))
+}
+
+function readFresh(cameraId: string, ttlMs: number): PatrolHelmetGpsSnapshot | null {
+  const snap = byCamera.get(cameraId)
+  if (!snap) return null
+  if (Date.now() - snap.updatedAt > ttlMs) return null
+  return snap
 }
 
 export function getPatrolHelmetGps(cameraId: string): PatrolHelmetGpsSnapshot | null {
-  if (!lastSnapshot || lastSnapshot.cameraId !== cameraId) return null
-  if (Date.now() - lastSnapshot.updatedAt > FRESH_TTL_MS) return null
-  return lastSnapshot
+  return readFresh(cameraId, FRESH_TTL_MS)
 }
 
 /** GPS gần đây (kể cả hơi cũ) — dùng vẽ person dots khi fix mới chậm. */
-export function getPatrolHelmetGpsLastKnown(cameraId: string): PatrolHelmetGpsSnapshot | null {
-  if (!lastSnapshot || lastSnapshot.cameraId !== cameraId) return null
-  if (Date.now() - lastSnapshot.updatedAt > LAST_KNOWN_TTL_MS) return null
-  return lastSnapshot
+export function getPatrolHelmetGpsLastKnown(
+  cameraId: string,
+): PatrolHelmetGpsSnapshot | null {
+  return readFresh(cameraId, LAST_KNOWN_TTL_MS)
 }
 
 export function clearPatrolHelmetGps(cameraId?: string): void {
-  if (!cameraId || lastSnapshot?.cameraId === cameraId) {
-    lastSnapshot = null
+  if (cameraId) {
+    byCamera.delete(cameraId)
+    return
   }
+  byCamera.clear()
 }
 
 export function subscribePatrolHelmetGps(
   listener: (snap: PatrolHelmetGpsSnapshot) => void,
 ): () => void {
   listeners.add(listener)
-  if (lastSnapshot) listener(lastSnapshot)
+  byCamera.forEach(snap => listener(snap))
   return () => listeners.delete(listener)
 }
