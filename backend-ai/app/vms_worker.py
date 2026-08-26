@@ -60,6 +60,11 @@ RTSP_TIMEOUT_MS = 5000.0
 # Nguồn ở xa (bodycam qua internet) giữ nhịp thưa, tránh nện liên tục.
 LOCAL_SOURCE_RETRY_SEC = 0.4
 REMOTE_SOURCE_RETRY_SEC = 3.0
+# Mũ tắt cả buổi thì nhịp 0.4s thành hàng nghìn lần bắt tay RTSP mỗi phút, đủ
+# chiếm một lõi CPU và ngập log MediaMTX. Giãn dần tới trần này rồi giữ nguyên.
+SOURCE_RETRY_MAX_SEC = 5.0
+# Số lần thử giữ nhịp dày trước khi giãn — đủ để mũ vừa bật là bắt được ngay.
+SOURCE_RETRY_FAST_ATTEMPTS = 12
 # Số lần đọc rỗng liên tiếp trước khi mở lại nguồn live (mỗi lần cách 50ms).
 PREGATE_IDLE_READS = 40
 
@@ -69,8 +74,16 @@ def _is_local_source(source_path: str) -> bool:
     return "://127.0.0.1" in p or "://localhost" in p or "://[::1]" in p
 
 
-def _source_retry_delay(source_path: str) -> float:
-    return LOCAL_SOURCE_RETRY_SEC if _is_local_source(source_path) else REMOTE_SOURCE_RETRY_SEC
+def _source_retry_delay(source_path: str, attempt: int = 0) -> float:
+    """Nhịp thử lại — dày lúc đầu rồi giãn gấp đôi dần tới trần.
+
+    `attempt` là số lần mở hỏng liên tiếp; về 0 ngay khi nguồn lên lại.
+    """
+    base = LOCAL_SOURCE_RETRY_SEC if _is_local_source(source_path) else REMOTE_SOURCE_RETRY_SEC
+    if attempt <= SOURCE_RETRY_FAST_ATTEMPTS:
+        return base
+    backoff = base * (2 ** min(attempt - SOURCE_RETRY_FAST_ATTEMPTS, 6))
+    return min(SOURCE_RETRY_MAX_SEC, backoff)
 
 
 def _open_capture(source: str) -> cv2.VideoCapture:
@@ -397,9 +410,9 @@ class CameraVmsWorker:
         open_failures = 0
         last_fail_log = 0.0
         while self._running:
-            retry_delay = _source_retry_delay(self._active_source)
+            retry_delay = _source_retry_delay(self._active_source, open_failures)
             # Nhịp thử dày thì đếm lần không còn nói lên thời gian — quy về giây.
-            fallback_after = max(3, int(6.0 / retry_delay))
+            fallback_after = max(3, int(6.0 / _source_retry_delay(self._active_source)))
             cap = _open_capture(self._active_source)
             if not cap.isOpened():
                 open_failures += 1

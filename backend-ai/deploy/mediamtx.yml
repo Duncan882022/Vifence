@@ -43,7 +43,9 @@ hlsAddress: :8888
 hlsVariant: lowLatency
 hlsPartDuration: 200ms
 hlsSegmentDuration: 1s
-hlsSegmentCount: 4
+# LL-HLS của MediaMTX bắt buộc >= 7 segment; đặt thấp hơn thì muxer bị huỷ ngay
+# khi tạo và mọi request index.m3u8 trả 404.
+hlsSegmentCount: 7
 hlsAlwaysRemux: no
 
 rtmp: yes
