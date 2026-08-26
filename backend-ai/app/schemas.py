@@ -64,6 +64,11 @@ class PpeDetection(BaseModel):
     # HC-* — track ổn định phía BE để FE khoá ROI, không phải đoán lại bằng IoU.
     track_id: Optional[str] = None
     face_eligible: Optional[bool] = None
+    # object | person | identity — tầng đã ổn định của track (chỉ tiến không lùi).
+    # FE hiển thị thẳng, không suy lại từ worker_id để hai bên không lệch nhãn.
+    tier: Optional[str] = None
+    # px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect.
+    velocity: Optional[list[float]] = None
 
 
 class MobileAiConfigPayload(BaseModel):
