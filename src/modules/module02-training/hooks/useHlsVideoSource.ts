@@ -18,9 +18,15 @@ interface HlsInstance {
 }
 
 /** Chu kỳ kiểm tra luồng đã ra khung hình chưa. */
-const WATCHDOG_MS = 4000
-/** Số nhịp liên tiếp không có khung hình thì gắn lại nguồn (tránh cắt ngang lúc đang tải). */
-const WATCHDOG_STRIKES = 2
+const WATCHDOG_MS = 5000
+/**
+ * Số nhịp liên tiếp không có khung hình thì gắn lại nguồn.
+ *
+ * hls.js đã tự thử lại phân đoạn, nên watchdog chỉ là lưới an toàn cuối. Ra tay
+ * sớm sẽ huỷ và dựng lại trình phát ngay giữa lúc bodycam đang nối lại sóng —
+ * biến một khoảng trống vài giây thành cú khựng dài hơn hẳn.
+ */
+const WATCHDOG_STRIKES = 3
 
 /** Thời gian chờ tín hiệu (retry HLS) trước khi tile chuyển Offline. */
 export const STREAM_SIGNAL_WAIT_MS = 8000

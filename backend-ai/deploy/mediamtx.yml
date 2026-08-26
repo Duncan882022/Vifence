@@ -46,7 +46,10 @@ hlsSegmentDuration: 1s
 # LL-HLS của MediaMTX bắt buộc >= 7 segment; đặt thấp hơn thì muxer bị huỷ ngay
 # khi tạo và mọi request index.m3u8 trả 404.
 hlsSegmentCount: 7
-hlsAlwaysRemux: no
+# Bodycam qua 4G đứt RTSP vài chục giây một lần. Với `no`, mỗi lần đứt là muxer
+# bị huỷ, playlist trả 404 và trình phát phải khởi tạo lại từ đầu — đó chính là
+# cú khựng người xem thấy. Giữ muxer sống để nguồn nối lại là hình chạy tiếp.
+hlsAlwaysRemux: yes
 
 rtmp: yes
 rtmpAddress: :1935
@@ -87,6 +90,14 @@ paths:
   # Backend VMS pull RTSP nội bộ → relay HLS cho CMS.
   dr03:
     source: publisher
+
+  # Bí danh của `dr03`. CMS suy path từ id camera nên dựng ra `dr-03`; giữ cả hai
+  # tên để bản FE cũ và mới cùng xem được, drone vẫn chỉ publish vào `dr03`.
+  dr-03:
+    source: rtsp://127.0.0.1:8554/dr03
+    sourceProtocol: tcp
+    sourceOnDemand: yes
+    record: no
 
   # Chặn path lạ tự tạo — chỉ nhận đúng mũ đã khai báo.
   all_others:

@@ -714,13 +714,16 @@ class CameraVmsWorker:
             "-b:v", bitrate,
             "-maxrate", maxrate,
             "-bufsize", bufsize,
-            "-g", "6",
+            # GOP ngắn quá thì I-frame nuốt hết bitrate và P-frame vỡ nhoè;
+            # playlist quá ngắn thì chỉ cần encoder trễ một nhịp là player đói
+            # dữ liệu. 1s/segment × 4 là điểm cân bằng cho nguồn 4G.
+            "-g", "25",
             "-sc_threshold", "0",
             "-an",
             "-muxdelay", "0",
             "-muxpreload", "0",
-            "-hls_time", "0.5",
-            "-hls_list_size", "2",
+            "-hls_time", "1",
+            "-hls_list_size", "4",
             # program_date_time: gắn EXT-X-PROGRAM-DATE-TIME vào playlist để FE biết
             # wallclock của frame đang phát, nhờ đó khớp bbox đúng thời điểm thay vì
             # vẽ detections mới nhất lên hình ảnh đã trễ vài giây.
