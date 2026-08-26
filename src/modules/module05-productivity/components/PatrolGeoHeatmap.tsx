@@ -24,8 +24,6 @@ import {
   PATROL_SITE_MIN_ZOOM,
   getPatrolHelmetZoneName,
   getPatrolMapDeviceBadgeNum,
-  type PatrolDronePin,
-  type PatrolHelmetPin,
 } from '../data/patrolSiteMap'
 import {
   DETECTION_DOT_STYLE,
@@ -41,6 +39,11 @@ import {
   type PatrolDisplayMode,
 } from '../services/patrolHeatmap.service'
 import { PatrolDensityCanvasLayer } from './PatrolDensityCanvasLayer'
+import {
+  createPatrolDroneMapIcon,
+  createPatrolHelmetMapIcon,
+  PATROL_MAP_DEVICE_PIN_STYLES,
+} from '../utils/patrolMapDeviceIcons'
 
 /* ── ESRI satellite tile ────────────────────────────────────── */
 const ESRI_TILE_URL =
@@ -201,67 +204,7 @@ function createDetectionDotIcon(
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
-/* ── Device marker icons (helmet 1/2, drone 3) ──────────────── */
-const MAP_DEVICE_ICON_W = 22
-const MAP_DEVICE_ICON_H = 26
-
-function deviceMarkerColors(isActive: boolean, accent: string) {
-  return {
-    fill: isActive ? accent : '#64748b',
-    stroke: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(203,213,225,0.8)',
-    glow: isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : '',
-  }
-}
-
-function createHelmetIcon(pin: PatrolHelmetPin, isActive: boolean) {
-  const num = getPatrolMapDeviceBadgeNum(pin.id)
-  const { fill, stroke, glow } = deviceMarkerColors(isActive, pin.color)
-  const html = `
-    <div style="width:${MAP_DEVICE_ICON_W}px;height:${MAP_DEVICE_ICON_H}px;${glow}">
-      <svg viewBox="0 0 24 28" width="${MAP_DEVICE_ICON_W}" height="${MAP_DEVICE_ICON_H}" aria-hidden="true">
-        <path
-          d="M4 15v-2.2c0-3.4 2.8-6.2 6.2-6.2h3.6c3.4 0 6.2 2.8 6.2 6.2V15"
-          fill="${fill}" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round"
-        />
-        <path
-          d="M2.5 15.2h19v2.4a1.2 1.2 0 0 1-1.2 1.2H3.7a1.2 1.2 0 0 1-1.2-1.2v-2.4z"
-          fill="${fill}" stroke="${stroke}" stroke-width="1.2"
-        />
-        <rect x="10.2" y="7.2" width="3.6" height="2.2" rx="0.6" fill="${stroke}" opacity="0.85"/>
-        <text
-          x="12" y="18.2" text-anchor="middle"
-          font-size="8.5" font-weight="800" fill="#fff"
-          font-family="system-ui,sans-serif"
-        >${num}</text>
-      </svg>
-    </div>`
-  return L.divIcon(divIconOpts(html, [MAP_DEVICE_ICON_W, MAP_DEVICE_ICON_H], [MAP_DEVICE_ICON_W / 2, MAP_DEVICE_ICON_H / 2]))
-}
-
-function createDroneIcon(pin: PatrolDronePin, isActive: boolean) {
-  const num = getPatrolMapDeviceBadgeNum(pin.id)
-  const { fill, stroke, glow } = deviceMarkerColors(isActive, pin.color)
-  const html = `
-    <div style="width:${MAP_DEVICE_ICON_W}px;height:${MAP_DEVICE_ICON_H}px;${glow}">
-      <svg viewBox="0 0 24 28" width="${MAP_DEVICE_ICON_W}" height="${MAP_DEVICE_ICON_H}" aria-hidden="true">
-        <line x1="6" y1="8" x2="18" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
-        <line x1="18" y1="8" x2="6" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
-        <circle cx="6" cy="8" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="18" cy="8" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="6" cy="20" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
-        <circle cx="18" cy="20" r="2.6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
-        <rect x="9.2" y="12.2" width="5.6" height="3.6" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
-        <text
-          x="12" y="15.1" text-anchor="middle"
-          font-size="7.5" font-weight="800" fill="#fff"
-          font-family="system-ui,sans-serif"
-        >${num}</text>
-      </svg>
-    </div>`
-  return L.divIcon(divIconOpts(html, [MAP_DEVICE_ICON_W, MAP_DEVICE_ICON_H], [MAP_DEVICE_ICON_W / 2, MAP_DEVICE_ICON_H / 2]))
-}
-
-/** Heading cone tip ~18m ahead, ±22° FOV wedge (MD §7.1 layer Mũ). */
+/** Heading cone tip ~18m ahead, ±22° FOV wedge (MD §7.1 layer Thiết bị). */
 function headingConePositions(
   lat: number,
   lng: number,
@@ -618,6 +561,7 @@ export function PatrolGeoHeatmap({
           0%,100%{ box-shadow:0 1px 5px rgba(0,0,0,0.55),0 0 0 0px rgba(255,255,255,0.55); }
           55%    { box-shadow:0 1px 5px rgba(0,0,0,0.55),0 0 0 6px rgba(255,255,255,0); }
         }
+        ${PATROL_MAP_DEVICE_PIN_STYLES}
         .leaflet-marker-icon { transition: transform 260ms linear !important; }
         .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
         .${PATROL_DIV_ICON_CLASS} {
@@ -851,7 +795,7 @@ export function PatrolGeoHeatmap({
                 <Marker
                   key={`${pin.id}-${isActive ? 'on' : 'off'}`}
                   position={livePos}
-                  icon={createHelmetIcon(pin, isActive)}
+                  icon={createPatrolHelmetMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
                   zIndexOffset={isActive ? 700 : 400}
                   opacity={markerOpacity}
                   eventHandlers={{
@@ -860,7 +804,7 @@ export function PatrolGeoHeatmap({
                 >
                   <Tooltip
                     direction="top"
-                    offset={[0, -14]}
+                    offset={[0, -20]}
                     opacity={0.95}
                     permanent={tipOpen}
                   >
@@ -926,7 +870,7 @@ export function PatrolGeoHeatmap({
               <Marker
                 key={`${pin.id}-${isActive ? 'on' : 'off'}`}
                 position={livePos}
-                icon={createDroneIcon(pin, isActive)}
+                icon={createPatrolDroneMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
                 zIndexOffset={isActive ? 720 : 420}
                 opacity={markerOpacity}
                 eventHandlers={{
@@ -935,7 +879,7 @@ export function PatrolGeoHeatmap({
               >
                 <Tooltip
                   direction="top"
-                  offset={[0, -16]}
+                  offset={[0, -20]}
                   opacity={0.95}
                   permanent={tipOpen}
                 >
