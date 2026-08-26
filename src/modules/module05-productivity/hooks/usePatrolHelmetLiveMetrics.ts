@@ -22,8 +22,7 @@ export interface PatrolHelmetLiveMetrics {
   personCount: number
   uniqueWorkers: number
   identifiedWorkers: number
-  activePpeViolations: number
-  ppeAlertsToday: number
+  personEventsToday: number
   workerNames: string[]
   /** Chi tiết theo từng mũ — HC-01, HC-02, … */
   perCamera: PatrolHelmetCameraMetricsSlice[]
@@ -36,13 +35,11 @@ const EMPTY: PatrolHelmetLiveMetrics = {
   personCount: 0,
   uniqueWorkers: 0,
   identifiedWorkers: 0,
-  activePpeViolations: 0,
-  ppeAlertsToday: 0,
+  personEventsToday: 0,
   workerNames: [],
   perCamera: [],
 }
 
-const VIOLATION_COUNT_HOLD_MS = 6000
 const HC02 = 'HC-02'
 
 function mergeHc02Mobile(
@@ -70,9 +67,8 @@ function mergeHc02Mobile(
     camera_id: HC02,
     stream_online: Boolean(mobile.streamOnline),
     person_count: Math.max(hc02Person, sessionPeakRef.current),
-    ppe_violations: Math.max(mobile.activePpeViolations, prevSlice?.ppe_violations ?? 0),
     identified_workers: Math.max(mobile.identifiedWorkers, prevSlice?.identified_workers ?? 0),
-    ppe_alerts_today: prevSlice?.ppe_alerts_today ?? 0,
+    person_events_today: prevSlice?.person_events_today ?? 0,
   }
   if (idx >= 0) perCamera[idx] = { ...perCamera[idx], ...hc02Slice }
   else perCamera.push(hc02Slice)
@@ -80,9 +76,6 @@ function mergeHc02Mobile(
   const othersPerson = perCamera
     .filter(c => c.camera_id !== HC02)
     .reduce((s, c) => s + Math.max(0, c.person_count), 0)
-  const othersViol = perCamera
-    .filter(c => c.camera_id !== HC02)
-    .reduce((s, c) => s + (c.stream_online ? c.ppe_violations : 0), 0)
 
   const personCount = Math.max(
     sessionPeakRef.current,
@@ -91,7 +84,6 @@ function mergeHc02Mobile(
   )
   sessionPeakRef.current = personCount
 
-  const activePpeViolations = othersViol + hc02Slice.ppe_violations
   const names = [
     ...new Set([...(base.workerNames ?? []), ...mobile.workerNames]),
   ].slice(0, 8)
@@ -104,7 +96,6 @@ function mergeHc02Mobile(
     personCount,
     uniqueWorkers: personCount,
     identifiedWorkers: Math.max(base.identifiedWorkers, mobile.identifiedWorkers),
-    activePpeViolations,
     workerNames: names,
     perCamera,
   }
@@ -117,8 +108,6 @@ export function usePatrolHelmetLiveMetrics(
 ): PatrolHelmetLiveMetrics {
   const [metrics, setMetrics] = useState<PatrolHelmetLiveMetrics>(EMPTY)
   const backendLiveRef = useRef(false)
-  const lastViolationCountRef = useRef(0)
-  const lastViolationAtRef = useRef(0)
   const sessionPeakPersonRef = useRef(0)
   const baseRef = useRef<PatrolHelmetLiveMetrics>(EMPTY)
 
@@ -143,20 +132,6 @@ export function usePatrolHelmetLiveMetrics(
 
     let stopped = false
     let timerId = 0
-
-    const applyViolationHold = (current: number) => {
-      const now = Date.now()
-      if (current > 0) {
-        lastViolationCountRef.current = current
-        lastViolationAtRef.current = now
-        return current
-      }
-      if (now - lastViolationAtRef.current <= VIOLATION_COUNT_HOLD_MS) {
-        return lastViolationCountRef.current
-      }
-      lastViolationCountRef.current = 0
-      return 0
-    }
 
     const tick = async () => {
       if (stopped) return
@@ -201,17 +176,12 @@ export function usePatrolHelmetLiveMetrics(
 
         const streamOnline = Boolean(snapshot.stream_online)
         const rawPersonCount = Number(snapshot.person_count ?? 0)
-        const rawViolations = Number(snapshot.ppe_violations ?? 0)
 
-        // Cộng dồn peak phiên — không cho KPI từ N về 0
         sessionPeakPersonRef.current = Math.max(
           sessionPeakPersonRef.current,
           rawPersonCount,
         )
         const personCount = Math.max(sessionPeakPersonRef.current, rawPersonCount)
-        const activePpeViolations = streamOnline
-          ? applyViolationHold(rawViolations)
-          : applyViolationHold(0)
 
         const stickyPerCamera = (snapshot.cameras ?? []).map(row => {
           if (row.camera_id !== HC02) {
@@ -242,8 +212,7 @@ export function usePatrolHelmetLiveMetrics(
             Number(snapshot.identified_workers ?? 0),
             baseRef.current.identifiedWorkers,
           ),
-          activePpeViolations,
-          ppeAlertsToday: Number(snapshot.ppe_alerts_today ?? 0),
+          personEventsToday: Number(snapshot.person_events_today ?? 0),
           workerNames: snapshot.worker_names ?? [],
           perCamera: stickyPerCamera,
         }
@@ -277,9 +246,6 @@ export function usePatrolHelmetLiveMetrics(
       stopped = true
       window.clearTimeout(timerId)
       backendLiveRef.current = false
-      lastViolationCountRef.current = 0
-      lastViolationAtRef.current = 0
-      // Giữ sessionPeak khi remount effect (cameraIds đổi) — reset khi unmount hook
       sessionPeakPersonRef.current = 0
     }
   }, [cameraIds.join(','), pollMs])

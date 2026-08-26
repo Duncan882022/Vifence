@@ -1,4 +1,4 @@
-/** Sự kiện patrol từ MobileCameraFeed (HC-02) → panel Sự kiện Module 05 + heatmap dots. */
+/** Sự kiện vòng đời người từ MobileCameraFeed (HC-02) → heatmap + cache tạm. */
 import type { PatrolEvent } from '@/modules/module05-productivity/data/patrolMockData'
 import { mapBackendEventToPatrolEvent } from '@/modules/module05-productivity/services/patrolLiveEvents.service'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -47,11 +47,8 @@ function resolveGpsForMobileEvent(
   return { gps_lat: null, gps_lng: null }
 }
 
-/**
- * Module 05 chỉ nhận sự kiện vòng đời người. Backend cũ có thể còn đẩy kèm
- * kịch bản PPE — chặn ngay tại biên thay vì lọc lại ở từng nơi hiển thị.
- */
-function isPatrolBackendRow(row: MobileAiViolationEvent): boolean {
+/** Chỉ PERS-001 / person — bỏ mọi kịch bản ATLĐ legacy. */
+function isPatrolPersonBackendRow(row: MobileAiViolationEvent): boolean {
   const scenario = (row.scenario_id ?? '').toUpperCase()
   const behavior = (row.behavior ?? '').toLowerCase()
   if (scenario.startsWith('PPE')) return false
@@ -68,7 +65,7 @@ export function refreshPatrolMobileEventsIdentity(): void {
   notify()
 }
 
-export function pushPatrolMobilePpeEvents(
+export function pushPatrolMobilePersonEvents(
   rows: MobileAiViolationEvent[],
   cameraId = 'HC-02',
 ): void {
@@ -77,7 +74,7 @@ export function pushPatrolMobilePpeEvents(
   let changed = false
 
   for (const row of rows) {
-    if (!row.id || !isPatrolBackendRow(row)) continue
+    if (!row.id || !isPatrolPersonBackendRow(row)) continue
     if (!row.snapshot_file?.trim()) continue
 
     const gps = resolveGpsForMobileEvent(row, cameraId)
@@ -129,21 +126,21 @@ export function pushPatrolMobilePpeEvents(
   notify()
 }
 
-export function getPatrolMobilePpeEvents(): PatrolEvent[] {
+export function getPatrolMobilePersonEvents(): PatrolEvent[] {
   return [...eventsById.values()].sort(
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
 }
 
-export function subscribePatrolMobilePpeEvents(
+export function subscribePatrolMobilePersonEvents(
   listener: (events: PatrolEvent[]) => void,
 ): () => void {
   listeners.add(listener)
-  listener(getPatrolMobilePpeEvents())
+  listener(getPatrolMobilePersonEvents())
   return () => listeners.delete(listener)
 }
 
-export function clearPatrolMobilePpeEvents(): void {
+export function clearPatrolMobilePersonEvents(): void {
   eventsById = new Map()
   notify()
 }
