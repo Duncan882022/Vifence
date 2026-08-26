@@ -22,15 +22,14 @@ export const PATROL_PERSON_ROI_CONFIG = {
   matchIouMin: 0.07,
   /** Match theo khoảng cách tâm / kích thước bbox (di chuyển nhanh) */
   matchCenterRatio: 0.9,
-  /** Frame analyze miss liên tiếp trước khi bỏ track */
-  maxMissFrames: 8,
   /**
-   * Thời gian coast sau lost (ms) — quá dài sẽ để lại bbox ma trên khung.
-   * Track có id backend đã được backend coast sẵn, biến mất khỏi payload nghĩa
-   * là backend bỏ hẳn; giữ thêm ở FE chỉ tạo bóng ma nên dùng mốc ngắn hơn.
+   * Frame analyze miss liên tiếp trước khi bỏ hẳn track khỏi bộ nhớ.
+   *
+   * Track mất dấu **không được vẽ** (xem `predictPersonRoiTracks`), nhưng vẫn
+   * giữ trong bộ nhớ ngần này nhịp để người bị che thoáng qua rồi hiện lại
+   * nhận lại đúng track cũ thay vì bị cấp mã mới.
    */
-  maxLostMs: 1200,
-  maxLostAnchoredMs: 600,
+  maxMissFrames: 8,
   /**
    * Trần nội suy rAF (ms). Đủ bù một nhịp analyze bodycam (180–400ms) nhưng
    * không hơn: vận tốc hiện còn lẫn chuyển động của chính camera (chưa bù

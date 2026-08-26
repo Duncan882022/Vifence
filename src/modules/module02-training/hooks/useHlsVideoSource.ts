@@ -87,7 +87,7 @@ function isVmsRelayHlsUrl(url: string): boolean {
  */
 function resolveHlsLatencyProfile(url: string): {
   lowLatencyMode: boolean
-  liveSyncDurationCount: number
+  liveSyncDurationCount?: number
   liveMaxLatencyDurationCount: number
   maxBufferLength: number
   maxMaxBufferLength: number
@@ -95,8 +95,14 @@ function resolveHlsLatencyProfile(url: string): {
   if (isLowLatencyHlsUrl(url)) {
     return {
       lowLatencyMode: true,
-      liveSyncDurationCount: 2,
-      liveMaxLatencyDurationCount: 5,
+      // Cố ý **không** đặt liveSyncDurationCount.
+      //
+      // MediaMTX chia segment 1s thành part 200ms và công bố PART-HOLD-BACK
+      // trong playlist — đó mới là mốc live của LL-HLS, thường ~600ms. Đặt
+      // liveSyncDurationCount là ép hls.js lùi về *2 segment nguyên* tức 2 giây
+      // và vô hiệu hoá toàn bộ phần low-latency. Để trống thì trình phát bám
+      // theo mốc của máy chủ.
+      liveMaxLatencyDurationCount: 6,
       maxBufferLength: 6,
       maxMaxBufferLength: 8,
     }
@@ -237,7 +243,11 @@ export function useHlsVideoSource(
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: latency.lowLatencyMode,
-          liveSyncDurationCount: latency.liveSyncDurationCount,
+          // Bỏ hẳn khoá này khi profile không đặt — truyền `undefined` vẫn bị
+          // hls.js coi là "đã cấu hình" và ghi đè PART-HOLD-BACK của máy chủ.
+          ...(latency.liveSyncDurationCount != null
+            ? { liveSyncDurationCount: latency.liveSyncDurationCount }
+            : {}),
           liveMaxLatencyDurationCount: latency.liveMaxLatencyDurationCount,
           maxLiveSyncPlaybackRate: 1.5,
           maxBufferLength: latency.maxBufferLength,

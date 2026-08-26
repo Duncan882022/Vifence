@@ -63,15 +63,15 @@ describe('khoá đối tượng theo track id backend', () => {
 
   it('detection có track id hiện ROI ngay từ frame đầu', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    expect(predictPersonRoiTracks(tracks, 0, 1_000)).toHaveLength(1)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
     expect([...tracks.values()][0].state).toBe('confirmed')
   })
 
   it('không có track id thì chờ đủ confirmHits mới vẽ', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400])], 1_000)
-    expect(predictPersonRoiTracks(tracks, 0, 1_000)).toHaveLength(0)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
     tracks = advance(tracks, [person([102, 101, 202, 401])], 1_180)
-    expect(predictPersonRoiTracks(tracks, 0, 1_180)).toHaveLength(1)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
   })
 
   it('worker_id làm khoá khi backend chưa gửi track id', () => {
@@ -133,46 +133,34 @@ describe('bbox mượt', () => {
   it('extrapolate giới hạn trong một nhịp analyze', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
     expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeLessThanOrEqual(400)
-    const far = predictPersonRoiTracks(tracks, 5_000, 1_000)
-    const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs, 1_000)
+    const far = predictPersonRoiTracks(tracks, 5_000)
+    const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs)
     expect(far[0].bbox).toEqual(capped[0].bbox)
   })
 
-  it('track mất dấu không bị dự đoán hai lần', () => {
-    // Người đang đi rồi biến mất khỏi payload: track coast bằng `predict` mỗi
-    // nhịp ingest. Nội suy rAF thêm lần nữa là bbox ma trôi khỏi người.
-    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    tracks = advance(tracks, [person([220, 100, 320, 400], { track_id: 'p1' })], 1_180)
-    tracks = advance(tracks, [], 1_360)
-    expect([...tracks.values()][0].state).toBe('lost')
-
-    const held = predictPersonRoiTracks(tracks, 0, 1_400)
-    const rafd = predictPersonRoiTracks(tracks, 300, 1_400)
-    expect(rafd[0].bbox).toEqual(held[0].bbox)
-  })
 })
 
 describe('tầng định danh từ backend', () => {
   it('mặc định là Đối tượng khi backend chưa gửi tier', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    expect(predictPersonRoiTracks(tracks, 0, 1_000)[0].tier).toBe('object')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
   })
 
   it('đi lên theo backend: Đối tượng → Người → Định danh', () => {
     let tracks = advance(
       empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'object' })], 1_000,
     )
-    expect(predictPersonRoiTracks(tracks, 0, 1_000)[0].tier).toBe('object')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
 
     tracks = advance(
       tracks, [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person' })], 1_180,
     )
-    expect(predictPersonRoiTracks(tracks, 0, 1_180)[0].tier).toBe('person')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
 
     tracks = advance(
       tracks, [person([108, 104, 208, 404], { track_id: 'p1', tier: 'identity' })], 1_360,
     )
-    expect(predictPersonRoiTracks(tracks, 0, 1_360)[0].tier).toBe('identity')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
   })
 
   it('payload trễ nhịp không kéo nhãn tụt xuống', () => {
@@ -182,7 +170,7 @@ describe('tầng định danh từ backend', () => {
     tracks = advance(
       tracks, [person([104, 102, 204, 402], { track_id: 'p1', tier: 'object' })], 1_180,
     )
-    expect(predictPersonRoiTracks(tracks, 0, 1_180)[0].tier).toBe('identity')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
   })
 })
 
@@ -197,8 +185,8 @@ describe('mồi vận tốc từ backend', () => {
     expect(kalman.vx).toBeGreaterThan(0)
 
     const [still, moved] = [
-      predictPersonRoiTracks(tracks, 0, 1_000)[0].bbox,
-      predictPersonRoiTracks(tracks, 200, 1_000)[0].bbox,
+      predictPersonRoiTracks(tracks, 0)[0].bbox,
+      predictPersonRoiTracks(tracks, 200)[0].bbox,
     ]
     expect(moved[0]).toBeGreaterThan(still[0])
   })
@@ -216,33 +204,40 @@ describe('mồi vận tốc từ backend', () => {
 })
 
 describe('vòng đời track', () => {
-  it('track không có id backend coast theo maxLostMs', () => {
-    // Không có anchor thì phải đủ confirmHits mới được vẽ, nên đo hai nhịp trước.
-    let tracks = advance(empty(), [person([100, 100, 200, 400])], 1_000)
-    tracks = advance(tracks, [person([104, 102, 204, 402])], 1_180)
-    expect([...tracks.values()][0].state).toBe('confirmed')
+  it('người rời khung là ROI tắt ngay, không vẽ hộp đoán', () => {
+    // Đây là kịch bản đã sinh ra bbox nằm lại trên bàn phím: người bước ra,
+    // camera lia sang chỗ khác, nhưng hộp cũ vẫn được vẽ ở toạ độ cũ.
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
-    tracks = advance(tracks, [], 1_360)
+    tracks = advance(tracks, [], 1_180)
     expect([...tracks.values()][0].state).toBe('lost')
-
-    const base = 1_180
-    const stillShown = predictPersonRoiTracks(tracks, 0, base + PATROL_PERSON_ROI_CONFIG.maxLostMs - 50)
-    expect(stillShown).toHaveLength(1)
-
-    const gone = predictPersonRoiTracks(tracks, 0, base + PATROL_PERSON_ROI_CONFIG.maxLostMs + 50)
-    expect(gone).toHaveLength(0)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
+    // Kể cả ngay lập tức, không có cửa sổ ân hạn nào.
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })
 
-  it('track có id backend biến mất sớm hơn — backend đã coast sẵn', () => {
-    const anchored = PATROL_PERSON_ROI_CONFIG.maxLostAnchoredMs
-    expect(anchored).toBeLessThan(PATROL_PERSON_ROI_CONFIG.maxLostMs)
-
+  it('track mất dấu vẫn nằm trong bộ nhớ để nhận lại sau lúc bị che', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    tracks = advance(tracks, [], 1_180)
+    const firstId = [...tracks.keys()][0]
 
-    expect(predictPersonRoiTracks(tracks, 0, 1_000 + anchored - 50)).toHaveLength(1)
-    // Backend bỏ track rồi mà FE còn giữ thêm nửa giây nữa thì đó là bbox ma.
-    expect(predictPersonRoiTracks(tracks, 0, 1_000 + anchored + 50)).toHaveLength(0)
+    tracks = advance(tracks, [], 1_180)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
+
+    tracks = advance(tracks, [person([120, 110, 220, 410], { track_id: 'p1' })], 1_360)
+    expect([...tracks.keys()][0]).toBe(firstId)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
+  })
+
+  it('độ tin cậy suy giảm, không giữ đỉnh của cả đời track', () => {
+    // Nhãn "93%" đứng nguyên trong khi track đã yếu hẳn là thông tin sai.
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1', confidence: 0.93 })], 1_000)
+    expect([...tracks.values()][0].confidence).toBeCloseTo(0.93, 2)
+
+    tracks = advance(tracks, [person([104, 102, 204, 402], { track_id: 'p1', confidence: 0.30 })], 1_180)
+    const after = [...tracks.values()][0].confidence
+    expect(after).toBeLessThan(0.93)
+    expect(after).toBeGreaterThanOrEqual(0.30)
   })
 
   it('track quay lại sau khi mất vẫn giữ nguyên id', () => {

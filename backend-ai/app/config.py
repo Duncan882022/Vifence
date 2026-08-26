@@ -141,8 +141,17 @@ class Settings(BaseSettings):
     face_deep_split_max_similarity: float = 0.34
     face_deep_reuse_min_margin: float = 0.05
     face_deep_cross_camera_min_similarity: float = 0.58
-    # Điểm YuNet tối thiểu để coi là "thấy mặt" (cấp sgc) — độc lập ngưỡng khớp gallery.
-    patrol_face_detect_min_score: float = 0.65
+    # Điểm YuNet tối thiểu để coi là "thấy mặt" (cấp sgc) — độc lập ngưỡng khớp
+    # gallery.
+    #
+    # 0.65 quá dễ dãi: cảnh lộn xộn (bàn phím, hộp đồ, vân gỗ) cũng qua được, và
+    # embedding rút từ mảng vô nghĩa đó lại **khớp với nhau**, nên mọi phát hiện
+    # rác dồn hết vào cùng một mã. Tab Người khi ấy đầy những mã không hề dựa
+    # trên khuôn mặt nào.
+    #
+    # Thà bỏ sót một khuôn mặt mờ — track vẫn nằm ở tab Đối tượng và được cấp mã
+    # ngay khi bắt được góc rõ hơn.
+    patrol_face_detect_min_score: float = 0.82
     # Tab Đối tượng — đầu + ≥30% thân, không đủ mặt, bám track ≥ N giây.
     patrol_object_confirm_seconds: float = 3.0
     patrol_face_object_confirm_seconds: float = 1.5

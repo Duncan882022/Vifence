@@ -283,25 +283,49 @@ export async function assignPatrolManualIdentityWithBackend(input: {
   return { identity, backend }
 }
 
-/** Đồng bộ bindings từ BE → local alias (sau reload / thiết bị khác). */
+/**
+ * Đồng bộ định danh từ server. **Server là nguồn sự thật** — bản local phải
+ * khớp hoàn toàn, kể cả việc xoá.
+ *
+ * Trước đây hàm này chỉ thêm, không bao giờ xoá. Sau khi xoá dữ liệu trên
+ * server, bộ đếm `sgc-*` bắt đầu lại từ 1 và alias cũ còn kẹt trong trình duyệt
+ * dán tên của người cũ lên **đối tượng hoàn toàn khác** vừa được cấp lại đúng
+ * mã đó — thẻ nhảy sang tab Định danh với một cái tên chẳng liên quan.
+ */
 export async function syncPatrolIdentityBindingsFromBackend(): Promise<number> {
   const bindings = await fetchPatrolIdentityBindings()
+
+  const next = emptyStore()
   let count = 0
   for (const row of bindings) {
     const workerId = normalizePatrolWorkerId(row.gallery_worker_id)
     const workerName = (row.worker_name ?? '').trim()
     const unitName = (row.contractor_name ?? '').trim()
     if (!workerId || !workerName || !unitName) continue
-    for (const alias of row.aliases ?? []) {
-      assignPatrolManualIdentity({
-        objectKey: alias,
-        workerId,
-        workerName,
-        unitName,
-      })
+
+    const aliases = (row.aliases ?? [])
+      .map(a => normalizePatrolIdentityKey(a))
+      .filter(Boolean)
+    if (aliases.length === 0) continue
+
+    const now = Date.now()
+    next.byWorkerId[workerId] = {
+      workerId,
+      workerName,
+      unitName,
+      objectKeys: aliases,
+      assignedAt: now,
+      updatedAt: now,
+    }
+    for (const alias of aliases) {
+      next.aliasToWorkerId[alias] = workerId
       count += 1
     }
   }
+
+  const before = JSON.stringify(readStore())
+  writeStore(next)
+  if (JSON.stringify(next) !== before) notify()
   return count
 }
 

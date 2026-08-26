@@ -197,7 +197,11 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   }
   track.label = track.workerName?.trim()
     || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
-  track.confidence = Math.max(track.confidence, det.confidence)
+  // Suy giảm rồi mới lấy max, giống backend. Dùng thẳng `Math.max` thì con số
+  // trên nhãn là **đỉnh của cả đời track** và không bao giờ hạ: người rời khung
+  // rồi mà ROI vẫn khoe 93% của mấy giây trước, khiến một track đang yếu trông
+  // như bằng chứng chắc chắn.
+  track.confidence = Math.max(track.confidence * 0.6, det.confidence)
 }
 
 /**
@@ -351,23 +355,22 @@ export function advancePersonRoiTracks(
 export function predictPersonRoiTracks(
   tracks: Map<string, PersonRoiTrack>,
   elapsedMs: number,
-  now = Date.now(),
   cfg: PatrolPersonRoiConfig = PATROL_PERSON_ROI_CONFIG,
 ): PersonRoiDisplay[] {
   const dt = Math.min(Math.max(elapsedMs, 0), cfg.maxPredictMs)
   const out: PersonRoiDisplay[] = []
 
   for (const track of tracks.values()) {
-    const ageSinceMeasure = now - track.lastMeasureAt
-    const lostBudget = track.anchorKey ? cfg.maxLostAnchoredMs : cfg.maxLostMs
-    if (track.state === 'lost' && ageSinceMeasure > lostBudget) continue
+    // Người đi khỏi khung thì ROI phải tắt ngay, không vẽ tiếp một hộp đoán.
+    //
+    // Backend đã coast track sẵn và vẫn gửi xuống chừng nào còn tin là người đó
+    // trong khung; hết gửi nghĩa là hết thấy. Vẽ thêm ở FE chỉ tạo ra hộp đứng
+    // lại trên nền — mà lúc camera vừa lia sang chỗ khác thì cái nền đó là bàn
+    // phím, là tường, là bất cứ thứ gì đang ở đúng toạ độ cũ.
+    if (track.state === 'lost') continue
     if (track.state === 'tentative' && track.hits < cfg.confirmHits) continue
 
-    // Track mất dấu đã được `predict` ở mỗi nhịp ingest rồi; cộng thêm nội suy
-    // rAF là dự đoán hai lần trên cùng quãng thời gian, đủ để bbox ma trôi hẳn
-    // ra khỏi người khi camera đang lia.
-    const extrapolate = dt > 0 && track.state !== 'lost'
-    const bbox = extrapolate ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
+    const bbox = dt > 0 ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
     const personId = canonicalPersonId(track)
     out.push({
       trackId: track.id,
