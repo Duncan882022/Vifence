@@ -24,11 +24,12 @@ export interface PatrolScanPose {
 }
 
 export interface PatrolScanEnrollment {
-  pers_id: string
-  full_name: string | null
-  employee_code: string | null
-  contractor: string | null
-  status: string | null
+  pers_id?: string
+  session_id?: string
+  full_name?: string | null
+  employee_code?: string | null
+  contractor?: string | null
+  status?: string | null
   faces_captured: number
   faces_required: number
   complete: boolean
@@ -159,4 +160,98 @@ export async function scanPatrolWorkerFace(
     enrollment: data.enrollment,
     message: data.message,
   }
+}
+
+export async function createPatrolEnrollSession(): Promise<{
+  sessionId: string
+  enrollment: PatrolScanEnrollment
+}> {
+  const data = await patrolJson<{
+    ok: boolean
+    session_id?: string
+    enrollment?: PatrolScanEnrollment
+    error?: string
+  }>('/patrol/enroll/session', { method: 'POST' })
+  if (!data.ok || !data.session_id || !data.enrollment) {
+    throw new Error(data.error ?? 'Không tạo được phiên quét.')
+  }
+  return { sessionId: data.session_id, enrollment: data.enrollment }
+}
+
+export async function fetchPatrolEnrollSession(
+  sessionId: string,
+): Promise<PatrolScanEnrollment> {
+  const data = await patrolJson<{
+    ok: boolean
+    enrollment?: PatrolScanEnrollment
+    error?: string
+  }>(`/patrol/enroll/${encodeURIComponent(sessionId)}`)
+  if (!data.ok || !data.enrollment) {
+    throw new Error(data.error === 'session_not_found'
+      ? 'Phiên quét đã hết hạn — tải lại trang.'
+      : (data.error ?? 'Không tải được trạng thái quét.'))
+  }
+  return data.enrollment
+}
+
+export async function scanPatrolEnrollSessionFace(
+  sessionId: string,
+  imageB64: string,
+  poseSlot: number,
+): Promise<{ face_added: boolean; enrollment: PatrolScanEnrollment; message?: string }> {
+  const data = await patrolJson<{
+    ok: boolean
+    error?: string
+    face_added?: boolean
+    enrollment?: PatrolScanEnrollment
+    message?: string
+  }>(`/patrol/enroll/${encodeURIComponent(sessionId)}/scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_b64: imageB64, pose_slot: poseSlot }),
+  })
+  if (!data.ok || !data.enrollment) {
+    const err = data.error === 'no_face_detected'
+      ? 'Không phát hiện khuôn mặt — giữ mặt trong khung oval.'
+      : data.error === 'session_not_found'
+        ? 'Phiên quét đã hết hạn — tải lại trang.'
+        : (data.error ?? 'Quét mặt thất bại.')
+    throw new Error(err)
+  }
+  return {
+    face_added: Boolean(data.face_added),
+    enrollment: data.enrollment,
+    message: data.message,
+  }
+}
+
+export async function completePatrolEnrollSession(
+  sessionId: string,
+  profile: PatrolImportRow,
+): Promise<{ person: PatrolWorkerPerson; enrollment: PatrolScanEnrollment }> {
+  const data = await patrolJson<{
+    ok: boolean
+    error?: string
+    person?: PatrolWorkerPerson
+    enrollment?: PatrolScanEnrollment
+  }>(`/patrol/enroll/${encodeURIComponent(sessionId)}/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      full_name: profile.full_name,
+      employee_code: profile.employee_code,
+      contractor: profile.contractor ?? '',
+    }),
+  })
+  if (!data.ok || !data.person || !data.enrollment) {
+    const err = data.error === 'missing_fields'
+      ? 'Nhập đủ họ tên và mã nhân viên.'
+      : data.error === 'incomplete_enrollment'
+        ? 'Chưa đủ 3 góc mặt — quay lại bước quét.'
+        : data.error === 'session_not_found'
+          ? 'Phiên quét đã hết hạn — tải lại trang.'
+          : (data.error ?? 'Lưu hồ sơ thất bại.')
+    throw new Error(err)
+  }
+  return { person: data.person, enrollment: data.enrollment }
 }

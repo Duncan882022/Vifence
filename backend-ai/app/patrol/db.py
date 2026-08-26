@@ -121,6 +121,24 @@ CREATE TABLE IF NOT EXISTS counters (
   name  TEXT PRIMARY KEY,
   value INTEGER NOT NULL
 );
+
+-- Phiên quét mặt tự phục vụ (công nhân quét trước, nhập hồ sơ sau).
+CREATE TABLE IF NOT EXISTS enroll_sessions (
+  session_id TEXT PRIMARY KEY,
+  created_at REAL NOT NULL,
+  expires_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS enroll_session_faces (
+  session_id TEXT NOT NULL REFERENCES enroll_sessions(session_id) ON DELETE CASCADE,
+  slot       INTEGER NOT NULL,
+  embedding  BLOB NOT NULL,
+  dim        INTEGER NOT NULL,
+  quality    REAL NOT NULL DEFAULT 1.0,
+  created_at REAL NOT NULL,
+  PRIMARY KEY (session_id, slot)
+);
+CREATE INDEX IF NOT EXISTS ix_enroll_sessions_expires ON enroll_sessions(expires_at);
 """
 
 
@@ -223,6 +241,8 @@ def reset_all(keep_counters: bool = True) -> dict[str, int]:
         conn.execute("DELETE FROM daily_objects")
         conn.execute("DELETE FROM person_aliases")
         conn.execute("DELETE FROM person_faces")
+        conn.execute("DELETE FROM enroll_session_faces")
+        conn.execute("DELETE FROM enroll_sessions")
         conn.execute("DELETE FROM persons")
         if not keep_counters:
             conn.execute("DELETE FROM counters")

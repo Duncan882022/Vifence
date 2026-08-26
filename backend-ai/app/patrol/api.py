@@ -176,6 +176,83 @@ def import_persons(payload: dict) -> dict[str, Any]:
     }
 
 
+@router.post("/enroll/session")
+def create_enroll_session() -> dict[str, Any]:
+    """Bắt đầu phiên quét tự phục vụ — công nhân quét trước, nhập hồ sơ sau."""
+    session_id = identity.create_enroll_session()
+    enrollment = identity.get_enroll_session_enrollment(session_id)
+    return {"ok": True, "session_id": session_id, "enrollment": enrollment}
+
+
+@router.get("/enroll/{session_id}")
+def enroll_session_status(session_id: str) -> dict[str, Any]:
+    enrollment = identity.get_enroll_session_enrollment(session_id)
+    if enrollment is None:
+        return {"ok": False, "error": "session_not_found"}
+    return {"ok": True, "enrollment": enrollment}
+
+
+@router.post("/enroll/{session_id}/scan")
+def scan_enroll_session_face(session_id: str, payload: dict) -> dict[str, Any]:
+    """Quét góc mặt vào phiên tạm — chưa gắn hồ sơ."""
+    if identity.get_enroll_session_enrollment(session_id) is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    image_b64 = payload.get("image_b64")
+    if not image_b64:
+        return {"ok": False, "error": "missing_image"}
+
+    emb = _embed_face_b64(str(image_b64))
+    if emb is None:
+        return {"ok": False, "error": "no_face_detected"}
+
+    pose_slot = payload.get("pose_slot")
+    slot = int(pose_slot) if pose_slot is not None else None
+    added = identity.add_enroll_session_face(session_id, emb, pose_slot=slot)
+    enrollment = identity.get_enroll_session_enrollment(session_id)
+    if enrollment is None:
+        return {"ok": False, "error": "session_not_found"}
+    if not added:
+        return {
+            "ok": True,
+            "face_added": False,
+            "message": "duplicate_angle",
+            "enrollment": enrollment,
+        }
+    return {"ok": True, "face_added": True, "enrollment": enrollment}
+
+
+@router.post("/enroll/{session_id}/complete")
+def complete_enroll_session(session_id: str, payload: dict) -> dict[str, Any]:
+    """Hoàn tất — nhập hồ sơ giống import Excel, gắn vector đã quét."""
+    full_name = str(payload.get("full_name") or payload.get("ho_ten") or "").strip()
+    employee_code = str(payload.get("employee_code") or payload.get("ma_nv") or "").strip()
+    contractor = str(payload.get("contractor") or payload.get("don_vi") or "").strip()
+    if not full_name or not employee_code:
+        return {"ok": False, "error": "missing_fields"}
+
+    try:
+        row = identity.complete_enroll_session(
+            session_id,
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code == "session_not_found":
+            return {"ok": False, "error": "session_not_found"}
+        if code == "incomplete_enrollment":
+            return {"ok": False, "error": "incomplete_enrollment"}
+        return {"ok": False, "error": code}
+
+    return {
+        "ok": True,
+        "person": _person_payload(row, with_face_stats=True),
+        "enrollment": identity.get_scan_enrollment(str(row["pers_id"])),
+    }
+
+
 @router.post("/persons/{pers_id}/scan")
 def scan_person_face(pers_id: str, payload: dict) -> dict[str, Any]:
     """Quét thêm góc mặt — vector lưu vào `person_faces` cho nhận diện tuần tra."""

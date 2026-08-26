@@ -10,24 +10,36 @@ import {
 import { cn } from '@/utils/cn'
 import { captureVideoFrameBase64 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
+  fetchPatrolEnrollSession,
   fetchPatrolScanEnrollment,
   pingPatrolProfileBackend,
+  scanPatrolEnrollSessionFace,
   scanPatrolWorkerFace,
   type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 
 interface PatrolFaceScannerPanelProps {
-  person: PatrolWorkerPerson
+  /** Quét bổ sung vector cho hồ sơ đã có (HR / tra mã). */
+  person?: PatrolWorkerPerson
+  /** Phiên quét tự phục vụ — chưa có hồ sơ. */
+  sessionId?: string
   subtitle?: string
   onEnrollmentChange?: (enrollment: PatrolScanEnrollment) => void
+  /** Gọi khi đủ 3 góc (phiên tự phục vụ). */
+  onScanComplete?: (enrollment: PatrolScanEnrollment) => void
 }
 
 export function PatrolFaceScannerPanel({
   person,
+  sessionId,
   subtitle,
   onEnrollmentChange,
+  onScanComplete,
 }: PatrolFaceScannerPanelProps) {
+  const isSession = Boolean(sessionId)
+  const subjectKey = sessionId ?? person?.pers_id ?? ''
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
@@ -42,6 +54,7 @@ export function PatrolFaceScannerPanel({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const refreshStatus = useCallback(async () => {
+    if (!subjectKey) return
     setLoading(true)
     setErrorMsg(null)
     try {
@@ -51,18 +64,21 @@ export function PatrolFaceScannerPanel({
         setErrorMsg('Không kết nối backend tuần tra. Kiểm tra URL backend AI.')
         return
       }
-      const status = await fetchPatrolScanEnrollment(person.pers_id)
+      const status = isSession
+        ? await fetchPatrolEnrollSession(sessionId!)
+        : await fetchPatrolScanEnrollment(person!.pers_id)
       setEnrollment(status)
       onEnrollmentChange?.(status)
       const nextSlot = status.poses.find(p => !p.captured)?.slot
       if (nextSlot) setActiveSlot(nextSlot)
+      if (status.complete) onScanComplete?.(status)
     } catch (err) {
       setBackendOnline(false)
       setErrorMsg(err instanceof Error ? err.message : 'Không tải được trạng thái quét.')
     } finally {
       setLoading(false)
     }
-  }, [person.pers_id, onEnrollmentChange])
+  }, [subjectKey, isSession, sessionId, person, onEnrollmentChange, onScanComplete])
 
   const startCamera = useCallback(async () => {
     setCameraError(null)
@@ -90,11 +106,11 @@ export function PatrolFaceScannerPanel({
     return () => {
       streamRef.current?.getTracks().forEach(track => track.stop())
     }
-  }, [refreshStatus, startCamera, person.pers_id])
+  }, [refreshStatus, startCamera, subjectKey])
 
   const handleCapture = async () => {
     const video = videoRef.current
-    if (!video || !cameraReady) {
+    if (!video || !cameraReady || !subjectKey) {
       setErrorMsg('Camera chưa sẵn sàng.')
       return
     }
@@ -109,7 +125,9 @@ export function PatrolFaceScannerPanel({
     setErrorMsg(null)
     setSuccessMsg(null)
     try {
-      const result = await scanPatrolWorkerFace(person.pers_id, imageB64, activeSlot)
+      const result = isSession
+        ? await scanPatrolEnrollSessionFace(sessionId!, imageB64, activeSlot)
+        : await scanPatrolWorkerFace(person!.pers_id, imageB64, activeSlot)
       setEnrollment(result.enrollment)
       onEnrollmentChange?.(result.enrollment)
       if (result.message === 'duplicate_angle') {
@@ -118,7 +136,11 @@ export function PatrolFaceScannerPanel({
         setSuccessMsg(`Đã lưu góc "${result.enrollment.poses.find(p => p.slot === activeSlot)?.label ?? activeSlot}".`)
       }
       const pending = result.enrollment.poses.find(p => !p.captured)
-      if (pending) setActiveSlot(pending.slot)
+      if (pending) {
+        setActiveSlot(pending.slot)
+      } else if (result.enrollment.complete) {
+        onScanComplete?.(result.enrollment)
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Lưu ảnh thất bại.')
     } finally {
@@ -133,10 +155,12 @@ export function PatrolFaceScannerPanel({
   ]
   const capturedCount = enrollment?.faces_captured ?? 0
   const complete = enrollment?.complete ?? false
-  const displayName = person.full_name ?? person.display_name
+  const displayName = person?.full_name ?? person?.display_name
   const defaultSubtitle = subtitle ?? (
-    `Quét 3 góc mặt cho ${displayName} (${person.employee_code ?? person.pers_id}) — `
-    + 'vector lưu vào kho tuần tra Module 05, khớp nhận diện trên mũ & flycam.'
+    isSession
+      ? 'Quét 3 góc mặt — hệ thống đánh giá đủ vector rồi mới sang bước nhập họ tên và đơn vị.'
+      : `Quét 3 góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}) — `
+        + 'vector lưu vào kho tuần tra Module 05, khớp nhận diện trên mũ & flycam.'
   )
 
   return (
@@ -238,7 +262,9 @@ export function PatrolFaceScannerPanel({
           <div className="rounded-xl border border-[#1e2433] bg-[#0b0f1a] p-4 space-y-3">
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               Góc đang quét: <span className="text-foreground font-semibold">{poses.find(p => p.slot === activeSlot)?.label}</span>.
-              Vector embedding dùng chung engine nhận diện tuần tra (SFace).
+              {isSession
+                ? ' Đủ 3 góc sẽ chuyển sang nhập họ tên và đơn vị.'
+                : ' Vector embedding dùng chung engine nhận diện tuần tra (SFace).'}
             </p>
             <button
               type="button"
@@ -251,7 +277,9 @@ export function PatrolFaceScannerPanel({
             </button>
             {complete && (
               <p className="text-[10px] text-green-400 text-center">
-                Hồ sơ đủ vector — sẵn sàng nhận diện trên Module 05.
+                {isSession
+                  ? 'Đủ vector — nhấn Tiếp tục bên dưới để nhập thông tin.'
+                  : 'Hồ sơ đủ vector — sẵn sàng nhận diện trên Module 05.'}
               </p>
             )}
           </div>
