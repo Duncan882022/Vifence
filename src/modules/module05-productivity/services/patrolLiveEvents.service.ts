@@ -1,5 +1,4 @@
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
-import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
   getPatrolHelmetGps,
   getPatrolHelmetGpsLastKnown,
@@ -368,27 +367,4 @@ export function mapBackendEventToPatrolEvent(
   return eventType === 'PERSON_DETECTED'
     ? formatPatrolPersonDetectedEvent(mapped)
     : mapped
-}
-
-export interface ClearBackendEventsResult {
-  memory: number
-  files: number
-  dedup_keys: number
-}
-
-/** DELETE /events — xóa RAM + JSONL + snapshot trên backend (test mới). */
-export async function clearAllPatrolBackendEvents(
-  backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl(),
-): Promise<ClearBackendEventsResult | null> {
-  const base = backendUrl?.replace(/\/$/, '')
-  if (!base) return null
-  const res = await fetch(`${base}/events`, {
-    method: 'DELETE',
-    headers: TUNNEL_HEADERS,
-    mode: 'cors',
-  })
-  if (!res.ok) {
-    throw new Error(`clear events failed: HTTP ${res.status}`)
-  }
-  return (await res.json()) as ClearBackendEventsResult
 }

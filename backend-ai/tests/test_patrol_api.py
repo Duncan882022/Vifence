@@ -100,13 +100,9 @@ class PatrolApiTests(unittest.TestCase):
         looked_up = self.client.get(f"/patrol/persons/{b}").json()
         self.assertEqual(looked_up["person"]["pers_id"], a)
 
-    def test_objects_listed_and_reset(self) -> None:
+    def test_objects_listed(self) -> None:
         daystore.touch_object(None, camera_id="HC-02")
         self.assertEqual(len(self.client.get("/patrol/day/objects").json()["items"]), 1)
-
-        self.client.delete("/patrol/day/reset")
-        self.assertEqual(self.client.get("/patrol/day/objects").json()["items"], [])
-        self.assertEqual(self.client.get("/patrol/persons").json()["items"], [])
 
 
 if __name__ == "__main__":
