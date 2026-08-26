@@ -33,9 +33,18 @@ export const PATROL_PERSON_ROI_CONFIG = {
   maxLostAnchoredMs: 600,
   /** Giới hạn extrapolate rAF (ms) — chỉ bù đúng một nhịp analyze */
   maxPredictMs: 260,
-  /** Kalman — processNoise thấp → track ổn định hơn giữa 2 detect */
+  /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
   processNoise: 0.08,
   measureNoise: 0.2,
+  /**
+   * Sàn hệ số lọc: mỗi lần đo, tâm box phải tiến ít nhất ngần này quãng đường
+   * tới vị trí vừa đo được.
+   *
+   * Track đang bám chỉ chạy `update`, không chạy `predict`, nên `p` giảm đơn
+   * điệu tới sàn và hệ số rơi về ~0.2: mỗi nhịp ROI chỉ đi được 1/5 quãng, box
+   * bám lệt bệt sau người và càng đi nhanh càng tụt. Có sàn thì độ trễ bị chặn.
+   */
+  minMeasureGain: 0.55,
   velocityDamping: 0.978,
   /** Trọng số đo trên kích thước — thấp thì ROI không phình/co giật theo YOLO */
   sizeGain: 0.35,

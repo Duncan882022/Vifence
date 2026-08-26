@@ -83,7 +83,11 @@ class TrackerProfile:
     # camera: flycam nhận người từ 0.18 nên lấy chung mốc 0.34 của bodycam thì
     # gần như mọi detection đều rơi vào nhánh low.
     high_conf: float = 0.34
-    process_noise: float = 0.08
+    # Độ bất định cộng thêm mỗi giây. Để quá thấp thì `p` tụt xuống sàn, hệ số
+    # lọc chỉ còn ~0.2 và bbox hiển thị bám chậm hẳn sau người đang đi — nhìn
+    # như ROI "trôi" phía sau. 1.2 cho hệ số ổn định quanh 0.55 ở nhịp 8 FPS:
+    # đủ mượt mà vẫn theo kịp.
+    process_noise: float = 1.2
     measure_noise: float = 0.2
     size_gain: float = 0.35
     velocity_smoothing: float = 0.72
@@ -155,7 +159,12 @@ class _Kalman:
         self.vy *= self._prof.velocity_damping
         self.p += self._prof.process_noise * dt
 
-    def update(self, bbox: Bbox, dt_sec: float) -> None:
+    def update(
+        self,
+        bbox: Bbox,
+        dt_sec: float,
+        measured_velocity: tuple[float, float] | None = None,
+    ) -> None:
         mx, my = _center(bbox)
         mw = max(1.0, bbox[2] - bbox[0])
         mh = max(1.0, bbox[3] - bbox[1])
@@ -167,12 +176,17 @@ class _Kalman:
         self.cx += applied_x
         self.cy += applied_y
 
-        # Vận tốc lấy từ dịch chuyển *đã lọc*. Chia innovation thô cho dt sẽ
-        # khuếch đại nhiễu đo, khiến hộp bay vọt khi ngoại suy.
         keep = self._prof.velocity_smoothing
         limit = self._max_speed()
-        self.vx = _clamp(self.vx * keep + (applied_x / dt) * (1 - keep), -limit, limit)
-        self.vy = _clamp(self.vy * keep + (applied_y / dt) * (1 - keep), -limit, limit)
+        if measured_velocity is not None:
+            # Dịch chuyển giữa hai lần đo là số đo trực tiếp của vận tốc. Suy từ
+            # phần dư sau `predict` thì khi dự đoán đúng phần dư gần bằng 0 và
+            # vận tốc tự tiêu biến — FE nhận số hụt rồi nội suy thiếu.
+            raw_vx, raw_vy = measured_velocity
+        else:
+            raw_vx, raw_vy = applied_x / dt, applied_y / dt
+        self.vx = _clamp(self.vx * keep + raw_vx * (1 - keep), -limit, limit)
+        self.vy = _clamp(self.vy * keep + raw_vy * (1 - keep), -limit, limit)
 
         gain = self._prof.size_gain
         self.w = self.w * (1 - gain) + mw * gain
@@ -197,7 +211,24 @@ class PatrolTrack:
     measured_bbox: Bbox = (0.0, 0.0, 0.0, 0.0)
 
     def bbox(self) -> Bbox:
+        """Bbox đã làm mượt — dùng để hiển thị."""
         return self.kalman.bbox()
+
+    def gate_bbox(self, now: float) -> Bbox:
+        """Bbox dùng để ghép — vị trí đo lần cuối, đẩy tiếp theo vận tốc.
+
+        Không dùng bbox Kalman ở đây: bộ lọc cố tình bám chậm để hình đỡ giật,
+        nên với người đang đi nó luôn nằm sau vị trí thật. Lấy nó làm mốc ghép
+        thì khoảng cách tới detection mới cứ nới ra từng frame cho tới lúc vượt
+        cổng, và track đứt ngay giữa lúc người vẫn đang trong khung.
+        """
+        age = _clamp(now - self.last_measured_at, 0.0, 1.2)
+        if age <= 0.0:
+            return self.measured_bbox
+        dx = self.kalman.vx * age
+        dy = self.kalman.vy * age
+        x1, y1, x2, y2 = self.measured_bbox
+        return (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
 
     def velocity(self) -> tuple[float, float]:
         """px/giây trên hệ toạ độ frame AI — FE dùng để nội suy giữa hai snapshot."""
@@ -227,9 +258,9 @@ class PatrolTracker:
         # phân biệt track người với track vi phạm PPE theo hậu tố hành vi.
         return f"ptk{self._seq:04d}:person"
 
-    def _match_cost(self, track: PatrolTrack, det: Bbox) -> float | None:
+    def _match_cost(self, track: PatrolTrack, det: Bbox, now: float) -> float | None:
         prof = self.profile
-        tb = track.bbox()
+        tb = track.gate_bbox(now)
         if _size_ratio(tb, det) < prof.size_ratio_min:
             return None
 
@@ -255,6 +286,7 @@ class PatrolTracker:
         states: set[str],
         used_tracks: set[str],
         used_dets: set[int],
+        now: float,
     ) -> list[tuple[str, int]]:
         candidates: list[_Candidate] = []
         for track in self.tracks.values():
@@ -263,7 +295,7 @@ class PatrolTracker:
             for det_index, det_bbox in pool:
                 if det_index in used_dets:
                     continue
-                cost = self._match_cost(track, det_bbox)
+                cost = self._match_cost(track, det_bbox, now)
                 if cost is not None:
                     candidates.append(_Candidate(track, det_index, cost))
 
@@ -307,14 +339,14 @@ class PatrolTracker:
 
         # ByteTrack: high-conf ghép trước với track đang sống, rồi tới track vừa
         # mất dấu, cuối cùng mới để low-conf vớt lại.
-        pairs += self._assign(high, {"confirmed"}, used_tracks, used_dets)
-        pairs += self._assign(high, {"lost", "tentative"}, used_tracks, used_dets)
-        pairs += self._assign(low, {"confirmed"}, used_tracks, used_dets)
+        pairs += self._assign(high, {"confirmed"}, used_tracks, used_dets, now)
+        pairs += self._assign(high, {"lost", "tentative"}, used_tracks, used_dets, now)
+        pairs += self._assign(low, {"confirmed"}, used_tracks, used_dets, now)
         # ByteTrack gốc dừng ở đây vì giả định track nào cũng khởi sinh từ
         # detection high-conf. Người nhỏ trên flycam thì không: cả vòng đời của
         # họ nằm dưới ngưỡng, nên track vừa sinh sẽ không bao giờ được đo lại và
         # chết ngay sau `lost_keep_sec` — đúng hiện tượng ROI không bám ai.
-        pairs += self._assign(low, {"lost", "tentative"}, used_tracks, used_dets)
+        pairs += self._assign(low, {"lost", "tentative"}, used_tracks, used_dets, now)
 
         result: list[str | None] = [None] * len(detections)
         measure_dt = max(dt, 0.008)
@@ -322,7 +354,13 @@ class PatrolTracker:
         for track_id, det_index in pairs:
             track = self.tracks[track_id]
             bbox, conf = detections[det_index]
-            track.kalman.update(bbox, measure_dt)
+            gap = now - track.last_measured_at
+            measured_velocity: tuple[float, float] | None = None
+            if gap > 1e-3:
+                pcx, pcy = _center(track.measured_bbox)
+                ncx, ncy = _center(bbox)
+                measured_velocity = ((ncx - pcx) / gap, (ncy - pcy) / gap)
+            track.kalman.update(bbox, measure_dt, measured_velocity)
             track.hits += 1
             track.miss_streak = 0
             track.last_measured_at = now

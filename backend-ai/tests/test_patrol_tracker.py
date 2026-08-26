@@ -107,6 +107,34 @@ class TestTrackStability(unittest.TestCase):
         out = tracker.update([(_box(600, 400, 40, 90), 0.5)], now=t)[0]
         self.assertNotEqual(near, out)
 
+    def test_fast_runner_keeps_id_over_long_sequence(self):
+        """Bẫy cũ: cổng ghép so với bbox Kalman (bám chậm) nên khoảng lệch nới
+        dần từng frame cho tới khi track đứt giữa lúc người vẫn trong khung."""
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        ids = []
+        t = 0.0
+        x = 100.0
+        for _ in range(25):
+            t += 0.125
+            ids.append(tracker.update([(_box(x, 400, 110, 260), 0.7)], now=t)[0])
+            x += 90  # ~720 px/s, chạy nhanh
+
+        self.assertEqual(len(set(ids)), 1, f"ID phải giữ nguyên, nhận được {set(ids)}")
+
+    def test_velocity_matches_measured_displacement(self):
+        """Vận tốc phải bám số đo thật, không tiêu biến khi dự đoán đúng."""
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        tid = None
+        for step in range(12):
+            t += 0.125
+            tid = tracker.update([(_box(200 + step * 50, 400, 120, 300), 0.7)], now=t)[0]
+
+        vx, _vy = tracker.get(tid).velocity()
+        expected = 50 / 0.125  # 400 px/s
+        self.assertGreater(vx, expected * 0.7)
+        self.assertLess(vx, expected * 1.3)
+
     def test_velocity_is_exposed_for_interpolation(self):
         tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
         t = 0.0

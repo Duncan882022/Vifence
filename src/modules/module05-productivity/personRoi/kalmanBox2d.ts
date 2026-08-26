@@ -29,6 +29,8 @@ export interface KalmanBox2DTuning {
   velocitySmoothing: number
   /** Trần tốc độ tính theo số lần cạnh bbox mỗi giây — chặn box bay khi đo nhiễu. */
   maxSpeedBoxPerSec: number
+  /** Sàn hệ số lọc vị trí — chặn độ trễ khi `p` đã tụt xuống đáy. */
+  minMeasureGain: number
 }
 
 const DEFAULT_TUNING: KalmanBox2DTuning = {
@@ -38,6 +40,7 @@ const DEFAULT_TUNING: KalmanBox2DTuning = {
   sizeGain: 0.35,
   velocitySmoothing: 0.72,
   maxSpeedBoxPerSec: 2.5,
+  minMeasureGain: 0.55,
 }
 
 /**
@@ -93,7 +96,10 @@ export class KalmanBox2D {
   update(bbox: Bbox, dtMs: number): Bbox {
     const [mx, my, mw, mh] = bboxToCxCyWh(bbox)
     const dt = Math.max(8, dtMs) / 1000
-    const k = this.p / (this.p + this.tuning.measureNoise)
+    const k = Math.max(
+      this.tuning.minMeasureGain,
+      this.p / (this.p + this.tuning.measureNoise),
+    )
 
     const appliedX = k * (mx - this.cx)
     const appliedY = k * (my - this.cy)

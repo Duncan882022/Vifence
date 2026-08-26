@@ -138,6 +138,7 @@ function createKalman(bbox: Bbox, cfg: PatrolPersonRoiConfig): KalmanBox2D {
     sizeGain: cfg.sizeGain,
     velocitySmoothing: cfg.velocitySmoothing,
     maxSpeedBoxPerSec: cfg.maxSpeedBoxPerSec,
+    minMeasureGain: cfg.minMeasureGain,
   })
 }
 
