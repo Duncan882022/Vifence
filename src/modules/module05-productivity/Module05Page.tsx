@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2, Trash2,
+  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -55,7 +55,6 @@ import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import { summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
 import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/patrolPatrolCounts'
 import { subscribeHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
-import { resetPatrolTestData } from './services/patrolReset.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
@@ -246,32 +245,6 @@ export function Module05Page() {
     [detailEventId, patrolEventsLive],
   )
 
-  const [resetting, setResetting] = useState(false)
-
-  async function handleResetTestData() {
-    if (!window.confirm('Xóa toàn bộ dữ liệu patrol (events, sgc, thư viện mặt, định danh)?\nTrang sẽ tự reload sau khi xong.')) return
-    setResetting(true)
-    let result: Awaited<ReturnType<typeof resetPatrolTestData>>
-    try {
-      result = await resetPatrolTestData()
-    } finally {
-      setResetting(false)
-    }
-
-    // Backend chưa xoá mà reload thì lần tải trang sau đồng bộ ngược bindings cũ
-    // về localStorage — dữ liệu quay lại nguyên vẹn và người trực tưởng đã xoá.
-    if (!result.ok) {
-      window.alert(
-        `Chưa xoá được dữ liệu.\n\n${result.error ?? 'Không rõ nguyên nhân.'}\n\n`
-        + 'Dữ liệu trên máy chủ vẫn còn nên trang không reload. '
-        + 'Kiểm tra backend rồi thử lại.',
-      )
-      return
-    }
-
-    window.location.reload()
-  }
-
   const handleSelectCamera = (cam: TrainingCamera) => {
     setSelectedCamId(cam.id)
   }
@@ -288,18 +261,6 @@ export function Module05Page() {
       <Header
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
-        headerRight={
-          <button
-            type="button"
-            onClick={handleResetTestData}
-            disabled={resetting}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[9px] text-muted-foreground/60 hover:text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
-            title="Xóa dữ liệu test (events, sgc, heatmap)"
-          >
-            <Trash2 className="w-3 h-3" />
-            {resetting ? 'Đang xóa…' : 'Reset test'}
-          </button>
-        }
       />
       <PageLayout scrollable={isMobileLayout && !cameraCollapsed}>
         {/* Tier 1 — KPIs */}
