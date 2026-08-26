@@ -15,15 +15,6 @@ const TIER_RANK: Record<PersonRoiTier, number> = {
   identity: 2,
 }
 
-const PPE_PROXY_BEHAVIORS = new Set([
-  'no_helmet',
-  'no_vest',
-  'no_shoes',
-  'hard_hat',
-  'safety_vest',
-  'safety_shoes',
-])
-
 let trackSeq = 0
 
 function nextTrackId(): string {
@@ -31,13 +22,17 @@ function nextTrackId(): string {
   return `PTR-${String(trackSeq).padStart(5, '0')}`
 }
 
+/**
+ * Chỉ nhận detection `person`.
+ *
+ * Trước đây khi không có box người nào, hàm này rơi xuống lấy bbox PPE
+ * (mũ, áo, giày) làm bằng chứng có người. Module 05 không chạy model PPE nên
+ * nhánh đó chỉ còn là đường cho dữ liệu lạ lọt vào — mà bbox một cái mũ thì
+ * cũng không phải khung người để mà bám.
+ */
 export function normalizePersonRoiDetections(detections: PersonRoiDetection[]): PersonRoiDetection[] {
-  const persons = detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4)
-  if (persons.length > 0) return dedupeOverlappingPersonDetections(persons)
   return dedupeOverlappingPersonDetections(
-    detections
-      .filter(d => PPE_PROXY_BEHAVIORS.has(d.behavior) && d.bbox?.length === 4)
-      .map(d => ({ ...d, behavior: 'person' })),
+    detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4),
   )
 }
 

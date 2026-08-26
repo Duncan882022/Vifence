@@ -16,6 +16,17 @@ export function isPatrolPersonRoiCameraId(cameraId: string): boolean {
 }
 
 /**
+ * Camera tuần tra chỉ theo dõi người — không có PPE.
+ *
+ * Backend không chạy model PPE nào cho bodycam và flycam, nên đây là ràng buộc
+ * phạm vi của Module 05 chứ không phải công tắc bật/tắt tính năng. Overlay ATLĐ
+ * dùng hàm này để không vẽ bbox vi phạm lên tile tuần tra.
+ */
+export function isPatrolPersonOnlyCamera(cameraId: string): boolean {
+  return isPatrolMetricsCameraId(cameraId)
+}
+
+/**
  * Backend còn relay HLS cho camera này không.
  *
  * Phải khớp `VMS_HLS_RELAY_SKIP_PREFIXES` phía backend: camera tuần tra được

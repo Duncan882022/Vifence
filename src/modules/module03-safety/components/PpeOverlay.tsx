@@ -33,7 +33,7 @@ import { syncPersonOverlaySession } from '../utils/personOverlaySession'
 import { getOverlayBoxStyle } from '../utils/roiBoxRole'
 import { overlayBoxMotionClass } from '../utils/overlayBoxMotion'
 import { ppeScanRank, ppeViolationRank } from '../utils/overlayScanOrder'
-import { shouldHidePatrolPpeViolationOverlay } from '@/modules/module05-productivity/utils/patrolPpeVisibility'
+import { isPatrolPersonOnlyCamera } from '@/modules/module05-productivity/data/patrolHelmetScope'
 
 interface PpeOverlayProps {
   cameraId: string
@@ -298,7 +298,7 @@ export const PpeOverlay = memo(function PpeOverlay({
     let items = buildPpeCycleDetections(stableDetections).filter(d =>
       shouldShowOverlayBox(d.confidence, d.bbox),
     )
-    if (shouldHidePatrolPpeViolationOverlay(cameraId)) {
+    if (isPatrolPersonOnlyCamera(cameraId)) {
       items = items.filter(d => d.behavior === 'person')
     }
     return items
@@ -312,7 +312,7 @@ export const PpeOverlay = memo(function PpeOverlay({
     )
   }, [cycleItems])
 
-  const patrolPersonOnly = shouldHidePatrolPpeViolationOverlay(cameraId)
+  const patrolPersonOnly = isPatrolPersonOnlyCamera(cameraId)
 
   const { visible, pulse } = useRoiCycleDisplay(cycleItems, d => d.behavior.startsWith('no_'), {
     enabled: !patrolPersonOnly,

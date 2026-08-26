@@ -6,7 +6,6 @@ import {
   isPatrolHeatmapEligibleEvent,
   summarizePatrolAlertCount,
 } from './patrolPatrolCounts'
-import { PATROL_PPE_UI_HIDDEN } from './patrolPpeVisibility'
 
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000
 
@@ -43,12 +42,11 @@ export function isPatrolPersonLifecycleWithSnapshot(event: PatrolEvent): boolean
   return hasPatrolEventSnapshot(event)
 }
 
-/** Loại sự kiện được phép trên feed chính (spec §8.1 / §8.4). */
+/** Loại sự kiện được phép trên feed chính — Module 05 chỉ có vòng đời người. */
 export function isPatrolFeedEventType(event: PatrolEvent): boolean {
   if (event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED') {
     return hasPatrolEventSnapshot(event)
   }
-  if (event.type === 'PPE_VIOLATION') return !PATROL_PPE_UI_HIDDEN && hasPatrolEventSnapshot(event)
   return false
 }
 

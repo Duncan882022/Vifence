@@ -3,8 +3,6 @@
 export type CameraStatus = 'ONLINE' | 'OFFLINE'
 export type ZoneCoverage = 'VISITED' | 'NOT_VISITED'
 export type EventType =
-  | 'PPE_VIOLATION'
-  | 'MACHINE_STOPPED'
   | 'PERSON_DETECTED'
   | 'POPULATION_OBSERVED'
   | 'POPULATION_CHANGE'
@@ -120,42 +118,6 @@ export const MOCK_PATROL_ZONES: PatrolZone[] = [
 /* ── Events — GPS updated to match GPS zone grid ───────────── */
 export const MOCK_PATROL_EVENTS: PatrolEvent[] = [
   {
-    id: 'EVT-00128',
-    type: 'PPE_VIOLATION',
-    cameraId: 'HC-03',
-    cameraName: 'Helmet 03',
-    zoneId: 'ZONE_B',
-    zoneName: 'Khu lắp dựng tầng',
-    objectId: 'PERSON_0023',
-    objectLabel: 'PERSON_0023',
-    violationLabel: 'Không đội mũ bảo hộ',
-    startedAt: '2026-08-20T09:32:13+07:00',
-    lockedAt: '2026-08-20T09:32:18+07:00',
-    endedAt: null,
-    durationSeconds: null,
-    status: 'LOCKED',
-    confidence: 0.91,
-    gps: { lat: 20.943600, lng: 106.911444 },
-  },
-  {
-    id: 'EVT-00127',
-    type: 'PPE_VIOLATION',
-    cameraId: 'HC-01',
-    cameraName: 'Helmet 01',
-    zoneId: 'ZONE_A',
-    zoneName: 'Khu thi công móng',
-    objectId: 'PERSON_0012',
-    objectLabel: 'PERSON_0012',
-    violationLabel: 'Không mặc áo phản quang',
-    startedAt: '2026-08-20T09:20:58+07:00',
-    lockedAt: '2026-08-20T09:21:04+07:00',
-    endedAt: '2026-08-20T09:26:41+07:00',
-    durationSeconds: 337,
-    status: 'ENDED',
-    confidence: 0.87,
-    gps: { lat: 20.943500, lng: 106.910044 },
-  },
-  {
     id: 'EVT-00129',
     type: 'PERSON_DETECTED',
     cameraId: 'HC-02',
@@ -190,42 +152,6 @@ export const MOCK_PATROL_EVENTS: PatrolEvent[] = [
     status: 'LOCKED',
     confidence: 0.91,
     gps: { lat: 20.943550, lng: 106.910094 },
-  },
-  {
-    id: 'EVT-00143',
-    type: 'MACHINE_STOPPED',
-    cameraId: 'HC-02',
-    cameraName: 'Helmet 02',
-    zoneId: 'ZONE_C',
-    zoneName: 'Khu hoàn thiện',
-    objectId: 'VEHICLE_0021',
-    objectLabel: 'Máy xúc #021',
-    violationLabel: 'Máy dừng >5 giây',
-    startedAt: '2026-08-20T09:42:11+07:00',
-    lockedAt: '2026-08-20T09:42:16+07:00',
-    endedAt: '2026-08-20T09:42:23+07:00',
-    durationSeconds: 12,
-    status: 'ENDED',
-    confidence: 0.95,
-    gps: { lat: 20.944550, lng: 106.911444 },
-  },
-  {
-    id: 'EVT-00144',
-    type: 'MACHINE_STOPPED',
-    cameraId: 'HC-01',
-    cameraName: 'Helmet 01',
-    zoneId: 'ZONE_A',
-    zoneName: 'Khu thi công móng',
-    objectId: 'VEHICLE_0034',
-    objectLabel: 'Cẩu tháp #034',
-    violationLabel: 'Máy dừng >5 giây',
-    startedAt: '2026-08-20T08:58:40+07:00',
-    lockedAt: '2026-08-20T08:58:45+07:00',
-    endedAt: null,
-    durationSeconds: null,
-    status: 'LOCKED',
-    confidence: 0.93,
-    gps: { lat: 20.943700, lng: 106.910054 },
   },
 ]
 

@@ -65,11 +65,7 @@ export async function fetchPatrolRecordDetections(recordId: string): Promise<Cam
   const items: CameraDetection[] = [
     {
       id: `${ev.id}-det`,
-      label: ev.type === 'PPE_VIOLATION'
-        ? 'ppe'
-        : ev.type === 'PERSON_DETECTED'
-          ? 'person'
-          : 'machine',
+      label: ev.type === 'PERSON_DETECTED' ? 'person' : 'identity',
       confidenceScore: Math.round(ev.confidence * 100),
       detectionResult: ev.violationLabel,
       createdAt: ev.lockedAt,

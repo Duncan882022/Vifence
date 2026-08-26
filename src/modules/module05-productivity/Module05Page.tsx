@@ -57,7 +57,6 @@ import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/
 import { subscribeHeatmapPersonRegistry } from '@/services/patrolHeatmapPersonRegistry'
 import { resetPatrolTestData } from './services/patrolReset.service'
 import { applyManualIdentityToPatrolEvents } from './utils/patrolManualIdentityUi'
-import { stripPatrolPpeEvents } from './utils/patrolPpeVisibility'
 import { mergePatrolAndWorkforceEvents } from './utils/workforceEventsMapper'
 import { enrichPatrolEventsWithWorkforceObjects, dedupePatrolEventsByMasterEntity } from './utils/patrolWorkforceEventLabels'
 import { subscribePatrolManualIdentity, syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
@@ -250,7 +249,7 @@ export function Module05Page() {
   const patrolEventsLive = useMemo(() => {
     void identityRevision
     const merged = mergePatrolAndWorkforceEvents(
-      stripPatrolPpeEvents(liveHelmetEvents.events),
+      liveHelmetEvents.events,
       workforceSnap.events,
     )
     const enriched = enrichPatrolEventsWithWorkforceObjects(
