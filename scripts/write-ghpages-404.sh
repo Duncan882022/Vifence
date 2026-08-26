@@ -33,4 +33,9 @@ if [[ -f "${DOCS}/index.html" ]]; then
     mkdir -p "${DOCS}/${route}"
     cp "${DOCS}/index.html" "${DOCS}/${route}/index.html"
   done
+  # Module 05 sub-routes (hồ sơ / quét mặt)
+  for route in module05/ho-so module05/quet-mat; do
+    mkdir -p "${DOCS}/${route}"
+    cp "${DOCS}/index.html" "${DOCS}/${route}/index.html"
+  done
 fi
