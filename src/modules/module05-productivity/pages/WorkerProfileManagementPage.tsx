@@ -158,7 +158,7 @@ export function WorkerProfileManagementPage() {
               Làm mới
             </button>
             <Link
-              to="/module05/quet-mat"
+              to="/module05/quet-mat?admin=1"
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-semibold bg-violet-500 text-white hover:bg-violet-500/90"
             >
               <ScanFace className="w-3 h-3" />

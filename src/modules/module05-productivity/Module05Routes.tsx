@@ -26,7 +26,7 @@ export function Module05Routes() {
           <>
             <Header
               title="Quét Mặt Công Nhân"
-              subtitle="Đăng ký vector khuôn mặt — khớp nhận diện trên mũ & flycam"
+              subtitle="Công nhân tự quét → nhập thông tin · HR dùng ?admin=1"
             />
             <WorkerFaceScanPage />
           </>

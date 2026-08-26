@@ -555,3 +555,174 @@ def import_identity(
     result = get_person(pers_id)
     assert result is not None
     return result
+
+
+# ---------------------------------------------------------------------------
+# Phiên quét mặt tự phục vụ — quét trước, nhập hồ sơ (Excel fields) sau.
+
+
+ENROLL_SESSION_TTL_SEC = 3600.0
+
+
+def _purge_expired_enroll_sessions(now: float | None = None) -> None:
+    ts = now or time.time()
+    with db.tx() as c:
+        c.execute("DELETE FROM enroll_sessions WHERE expires_at <= ?", (ts,))
+
+
+def create_enroll_session(now: float | None = None) -> str:
+    import uuid
+
+    _purge_expired_enroll_sessions(now)
+    ts = now or time.time()
+    session_id = uuid.uuid4().hex
+    with db.tx() as c:
+        c.execute(
+            "INSERT INTO enroll_sessions(session_id, created_at, expires_at)"
+            " VALUES(?,?,?)",
+            (session_id, ts, ts + ENROLL_SESSION_TTL_SEC),
+        )
+    return session_id
+
+
+def _get_enroll_session_row(session_id: str, now: float | None = None) -> dict[str, Any] | None:
+    _purge_expired_enroll_sessions(now)
+    row = db.query_one(
+        "SELECT * FROM enroll_sessions WHERE session_id = ?",
+        (session_id.strip(),),
+    )
+    if row is None:
+        return None
+    ts = now or time.time()
+    if float(row["expires_at"]) <= ts:
+        with db.tx() as c:
+            c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (session_id,))
+        return None
+    return dict(row)
+
+
+def get_enroll_session_enrollment(session_id: str) -> dict[str, Any] | None:
+    if _get_enroll_session_row(session_id) is None:
+        return None
+    rows = db.query(
+        "SELECT slot FROM enroll_session_faces WHERE session_id = ? ORDER BY slot ASC",
+        (session_id.strip(),),
+    )
+    captured_slots = {int(r["slot"]) for r in rows}
+    count = len(captured_slots)
+    poses: list[dict[str, Any]] = []
+    for slot in range(1, SCAN_FACES_REQUIRED + 1):
+        poses.append({
+            "slot": slot,
+            "label": SCAN_POSE_LABELS[slot - 1],
+            "captured": slot in captured_slots,
+        })
+    return {
+        "session_id": session_id.strip(),
+        "faces_captured": count,
+        "faces_required": SCAN_FACES_REQUIRED,
+        "complete": count >= SCAN_FACES_REQUIRED,
+        "poses": poses,
+        "face_records": count,
+    }
+
+
+def add_enroll_session_face(
+    session_id: str,
+    embedding: Sequence[float],
+    *,
+    pose_slot: int | None = None,
+    now: float | None = None,
+) -> bool:
+    if _get_enroll_session_row(session_id, now) is None:
+        return False
+
+    probe = np.asarray(embedding, dtype=np.float32).ravel()
+    norm = float(np.linalg.norm(probe))
+    if norm <= 0:
+        return False
+    probe = probe / norm
+
+    sid = session_id.strip()
+    rows = db.query(
+        "SELECT slot, embedding, dim FROM enroll_session_faces WHERE session_id = ?",
+        (sid,),
+    )
+    for r in rows:
+        vec = _from_blob(r["embedding"], int(r["dim"]))
+        if vec.size == probe.size and float(np.dot(probe, vec)) > FACE_ANGLE_DEDUPE_SIM:
+            return False
+
+    slot = int(pose_slot or (len(rows) + 1))
+    if slot < 1 or slot > SCAN_FACES_REQUIRED:
+        return False
+
+    blob, dim = _to_blob(probe)
+    ts = now or time.time()
+    with db.tx() as c:
+        c.execute(
+            "INSERT INTO enroll_session_faces(session_id, slot, embedding, dim, quality, created_at)"
+            " VALUES(?,?,?,?,?,?)"
+            " ON CONFLICT(session_id, slot) DO UPDATE SET"
+            " embedding=excluded.embedding, dim=excluded.dim, quality=excluded.quality,"
+            " created_at=excluded.created_at",
+            (sid, slot, blob, dim, 1.0, ts),
+        )
+        c.execute(
+            "UPDATE enroll_sessions SET expires_at = ? WHERE session_id = ?",
+            (ts + ENROLL_SESSION_TTL_SEC, sid),
+        )
+    return True
+
+
+def complete_enroll_session(
+    session_id: str,
+    *,
+    full_name: str,
+    employee_code: str,
+    contractor: str = "",
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Gắn vector phiên quét vào hồ sơ — cùng schema import Excel."""
+    if _get_enroll_session_row(session_id, now) is None:
+        raise ValueError("session_not_found")
+
+    enrollment = get_enroll_session_enrollment(session_id)
+    if enrollment is None or not enrollment["complete"]:
+        raise ValueError("incomplete_enrollment")
+
+    sid = session_id.strip()
+    face_rows = db.query(
+        "SELECT embedding, dim FROM enroll_session_faces"
+        " WHERE session_id = ? ORDER BY slot ASC",
+        (sid,),
+    )
+    if len(face_rows) < SCAN_FACES_REQUIRED:
+        raise ValueError("incomplete_enrollment")
+
+    row = import_identity(
+        full_name=full_name,
+        employee_code=employee_code,
+        contractor=contractor,
+        embedding=None,
+        source="self_enroll",
+        now=now,
+    )
+    pers_id = str(row["pers_id"])
+    ts = now or time.time()
+    for fr in face_rows:
+        vec = _from_blob(fr["embedding"], int(fr["dim"]))
+        add_face_angle(
+            pers_id,
+            vec.tolist(),
+            quality=1.0,
+            camera_id="SELF_ENROLL",
+            now=ts,
+        )
+
+    with db.tx() as c:
+        c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (sid,))
+
+    result = get_person(pers_id)
+    assert result is not None
+    return result
