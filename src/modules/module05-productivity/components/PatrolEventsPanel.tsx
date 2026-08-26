@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Info, Loader2, Play } from 'lucide-react'
+import { Clock, Loader2 } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolMockData'
-import {
-  getPatrolEventPlace,
-  getPatrolEventStatusDisplay,
-  shouldShowPatrolStatusBadge,
-} from '../utils/patrolEventsUi'
+import { getPatrolEventPlace } from '../utils/patrolEventsUi'
 import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
 import {
   PATROL_EVENTS_TAB_META,
@@ -26,7 +22,6 @@ interface PatrolEventsPanelProps {
   selectedId?: string | null
   onSelect?: (event: PatrolEvent) => void
   onDetailClick?: (event: PatrolEvent) => void
-  onPlayback?: (event: PatrolEvent) => void
 }
 
 type PatrolFilterTab = 'all' | 'object' | 'person' | 'identity'
@@ -79,101 +74,19 @@ function PatrolStageBadge({ event }: { event: PatrolEvent }) {
   )
 }
 
-function StatusTag({
-  label,
-  badgeClassName,
-  icon: StatusIcon,
-  iconOnly = false,
-}: {
-  label: string
-  badgeClassName: string
-  icon: LucideIcon
-  iconOnly?: boolean
-}) {
-  const badge = (
-    <span
-      className={cn(
-        iconOnly
-          ? 'w-5 h-5 rounded border inline-flex items-center justify-center'
-          : 'text-[8px] px-1 py-0.5 rounded border inline-flex items-center gap-0.5 font-medium max-w-full',
-        badgeClassName,
-      )}
-      aria-label={label}
-    >
-      <StatusIcon className="w-2.5 h-2.5 shrink-0" aria-hidden />
-      {!iconOnly && <span className="truncate">{label}</span>}
-    </span>
-  )
-
-  if (iconOnly) {
-    return (
-      <TagTooltip content={label} className="shrink-0">
-        {badge}
-      </TagTooltip>
-    )
-  }
-
-  return badge
-}
-
-function PatrolEventCardActions({
-  onPlayback,
-  onDetailClick,
-  event,
-}: {
-  onPlayback?: (event: PatrolEvent) => void
-  onDetailClick?: (event: PatrolEvent) => void
-  event: PatrolEvent
-}) {
-  return (
-    <div className="flex items-center gap-0.5 shrink-0">
-      {onDetailClick && (
-        <button
-          type="button"
-          onMouseEnter={() => preloadPatrolEventSnapshot(event.snapshotUrl)}
-          onFocus={() => preloadPatrolEventSnapshot(event.snapshotUrl)}
-          onClick={(e) => {
-            e.stopPropagation()
-            preloadPatrolEventSnapshot(event.snapshotUrl)
-            onDetailClick(event)
-          }}
-          className="flex items-center justify-center rounded-md transition-colors border w-7 h-7 hover:bg-[#1e2433]/80 text-muted-foreground hover:text-foreground border-[#1e2433]/60"
-          title="Chi tiết"
-        >
-          <Info className="w-3 h-3" />
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onPlayback?.(event)
-        }}
-        className="flex items-center justify-center rounded-md transition-colors border w-7 h-7 hover:bg-[#1e2433]/80 text-muted-foreground hover:text-sky-400 border-[#1e2433]/60"
-        title="Xem Playback"
-      >
-        <Play className="w-3 h-3" />
-      </button>
-    </div>
-  )
-}
-
 function PatrolEventCard({
   event,
   selected,
   onSelect,
   onDetailClick,
-  onPlayback,
 }: {
   event: PatrolEvent
   selected?: boolean
   onSelect?: (event: PatrolEvent) => void
   onDetailClick?: (event: PatrolEvent) => void
-  onPlayback?: (event: PatrolEvent) => void
 }) {
   const displayMeta = resolvePatrolEventDisplayMeta(event)
   const SubjectIcon = displayMeta.icon
-  const statusDisplay = getPatrolEventStatusDisplay(event.status)
   const eventDateTime = formatEventDateTime(event.lockedAt)
   const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
   const stage = resolvePatrolPersonStage(event)
@@ -211,19 +124,8 @@ function PatrolEventCard({
         />
 
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <div className="flex flex-wrap items-center gap-1 min-w-0">
-              <PatrolStageBadge event={event} />
-              {shouldShowPatrolStatusBadge(event.status) && (
-                <StatusTag
-                  label={statusDisplay.label}
-                  badgeClassName={statusDisplay.badgeClassName}
-                  icon={statusDisplay.icon}
-                  iconOnly
-                />
-              )}
-            </div>
-            <PatrolEventCardActions event={event} onDetailClick={onDetailClick} onPlayback={onPlayback} />
+          <div className="flex items-center gap-1 min-w-0">
+            <PatrolStageBadge event={event} />
           </div>
 
           <h3 className="text-[11px] font-semibold text-foreground leading-snug line-clamp-2 pr-1">
@@ -262,7 +164,6 @@ export function PatrolEventsPanel({
   selectedId,
   onSelect,
   onDetailClick,
-  onPlayback,
 }: PatrolEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<PatrolFilterTab>('all')
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
@@ -360,7 +261,6 @@ export function PatrolEventsPanel({
                 selected={selectedId === event.id}
                 onSelect={onSelect}
                 onDetailClick={onDetailClick}
-                onPlayback={onPlayback}
               />
             ))}
 

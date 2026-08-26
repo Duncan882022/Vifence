@@ -435,7 +435,6 @@ export function Module05Page() {
                 selectedId={selectedEventId}
                 onSelect={handleSelectEvent}
                 onDetailClick={ev => setDetailEventId(ev.id)}
-                onPlayback={handleSelectEvent}
               />
             </Panel>
           </div>
@@ -445,7 +444,6 @@ export function Module05Page() {
       <PatrolEventDetailModal
         event={detailEvent}
         onClose={() => setDetailEventId(null)}
-        onPlayback={handleSelectEvent}
       />
 
       {/* Chỉ hỏi quyền khi CMS còn phải tự làm camera. Với pipeline mới, việc xin
