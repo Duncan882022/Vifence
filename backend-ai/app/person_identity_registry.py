@@ -20,6 +20,18 @@ _TRACK_META_TTL_SEC = 180.0
 _REUSE_IOU = 0.22
 _REUSE_CENTER_NORM = 0.11
 
+# Mức trùng vị trí (0–1) đủ để coi là "người hiện ra đúng chỗ track cũ vừa mất".
+_REUSE_SPATIAL_STRONG = 0.55
+# Và phải trùng hơn ứng viên kế tiếp ngần này thì mới dám dùng vị trí thay cho
+# cách biệt khuôn mặt — nếu hai người cùng gần đó thì vị trí không phân định được.
+_REUSE_SPATIAL_MARGIN = 0.30
+# Bán kính chấp nhận ngay khi vừa mất dấu, tính theo tỉ lệ khung hình.
+_REUSE_BASE_RADIUS = 0.12
+# Người đi bộ trôi được chừng này chiều khung mỗi giây bị che.
+_REUSE_DRIFT_PER_SEC = 0.10
+# Trần bán kính — che đủ lâu thì vị trí hết giá trị phân định, đừng nới vô hạn.
+_REUSE_MAX_DRIFT = 0.45
+
 _lock = threading.Lock()
 _state: dict | None = None
 
@@ -205,6 +217,35 @@ def _identity_face_emb(state: dict, camera_id: str, worker_id: str) -> np.ndarra
     return best
 
 
+def _spatial_agreement(
+    person_bbox: list[float] | tuple[float, ...],
+    other_bbox: list[float] | tuple[float, ...] | None,
+    frame_w: int,
+    frame_h: int,
+    age_sec: float,
+) -> float:
+    """0–1 — bbox hiện tại trùng chỗ ứng viên tới mức nào, nới dần theo thời gian.
+
+    Lấy giá trị tốt hơn giữa chồng lấn và khoảng cách tâm: người bị che rồi hiện
+    ra thường lệch đủ để IoU về 0 trong khi tâm vẫn còn rất gần, còn người ngồi
+    bị che một phần thì tâm dịch nhưng vùng vẫn chồng nhau.
+
+    Bán kính chấp nhận phải giãn theo thời gian đã mất dấu. Dùng một ngưỡng cố
+    định thì đúng cho lúc vừa bị che, nhưng người bị khuất năm giây đã đi tiếp
+    một quãng và mọi ứng viên đều trượt — đúng lúc cần nối lại nhất thì phép so
+    lại từ chối.
+    """
+    if not other_bbox or len(other_bbox) < 4:
+        return 0.0
+    iou = bbox_iou(person_bbox, other_bbox)
+    dist = _center_distance_norm(person_bbox, other_bbox, frame_w, frame_h)
+    drift = min(_REUSE_DRIFT_PER_SEC * max(0.0, age_sec), _REUSE_MAX_DRIFT)
+    tolerance = _REUSE_BASE_RADIUS + drift
+    by_iou = min(1.0, iou / 0.35) if iou > 0.0 else 0.0
+    by_dist = max(0.0, 1.0 - dist / tolerance)
+    return max(by_iou, by_dist)
+
+
 def _find_reusable_worker_id(
     state: dict,
     camera_id: str,
@@ -223,7 +264,7 @@ def _find_reusable_worker_id(
     prefix = f"{camera_id}|"
 
     if face_emb is not None:
-        face_candidates: list[tuple[str, float]] = []
+        face_candidates: list[tuple[str, float, float]] = []
         for key, row in meta.items():
             if not key.startswith(prefix):
                 continue
@@ -236,18 +277,36 @@ def _find_reusable_worker_id(
             sim = embedding_similarity(face_emb, stored)
             if sim < face_thresholds.reuse_min_similarity():
                 continue
-            face_candidates.append((wid, sim))
+            spatial = _spatial_agreement(
+                person_bbox,
+                row.get("bbox"),
+                frame_w,
+                frame_h,
+                now - float(row.get("updated_at") or 0),
+            )
+            face_candidates.append((wid, sim, spatial))
 
         if face_candidates:
             face_candidates.sort(key=lambda item: item[1], reverse=True)
-            best_wid, best_sim = face_candidates[0]
-            rival = next(
-                (sim for wid, sim in face_candidates[1:] if wid != best_wid),
-                0.0,
-            )
-            if best_sim - rival >= face_thresholds.reuse_min_margin():
-                if not _conflicts_frame_faces(best_wid, face_emb, frame_face_assignments):
-                    return best_wid
+            best_wid, best_sim, best_spatial = face_candidates[0]
+            others = [row for row in face_candidates[1:] if row[0] != best_wid]
+            rival = others[0][1] if others else 0.0
+            reuse_ok = best_sim - rival >= face_thresholds.reuse_min_margin()
+
+            if not reuse_ok and best_spatial >= _REUSE_SPATIAL_STRONG:
+                # Đám đông cùng đội mũ bảo hộ kéo cách biệt giữa hai ứng viên
+                # xuống sát 0 — đúng lúc cần nối lại track vừa vỡ nhất thì phép
+                # so mặt lại từ chối. Vị trí người hiện ra so với chỗ track cũ
+                # vừa mất là bằng chứng độc lập với khuôn mặt, nên khi nó trùng
+                # rõ rệt hơn hẳn mọi ứng viên khác thì hai tín hiệu yếu cộng lại
+                # vẫn chắc hơn một tín hiệu mạnh đứng một mình.
+                rival_spatial = max((row[2] for row in others), default=0.0)
+                reuse_ok = best_spatial - rival_spatial >= _REUSE_SPATIAL_MARGIN
+
+            if reuse_ok and not _conflicts_frame_faces(
+                best_wid, face_emb, frame_face_assignments,
+            ):
+                return best_wid
 
     bbox_candidates: list[tuple[str, float]] = []
     for key, row in meta.items():
