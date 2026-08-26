@@ -12,6 +12,7 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
+import { PATROL_DRONE_IDS } from '../data/patrolDrones'
 import {
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
@@ -35,6 +36,7 @@ import {
   resolvePatrolWorkerId,
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
+import { resolveHeatmapEntityMasterId } from '../utils/patrolIdentityEntity'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
 import { subscribeHeatmapPersonRegistry, syncHeatmapFramePresence, getHeatmapPersonDots, syncPatrolPersonEventsToHeatmap } from '@/services/patrolHeatmapPersonRegistry'
@@ -43,6 +45,17 @@ import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { countUniquePatrolTabEntities, isPatrolSgcWorkerId } from '../utils/patrolWorkforceEventLabels'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { ObjectState } from '../types/workforceHeatmap'
+
+/**
+ * Mọi camera đóng góp chấm lên bản đồ — hai mũ và một drone.
+ *
+ * Trước đây bản đồ chỉ đọc registry của HC-02: người do HC-01 và drone phát
+ * hiện vẫn được ghi vào registry nhưng không bao giờ được vẽ.
+ */
+const PATROL_MAP_CAMERA_IDS: readonly string[] = [
+  ...DEFAULT_PATROL_CAMERA_IDS,
+  ...PATROL_DRONE_IDS,
+]
 
 function LayerToggle({
   active,
@@ -127,7 +140,8 @@ export function PatrolDensityHeatmap({
     [patrolEvents],
   )
 
-  const metrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
+  // Kể cả drone: nó cũng phát hiện người và đóng góp chấm lên bản đồ.
+  const metrics = usePatrolHelmetLiveMetrics(PATROL_MAP_CAMERA_IDS)
 
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
@@ -149,7 +163,9 @@ export function PatrolDensityHeatmap({
 
 
   const helmetOnlineById = useMemo(() => {
-    const map: Record<string, boolean> = { 'HC-01': false, 'HC-02': false }
+    const map: Record<string, boolean> = Object.fromEntries(
+      PATROL_MAP_CAMERA_IDS.map(id => [id, false]),
+    )
     for (const row of metrics.perCamera) {
       map[row.camera_id] = Boolean(row.stream_online)
     }
@@ -166,7 +182,8 @@ export function PatrolDensityHeatmap({
 
   const hc01Online = Boolean(helmetOnlineById['HC-01'])
   const hc02Online = Boolean(helmetOnlineById['HC-02'])
-  const anyCameraOnline = hc01Online || hc02Online
+  const droneOnline = PATROL_DRONE_IDS.some(id => Boolean(helmetOnlineById[id]))
+  const anyCameraOnline = hc01Online || hc02Online || droneOnline
 
   const mergedCameraPositions = useMemo(() => {
     const next = { ...cameraPositions }
@@ -234,6 +251,14 @@ export function PatrolDensityHeatmap({
   }, [hc02Online])
 
   useEffect(() => {
+    if (droneOnline) return
+    for (const id of PATROL_DRONE_IDS) {
+      syncHeatmapFramePresence(id, [])
+      clearPatrolHeatmapLiveTracks(id)
+    }
+  }, [droneOnline])
+
+  useEffect(() => {
     syncPatrolPersonEventsToHeatmap(patrolEvents)
   }, [patrolEvents])
 
@@ -293,20 +318,29 @@ export function PatrolDensityHeatmap({
         })
       })
 
-    const registryDots = hc02Online
-      ? hc02Live.dots.map(d => markInView(d))
-      : []
-
-    if (objectDots.length === 0) {
-      return registryDots
+    // Toạ độ backend đã suy từ hướng + khoảng cách của bbox, tức là vị trí
+    // *người được nhìn thấy*. Registry chỉ neo quanh GPS của mũ, nên ưu tiên
+    // toạ độ backend khi có, còn lại mới rơi về neo quanh mũ.
+    const backendPositionByMaster = new Map<string, [number, number]>()
+    for (const o of liveObjects) {
+      if (o.lat == null || o.lon == null) continue
+      const master = resolveHeatmapEntityMasterId(
+        resolvePatrolWorkerId(o.object_id, o.worker_id) ?? o.object_id,
+      )
+      if (master) backendPositionByMaster.set(master, [o.lat, o.lon])
     }
 
-    // Chỉ registry (quanh mũ GPS) — workforce lat/lon hay snap mép ROI.
-    if (registryDots.length > 0) {
-      return registryDots
-    }
+    // Lấy chấm của **mọi** camera. Trước đây chỉ đọc registry của HC-02 nên
+    // người do HC-01 và drone phát hiện vẫn được ghi nhưng không bao giờ vẽ.
+    const registryDots = getHeatmapPersonDots().map(d => {
+      const master = resolveHeatmapEntityMasterId(d.objectId ?? d.id)
+      const backendPos = master ? backendPositionByMaster.get(master) : undefined
+      return markInView(backendPos ? { ...d, position: backendPos } : d)
+    })
+
+    if (registryDots.length > 0) return registryDots
     return objectDots
-  }, [anyCameraOnline, hc02Live.dots, hc02Online, liveObjects, identityRevision])
+  }, [anyCameraOnline, liveObjects, identityRevision, pinTick])
 
   const headingDeg = hc02Helmet?.heading
 
