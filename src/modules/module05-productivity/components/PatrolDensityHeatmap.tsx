@@ -109,14 +109,6 @@ export function PatrolDensityHeatmap({
   const workforce = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
   const hc02Helmet = workforce.helmets['HC-02']
 
-  const zonePop = useMemo(() => {
-    const zones = Object.values(workforce.zonePopulation)
-    if (hc02Helmet?.zone_id) {
-      return workforce.zonePopulation[hc02Helmet.zone_id] ?? zones[0] ?? null
-    }
-    return zones[0] ?? null
-  }, [workforce.zonePopulation, hc02Helmet?.zone_id])
-
   const liveObjects = useMemo(
     () => Object.values(workforce.objects).filter(o => o.status !== 'EXPIRED'),
     [workforce.objects],
