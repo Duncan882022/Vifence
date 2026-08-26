@@ -68,6 +68,10 @@ export interface VmsOverlayDetection {
   track_id?: string
   subject_bbox?: [number, number, number, number]
   related_bbox?: [number, number, number, number]
+  /** Tầng định danh đã ổn định phía BE: object | person | identity. */
+  tier?: 'object' | 'person' | 'identity'
+  /** px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect. */
+  velocity?: [number, number]
 }
 
 export interface VmsDetectionSnapshot {
@@ -131,6 +135,20 @@ function normalizeBbox(raw: number[] | undefined): [number, number, number, numb
   return [x1, y1, x2, y2]
 }
 
+const TIER_VALUES = new Set(['object', 'person', 'identity'])
+
+function normalizeTier(raw: unknown): VmsOverlayDetection['tier'] {
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  return TIER_VALUES.has(value) ? (value as VmsOverlayDetection['tier']) : undefined
+}
+
+function normalizeVelocity(raw: number[] | undefined): [number, number] | undefined {
+  if (!raw || raw.length < 2) return undefined
+  const [vx, vy] = raw
+  if (!Number.isFinite(vx) || !Number.isFinite(vy)) return undefined
+  return [Number(vx), Number(vy)]
+}
+
 function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null {
   const bbox = normalizeBbox(raw.bbox as number[] | undefined)
   if (!bbox) return null
@@ -157,6 +175,8 @@ function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null 
     face_match_source: raw.face_match_source ? String(raw.face_match_source) : undefined,
     subject_bbox: normalizeBbox(raw.subject_bbox as number[] | undefined) ?? undefined,
     related_bbox: normalizeBbox(raw.related_bbox as number[] | undefined) ?? undefined,
+    tier: normalizeTier(raw.tier),
+    velocity: normalizeVelocity(raw.velocity as number[] | undefined),
   }
 }
 

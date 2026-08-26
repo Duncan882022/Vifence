@@ -51,6 +51,27 @@ def _daily_snapshot_dir(date: str) -> Path:
     return folder
 
 
+_PATROL_TIER_WEIGHT = {"object": 0.0, "person": 1.0, "identity": 2.0}
+
+
+def _patrol_snapshot_score(detection: PpeDetection) -> float:
+    """Ảnh nào đáng giữ hơn cho một người — ưu tiên khung nhìn rõ mặt.
+
+    Ảnh mới không đương nhiên tốt hơn ảnh cũ. Bản ghi được làm mới mỗi ba giây,
+    nên chỉ cần đúng nhịp đó người đang quay lưng hay bị che một nửa là ảnh rõ
+    mặt trước đó bị thay, và chỉ huy mất luôn thứ để nhận ra ai.
+
+    Thang điểm bám theo mức độ hữu ích khi nhận diện: tầng đã đạt được quan trọng
+    hơn hẳn độ tin cậy của khung đơn lẻ, vì tầng phản ánh cả quá trình quan sát.
+    """
+    score = _PATROL_TIER_WEIGHT.get(detection.tier or "object", 0.0) * 10.0
+    if detection.face_eligible:
+        score += 4.0
+    if detection.face_match_confidence:
+        score += float(detection.face_match_confidence) * 2.0
+    return score + float(detection.confidence or 0.0)
+
+
 class PersistenceDebouncer:
     """Xác nhận sự kiện khi hành vi detect liên tục đủ min_duration.
 
@@ -707,10 +728,16 @@ class EventStore:
         snapshot = crop_to_focus(annotated, list(incoming.bbox), behavior="person")
         frame_size = (int(w), int(h))
 
+        incoming_score = _patrol_snapshot_score(detection)
+        incoming.snapshot_score = incoming_score
+
         if existing is not None:
             now = time.time()
             last_touch = float(existing.confirmed_at or existing.created_at or 0)
-            if now - last_touch >= 3.0:
+            stored_score = (
+                existing.snapshot_score if existing.snapshot_score is not None else -1.0
+            )
+            if now - last_touch >= 3.0 and incoming_score >= stored_score:
                 refreshed = self._finalize_event(
                     incoming,
                     snapshot,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 import cv2
@@ -39,6 +40,8 @@ _PERSON_CONF = 0.40
 _PERSON_CONF_BODYCAM = 0.30
 _PERSON_CONF_FLYCAM = 0.18
 _PERSON_CONF_STRICT = 0.48
+# Dưới mốc này đường vẽ ROI mới đòi thêm bằng chứng (mặt / dáng xa / tín hiệu da).
+_PERSON_CONF_DISPLAY_CORROBORATE = 0.45
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
 _HELMET_MODEL_MIN_CONF = 0.55
@@ -56,7 +59,6 @@ def _is_patrol_flycam(camera_id: str) -> bool:
     return camera_id.startswith("DR-")
 
 _person_detector: PersonDetector | None = None
-_hc_patrol_person_tracks: dict[str, dict[str, object]] = {}
 _hc_frame_face_assignments: dict[str, dict[str, list[float]]] = {}
 
 
@@ -67,17 +69,35 @@ def reset_hc_patrol_face_assignments(camera_id: str) -> None:
 
 def reset_all_hc_patrol_state() -> int:
     """Xóa toàn bộ patrol person tracks và face assignments — dùng khi reset test data."""
-    count = sum(len(v) for v in _hc_patrol_person_tracks.values())
-    _hc_patrol_person_tracks.clear()
+    from .patrol_identity_lifecycle import reset as reset_identity_lifecycle
+    from .patrol_tracker import reset_patrol_trackers
+
+    count = reset_patrol_trackers()
+    reset_identity_lifecycle()
     _hc_frame_face_assignments.clear()
     return count
 
 
-class _HcPersonTrackSlot:
-    __slots__ = ("person_bbox",)
+def assign_patrol_track_ids(
+    camera_id: str,
+    person_boxes: list[tuple[tuple[float, float, float, float], float]],
+    *,
+    now: float | None = None,
+) -> list[str | None]:
+    """Gán track cho **cả frame** một lượt qua ByteTrack (`patrol_tracker`).
 
-    def __init__(self, person_bbox: list[float]) -> None:
-        self.person_bbox = person_bbox
+    Phải ghép theo cả khung mới đúng: gán tuần tự từng người rồi chặn lẫn nhau
+    (cách cũ) khiến người vào sau cướp track của người kia tuỳ thứ tự YOLO trả về.
+    """
+    if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
+        return [None] * len(person_boxes)
+    from .patrol_tracker import get_patrol_tracker
+
+    tracker = get_patrol_tracker(camera_id)
+    return tracker.update(
+        [(tuple(float(v) for v in box), float(conf)) for box, conf in person_boxes],
+        now=now if now is not None else time.time(),
+    )
 
 
 def _assign_patrol_person_identity(
@@ -88,36 +108,21 @@ def _assign_patrol_person_identity(
     camera_id: str,
     frame_w: int,
     frame_h: int,
-    blocked: set[str],
+    track_id: str | None,
 ) -> None:
     """HC-* / DR-* — gán sgc hoặc để trống (Đối tượng) lên detection trả về FE."""
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
         return
+    if not track_id:
+        return
+    from .patrol_identity_lifecycle import observe as observe_track_identity
     from .person_identity_registry import (
         peek_patrol_track_identity,
         resolve_patrol_person_identity,
     )
-    from .track_matching import assign_person_track_id
     from .worker_identity.recognizer import assess_patrol_face
 
-    tracks = _hc_patrol_person_tracks.setdefault(camera_id, {})
     person_bbox = [float(v) for v in person_box]
-    track_id = assign_person_track_id(
-        person_bbox,
-        tracks,
-        behavior="person",
-        frame_w=frame_w,
-        frame_h=frame_h,
-        max_tracks=24,
-        blocked_tracks=blocked,
-    )
-    if track_id is None:
-        return
-    blocked.add(track_id)
-    if track_id not in tracks:
-        tracks[track_id] = _HcPersonTrackSlot(person_bbox)
-    else:
-        tracks[track_id] = _HcPersonTrackSlot(person_bbox)
 
     # Cùng thước đo "thấy mặt" với đường ghi sự kiện — nếu không, nhãn ROI và
     # tab sự kiện sẽ nói hai điều khác nhau về cùng một người.
@@ -143,9 +148,19 @@ def _assign_patrol_person_identity(
         worker_id = peek_patrol_track_identity(camera_id, track_id)
         worker_name = worker_id
 
-    person_det.worker_id = worker_id
-    person_det.worker_name = worker_name
+    # Tầng lấy từ state machine chứ không suy lại mỗi frame: track đã lên Người /
+    # Định danh thì giữ nguyên nhãn kể cả khung hình này quay lưng.
+    resolved = observe_track_identity(
+        camera_id,
+        track_id,
+        worker_id=worker_id,
+        worker_name=worker_name,
+    )
+
+    person_det.worker_id = resolved.worker_id
+    person_det.worker_name = resolved.worker_name
     person_det.track_id = track_id
+    person_det.tier = resolved.tier
     person_det.face_eligible = face_eligible and face_emb is not None
 
 
@@ -1620,8 +1635,20 @@ def _plausible_person_box(
     strict: bool = False,
     bodycam: bool = False,
     flycam: bool = False,
+    for_display: bool = False,
 ) -> bool:
-    """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng."""
+    """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng.
+
+    `for_display=True` là đường vẽ ROI: chỉ loại khung không thể là người. Đường
+    ghi sự kiện vẫn siết lại bằng gate riêng trong `ppe_engine`, nên nới ở đây
+    không kéo theo sự kiện rác.
+    """
+    if for_display and (bodycam or flycam):
+        from .patrol_person_visibility import patrol_person_meets_display_gate
+
+        return patrol_person_meets_display_gate(
+            box, frame_w, frame_h, flycam=flycam,
+        )
     if flycam:
         return _plausible_flycam_aerial(box, frame_w, frame_h)
     if bodycam:
@@ -1664,6 +1691,7 @@ def _filter_persons(
     source_pts_sec: float | None = None,
     strict: bool = False,
     min_conf: float | None = None,
+    for_display: bool = False,
 ) -> list[_PersonPpe]:
     h, w = frame.shape[:2]
     bodycam = _is_helmet_bodycam(camera_id)
@@ -1690,6 +1718,7 @@ def _filter_persons(
             strict=identity_strict,
             bodycam=bodycam,
             flycam=flycam,
+            for_display=for_display,
         ):
             continue
         if bodycam and frame is not None:
@@ -1702,8 +1731,14 @@ def _filter_persons(
             face_dom = _face_dominant_person_box(box, w, h)
             if background_clutter_person_box(box, w, h) and not _person_upper_body_signal(frame, box):
                 continue
+            # Người quay lưng, ngồi hoặc bị che một phần thường không có mảng da
+            # nào để soi, nên đòi tín hiệu thân trên tới tận 0.62 là loại đúng
+            # nhóm cần thấy nhất. Đường vẽ ROI chỉ dùng nó như lưới chặn FP.
+            corroborate_below = (
+                _PERSON_CONF_DISPLAY_CORROBORATE if for_display else 0.62
+            )
             if (
-                conf < 0.62
+                conf < corroborate_below
                 and not face_dom
                 and not wide_crowd_rider_box(box, w, h)
                 and not _person_upper_body_signal(frame, box)
@@ -1777,8 +1812,6 @@ def _build_patrol_bodycam_result(
     HC-* streams come from the mobile client at ~220–320ms intervals. Running 3 extra YOLO models
     (helmet/vest/shoes) doubles inference time per frame without UX value when PATROL_PPE_UI_HIDDEN.
     """
-    from .worker_identity.detection_enrich import enrich_person_bbox
-
     detector = _get_person_detector()
     h, w = frame.shape[:2]
     persons = _dedupe_person_boxes(
@@ -1789,6 +1822,7 @@ def _build_patrol_bodycam_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_BODYCAM,
+            for_display=True,
         ),
         camera_id=camera_id,
     )
@@ -1804,13 +1838,75 @@ def _build_patrol_bodycam_result(
         for box, conf in anchored
     ]
 
-    detections: list[PpeDetection] = []
-    assigned_patrol_tracks: set[str] = set()
-    reset_hc_patrol_face_assignments(camera_id)
+    detections = _build_patrol_person_detections(
+        frame, camera_id, persons, w, h, source_pts_sec=source_pts_sec,
+    )
 
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": _patrol_countable_person_count(persons, w, h),
+            "ppe_violations": 0,
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
+def _patrol_countable_person_count(
+    persons: list[_PersonPpe],
+    frame_w: int,
+    frame_h: int,
+) -> int:
+    """Số người tính vào KPI — giữ tiêu chí ghi sự kiện, không theo số ROI đã vẽ.
+
+    Đường vẽ ROI cố ý khoanh cả người ngồi, bị che và quay lưng. Lấy thẳng số box
+    đó làm KPI thì mỗi mảnh thân YOLO tách ra lại thành một nhân sự, nên chỉ số
+    trên bảng điều khiển phải đếm bằng cùng thước đo với tab sự kiện.
+    """
+    from .patrol_person_visibility import patrol_person_meets_detection_gate
+
+    return sum(
+        1
+        for p in persons
+        if patrol_person_meets_detection_gate(
+            p.person_box,
+            frame_w,
+            frame_h,
+            face_dominant=_face_dominant_person_box(p.person_box, frame_w, frame_h),
+        )
+    )
+
+
+def _build_patrol_person_detections(
+    frame: np.ndarray,
+    camera_id: str,
+    persons: list[_PersonPpe],
+    frame_w: int,
+    frame_h: int,
+    *,
+    source_pts_sec: float | None = None,
+) -> list[PpeDetection]:
+    """Dựng detection người cho camera tuần tra — dùng chung bodycam và flycam.
+
+    Track được gán **một lượt cho cả frame** trước khi vào vòng lặp, nên thứ tự
+    YOLO trả về không còn ảnh hưởng tới việc ai giữ track nào.
+    """
+    from .worker_identity.detection_enrich import enrich_person_bbox
+
+    reset_hc_patrol_face_assignments(camera_id)
+    track_ids = assign_patrol_track_ids(
+        camera_id,
+        [(p.person_box, p.person_conf) for p in persons],
+    )
+
+    detections: list[PpeDetection] = []
     for person_index, person in enumerate(persons):
         pb = person.person_box
-        display_pb = _visible_person_display_bbox(pb, w, h)
+        display_pb = _visible_person_display_bbox(pb, frame_w, frame_h)
         person_det = PpeDetection(
             behavior="person",
             label=PPE_LABELS["person"],
@@ -1826,29 +1922,42 @@ def _build_patrol_bodycam_result(
             person_index=person_index,
             source_pts_sec=source_pts_sec,
         )
+        track_id = track_ids[person_index] if person_index < len(track_ids) else None
         _assign_patrol_person_identity(
             person_det,
             pb,
             frame=frame,
             camera_id=camera_id,
-            frame_w=w,
-            frame_h=h,
-            blocked=assigned_patrol_tracks,
+            frame_w=frame_w,
+            frame_h=frame_h,
+            track_id=track_id,
         )
+        _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)
 
-    return {
-        "type": "result",
-        "camera_id": camera_id,
-        "width": w,
-        "height": h,
-        "metrics": {
-            "person_count": len(persons),
-            "ppe_violations": 0,
-        },
-        "detections": [d.model_dump() for d in detections],
-        "events": [],
-    }
+    return detections
+
+
+def _attach_track_velocity(
+    person_det: PpeDetection,
+    camera_id: str,
+    track_id: str | None,
+) -> None:
+    """Gắn vận tốc Kalman để FE nội suy ROI giữa hai lần AI chạy.
+
+    AI chạy vài FPS còn video render 25–30 FPS. Không có vận tốc thì FE chỉ còn
+    cách hoặc để ROI đứng giật theo nhịp AI, hoặc tự đoán lại chuyển động — mà
+    đoán lại chính là thứ vừa được dồn về backend.
+    """
+    if not track_id:
+        return
+    from .patrol_tracker import get_patrol_tracker
+
+    track = get_patrol_tracker(camera_id).get(track_id)
+    if track is None:
+        return
+    vx, vy = track.velocity()
+    person_det.velocity = [round(vx, 2), round(vy, 2)]
 
 
 def _build_patrol_flycam_result(
@@ -1858,8 +1967,6 @@ def _build_patrol_flycam_result(
     source_pts_sec: float | None = None,
 ) -> dict:
     """Flycam DR-* — YOLO person only; góc cao nên bỏ face-anchor bodycam."""
-    from .worker_identity.detection_enrich import enrich_person_bbox
-
     detector = _get_person_detector()
     h, w = frame.shape[:2]
     persons = _dedupe_person_boxes(
@@ -1870,42 +1977,14 @@ def _build_patrol_flycam_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_FLYCAM,
+            for_display=True,
         ),
         camera_id=camera_id,
     )
 
-    detections: list[PpeDetection] = []
-    assigned_patrol_tracks: set[str] = set()
-    reset_hc_patrol_face_assignments(camera_id)
-
-    for person_index, person in enumerate(persons):
-        pb = person.person_box
-        display_pb = _visible_person_display_bbox(pb, w, h)
-        person_det = PpeDetection(
-            behavior="person",
-            label=PPE_LABELS["person"],
-            scenario_id=PPE_SCENARIO["person"],
-            confidence=round(person.person_conf, 3),
-            bbox=[float(v) for v in display_pb],
-            subject_bbox=[float(v) for v in pb],
-        )
-        enrich_person_bbox(
-            frame,
-            person_det,
-            camera_id=camera_id,
-            person_index=person_index,
-            source_pts_sec=source_pts_sec,
-        )
-        _assign_patrol_person_identity(
-            person_det,
-            pb,
-            frame=frame,
-            camera_id=camera_id,
-            frame_w=w,
-            frame_h=h,
-            blocked=assigned_patrol_tracks,
-        )
-        detections.append(person_det)
+    detections = _build_patrol_person_detections(
+        frame, camera_id, persons, w, h, source_pts_sec=source_pts_sec,
+    )
 
     return {
         "type": "result",
@@ -1913,7 +1992,7 @@ def _build_patrol_flycam_result(
         "width": w,
         "height": h,
         "metrics": {
-            "person_count": len(persons),
+            "person_count": _patrol_countable_person_count(persons, w, h),
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],
@@ -2056,9 +2135,12 @@ def analyze_ppe_frame(
 
     detections: list[PpeDetection] = []
     violations = 0
-    assigned_patrol_tracks: set[str] = set()
     if _is_helmet_bodycam(camera_id):
         reset_hc_patrol_face_assignments(camera_id)
+    patrol_track_ids = assign_patrol_track_ids(
+        camera_id,
+        [(p.person_box, p.person_conf) for p in persons],
+    )
 
     for person_index, person in enumerate(persons):
         pb = person.person_box
@@ -2094,7 +2176,9 @@ def analyze_ppe_frame(
             camera_id=camera_id,
             frame_w=w,
             frame_h=h,
-            blocked=assigned_patrol_tracks,
+            track_id=patrol_track_ids[person_index]
+            if person_index < len(patrol_track_ids)
+            else None,
         )
         detections.append(person_det)
 

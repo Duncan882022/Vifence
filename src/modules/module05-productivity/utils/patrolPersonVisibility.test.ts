@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  patrolPersonLimbFragmentBbox,
   patrolPersonMeetsDetectionGate,
   patrolPersonMeetsDisplayGate,
   type Bbox4,
@@ -51,6 +52,19 @@ describe('gate hiển thị ROI', () => {
     ).toBe(false)
   })
 
+  it('người ngồi ghế nằm nửa dưới khung vẫn được vẽ ROI', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.38, FRAME_H * 0.55, FRAME_W * 0.62, FRAME_H * 0.88]
+    const { display, event } = gates(bbox)
+    expect(display).toBe(true)
+    expect(event).toBe(false)
+  })
+
+  it('chân của chính người đeo camera dính đáy khung thì loại', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.30, FRAME_H * 0.66, FRAME_W * 0.70, FRAME_H * 0.99]
+    expect(patrolPersonLimbFragmentBbox(bbox, FRAME_W, FRAME_H)).toBe(true)
+    expect(gates(bbox).display).toBe(false)
+  })
+
   it('gate hiển thị không bao giờ chặt hơn gate sự kiện', () => {
     const samples: Bbox4[] = [
       [520, 140, 700, 660],
@@ -63,5 +77,25 @@ describe('gate hiển thị ROI', () => {
       const { display, event } = gates(bbox)
       if (event) expect(display).toBe(true)
     }
+  })
+})
+
+describe('gate hiển thị flycam', () => {
+  const flycamDisplay = (bbox: Bbox4) =>
+    patrolPersonMeetsDisplayGate({ bbox, frameW: FRAME_W, frameH: FRAME_H, flycam: true })
+
+  it('người ngồi co lại rộng hơn cao vẫn được vẽ ROI', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.45, FRAME_H * 0.50, FRAME_W * 0.45 + 200, FRAME_H * 0.50 + 30]
+    expect(flycamDisplay(bbox)).toBe(true)
+  })
+
+  it('người rất nhỏ trên không vẫn được vẽ ROI', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.49, FRAME_H * 0.40, FRAME_W * 0.51, FRAME_H * 0.415]
+    expect(flycamDisplay(bbox)).toBe(true)
+  })
+
+  it('đốm nhiễu vài pixel thì loại', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.5, FRAME_H * 0.5, FRAME_W * 0.5 + 3, FRAME_H * 0.5 + 4]
+    expect(flycamDisplay(bbox)).toBe(false)
   })
 })

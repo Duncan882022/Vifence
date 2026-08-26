@@ -18,7 +18,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.ppe_analyzer import _assign_patrol_person_identity  # noqa: E402
+from app.ppe_analyzer import (  # noqa: E402
+    _assign_patrol_person_identity,
+    assign_patrol_track_ids,
+)
 from app.schemas import PpeDetection  # noqa: E402
 
 
@@ -55,10 +58,14 @@ class PatrolAnalyzerIdentityTests(unittest.TestCase):
         for p in self._patches:
             p.start()
         self.frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        from app.ppe_analyzer import _hc_frame_face_assignments, _hc_patrol_person_tracks
+        from app.patrol_identity_lifecycle import reset as reset_lifecycle
+        from app.patrol_tracker import reset_patrol_trackers
+        from app.ppe_analyzer import _hc_frame_face_assignments
 
-        _hc_patrol_person_tracks.clear()
         _hc_frame_face_assignments.clear()
+        reset_patrol_trackers()
+        reset_lifecycle()
+        self._now = 1000.0
 
     def tearDown(self) -> None:
         for p in reversed(self._patches):
@@ -66,7 +73,12 @@ class PatrolAnalyzerIdentityTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def _assign(self, det: PpeDetection, face: tuple) -> None:
+        """Đi đúng đường thật: tracker gán id cho cả frame, rồi mới tới định danh."""
         box = (det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3])
+        self._now += 0.2
+        track_id = assign_patrol_track_ids(
+            "HC-02", [(box, det.confidence)], now=self._now,
+        )[0]
         with patch("app.worker_identity.recognizer.assess_patrol_face", return_value=face):
             _assign_patrol_person_identity(
                 det,
@@ -75,7 +87,7 @@ class PatrolAnalyzerIdentityTests(unittest.TestCase):
                 camera_id="HC-02",
                 frame_w=1280,
                 frame_h=720,
-                blocked=set(),
+                track_id=track_id,
             )
 
     def _registry_tracks(self) -> dict:

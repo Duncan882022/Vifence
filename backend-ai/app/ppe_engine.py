@@ -289,11 +289,15 @@ class PpeEngine:
             from .event_dedup import build_dedup_key
             from .patrol_appearance_store import touch_appearance
             from .patrol_entity import (
-                patrol_tier_label,
                 resolve_patrol_dedup_stable_id,
                 resolve_patrol_master_id,
             )
             from .patrol_entity import is_patrol_gallery_id
+            from .patrol_identity_lifecycle import (
+                TIER_IDENTITY,
+                TIER_PERSON,
+                observe as observe_track_identity,
+            )
             from .person_identity_registry import (
                 bind_patrol_track_identity,
                 is_sgc_worker_id,
@@ -322,7 +326,11 @@ class PpeEngine:
                 from .ppe_analyzer import raw_person_bbox
 
                 person_bbox = raw_person_bbox(person)
-                track_id = assign_person_track_id(
+                # Track đã được `analyze_ppe_frame` gán bằng ByteTrack cho cả
+                # khung. Gán lại ở đây (như trước) tạo ra bộ id thứ hai lệch với
+                # bộ đang vẽ ROI, nên cùng một người có thể mang hai danh tính:
+                # một trên overlay, một trong tab sự kiện.
+                track_id = (person.track_id or "").strip() or assign_person_track_id(
                     person_bbox,
                     tracks,
                     behavior="person",
@@ -427,10 +435,32 @@ class PpeEngine:
                 if face_eligible and face_emb is not None and worker_id:
                     frame_face_assignments[worker_id] = face_emb
 
-                is_gallery = bool(worker_id) and (
-                    gallery_verified or is_patrol_gallery_id(worker_id)
+                # Tầng lấy từ state machine chung với đường vẽ ROI, nên nhãn trên
+                # overlay và nhãn trong tab sự kiện không thể nói khác nhau. Suy
+                # lại từ worker_id mỗi frame (cách cũ) khiến người vừa quay lưng
+                # là tụt từ Định danh về Đối tượng rồi lại nhảy lên.
+                resolved_identity = observe_track_identity(
+                    camera_id,
+                    track_id,
+                    worker_id=worker_id,
+                    worker_name=worker_name,
+                    now=now,
                 )
-                is_sgc = is_sgc_worker_id(worker_id)
+                if resolved_identity.worker_id:
+                    worker_id = resolved_identity.worker_id
+                    worker_name = resolved_identity.worker_name or worker_id
+                is_gallery = resolved_identity.tier == TIER_IDENTITY
+                is_sgc = resolved_identity.tier == TIER_PERSON
+                if resolved_identity.transition is not None:
+                    tr = resolved_identity.transition
+                    logger.info(
+                        "[%s] Thăng tầng %s → %s: track=%s %s",
+                        camera_id,
+                        tr.from_label,
+                        tr.to_label,
+                        track_id,
+                        tr.worker_name or tr.worker_id or "-",
+                    )
 
                 from .ppe_analyzer import _face_dominant_person_box, raw_person_bbox
                 from .patrol_person_visibility import (
@@ -570,7 +600,7 @@ class PpeEngine:
                         event.object_id,
                         track_id,
                     )
-                    tier = patrol_tier_label(event.worker_id or worker_id)
+                    tier = resolved_identity.tier
                     touch_appearance(
                         master_id=master_id,
                         camera_id=camera_id,

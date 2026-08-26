@@ -4,9 +4,16 @@ import type {
   Bbox,
   PersonRoiDetection,
   PersonRoiDisplay,
+  PersonRoiTier,
   PersonRoiTrack,
   PersonRoiTrackState,
 } from './types'
+
+const TIER_RANK: Record<PersonRoiTier, number> = {
+  object: 0,
+  person: 1,
+  identity: 2,
+}
 
 const PPE_PROXY_BEHAVIORS = new Set([
   'no_helmet',
@@ -131,6 +138,7 @@ function createKalman(bbox: Bbox, cfg: PatrolPersonRoiConfig): KalmanBox2D {
     sizeGain: cfg.sizeGain,
     velocitySmoothing: cfg.velocitySmoothing,
     maxSpeedBoxPerSec: cfg.maxSpeedBoxPerSec,
+    minMeasureGain: cfg.minMeasureGain,
   })
 }
 
@@ -189,6 +197,11 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
       track.workerName = name
     }
   }
+  // Tầng do backend giữ (state machine chỉ tiến không lùi). FE chỉ chấp nhận
+  // giá trị cao hơn để một payload trễ nhịp không kéo nhãn tụt xuống.
+  if (det.tier && TIER_RANK[det.tier] > TIER_RANK[track.tier]) {
+    track.tier = det.tier
+  }
   track.label = track.workerName?.trim()
     || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
   track.confidence = Math.max(track.confidence, det.confidence)
@@ -216,6 +229,11 @@ export function advancePersonRoiTracks(
 
   const applyMeasurement = (track: PersonRoiTrack, det: PersonRoiDetection) => {
     track.kalman.update(det.bbox, dtMs)
+    // Backend ước lượng vận tốc trên chuỗi frame liên tục với dt đều; FE chỉ có
+    // nhịp snapshot tới nơi, vốn dao động theo mạng. Có số của backend thì dùng.
+    if (det.velocity && det.velocity.length >= 2) {
+      track.kalman.seedVelocity(det.velocity[0], det.velocity[1])
+    }
     track.hits += 1
     track.missStreak = 0
     track.lastSeenAt = now
@@ -296,6 +314,12 @@ export function advancePersonRoiTracks(
     if (det.confidence < cfg.birthMinConfidence) return
     const id = nextTrackId()
     const anchorKey = personRoiAnchorKey(det)
+    const kalman = createKalman(det.bbox, cfg)
+    // Không mồi vận tốc thì nhịp analyze đầu tiên ROI luôn đứng yên trong khi
+    // người đã đi tiếp — thấy rõ nhất lúc người vừa bước vào khung.
+    if (det.velocity && det.velocity.length >= 2) {
+      kalman.seedVelocity(det.velocity[0], det.velocity[1])
+    }
     const track: PersonRoiTrack = {
       id,
       state: anchorKey ? 'confirmed' : 'tentative',
@@ -308,7 +332,8 @@ export function advancePersonRoiTracks(
       workerId: isKnownWorker(det.worker_id) ? det.worker_id!.trim() : undefined,
       workerName: det.worker_name?.trim(),
       anchorKey,
-      kalman: createKalman(det.bbox, cfg),
+      tier: det.tier ?? 'object',
+      kalman,
     }
     applyIdentity(track, det)
     next.set(id, track)
@@ -339,7 +364,8 @@ export function predictPersonRoiTracks(
 
   for (const track of tracks.values()) {
     const ageSinceMeasure = now - track.lastMeasureAt
-    if (track.state === 'lost' && ageSinceMeasure > cfg.maxLostMs) continue
+    const lostBudget = track.anchorKey ? cfg.maxLostAnchoredMs : cfg.maxLostMs
+    if (track.state === 'lost' && ageSinceMeasure > lostBudget) continue
     if (track.state === 'tentative' && track.hits < cfg.confirmHits) continue
 
     const bbox = dt > 0 ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
@@ -355,6 +381,7 @@ export function predictPersonRoiTracks(
       workerId: track.workerId,
       workerName: track.workerName,
       subjectBbox: track.subjectBbox,
+      tier: track.tier,
     })
   }
 

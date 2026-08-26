@@ -146,6 +146,9 @@ export function CameraVideoFeed({
         subject_bbox: d.subject_bbox,
         worker_id: d.worker_id,
         worker_name: d.worker_name,
+        track_id: d.track_id,
+        tier: d.tier,
+        velocity: d.velocity,
       })),
     )
   }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at])

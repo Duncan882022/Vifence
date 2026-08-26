@@ -2,11 +2,11 @@
  * Patrol Person ROI overlay — Kalman + ByteTrack-lite (Module 05).
  * Không dùng ATLĐ bboxTrackLock / ROI cycle / sticky violation.
  */
-import { memo, type RefObject } from 'react'
+import { memo, useEffect, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
-import { getOverlayBoxStyle } from '@/modules/module03-safety/utils/roiBoxRole'
 import { passesOverlayConfidence } from '@/modules/module03-safety/utils/overlayCoverage'
+import { PATROL_TIER_RANK, patrolTierToken } from '../utils/patrolTierTokens'
 import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
 import {
   formatPersonOverlayBadge,
@@ -45,6 +45,8 @@ const PersonRoiBox = memo(function PersonRoiBox({
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
 }) {
+  const justPromoted = useTierPromotionFlash(track.tier)
+
   const video = videoRef.current
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
@@ -65,7 +67,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
   )
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
-  const style = getOverlayBoxStyle('ppe', 'person')
+  const tierToken = patrolTierToken(track.tier)
   const identityKey = track.workerId?.trim() || track.personId
   const manual = getPatrolManualIdentity(identityKey)
   const wid = track.workerId?.trim() ?? ''
@@ -102,13 +104,23 @@ const PersonRoiBox = memo(function PersonRoiBox({
       }}
       data-track-id={track.trackId}
       data-person-id={track.personId}
+      data-tier={track.tier}
     >
-      <div className={cn('absolute inset-0 rounded-sm', style.border)} />
+      <div
+        className={cn(
+          'absolute inset-0 rounded-sm transition-colors duration-300',
+          tierToken.roiBorder,
+          // Vừa thăng tầng — quầng sáng ngắn để người trực nhìn thấy đúng lúc
+          // một Đối tượng vừa thành Người / vừa được định danh.
+          justPromoted && 'ring-2 ring-white/70 ring-offset-0',
+        )}
+      />
       <span
         className={cn(
           'absolute -top-3 left-0 px-1 py-px font-mono whitespace-nowrap rounded-sm',
-          style.bg,
-          style.label,
+          'transition-colors duration-300',
+          tierToken.roiLabelBg,
+          tierToken.roiLabelText,
           compact ? 'text-[5px]' : 'text-[7px]',
         )}
       >
@@ -117,6 +129,25 @@ const PersonRoiBox = memo(function PersonRoiBox({
     </div>
   )
 })
+
+/** Bật cờ trong ~1.2s ngay sau khi track lên tầng cao hơn. */
+function useTierPromotionFlash(tier: PersonRoiDisplay['tier']): boolean {
+  const previousTier = useRef(tier)
+  const [flash, setFlash] = useState(false)
+
+  useEffect(() => {
+    const before = previousTier.current
+    previousTier.current = tier
+    if (before === tier) return
+    if (PATROL_TIER_RANK[tier] <= PATROL_TIER_RANK[before]) return
+
+    setFlash(true)
+    const timer = window.setTimeout(() => setFlash(false), 1200)
+    return () => window.clearTimeout(timer)
+  }, [tier])
+
+  return flash
+}
 
 export function PatrolPersonRoiOverlay({
   cameraId,

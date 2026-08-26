@@ -62,12 +62,45 @@ function plausiblePersonSilhouette(
   const pw = Math.max(x2 - x1, 1)
   const ph = Math.max(y2 - y1, 1)
   const aspect = ph / pw
+  if (flycam) {
+    // Nhìn từ trên xuống, người ngồi hoặc cúi co lại thành khối rộng hơn cao.
+    // Giữ sàn 0.28 của góc ngang là loại đúng những trường hợp đó.
+    if (aspect > 6.5 || aspect < 0.12) return false
+    if (pw < Math.max(6, frameW * 0.006)) return false
+    if (ph < Math.max(8, frameH * 0.010)) return false
+    return true
+  }
   if (aspect > 4.2 || aspect < 0.28) return false
-  const minW = flycam ? Math.max(6, frameW * 0.006) : Math.max(12, frameW * 0.035)
-  const minH = flycam ? Math.max(8, frameH * 0.010) : Math.max(14, frameH * 0.04)
-  if (pw < minW) return false
-  if (ph < minH) return false
+  if (pw < Math.max(12, frameW * 0.035)) return false
+  if (ph < Math.max(14, frameH * 0.04)) return false
   return true
+}
+
+/**
+ * Bbox chỉ là mảnh chi thể — mảnh vỡ của người đã được khoanh ở box khác.
+ *
+ * Hẹp hơn hẳn `patrolPersonLegsOnlyBbox`. Hàm kia coi mọi bbox có vùng đầu nằm
+ * dưới 54% chiều cao khung là chân, nên người **ngồi** nhìn từ camera đội đầu —
+ * vốn luôn rơi xuống nửa dưới khung — cũng bị loại. Chặt như vậy đúng cho đường
+ * ghi sự kiện, nhưng với đường vẽ ROI thì mất đúng nhóm cần thấy nhất.
+ *
+ * Mirror `limb_fragment_person_box` bên backend.
+ */
+export function patrolPersonLimbFragmentBbox(
+  bbox: Bbox4,
+  _frameW: number,
+  frameH: number,
+): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  const y1Ratio = y1 / Math.max(frameH, 1)
+  const y2Ratio = y2 / Math.max(frameH, 1)
+
+  if (aspect >= 2.2 && y1Ratio > 0.52 && y2Ratio > 0.80) return true
+  if (y1Ratio > 0.62 && y2Ratio > 0.97) return true
+  return false
 }
 
 /** Người nhỏ/xa trên đường — quay lưng, không cần tín hiệu da (mirror BE). */
@@ -151,8 +184,9 @@ export interface PatrolPersonDetectionGateInput {
 
 /**
  * Gate vẽ ROI — rộng hơn gate ghi sự kiện.
- * Yêu cầu nghiệp vụ: khung hình bbox mọi người nhìn thấy được, còn "đầu + 30%
- * thân" chỉ quyết định có ghi sự kiện hay không (backend lo phần đó).
+ * Yêu cầu nghiệp vụ: khoanh mọi thứ có dấu hiệu là người, kể cả người ngồi, bị
+ * che một phần hay quay lưng. Ràng buộc "đầu + 30% thân" chỉ quyết định có ghi
+ * sự kiện hay không.
  * Ở đây chỉ loại mảnh chân/tay và khung không thể là người.
  */
 export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
@@ -160,7 +194,7 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
   if (frameW <= 0 || frameH <= 0) return false
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, flycam)) return false
   if (flycam) return true
-  return !patrolPersonLegsOnlyBbox(bbox, frameW, frameH)
+  return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
 }
 
 export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateInput): boolean {

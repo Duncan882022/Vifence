@@ -70,6 +70,10 @@ def resolve_patrol_dedup_stable_id(
     if oid.upper().startswith("OBJ-"):
         return oid
     tid = (track_id or "").strip()
+    # Track của `patrol_tracker` bám đúng một người suốt lượt xuất hiện, nên tự
+    # nó đã là khoá dedup tốt nhất khi chưa có mã định danh nào.
+    if tid.startswith("ptk"):
+        return f"track:{tid}"
     if tid.endswith(":person"):
         slot = tid.split(":")[0]
         if slot.startswith("p"):

@@ -29,6 +29,8 @@ export interface KalmanBox2DTuning {
   velocitySmoothing: number
   /** Trần tốc độ tính theo số lần cạnh bbox mỗi giây — chặn box bay khi đo nhiễu. */
   maxSpeedBoxPerSec: number
+  /** Sàn hệ số lọc vị trí — chặn độ trễ khi `p` đã tụt xuống đáy. */
+  minMeasureGain: number
 }
 
 const DEFAULT_TUNING: KalmanBox2DTuning = {
@@ -38,6 +40,7 @@ const DEFAULT_TUNING: KalmanBox2DTuning = {
   sizeGain: 0.35,
   velocitySmoothing: 0.72,
   maxSpeedBoxPerSec: 2.5,
+  minMeasureGain: 0.55,
 }
 
 /**
@@ -93,7 +96,10 @@ export class KalmanBox2D {
   update(bbox: Bbox, dtMs: number): Bbox {
     const [mx, my, mw, mh] = bboxToCxCyWh(bbox)
     const dt = Math.max(8, dtMs) / 1000
-    const k = this.p / (this.p + this.tuning.measureNoise)
+    const k = Math.max(
+      this.tuning.minMeasureGain,
+      this.p / (this.p + this.tuning.measureNoise),
+    )
 
     const appliedX = k * (mx - this.cx)
     const appliedY = k * (my - this.cy)
@@ -113,6 +119,19 @@ export class KalmanBox2D {
     this.p = Math.max(0.05, (1 - k) * this.p)
 
     return this.getBbox()
+  }
+
+  /**
+   * Nạp vận tốc backend đã ước lượng (px/giây).
+   *
+   * Track mới sinh ra với vận tốc 0 nên nhịp analyze đầu tiên ROI luôn tụt lại
+   * sau người đang đi. Backend đã chạy Kalman trên chuỗi frame liên tục và biết
+   * vận tốc thật ngay lúc đó — mồi lại rẻ hơn nhiều so với để FE tự đoán lại.
+   */
+  seedVelocity(vx: number, vy: number): void {
+    const limit = this.maxSpeed()
+    this.vx = clamp(vx, -limit, limit)
+    this.vy = clamp(vy, -limit, limit)
   }
 
   getBbox(): Bbox {
