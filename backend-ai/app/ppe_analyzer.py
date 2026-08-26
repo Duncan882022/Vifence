@@ -83,20 +83,31 @@ def assign_patrol_track_ids(
     person_boxes: list[tuple[tuple[float, float, float, float], float]],
     *,
     now: float | None = None,
+    frame: np.ndarray | None = None,
 ) -> list[str | None]:
     """Gán track cho **cả frame** một lượt qua ByteTrack (`patrol_tracker`).
 
     Phải ghép theo cả khung mới đúng: gán tuần tự từng người rồi chặn lẫn nhau
     (cách cũ) khiến người vào sau cướp track của người kia tuỳ thứ tự YOLO trả về.
+
+    Có `frame` thì ước lượng luôn dịch chuyển của cả khung hình, để tracker
+    phân biệt "người đi" với "người đeo lia mũ".
     """
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
         return [None] * len(person_boxes)
     from .patrol_tracker import get_patrol_tracker
 
+    shift = (0.0, 0.0)
+    if frame is not None:
+        from .patrol.egomotion import estimate_shift
+
+        shift = estimate_shift(camera_id, frame)
+
     tracker = get_patrol_tracker(camera_id)
     return tracker.update(
         [(tuple(float(v) for v in box), float(conf)) for box, conf in person_boxes],
         now=now if now is not None else time.time(),
+        camera_shift=shift,
     )
 
 
@@ -1943,6 +1954,7 @@ def _build_patrol_person_detections(
     track_ids = assign_patrol_track_ids(
         camera_id,
         [(p.person_box, p.person_conf) for p in persons],
+        frame=frame,
     )
 
     detections: list[PpeDetection] = []
