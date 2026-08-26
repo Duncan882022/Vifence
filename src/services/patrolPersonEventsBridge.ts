@@ -1,4 +1,4 @@
-/** Sự kiện vòng đời người từ MobileCameraFeed (HC-02) → heatmap + cache tạm. */
+/** Sự kiện vòng đời người từ MobileCameraFeed (HC-02) → heatmap. */
 import type { PatrolEvent } from '@/modules/module05-productivity/data/patrolMockData'
 import { mapBackendEventToPatrolEvent } from '@/modules/module05-productivity/services/patrolLiveEvents.service'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
@@ -13,7 +13,6 @@ import { applyManualIdentityToPatrolEvent } from '@/modules/module05-productivit
 import { subscribePatrolManualIdentity } from '@/modules/module05-productivity/services/patrolManualIdentity.service'
 
 const MAX_EVENTS = 80
-const listeners = new Set<(events: PatrolEvent[]) => void>()
 let eventsById = new Map<string, PatrolEvent>()
 
 function notify(): void {
@@ -21,7 +20,6 @@ function notify(): void {
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
   syncPatrolPersonEventsToHeatmap(list)
-  listeners.forEach(fn => fn(list))
 }
 
 function resolveGpsForMobileEvent(
@@ -124,20 +122,6 @@ export function pushPatrolMobilePersonEvents(
     eventsById = new Map(sorted.slice(0, MAX_EVENTS).map(e => [e.id, e]))
   }
   notify()
-}
-
-export function getPatrolMobilePersonEvents(): PatrolEvent[] {
-  return [...eventsById.values()].sort(
-    (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
-  )
-}
-
-export function subscribePatrolMobilePersonEvents(
-  listener: (events: PatrolEvent[]) => void,
-): () => void {
-  listeners.add(listener)
-  listener(getPatrolMobilePersonEvents())
-  return () => listeners.delete(listener)
 }
 
 export function clearPatrolMobilePersonEvents(): void {

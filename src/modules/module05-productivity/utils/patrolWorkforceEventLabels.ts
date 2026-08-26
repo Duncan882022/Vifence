@@ -5,8 +5,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolMockData'
-import type { ObjectState } from '../types/workforceHeatmap'
-import { rememberPatrolSgcObjectLink } from '../services/patrolSgcObjectLink.service'
 import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIdentityForSgc } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
@@ -97,6 +95,10 @@ export function isPatrolSgcWorkerId(id?: string | null): boolean {
 
 export function isPatrolObjectId(id?: string | null): boolean {
   return Boolean(id && /^obj-/i.test(id.trim()))
+}
+
+export function isPatrolPersId(id?: string | null): boolean {
+  return Boolean(id && /^pers-/i.test(id.trim()))
 }
 
 /**
@@ -194,84 +196,36 @@ export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent
   }
 }
 
-export function buildSgcToObjectIdMap(objects: ObjectState[]): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const obj of objects) {
-    const wid = obj.worker_id?.trim()
-    if (!wid || !isPatrolSgcWorkerId(wid)) continue
-    map.set(wid.toUpperCase(), obj.object_id)
-  }
-  return map
-}
-
-const FACE_CAPTURE_MODES = new Set(['FACE_CLOSEUP', 'FULL_BODY', 'UPPER_BODY'])
-
-/** Gắn objectId khi workforce đã có khuôn mặt / thân đủ tiêu chí. */
-export function enrichPatrolPersonEventWithWorkforceObject(
-  event: PatrolEvent,
-  objects: ObjectState[],
-  sgcToObject: Map<string, string>,
-): PatrolEvent {
-  if (event.type !== 'PERSON_DETECTED') return event
-
-  let trackWorkerId = event.trackWorkerId
-  const eventOid = event.objectId?.trim()
-  if (eventOid && isPatrolObjectId(eventOid)) {
-    const wfObj = objects.find(o => o.object_id === eventOid)
-    if (wfObj?.worker_id && isPatrolSgcWorkerId(wfObj.worker_id)) {
-      trackWorkerId = wfObj.worker_id.trim()
-    }
-  }
-
-  const sgcKey = (trackWorkerId ?? event.objectId)?.trim()
-  const sgcUpper = sgcKey?.toUpperCase()
-  let objectId = sgcUpper ? sgcToObject.get(sgcUpper) : undefined
-
-  if (!objectId && sgcKey) {
-    const match = objects.find(o =>
-      o.helmet_id === event.cameraId
-      && o.worker_id?.trim().toUpperCase() === sgcUpper
-      && FACE_CAPTURE_MODES.has(o.observation_mode),
-    )
-    objectId = match?.object_id
-  }
-
-  if (!objectId || !isPatrolObjectId(objectId)) {
-    return formatPatrolPersonDetectedEvent(event)
-  }
-
-  const trackWorkerIdFinal = isPatrolSgcWorkerId(sgcKey) ? sgcKey : trackWorkerId
-  if (trackWorkerIdFinal && isPatrolSgcWorkerId(trackWorkerIdFinal)) {
-    rememberPatrolSgcObjectLink(trackWorkerIdFinal, objectId)
-  }
-
-  const enriched: PatrolEvent = {
-    ...event,
-    objectId,
-    trackWorkerId: trackWorkerIdFinal,
-  }
-  return formatPatrolPersonDetectedEvent(enriched)
-}
-
 /** Khóa master dedup — profile worker > sgc canonical > OBJ > event. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   return resolvePatrolCanonicalEntityKey(event)
 }
 
-/** Master id tra lịch sử xuất hiện (popup). */
-export function patrolEventAppearanceMasterId(event: PatrolEvent): string {
+/** Subject id tra lịch sử xuất hiện (popup) — ưu tiên pers/obj từ SQLite day cards. */
+export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
+  const fromDayCard = event.id.match(/^(?:pers|obj):(.+)$/i)?.[1]?.trim()
+  if (fromDayCard) return fromDayCard
+
+  const objectId = event.objectId?.trim() ?? ''
+  if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId
+
   const sgc = resolvePatrolEventSgcKey(event)
   if (sgc) return sgc
+
   const key = patrolEventMasterEntityKey(event)
   if (key.startsWith('EV:')) {
-    const oid = event.objectId?.trim()
     const track = event.trackWorkerId?.trim()
     if (track && isPatrolSgcWorkerId(track)) return track.toUpperCase()
-    if (oid && isPatrolSgcWorkerId(oid)) return oid.toUpperCase()
-    if (oid && isPatrolGalleryWorkerId(oid)) return oid.toUpperCase()
-    return oid || track || event.id
+    if (objectId && isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
+    if (objectId && isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
+    return objectId || track || event.id
   }
   return key
+}
+
+/** @deprecated Dùng `resolvePatrolAppearanceSubjectId`. */
+export function patrolEventAppearanceMasterId(event: PatrolEvent): string {
+  return resolvePatrolAppearanceSubjectId(event)
 }
 
 /** Gộp list — giữ snapshot mới nhất theo master key. */
@@ -290,19 +244,6 @@ export function dedupePatrolEventsByMasterEntity(events: PatrolEvent[]): PatrolE
   return [...byKey.values()].sort(
     (a, b) => new Date(b.lockedAt).getTime() - new Date(a.lockedAt).getTime(),
   )
-}
-
-export function enrichPatrolEventsWithWorkforceObjects(
-  events: PatrolEvent[],
-  objects: ObjectState[],
-): PatrolEvent[] {
-  if (!objects.length) {
-    return events.map(ev =>
-      ev.type === 'PERSON_DETECTED' ? formatPatrolPersonDetectedEvent(ev) : ev,
-    )
-  }
-  const sgcToObject = buildSgcToObjectIdMap(objects)
-  return events.map(ev => enrichPatrolPersonEventWithWorkforceObject(ev, objects, sgcToObject))
 }
 
 export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'

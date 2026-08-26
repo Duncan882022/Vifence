@@ -8,10 +8,10 @@ import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
 import { needsPatrolManualIdentity, isPatrolManuallyIdentified, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
 import {
-  fetchPatrolAppearances,
+  fetchPatrolSubjectAppearances,
   formatAppearanceTimeRange,
-  type PatrolAppearancesByCamera,
-} from '../services/patrolAppearances.service'
+  type PatrolAppearanceSegment,
+} from '../services/patrolDayEvents.service'
 import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import {
   PATROL_TYPE_META,
@@ -19,7 +19,7 @@ import {
   getPatrolEventStatusDisplay,
 } from '../utils/patrolEventsUi'
 import {
-  patrolEventAppearanceMasterId,
+  resolvePatrolAppearanceSubjectId,
   resolvePatrolEventDisplayMeta,
   resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
@@ -47,7 +47,7 @@ function mapsUrl(lat: number, lng: number): string {
 
 export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEventDetailModalProps) {
   const [identityTick, setIdentityTick] = useState(0)
-  const [appearances, setAppearances] = useState<PatrolAppearancesByCamera>({})
+  const [appearances, setAppearances] = useState<Record<string, PatrolAppearanceSegment[]>>({})
 
   useEffect(() => {
     if (!event) return
@@ -67,8 +67,8 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
       setAppearances({})
       return
     }
-    const masterId = patrolEventAppearanceMasterId(event)
-    void fetchPatrolAppearances(masterId).then(({ byCamera }) => {
+    const subjectId = resolvePatrolAppearanceSubjectId(event)
+    void fetchPatrolSubjectAppearances(subjectId).then(byCamera => {
       setAppearances(byCamera)
     })
   }, [event, identityTick])
@@ -177,16 +177,16 @@ export function PatrolEventDetailModal({ event, onClose, onPlayback }: PatrolEve
                   return (
                     <div key={cameraId} className="space-y-1">
                       <p className="text-[9px] font-medium text-muted-foreground">{camLabel}</p>
-                      {blocks.map(block => (
+                      {blocks.map((block, index) => (
                         <div
-                          key={block.id}
+                          key={`${cameraId}-${block.startedAt}-${index}`}
                           className="rounded border border-[#1e2433] bg-[#0a0e17] px-2 py-1.5 text-[9px] text-foreground/90"
                         >
                           <span className="tabular-nums font-medium">
-                            {formatAppearanceTimeRange(block.started_at, block.ended_at)}
+                            {formatAppearanceTimeRange(block.startedAt, block.endedAt)}
                           </span>
-                          {block.zone_id && (
-                            <span className="text-muted-foreground ml-1.5">· {block.zone_id}</span>
+                          {block.zoneId && (
+                            <span className="text-muted-foreground ml-1.5">· {block.zoneId}</span>
                           )}
                         </div>
                       ))}
