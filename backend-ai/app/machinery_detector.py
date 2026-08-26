@@ -230,13 +230,23 @@ def _ensure_worker() -> None:
 
 def preload() -> None:
     """Tải OWLv2 sớm — tránh cold-start 60–120s ở request crane đầu tiên."""
+    if not is_enabled():
+        return
     _ensure_worker()
     _load_model()
+
+
+def is_enabled() -> bool:
+    from .config import settings
+
+    return settings.machinery_detector_enabled
 
 
 def submit_frame(camera_id: str, frame: np.ndarray) -> None:
     """Gọi từ luồng request (không chặn) — chỉ ghi tham chiếu frame mới nhất
     để luồng nền tự lấy khi tới chu kỳ; KHÔNG chạy model ở đây."""
+    if not is_enabled():
+        return
     with _state_lock:
         _latest_frame[camera_id] = frame
     _ensure_worker()
@@ -248,6 +258,8 @@ def get_cached(
 ) -> list[tuple[str, tuple[int, int, int, int], float]]:
     """Kết quả máy móc gần nhất — chỉ trả về khi khung hiện tại còn khớp
     khung đã phân tích (tránh bbox trôi khi video chạy liên tục)."""
+    if not is_enabled():
+        return []
     with _state_lock:
         result = _latest_result.get(camera_id)
         if not result:

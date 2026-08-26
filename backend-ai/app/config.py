@@ -190,9 +190,29 @@ class Settings(BaseSettings):
     # FPS AI trên server (VMS mode) — tiết kiệm CPU, đủ ATLĐ.
     vms_ai_fps: float = 6.0
 
+    # Camera CMS xem thẳng qua MediaMTX (WHEP/LL-HLS) — worker khỏi re-encode HLS.
+    # Mỗi camera bỏ đi ở đây là bớt một ffmpeg + ~69 MB/s ghi raw frame vào pipe.
+    vms_hls_relay_skip_prefixes: str = "HC-,DR-"
+
+    # Cạnh dài tối đa của frame đưa vào AI (0 = giữ nguyên). Snapshot sự kiện vẫn
+    # dùng frame gốc, nên hạ giá trị này chỉ đổi chi phí inference.
+    vms_ai_max_width: int = 0
+
+    # OWLv2 (crane/machinery) là transformer ~1.2 GB, inference CPU hàng giây mỗi
+    # frame. Tắt khi VPS chỉ cần phục vụ Module 05.
+    machinery_detector_enabled: bool = True
+
     def vms_ai_fps_effective(self) -> float:
         """FPS AI trên VMS — luôn dùng cấu hình đầy đủ (grace không hạ FPS)."""
         return self.vms_ai_fps
+
+    def vms_hls_relay_enabled_for(self, camera_id: str) -> bool:
+        """CMS đã xem camera này qua MediaMTX chưa — chưa thì worker phải relay HLS."""
+        for prefix in self.vms_hls_relay_skip_prefixes.split(","):
+            prefix = prefix.strip()
+            if prefix and camera_id.startswith(prefix):
+                return False
+        return True
 
     @property
     def camera_source_value(self) -> Union[int, str]:

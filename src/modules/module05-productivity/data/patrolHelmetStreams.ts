@@ -11,6 +11,7 @@ import {
   getVmsHlsUrl,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { getHelmetMediaMtxHlsUrl, isLegacyMobileHelmet } from './helmetIngest'
+import { isVmsHlsRelayEnabled } from './patrolHelmetScope'
 
 /** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → backend pull qua MediaMTX). */
 export const PATROL_HELMET_RTSP_SOURCES: Record<string, string> = {
@@ -55,9 +56,16 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   return getVmsHlsUrl(cameraId) ?? getStreamUrlForCamera(cameraId)
 }
 
-/** HLS dự phòng — VMS relay khi MediaMTX LL-HLS chưa sẵn sàng. */
+/**
+ * HLS dự phòng — chỉ khi backend còn relay `/stream/<cam>/`.
+ *
+ * Từ khi worker bỏ re-encode cho camera tuần tra, endpoint đó trả 503 vĩnh viễn.
+ * Trỏ fallback vào đấy khiến watchdog luân phiên hai nguồn và gắn lại hls.js
+ * mỗi vài giây — chính là hiện tượng giật ngắt quãng đều đặn khi xem live.
+ */
 export function getPatrolHelmetStreamFallbackUrl(cameraId: string): string | undefined {
   if (isLegacyMobileHelmet(cameraId)) return undefined
+  if (!isVmsHlsRelayEnabled(cameraId)) return undefined
   const primary = getPatrolHelmetStreamUrl(cameraId)
   const vmsHls = getVmsHlsUrl(cameraId)
   if (!vmsHls || vmsHls === primary) return undefined

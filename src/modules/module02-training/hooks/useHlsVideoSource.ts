@@ -72,6 +72,13 @@ function isVmsRelayHlsUrl(url: string): boolean {
   return url.includes('/stream/') && url.includes('.m3u8')
 }
 
+/**
+ * Buffer theo loại nguồn.
+ *
+ * Bodycam 4G và flycam có bitrate dao động mạnh: buffer 1 segment nghe thì độ
+ * trễ đẹp nhưng chỉ cần một nhịp mạng xấu là hết dữ liệu và khựng. Giữ 2 segment
+ * đổi thêm ~1s độ trễ lấy hình liên tục — đúng ưu tiên xem live.
+ */
 function resolveHlsLatencyProfile(url: string): {
   lowLatencyMode: boolean
   liveSyncDurationCount: number
@@ -82,19 +89,19 @@ function resolveHlsLatencyProfile(url: string): {
   if (isLowLatencyHlsUrl(url)) {
     return {
       lowLatencyMode: true,
-      liveSyncDurationCount: 1,
-      liveMaxLatencyDurationCount: 3,
-      maxBufferLength: 3,
-      maxMaxBufferLength: 4,
+      liveSyncDurationCount: 2,
+      liveMaxLatencyDurationCount: 5,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 8,
     }
   }
   if (isVmsRelayHlsUrl(url)) {
     return {
       lowLatencyMode: false,
       liveSyncDurationCount: 2,
-      liveMaxLatencyDurationCount: 4,
-      maxBufferLength: 5,
-      maxMaxBufferLength: 6,
+      liveMaxLatencyDurationCount: 5,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 8,
     }
   }
   return {

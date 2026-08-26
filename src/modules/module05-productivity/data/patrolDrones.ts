@@ -13,6 +13,7 @@
  */
 import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { getMediaMtxHlsBase, getMediaMtxWebrtcBase } from './helmetIngest'
+import { isVmsHlsRelayEnabled } from './patrolHelmetScope'
 
 /** Camera thuộc nhóm flycam của Module 05. */
 export const PATROL_DRONE_CAMERA_PREFIX = 'DR-'
@@ -73,8 +74,12 @@ export function getPatrolDroneStreamUrl(cameraId: string): string | undefined {
   return getPatrolDroneMediaMtxHlsUrl(cameraId) ?? getVmsHlsUrl(cameraId)
 }
 
-/** HLS dự phòng — VMS relay, dùng khi MediaMTX HLS chưa sẵn sàng. */
+/**
+ * HLS dự phòng — chỉ khi backend còn relay `/stream/<cam>/`.
+ * Worker đã bỏ re-encode cho DR-*, nên mặc định không có nguồn thứ hai.
+ */
 export function getPatrolDroneStreamFallbackUrl(cameraId: string): string | undefined {
+  if (!isVmsHlsRelayEnabled(cameraId)) return undefined
   const vmsHls = getVmsHlsUrl(cameraId)
   if (!vmsHls || vmsHls === getPatrolDroneStreamUrl(cameraId)) return undefined
   return vmsHls

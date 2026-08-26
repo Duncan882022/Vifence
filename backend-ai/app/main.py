@@ -168,6 +168,7 @@ def _build_vms_workers() -> None:
 
     for cam_id, source_path, fallback_source in settings.vms_camera_entries:
         engines = cam_engines.get(cam_id, {})
+        hls_relay = settings.vms_hls_relay_enabled_for(cam_id)
         worker = CameraVmsWorker(
             camera_id=cam_id,
             source_path=source_path,
@@ -175,9 +176,16 @@ def _build_vms_workers() -> None:
             process_frame_fns=engines,
             on_event=on_event,
             ai_fps=settings.vms_ai_fps,
+            hls_relay=hls_relay,
+            ai_max_width=settings.vms_ai_max_width,
         )
         _vms_workers[cam_id] = worker
-        logger.info("[VMS] Worker %s tạo xong (%d engines).", cam_id, len(engines))
+        logger.info(
+            "[VMS] Worker %s tạo xong (%d engines, HLS relay %s).",
+            cam_id,
+            len(engines),
+            "bật" if hls_relay else "tắt — CMS xem qua MediaMTX",
+        )
 
     from .vms_loop_state import register_seek_handler
 
@@ -232,11 +240,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Auto-train tắt — chỉ chạy detect rule-based / model gốc.")
 
-    threading.Thread(
-        target=machinery_detector.preload,
-        name="machinery-preload",
-        daemon=True,
-    ).start()
+    if settings.machinery_detector_enabled:
+        threading.Thread(
+            target=machinery_detector.preload,
+            name="machinery-preload",
+            daemon=True,
+        ).start()
+    else:
+        logger.info("OWLv2 (crane/machinery) tắt — nhường CPU cho luồng live.")
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     if settings.event_test_mode:
         logger.warning(

@@ -112,6 +112,9 @@ class CameraVmsWorker:
             map tên engine → hàm process_frame trả (detections, events)
         on_event: callback khi có ViolationEvent confirmed
         ai_fps: tần suất AI (khung/giây)
+        hls_relay: có encode HLS phục vụ CMS không. False khi CMS xem thẳng
+            MediaMTX (WHEP/LL-HLS) — worker chỉ decode cho AI.
+        ai_max_width: cạnh dài tối đa của frame đưa vào AI (0 = giữ nguyên).
     """
 
     def __init__(
@@ -122,6 +125,8 @@ class CameraVmsWorker:
         on_event: Optional[Callable] = None,
         ai_fps: float = VMS_AI_FPS,
         fallback_source: Optional[str] = None,
+        hls_relay: bool = True,
+        ai_max_width: int = 0,
     ):
         self.camera_id = camera_id
         self.source_path = source_path
@@ -131,6 +136,8 @@ class CameraVmsWorker:
         self._process_fns = process_frame_fns
         self._on_event = on_event
         self._ai_fps = ai_fps
+        self._hls_relay = hls_relay
+        self._ai_max_width = max(0, int(ai_max_width))
 
         self._frame: Optional[np.ndarray] = None
         self._source_pts_sec: float = 0.0
@@ -182,6 +189,12 @@ class CameraVmsWorker:
 
     def _refresh_source_mode(self) -> None:
         live = _is_live_stream_source(self._active_source)
+        if not self._hls_relay:
+            # CMS xem thẳng MediaMTX: encode lại ở đây vừa tốn CPU vừa không ai
+            # xem. Giữ ingest để AI vẫn có frame.
+            self._live_hls_only = False
+            self._live_hls_from_pipe = False
+            return
         self._live_hls_only = live and not self._process_fns
         self._live_hls_from_pipe = live and bool(self._process_fns)
 
@@ -208,7 +221,7 @@ class CameraVmsWorker:
         self._clear_frame_buffer()
         with self._hls_lock:
             self._stop_hls_unlocked()
-            if not self._live_hls_from_pipe:
+            if self._hls_relay and not self._live_hls_from_pipe:
                 self._start_hls(fresh_output=True)
         self._probe_source_duration()
         return True
@@ -252,10 +265,10 @@ class CameraVmsWorker:
                 self.camera_id,
             )
 
-        if not self._live_hls_from_pipe:
+        if self._hls_relay and not self._live_hls_from_pipe:
             self._start_hls(fresh_output=True)
 
-        if _is_live_stream_source(self.source_path):
+        if self._hls_relay and _is_live_stream_source(self.source_path):
             self._hls_watchdog_thread = threading.Thread(
                 target=self._hls_watchdog_loop,
                 name=f"vms-hls-watch-{self.camera_id}",
@@ -279,7 +292,13 @@ class CameraVmsWorker:
     def hls_index_path(self) -> Path:
         return self._hls_dir / "index.m3u8"
 
+    def hls_relay_enabled(self) -> bool:
+        """False khi CMS xem thẳng MediaMTX — `/stream/<cam>/index.m3u8` không phục vụ."""
+        return self._hls_relay
+
     def hls_ready(self) -> bool:
+        if not self._hls_relay:
+            return False
         if not self.hls_index_path().is_file():
             return False
         if not _is_live_stream_source(self._active_source):
@@ -507,6 +526,21 @@ class CameraVmsWorker:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("[VMS %s] Warmup engine %s: %s", self.camera_id, engine_name, exc)
 
+    def _downscale_for_ai(self, frame: np.ndarray) -> np.ndarray:
+        """Thu nhỏ frame trước inference — YOLO vẫn nhận đủ chi tiết ở 960px."""
+        limit = self._ai_max_width
+        if limit <= 0:
+            return frame
+        h, w = frame.shape[:2]
+        if w <= limit:
+            return frame
+        scale = limit / float(w)
+        return cv2.resize(
+            frame,
+            (limit, max(1, int(round(h * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+
     def _ai_loop(self) -> None:
         interval = 1.0 / self._ai_fps
         logger.info("[VMS %s] AI loop @ %.1f FPS, %d engine(s)", self.camera_id, self._ai_fps, len(self._process_fns))
@@ -516,9 +550,15 @@ class CameraVmsWorker:
 
         warmup_frame = self.get_frame()
         if warmup_frame is not None:
+            warmup_frame = self._downscale_for_ai(warmup_frame)
             if self._live_hls_from_pipe:
                 hh, ww = warmup_frame.shape[:2]
                 self._start_hls(fresh_output=True, pipe_size=(ww, hh))
+
+            # Nguồn live không tua lại được: chặn ingest chờ nạp model chỉ làm
+            # dồn buffer RTSP rồi vứt. Chỉ reel MP4 mới cần warmup đồng bộ để
+            # sự kiện bắt đúng từ pts 0.
+            if self._live_hls_from_pipe or _is_live_stream_source(self._active_source):
                 self._ingest_gate.set()
                 threading.Thread(
                     target=self._warmup_engines,
@@ -526,10 +566,7 @@ class CameraVmsWorker:
                     name=f"vms-warmup-{self.camera_id}",
                     daemon=True,
                 ).start()
-                logger.info(
-                    "[VMS %s] Live HLS mở ngay — warmup AI chạy nền.",
-                    self.camera_id,
-                )
+                logger.info("[VMS %s] Ingest mở ngay — warmup AI chạy nền.", self.camera_id)
             else:
                 self._warmup_engines(warmup_frame)
                 logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
@@ -549,6 +586,10 @@ class CameraVmsWorker:
                 if frame_received_at <= 0 or frame_age > LIVE_FRAME_STALE_SEC:
                     frame = None
             if frame is not None:
+                # Frame gốc vẫn là nguồn cắt snapshot/clip; AI chạy trên bản thu
+                # nhỏ nên engine tự scale bbox về ảnh gốc qua `capture_frame`.
+                capture_frame = frame
+                frame = self._downscale_for_ai(frame)
                 h, w = frame.shape[:2]
                 frame_w, frame_h = w, h
                 merged_detections: list[dict] = []
@@ -557,7 +598,7 @@ class CameraVmsWorker:
 
                 for engine_name, fn in self._process_fns.items():
                     try:
-                        engine_kwargs: dict = {"capture_frame": frame}
+                        engine_kwargs: dict = {"capture_frame": capture_frame}
                         if engine_name == "road":
                             engine_kwargs["stabilize"] = False
                         if engine_name in ("atgt", "mesh", "ppe", "pccc", "crane", "wah"):
