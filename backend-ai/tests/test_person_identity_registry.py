@@ -57,11 +57,18 @@ class ClearRegistryTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_clear_preserves_next_seq(self) -> None:
-        cleared = clear_registry()
-        self.assertEqual(cleared, 1)
+        clear_registry()
         state = json.loads(self._reg_file.read_text(encoding="utf-8"))
         self.assertEqual(state["tracks"], {})
         self.assertEqual(state["next_seq"], 42)
+
+    def test_restart_drops_track_map_but_keeps_next_seq(self) -> None:
+        """Track id đánh lại từ p01 sau restart — giữ map cũ là dán nhầm người."""
+        from app.person_identity_registry import _load, peek_patrol_track_identity
+
+        self.assertEqual(_load()["tracks"], {})
+        self.assertEqual(_load()["next_seq"], 42)
+        self.assertEqual(peek_patrol_track_identity("HC-02", "t1"), "")
 
 
 class PersonIdentityRegistryFrameSplitTests(unittest.TestCase):

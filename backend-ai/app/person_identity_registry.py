@@ -25,20 +25,25 @@ _state: dict | None = None
 
 
 def _load() -> dict:
+    """Nạp registry — chỉ next_seq sống qua restart, track map thì không.
+
+    Track id (p01:person, p02:person…) được đánh lại từ đầu mỗi lần tiến trình
+    khởi động, nên khoá "HC-02|p01:person" trong file trỏ vào người của phiên
+    trước. Giữ lại sẽ dán mã cũ lên người đầu tiên bước vào khung sau restart.
+    Ràng buộc gallery không nằm ở đây (patrol_identity_store) nên không mất.
+    """
     global _state
     if _state is not None:
         return _state
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    next_seq = 1
     if REGISTRY_FILE.exists():
         try:
-            _state = json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            _state = {"next_seq": 1, "tracks": {}, "track_meta": {}}
-    else:
-        _state = {"next_seq": 1, "tracks": {}, "track_meta": {}}
-    _state.setdefault("next_seq", 1)
-    _state.setdefault("tracks", {})
-    _state.setdefault("track_meta", {})
+            saved = json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))
+            next_seq = max(int(saved.get("next_seq") or 1), 1)
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            next_seq = 1
+    _state = {"next_seq": next_seq, "tracks": {}, "track_meta": {}}
     return _state
 
 
@@ -78,6 +83,17 @@ def _track_key(camera_id: str, track_id: str) -> str:
 
 def is_sgc_worker_id(worker_id: str | None) -> bool:
     return bool(worker_id and str(worker_id).startswith("sgc-"))
+
+
+def peek_patrol_track_identity(camera_id: str, track_id: str) -> str:
+    """Mã đã gắn cho track, hoặc "" — tra cứu thuần, không bao giờ cấp mã mới.
+
+    Dùng cho khung hình không thấy mặt: người đã nhận diện rồi quay lưng thì giữ
+    nguyên mã, còn người chưa từng thấy mặt vẫn là Đối tượng.
+    """
+    with _lock:
+        state = _load()
+        return str(state.get("tracks", {}).get(_track_key(camera_id, track_id)) or "")
 
 
 def is_identified_gallery_worker(worker_id: str | None) -> bool:

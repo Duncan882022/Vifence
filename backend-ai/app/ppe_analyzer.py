@@ -87,9 +87,12 @@ def _assign_patrol_person_identity(
     """HC-* — gán sgc-0xxxxxxx (hoặc gallery) lên detection trả về FE/heatmap."""
     if not _is_helmet_bodycam(camera_id):
         return
-    from .person_identity_registry import resolve_patrol_person_identity
+    from .person_identity_registry import (
+        peek_patrol_track_identity,
+        resolve_patrol_person_identity,
+    )
     from .track_matching import assign_person_track_id
-    from .worker_identity.recognizer import extract_person_face_embedding
+    from .worker_identity.recognizer import assess_patrol_face
 
     tracks = _hc_patrol_person_tracks.setdefault(camera_id, {})
     person_bbox = [float(v) for v in person_box]
@@ -110,26 +113,34 @@ def _assign_patrol_person_identity(
     else:
         tracks[track_id] = _HcPersonTrackSlot(person_bbox)
 
-    face_vec = extract_person_face_embedding(frame, person_bbox)
+    # Cùng thước đo "thấy mặt" với đường ghi sự kiện — nếu không, nhãn ROI và
+    # tab sự kiện sẽ nói hai điều khác nhau về cùng một người.
+    face_vec, _face_score, face_eligible = assess_patrol_face(frame, person_bbox)
     face_emb = face_vec.tolist() if face_vec is not None else None
     frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})
 
-    worker_id, worker_name = resolve_patrol_person_identity(
-        person_det,
-        camera_id,
-        track_id,
-        person_bbox=person_bbox,
-        face_emb=face_emb,
-        frame_face_assignments=frame_faces,
-        frame_w=frame_w,
-        frame_h=frame_h,
-    )
-    if face_emb is not None:
+    if face_eligible and face_emb is not None:
+        worker_id, worker_name = resolve_patrol_person_identity(
+            person_det,
+            camera_id,
+            track_id,
+            person_bbox=person_bbox,
+            face_emb=face_emb,
+            frame_face_assignments=frame_faces,
+            frame_w=frame_w,
+            frame_h=frame_h,
+        )
         frame_faces[worker_id] = face_emb
+    else:
+        # Quay lưng: giữ mã cũ nếu track này từng nhận diện được, còn lại để
+        # trống — Đối tượng. Cấp mã lúc này là gán danh tính cho một cái lưng.
+        worker_id = peek_patrol_track_identity(camera_id, track_id)
+        worker_name = worker_id
+
     person_det.worker_id = worker_id
     person_det.worker_name = worker_name
     person_det.track_id = track_id
-    person_det.face_eligible = face_emb is not None
+    person_det.face_eligible = face_eligible and face_emb is not None
 
 
 def _get_person_detector() -> PersonDetector:
