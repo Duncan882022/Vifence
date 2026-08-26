@@ -97,6 +97,42 @@ class TestTrackStability(unittest.TestCase):
         again = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
         self.assertNotEqual(first, again)
 
+    def test_track_survives_crowd_occlusion(self):
+        """Đồng nghiệp đi ngang che mất 3 giây — hiện lại vẫn phải là cùng một người.
+
+        Mốc cũ 2 giây khiến mỗi lần bị che lại sinh một mã `sgc-*` mới, và KPI
+        cộng thêm một người không có thật.
+        """
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        for _ in range(3):
+            t += 0.17
+            first = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
+
+        # Bị che hoàn toàn 3 giây ở nhịp AI 6 FPS.
+        for _ in range(18):
+            t += 0.17
+            tracker.update([], now=t)
+
+        t += 0.17
+        again = tracker.update([(_box(620, 400, 120, 300), 0.7)], now=t)[0]
+        self.assertEqual(first, again)
+
+    def test_long_lost_track_rejects_different_sized_person(self):
+        """Giữ track lâu hơn chỉ an toàn khi cổng siết lại theo tuổi mất dấu."""
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        first = tracker.update([(_box(600, 400, 120, 300), 0.8)], now=t)[0]
+
+        for _ in range(15):
+            t += 0.17
+            tracker.update([], now=t)
+
+        # Người khác bước vào đúng chỗ đó nhưng ở xa hơn nhiều (diện tích ~1/3).
+        t += 0.17
+        other = tracker.update([(_box(600, 400, 70, 175), 0.8)], now=t)[0]
+        self.assertNotEqual(first, other)
+
     def test_size_gate_blocks_far_person_stealing_near_track(self):
         """Người cận cảnh và người xa chồng tâm nhau không được gộp làm một."""
         tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)

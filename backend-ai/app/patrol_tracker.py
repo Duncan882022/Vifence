@@ -21,8 +21,14 @@ from dataclasses import dataclass, field
 Bbox = tuple[float, float, float, float]
 
 # Track sống lâu hơn ngưỡng này mà không được đo lại thì bỏ hẳn.
-_LOST_KEEP_SEC_BODYCAM = 2.0
-_LOST_KEEP_SEC_FLYCAM = 3.0
+#
+# Trên công trường đông, một người đi ngang qua ống kính che mất đồng nghiệp phía
+# sau 2–4 giây là chuyện thường. Bỏ track ngay ở mốc 2 giây nghĩa là mỗi lần bị
+# che lại sinh ra một người mới trong hệ thống: mã `sgc-*` mới, dòng sự kiện mới,
+# KPI cộng thêm một — trong khi ngoài đời vẫn chỉ là một người. Track đang mất dấu
+# gần như không tốn tài nguyên, nên giữ lâu hơn rẻ hơn nhiều so với đếm trùng.
+_LOST_KEEP_SEC_BODYCAM = 5.0
+_LOST_KEEP_SEC_FLYCAM = 4.0
 
 # Trần số track giữ đồng thời mỗi camera — chặn phình bộ nhớ khi cảnh đông.
 _MAX_TRACKS = 48
@@ -93,6 +99,13 @@ class TrackerProfile:
     velocity_smoothing: float = 0.72
     velocity_damping: float = 0.978
     max_speed_box_per_sec: float = 3.0
+    # Giữ track qua lúc bị che chỉ an toàn khi cổng ghép siết lại theo tuổi: càng
+    # lâu không đo được thì khả năng có người khác bước vào đúng vị trí đó càng
+    # cao, mà ghép nhầm thì hai người thành một danh tính — hỏng nặng hơn đếm
+    # trùng. Vài khung hình đầu vẫn ghép bình thường để không phá nhịp bám.
+    lost_strict_after_sec: float = 1.2
+    lost_size_ratio_min: float = 0.45
+    lost_center_ratio_max: float = 0.85
 
 
 # Bodycam: người to, nhưng camera đội đầu rung và xoay nhanh nên vẫn cần gate rộng.
@@ -261,7 +274,14 @@ class PatrolTracker:
     def _match_cost(self, track: PatrolTrack, det: Bbox, now: float) -> float | None:
         prof = self.profile
         tb = track.gate_bbox(now)
-        if _size_ratio(tb, det) < prof.size_ratio_min:
+
+        size_min = prof.size_ratio_min
+        center_max = prof.center_ratio_max
+        if now - track.last_measured_at > prof.lost_strict_after_sec:
+            size_min = max(size_min, prof.lost_size_ratio_min)
+            center_max = min(center_max, prof.lost_center_ratio_max)
+
+        if _size_ratio(tb, det) < size_min:
             return None
 
         iou = _bbox_iou(tb, det)
@@ -269,15 +289,15 @@ class PatrolTracker:
             return 1.0 - iou
 
         ratio = _center_ratio(tb, det)
-        if ratio > prof.center_ratio_max:
+        if ratio > center_max:
             return None
         # Chồng lấn một phần → tin hơn hẳn trường hợp chỉ gần nhau.
         if iou > 0.0:
-            return 0.55 + 0.45 * (ratio / prof.center_ratio_max)
+            return 0.55 + 0.45 * (ratio / center_max)
         # IoU bằng 0: chỉ nhận khi tâm còn rất gần theo cỡ hộp. Người nhỏ trên
         # flycam rơi hết vào nhánh này.
-        if ratio <= prof.center_ratio_max * 0.6:
-            return 0.80 + 0.20 * (ratio / prof.center_ratio_max)
+        if ratio <= center_max * 0.6:
+            return 0.80 + 0.20 * (ratio / center_max)
         return None
 
     def _assign(
