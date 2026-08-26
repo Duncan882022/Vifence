@@ -7,6 +7,7 @@ import {
 } from '@/services/patrolHelmetGpsBridge'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import {
+  PATROL_MAP_ACTIVE_DRONE_PINS,
   PATROL_MAP_ACTIVE_HELMET_PINS,
   PATROL_SITE_CENTER,
 } from '../data/patrolSiteMap'
@@ -42,6 +43,7 @@ export function resolvePatrolHeatmapGps(cameraId: string): { lat: number; lng: n
   }
 
   const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === cameraId)
+    ?? PATROL_MAP_ACTIVE_DRONE_PINS.find(p => p.id === cameraId)
   if (pin) return { lat: pin.position[0], lng: pin.position[1] }
   return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
 }

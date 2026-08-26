@@ -23,6 +23,12 @@ export const PATROL_HELMET_02_FALLBACK: [number, number] = [
   parseFloat((PATROL_SITE_CENTER[1] + 0.00004).toFixed(6)),
 ]
 
+/** DR-03 không GPS → neo phía Bắc-Đông công trường (~15m offset). */
+export const PATROL_DRONE_03_FALLBACK: [number, number] = [
+  parseFloat((PATROL_SITE_CENTER[0] + 0.00012).toFixed(6)),
+  parseFloat((PATROL_SITE_CENTER[1] + 0.00010).toFixed(6)),
+]
+
 function polygonCenter(polygon: [number, number][]): [number, number] {
   if (polygon.length === 0) return PATROL_SITE_CENTER
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
@@ -127,6 +133,33 @@ export const PATROL_MAP_ACTIVE_HELMET_IDS = ['HC-01', 'HC-02'] as const
 export const PATROL_MAP_ACTIVE_HELMET_PINS: PatrolHelmetPin[] = PATROL_HELMET_GPS_PINS.filter(
   pin => (PATROL_MAP_ACTIVE_HELMET_IDS as readonly string[]).includes(pin.id),
 )
+
+/** Pin flycam trên heatmap — cùng contract với mũ, badge số 3. */
+export interface PatrolDronePin {
+  id: string
+  label: string
+  zoneId: string
+  color: string
+  position: [number, number]
+}
+
+export const PATROL_MAP_ACTIVE_DRONE_PINS: PatrolDronePin[] = [
+  {
+    id: 'DR-03',
+    label: 'Drone 03',
+    zoneId: PATROL_SITE_ZONE_ID,
+    color: '#38bdf8',
+    position: PATROL_DRONE_03_FALLBACK,
+  },
+]
+
+export function getPatrolMapDeviceBadgeNum(deviceId: string): string {
+  const helmetNum = deviceId.replace(/^HC-0?/, '')
+  if (/^\d+$/.test(helmetNum)) return helmetNum
+  const droneNum = deviceId.replace(/^DR-0?/, '')
+  if (/^\d+$/.test(droneNum)) return droneNum
+  return deviceId.slice(-1)
+}
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t

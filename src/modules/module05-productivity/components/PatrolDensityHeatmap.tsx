@@ -12,12 +12,12 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
-import { PATROL_DRONE_IDS } from '../data/patrolDrones'
+import { PATROL_DRONE_IDS, PATROL_DRONE_LABELS } from '../data/patrolDrones'
 import {
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
 } from '../data/patrolDetectionData'
-import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS } from '../data/patrolSiteMap'
+import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
@@ -118,7 +118,7 @@ export function PatrolDensityHeatmap({
   const hc02Live = useHc02LiveDetectionDots()
 
   const helmetDetectCountsById = useMemo(
-    () => buildHelmetDetectCountsById(patrolEvents, DEFAULT_PATROL_CAMERA_IDS),
+    () => buildHelmetDetectCountsById(patrolEvents, PATROL_MAP_CAMERA_IDS),
     [patrolEvents],
   )
 
@@ -182,6 +182,18 @@ export function PatrolDensityHeatmap({
       next['HC-02'] = resolvePatrolHelmetMapPosition(hc02Lat, hc02Lng, hc02Default)
     } else {
       next['HC-02'] = hc02Default
+    }
+    for (const dronePin of PATROL_MAP_ACTIVE_DRONE_PINS) {
+      const droneWf = workforce.helmets[dronePin.id]
+      if (helmetOnlineById[dronePin.id] && droneWf?.lat != null && droneWf?.lon != null) {
+        next[dronePin.id] = resolvePatrolHelmetMapPosition(
+          droneWf.lat,
+          droneWf.lon,
+          dronePin.position,
+        )
+      } else {
+        next[dronePin.id] = dronePin.position ?? PATROL_DRONE_03_FALLBACK
+      }
     }
     return next
   }, [
@@ -331,6 +343,25 @@ export function PatrolDensityHeatmap({
               </span>
             )
           })}
+          {PATROL_DRONE_IDS.map(id => {
+            const online = Boolean(helmetOnlineById[id])
+            const label = PATROL_DRONE_LABELS[id] ?? id
+            return (
+              <span
+                key={id}
+                className={cn(
+                  'inline-flex items-center gap-1 font-semibold shrink-0',
+                  online ? 'text-sky-400' : 'text-slate-500',
+                )}
+              >
+                <span className={cn(
+                  'w-1.5 h-1.5 rounded-full',
+                  online ? 'bg-sky-400 animate-pulse' : 'bg-slate-500',
+                )} />
+                {label}
+              </span>
+            )
+          })}
           <span className="text-[#334155] hidden sm:inline">·</span>
           <span className="text-sky-300/90 tabular-nums shrink-0">{observedCount} quan sát</span>
           <span className="text-[#334155]">·</span>
@@ -340,7 +371,7 @@ export function PatrolDensityHeatmap({
         <div className="flex items-center gap-1 flex-wrap">
           <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
           <LayerToggle compact={viewport.compactChrome} active={layers.detection} color="#38bdf8" onClick={() => toggleLayer('detection')}>Người</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.route} color="#22c55e" onClick={() => toggleLayer('route')}>Mũ</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.route} color="#22c55e" onClick={() => toggleLayer('route')}>Thiết bị</LayerToggle>
         </div>
       </div>
 
