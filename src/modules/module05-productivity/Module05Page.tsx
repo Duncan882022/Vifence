@@ -272,18 +272,27 @@ export function Module05Page() {
   const [resetting, setResetting] = useState(false)
 
   async function handleResetTestData() {
-    if (!window.confirm('Xóa toàn bộ dữ liệu patrol (events, sgc, heatmap)?\nTrang sẽ tự reload sau khi xong.')) return
+    if (!window.confirm('Xóa toàn bộ dữ liệu patrol (events, sgc, thư viện mặt, định danh)?\nTrang sẽ tự reload sau khi xong.')) return
     setResetting(true)
+    let result: Awaited<ReturnType<typeof resetPatrolTestData>>
     try {
-      const result = await resetPatrolTestData()
-      const be = result.backend
-      const summary = be
-        ? `Backend: ${be.events_cleared} events, ${be.sgc_tracks_cleared} sgc, ${be.hc_tracks_cleared} HC tracks`
-        : 'Backend không kết nối (FE đã xoá)'
-      console.info('[patrolReset] Đã xoá:', summary)
+      result = await resetPatrolTestData()
     } finally {
-      window.location.reload()
+      setResetting(false)
     }
+
+    // Backend chưa xoá mà reload thì lần tải trang sau đồng bộ ngược bindings cũ
+    // về localStorage — dữ liệu quay lại nguyên vẹn và người trực tưởng đã xoá.
+    if (!result.ok) {
+      window.alert(
+        `Chưa xoá được dữ liệu.\n\n${result.error ?? 'Không rõ nguyên nhân.'}\n\n`
+        + 'Dữ liệu trên máy chủ vẫn còn nên trang không reload. '
+        + 'Kiểm tra backend rồi thử lại.',
+      )
+      return
+    }
+
+    window.location.reload()
   }
 
   const handleSelectCamera = (cam: TrainingCamera) => {
