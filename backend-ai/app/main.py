@@ -527,7 +527,6 @@ def patrol_reset_all():
     - Xóa config/mobile_ai history
     """
     from .person_identity_registry import clear_registry
-    from .patrol import db as patrol_db
     from .patrol_appearance_store import clear_patrol_appearances
     from .patrol_identity_store import clear_patrol_identity_bindings
     from .ppe_analyzer import reset_all_hc_patrol_state
@@ -536,7 +535,6 @@ def patrol_reset_all():
     from .worker_identity.gallery import clear_gallery_storage
 
     events_result = engine.store.clear_all()
-    daystore_counts = patrol_db.reset_all(keep_counters=True)
     sgc_count = clear_registry()
     appearance_count = clear_patrol_appearances()
     identity_bindings = clear_patrol_identity_bindings()
@@ -553,7 +551,6 @@ def patrol_reset_all():
     return {
         "ok": True,
         "events_cleared": events_result.get("memory", 0),
-        "daystore_cleared": daystore_counts,
         "sgc_tracks_cleared": sgc_count,
         "appearances_cleared": appearance_count,
         "identity_bindings_cleared": identity_bindings,
