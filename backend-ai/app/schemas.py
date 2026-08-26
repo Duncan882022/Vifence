@@ -282,6 +282,9 @@ class ViolationEvent(BaseModel):
     gps_lng: Optional[float] = None
     track_id: Optional[str] = None
     object_id: Optional[str] = None
+    # Chất lượng ảnh đang lưu (PERS-001) — dùng để không thay ảnh rõ mặt bằng
+    # ảnh chụp đúng lúc người bị che.
+    snapshot_score: Optional[float] = None
 
     @classmethod
     def from_detection(
