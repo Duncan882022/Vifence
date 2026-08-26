@@ -14,3 +14,8 @@ backend-ai/.venv/
 yolov8n.pt
 public/camera-feeds/*.bak*
 public/camera-feeds/*.pre-*
+
+# Kho tuần tra Module 05 — dữ liệu chạy thật, không đưa vào repo.
+backend-ai/data/patrol.db
+backend-ai/data/patrol.db-*
+backend-ai/data/patrol_snapshots/
