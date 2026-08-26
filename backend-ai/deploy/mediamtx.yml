@@ -1,0 +1,120 @@
+# MediaMTX — ingest thống nhất cho helmet camera.
+#
+# Vai trò: nhận luồng từ mọi loại mũ (bodycam RTSP hoặc điện thoại WHIP), rồi
+# fan-out cho ba nhánh tiêu thụ độc lập:
+#
+#   record (copy, không re-encode) ──▶ playback / xuất clip, chất lượng nguyên bản
+#   RTSP nội bộ ──────────────────────▶ backend AI decode ở chất lượng đầy đủ
+#   WHEP + HLS ───────────────────────▶ CMS xem live
+#
+# Nguyên tắc: KHÔNG cho AI đọc luồng đã hạ chất lượng. Việc giảm chất lượng chỉ
+# phục vụ mắt người xem, không phục vụ detect.
+#
+# Chạy: mediamtx /path/to/mediamtx.yml
+
+logLevel: info
+
+###############################################
+# Giao thức
+
+# RTSP — bodycam phần cứng publish vào đây, và backend AI pull từ đây.
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp, udp]
+
+# WebRTC — WHIP (điện thoại publish) + WHEP (CMS xem).
+webrtc: yes
+webrtcAddress: :8889
+# Địa chỉ công khai để ICE hoạt động sau NAT — IP của chính VPS chạy MediaMTX.
+webrtcAdditionalHosts: [217.217.253.247]
+# STUN — điện thoại 4G chỉ có host candidate (IP nội bộ nhà mạng). Thiếu srflx
+# thì phiên phát sống nhờ peer-reflexive và chết hẳn mỗi lần NAT đổi cổng.
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+# Bật thêm TURN khi mũ chạy sau NAT đối xứng (một số nhà mạng 4G):
+# webrtcICEServers2:
+#   - url: turn:turn.vifence.io:3478
+#     username: vifence
+#     password: doi-mat-khau-nay
+
+# HLS — dự phòng khi UDP bị chặn (firewall văn phòng).
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsPartDuration: 200ms
+hlsSegmentDuration: 1s
+hlsSegmentCount: 7
+hlsAlwaysRemux: no
+
+rtmp: no
+srt: no
+
+###############################################
+# Ghi hình — nguyên bản, phục vụ playback
+
+pathDefaults:
+  # Copy stream vào file, không re-encode: giữ đúng chất lượng đã phát lên và
+  # gần như không tốn CPU.
+  record: yes
+  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 10m
+  # Giữ 7 ngày — chỉnh theo dung lượng đĩa VPS.
+  recordDeleteAfter: 168h
+
+###############################################
+# Path theo từng mũ
+
+paths:
+  # HC-01 — bodycam của hãng phát RTSP ở gateway riêng, MediaMTX pull về.
+  # sourceOnDemand: no để luôn có luồng sẵn cho AI worker, không chờ viewer đầu tiên.
+  hc-01:
+    source: rtsp://157.66.100.182:8554/866926048126915
+    sourceProtocol: tcp
+    sourceOnDemand: no
+
+  # HC-02 — điện thoại publish qua WHIP tại /hc-02/whip.
+  # Khi có bodycam thật, đổi thành `source: rtsp://…` y như hc-01.
+  # Phía CMS không cần sửa gì.
+  hc-02:
+    source: publisher
+
+  # Chặn path lạ tự tạo — chỉ nhận đúng mũ đã khai báo.
+  all_others:
+    source: publisher
+    record: no
+
+###############################################
+# TLS — BẮT BUỘC khi CMS chạy trên HTTPS (GitHub Pages)
+#
+# Trang HTTPS không gọi được endpoint HTTP (mixed content) và getUserMedia cũng
+# đòi secure context. Hai cách:
+#
+#   1. Proxy qua nginx sẵn có trên VPS (khuyến nghị — dùng luôn cert nip.io):
+#        location /mediamtx/webrtc/ { proxy_pass http://127.0.0.1:8889/; }
+#        location /mediamtx/hls/    { proxy_pass http://127.0.0.1:8888/; }
+#      rồi đặt VITE_MEDIAMTX_WEBRTC_URL=https://<host>/mediamtx/webrtc
+#      Nhớ bật WebSocket upgrade và tắt buffering cho hai location này.
+#
+#   2. Cho MediaMTX tự nắm cert:
+#        webrtcEncryption: yes
+#        webrtcServerCert: /etc/letsencrypt/live/<host>/fullchain.pem
+#        webrtcServerKey:  /etc/letsencrypt/live/<host>/privkey.pem
+#
+# Lưu ý: proxy chỉ lo phần signaling. Media WebRTC vẫn đi UDP trực tiếp nên
+# phải mở dải cổng ICE (mặc định 8189/udp) trên firewall.
+
+###############################################
+# Xác thực — BẮT BUỘC đổi trước khi mở ra internet
+#
+# authInternalUsers:
+#   - user: helmet
+#     pass: doi-mat-khau-nay
+#     ips: []
+#     permissions:
+#       - action: publish
+#   - user: cms
+#     pass: doi-mat-khau-nay
+#     permissions:
+#       - action: read

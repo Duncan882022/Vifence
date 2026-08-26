@@ -171,6 +171,60 @@ python3 -m venv .venv
 .venv/bin/pip install -q -r requirements.txt
 REMOTE_VENV
 
+echo "→ MediaMTX (ingest thống nhất helmet HC-01/HC-02)…"
+ssh_cmd "bash -s" <<'REMOTE_MEDIAMTX'
+set -euo pipefail
+MEDIAMTX_DIR=/opt/vifence
+MEDIAMTX_BIN="${MEDIAMTX_DIR}/mediamtx"
+MEDIAMTX_YML="${MEDIAMTX_DIR}/mediamtx.yml"
+mkdir -p "${MEDIAMTX_DIR}/recordings"
+
+if [[ ! -x "${MEDIAMTX_BIN}" ]]; then
+  echo "   Tải MediaMTX binary…"
+  cd "${MEDIAMTX_DIR}"
+  curl -fsSL -o mediamtx.tar.gz \
+    "https://github.com/bluenviron/mediamtx/releases/download/v1.11.3/mediamtx_v1.11.3_linux_amd64.tar.gz"
+  tar xzf mediamtx.tar.gz
+  rm -f mediamtx.tar.gz
+  chmod +x "${MEDIAMTX_BIN}"
+fi
+
+cp /opt/vifence/backend-ai/deploy/mediamtx.yml "${MEDIAMTX_YML}"
+
+cat > /etc/systemd/system/mediamtx.service <<'EOF'
+[Unit]
+Description=MediaMTX — helmet ingest (RTSP/WHIP/HLS)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vifence
+ExecStart=/opt/vifence/mediamtx /opt/vifence/mediamtx.yml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable mediamtx
+systemctl restart mediamtx
+sleep 2
+systemctl is-active --quiet mediamtx && echo "   MediaMTX OK" || {
+  journalctl -u mediamtx -n 20 --no-pager
+  exit 1
+}
+
+# ICE media UDP — cần cho WHIP/WHEP qua 4G. Bỏ qua nếu ufw không bật.
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+  ufw allow 8189/udp comment 'MediaMTX WebRTC ICE' 2>/dev/null || true
+  ufw allow 8889/tcp comment 'MediaMTX WebRTC signaling' 2>/dev/null || true
+  ufw allow 8888/tcp comment 'MediaMTX HLS' 2>/dev/null || true
+fi
+REMOTE_MEDIAMTX
+
 echo "→ Thư mục video VPS (MP4 loop sources)…"
 VPS_VIDEO_DIR="${VPS_VIDEO_DIR:-/opt/vifence/videos}"
 ssh_cmd "mkdir -p ${VPS_VIDEO_DIR}"
@@ -234,7 +288,7 @@ EVENT_AUDIT_GRACE_MINUTES=5
 EVENT_AUDIT_GRACE_LOOPS=2
 CAMERA_SOURCE=0
 VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
-VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},HC-01:rtsp://157.66.100.182:8554/866926048126915
+VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},HC-01:rtsp://157.66.100.182:8554/866926048126915,HC-02:rtsp://127.0.0.1:8554/hc-02
 VMS_AI_FPS=10.0
 WORKER_RECOGNITION_ENABLED=true
 WORKER_DEMO_FALLBACK_ENABLED=false
@@ -287,6 +341,27 @@ server {
 
     client_max_body_size 20M;
 
+    location /mediamtx/webrtc/ {
+        proxy_pass http://127.0.0.1:8889/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        client_max_body_size 1M;
+    }
+
+    location /mediamtx/hls/ {
+        proxy_pass http://127.0.0.1:8888/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_buffering off;
+        add_header Cache-Control "no-cache, no-store";
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -323,6 +398,27 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     client_max_body_size 20M;
+
+    location /mediamtx/webrtc/ {
+        proxy_pass http://127.0.0.1:8889/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        client_max_body_size 1M;
+    }
+
+    location /mediamtx/hls/ {
+        proxy_pass http://127.0.0.1:8888/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_buffering off;
+        add_header Cache-Control "no-cache, no-store";
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -391,6 +487,27 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     client_max_body_size 20M;
+
+    location /mediamtx/webrtc/ {
+        proxy_pass http://127.0.0.1:8889/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        client_max_body_size 1M;
+    }
+
+    location /mediamtx/hls/ {
+        proxy_pass http://127.0.0.1:8888/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_buffering off;
+        add_header Cache-Control "no-cache, no-store";
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8000;

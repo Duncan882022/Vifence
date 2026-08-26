@@ -29,7 +29,7 @@ EOF
 
 # Deep-link folders: /Vifence/module05/ → 200 + cùng SPA (không spam 404 trong console)
 if [[ -f "${DOCS}/index.html" ]]; then
-  for route in module01 module03 module04 module05 module06 module07 module08 dttt equipment profile scanner; do
+  for route in module01 module03 module04 module05 module06 module07 module08 dttt equipment profile scanner phat-song; do
     mkdir -p "${DOCS}/${route}"
     cp "${DOCS}/index.html" "${DOCS}/${route}/index.html"
   done

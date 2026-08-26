@@ -94,6 +94,12 @@ interface MobileCameraFeedProps {
   autoStartCapture?: boolean
   compact?: boolean
   aiEnabled?: boolean
+  /**
+   * Luồng camera do nơi khác mở (trang Phát sóng trên cùng máy).
+   * iOS chỉ cho một consumer giữ camera, nên nhận lại luồng sẵn có thay vì
+   * gọi getUserMedia lần hai. Không sở hữu luồng ⇒ không được stop track.
+   */
+  externalStream?: MediaStream | null
 }
 
 export function MobileCameraFeed({
@@ -103,9 +109,14 @@ export function MobileCameraFeed({
   autoStartCapture = false,
   compact,
   aiEnabled = false,
+  externalStream = null,
 }: MobileCameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  /** Luồng do chính component mở — chỉ luồng này mới được stop khi dọn dẹp. */
+  const ownsStreamRef = useRef(false)
+  const externalStreamRef = useRef<MediaStream | null>(externalStream)
+  externalStreamRef.current = externalStream
   const aiClientRef = useRef<{ stop: () => void } | null>(null)
   const detectionHoldRef = useRef<{ until: number; items: MobileAiDetection[] }>({
     until: 0,
@@ -161,7 +172,11 @@ export function MobileCameraFeed({
   const stopCapture = useCallback((opts?: { clearPatrol?: boolean }) => {
     const clearPatrol = opts?.clearPatrol !== false
     stopAiClient()
-    streamRef.current?.getTracks().forEach(track => track.stop())
+    // Luồng mượn của trang Phát sóng: tắt track ở đây là cắt luôn sóng đang phát.
+    if (ownsStreamRef.current) {
+      streamRef.current?.getTracks().forEach(track => track.stop())
+    }
+    ownsStreamRef.current = false
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
     // Flip / maximize: delay clear — feed mới kịp heartbeat thì hủy
@@ -297,6 +312,9 @@ export function MobileCameraFeed({
     const useFacing = nextFacing ?? facingRef.current
     const useDeviceIndex = nextDeviceIndex ?? deviceIndexRef.current
 
+    // Trang Phát sóng đang giữ camera — mở lần hai sẽ cướp luồng và cắt sóng.
+    if (externalStreamRef.current) return
+
     if (!isDeviceCameraSupported()) {
       setStatus('error')
       setErrorMsg('Trình duyệt không hỗ trợ camera thiết bị.')
@@ -324,6 +342,7 @@ export function MobileCameraFeed({
       })
 
       streamRef.current = stream
+      ownsStreamRef.current = true
       const video = videoRef.current
       if (video) {
         video.srcObject = stream
@@ -412,7 +431,61 @@ export function MobileCameraFeed({
     }
   }, [])
 
+  /**
+   * Luồng mượn từ trang Phát sóng — gắn thẳng, không mở camera lần hai.
+   * Gắn lại mỗi khi phần tử video mất srcObject (remount, hoặc trình duyệt tự
+   * huỷ nguồn) để tile không kẹt ở màn chờ.
+   */
   useEffect(() => {
+    if (!externalStream) return
+    if (!playing) {
+      // Tile ẩn: dừng gửi frame, nhưng tuyệt đối không đụng vào track của sóng.
+      stopAiClient()
+      streamRef.current = null
+      setStatus('idle')
+      return
+    }
+
+    stopAiClient()
+    ownsStreamRef.current = false
+    streamRef.current = externalStream
+    cancelScheduledClearPatrolMobile()
+
+    const attach = () => {
+      const video = videoRef.current
+      if (!video) return
+      if (video.srcObject !== externalStream) video.srcObject = externalStream
+      video.muted = true
+      video.setAttribute('playsinline', 'true')
+      if (video.paused) void video.play().catch(() => {})
+    }
+
+    attach()
+    const track = externalStream.getVideoTracks()[0]
+    const settings = track?.getSettings?.()
+    if (settings?.facingMode === 'user' || settings?.facingMode === 'environment') {
+      facingRef.current = settings.facingMode
+      setFacing(settings.facingMode)
+    }
+    setStatus(track && track.readyState !== 'ended' ? 'live' : 'scanning')
+
+    const keepAlive = window.setInterval(attach, 1000)
+    const onEnded = () => setStatus('scanning')
+    track?.addEventListener('ended', onEnded)
+
+    return () => {
+      window.clearInterval(keepAlive)
+      track?.removeEventListener('ended', onEnded)
+      stopAiClient()
+      streamRef.current = null
+      const video = videoRef.current
+      if (video && video.srcObject === externalStream) video.srcObject = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stopAiClient ổn định theo cameraId
+  }, [externalStream, playing])
+
+  useEffect(() => {
+    if (externalStream) return
     if (!playing) {
       stopCapture()
       setStatus('idle')
@@ -426,7 +499,7 @@ export function MobileCameraFeed({
     }
     return stopCapture
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ restart khi playing/cameraId/autoStartCapture đổi
-  }, [playing, cameraId, autoStartCapture])
+  }, [playing, cameraId, autoStartCapture, externalStream])
 
   useEffect(() => {
     if (status === 'live' && runAiAnalyze && backendUrl) {

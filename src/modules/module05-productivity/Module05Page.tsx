@@ -9,6 +9,7 @@ import {
   CameraModeToggle,
   type CameraPanelMode,
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
+import { LocalBroadcastControl } from './components/LocalBroadcastControl'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
@@ -26,6 +27,7 @@ import {
 } from './data/patrolMockData'
 import {
   DEFAULT_PATROL_CAMERA_IDS,
+  DEFAULT_PATROL_GRID_CAMERA_IDS,
   PATROL_CAMERAS,
   PATROL_CAMERA_FILTER_TABS,
   applyPatrolCameraStreamStatus,
@@ -43,6 +45,7 @@ import {
 } from './services/patrolCameraPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
+import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
@@ -177,7 +180,7 @@ export function Module05Page() {
   const [tier2Open, setTier2Open] = useState(true)
   const cameraCollapsed = !tier2Open
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
-  const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-01')
+  const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-02')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [detailEventId, setDetailEventId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
@@ -186,8 +189,12 @@ export function Module05Page() {
 
   const playbackDate = getPatrolDefaultPlaybackDate()
   const { cameras: visionCameras } = useCameras()
+  // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
+  // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.
   const patrolDefaultCameraIds = useMemo(
-    () => (isHandheldDevice() ? (['HC-02'] as const) : DEFAULT_PATROL_CAMERA_IDS),
+    () => (hasLegacyMobileHelmet() && isHandheldDevice()
+      ? (legacyMobileHelmetIds() as readonly string[])
+      : DEFAULT_PATROL_GRID_CAMERA_IDS),
     [],
   )
   const liveMetrics = usePatrolHelmetLiveMetrics(DEFAULT_PATROL_CAMERA_IDS)
@@ -355,6 +362,9 @@ export function Module05Page() {
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
+                  {tier2Open && cameraMode === 'live' && (
+                    <LocalBroadcastControl />
+                  )}
                   {tier2Open && (
                     <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
                   )}
@@ -383,6 +393,7 @@ export function Module05Page() {
                       defaultSidebarOpen={false}
                       mobileCompactVideo={isMobileLayout}
                       mobileStackedNoScroll={isMobileLayout}
+                      streamWhenOffline
                       compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
@@ -491,7 +502,9 @@ export function Module05Page() {
         onPlayback={handleSelectEvent}
       />
 
-      <PatrolDevicePermissionGate />
+      {/* Chỉ hỏi quyền khi CMS còn phải tự làm camera. Với pipeline mới, việc xin
+          quyền thuộc về trang /phat-song trên máy người đeo mũ. */}
+      {hasLegacyMobileHelmet() && <PatrolDevicePermissionGate />}
     </>
   )
 }

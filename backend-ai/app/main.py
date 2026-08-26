@@ -25,6 +25,7 @@ from .auto_train.frame_collectors import (
 )
 from .auto_train.scheduler import scheduler as auto_train_scheduler
 from . import machinery_detector
+from . import overlay_bus
 from .camera_stream import CameraStream
 from .config import settings
 from .crane_proximity_engine import CraneProximityEngine
@@ -58,6 +59,9 @@ logger = logging.getLogger("main")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 _analyze_executor = ThreadPoolExecutor(max_workers=4)
+
+# Nhịp heartbeat WS detections — đủ ngắn để qua idle timeout của nginx/ngrok (60s).
+WS_DETECTIONS_HEARTBEAT_SEC = 10.0
 
 # VMS workers — khởi tạo trong lifespan khi VMS_MODE_ENABLED=true
 _vms_workers: dict[str, CameraVmsWorker] = {}
@@ -138,6 +142,9 @@ def _build_vms_workers() -> None:
         return
 
     # Cấu hình engines per camera theo ma trận (Spec §4)
+    patrol_helmet_engines = {
+        "ppe": ppe_engine.process_frame,
+    }
     cam_engines: dict[str, dict[str, object]] = {
         "A-03": {
             "atgt": atgt_engine.process_frame,
@@ -150,9 +157,8 @@ def _build_vms_workers() -> None:
             "wah": wah_engine.process_frame,
             "crane": crane_engine.process_frame,
         },
-        "HC-01": {
-            "ppe": ppe_engine.process_frame,
-        },
+        "HC-01": dict(patrol_helmet_engines),
+        "HC-02": dict(patrol_helmet_engines),
     }
 
     def on_event(ev):
@@ -184,6 +190,9 @@ def _build_vms_workers() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Đang khởi động backend AI…")
+
+    # Bus overlay cần loop chính để đánh thức WS subscriber từ AI thread.
+    overlay_bus.bind_event_loop(asyncio.get_running_loop())
 
     if settings.vms_mode_enabled:
         logger.info("VMS mode: server-side AI + HLS stream đang khởi động…")
@@ -262,7 +271,25 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", **engine.status()}
+    """Trạng thái backend + từng VMS worker.
+
+    FE dùng để chọn transport: có worker cho camera → dùng WS detections,
+    không có → rơi về luồng analyze frame.
+    """
+    cameras = {
+        camera_id: {
+            "stream_online": worker.is_stream_live(),
+            "hls_ready": worker.hls_ready(),
+            "overlay_subscribers": overlay_bus.subscriber_count(camera_id),
+        }
+        for camera_id, worker in _vms_workers.items()
+    }
+    return {
+        "status": "ok",
+        "vms_mode": settings.vms_mode_enabled,
+        "cameras": cameras,
+        **engine.status(),
+    }
 
 
 @app.get("/workers/gallery/status")
@@ -646,6 +673,99 @@ def vms_stream_detections(camera_id: str):
         "vms_ready": stream_online and payload.get("updated_at", 0) > 0,
         **payload,
     }
+
+
+@app.websocket("/ws/helmet/{camera_id}/telemetry")
+async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str):
+    """GPS + IMU từ mũ — kênh riêng, không đi kèm frame video.
+
+    Tách khỏi video có hai lợi ích: vị trí vẫn cập nhật khi sóng yếu không đẩy
+    được video, và mọi người xem đều thấy vị trí thay vì chỉ tab đang mở camera.
+    """
+    await websocket.accept()
+
+    try:
+        while True:
+            payload = await websocket.receive_json()
+            if not isinstance(payload, dict):
+                continue
+
+            lat = payload.get("lat")
+            lng = payload.get("lng")
+            heading = payload.get("heading")
+            pitch = payload.get("pitch")
+            roll = payload.get("roll")
+
+            update_patrol_gps(
+                camera_id,
+                float(lat) if isinstance(lat, (int, float)) else None,
+                float(lng) if isinstance(lng, (int, float)) else None,
+                heading=float(heading) if isinstance(heading, (int, float)) else None,
+                pitch=float(pitch) if isinstance(pitch, (int, float)) else None,
+                roll=float(roll) if isinstance(roll, (int, float)) else None,
+            )
+            await websocket.send_json({"type": "ack", "camera_id": camera_id})
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.info("[ws telemetry %s] đóng: %s", camera_id, exc)
+
+
+@app.websocket("/ws/stream/{camera_id}/detections")
+async def ws_stream_detections(websocket: WebSocket, camera_id: str):
+    """Push detections theo sự kiện — thay cho FE poll 450ms.
+
+    Bbox tới ngay khi AI chạy xong frame, không chờ nhịp poll, và tải backend
+    không tăng theo số người xem (mỗi viewer chỉ là một subscriber nhẹ).
+    """
+    await websocket.accept()
+
+    worker = _vms_workers.get(camera_id)
+    if worker is None:
+        await websocket.send_json({
+            "type": "error",
+            "message": f"Camera {camera_id!r} không có trong VMS workers",
+        })
+        await websocket.close(code=1008)
+        return
+
+    event = overlay_bus.subscribe(camera_id)
+    last_revision = -1
+
+    try:
+        while True:
+            # clear() trước khi đọc revision — notify xen giữa vẫn được bắt,
+            # hoặc qua revision mới, hoặc qua event đã set cho vòng wait kế.
+            event.clear()
+            revision = overlay_bus.get_revision(camera_id)
+
+            if revision != last_revision:
+                last_revision = revision
+                payload = worker.get_latest_overlay()
+                stream_online = bool(payload.get("stream_online", True))
+                await websocket.send_json({
+                    "type": "detections",
+                    "revision": revision,
+                    "vms_ready": stream_online and payload.get("updated_at", 0) > 0,
+                    **payload,
+                })
+                continue
+
+            try:
+                await asyncio.wait_for(event.wait(), timeout=WS_DETECTIONS_HEARTBEAT_SEC)
+            except asyncio.TimeoutError:
+                # Heartbeat: giữ kết nối qua proxy idle timeout và báo stream chết.
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "camera_id": camera_id,
+                    "stream_online": worker.is_stream_live(),
+                })
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.info("[ws detections %s] đóng: %s", camera_id, exc)
+    finally:
+        overlay_bus.unsubscribe(camera_id, event)
 
 
 @app.get("/stream/{camera_id}/{segment}")

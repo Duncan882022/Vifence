@@ -13,6 +13,7 @@ Pipeline mỗi camera:
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import threading
@@ -24,6 +25,7 @@ from typing import Callable, Optional
 import cv2
 import numpy as np
 
+from . import overlay_bus
 from .auto_train.frame_collectors import collect_vms_engine_sample
 
 logger = logging.getLogger("vms_worker")
@@ -45,6 +47,59 @@ CLIP_POST_SEC = 4.0
 PTS_HISTORY_SEC = 60.0
 # Live RTSP: không chạy AI trên frame đóng băng khi mất tín hiệu.
 LIVE_FRAME_STALE_SEC = 4.0
+# RTSP không timeout thì cap.read() treo vĩnh viễn khi mũ tắt sóng giữa chừng:
+# luồng ingest đứng im, AI ngừng chạy và không bao giờ tự nối lại.
+# probesize/analyzeduration mặc định của FFmpeg là vài giây — với mũ thì đó là
+# vài giây màn hình trống trước khi AI có khung hình đầu tiên.
+RTSP_CAPTURE_OPTIONS = (
+    "rtsp_transport;tcp|timeout;5000000"
+    "|probesize;100000|analyzeduration;200000|fflags;nobuffer|flags;low_delay"
+)
+RTSP_TIMEOUT_MS = 5000.0
+# MediaMTX chạy cùng máy: thử lại dày để mũ vừa lên sóng là bắt được ngay.
+# Nguồn ở xa (bodycam qua internet) giữ nhịp thưa, tránh nện liên tục.
+LOCAL_SOURCE_RETRY_SEC = 0.4
+REMOTE_SOURCE_RETRY_SEC = 3.0
+# Số lần đọc rỗng liên tiếp trước khi mở lại nguồn live (mỗi lần cách 50ms).
+PREGATE_IDLE_READS = 40
+
+
+def _is_local_source(source_path: str) -> bool:
+    p = source_path.lower()
+    return "://127.0.0.1" in p or "://localhost" in p or "://[::1]" in p
+
+
+def _source_retry_delay(source_path: str) -> float:
+    return LOCAL_SOURCE_RETRY_SEC if _is_local_source(source_path) else REMOTE_SOURCE_RETRY_SEC
+
+
+def _open_capture(source: str) -> cv2.VideoCapture:
+    """Mở nguồn cho OpenCV; nguồn live thêm timeout đọc/mở."""
+    if not _is_live_stream_source(source):
+        return cv2.VideoCapture(source)
+
+    previous = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS")
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = RTSP_CAPTURE_OPTIONS
+    try:
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+    finally:
+        if previous is None:
+            os.environ.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
+        else:
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = previous
+
+    # Bản OpenCV/FFmpeg cũ có thể không nhận option — mở lại kiểu mặc định còn
+    # hơn để camera câm hẳn.
+    if not cap.isOpened():
+        cap.release()
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+
+    for prop in (cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, cv2.CAP_PROP_READ_TIMEOUT_MSEC):
+        try:
+            cap.set(prop, RTSP_TIMEOUT_MS)
+        except (AttributeError, cv2.error):
+            pass
+    return cap
 
 
 class CameraVmsWorker:
@@ -99,7 +154,9 @@ class CameraVmsWorker:
         self._hls_proc: Optional[subprocess.Popen] = None
         self._hls_lock = threading.Lock()
         self._hls_started_at: float = 0.0
+        self._hls_started_wall: float = 0.0
         self._hls_restart_cooldown_until: float = 0.0
+        self._pipe_hls_retry_after: float = 0.0
         self._hls_pipe_stdin = None
         self._hls_pipe_size: Optional[tuple[int, int]] = None
         self._refresh_source_mode()
@@ -241,6 +298,7 @@ class CameraVmsWorker:
                 "height": int(self._latest_overlay.get("height") or 0),
                 "updated_at": float(self._latest_overlay.get("updated_at") or 0.0),
                 "source_pts_sec": float(self._latest_overlay.get("source_pts_sec") or 0.0),
+                "frame_wallclock_ms": float(self._latest_overlay.get("frame_wallclock_ms") or 0.0),
                 "stream_online": stream_online,
                 "frame_age_sec": round(frame_age_sec, 2) if frame_age_sec >= 0 else None,
                 "detections": list(self._latest_overlay.get("detections") or []),
@@ -298,8 +356,13 @@ class CameraVmsWorker:
     # ------------------------------------------------------------------
 
     def _probe_source_duration(self) -> None:
+        # Luồng trực tiếp không có độ dài. Mở thử lúc mũ chưa phát chỉ tổ chặn
+        # worker vài giây trước khi kịp chạy luồng ingest.
+        if _is_live_stream_source(self._active_source):
+            self._source_duration = 0.0
+            return
         try:
-            cap = cv2.VideoCapture(self._active_source)
+            cap = _open_capture(self._active_source)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
             fc = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             cap.release()
@@ -309,22 +372,28 @@ class CameraVmsWorker:
             logger.warning("[VMS %s] Không probe được duration: %s", self.camera_id, exc)
 
     def _ingest_loop(self) -> None:
-        retry_delay = 3.0
         open_failures = 0
+        last_fail_log = 0.0
         while self._running:
-            cap = cv2.VideoCapture(self._active_source)
+            retry_delay = _source_retry_delay(self._active_source)
+            # Nhịp thử dày thì đếm lần không còn nói lên thời gian — quy về giây.
+            fallback_after = max(3, int(6.0 / retry_delay))
+            cap = _open_capture(self._active_source)
             if not cap.isOpened():
                 open_failures += 1
-                logger.warning(
-                    "[VMS %s] Không mở được source (%s), retry %.1fs (#%d)",
-                    self.camera_id,
-                    self._active_source,
-                    retry_delay,
-                    open_failures,
-                )
+                now = time.monotonic()
+                if open_failures == 1 or now - last_fail_log >= 15.0:
+                    last_fail_log = now
+                    logger.warning(
+                        "[VMS %s] Không mở được source (%s), retry %.1fs (#%d)",
+                        self.camera_id,
+                        self._active_source,
+                        retry_delay,
+                        open_failures,
+                    )
                 if (
                     _is_live_stream_source(self._active_source)
-                    and open_failures >= 3
+                    and open_failures >= fallback_after
                     and self._switch_to_fallback_source()
                 ):
                     open_failures = 0
@@ -342,6 +411,7 @@ class CameraVmsWorker:
             live = _is_live_stream_source(self._active_source)
 
             logger.info("[VMS %s] Ingest bắt đầu @ %.1f FPS", self.camera_id, fps)
+            idle_reads = 0
 
             while self._running:
                 with self._seek_lock:
@@ -354,8 +424,21 @@ class CameraVmsWorker:
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ok, frame = cap.read()
                     if not ok or frame is None:
+                        # RTSP mở được nhưng chưa có khung hình là chuyện thường
+                        # khi mũ chưa bật camera. Nằm chờ mãi trên một capture
+                        # câm thì mũ có phát lại cũng không nhận được gì — phải
+                        # mở lại kết nối.
+                        idle_reads += 1
+                        if live and idle_reads >= PREGATE_IDLE_READS:
+                            logger.warning(
+                                "[VMS %s] Nguồn mở được nhưng không có khung hình — mở lại.",
+                                self.camera_id,
+                            )
+                            self._clear_frame_buffer()
+                            break
                         time.sleep(0.05)
                         continue
+                    idle_reads = 0
                     source_pts = 0.0
                     with self._frame_lock:
                         self._frame = frame
@@ -369,6 +452,11 @@ class CameraVmsWorker:
                     if _is_live_stream_source(self._active_source):
                         logger.warning("[VMS %s] Mất tín hiệu live — reconnect.", self.camera_id)
                         self._clear_frame_buffer()
+                        # Đóng luôn ffmpeg: để nó sống chỉ tổ giữ playlist đứng
+                        # hình, người xem tưởng còn LIVE. _ensure_pipe_hls mở
+                        # lại ngay khi mũ phát tiếp.
+                        if self._live_hls_from_pipe:
+                            self._stop_hls()
                         break
                     from .vms_loop_state import register_video_loop
 
@@ -389,6 +477,7 @@ class CameraVmsWorker:
                 with self._pts_lock:
                     self._pts_history.append((wall_now, source_pts))
 
+                self._ensure_pipe_hls(frame)
                 self._write_hls_pipe_frame(frame)
 
                 time.sleep(frame_sleep)
@@ -424,12 +513,26 @@ class CameraVmsWorker:
 
         warmup_frame = self.get_frame()
         if warmup_frame is not None:
-            self._warmup_engines(warmup_frame)
             if self._live_hls_from_pipe:
                 hh, ww = warmup_frame.shape[:2]
                 self._start_hls(fresh_output=True, pipe_size=(ww, hh))
-            logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
-        self._ingest_gate.set()
+                self._ingest_gate.set()
+                threading.Thread(
+                    target=self._warmup_engines,
+                    args=(warmup_frame,),
+                    name=f"vms-warmup-{self.camera_id}",
+                    daemon=True,
+                ).start()
+                logger.info(
+                    "[VMS %s] Live HLS mở ngay — warmup AI chạy nền.",
+                    self.camera_id,
+                )
+            else:
+                self._warmup_engines(warmup_frame)
+                logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
+                self._ingest_gate.set()
+        else:
+            self._ingest_gate.set()
 
         while self._running:
             t0 = time.monotonic()
@@ -494,7 +597,13 @@ class CameraVmsWorker:
                         "metrics": merged_metrics,
                         "updated_at": time.time(),
                         "source_pts_sec": round(source_pts_sec, 3),
+                        # Wallclock lúc nhận frame từ camera — khớp với
+                        # EXT-X-PROGRAM-DATE-TIME của HLS để FE đồng bộ bbox.
+                        "frame_wallclock_ms": round(frame_received_at * 1000.0),
                     }
+
+                # Đánh thức WebSocket subscribers — FE nhận bbox ngay, không chờ nhịp poll.
+                overlay_bus.notify(self.camera_id)
 
             elapsed = time.monotonic() - t0
             sleep_time = max(0.0, interval - elapsed)
@@ -549,10 +658,39 @@ class CameraVmsWorker:
             "-muxpreload", "0",
             "-hls_time", "1",
             "-hls_list_size", "3",
-            "-hls_flags", "split_by_time+delete_segments+append_list+omit_endlist+independent_segments",
+            # program_date_time: gắn EXT-X-PROGRAM-DATE-TIME vào playlist để FE biết
+            # wallclock của frame đang phát, nhờ đó khớp bbox đúng thời điểm thay vì
+            # vẽ detections mới nhất lên hình ảnh đã trễ vài giây.
+            "-hls_flags", (
+                "split_by_time+delete_segments+append_list+omit_endlist"
+                "+independent_segments+program_date_time"
+            ),
             "-hls_segment_filename", segment_pattern,
             hls_out,
         ]
+
+    def _ensure_pipe_hls(self, frame: np.ndarray) -> None:
+        """Mở lại HLS pipe mỗi khi có frame mà ffmpeg không còn sống.
+
+        Mũ tắt sóng rồi phát lại là chuyện thường ngày. Không mở lại ở đây thì
+        chỉ lần phát đầu tiên sau khi khởi động service mới có hình.
+        """
+        if not self._live_hls_from_pipe:
+            return
+        proc = self._hls_proc
+        if self._hls_pipe_stdin is not None and proc is not None and proc.poll() is None:
+            return
+
+        # ffmpeg chết ngay khi vừa mở thì đừng mở lại mỗi frame.
+        now = time.monotonic()
+        if now < self._pipe_hls_retry_after:
+            return
+        self._pipe_hls_retry_after = now + 2.0
+
+        height, width = frame.shape[:2]
+        with self._hls_lock:
+            self._stop_hls_unlocked()
+            self._start_hls(fresh_output=True, pipe_size=(width, height))
 
     def _write_hls_pipe_frame(self, frame: np.ndarray) -> None:
         stdin = self._hls_pipe_stdin
@@ -577,6 +715,10 @@ class CameraVmsWorker:
                 self.camera_id,
             )
             return
+
+        # Không bỏ rơi tiến trình cũ: hai ffmpeg cùng ghi một thư mục HLS sẽ
+        # tranh nhau đánh số segment và playlist nhảy loạn.
+        self._stop_hls_unlocked()
 
         hls_out = str(self._hls_dir / "index.m3u8")
         segment_pattern = str(self._hls_dir / "seg_%04d.ts")
@@ -628,7 +770,7 @@ class CameraVmsWorker:
                 "-an",
                 "-hls_time", "2",
                 "-hls_list_size", "6",
-                "-hls_flags", "delete_segments+independent_segments",
+                "-hls_flags", "delete_segments+independent_segments+program_date_time",
                 "-hls_segment_filename", segment_pattern,
                 hls_out,
             ])
@@ -643,6 +785,7 @@ class CameraVmsWorker:
             self._hls_proc = subprocess.Popen(cmd, **popen_kwargs)
             self._hls_pipe_stdin = self._hls_proc.stdin if stdin_mode else None
             self._hls_started_at = time.monotonic()
+            self._hls_started_wall = time.time()
             mode = "pipe" if stdin_mode else "direct"
             logger.info(
                 "[VMS %s] HLS ffmpeg PID %d khởi động (%s).",
@@ -663,8 +806,12 @@ class CameraVmsWorker:
         logger.warning("[VMS %s] HLS restart: %s", self.camera_id, reason)
         with self._hls_lock:
             self._stop_hls_unlocked()
-            if self._live_hls_from_pipe and self._hls_pipe_size:
-                self._start_hls(fresh_output=True, pipe_size=self._hls_pipe_size)
+            if self._live_hls_from_pipe:
+                # Chưa biết kích thước frame thì chờ ingest mở lại qua
+                # _ensure_pipe_hls. Hạ xuống direct ở đây sẽ cắt đường AI:
+                # ffmpeg tự kéo RTSP, worker hết cửa đọc frame để detect.
+                if self._hls_pipe_size:
+                    self._start_hls(fresh_output=True, pipe_size=self._hls_pipe_size)
             else:
                 self._start_hls(fresh_output=True)
 
@@ -675,13 +822,23 @@ class CameraVmsWorker:
             dead = proc is None or proc.poll() is not None
             startup_grace = time.monotonic() - self._hls_started_at < 25.0
 
-            if not dead and not startup_grace:
-                idle_sec = time.time() - self._latest_hls_activity()
-                if idle_sec > 40.0:
-                    self._restart_hls(f"không segment mới {idle_sec:.0f}s")
-            elif dead and not startup_grace:
+            # Pipe mode: ffmpeg do luồng ingest sở hữu và chỉ mở khi có frame.
+            # Nguồn chưa phát thì "chưa có ffmpeg" là đang chờ, không phải chết.
+            if self._live_hls_from_pipe and not self.is_stream_live():
+                time.sleep(6.0)
+                continue
+
+            if dead and not startup_grace:
                 code = proc.returncode if proc is not None else "none"
                 self._restart_hls(f"ffmpeg thoát (code={code})")
+            elif not dead and not startup_grace and self.is_stream_live():
+                # Chỉ coi là treo khi nguồn vẫn đang gửi frame. Mũ tắt sóng thì
+                # không có segment là đúng — restart lúc đó chỉ làm nhiễu log.
+                last_activity = self._latest_hls_activity()
+                baseline = last_activity if last_activity > 0 else self._hls_started_wall
+                idle_sec = time.time() - baseline if baseline > 0 else 0.0
+                if idle_sec > 40.0:
+                    self._restart_hls(f"không segment mới {idle_sec:.0f}s")
 
             time.sleep(6.0)
 

@@ -8,6 +8,8 @@ export interface Camera {
   zone: string
   status: CameraStatus
   streamUrl?: string
+  /** HLS dự phòng — khi streamUrl (VMS relay) chưa sẵn sàng, thử URL này (vd MediaMTX). */
+  streamFallbackUrl?: string
   /** Live JSMpeg WebSocket — cùng cơ chế vifence.io / dao-tao-tuan-thu */
   wsUrl?: string | null
   thumbnailUrl?: string

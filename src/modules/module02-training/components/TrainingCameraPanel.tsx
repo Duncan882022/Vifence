@@ -5,6 +5,7 @@ import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
+import { useHelmetLocalStream } from '@/hooks/useHelmetLocalStream'
 import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJsmpegFeed'
 import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
@@ -30,6 +31,27 @@ const CCTV_SCANLINE = {
 function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle, streamIndex }: {
   cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean; streamIndex?: number
 }) {
+  const localStream = useHelmetLocalStream(cam.id)
+
+  /**
+   * Mũ và CMS cùng một máy: dùng thẳng camera đang phát, không vòng qua server.
+   * Phải đi qua MobileCameraFeed — chỉ thành phần này chạy vòng phân tích AI trên
+   * khung hình tại chỗ. CameraVideoFeed chỉ đọc detection do backend trả về, nên
+   * tile sẽ có hình mà không bao giờ có ROI khi luồng chưa lên tới server.
+   */
+  if (localStream) {
+    return (
+      <MobileCameraFeed
+        cameraId={cam.id}
+        label={cam.assignee ?? cam.name}
+        playing={playing}
+        externalStream={localStream}
+        compact={compact}
+        aiEnabled={aiOverlay}
+      />
+    )
+  }
+
   if (cam.streamType === 'mobile') {
     return (
       <MobileCameraFeed
@@ -47,10 +69,12 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
       <CameraJsmpegFeed wsUrl={cam.wsUrl} cameraId={cam.id} />
     )
   }
-  if (!cam.streamUrl) return null
+  if (!cam.streamUrl && !cam.whepUrl) return null
   return (
     <CameraVideoFeed
-      src={cam.streamUrl}
+      src={cam.streamUrl ?? ''}
+      whepUrl={cam.whepUrl}
+      hlsFallbackSrc={cam.streamFallbackUrl}
       cameraId={cam.id}
       streamType={cam.streamType}
       playing={playing}
@@ -128,7 +152,7 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
   )
 }
 
-function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex, playing = true }: {
+function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false }: {
   cam: TrainingCamera
   compact?: boolean
   onMaximize: () => void
@@ -137,14 +161,21 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
   streamIndex?: number
   /** false khi mobile đang mở fullscreen — tránh 2 getUserMedia (iPhone tile đen) */
   playing?: boolean
+  streamWhenOffline?: boolean
 }) {
   /** Mobile bodycam — luôn mount feed; offline chỉ áp dụng luồng remote (HLS/WS). */
   const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
+  const tryStreamDespiteOffline = Boolean(
+    streamWhenOffline
+      && (cam.streamType === 'bodycam' || cam.streamType === 'flycam')
+      && cam.streamUrl,
+  )
+  const blockFeed = isOffline && !tryStreamDespiteOffline
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-black border border-[#1e2433]">
       <div className="absolute inset-0 bg-black" />
-      {isOffline ? (
+      {blockFeed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 z-[5]">
           <span className="text-xs font-bold tracking-[0.2em] uppercase">Offline</span>
           <span className="text-[10px] text-muted-foreground/40">{cameraDisplayLabel(cam)}</span>
@@ -198,7 +229,7 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass }: {
+function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, streamWhenOffline }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   onCloseMaximize: () => void
@@ -211,6 +242,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
   compactVideoMaxClass?: string
   /** Camera đang phóng to — giữ nguyên instance feed, không mount stream mới. */
   focusedCamId?: string | null
+  streamWhenOffline?: boolean
 }) {
   const count = cams.length
   const cols = getGridCols(count, stackedPortrait, forceSingleCol)
@@ -271,6 +303,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
                   analyzeThrottle={analyzeThrottle}
                   streamIndex={index}
                   playing={!isBackground}
+                  streamWhenOffline={streamWhenOffline}
                   isMaximized={isFocused}
                   onMaximize={isFocused ? onCloseMaximize : () => onMaximize(cam)}
                 />
@@ -327,6 +360,8 @@ interface TrainingCameraPanelProps {
   compactVideoMaxClass?: string
   /** Module 05 mobile: stack 16:9, không scroll lồng trong grid video. */
   mobileStackedNoScroll?: boolean
+  /** Patrol bodycam/flycam: vẫn thử load HLS khi badge offline (metrics trễ hơn nguồn). */
+  streamWhenOffline?: boolean
 }
 
 export function TrainingCameraPanel({
@@ -342,6 +377,7 @@ export function TrainingCameraPanel({
   mobileCompactVideo = false,
   compactVideoMaxClass,
   mobileStackedNoScroll = false,
+  streamWhenOffline = false,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
   const tabs = filterTabs ?? CAMERA_FILTER_TABS
@@ -515,6 +551,7 @@ export function TrainingCameraPanel({
               compactVideo={mobileCompactVideo && !mobileStackedNoScroll}
               compactVideoMaxClass={compactVideoMaxClass}
               focusedCamId={focusedCam?.id}
+              streamWhenOffline={streamWhenOffline}
             />
           </div>
         </div>
