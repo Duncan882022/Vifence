@@ -194,6 +194,14 @@ class Settings(BaseSettings):
     # Mỗi camera bỏ đi ở đây là bớt một ffmpeg + ~69 MB/s ghi raw frame vào pipe.
     vms_hls_relay_skip_prefixes: str = "HC-,DR-"
 
+    # Nơi `/stream/<cam>/index.m3u8` chuyển hướng tới khi worker không relay nữa.
+    # Đường dẫn công khai (qua nginx), không phải cổng 8888 nội bộ.
+    mediamtx_hls_public_base: str = "/mediamtx/hls"
+
+    # Ánh xạ camera → path MediaMTX khi tên không chỉ là chữ thường của id.
+    # Định dạng: "DR-03:dr03,HC-01:hc-01"
+    mediamtx_path_overrides: str = "DR-03:dr03"
+
     # Cạnh dài tối đa của frame đưa vào AI (0 = giữ nguyên). Snapshot sự kiện vẫn
     # dùng frame gốc, nên hạ giá trị này chỉ đổi chi phí inference.
     vms_ai_max_width: int = 0
@@ -213,6 +221,17 @@ class Settings(BaseSettings):
             if prefix and camera_id.startswith(prefix):
                 return False
         return True
+
+    def mediamtx_path_for(self, camera_id: str) -> str:
+        """Path MediaMTX của camera — mặc định là id viết thường (`HC-01` → `hc-01`)."""
+        for entry in self.mediamtx_path_overrides.split(","):
+            entry = entry.strip()
+            if ":" not in entry:
+                continue
+            cam, path = entry.split(":", 1)
+            if cam.strip() == camera_id:
+                return path.strip()
+        return camera_id.lower()
 
     @property
     def camera_source_value(self) -> Union[int, str]:

@@ -63,5 +63,22 @@ class TestHlsRelayScope(unittest.TestCase):
         self.assertTrue(s.vms_hls_relay_enabled_for("HC-01"))
 
 
+class TestMediaMtxPathMapping(unittest.TestCase):
+    """`/stream/<cam>/` chuyển hướng đúng path — CMS bản cũ vẫn xem được."""
+
+    def test_default_is_lowercased_id(self):
+        s = Settings(mediamtx_path_overrides="")
+        self.assertEqual(s.mediamtx_path_for("HC-01"), "hc-01")
+        self.assertEqual(s.mediamtx_path_for("HC-02"), "hc-02")
+
+    def test_override_wins(self):
+        s = Settings(mediamtx_path_overrides="DR-03:dr03")
+        self.assertEqual(s.mediamtx_path_for("DR-03"), "dr03")
+
+    def test_unlisted_camera_falls_back(self):
+        s = Settings(mediamtx_path_overrides="DR-03:dr03")
+        self.assertEqual(s.mediamtx_path_for("HC-01"), "hc-01")
+
+
 if __name__ == "__main__":
     unittest.main()

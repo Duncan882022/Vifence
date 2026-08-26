@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auto_train.frame_collectors import (
@@ -661,12 +661,29 @@ def _hls_bytes_response(path: Path, media_type: str) -> Response:
     )
 
 
+def _mediamtx_hls_redirect(camera_id: str) -> RedirectResponse:
+    """Đưa client sang thẳng MediaMTX — `HC-01` → `/mediamtx/hls/hc-01/index.m3u8`.
+
+    Worker tuần tra không còn re-encode HLS, nhưng CMS đã phát hành trước đó vẫn
+    gọi endpoint này. Trả 503 sẽ làm tile của bản cũ chết hẳn, nên chuyển hướng
+    tới nguồn thật: client cũ chạy được ngay mà không cần build lại.
+    """
+    path = settings.mediamtx_path_for(camera_id)
+    return RedirectResponse(
+        url=f"{settings.mediamtx_hls_public_base.rstrip('/')}/{path}/index.m3u8",
+        status_code=302,
+        headers={"Cache-Control": "no-cache, no-store"},
+    )
+
+
 @app.get("/stream/{camera_id}/index.m3u8")
 def vms_stream_playlist(camera_id: str):
     """HLS playlist cho camera VMS (live stream từ MP4 loop)."""
     worker = _vms_workers.get(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
+    if not worker.hls_relay_enabled():
+        return _mediamtx_hls_redirect(camera_id)
     if not worker.hls_ready():
         raise HTTPException(status_code=503, detail="HLS stream chưa sẵn sàng, thử lại sau 5s")
     return _hls_bytes_response(worker.hls_index_path(), "application/vnd.apple.mpegurl")
@@ -786,6 +803,15 @@ def vms_stream_segment(camera_id: str, segment: str):
     worker = _vms_workers.get(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail="Camera not found")
+    if not worker.hls_relay_enabled():
+        # Client thường bám theo URL đã chuyển hướng nên không tới đây; giữ
+        # nhánh này cho trình phát tự ghép URL từ playlist gốc.
+        path = settings.mediamtx_path_for(camera_id)
+        return RedirectResponse(
+            url=f"{settings.mediamtx_hls_public_base.rstrip('/')}/{path}/{segment}",
+            status_code=302,
+            headers={"Cache-Control": "no-cache, no-store"},
+        )
     seg_path = worker.hls_index_path().parent / segment
     if not seg_path.exists():
         raise HTTPException(status_code=404, detail="Segment not found")
