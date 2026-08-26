@@ -15,6 +15,17 @@ export function isPatrolPersonRoiCameraId(cameraId: string): boolean {
   return isPatrolMetricsCameraId(cameraId)
 }
 
+/**
+ * Backend còn relay HLS cho camera này không.
+ *
+ * Phải khớp `VMS_HLS_RELAY_SKIP_PREFIXES` phía backend: camera tuần tra được
+ * CMS xem thẳng qua MediaMTX nên worker không encode lại, `/stream/<cam>/`
+ * trả 503. Coi đó là nguồn dự phòng chỉ tổ làm tile gắn lại luồng liên tục.
+ */
+export function isVmsHlsRelayEnabled(cameraId: string): boolean {
+  return !isPatrolMetricsCameraId(cameraId)
+}
+
 export function assertPatrolHelmetCameraId(cameraId: string): void {
   if (!isPatrolHelmetCameraId(cameraId)) {
     throw new Error(`Camera ${cameraId} không thuộc Module 05 (HC-*)`)

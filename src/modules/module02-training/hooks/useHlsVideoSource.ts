@@ -18,9 +18,15 @@ interface HlsInstance {
 }
 
 /** Chu kỳ kiểm tra luồng đã ra khung hình chưa. */
-const WATCHDOG_MS = 4000
-/** Số nhịp liên tiếp không có khung hình thì gắn lại nguồn (tránh cắt ngang lúc đang tải). */
-const WATCHDOG_STRIKES = 2
+const WATCHDOG_MS = 5000
+/**
+ * Số nhịp liên tiếp không có khung hình thì gắn lại nguồn.
+ *
+ * hls.js đã tự thử lại phân đoạn, nên watchdog chỉ là lưới an toàn cuối. Ra tay
+ * sớm sẽ huỷ và dựng lại trình phát ngay giữa lúc bodycam đang nối lại sóng —
+ * biến một khoảng trống vài giây thành cú khựng dài hơn hẳn.
+ */
+const WATCHDOG_STRIKES = 3
 
 /** Thời gian chờ tín hiệu (retry HLS) trước khi tile chuyển Offline. */
 export const STREAM_SIGNAL_WAIT_MS = 8000
@@ -62,9 +68,55 @@ export function useStreamSignalPhase(
   return phase
 }
 
-/** MediaMTX LL-HLS — backend VMS relay dùng HLS thường (không EXT-X-PART). */
+/** MediaMTX LL-HLS — có EXT-X-PART, segment 1s. */
 function isLowLatencyHlsUrl(url: string): boolean {
   return url.includes('/mediamtx/hls/')
+}
+
+/** VMS relay HLS — re-encode backend, không có PART nhưng vẫn giảm buffer. */
+function isVmsRelayHlsUrl(url: string): boolean {
+  return url.includes('/stream/') && url.includes('.m3u8')
+}
+
+/**
+ * Buffer theo loại nguồn.
+ *
+ * Bodycam 4G và flycam có bitrate dao động mạnh: buffer 1 segment nghe thì độ
+ * trễ đẹp nhưng chỉ cần một nhịp mạng xấu là hết dữ liệu và khựng. Giữ 2 segment
+ * đổi thêm ~1s độ trễ lấy hình liên tục — đúng ưu tiên xem live.
+ */
+function resolveHlsLatencyProfile(url: string): {
+  lowLatencyMode: boolean
+  liveSyncDurationCount: number
+  liveMaxLatencyDurationCount: number
+  maxBufferLength: number
+  maxMaxBufferLength: number
+} {
+  if (isLowLatencyHlsUrl(url)) {
+    return {
+      lowLatencyMode: true,
+      liveSyncDurationCount: 2,
+      liveMaxLatencyDurationCount: 5,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 8,
+    }
+  }
+  if (isVmsRelayHlsUrl(url)) {
+    return {
+      lowLatencyMode: false,
+      liveSyncDurationCount: 2,
+      liveMaxLatencyDurationCount: 5,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 8,
+    }
+  }
+  return {
+    lowLatencyMode: false,
+    liveSyncDurationCount: 3,
+    liveMaxLatencyDurationCount: 6,
+    maxBufferLength: 10,
+    maxMaxBufferLength: 12,
+  }
 }
 
 /** Safari phát HLS native — getStartDate() cho mốc PDT của đầu luồng. */
@@ -181,21 +233,22 @@ export function useHlsVideoSource(
           attachMp4()
           return undefined
         }
-        const llHls = isLowLatencyHlsUrl(activeSrc)
+        const latency = resolveHlsLatencyProfile(activeSrc)
         const hls = new Hls({
           enableWorker: true,
-          // Backend VMS relay là HLS thường — lowLatencyMode gây màn đen trên Chrome.
-          lowLatencyMode: llHls,
-          liveSyncDurationCount: llHls ? 1 : 3,
-          liveMaxLatencyDurationCount: llHls ? 3 : 6,
+          lowLatencyMode: latency.lowLatencyMode,
+          liveSyncDurationCount: latency.liveSyncDurationCount,
+          liveMaxLatencyDurationCount: latency.liveMaxLatencyDurationCount,
           maxLiveSyncPlaybackRate: 1.5,
-          maxBufferLength: llHls ? 4 : 10,
+          maxBufferLength: latency.maxBufferLength,
+          maxMaxBufferLength: latency.maxMaxBufferLength,
           backBufferLength: 0,
+          liveBackBufferLength: 0,
           manifestLoadingMaxRetry: 4,
-          manifestLoadingRetryDelay: 1000,
+          manifestLoadingRetryDelay: 800,
           levelLoadingMaxRetry: 4,
           fragLoadingMaxRetry: 6,
-          fragLoadingRetryDelay: 800,
+          fragLoadingRetryDelay: 600,
         })
         hls.loadSource(activeSrc)
         hls.attachMedia(video)

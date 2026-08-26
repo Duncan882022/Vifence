@@ -52,14 +52,21 @@ export function patrolPersonFaceDominantBbox(bbox: Bbox4, _frameW: number, frame
   return false
 }
 
-function plausiblePersonSilhouette(bbox: Bbox4, frameW: number, frameH: number): boolean {
+function plausiblePersonSilhouette(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+  flycam = false,
+): boolean {
   const [x1, y1, x2, y2] = bbox
   const pw = Math.max(x2 - x1, 1)
   const ph = Math.max(y2 - y1, 1)
   const aspect = ph / pw
   if (aspect > 4.2 || aspect < 0.28) return false
-  if (pw < Math.max(12, frameW * 0.035)) return false
-  if (ph < Math.max(14, frameH * 0.04)) return false
+  const minW = flycam ? Math.max(6, frameW * 0.006) : Math.max(12, frameW * 0.035)
+  const minH = flycam ? Math.max(8, frameH * 0.010) : Math.max(14, frameH * 0.04)
+  if (pw < minW) return false
+  if (ph < minH) return false
   return true
 }
 
@@ -138,6 +145,8 @@ export interface PatrolPersonDetectionGateInput {
   workerId?: string | null
   /** Backend đã assess mặt — tab Người */
   faceEligible?: boolean
+  /** DR-* flycam — người nhỏ từ góc cao */
+  flycam?: boolean
 }
 
 /**
@@ -147,9 +156,10 @@ export interface PatrolPersonDetectionGateInput {
  * Ở đây chỉ loại mảnh chân/tay và khung không thể là người.
  */
 export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
-  const { bbox, frameW, frameH } = input
+  const { bbox, frameW, frameH, flycam = false } = input
   if (frameW <= 0 || frameH <= 0) return false
-  if (!plausiblePersonSilhouette(bbox, frameW, frameH)) return false
+  if (!plausiblePersonSilhouette(bbox, frameW, frameH, flycam)) return false
+  if (flycam) return true
   return !patrolPersonLegsOnlyBbox(bbox, frameW, frameH)
 }
 

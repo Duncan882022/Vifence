@@ -60,6 +60,11 @@ RTSP_TIMEOUT_MS = 5000.0
 # Nguồn ở xa (bodycam qua internet) giữ nhịp thưa, tránh nện liên tục.
 LOCAL_SOURCE_RETRY_SEC = 0.4
 REMOTE_SOURCE_RETRY_SEC = 3.0
+# Mũ tắt cả buổi thì nhịp 0.4s thành hàng nghìn lần bắt tay RTSP mỗi phút, đủ
+# chiếm một lõi CPU và ngập log MediaMTX. Giãn dần tới trần này rồi giữ nguyên.
+SOURCE_RETRY_MAX_SEC = 5.0
+# Số lần thử giữ nhịp dày trước khi giãn — đủ để mũ vừa bật là bắt được ngay.
+SOURCE_RETRY_FAST_ATTEMPTS = 12
 # Số lần đọc rỗng liên tiếp trước khi mở lại nguồn live (mỗi lần cách 50ms).
 PREGATE_IDLE_READS = 40
 
@@ -69,8 +74,16 @@ def _is_local_source(source_path: str) -> bool:
     return "://127.0.0.1" in p or "://localhost" in p or "://[::1]" in p
 
 
-def _source_retry_delay(source_path: str) -> float:
-    return LOCAL_SOURCE_RETRY_SEC if _is_local_source(source_path) else REMOTE_SOURCE_RETRY_SEC
+def _source_retry_delay(source_path: str, attempt: int = 0) -> float:
+    """Nhịp thử lại — dày lúc đầu rồi giãn gấp đôi dần tới trần.
+
+    `attempt` là số lần mở hỏng liên tiếp; về 0 ngay khi nguồn lên lại.
+    """
+    base = LOCAL_SOURCE_RETRY_SEC if _is_local_source(source_path) else REMOTE_SOURCE_RETRY_SEC
+    if attempt <= SOURCE_RETRY_FAST_ATTEMPTS:
+        return base
+    backoff = base * (2 ** min(attempt - SOURCE_RETRY_FAST_ATTEMPTS, 6))
+    return min(SOURCE_RETRY_MAX_SEC, backoff)
 
 
 def _open_capture(source: str) -> cv2.VideoCapture:
@@ -112,6 +125,9 @@ class CameraVmsWorker:
             map tên engine → hàm process_frame trả (detections, events)
         on_event: callback khi có ViolationEvent confirmed
         ai_fps: tần suất AI (khung/giây)
+        hls_relay: có encode HLS phục vụ CMS không. False khi CMS xem thẳng
+            MediaMTX (WHEP/LL-HLS) — worker chỉ decode cho AI.
+        ai_max_width: cạnh dài tối đa của frame đưa vào AI (0 = giữ nguyên).
     """
 
     def __init__(
@@ -122,6 +138,8 @@ class CameraVmsWorker:
         on_event: Optional[Callable] = None,
         ai_fps: float = VMS_AI_FPS,
         fallback_source: Optional[str] = None,
+        hls_relay: bool = True,
+        ai_max_width: int = 0,
     ):
         self.camera_id = camera_id
         self.source_path = source_path
@@ -131,6 +149,8 @@ class CameraVmsWorker:
         self._process_fns = process_frame_fns
         self._on_event = on_event
         self._ai_fps = ai_fps
+        self._hls_relay = hls_relay
+        self._ai_max_width = max(0, int(ai_max_width))
 
         self._frame: Optional[np.ndarray] = None
         self._source_pts_sec: float = 0.0
@@ -182,6 +202,12 @@ class CameraVmsWorker:
 
     def _refresh_source_mode(self) -> None:
         live = _is_live_stream_source(self._active_source)
+        if not self._hls_relay:
+            # CMS xem thẳng MediaMTX: encode lại ở đây vừa tốn CPU vừa không ai
+            # xem. Giữ ingest để AI vẫn có frame.
+            self._live_hls_only = False
+            self._live_hls_from_pipe = False
+            return
         self._live_hls_only = live and not self._process_fns
         self._live_hls_from_pipe = live and bool(self._process_fns)
 
@@ -208,7 +234,7 @@ class CameraVmsWorker:
         self._clear_frame_buffer()
         with self._hls_lock:
             self._stop_hls_unlocked()
-            if not self._live_hls_from_pipe:
+            if self._hls_relay and not self._live_hls_from_pipe:
                 self._start_hls(fresh_output=True)
         self._probe_source_duration()
         return True
@@ -252,10 +278,10 @@ class CameraVmsWorker:
                 self.camera_id,
             )
 
-        if not self._live_hls_from_pipe:
+        if self._hls_relay and not self._live_hls_from_pipe:
             self._start_hls(fresh_output=True)
 
-        if _is_live_stream_source(self.source_path):
+        if self._hls_relay and _is_live_stream_source(self.source_path):
             self._hls_watchdog_thread = threading.Thread(
                 target=self._hls_watchdog_loop,
                 name=f"vms-hls-watch-{self.camera_id}",
@@ -279,7 +305,13 @@ class CameraVmsWorker:
     def hls_index_path(self) -> Path:
         return self._hls_dir / "index.m3u8"
 
+    def hls_relay_enabled(self) -> bool:
+        """False khi CMS xem thẳng MediaMTX — `/stream/<cam>/index.m3u8` không phục vụ."""
+        return self._hls_relay
+
     def hls_ready(self) -> bool:
+        if not self._hls_relay:
+            return False
         if not self.hls_index_path().is_file():
             return False
         if not _is_live_stream_source(self._active_source):
@@ -378,9 +410,9 @@ class CameraVmsWorker:
         open_failures = 0
         last_fail_log = 0.0
         while self._running:
-            retry_delay = _source_retry_delay(self._active_source)
+            retry_delay = _source_retry_delay(self._active_source, open_failures)
             # Nhịp thử dày thì đếm lần không còn nói lên thời gian — quy về giây.
-            fallback_after = max(3, int(6.0 / retry_delay))
+            fallback_after = max(3, int(6.0 / _source_retry_delay(self._active_source)))
             cap = _open_capture(self._active_source)
             if not cap.isOpened():
                 open_failures += 1
@@ -507,6 +539,21 @@ class CameraVmsWorker:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("[VMS %s] Warmup engine %s: %s", self.camera_id, engine_name, exc)
 
+    def _downscale_for_ai(self, frame: np.ndarray) -> np.ndarray:
+        """Thu nhỏ frame trước inference — YOLO vẫn nhận đủ chi tiết ở 960px."""
+        limit = self._ai_max_width
+        if limit <= 0:
+            return frame
+        h, w = frame.shape[:2]
+        if w <= limit:
+            return frame
+        scale = limit / float(w)
+        return cv2.resize(
+            frame,
+            (limit, max(1, int(round(h * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+
     def _ai_loop(self) -> None:
         interval = 1.0 / self._ai_fps
         logger.info("[VMS %s] AI loop @ %.1f FPS, %d engine(s)", self.camera_id, self._ai_fps, len(self._process_fns))
@@ -516,9 +563,15 @@ class CameraVmsWorker:
 
         warmup_frame = self.get_frame()
         if warmup_frame is not None:
+            warmup_frame = self._downscale_for_ai(warmup_frame)
             if self._live_hls_from_pipe:
                 hh, ww = warmup_frame.shape[:2]
                 self._start_hls(fresh_output=True, pipe_size=(ww, hh))
+
+            # Nguồn live không tua lại được: chặn ingest chờ nạp model chỉ làm
+            # dồn buffer RTSP rồi vứt. Chỉ reel MP4 mới cần warmup đồng bộ để
+            # sự kiện bắt đúng từ pts 0.
+            if self._live_hls_from_pipe or _is_live_stream_source(self._active_source):
                 self._ingest_gate.set()
                 threading.Thread(
                     target=self._warmup_engines,
@@ -526,10 +579,7 @@ class CameraVmsWorker:
                     name=f"vms-warmup-{self.camera_id}",
                     daemon=True,
                 ).start()
-                logger.info(
-                    "[VMS %s] Live HLS mở ngay — warmup AI chạy nền.",
-                    self.camera_id,
-                )
+                logger.info("[VMS %s] Ingest mở ngay — warmup AI chạy nền.", self.camera_id)
             else:
                 self._warmup_engines(warmup_frame)
                 logger.info("[VMS %s] AI warmup xong — mở ingest @ pts 0", self.camera_id)
@@ -549,6 +599,10 @@ class CameraVmsWorker:
                 if frame_received_at <= 0 or frame_age > LIVE_FRAME_STALE_SEC:
                     frame = None
             if frame is not None:
+                # Frame gốc vẫn là nguồn cắt snapshot/clip; AI chạy trên bản thu
+                # nhỏ nên engine tự scale bbox về ảnh gốc qua `capture_frame`.
+                capture_frame = frame
+                frame = self._downscale_for_ai(frame)
                 h, w = frame.shape[:2]
                 frame_w, frame_h = w, h
                 merged_detections: list[dict] = []
@@ -557,7 +611,7 @@ class CameraVmsWorker:
 
                 for engine_name, fn in self._process_fns.items():
                     try:
-                        engine_kwargs: dict = {"capture_frame": frame}
+                        engine_kwargs: dict = {"capture_frame": capture_frame}
                         if engine_name == "road":
                             engine_kwargs["stabilize"] = False
                         if engine_name in ("atgt", "mesh", "ppe", "pccc", "crane", "wah"):
@@ -647,20 +701,29 @@ class CameraVmsWorker:
         return latest
 
     def _live_hls_encode_args(self, segment_pattern: str, hls_out: str) -> list[str]:
+        # Flycam DR-* — nguồn 720p từ DJI; 800k ultrafast gây mờ/giật rõ trên CMS.
+        is_flycam = self.camera_id.startswith("DR-")
+        bitrate = "2500k" if is_flycam else "1200k"
+        maxrate = "2800k" if is_flycam else "1400k"
+        bufsize = "3500k" if is_flycam else "1800k"
+        preset = "veryfast" if is_flycam else "ultrafast"
         return [
             "-c:v", "libx264",
-            "-preset", "ultrafast",
+            "-preset", preset,
             "-tune", "zerolatency",
-            "-b:v", "800k",
-            "-maxrate", "900k",
-            "-bufsize", "900k",
-            "-g", "12",
+            "-b:v", bitrate,
+            "-maxrate", maxrate,
+            "-bufsize", bufsize,
+            # GOP ngắn quá thì I-frame nuốt hết bitrate và P-frame vỡ nhoè;
+            # playlist quá ngắn thì chỉ cần encoder trễ một nhịp là player đói
+            # dữ liệu. 1s/segment × 4 là điểm cân bằng cho nguồn 4G.
+            "-g", "25",
             "-sc_threshold", "0",
             "-an",
             "-muxdelay", "0",
             "-muxpreload", "0",
             "-hls_time", "1",
-            "-hls_list_size", "3",
+            "-hls_list_size", "4",
             # program_date_time: gắn EXT-X-PROGRAM-DATE-TIME vào playlist để FE biết
             # wallclock của frame đang phát, nhờ đó khớp bbox đúng thời điểm thay vì
             # vẽ detections mới nhất lên hình ảnh đã trễ vài giây.

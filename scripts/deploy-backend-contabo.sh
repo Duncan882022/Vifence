@@ -190,6 +190,9 @@ if [[ ! -x "${MEDIAMTX_BIN}" ]]; then
 fi
 
 cp /opt/vifence/backend-ai/deploy/mediamtx.yml "${MEDIAMTX_YML}"
+# Relay chuẩn hoá timestamp cho nguồn RTSP ngoài — mediamtx.yml gọi qua runOnInit.
+cp /opt/vifence/backend-ai/deploy/rtsp-relay.sh /opt/vifence/rtsp-relay.sh
+chmod +x /opt/vifence/rtsp-relay.sh
 
 cat > /etc/systemd/system/mediamtx.service <<'EOF'
 [Unit]
@@ -261,11 +264,36 @@ if [[ -n "${VPS_HC01_FALLBACK_MP4:-}" && -f "$LOCAL_HC01_FALLBACK" ]]; then
 fi
 
 echo "→ .env production…"
-VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
+# Chế độ ưu tiên Module 05: VPS 6 vCPU không gánh nổi 5 camera × 7 engine cùng
+# OWLv2. Mặc định chỉ chạy bodycam/flycam tuần tra; đặt PRIORITIZE_MODULE05=0 để
+# bật lại reel demo A-03/A-04 của Module 03/04.
+PRIORITIZE_MODULE05="${PRIORITIZE_MODULE05:-1}"
 VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-true}"
 VPS_VIDEO_A03="${VPS_VIDEO_A03:-${VPS_VIDEO_DIR}/cam03.mp4}"
 VPS_VIDEO_A04="${VPS_VIDEO_A04:-${VPS_VIDEO_DIR}/cam04.mp4}"
 VPS_DR03_RTSP="${VPS_DR03_RTSP:-rtsp://127.0.0.1:8554/dr03}"
+# Mọi camera pull qua MediaMTX nội bộ, KHÔNG pull thẳng nguồn gốc.
+#
+# Gateway bodycam HC-01 chỉ phục vụ được một phiên RTSP: khi MediaMTX và VMS
+# worker cùng nối tới `157.66.100.182`, hai bên liên tục đá nhau ra và log đầy
+# `[RTSP source] EOF` mỗi ~20 giây — chính là cú khựng người xem thấy.
+# MediaMTX là client duy nhất của nguồn gốc; worker và CMS đều đọc lại từ nó.
+VPS_HC01_RTSP="${VPS_HC01_RTSP:-rtsp://127.0.0.1:8554/hc-01}"
+VPS_PATROL_SOURCES="HC-01:${VPS_HC01_RTSP},HC-02:rtsp://127.0.0.1:8554/hc-02,DR-03:${VPS_DR03_RTSP}"
+
+if [[ "$PRIORITIZE_MODULE05" == "1" ]]; then
+  VPS_CAMERA_SOURCES="${VPS_PATROL_SOURCES}"
+  VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-false}"
+  VPS_MACHINERY_ENABLED="${VPS_MACHINERY_ENABLED:-false}"
+  VPS_AI_FPS="${VPS_AI_FPS:-5.0}"
+  echo "   Ưu tiên Module 05: chỉ HC-01, HC-02, DR-03 (bỏ reel A-03/A-04, OWLv2, auto-train)"
+else
+  VPS_CAMERA_SOURCES="A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},${VPS_PATROL_SOURCES}"
+  VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
+  VPS_MACHINERY_ENABLED="${VPS_MACHINERY_ENABLED:-true}"
+  VPS_AI_FPS="${VPS_AI_FPS:-10.0}"
+  echo "   Chạy đủ camera (A-03, A-04 + tuần tra)"
+fi
 ssh_cmd "bash -s" <<REMOTE_ENV
 set -euo pipefail
 cat > /opt/vifence/backend-ai/.env <<EOF
@@ -273,7 +301,7 @@ HOST=0.0.0.0
 PORT=8000
 DETECTION_LOOP_ENABLED=false
 AUTO_TRAIN_ENABLED=${VPS_AUTO_TRAIN_ENABLED}
-AUTO_TRAIN_INFERENCE_ENABLED=true
+AUTO_TRAIN_INFERENCE_ENABLED=${VPS_AUTO_TRAIN_ENABLED}
 AUTO_TRAIN_SCHEDULE_HOURS_LOCAL=0,6,22
 AUTO_TRAIN_SCHEDULE_TZ_OFFSET_HOURS=7
 AUTO_TRAIN_SCHEDULE_WINDOW_MINUTES=90
@@ -289,8 +317,13 @@ EVENT_AUDIT_GRACE_MINUTES=5
 EVENT_AUDIT_GRACE_LOOPS=2
 CAMERA_SOURCE=0
 VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
-VMS_CAMERA_SOURCES=A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},HC-01:rtsp://157.66.100.182:8554/866926048126915,HC-02:rtsp://127.0.0.1:8554/hc-02,DR-03:${VPS_DR03_RTSP}
-VMS_AI_FPS=10.0
+VMS_CAMERA_SOURCES=${VPS_CAMERA_SOURCES}
+VMS_AI_FPS=${VPS_AI_FPS}
+VMS_HLS_RELAY_SKIP_PREFIXES=HC-,DR-
+VMS_AI_MAX_WIDTH=960
+MEDIAMTX_HLS_PUBLIC_BASE=/mediamtx/hls
+MEDIAMTX_PATH_OVERRIDES=DR-03:dr03
+MACHINERY_DETECTOR_ENABLED=${VPS_MACHINERY_ENABLED}
 WORKER_RECOGNITION_ENABLED=true
 WORKER_DEMO_FALLBACK_ENABLED=false
 WORKER_MATCH_MIN_CONFIDENCE=0.72

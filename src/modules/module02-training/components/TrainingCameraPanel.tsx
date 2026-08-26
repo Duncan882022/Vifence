@@ -165,8 +165,15 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
 }) {
   /** Mobile bodycam — luôn mount feed; offline chỉ áp dụng luồng remote (HLS/WS). */
   const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
+  /**
+   * Badge thường trễ hơn nguồn vài giây nên tile vẫn thử tải khi báo offline.
+   * Nhưng khi backend đã khẳng định không có tín hiệu thì thôi: mũ tắt cả buổi
+   * mà cứ gọi tiếp là hàng nghìn lỗi 404 đỏ console và request rác.
+   * Metrics poll 2.2s sẽ bật lại tile trong vài giây khi nguồn lên sóng.
+   */
   const tryStreamDespiteOffline = Boolean(
     streamWhenOffline
+      && !cam.streamOfflineConfirmed
       && (cam.streamType === 'bodycam' || cam.streamType === 'flycam')
       && cam.streamUrl,
   )

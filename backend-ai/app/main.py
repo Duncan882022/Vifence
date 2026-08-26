@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auto_train.frame_collectors import (
@@ -168,6 +168,7 @@ def _build_vms_workers() -> None:
 
     for cam_id, source_path, fallback_source in settings.vms_camera_entries:
         engines = cam_engines.get(cam_id, {})
+        hls_relay = settings.vms_hls_relay_enabled_for(cam_id)
         worker = CameraVmsWorker(
             camera_id=cam_id,
             source_path=source_path,
@@ -175,9 +176,16 @@ def _build_vms_workers() -> None:
             process_frame_fns=engines,
             on_event=on_event,
             ai_fps=settings.vms_ai_fps,
+            hls_relay=hls_relay,
+            ai_max_width=settings.vms_ai_max_width,
         )
         _vms_workers[cam_id] = worker
-        logger.info("[VMS] Worker %s tạo xong (%d engines).", cam_id, len(engines))
+        logger.info(
+            "[VMS] Worker %s tạo xong (%d engines, HLS relay %s).",
+            cam_id,
+            len(engines),
+            "bật" if hls_relay else "tắt — CMS xem qua MediaMTX",
+        )
 
     from .vms_loop_state import register_seek_handler
 
@@ -232,11 +240,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Auto-train tắt — chỉ chạy detect rule-based / model gốc.")
 
-    threading.Thread(
-        target=machinery_detector.preload,
-        name="machinery-preload",
-        daemon=True,
-    ).start()
+    if settings.machinery_detector_enabled:
+        threading.Thread(
+            target=machinery_detector.preload,
+            name="machinery-preload",
+            daemon=True,
+        ).start()
+    else:
+        logger.info("OWLv2 (crane/machinery) tắt — nhường CPU cho luồng live.")
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     if settings.event_test_mode:
         logger.warning(
@@ -650,12 +661,29 @@ def _hls_bytes_response(path: Path, media_type: str) -> Response:
     )
 
 
+def _mediamtx_hls_redirect(camera_id: str) -> RedirectResponse:
+    """Đưa client sang thẳng MediaMTX — `HC-01` → `/mediamtx/hls/hc-01/index.m3u8`.
+
+    Worker tuần tra không còn re-encode HLS, nhưng CMS đã phát hành trước đó vẫn
+    gọi endpoint này. Trả 503 sẽ làm tile của bản cũ chết hẳn, nên chuyển hướng
+    tới nguồn thật: client cũ chạy được ngay mà không cần build lại.
+    """
+    path = settings.mediamtx_path_for(camera_id)
+    return RedirectResponse(
+        url=f"{settings.mediamtx_hls_public_base.rstrip('/')}/{path}/index.m3u8",
+        status_code=302,
+        headers={"Cache-Control": "no-cache, no-store"},
+    )
+
+
 @app.get("/stream/{camera_id}/index.m3u8")
 def vms_stream_playlist(camera_id: str):
     """HLS playlist cho camera VMS (live stream từ MP4 loop)."""
     worker = _vms_workers.get(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
+    if not worker.hls_relay_enabled():
+        return _mediamtx_hls_redirect(camera_id)
     if not worker.hls_ready():
         raise HTTPException(status_code=503, detail="HLS stream chưa sẵn sàng, thử lại sau 5s")
     return _hls_bytes_response(worker.hls_index_path(), "application/vnd.apple.mpegurl")
@@ -775,6 +803,15 @@ def vms_stream_segment(camera_id: str, segment: str):
     worker = _vms_workers.get(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail="Camera not found")
+    if not worker.hls_relay_enabled():
+        # Client thường bám theo URL đã chuyển hướng nên không tới đây; giữ
+        # nhánh này cho trình phát tự ghép URL từ playlist gốc.
+        path = settings.mediamtx_path_for(camera_id)
+        return RedirectResponse(
+            url=f"{settings.mediamtx_hls_public_base.rstrip('/')}/{path}/{segment}",
+            status_code=302,
+            headers={"Cache-Control": "no-cache, no-store"},
+        )
     seg_path = worker.hls_index_path().parent / segment
     if not seg_path.exists():
         raise HTTPException(status_code=404, detail="Segment not found")
