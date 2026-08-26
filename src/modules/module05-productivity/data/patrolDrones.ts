@@ -4,10 +4,9 @@
  * Drone không đẩy được luồng thẳng vào trình duyệt: nguồn gốc là RTSP/RTMP, CMS
  * chỉ xem được HLS. Hai đường dẫn tới HLS đều chấp nhận, không phải chọn trước:
  *
- *  - MediaMTX phát lại path `dr-03` — drone (hoặc điện thoại cầm tay điều khiển)
- *    publish thẳng vào, không cần backend biết gì.
+ *  - MediaMTX phát lại path `dr03` — drone publish RTMP trực tiếp.
  *  - VMS relay `/stream/DR-03/index.m3u8` — drone push RTMP vào MediaMTX VPS
- *    (`rtmp://217.217.253.247:1935/dr-03`), backend pull `rtsp://127.0.0.1:8554/dr-03`.
+ *    (`rtmp://217.217.253.247:1935/dr03`), backend pull `rtsp://127.0.0.1:8554/dr03`.
  *
  * Tile thử VMS trước rồi rơi về MediaMTX, nên chỉ cần một trong hai đường sống.
  * Chưa có nguồn thật thì retry HLS ~8s rồi tile chuyển Offline (retry nền vẫn chạy).
@@ -46,9 +45,12 @@ export function getPatrolDroneRtspSource(cameraId: string): string | undefined {
   return readEnv(`VITE_${envSuffix(cameraId)}_RTSP_URL`)
 }
 
-/** Path trên MediaMTX — `DR-03` → `dr-03`. */
+/** Path trên MediaMTX — `DR-03` → `dr03` (không dấu gạch, DJI/OBS hay dùng). */
 export function getPatrolDroneMediaMtxPath(cameraId: string): string {
-  return readEnv(`VITE_${envSuffix(cameraId)}_PATH`) ?? cameraId.toLowerCase()
+  const fromEnv = readEnv(`VITE_${envSuffix(cameraId)}_PATH`)
+  if (fromEnv) return fromEnv
+  if (cameraId === 'DR-03') return 'dr03'
+  return cameraId.toLowerCase()
 }
 
 function getPatrolDroneMediaMtxHlsUrl(cameraId: string): string | undefined {

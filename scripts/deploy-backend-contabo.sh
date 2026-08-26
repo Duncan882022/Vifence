@@ -265,7 +265,7 @@ VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
 VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-true}"
 VPS_VIDEO_A03="${VPS_VIDEO_A03:-${VPS_VIDEO_DIR}/cam03.mp4}"
 VPS_VIDEO_A04="${VPS_VIDEO_A04:-${VPS_VIDEO_DIR}/cam04.mp4}"
-VPS_DR03_RTSP="${VPS_DR03_RTSP:-rtsp://127.0.0.1:8554/dr-03}"
+VPS_DR03_RTSP="${VPS_DR03_RTSP:-rtsp://127.0.0.1:8554/dr03}"
 ssh_cmd "bash -s" <<REMOTE_ENV
 set -euo pipefail
 cat > /opt/vifence/backend-ai/.env <<EOF

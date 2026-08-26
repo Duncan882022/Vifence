@@ -81,9 +81,9 @@ paths:
   hc-02:
     source: publisher
 
-  # DR-03 — flycam DJI Mavic Air push RTMP vào đây (rtmp://<vps>:1935/dr-03).
+  # DR-03 — flycam DJI Mavic Air push RTMP vào đây (rtmp://<vps>:1935/dr03).
   # Backend VMS pull RTSP nội bộ → relay HLS cho CMS.
-  dr-03:
+  dr03:
     source: publisher
 
   # Chặn path lạ tự tạo — chỉ nhận đúng mũ đã khai báo.
