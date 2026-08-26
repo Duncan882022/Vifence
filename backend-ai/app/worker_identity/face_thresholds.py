@@ -52,6 +52,18 @@ def reuse_min_margin() -> float:
     return settings.patrol_face_reuse_min_margin
 
 
+def cross_camera_min_similarity() -> float:
+    """Ngưỡng gộp mã giữa hai mũ khác nhau.
+
+    Trong cùng một camera còn có toạ độ bbox làm bằng chứng phụ; qua mũ khác thì
+    không còn hệ quy chiếu chung nào, chỉ còn mỗi khuôn mặt. Bù lại bằng ngưỡng
+    tương đồng cao hơn hẳn để không dán hai người thành một.
+    """
+    if _deep():
+        return settings.face_deep_cross_camera_min_similarity
+    return settings.patrol_face_cross_camera_min_similarity
+
+
 def split_max_similarity() -> float:
     """Dưới ngưỡng này coi là hai người khác nhau — tách ID."""
     if _deep():

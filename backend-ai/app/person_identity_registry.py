@@ -16,7 +16,15 @@ from .worker_identity.gallery import embedding_similarity
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 REGISTRY_FILE = DATA_DIR / "person_identity_registry.json"
 
+# Vị trí cũ hơn ngần này không còn nói lên điều gì — người đã đi đâu mất rồi.
 _TRACK_META_TTL_SEC = 180.0
+# Khuôn mặt thì không đổi trong một ca làm việc. Dùng chung hạn 3 phút với vị trí
+# nghĩa là chỉ huy đi một vòng công trường rồi gặp lại đúng người đó là hệ thống
+# đã quên, cấp mã mới và đếm thêm một lần nữa.
+_FACE_META_TTL_SEC = 8 * 3600.0
+# Trần số dòng track_meta giữ lại — hạn khuôn mặt dài nên phải dọn, nếu không
+# file registry phình theo cả ca.
+_TRACK_META_MAX_ROWS = 900
 _REUSE_IOU = 0.22
 _REUSE_CENTER_NORM = 0.11
 
@@ -193,6 +201,26 @@ def _remember_track_meta(
     if face_emb and len(face_emb) >= 8:
         entry["face_emb"] = [float(v) for v in face_emb]
     meta[key] = entry
+    _prune_track_meta(state)
+
+
+def _prune_track_meta(state: dict) -> None:
+    """Dọn dòng đã hết hạn, rồi cắt bớt dòng cũ nhất nếu vẫn vượt trần."""
+    meta = state.get("track_meta") or {}
+    if len(meta) <= _TRACK_META_MAX_ROWS:
+        return
+    now = time.time()
+    for key in [
+        k
+        for k, row in meta.items()
+        if now - float(row.get("updated_at") or 0) > _FACE_META_TTL_SEC
+    ]:
+        meta.pop(key, None)
+    if len(meta) <= _TRACK_META_MAX_ROWS:
+        return
+    ordered = sorted(meta.items(), key=lambda kv: float(kv[1].get("updated_at") or 0))
+    for key, _row in ordered[: len(meta) - _TRACK_META_MAX_ROWS]:
+        meta.pop(key, None)
 
 
 def _identity_face_emb(state: dict, camera_id: str, worker_id: str) -> np.ndarray | None:
@@ -205,7 +233,7 @@ def _identity_face_emb(state: dict, camera_id: str, worker_id: str) -> np.ndarra
             continue
         if str(row.get("worker_id") or "") != worker_id:
             continue
-        if now - float(row.get("updated_at") or 0) > _TRACK_META_TTL_SEC:
+        if now - float(row.get("updated_at") or 0) > _FACE_META_TTL_SEC:
             continue
         emb = _as_emb(row.get("face_emb"))
         if emb is None:
@@ -264,32 +292,39 @@ def _find_reusable_worker_id(
     prefix = f"{camera_id}|"
 
     if face_emb is not None:
-        face_candidates: list[tuple[str, float, float]] = []
+        same_floor = face_thresholds.reuse_min_similarity()
+        cross_floor = face_thresholds.cross_camera_min_similarity()
+        # Gom theo mã người, không theo dòng track: cùng một công nhân thường có
+        # nhiều dòng (nhiều track, nhiều mũ) và mỗi dòng giữ một mảnh bằng chứng
+        # khác nhau. Xét rời từng dòng thì dòng khoẻ về mặt lại che mất dòng khoẻ
+        # về vị trí của chính người đó.
+        merged: dict[str, tuple[float, float]] = {}
         for key, row in meta.items():
-            if not key.startswith(prefix):
-                continue
-            if now - float(row.get("updated_at") or 0) > _TRACK_META_TTL_SEC:
+            same_camera = key.startswith(prefix)
+            age = now - float(row.get("updated_at") or 0)
+            if age > _FACE_META_TTL_SEC:
                 continue
             stored = _as_emb(row.get("face_emb"))
             wid = str(row.get("worker_id") or state.get("tracks", {}).get(key) or "").strip()
             if not wid or stored is None:
                 continue
             sim = embedding_similarity(face_emb, stored)
-            if sim < face_thresholds.reuse_min_similarity():
+            if sim < (same_floor if same_camera else cross_floor):
                 continue
-            spatial = _spatial_agreement(
-                person_bbox,
-                row.get("bbox"),
-                frame_w,
-                frame_h,
-                now - float(row.get("updated_at") or 0),
+            spatial = (
+                _spatial_agreement(person_bbox, row.get("bbox"), frame_w, frame_h, age)
+                if same_camera
+                else 0.0
             )
-            face_candidates.append((wid, sim, spatial))
+            prev_sim, prev_spatial = merged.get(wid, (0.0, 0.0))
+            merged[wid] = (max(prev_sim, sim), max(prev_spatial, spatial))
+
+        face_candidates = [(wid, sim, sp) for wid, (sim, sp) in merged.items()]
 
         if face_candidates:
             face_candidates.sort(key=lambda item: item[1], reverse=True)
             best_wid, best_sim, best_spatial = face_candidates[0]
-            others = [row for row in face_candidates[1:] if row[0] != best_wid]
+            others = face_candidates[1:]
             rival = others[0][1] if others else 0.0
             reuse_ok = best_sim - rival >= face_thresholds.reuse_min_margin()
 
