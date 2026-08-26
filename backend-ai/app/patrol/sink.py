@@ -107,6 +107,19 @@ def record_observation(
         return None
 
     key = _key(camera_id, track_id)
+
+    if not face_embedding or len(face_embedding) == 0:
+        if frame is not None and person_bbox is not None:
+            from ..worker_identity.recognizer import recover_patrol_face_embedding
+
+            recovered = recover_patrol_face_embedding(
+                frame,
+                [float(v) for v in person_bbox[:4]],
+                camera_id=camera_id,
+            )
+            if recovered is not None:
+                face_embedding, face_quality = recovered
+
     score = snapshot_score(face_quality=face_quality, confidence=confidence)
 
     def _shot(subject_id: str) -> tuple[str | None, float]:

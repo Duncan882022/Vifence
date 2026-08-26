@@ -189,9 +189,17 @@ def patrol_face_bbox_in_frame(
     return best
 
 
+def _patrol_face_detect_min(camera_id: str = "") -> float:
+    if camera_id.startswith("HC-"):
+        return settings.patrol_face_detect_min_score_bodycam
+    return settings.patrol_face_detect_min_score
+
+
 def assess_patrol_face(
     frame: np.ndarray,
     person_bbox: list[float] | None,
+    *,
+    camera_id: str = "",
 ) -> tuple[np.ndarray | None, float, bool]:
     """Trả (embedding, score, eligible) — chỉ eligible mới cấp sgc / tab Người."""
     if not person_bbox or len(person_bbox) < 4:
@@ -199,11 +207,31 @@ def assess_patrol_face(
     crop = _crop_person(frame, person_bbox)
     if crop is None:
         return None, 0.0, False
+    return _assess_patrol_face_crop(crop, camera_id=camera_id)
+
+
+def _assess_patrol_face_crop(
+    crop: np.ndarray,
+    *,
+    camera_id: str = "",
+    selfie_mode: bool | None = None,
+) -> tuple[np.ndarray | None, float, bool]:
     crop_h, crop_w = crop.shape[:2]
-    head_h = max(int(crop_h * 0.42), 48)
-    search = crop[:head_h, :]
-    detect_min = settings.patrol_face_detect_min_score
-    ok, faces = detect_faces(search, score_threshold=detect_min)
+    detect_min = _patrol_face_detect_min(camera_id)
+    if selfie_mode is None:
+        # Bodycam cận cảnh — mặt trải trên phần lớn crop, không chỉ 42% đầu.
+        selfie_mode = camera_id.startswith("HC-") and crop_h >= 160
+    if selfie_mode:
+        search = crop
+        max_cy_frac = 0.88
+    else:
+        head_h = max(int(crop_h * 0.42), 48)
+        search = crop[:head_h, :]
+        max_cy_frac = 0.72 if crop_h < 200 else 0.62
+
+    # Lấy candidate rộng hơn ngưỡng cuối — lọc lại trong vòng lặp.
+    detect_pass = min(detect_min, 0.52)
+    ok, faces = detect_faces(search, score_threshold=detect_pass)
     if not ok or faces is None or len(faces) == 0:
         return None, 0.0, False
 
@@ -223,7 +251,6 @@ def assess_patrol_face(
         if aspect < 0.55 or aspect > 1.85:
             continue
         face_cy = y + fh / 2.0
-        max_cy_frac = 0.72 if crop_h < 200 else 0.62
         if face_cy > search_h * max_cy_frac:
             continue
         if score > best_det_score:
@@ -238,11 +265,36 @@ def assess_patrol_face(
     if best_face is None:
         return None, best_det_score, False
 
-    # Landmark YuNet cho phép căn mặt trước khi trích đặc trưng — chính xác hơn crop thô.
     embedding = embed_aligned_face(search, best_row) if best_row is not None else None
     if embedding is None:
         embedding = _face_embedding(best_face)
     return embedding, best_det_score, True
+
+
+def recover_patrol_face_embedding(
+    frame: np.ndarray,
+    person_bbox: list[float],
+    *,
+    camera_id: str = "",
+) -> tuple[list[float], float] | None:
+    """Thử lại trước khi ghi Đối tượng — dùng crop selfie khi analyze path fail."""
+    vec, score, eligible = assess_patrol_face(frame, person_bbox, camera_id=camera_id)
+    if eligible and vec is not None:
+        return vec.tolist(), float(score)
+
+    if not camera_id.startswith("HC-"):
+        return None
+
+    crop = _crop_person(frame, person_bbox)
+    if crop is None:
+        return None
+
+    vec2, score2, eligible2 = _assess_patrol_face_crop(
+        crop, camera_id=camera_id, selfie_mode=True,
+    )
+    if eligible2 and vec2 is not None:
+        return vec2.tolist(), float(score2)
+    return None
 
 
 def _match_face_crop(face: np.ndarray, *, camera_id: str = "") -> WorkerMatch | None:

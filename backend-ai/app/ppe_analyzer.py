@@ -137,7 +137,9 @@ def _assign_patrol_person_identity(
 
     # Cùng thước đo "thấy mặt" với đường ghi sự kiện — nếu không, nhãn ROI và
     # tab sự kiện sẽ nói hai điều khác nhau về cùng một người.
-    face_vec, _face_score, face_eligible = assess_patrol_face(frame, person_bbox)
+    face_vec, _face_score, face_eligible = assess_patrol_face(
+        frame, person_bbox, camera_id=camera_id,
+    )
     face_emb = face_vec.tolist() if face_vec is not None else None
     frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})
 

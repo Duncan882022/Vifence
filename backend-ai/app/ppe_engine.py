@@ -371,7 +371,9 @@ class PpeEngine:
                 if skip_face_assess:
                     face_vec, face_emb, face_eligible = None, None, True
                 else:
-                    face_vec, _face_score, face_eligible = assess_patrol_face(frame, person_bbox)
+                    face_vec, _face_score, face_eligible = assess_patrol_face(
+                        frame, person_bbox, camera_id=camera_id,
+                    )
                     face_emb = face_vec.tolist() if face_vec is not None else None
 
                 existing_wid = (person.worker_id or "").strip()
