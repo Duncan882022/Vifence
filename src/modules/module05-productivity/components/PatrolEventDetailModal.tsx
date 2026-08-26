@@ -15,25 +15,16 @@ import {
 } from '../services/patrolDayEvents.service'
 import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import {
-  PATROL_TYPE_META,
-  getPatrolEventStatusDisplay,
-} from '../utils/patrolEventsUi'
-import {
   resolvePatrolAppearanceSubjectId,
   resolvePatrolEventDisplayMeta,
   resolvePatrolPersonStage,
+  PATROL_PERSON_STAGE_META,
 } from '../utils/patrolWorkforceEventLabels'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
   onClose: () => void
-}
-
-interface DetailRow {
-  label: string
-  value: string
-  span?: 2
 }
 
 function hasValidGps(gps: { lat: number; lng: number } | null | undefined): gps is { lat: number; lng: number } {
@@ -49,15 +40,15 @@ function mapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`
 }
 
-function resolveEventLocation(event: PatrolEvent): string {
-  const camLabel = event.cameraId?.trim()
-    ? (PATROL_BODYCAM_LABELS[event.cameraId] ?? (event.cameraName?.trim() || event.cameraId))
-    : (event.cameraName?.trim() || '')
-  const zoneLabel = event.zoneName?.trim() || ''
-  if (camLabel && zoneLabel) return `${camLabel} · ${zoneLabel}`
-  if (camLabel) return camLabel
-  if (zoneLabel) return zoneLabel
-  return 'Chưa gắn camera'
+function formatEventTimeRange(event: PatrolEvent): string {
+  const first = formatEventDateTime(event.startedAt)
+  const last = formatEventDateTime(event.lockedAt)
+  if (first === last) return last
+  if (event.endedAt) {
+    const ended = formatEventDateTime(event.endedAt)
+    if (ended !== last) return `${first} – ${ended}`
+  }
+  return `${first} – ${last}`
 }
 
 function resolveEventDurationSeconds(event: PatrolEvent): number | null {
@@ -71,62 +62,19 @@ function resolveEventDurationSeconds(event: PatrolEvent): number | null {
   return seconds > 0 ? seconds : null
 }
 
-function buildDetailRows(event: PatrolEvent): DetailRow[] {
-  const stage = resolvePatrolPersonStage(event)
-  const meta = resolvePatrolEventDisplayMeta(event)
-  const objectDisplay = resolveEventObjectDisplay(event)
-  const cardDisplay = resolvePatrolPersonCardDisplay(event)
-  const statusDisplay = getPatrolEventStatusDisplay(event.status)
-  const subjectId = event.objectId?.trim() || event.id
-  const rows: DetailRow[] = []
-
-  rows.push({ label: 'Giai đoạn', value: meta.label })
-  rows.push({ label: 'Mã', value: subjectId })
-
-  const trackId = event.trackWorkerId?.trim()
-  if (trackId && trackId !== subjectId) {
-    rows.push({ label: 'Track', value: trackId })
+function resolvePrimaryCameraLabel(
+  event: PatrolEvent,
+  appearanceCameras: string[],
+): string | null {
+  if (event.cameraId?.trim()) {
+    return PATROL_BODYCAM_LABELS[event.cameraId] ?? event.cameraId
   }
-
-  if (stage === 'profile') {
-    if (objectDisplay.workerId && objectDisplay.workerId !== subjectId) {
-      rows.push({ label: 'Mã định danh', value: objectDisplay.workerId })
-    }
-    if (objectDisplay.unit) rows.push({ label: 'Đơn vị', value: objectDisplay.unit })
-  } else if (stage === 'person' && cardDisplay.workerId) {
-    rows.push({ label: 'Mã tạm', value: cardDisplay.workerId })
+  if (event.cameraName?.trim()) return event.cameraName.trim()
+  if (appearanceCameras.length > 0) {
+    const id = appearanceCameras[0]
+    return PATROL_BODYCAM_LABELS[id] ?? id
   }
-
-  const displayName = stage === 'object'
-    ? (event.objectLabel?.trim() || 'Đối tượng')
-    : objectDisplay.label
-  if (displayName && displayName !== meta.label && displayName !== 'Đối tượng') {
-    rows.push({ label: 'Tên', value: displayName, span: 2 })
-  }
-
-  rows.push({ label: 'Vị trí', value: resolveEventLocation(event), span: 2 })
-  rows.push({ label: 'Trạng thái', value: statusDisplay.label })
-  rows.push({ label: 'Bắt đầu', value: formatEventDateTime(event.startedAt) })
-  rows.push({ label: 'Ghi nhận', value: formatEventDateTime(event.lockedAt) })
-
-  if (event.endedAt) {
-    rows.push({ label: 'Kết thúc', value: formatEventDateTime(event.endedAt), span: 2 })
-  }
-
-  const duration = resolveEventDurationSeconds(event)
-  if (duration != null) {
-    rows.push({ label: 'Thời lượng', value: formatPatrolTime(duration), span: 2 })
-  }
-
-  if (event.confidence > 0) {
-    rows.push({
-      label: 'Độ tin cậy',
-      value: `${Math.round(event.confidence * 100)}%`,
-      span: 2,
-    })
-  }
-
-  return rows
+  return null
 }
 
 export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModalProps) {
@@ -168,21 +116,52 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     return () => { cancelled = true }
   }, [event, identityTick])
 
-  const detailRows = useMemo(() => (event ? buildDetailRows(event) : []), [event])
+  const summary = useMemo(() => {
+    if (!event) return null
+    const stage = resolvePatrolPersonStage(event)
+    const stageMeta = PATROL_PERSON_STAGE_META[stage]
+    const cardDisplay = resolvePatrolPersonCardDisplay(event)
+    const objectDisplay = resolveEventObjectDisplay(event)
+    const appearanceCameras = Object.keys(appearances)
+    const cameraLabel = resolvePrimaryCameraLabel(event, appearanceCameras)
+    const duration = resolveEventDurationSeconds(event)
 
-  if (!event) return null
+    const infoRows: Array<{ label: string; value: string }> = []
+    if (stage === 'profile') {
+      if (objectDisplay.label && objectDisplay.label !== 'Đối tượng') {
+        infoRows.push({ label: 'Họ tên', value: objectDisplay.label })
+      }
+      if (objectDisplay.workerId) infoRows.push({ label: 'Mã nhân viên', value: objectDisplay.workerId })
+      if (objectDisplay.unit) infoRows.push({ label: 'Đơn vị', value: objectDisplay.unit })
+    } else if (stage === 'person') {
+      if (cardDisplay.workerId) infoRows.push({ label: 'Mã theo dõi', value: cardDisplay.workerId })
+    } else {
+      infoRows.push({ label: 'Mã', value: event.objectId || event.id })
+    }
+
+    if (cameraLabel) infoRows.push({ label: 'Camera', value: cameraLabel })
+
+    return {
+      stage,
+      stageMeta,
+      cardDisplay,
+      timeRange: formatEventTimeRange(event),
+      duration,
+      infoRows,
+    }
+  }, [event, appearances])
+
+  if (!event || !summary) return null
   void identityTick
 
-  const meta = event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
-    ? resolvePatrolEventDisplayMeta(event)
-    : PATROL_TYPE_META[event.type]
+  const meta = resolvePatrolEventDisplayMeta(event)
   const TypeIcon = meta.icon
   const gpsOk = hasValidGps(event.gps)
   const objectKey = event.objectId?.trim() || event.id
-  const objectDisplay = resolveEventObjectDisplay(event)
-  const cardDisplay = resolvePatrolPersonCardDisplay(event)
-  const stage = resolvePatrolPersonStage(event)
-  const modalTitle = (stage === 'person' || stage === 'profile') ? cardDisplay.title : event.violationLabel
+  const stage = summary.stage
+  const modalTitle = (stage === 'person' || stage === 'profile')
+    ? summary.cardDisplay.title
+    : event.violationLabel
   const showIdentify = needsPatrolManualIdentity(objectKey, event.objectLabel)
     || isPatrolManuallyIdentified(objectKey)
   const appearanceCameras = Object.keys(appearances)
@@ -214,13 +193,8 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                 {modalTitle}
               </p>
               <p className="text-[9px] text-muted-foreground mt-0.5 truncate">
-                {meta.label}
-                {(stage === 'person' || stage === 'profile') && cardDisplay.subtitle !== '—'
-                  ? ` · ${cardDisplay.subtitle}`
-                  : ''}
-                {(stage === 'profile' && objectDisplay.label !== modalTitle) && objectDisplay.label !== meta.label
-                  ? ` · ${objectDisplay.label}`
-                  : ''}
+                {summary.stageMeta.label}
+                {summary.cardDisplay.subtitle !== '—' ? ` · ${summary.cardDisplay.subtitle}` : ''}
               </p>
             </div>
           </div>
@@ -239,16 +213,32 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
             <PatrolEventSnapshot event={event} variant="detail" />
           )}
 
-          {detailRows.length > 0 && (
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px] rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5">
-              {detailRows.map(({ label, value, span }) => (
-                <div key={label} className={span === 2 ? 'col-span-2' : undefined}>
-                  <dt className="text-muted-foreground">{label}</dt>
-                  <dd className="text-foreground font-medium mt-0.5 break-all">{value}</dd>
-                </div>
-              ))}
-            </dl>
+          {summary.infoRows.length > 0 && (
+            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
+              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Thông tin</p>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                {summary.infoRows.map(row => (
+                  <div key={row.label}>
+                    <dt className="text-muted-foreground">{row.label}</dt>
+                    <dd className="text-foreground font-medium mt-0.5 break-all">{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           )}
+
+          <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-1">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
+              <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Thời gian</span>
+            </div>
+            <p className="text-[11px] text-foreground font-medium tabular-nums">{summary.timeRange}</p>
+            {summary.duration != null && (
+              <p className="text-[9px] text-muted-foreground">
+                Tổng thời lượng quan sát: {formatPatrolTime(summary.duration)}
+              </p>
+            )}
+          </div>
 
           {(appearancesLoading || hasAppearanceHistory) && (stage === 'person' || stage === 'profile') && (
             <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
@@ -298,7 +288,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
             <div className="flex items-center gap-1.5">
               <MapPin className={cn('w-3.5 h-3.5 shrink-0', gpsOk ? 'text-emerald-400' : 'text-amber-400')} />
               <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
-                GPS ghi nhận
+                Vị trí GPS
               </span>
               <span
                 className={cn(
