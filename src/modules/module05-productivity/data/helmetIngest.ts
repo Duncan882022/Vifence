@@ -61,6 +61,41 @@ export function getMediaMtxWebrtcBase(): string | undefined {
   return `${scheme}://${host}:${port}`
 }
 
+/**
+ * Base Playback Server của MediaMTX (mặc định cổng 9996) — đọc băng đã ghi.
+ *
+ * Không cấu hình thì playback tắt hẳn. Cố đoán ra URL rồi trỏ nhầm vào luồng
+ * live là kiểu hỏng khó nhận ra nhất: người xem tưởng đang xem lại quá khứ.
+ */
+export function getMediaMtxPlaybackBase(): string | undefined {
+  const explicit = readEnv('VITE_MEDIAMTX_PLAYBACK_URL')
+  if (explicit) return stripTrailingSlash(explicit)
+
+  const host = readEnv('VITE_MEDIAMTX_HOST')
+  if (!host) return undefined
+
+  const port = readEnv('VITE_MEDIAMTX_PLAYBACK_PORT') ?? '9996'
+  const scheme = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? 'https'
+    : 'http'
+  return `${scheme}://${host}:${port}`
+}
+
+/**
+ * Path MediaMTX của một camera bất kỳ trong Module 05.
+ *
+ * Drone publish vào `dr03`; bí danh `dr-03` chỉ pull lại và **không ghi băng**
+ * (bật ghi cả hai là tốn gấp đôi đĩa cho cùng một hình), nên playback phải hỏi
+ * đúng path gốc.
+ */
+export function mediaMtxPathForCamera(cameraId: string): string {
+  const id = cameraId.trim()
+  if (id.toUpperCase().startsWith('DR-')) {
+    return id.toLowerCase().replace('-', '')
+  }
+  return getHelmetIngest(id).path
+}
+
 /** Base HLS của MediaMTX — fallback khi WebRTC bị chặn (firewall UDP). */
 export function getMediaMtxHlsBase(): string | undefined {
   const explicit = readEnv('VITE_MEDIAMTX_HLS_URL')

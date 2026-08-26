@@ -40,10 +40,10 @@ import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
 import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import {
-  fetchPatrolCameraRecords,
-  fetchPatrolRecordDetections,
+  fetchPatrolPlaybackRecords,
+  fetchPatrolPlaybackDetections,
   getPatrolDefaultPlaybackDate,
-} from './services/patrolCameraPlayback.service'
+} from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
@@ -423,8 +423,8 @@ export function Module05Page() {
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
-                      fetchRecords={fetchPatrolCameraRecords}
-                      fetchDetections={fetchPatrolRecordDetections}
+                      fetchRecords={fetchPatrolPlaybackRecords}
+                      fetchDetections={fetchPatrolPlaybackDetections}
                       videoAreaFlex={82}
                     />
                   )}

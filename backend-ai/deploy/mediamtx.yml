@@ -55,6 +55,20 @@ rtmp: yes
 rtmpAddress: :1935
 srt: no
 
+# Playback — đọc lại băng đã ghi bên dưới.
+#
+# Băng vẫn được ghi từ trước nhưng không có đường nào đọc ra, nên CMS phải
+# dựng playback giả trỏ vào luồng live. Bật server này là có băng thật mà
+# backend không tốn thêm CPU nào: MediaMTX đọc thẳng file fmp4 đã ghi.
+#
+#   GET /list?path=hc-02                      → các đoạn băng còn giữ
+#   GET /get?path=hc-02&start=<ISO8601>&duration=<giây>
+#
+# Nhớ proxy qua nginx như hai cổng kia:
+#   location /mediamtx/playback/ { proxy_pass http://127.0.0.1:9996/; }
+playback: yes
+playbackAddress: :9996
+
 ###############################################
 # Ghi hình — nguyên bản, phục vụ playback
 
@@ -100,6 +114,9 @@ paths:
 
   # Bí danh của `dr03`. CMS suy path từ id camera nên dựng ra `dr-03`; giữ cả hai
   # tên để bản FE cũ và mới cùng xem được, drone vẫn chỉ publish vào `dr03`.
+  #
+  # Không ghi ở đây: bí danh chỉ pull lại từ `dr03` vốn đã ghi rồi, bật thêm là
+  # tốn gấp đôi đĩa cho cùng một hình. Playback của drone đọc path `dr03`.
   dr-03:
     source: rtsp://127.0.0.1:8554/dr03
     sourceProtocol: tcp
