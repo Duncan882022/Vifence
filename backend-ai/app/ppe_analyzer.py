@@ -40,6 +40,8 @@ _PERSON_CONF = 0.40
 _PERSON_CONF_BODYCAM = 0.30
 _PERSON_CONF_FLYCAM = 0.18
 _PERSON_CONF_STRICT = 0.48
+# Dưới mốc này đường vẽ ROI mới đòi thêm bằng chứng (mặt / dáng xa / tín hiệu da).
+_PERSON_CONF_DISPLAY_CORROBORATE = 0.45
 _VIOLATION_CONF = VIOLATION_MIN_CONFIDENCE
 _ITEM_IOU = 0.12
 _HELMET_MODEL_MIN_CONF = 0.55
@@ -1633,8 +1635,20 @@ def _plausible_person_box(
     strict: bool = False,
     bodycam: bool = False,
     flycam: bool = False,
+    for_display: bool = False,
 ) -> bool:
-    """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng."""
+    """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng.
+
+    `for_display=True` là đường vẽ ROI: chỉ loại khung không thể là người. Đường
+    ghi sự kiện vẫn siết lại bằng gate riêng trong `ppe_engine`, nên nới ở đây
+    không kéo theo sự kiện rác.
+    """
+    if for_display and (bodycam or flycam):
+        from .patrol_person_visibility import patrol_person_meets_display_gate
+
+        return patrol_person_meets_display_gate(
+            box, frame_w, frame_h, flycam=flycam,
+        )
     if flycam:
         return _plausible_flycam_aerial(box, frame_w, frame_h)
     if bodycam:
@@ -1677,6 +1691,7 @@ def _filter_persons(
     source_pts_sec: float | None = None,
     strict: bool = False,
     min_conf: float | None = None,
+    for_display: bool = False,
 ) -> list[_PersonPpe]:
     h, w = frame.shape[:2]
     bodycam = _is_helmet_bodycam(camera_id)
@@ -1703,6 +1718,7 @@ def _filter_persons(
             strict=identity_strict,
             bodycam=bodycam,
             flycam=flycam,
+            for_display=for_display,
         ):
             continue
         if bodycam and frame is not None:
@@ -1715,8 +1731,14 @@ def _filter_persons(
             face_dom = _face_dominant_person_box(box, w, h)
             if background_clutter_person_box(box, w, h) and not _person_upper_body_signal(frame, box):
                 continue
+            # Người quay lưng, ngồi hoặc bị che một phần thường không có mảng da
+            # nào để soi, nên đòi tín hiệu thân trên tới tận 0.62 là loại đúng
+            # nhóm cần thấy nhất. Đường vẽ ROI chỉ dùng nó như lưới chặn FP.
+            corroborate_below = (
+                _PERSON_CONF_DISPLAY_CORROBORATE if for_display else 0.62
+            )
             if (
-                conf < 0.62
+                conf < corroborate_below
                 and not face_dom
                 and not wide_crowd_rider_box(box, w, h)
                 and not _person_upper_body_signal(frame, box)
@@ -1800,6 +1822,7 @@ def _build_patrol_bodycam_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_BODYCAM,
+            for_display=True,
         ),
         camera_id=camera_id,
     )
@@ -1825,12 +1848,37 @@ def _build_patrol_bodycam_result(
         "width": w,
         "height": h,
         "metrics": {
-            "person_count": len(persons),
+            "person_count": _patrol_countable_person_count(persons, w, h),
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],
         "events": [],
     }
+
+
+def _patrol_countable_person_count(
+    persons: list[_PersonPpe],
+    frame_w: int,
+    frame_h: int,
+) -> int:
+    """Số người tính vào KPI — giữ tiêu chí ghi sự kiện, không theo số ROI đã vẽ.
+
+    Đường vẽ ROI cố ý khoanh cả người ngồi, bị che và quay lưng. Lấy thẳng số box
+    đó làm KPI thì mỗi mảnh thân YOLO tách ra lại thành một nhân sự, nên chỉ số
+    trên bảng điều khiển phải đếm bằng cùng thước đo với tab sự kiện.
+    """
+    from .patrol_person_visibility import patrol_person_meets_detection_gate
+
+    return sum(
+        1
+        for p in persons
+        if patrol_person_meets_detection_gate(
+            p.person_box,
+            frame_w,
+            frame_h,
+            face_dominant=_face_dominant_person_box(p.person_box, frame_w, frame_h),
+        )
+    )
 
 
 def _build_patrol_person_detections(
@@ -1929,6 +1977,7 @@ def _build_patrol_flycam_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_FLYCAM,
+            for_display=True,
         ),
         camera_id=camera_id,
     )
@@ -1943,7 +1992,7 @@ def _build_patrol_flycam_result(
         "width": w,
         "height": h,
         "metrics": {
-            "person_count": len(persons),
+            "person_count": _patrol_countable_person_count(persons, w, h),
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],

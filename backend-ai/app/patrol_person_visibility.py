@@ -122,12 +122,24 @@ def plausible_person_silhouette(
     person_box: tuple[float, float, float, float],
     frame_w: int,
     frame_h: int,
+    *,
+    flycam: bool = False,
 ) -> bool:
     """Loại dải dọc/ngang quá hẹp — YOLO FP mép khung."""
     x1, y1, x2, y2 = person_box
     pw = max(x2 - x1, 1.0)
     ph = max(y2 - y1, 1.0)
     aspect = ph / pw
+    if flycam:
+        # Nhìn từ trên xuống, người ngồi hoặc cúi co lại thành khối rộng hơn cao.
+        # Giữ sàn 0.28 của góc ngang là loại đúng những trường hợp đó.
+        if aspect > 6.5 or aspect < 0.12:
+            return False
+        if pw < max(6.0, frame_w * 0.006):
+            return False
+        if ph < max(8.0, frame_h * 0.010):
+            return False
+        return True
     if aspect > 4.2 or aspect < 0.28:
         return False
     if pw < max(12.0, frame_w * 0.035):
@@ -135,6 +147,61 @@ def plausible_person_silhouette(
     if ph < max(14.0, frame_h * 0.04):
         return False
     return True
+
+
+def limb_fragment_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Bbox chỉ là mảnh chi thể — mảnh vỡ của người đã được khoanh ở box khác.
+
+    Hẹp hơn hẳn `legs_only_person_box`. Hàm kia coi mọi bbox có vùng đầu nằm dưới
+    54% chiều cao khung là chân, nên người **ngồi** nhìn từ camera đội đầu — vốn
+    luôn rơi xuống nửa dưới khung — cũng bị loại. Với đường ghi sự kiện thì chặt
+    như vậy là đúng, nhưng với đường vẽ ROI thì mất đúng nhóm cần thấy nhất.
+
+    Ở đây chỉ loại khối thật sự có dáng chi thể: dài và hẹp nằm hẳn phía dưới, hoặc
+    dính sát đáy khung (thường là chân của chính người đeo camera).
+    """
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    y1_ratio = y1 / max(float(frame_h), 1.0)
+    y2_ratio = y2 / max(float(frame_h), 1.0)
+
+    if aspect >= 2.2 and y1_ratio > 0.52 and y2_ratio > 0.80:
+        return True
+    if y1_ratio > 0.62 and y2_ratio > 0.97:
+        return True
+    return False
+
+
+def patrol_person_meets_display_gate(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    flycam: bool = False,
+) -> bool:
+    """Gate vẽ ROI — rộng hơn hẳn gate ghi sự kiện.
+
+    Yêu cầu nghiệp vụ: khoanh mọi thứ có dấu hiệu là người trên khung hình, kể cả
+    người ngồi, bị che một phần hay quay lưng. Ràng buộc "đầu + 1/3 thân trên" chỉ
+    dùng để quyết định có ghi sự kiện hay không, không được dùng ở đây — nó chính
+    là thứ làm biến mất ROI của người ngồi và người bị khuất trong đám đông.
+
+    Mirror `patrolPersonMeetsDisplayGate` bên FE để overlay của luồng VMS và luồng
+    mobile không nói hai điều khác nhau về cùng một khung hình.
+    """
+    if frame_w <= 0 or frame_h <= 0:
+        return False
+    if not plausible_person_silhouette(person_box, frame_w, frame_h, flycam=flycam):
+        return False
+    if flycam:
+        return True
+    return not limb_fragment_person_box(person_box, frame_w, frame_h)
 
 
 def background_clutter_person_box(
