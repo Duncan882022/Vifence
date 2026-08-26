@@ -84,12 +84,7 @@ paths:
   # `-c:v copy` nên không hề encode lại: hình giữ nguyên chất lượng gốc.
   hc-01:
     source: publisher
-    runOnInit: >
-      ffmpeg -loglevel warning -rtsp_transport tcp
-      -use_wallclock_as_timestamps 1
-      -i rtsp://157.66.100.182:8554/866926048126915
-      -an -c:v copy
-      -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/hc-01
+    runOnInit: /opt/vifence/rtsp-relay.sh rtsp://157.66.100.182:8554/866926048126915 rtsp://127.0.0.1:8554/hc-01 8
     runOnInitRestart: yes
 
   # HC-02 — điện thoại publish qua WHIP tại /hc-02/whip.

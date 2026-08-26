@@ -113,7 +113,13 @@ export function groupPatrolCamerasForSidebar(
     .filter(group => group.cameras.length > 0)
 }
 
-/** Gắn online/offline thật từ metrics backend + bridge HC-02 mobile. */
+/**
+ * Gắn online/offline thật từ metrics backend + bridge HC-02 mobile.
+ *
+ * Camera không có dòng nào trong `perCamera` nghĩa là chưa hỏi được backend,
+ * không phải đã tắt: để `streamOfflineConfirmed` false cho tile cứ thử tải.
+ * Backend sập thì thà tile tự dò còn hơn cả lưới đen mà không ai biết vì sao.
+ */
 export function applyPatrolCameraStreamStatus(
   cameras: TrainingCamera[],
   perCamera: PatrolHelmetCameraMetricsSlice[],
@@ -126,7 +132,12 @@ export function applyPatrolCameraStreamStatus(
   if (hc02MobileOnline) onlineById.set('HC-02', true)
 
   return cameras.map(cam => {
-    const online = onlineById.get(cam.id) ?? false
-    return { ...cam, status: online ? 'online' as const : 'offline' as const }
+    const reported = onlineById.get(cam.id)
+    const online = reported ?? false
+    return {
+      ...cam,
+      status: online ? 'online' as const : 'offline' as const,
+      streamOfflineConfirmed: reported === false,
+    }
   })
 }

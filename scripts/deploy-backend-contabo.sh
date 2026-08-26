@@ -190,6 +190,9 @@ if [[ ! -x "${MEDIAMTX_BIN}" ]]; then
 fi
 
 cp /opt/vifence/backend-ai/deploy/mediamtx.yml "${MEDIAMTX_YML}"
+# Relay chuẩn hoá timestamp cho nguồn RTSP ngoài — mediamtx.yml gọi qua runOnInit.
+cp /opt/vifence/backend-ai/deploy/rtsp-relay.sh /opt/vifence/rtsp-relay.sh
+chmod +x /opt/vifence/rtsp-relay.sh
 
 cat > /etc/systemd/system/mediamtx.service <<'EOF'
 [Unit]

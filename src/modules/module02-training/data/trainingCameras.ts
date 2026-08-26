@@ -14,6 +14,15 @@ export interface TrainingCamera extends Camera {
   assignee?: string
   /** Endpoint WHEP (WebRTC) — ưu tiên hơn streamUrl khi hạ tầng có MediaMTX. */
   whepUrl?: string
+  /**
+   * Backend đã trả lời rõ camera này không có tín hiệu.
+   *
+   * Khác hẳn `status: 'offline'` mặc định lúc chưa biết gì: chỉ khi backend
+   * khẳng định mới được ngừng gọi HLS. Không có cờ này thì tile phải đoán, và
+   * đoán sai theo hướng nào cũng dở — hoặc màn đen vĩnh viễn, hoặc nã request
+   * 404 vào camera đã tắt suốt cả buổi.
+   */
+  streamOfflineConfirmed?: boolean
 }
 
 const RAW_CAMERAS: Omit<TrainingCamera, 'streamUrl'>[] = [
