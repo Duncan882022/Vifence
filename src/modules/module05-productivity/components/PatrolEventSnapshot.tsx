@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { PatrolEvent } from '../data/patrolMockData'
+import {
+  resolvePatrolPersonStage,
+} from '../utils/patrolWorkforceEventLabels'
+import { patrolTierToken, type PatrolTier } from '../utils/patrolTierTokens'
 
 interface PatrolEventSnapshotProps {
   event: PatrolEvent
@@ -27,6 +31,11 @@ export function PatrolEventSnapshot({
   onClick,
 }: PatrolEventSnapshotProps) {
   const isDetail = variant === 'detail'
+  const stage = resolvePatrolPersonStage(event)
+  const tier: PatrolTier = stage === 'profile' ? 'identity' : stage
+  const tierToken = patrolTierToken(tier)
+  const roiLabel = tierToken.label
+  const codeLabel = event.objectId?.trim() || event.cameraId || '—'
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -91,23 +100,26 @@ export function PatrolEventSnapshot({
       )}
       {loaded && !failed && (
         <>
-          <span
-            className={cn(
-              'absolute font-mono text-white/55 px-0.5 bg-black/50 rounded',
-              isDetail
-                ? 'bottom-1.5 left-1.5 text-[9px] py-0.5 px-1'
-                : 'bottom-0.5 left-0.5 text-[6px]',
-            )}
-          >
-            {event.cameraId || '—'}
-          </span>
-          <Camera
-            className={cn(
-              'absolute text-white/35',
-              isDetail ? 'top-1.5 right-1.5 w-3.5 h-3.5' : 'top-0.5 right-0.5 w-2.5 h-2.5',
-            )}
-            aria-hidden
-          />
+          {!isDetail && (
+            <>
+              <span className="absolute bottom-0.5 left-0.5 font-mono text-[6px] text-white/55 px-0.5 bg-black/50 rounded">
+                {event.cameraId || '—'}
+              </span>
+              <Camera className="absolute top-0.5 right-0.5 w-2.5 h-2.5 text-white/35" aria-hidden />
+            </>
+          )}
+          {isDetail && (
+            <div
+              className={cn(
+                'absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded text-[9px] font-bold border shadow-sm',
+                tierToken.roiLabelBg,
+                tierToken.roiLabelText,
+                tier === 'object' ? 'border-slate-400/60' : tier === 'person' ? 'border-sky-400/70' : 'border-violet-400/70',
+              )}
+            >
+              {roiLabel} · {codeLabel}
+            </div>
+          )}
         </>
       )}
     </>

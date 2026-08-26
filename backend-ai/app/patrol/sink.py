@@ -30,32 +30,75 @@ def snapshot_score(*, face_quality: float, confidence: float) -> float:
     return float(face_quality) * 2.0 + float(confidence)
 
 
+def _snapshot_tier(subject_id: str) -> str:
+    if subject_id.startswith("obj-"):
+        return "object"
+    person = identity.get_person(subject_id)
+    if person and person.get("status") == identity.STATUS_IDENTIFIED:
+        return "identity"
+    return "person"
+
+
 def _write_snapshot(subject_id: str, frame: Any, bbox: Sequence[float]) -> str | None:
-    """Cắt vùng người, ghi JPG. Trả đường dẫn tương đối để lưu vào DB."""
+    """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
         import cv2
         import numpy as np
+
+        from ..snapshot_compose import draw_dashed_rectangle, draw_snapshot_roi_badge
 
         if frame is None or not isinstance(frame, np.ndarray):
             return None
         h, w = frame.shape[:2]
         x1, y1, x2, y2 = (int(v) for v in bbox[:4])
-        # Nới nhẹ để không cắt sát mép mặt.
-        pad_x = int((x2 - x1) * 0.08)
-        pad_y = int((y2 - y1) * 0.08)
-        x1 = max(0, x1 - pad_x)
-        y1 = max(0, y1 - pad_y)
-        x2 = min(w, x2 + pad_x)
-        y2 = min(h, y2 + pad_y)
-        if x2 - x1 < 16 or y2 - y1 < 16:
+        pad_x = int((x2 - x1) * 0.04)
+        pad_y = int((y2 - y1) * 0.04)
+        bx1 = max(0, x1 - pad_x)
+        by1 = max(0, y1 - pad_y)
+        bx2 = min(w, x2 + pad_x)
+        by2 = min(h, y2 + pad_y)
+        if bx2 - bx1 < 16 or by2 - by1 < 16:
             return None
+
+        out = frame.copy()
+        tier = _snapshot_tier(subject_id)
+        colors_bgr = {
+            "object": (184, 163, 148),
+            "person": (250, 180, 56),
+            "identity": (250, 120, 167),
+        }
+        color = colors_bgr[tier]
+        if tier == "object":
+            draw_dashed_rectangle(out, (bx1, by1), (bx2, by2), color, thickness=1)
+        else:
+            cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
+
+        person = identity.get_person(subject_id) if not subject_id.startswith("obj-") else None
+        draw_snapshot_roi_badge(
+            out,
+            bx1,
+            by1,
+            bx2,
+            by2,
+            color,
+            scenario_id=None,
+            confidence=0.9,
+            behavior="person",
+            object_id=subject_id,
+            worker_name=identity.display_name(person) if person else None,
+        )
+
+        max_side = 1280
+        fh, fw = out.shape[:2]
+        if max(fh, fw) > max_side:
+            scale = max_side / max(fh, fw)
+            out = cv2.resize(out, (int(fw * scale), int(fh * scale)), interpolation=cv2.INTER_AREA)
 
         date = db.today_vn()
         folder = SNAPSHOT_DIR / date
         folder.mkdir(parents=True, exist_ok=True)
         name = f"{subject_id}.jpg"
-        cv2.imwrite(str(folder / name), frame[y1:y2, x1:x2],
-                    [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        cv2.imwrite(str(folder / name), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         return f"{date}/{name}"
     except Exception:  # noqa: BLE001
         return None
