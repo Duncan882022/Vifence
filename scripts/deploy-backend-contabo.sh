@@ -52,6 +52,10 @@ rsync_cmd() {
   else
     ssh_rsh="ssh -o StrictHostKeyChecking=no"
   fi
+  # `--delete` xoá mọi thứ trên máy chủ không có trong cây nguồn. Dữ liệu chạy
+  # thật (sự kiện, ảnh, kho tuần tra, khuôn mặt đã học) không nằm trong repo,
+  # nên thiếu một dòng protect là mất sạch sau mỗi lần deploy — đúng cách 11
+  # khuôn mặt vừa học được biến mất.
   rsync -avz --delete \
     --filter='protect data/events/' \
     --filter='protect data/events/**' \
@@ -61,6 +65,15 @@ rsync_cmd() {
     --filter='protect data/clips/**' \
     --filter='protect data/hls/' \
     --filter='protect data/hls/**' \
+    --filter='protect data/patrol.db' \
+    --filter='protect data/patrol.db-*' \
+    --filter='protect data/patrol_snapshots/' \
+    --filter='protect data/patrol_snapshots/**' \
+    --filter='protect data/worker_gallery/' \
+    --filter='protect data/worker_gallery/**' \
+    --filter='protect data/person_identity_registry.json' \
+    --filter='protect data/patrol_identity_bindings.json' \
+    --filter='protect data/patrol_appearance_log.json' \
     --exclude '.venv/' \
     --exclude '__pycache__/' \
     --exclude '*.pyc' \
