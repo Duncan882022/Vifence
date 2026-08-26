@@ -188,9 +188,6 @@ function greedyAssign(
 function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   const anchor = personRoiAnchorKey(det)
   if (anchor) track.anchorKey = anchor
-  if (det.subject_bbox && det.subject_bbox.length >= 4) {
-    track.subjectBbox = det.subject_bbox
-  }
   if (isKnownWorker(det.worker_id)) {
     track.workerId = det.worker_id!.trim()
     const name = det.worker_name?.trim()
@@ -371,7 +368,11 @@ export function predictPersonRoiTracks(
     if (track.state === 'lost' && ageSinceMeasure > lostBudget) continue
     if (track.state === 'tentative' && track.hits < cfg.confirmHits) continue
 
-    const bbox = dt > 0 ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
+    // Track mất dấu đã được `predict` ở mỗi nhịp ingest rồi; cộng thêm nội suy
+    // rAF là dự đoán hai lần trên cùng quãng thời gian, đủ để bbox ma trôi hẳn
+    // ra khỏi người khi camera đang lia.
+    const extrapolate = dt > 0 && track.state !== 'lost'
+    const bbox = extrapolate ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
     const personId = canonicalPersonId(track)
     out.push({
       trackId: track.id,
@@ -383,7 +384,6 @@ export function predictPersonRoiTracks(
       locked: track.state === 'confirmed',
       workerId: track.workerId,
       workerName: track.workerName,
-      subjectBbox: track.subjectBbox,
       tier: track.tier,
     })
   }

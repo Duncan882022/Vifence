@@ -31,8 +31,12 @@ export const PATROL_PERSON_ROI_CONFIG = {
    */
   maxLostMs: 1200,
   maxLostAnchoredMs: 600,
-  /** Giới hạn extrapolate rAF (ms) — bù trọn một nhịp analyze bodycam (~180–400ms). */
-  maxPredictMs: 450,
+  /**
+   * Trần nội suy rAF (ms). Đủ bù một nhịp analyze bodycam (180–400ms) nhưng
+   * không hơn: vận tốc hiện còn lẫn chuyển động của chính camera (chưa bù
+   * ego-motion), nên nội suy dài chỉ đẩy hộp ra chỗ không có ai.
+   */
+  maxPredictMs: 320,
   /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
   processNoise: 0.08,
   measureNoise: 0.2,

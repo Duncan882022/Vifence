@@ -11,7 +11,6 @@ import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
 import {
   formatPersonOverlayBadge,
   formatPersonOverlayLabel,
-  tightenPersonOverlayBbox,
 } from '@/modules/module03-safety/utils/personOverlayLabel'
 import { resolvePatrolObjectLabel, getPatrolManualIdentity, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
@@ -56,9 +55,14 @@ const PersonRoiBox = memo(function PersonRoiBox({
     return null
   }
 
-  const tightBbox = tightenPersonOverlayBbox(track.bbox, track.subjectBbox)
+  // Vẽ thẳng hộp Kalman. `tightenPersonOverlayBbox` ưu tiên `subject_bbox` — hợp
+  // với overlay PPE (bbox là vùng vi phạm, subject là người) nhưng ở đây cả hai
+  // đều là hộp người: dùng nó là vứt toàn bộ phần làm mượt + nội suy, vẽ lại hộp
+  // YOLO thô của lần đo cuối. Hộp đó đứng im giữa hai nhịp analyze và lúc track
+  // mất dấu, nên khi camera lia thì nó nằm lại trên nền trống.
+  // Backend đã siết sẵn 5%/3% trong `_visible_person_display_bbox`.
   const box = mapBackendBboxToOverlay(
-    tightBbox,
+    track.bbox,
     frameWidth,
     frameHeight,
     video,

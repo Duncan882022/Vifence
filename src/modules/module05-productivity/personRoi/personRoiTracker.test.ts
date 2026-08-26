@@ -132,10 +132,23 @@ describe('bbox mượt', () => {
 
   it('extrapolate giới hạn trong một nhịp analyze', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeLessThanOrEqual(500)
+    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeLessThanOrEqual(400)
     const far = predictPersonRoiTracks(tracks, 5_000, 1_000)
     const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs, 1_000)
     expect(far[0].bbox).toEqual(capped[0].bbox)
+  })
+
+  it('track mất dấu không bị dự đoán hai lần', () => {
+    // Người đang đi rồi biến mất khỏi payload: track coast bằng `predict` mỗi
+    // nhịp ingest. Nội suy rAF thêm lần nữa là bbox ma trôi khỏi người.
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    tracks = advance(tracks, [person([220, 100, 320, 400], { track_id: 'p1' })], 1_180)
+    tracks = advance(tracks, [], 1_360)
+    expect([...tracks.values()][0].state).toBe('lost')
+
+    const held = predictPersonRoiTracks(tracks, 0, 1_400)
+    const rafd = predictPersonRoiTracks(tracks, 300, 1_400)
+    expect(rafd[0].bbox).toEqual(held[0].bbox)
   })
 })
 

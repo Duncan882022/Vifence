@@ -40,7 +40,6 @@ export interface PersonRoiTrack {
   label: string
   workerId?: string
   workerName?: string
-  subjectBbox?: Bbox
   /** Khoá theo track BE — ưu tiên hơn IoU khi bodycam rung/xoay. */
   anchorKey?: string
   tier: PersonRoiTier
@@ -58,6 +57,5 @@ export interface PersonRoiDisplay {
   locked: boolean
   workerId?: string
   workerName?: string
-  subjectBbox?: Bbox
   tier: PersonRoiTier
 }
