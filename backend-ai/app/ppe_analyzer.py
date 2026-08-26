@@ -174,6 +174,25 @@ def _assign_patrol_person_identity(
     person_det.tier = resolved.tier
     person_det.face_eligible = face_eligible and face_emb is not None
 
+    # Ghi vào kho tuần tra (SQLite). Vector khuôn mặt chỉ tồn tại ở đúng chỗ
+    # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được
+    # serialize thẳng xuống trình duyệt.
+    try:
+        from .patrol.sink import record_observation
+
+        record_observation(
+            camera_id=camera_id,
+            track_id=track_id,
+            face_embedding=face_emb if person_det.face_eligible else None,
+            face_quality=float(_face_score or 0.0),
+            confidence=float(person_det.confidence or 0.0),
+            frame=frame,
+            person_bbox=person_bbox,
+        )
+    except Exception:  # noqa: BLE001
+        # Kho tuần tra hỏng không được kéo sập luồng live.
+        logger.exception("[patrol] Không ghi được quan sát vào SQLite")
+
 
 def _patrol_person_passes_event_gate(
     person_box: tuple[float, float, float, float],

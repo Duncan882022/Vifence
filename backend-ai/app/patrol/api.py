@@ -139,6 +139,19 @@ def merge_persons(payload: dict) -> dict[str, Any]:
     return {"ok": True, "person": _person_payload(row) if row else None}
 
 
+@router.get("/snapshot")
+def patrol_snapshot(path: str):
+    """Ảnh chụp của thẻ sự kiện. Đường dẫn bị chặn thoát khỏi thư mục ảnh."""
+    from fastapi.responses import FileResponse, Response
+
+    from .sink import resolve_snapshot_path
+
+    full = resolve_snapshot_path(path)
+    if full is None:
+        return Response(status_code=404)
+    return FileResponse(str(full), media_type="image/jpeg")
+
+
 @router.delete("/day/reset")
 def reset_patrol_db() -> dict[str, Any]:
     """Xoá sạch dữ liệu tuần tra. Bộ đếm giữ nguyên để mã không cấp lại."""

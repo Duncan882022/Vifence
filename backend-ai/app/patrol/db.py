@@ -226,6 +226,11 @@ def reset_all(keep_counters: bool = True) -> dict[str, int]:
         conn.execute("DELETE FROM persons")
         if not keep_counters:
             conn.execute("DELETE FROM counters")
+
+    from . import identity, sink
+
+    identity._invalidate_face_index()
+    sink.reset()
     return counts
 
 

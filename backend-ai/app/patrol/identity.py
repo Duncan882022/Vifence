@@ -11,6 +11,7 @@ kịp lưu ảnh.
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 from typing import Any, Sequence
 
@@ -95,9 +96,30 @@ def display_name(person: dict[str, Any] | None) -> str:
 # Khớp khuôn mặt
 
 
+# Bảng khuôn mặt đổi hiếm (chỉ khi gặp người mới hoặc gán tên) nhưng bị đọc ở
+# mỗi khung hình của mỗi camera. Giữ bản dựng sẵn trong RAM, huỷ khi có ghi.
+_face_index: list[tuple[str, np.ndarray]] | None = None
+_face_index_lock = threading.Lock()
+
+
+def _invalidate_face_index() -> None:
+    global _face_index
+    with _face_index_lock:
+        _face_index = None
+
+
 def _load_face_index() -> list[tuple[str, np.ndarray]]:
+    global _face_index
+    with _face_index_lock:
+        if _face_index is not None:
+            return _face_index
     rows = db.query("SELECT pers_id, embedding, dim FROM person_faces")
-    return [(str(r["pers_id"]), _from_blob(r["embedding"], int(r["dim"]))) for r in rows]
+    built = [
+        (str(r["pers_id"]), _from_blob(r["embedding"], int(r["dim"]))) for r in rows
+    ]
+    with _face_index_lock:
+        _face_index = built
+    return built
 
 
 def match_face(embedding: Sequence[float]) -> tuple[str | None, float]:
@@ -174,6 +196,7 @@ def add_face(
     else:
         with db.tx() as c:
             _run(c)
+    _invalidate_face_index()
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +398,7 @@ def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> No
             " VALUES(?,?,?)",
             (drop, keep, ts),
         )
+    _invalidate_face_index()
 
 
 def import_identity(
