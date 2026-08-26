@@ -292,8 +292,8 @@ export function Module05Page() {
             'flex flex-col min-h-0',
             tier2Open && (
               isMobileLayout
-                ? 'shrink-0 flex-1 min-h-0 max-h-[min(56dvh,480px)] max-lg:landscape:max-h-[min(44dvh,380px)]'
-                : 'shrink-0 h-auto max-h-[min(62vh,680px)]'
+                ? 'shrink-0 flex-1 min-h-[min(43dvh,360px)] max-h-[min(52dvh,432px)] max-lg:landscape:min-h-[min(32dvh,270px)] max-lg:landscape:max-h-[min(40dvh,342px)]'
+                : 'flex-[8] min-h-[min(40vh,400px)] max-h-[min(55vh,594px)]'
             ),
             !tier2Open && 'shrink-0',
           )}>
@@ -303,7 +303,7 @@ export function Module05Page() {
               fit={!tier2Open}
               noPadding
               className={cn(
-                tier2Open && (isMobileLayout ? 'h-full min-h-0 overflow-hidden' : 'h-auto overflow-visible'),
+                tier2Open && 'h-full min-h-0 overflow-hidden',
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -327,10 +327,7 @@ export function Module05Page() {
               }
             >
               {tier2Open && (
-                <div className={cn(
-                  'flex flex-col w-full',
-                  isMobileLayout ? 'flex-1 min-h-0 overflow-hidden' : 'h-auto overflow-visible',
-                )}>
+                <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
                   {cameraMode === 'live' ? (
                     <TrainingCameraPanel
                       selectedId={selectedCamId}
@@ -343,7 +340,7 @@ export function Module05Page() {
                       mobileCompactVideo={isMobileLayout}
                       mobileStackedNoScroll={isMobileLayout}
                       streamWhenOffline
-                      compactVideoMaxClass="max-h-[min(44dvh,360px)] sm:max-h-[min(48dvh,400px)] max-lg:landscape:max-h-[min(36dvh,300px)]"
+                      compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
