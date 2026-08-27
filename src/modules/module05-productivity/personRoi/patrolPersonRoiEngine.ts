@@ -17,15 +17,16 @@ export class PatrolPersonRoiEngine {
 
   constructor(readonly cameraId: string) {}
 
-  private polishDisplay(raw: PersonRoiDisplay[]): PersonRoiDisplay[] {
+  private polishDisplay(raw: PersonRoiDisplay[], predicting: boolean): PersonRoiDisplay[] {
     const active = new Set<string>()
+    const alpha = predicting
+      ? PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha
+      : PATROL_PERSON_ROI_CONFIG.displayEmaAlpha
     const polished = raw.map(track => {
       active.add(track.trackId)
       return {
         ...track,
-        bbox: this.displaySmoother.smooth(track.trackId, track.bbox, {
-          alpha: PATROL_PERSON_ROI_CONFIG.displayEmaAlpha,
-        }),
+        bbox: this.displaySmoother.smooth(track.trackId, track.bbox, { alpha }),
       }
     })
     this.displaySmoother.prune(active)
@@ -37,7 +38,7 @@ export class PatrolPersonRoiEngine {
     const dtMs = this.lastIngestAt > 0 ? Math.max(16, now - this.lastIngestAt) : 450
     this.lastIngestAt = now
     this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now())
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0))
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0), false)
     this.notify()
   }
 
@@ -45,7 +46,7 @@ export class PatrolPersonRoiEngine {
   predictDisplay(now = performance.now()): PersonRoiDisplay[] {
     const elapsed = this.lastIngestAt > 0 ? now - this.lastIngestAt : 0
     if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed))
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed), true)
     return this.displayCache
   }
 

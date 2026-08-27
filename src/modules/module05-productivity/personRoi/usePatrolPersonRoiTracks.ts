@@ -11,8 +11,8 @@ const EMPTY: PersonRoiDisplay[] = []
  */
 const OVERLAY_UPDATE_INTERVAL_MS = 1000 / 60
 
-/** Dịch dưới ngưỡng này thì không đáng để React render lại. */
-const MIN_VISIBLE_SHIFT_PX = 0.4
+/** Dịch dưới ngưỡng này thì không đáng để React render lại — thấp hơn = mượt hơn. */
+const MIN_VISIBLE_SHIFT_PX = 0.12
 
 function tracksVisuallyEqual(a: PersonRoiDisplay[], b: PersonRoiDisplay[]): boolean {
   if (a === b) return true

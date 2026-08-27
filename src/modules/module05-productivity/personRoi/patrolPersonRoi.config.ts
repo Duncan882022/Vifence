@@ -29,15 +29,16 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * giữ trong bộ nhớ ngần này nhịp để người bị che thoáng qua rồi hiện lại
    * nhận lại đúng track cũ thay vì bị cấp mã mới.
    */
-  maxMissFrames: 4,
+  maxMissFrames: 5,
+  /** Coast ngắn giữa hai nhịp AI — mượt như TikTok, ẩn trước khi thành ghost. */
+  displayCoastMaxMiss: 2,
   /**
-   * Trần nội suy rAF (ms). Phải ≥ một nhịp analyze bodycam (~360ms) + jitter mạng
-   * thì ROI mới trượt liên tục giữa hai lần AI thay vì đứng rồi nhảy.
+   * Trần nội suy rAF (ms) — đủ trượt mượt giữa hai lần analyze ~90–150ms.
    */
-  maxPredictMs: 480,
+  maxPredictMs: 720,
   /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
-  processNoise: 0.08,
-  measureNoise: 0.2,
+  processNoise: 0.06,
+  measureNoise: 0.14,
   /**
    * Sàn hệ số lọc: mỗi lần đo, tâm box phải tiến ít nhất ngần này quãng đường
    * tới vị trí vừa đo được.
@@ -46,21 +47,21 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * điệu tới sàn và hệ số rơi về ~0.2: mỗi nhịp ROI chỉ đi được 1/5 quãng, box
    * bám lệt bệt sau người và càng đi nhanh càng tụt. Có sàn thì độ trễ bị chặn.
    */
-  minMeasureGain: 0.78,
+  minMeasureGain: 0.94,
   /**
-   * Track đã khoá theo track id backend — bám sát measurement hơn, giảm cảm giác
-   * hộp "trailing" sau người.
+   * Track đã khoá theo track id backend — bám sát measurement, ít trailing.
    */
-  anchoredMinMeasureGain: 0.94,
-  velocityDamping: 0.985,
-  /** Trọng số đo trên kích thước — cao hơn một chút để box theo người nhanh hơn */
-  sizeGain: 0.48,
-  /** Giữ lại bao nhiêu vận tốc cũ mỗi lần đo */
-  velocitySmoothing: 0.58,
-  /** EMA 4 góc trên overlay — thấp = mượt hơn, cao = bám sát hơn */
-  displayEmaAlpha: 0.58,
+  anchoredMinMeasureGain: 0.98,
+  velocityDamping: 0.992,
+  /** Trọng số đo trên kích thước — cao hơn để box theo người nhanh hơn */
+  sizeGain: 0.62,
+  /** Giữ lại bao nhiêu vận tốc cũ mỗi lần đo — thấp = phản ứng nhanh hơn */
+  velocitySmoothing: 0.38,
+  /** EMA overlay — cao = bám video sát (TikTok-style), thấp = lag/trailing */
+  displayEmaAlpha: 0.86,
+  displayEmaGlideAlpha: 0.72,
   /** Trần tốc độ theo số lần cạnh bbox mỗi giây */
-  maxSpeedBoxPerSec: 2.5,
+  maxSpeedBoxPerSec: 4.2,
 } as const
 
 export type PatrolPersonRoiConfig = typeof PATROL_PERSON_ROI_CONFIG
