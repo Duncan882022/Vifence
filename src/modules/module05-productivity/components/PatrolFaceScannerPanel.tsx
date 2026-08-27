@@ -8,7 +8,7 @@ import {
   ScanFace,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { captureVideoFrameBase64 } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { captureFaceEnrollmentFrameBase64 } from '../utils/patrolFaceCapture'
 import {
   fetchPatrolEnrollSession,
   fetchPatrolScanEnrollment,
@@ -197,7 +197,7 @@ export function PatrolFaceScannerPanel({
   const handleManualCapture = async () => {
     const video = videoRef.current
     if (!video || !cameraReady || complete) return
-    const imageB64 = captureVideoFrameBase64(video, 640, 0.82)
+    const imageB64 = captureFaceEnrollmentFrameBase64(video)
     if (!imageB64) {
       setPanelError('Không quét được khung hình.')
       return

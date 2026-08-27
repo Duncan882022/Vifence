@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { captureVideoFrameBase64 } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { captureFaceEnrollmentFrameBase64 } from '../utils/patrolFaceCapture'
 import type { PatrolScanEnrollment } from '../services/patrolWorkerProfile.service'
 import {
   analyzeFaceScanFrame,
@@ -84,7 +84,7 @@ export function usePatrolAutoFaceScan(
     setError(null)
     setSuccessFlash(null)
 
-    const imageB64 = captureVideoFrameBase64(video, 640, 0.82)
+    const imageB64 = captureFaceEnrollmentFrameBase64(video)
     if (!imageB64) {
       setError('Không quét được — thử lại.')
       capturingRef.current = false

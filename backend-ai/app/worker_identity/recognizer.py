@@ -238,6 +238,31 @@ def _face_likely_masked(face_bgr: np.ndarray) -> bool:
     return False
 
 
+def embed_enrollment_selfie(frame: np.ndarray) -> np.ndarray | None:
+    """Vector từ ảnh quét đăng ký (camera trước, toàn khung).
+
+    Khác patrol live: không crop 42% đầu người, không dùng ngưỡng 0.82 flycam.
+    """
+    if frame is None or frame.size == 0:
+        return None
+
+    from .face_embedder import embed_face_image
+
+    emb = embed_face_image(frame)
+    if emb is not None:
+        return emb
+
+    vec, _score, eligible = _assess_patrol_face_crop(
+        frame,
+        camera_id="HC-SCAN",
+        selfie_mode=True,
+        enrollment_mode=True,
+    )
+    if eligible and vec is not None:
+        return vec
+    return None
+
+
 def assess_patrol_face(
     frame: np.ndarray,
     person_bbox: list[float] | None,
@@ -258,9 +283,10 @@ def _assess_patrol_face_crop(
     *,
     camera_id: str = "",
     selfie_mode: bool | None = None,
+    enrollment_mode: bool = False,
 ) -> tuple[np.ndarray | None, float, bool]:
     crop_h, crop_w = crop.shape[:2]
-    detect_min = _patrol_face_detect_min(camera_id)
+    detect_min = 0.5 if enrollment_mode else _patrol_face_detect_min(camera_id)
     if selfie_mode is None:
         # Bodycam cận cảnh — mặt trải trên phần lớn crop, không chỉ 42% đầu.
         selfie_mode = camera_id.startswith("HC-") and crop_h >= 160
@@ -308,7 +334,11 @@ def _assess_patrol_face_crop(
     if best_face is None:
         return None, best_det_score, False
 
-    if settings.patrol_face_reject_mask and _face_likely_masked(best_face):
+    if (
+        settings.patrol_face_reject_mask
+        and not enrollment_mode
+        and _face_likely_masked(best_face)
+    ):
         return None, best_det_score, False
 
     embedding = embed_aligned_face(search, best_row) if best_row is not None else None
