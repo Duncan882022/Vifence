@@ -248,21 +248,6 @@ export function PatrolDensityHeatmap({
   const { presences } = usePatrolDayPresences()
   const { stats: dayStats } = usePatrolDayStats()
 
-  const filteredDots = useMemo(() => {
-    void identityRevision
-    const dots = buildPatrolPresenceHeatmapDots(presences, {
-      liveOnly: anyCameraOnline,
-      cameraOnlineById: helmetOnlineById,
-      includeUnassigned: true,
-    })
-    return dots.map(dot => ({
-      ...dot,
-      opacity: dot.inCameraView
-        ? DETECTION_DOT_OPACITY_IN_VIEW
-        : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
-    }))
-  }, [presences, anyCameraOnline, helmetOnlineById, identityRevision])
-
   const headingDeg = hc02Helmet?.heading
 
   const helmetHeadingById = useMemo(() => {
@@ -273,6 +258,30 @@ export function PatrolDensityHeatmap({
     if (headingDeg != null) map['HC-02'] = headingDeg
     return map
   }, [workforce.helmets, headingDeg])
+
+  const filteredDots = useMemo(() => {
+    void identityRevision
+    const dots = buildPatrolPresenceHeatmapDots(presences, {
+      liveOnly: anyCameraOnline,
+      cameraOnlineById: helmetOnlineById,
+      includeUnassigned: true,
+      helmetPositionsById: mergedCameraPositions,
+      helmetHeadingsById: helmetHeadingById,
+    })
+    return dots.map(dot => ({
+      ...dot,
+      opacity: dot.inCameraView
+        ? DETECTION_DOT_OPACITY_IN_VIEW
+        : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+    }))
+  }, [
+    presences,
+    anyCameraOnline,
+    helmetOnlineById,
+    identityRevision,
+    mergedCameraPositions,
+    helmetHeadingById,
+  ])
 
   const onDetectionClick = (dot: { objectId?: string; id: string }) => {
     const oid = dot.objectId || (dot.id.startsWith('OBJ-') ? dot.id : null)
