@@ -19,7 +19,7 @@ from typing import Any, Iterator
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_FILE = DATA_DIR / "patrol.db"
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -104,13 +104,20 @@ CREATE INDEX IF NOT EXISTS ix_daily_events_date ON daily_events(event_date);
 -- Lịch sử xuất hiện — nội dung popup. Chủ thể đa hình (obj-… hoặc pers-…) nên
 -- dùng index thay khoá ngoại; dọn dẹp đằng nào cũng theo ngày.
 CREATE TABLE IF NOT EXISTS appearances (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  event_date TEXT NOT NULL,
-  subject_id TEXT NOT NULL,
-  camera_id  TEXT NOT NULL,
-  zone_id    TEXT,
-  started_at REAL NOT NULL,
-  ended_at   REAL NOT NULL
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_date      TEXT NOT NULL,
+  subject_id      TEXT NOT NULL,
+  camera_id       TEXT NOT NULL,
+  zone_id         TEXT,
+  started_at      REAL NOT NULL,
+  ended_at        REAL NOT NULL,
+  gps_lat         REAL,
+  gps_lng         REAL,
+  gps_lat_end     REAL,
+  gps_lng_end     REAL,
+  qualified       INTEGER NOT NULL DEFAULT 1,
+  presence_seq    INTEGER NOT NULL DEFAULT 1,
+  source_cameras  TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_appearances_subject
   ON appearances(event_date, subject_id);
@@ -142,6 +149,34 @@ CREATE INDEX IF NOT EXISTS ix_enroll_sessions_expires ON enroll_sessions(expires
 """
 
 
+_APPEARANCE_V2_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("gps_lat", "REAL"),
+    ("gps_lng", "REAL"),
+    ("gps_lat_end", "REAL"),
+    ("gps_lng_end", "REAL"),
+    ("qualified", "INTEGER NOT NULL DEFAULT 1"),
+    ("presence_seq", "INTEGER NOT NULL DEFAULT 1"),
+    ("source_cameras", "TEXT"),
+)
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """Nâng cấp DB cũ — thêm cột presence/GPS vào appearances."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= _SCHEMA_VERSION:
+        return
+    if version < 2:
+        cols = {
+            str(r[1])
+            for r in conn.execute("PRAGMA table_info(appearances)").fetchall()
+        }
+        for name, typedef in _APPEARANCE_V2_COLUMNS:
+            if name not in cols:
+                conn.execute(f"ALTER TABLE appearances ADD COLUMN {name} {typedef}")
+        conn.execute("PRAGMA user_version=2")
+    conn.commit()
+
+
 def _connect() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_FILE), check_same_thread=False)
@@ -151,8 +186,7 @@ def _connect() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(_SCHEMA)
-    conn.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
-    conn.commit()
+    _migrate_schema(conn)
     return conn
 
 

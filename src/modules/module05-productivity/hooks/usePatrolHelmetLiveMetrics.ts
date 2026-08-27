@@ -18,13 +18,12 @@ export interface PatrolHelmetLiveMetrics {
   streamOnline: boolean
   /** @deprecated dùng streamOnline */
   connected: boolean
-  /** Peak cộng dồn phiên — không giảm về 0 khi mất detect tạm thời. */
+  /** Khung hiện tại — không dùng làm KPI đếm (xem usePatrolDayStats). */
   personCount: number
   uniqueWorkers: number
   identifiedWorkers: number
   personEventsToday: number
   workerNames: string[]
-  /** Chi tiết theo từng mũ — HC-01, HC-02, … */
   perCamera: PatrolHelmetCameraMetricsSlice[]
 }
 
@@ -45,7 +44,6 @@ const HC02 = 'HC-02'
 function mergeHc02Mobile(
   base: PatrolHelmetLiveMetrics,
   mobile: PatrolMobileLiveSnapshot | null,
-  sessionPeakRef: { current: number },
 ): PatrolHelmetLiveMetrics {
   if (!mobile || mobile.cameraId !== HC02) return base
   if (Date.now() - mobile.updatedAt > 45_000) return base
@@ -76,33 +74,20 @@ function mergeHc02Mobile(
     }
   }
 
-  const hc02Person = Math.max(
-    mobile.peakPersonCount,
-    mobile.personCount,
-    prevSlice?.person_count ?? 0,
-  )
-  sessionPeakRef.current = Math.max(sessionPeakRef.current, hc02Person)
-
   const hc02Slice: PatrolHelmetCameraMetricsSlice = {
     camera_id: HC02,
     stream_online: true,
-    person_count: Math.max(hc02Person, sessionPeakRef.current),
+    person_count: Math.max(0, mobile.personCount),
     identified_workers: Math.max(mobile.identifiedWorkers, prevSlice?.identified_workers ?? 0),
     person_events_today: prevSlice?.person_events_today ?? 0,
   }
   if (idxBase >= 0) perCameraBase[idxBase] = { ...perCameraBase[idxBase], ...hc02Slice }
   else perCameraBase.push(hc02Slice)
 
-  const othersPerson = perCameraBase
-    .filter(c => c.camera_id !== HC02)
-    .reduce((s, c) => s + Math.max(0, c.person_count), 0)
-
-  const personCount = Math.max(
-    sessionPeakRef.current,
-    othersPerson + hc02Slice.person_count,
-    base.personCount,
+  const framePersonCount = perCameraBase.reduce(
+    (s, c) => s + Math.max(0, Number(c.person_count ?? 0)),
+    0,
   )
-  sessionPeakRef.current = personCount
 
   const names = [
     ...new Set([...(base.workerNames ?? []), ...mobile.workerNames]),
@@ -115,22 +100,21 @@ function mergeHc02Mobile(
     backendReachable: true,
     streamOnline: anyOnline,
     connected: anyOnline,
-    personCount,
-    uniqueWorkers: personCount,
+    personCount: framePersonCount,
+    uniqueWorkers: framePersonCount,
     identifiedWorkers: Math.max(base.identifiedWorkers, mobile.identifiedWorkers),
     workerNames: names,
     perCamera: perCameraBase,
   }
 }
 
-/** Live KPI Module 05 — backend aggregate + bridge HC-02 mobile cùng tab. */
+/** Trạng thái luồng live — KPI đếm lấy từ usePatrolDayStats. */
 export function usePatrolHelmetLiveMetrics(
   cameraIds: readonly string[] = DEFAULT_PATROL_CAMERA_IDS,
   pollMs = 2200,
 ): PatrolHelmetLiveMetrics {
   const [metrics, setMetrics] = useState<PatrolHelmetLiveMetrics>(EMPTY)
   const backendLiveRef = useRef(false)
-  const sessionPeakPersonRef = useRef(0)
   const baseRef = useRef<PatrolHelmetLiveMetrics>(EMPTY)
 
   useEffect(() => {
@@ -139,7 +123,6 @@ export function usePatrolHelmetLiveMetrics(
         mergeHc02Mobile(
           baseRef.current,
           snap ?? getPatrolMobileLiveSnapshot(HC02),
-          sessionPeakPersonRef,
         ),
       )
     }
@@ -162,15 +145,7 @@ export function usePatrolHelmetLiveMetrics(
         if (stopped) return
         backendLiveRef.current = online
         if (!online) {
-          const mobileOnly = mergeHc02Mobile(
-            {
-              ...EMPTY,
-              personCount: sessionPeakPersonRef.current,
-              uniqueWorkers: sessionPeakPersonRef.current,
-            },
-            getPatrolMobileLiveSnapshot(HC02),
-            sessionPeakPersonRef,
-          )
+          const mobileOnly = mergeHc02Mobile(EMPTY, getPatrolMobileLiveSnapshot(HC02))
           baseRef.current = mobileOnly
           setMetrics(mobileOnly)
           timerId = window.setTimeout(tick, pollMs * 2)
@@ -182,13 +157,8 @@ export function usePatrolHelmetLiveMetrics(
 
         if (!snapshot) {
           const merged = mergeHc02Mobile(
-            {
-              ...baseRef.current,
-              backendReachable: true,
-              personCount: Math.max(baseRef.current.personCount, sessionPeakPersonRef.current),
-            },
+            { ...baseRef.current, backendReachable: true },
             getPatrolMobileLiveSnapshot(HC02),
-            sessionPeakPersonRef,
           )
           baseRef.current = merged
           setMetrics(merged)
@@ -197,65 +167,36 @@ export function usePatrolHelmetLiveMetrics(
         }
 
         const streamOnline = Boolean(snapshot.stream_online)
-        const rawPersonCount = Number(snapshot.person_count ?? 0)
-
-        sessionPeakPersonRef.current = Math.max(
-          sessionPeakPersonRef.current,
-          rawPersonCount,
+        const perCamera = (snapshot.cameras ?? []).map(row => ({
+          ...row,
+          stream_online: Boolean(row.stream_online),
+          person_count: Math.max(0, Number(row.person_count ?? 0)),
+        }))
+        const framePersonCount = perCamera.reduce(
+          (s, c) => s + Math.max(0, Number(c.person_count ?? 0)),
+          0,
         )
-        const personCount = Math.max(sessionPeakPersonRef.current, rawPersonCount)
-
-        const stickyPerCamera = (snapshot.cameras ?? []).map(row => {
-          if (row.camera_id !== HC02) {
-            return {
-              ...row,
-              person_count: Math.max(0, Number(row.person_count ?? 0)),
-            }
-          }
-          const prev = baseRef.current.perCamera.find(c => c.camera_id === HC02)
-          return {
-            ...row,
-            stream_online: Boolean(row.stream_online),
-            person_count: Math.max(
-              Number(row.person_count ?? 0),
-              prev?.person_count ?? 0,
-              sessionPeakPersonRef.current,
-            ),
-          }
-        })
 
         const fromBackend: PatrolHelmetLiveMetrics = {
           backendReachable: true,
           streamOnline,
           connected: streamOnline,
-          personCount,
-          uniqueWorkers: personCount,
-          identifiedWorkers: Math.max(
-            Number(snapshot.identified_workers ?? 0),
-            baseRef.current.identifiedWorkers,
-          ),
+          personCount: framePersonCount,
+          uniqueWorkers: framePersonCount,
+          identifiedWorkers: Number(snapshot.identified_workers ?? 0),
           personEventsToday: Number(snapshot.person_events_today ?? 0),
           workerNames: snapshot.worker_names ?? [],
-          perCamera: stickyPerCamera,
+          perCamera,
         }
-        const merged = mergeHc02Mobile(
-          fromBackend,
-          getPatrolMobileLiveSnapshot(HC02),
-          sessionPeakPersonRef,
-        )
+        const merged = mergeHc02Mobile(fromBackend, getPatrolMobileLiveSnapshot(HC02))
         baseRef.current = merged
         setMetrics(merged)
         timerId = window.setTimeout(tick, pollMs)
       } catch {
         if (stopped) return
         const merged = mergeHc02Mobile(
-          {
-            ...baseRef.current,
-            backendReachable: backendLiveRef.current,
-            personCount: Math.max(baseRef.current.personCount, sessionPeakPersonRef.current),
-          },
+          { ...baseRef.current, backendReachable: backendLiveRef.current },
           getPatrolMobileLiveSnapshot(HC02),
-          sessionPeakPersonRef,
         )
         baseRef.current = merged
         setMetrics(merged)
@@ -268,7 +209,6 @@ export function usePatrolHelmetLiveMetrics(
       stopped = true
       window.clearTimeout(timerId)
       backendLiveRef.current = false
-      sessionPeakPersonRef.current = 0
     }
   }, [cameraIds.join(','), pollMs])
 

@@ -261,13 +261,37 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                         {blocks.map((block, index) => (
                           <div
                             key={`${cameraId}-${block.startedAt}-${index}`}
-                            className="rounded border border-[#1e2433] bg-[#0a0e17] px-2 py-1.5 text-[9px] text-foreground/90"
+                            className="rounded border border-[#1e2433] bg-[#0a0e17] px-2 py-1.5 text-[9px] text-foreground/90 space-y-0.5"
                           >
-                            <span className="tabular-nums font-medium">
-                              {formatAppearanceTimeRange(block.startedAt, block.endedAt)}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="tabular-nums font-medium">
+                                {formatAppearanceTimeRange(block.startedAt, block.endedAt)}
+                              </span>
+                              {block.presenceSeq != null && block.presenceSeq > 0 && (
+                                <span className="text-sky-400/90 font-semibold">
+                                  Lượt #{block.presenceSeq}
+                                </span>
+                              )}
+                            </div>
                             {block.zoneId && (
-                              <span className="text-muted-foreground ml-1.5">· {block.zoneId}</span>
+                              <span className="text-muted-foreground">· {block.zoneId}</span>
+                            )}
+                            {block.gpsLat != null && block.gpsLng != null
+                              && block.gpsLat !== 0 && block.gpsLng !== 0 && (
+                              <a
+                                href={mapsUrl(block.gpsLat, block.gpsLng)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-emerald-400/90 hover:text-emerald-300"
+                              >
+                                <MapPin className="w-2.5 h-2.5" />
+                                {block.gpsLat.toFixed(5)}, {block.gpsLng.toFixed(5)}
+                              </a>
+                            )}
+                            {(block.sourceCameras?.length ?? 0) > 1 && (
+                              <span className="text-muted-foreground text-[8px]">
+                                Mũ: {block.sourceCameras!.join(' · ')}
+                              </span>
                             )}
                           </div>
                         ))}

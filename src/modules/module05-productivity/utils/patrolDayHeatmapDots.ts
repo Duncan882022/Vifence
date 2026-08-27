@@ -1,47 +1,107 @@
 /**
- * Chấm bản đồ tuần tra — đọc từ thẻ SQLite trong ngày (pers-* / iden-*).
- * Không dùng session registry sgc-* (tích lũy track đứt → dot thừa).
+ * Chấm bản đồ tuần tra — 1 chấm / qualified presence tại GPS thật.
  */
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
-import { offsetLatLngByMeters } from './patrolLivePersonDots'
 import { isPatrolHeatmapEligibleEvent } from './patrolPatrolCounts'
 import {
   resolvePatrolAppearanceSubjectId,
   resolvePatrolPersonStage,
 } from './patrolWorkforceEventLabels'
 
-/** Coi là "đang quan sát" nếu lastSeen trong khoảng này (ms). */
+/** Coi là "đang quan sát" nếu endedAt trong khoảng này (ms). */
 export const PATROL_LIVE_RECENT_MS = 120_000
 
-const DOT_RADIUS_MIN_M = 1.0
-const DOT_RADIUS_MAX_M = 4.0
+function isValidGps(lat: number | null, lng: number | null): boolean {
+  if (lat == null || lng == null) return false
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+  if (lat === 0 && lng === 0) return false
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+}
 
-function hashOffset(personId: string): [number, number] {
-  let h = 2166136261
-  for (let i = 0; i < personId.length; i++) {
-    h ^= personId.charCodeAt(i)
-    h = Math.imul(h, 16777619)
+function presencePosition(presence: PatrolDayPresence): [number, number] {
+  const { gpsLat, gpsLng } = presence
+  if (isValidGps(gpsLat, gpsLng)) {
+    return clampPointToSiteInterior(gpsLat!, gpsLng!)
   }
-  const angle = ((h >>> 0) % 360) * (Math.PI / 180)
-  const ring = ((h >>> 8) % 100) / 100
-  const r = DOT_RADIUS_MIN_M + ring * (DOT_RADIUS_MAX_M - DOT_RADIUS_MIN_M)
-  return [Math.cos(angle) * r, Math.sin(angle) * r]
+  return clampPointToSiteInterior(PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1])
 }
 
-function dotPosition(personId: string): [number, number] {
-  const [eastM, northM] = hashOffset(personId)
-  const [lat, lng] = offsetLatLngByMeters(
-    PATROL_SITE_CENTER[0],
-    PATROL_SITE_CENTER[1],
-    eastM,
-    northM,
-  )
-  return clampPointToSiteInterior(lat, lng)
+function isCameraOnlineForHeatmap(
+  cameraId: string,
+  onlineById?: Record<string, boolean>,
+): boolean {
+  return Boolean(cameraId && onlineById?.[cameraId])
 }
 
+function tierVerified(tier: PatrolDayPresence['tier']): boolean {
+  return tier === 'identity'
+}
+
+function tierEligibleStandard(tier: PatrolDayPresence['tier']): boolean {
+  return tier === 'person' || tier === 'identity'
+}
+
+export function filterRecentPresences(
+  presences: PatrolDayPresence[],
+  now = Date.now(),
+  windowMs = PATROL_LIVE_RECENT_MS,
+): PatrolDayPresence[] {
+  return presences.filter(p => {
+    const ts = p.endedAt * 1000
+    if (!Number.isFinite(ts)) return false
+    return now - ts <= windowMs
+  })
+}
+
+/** Một chấm / qualified presence — GPS trong polygon công trường. */
+export function buildPatrolPresenceHeatmapDots(
+  presences: PatrolDayPresence[],
+  opts?: {
+    liveOnly?: boolean
+    now?: number
+    includeUnassigned?: boolean
+    cameraOnlineById?: Record<string, boolean>
+  },
+): DetectionDot[] {
+  const now = opts?.now ?? Date.now()
+  let scoped = opts?.liveOnly ? filterRecentPresences(presences, now) : presences
+
+  if (!opts?.includeUnassigned) {
+    scoped = scoped.filter(p => tierEligibleStandard(p.tier))
+  }
+
+  return scoped.map(presence => {
+    const lastSeen = presence.endedAt * 1000
+    const recent = now - lastSeen <= PATROL_LIVE_RECENT_MS
+    const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
+    const cameraOnline = isCameraOnlineForHeatmap(primaryCam, opts?.cameraOnlineById)
+    const inCameraView = recent && cameraOnline
+    const [lat, lng] = presencePosition(presence)
+
+    return {
+      id: `presence-${presence.id}`,
+      type: 'person',
+      position: [lat, lng],
+      zoneId: presence.zoneId || 'ZONE_SITE',
+      cameraId: primaryCam,
+      confidence: 1,
+      label: `${presence.displayName} · L#${presence.presenceSeq}`,
+      lastSeenAt: lastSeen,
+      objectId: presence.subjectId,
+      verified: tierVerified(presence.tier),
+      inCameraView,
+      opacity: presence.tier === 'object'
+        ? (inCameraView ? 0.55 : 0.35)
+        : (inCameraView ? 0.92 : 0.45),
+    }
+  })
+}
+
+/** Legacy — lọc events theo lastSeen (panel live window). */
 export function filterRecentPatrolWorkerEvents(
   events: PatrolEvent[],
   now = Date.now(),
@@ -54,21 +114,15 @@ export function filterRecentPatrolWorkerEvents(
   })
 }
 
-function isCameraOnlineForHeatmap(
-  cameraId: string,
-  onlineById?: Record<string, boolean>,
-): boolean {
-  if (!cameraId) return false
-  return Boolean(onlineById?.[cameraId])
-}
-
-/** Một chấm / pers-* (hoặc iden-* qua resolvePatrolAppearanceSubjectId). */
+/**
+ * @deprecated Hash dots — chỉ fallback khi chưa có presences API.
+ * Ưu tiên buildPatrolPresenceHeatmapDots.
+ */
 export function buildPatrolDayHeatmapDots(
   events: PatrolEvent[],
   opts?: {
     liveOnly?: boolean
     now?: number
-    /** Chấm nhấp nháy chỉ khi camera nguồn đang online. */
     cameraOnlineById?: Record<string, boolean>
   },
 ): DetectionDot[] {
@@ -93,10 +147,11 @@ export function buildPatrolDayHeatmapDots(
     const prev = byMaster.get(master)
     if (prev && (prev.lastSeenAt ?? 0) >= lastSeen) continue
 
+    const [lat, lng] = clampPointToSiteInterior(PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1])
     byMaster.set(master, {
       id: `day-${master}`,
       type: 'person',
-      position: dotPosition(master),
+      position: [lat, lng],
       zoneId: event.zoneId || 'ZONE_SITE',
       cameraId: event.cameraId || '',
       confidence: event.confidence,

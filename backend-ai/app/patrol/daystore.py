@@ -16,8 +16,13 @@ import time
 from typing import Any
 
 from . import db, identity
+from .presence import (
+    merge_source_cameras,
+    parse_source_cameras,
+    should_extend_presence,
+)
 
-# Hai lần thấy cách nhau quá ngưỡng này thì tính là hai lượt xuất hiện riêng.
+# Legacy alias — không GPS thì fallback trong should_extend_presence.
 APPEARANCE_GAP_SEC = 45.0
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
@@ -57,6 +62,8 @@ def touch_object(
     snapshot_score: float = 0.0,
     now: float | None = None,
     seen_since: float | None = None,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
 ) -> str:
     """Ghi nhận một Đối tượng. Không truyền `obj_id` thì cấp mã mới.
 
@@ -110,7 +117,10 @@ def touch_object(
                         " WHERE event_date = ? AND obj_id = ?",
                         (ts, date, obj_id),
                     )
-        _touch_appearance(conn, date, obj_id, camera_id, zone_id, ts)
+        _touch_appearance(
+            conn, date, obj_id, camera_id, zone_id, ts,
+            gps_lat=gps_lat, gps_lng=gps_lng,
+        )
 
     return obj_id
 
@@ -136,6 +146,8 @@ def touch_person_event(
     snapshot_score: float = 0.0,
     now: float | None = None,
     seen_since: float | None = None,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
 ) -> None:
     ts = now or time.time()
     first = float(seen_since) if seen_since is not None else ts
@@ -180,7 +192,10 @@ def touch_person_event(
             " WHERE pers_id = ?",
             (ts, first, pid),
         )
-        _touch_appearance(conn, date, pid, camera_id, zone_id, ts)
+        _touch_appearance(
+            conn, date, pid, camera_id, zone_id, ts,
+            gps_lat=gps_lat, gps_lng=gps_lng,
+        )
 
 
 def promote_object(
@@ -281,6 +296,15 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
 # Lịch sử xuất hiện
 
 
+def _next_presence_seq(conn, date: str, subject_id: str) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(presence_seq), 0) AS mx FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1",
+        (date, subject_id),
+    ).fetchone()
+    return int(row["mx"] or 0) + 1
+
+
 def _touch_appearance(
     conn,
     date: str,
@@ -288,24 +312,66 @@ def _touch_appearance(
     camera_id: str,
     zone_id: str | None,
     ts: float,
+    *,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
+    qualified: bool = True,
 ) -> None:
+    """Một qualified presence = một lượt gặp (chuẩn hoặc chưa gán).
+
+    Gộp khi GPS gần + trong T_max (cross-camera nếu có GPS). Không GPS: gộp
+    theo camera + gap 45s — tương thích test và indoor.
+    """
+    q = 1 if qualified else 0
     row = conn.execute(
-        "SELECT id, ended_at FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? AND camera_id = ?"
+        "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
+        " source_cameras FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC LIMIT 1",
-        (date, subject_id, camera_id),
+        (date, subject_id),
     ).fetchone()
 
-    if row is not None and ts - float(row["ended_at"]) <= APPEARANCE_GAP_SEC:
-        conn.execute("UPDATE appearances SET ended_at = ? WHERE id = ?", (ts, row["id"]))
+    lat_end = gps_lat
+    lng_end = gps_lng
+
+    if row is not None and should_extend_presence(
+        row, ts, gps_lat, gps_lng, camera_id=camera_id,
+    ):
+        src = merge_source_cameras(
+            str(row["source_cameras"]) if row["source_cameras"] else None,
+            camera_id,
+        )
+        if lat_end is None:
+            lat_end = row["gps_lat_end"] if row["gps_lat_end"] is not None else row["gps_lat"]
+        if lng_end is None:
+            lng_end = row["gps_lng_end"] if row["gps_lng_end"] is not None else row["gps_lng"]
+        conn.execute(
+            "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
+            " camera_id = ?, source_cameras = ? WHERE id = ?",
+            (ts, lat_end, lng_end, camera_id, src, row["id"]),
+        )
         return
 
+    seq = _next_presence_seq(conn, date, subject_id)
+    src = merge_source_cameras(None, camera_id)
     conn.execute(
         "INSERT INTO appearances"
-        "(event_date, subject_id, camera_id, zone_id, started_at, ended_at)"
-        " VALUES(?,?,?,?,?,?)",
-        (date, subject_id, camera_id, zone_id, ts, ts),
+        "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
+        " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq, source_cameras)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            date, subject_id, camera_id, zone_id, ts, ts,
+            gps_lat, gps_lng, lat_end, lng_end, q, seq, src,
+        ),
     )
+
+
+def _appearance_row_payload(row: Any) -> dict[str, Any]:
+    item = dict(row)
+    item["source_cameras"] = parse_source_cameras(
+        str(row["source_cameras"]) if row["source_cameras"] else None,
+    )
+    return item
 
 
 def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
@@ -313,14 +379,93 @@ def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]
     d = date or db.today_vn()
     sid = identity.resolve_alias(subject_id)
     rows = db.query(
-        "SELECT camera_id, zone_id, started_at, ended_at FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? ORDER BY started_at ASC",
+        "SELECT id, camera_id, zone_id, started_at, ended_at,"
+        " gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
+        " qualified, presence_seq, source_cameras"
+        " FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY started_at ASC",
         (d, sid),
     )
     by_camera: dict[str, list[dict[str, Any]]] = {}
     segments: list[dict[str, Any]] = []
     for r in rows:
-        item = dict(r)
+        item = _appearance_row_payload(r)
         segments.append(item)
-        by_camera.setdefault(str(r["camera_id"]), []).append(item)
+        primary = str(r["camera_id"])
+        by_camera.setdefault(primary, []).append(item)
+        for cam in item["source_cameras"]:
+            if cam != primary:
+                by_camera.setdefault(cam, []).append(item)
     return {"by_camera": by_camera, "segments": segments}
+
+
+def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
+    """Mọi lượt gặp qualified trong ngày — heatmap + API."""
+    d = date or db.today_vn()
+    rows = db.query(
+        "SELECT a.id, a.subject_id, a.camera_id, a.zone_id,"
+        " a.started_at, a.ended_at, a.gps_lat, a.gps_lng,"
+        " a.gps_lat_end, a.gps_lng_end, a.presence_seq, a.source_cameras,"
+        " p.status AS person_status, p.iden_code, p.full_name"
+        " FROM appearances a"
+        " LEFT JOIN persons p ON p.pers_id = a.subject_id"
+        " WHERE a.event_date = ? AND a.qualified = 1"
+        " ORDER BY a.started_at ASC",
+        (d,),
+    )
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = _appearance_row_payload(r)
+        sid = str(r["subject_id"])
+        if sid.startswith("obj-"):
+            item["tier"] = "object"
+        elif r["person_status"] == identity.STATUS_IDENTIFIED:
+            item["tier"] = "identity"
+        else:
+            item["tier"] = "person"
+        item["display_name"] = (
+            str(r["full_name"]).strip()
+            if r["full_name"]
+            else (str(r["iden_code"]) if r["iden_code"] else sid)
+        )
+        out.append(item)
+    return out
+
+
+def day_stats(date: str | None = None) -> dict[str, Any]:
+    """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
+    d = date or db.today_vn()
+    workers = db.query_one(
+        "SELECT COUNT(*) AS c FROM daily_events WHERE event_date = ?", (d,),
+    )
+    person_row = db.query_one(
+        "SELECT COUNT(*) AS c FROM daily_events e"
+        " JOIN persons p ON p.pers_id = e.pers_id"
+        " WHERE e.event_date = ? AND p.status = ?",
+        (d, identity.STATUS_PERSON),
+    )
+    identity_row = db.query_one(
+        "SELECT COUNT(*) AS c FROM daily_events e"
+        " JOIN persons p ON p.pers_id = e.pers_id"
+        " WHERE e.event_date = ? AND p.status = ?",
+        (d, identity.STATUS_IDENTIFIED),
+    )
+    enc_row = db.query_one(
+        "SELECT COUNT(*) AS c FROM appearances"
+        " WHERE event_date = ? AND qualified = 1 AND subject_id NOT LIKE 'obj-%'",
+        (d,),
+    )
+    obj_row = db.query_one(
+        "SELECT COUNT(*) AS c FROM appearances"
+        " WHERE event_date = ? AND qualified = 1 AND subject_id LIKE 'obj-%'",
+        (d,),
+    )
+    return {
+        "date": d,
+        "workers_standard": int(workers["c"] if workers else 0),
+        "person_count": int(person_row["c"] if person_row else 0),
+        "identity_count": int(identity_row["c"] if identity_row else 0),
+        "encounters_standard": int(enc_row["c"] if enc_row else 0),
+        "unassigned_observations": int(obj_row["c"] if obj_row else 0),
+    }

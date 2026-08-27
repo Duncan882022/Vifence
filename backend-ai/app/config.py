@@ -158,8 +158,11 @@ class Settings(BaseSettings):
     # Khẩu trang che miệng/mũi — không đủ tiêu chí cấp sgc / pers-*.
     patrol_face_reject_mask: bool = True
     # Tab Đối tượng — đầu + ≥30% thân, không đủ mặt, bám track ≥ N giây.
-    patrol_object_confirm_seconds: float = 3.0
-    patrol_face_object_confirm_seconds: float = 1.5
+    patrol_object_confirm_seconds: float = 1.0
+    patrol_face_object_confirm_seconds: float = 1.0
+    # Presence tuần tra — gộp/tách lượt gặp (GPS + thời gian).
+    patrol_presence_t_max_sec: float = 600.0
+    patrol_presence_d_merge_m: float = 50.0
     # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí.
     patrol_person_confirm_seconds: float = 0.15
 
