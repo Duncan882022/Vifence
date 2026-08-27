@@ -75,6 +75,53 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertEqual(len(out), 2)
         self.assertIn(person, [box for box, _ in out])
 
+    def test_oversized_yolo_with_two_faces_yields_two_boxes(self):
+        """YOLO gom cả đám — mỗi mặt phải có bbox riêng."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        crowd_box = (80.0, 80.0, 1180.0, 680.0)
+        face_a = _FrameFace(box=(180.0, 180.0, 280.0, 320.0), score=0.9)
+        face_b = _FrameFace(box=(820.0, 200.0, 920.0, 340.0), score=0.86)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_a, face_b]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(crowd_box, 0.74)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 2)
+        centers = sorted((box[0] + box[2]) / 2 for box, _ in out)
+        self.assertLess(centers[0], 400.0)
+        self.assertGreater(centers[1], 700.0)
+
+    def test_large_yolo_does_not_suppress_distant_face_synth(self):
+        """Mặt ngoài bbox YOLO vẫn được synth dù IoU với box YOLO lớn."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        near_box = (260.0, 100.0, 680.0, 700.0)
+        face_near = _FrameFace(box=(380.0, 180.0, 520.0, 360.0), score=0.9)
+        face_far = _FrameFace(box=(980.0, 210.0, 1080.0, 350.0), score=0.84)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_near, face_far]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(near_box, 0.71)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 2)
+        centers = sorted((box[0] + box[2]) / 2 for box, _ in out)
+        self.assertLess(centers[0], 600.0)
+        self.assertGreater(centers[1], 900.0)
+
+    def test_fallback_emits_all_faces_when_yolo_rejected(self):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        face_a = _FrameFace(box=(120.0, 180.0, 220.0, 320.0), score=0.88)
+        face_b = _FrameFace(box=(820.0, 200.0, 920.0, 340.0), score=0.85)
+        junk = (900.0, 40.0, 960.0, 700.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_a, face_b]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(junk, 0.55)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 2)
+
 
     def test_yolo_back_turn_kept_when_upper_body_visible(self):
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
