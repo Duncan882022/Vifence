@@ -284,7 +284,7 @@ export function MobileCameraFeed({
             workerNames: [...new Set(workerNames)].slice(0, 5),
             updatedAt: now,
           })
-          syncLivePatrolPersonDetectionsToHeatmap(cameraId, result.detections.filter(patrolVisible))
+          syncLivePatrolPersonDetectionsToHeatmap(cameraId, gated)
 
           if (result.events?.length) {
             pushPatrolMobilePersonEvents(result.events, cameraId)
