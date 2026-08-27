@@ -24,6 +24,7 @@ import {
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
+import { suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
@@ -136,20 +137,21 @@ export function CameraVideoFeed({
 
   useEffect(() => {
     if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
+    const mapped = vmsFeed.snapshot.detections.map(d => ({
+      behavior: d.behavior,
+      label: d.label ?? d.behavior,
+      confidence: d.confidence,
+      bbox: d.bbox,
+      subject_bbox: d.subject_bbox,
+      worker_id: d.worker_id,
+      worker_name: d.worker_name,
+      track_id: d.track_id,
+      tier: d.tier,
+      velocity: d.velocity,
+    }))
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
-      vmsFeed.snapshot.detections.map(d => ({
-        behavior: d.behavior,
-        label: d.label ?? d.behavior,
-        confidence: d.confidence,
-        bbox: d.bbox,
-        subject_bbox: d.subject_bbox,
-        worker_id: d.worker_id,
-        worker_name: d.worker_name,
-        track_id: d.track_id,
-        tier: d.tier,
-        velocity: d.velocity,
-      })),
+      suppressPatrolObjectOverlappingIdentified(mapped),
     )
   }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at])
 

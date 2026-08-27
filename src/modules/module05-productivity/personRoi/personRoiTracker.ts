@@ -1,4 +1,5 @@
 import { KalmanBox2D } from './kalmanBox2d'
+import { suppressPatrolObjectOverlappingIdentified } from '../utils/patrolPersonVisibility'
 import { PATROL_PERSON_ROI_CONFIG, type PatrolPersonRoiConfig } from './patrolPersonRoi.config'
 import type {
   Bbox,
@@ -31,7 +32,7 @@ function nextTrackId(): string {
  * cũng không phải khung người để mà bám.
  */
 export function normalizePersonRoiDetections(detections: PersonRoiDetection[]): PersonRoiDetection[] {
-  return dedupeOverlappingPersonDetections(
+  return suppressPatrolObjectOverlappingIdentified(
     detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4),
   )
 }
@@ -47,43 +48,6 @@ function bboxIou(a: Bbox, b: Bbox): number {
   const areaB = Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1])
   const union = areaA + areaB - inter
   return union > 0 ? inter / union : 0
-}
-
-function bboxContainment(a: Bbox, b: Bbox): number {
-  const ix1 = Math.max(a[0], b[0])
-  const iy1 = Math.max(a[1], b[1])
-  const ix2 = Math.min(a[2], b[2])
-  const iy2 = Math.min(a[3], b[3])
-  if (ix2 <= ix1 || iy2 <= iy1) return 0
-  const inter = (ix2 - ix1) * (iy2 - iy1)
-  const areaA = Math.max(0, a[2] - a[0]) * Math.max(0, a[3] - a[1])
-  const areaB = Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1])
-  const smaller = Math.min(areaA, areaB)
-  return smaller > 0 ? inter / smaller : 0
-}
-
-function dedupeOverlappingPersonDetections(detections: PersonRoiDetection[]): PersonRoiDetection[] {
-  if (detections.length <= 1) return detections
-  const ranked = [...detections].sort((a, b) => {
-    const areaA = Math.max(0, a.bbox[2] - a.bbox[0]) * Math.max(0, a.bbox[3] - a.bbox[1])
-    const areaB = Math.max(0, b.bbox[2] - b.bbox[0]) * Math.max(0, b.bbox[3] - b.bbox[1])
-    return areaB - areaA || b.confidence - a.confidence
-  })
-  const kept: PersonRoiDetection[] = []
-  for (const candidate of ranked) {
-    const candidateKey = personRoiAnchorKey(candidate)
-    const duplicate = kept.some(keptDet => {
-      // Backend đã tách thành hai track — hai người đứng chồng nhau, không gộp.
-      const keptKey = personRoiAnchorKey(keptDet)
-      if (candidateKey && keptKey && candidateKey !== keptKey) return false
-      return (
-        bboxIou(candidate.bbox, keptDet.bbox) >= 0.34
-        || bboxContainment(candidate.bbox, keptDet.bbox) >= 0.46
-      )
-    })
-    if (!duplicate) kept.push(candidate)
-  }
-  return kept
 }
 
 function centerRatio(a: Bbox, b: Bbox): number {

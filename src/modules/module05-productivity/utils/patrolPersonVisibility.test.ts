@@ -7,6 +7,7 @@ import {
   patrolPersonLimbFragmentBbox,
   patrolPersonMeetsDetectionGate,
   patrolPersonMeetsDisplayGate,
+  suppressPatrolObjectOverlappingIdentified,
   type Bbox4,
 } from './patrolPersonVisibility'
 
@@ -97,5 +98,51 @@ describe('gate hiển thị flycam', () => {
   it('đốm nhiễu vài pixel thì loại', () => {
     const bbox: Bbox4 = [FRAME_W * 0.5, FRAME_H * 0.5, FRAME_W * 0.5 + 3, FRAME_H * 0.5 + 4]
     expect(flycamDisplay(bbox)).toBe(false)
+  })
+})
+
+describe('ẩn ROI trùng tầng thấp', () => {
+  const personDet = (
+    bbox: Bbox4,
+    extra: {
+      worker_id?: string
+      track_id?: string
+      tier?: 'object' | 'person' | 'identity'
+      confidence?: number
+    } = {},
+  ) => ({
+    behavior: 'person',
+    bbox,
+    confidence: extra.confidence ?? 0.7,
+    ...extra,
+  })
+
+  it('ẩn Đối tượng khi chồng Người đã có sgc — kể cả khác track_id', () => {
+    const input = [
+      personDet([100, 100, 220, 480], { worker_id: 'sgc-00000107', track_id: 'trk-a', tier: 'person' }),
+      personDet([130, 180, 200, 360], { track_id: 'trk-b', tier: 'object', confidence: 0.77 }),
+    ]
+    const out = suppressPatrolObjectOverlappingIdentified(input)
+    expect(out).toHaveLength(1)
+    expect(out[0].worker_id).toBe('sgc-00000107')
+  })
+
+  it('giữ hai người khác mã dù bbox chồng nhau', () => {
+    const input = [
+      personDet([100, 100, 220, 480], { worker_id: 'sgc-00000107', tier: 'person' }),
+      personDet([110, 105, 210, 470], { worker_id: 'sgc-00000109', tier: 'person' }),
+    ]
+    const out = suppressPatrolObjectOverlappingIdentified(input)
+    expect(out).toHaveLength(2)
+  })
+
+  it('chỉ giữ một hộp khi cùng tầng object trùng vùng', () => {
+    const input = [
+      personDet([100, 100, 220, 480], { tier: 'object', confidence: 0.55 }),
+      personDet([120, 140, 190, 420], { tier: 'object', confidence: 0.77 }),
+    ]
+    const out = suppressPatrolObjectOverlappingIdentified(input)
+    expect(out).toHaveLength(1)
+    expect(out[0].confidence).toBe(0.55)
   })
 })

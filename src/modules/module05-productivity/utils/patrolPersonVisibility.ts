@@ -1,6 +1,7 @@
 /** Patrol — gate hiển thị person HC-* (thân trên / cận mặt / đã có mã). */
 
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
+import { PATROL_TIER_RANK, type PatrolTier } from './patrolTierTokens'
 
 export type Bbox4 = [number, number, number, number]
 
@@ -237,33 +238,85 @@ function bboxContainment(a: Bbox4, b: Bbox4): number {
   return smaller > 0 ? inter / smaller : 0
 }
 
-/** Ẩn Đối tượng yếu trùng vùng với người đã có sgc — chỉ khi cùng vùng thật sự. */
+function bboxArea(bbox: Bbox4): number {
+  return Math.max(0, bbox[2] - bbox[0]) * Math.max(0, bbox[3] - bbox[1])
+}
+
+function patrolDetectionsOverlap(a: Bbox4, b: Bbox4): boolean {
+  return bboxIou(a, b) >= 0.34 || bboxContainment(a, b) >= 0.46
+}
+
+/** Suy tầng từ payload backend khi thiếu field `tier`. */
+export function resolvePatrolDetectionTier(input: {
+  tier?: PatrolTier | null
+  worker_id?: string | null
+}): PatrolTier {
+  if (input.tier) return input.tier
+  const wid = input.worker_id?.trim() ?? ''
+  if (wid && isPatrolGalleryWorkerId(wid)) return 'identity'
+  if (wid && wid !== 'unknown' && /^(sgc-|pers-|iden-)/i.test(wid)) return 'person'
+  return 'object'
+}
+
+function patrolKnownWorkerId(workerId?: string | null): string {
+  const wid = workerId?.trim() ?? ''
+  if (!wid || wid === 'unknown') return ''
+  return wid
+}
+
+/**
+ * Một người chỉ một ROI — tầng cao thắng (Định danh > Người > Đối tượng).
+ * Hai người đã có mã khác nhau vẫn giữ cả hai dù bbox chồng nhau.
+ */
 export function suppressPatrolObjectOverlappingIdentified<T extends {
   behavior: string
   bbox: Bbox4
+  confidence?: number
   worker_id?: string | null
   track_id?: string | null
+  tier?: PatrolTier | null
 }>(
   detections: T[],
 ): T[] {
-  const identified = detections.filter(
-    d => d.behavior === 'person'
-      && d.bbox?.length === 4
-      && d.worker_id
-      && d.worker_id !== 'unknown'
-      && /^sgc-/i.test(d.worker_id),
-  )
-  if (identified.length === 0) return detections
-  return detections.filter(d => {
-    if (d.behavior !== 'person' || !d.bbox || d.bbox.length < 4) return true
-    const wid = d.worker_id?.trim() ?? ''
-    if (wid && wid !== 'unknown') return true
-    return !identified.some(id => {
-      if (d.track_id && id.track_id && d.track_id !== id.track_id) return false
-      return (
-        bboxIou(d.bbox as Bbox4, id.bbox as Bbox4) >= 0.42
-        || bboxContainment(d.bbox as Bbox4, id.bbox as Bbox4) >= 0.55
-      )
+  const persons = detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4)
+  if (persons.length <= 1) return detections
+
+  const ranked = persons.map(d => ({
+    d,
+    tier: resolvePatrolDetectionTier(d),
+    area: bboxArea(d.bbox as Bbox4),
+    conf: d.confidence ?? 0,
+  }))
+  ranked.sort((a, b) => (
+    PATROL_TIER_RANK[b.tier] - PATROL_TIER_RANK[a.tier]
+    || b.area - a.area
+    || b.conf - a.conf
+  ))
+
+  const kept: typeof ranked = []
+  const dropped = new Set<T>()
+
+  for (const candidate of ranked) {
+    const dominated = kept.some(keptDet => {
+      if (!patrolDetectionsOverlap(candidate.d.bbox as Bbox4, keptDet.d.bbox as Bbox4)) return false
+      const candRank = PATROL_TIER_RANK[candidate.tier]
+      const keptRank = PATROL_TIER_RANK[keptDet.tier]
+      if (keptRank > candRank) return true
+      if (keptRank < candRank) return false
+      if (keptRank >= PATROL_TIER_RANK.person) {
+        const candWid = patrolKnownWorkerId(candidate.d.worker_id)
+        const keptWid = patrolKnownWorkerId(keptDet.d.worker_id)
+        if (candWid && keptWid && candWid !== keptWid) return false
+      }
+      return true
     })
-  })
+    if (dominated) {
+      dropped.add(candidate.d)
+    } else {
+      kept.push(candidate)
+    }
+  }
+
+  if (dropped.size === 0) return detections
+  return detections.filter(d => !dropped.has(d))
 }
