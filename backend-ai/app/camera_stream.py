@@ -51,6 +51,10 @@ class CameraStream:
         if not cap.isOpened():
             cap.release()
             return False
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except (AttributeError, cv2.error):
+            pass
         self._cap = cap
         self._connected = True
         logger.info("Camera source '%s' đã kết nối.", self._source)

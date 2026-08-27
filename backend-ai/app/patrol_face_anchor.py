@@ -16,7 +16,7 @@ from .patrol_person_visibility import (
 
 # Quay lưng chỉ cần vượt sàn YOLO bodycam — đặt cao hơn sẽ âm thầm bỏ rơi
 # người đủ đầu + 1/3 thân trên mà YOLO chấm 0.30–0.38.
-BACK_TURN_MIN_CONF = 0.30
+BACK_TURN_MIN_CONF = 0.25
 
 
 @dataclass(frozen=True)

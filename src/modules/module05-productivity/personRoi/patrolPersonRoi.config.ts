@@ -29,7 +29,7 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * giữ trong bộ nhớ ngần này nhịp để người bị che thoáng qua rồi hiện lại
    * nhận lại đúng track cũ thay vì bị cấp mã mới.
    */
-  maxMissFrames: 14,
+  maxMissFrames: 8,
   /**
    * Trần nội suy rAF (ms). Phải ≥ một nhịp analyze bodycam (~360ms) + jitter mạng
    * thì ROI mới trượt liên tục giữa hai lần AI thay vì đứng rồi nhảy.
