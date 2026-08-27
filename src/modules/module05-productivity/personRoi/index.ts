@@ -20,3 +20,8 @@ export {
 } from './patrolPersonRoiEngine'
 export { usePatrolPersonRoiTracks } from './usePatrolPersonRoiTracks'
 export { PatrolPersonRoiOverlay } from './PatrolPersonRoiOverlay'
+export {
+  mergePatrolOnDeviceWithServerIdentity,
+  type OnDevicePersonBox,
+  type PatrolServerIdentityHint,
+} from './patrolOnDeviceIdentityMerge'

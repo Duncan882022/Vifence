@@ -275,6 +275,66 @@ export async function detectPeopleInVideo(
 /** @deprecated alias */
 export const detectFacesInVideo = detectPeopleInVideo
 
+export interface VideoPixelPersonBox {
+  /** x1,y1,x2,y2 trong không gian pixel gốc của `<video>`. */
+  bbox: [number, number, number, number]
+  score: number
+}
+
+/**
+ * Detect người trên khung video — trả bbox pixel gốc (không map % overlay).
+ * Dùng cho patrol ROI kiểu Hikvision: vị trí box chạy on-device, server chỉ gán mã.
+ */
+export async function detectPeopleInVideoPixels(
+  video: HTMLVideoElement,
+): Promise<VideoPixelPersonBox[]> {
+  const sampleCanvas = drawVideoFrame(video)
+  if (!sampleCanvas) return []
+
+  const vw = video.videoWidth
+  const vh = video.videoHeight
+  const sw = sampleCanvas.width
+  const sh = sampleCanvas.height
+  if (!vw || !vh) return []
+
+  const scaleX = vw / sw
+  const scaleY = vh / sh
+  const pixelRects: PixelRect[] = []
+
+  const [coco, blaze] = await Promise.all([loadCocoSsd(), loadBlazeFace()])
+
+  if (coco) {
+    try {
+      pixelRects.push(...await detectPersons(coco, sampleCanvas))
+    } catch {
+      /* fallback blaze */
+    }
+  }
+
+  if (blaze) {
+    try {
+      const faces = await detectFaces(blaze, sampleCanvas)
+      for (const face of faces) {
+        const c = rectCenter(face)
+        const covered = pixelRects.some(p => p.kind === 'person' && containsPoint(p, c.x, c.y))
+        if (!covered) pixelRects.push(face)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return dedupeRects(pixelRects).map(r => ({
+    bbox: [
+      r.x * scaleX,
+      r.y * scaleY,
+      (r.x + r.width) * scaleX,
+      (r.y + r.height) * scaleY,
+    ] as [number, number, number, number],
+    score: r.score,
+  }))
+}
+
 export function preloadFaceDetection(): void {
   void loadCocoSsd()
   void loadBlazeFace()

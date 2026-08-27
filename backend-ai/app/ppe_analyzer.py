@@ -2080,7 +2080,29 @@ def _build_patrol_person_detections(
         _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)
 
-    return detections
+    return _dedupe_patrol_overlay_detections(detections)
+
+
+def _dedupe_patrol_overlay_detections(detections: list[PpeDetection]) -> list[PpeDetection]:
+    """Một vị trí overlay — một detection (loại synth face-anchor trùng YOLO)."""
+    persons = [d for d in detections if d.behavior == "person"]
+    others = [d for d in detections if d.behavior != "person"]
+    if len(persons) <= 1:
+        return detections
+
+    def _rank(det: PpeDetection) -> tuple[int, float]:
+        wid = (det.worker_id or "").strip()
+        known = 1 if wid and wid != "unknown" else 0
+        return known, float(det.confidence or 0.0)
+
+    ranked = sorted(persons, key=_rank, reverse=True)
+    kept: list[PpeDetection] = []
+    for cand in ranked:
+        cb = tuple(cand.bbox)
+        if any(_bbox_iou(cb, tuple(k.bbox)) >= 0.55 for k in kept):
+            continue
+        kept.append(cand)
+    return others + kept
 
 
 def _attach_track_velocity(

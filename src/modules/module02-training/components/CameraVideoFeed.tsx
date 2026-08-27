@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { setVideoAnalyzeIntervalScale } from '../services/mobileAiBackend.service'
@@ -23,8 +23,8 @@ import {
   isPatrolFlycamAiCamera,
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
-import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
-import { suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
+import { usePatrolOnDeviceRoi } from '@/modules/module05-productivity/hooks/usePatrolOnDeviceRoi'
+import type { PatrolServerIdentityHint } from '@/modules/module05-productivity/personRoi/patrolOnDeviceIdentityMerge'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
@@ -135,25 +135,53 @@ export function CameraVideoFeed({
   // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock)
 
-  useEffect(() => {
-    if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
-    const mapped = vmsFeed.snapshot.detections.map(d => ({
+  const patrolServerIdentity = useMemo((): PatrolServerIdentityHint[] => {
+    const snapshot = vmsFeed.snapshot
+    if (!snapshot) return []
+    return snapshot.detections.map(d => ({
       behavior: d.behavior,
       label: d.label ?? d.behavior,
       confidence: d.confidence,
-      bbox: d.bbox,
-      subject_bbox: d.subject_bbox,
+      bbox: d.bbox as [number, number, number, number],
+      subject_bbox: d.subject_bbox?.length === 4
+        ? (d.subject_bbox as [number, number, number, number])
+        : undefined,
       worker_id: d.worker_id,
       worker_name: d.worker_name,
       track_id: d.track_id,
       tier: d.tier,
-      velocity: d.velocity,
     }))
-    syncLivePatrolPersonDetectionsToHeatmap(
-      cameraId,
-      suppressPatrolObjectOverlappingIdentified(mapped),
-    )
-  }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at])
+  }, [vmsFeed.snapshot])
+
+  const onDeviceRoiFrameSize = usePatrolOnDeviceRoi(
+    cameraId,
+    videoRef,
+    showPatrolPersonRoi && framesReady,
+    patrolServerIdentity,
+    {
+      width: vmsFeed.snapshot?.width ?? 0,
+      height: vmsFeed.snapshot?.height ?? 0,
+    },
+  )
+
+  const patrolOverlayFrameSize = useMemo(() => {
+    if (onDeviceRoiFrameSize.width > 0 && onDeviceRoiFrameSize.height > 0) {
+      return onDeviceRoiFrameSize
+    }
+    const video = videoRef.current
+    if (video?.videoWidth && video.videoHeight) {
+      return { width: video.videoWidth, height: video.videoHeight }
+    }
+    return {
+      width: vmsFeed.snapshot?.width ?? 0,
+      height: vmsFeed.snapshot?.height ?? 0,
+    }
+  }, [
+    onDeviceRoiFrameSize,
+    vmsFeed.snapshot?.width,
+    vmsFeed.snapshot?.height,
+    framesReady,
+  ])
 
   useEffect(() => {
     const video = videoRef.current
@@ -337,8 +365,8 @@ export function CameraVideoFeed({
         {showPatrolPersonRoi && (
           <PatrolPersonRoiOverlay
             cameraId={cameraId}
-            frameWidth={vmsFeed.snapshot?.width ?? 0}
-            frameHeight={vmsFeed.snapshot?.height ?? 0}
+            frameWidth={patrolOverlayFrameSize.width}
+            frameHeight={patrolOverlayFrameSize.height}
             videoRef={videoRef}
             compact={compact}
             videoFit={videoFit}

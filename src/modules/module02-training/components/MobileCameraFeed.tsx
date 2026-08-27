@@ -40,7 +40,8 @@ import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
+import { usePatrolOnDeviceRoi } from '@/modules/module05-productivity/hooks/usePatrolOnDeviceRoi'
+import type { PatrolServerIdentityHint } from '@/modules/module05-productivity/personRoi/patrolOnDeviceIdentityMerge'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
@@ -116,20 +117,42 @@ export function MobileCameraFeed({
   const showAiOverlay = runAiAnalyze && bboxVisible
   /** Module 05 patrol — Kalman/ByteTrack ROI, không PPE overlay. */
   const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && isPatrolCam
-  /** Local analyze nuôi ROI — bbox khớp khung video đang hiển thị, không lag WHIP→RTSP. */
+  /** On-device COCO-SSD nuôi ROI — server YOLO chỉ gán sgc-* (Hikvision pattern). */
   const patrolLocalRoiEnabled = usePatrolPersonRoi && runAiAnalyze && status === 'live'
-  const localRoiFrameSize = usePatrolLocalFrameAnalyze(cameraId, videoRef, patrolLocalRoiEnabled)
+  const patrolServerIdentity = useMemo((): PatrolServerIdentityHint[] =>
+    detections.map(d => ({
+      behavior: d.behavior,
+      label: d.label,
+      confidence: d.confidence,
+      bbox: d.bbox as [number, number, number, number],
+      subject_bbox: d.subject_bbox?.length === 4
+        ? (d.subject_bbox as [number, number, number, number])
+        : undefined,
+      worker_id: d.worker_id,
+      worker_name: d.worker_name,
+      track_id: d.track_id,
+      tier: d.tier,
+      face_eligible: d.face_eligible,
+    })),
+  [detections])
+  const onDeviceRoiFrameSize = usePatrolOnDeviceRoi(
+    cameraId,
+    videoRef,
+    patrolLocalRoiEnabled,
+    patrolServerIdentity,
+    frameSize,
+  )
 
-  /** ROI cần frame size — ưu tiên kích thước khung JPEG local analyze. */
+  /** ROI cần frame size — ưu tiên kích thước khung on-device detect. */
   const overlayFrameSize = useMemo(() => {
-    if (localRoiFrameSize.width > 0 && localRoiFrameSize.height > 0) return localRoiFrameSize
+    if (onDeviceRoiFrameSize.width > 0 && onDeviceRoiFrameSize.height > 0) return onDeviceRoiFrameSize
     if (frameSize.width > 0 && frameSize.height > 0) return frameSize
     const v = videoRef.current
     if (v?.videoWidth && v?.videoHeight) {
       return { width: v.videoWidth, height: v.videoHeight }
     }
     return frameSize
-  }, [localRoiFrameSize, frameSize, layoutTick, status])
+  }, [onDeviceRoiFrameSize, frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = detections
     return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped

@@ -41,14 +41,10 @@ function gatePatrolPersons(
 }
 
 /**
- * ROI cho mũ đang phát từ chính máy đang mở CMS.
+ * @deprecated Thay bằng `usePatrolOnDeviceRoi` — COCO-SSD on-device + server identity.
  *
- * Tile lúc đó hiển thị camera thời gian thực, còn detections của worker VMS phải
- * đi vòng WHIP → MediaMTX → RTSP → AI nên mô tả khung hình của hơn một giây
- * trước. Mũ vừa quay là bbox rơi ra ngoài người. Chụp thẳng khung đang hiển thị
- * gửi `/analyze/frame` thì bbox chắc chắn thuộc đúng khung đó.
- *
- * Sự kiện, KPI và ghi hình vẫn do worker VMS lo — hook này chỉ nuôi ROI overlay.
+ * Luồng cũ: chụp JPEG gửi `/analyze/frame` để bbox khớp khung video.
+ * Sự kiện/KPI vẫn do worker VMS — hook này chỉ nuôi ROI overlay.
  */
 export function usePatrolLocalFrameAnalyze(
   cameraId: string,
