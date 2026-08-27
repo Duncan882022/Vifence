@@ -242,10 +242,9 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, streamWhenOffline }: {
+function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, streamWhenOffline }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
-  onCloseMaximize: () => void
   stackedPortrait: boolean
   fillHeight: boolean
   forceSingleCol?: boolean
@@ -255,7 +254,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
   compactVideoMaxClass?: string
   /** Patrol grid: luôn 16:9, không giới hạn max-h trên desktop. */
   aspectVideoGrid?: boolean
-  /** Camera đang phóng to — giữ nguyên instance feed, không mount stream mới. */
+  /** Camera đang phóng to — ô grid chỉ giữ chỗ, overlay render qua portal. */
   focusedCamId?: string | null
   streamWhenOffline?: boolean
 }) {
@@ -264,6 +263,7 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
   const rows = Math.ceil(count / cols)
   const compact = count > 2
   const analyzeThrottle = count >= 2
+  const hasFocus = Boolean(focusedCamId)
 
   return (
     <div
@@ -294,38 +294,27 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
         )
         return (
           <div key={cam.id} className="relative min-w-0">
-            {isFocused && (
-              <div className={cn(cellShellClass, 'invisible pointer-events-none')} aria-hidden />
-            )}
-            <div
-              className={cn(
-                cellShellClass,
-                isFocused && [
-                  'fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4',
-                  '!h-auto !max-h-none !w-full',
-                ],
-                isBackground && 'invisible pointer-events-none',
-              )}
-            >
+            {isFocused ? (
               <div
                 className={cn(
-                  'relative w-full h-full min-h-0',
-                  isFocused && 'max-w-[96vw] max-h-[92dvh] rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl',
+                  cellShellClass,
+                  'border border-dashed border-[#334155] bg-[#0a0e17]/80',
                 )}
-                onClick={isFocused ? e => e.stopPropagation() : undefined}
-              >
+                aria-hidden
+              />
+            ) : (
+              <div className={cn(cellShellClass, isBackground && 'invisible pointer-events-none')}>
                 <CameraCell
                   cam={cam}
                   compact={compact}
                   analyzeThrottle={analyzeThrottle}
                   streamIndex={index}
-                  playing={!isBackground}
+                  playing={!hasFocus}
                   streamWhenOffline={streamWhenOffline}
-                  isMaximized={isFocused}
-                  onMaximize={isFocused ? onCloseMaximize : () => onMaximize(cam)}
+                  onMaximize={() => onMaximize(cam)}
                 />
               </div>
-            </div>
+            )}
           </div>
         )
       })}
@@ -333,9 +322,22 @@ function CameraGrid({ cams, onMaximize, onCloseMaximize, stackedPortrait, fillHe
   )
 }
 
-function MaximizeBackdrop({ active, onClose }: { active: boolean; onClose: () => void }) {
+function FocusedCameraOverlay({
+  cam,
+  streamIndex,
+  onClose,
+  compact,
+  analyzeThrottle,
+  streamWhenOffline,
+}: {
+  cam: TrainingCamera
+  streamIndex: number
+  onClose: () => void
+  compact: boolean
+  analyzeThrottle: boolean
+  streamWhenOffline: boolean
+}) {
   useEffect(() => {
-    if (!active) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
@@ -343,17 +345,35 @@ function MaximizeBackdrop({ active, onClose }: { active: boolean; onClose: () =>
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [active, onClose])
-
-  if (!active) return null
+  }, [onClose])
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[110] bg-black/92 backdrop-blur-sm"
-      onClick={onClose}
-      role="presentation"
-      aria-hidden
-    />,
+    <>
+      <div
+        className="fixed inset-0 z-[190] bg-black/92 backdrop-blur-sm touch-none"
+        onClick={onClose}
+        role="presentation"
+      />
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 pointer-events-none"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Phóng to ${cameraDisplayLabel(cam)}`}
+      >
+        <div className="relative w-full max-w-[96vw] aspect-video max-h-[92dvh] pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black">
+          <CameraCell
+            cam={cam}
+            compact={compact}
+            analyzeThrottle={analyzeThrottle}
+            streamIndex={streamIndex}
+            playing
+            streamWhenOffline={streamWhenOffline}
+            isMaximized
+            onMaximize={onClose}
+          />
+        </div>
+      </div>
+    </>,
     document.body,
   )
 }
@@ -455,6 +475,8 @@ export function TrainingCameraPanel({
   const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
   const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll) || (aspectVideoGrid && !isDesktop)
   const aspectGridInTier = aspectVideoGrid && isDesktop
+  /** Mobile compact: fill tier height — video scrolls inside, sidebar strip stays visible. */
+  const mobileFillPanel = mobileCompactVideo && !isDesktop
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
@@ -545,8 +567,7 @@ export function TrainingCameraPanel({
   return (
     <>
       <div className={cn(
-        'w-full min-h-0',
-        mobileCompactVideo && !isDesktop ? 'h-auto max-h-full' : 'h-full',
+        'w-full min-h-0 h-full',
         'flex flex-col lg:flex-row',
         aspectGridInTier
           ? 'lg:flex-1 lg:min-h-0'
@@ -556,21 +577,23 @@ export function TrainingCameraPanel({
         'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
         'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
       )}>
-        <div className="flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0">
+        <div className={cn(
+          'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
+          mobileFillPanel && 'overflow-hidden',
+        )}>
           <div
             ref={videoGridRef}
             className={cn(
               'w-full min-h-0 flex-1',
-              fillHeightMain
+              fillHeightMain && !mobileFillPanel
                 ? 'overflow-hidden'
                 : 'overflow-y-auto overflow-x-hidden overscroll-y-contain',
             )}
-            style={mobileViewportH ? { maxHeight: mobileViewportH } : undefined}
+            style={mobileViewportH && !mobileStackedNoScroll ? { maxHeight: mobileViewportH } : undefined}
           >
             <CameraGrid
               cams={safeCams}
               onMaximize={cam => setFocusedCam(cam)}
-              onCloseMaximize={() => setFocusedCam(null)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
               forceSingleCol={mobileStackedNoScroll && !isDesktop}
@@ -589,10 +612,9 @@ export function TrainingCameraPanel({
             'border-t lg:border-t-0 lg:border-l',
             'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
             'lg:overflow-hidden',
-            mobileCompactVideo && !sidebarOpen && 'max-lg:[@media(orientation:portrait)]:hidden',
             sidebarOpen
               ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
-              : 'w-full shrink-0 lg:flex lg:w-8 lg:h-full lg:min-h-0',
+              : 'w-full shrink-0 min-h-[2.25rem] lg:flex lg:w-8 lg:h-full lg:min-h-0',
           )}
           style={landscapeSidebarH ? { maxHeight: landscapeSidebarH } : undefined}
         >
@@ -666,7 +688,7 @@ export function TrainingCameraPanel({
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 w-full lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 w-full min-h-[2.25rem] border-t border-[#1e2433] lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0 lg:border-t-0">
               <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
                 {tabs.map(tab => (
                   <button
@@ -702,7 +724,16 @@ export function TrainingCameraPanel({
         </div>
       </div>
 
-      <MaximizeBackdrop active={Boolean(focusedCam)} onClose={() => setFocusedCam(null)} />
+      {focusedCam && (
+        <FocusedCameraOverlay
+          cam={focusedCam}
+          streamIndex={Math.max(0, safeCams.findIndex(c => c.id === focusedCam.id))}
+          onClose={() => setFocusedCam(null)}
+          compact={safeCams.length > 2}
+          analyzeThrottle={safeCams.length >= 2}
+          streamWhenOffline={streamWhenOffline}
+        />
+      )}
     </>
   )
 }

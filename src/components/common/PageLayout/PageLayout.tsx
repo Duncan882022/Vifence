@@ -116,7 +116,7 @@ export function Panel({
       showBody && 'border-b border-[#1e2433]',
     )}>
       <h2 className="text-xs max-lg:text-[10px] font-bold text-foreground tracking-wide shrink-0">{title}</h2>
-      <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end overflow-x-auto scrollbar-none">
         {headerRight}
         {expandable && (
           <button
