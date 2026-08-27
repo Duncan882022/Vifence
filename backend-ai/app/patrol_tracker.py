@@ -440,7 +440,14 @@ class PatrolTracker:
             if track.state == "confirmed":
                 track.state = "lost"
             if now - track.last_measured_at > self.profile.lost_keep_sec:
-                self.tracks.pop(track.track_id, None)
+                dropped_id = track.track_id
+                self.tracks.pop(dropped_id, None)
+                try:
+                    from .patrol.sink import forget_track
+
+                    forget_track(self.camera_id, dropped_id, now=now)
+                except Exception:  # noqa: BLE001
+                    pass
 
         for det_index, (bbox, conf) in enumerate(detections):
             if det_index in used_dets:
