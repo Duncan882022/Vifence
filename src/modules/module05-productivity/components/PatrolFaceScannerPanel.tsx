@@ -5,8 +5,10 @@ import {
   CheckCircle,
   Loader2,
   RefreshCw,
+  ScanFace,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { captureVideoFrameBase64 } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
   fetchPatrolEnrollSession,
   fetchPatrolScanEnrollment,
@@ -20,36 +22,37 @@ import { usePatrolAutoFaceScan } from '../hooks/usePatrolAutoFaceScan'
 import { guidanceForSlot } from '../utils/patrolFaceScanGuide'
 
 interface PatrolFaceScannerPanelProps {
-  /** Quét bổ sung vector cho hồ sơ đã có (HR / tra mã). */
   person?: PatrolWorkerPerson
-  /** Phiên quét tự phục vụ — chưa có hồ sơ. */
   sessionId?: string
   subtitle?: string
   onEnrollmentChange?: (enrollment: PatrolScanEnrollment) => void
-  /** Gọi khi đủ 3 góc (phiên tự phục vụ). */
   onScanComplete?: (enrollment: PatrolScanEnrollment) => void
 }
 
 function FaceScanProgressRing({
-  progress,
+  stepProgress,
+  holdProgress,
   poseMatched,
   capturing,
   complete,
 }: {
-  progress: number
+  stepProgress: number
+  holdProgress: number
   poseMatched: boolean
   capturing: boolean
   complete: boolean
 }) {
-  const clamped = Math.max(0, Math.min(1, progress))
-  const dash = 100 - clamped * 100
+  const stepClamped = Math.max(0, Math.min(1, stepProgress))
+  const holdClamped = Math.max(0, Math.min(1, holdProgress))
+  const stepDash = 100 - stepClamped * 100
+  const holdDash = 100 - holdClamped * 100
   const ringColor = complete
     ? '#4ade80'
     : capturing
       ? '#38bdf8'
       : poseMatched
         ? '#4ade80'
-        : 'rgba(74,222,128,0.35)'
+        : 'rgba(56,189,248,0.35)'
 
   return (
     <svg
@@ -58,15 +61,7 @@ function FaceScanProgressRing({
       preserveAspectRatio="xMidYMid meet"
       aria-hidden
     >
-      <ellipse
-        cx="50"
-        cy="50"
-        rx="21"
-        ry="28"
-        fill="none"
-        stroke="rgba(255,255,255,0.1)"
-        strokeWidth="1"
-      />
+      <ellipse cx="50" cy="50" rx="21" ry="28" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
       <ellipse
         cx="50"
         cy="50"
@@ -74,17 +69,34 @@ function FaceScanProgressRing({
         ry="28"
         fill="none"
         stroke={ringColor}
-        strokeWidth="2.2"
+        strokeWidth="2"
         strokeLinecap="round"
         pathLength={100}
         strokeDasharray="100"
-        strokeDashoffset={dash}
+        strokeDashoffset={stepDash}
         transform="rotate(-90 50 50)"
-        style={{
-          transition: 'stroke-dashoffset 0.45s ease, stroke 0.25s ease',
-          filter: poseMatched || complete ? 'drop-shadow(0 0 4px rgba(74,222,128,0.6))' : undefined,
-        }}
+        style={{ transition: 'stroke-dashoffset 0.35s ease' }}
       />
+      {poseMatched && !complete && holdClamped > 0 && (
+        <ellipse
+          cx="50"
+          cy="50"
+          rx="18"
+          ry="24"
+          fill="none"
+          stroke="#4ade80"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray="100"
+          strokeDashoffset={holdDash}
+          transform="rotate(-90 50 50)"
+          style={{
+            transition: 'stroke-dashoffset 0.12s linear',
+            filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.7))',
+          }}
+        />
+      )}
     </svg>
   )
 }
@@ -107,6 +119,7 @@ export function PatrolFaceScannerPanel({
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [manualCapturing, setManualCapturing] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
 
   const handleEnrollment = useCallback((next: PatrolScanEnrollment) => {
@@ -181,6 +194,26 @@ export function PatrolFaceScannerPanel({
     }
   }, [refreshStatus, startCamera, subjectKey])
 
+  const handleManualCapture = async () => {
+    const video = videoRef.current
+    if (!video || !cameraReady || complete) return
+    const imageB64 = captureVideoFrameBase64(video, 640, 0.82)
+    if (!imageB64) {
+      setPanelError('Không quét được khung hình.')
+      return
+    }
+    setManualCapturing(true)
+    setPanelError(null)
+    try {
+      const result = await submitScan(imageB64, autoScan.activeSlot)
+      handleEnrollment(result.enrollment)
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : 'Lưu vector thất bại.')
+    } finally {
+      setManualCapturing(false)
+    }
+  }
+
   const poses = enrollment?.poses ?? [
     { slot: 1, label: 'Chính diện', captured: false },
     { slot: 2, label: 'Nghiêng trái', captured: false },
@@ -191,12 +224,12 @@ export function PatrolFaceScannerPanel({
   const displayName = person?.full_name ?? person?.display_name
   const defaultSubtitle = subtitle ?? (
     isSession
-      ? 'Đưa mặt vào khung tròn, làm theo hướng dẫn trên màn hình — hệ thống tự quét, không cần bấm nút.'
-      : `Quét 3 góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}) — `
-        + 'đưa mặt vào khung và làm theo chữ trên màn hình.'
+      ? 'Giống eKYC: đưa mặt vào khung tròn, giữ yên — hệ thống tự quét 3 góc.'
+      : `Quét 3 góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}).`
   )
 
   const showError = panelError ?? autoScan.error
+  const busy = autoScan.capturing || manualCapturing
 
   return (
     <div className="space-y-5">
@@ -242,7 +275,7 @@ export function PatrolFaceScannerPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] gap-4">
         <div className="relative aspect-[4/3] rounded-xl overflow-hidden border border-[#1e2433] bg-black">
           <video
             ref={videoRef}
@@ -252,9 +285,10 @@ export function PatrolFaceScannerPanel({
           />
 
           <FaceScanProgressRing
-            progress={autoScan.ringProgress}
+            stepProgress={autoScan.ringProgress}
+            holdProgress={autoScan.holdProgress}
             poseMatched={autoScan.poseMatched}
-            capturing={autoScan.capturing}
+            capturing={busy}
             complete={complete}
           />
 
@@ -268,34 +302,38 @@ export function PatrolFaceScannerPanel({
                   : autoScan.poseMatched
                     ? 'border-green-400/70'
                     : autoScan.faceDetected
-                      ? 'border-sky-400/45'
-                      : 'border-white/25',
+                      ? 'border-sky-400/50'
+                      : 'border-sky-400/35',
               )}
             />
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 p-4 pt-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent pointer-events-none">
+          <div className="absolute inset-x-0 bottom-0 p-4 pt-12 bg-gradient-to-t from-black/90 via-black/55 to-transparent pointer-events-none">
             <p className={cn(
               'text-center font-bold leading-snug',
-              complete ? 'text-green-400 text-base' : 'text-white text-sm sm:text-base',
+              complete ? 'text-green-400 text-lg' : 'text-white text-base sm:text-lg',
             )}>
               {complete ? '✓ Xong rồi!' : autoScan.guidance}
             </p>
             {!complete && (
-              <p className="text-center text-[10px] text-white/55 mt-1.5">
+              <p className="text-center text-[11px] text-white/60 mt-2">
                 {guidanceForSlot(autoScan.activeSlot)}
               </p>
             )}
           </div>
 
           <div className="absolute left-3 top-3 flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/55 border border-white/10 text-[10px]">
-            <Camera className="w-3 h-3 text-violet-400" />
+            <Camera className="w-3 h-3 text-sky-400" />
             <span className={cameraReady ? 'text-green-400' : 'text-amber-400'}>
-              {cameraReady ? 'Tự quét' : 'Đang mở camera…'}
+              {cameraReady
+                ? autoScan.modelStatus === 'loading'
+                  ? 'Đang tải AI…'
+                  : 'Tự quét'
+                : 'Đang mở camera…'}
             </span>
           </div>
 
-          {autoScan.capturing && (
+          {busy && (
             <div className="absolute right-3 top-3 flex items-center gap-1.5 px-2 py-1 rounded-md bg-sky-500/20 border border-sky-400/30 text-[10px] text-sky-300">
               <Loader2 className="w-3 h-3 animate-spin" />
               Đang lưu…
@@ -303,7 +341,7 @@ export function PatrolFaceScannerPanel({
           )}
 
           {cameraError && (
-            <div className="absolute inset-x-3 bottom-20 p-2 rounded-lg bg-red-500/15 border border-red-500/30 text-[10px] text-red-300 pointer-events-none">
+            <div className="absolute inset-x-3 bottom-24 p-2 rounded-lg bg-red-500/15 border border-red-500/30 text-[10px] text-red-300 pointer-events-none">
               {cameraError}
             </div>
           )}
@@ -312,49 +350,63 @@ export function PatrolFaceScannerPanel({
         <div className="space-y-4">
           <div className="rounded-xl border border-[#1e2433] bg-[#0b0f1a] p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Vòng tròn xanh</span>
-              <span className={cn('text-[10px] font-bold tabular-nums', complete ? 'text-green-400' : 'text-green-400/90')}>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tiến độ quét</span>
+              <span className={cn('text-[10px] font-bold tabular-nums', complete ? 'text-green-400' : 'text-sky-400')}>
                 {capturedCount}/{enrollment?.faces_required ?? 3}
               </span>
             </div>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Chỉ cần đưa mặt vào khung và làm theo chữ trên màn hình. Hệ thống tự quét — không cần bấm nút.
-            </p>
-            <ol className="space-y-2">
-              {poses.map((pose, idx) => {
+            <div className="h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
+              <div
+                className={cn('h-full transition-all', complete ? 'bg-green-400' : 'bg-sky-400')}
+                style={{ width: `${Math.round((capturedCount / (enrollment?.faces_required ?? 3)) * 100)}%` }}
+              />
+            </div>
+            <div className="space-y-2">
+              {poses.map(pose => {
                 const active = pose.slot === autoScan.activeSlot && !complete && !pose.captured
-                const done = pose.captured
                 return (
-                  <li
+                  <div
                     key={pose.slot}
                     className={cn(
-                      'flex items-center gap-2.5 px-3 py-2 rounded-lg border text-[11px] transition-colors',
-                      done && 'border-green-500/30 bg-green-500/10',
-                      active && !done && 'border-green-400/40 bg-green-400/10',
-                      !done && !active && 'border-[#1e2433] bg-[#0a0e17]/50',
+                      'flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-[11px] transition-colors',
+                      pose.captured && 'border-green-500/30 bg-green-500/10',
+                      active && !pose.captured && 'border-sky-400/40 bg-sky-400/10',
+                      !pose.captured && !active && 'border-[#1e2433]',
                     )}
                   >
-                    <span className={cn(
-                      'w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0',
-                      done ? 'bg-green-400 text-[#0a0e17]' : active ? 'bg-green-400/20 text-green-400 ring-1 ring-green-400/50' : 'bg-[#1e2433] text-muted-foreground',
-                    )}>
-                      {done ? '✓' : idx + 1}
+                    <span className="flex items-center gap-2 min-w-0">
+                      <ScanFace className={cn('w-3.5 h-3.5 shrink-0', pose.captured ? 'text-green-400' : active ? 'text-sky-400' : 'text-muted-foreground')} />
+                      <span className={cn('font-medium truncate', pose.captured && 'text-green-400')}>{pose.label}</span>
                     </span>
-                    <span className={cn('font-medium flex-1', done && 'text-green-400')}>{pose.label}</span>
-                    {active && !done && (
-                      <span className="text-[8px] text-green-400 animate-pulse shrink-0">Đang quét</span>
-                    )}
-                  </li>
+                    {pose.captured
+                      ? <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                      : active
+                        ? <span className="text-[8px] text-sky-400 animate-pulse shrink-0">Đang quét</span>
+                        : <span className="text-[9px] text-muted-foreground shrink-0">Chưa quét</span>}
+                  </div>
                 )
               })}
-            </ol>
+            </div>
           </div>
 
-          {!isSession && !complete && (
-            <p className="text-[10px] text-muted-foreground leading-relaxed px-1">
-              Vector embedding dùng chung engine nhận diện tuần tra (SFace).
+          <div className="rounded-xl border border-[#1e2433] bg-[#0b0f1a] p-4 space-y-3">
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Góc đang quét: <span className="text-foreground font-semibold">{poses.find(p => p.slot === autoScan.activeSlot)?.label}</span>.
+              Giữ mặt trong khung oval, ánh sáng đều, không che khuôn mặt — giống quét eKYC.
             </p>
-          )}
+            <button
+              type="button"
+              onClick={() => void handleManualCapture()}
+              disabled={busy || !cameraReady || backendOnline === false || complete}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold bg-sky-500 text-white hover:bg-sky-500/90 transition-all disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanFace className="w-4 h-4" />}
+              {complete ? 'Đã đủ 3 góc' : `Quét ${poses.find(p => p.slot === autoScan.activeSlot)?.label ?? 'góc này'}`}
+            </button>
+            <p className="text-[9px] text-muted-foreground/80 text-center">
+              Hệ thống tự quét khi giữ yên. Nếu không tự quét, bấm nút trên.
+            </p>
+          </div>
         </div>
       </div>
     </div>
