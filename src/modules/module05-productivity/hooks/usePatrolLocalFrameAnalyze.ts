@@ -9,7 +9,7 @@ import { getPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { getPatrolPersonRoiEngine } from '../personRoi'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '../utils/patrolHeatmapLiveSync'
-import { patrolPersonMeetsDetectionGate } from '../utils/patrolPersonVisibility'
+import { patrolPersonMeetsDisplayGate } from '../utils/patrolPersonVisibility'
 
 /**
  * Nhịp gửi khung — thưa hơn trang Phát sóng vì máy này còn đang tải luồng WHIP lên.
@@ -29,9 +29,10 @@ function gatePatrolPersons(
   if (frameW <= 0 || frameH <= 0) return []
   return detections.filter(d => {
     if (d.behavior !== 'person') return true
-    if (!d.bbox || d.bbox.length < 4) return false
-    return patrolPersonMeetsDetectionGate({
-      bbox: [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
+    const box = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
+    if (!box || box.length < 4) return false
+    return patrolPersonMeetsDisplayGate({
+      bbox: [box[0], box[1], box[2], box[3]],
       frameW,
       frameH,
       workerId: d.worker_id,

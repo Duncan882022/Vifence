@@ -30,13 +30,13 @@ function empty(): Map<string, PersonRoiTrack> {
 }
 
 describe('ingest bbox', () => {
-  it('ưu tiên subject_bbox YOLO gốc thay bbox đã cắt PPE', () => {
-    const raw: Bbox = [100, 100, 200, 400]
-    const cropped: Bbox = [105, 103, 195, 316]
-    const tracks = advance(empty(), [person(cropped, { subject_bbox: raw, track_id: 'p1' })], 1_000)
+  it('ưu tiên bbox display từ BE (đã mở rộng) thay subject_bbox YOLO thô', () => {
+    const raw: Bbox = [100, 100, 200, 280]
+    const expanded: Bbox = [100, 100, 200, 400]
+    const tracks = advance(empty(), [person(expanded, { subject_bbox: raw, track_id: 'p1' })], 1_000)
     const display = predictPersonRoiTracks(tracks, 0)[0].bbox
-    expect(display[2] - display[0]).toBeCloseTo(raw[2] - raw[0], 0)
-    expect(display[3] - display[1]).toBeGreaterThan(cropped[3] - cropped[1])
+    expect(display[3] - display[1]).toBeCloseTo(expanded[3] - expanded[1], 0)
+    expect(display[3] - display[1]).toBeGreaterThan(raw[3] - raw[1])
   })
 })
 

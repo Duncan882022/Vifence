@@ -37,8 +37,10 @@ export function normalizePersonRoiDetections(detections: PersonRoiDetection[]): 
       .filter(d => d.behavior === 'person' && (d.bbox?.length === 4 || d.subject_bbox?.length === 4))
       .map(d => ({
         ...d,
-        // Patrol ROI luôn bám YOLO gốc — không dùng bbox đã cắt chân/siết PPE.
-        bbox: d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox!,
+        // BE gửi bbox đã mở rộng cho overlay; subject_bbox là YOLO gốc (sự kiện/debug).
+        bbox: d.bbox?.length === 4
+          ? d.bbox
+          : (d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox!),
       })),
   )
 }
