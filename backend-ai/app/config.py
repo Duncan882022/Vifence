@@ -229,23 +229,6 @@ class Settings(BaseSettings):
     # frame. Tắt khi VPS chỉ cần phục vụ Module 05.
     machinery_detector_enabled: bool = True
 
-    # --- Person YOLO (patrol HC-* / DR-* / person gate) ---
-    person_model_weights: str = "yolov8s.pt"
-    person_use_openvino: bool = False
-    person_openvino_dir: str = "models/person_openvino"
-    person_imgsz: int = 1280
-    person_conf_threshold: float = 0.12
-    person_iou_threshold: float = 0.5
-    person_max_det: int = 100
-    person_letterbox: bool = True
-    # Tiled slice inference cho người nhỏ ở xa (tốn CPU — bật khi 1280 vẫn sót).
-    person_tiled_inference: bool = False
-    person_tile_size: int = 640
-    person_tile_overlap: float = 0.22
-    # Patrol — có thể hạ thêm qua env; mặc định = person_conf_threshold.
-    person_conf_patrol_bodycam: float = 0.12
-    person_conf_patrol_flycam: float = 0.12
-
     def vms_ai_fps_effective(self) -> float:
         """FPS AI trên VMS — luôn dùng cấu hình đầy đủ (grace không hạ FPS)."""
         return self.vms_ai_fps
