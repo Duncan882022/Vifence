@@ -141,16 +141,18 @@ class _TrackWatch:
 
 
 @dataclass
-class _StaleObject:
-    obj_id: str
+class _StaleSlot:
+    subject_id: str
     bbox: tuple[float, float, float, float] | None
     last_seen: float
 
 
 # Theo dõi thời gian bám track trước khi ghi thẻ — tránh log cảnh thoáng qua.
 _track_watch: dict[str, _TrackWatch] = {}
-# Đối tượng vừa mất track, chờ track mới cùng vị trí nhận lại.
-_stale_objects: dict[str, list[_StaleObject]] = {}
+# Track vừa mất, chờ track mới cùng vị trí nhận lại — tách Người / Đối tượng
+# để nhóm lẫn mặt và lưng không nuốt nhau.
+_stale_objects: dict[str, list[_StaleSlot]] = {}
+_stale_persons: dict[str, list[_StaleSlot]] = {}
 
 
 def _key(camera_id: str, track_id: str) -> str:
@@ -233,42 +235,81 @@ def _live_object_ids() -> set[str]:
     return set(_track_to_object.values())
 
 
+def _live_person_ids() -> set[str]:
+    return set(_track_to_person.values())
+
+
+def _reuse_stale_slot(
+    store: dict[str, list[_StaleSlot]],
+    camera_id: str,
+    person_bbox: Sequence[float] | None,
+    now: float,
+    live_ids: set[str],
+) -> str | None:
+    """Track mới cùng camera, cùng chỗ → nhận lại thẻ cũ cùng tầng."""
+    box = _as_bbox(person_bbox)
+    if box is None:
+        return None
+    slots = store.get(camera_id) or []
+    kept: list[_StaleSlot] = []
+    best: _StaleSlot | None = None
+    best_iou = _STALE_IOU_MIN
+    for slot in slots:
+        if now - slot.last_seen > _STALE_OBJECT_SEC:
+            continue
+        if slot.subject_id in live_ids:
+            continue
+        if slot.bbox is None:
+            kept.append(slot)
+            continue
+        iou = _bbox_iou(box, slot.bbox)
+        if iou >= best_iou:
+            if best is not None:
+                kept.append(best)
+            best = slot
+            best_iou = iou
+        else:
+            kept.append(slot)
+    if best is not None:
+        store[camera_id] = kept
+        return best.subject_id
+    store[camera_id] = kept
+    return None
+
+
 def _reuse_stale_object(
     camera_id: str,
     person_bbox: Sequence[float] | None,
     now: float,
 ) -> str | None:
-    """Track mới trên cùng camera, cùng chỗ → nhận lại thẻ Đối tượng cũ."""
-    box = _as_bbox(person_bbox)
-    if box is None:
-        return None
     with _lock:
-        slots = _stale_objects.get(camera_id) or []
-        live = _live_object_ids()
-        kept: list[_StaleObject] = []
-        best: _StaleObject | None = None
-        best_iou = _STALE_IOU_MIN
-        for slot in slots:
-            if now - slot.last_seen > _STALE_OBJECT_SEC:
-                continue
-            if slot.obj_id in live:
-                continue
-            if slot.bbox is None:
-                kept.append(slot)
-                continue
-            iou = _bbox_iou(box, slot.bbox)
-            if iou >= best_iou:
-                if best is not None:
-                    kept.append(best)
-                best = slot
-                best_iou = iou
-            else:
-                kept.append(slot)
-        if best is not None:
-            _stale_objects[camera_id] = kept
-            return best.obj_id
-        _stale_objects[camera_id] = kept
-        return None
+        return _reuse_stale_slot(
+            _stale_objects, camera_id, person_bbox, now, _live_object_ids(),
+        )
+
+
+def _reuse_stale_person(
+    camera_id: str,
+    person_bbox: Sequence[float] | None,
+    now: float,
+) -> str | None:
+    with _lock:
+        return _reuse_stale_slot(
+            _stale_persons, camera_id, person_bbox, now, _live_person_ids(),
+        )
+
+
+def _stash_stale(
+    store: dict[str, list[_StaleSlot]],
+    camera_id: str,
+    subject_id: str,
+    bbox: tuple[float, float, float, float] | None,
+    ts: float,
+) -> None:
+    slots = store.setdefault(camera_id, [])
+    slots.append(_StaleSlot(subject_id=subject_id, bbox=bbox, last_seen=ts))
+    if len(slots) > 24:
+        del slots[:-24]
 
 
 def record_observation(
@@ -379,6 +420,26 @@ def record_observation(
     if not ok:
         return None
 
+    # Track mới, chưa mặt: ưu tiên nhận lại Người vừa mất track cùng chỗ
+    # (quay lưng). Không khớp thì mới là Đối tượng — để nhóm lẫn mặt/lưng
+    # không bị gộp một thẻ.
+    reused_person = _reuse_stale_person(camera_id, person_bbox, ts)
+    if reused_person:
+        pers_id = identity.resolve_alias(reused_person)
+        with _lock:
+            _track_to_person[key] = pers_id
+        path, shot_score = _shot(pers_id)
+        daystore.touch_person_event(
+            pers_id,
+            camera_id=camera_id,
+            zone_id=zone_id,
+            snapshot_path=path,
+            snapshot_score=shot_score,
+            now=ts,
+            seen_since=anchor_ts,
+        )
+        return pers_id
+
     with _lock:
         obj_id = _track_to_object.get(key)
     first_write = obj_id is None
@@ -422,14 +483,13 @@ def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> 
     ts = float(now if now is not None else time.time())
     with _lock:
         obj_id = _track_to_object.pop(key, None)
+        pers_id = _track_to_person.pop(key, None)
         bbox = _track_bbox.pop(key, None)
         _track_watch.pop(key, None)
-        _track_to_person.pop(key, None)
-        if obj_id:
-            slots = _stale_objects.setdefault(camera_id, [])
-            slots.append(_StaleObject(obj_id=obj_id, bbox=bbox, last_seen=ts))
-            if len(slots) > 24:
-                del slots[:-24]
+        if pers_id:
+            _stash_stale(_stale_persons, camera_id, pers_id, bbox, ts)
+        elif obj_id:
+            _stash_stale(_stale_objects, camera_id, obj_id, bbox, ts)
 
 
 def reset(camera_id: str | None = None) -> None:
@@ -440,9 +500,11 @@ def reset(camera_id: str | None = None) -> None:
             _track_watch.clear()
             _track_bbox.clear()
             _stale_objects.clear()
+            _stale_persons.clear()
             return
         prefix = f"{camera_id}|"
         for store in (_track_to_object, _track_to_person, _track_watch, _track_bbox):
             for k in [k for k in store if k.startswith(prefix)]:
                 store.pop(k, None)
         _stale_objects.pop(camera_id, None)
+        _stale_persons.pop(camera_id, None)
