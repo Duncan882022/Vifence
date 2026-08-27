@@ -38,7 +38,7 @@ def _list_frame_faces(
 
     h, w = frame.shape[:2]
     out: list[_FrameFace] = []
-    min_face_h = max(10.0, h * 0.035)
+    min_face_h = max(8.0, h * 0.024)
     for face in faces:
         x, y, fw, fh = face[:4]
         score = float(face[14]) if len(face) > 14 else float(face[4] if len(face) > 4 else 0.0)
@@ -106,6 +106,38 @@ def _synth_conf_from_face(face: _FrameFace) -> float:
     return min(0.92, 0.55 + face.score * 0.35)
 
 
+def _dedupe_anchor_boxes(
+    boxes: list[tuple[tuple[float, float, float, float], float]],
+    *,
+    iou_threshold: float = 0.34,
+) -> list[tuple[tuple[float, float, float, float], float]]:
+    if len(boxes) <= 1:
+        return boxes
+    ranked = sorted(
+        boxes,
+        key=lambda item: item[1] * max(1.0, (item[0][2] - item[0][0]) * (item[0][3] - item[0][1])),
+        reverse=True,
+    )
+    kept: list[tuple[tuple[float, float, float, float], float]] = []
+    for candidate_box, candidate_conf in ranked:
+        if any(_bbox_iou(candidate_box, kept_box) >= iou_threshold for kept_box, _ in kept):
+            continue
+        kept.append((candidate_box, candidate_conf))
+    return kept
+
+
+def _synth_duplicate_of_matched(
+    face: _FrameFace,
+    synth_box: tuple[float, float, float, float],
+    matched_yolo: list[tuple[tuple[float, float, float, float], float]],
+) -> bool:
+    """Chỉ gộp synth với YOLO khi mặt nằm trong box YOLO — tránh bbox YOLO rộng nuốt cả đám."""
+    for box, _ in matched_yolo:
+        if _face_center_in_box(face, box) and _bbox_iou(synth_box, box) >= 0.34:
+            return True
+    return False
+
+
 def _yolo_plausible_without_face(
     box: tuple[float, float, float, float],
     frame_w: int,
@@ -158,19 +190,26 @@ def anchor_patrol_person_boxes_to_faces(
             continue
         for idx, _face in matching:
             covered_face_indices.add(idx)
+
+        if len(matching) > 1:
+            for _idx, face in matching:
+                synth_box = _person_box_from_face(face, w, h)
+                matched_yolo.append((synth_box, _synth_conf_from_face(face)))
+            continue
+
+        _idx, face = matching[0]
         if upper_body_third_with_head_visible(box, w, h) and not legs_only_person_box(box, w, h):
             matched_yolo.append((box, conf))
             continue
-        best_face = max(matching, key=lambda item: item[1].score)[1]
-        synth_box = _person_box_from_face(best_face, w, h)
-        matched_yolo.append((synth_box, _synth_conf_from_face(best_face)))
+        synth_box = _person_box_from_face(face, w, h)
+        matched_yolo.append((synth_box, _synth_conf_from_face(face)))
 
     synth_boxes: list[tuple[tuple[float, float, float, float], float]] = []
     for face_index, face in enumerate(faces):
         if face_index in covered_face_indices:
             continue
         synth_box = _person_box_from_face(face, w, h)
-        if any(_bbox_iou(synth_box, box) >= 0.34 for box, _ in matched_yolo):
+        if _synth_duplicate_of_matched(face, synth_box, matched_yolo):
             continue
         synth_boxes.append((synth_box, _synth_conf_from_face(face)))
 
@@ -187,8 +226,9 @@ def anchor_patrol_person_boxes_to_faces(
         existing_boxes.append(box)
 
     if matched_yolo or synth_boxes or back_turn:
-        return matched_yolo + synth_boxes + back_turn
+        return _dedupe_anchor_boxes(matched_yolo + synth_boxes + back_turn)
 
-    best = max(faces, key=lambda f: f.score * (f.box[2] - f.box[0]) * (f.box[3] - f.box[1]))
-    synth_box = _person_box_from_face(best, w, h)
-    return [(synth_box, _synth_conf_from_face(best))]
+    return _dedupe_anchor_boxes([
+        (_person_box_from_face(face, w, h), _synth_conf_from_face(face))
+        for face in faces
+    ])
