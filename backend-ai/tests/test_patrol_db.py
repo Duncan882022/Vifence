@@ -200,6 +200,30 @@ class ObjectTests(PatrolDbTestCase):
         self.assertTrue(obj_id.startswith("obj-"))
         self.assertEqual(len(daystore.list_objects(db.today_vn(1_000.0))), 1)
 
+    def test_continuous_stream_does_not_rewrite_every_frame(self) -> None:
+        """Camera quay liên tục: đứng yên vài giây không đụng last_seen."""
+        obj_id = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
+        daystore.touch_object(obj_id, camera_id="HC-01", now=1_005.0)
+        card = daystore.list_objects(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["last_seen"], 1_000.0)
+
+        daystore.touch_object(obj_id, camera_id="HC-01", now=1_010.0)
+        card = daystore.list_objects(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["last_seen"], 1_010.0)
+
+    def test_better_snapshot_bypasses_presence_throttle(self) -> None:
+        obj_id = daystore.touch_object(
+            None, camera_id="HC-01", snapshot_path="a.jpg",
+            snapshot_score=0.1, now=1_000.0,
+        )
+        daystore.touch_object(
+            obj_id, camera_id="HC-01", snapshot_path="b.jpg",
+            snapshot_score=0.8, now=1_002.0,
+        )
+        card = daystore.list_objects(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["snapshot_path"], "b.jpg")
+        self.assertEqual(card["last_seen"], 1_002.0)
+
     def test_promote_moves_history_to_person(self) -> None:
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
         pers_id, _ = identity.observe_face(_vec(30), quality=0.8)

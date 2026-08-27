@@ -237,6 +237,52 @@ class PatrolSinkTests(unittest.TestCase):
         row = identity.get_person(str(again))
         self.assertEqual(identity.display_name(row), "Nguyễn Văn A")
 
+    def test_track_split_reuses_object_by_bbox(self) -> None:
+        """ByteTrack mất id — cùng người đứng yên không đẻ thẻ Đối tượng mới."""
+        t0 = 1_000.0
+        box = [80.0, 60.0, 220.0, 420.0]
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=box, now=t0,
+        )
+        first = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=box, now=t0 + _OBJECT_CONFIRM,
+        )
+        sink.forget_track("HC-01", "ptk0001:person", now=t0 + 4.0)
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0008:person",
+            person_bbox=[85.0, 62.0, 225.0, 425.0], now=t0 + 5.0,
+        )
+        again = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0008:person",
+            person_bbox=[85.0, 62.0, 225.0, 425.0],
+            now=t0 + 5.0 + _OBJECT_CONFIRM,
+        )
+        self.assertEqual(again, first)
+        self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
+
+    def test_two_people_do_not_share_object_card(self) -> None:
+        t0 = 1_000.0
+        left = [40.0, 50.0, 160.0, 400.0]
+        right = [400.0, 50.0, 540.0, 400.0]
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person", person_bbox=left, now=t0,
+        )
+        a = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=left, now=t0 + _OBJECT_CONFIRM,
+        )
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0002:person", person_bbox=right, now=t0,
+        )
+        b = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0002:person",
+            person_bbox=right, now=t0 + _OBJECT_CONFIRM,
+        )
+        self.assertNotEqual(a, b)
+        self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

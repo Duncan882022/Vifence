@@ -124,8 +124,13 @@ def resolve_snapshot_path(relative: str) -> Path | None:
 # đại diện bởi Đối tượng nào, hoặc đã thăng lên Người nào.
 # Ngưỡng chất lượng mặt — dưới đây coi là chưa đủ mặt cho tab Đối tượng.
 _OBJECT_FACE_QUALITY_MAX = 0.2
+# Track ByteTrack mất dấu ~5s rồi cấp id mới — cùng người đứng yên bị đếm 2 lần
+# nếu không tái dùng thẻ Đối tượng theo vị trí trên cùng camera.
+_STALE_OBJECT_SEC = 12.0
+_STALE_IOU_MIN = 0.30
 _track_to_object: dict[str, str] = {}
 _track_to_person: dict[str, str] = {}
+_track_bbox: dict[str, tuple[float, float, float, float]] = {}
 _lock = threading.Lock()
 
 
@@ -135,8 +140,17 @@ class _TrackWatch:
     confirmed: bool = False
 
 
+@dataclass
+class _StaleObject:
+    obj_id: str
+    bbox: tuple[float, float, float, float] | None
+    last_seen: float
+
+
 # Theo dõi thời gian bám track trước khi ghi thẻ — tránh log cảnh thoáng qua.
 _track_watch: dict[str, _TrackWatch] = {}
+# Đối tượng vừa mất track, chờ track mới cùng vị trí nhận lại.
+_stale_objects: dict[str, list[_StaleObject]] = {}
 
 
 def _key(camera_id: str, track_id: str) -> str:
@@ -181,6 +195,82 @@ def _gate_observation_commit(
         return True, watch.first_seen
 
 
+def _as_bbox(person_bbox: Sequence[float] | None) -> tuple[float, float, float, float] | None:
+    if person_bbox is None or len(person_bbox) < 4:
+        return None
+    return (
+        float(person_bbox[0]),
+        float(person_bbox[1]),
+        float(person_bbox[2]),
+        float(person_bbox[3]),
+    )
+
+
+def _bbox_iou(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+    ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
+    area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _note_track_bbox(key: str, person_bbox: Sequence[float] | None) -> None:
+    box = _as_bbox(person_bbox)
+    if box is None:
+        return
+    with _lock:
+        _track_bbox[key] = box
+
+
+def _live_object_ids() -> set[str]:
+    return set(_track_to_object.values())
+
+
+def _reuse_stale_object(
+    camera_id: str,
+    person_bbox: Sequence[float] | None,
+    now: float,
+) -> str | None:
+    """Track mới trên cùng camera, cùng chỗ → nhận lại thẻ Đối tượng cũ."""
+    box = _as_bbox(person_bbox)
+    if box is None:
+        return None
+    with _lock:
+        slots = _stale_objects.get(camera_id) or []
+        live = _live_object_ids()
+        kept: list[_StaleObject] = []
+        best: _StaleObject | None = None
+        best_iou = _STALE_IOU_MIN
+        for slot in slots:
+            if now - slot.last_seen > _STALE_OBJECT_SEC:
+                continue
+            if slot.obj_id in live:
+                continue
+            if slot.bbox is None:
+                kept.append(slot)
+                continue
+            iou = _bbox_iou(box, slot.bbox)
+            if iou >= best_iou:
+                if best is not None:
+                    kept.append(best)
+                best = slot
+                best_iou = iou
+            else:
+                kept.append(slot)
+        if best is not None:
+            _stale_objects[camera_id] = kept
+            return best.obj_id
+        _stale_objects[camera_id] = kept
+        return None
+
+
 def record_observation(
     *,
     camera_id: str,
@@ -204,6 +294,7 @@ def record_observation(
 
     key = _key(camera_id, track_id)
     ts = float(now if now is not None else time.time())
+    _note_track_bbox(key, person_bbox)
 
     if not face_embedding or len(face_embedding) == 0:
         if frame is not None and person_bbox is not None:
@@ -258,24 +349,15 @@ def record_observation(
             with _lock:
                 _track_to_person[key] = pers_id
         path, shot_score = _shot(pers_id)
-        write_ts = anchor_ts if not bound else ts
         daystore.touch_person_event(
             pers_id,
             camera_id=camera_id,
             zone_id=zone_id,
             snapshot_path=path,
             snapshot_score=shot_score,
-            now=write_ts,
+            now=ts,
+            seen_since=None if bound else anchor_ts,
         )
-        if not bound and ts > write_ts:
-            daystore.touch_person_event(
-                pers_id,
-                camera_id=camera_id,
-                zone_id=zone_id,
-                snapshot_path=path,
-                snapshot_score=shot_score,
-                now=ts,
-            )
         return pers_id
 
     # Track này từng thấy mặt rồi thì đã là Người — quay lưng một lúc không
@@ -300,21 +382,18 @@ def record_observation(
     with _lock:
         obj_id = _track_to_object.get(key)
     first_write = obj_id is None
+    if first_write:
+        obj_id = _reuse_stale_object(camera_id, person_bbox, ts)
+        first_write = obj_id is None
     obj_id = daystore.touch_object(
         obj_id,
         camera_id=camera_id,
         zone_id=zone_id,
-        now=anchor_ts if first_write else ts,
+        now=ts,
+        seen_since=anchor_ts if first_write else None,
     )
     with _lock:
         _track_to_object[key] = obj_id
-    if first_write and ts > anchor_ts:
-        obj_id = daystore.touch_object(
-            obj_id,
-            camera_id=camera_id,
-            zone_id=zone_id,
-            now=ts,
-        )
     # Không gắn ảnh portrait lên thẻ Đối tượng — mặt đủ rõ thuộc tab Người.
     if face_quality < _OBJECT_FACE_QUALITY_MAX:
         path, shot_score = _shot(obj_id)
@@ -338,12 +417,19 @@ def _known_person_for_track(key: str) -> str | None:
     return identity.resolve_alias(pers)
 
 
-def forget_track(camera_id: str, track_id: str) -> None:
+def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> None:
     key = _key(camera_id, track_id)
+    ts = float(now if now is not None else time.time())
     with _lock:
-        _track_to_object.pop(key, None)
-        _track_to_person.pop(key, None)
+        obj_id = _track_to_object.pop(key, None)
+        bbox = _track_bbox.pop(key, None)
         _track_watch.pop(key, None)
+        _track_to_person.pop(key, None)
+        if obj_id:
+            slots = _stale_objects.setdefault(camera_id, [])
+            slots.append(_StaleObject(obj_id=obj_id, bbox=bbox, last_seen=ts))
+            if len(slots) > 24:
+                del slots[:-24]
 
 
 def reset(camera_id: str | None = None) -> None:
@@ -352,8 +438,11 @@ def reset(camera_id: str | None = None) -> None:
             _track_to_object.clear()
             _track_to_person.clear()
             _track_watch.clear()
+            _track_bbox.clear()
+            _stale_objects.clear()
             return
         prefix = f"{camera_id}|"
-        for store in (_track_to_object, _track_to_person, _track_watch):
+        for store in (_track_to_object, _track_to_person, _track_watch, _track_bbox):
             for k in [k for k in store if k.startswith(prefix)]:
                 store.pop(k, None)
+        _stale_objects.pop(camera_id, None)

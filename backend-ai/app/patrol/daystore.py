@@ -1,9 +1,9 @@
 """Sự kiện tuần tra theo ngày — Đối tượng / Người / Định danh.
 
-Quy tắc nghiệp vụ: **một người một thẻ mỗi ngày**. Gặp lại thì cập nhật giờ
-mới nhất và ghi thêm một đoạn vào lịch sử xuất hiện, không đẻ thẻ mới. Ở đây
-quy tắc đó là khoá chính `(event_date, pers_id)` chứ không phải một lớp gộp
-trùng chạy sau — nên không có đường nào lách qua được.
+Quy tắc nghiệp vụ: **một người một thẻ mỗi ngày**. Camera quay liên tục thì
+không đẻ sự kiện theo khung hình: gặp lại chỉ cập nhật hiện diện (last_seen /
+lịch sử xuất hiện), không tăng bộ đếm. Khoá chính `(event_date, pers_id)` nên
+không có đường nào lách qua được.
 
 Ba tầng không phải ba bảng: Đối tượng sống trong ngày rồi xoá (chưa thấy mặt
 nên chẳng có gì để nhận lại hôm sau), còn Người và Định danh dùng chung bảng
@@ -19,6 +19,25 @@ from . import db, identity
 
 # Hai lần thấy cách nhau quá ngưỡng này thì tính là hai lượt xuất hiện riêng.
 APPEARANCE_GAP_SEC = 45.0
+# Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
+# Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
+TOUCH_MIN_INTERVAL_SEC = 10.0
+
+
+def _should_refresh_presence(
+    row,
+    ts: float,
+    snapshot_path: str | None,
+    snapshot_score: float,
+) -> tuple[bool, bool]:
+    """(ghi DB, giữ snapshot mới). Hàng mới luôn ghi."""
+    if row is None:
+        return True, bool(snapshot_path)
+    keep_new = bool(snapshot_path) and snapshot_score >= float(row["snapshot_score"] or 0)
+    if keep_new:
+        return True, True
+    last = float(row["last_seen"] or 0)
+    return (ts - last) >= TOUCH_MIN_INTERVAL_SEC, False
 
 
 def _fmt_obj(date: str, seq: int) -> str:
@@ -37,9 +56,17 @@ def touch_object(
     snapshot_path: str | None = None,
     snapshot_score: float = 0.0,
     now: float | None = None,
+    seen_since: float | None = None,
 ) -> str:
-    """Ghi nhận một Đối tượng. Không truyền `obj_id` thì cấp mã mới."""
+    """Ghi nhận một Đối tượng. Không truyền `obj_id` thì cấp mã mới.
+
+    `seen_since` — mốc bắt đầu bám track (trước dwell). `now` là lúc chốt /
+    lần thấy mới nhất. Camera liên tục: không UPDATE mỗi khung.
+    """
     ts = now or time.time()
+    first = float(seen_since) if seen_since is not None else ts
+    if first > ts:
+        first = ts
     date = db.today_vn(ts)
 
     with db.tx() as conn:
@@ -50,11 +77,11 @@ def touch_object(
                 "INSERT INTO daily_objects"
                 "(event_date, obj_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, obj_id, ts, ts, snapshot_path, snapshot_score),
+                (date, obj_id, first, ts, snapshot_path, snapshot_score),
             )
         else:
             row = conn.execute(
-                "SELECT snapshot_score FROM daily_objects"
+                "SELECT snapshot_score, last_seen FROM daily_objects"
                 " WHERE event_date = ? AND obj_id = ?",
                 (date, obj_id),
             ).fetchone()
@@ -63,13 +90,14 @@ def touch_object(
                     "INSERT INTO daily_objects"
                     "(event_date, obj_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                     " VALUES(?,?,?,?,?,?)",
-                    (date, obj_id, ts, ts, snapshot_path, snapshot_score),
+                    (date, obj_id, first, ts, snapshot_path, snapshot_score),
                 )
             else:
-                # Giữ ảnh rõ nhất, không phải ảnh mới nhất — ảnh mới hay là lưng.
-                keep_new = snapshot_path and snapshot_score >= float(
-                    row["snapshot_score"]
+                write, keep_new = _should_refresh_presence(
+                    row, ts, snapshot_path, snapshot_score
                 )
+                if not write:
+                    return obj_id
                 if keep_new:
                     conn.execute(
                         "UPDATE daily_objects SET last_seen = ?, snapshot_path = ?,"
@@ -107,14 +135,19 @@ def touch_person_event(
     snapshot_path: str | None = None,
     snapshot_score: float = 0.0,
     now: float | None = None,
+    seen_since: float | None = None,
 ) -> None:
     ts = now or time.time()
+    first = float(seen_since) if seen_since is not None else ts
+    if first > ts:
+        first = ts
     date = db.today_vn(ts)
     pid = identity.resolve_alias(pers_id)
 
     with db.tx() as conn:
         row = conn.execute(
-            "SELECT snapshot_score FROM daily_events WHERE event_date = ? AND pers_id = ?",
+            "SELECT snapshot_score, last_seen FROM daily_events"
+            " WHERE event_date = ? AND pers_id = ?",
             (date, pid),
         ).fetchone()
         if row is None:
@@ -122,24 +155,30 @@ def touch_person_event(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, pid, ts, ts, snapshot_path, snapshot_score),
-            )
-        elif snapshot_path and snapshot_score >= float(row["snapshot_score"]):
-            conn.execute(
-                "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
-                " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
-                (ts, snapshot_path, snapshot_score, date, pid),
+                (date, pid, first, ts, snapshot_path, snapshot_score),
             )
         else:
-            conn.execute(
-                "UPDATE daily_events SET last_seen = ?"
-                " WHERE event_date = ? AND pers_id = ?",
-                (ts, date, pid),
+            write, keep_new = _should_refresh_presence(
+                row, ts, snapshot_path, snapshot_score
             )
+            if not write:
+                return
+            if keep_new:
+                conn.execute(
+                    "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
+                    " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
+                    (ts, snapshot_path, snapshot_score, date, pid),
+                )
+            else:
+                conn.execute(
+                    "UPDATE daily_events SET last_seen = ?"
+                    " WHERE event_date = ? AND pers_id = ?",
+                    (ts, date, pid),
+                )
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
             " WHERE pers_id = ?",
-            (ts, ts, pid),
+            (ts, first, pid),
         )
         _touch_appearance(conn, date, pid, camera_id, zone_id, ts)
 
