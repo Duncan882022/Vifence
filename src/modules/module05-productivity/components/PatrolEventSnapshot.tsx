@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react'
 import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { PatrolEvent } from '../data/patrolMockData'
-import {
-  resolvePatrolPersonStage,
-} from '../utils/patrolWorkforceEventLabels'
-import { patrolTierToken, type PatrolTier } from '../utils/patrolTierTokens'
 
 interface PatrolEventSnapshotProps {
   event: PatrolEvent
@@ -31,11 +27,6 @@ export function PatrolEventSnapshot({
   onClick,
 }: PatrolEventSnapshotProps) {
   const isDetail = variant === 'detail'
-  const stage = resolvePatrolPersonStage(event)
-  const tier: PatrolTier = stage === 'profile' ? 'identity' : stage
-  const tierToken = patrolTierToken(tier)
-  const roiLabel = tierToken.label
-  const codeLabel = event.objectId?.trim() || event.cameraId || '—'
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -107,18 +98,6 @@ export function PatrolEventSnapshot({
               </span>
               <Camera className="absolute top-0.5 right-0.5 w-2.5 h-2.5 text-white/35" aria-hidden />
             </>
-          )}
-          {isDetail && (
-            <div
-              className={cn(
-                'absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded text-[9px] font-bold border shadow-sm',
-                tierToken.roiLabelBg,
-                tierToken.roiLabelText,
-                tier === 'object' ? 'border-slate-400/60' : tier === 'person' ? 'border-sky-400/70' : 'border-violet-400/70',
-              )}
-            >
-              {roiLabel} · {codeLabel}
-            </div>
           )}
         </>
       )}
