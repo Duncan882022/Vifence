@@ -14,7 +14,7 @@ import { patrolPersonMeetsDetectionGate } from '../utils/patrolPersonVisibility'
 /**
  * Nhịp gửi khung — thưa hơn trang Phát sóng vì máy này còn đang tải luồng WHIP lên.
  */
-const LOCAL_ANALYZE_INTERVAL_MS = 280
+const LOCAL_ANALYZE_INTERVAL_MS = 150
 
 export interface PatrolLocalFrameSize {
   width: number

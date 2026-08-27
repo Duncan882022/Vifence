@@ -38,8 +38,8 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 HLS_DIR = DATA_DIR / "hls"
 CLIPS_DIR = DATA_DIR / "clips"
 
-# FPS AI mặc định cho VMS — tiết kiệm CPU, đủ ATLĐ
-VMS_AI_FPS = 6.0
+# FPS AI mặc định cho VMS — 10 FPS khi chạy 1 luồng; user không bật 3 cam cùng lúc.
+VMS_AI_FPS = 10.0
 # Pre/post window cho clip (giây)
 CLIP_PRE_SEC = 1.0
 CLIP_POST_SEC = 4.0

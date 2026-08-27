@@ -38,6 +38,7 @@ from .mesh_analysis_engine import MeshAnalysisEngine
 from .road_detection_catalog import analyze_road_catalog, render_road_catalog, save_road_catalog_snapshot
 from .crane_detection_catalog import analyze_crane_catalog, render_crane_catalog
 from .ppe_engine import PpeEngine
+from .patrol_engine import patrol_engine
 from .pccc_engine import PcccEngine
 from .wah_engine import WahEngine
 from .atgt_engine import AtgtEngine
@@ -144,8 +145,8 @@ def _build_vms_workers() -> None:
         return
 
     # Cấu hình engines per camera theo ma trận (Spec §4)
-    patrol_helmet_engines = {
-        "ppe": ppe_engine.process_frame,
+    patrol_vms_engines = {
+        "patrol": patrol_engine.process_frame,
     }
     cam_engines: dict[str, dict[str, object]] = {
         "A-03": {
@@ -159,9 +160,9 @@ def _build_vms_workers() -> None:
             "wah": wah_engine.process_frame,
             "crane": crane_engine.process_frame,
         },
-        "HC-01": dict(patrol_helmet_engines),
-        "HC-02": dict(patrol_helmet_engines),
-        "DR-03": dict(patrol_helmet_engines),
+        "HC-01": dict(patrol_vms_engines),
+        "HC-02": dict(patrol_vms_engines),
+        "DR-03": dict(patrol_vms_engines),
     }
 
     def on_event(ev):
@@ -497,12 +498,31 @@ def patrol_helmet_events(camera_id: str, date: str | None = None, limit: int = 5
 
 @app.get("/patrol/{camera_id}/metrics")
 def patrol_helmet_metrics(camera_id: str):
-    """Module 05 — đếm công nhân / vi phạm PPE live theo từng mũ HC-*."""
+    """Module 05 — đếm công nhân live theo camera HC-* / DR-*."""
+    if camera_id.startswith("DR-"):
+        from .drone_heatmap import get_drone_heatmap_metrics
+
+        live = get_drone_heatmap_metrics(camera_id)
+        if live.get("updated_at"):
+            return live
     return build_patrol_metrics_payload(
         camera_id,
         store=engine.store,
         vms_workers=_vms_workers,
     )
+
+
+@app.get("/patrol/{camera_id}/heatmap.png")
+def patrol_drone_heatmap_png(camera_id: str):
+    """DR-* — heatmap mật độ pixel (JET), render ~30s/lần."""
+    if not camera_id.startswith("DR-"):
+        raise HTTPException(status_code=404, detail="heatmap_only_for_drone")
+    from .drone_heatmap import get_drone_heatmap_png_path
+
+    path = get_drone_heatmap_png_path(camera_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="heatmap_not_ready")
+    return FileResponse(path, media_type="image/png")
 
 
 @app.get("/events/dates")
@@ -878,11 +898,11 @@ def _analyze_ppe_frame(frame: np.ndarray, camera_id: str) -> dict:
 
 
 def _analyze_patrol_person_frame(frame: np.ndarray, camera_id: str) -> dict:
-    """HC-* person mode — detect + gán sgc + log PERS-001 qua ppe_engine."""
+    """HC-* / DR-* — YOLO person only, không PPE."""
     return analyze_engine_frame(
         frame,
         camera_id,
-        ppe_engine.process_frame,
+        patrol_engine.process_frame,
     )
 
 

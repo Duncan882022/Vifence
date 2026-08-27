@@ -2102,6 +2102,10 @@ def _build_patrol_flycam_result(
     detections = _build_patrol_person_detections(
         frame, camera_id, persons, w, h, source_pts_sec=source_pts_sec,
     )
+    person_dets = [d for d in detections if d.behavior == "person"]
+    track_ids = {d.track_id for d in person_dets if d.track_id}
+    frame_person_count = len(person_dets)
+    track_count = len(track_ids) if track_ids else frame_person_count
 
     return {
         "type": "result",
@@ -2109,7 +2113,9 @@ def _build_patrol_flycam_result(
         "width": w,
         "height": h,
         "metrics": {
-            "person_count": _patrol_countable_person_count(persons, w, h),
+            "person_count": track_count,
+            "frame_person_count": frame_person_count,
+            "track_count": track_count,
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],
