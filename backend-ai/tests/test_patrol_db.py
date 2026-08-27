@@ -274,5 +274,32 @@ class ResetTests(PatrolDbTestCase):
         self.assertEqual(len(identity.list_persons()), 1)
 
 
+class PurgeDayTests(PatrolDbTestCase):
+    def test_purge_day_clears_events_keeps_identified_profile(self) -> None:
+        profile = identity.import_identity(
+            full_name="Nguyễn Hồ Sơ",
+            employee_code="NV999",
+            contractor="Cty A",
+            embedding=_vec(50),
+        )
+        stray, _ = identity.observe_face(_vec(51), quality=0.8)
+        daystore.touch_person_event(stray, camera_id="HC-01", now=1_000.0)
+        daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
+        date = db.today_vn(1_000.0)
+
+        stats = db.purge_day(date)
+        self.assertEqual(stats["daily_events"], 1)
+        self.assertEqual(stats["daily_objects"], 1)
+        self.assertEqual(stats["orphan_persons"], 1)
+        self.assertEqual(daystore.list_person_events(date), [])
+        self.assertEqual(daystore.list_objects(date), [])
+
+        kept = identity.get_person(str(profile["pers_id"]))
+        self.assertIsNotNone(kept)
+        self.assertEqual(kept["status"], identity.STATUS_IDENTIFIED)
+        self.assertEqual(kept["full_name"], "Nguyễn Hồ Sơ")
+        self.assertIsNone(identity.get_person(stray))
+
+
 if __name__ == "__main__":
     unittest.main()

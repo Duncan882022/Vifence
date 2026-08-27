@@ -369,6 +369,13 @@ def merge_persons(payload: dict) -> dict[str, Any]:
     return {"ok": True, "person": _person_payload(row) if row else None}
 
 
+@router.delete("/day/events")
+def purge_day_events(date: str | None = None) -> dict[str, Any]:
+    """Xoá thẻ sự kiện một ngày — giữ nguyên hồ sơ Định danh đã import."""
+    stats = db.purge_day(date)
+    return {"ok": True, **stats}
+
+
 @router.get("/snapshot")
 def patrol_snapshot(path: str):
     """Ảnh chụp của thẻ sự kiện. Đường dẫn bị chặn thoát khỏi thư mục ảnh."""

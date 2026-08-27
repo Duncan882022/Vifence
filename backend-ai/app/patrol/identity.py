@@ -357,14 +357,15 @@ def observe_face(
     ts = now or time.time()
     matched, _sim = match_face(embedding)
     if matched:
+        pid = resolve_alias(matched)
         with db.tx() as c:
             c.execute(
-                "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, matched)
+                "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid)
             )
         add_face_angle(
-            matched, embedding, quality=quality, camera_id=camera_id, now=ts
+            pid, embedding, quality=quality, camera_id=camera_id, now=ts
         )
-        return matched, False
+        return pid, False
 
     with db.tx() as c:
         pers_id = create_person(origin="camera", now=ts, conn=c)
