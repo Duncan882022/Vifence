@@ -1,9 +1,10 @@
 """Cầu nối luồng AI → SQLite tuần tra.
 
-Luồng phân tích gọi `record_observation` mỗi khi xác nhận một người trong
-khung. Ở đây quyết định người đó là Đối tượng (chưa thấy mặt, sống trong ngày)
-hay Người/Định danh (có khuôn mặt, thực thể bền), rồi ghi thẻ sự kiện và lịch
-sử xuất hiện.
+Luồng phân tích gọi `record_observation` mỗi khi phát hiện một người trong
+khung. **Chưa ghi thẻ ngay** — phải bám track đủ vài giây (`patrol_object_confirm_seconds`
+/ `patrol_face_object_confirm_seconds` trong config) rồi mới chốt sự kiện vào SQLite.
+Sau đó quyết định Đối tượng (chưa thấy mặt) hay Người/Định danh (có khuôn mặt),
+rồi ghi thẻ sự kiện và lịch sử xuất hiện.
 
 Tách khỏi `ppe_engine` có chủ ý: engine kia lo vòng đời sự kiện ATLĐ, còn đây
 là mô hình nghiệp vụ của Module 05. Trộn hai thứ vào nhau chính là cái đã làm
@@ -13,6 +14,8 @@ Module 05 rối tới mức phải viết lại.
 from __future__ import annotations
 
 import threading
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -126,8 +129,56 @@ _track_to_person: dict[str, str] = {}
 _lock = threading.Lock()
 
 
+@dataclass
+class _TrackWatch:
+    first_seen: float
+    confirmed: bool = False
+
+
+# Theo dõi thời gian bám track trước khi ghi thẻ — tránh log cảnh thoáng qua.
+_track_watch: dict[str, _TrackWatch] = {}
+
+
 def _key(camera_id: str, track_id: str) -> str:
     return f"{camera_id}|{track_id}"
+
+
+def _track_is_committed(key: str) -> bool:
+    with _lock:
+        return key in _track_to_object or key in _track_to_person
+
+
+def _required_confirm_seconds(*, has_face: bool) -> float:
+    from ..config import settings
+
+    if has_face:
+        return float(settings.patrol_face_object_confirm_seconds)
+    return float(settings.patrol_object_confirm_seconds)
+
+
+def _gate_observation_commit(
+    key: str,
+    *,
+    has_face: bool,
+    now: float,
+) -> tuple[bool, float]:
+    """Chỉ cho ghi SQLite sau khi bám track đủ giây. Trả (ok, mốc first_seen)."""
+    if _track_is_committed(key):
+        return True, now
+
+    with _lock:
+        watch = _track_watch.get(key)
+        if watch is None:
+            watch = _TrackWatch(first_seen=now)
+            _track_watch[key] = watch
+        elif watch.confirmed:
+            return True, now
+
+        if now - watch.first_seen < _required_confirm_seconds(has_face=has_face):
+            return False, now
+
+        watch.confirmed = True
+        return True, watch.first_seen
 
 
 def record_observation(
@@ -152,6 +203,7 @@ def record_observation(
         return None
 
     key = _key(camera_id, track_id)
+    ts = float(now if now is not None else time.time())
 
     if not face_embedding or len(face_embedding) == 0:
         if frame is not None and person_bbox is not None:
@@ -181,6 +233,13 @@ def record_observation(
         # đẻ ra một mã mới cho chính người đang đứng đó. Đúng cách đã sinh ra
         # pers-0001 tới pers-0011 cho cùng một người.
         bound = _known_person_for_track(key)
+        if not bound:
+            ok, anchor_ts = _gate_observation_commit(key, has_face=True, now=ts)
+            if not ok:
+                return None
+        else:
+            anchor_ts = ts
+
         if bound:
             pers_id = bound
             # Góc mặt mới của người đã biết là thứ quý nhất: lần sau gặp lại
@@ -192,21 +251,31 @@ def record_observation(
             with _lock:
                 obj_id = _track_to_object.pop(key, None)
             pers_id, _created = identity.observe_face(
-                face_embedding, quality=face_quality, camera_id=camera_id, now=now
+                face_embedding, quality=face_quality, camera_id=camera_id, now=ts
             )
             if obj_id:
-                daystore.promote_object(obj_id, pers_id, now=now)
+                daystore.promote_object(obj_id, pers_id, now=anchor_ts)
             with _lock:
                 _track_to_person[key] = pers_id
         path, shot_score = _shot(pers_id)
+        write_ts = anchor_ts if not bound else ts
         daystore.touch_person_event(
             pers_id,
             camera_id=camera_id,
             zone_id=zone_id,
             snapshot_path=path,
             snapshot_score=shot_score,
-            now=now,
+            now=write_ts,
         )
+        if not bound and ts > write_ts:
+            daystore.touch_person_event(
+                pers_id,
+                camera_id=camera_id,
+                zone_id=zone_id,
+                snapshot_path=path,
+                snapshot_score=shot_score,
+                now=ts,
+            )
         return pers_id
 
     # Track này từng thấy mặt rồi thì đã là Người — quay lưng một lúc không
@@ -220,20 +289,32 @@ def record_observation(
             zone_id=zone_id,
             snapshot_path=path,
             snapshot_score=shot_score,
-            now=now,
+            now=ts,
         )
         return known
 
+    ok, anchor_ts = _gate_observation_commit(key, has_face=False, now=ts)
+    if not ok:
+        return None
+
     with _lock:
         obj_id = _track_to_object.get(key)
+    first_write = obj_id is None
     obj_id = daystore.touch_object(
         obj_id,
         camera_id=camera_id,
         zone_id=zone_id,
-        now=now,
+        now=anchor_ts if first_write else ts,
     )
     with _lock:
         _track_to_object[key] = obj_id
+    if first_write and ts > anchor_ts:
+        obj_id = daystore.touch_object(
+            obj_id,
+            camera_id=camera_id,
+            zone_id=zone_id,
+            now=ts,
+        )
     # Không gắn ảnh portrait lên thẻ Đối tượng — mặt đủ rõ thuộc tab Người.
     if face_quality < _OBJECT_FACE_QUALITY_MAX:
         path, shot_score = _shot(obj_id)
@@ -244,7 +325,7 @@ def record_observation(
                 zone_id=zone_id,
                 snapshot_path=path,
                 snapshot_score=shot_score,
-                now=now,
+                now=ts,
             )
     return obj_id
 
@@ -262,6 +343,7 @@ def forget_track(camera_id: str, track_id: str) -> None:
     with _lock:
         _track_to_object.pop(key, None)
         _track_to_person.pop(key, None)
+        _track_watch.pop(key, None)
 
 
 def reset(camera_id: str | None = None) -> None:
@@ -269,8 +351,9 @@ def reset(camera_id: str | None = None) -> None:
         if camera_id is None:
             _track_to_object.clear()
             _track_to_person.clear()
+            _track_watch.clear()
             return
         prefix = f"{camera_id}|"
-        for store in (_track_to_object, _track_to_person):
+        for store in (_track_to_object, _track_to_person, _track_watch):
             for k in [k for k in store if k.startswith(prefix)]:
                 store.pop(k, None)

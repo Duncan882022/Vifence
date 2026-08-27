@@ -50,7 +50,7 @@ class TrackIdentityStabilityTests(unittest.TestCase):
         """Đây là sự cố thật: 60 khung hình của một người, embedding lệch mạnh."""
         base = _vec(1)
         t = 1_000.0
-        seen = set()
+        seen: set[str | None] = set()
         for i in range(60):
             emb = _angle(base, 0.45 + (i % 7) * 0.02, seed=100 + i)
             pid = sink.record_observation(
@@ -63,7 +63,7 @@ class TrackIdentityStabilityTests(unittest.TestCase):
             seen.add(pid)
             t += 0.17
 
-        self.assertEqual(len(seen), 1, f"phải một mã, nhận được {seen}")
+        self.assertEqual(len({x for x in seen if x is not None}), 1, f"phải một mã, nhận được {seen}")
         self.assertEqual(len(identity.list_persons()), 1)
         self.assertEqual(len(daystore.list_person_events(db.today_vn(1_000.0))), 1)
 
@@ -108,6 +108,11 @@ class TrackIdentityStabilityTests(unittest.TestCase):
             face_embedding=_angle(base, 0.85, seed=301), face_quality=0.9,
             now=t + 10,
         )
+        again = sink.record_observation(
+            camera_id="HC-02", track_id="ptk0077:person",
+            face_embedding=_angle(base, 0.85, seed=301), face_quality=0.9,
+            now=t + 10 + 1.5,
+        )
         self.assertEqual(again, first)
         self.assertEqual(len(identity.list_persons()), 1)
 
@@ -117,9 +122,17 @@ class TrackIdentityStabilityTests(unittest.TestCase):
             camera_id="HC-02", track_id="ptk0001:person",
             face_embedding=_vec(10).tolist(), face_quality=0.9, now=1_000.0,
         )
-        b = sink.record_observation(
+        a = sink.record_observation(
+            camera_id="HC-02", track_id="ptk0001:person",
+            face_embedding=_vec(10).tolist(), face_quality=0.9, now=1_001.5,
+        )
+        sink.record_observation(
             camera_id="HC-02", track_id="ptk0002:person",
             face_embedding=_vec(11).tolist(), face_quality=0.9, now=1_100.0,
+        )
+        b = sink.record_observation(
+            camera_id="HC-02", track_id="ptk0002:person",
+            face_embedding=_vec(11).tolist(), face_quality=0.9, now=1_101.5,
         )
         self.assertNotEqual(a, b)
         self.assertEqual(len(identity.list_persons()), 2)
@@ -130,11 +143,19 @@ class TrackIdentityStabilityTests(unittest.TestCase):
             camera_id="HC-01", track_id="ptk0001:person",
             face_embedding=_angle(base, 0.95, seed=1), face_quality=0.9, now=1_000.0,
         )
+        pers = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            face_embedding=_angle(base, 0.95, seed=1), face_quality=0.9, now=1_001.5,
+        )
         identity.identify(str(pers), full_name="Nguyễn Văn A", employee_code="NV001")
 
         again = sink.record_observation(
             camera_id="HC-02", track_id="ptk0050:person",
             face_embedding=_angle(base, 0.90, seed=2), face_quality=0.9, now=2_000.0,
+        )
+        again = sink.record_observation(
+            camera_id="HC-02", track_id="ptk0050:person",
+            face_embedding=_angle(base, 0.90, seed=2), face_quality=0.9, now=2_001.5,
         )
         self.assertEqual(again, pers)
         row = identity.get_person(str(again))
