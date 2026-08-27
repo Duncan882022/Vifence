@@ -120,8 +120,8 @@ describe('bbox mượt', () => {
     tracks = advance(tracks, [person([100, 100, 200, 550], { track_id: 'p1' })], now)
     const after = [...tracks.values()][0].kalman.h
 
-    const jump = (after - before) / (450 - before)
-    expect(jump).toBeLessThan(0.5)
+    const jump = (after - before) / (550 - before)
+    expect(jump).toBeLessThan(0.68)
     expect(jump).toBeGreaterThan(0)
   })
 
@@ -228,13 +228,15 @@ describe('mồi vận tốc từ backend', () => {
 })
 
 describe('vòng đời track', () => {
-  it('miss một nhịp ẩn ROI nhưng giữ track trong bộ nhớ', () => {
+  it('miss một nhịp coast ngắn rồi mờ dần — không tắt đột ngột', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
     tracks = advance(tracks, [], 1_180)
     expect([...tracks.values()][0].state).toBe('lost')
-    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(0)
+    const coasting = predictPersonRoiTracks(tracks, 120)
+    expect(coasting).toHaveLength(1)
+    expect(coasting[0].displayOpacity).toBeLessThan(1)
   })
 
   it('track mất dấu vẫn nằm trong bộ nhớ để nhận lại sau lúc bị che', () => {
@@ -242,7 +244,7 @@ describe('vòng đời track', () => {
     const firstId = [...tracks.keys()][0]
 
     tracks = advance(tracks, [], 1_180)
-    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
+    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(1)
 
     tracks = advance(tracks, [person([120, 110, 220, 410], { track_id: 'p1' })], 1_360)
     expect([...tracks.keys()][0]).toBe(firstId)

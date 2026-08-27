@@ -333,8 +333,8 @@ export function predictPersonRoiTracks(
   const out: PersonRoiDisplay[] = []
 
   for (const track of tracks.values()) {
-    // Track mất dấu không vẽ — tránh ghost trên giàn giáo/sàn khi YOLO hết hit.
-    if (track.state === 'lost' || track.missStreak > 0) {
+    const coastLimit = cfg.displayCoastMaxMiss
+    if (track.missStreak > coastLimit) {
       continue
     }
 
@@ -342,7 +342,9 @@ export function predictPersonRoiTracks(
     const personId = canonicalPersonId(track)
 
     let displayOpacity = 1
-    if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
+    if (track.missStreak > 0) {
+      displayOpacity = Math.max(0.55, 1 - track.missStreak / (coastLimit + 1))
+    } else if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
       displayOpacity = 0.62
     }
 

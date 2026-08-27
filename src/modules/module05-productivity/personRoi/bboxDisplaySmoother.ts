@@ -43,7 +43,7 @@ export class BboxDisplaySmoother {
 
     const diagonal = Math.max(bboxDiagonal(raw), bboxDiagonal(prev.bbox), 48)
     const shift = maxCornerShift(raw, prev.bbox)
-    const blend = shift / diagonal >= snapDiagonalRatio ? 0.88 : alpha
+    const blend = shift / diagonal >= snapDiagonalRatio ? 0.96 : alpha
 
     const out: Bbox = [
       blend * raw[0] + (1 - blend) * prev.bbox[0],

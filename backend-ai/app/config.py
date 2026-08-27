@@ -207,7 +207,7 @@ class Settings(BaseSettings):
     vms_camera_sources: str = ""
 
     # FPS AI trên server (VMS mode) — 10 FPS/stream; user không bật 3 cam cùng lúc.
-    vms_ai_fps: float = 10.0
+    vms_ai_fps: float = 12.0
 
     # Camera CMS xem thẳng qua MediaMTX (WHEP/LL-HLS) — worker khỏi re-encode HLS.
     # Mỗi camera bỏ đi ở đây là bớt một ffmpeg + ~69 MB/s ghi raw frame vào pipe.
