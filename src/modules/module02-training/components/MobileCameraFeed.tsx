@@ -192,12 +192,18 @@ export function MobileCameraFeed({
         const filtered = result.detections.filter(minConf)
         const frameW = result.width > 0 ? result.width : (videoRef.current?.videoWidth ?? 0)
         const frameH = result.height > 0 ? result.height : (videoRef.current?.videoHeight ?? 0)
+        const patrolBox = (d: MobileAiDetection): [number, number, number, number] | null => {
+          const raw = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
+          if (!raw || raw.length < 4) return null
+          return [raw[0], raw[1], raw[2], raw[3]]
+        }
         /** Vẽ ROI cho mọi người nhìn thấy được — chỉ loại mảnh chân/tay. */
         const patrolVisible = (d: MobileAiDetection) => {
           if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
-          if (!d.bbox || d.bbox.length < 4 || frameW <= 0 || frameH <= 0) return false
+          const box = patrolBox(d)
+          if (!box || frameW <= 0 || frameH <= 0) return false
           return patrolPersonMeetsDisplayGate({
-            bbox: [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
+            bbox: box,
             frameW,
             frameH,
             workerId: d.worker_id,
@@ -206,9 +212,10 @@ export function MobileCameraFeed({
         /** Đếm KPI vẫn theo tiêu chí sự kiện: đầu + ≥30% thân, hoặc đã có mặt/mã. */
         const patrolCountable = (d: MobileAiDetection) => {
           if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
-          if (!d.bbox || d.bbox.length < 4 || frameW <= 0 || frameH <= 0) return false
+          const box = patrolBox(d)
+          if (!box || frameW <= 0 || frameH <= 0) return false
           return patrolPersonMeetsDetectionGate({
-            bbox: [d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3]],
+            bbox: box,
             frameW,
             frameH,
             workerId: d.worker_id,
@@ -219,7 +226,7 @@ export function MobileCameraFeed({
         const now = Date.now()
         const isPatrolPerson = isPatrolCam && (cameraId.startsWith('HC-') || cameraId.startsWith('DR-'))
         /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */
-        const holdMs = isPatrolPerson ? 2200 : 1800
+        const holdMs = isPatrolPerson ? 4200 : 1800
         if (gated.length > 0) {
           detectionHoldRef.current = { until: now + holdMs, items: gated }
           setDetections(gated)

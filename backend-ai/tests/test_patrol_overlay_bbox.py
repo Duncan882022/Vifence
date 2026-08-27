@@ -24,6 +24,12 @@ class PatrolOverlayBboxTests(unittest.TestCase):
         out = patrol_person_overlay_bbox(overflow, self.FW, self.FH)
         self.assertEqual(out, (0.0, 0.0, float(self.FW), float(self.FH)))
 
+    def test_expands_partial_back_turn_slice(self) -> None:
+        """YOLO quay lưng hay trả mảnh lưng–bụng — ROI phải kéo xuống gần full người."""
+        upper_back = (420.0, 220.0, 620.0, 420.0)
+        out = patrol_person_overlay_bbox(upper_back, self.FW, self.FH)
+        self.assertGreater(out[3] - out[1], upper_back[3] - upper_back[1] + 80.0)
+
 
 if __name__ == "__main__":
     unittest.main()

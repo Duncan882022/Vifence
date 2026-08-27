@@ -55,7 +55,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
     return null
   }
 
-  // Patrol ROI — Kalman + EMA trên bbox YOLO gốc (subject_bbox). Không cắt chân/PPE.
+  // Patrol ROI — Kalman + EMA trên bbox display từ BE (YOLO gốc + mở rộng nếu cần).
   const box = mapBackendBboxToOverlay(
     track.bbox,
     frameWidth,

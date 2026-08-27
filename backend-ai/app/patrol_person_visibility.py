@@ -183,8 +183,22 @@ def patrol_person_overlay_bbox(
     frame_w: int,
     frame_h: int,
 ) -> tuple[float, float, float, float]:
-    """BBox vẽ ROI patrol — YOLO gốc, chỉ clip khung. Không cắt chân / siết PPE."""
-    return _clip_box_to_frame(person_box, frame_w, frame_h)
+    """BBox vẽ ROI patrol — YOLO gốc, clip khung, mở rộng nếu chỉ thấy thân trên."""
+    clipped = _clip_box_to_frame(person_box, frame_w, frame_h)
+    x1, y1, x2, y2 = clipped
+    ph = max(y2 - y1, 1.0)
+    pw = max(x2 - x1, 1.0)
+    aspect = ph / pw
+    bh_ratio = ph / max(float(frame_h), 1.0)
+
+    # YOLO quay lưng / xa hay trả bbox cắt ngang lưng–bụng — mở xuống chân ước lượng.
+    if aspect < 2.05 and bh_ratio < 0.52:
+        target_h = max(ph * 2.6, frame_h * 0.38 if y1 < frame_h * 0.28 else ph * 2.2)
+        expanded_bottom = min(float(frame_h), y1 + target_h)
+        if expanded_bottom > y2 + ph * 0.12:
+            return _clip_box_to_frame((x1, y1, x2, expanded_bottom), frame_w, frame_h)
+
+    return clipped
 
 
 def patrol_person_meets_display_gate(

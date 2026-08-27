@@ -1924,7 +1924,7 @@ def _build_patrol_bodycam_result(
     """
     detector = _get_person_detector()
     h, w = frame.shape[:2]
-    persons = _dedupe_person_boxes(
+    raw_persons = _dedupe_person_boxes(
         _filter_persons(
             frame,
             camera_id,
@@ -1940,7 +1940,7 @@ def _build_patrol_bodycam_result(
 
     anchored = anchor_patrol_person_boxes_to_faces(
         frame,
-        [(p.person_box, p.person_conf) for p in persons],
+        [(p.person_box, p.person_conf) for p in raw_persons],
         camera_id=camera_id,
     )
     persons = [
@@ -1949,7 +1949,13 @@ def _build_patrol_bodycam_result(
     ]
 
     detections = _build_patrol_person_detections(
-        frame, camera_id, persons, w, h, source_pts_sec=source_pts_sec,
+        frame,
+        camera_id,
+        persons,
+        w,
+        h,
+        source_pts_sec=source_pts_sec,
+        raw_yolo_boxes=[p.person_box for p in raw_persons],
     )
 
     return {
@@ -1991,6 +1997,25 @@ def _patrol_countable_person_count(
     )
 
 
+def _match_raw_yolo_person_box(
+    anchored_box: tuple[float, float, float, float],
+    raw_boxes: list[tuple[float, float, float, float]],
+) -> tuple[float, float, float, float] | None:
+    """Khớp box sau face-anchor với YOLO gốc — ROI vẽ theo YOLO, không theo synth mặt."""
+    from .patrol_face_anchor import _bbox_iou
+
+    best: tuple[float, float, float, float] | None = None
+    best_iou = 0.0
+    for raw in raw_boxes:
+        iou = _bbox_iou(anchored_box, raw)
+        if iou > best_iou:
+            best_iou = iou
+            best = raw
+    if best is not None and best_iou >= 0.12:
+        return best
+    return None
+
+
 def _build_patrol_person_detections(
     frame: np.ndarray,
     camera_id: str,
@@ -1999,6 +2024,7 @@ def _build_patrol_person_detections(
     frame_h: int,
     *,
     source_pts_sec: float | None = None,
+    raw_yolo_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> list[PpeDetection]:
     """Dựng detection người cho camera tuần tra — dùng chung bodycam và flycam.
 
@@ -2017,18 +2043,20 @@ def _build_patrol_person_detections(
     )
 
     detections: list[PpeDetection] = []
+    raw_boxes = list(raw_yolo_boxes or [])
     for person_index, person in enumerate(persons):
         pb = person.person_box
         from .patrol_person_visibility import patrol_person_overlay_bbox
 
-        overlay_pb = patrol_person_overlay_bbox(pb, frame_w, frame_h)
+        raw_pb = _match_raw_yolo_person_box(pb, raw_boxes) or pb
+        overlay_pb = patrol_person_overlay_bbox(raw_pb, frame_w, frame_h)
         person_det = PpeDetection(
             behavior="person",
             label=PPE_LABELS["person"],
             scenario_id=PPE_SCENARIO["person"],
             confidence=round(person.person_conf, 3),
             bbox=[float(v) for v in overlay_pb],
-            subject_bbox=[float(v) for v in pb],
+            subject_bbox=[float(v) for v in raw_pb],
         )
         track_id = track_ids[person_index] if person_index < len(track_ids) else None
         if _patrol_person_passes_display_gate(pb, frame_w, frame_h, camera_id=camera_id):
