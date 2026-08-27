@@ -306,7 +306,6 @@ export function Module05Page() {
           )}>
             <Panel
               title="Camera"
-              expandable={tier2Open}
               fit={!tier2Open}
               noPadding
               className={cn(
