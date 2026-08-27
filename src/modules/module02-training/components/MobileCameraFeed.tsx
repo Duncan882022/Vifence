@@ -40,12 +40,13 @@ import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
-/** Ngưỡng overlay HC-02 — person từ 0.30 (vàng nếu <0.42). */
-const HC02_PERSON_MIN_CONF = 0.30
+/** Ngưỡng overlay HC-02 — person từ 0.25 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
+const HC02_PERSON_MIN_CONF = 0.25
 const HC02_PERSON_STRONG_CONF = 0.42
 
 function tagHc02PersonDetections(items: MobileAiDetection[]): MobileAiDetection[] {
@@ -115,15 +116,20 @@ export function MobileCameraFeed({
   const showAiOverlay = runAiAnalyze && bboxVisible
   /** Module 05 patrol — Kalman/ByteTrack ROI, không PPE overlay. */
   const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && isPatrolCam
-  /** ROI cần frame size — fallback video native trước khi backend trả width/height. */
+  /** Local analyze nuôi ROI — bbox khớp khung video đang hiển thị, không lag WHIP→RTSP. */
+  const patrolLocalRoiEnabled = usePatrolPersonRoi && runAiAnalyze && status === 'live'
+  const localRoiFrameSize = usePatrolLocalFrameAnalyze(cameraId, videoRef, patrolLocalRoiEnabled)
+
+  /** ROI cần frame size — ưu tiên kích thước khung JPEG local analyze. */
   const overlayFrameSize = useMemo(() => {
+    if (localRoiFrameSize.width > 0 && localRoiFrameSize.height > 0) return localRoiFrameSize
     if (frameSize.width > 0 && frameSize.height > 0) return frameSize
     const v = videoRef.current
     if (v?.videoWidth && v?.videoHeight) {
       return { width: v.videoWidth, height: v.videoHeight }
     }
     return frameSize
-  }, [frameSize, layoutTick, status])
+  }, [localRoiFrameSize, frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = detections
     return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped
@@ -168,7 +174,10 @@ export function MobileCameraFeed({
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl: url,
-      intervalMs: isPatrolCam && cameraId.startsWith('HC-') ? 120 : 450,
+      /** Patrol ROI do local analyze — client này chỉ KPI/sự kiện, thưa hơn tránh 2× infer. */
+      intervalMs: usePatrolPersonRoi
+        ? 420
+        : (isPatrolCam && cameraId.startsWith('HC-') ? 120 : 450),
       getGps: cameraId === 'HC-02'
         ? () => {
             const snap = getPatrolHelmetGps(cameraId)
@@ -225,12 +234,12 @@ export function MobileCameraFeed({
         const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible))
         const now = Date.now()
         const isPatrolPerson = isPatrolCam && (cameraId.startsWith('HC-') || cameraId.startsWith('DR-'))
-        /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */
-        const holdMs = isPatrolPerson ? 4200 : 1800
+        /** Patrol ROI overlay đọc engine local — không giữ ghost bbox từ round-trip cũ. */
+        const holdMs = usePatrolPersonRoi ? 0 : (isPatrolPerson ? 900 : 1800)
         if (gated.length > 0) {
           detectionHoldRef.current = { until: now + holdMs, items: gated }
           setDetections(gated)
-        } else if (now < detectionHoldRef.current.until) {
+        } else if (holdMs > 0 && now < detectionHoldRef.current.until) {
           setDetections(detectionHoldRef.current.items)
         } else {
           setDetections([])
@@ -258,7 +267,9 @@ export function MobileCameraFeed({
             workerNames: [...new Set(workerNames)].slice(0, 5),
             updatedAt: now,
           })
-          syncLivePatrolPersonDetectionsToHeatmap(cameraId, gated)
+          if (!usePatrolPersonRoi) {
+            syncLivePatrolPersonDetectionsToHeatmap(cameraId, gated)
+          }
 
           if (result.events?.length) {
             pushPatrolMobilePersonEvents(result.events, cameraId)
@@ -270,7 +281,7 @@ export function MobileCameraFeed({
         // Trạng thái backend hiển thị qua toolbar ngrok trên CameraChrome.
       },
     })
-  }, [runAiAnalyze, cameraId, status, stopAiClient])
+  }, [runAiAnalyze, cameraId, status, stopAiClient, usePatrolPersonRoi, isPatrolCam])
 
   const startCapture = useCallback(async (
     nextFacing?: CameraFacing,
