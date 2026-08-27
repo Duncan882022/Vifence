@@ -167,9 +167,9 @@ class TestPatrolFaceAnchor(unittest.TestCase):
             )
         self.assertIn(close_back_turn, [box for box, _ in out])
 
-    def test_back_turn_kept_at_yolo_confidence_floor(self):
-        """Ngưỡng quay lưng không được cao hơn sàn YOLO bodycam."""
-        self.assertLessEqual(BACK_TURN_MIN_CONF, 0.30)
+    def test_back_turn_kept_at_yolo_confidence_floor(self) -> None:
+        """Ngưỡng quay lưng khớp sàn conf patrol bodycam."""
+        self.assertLessEqual(BACK_TURN_MIN_CONF, 0.12)
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
         back_turn = (180.0, 140.0, 420.0, 620.0)
         with patch("app.patrol_face_anchor._list_frame_faces", return_value=[]):

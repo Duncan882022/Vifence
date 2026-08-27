@@ -53,13 +53,19 @@ def main() -> int:
 
     from app.detectors.person_detector import PersonDetector
 
-    detector = PersonDetector(conf_threshold=0.30)
+    detector = PersonDetector()
     detector.load()
     if not detector.ready:
         print("  !! Không nạp được YOLOv8n — bỏ qua phần suy luận.")
         return 1
 
-    yolo_ms = _bench("YOLOv8n @ imgsz=640", lambda: detector.predict(frame, conf=0.30))
+    from app.ai_engine import person_infer_config
+
+    cfg = person_infer_config()
+    yolo_ms = _bench(
+        f"YOLOv8s @ imgsz={cfg.imgsz}",
+        lambda: detector.predict(frame, conf=detector.conf_threshold),
+    )
 
     from app.patrol.egomotion import estimate_shift, reset
 

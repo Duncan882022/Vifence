@@ -14,9 +14,10 @@ from .patrol_person_visibility import (
     upper_body_third_with_head_visible,
 )
 
-# Quay lưng chỉ cần vượt sàn YOLO bodycam — đặt cao hơn sẽ âm thầm bỏ rơi
-# người đủ đầu + 1/3 thân trên mà YOLO chấm 0.30–0.38.
-BACK_TURN_MIN_CONF = 0.30
+from .config import settings
+
+# Quay lưng — cùng sàn conf YOLO patrol bodycam (0.12).
+BACK_TURN_MIN_CONF = settings.person_conf_patrol_bodycam
 
 
 @dataclass(frozen=True)
