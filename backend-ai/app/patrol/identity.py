@@ -429,6 +429,54 @@ def identify(
     return result
 
 
+def update_profile(
+    pers_id: str,
+    *,
+    full_name: str,
+    employee_code: str,
+    contractor: str = "",
+) -> dict[str, Any]:
+    """Cập nhật hồ sơ đã import — không đổi mã định danh nội bộ."""
+    pid = resolve_alias(pers_id)
+    row = get_person(pid)
+    if row is None:
+        raise KeyError("not_found")
+
+    name = full_name.strip()
+    code = employee_code.strip()
+    if not name or not code:
+        raise ValueError("missing_fields")
+
+    existing = db.query_one(
+        "SELECT pers_id FROM persons WHERE employee_code = ? AND pers_id <> ?",
+        (code, pid),
+    )
+    if existing is not None:
+        raise ValueError("duplicate_employee_code")
+
+    with db.tx() as c:
+        c.execute(
+            "UPDATE persons SET full_name = ?, employee_code = ?, contractor = ?"
+            " WHERE pers_id = ?",
+            (name, code, contractor.strip(), pid),
+        )
+
+    result = get_person(pid)
+    assert result is not None
+    return result
+
+
+def delete_person(pers_id: str) -> bool:
+    """Xóa hồ sơ và vector khuôn mặt (CASCADE)."""
+    pid = resolve_alias(pers_id)
+    with db.tx() as c:
+        cur = c.execute("DELETE FROM persons WHERE pers_id = ?", (pid,))
+        deleted = cur.rowcount > 0
+    if deleted:
+        _invalidate_face_index()
+    return deleted
+
+
 def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> None:
     """Gộp hai mã của cùng một người. Mã bị bỏ vẫn tra ra được qua alias."""
     ts = now or time.time()

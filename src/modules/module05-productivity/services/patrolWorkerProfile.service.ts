@@ -113,6 +113,55 @@ export async function lookupPatrolWorkerByCode(
   return data.person
 }
 
+export async function fetchPatrolWorkerProfile(persId: string): Promise<PatrolWorkerPerson> {
+  const data = await patrolJson<{ ok: boolean; error?: string; person?: PatrolWorkerPerson }>(
+    `/patrol/persons/${encodeURIComponent(persId)}`,
+  )
+  if (!data.ok || !data.person) {
+    throw new Error(data.error === 'not_found' ? 'Không tìm thấy hồ sơ.' : (data.error ?? 'Tải hồ sơ thất bại.'))
+  }
+  return data.person
+}
+
+export async function updatePatrolWorkerProfile(
+  persId: string,
+  profile: PatrolImportRow,
+): Promise<PatrolWorkerPerson> {
+  const data = await patrolJson<{ ok: boolean; error?: string; person?: PatrolWorkerPerson }>(
+    `/patrol/persons/${encodeURIComponent(persId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: profile.full_name,
+        employee_code: profile.employee_code,
+        contractor: profile.contractor ?? '',
+      }),
+    },
+  )
+  if (!data.ok || !data.person) {
+    const err = data.error === 'duplicate_employee_code'
+      ? 'Mã nhân viên đã thuộc hồ sơ khác.'
+      : data.error === 'missing_fields'
+        ? 'Nhập đủ họ tên và mã nhân viên.'
+        : data.error === 'not_found'
+          ? 'Không tìm thấy hồ sơ.'
+          : (data.error ?? 'Cập nhật thất bại.')
+    throw new Error(err)
+  }
+  return data.person
+}
+
+export async function deletePatrolWorkerProfile(persId: string): Promise<void> {
+  const data = await patrolJson<{ ok: boolean; error?: string }>(
+    `/patrol/persons/${encodeURIComponent(persId)}`,
+    { method: 'DELETE' },
+  )
+  if (!data.ok) {
+    throw new Error(data.error === 'not_found' ? 'Không tìm thấy hồ sơ.' : (data.error ?? 'Xóa thất bại.'))
+  }
+}
+
 export async function fetchPatrolScanEnrollment(persId: string): Promise<PatrolScanEnrollment> {
   const data = await patrolJson<{ ok: boolean; error?: string; enrollment?: PatrolScanEnrollment }>(
     `/patrol/persons/${encodeURIComponent(persId)}/enrollment`,

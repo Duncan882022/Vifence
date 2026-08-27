@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowLeft, Download, FileSpreadsheet, Loader2, RefreshCw,
-  ScanFace, Search, Upload, UserCheck, Users,
+  ArrowLeft, Download, Eye, FileSpreadsheet, Loader2, Pencil, RefreshCw,
+  ScanFace, Search, Trash2, Upload, UserCheck, Users,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import {
+  deletePatrolWorkerProfile,
   fetchPatrolWorkerProfiles,
   importPatrolWorkerProfiles,
   pingPatrolProfileBackend,
@@ -15,6 +16,7 @@ import {
   type PatrolImportResult,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
+import { WorkerProfileDetailModal } from '../components/WorkerProfileDetailModal'
 
 const TEMPLATE_HEADERS = ['Họ tên', 'Mã nhân viên', 'Đơn vị'] as const
 
@@ -68,6 +70,10 @@ export function WorkerProfileManagementPage() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<PatrolImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [detailPersId, setDetailPersId] = useState<string | null>(null)
+  const [detailMode, setDetailMode] = useState<'view' | 'edit'>('view')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -133,6 +139,30 @@ export function WorkerProfileManagementPage() {
       setImportError(err instanceof Error ? err.message : 'Import thất bại.')
     } finally {
       setImporting(false)
+    }
+  }
+
+  const openDetail = (persId: string, mode: 'view' | 'edit' = 'view') => {
+    setDetailMode(mode)
+    setDetailPersId(persId)
+    setRowError(null)
+  }
+
+  const handleQuickDelete = async (p: PatrolWorkerPerson) => {
+    const name = p.full_name ?? p.display_name
+    if (!window.confirm(`Xóa hồ sơ "${name}" (${p.employee_code})?\nVector mặt cũng bị xóa — không hoàn tác.`)) {
+      return
+    }
+    setDeletingId(p.pers_id)
+    setRowError(null)
+    try {
+      await deletePatrolWorkerProfile(p.pers_id)
+      if (detailPersId === p.pers_id) setDetailPersId(null)
+      void load()
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Xóa thất bại.')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -203,6 +233,9 @@ export function WorkerProfileManagementPage() {
             {backendOk === false && (
               <p className="text-[10px] text-amber-400">Backend tuần tra chưa sẵn sàng — kiểm tra URL backend.</p>
             )}
+            {rowError && (
+              <p className="text-[10px] text-red-400">{rowError}</p>
+            )}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
@@ -222,7 +255,7 @@ export function WorkerProfileManagementPage() {
                     <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell">Mã NV</th>
                     <th className="text-left px-3 py-2 font-semibold hidden md:table-cell">Đơn vị</th>
                     <th className="text-left px-3 py-2 font-semibold">Vector</th>
-                    <th className="text-right px-3 py-2 font-semibold"> </th>
+                    <th className="text-right px-3 py-2 font-semibold min-w-[140px]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -238,13 +271,42 @@ export function WorkerProfileManagementPage() {
                         <FaceBadge count={p.face_count ?? 0} complete={p.face_enrollment_complete} />
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <Link
-                          to={`/module05/quet-mat?code=${encodeURIComponent(p.employee_code ?? '')}`}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold text-violet-300 hover:bg-violet-500/10 border border-violet-500/25"
-                        >
-                          <ScanFace className="w-3 h-3" />
-                          Quét
-                        </Link>
+                        <div className="inline-flex items-center justify-end gap-0.5 flex-wrap">
+                          <button
+                            type="button"
+                            title="Xem chi tiết"
+                            onClick={() => openDetail(p.pers_id, 'view')}
+                            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/5"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Sửa hồ sơ"
+                            onClick={() => openDetail(p.pers_id, 'edit')}
+                            className="p-1.5 rounded text-muted-foreground hover:text-sky-400 hover:bg-sky-400/10"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <Link
+                            to={`/module05/quet-mat?code=${encodeURIComponent(p.employee_code ?? '')}`}
+                            title="Quét mặt"
+                            className="p-1.5 rounded text-violet-300 hover:bg-violet-500/10"
+                          >
+                            <ScanFace className="w-3.5 h-3.5" />
+                          </Link>
+                          <button
+                            type="button"
+                            title="Xóa hồ sơ"
+                            disabled={deletingId === p.pers_id}
+                            onClick={() => void handleQuickDelete(p)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                          >
+                            {deletingId === p.pers_id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -316,6 +378,13 @@ export function WorkerProfileManagementPage() {
           </div>
         </Panel>
       </div>
+
+      <WorkerProfileDetailModal
+        persId={detailPersId}
+        initialMode={detailMode}
+        onClose={() => setDetailPersId(null)}
+        onChanged={() => void load()}
+      />
     </PageLayout>
   )
 }

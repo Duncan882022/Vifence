@@ -65,7 +65,42 @@ def get_person(pers_id: str) -> dict[str, Any]:
     row = identity.get_person(pers_id)
     if row is None:
         return {"ok": False, "error": "not_found"}
-    return {"ok": True, "person": _person_payload(row)}
+    return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
+
+
+@router.patch("/persons/{pers_id}")
+def update_person(pers_id: str, payload: dict) -> dict[str, Any]:
+    """Sửa họ tên, mã NV, đơn vị — giữ nguyên vector mặt."""
+    full_name = str(payload.get("full_name") or payload.get("ho_ten") or "").strip()
+    employee_code = str(payload.get("employee_code") or payload.get("ma_nv") or "").strip()
+    contractor = str(payload.get("contractor") or payload.get("don_vi") or "").strip()
+    if not full_name or not employee_code:
+        return {"ok": False, "error": "missing_fields"}
+    if identity.get_person(pers_id) is None:
+        return {"ok": False, "error": "not_found"}
+    try:
+        row = identity.update_profile(
+            pers_id,
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code == "duplicate_employee_code":
+            return {"ok": False, "error": "duplicate_employee_code"}
+        return {"ok": False, "error": code}
+    except KeyError:
+        return {"ok": False, "error": "not_found"}
+    return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
+
+
+@router.delete("/persons/{pers_id}")
+def delete_person(pers_id: str) -> dict[str, Any]:
+    """Xóa hồ sơ công nhân và vector mặt."""
+    if not identity.delete_person(pers_id):
+        return {"ok": False, "error": "not_found"}
+    return {"ok": True}
 
 
 @router.get("/persons/{pers_id}/enrollment")
