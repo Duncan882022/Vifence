@@ -11,3 +11,4 @@ data/events.jsonl
 !data/snapshots/.gitkeep
 !data/events/.gitkeep
 !data/config/.gitkeep
+backend-ai/data/heatmap/
