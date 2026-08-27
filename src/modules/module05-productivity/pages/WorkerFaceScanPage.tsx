@@ -152,7 +152,7 @@ export function WorkerFaceScanPage() {
             </div>
             <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Bước 1: Quét 3 góc mặt · Bước 2: Nhập họ tên, mã nhân viên và đơn vị (giống file Excel).
+              Bước 1: Đưa mặt vào khung, làm theo hướng dẫn (hệ thống tự quét 3 góc) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
             </p>
           </div>
 
@@ -319,7 +319,7 @@ export function WorkerFaceScanPage() {
             </div>
             <h1 className="text-lg font-bold">Quét mặt công nhân (HR)</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Tra cứu theo mã đã import Excel, rồi quét bổ sung vector.
+              Tra cứu theo mã đã import Excel, rồi đưa mặt vào khung — hệ thống tự quét bổ sung vector.
             </p>
           </div>
 
