@@ -200,6 +200,9 @@ def _patrol_person_passes_event_gate(
     person_box: tuple[float, float, float, float],
     frame_w: int,
     frame_h: int,
+    *,
+    face_eligible: bool = False,
+    has_stable_id: bool = False,
 ) -> bool:
     from .patrol_person_visibility import patrol_person_meets_detection_gate
 
@@ -208,6 +211,25 @@ def _patrol_person_passes_event_gate(
         frame_w,
         frame_h,
         face_dominant=_face_dominant_person_box(person_box, frame_w, frame_h),
+        face_eligible=face_eligible,
+        has_stable_id=has_stable_id,
+    )
+
+
+def _patrol_person_passes_display_gate(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str,
+) -> bool:
+    from .patrol_person_visibility import patrol_person_meets_display_gate
+
+    return patrol_person_meets_display_gate(
+        person_box,
+        frame_w,
+        frame_h,
+        flycam=_is_patrol_flycam(camera_id),
     )
 
 
@@ -216,12 +238,13 @@ def _assign_patrol_person_display_only(
     *,
     camera_id: str,
     track_id: str | None,
+    frame: np.ndarray | None = None,
+    person_box: tuple[float, float, float, float] | None = None,
 ) -> None:
     """ROI-only — track id + nhãn đã cache, không chạy face/embed lại.
 
-    Sau khi tách gate hiển thị, mỗi frame có thể mang nhiều box chỉ để vẽ ROI
-    (người ngồi, mảnh thân…). Chạy assess_patrol_face + registry trên tất cả
-    làm AI loop HC-* chậm hẳn (~300ms → 600ms+) và ROI giật theo nhịp analyze.
+    Track đã commit (obj/pers) vẫn touch sink để sự kiện không đứng khi quay
+    lưng hoặc ngồi — những khung hình không đủ gate hình học ghi sự kiện.
     """
     if not track_id:
         return
@@ -235,6 +258,21 @@ def _assign_patrol_person_display_only(
         person_det.tier = cached.tier
     else:
         person_det.tier = "object"
+
+    if cached is None or not cached.worker_id:
+        return
+    try:
+        from .patrol.sink import record_observation
+
+        record_observation(
+            camera_id=camera_id,
+            track_id=track_id,
+            confidence=float(person_det.confidence or 0.0),
+            frame=frame,
+            person_bbox=[float(v) for v in person_box] if person_box is not None else None,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("[patrol] Không touch sink cho track display-only")
 
 
 def _get_person_detector() -> PersonDetector:
@@ -1968,8 +2006,9 @@ def _build_patrol_person_detections(
     Track được gán **một lượt cho cả frame** trước khi vào vòng lặp, nên thứ tự
     YOLO trả về không còn ảnh hưởng tới việc ai giữ track nào.
 
-    Face/embed chỉ chạy trên người đủ gate ghi sự kiện; box display-only vẫn
-    mang track_id + velocity để FE vẽ ROI mượt mà không làm chậm nhịp analyze.
+    Face/embed chạy trên mọi người đủ gate **hiển thị** (ngồi, quay lưng, đám
+    đông…) — sink tự dwell trước khi commit obj/pers. Gate hình học chặt chỉ
+    dùng cho KPI legacy, không chặn đường ghi sự kiện chính nữa.
     """
     reset_hc_patrol_face_assignments(camera_id)
     track_ids = assign_patrol_track_ids(
@@ -1991,7 +2030,7 @@ def _build_patrol_person_detections(
             subject_bbox=[float(v) for v in pb],
         )
         track_id = track_ids[person_index] if person_index < len(track_ids) else None
-        if _patrol_person_passes_event_gate(pb, frame_w, frame_h):
+        if _patrol_person_passes_display_gate(pb, frame_w, frame_h, camera_id=camera_id):
             _assign_patrol_person_identity(
                 person_det,
                 pb,
@@ -2006,6 +2045,8 @@ def _build_patrol_person_detections(
                 person_det,
                 camera_id=camera_id,
                 track_id=track_id,
+                frame=frame,
+                person_box=pb,
             )
         _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)

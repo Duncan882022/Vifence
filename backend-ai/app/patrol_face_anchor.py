@@ -28,7 +28,7 @@ class _FrameFace:
 def _list_frame_faces(
     frame: np.ndarray,
     *,
-    score_threshold: float = 0.45,
+    score_threshold: float = 0.38,
 ) -> list[_FrameFace]:
     from .detectors.face_guard import detect_faces
 
@@ -158,6 +158,15 @@ def _yolo_plausible_without_face(
     return upper_body_third_with_head_visible(box, frame_w, frame_h)
 
 
+def _box_area_ratio(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> float:
+    x1, y1, x2, y2 = box
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1) / max(float(frame_w * frame_h), 1.0)
+
+
 def anchor_patrol_person_boxes_to_faces(
     frame: np.ndarray,
     person_boxes: list[tuple[tuple[float, float, float, float], float]],
@@ -198,7 +207,13 @@ def anchor_patrol_person_boxes_to_faces(
             continue
 
         _idx, face = matching[0]
-        if upper_body_third_with_head_visible(box, w, h) and not legs_only_person_box(box, w, h):
+        area_ratio = _box_area_ratio(box, w, h)
+        tight_yolo = (
+            upper_body_third_with_head_visible(box, w, h)
+            and not legs_only_person_box(box, w, h)
+            and area_ratio < 0.28
+        )
+        if tight_yolo:
             matched_yolo.append((box, conf))
             continue
         synth_box = _person_box_from_face(face, w, h)
