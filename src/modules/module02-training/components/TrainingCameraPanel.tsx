@@ -475,6 +475,8 @@ export function TrainingCameraPanel({
   const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
   const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll) || (aspectVideoGrid && !isDesktop)
   const aspectGridInTier = aspectVideoGrid && isDesktop
+  /** Mobile compact: fill tier height — video scrolls inside, sidebar strip stays visible. */
+  const mobileFillPanel = mobileCompactVideo && !isDesktop
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
@@ -565,8 +567,7 @@ export function TrainingCameraPanel({
   return (
     <>
       <div className={cn(
-        'w-full min-h-0',
-        mobileCompactVideo && !isDesktop ? 'h-auto max-h-full' : 'h-full',
+        'w-full min-h-0 h-full',
         'flex flex-col lg:flex-row',
         aspectGridInTier
           ? 'lg:flex-1 lg:min-h-0'
@@ -576,16 +577,19 @@ export function TrainingCameraPanel({
         'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
         'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
       )}>
-        <div className="flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0">
+        <div className={cn(
+          'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
+          mobileFillPanel && 'overflow-hidden',
+        )}>
           <div
             ref={videoGridRef}
             className={cn(
               'w-full min-h-0 flex-1',
-              fillHeightMain
+              fillHeightMain && !mobileFillPanel
                 ? 'overflow-hidden'
                 : 'overflow-y-auto overflow-x-hidden overscroll-y-contain',
             )}
-            style={mobileViewportH ? { maxHeight: mobileViewportH } : undefined}
+            style={mobileViewportH && !mobileStackedNoScroll ? { maxHeight: mobileViewportH } : undefined}
           >
             <CameraGrid
               cams={safeCams}
