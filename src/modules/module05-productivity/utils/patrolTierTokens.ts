@@ -36,7 +36,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     color: 'text-slate-400',
     badge: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
     borderAccent: 'border-l-slate-400',
-    tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / chưa có mặt',
+    tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / che mặt / khẩu trang',
     roiBorder: 'border border-dashed border-slate-300/90',
     roiLabelBg: 'bg-slate-900/95',
     roiLabelText: 'text-slate-100',
