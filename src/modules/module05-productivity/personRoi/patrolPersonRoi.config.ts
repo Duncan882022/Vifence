@@ -15,7 +15,7 @@ export const PATROL_PERSON_ROI_CONFIG = {
    */
   birthMinConfidence: 0.15,
   /** Conf cao — ưu tiên gán trước (ByteTrack high-conf pool) */
-  highConfidenceMin: 0.34,
+  highConfidenceMin: 0.30,
   /** Số hit liên tiếp để confirmed — detection có track id BE confirm ngay */
   confirmHits: 1,
   /** IoU tối thiểu match track ↔ detection */
@@ -29,12 +29,12 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * giữ trong bộ nhớ ngần này nhịp để người bị che thoáng qua rồi hiện lại
    * nhận lại đúng track cũ thay vì bị cấp mã mới.
    */
-  maxMissFrames: 8,
+  maxMissFrames: 4,
   /**
    * Trần nội suy rAF (ms). Phải ≥ một nhịp analyze bodycam (~360ms) + jitter mạng
    * thì ROI mới trượt liên tục giữa hai lần AI thay vì đứng rồi nhảy.
    */
-  maxPredictMs: 680,
+  maxPredictMs: 480,
   /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
   processNoise: 0.08,
   measureNoise: 0.2,
@@ -46,19 +46,19 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * điệu tới sàn và hệ số rơi về ~0.2: mỗi nhịp ROI chỉ đi được 1/5 quãng, box
    * bám lệt bệt sau người và càng đi nhanh càng tụt. Có sàn thì độ trễ bị chặn.
    */
-  minMeasureGain: 0.68,
+  minMeasureGain: 0.78,
   /**
    * Track đã khoá theo track id backend — bám sát measurement hơn, giảm cảm giác
    * hộp "trailing" sau người.
    */
-  anchoredMinMeasureGain: 0.9,
+  anchoredMinMeasureGain: 0.94,
   velocityDamping: 0.985,
   /** Trọng số đo trên kích thước — cao hơn một chút để box theo người nhanh hơn */
   sizeGain: 0.48,
   /** Giữ lại bao nhiêu vận tốc cũ mỗi lần đo */
   velocitySmoothing: 0.58,
   /** EMA 4 góc trên overlay — thấp = mượt hơn, cao = bám sát hơn */
-  displayEmaAlpha: 0.44,
+  displayEmaAlpha: 0.58,
   /** Trần tốc độ theo số lần cạnh bbox mỗi giây */
   maxSpeedBoxPerSec: 2.5,
 } as const

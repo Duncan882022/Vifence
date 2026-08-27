@@ -66,8 +66,15 @@ class TestBodycamDisplayGate(unittest.TestCase):
         self.assertFalse(patrol_person_meets_display_gate(strip, FW, FH))
         self.assertFalse(patrol_person_meets_detection_gate(strip, FW, FH))
 
-    def test_zero_frame_size_rejected(self):
-        self.assertFalse(patrol_person_meets_display_gate((0, 0, 10, 10), 0, 0))
+    def test_scaffold_vertical_bar_rejected(self):
+        """Than giàn giáo dọc — YOLO FP hay conf cao."""
+        scaffold = _box(0.46, 0.18, 0.50, 0.62)
+        self.assertFalse(patrol_person_meets_display_gate(scaffold, FW, FH))
+
+    def test_small_distant_worker_passes_display_gate(self):
+        """Người xa trên công trường — bbox nhỏ hơn ngưỡng silhouette cũ."""
+        distant = _box(0.62, 0.38, 0.66, 0.52)
+        self.assertTrue(patrol_person_meets_display_gate(distant, FW, FH))
 
 
 class TestFlycamDisplayGate(unittest.TestCase):

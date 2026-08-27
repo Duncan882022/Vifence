@@ -44,7 +44,7 @@ class PersonDetector:
             frame,
             conf=threshold,
             verbose=False,
-            imgsz=640,
+            imgsz=1024,
             max_det=300,
             iou=0.65,
         )

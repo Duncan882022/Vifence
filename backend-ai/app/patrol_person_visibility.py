@@ -118,12 +118,32 @@ def upper_body_third_with_head_visible(
     return True
 
 
+def vertical_structure_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Than giàn giáo/cột dọc — YOLO hay gán person với conf cao trên vật tĩnh."""
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    bw_ratio = pw / max(float(frame_w), 1.0)
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    if aspect > 2.6 and bw_ratio < 0.075 and bh_ratio > 0.10:
+        return True
+    if aspect < 0.30 and bh_ratio < 0.055 and bw_ratio > 0.20:
+        return True
+    return False
+
+
 def plausible_person_silhouette(
     person_box: tuple[float, float, float, float],
     frame_w: int,
     frame_h: int,
     *,
     flycam: bool = False,
+    patrol_display: bool = False,
 ) -> bool:
     """Loại dải dọc/ngang quá hẹp — YOLO FP mép khung."""
     x1, y1, x2, y2 = person_box
@@ -140,11 +160,13 @@ def plausible_person_silhouette(
         if ph < max(8.0, frame_h * 0.010):
             return False
         return True
+    min_pw_frac = 0.012 if patrol_display else 0.035
+    min_ph_frac = 0.018 if patrol_display else 0.04
     if aspect > 4.2 or aspect < 0.28:
         return False
-    if pw < max(12.0, frame_w * 0.035):
+    if pw < max(8.0 if patrol_display else 12.0, frame_w * min_pw_frac):
         return False
-    if ph < max(14.0, frame_h * 0.04):
+    if ph < max(10.0 if patrol_display else 14.0, frame_h * min_ph_frac):
         return False
     return True
 
@@ -220,10 +242,18 @@ def patrol_person_meets_display_gate(
     """
     if frame_w <= 0 or frame_h <= 0:
         return False
-    if not plausible_person_silhouette(person_box, frame_w, frame_h, flycam=flycam):
+    if vertical_structure_fp_box(person_box, frame_w, frame_h):
         return False
     if flycam:
+        if not plausible_person_silhouette(person_box, frame_w, frame_h, flycam=True):
+            return False
         return True
+    if wide_crowd_rider_box(person_box, frame_w, frame_h):
+        return True
+    if not plausible_person_silhouette(
+        person_box, frame_w, frame_h, patrol_display=True,
+    ):
+        return False
     return not limb_fragment_person_box(person_box, frame_w, frame_h)
 
 

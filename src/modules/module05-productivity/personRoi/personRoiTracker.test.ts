@@ -156,7 +156,7 @@ describe('bbox mượt', () => {
 
   it('extrapolate giới hạn trong một nhịp analyze', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeGreaterThanOrEqual(600)
+    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeGreaterThanOrEqual(400)
     const far = predictPersonRoiTracks(tracks, 5_000)
     const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs)
     expect(far[0].bbox).toEqual(capped[0].bbox)
@@ -228,15 +228,13 @@ describe('mồi vận tốc từ backend', () => {
 })
 
 describe('vòng đời track', () => {
-  it('miss một nhịp vẫn coast ROI thay vì tắt ngay', () => {
+  it('miss một nhịp ẩn ROI nhưng giữ track trong bộ nhớ', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
     tracks = advance(tracks, [], 1_180)
     expect([...tracks.values()][0].state).toBe('lost')
-    const coasting = predictPersonRoiTracks(tracks, 120)
-    expect(coasting).toHaveLength(1)
-    expect(coasting[0].displayOpacity).toBeLessThan(1)
+    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(0)
   })
 
   it('track mất dấu vẫn nằm trong bộ nhớ để nhận lại sau lúc bị che', () => {
@@ -244,7 +242,7 @@ describe('vòng đời track', () => {
     const firstId = [...tracks.keys()][0]
 
     tracks = advance(tracks, [], 1_180)
-    expect(predictPersonRoiTracks(tracks, 0).length).toBeGreaterThan(0)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
 
     tracks = advance(tracks, [person([120, 110, 220, 410], { track_id: 'p1' })], 1_360)
     expect([...tracks.keys()][0]).toBe(firstId)

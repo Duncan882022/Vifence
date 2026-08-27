@@ -149,6 +149,10 @@ def _yolo_plausible_without_face(
     chặn FP thời histogram lại loại cả người đứng gần (bbox lớn) lẫn người đứng
     xa (bbox nhỏ), nên bỏ — FP đã do clutter/silhouette và model mặt lo.
     """
+    from .patrol_person_visibility import vertical_structure_fp_box
+
+    if vertical_structure_fp_box(box, frame_w, frame_h):
+        return False
     if background_clutter_person_box(box, frame_w, frame_h):
         return False
     if legs_only_person_box(box, frame_w, frame_h):
