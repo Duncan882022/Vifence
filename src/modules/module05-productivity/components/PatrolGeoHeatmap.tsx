@@ -669,13 +669,16 @@ export function PatrolGeoHeatmap({
           {/* ── LAYER 2: Detection / Object Dots — nhỏ, FOV blink ── */}
           {showDetections && visibleDetectionDots.map(dot => {
             const inView = dot.inCameraView ?? false
+            const dotZ = !showHelmetMarkers && !showCameras
+              ? (inView ? 820 : 780)
+              : (inView ? 420 : 380)
             if (dot.type === 'person') {
               return (
                 <Marker
                   key={dot.id}
                   position={dot.position}
                   icon={createDetectionDotIcon(inView, Boolean(dot.verified), dot.type)}
-                  zIndexOffset={inView ? 420 : 380}
+                  zIndexOffset={dotZ}
                   eventHandlers={
                     onDetectionClick && (dot.objectId || dot.type === 'person')
                       ? { click: () => onDetectionClick(dot) }

@@ -6,6 +6,7 @@ import type { PatrolEvent } from '../data/patrolMockData'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { resolvePatrolDetectionMapPosition } from './patrolDetectionMapOffset'
 import { isPatrolHeatmapEligibleEvent } from './patrolPatrolCounts'
 import {
   resolvePatrolAppearanceSubjectId,
@@ -22,11 +23,36 @@ function isValidGps(lat: number | null, lng: number | null): boolean {
   return Math.abs(lat) <= 90 && Math.abs(lng) <= 180
 }
 
-function presencePosition(presence: PatrolDayPresence): [number, number] {
-  const { gpsLat, gpsLng } = presence
+function presencePosition(
+  presence: PatrolDayPresence,
+  helmetPositions?: Record<string, [number, number]>,
+  helmetHeadings?: Record<string, number | null | undefined>,
+): [number, number] {
+  const { gpsLat, gpsLng, subjectId, cameraId } = presence
+  const primaryCam = cameraId || presence.sourceCameras[0] || ''
+  const helmetPos = primaryCam ? helmetPositions?.[primaryCam] : undefined
+  const heading = primaryCam ? helmetHeadings?.[primaryCam] : undefined
+
   if (isValidGps(gpsLat, gpsLng)) {
-    return clampPointToSiteInterior(gpsLat!, gpsLng!)
+    return resolvePatrolDetectionMapPosition(
+      gpsLat!,
+      gpsLng!,
+      subjectId,
+      helmetPos,
+      heading,
+    )
   }
+
+  if (helmetPos) {
+    return resolvePatrolDetectionMapPosition(
+      helmetPos[0],
+      helmetPos[1],
+      subjectId,
+      helmetPos,
+      heading,
+    )
+  }
+
   return clampPointToSiteInterior(PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1])
 }
 
@@ -65,6 +91,8 @@ export function buildPatrolPresenceHeatmapDots(
     now?: number
     includeUnassigned?: boolean
     cameraOnlineById?: Record<string, boolean>
+    helmetPositionsById?: Record<string, [number, number]>
+    helmetHeadingsById?: Record<string, number | null | undefined>
   },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
@@ -80,7 +108,11 @@ export function buildPatrolPresenceHeatmapDots(
     const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
     const cameraOnline = isCameraOnlineForHeatmap(primaryCam, opts?.cameraOnlineById)
     const inCameraView = recent && cameraOnline
-    const [lat, lng] = presencePosition(presence)
+    const [lat, lng] = presencePosition(
+      presence,
+      opts?.helmetPositionsById,
+      opts?.helmetHeadingsById,
+    )
 
     return {
       id: `presence-${presence.id}`,

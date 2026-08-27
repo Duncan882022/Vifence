@@ -60,6 +60,17 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].position[0]).toBeCloseTo(PATROL_SITE_CENTER[0], 3)
   })
 
+  it('GPS trùng mũ → chấm lệch phía trước mũ', () => {
+    const helmet: [number, number] = [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]]
+    const dots = buildPatrolPresenceHeatmapDots([makePresence({})], {
+      helmetPositionsById: { 'HC-01': helmet },
+      helmetHeadingsById: { 'HC-01': 0 },
+    })
+    expect(dots).toHaveLength(1)
+    expect(dots[0].position[0]).not.toBeCloseTo(helmet[0], 5)
+    expect(dots[0].position[0]).toBeGreaterThan(helmet[0])
+  })
+
   it('hai presence cùng người khác lượt → hai chấm', () => {
     const dots = buildPatrolPresenceHeatmapDots([
       makePresence({ id: 1, presenceSeq: 1, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1] }),

@@ -8,15 +8,13 @@ import {
   isPointInSiteBoundary,
 } from '@/modules/module05-productivity/data/patrolSiteGeometry'
 import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/patrolHeatmapGps'
-import { offsetLatLngByMeters } from '@/modules/module05-productivity/utils/patrolLivePersonDots'
+import { resolvePatrolDetectionMapPosition } from '@/modules/module05-productivity/utils/patrolDetectionMapOffset'
 import { resolveHeatmapEntityMasterId } from '@/modules/module05-productivity/utils/patrolIdentityEntity'
 import { isPatrolHeatmapEligibleId } from '@/modules/module05-productivity/utils/patrolPatrolCounts'
 import { appendPatrolHeatSample, patrolSessionDateLocal } from '@/services/patrolHeatGrid'
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v2'
 const MAX_PERSONS = 256
-const DOT_RADIUS_MIN_M = 1.0
-const DOT_RADIUS_MAX_M = 4.0
 
 export type PatrolDotPinStatus = 'in_frame' | 'inactive'
 
@@ -43,18 +41,6 @@ function notify(): void {
 
 export function resolveHeatmapDotMasterId(rawId: string): string {
   return resolveHeatmapEntityMasterId(rawId)
-}
-
-function hashOffset(personId: string): [number, number] {
-  let h = 2166136261
-  for (let i = 0; i < personId.length; i++) {
-    h ^= personId.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  const angle = ((h >>> 0) % 360) * (Math.PI / 180)
-  const ring = ((h >>> 8) % 100) / 100
-  const r = DOT_RADIUS_MIN_M + ring * (DOT_RADIUS_MAX_M - DOT_RADIUS_MIN_M)
-  return [Math.cos(angle) * r, Math.sin(angle) * r]
 }
 
 function persist(): void {
@@ -115,10 +101,15 @@ function positionForPerson(
   personId: string,
   lat: number,
   lng: number,
+  headingDeg?: number | null,
 ): [number, number] {
-  const [eastM, northM] = hashOffset(personId)
-  const [lat2, lng2] = offsetLatLngByMeters(lat, lng, eastM, northM)
-  return clampPointToSiteInterior(lat2, lng2)
+  return resolvePatrolDetectionMapPosition(
+    lat,
+    lng,
+    personId,
+    [lat, lng],
+    headingDeg,
+  )
 }
 
 function recordHeatSample(
@@ -139,6 +130,7 @@ export function upsertHeatmapPersons(input: {
   lat: number
   lng: number
   zoneId?: string
+  headingDeg?: number | null
   persons: Array<{ personId: string; label?: string; confidence?: number }>
   inFrame?: boolean
 }): void {
@@ -154,7 +146,7 @@ export function upsertHeatmapPersons(input: {
   for (const person of input.persons) {
     const masterId = resolveHeatmapDotMasterId(person.personId)
     if (!masterId || !isPatrolHeatmapEligibleId(masterId)) continue
-    const position = positionForPerson(masterId, input.lat, input.lng)
+    const position = positionForPerson(masterId, input.lat, input.lng, input.headingDeg)
     const label = person.label?.trim() || masterId
     const confidence = Number.isFinite(person.confidence) ? person.confidence! : 0.9
     const existing = registry.get(masterId)
