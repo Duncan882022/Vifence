@@ -195,6 +195,49 @@ def _patrol_face_detect_min(camera_id: str = "") -> float:
     return settings.patrol_face_detect_min_score
 
 
+def _face_skin_ratio(bgr: np.ndarray) -> float:
+    if bgr.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    skin = cv2.inRange(hsv, np.array([0, 28, 60]), np.array([22, 160, 255]))
+    return float(cv2.countNonZero(skin)) / max(bgr.shape[0] * bgr.shape[1], 1)
+
+
+def _surgical_mask_color_ratio(bgr: np.ndarray) -> float:
+    """Vùng màu khẩu trang y tế (trắng / xanh nhạt)."""
+    if bgr.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    white = cv2.inRange(hsv, np.array([0, 0, 175]), np.array([180, 45, 255]))
+    light_blue = cv2.inRange(hsv, np.array([85, 10, 130]), np.array([115, 110, 255]))
+    combined = cv2.bitwise_or(white, light_blue)
+    return float(cv2.countNonZero(combined)) / max(bgr.shape[0] * bgr.shape[1], 1)
+
+
+def _face_likely_masked(face_bgr: np.ndarray) -> bool:
+    """Miệng/mũi bị che — chưa đủ tiêu chí nhận diện / định danh."""
+    h, w = face_bgr.shape[:2]
+    if h < 20 or w < 14:
+        return False
+    split = max(int(h * 0.42), 1)
+    upper = face_bgr[:split, :]
+    lower = face_bgr[split:, :]
+    if lower.size == 0 or upper.size == 0:
+        return False
+
+    upper_skin = _face_skin_ratio(upper)
+    lower_skin = _face_skin_ratio(lower)
+    lower_mask = _surgical_mask_color_ratio(lower)
+
+    # Khẩu trang: nửa trên còn da (mắt/trán), nửa dưới ít da + nhiều màu khẩu trang.
+    if upper_skin >= 0.04 and lower_skin < max(0.025, upper_skin * 0.45):
+        if lower_mask >= 0.22:
+            return True
+    if lower_mask >= 0.40 and upper_skin >= 0.035:
+        return True
+    return False
+
+
 def assess_patrol_face(
     frame: np.ndarray,
     person_bbox: list[float] | None,
@@ -263,6 +306,9 @@ def _assess_patrol_face_crop(
                 best_face = crop[y1:y2, x1:x2]
 
     if best_face is None:
+        return None, best_det_score, False
+
+    if settings.patrol_face_reject_mask and _face_likely_masked(best_face):
         return None, best_det_score, False
 
     embedding = embed_aligned_face(search, best_row) if best_row is not None else None
