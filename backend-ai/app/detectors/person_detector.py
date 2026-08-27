@@ -45,7 +45,8 @@ class PersonDetector:
             conf=threshold,
             verbose=False,
             imgsz=640,
-            max_det=48,
+            max_det=150,
+            iou=0.65,
         )
         if not results or results[0].boxes is None:
             return []
