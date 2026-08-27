@@ -29,6 +29,17 @@ function empty(): Map<string, PersonRoiTrack> {
   return new Map<string, PersonRoiTrack>()
 }
 
+describe('ingest bbox', () => {
+  it('ưu tiên subject_bbox YOLO gốc thay bbox đã cắt PPE', () => {
+    const raw: Bbox = [100, 100, 200, 400]
+    const cropped: Bbox = [105, 103, 195, 316]
+    const tracks = advance(empty(), [person(cropped, { subject_bbox: raw, track_id: 'p1' })], 1_000)
+    const display = predictPersonRoiTracks(tracks, 0)[0].bbox
+    expect(display[2] - display[0]).toBeCloseTo(raw[2] - raw[0], 0)
+    expect(display[3] - display[1]).toBeGreaterThan(cropped[3] - cropped[1])
+  })
+})
+
 describe('khoá đối tượng theo track id backend', () => {
   it('giữ nguyên track khi bbox nhảy hẳn ra chỗ khác (bodycam xoay)', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)

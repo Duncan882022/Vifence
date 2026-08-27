@@ -1832,7 +1832,9 @@ def _filter_persons(
             for_display=for_display,
         ):
             continue
-        if bodycam and frame is not None:
+        # Patrol HC-* / DR-* — gate trong `_plausible_person_box(for_display=True)`.
+        # Không thêm lớp corroborate da/thân trên kiểu PPE (làm mất người ngồi/quay lưng).
+        if bodycam and frame is not None and not _is_helmet_bodycam(camera_id):
             from .patrol_person_visibility import (
                 background_clutter_person_box,
                 wide_crowd_rider_box,
@@ -1842,9 +1844,6 @@ def _filter_persons(
             face_dom = _face_dominant_person_box(box, w, h)
             if background_clutter_person_box(box, w, h) and not _person_upper_body_signal(frame, box):
                 continue
-            # Người quay lưng, ngồi hoặc bị che một phần thường không có mảng da
-            # nào để soi, nên đòi tín hiệu thân trên tới tận 0.62 là loại đúng
-            # nhóm cần thấy nhất. Đường vẽ ROI chỉ dùng nó như lưới chặn FP.
             corroborate_below = (
                 _PERSON_CONF_DISPLAY_CORROBORATE if for_display else 0.62
             )
@@ -2020,13 +2019,15 @@ def _build_patrol_person_detections(
     detections: list[PpeDetection] = []
     for person_index, person in enumerate(persons):
         pb = person.person_box
-        display_pb = _visible_person_display_bbox(pb, frame_w, frame_h)
+        from .patrol_person_visibility import patrol_person_overlay_bbox
+
+        overlay_pb = patrol_person_overlay_bbox(pb, frame_w, frame_h)
         person_det = PpeDetection(
             behavior="person",
             label=PPE_LABELS["person"],
             scenario_id=PPE_SCENARIO["person"],
             confidence=round(person.person_conf, 3),
-            bbox=[float(v) for v in display_pb],
+            bbox=[float(v) for v in overlay_pb],
             subject_bbox=[float(v) for v in pb],
         )
         track_id = track_ids[person_index] if person_index < len(track_ids) else None

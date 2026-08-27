@@ -33,7 +33,13 @@ function nextTrackId(): string {
  */
 export function normalizePersonRoiDetections(detections: PersonRoiDetection[]): PersonRoiDetection[] {
   return suppressPatrolObjectOverlappingIdentified(
-    detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4),
+    detections
+      .filter(d => d.behavior === 'person' && (d.bbox?.length === 4 || d.subject_bbox?.length === 4))
+      .map(d => ({
+        ...d,
+        // Patrol ROI luôn bám YOLO gốc — không dùng bbox đã cắt chân/siết PPE.
+        bbox: d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox!,
+      })),
   )
 }
 
