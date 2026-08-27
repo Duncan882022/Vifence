@@ -34,10 +34,39 @@ export interface PatrolDayObject {
 }
 
 export interface PatrolAppearanceSegment {
+  id?: number
   cameraId: string
   zoneId: string | null
   startedAt: number
   endedAt: number
+  gpsLat?: number | null
+  gpsLng?: number | null
+  presenceSeq?: number
+  sourceCameras?: string[]
+}
+
+export interface PatrolDayPresence {
+  id: number
+  subjectId: string
+  cameraId: string
+  zoneId: string | null
+  startedAt: number
+  endedAt: number
+  gpsLat: number | null
+  gpsLng: number | null
+  presenceSeq: number
+  tier: 'person' | 'identity' | 'object'
+  displayName: string
+  sourceCameras: string[]
+}
+
+export interface PatrolDayStats {
+  date: string
+  workersStandard: number
+  personCount: number
+  identityCount: number
+  encountersStandard: number
+  unassignedObservations: number
 }
 
 function backendBase(): string {
@@ -118,13 +147,71 @@ export async function fetchPatrolSubjectAppearances(
   const out: Record<string, PatrolAppearanceSegment[]> = {}
   for (const [cameraId, rows] of Object.entries(data.by_camera ?? {})) {
     out[cameraId] = rows.map(r => ({
+      id: r.id != null ? Number(r.id) : undefined,
       cameraId,
       zoneId: r.zone_id ? String(r.zone_id) : null,
       startedAt: Number(r.started_at ?? 0),
       endedAt: Number(r.ended_at ?? 0),
+      gpsLat: r.gps_lat != null ? Number(r.gps_lat) : null,
+      gpsLng: r.gps_lng != null ? Number(r.gps_lng) : null,
+      presenceSeq: r.presence_seq != null ? Number(r.presence_seq) : undefined,
+      sourceCameras: Array.isArray(r.source_cameras)
+        ? (r.source_cameras as string[])
+        : undefined,
     }))
   }
   return out
+}
+
+export async function fetchPatrolDayStats(date?: string): Promise<PatrolDayStats | null> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  const data = await getJson<{
+    ok: boolean
+    date: string
+    workers_standard: number
+    person_count: number
+    identity_count: number
+    encounters_standard: number
+    unassigned_observations: number
+  }>(`/patrol/day/stats${query}`)
+  if (!data?.ok) return null
+  return {
+    date: data.date,
+    workersStandard: Number(data.workers_standard ?? 0),
+    personCount: Number(data.person_count ?? 0),
+    identityCount: Number(data.identity_count ?? 0),
+    encountersStandard: Number(data.encounters_standard ?? 0),
+    unassignedObservations: Number(data.unassigned_observations ?? 0),
+  }
+}
+
+export async function fetchPatrolDayPresences(
+  date?: string,
+): Promise<{ items: PatrolDayPresence[]; ok: boolean }> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  const data = await getJson<{ ok: boolean; items: Record<string, unknown>[] }>(
+    `/patrol/day/presences${query}`,
+  )
+  if (!data?.ok) return { ok: false, items: [] }
+  const items = (data.items ?? []).map(row => ({
+    id: Number(row.id ?? 0),
+    subjectId: String(row.subject_id ?? ''),
+    cameraId: String(row.camera_id ?? ''),
+    zoneId: row.zone_id ? String(row.zone_id) : null,
+    startedAt: Number(row.started_at ?? 0),
+    endedAt: Number(row.ended_at ?? 0),
+    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
+    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
+    presenceSeq: Number(row.presence_seq ?? 1),
+    tier: (row.tier === 'identity' ? 'identity' : row.tier === 'object' ? 'object' : 'person') as PatrolDayPresence['tier'],
+    displayName: String(row.display_name ?? row.subject_id ?? ''),
+    sourceCameras: Array.isArray(row.source_cameras)
+      ? (row.source_cameras as string[])
+      : row.camera_id
+        ? [String(row.camera_id)]
+        : [],
+  }))
+  return { ok: true, items }
 }
 
 export function formatAppearanceTimeRange(startSec: number, endSec: number): string {

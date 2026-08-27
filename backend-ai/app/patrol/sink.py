@@ -312,6 +312,15 @@ def _stash_stale(
         del slots[:-24]
 
 
+def _resolve_observation_gps(camera_id: str) -> tuple[float | None, float | None]:
+    try:
+        from ..patrol_api import get_patrol_gps
+
+        return get_patrol_gps(camera_id)
+    except Exception:
+        return None, None
+
+
 def record_observation(
     *,
     camera_id: str,
@@ -350,6 +359,7 @@ def record_observation(
                 face_embedding, face_quality = recovered
 
     score = snapshot_score(face_quality=face_quality, confidence=confidence)
+    gps_lat, gps_lng = _resolve_observation_gps(camera_id)
 
     def _shot(subject_id: str) -> tuple[str | None, float]:
         if frame is None or person_bbox is None:
@@ -398,6 +408,8 @@ def record_observation(
             snapshot_score=shot_score,
             now=ts,
             seen_since=None if bound else anchor_ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
         )
         return pers_id
 
@@ -413,6 +425,8 @@ def record_observation(
             snapshot_path=path,
             snapshot_score=shot_score,
             now=ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
         )
         return known
 
@@ -437,6 +451,8 @@ def record_observation(
             snapshot_score=shot_score,
             now=ts,
             seen_since=anchor_ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
         )
         return pers_id
 
@@ -452,6 +468,8 @@ def record_observation(
         zone_id=zone_id,
         now=ts,
         seen_since=anchor_ts if first_write else None,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
     )
     with _lock:
         _track_to_object[key] = obj_id
@@ -466,6 +484,8 @@ def record_observation(
                 snapshot_path=path,
                 snapshot_score=shot_score,
                 now=ts,
+                gps_lat=gps_lat,
+                gps_lng=gps_lng,
             )
     return obj_id
 

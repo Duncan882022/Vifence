@@ -91,6 +91,29 @@ class PatrolApiTests(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertEqual(sorted(res["by_camera"]), ["DR-03", "HC-01"])
 
+    def test_day_stats_and_presences(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(9), quality=0.8)
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", now=1_000.0,
+            gps_lat=10.7721, gps_lng=106.6592,
+        )
+        daystore.touch_object(
+            None, camera_id="HC-02", now=2_000.0,
+            gps_lat=10.7725, gps_lng=106.6595,
+        )
+
+        stats = self.client.get("/patrol/day/stats").json()
+        self.assertTrue(stats["ok"])
+        self.assertEqual(stats["workers_standard"], 1)
+        self.assertEqual(stats["encounters_standard"], 1)
+        self.assertEqual(stats["unassigned_observations"], 1)
+
+        pres = self.client.get("/patrol/day/presences").json()
+        self.assertTrue(pres["ok"])
+        self.assertEqual(len(pres["items"]), 2)
+        gps_items = [i for i in pres["items"] if i.get("gps_lat")]
+        self.assertGreaterEqual(len(gps_items), 1)
+
     def test_merge_endpoint_keeps_old_code_resolvable(self) -> None:
         a, _ = identity.observe_face(_vec(7), quality=0.8)
         b, _ = identity.observe_face(_vec(8), quality=0.8)

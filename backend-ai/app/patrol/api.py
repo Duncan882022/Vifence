@@ -144,6 +144,20 @@ def day_objects(date: str | None = None) -> dict[str, Any]:
     }
 
 
+@router.get("/day/stats")
+def day_stats(date: str | None = None) -> dict[str, Any]:
+    """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
+    return {"ok": True, **daystore.day_stats(date)}
+
+
+@router.get("/day/presences")
+def day_presences(date: str | None = None) -> dict[str, Any]:
+    """Mọi lượt gặp qualified — heatmap GPS."""
+    d = date or db.today_vn()
+    items = daystore.list_day_presences(d)
+    return {"ok": True, "date": d, "items": items}
+
+
 @router.get("/day/appearances")
 def day_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
     sid = (subject_id or "").strip()
@@ -428,6 +442,12 @@ def observe_person_face(
     đã tích luỹ từ lúc chưa nhận ra mặt.
     """
     ts = now or time.time()
+    try:
+        from .patrol_api import get_patrol_gps
+
+        gps_lat, gps_lng = get_patrol_gps(camera_id) if camera_id else (None, None)
+    except Exception:
+        gps_lat, gps_lng = None, None
     pers_id, _ = identity.observe_face(
         embedding, quality=quality, camera_id=camera_id, now=ts
     )
@@ -440,5 +460,7 @@ def observe_person_face(
         snapshot_path=snapshot_path,
         snapshot_score=snapshot_score,
         now=ts,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
     )
     return pers_id

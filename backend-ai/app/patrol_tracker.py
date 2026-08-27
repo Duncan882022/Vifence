@@ -27,7 +27,7 @@ Bbox = tuple[float, float, float, float]
 # che lại sinh ra một người mới trong hệ thống: mã `sgc-*` mới, dòng sự kiện mới,
 # KPI cộng thêm một — trong khi ngoài đời vẫn chỉ là một người. Track đang mất dấu
 # gần như không tốn tài nguyên, nên giữ lâu hơn rẻ hơn nhiều so với đếm trùng.
-_LOST_KEEP_SEC_BODYCAM = 5.0
+_LOST_KEEP_SEC_BODYCAM = 8.0
 _LOST_KEEP_SEC_FLYCAM = 4.0
 
 # Trần số track giữ đồng thời mỗi camera — chặn phình bộ nhớ khi cảnh đông.

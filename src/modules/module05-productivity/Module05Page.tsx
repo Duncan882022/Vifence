@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, Truck, MapPin, AlertTriangle, Maximize2, Minimize2,
+  Users, MapPin, Footprints, ScanFace, Maximize2, Minimize2,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -57,19 +57,19 @@ import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { summarizePatrolAlertEvents } from './utils/patrolEventsFeed'
-import { countPatrolAlertEntities, summarizePatrolGlobalWorkers } from './utils/patrolPatrolCounts'
+import { usePatrolDayStats } from './hooks/usePatrolDayStats'
+import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 
 function PatrolKPIs({
   live,
   workforce,
-  events,
+  stats,
 }: {
   live: PatrolHelmetLiveMetrics
   workforce: WorkforceSnapshot
-  events: PatrolEvent[]
+  stats: PatrolDayStats
 }) {
   const zoneEntries = Object.values(workforce.zonePopulation)
   const visitedZones = zoneEntries.filter(
@@ -80,24 +80,23 @@ function PatrolKPIs({
     ? Math.round((visitedZones / totalZones) * 100)
     : 0
 
-  // Công nhân — dedupe từ SQLite day events (khớp panel sự kiện)
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
-  const workerSummary = summarizePatrolGlobalWorkers(events, { liveOnly: anyCameraOnline })
-  const observedCount = workerSummary.total
 
-  // Sự kiện = unique entities tab Người + Định danh (feed có snapshot)
-  const alertCount = countPatrolAlertEntities(events)
-
-  const zonePop = Object.values(workforce.zonePopulation)[0]
-  const peopleDetail = observedCount > 0
-    ? `${observedCount} ${anyCameraOnline ? 'đang quan sát' : 'trong ca'} · ${workerSummary.person} Người · ${workerSummary.identity} Định danh`
+  const workersDetail = stats.workersStandard > 0
+    ? `${stats.personCount} Người · ${stats.identityCount} Định danh`
     : anyCameraOnline
-      ? zonePop?.observed_count
-        ? `${zonePop.breakdown.verified_identities} định danh · ${zonePop.breakdown.unknown_objects} chưa xác định`
-        : live.backendReachable || live.streamOnline
-          ? 'Đang chờ phát hiện'
-          : 'Chưa có luồng live'
-      : 'Chưa có dữ liệu phiên'
+      ? live.backendReachable || live.streamOnline
+        ? 'Đang tuần tra — chờ phát hiện'
+        : 'Chưa có luồng live'
+      : 'Chưa có dữ liệu hôm nay'
+
+  const encountersDetail = stats.encountersStandard > 0
+    ? `${stats.encountersStandard} lượt gặp qualified`
+    : 'Chưa ghi nhận lượt gặp'
+
+  const unassignedDetail = stats.unassignedObservations > 0
+    ? 'Chưa gán pers/iden — không tính vào chuẩn'
+    : 'Không có quan sát chưa gán'
 
   const kpis = [
     {
@@ -105,7 +104,7 @@ function PatrolKPIs({
       value: `${visitedZones}/${totalZones}`,
       unit: 'khu vực',
       detail: visitedZones > 0
-        ? `${coveragePercent}% diện tích đã phủ`
+        ? `${coveragePercent}% diện tích đã phủ · mật độ tuần tra`
         : 'Chưa có dữ liệu tuần tra',
       change: 0,
       changeType: 'neutral' as const,
@@ -114,10 +113,10 @@ function PatrolKPIs({
       iconColor: 'text-green-400',
     },
     {
-      label: 'Công nhân',
-      value: observedCount,
+      label: 'Người (chuẩn)',
+      value: stats.workersStandard,
       unit: 'người',
-      detail: peopleDetail,
+      detail: workersDetail,
       change: 0,
       changeType: 'neutral' as const,
       icon: Users,
@@ -125,26 +124,26 @@ function PatrolKPIs({
       iconColor: 'text-sky-400',
     },
     {
-      label: 'Máy móc',
-      value: 0,
-      unit: 'máy',
-      detail: 'Đang chờ dữ liệu live',
+      label: 'Lượt gặp',
+      value: stats.encountersStandard,
+      unit: 'lượt',
+      detail: encountersDetail,
       change: 0,
       changeType: 'neutral' as const,
-      icon: Truck,
-      iconBg: 'bg-amber-400/10',
-      iconColor: 'text-amber-400',
+      icon: Footprints,
+      iconBg: 'bg-emerald-400/10',
+      iconColor: 'text-emerald-400',
     },
     {
-      label: 'Cảnh báo',
-      value: alertCount,
-      unit: 'sự kiện',
-      detail: summarizePatrolAlertEvents(events),
+      label: 'Quan sát chưa gán',
+      value: stats.unassignedObservations,
+      unit: 'lượt',
+      detail: unassignedDetail,
       change: 0,
       changeType: 'neutral' as const,
-      icon: AlertTriangle,
-      iconBg: 'bg-red-400/10',
-      iconColor: 'text-red-400',
+      icon: ScanFace,
+      iconBg: 'bg-slate-400/10',
+      iconColor: 'text-slate-400',
     },
   ]
 
@@ -238,6 +237,7 @@ export function Module05Page() {
   // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
   // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
   const dayEvents = usePatrolDayEvents()
+  const dayStats = usePatrolDayStats()
   const patrolEventsLive = dayEvents.events
 
   const detailEvent = useMemo(
@@ -281,7 +281,7 @@ export function Module05Page() {
           {tier1Open && (
             <div className="p-2 sm:p-3">
               <Tier1 className="grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-                <PatrolKPIs live={liveMetrics} workforce={workforceSnap} events={patrolEventsLive} />
+                <PatrolKPIs live={liveMetrics} workforce={workforceSnap} stats={dayStats.stats} />
               </Tier1>
             </div>
           )}

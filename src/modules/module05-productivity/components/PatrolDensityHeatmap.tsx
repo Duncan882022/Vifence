@@ -31,9 +31,9 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { buildPatrolDayHeatmapDots } from '../utils/patrolDayHeatmapDots'
-import { countPatrolGlobalWorkers, summarizePatrolGlobalWorkers } from '../utils/patrolPatrolCounts'
-import { countUniquePatrolTabEntities } from '../utils/patrolWorkforceEventLabels'
+import { buildPatrolPresenceHeatmapDots } from '../utils/patrolDayHeatmapDots'
+import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
+import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { ObjectState } from '../types/workforceHeatmap'
 
@@ -245,11 +245,15 @@ export function PatrolDensityHeatmap({
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
+  const { presences } = usePatrolDayPresences()
+  const { stats: dayStats } = usePatrolDayStats()
+
   const filteredDots = useMemo(() => {
     void identityRevision
-    const dots = buildPatrolDayHeatmapDots(patrolEvents, {
+    const dots = buildPatrolPresenceHeatmapDots(presences, {
       liveOnly: anyCameraOnline,
       cameraOnlineById: helmetOnlineById,
+      includeUnassigned: true,
     })
     return dots.map(dot => ({
       ...dot,
@@ -257,7 +261,7 @@ export function PatrolDensityHeatmap({
         ? DETECTION_DOT_OPACITY_IN_VIEW
         : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
     }))
-  }, [patrolEvents, anyCameraOnline, helmetOnlineById, identityRevision])
+  }, [presences, anyCameraOnline, helmetOnlineById, identityRevision])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -277,34 +281,16 @@ export function PatrolDensityHeatmap({
     if (obj) setSelectedObject(obj)
   }
 
-  const observedCount = useMemo(
-    () => countPatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline }),
-    [patrolEvents, anyCameraOnline],
-  )
+  const observedCount = dayStats.workersStandard
+  const identifiedCount = dayStats.identityCount
+  const encounterCount = dayStats.encountersStandard
 
-  const identifiedCount = useMemo(() => {
-    void identityRevision
-    const scoped = anyCameraOnline
-      ? buildPatrolDayHeatmapDots(patrolEvents, {
-        liveOnly: true,
-        cameraOnlineById: helmetOnlineById,
-      })
-      : null
-    if (scoped) {
-      return scoped.filter(d => d.verified).length
-    }
-    return countUniquePatrolTabEntities(patrolEvents, 'identity')
-  }, [anyCameraOnline, patrolEvents, helmetOnlineById, identityRevision])
-
-  const siteHeadcount = useMemo(() => {
-    const summary = summarizePatrolGlobalWorkers(patrolEvents, { liveOnly: anyCameraOnline })
-    return {
-      observed: summary.total,
-      identified: summary.identity,
-      objects: 0,
-      persons: summary.person,
-    }
-  }, [patrolEvents, anyCameraOnline])
+  const siteHeadcount = useMemo(() => ({
+    observed: dayStats.workersStandard,
+    identified: dayStats.identityCount,
+    objects: dayStats.unassignedObservations,
+    persons: dayStats.personCount,
+  }), [dayStats])
 
   const bodycamOnlineById = useMemo(() => ({
     'HC-01': Boolean(helmetOnlineById['HC-01']),
@@ -365,7 +351,9 @@ export function PatrolDensityHeatmap({
             )
           })}
           <span className="text-[#334155] hidden sm:inline">·</span>
-          <span className="text-sky-300/90 tabular-nums shrink-0">{observedCount} quan sát</span>
+          <span className="text-sky-300/90 tabular-nums shrink-0">{observedCount} người chuẩn</span>
+          <span className="text-[#334155]">·</span>
+          <span className="text-emerald-300/90 tabular-nums shrink-0">{encounterCount} lượt</span>
           <span className="text-[#334155]">·</span>
           <span className="text-violet-300/90 tabular-nums shrink-0">{identifiedCount} định danh</span>
         </div>
