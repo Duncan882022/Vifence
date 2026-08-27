@@ -361,13 +361,12 @@ def _embed_face_b64(image_b64: str) -> list[float] | None:
     if frame is None:
         return None
 
-    from ..worker_identity.recognizer import assess_patrol_face
+    from ..worker_identity.recognizer import embed_enrollment_selfie
 
-    h, w = frame.shape[:2]
-    vec, _score, eligible = assess_patrol_face(frame, [0.0, 0.0, float(w), float(h)])
-    if not eligible or vec is None:
+    emb = embed_enrollment_selfie(frame)
+    if emb is None:
         return None
-    return vec.tolist()
+    return emb.tolist()
 
 
 def observe_person_face(
