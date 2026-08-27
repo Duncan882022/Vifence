@@ -178,6 +178,15 @@ def limb_fragment_person_box(
     return False
 
 
+def patrol_person_overlay_bbox(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> tuple[float, float, float, float]:
+    """BBox vẽ ROI patrol — YOLO gốc, chỉ clip khung. Không cắt chân / siết PPE."""
+    return _clip_box_to_frame(person_box, frame_w, frame_h)
+
+
 def patrol_person_meets_display_gate(
     person_box: tuple[float, float, float, float],
     frame_w: int,

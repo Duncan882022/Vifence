@@ -31,8 +31,7 @@ export function isPatrolPersonCamera(cameraId: string): boolean {
 }
 
 export function isPatrolHelmetAiCamera(cameraId: string): boolean {
-  return cameraId.startsWith('HC-')
-    && (isPatrolPersonCamera(cameraId) || isPpeCamera(cameraId))
+  return cameraId.startsWith('HC-') && isPatrolPersonCamera(cameraId)
 }
 
 export function isPatrolFlycamAiCamera(cameraId: string): boolean {

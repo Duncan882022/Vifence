@@ -21,7 +21,7 @@ import {
   getVideoObjectFitForCamera,
   getVideoObjectPositionForCamera,
 } from '../data/trainingCameraFeeds'
-import { isMobileSmokingFireCamera, isPatrolPersonCamera, isPpeCamera } from '../data/cameraAiRuntime'
+import { isMobileSmokingFireCamera, isPatrolPersonCamera } from '../data/cameraAiRuntime'
 import {
   setPatrolMobileLiveSnapshot,
   touchPatrolMobileStreamOnline,
@@ -38,9 +38,6 @@ import { watchDeviceGps } from '../services/deviceGps.service'
 import { getLastDeviceHeading, watchDeviceHeading } from '../services/deviceHeading.service'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
-import type { PpeDetection } from '@/modules/module03-safety/services/ppeBackend.service'
-import { groupPpeDetections } from '@/modules/module03-safety/utils/ppeDetectionGroups'
-import { tightenPersonOverlayBbox } from '@/modules/module03-safety/utils/personOverlayLabel'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
@@ -57,30 +54,6 @@ function tagHc02PersonDetections(items: MobileAiDetection[]): MobileAiDetection[
     const weak = d.confidence >= HC02_PERSON_MIN_CONF && d.confidence < HC02_PERSON_STRONG_CONF
     return weak ? { ...d, weak: true } : d
   })
-}
-
-/** HC bodycam — chỉ bbox person (xanh / vàng nếu conf yếu). */
-function mapMobilePatrolOverlayDetections(detections: MobileAiDetection[]): MobileAiDetection[] {
-  const personDets: Array<PpeDetection & { subject_bbox?: [number, number, number, number] }> = detections.map(d => ({
-    behavior: d.behavior as PpeDetection['behavior'],
-    label: d.label,
-    scenario_id: 'PERS-001',
-    confidence: d.confidence,
-    bbox: d.bbox,
-    subject_bbox: d.subject_bbox,
-    worker_id: d.worker_id,
-    worker_name: d.worker_name,
-  }))
-  const groups = groupPpeDetections(personDets)
-  return groups.map(g => ({
-    behavior: 'person' as const,
-    label: g.person.label,
-    confidence: g.person.confidence,
-    bbox: tightenPersonOverlayBbox(g.person.bbox, g.person.subject_bbox),
-    subject_bbox: g.person.subject_bbox,
-    worker_id: g.person.worker_id,
-    worker_name: g.person.worker_name,
-  }))
 }
 
 type MobileFeedStatus = 'idle' | 'scanning' | 'live' | 'error'
@@ -132,19 +105,16 @@ export function MobileCameraFeed({
   const deviceIndexRef = useRef(0)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
   useCameraAiEnabledModels(cameraId)
-  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId)
-    || isPpeCamera(cameraId)
-    || isPatrolPersonCamera(cameraId)
-  const overlayModelId = isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId)
-    ? 'ppe' as const
-    : 'mobile_smoking_fire' as const
+  const mobileAiEnabled = isMobileSmokingFireCamera(cameraId) || isPatrolPersonCamera(cameraId)
+  const isPatrolCam = isPatrolPersonCamera(cameraId)
+  const overlayModelId = isPatrolCam ? 'patrol_person' as const : 'mobile_smoking_fire' as const
   const videoFit = getVideoObjectFitForCamera(cameraId, 'mobile')
   const videoObjectPosition = getVideoObjectPositionForCamera(cameraId, 'mobile')
   /** Analyze vẫn chạy khi ẩn ROI — heatmap/personCount cần detections. */
   const runAiAnalyze = aiEnabled && mobileAiEnabled
   const showAiOverlay = runAiAnalyze && bboxVisible
-  /** Module 05 patrol — Kalman/ByteTrack ROI, không dùng ATLĐ bboxTrackLock. */
-  const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && overlayModelId === 'ppe'
+  /** Module 05 patrol — Kalman/ByteTrack ROI, không PPE overlay. */
+  const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && isPatrolCam
   /** ROI cần frame size — fallback video native trước khi backend trả width/height. */
   const overlayFrameSize = useMemo(() => {
     if (frameSize.width > 0 && frameSize.height > 0) return frameSize
@@ -155,11 +125,9 @@ export function MobileCameraFeed({
     return frameSize
   }, [frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
-    const mapped = overlayModelId === 'ppe' && !usePatrolPersonRoi
-      ? mapMobilePatrolOverlayDetections(detections)
-      : detections
+    const mapped = detections
     return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped
-  }, [detections, overlayModelId, usePatrolPersonRoi, cameraId])
+  }, [detections, cameraId])
 
   const stopAiClient = useCallback(() => {
     aiClientRef.current?.stop()
@@ -200,7 +168,7 @@ export function MobileCameraFeed({
     aiClientRef.current = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl: url,
-      intervalMs: cameraId === 'HC-02' ? 180 : 450,
+      intervalMs: isPatrolCam && cameraId.startsWith('HC-') ? 120 : 450,
       getGps: cameraId === 'HC-02'
         ? () => {
             const snap = getPatrolHelmetGps(cameraId)
@@ -210,12 +178,11 @@ export function MobileCameraFeed({
       getHeading: cameraId === 'HC-02' ? () => getLastDeviceHeading() : undefined,
       onResult: (result: MobileAiAnalyzeResult) => {
         const minConf = (d: MobileAiDetection) => {
-          if (overlayModelId === 'ppe') {
+          if (isPatrolCam) {
             if (d.behavior === 'person') {
-              return d.confidence >= (cameraId === 'HC-02' ? HC02_PERSON_MIN_CONF : 0.45)
+              return d.confidence >= (cameraId === 'HC-02' ? HC02_PERSON_MIN_CONF : 0.18)
             }
-            if (['no_helmet', 'no_vest', 'no_shoes'].includes(d.behavior)) return d.confidence >= 0.55
-            return d.confidence >= 0.5
+            return false
           }
           if (d.behavior === 'fire' && d.label.startsWith('flame')) return d.confidence >= 0.58
           if (d.behavior === 'fire') return d.confidence >= 0.62
@@ -250,7 +217,7 @@ export function MobileCameraFeed({
         }
         const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible))
         const now = Date.now()
-        const isPatrolPerson = cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))
+        const isPatrolPerson = isPatrolCam && (cameraId.startsWith('HC-') || cameraId.startsWith('DR-'))
         /** Giữ bbox — Kalman coast đủ lâu để ROI mượt khi round-trip mạng chậm. */
         const holdMs = isPatrolPerson ? 2200 : 1800
         if (gated.length > 0) {
@@ -261,7 +228,7 @@ export function MobileCameraFeed({
         } else {
           setDetections([])
         }
-        if (cameraId === 'HC-02' && (isPpeCamera(cameraId) || isPatrolPersonCamera(cameraId))) {
+        if (isPatrolPerson) {
           // Đếm person từ raw detections (trước filter overlay) — map không miss khi conf thấp
           const rawPersons = result.detections.filter(d => d.behavior === 'person'
             && d.confidence >= HC02_PERSON_MIN_CONF

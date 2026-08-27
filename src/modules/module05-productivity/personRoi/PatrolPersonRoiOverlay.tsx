@@ -55,12 +55,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
     return null
   }
 
-  // Vẽ thẳng hộp Kalman. `tightenPersonOverlayBbox` ưu tiên `subject_bbox` — hợp
-  // với overlay PPE (bbox là vùng vi phạm, subject là người) nhưng ở đây cả hai
-  // đều là hộp người: dùng nó là vứt toàn bộ phần làm mượt + nội suy, vẽ lại hộp
-  // YOLO thô của lần đo cuối. Hộp đó đứng im giữa hai nhịp analyze và lúc track
-  // mất dấu, nên khi camera lia thì nó nằm lại trên nền trống.
-  // Backend đã siết sẵn 5%/3% trong `_visible_person_display_bbox`.
+  // Patrol ROI — Kalman + EMA trên bbox YOLO gốc (subject_bbox). Không cắt chân/PPE.
   const box = mapBackendBboxToOverlay(
     track.bbox,
     frameWidth,
