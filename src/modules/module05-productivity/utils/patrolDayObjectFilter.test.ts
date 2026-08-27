@@ -37,31 +37,22 @@ describe('isPatrolDayObjectDisplayable', () => {
     ).toBe(false)
   })
 
-  it('giữ đối tượng lưng điểm thấp không trùng người', () => {
+  it('giữ đối tượng lưng điểm thấp', () => {
     expect(isPatrolDayObjectDisplayable(obj(), [])).toBe(true)
   })
 
-  it('loại đối tượng trùng khung thời gian với thẻ Người', () => {
+  it('giữ đối tượng cùng giờ với thẻ Người — nhóm lẫn mặt và lưng', () => {
     expect(
       isPatrolDayObjectDisplayable(
         obj({ firstSeen: 1_100, lastSeen: 1_500 }),
         [person()],
-      ),
-    ).toBe(false)
-  })
-
-  it('giữ đối tượng xa thời gian mọi thẻ Người', () => {
-    expect(
-      isPatrolDayObjectDisplayable(
-        obj({ firstSeen: 100, lastSeen: 200 }),
-        [person({ firstSeen: 5_000, lastSeen: 6_000 })],
       ),
     ).toBe(true)
   })
 })
 
 describe('filterPatrolDayObjectsForDisplay', () => {
-  it('chỉ trả về obj hợp lệ', () => {
+  it('chỉ loại obj nhầm tầng (điểm mặt), giữ lưng trong nhóm', () => {
     const persons = [person()]
     const items = [
       obj(),
@@ -70,6 +61,7 @@ describe('filterPatrolDayObjectsForDisplay', () => {
     ]
     expect(filterPatrolDayObjectsForDisplay(items, persons).map(o => o.objId)).toEqual([
       'obj-20260826-0001',
+      'obj-3',
     ])
   })
 })

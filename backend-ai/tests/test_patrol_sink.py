@@ -283,6 +283,60 @@ class PatrolSinkTests(unittest.TestCase):
         self.assertNotEqual(a, b)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 2)
 
+    def test_mixed_group_person_and_object_same_frame(self) -> None:
+        """Một nhóm: người nhìn camera + người quay lưng — hai thẻ, hai tầng."""
+        t0 = 1_000.0
+        face_box = [40.0, 50.0, 160.0, 400.0]
+        back_box = [400.0, 50.0, 540.0, 400.0]
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=face_box, face_embedding=_vec(3), face_quality=0.9, now=t0,
+        )
+        pers = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=face_box, face_embedding=_vec(3), face_quality=0.9,
+            now=t0 + _FACE_CONFIRM,
+        )
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0002:person",
+            person_bbox=back_box, now=t0,
+        )
+        obj = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0002:person",
+            person_bbox=back_box, now=t0 + _OBJECT_CONFIRM,
+        )
+        self.assertTrue(str(pers).startswith("pers-"))
+        self.assertTrue(str(obj).startswith("obj-"))
+        self.assertNotEqual(pers, obj)
+        self.assertEqual(len(daystore.list_person_events(db.today_vn(t0))), 1)
+        self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
+
+    def test_person_turning_away_does_not_become_new_object(self) -> None:
+        """Đã là Người, track tách khi quay lưng — vẫn Người, không đẻ Đối tượng."""
+        t0 = 1_000.0
+        box = [80.0, 60.0, 220.0, 420.0]
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=box, face_embedding=_vec(4), face_quality=0.9, now=t0,
+        )
+        pers = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person",
+            person_bbox=box, face_embedding=_vec(4), face_quality=0.9,
+            now=t0 + _FACE_CONFIRM,
+        )
+        sink.forget_track("HC-01", "ptk0001:person", now=t0 + 4.0)
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0009:person",
+            person_bbox=[82.0, 61.0, 218.0, 418.0], now=t0 + 5.0,
+        )
+        again = sink.record_observation(
+            camera_id="HC-01", track_id="ptk0009:person",
+            person_bbox=[82.0, 61.0, 218.0, 418.0],
+            now=t0 + 5.0 + _OBJECT_CONFIRM,
+        )
+        self.assertEqual(again, pers)
+        self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
+
 
 if __name__ == "__main__":
     unittest.main()
