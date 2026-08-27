@@ -37,7 +37,12 @@ import {
 } from './data/patrolCameras'
 import { PATROL_DRONE_IDS } from './data/patrolDrones'
 import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
-import { mergePatrolCamerasWithVisionLive, applyPatrolHelmetEnvLive, applyPatrolHelmetMobileLive } from './data/patrolHelmetStreams'
+import {
+  mergePatrolCamerasWithVisionLive,
+  applyPatrolHelmetEnvLive,
+  applyPatrolHelmetMobileLive,
+  applyPatrolUnifiedLiveRouting,
+} from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import { usePatrolDayEvents } from './hooks/usePatrolDayEvents'
 import {
@@ -213,9 +218,11 @@ export function Module05Page() {
 
   const patrolCamerasLive = useMemo(
     () => applyPatrolCameraStreamStatus(
-      applyPatrolHelmetMobileLive(
-        applyPatrolHelmetEnvLive(
-          mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+      applyPatrolUnifiedLiveRouting(
+        applyPatrolHelmetMobileLive(
+          applyPatrolHelmetEnvLive(
+            mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
+          ),
         ),
       ),
       liveMetrics.perCamera,

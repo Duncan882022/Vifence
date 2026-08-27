@@ -1,17 +1,19 @@
 /**
- * Helmet camera live streams — RTSP nguồn + HLS/WHEP cho browser.
+ * Helmet camera live streams — MediaMTX pipeline thống nhất.
  *
- * Thứ tự ưu tiên xem live (CameraVideoFeed):
- *   1. WHEP WebRTC (~200–500ms) — patrolCameras gắn whepUrl
- *   2. MediaMTX LL-HLS (~1–2s) — không re-encode
- *   3. VMS relay HLS (~3–5s) — fallback khi MediaMTX chưa sẵn sàng
+ * Mọi camera tuần tra (HC-*, DR-*) xem live qua CameraVideoFeed:
+ *   1. WHEP WebRTC (~200–500ms)
+ *   2. MediaMTX LL-HLS (~1–2s) — fallback UDP/firewall
+ *
+ * JSMpeg (Vision wsUrl) và VMS relay HLS chỉ còn khi chưa cấu hình MediaMTX.
+ * Cùng tab đang phát WHIP → local MediaStream (không qua server).
  */
 import {
   getStreamUrlForCamera,
   getVmsHlsUrl,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
-import { getHelmetMediaMtxHlsUrl, isLegacyMobileHelmet } from './helmetIngest'
-import { isVmsHlsRelayEnabled } from './patrolHelmetScope'
+import { getHelmetMediaMtxHlsUrl, isHelmetWebrtcAvailable, isLegacyMobileHelmet } from './helmetIngest'
+import { isPatrolMetricsCameraId, isVmsHlsRelayEnabled } from './patrolHelmetScope'
 
 /** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → backend pull qua MediaMTX). */
 export const PATROL_HELMET_RTSP_SOURCES: Record<string, string> = {
@@ -83,11 +85,36 @@ export function getPatrolHelmetRtspPath(cameraId: string): string | undefined {
   }
 }
 
-/** Gắn wsUrl live từ Vision API (cùng luồng vifence.io/dao-tao-tuan-thu). */
+/**
+ * Gỡ wsUrl / fallback VMS — mọi camera tuần tra xem qua MediaMTX (WHEP → LL-HLS).
+ * Gọi sau các bước merge env/Vision để không còn nhánh JSMpeg song song.
+ */
+export function applyPatrolUnifiedLiveRouting<
+  T extends {
+    id: string
+    streamUrl?: string
+    wsUrl?: string | null
+    whepUrl?: string
+    streamFallbackUrl?: string
+  },
+>(cameras: T[]): T[] {
+  if (!isHelmetWebrtcAvailable()) return cameras
+  return cameras.map(cam => {
+    if (!isPatrolMetricsCameraId(cam.id)) return cam
+    return {
+      ...cam,
+      wsUrl: undefined,
+      streamFallbackUrl: undefined,
+    }
+  })
+}
+
+/** Gắn wsUrl live từ Vision API — chỉ khi chưa có MediaMTX (dev / fallback cũ). */
 export function mergePatrolCamerasWithVisionLive<T extends { id: string; streamUrl?: string; wsUrl?: string | null }>(
   cameras: T[],
   apiCameras: Array<{ id: string; rtspUrl?: string; wsUrl?: string | null }>,
 ): T[] {
+  if (isHelmetWebrtcAvailable()) return cameras
   return cameras.map(cam => {
     const path = getPatrolHelmetRtspPath(cam.id)
     if (!path) return cam
@@ -99,10 +126,11 @@ export function mergePatrolCamerasWithVisionLive<T extends { id: string; streamU
   })
 }
 
-/** Override HC-01 wsUrl từ env — dùng khi local dev không gọi được Vision API (CORS). */
+/** Override HC-01 wsUrl từ env — chỉ khi chưa có MediaMTX (local dev / CORS). */
 export function applyPatrolHelmetEnvLive<T extends { id: string; streamUrl?: string; wsUrl?: string | null }>(
   cameras: T[],
 ): T[] {
+  if (isHelmetWebrtcAvailable()) return cameras
   const hc01Ws = readEnv('VITE_HC01_WS_URL')
   if (!hc01Ws) return cameras
   return cameras.map(cam =>

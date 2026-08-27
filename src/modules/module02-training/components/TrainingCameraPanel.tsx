@@ -64,26 +64,32 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
       />
     )
   }
+
+  // MediaMTX WHEP/HLS — pipeline thống nhất HC-* / DR-*; ưu tiên trước JSMpeg legacy.
+  if (cam.whepUrl || cam.streamUrl) {
+    return (
+      <CameraVideoFeed
+        src={cam.streamUrl ?? ''}
+        whepUrl={cam.whepUrl}
+        hlsFallbackSrc={cam.streamFallbackUrl}
+        cameraId={cam.id}
+        streamType={cam.streamType}
+        playing={playing}
+        aiOverlay={aiOverlay}
+        compact={compact}
+        analyzeThrottle={analyzeThrottle}
+        streamIndex={streamIndex}
+      />
+    )
+  }
+
   if (cam.wsUrl) {
     return (
       <CameraJsmpegFeed wsUrl={cam.wsUrl} cameraId={cam.id} />
     )
   }
-  if (!cam.streamUrl && !cam.whepUrl) return null
-  return (
-    <CameraVideoFeed
-      src={cam.streamUrl ?? ''}
-      whepUrl={cam.whepUrl}
-      hlsFallbackSrc={cam.streamFallbackUrl}
-      cameraId={cam.id}
-      streamType={cam.streamType}
-      playing={playing}
-      aiOverlay={aiOverlay}
-      compact={compact}
-      analyzeThrottle={analyzeThrottle}
-      streamIndex={streamIndex}
-    />
-  )
+
+  return null
 }
 
 function CameraThumb({ cam, selected, onClick, compact = false, strip = false }: {
