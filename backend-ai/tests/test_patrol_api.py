@@ -127,6 +127,22 @@ class PatrolApiTests(unittest.TestCase):
         missing = self.client.get(f"/patrol/persons/{pers_id}").json()
         self.assertFalse(missing["ok"])
 
+    def test_purge_day_events_endpoint(self) -> None:
+        profile = identity.import_identity(
+            full_name="Trần BC",
+            employee_code="NV888",
+            embedding=_vec(88),
+        )
+        pers, _ = identity.observe_face(_vec(89), quality=0.8)
+        daystore.touch_person_event(pers, camera_id="HC-01", now=2_000.0)
+        date = db.today_vn(2_000.0)
+
+        res = self.client.delete(f"/patrol/day/events?date={date}").json()
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["daily_events"], 1)
+        self.assertEqual(daystore.list_person_events(date), [])
+        self.assertIsNotNone(identity.get_person(str(profile["pers_id"])))
+
 
 if __name__ == "__main__":
     unittest.main()

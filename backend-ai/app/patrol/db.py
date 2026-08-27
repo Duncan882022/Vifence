@@ -224,6 +224,66 @@ def purge_old_days(keep_date: str | None = None) -> int:
     return removed
 
 
+def purge_day(date: str | None = None) -> dict[str, Any]:
+    """Xoá toàn bộ thẻ sự kiện một ngày — **giữ hồ sơ Định danh** (import Excel).
+
+    Cũng dọn các mã `pers-*` tạm (origin=camera, chưa gán tên) không còn thẻ
+    nào, để lần tuần tra sau khớp lại đúng hồ sơ thay vì kẹt pers-0003.
+    """
+    import shutil
+
+    from . import identity, sink
+
+    d = date or today_vn()
+    removed: dict[str, int] = {
+        "daily_events": 0,
+        "daily_objects": 0,
+        "appearances": 0,
+        "orphan_persons": 0,
+        "orphan_faces": 0,
+    }
+
+    with tx() as conn:
+        removed["daily_events"] = int(
+            conn.execute("DELETE FROM daily_events WHERE event_date = ?", (d,)).rowcount
+            or 0
+        )
+        removed["daily_objects"] = int(
+            conn.execute("DELETE FROM daily_objects WHERE event_date = ?", (d,)).rowcount
+            or 0
+        )
+        removed["appearances"] = int(
+            conn.execute("DELETE FROM appearances WHERE event_date = ?", (d,)).rowcount
+            or 0
+        )
+
+        orphan_rows = conn.execute(
+            "SELECT pers_id FROM persons"
+            " WHERE status = ? AND origin = 'camera'"
+            " AND pers_id NOT IN (SELECT DISTINCT pers_id FROM daily_events)",
+            (identity.STATUS_PERSON,),
+        ).fetchall()
+        orphan_ids = [str(r["pers_id"]) for r in orphan_rows]
+        for pid in orphan_ids:
+            removed["orphan_faces"] += int(
+                conn.execute("DELETE FROM person_faces WHERE pers_id = ?", (pid,)).rowcount
+                or 0
+            )
+            conn.execute("DELETE FROM person_aliases WHERE old_pers_id = ?", (pid,))
+            conn.execute("DELETE FROM person_aliases WHERE pers_id = ?", (pid,))
+            conn.execute("DELETE FROM persons WHERE pers_id = ?", (pid,))
+            removed["orphan_persons"] += 1
+
+    snap_dir = DATA_DIR / "patrol_snapshots" / d
+    if snap_dir.is_dir():
+        shutil.rmtree(snap_dir, ignore_errors=True)
+
+    identity._invalidate_face_index()
+    sink.reset()
+    removed["date"] = d
+    return removed
+
+
 def reset_all(keep_counters: bool = True) -> dict[str, int]:
     """Xoá sạch dữ liệu tuần tra. Giữ bộ đếm để mã không bao giờ cấp lại."""
     with tx() as conn:
