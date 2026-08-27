@@ -10,4 +10,5 @@ eval_type_backport>=0.2  # cho phép pydantic hiểu cú pháp "X | None" trên 
 python-dotenv>=1.0
 numpy>=1.26
 torch>=2.0
+# openvino>=2024.4  # bật khi export/load YOLOv8s OpenVINO (scripts/export_person_openvino.py)
 transformers>=4.40  # OWLv2 zero-shot — detect máy móc DZ (Cam A-04) theo mô tả text, không rule màu/vị trí cố định

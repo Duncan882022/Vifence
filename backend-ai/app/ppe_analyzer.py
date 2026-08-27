@@ -9,8 +9,9 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from .config import settings
 from .auto_train.inference import predict_boxes
-from .detectors.person_detector import PersonDetector
+from .detector import PersonDetector
 from .schemas import PpeDetection
 from .violation_thresholds import VIOLATION_MIN_CONFIDENCE
 
@@ -37,8 +38,8 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
-_PERSON_CONF_BODYCAM = 0.30
-_PERSON_CONF_FLYCAM = 0.18
+_PERSON_CONF_BODYCAM = settings.person_conf_patrol_bodycam
+_PERSON_CONF_FLYCAM = settings.person_conf_patrol_flycam
 _PERSON_CONF_STRICT = 0.48
 # Dưới mốc này đường vẽ ROI mới đòi thêm bằng chứng (mặt / dáng xa / tín hiệu da).
 _PERSON_CONF_DISPLAY_CORROBORATE = 0.45
@@ -278,7 +279,7 @@ def _assign_patrol_person_display_only(
 def _get_person_detector() -> PersonDetector:
     global _person_detector
     if _person_detector is None:
-        _person_detector = PersonDetector(conf_threshold=_PERSON_CONF)
+        _person_detector = PersonDetector(conf_threshold=settings.person_conf_threshold)
         _person_detector.load()
     return _person_detector
 
