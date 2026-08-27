@@ -1,12 +1,34 @@
 import { describe, expect, it } from 'vitest'
-import { guidanceForSlot, poseHintMatchesSlot } from './patrolFaceScanGuide'
+import {
+  faceReadyForSlot,
+  guidanceForSlot,
+  poseHintMatchesSlot,
+} from './patrolFaceScanGuide'
 
 describe('patrolFaceScanGuide', () => {
-  it('maps head pose to enrollment slots', () => {
+  it('maps head pose to enrollment slots (lenient)', () => {
     expect(poseHintMatchesSlot('front', 1)).toBe(true)
-    expect(poseHintMatchesSlot('left', 2)).toBe(true)
-    expect(poseHintMatchesSlot('right', 3)).toBe(true)
-    expect(poseHintMatchesSlot('left', 1)).toBe(false)
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1)).toBe(true)
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.38,
+      centerY: 0.5,
+    }, 2)).toBe(true)
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'right',
+      fillScore: 0.5,
+      centerX: 0.62,
+      centerY: 0.5,
+    }, 3)).toBe(true)
   })
 
   it('exposes simple step labels', () => {
