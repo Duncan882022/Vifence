@@ -237,8 +237,13 @@ function bboxContainment(a: Bbox4, b: Bbox4): number {
   return smaller > 0 ? inter / smaller : 0
 }
 
-/** Ẩn Đối tượng yếu trùng vùng với người đã có sgc. */
-export function suppressPatrolObjectOverlappingIdentified<T extends { behavior: string; bbox: Bbox4; worker_id?: string | null }>(
+/** Ẩn Đối tượng yếu trùng vùng với người đã có sgc — chỉ khi cùng vùng thật sự. */
+export function suppressPatrolObjectOverlappingIdentified<T extends {
+  behavior: string
+  bbox: Bbox4
+  worker_id?: string | null
+  track_id?: string | null
+}>(
   detections: T[],
 ): T[] {
   const identified = detections.filter(
@@ -253,9 +258,12 @@ export function suppressPatrolObjectOverlappingIdentified<T extends { behavior: 
     if (d.behavior !== 'person' || !d.bbox || d.bbox.length < 4) return true
     const wid = d.worker_id?.trim() ?? ''
     if (wid && wid !== 'unknown') return true
-    return !identified.some(id =>
-      bboxIou(d.bbox as Bbox4, id.bbox as Bbox4) >= 0.12
-      || bboxContainment(d.bbox as Bbox4, id.bbox as Bbox4) >= 0.35,
-    )
+    return !identified.some(id => {
+      if (d.track_id && id.track_id && d.track_id !== id.track_id) return false
+      return (
+        bboxIou(d.bbox as Bbox4, id.bbox as Bbox4) >= 0.42
+        || bboxContainment(d.bbox as Bbox4, id.bbox as Bbox4) >= 0.55
+      )
+    })
   })
 }

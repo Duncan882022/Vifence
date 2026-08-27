@@ -61,6 +61,23 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertLess(centers[0], 400.0)
         self.assertGreater(centers[1], 700.0)
 
+    def test_large_yolo_single_face_uses_tight_synth_not_crowd_box(self):
+        """YOLO gom cả đám nhưng chỉ 1 mặt — neo synth, không giữ bbox rộng."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        crowd_box = (80.0, 80.0, 1180.0, 680.0)
+        face_a = _FrameFace(box=(380.0, 180.0, 520.0, 360.0), score=0.9)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_a]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(crowd_box, 0.74)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 1)
+        box, _conf = out[0]
+        self.assertNotEqual(box, crowd_box)
+        cx = (box[0] + box[2]) / 2
+        self.assertLess(abs(cx - 450.0), 120.0)
+
     def test_yolo_plus_unmatched_face_keeps_both(self):
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
         person = (280.0, 120.0, 620.0, 680.0)

@@ -10,7 +10,9 @@ import numpy as np
 from app.ppe_analyzer import (
     _PersonPpe,
     _assign_patrol_person_display_only,
+    _assign_patrol_person_identity,
     _build_patrol_person_detections,
+    _patrol_person_passes_display_gate,
     _patrol_person_passes_event_gate,
 )
 from app.schemas import PpeDetection
@@ -26,15 +28,34 @@ class PatrolDisplayOnlyIdentityTests(unittest.TestCase):
     @patch("app.ppe_analyzer._assign_patrol_person_identity")
     @patch("app.ppe_analyzer._assign_patrol_person_display_only")
     @patch("app.ppe_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
-    def test_build_skips_heavy_identity_for_display_only(
+    def test_build_runs_identity_for_seated_display_gate_person(
+        self,
+        _assign_tracks,
+        mock_display_only,
+        mock_full_identity,
+    ) -> None:
+        """Người ngồi vẫn qua display gate — phải chạy identity + ghi sink."""
+        frame = np.zeros((self.FH, self.FW, 3), dtype=np.uint8)
+        seated = _PersonPpe(person_box=(520.0, 420.0, 680.0, 690.0), person_conf=0.52)
+        self.assertTrue(_patrol_person_passes_display_gate(seated.person_box, self.FW, self.FH, camera_id="HC-02"))
+        _build_patrol_person_detections(frame, "HC-02", [seated], self.FW, self.FH)
+
+        mock_full_identity.assert_called_once()
+        mock_display_only.assert_not_called()
+
+    @patch("app.ppe_analyzer._assign_patrol_person_identity")
+    @patch("app.ppe_analyzer._assign_patrol_person_display_only")
+    @patch("app.ppe_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
+    def test_build_skips_identity_for_limb_fragment(
         self,
         _assign_tracks,
         mock_display_only,
         mock_full_identity,
     ) -> None:
         frame = np.zeros((self.FH, self.FW, 3), dtype=np.uint8)
-        seated = _PersonPpe(person_box=(520.0, 420.0, 680.0, 690.0), person_conf=0.52)
-        _build_patrol_person_detections(frame, "HC-02", [seated], self.FW, self.FH)
+        shin = _PersonPpe(person_box=(560.0, 560.0, 660.0, 706.0), person_conf=0.52)
+        self.assertFalse(_patrol_person_passes_display_gate(shin.person_box, self.FW, self.FH, camera_id="HC-02"))
+        _build_patrol_person_detections(frame, "HC-02", [shin], self.FW, self.FH)
 
         mock_display_only.assert_called_once()
         mock_full_identity.assert_not_called()
