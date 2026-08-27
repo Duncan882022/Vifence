@@ -361,17 +361,17 @@ export function predictPersonRoiTracks(
   const out: PersonRoiDisplay[] = []
 
   for (const track of tracks.values()) {
-    // Người đi khỏi khung thì ROI phải tắt ngay, không vẽ tiếp một hộp đoán.
-    //
-    // Backend đã coast track sẵn và vẫn gửi xuống chừng nào còn tin là người đó
-    // trong khung; hết gửi nghĩa là hết thấy. Vẽ thêm ở FE chỉ tạo ra hộp đứng
-    // lại trên nền — mà lúc camera vừa lia sang chỗ khác thì cái nền đó là bàn
-    // phím, là tường, là bất cứ thứ gì đang ở đúng toạ độ cũ.
-    if (track.state === 'lost') continue
-    if (track.state === 'tentative' && track.hits < cfg.confirmHits) continue
-
     const bbox = dt > 0 ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
     const personId = canonicalPersonId(track)
+
+    let displayOpacity = 1
+    if (track.state === 'lost') {
+      const fade = 1 - track.missStreak / Math.max(cfg.maxMissFrames, 1)
+      displayOpacity = Math.max(0.42, fade)
+    } else if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
+      displayOpacity = 0.62
+    }
+
     out.push({
       trackId: track.id,
       personId,
@@ -383,6 +383,7 @@ export function predictPersonRoiTracks(
       workerId: track.workerId,
       workerName: track.workerName,
       tier: track.tier,
+      displayOpacity,
     })
   }
 

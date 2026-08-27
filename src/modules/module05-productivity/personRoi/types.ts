@@ -58,4 +58,6 @@ export interface PersonRoiDisplay {
   workerId?: string
   workerName?: string
   tier: PersonRoiTier
+  /** 0–1 — mờ dần khi track coast / tentative */
+  displayOpacity: number
 }
