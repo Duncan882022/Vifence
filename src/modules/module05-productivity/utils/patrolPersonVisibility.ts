@@ -53,11 +53,40 @@ export function patrolPersonFaceDominantBbox(bbox: Bbox4, _frameW: number, frame
   return false
 }
 
+function verticalStructureFpBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  const bwRatio = pw / Math.max(frameW, 1)
+  const bhRatio = ph / Math.max(frameH, 1)
+  if (aspect > 2.6 && bwRatio < 0.075 && bhRatio > 0.10) return true
+  if (aspect < 0.30 && bhRatio < 0.055 && bwRatio > 0.20) return true
+  return false
+}
+
+function wideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
+  if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
+  const [x1, y1, x2, y2] = bbox
+  const ph = Math.max(y2 - y1, 1)
+  const pw = Math.max(x2 - x1, 1)
+  const bhRatio = ph / Math.max(frameH, 1)
+  const bwRatio = pw / Math.max(frameW, 1)
+  const aspect = ph / pw
+  const cy = (y1 + y2) / 2
+  if (bhRatio < 0.035 || bhRatio > 0.58) return false
+  if (bwRatio < 0.022 || bwRatio > 0.40) return false
+  if (aspect < 0.80 || aspect > 4.8) return false
+  if (cy < frameH * 0.06 || cy > frameH * 0.82) return false
+  return true
+}
+
 function plausiblePersonSilhouette(
   bbox: Bbox4,
   frameW: number,
   frameH: number,
   flycam = false,
+  patrolDisplay = false,
 ): boolean {
   const [x1, y1, x2, y2] = bbox
   const pw = Math.max(x2 - x1, 1)
@@ -71,9 +100,11 @@ function plausiblePersonSilhouette(
     if (ph < Math.max(8, frameH * 0.010)) return false
     return true
   }
+  const minPwFrac = patrolDisplay ? 0.012 : 0.035
+  const minPhFrac = patrolDisplay ? 0.018 : 0.04
   if (aspect > 4.2 || aspect < 0.28) return false
-  if (pw < Math.max(12, frameW * 0.035)) return false
-  if (ph < Math.max(14, frameH * 0.04)) return false
+  if (pw < Math.max(patrolDisplay ? 8 : 12, frameW * minPwFrac)) return false
+  if (ph < Math.max(patrolDisplay ? 10 : 14, frameH * minPhFrac)) return false
   return true
 }
 
@@ -193,8 +224,12 @@ export interface PatrolPersonDetectionGateInput {
 export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
   const { bbox, frameW, frameH, flycam = false } = input
   if (frameW <= 0 || frameH <= 0) return false
-  if (!plausiblePersonSilhouette(bbox, frameW, frameH, flycam)) return false
-  if (flycam) return true
+  if (verticalStructureFpBox(bbox, frameW, frameH)) return false
+  if (flycam) {
+    return plausiblePersonSilhouette(bbox, frameW, frameH, true)
+  }
+  if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
+  if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
   return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
 }
 

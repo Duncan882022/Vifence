@@ -37,8 +37,8 @@ PPE_LABELS = {
 }
 
 _PERSON_CONF = 0.40
-_PERSON_CONF_BODYCAM = 0.25
-_PERSON_CONF_FLYCAM = 0.18
+_PERSON_CONF_BODYCAM = 0.22
+_PERSON_CONF_FLYCAM = 0.15
 _PERSON_CONF_STRICT = 0.48
 # Dưới mốc này đường vẽ ROI mới đòi thêm bằng chứng (mặt / dáng xa / tín hiệu da).
 _PERSON_CONF_DISPLAY_CORROBORATE = 0.45

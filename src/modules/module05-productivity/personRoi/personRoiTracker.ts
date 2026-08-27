@@ -333,14 +333,16 @@ export function predictPersonRoiTracks(
   const out: PersonRoiDisplay[] = []
 
   for (const track of tracks.values()) {
+    // Track mất dấu không vẽ — tránh ghost trên giàn giáo/sàn khi YOLO hết hit.
+    if (track.state === 'lost' || track.missStreak > 0) {
+      continue
+    }
+
     const bbox = dt > 0 ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
     const personId = canonicalPersonId(track)
 
     let displayOpacity = 1
-    if (track.state === 'lost') {
-      const fade = 1 - track.missStreak / Math.max(cfg.maxMissFrames, 1)
-      displayOpacity = Math.max(0.42, fade)
-    } else if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
+    if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
       displayOpacity = 0.62
     }
 
