@@ -31,7 +31,7 @@ _LOST_KEEP_SEC_BODYCAM = 8.0
 _LOST_KEEP_SEC_FLYCAM = 4.0
 
 # Trần số track giữ đồng thời mỗi camera — chặn phình bộ nhớ khi cảnh đông.
-_MAX_TRACKS = 48
+_MAX_TRACKS = 150
 
 
 def _bbox_iou(a: Bbox, b: Bbox) -> float:

@@ -112,7 +112,27 @@ def _open_capture(source: str) -> cv2.VideoCapture:
             cap.set(prop, RTSP_TIMEOUT_MS)
         except (AttributeError, cv2.error):
             pass
+    try:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except (AttributeError, cv2.error):
+        pass
     return cap
+
+
+def _read_latest_live_frame(
+    cap: cv2.VideoCapture,
+    *,
+    max_grab: int = 8,
+) -> tuple[bool, np.ndarray | None]:
+    """Đọc và vứt buffer cũ — chỉ giữ khung mới nhất (giảm trễ RTSP 2–3s)."""
+    ok = False
+    frame: np.ndarray | None = None
+    for _ in range(max(1, max_grab)):
+        ok, grabbed = cap.read()
+        if not ok or grabbed is None:
+            break
+        frame = grabbed
+    return ok, frame
 
 
 class CameraVmsWorker:
@@ -457,7 +477,10 @@ class CameraVmsWorker:
                 if not self._ingest_gate.is_set():
                     if not live:
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    ok, frame = cap.read()
+                    if live:
+                        ok, frame = _read_latest_live_frame(cap, max_grab=4)
+                    else:
+                        ok, frame = cap.read()
                     if not ok or frame is None:
                         # RTSP mở được nhưng chưa có khung hình là chuyện thường
                         # khi mũ chưa bật camera. Nằm chờ mãi trên một capture
@@ -482,7 +505,10 @@ class CameraVmsWorker:
                     time.sleep(0.02)
                     continue
 
-                ok, frame = cap.read()
+                if live:
+                    ok, frame = _read_latest_live_frame(cap)
+                else:
+                    ok, frame = cap.read()
                 if not ok or frame is None:
                     if _is_live_stream_source(self._active_source):
                         logger.warning("[VMS %s] Mất tín hiệu live — reconnect.", self.camera_id)
@@ -515,7 +541,8 @@ class CameraVmsWorker:
                 self._ensure_pipe_hls(frame)
                 self._write_hls_pipe_frame(frame)
 
-                time.sleep(frame_sleep)
+                if not live:
+                    time.sleep(frame_sleep)
 
             cap.release()
 
