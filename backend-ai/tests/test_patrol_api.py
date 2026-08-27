@@ -104,6 +104,29 @@ class PatrolApiTests(unittest.TestCase):
         daystore.touch_object(None, camera_id="HC-02")
         self.assertEqual(len(self.client.get("/patrol/day/objects").json()["items"]), 1)
 
+    def test_update_and_delete_profile(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(9), quality=0.8)
+        identity.identify(
+            pers_id, full_name="Nguyễn X", employee_code="NV010", contractor="SGC",
+        )
+
+        updated = self.client.patch(
+            f"/patrol/persons/{pers_id}",
+            json={
+                "full_name": "Nguyễn X (sửa)",
+                "employee_code": "NV010",
+                "contractor": "Vincons",
+            },
+        ).json()
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["person"]["full_name"], "Nguyễn X (sửa)")
+        self.assertEqual(updated["person"]["contractor"], "Vincons")
+
+        deleted = self.client.delete(f"/patrol/persons/{pers_id}").json()
+        self.assertTrue(deleted["ok"])
+        missing = self.client.get(f"/patrol/persons/{pers_id}").json()
+        self.assertFalse(missing["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()
