@@ -93,11 +93,11 @@ const PersonRoiBox = memo(function PersonRoiBox({
     workerId: track.workerId,
     workerName: displayLabel,
   })
-  const opacity = track.state === 'lost' ? 0.72 : 1
+  const opacity = track.displayOpacity ?? (track.state === 'lost' ? 0.72 : 1)
 
   return (
     <div
-      className="absolute pointer-events-none will-change-[left,top,width,height]"
+      className="absolute pointer-events-none will-change-[left,top,width,height,opacity]"
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -105,6 +105,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
         height: `${box.h}%`,
         zIndex: 8,
         opacity,
+        transition: 'opacity 120ms linear',
       }}
       data-track-id={track.trackId}
       data-person-id={track.personId}

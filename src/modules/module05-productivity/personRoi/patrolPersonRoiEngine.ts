@@ -1,34 +1,51 @@
 import { advancePersonRoiTracks, predictPersonRoiTracks } from './personRoiTracker'
+import { BboxDisplaySmoother } from './bboxDisplaySmoother'
 import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
 import type { PersonRoiDetection, PersonRoiDisplay, PersonRoiTrack } from './types'
 import { isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
 
 /**
  * Engine singleton per camera — overlay + heatmap dùng chung track state.
- * Pattern: detection @ low FPS → Kalman predict @ 60 FPS (SORT/ByteTrack).
+ * Pattern: detection @ low FPS → Kalman predict @ 60 FPS + EMA 4 góc (SORT demo).
  */
 export class PatrolPersonRoiEngine {
   private tracks = new Map<string, PersonRoiTrack>()
   private listeners = new Set<() => void>()
   private lastIngestAt = 0
   private displayCache: PersonRoiDisplay[] = []
+  private displaySmoother = new BboxDisplaySmoother()
 
   constructor(readonly cameraId: string) {}
+
+  private polishDisplay(raw: PersonRoiDisplay[]): PersonRoiDisplay[] {
+    const active = new Set<string>()
+    const polished = raw.map(track => {
+      active.add(track.trackId)
+      return {
+        ...track,
+        bbox: this.displaySmoother.smooth(track.trackId, track.bbox, {
+          alpha: PATROL_PERSON_ROI_CONFIG.displayEmaAlpha,
+        }),
+      }
+    })
+    this.displaySmoother.prune(active)
+    return polished
+  }
 
   /** Gọi mỗi lần backend trả detections mới. */
   ingest(detections: PersonRoiDetection[], now = performance.now()): void {
     const dtMs = this.lastIngestAt > 0 ? Math.max(16, now - this.lastIngestAt) : 450
     this.lastIngestAt = now
     this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now())
-    this.displayCache = predictPersonRoiTracks(this.tracks, 0)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0))
     this.notify()
   }
 
   /** rAF — extrapolate bbox giữa các lần analyze. */
   predictDisplay(now = performance.now()): PersonRoiDisplay[] {
     const elapsed = this.lastIngestAt > 0 ? now - this.lastIngestAt : 0
-    if (elapsed < 10 || this.tracks.size === 0) return this.displayCache
-    this.displayCache = predictPersonRoiTracks(this.tracks, elapsed)
+    if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed))
     return this.displayCache
   }
 
@@ -50,6 +67,7 @@ export class PatrolPersonRoiEngine {
     this.tracks.clear()
     this.displayCache = []
     this.lastIngestAt = 0
+    this.displaySmoother.clear()
     this.notify()
   }
 

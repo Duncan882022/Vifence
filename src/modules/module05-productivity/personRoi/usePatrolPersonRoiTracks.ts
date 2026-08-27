@@ -9,7 +9,7 @@ const EMPTY: PersonRoiDisplay[] = []
  * trong khi 60 FPS buộc React dựng lại toàn bộ box mỗi frame và tranh CPU với
  * bộ giải mã video — chính nó làm hình giật khi mở nhiều tile.
  */
-const OVERLAY_UPDATE_INTERVAL_MS = 1000 / 30
+const OVERLAY_UPDATE_INTERVAL_MS = 1000 / 60
 
 /** Dịch dưới ngưỡng này thì không đáng để React render lại. */
 const MIN_VISIBLE_SHIFT_PX = 0.4
