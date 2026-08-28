@@ -241,28 +241,35 @@ function MapInvalidator() {
   const map = useMap()
 
   useEffect(() => {
-    const invalidate = () => map.invalidateSize({ animate: false, pan: false })
+    const invalidate = () => {
+      map.invalidateSize({ animate: false, pan: false })
+    }
     invalidate()
+    const raf = window.requestAnimationFrame(invalidate)
     const t1 = window.setTimeout(invalidate, 120)
     const t2 = window.setTimeout(invalidate, 600)
+    const t3 = window.setTimeout(invalidate, 1200)
 
     window.addEventListener('resize', invalidate)
     window.addEventListener('orientationchange', invalidate)
     window.visualViewport?.addEventListener('resize', invalidate)
     window.visualViewport?.addEventListener('scroll', invalidate)
 
-    const container = map.getContainer().parentElement
-    const observer = container ? new ResizeObserver(invalidate) : null
-    if (container && observer) observer.observe(container)
+    const container = map.getContainer()
+    const observer = new ResizeObserver(invalidate)
+    observer.observe(container)
+    if (container.parentElement) observer.observe(container.parentElement)
 
     return () => {
+      window.cancelAnimationFrame(raf)
       window.clearTimeout(t1)
       window.clearTimeout(t2)
+      window.clearTimeout(t3)
       window.removeEventListener('resize', invalidate)
       window.removeEventListener('orientationchange', invalidate)
       window.visualViewport?.removeEventListener('resize', invalidate)
       window.visualViewport?.removeEventListener('scroll', invalidate)
-      observer?.disconnect()
+      observer.disconnect()
     }
   }, [map])
 
@@ -565,7 +572,7 @@ export function PatrolGeoHeatmap({
   const zoomControlPosition = compactControls ? 'topleft' as const : 'bottomright' as const
 
   return (
-    <div className="relative w-full h-full min-h-0 overflow-hidden">
+    <div className="relative w-full h-full min-h-[180px] overflow-hidden max-lg:min-h-[min(36dvh,320px)] supports-[height:100dvh]:min-h-[min(36dvh,320px)]">
       <style>{`
         @keyframes patrol-dot-blink {
           0%,100%{opacity:0.95;transform:scale(1)}
@@ -581,7 +588,7 @@ export function PatrolGeoHeatmap({
         }
         ${PATROL_MAP_DEVICE_PIN_STYLES}
         .leaflet-marker-icon { transition: transform 260ms linear !important; }
-        .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
+        .leaflet-container { background:#080b12 !important; touch-action: manipulation; ${compactControls ? 'min-height:180px !important;height:100% !important;' : ''} }
         .${PATROL_DIV_ICON_CLASS} {
           background: transparent !important;
           border: none !important;
