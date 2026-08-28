@@ -64,6 +64,8 @@ export function patrolGalleryWorkerIdFromEmployeeCode(code: string): string {
   const safe = code.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)
   return safe ? `p-${safe}` : 'p-unknown'
 }
+
+export function isPatrolGalleryWorkerId(id?: string | null): boolean {
   if (!id) return false
   const t = id.trim()
   if (!t || t === 'unknown') return false
