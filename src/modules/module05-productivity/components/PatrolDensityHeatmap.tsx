@@ -93,36 +93,56 @@ function HeatmapSiteStatsOverlay({
   )
 }
 
-function LayerToggle({
-  active,
-  color,
-  onClick,
-  children,
+function HeatmapLayerControls({
+  layers,
+  onToggle,
+  compactChrome,
 }: {
-  active: boolean
-  color: string
-  onClick: () => void
-  children: React.ReactNode
+  layers: { polygon: boolean; density: boolean; helmet: boolean; flycam: boolean }
+  onToggle: (key: 'polygon' | 'density' | 'helmet' | 'flycam') => void
+  compactChrome?: boolean
 }) {
+  const items = [
+    { key: 'polygon' as const, label: 'Khu vực', color: '#6366f1' },
+    { key: 'density' as const, label: 'Mật độ', color: '#f59e0b' },
+    { key: 'helmet' as const, label: 'Mũ', color: '#ef4444' },
+    { key: 'flycam' as const, label: 'Flycam', color: '#38bdf8' },
+  ]
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        'inline-flex items-center gap-0.5 rounded font-semibold transition-all border shrink-0',
-        'px-1.5 py-0.5 text-[8px] leading-none tracking-tight',
-        active
-          ? 'text-white border-transparent'
-          : 'bg-transparent text-[#64748b] border-[#334155] hover:border-[#475569] hover:text-[#94a3b8]',
+        'absolute z-[500] top-2 max-sm:top-1.5',
+        compactChrome ? 'right-2 max-sm:right-1.5' : 'left-2 max-sm:left-1.5',
+        compactChrome
+          ? 'pr-[env(safe-area-inset-right,0px)] pt-[env(safe-area-inset-top,0px)]'
+          : 'pl-[env(safe-area-inset-left,0px)] pt-[env(safe-area-inset-top,0px)]',
       )}
-      style={active ? { background: color, borderColor: color } : {}}
     >
-      <span
-        className={cn('w-1 h-1 rounded-full shrink-0', active ? 'opacity-100' : 'opacity-40')}
-        style={{ background: active ? '#fff' : color }}
-      />
-      {children}
-    </button>
+      <div className="flex items-stretch overflow-hidden rounded border border-[#334155] bg-[#111827]/95 shadow-sm">
+        {items.map((item, index) => {
+          const active = layers[item.key]
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onToggle(item.key)}
+              className={cn(
+                'inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] leading-none font-medium transition-colors',
+                index > 0 && 'border-l border-[#334155]',
+                active ? 'text-[#e2e8f0]' : 'text-[#64748b] hover:text-[#94a3b8]',
+              )}
+            >
+              <span
+                className="w-1 h-1 rounded-full shrink-0"
+                style={{ background: item.color, opacity: active ? 1 : 0.35 }}
+              />
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -368,18 +388,6 @@ export function PatrolDensityHeatmap({
 
   const mapBody = (
     <>
-      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 py-0.5">
-        <div className={cn(
-          'flex items-center gap-0.5 flex-wrap',
-          viewport.isTabletLandscape && 'justify-end',
-        )}>
-          <LayerToggle active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
-          <LayerToggle active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
-          <LayerToggle active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
-          <LayerToggle active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
-        </div>
-      </div>
-
       <div className={cn('min-w-0 relative', viewport.embeddedMapClass)}>
         <PatrolGeoHeatmap
           zones={liveZones}
@@ -409,6 +417,11 @@ export function PatrolDensityHeatmap({
           hasHc02LiveGps={hc02Live.hasMapPosition}
           mapZoom={viewport.mapZoom}
           compactControls={viewport.compactChrome}
+        />
+        <HeatmapLayerControls
+          layers={layers}
+          onToggle={toggleLayer}
+          compactChrome={viewport.compactChrome}
         />
         <HeatmapSiteStatsOverlay
           objectCount={unassignedCount}
