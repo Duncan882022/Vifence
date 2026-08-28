@@ -11,6 +11,7 @@ import { resolvePatrolHeatmapGps } from '@/modules/module05-productivity/utils/p
 import { resolvePatrolDetectionMapPosition } from '@/modules/module05-productivity/utils/patrolDetectionMapOffset'
 import { resolveHeatmapEntityMasterId } from '@/modules/module05-productivity/utils/patrolIdentityEntity'
 import { isPatrolHeatmapEligibleId } from '@/modules/module05-productivity/utils/patrolPatrolCounts'
+import { resolveDetectionDotTier } from '@/modules/module05-productivity/utils/patrolDetectionDotUi'
 import { appendPatrolHeatSample, patrolSessionDateLocal } from '@/services/patrolHeatGrid'
 
 const STORAGE_KEY = 'vifence_patrol_heatmap_persons_v2'
@@ -316,6 +317,7 @@ export function getHeatmapPersonDots(cameraId?: string): DetectionDot[] {
         label: row.label,
         lastSeenAt: row.lastSeenAt,
         objectId: row.id,
+        tier: resolveDetectionDotTier({ objectId: row.id }),
         inCameraView,
         opacity: inCameraView ? 0.92 : 0.28,
       }

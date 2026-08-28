@@ -91,6 +91,15 @@ describe('buildPatrolPresenceHeatmapDots', () => {
       { includeUnassigned: true },
     )
     expect(dots).toHaveLength(1)
+    expect(dots[0].tier).toBe('object')
+  })
+
+  it('identity tier gán tier + verified', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ tier: 'identity', subjectId: 'p-102' }),
+    ])
+    expect(dots[0].tier).toBe('identity')
+    expect(dots[0].verified).toBe(true)
   })
 
   it('liveOnly lọc presence gần đây', () => {
