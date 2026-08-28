@@ -27,14 +27,14 @@ export interface PatrolCameraPanelProps {
   isMobileLayout?: boolean
   /**
    * Giới hạn hàng grid desktop trước khi scroll.
-   * Mặc định 2 (HC-01/02 + DR-03). `null` = hiện hết — dùng khi phóng to tier.
+   * Mặc định 1 hàng — scroll xem hàng 2 (Drone). `null` = hiện hết khi phóng to tier.
    */
   desktopMaxVisibleRows?: number | null
 }
 
 /**
  * Module 05 — bọc TrainingCameraPanel với layout patrol + preload AI person detect.
- * Desktop / iPad: 2 hàng camera (Helmet + Drone), scroll trong Tier 2 nếu thêm luồng.
+ * Desktop / iPad: 1 hàng cố định + scroll trong Tier 2; phóng to tier → đủ hàng.
  * Phone dọc: stack 16:9, scroll theo trang.
  */
 export function PatrolCameraPanel({
@@ -57,7 +57,7 @@ export function PatrolCameraPanel({
   const mobileStackedNoScroll = isCompactLayout && !isTabletLandscape && !isTablet
   const resolvedMaxVisibleRows = desktopMaxVisibleRows === null
     ? undefined
-    : (desktopMaxVisibleRows ?? 2)
+    : (desktopMaxVisibleRows ?? 1)
 
   useEffect(() => {
     preloadFaceDetection()
