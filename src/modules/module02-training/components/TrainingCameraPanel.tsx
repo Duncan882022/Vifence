@@ -399,6 +399,8 @@ interface TrainingCameraPanelProps {
   mobileStackedNoScroll?: boolean
   /** Module 05 patrol: ô camera luôn 16:9 — không kéo giãn theo chiều cao panel. */
   aspectVideoGrid?: boolean
+  /** iPad ngang — ép cap chiều cao video dù width ≥1024 (desktop). */
+  preferCompactVideo?: boolean
   /** Patrol bodycam/flycam: vẫn thử load HLS khi badge offline (metrics trễ hơn nguồn). */
   streamWhenOffline?: boolean
 }
@@ -417,6 +419,7 @@ export function TrainingCameraPanel({
   compactVideoMaxClass,
   mobileStackedNoScroll = false,
   aspectVideoGrid = false,
+  preferCompactVideo = false,
   streamWhenOffline = false,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
@@ -473,8 +476,10 @@ export function TrainingCameraPanel({
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
   /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
   const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
-  const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll) || (aspectVideoGrid && !isDesktop)
-  const aspectGridInTier = aspectVideoGrid && isDesktop
+  const useCompactVideoCaps = preferCompactVideo
+    || (mobileCompactVideo && !mobileStackedNoScroll)
+    || (aspectVideoGrid && !isDesktop)
+  const aspectGridInTier = aspectVideoGrid && isDesktop && !preferCompactVideo
   /** Mobile compact: fill tier height — video scrolls inside, sidebar strip stays visible. */
   const mobileFillPanel = mobileCompactVideo && !isDesktop
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
@@ -492,7 +497,7 @@ export function TrainingCameraPanel({
 
   useEffect(() => {
     const scrollNode = videoGridRef.current
-    if (!scrollNode || isDesktop || fillHeightMain || mobileStackedNoScroll) {
+    if (!scrollNode || (isDesktop && !preferCompactVideo) || fillHeightMain || mobileStackedNoScroll) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
       return
@@ -502,19 +507,20 @@ export function TrainingCameraPanel({
     const landscapeMq = window.matchMedia('(max-width: 1023px) and (orientation: landscape)')
 
     const sync = () => {
-      if (!mobileMq.matches) {
+      if (!mobileMq.matches && !preferCompactVideo) {
         setMobileViewportH(null)
         setLandscapeSidebarH(null)
         return
       }
 
-      const maxRows = landscapeMq.matches
+      const landscapeCompact = preferCompactVideo || landscapeMq.matches
+      const maxRows = landscapeCompact
         ? MOBILE_LANDSCAPE_MAX_VISIBLE_ROWS
         : portraitMaxRows
       const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
       setMobileViewportH(viewportH)
 
-      if (landscapeMq.matches && sidebarOpen && viewportH) {
+      if (landscapeCompact && sidebarOpen && viewportH) {
         setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
       } else {
         setLandscapeSidebarH(null)
@@ -531,7 +537,7 @@ export function TrainingCameraPanel({
       mobileMq.removeEventListener('change', sync)
       landscapeMq.removeEventListener('change', sync)
     }
-  }, [isDesktop, gridCols, gridRows, safeCams.length, selectedIds.join(','), sidebarOpen, portraitMaxRows, mobileCompactVideo])
+  }, [isDesktop, preferCompactVideo, gridCols, gridRows, safeCams.length, selectedIds.join(','), sidebarOpen, portraitMaxRows, mobileCompactVideo])
 
   useEffect(() => {
     setSelectedIds(prev => (prev.length === 0 ? [...defaultIds] : prev))
@@ -574,11 +580,18 @@ export function TrainingCameraPanel({
           : mobileCompactVideo
             ? 'lg:h-auto lg:max-h-full'
             : 'lg:flex-1 lg:min-h-0',
-        'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
-        'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
+        (preferCompactVideo || !isDesktop) && [
+          'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
+          'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
+        ],
+        preferCompactVideo && [
+          'grid grid-cols-[minmax(0,1fr)_168px] items-stretch min-h-0',
+          'flex-none lg:flex-none',
+        ],
       )}>
         <div className={cn(
           'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
+          preferCompactVideo && 'min-w-0',
           mobileFillPanel && 'overflow-hidden',
         )}>
           <div
@@ -611,6 +624,7 @@ export function TrainingCameraPanel({
             'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
             'border-t lg:border-t-0 lg:border-l',
             'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
+            preferCompactVideo && 'border-t-0 border-l w-[168px]',
             'lg:overflow-hidden',
             sidebarOpen
               ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'

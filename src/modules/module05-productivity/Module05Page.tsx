@@ -17,6 +17,7 @@ import type { TrainingCamera } from '@/modules/module02-training/data/trainingCa
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { cn } from '@/utils/cn'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useTabletLandscape } from '@/hooks/useTabletLandscape'
 import { useAppStore } from '@/store/app.store'
 import {
   getPatrolMobileLiveSnapshot,
@@ -167,6 +168,9 @@ function PatrolKPIs({
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
   const isMobileLayout = useMediaQuery('(max-width: 1023px)')
+  const isTabletLandscape = useTabletLandscape()
+  /** Phone/tablet dọc + iPad ngang (height hẹp dù width ≥1024). */
+  const isCompactLayout = isMobileLayout || isTabletLandscape
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
@@ -261,7 +265,7 @@ export function Module05Page() {
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
       />
-      <PageLayout scrollable={isMobileLayout && !cameraCollapsed}>
+      <PageLayout scrollable={isCompactLayout && !cameraCollapsed}>
         {/* Tier 1 — KPIs */}
         <Panel
           title="Tổng Quan"
@@ -289,16 +293,18 @@ export function Module05Page() {
         {/* Tier 2 + Tier 3 */}
         <div className={cn(
           'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0',
-          isMobileLayout && !cameraCollapsed
+          isCompactLayout && !cameraCollapsed
             ? 'pb-[env(safe-area-inset-bottom,0px)]'
             : 'overflow-hidden',
         )}>
-          {/* Tier 2 — Camera (~64% chiều cao còn lại) */}
+          {/* Tier 2 — Camera */}
           <div className={cn(
             'flex flex-col min-h-0',
             tier2Open && (
-              isMobileLayout
-                ? 'shrink-0 flex-1 min-h-[min(43dvh,360px)] max-h-[min(52dvh,432px)] max-lg:landscape:min-h-[min(32dvh,270px)] max-lg:landscape:max-h-[min(40dvh,342px)]'
+              isCompactLayout
+                ? isTabletLandscape && !isMobileLayout
+                  ? 'shrink-0 flex-1 min-h-[min(34dvh,300px)] max-h-[min(42dvh,360px)]'
+                  : 'shrink-0 flex-1 min-h-[min(43dvh,360px)] max-h-[min(52dvh,432px)] max-lg:landscape:min-h-[min(32dvh,270px)] max-lg:landscape:max-h-[min(40dvh,342px)]'
                 : 'flex-[8] min-h-[min(40vh,400px)] max-h-[min(55vh,594px)]'
             ),
             !tier2Open && 'shrink-0',
@@ -340,7 +346,8 @@ export function Module05Page() {
                       onStreamCountChange={setActiveStreamCount}
                       cameras={patrolCamerasLive}
                       defaultCameraIds={patrolDefaultCameraIds}
-                      isMobileLayout={isMobileLayout}
+                      isCompactLayout={isCompactLayout}
+                      isTabletLandscape={isTabletLandscape}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
@@ -369,8 +376,10 @@ export function Module05Page() {
           {/* Tier 3 — HEATMAP | SỰ KIỆN (~36%) */}
           <div className={cn(
             'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0 shrink-0',
-            isMobileLayout && !cameraCollapsed
-              ? 'min-h-[min(28dvh,250px)]'
+            isCompactLayout && !cameraCollapsed
+              ? isTabletLandscape && !isMobileLayout
+                ? 'min-h-[min(30dvh,260px)] flex-1'
+                : 'min-h-[min(28dvh,250px)]'
               : 'flex-[6] overflow-hidden max-h-[min(40vh,440px)]',
           )}>
             <Panel
@@ -380,8 +389,10 @@ export function Module05Page() {
                 'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
                 cameraCollapsed
                   ? 'h-full'
-                  : isMobileLayout
-                    ? 'min-h-[112px] h-[min(20dvh,170px)] md:min-h-0 md:h-full'
+                  : isCompactLayout
+                    ? isTabletLandscape && !isMobileLayout
+                      ? 'min-h-[120px] flex-1 md:min-h-0 md:h-full'
+                      : 'min-h-[112px] h-[min(20dvh,170px)] md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
               )}
               headerRight={
@@ -411,8 +422,10 @@ export function Module05Page() {
                 'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
                 cameraCollapsed
                   ? 'h-full'
-                  : isMobileLayout
-                    ? 'min-h-[91px] h-[min(17dvh,143px)] md:min-h-0 md:h-full'
+                  : isCompactLayout
+                    ? isTabletLandscape && !isMobileLayout
+                      ? 'min-h-[100px] flex-1 md:min-h-0 md:h-full'
+                      : 'min-h-[91px] h-[min(17dvh,143px)] md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
