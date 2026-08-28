@@ -163,6 +163,15 @@ def observe(
 
     wname = resolve_patrol_worker_display_name(wid, worker_name)
 
+    sibling = _sibling_identity_for_worker(wid, camera_id) if wid else None
+    sibling_tier = sibling[0] if sibling else None
+    sibling_name = sibling[1] if sibling else ""
+    sibling_rank = _TIER_RANK.get(sibling_tier, 0) if sibling_tier else 0
+    if sibling_rank > _TIER_RANK.get(observed_tier, 0):
+        observed_tier = sibling_tier or observed_tier
+        if sibling_name and not is_technical_patrol_worker_label(sibling_name):
+            wname = sibling_name
+
     with _lock:
         key = _key(camera_id, track_id)
         state = _states.get(key)
@@ -197,6 +206,9 @@ def observe(
         if observed_rank > current_rank:
             # Thăng tầng — cần đủ số frame liên tiếp.
             need = _PROMOTE_HITS.get(observed_tier, 1)
+            # Mũ khác đã xác nhận cùng worker_id — không bắt HC-02 chờ lại từ đầu.
+            if sibling_tier == observed_tier and sibling_rank == observed_rank:
+                need = 1
             if state.pending_tier == observed_tier and state.pending_worker_id == wid:
                 state.pending_hits += 1
             else:
@@ -273,6 +285,34 @@ def observe(
             first_seen=state.first_seen,
             transition=transition,
         )
+
+
+def _sibling_identity_for_worker(
+    worker_id: str,
+    exclude_camera_id: str,
+) -> tuple[str, str] | None:
+    """Tier + tên cao nhất từ mũ HC-* khác cho cùng worker_id."""
+    wid = (worker_id or "").strip()
+    if not wid or not exclude_camera_id.startswith("HC-"):
+        return None
+    best_tier = ""
+    best_rank = -1
+    best_name = ""
+    with _lock:
+        for key, state in _states.items():
+            cam = key.split("|", 1)[0]
+            if cam == exclude_camera_id or not cam.startswith("HC-"):
+                continue
+            if state.worker_id != wid:
+                continue
+            rank = _TIER_RANK.get(state.tier, 0)
+            if rank > best_rank:
+                best_rank = rank
+                best_tier = state.tier
+                best_name = state.worker_name
+    if best_rank < 0:
+        return None
+    return best_tier, best_name
 
 
 def peek(camera_id: str, track_id: str) -> TrackIdentity | None:
