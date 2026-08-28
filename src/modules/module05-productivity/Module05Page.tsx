@@ -16,8 +16,7 @@ import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { cn } from '@/utils/cn'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useTabletLandscape } from '@/hooks/useTabletLandscape'
+import { useCompactViewport } from '@/hooks/useCompactViewport'
 import { useAppStore } from '@/store/app.store'
 import {
   getPatrolMobileLiveSnapshot,
@@ -167,10 +166,7 @@ function PatrolKPIs({
 
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
-  const isMobileLayout = useMediaQuery('(max-width: 1023px)')
-  const isTabletLandscape = useTabletLandscape()
-  /** Phone/tablet dọc + iPad ngang (height hẹp dù width ≥1024). */
-  const isCompactLayout = isMobileLayout || isTabletLandscape
+  const { isTabletLandscape, isCompactLayout } = useCompactViewport()
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
@@ -302,9 +298,7 @@ export function Module05Page() {
             'flex flex-col min-h-0',
             tier2Open && (
               isCompactLayout
-                ? isTabletLandscape && !isMobileLayout
-                  ? 'shrink-0 flex-1 min-h-[min(34dvh,300px)] max-h-[min(42dvh,360px)]'
-                  : 'shrink-0 flex-1 min-h-[min(43dvh,360px)] max-h-[min(52dvh,432px)] max-lg:landscape:min-h-[min(32dvh,270px)] max-lg:landscape:max-h-[min(40dvh,342px)]'
+                ? 'flex-1 min-h-0'
                 : 'flex-[8] min-h-[min(40vh,400px)] max-h-[min(55vh,594px)]'
             ),
             !tier2Open && 'shrink-0',
@@ -318,9 +312,9 @@ export function Module05Page() {
                 tier2Open && 'h-full min-h-0 overflow-hidden',
               )}
               headerRight={
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 max-w-full overflow-x-auto scrollbar-none">
                   {tier2Open && cameraMode === 'live' && (
-                    <LocalBroadcastControl />
+                    <LocalBroadcastControl className="shrink-0" />
                   )}
                   {tier2Open && (
                     <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
@@ -376,24 +370,20 @@ export function Module05Page() {
 
           {/* Tier 3 — HEATMAP | SỰ KIỆN (~36%) */}
           <div className={cn(
-            'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0 shrink-0',
+            'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0',
             isCompactLayout && !cameraCollapsed
-              ? isTabletLandscape && !isMobileLayout
-                ? 'min-h-[min(30dvh,260px)] flex-1'
-                : 'min-h-[min(28dvh,250px)]'
-              : 'flex-[6] overflow-hidden max-h-[min(40vh,440px)]',
+              ? 'flex-1 min-h-0 shrink min-w-0'
+              : 'flex-[6] overflow-hidden max-h-[min(40vh,440px)] shrink-0',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
-                'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3]',
+                'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3] min-w-0',
                 cameraCollapsed
                   ? 'h-full'
                   : isCompactLayout
-                    ? isTabletLandscape && !isMobileLayout
-                      ? 'min-h-[120px] flex-1 md:min-h-0 md:h-full'
-                      : 'min-h-[112px] h-[min(20dvh,170px)] md:min-h-0 md:h-full'
+                    ? 'min-h-[120px] flex-1 md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
               )}
               headerRight={
@@ -420,13 +410,11 @@ export function Module05Page() {
               title="SỰ KIỆN"
               noPadding
               className={cn(
-                'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2]',
+                'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2] min-w-0',
                 cameraCollapsed
                   ? 'h-full'
                   : isCompactLayout
-                    ? isTabletLandscape && !isMobileLayout
-                      ? 'min-h-[100px] flex-1 md:min-h-0 md:h-full'
-                      : 'min-h-[91px] h-[min(17dvh,143px)] md:min-h-0 md:h-full'
+                    ? 'min-h-[100px] flex-1 md:min-h-0 md:h-full'
                     : 'min-h-0 h-full',
                 tier3Focus === 'events' && 'md:flex-[3]',
               )}
