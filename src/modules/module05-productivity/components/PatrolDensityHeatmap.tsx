@@ -17,8 +17,8 @@ import {
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
 } from '../data/patrolDetectionData'
-import { PATROL_SITE_CENTER, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
-import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
+import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
+import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
 import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
@@ -163,7 +163,7 @@ export function PatrolDensityHeatmap({
   const mergedCameraPositions = useMemo(() => {
     const next = { ...cameraPositions }
     const hc01Pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === 'HC-01')
-    const hc01Default = hc01Pin?.position ?? PATROL_SITE_CENTER
+    const hc01Default = hc01Pin?.position ?? PATROL_HELMET_01_FALLBACK
     const hc01Wf = workforce.helmets['HC-01']
     if (helmetOnlineById['HC-01'] && hc01Wf?.lat != null && hc01Wf?.lon != null) {
       next['HC-01'] = resolvePatrolHelmetMapPosition(hc01Wf.lat, hc01Wf.lon, hc01Default)
@@ -192,7 +192,7 @@ export function PatrolDensityHeatmap({
         next[dronePin.id] = dronePin.position ?? PATROL_DRONE_03_FALLBACK
       }
     }
-    return next
+    return enforcePatrolHelmetPinSeparation(next)
   }, [
     cameraPositions,
     helmetOnlineById,
