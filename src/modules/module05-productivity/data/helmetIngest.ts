@@ -202,6 +202,19 @@ export function isLegacyMobileHelmet(helmetId: string): boolean {
   return getHelmetIngest(helmetId).kind === 'legacy-mobile'
 }
 
+/** Mũ đầu tiên publish qua trình duyệt — trang /phat-song dùng tự động, không cần query. */
+export function getBrowserPublishHelmetId(): string {
+  for (const id of PATROL_HELMET_IDS) {
+    if (isBrowserPublishHelmet(id) && getHelmetIngest(id).kind === 'whip') {
+      return id
+    }
+  }
+  for (const id of PATROL_HELMET_IDS) {
+    if (isBrowserPublishHelmet(id)) return id
+  }
+  return 'HC-02'
+}
+
 /** Helmet publish từ trình duyệt — dùng cho trang phát sóng. */
 export function isBrowserPublishHelmet(helmetId: string): boolean {
   const kind = getHelmetIngest(helmetId).kind

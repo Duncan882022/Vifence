@@ -4,8 +4,7 @@
  * Điện thoại chỉ làm nhiệm vụ quay và đẩy WHIP lên MediaMTX. Theo dõi tuần tra
  * mở Module 05 trên thiết bị khác (laptop/tablet).
  */
-import { memo, useMemo, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { memo, useRef } from 'react'
 import {
   Activity,
   Camera,
@@ -26,15 +25,13 @@ import {
 import { cn } from '@/utils/cn'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import {
+  getBrowserPublishHelmetId,
   getHelmetWhipUrl,
   isBrowserPublishHelmet,
-  PATROL_HELMET_IDS,
 } from '../data/helmetIngest'
 import { useHelmetPublisher, type HelmetPublisherState } from './useHelmetPublisher'
 import { usePublisherPatrolAuth } from './usePublisherPatrolAuth'
 import type { WhipConnectionState } from '@/services/webrtc/whipClient'
-
-const DEFAULT_HELMET_ID = 'HC-02'
 
 function formatDuration(totalSec: number): string {
   const h = Math.floor(totalSec / 3600)
@@ -213,16 +210,8 @@ const StatusBanner = memo(function StatusBanner({
 })
 
 export function HelmetPublisherPage() {
-  const [searchParams] = useSearchParams()
   const videoRef = useRef<HTMLVideoElement>(null)
-
-  const helmetId = useMemo(() => {
-    const requested = searchParams.get('helmet')?.trim().toUpperCase()
-    if (requested && (PATROL_HELMET_IDS as readonly string[]).includes(requested)) {
-      return requested
-    }
-    return DEFAULT_HELMET_ID
-  }, [searchParams])
+  const helmetId = getBrowserPublishHelmetId()
 
   const patrolAuth = usePublisherPatrolAuth()
   const { state, start, stop, flipCamera } = useHelmetPublisher({
@@ -256,12 +245,11 @@ export function HelmetPublisherPage() {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#64748b] mb-0.5">
               Vifence · Tuần tra
             </p>
-            <h1 className="text-[17px] font-bold leading-tight">{label}</h1>
-            <p className="text-[11px] text-[#94a3b8] mt-0.5">Phát sóng bodycam lên trung tâm</p>
+            <h1 className="text-[17px] font-bold leading-tight">Phát sóng</h1>
+            <p className="text-[11px] text-[#94a3b8] mt-0.5">
+              Camera thiết bị này → {label}
+            </p>
           </div>
-          <span className="rounded-md border border-[#334155] bg-[#111827] px-2 py-1 text-[11px] font-bold tabular-nums text-sky-300">
-            {helmetId}
-          </span>
         </header>
 
         <StatusBanner state={state} signalLevel={signalLevel} />
