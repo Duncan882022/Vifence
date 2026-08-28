@@ -33,6 +33,9 @@ const FILTER_TABS: { key: PatrolFilterTab; label: string; icon: LucideIcon; colo
   { key: 'identity', ...PATROL_EVENTS_TAB_META.identity },
 ]
 
+/** Icon meta card — tên / giờ / địa điểm: cùng xám, cùng kích cỡ. */
+const EVENT_CARD_META_ICON = 'w-2.5 h-2.5 shrink-0 text-muted-foreground/45'
+
 function isPersonEvent(event: PatrolEvent): boolean {
   return event.type === 'PERSON_DETECTED'
 }
@@ -146,19 +149,19 @@ function PatrolEventCard({
 
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <SubjectIcon className={cn('w-2.5 h-2.5 shrink-0', displayMeta.color)} aria-hidden />
+              <SubjectIcon className={EVENT_CARD_META_ICON} aria-hidden />
               <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
                 {cardDisplay.subjectLabel}
               </p>
             </div>
             <div className="flex items-center gap-1.5 min-w-0">
-              <Clock className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
+              <Clock className={EVENT_CARD_META_ICON} aria-hidden />
               <p className="text-[8px] tabular-nums text-foreground/80 truncate">
                 {eventDateTime}
               </p>
             </div>
             <div className="flex items-center gap-1.5 min-w-0">
-              <MapPin className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
+              <MapPin className={EVENT_CARD_META_ICON} aria-hidden />
               <p className="text-[8px] text-foreground/70 truncate">
                 {eventPlace}
               </p>
