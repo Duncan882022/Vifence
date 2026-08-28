@@ -260,6 +260,8 @@ def _assign_patrol_person_identity(
             confidence=float(person_det.confidence or 0.0),
             frame=frame,
             person_bbox=person_bbox,
+            lifecycle_tier=resolved.tier,
+            lifecycle_worker_id=resolved.worker_id,
         )
     except Exception:  # noqa: BLE001
         # Kho tuần tra hỏng không được kéo sập luồng live.

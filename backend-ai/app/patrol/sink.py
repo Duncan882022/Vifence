@@ -130,6 +130,7 @@ _STALE_OBJECT_SEC = 12.0
 _STALE_IOU_MIN = 0.30
 _track_to_object: dict[str, str] = {}
 _track_to_person: dict[str, str] = {}
+_sgc_to_person: dict[str, str] = {}
 _track_bbox: dict[str, tuple[float, float, float, float]] = {}
 _lock = threading.Lock()
 
@@ -321,6 +322,115 @@ def _resolve_observation_gps(camera_id: str) -> tuple[float | None, float | None
         return None, None
 
 
+def _bind_sgc_to_person(sgc_id: str, pers_id: str) -> None:
+    sgc = (sgc_id or "").strip().lower()
+    pid = identity.resolve_alias((pers_id or "").strip())
+    if not sgc or not pid.startswith("pers-"):
+        return
+    with _lock:
+        _sgc_to_person[sgc] = pid
+
+
+def _ensure_pers_for_sgc(sgc_id: str, *, now: float) -> str:
+    sgc = (sgc_id or "").strip().lower()
+    with _lock:
+        existing = _sgc_to_person.get(sgc)
+    if existing:
+        return identity.resolve_alias(existing)
+    pers_id = identity.create_person(origin="sgc", now=now)
+    _bind_sgc_to_person(sgc, pers_id)
+    return pers_id
+
+
+def _pers_id_for_lifecycle(
+    lifecycle_tier: str | None,
+    lifecycle_worker_id: str | None,
+    *,
+    now: float,
+) -> str | None:
+    """Map tier/worker_id từ ROI lifecycle → pers-* cho thẻ sự kiện."""
+    tier = (lifecycle_tier or "").strip()
+    wid = (lifecycle_worker_id or "").strip()
+    if not tier or not wid:
+        return None
+
+    from ..patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON
+    from ..patrol_entity import (
+        is_patrol_gallery_id,
+        is_patrol_iden_id,
+        is_patrol_pers_id,
+        resolve_patrol_gallery_id_for_worker,
+    )
+    from ..person_identity_registry import is_sgc_worker_id
+
+    if tier not in (TIER_PERSON, TIER_IDENTITY):
+        return None
+
+    if is_patrol_pers_id(wid):
+        return identity.resolve_alias(wid) if identity.get_person(wid) else None
+
+    if is_patrol_iden_id(wid):
+        row = db.query_one("SELECT pers_id FROM persons WHERE iden_code = ?", (wid,))
+        return str(row["pers_id"]) if row else None
+
+    gallery = wid if is_patrol_gallery_id(wid) else resolve_patrol_gallery_id_for_worker(wid)
+    if gallery:
+        from ..patrol_identity_store import lookup_patrol_identity
+
+        row = lookup_patrol_identity(gallery)
+        if row:
+            emp = str(row.get("employee_code") or "").strip()
+            if emp:
+                found = identity.find_by_employee_code(emp)
+                if found:
+                    return str(found["pers_id"])
+
+    if is_sgc_worker_id(wid):
+        return _ensure_pers_for_sgc(wid, now=now)
+
+    return None
+
+
+def _commit_lifecycle_person_event(
+    key: str,
+    *,
+    pers_id: str,
+    camera_id: str,
+    zone_id: str | None,
+    frame: Any,
+    person_bbox: Sequence[float] | None,
+    score: float,
+    ts: float,
+    anchor_ts: float,
+    seen_since: float | None = None,
+) -> str:
+    pid = identity.resolve_alias(pers_id)
+    with _lock:
+        obj_id = _track_to_object.pop(key, None)
+        _track_to_person[key] = pid
+    if obj_id:
+        daystore.promote_object(obj_id, pid, now=anchor_ts)
+    path: str | None = None
+    shot_score = score
+    if frame is not None and person_bbox is not None:
+        path = _write_snapshot(pid, frame, person_bbox)
+        if not path:
+            shot_score = score
+    gps_lat, gps_lng = _resolve_observation_gps(camera_id)
+    daystore.touch_person_event(
+        pid,
+        camera_id=camera_id,
+        zone_id=zone_id,
+        snapshot_path=path,
+        snapshot_score=shot_score,
+        now=ts,
+        seen_since=seen_since if seen_since is not None else anchor_ts,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+    )
+    return pid
+
+
 def record_observation(
     *,
     camera_id: str,
@@ -333,12 +443,13 @@ def record_observation(
     zone_id: str | None = None,
     now: float | None = None,
     density_only: bool = False,
+    lifecycle_tier: str | None = None,
+    lifecycle_worker_id: str | None = None,
 ) -> str | None:
-    """Ghi một lần quan sát. Trả `pers-*` nếu đã nhận ra mặt, `obj-*` nếu chưa.
+    """Ghi một lần quan sát. Trả `pers-*` nếu đã nhận ra (mặt hoặc lifecycle ROI).
 
-    Có khuôn mặt thì thăng thẳng lên Người: `promote_object` kéo theo cả lịch
-    sử xuất hiện đã tích luỹ lúc còn là Đối tượng, nên không mất quãng thời
-    gian quan sát ban đầu.
+    `lifecycle_tier` / `lifecycle_worker_id` đồng bộ với nhãn ROI live — tránh
+    ghi `obj-*` khi ROI đã lên Người/Định danh.
     """
     if not camera_id or not track_id:
         return None
@@ -405,6 +516,11 @@ def record_observation(
                 daystore.promote_object(obj_id, pers_id, now=anchor_ts)
             with _lock:
                 _track_to_person[key] = pers_id
+        if lifecycle_worker_id:
+            from ..person_identity_registry import is_sgc_worker_id
+
+            if is_sgc_worker_id(lifecycle_worker_id):
+                _bind_sgc_to_person(lifecycle_worker_id, pers_id)
         path, shot_score = _shot(pers_id)
         daystore.touch_person_event(
             pers_id,
@@ -436,9 +552,31 @@ def record_observation(
         )
         return known
 
-    ok, anchor_ts = _gate_observation_commit(key, has_face=False, now=ts)
+    lifecycle_pers = _pers_id_for_lifecycle(
+        lifecycle_tier,
+        lifecycle_worker_id,
+        now=ts,
+    )
+    ok, anchor_ts = _gate_observation_commit(
+        key,
+        has_face=lifecycle_pers is not None,
+        now=ts,
+    )
     if not ok:
         return None
+
+    if lifecycle_pers:
+        return _commit_lifecycle_person_event(
+            key,
+            pers_id=lifecycle_pers,
+            camera_id=camera_id,
+            zone_id=zone_id,
+            frame=frame,
+            person_bbox=person_bbox,
+            score=score,
+            ts=ts,
+            anchor_ts=anchor_ts,
+        )
 
     # Track mới, chưa mặt: ưu tiên nhận lại Người vừa mất track cùng chỗ
     # (quay lưng). Không khớp thì mới là Đối tượng — để nhóm lẫn mặt/lưng
@@ -523,6 +661,7 @@ def reset(camera_id: str | None = None) -> None:
         if camera_id is None:
             _track_to_object.clear()
             _track_to_person.clear()
+            _sgc_to_person.clear()
             _track_watch.clear()
             _track_bbox.clear()
             _stale_objects.clear()
