@@ -151,7 +151,7 @@ describe('bbox mượt', () => {
     const plainLag = measuredCx - [...plain.values()][0].kalman.cx
 
     expect(anchoredLag).toBeLessThan(plainLag)
-    expect(anchoredLag).toBeLessThan(45)
+    expect(anchoredLag).toBeLessThan(20)
   })
 
   it('extrapolate giới hạn trong một nhịp analyze', () => {

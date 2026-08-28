@@ -11,7 +11,7 @@ import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 import { OverlayTimeBuffer } from '../utils/overlayTimeSync'
 
 /** Nhịp đối chiếu snapshot ↔ đồng hồ video. */
-const RESOLVE_INTERVAL_MS = 100
+const RESOLVE_INTERVAL_MS = 33
 
 export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
   /** Đã khớp bbox theo wallclock hay đang dùng snapshot mới nhất. */

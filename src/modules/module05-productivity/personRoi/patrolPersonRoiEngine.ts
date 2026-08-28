@@ -22,11 +22,12 @@ export class PatrolPersonRoiEngine {
     const alpha = predicting
       ? PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha
       : PATROL_PERSON_ROI_CONFIG.displayEmaAlpha
+    const snapDiagonalRatio = predicting ? 0.10 : 0.04
     const polished = raw.map(track => {
       active.add(track.trackId)
       return {
         ...track,
-        bbox: this.displaySmoother.smooth(track.trackId, track.bbox, { alpha }),
+        bbox: this.displaySmoother.smooth(track.trackId, track.bbox, { alpha, snapDiagonalRatio }),
       }
     })
     this.displaySmoother.prune(active)

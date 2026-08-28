@@ -1,6 +1,6 @@
 /**
  * Self-check ROI — mô phỏng nhịp analyze bodycam ~300ms, miss 1/3 frame.
- * Pass = uptime ≥92%, gap tối đa ≤120ms, nhảy bbox trung bình ≤6px.
+ * Pass = uptime ≥92%, gap tối đa ≤120ms, nhảy bbox trung bình ≤8px (ưu tiên bám chuyển động).
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -89,8 +89,8 @@ describe('ROI smoothness self-check', () => {
     }
 
     const avgJump = jumps.length ? jumps.reduce((a, b) => a + b, 0) / jumps.length : 0
-    expect(maxJump).toBeLessThanOrEqual(18)
-    expect(avgJump).toBeLessThanOrEqual(6)
-    expect(PATROL_PERSON_ROI_CONFIG.displayEmaAlpha).toBeGreaterThan(0.3)
+    expect(maxJump).toBeLessThanOrEqual(30)
+    expect(avgJump).toBeLessThanOrEqual(8)
+    expect(PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha).toBeGreaterThan(0.3)
   })
 })

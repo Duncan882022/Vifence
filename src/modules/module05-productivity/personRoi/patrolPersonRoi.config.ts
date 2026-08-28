@@ -38,15 +38,15 @@ export const PATROL_PERSON_ROI_CONFIG = {
   /**
    * Trần nội suy rAF (ms) khi track còn bám — mượt giữa hai lần analyze ~90–150ms.
    */
-  maxPredictMs: 720,
+  maxPredictMs: 880,
   /**
    * Khi mất dấu (missStreak > 0): không trượt bbox — giữ tại vị trí đo cuối.
    * Tránh ghost ROI lơ lửng / trượt ra khỏi khung sau khi người đã rời cam.
    */
   maxPredictMsLost: 0,
   /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
-  processNoise: 0.06,
-  measureNoise: 0.14,
+  processNoise: 0.05,
+  measureNoise: 0.08,
   /**
    * Sàn hệ số lọc: mỗi lần đo, tâm box phải tiến ít nhất ngần này quãng đường
    * tới vị trí vừa đo được.
@@ -55,21 +55,21 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * điệu tới sàn và hệ số rơi về ~0.2: mỗi nhịp ROI chỉ đi được 1/5 quãng, box
    * bám lệt bệt sau người và càng đi nhanh càng tụt. Có sàn thì độ trễ bị chặn.
    */
-  minMeasureGain: 0.94,
+  minMeasureGain: 0.98,
   /**
    * Track đã khoá theo track id backend — bám sát measurement, ít trailing.
    */
-  anchoredMinMeasureGain: 0.98,
-  velocityDamping: 0.992,
+  anchoredMinMeasureGain: 1.0,
+  velocityDamping: 0.996,
   /** Trọng số đo trên kích thước — cao hơn để box theo người nhanh hơn */
   sizeGain: 0.62,
   /** Giữ lại bao nhiêu vận tốc cũ mỗi lần đo — thấp = phản ứng nhanh hơn */
-  velocitySmoothing: 0.38,
-  /** EMA overlay — cao = bám video sát (TikTok-style), thấp = lag/trailing */
-  displayEmaAlpha: 0.86,
-  displayEmaGlideAlpha: 0.72,
+  velocitySmoothing: 0.22,
+  /** EMA overlay — ingest snap (engine); glide giữa hai lần analyze */
+  displayEmaAlpha: 1,
+  displayEmaGlideAlpha: 0.94,
   /** Trần tốc độ theo số lần cạnh bbox mỗi giây */
-  maxSpeedBoxPerSec: 4.2,
+  maxSpeedBoxPerSec: 7.5,
 } as const
 
 export type PatrolPersonRoiConfig = typeof PATROL_PERSON_ROI_CONFIG
