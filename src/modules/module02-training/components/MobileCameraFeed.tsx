@@ -45,9 +45,9 @@ import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetec
 import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
-import { readPatrolFlightModeFromMetrics, resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
+import { resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
-import { isPatrolHelmetCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -119,8 +119,8 @@ export function MobileCameraFeed({
   /** Analyze vẫn chạy khi ẩn ROI — heatmap/personCount cần detections. */
   const runAiAnalyze = aiEnabled && mobileAiEnabled
   const showAiOverlay = runAiAnalyze && bboxVisible
-  /** Module 05 patrol — Kalman/ByteTrack ROI, không PPE overlay. */
-  const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && isPatrolCam
+  /** Module 05 patrol — Kalman/ByteTrack ROI (HC + DR). */
+  const usePatrolPersonRoi = isPatrolPersonRoiCameraId(cameraId) && isPatrolCam
   /** VMS worker — cùng nguồn detections với HC-01 / DR-* (không dual pipeline local). */
   const vmsPatrolRoiActive = Boolean(
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId),
@@ -239,7 +239,7 @@ export function MobileCameraFeed({
         const patrolPersonCam = isPatrolPersonRoiCameraId(cameraId)
         const flycamGates = resolvePatrolFlycamGateFlags(
           cameraId,
-          readPatrolFlightModeFromMetrics(result.metrics),
+          resolveEffectivePatrolFlightMode(cameraId, result.metrics),
         )
         /** Vẽ ROI cho mọi người nhìn thấy được — chỉ loại mảnh chân/tay. */
         const patrolVisible = (d: MobileAiDetection) => {

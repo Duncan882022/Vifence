@@ -2,6 +2,7 @@ import type { VmsDetectionSnapshot } from '@/modules/module03-safety/services/vm
 import type { MobileAiDetection } from '@/modules/module02-training/services/mobileAiBackend.service'
 import {
   patrolPersonMeetsDisplayGate,
+  patrolPersonMeetsDrFlycamDisplayGate,
   suppressPatrolObjectOverlappingIdentified,
 } from './patrolPersonVisibility'
 import {
@@ -20,6 +21,7 @@ export function gateVmsPatrolPersonDetections(
   const frameH = snapshot.height ?? 0
   const effectiveMode = flightMode ?? resolveEffectivePatrolFlightMode(cameraId, snapshot.metrics)
   const flycamGates = resolvePatrolFlycamGateFlags(cameraId, effectiveMode)
+  const isDrFlycam = cameraId.startsWith('DR-')
 
   const mapped = snapshot.detections
     .map(d => ({
@@ -39,11 +41,17 @@ export function gateVmsPatrolPersonDetections(
       if (d.behavior !== 'person') return false
       const raw = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
       if (!raw || raw.length < 4 || frameW <= 0 || frameH <= 0) return false
-      return patrolPersonMeetsDisplayGate({
-        bbox: [raw[0], raw[1], raw[2], raw[3]],
+      const gateInput = {
+        bbox: [raw[0], raw[1], raw[2], raw[3]] as [number, number, number, number],
         frameW,
         frameH,
         workerId: d.worker_id,
+      }
+      if (isDrFlycam) {
+        return patrolPersonMeetsDrFlycamDisplayGate(gateInput)
+      }
+      return patrolPersonMeetsDisplayGate({
+        ...gateInput,
         flycam: flycamGates.flycam,
         proximityFlycam: flycamGates.proximityFlycam,
       })

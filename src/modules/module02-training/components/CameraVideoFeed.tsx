@@ -25,7 +25,7 @@ import {
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import { resolveEffectivePatrolFlightMode } from '@/modules/module05-productivity/utils/patrolFlightMode'
+import { resolveEffectivePatrolFlightMode, readPatrolFlightModeFromMetrics } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
@@ -139,10 +139,11 @@ export function CameraVideoFeed({
 
   useEffect(() => {
     if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
-    const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
-    if (cameraId.startsWith('DR-') && flightMode) {
-      setPatrolFlightMode(cameraId, flightMode)
+    const fromMetrics = readPatrolFlightModeFromMetrics(vmsFeed.snapshot.metrics)
+    if (cameraId.startsWith('DR-') && fromMetrics) {
+      setPatrolFlightMode(cameraId, fromMetrics)
     }
+    const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
       gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),

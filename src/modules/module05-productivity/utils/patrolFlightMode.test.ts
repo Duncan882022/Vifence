@@ -4,6 +4,7 @@ import {
   resolveEffectivePatrolFlightMode,
   resolvePatrolFlycamGateFlags,
 } from './patrolFlightMode'
+import { getPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 
 vi.mock('@/services/patrolFlightModeBridge', () => ({
   getPatrolFlightMode: vi.fn(() => 'proximity' as const),
@@ -68,6 +69,11 @@ describe('resolveEffectivePatrolFlightMode', () => {
 
   it('fallback bridge TTL khi metrics thiếu (DR-*)', () => {
     expect(resolveEffectivePatrolFlightMode('DR-03', null)).toBe('proximity')
+  })
+
+  it('mặc định aerial khi không có metrics lẫn bridge', () => {
+    vi.mocked(getPatrolFlightMode).mockReturnValueOnce(null)
+    expect(resolveEffectivePatrolFlightMode('DR-03', null)).toBe('aerial')
   })
 
   it('HC-* không fallback bridge', () => {

@@ -240,6 +240,19 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
   return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
 }
 
+/**
+ * DR-* — thử cả gate aerial lẫn proximity cho mỗi bbox.
+ * Tránh lệch flight_mode (cache bridge vs metrics) làm mất ROI tầm cao.
+ */
+export function patrolPersonMeetsDrFlycamDisplayGate(
+  input: Omit<PatrolPersonDetectionGateInput, 'flycam' | 'proximityFlycam'>,
+): boolean {
+  return (
+    patrolPersonMeetsDisplayGate({ ...input, flycam: true })
+    || patrolPersonMeetsDisplayGate({ ...input, proximityFlycam: true })
+  )
+}
+
 export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateInput): boolean {
   const { bbox, frameW, frameH, workerId, faceEligible } = input
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false

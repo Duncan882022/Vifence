@@ -36,8 +36,8 @@ export function readPatrolFlightModeFromMetrics(
 }
 
 /**
- * flight_mode hiệu lực cho gate ROI — metrics snapshot ưu tiên, bridge TTL fallback.
- * Tránh label "Tầm thấp" (cache) trong khi gate ROI vẫn aerial (metrics null).
+ * flight_mode hiệu lực cho gate sự kiện / label — metrics snapshot ưu tiên.
+ * Không dùng bridge TTL cho ROI gate (DR dùng patrolPersonMeetsDrFlycamDisplayGate).
  */
 export function resolveEffectivePatrolFlightMode(
   cameraId: string,
@@ -46,7 +46,7 @@ export function resolveEffectivePatrolFlightMode(
   const fromMetrics = readPatrolFlightModeFromMetrics(metrics)
   if (fromMetrics) return fromMetrics
   if (cameraId.startsWith('DR-')) {
-    return getPatrolFlightMode(cameraId)
+    return getPatrolFlightMode(cameraId) ?? 'aerial'
   }
   return null
 }

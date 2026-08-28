@@ -48,24 +48,26 @@ describe('gateVmsPatrolPersonDetections', () => {
     expect(result[0]?.worker_name).toBe('Duncan')
   })
 
-  it('DR-03 proximity dùng gate bodycam-like từ metrics', () => {
+  it('DR-03 aerial bbox nhỏ vẫn qua gate khi flight_mode proximity (cache lệch)', () => {
     const result = gateVmsPatrolPersonDetections(
       snapshot(
         [
           {
             behavior: 'person',
             label: 'person',
-            bbox: [300, 180, 420, 520],
-            subject_bbox: [300, 180, 420, 520],
-            confidence: 0.65,
-            track_id: 'ptk0002',
+            bbox: [600, 320, 640, 330],
+            subject_bbox: [600, 320, 640, 330],
+            confidence: 0.55,
+            track_id: 'ptk-aerial',
+            tier: 'object',
           },
         ],
         { patrol: { flight_mode: 'proximity' } },
       ),
       'DR-03',
+      'proximity',
     )
     expect(result).toHaveLength(1)
-    expect(result[0]?.behavior).toBe('person')
+    expect(result[0]?.track_id).toBe('ptk-aerial')
   })
 })
