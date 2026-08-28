@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
+          // Chỉ tách thư viện leaflet thuần — KHÔNG gom react-leaflet (tránh 2 bản React → màn hình đen).
+          if (id.includes('node_modules/leaflet') && !id.includes('react-leaflet')) {
             return 'leaflet'
           }
           if (id.includes('/module05-productivity/personRoi/')) {
@@ -40,6 +41,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [react()],
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
