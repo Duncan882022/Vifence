@@ -1,5 +1,7 @@
 /** Chế độ bay flycam — mirror backend `patrol_flight_mode.py`. */
 
+import { getPatrolFlightMode } from '@/services/patrolFlightModeBridge'
+
 export type PatrolFlightMode = 'aerial' | 'proximity'
 
 export interface PatrolFlycamGateFlags {
@@ -33,19 +35,37 @@ export function readPatrolFlightModeFromMetrics(
   return null
 }
 
+/**
+ * flight_mode hiệu lực cho gate sự kiện / label — metrics snapshot ưu tiên.
+ * Không dùng bridge TTL cho ROI gate (DR dùng patrolPersonMeetsDrFlycamDisplayGate).
+ */
+export function resolveEffectivePatrolFlightMode(
+  cameraId: string,
+  metrics?: Record<string, unknown> | null,
+): PatrolFlightMode | null {
+  const fromMetrics = readPatrolFlightModeFromMetrics(metrics)
+  if (fromMetrics) return fromMetrics
+  if (cameraId.startsWith('DR-')) {
+    return getPatrolFlightMode(cameraId) ?? 'aerial'
+  }
+  return null
+}
+
 /** Đọc từ overlay metrics VMS hoặc `/analyze/frame`. */
 export function resolvePatrolFlycamGateFlags(
   cameraId: string,
   flightMode?: string | null,
 ): PatrolFlycamGateFlags {
-  if (isPatrolHelmetLikeCamera(cameraId, flightMode)) {
+  if (cameraId.startsWith('HC-')) {
     return { flycam: false, proximityFlycam: false }
   }
-  if (!cameraId.startsWith('DR-')) {
-    return { flycam: false, proximityFlycam: false }
+  if (cameraId.startsWith('DR-')) {
+    if (flightMode === 'proximity') {
+      return { flycam: false, proximityFlycam: true }
+    }
+    return { flycam: true, proximityFlycam: false }
   }
-  // Mặc định / aerial / chưa có telemetry → gate silhouette tầm cao.
-  return { flycam: true, proximityFlycam: false }
+  return { flycam: false, proximityFlycam: false }
 }
 
 export function patrolFlightModeLabel(mode: PatrolFlightMode | string | null | undefined): string {

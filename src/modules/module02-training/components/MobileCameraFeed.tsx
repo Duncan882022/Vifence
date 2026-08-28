@@ -41,10 +41,13 @@ import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetectionFeed'
+import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
-import { readPatrolFlightModeFromMetrics, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
-import { isPatrolHelmetCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
+import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
+import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -116,15 +119,39 @@ export function MobileCameraFeed({
   /** Analyze vẫn chạy khi ẩn ROI — heatmap/personCount cần detections. */
   const runAiAnalyze = aiEnabled && mobileAiEnabled
   const showAiOverlay = runAiAnalyze && bboxVisible
-  /** Module 05 patrol — Kalman/ByteTrack ROI, không PPE overlay. */
-  const usePatrolPersonRoi = isPatrolHelmetCameraId(cameraId) && isPatrolCam
-  /** Local analyze nuôi ROI — bbox khớp khung video đang hiển thị, không lag WHIP→RTSP. */
-  const patrolLocalRoiEnabled = usePatrolPersonRoi && runAiAnalyze && status === 'live'
+  /** Module 05 patrol — Kalman/ByteTrack ROI (HC + DR). */
+  const usePatrolPersonRoi = isPatrolPersonRoiCameraId(cameraId) && isPatrolCam
+  /** VMS worker — cùng nguồn detections với HC-01 / DR-* (không dual pipeline local). */
+  const vmsPatrolRoiActive = Boolean(
+    usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId),
+  )
+  const vmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
+  /** Local analyze chỉ khi chưa có VMS (legacy-mobile fallback). */
+  const patrolLocalRoiEnabled = usePatrolPersonRoi && runAiAnalyze && status === 'live' && !isVmsLiveCamera(cameraId)
   const localRoiFrameSize = usePatrolLocalFrameAnalyze(cameraId, videoRef, patrolLocalRoiEnabled)
 
-  /** ROI cần frame size — ưu tiên kích thước khung JPEG local analyze. */
+  useEffect(() => {
+    if (!vmsPatrolRoiActive || !vmsFeed.snapshot) return
+    const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
+    syncLivePatrolPersonDetectionsToHeatmap(
+      cameraId,
+      gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
+    )
+  }, [
+    vmsPatrolRoiActive,
+    cameraId,
+    vmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.width,
+    vmsFeed.snapshot?.height,
+    vmsFeed.snapshot?.metrics,
+  ])
+
+  /** ROI cần frame size — VMS snapshot ưu tiên, rồi local JPEG analyze. */
   const overlayFrameSize = useMemo(() => {
     const video = videoRef.current
+    if (vmsPatrolRoiActive && vmsFeed.snapshot && vmsFeed.snapshot.width > 0 && vmsFeed.snapshot.height > 0) {
+      return resolveOverlayAnalyzeFrameSize(video, vmsFeed.snapshot.width, vmsFeed.snapshot.height)
+    }
     if (localRoiFrameSize.width > 0 && localRoiFrameSize.height > 0) {
       return resolveOverlayAnalyzeFrameSize(video, localRoiFrameSize.width, localRoiFrameSize.height)
     }
@@ -132,7 +159,7 @@ export function MobileCameraFeed({
       return resolveOverlayAnalyzeFrameSize(video, frameSize.width, frameSize.height)
     }
     return resolveOverlayAnalyzeFrameSize(video, 0, 0)
-  }, [localRoiFrameSize, frameSize, layoutTick, status])
+  }, [vmsPatrolRoiActive, vmsFeed.snapshot, localRoiFrameSize, frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = detections
     return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped
@@ -212,7 +239,7 @@ export function MobileCameraFeed({
         const patrolPersonCam = isPatrolPersonRoiCameraId(cameraId)
         const flycamGates = resolvePatrolFlycamGateFlags(
           cameraId,
-          readPatrolFlightModeFromMetrics(result.metrics),
+          resolveEffectivePatrolFlightMode(cameraId, result.metrics),
         )
         /** Vẽ ROI cho mọi người nhìn thấy được — chỉ loại mảnh chân/tay. */
         const patrolVisible = (d: MobileAiDetection) => {

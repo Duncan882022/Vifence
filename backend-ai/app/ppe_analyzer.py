@@ -180,9 +180,10 @@ def _assign_patrol_person_identity(
     )
     face_emb = face_vec.tolist() if face_vec is not None else None
 
-    # JPEG 480px từ /analyze/frame thường fail assess trong khi recover selfie vẫn
-    # lấy được embedding — nếu không bù thì HC-02 object còn HC-01 person/identity.
-    if not face_eligible and _is_helmet_bodycam(camera_id):
+    # JPEG nhỏ / góc drone — assess fail trong khi recover selfie vẫn lấy được embedding.
+    from .patrol_flight_mode import is_patrol_helmet_like
+
+    if not face_eligible and is_patrol_helmet_like(camera_id):
         from .worker_identity.recognizer import recover_patrol_face_embedding
 
         recovered = recover_patrol_face_embedding(frame, person_bbox, camera_id=camera_id)
@@ -217,14 +218,14 @@ def _assign_patrol_person_identity(
             face_emb=face_emb,
         )
         cached = peek_track_lifecycle(camera_id, track_id)
-        peek_id = peek_patrol_track_identity(camera_id, track_id) or ""
+        worker_id = peek_patrol_track_identity(camera_id, track_id)
         if borrowed:
             worker_id, worker_name = borrowed
         elif cached and cached.worker_id:
-            worker_id = cached.worker_id or peek_id
+            worker_id = cached.worker_id or worker_id
             worker_name = cached.worker_name
-        elif peek_id:
-            worker_id = peek_id
+        else:
+            worker_name = ""
         if worker_id and not worker_name:
             from .patrol_entity import resolve_patrol_worker_display_name
 

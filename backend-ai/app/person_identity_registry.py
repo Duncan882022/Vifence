@@ -394,8 +394,10 @@ def borrow_cross_camera_patrol_worker(
     frame_h: int,
     face_emb: list[float] | None = None,
 ) -> tuple[str, str] | None:
-    """Reuse worker_id từ mũ HC-* khác — cùng người phải cùng mã trên mọi camera."""
-    if not camera_id.startswith("HC-"):
+    """Reuse worker_id từ cam tuần tra khác — cùng người phải cùng mã trên site."""
+    from .patrol_flight_mode import is_patrol_identity_unified_camera
+
+    if not is_patrol_identity_unified_camera(camera_id):
         return None
 
     query = _as_emb(face_emb)

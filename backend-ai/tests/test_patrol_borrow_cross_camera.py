@@ -72,6 +72,20 @@ class TestBorrowCrossCameraPatrolWorker(unittest.TestCase):
         wid, _name = borrowed  # type: ignore[misc]
         self.assertEqual(wid, "sgc-00000430")
 
+    @patch("app.patrol_flight_mode.is_patrol_flycam_proximity", return_value=True)
+    def test_borrow_sgc_from_helmet_on_dr_proximity(self, _prox: object) -> None:
+        borrowed = borrow_cross_camera_patrol_worker(
+            "DR-03",
+            [100.0, 200.0, 240.0, 560.0],
+            frame=self.frame,
+            frame_w=480,
+            frame_h=720,
+            face_emb=_query_emb(),
+        )
+        self.assertIsNotNone(borrowed)
+        wid, _name = borrowed  # type: ignore[misc]
+        self.assertEqual(wid, "sgc-00000430")
+
 
 if __name__ == "__main__":
     unittest.main()

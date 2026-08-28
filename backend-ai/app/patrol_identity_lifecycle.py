@@ -114,6 +114,7 @@ class _TrackState:
 
 
 _states: dict[str, _TrackState] = {}
+_worker_global: dict[str, tuple[str, str, float]] = {}
 _lock = threading.Lock()
 
 
@@ -135,6 +136,29 @@ def tier_for_worker_id(worker_id: str | None) -> str:
         return TIER_PERSON
     # Mã lạ không thuộc gallery cũng không phải sgc — coi như chưa định danh.
     return TIER_OBJECT
+
+
+def _global_identity_for_worker(worker_id: str, now: float) -> tuple[str, str] | None:
+    """Tier + tên cao nhất theo worker_id — site-wide, không phụ thuộc track còn sống."""
+    wid = (worker_id or "").strip()
+    if not wid:
+        return None
+    row = _worker_global.get(wid)
+    if row is None:
+        return None
+    if now - row[2] > _STATE_TTL_SEC:
+        _worker_global.pop(wid, None)
+        return None
+    return row[0], row[1]
+
+
+def _promote_worker_global(worker_id: str, tier: str, name: str, now: float) -> None:
+    wid = (worker_id or "").strip()
+    if not wid:
+        return
+    cur = _worker_global.get(wid)
+    if cur is None or _TIER_RANK.get(tier, 0) >= _TIER_RANK.get(cur[0], 0):
+        _worker_global[wid] = (tier, name, now)
 
 
 def _prune(now: float) -> None:
@@ -162,6 +186,14 @@ def observe(
     from .patrol_entity import is_technical_patrol_worker_label, resolve_patrol_worker_display_name
 
     wname = resolve_patrol_worker_display_name(wid, worker_name)
+
+    global_hit = _global_identity_for_worker(wid, ts) if wid else None
+    if global_hit:
+        g_tier, g_name = global_hit
+        if _TIER_RANK.get(g_tier, 0) > _TIER_RANK.get(observed_tier, 0):
+            observed_tier = g_tier
+            if g_name and not is_technical_patrol_worker_label(g_name):
+                wname = g_name
 
     sibling = _sibling_identity_for_worker(wid, camera_id) if wid else None
     sibling_tier = sibling[0] if sibling else None
@@ -277,6 +309,9 @@ def observe(
             state.worker_id = wid
             state.worker_name = wname
 
+        if state.worker_id:
+            _promote_worker_global(state.worker_id, state.tier, state.worker_name, ts)
+
         return TrackIdentity(
             tier=state.tier,
             worker_id=state.worker_id,
@@ -291,9 +326,11 @@ def _sibling_identity_for_worker(
     worker_id: str,
     exclude_camera_id: str,
 ) -> tuple[str, str] | None:
-    """Tier + tên cao nhất từ mũ HC-* khác cho cùng worker_id."""
+    """Tier + tên cao nhất từ cam tuần tra khác cho cùng worker_id."""
+    from .patrol_flight_mode import is_patrol_identity_unified_camera
+
     wid = (worker_id or "").strip()
-    if not wid or not exclude_camera_id.startswith("HC-"):
+    if not wid or not is_patrol_identity_unified_camera(exclude_camera_id):
         return None
     best_tier = ""
     best_rank = -1
@@ -301,7 +338,7 @@ def _sibling_identity_for_worker(
     with _lock:
         for key, state in _states.items():
             cam = key.split("|", 1)[0]
-            if cam == exclude_camera_id or not cam.startswith("HC-"):
+            if cam == exclude_camera_id or not is_patrol_identity_unified_camera(cam):
                 continue
             if state.worker_id != wid:
                 continue
@@ -335,6 +372,7 @@ def reset(camera_id: str | None = None) -> int:
         if camera_id is None:
             count = len(_states)
             _states.clear()
+            _worker_global.clear()
             return count
         prefix = f"{camera_id}|"
         keys = [k for k in _states if k.startswith(prefix)]

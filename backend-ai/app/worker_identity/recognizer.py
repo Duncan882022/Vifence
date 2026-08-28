@@ -364,15 +364,21 @@ def recover_patrol_face_embedding(
     if eligible and vec is not None:
         return vec.tolist(), float(score)
 
-    if not camera_id.startswith("HC-"):
+    from ..patrol_flight_mode import is_patrol_flycam_proximity
+
+    helmet_like = camera_id.startswith("HC-") or (
+        camera_id.startswith("DR-") and is_patrol_flycam_proximity(camera_id)
+    )
+    if not helmet_like:
         return None
 
     crop = _crop_person(frame, person_bbox)
     if crop is None:
         return None
 
+    selfie = camera_id.startswith("HC-")
     vec2, score2, eligible2 = _assess_patrol_face_crop(
-        crop, camera_id=camera_id, selfie_mode=True,
+        crop, camera_id=camera_id, selfie_mode=selfie,
     )
     if eligible2 and vec2 is not None:
         return vec2.tolist(), float(score2)
