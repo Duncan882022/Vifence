@@ -89,19 +89,6 @@ function resolveAppearanceCameraLabel(segment: PatrolAppearanceSegment): string 
   )
 }
 
-function hasValidGps(gps: { lat: number; lng: number } | null | undefined): gps is { lat: number; lng: number } {
-  if (!gps) return false
-  const { lat, lng } = gps
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
-  if (lat === 0 && lng === 0) return false
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false
-  return true
-}
-
-function mapsUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`
-}
-
 function formatEventTimeRange(event: PatrolEvent): string {
   const first = formatEventDateTime(event.startedAt)
   const last = formatEventDateTime(event.lockedAt)
@@ -274,7 +261,6 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
 
   const meta = resolvePatrolEventDisplayMeta(event)
   const TypeIcon = meta.icon
-  const gpsOk = hasValidGps(event.gps)
   const objectKey = event.objectId?.trim() || event.id
   const stage = summary.stage
   const modalTitle = (stage === 'person' || stage === 'profile')
@@ -462,48 +448,6 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
               )}
             </div>
           )}
-
-          <div
-            className={cn(
-              'rounded-lg border px-3 py-2.5 space-y-1.5',
-              gpsOk ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5',
-            )}
-          >
-            <div className="flex items-center gap-1.5">
-              <MapPin className={cn('w-3.5 h-3.5 shrink-0', gpsOk ? 'text-emerald-400' : 'text-amber-400')} />
-              <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
-                Vị trí GPS
-              </span>
-              <span
-                className={cn(
-                  'ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded',
-                  gpsOk ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400',
-                )}
-              >
-                {gpsOk ? 'Có toạ độ' : 'Thiếu GPS'}
-              </span>
-            </div>
-            {gpsOk ? (
-              <>
-                <p className="text-[10px] text-foreground font-mono select-all">
-                  {event.gps.lat.toFixed(6)}, {event.gps.lng.toFixed(6)}
-                </p>
-                <a
-                  href={mapsUrl(event.gps.lat, event.gps.lng)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-semibold border border-[#1e2433] text-muted-foreground hover:text-foreground hover:bg-[#1a2235]"
-                >
-                  <MapPin className="w-3 h-3" />
-                  Xem trên bản đồ
-                </a>
-              </>
-            ) : (
-              <p className="text-[9px] text-amber-200/80 leading-relaxed">
-                Sự kiện chưa gắn toạ độ GPS. Bật Location trên HC-02 để log GPS cho sự kiện mới.
-              </p>
-            )}
-          </div>
 
           {showIdentify && (
             <PatrolManualIdentityPanel
