@@ -104,6 +104,41 @@ class PatrolDisplayOnlyIdentityTests(unittest.TestCase):
         self.assertEqual(det.worker_id, "sgc-00000042")
         self.assertEqual(det.tier, "person")
 
+    def test_display_only_inherits_sibling_identity(self) -> None:
+        from unittest.mock import patch
+
+        from app.patrol_identity_lifecycle import observe, reset
+
+        reset()
+        for i in range(2):
+            observe(
+                "HC-01",
+                "trk-1",
+                worker_id="p-SGC-6688",
+                worker_name="Duncan",
+                now=float(i + 1),
+            )
+
+        det = PpeDetection(
+            behavior="person",
+            label="person",
+            scenario_id="person",
+            confidence=0.4,
+            bbox=[100.0, 100.0, 200.0, 400.0],
+        )
+        with patch(
+            "app.person_identity_registry.peek_patrol_track_identity",
+            return_value="p-SGC-6688",
+        ):
+            _assign_patrol_person_display_only(
+                det,
+                camera_id="HC-02",
+                track_id="ptk0099:person",
+            )
+        self.assertEqual(det.tier, "identity")
+        self.assertEqual(det.worker_id, "p-SGC-6688")
+        self.assertEqual(det.worker_name, "Duncan")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -70,6 +70,30 @@ class DetectorNormalizeTests(unittest.TestCase):
     def test_bytetrack_max_age_constant(self) -> None:
         self.assertEqual(MODULE05_BYTETRACK_MAX_AGE, 5)
 
+    def test_track_id_not_used_as_worker_id(self) -> None:
+        row = {
+            "behavior": "person",
+            "track_id": "ptk0007:person",
+            "worker_id": "",
+            "confidence": 0.75,
+            "bbox": [100.0, 100.0, 200.0, 400.0],
+        }
+        det = format_module05_detection(row, self.FW, self.FH)
+        self.assertEqual(det["worker_id"], "")
+        self.assertEqual(det["id"], "")
+
+    def test_worker_id_preserved_over_track_id(self) -> None:
+        row = {
+            "behavior": "person",
+            "track_id": "ptk0007:person",
+            "worker_id": "sgc-00000042",
+            "confidence": 0.75,
+            "bbox": [100.0, 100.0, 200.0, 400.0],
+        }
+        det = format_module05_detection(row, self.FW, self.FH)
+        self.assertEqual(det["worker_id"], "sgc-00000042")
+        self.assertEqual(det["track_id"], "ptk0007:person")
+
 
 if __name__ == "__main__":
     unittest.main()

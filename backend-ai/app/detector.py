@@ -54,9 +54,29 @@ def denormalize_bbox(
     return [x1 * orig_w, y1 * orig_h, x2 * orig_w, y2 * orig_h]
 
 
+def _is_technical_track_worker_id(wid: str) -> bool:
+    """Mã ByteTrack — không dùng làm worker_id API."""
+    sl = wid.lower()
+    if sl.startswith("ptk"):
+        return True
+    if sl.endswith(":person"):
+        slot = sl.split(":", 1)[0]
+        if slot.startswith("p") and len(slot) > 1 and slot[1:].isdigit():
+            return True
+    return False
+
+
 def _resolve_worker_id(row: Mapping[str, Any]) -> str:
-    raw_id = row.get("id") or row.get("worker_id") or row.get("track_id") or ""
-    return str(raw_id).strip()
+    """Chỉ lấy mã nhân sự thật — không fallback track_id (ptk*:person)."""
+    for key in ("worker_id", "id"):
+        raw = row.get(key)
+        if raw is None:
+            continue
+        wid = str(raw).strip()
+        if not wid or wid == "unknown" or _is_technical_track_worker_id(wid):
+            continue
+        return wid
+    return ""
 
 
 def _resolve_label(row: Mapping[str, Any], worker_id: str) -> str:

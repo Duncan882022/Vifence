@@ -17,7 +17,10 @@ def is_patrol_gallery_id(worker_id: str | None) -> bool:
     wid = (worker_id or "").strip()
     if not wid or wid == "unknown" or is_sgc_worker_id(wid):
         return False
-    if wid.lower().startswith("p-"):
+    wl = wid.lower()
+    if wl.startswith(("pers-", "iden-")):
+        return False
+    if wl.startswith("p-"):
         return True
     try:
         from .patrol_identity_store import lookup_patrol_identity
@@ -114,15 +117,87 @@ def resolve_patrol_master_id(
     return tid or "unknown"
 
 
+def is_patrol_track_technical_id(worker_id: str | None) -> bool:
+    """True nếu là mã track ByteTrack — không phải định danh nhân sự."""
+    s = (worker_id or "").strip()
+    if not s:
+        return False
+    sl = s.lower()
+    if sl.startswith("ptk"):
+        return True
+    if sl.endswith(":person"):
+        slot = sl.split(":", 1)[0]
+        if slot.startswith("p") and len(slot) > 1 and slot[1:].isdigit():
+            return True
+    return False
+
+
+def resolve_patrol_gallery_id_for_worker(worker_id: str | None) -> str | None:
+    """pers/iden/sgc/alias → mã gallery p-* khi đã bind hoặc đã định danh SQLite."""
+    wid = (worker_id or "").strip()
+    if not wid or wid == "unknown" or is_patrol_track_technical_id(wid):
+        return None
+    if wid.lower().startswith("p-") and is_patrol_gallery_id(wid):
+        return wid
+    if wid.lower().startswith(("pers-", "iden-")):
+        try:
+            from .patrol import identity as patrol_identity
+            from .patrol_identity_store import lookup_gallery_worker, patrol_gallery_worker_id
+
+            person = patrol_identity.get_person(wid)
+            if person and person.get("status") == patrol_identity.STATUS_IDENTIFIED:
+                emp = str(person.get("employee_code") or "").strip()
+                if emp:
+                    return patrol_gallery_worker_id(emp)
+            gallery = lookup_gallery_worker(wid)
+            if gallery:
+                return gallery
+        except Exception:
+            pass
+        return None
+    try:
+        from .patrol_identity_store import lookup_gallery_worker
+
+        gallery = lookup_gallery_worker(wid)
+        if gallery:
+            return gallery
+    except Exception:
+        return None
+    return None
+
+
 def patrol_tier_label(worker_id: str | None) -> str:
     """
     Phân tier patrol person (chỉ áp dụng cho detection behavior=person):
-    - identity: gallery / profile đã xác minh
-    - person: đã phân biệt A≠B (sgc-* hoặc pers-* SQLite) nhưng chưa gallery
+    - identity: gallery / profile đã xác minh (p-*, pers identified, iden-*)
+    - person: đã phân biệt A≠B (sgc-* hoặc pers-* chưa gallery)
     - object: chưa đủ tiêu chí nhận diện
     """
     wid = (worker_id or "").strip()
-    if is_patrol_gallery_id(wid):
+    if not wid or wid == "unknown" or is_patrol_track_technical_id(wid):
+        return "object"
+    if wid.lower().startswith("pers-"):
+        try:
+            from .patrol import identity as patrol_identity
+
+            person = patrol_identity.get_person(wid)
+            if person:
+                if person.get("status") == patrol_identity.STATUS_IDENTIFIED:
+                    return "identity"
+                return "person"
+        except Exception:
+            pass
+        try:
+            from .patrol_identity_store import lookup_gallery_worker
+
+            if lookup_gallery_worker(wid):
+                return "identity"
+        except Exception:
+            pass
+        return "object"
+    if wid.lower().startswith("iden-"):
+        return "identity"
+    if resolve_patrol_gallery_id_for_worker(wid) or is_patrol_gallery_id(wid):
         return "identity"
     if is_patrol_iden_id(wid):
         return "identity"

@@ -10,7 +10,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.patrol_entity import resolve_patrol_dedup_stable_id, resolve_patrol_master_id  # noqa: E402
+from app.patrol_entity import (  # noqa: E402
+    is_patrol_track_technical_id,
+    patrol_tier_label,
+    resolve_patrol_dedup_stable_id,
+    resolve_patrol_gallery_id_for_worker,
+    resolve_patrol_master_id,
+)
 
 
 class PatrolEntitySgcCanonicalTests(unittest.TestCase):
@@ -50,6 +56,41 @@ class PatrolEntitySgcCanonicalTests(unittest.TestCase):
         with patch("app.patrol_identity_store.lookup_gallery_worker", return_value=None):
             mid2 = resolve_patrol_master_id("sgc-00000010", None, "p01:person")
         self.assertEqual(mid2, "sgc-00000010")
+
+    def test_track_technical_id_detection(self) -> None:
+        self.assertTrue(is_patrol_track_technical_id("ptk0007:person"))
+        self.assertTrue(is_patrol_track_technical_id("ptk0042"))
+        self.assertFalse(is_patrol_track_technical_id("sgc-00000042"))
+        self.assertFalse(is_patrol_track_technical_id("p-SGC-6688"))
+
+    def test_patrol_tier_label_rejects_track_id(self) -> None:
+        self.assertEqual(patrol_tier_label("ptk0007:person"), "object")
+
+    def test_patrol_tier_label_gallery(self) -> None:
+        bindings = {
+            "version": 1,
+            "by_gallery_worker": {
+                "p-SGC-6688": {
+                    "gallery_worker_id": "p-SGC-6688",
+                    "worker_name": "Duncan",
+                    "aliases": ["p-SGC-6688", "pers-0001"],
+                },
+            },
+            "alias_to_gallery": {
+                "p-SGC-6688": "p-SGC-6688",
+                "pers-0001": "p-SGC-6688",
+            },
+        }
+        with patch("app.patrol_identity_store._load", return_value=bindings):
+            self.assertEqual(patrol_tier_label("p-SGC-6688"), "identity")
+            self.assertEqual(patrol_tier_label("pers-0001"), "identity")
+            self.assertEqual(resolve_patrol_gallery_id_for_worker("pers-0001"), "p-SGC-6688")
+
+    def test_patrol_tier_label_sgc_is_person(self) -> None:
+        self.assertEqual(patrol_tier_label("sgc-00000042"), "person")
+
+    def test_patrol_tier_label_iden_is_identity(self) -> None:
+        self.assertEqual(patrol_tier_label("iden-0003"), "identity")
 
 
 if __name__ == "__main__":
