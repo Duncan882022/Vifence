@@ -17,6 +17,7 @@ import type { TrainingCamera } from '@/modules/module02-training/data/trainingCa
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { cn } from '@/utils/cn'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useTabletLandscape } from '@/hooks/useTabletLandscape'
 import { useAppStore } from '@/store/app.store'
 import {
   getPatrolMobileLiveSnapshot,
@@ -167,6 +168,9 @@ function PatrolKPIs({
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
   const isMobileLayout = useMediaQuery('(max-width: 1023px)')
+  const isTabletLandscape = useTabletLandscape()
+  /** Phone/tablet dọc + iPad ngang (height hẹp dù width ≥1024). */
+  const isCompactLayout = isMobileLayout || isTabletLandscape
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
@@ -288,20 +292,21 @@ export function Module05Page() {
         {/* Tier 2 + Tier 3 — scroll trang: stack dọc mobile, không ép max-h viewport */}
         <div className={cn(
           'flex flex-col gap-2 sm:gap-3 shrink-0',
-          isMobileLayout && 'pb-[env(safe-area-inset-bottom,0px)]',
+          isCompactLayout && 'pb-[env(safe-area-inset-bottom,0px)]',
         )}>
           {/* Tier 2 — Camera */}
           <div className={cn(
             'flex flex-col shrink-0',
-            tier2Open && (isMobileLayout ? 'min-h-0' : 'min-h-[min(52vh,560px)]'),
+            tier2Open && (isCompactLayout ? 'min-h-0' : 'min-h-[min(52vh,560px)]'),
           )}>
             <Panel
               title="Camera"
+              expandable={tier2Open}
               fit={!tier2Open}
               noPadding
-              overflowVisible={tier2Open && isMobileLayout}
+              overflowVisible={tier2Open && isCompactLayout}
               className={cn(
-                tier2Open && (isMobileLayout ? 'h-auto overflow-visible' : 'min-h-[min(52vh,560px)]'),
+                tier2Open && (isCompactLayout ? 'h-auto overflow-visible' : 'min-h-[min(52vh,560px)]'),
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -327,7 +332,7 @@ export function Module05Page() {
               {tier2Open && (
                 <div className={cn(
                   'flex flex-col w-full',
-                  isMobileLayout ? 'h-auto overflow-visible' : 'flex-1 min-h-0 overflow-hidden',
+                  isCompactLayout ? 'h-auto overflow-visible' : 'flex-1 min-h-0 overflow-hidden',
                 )}>
                   {cameraMode === 'live' ? (
                     <PatrolCameraPanel
@@ -336,7 +341,8 @@ export function Module05Page() {
                       onStreamCountChange={setActiveStreamCount}
                       cameras={patrolCamerasLive}
                       defaultCameraIds={patrolDefaultCameraIds}
-                      isMobileLayout={isMobileLayout}
+                      isCompactLayout={isCompactLayout}
+                      isTabletLandscape={isTabletLandscape}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}
@@ -365,14 +371,14 @@ export function Module05Page() {
           {/* Tier 3 — HEATMAP | SỰ KIỆN */}
           <div className={cn(
             'flex gap-2 sm:gap-3 flex-col lg:flex-row shrink-0',
-            !isMobileLayout && 'min-h-[min(36vh,400px)]',
+            !isCompactLayout && 'min-h-[min(36vh,400px)]',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[3]',
-                isMobileLayout
+                isCompactLayout
                   ? 'min-h-[min(42dvh,360px)] h-[min(42dvh,360px)]'
                   : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
               )}
@@ -401,7 +407,7 @@ export function Module05Page() {
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[2]',
-                isMobileLayout
+                isCompactLayout
                   ? 'min-h-[min(36dvh,320px)] h-[min(36dvh,320px)]'
                   : 'min-h-[min(28vh,300px)] h-[min(32vh,360px)]',
                 tier3Focus === 'events' && 'lg:flex-[3]',

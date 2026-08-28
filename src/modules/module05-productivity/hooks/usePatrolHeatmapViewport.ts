@@ -2,12 +2,14 @@
  * Breakpoint heatmap — iPhone / iPad / desktop / landscape.
  */
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useTabletLandscape } from '@/hooks/useTabletLandscape'
 
 export interface PatrolHeatmapViewport {
   isPhone: boolean
   isTablet: boolean
   isDesktop: boolean
   isLandscapeMobile: boolean
+  isTabletLandscape: boolean
   isCoarsePointer: boolean
   /** Chiều cao map trong panel nhúng (Tier 3) */
   embeddedMapClass: string
@@ -22,15 +24,16 @@ export function usePatrolHeatmapViewport(): PatrolHeatmapViewport {
   const isTablet = useMediaQuery('(min-width: 640px) and (max-width: 1023px)')
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const isLandscapeMobile = useMediaQuery('(max-width: 1023px) and (orientation: landscape)')
+  const isTabletLandscape = useTabletLandscape()
   const isCoarsePointer = useMediaQuery('(pointer: coarse)')
 
   const mapZoom = isPhone
     ? (isLandscapeMobile ? 17 : 16)
-    : isTablet
-      ? (isLandscapeMobile ? 17 : 16)
+    : isTablet || isTabletLandscape
+      ? (isLandscapeMobile || isTabletLandscape ? 17 : 16)
       : 17
 
-  const embeddedMapClass = isPhone || isTablet
+  const embeddedMapClass = isPhone || isTablet || isTabletLandscape
     ? 'min-h-[220px] h-full w-full supports-[height:100dvh]:min-h-[min(220px,38dvh)]'
     : 'min-h-[280px] h-full w-full'
 
@@ -45,10 +48,11 @@ export function usePatrolHeatmapViewport(): PatrolHeatmapViewport {
     isTablet,
     isDesktop,
     isLandscapeMobile,
+    isTabletLandscape,
     isCoarsePointer,
     embeddedMapClass,
     modalMapClass,
     mapZoom,
-    compactChrome: isPhone || isTablet || isCoarsePointer,
+    compactChrome: isPhone || isTablet || isTabletLandscape || isCoarsePointer,
   }
 }

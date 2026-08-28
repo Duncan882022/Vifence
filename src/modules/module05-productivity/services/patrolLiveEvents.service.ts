@@ -3,6 +3,7 @@ import {
   getPatrolHelmetGps,
   getPatrolHelmetGpsLastKnown,
 } from '@/services/patrolHelmetGpsBridge'
+import { fetchPatrol } from '@/services/patrolApiClient'
 import type { EventType, PatrolEvent } from '../data/patrolTypes'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
@@ -133,13 +134,89 @@ async function probePatrolApi(backendUrl: string): Promise<boolean> {
       headers: TUNNEL_HEADERS,
       mode: 'cors',
     })
-    const ok = res.ok
+    // 401 = route patrol đã deploy, chỉ thiếu JWT — không rơi legacy Contabo.
+    const ok = res.ok || res.status === 401
     patrolApiByBase.set(base, ok)
     return ok
   } catch {
     patrolApiByBase.set(base, false)
     return false
   }
+}
+
+interface HealthCameraRow {
+  stream_online?: boolean
+}
+
+/** /health công khai — nguồn đúng cho stream_online khi /patrol/metrics cần JWT. */
+export async function fetchPatrolHealthStreamMap(
+  cameraIds: readonly string[],
+  backendUrl: string,
+): Promise<Map<string, boolean>> {
+  const map = new Map<string, boolean>()
+  if (!backendUrl || cameraIds.length === 0) return map
+
+  try {
+    const res = await fetch(`${patrolApiBase(backendUrl)}/health`, {
+      headers: TUNNEL_HEADERS,
+      mode: 'cors',
+    })
+    if (!res.ok) return map
+    const data = await res.json() as { cameras?: Record<string, HealthCameraRow> }
+    for (const id of cameraIds) {
+      const row = data.cameras?.[id]
+      if (typeof row?.stream_online === 'boolean') {
+        map.set(id, row.stream_online)
+      }
+    }
+  } catch {
+    /* backend tạm không phản hồi — giữ map rỗng */
+  }
+  return map
+}
+
+function applyHealthStreamOnline(
+  snapshot: PatrolHelmetAggregateMetricsResponse,
+  healthMap: Map<string, boolean>,
+  cameraIds: readonly string[],
+): PatrolHelmetAggregateMetricsResponse {
+  if (healthMap.size === 0) return snapshot
+
+  const byId = new Map(snapshot.cameras.map(row => [row.camera_id, { ...row }]))
+  for (const id of cameraIds) {
+    const online = healthMap.get(id)
+    if (online === undefined) continue
+    const prev = byId.get(id) ?? emptyCameraMetrics(id)
+    byId.set(id, { ...prev, stream_online: online })
+  }
+
+  const cameras = cameraIds.map(id => byId.get(id) ?? emptyCameraMetrics(id))
+  const anyOnline = cameras.some(row => row.stream_online)
+  return {
+    ...snapshot,
+    cameras,
+    stream_online: anyOnline || snapshot.stream_online,
+  }
+}
+
+async function fetchPatrolMetricsWithAuth(
+  cameraIds: readonly string[],
+  backendUrl: string,
+): Promise<PatrolHelmetAggregateMetricsResponse | null> {
+  const hasPatrol = await probePatrolApi(backendUrl)
+  if (!hasPatrol) return null
+
+  const params = new URLSearchParams({ cameras: cameraIds.join(',') })
+  const raw = await fetchPatrol<Record<string, unknown>>(
+    `/patrol/metrics?${params.toString()}`,
+    { headers: TUNNEL_HEADERS },
+  )
+  if (!raw) return null
+
+  const cameras = Array.isArray(raw.cameras)
+    ? raw.cameras.map(row => normalizeCameraSlice(row as Record<string, unknown>))
+    : []
+  return normalizeMetricsResponse({ ...raw, cameras }) as unknown as PatrolHelmetAggregateMetricsResponse
 }
 
 /** Legacy Contabo: GET /events?camera_id=&date= */
@@ -181,12 +258,14 @@ async function fetchLegacyAggregateMetrics(
   cameraIds: readonly string[],
   backendUrl: string,
 ): Promise<PatrolHelmetAggregateMetricsResponse> {
-  const ids = cameraIds.filter(isPatrolHelmetCameraId)
+  const ids = cameraIds.filter(isPatrolMetricsCameraId)
   const cameras: PatrolHelmetCameraMetricsSlice[] = []
   let totalEvents = 0
 
   for (const id of ids) {
-    const events = await fetchLegacyHelmetEvents(id, backendUrl, 500)
+    const events = isPatrolHelmetCameraId(id)
+      ? await fetchLegacyHelmetEvents(id, backendUrl, 500)
+      : []
     totalEvents += events.length
     cameras.push(emptyCameraMetrics(id, events.length))
   }
@@ -208,23 +287,37 @@ export async function fetchPatrolHelmetMetrics(
 ): Promise<PatrolHelmetMetricsResponse | null> {
   if (!backendUrl || !isPatrolMetricsCameraId(cameraId)) return null
 
-  const hasPatrol = await probePatrolApi(backendUrl)
-  if (hasPatrol) {
-    const res = await fetch(`${patrolApiBase(backendUrl)}/patrol/${cameraId}/metrics`, {
-      headers: TUNNEL_HEADERS,
-      mode: 'cors',
-    })
-    if (!res.ok) return null
-    const raw = await res.json() as Record<string, unknown>
-    return normalizeMetricsResponse(raw) as unknown as PatrolHelmetMetricsResponse
+  const [healthMap, metrics] = await Promise.all([
+    fetchPatrolHealthStreamMap([cameraId], backendUrl),
+    fetchPatrolMetricsWithAuth([cameraId], backendUrl),
+  ])
+
+  const gps = cameraId === 'HC-02' ? getPatrolHelmetGps(cameraId) : null
+
+  if (metrics) {
+    const merged = applyHealthStreamOnline(metrics, healthMap, [cameraId])
+    const row = merged.cameras.find(c => c.camera_id === cameraId)
+    return {
+      camera_id: cameraId,
+      backend_reachable: merged.backend_reachable,
+      stream_online: row?.stream_online ?? merged.stream_online,
+      person_count: row?.person_count ?? 0,
+      identified_workers: row?.identified_workers ?? 0,
+      worker_names: merged.worker_names,
+      person_events_today: row?.person_events_today ?? 0,
+      gps_lat: row?.gps_lat ?? gps?.lat ?? null,
+      gps_lng: row?.gps_lng ?? gps?.lng ?? null,
+    }
   }
 
-  const events = await fetchLegacyHelmetEvents(cameraId, backendUrl, 500)
-  const gps = cameraId === 'HC-02' ? getPatrolHelmetGps(cameraId) : null
+  const events = isPatrolHelmetCameraId(cameraId)
+    ? await fetchLegacyHelmetEvents(cameraId, backendUrl, 500)
+    : []
+  const streamOnline = healthMap.get(cameraId) ?? false
   return {
     camera_id: cameraId,
     backend_reachable: true,
-    stream_online: false,
+    stream_online: streamOnline,
     person_count: 0,
     identified_workers: 0,
     worker_names: [],
@@ -241,22 +334,13 @@ export async function fetchPatrolHelmetAggregateMetrics(
   const ids = cameraIds.filter(isPatrolMetricsCameraId)
   if (!backendUrl || ids.length === 0) return null
 
-  const hasPatrol = await probePatrolApi(backendUrl)
-  if (hasPatrol) {
-    const params = new URLSearchParams({ cameras: ids.join(',') })
-    const res = await fetch(`${patrolApiBase(backendUrl)}/patrol/metrics?${params.toString()}`, {
-      headers: TUNNEL_HEADERS,
-      mode: 'cors',
-    })
-    if (!res.ok) return null
-    const raw = await res.json() as Record<string, unknown>
-    const cameras = Array.isArray(raw.cameras)
-      ? raw.cameras.map(row => normalizeCameraSlice(row as Record<string, unknown>))
-      : []
-    return normalizeMetricsResponse({ ...raw, cameras }) as unknown as PatrolHelmetAggregateMetricsResponse
-  }
+  const [healthMap, metrics] = await Promise.all([
+    fetchPatrolHealthStreamMap(ids, backendUrl),
+    fetchPatrolMetricsWithAuth(ids, backendUrl),
+  ])
 
-  return fetchLegacyAggregateMetrics(ids, backendUrl)
+  const base = metrics ?? await fetchLegacyAggregateMetrics(ids, backendUrl)
+  return applyHealthStreamOnline(base, healthMap, ids)
 }
 
 function buildSnapshotUrl(backendUrl: string, eventId: string, snapshotFile: string, versionTs?: number): string {
