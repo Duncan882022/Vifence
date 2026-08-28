@@ -98,6 +98,7 @@ export function PatrolDensityHeatmap({
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
     polygon: true,
+    density: true,
     helmet: true,
     flycam: true,
   })
@@ -357,6 +358,7 @@ export function PatrolDensityHeatmap({
           {viewport.isTabletLandscape && (
             <div className="flex items-center gap-1 shrink-0">
               <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+              <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
               <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
               <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
             </div>
@@ -366,6 +368,7 @@ export function PatrolDensityHeatmap({
         {!viewport.isTabletLandscape && (
           <div className="flex items-center gap-1 flex-wrap">
             <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+            <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
             <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
             <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
           </div>
@@ -387,7 +390,7 @@ export function PatrolDensityHeatmap({
           followLiveGps={hc02Online && hc02Live.hasLiveGps}
           liveGpsLat={hc02Online ? hc02Live.lat : null}
           liveGpsLng={hc02Online ? hc02Live.lng : null}
-          showDensity={false}
+          showDensity={layers.density}
           showRoute={layers.helmet}
           showHelmetMarkers={layers.helmet}
           showDroneMarkers={layers.flycam}
