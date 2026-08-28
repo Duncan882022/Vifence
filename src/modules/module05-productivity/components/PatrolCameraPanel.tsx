@@ -8,6 +8,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 const PATROL_SIDEBAR_LG = 'lg:w-[141px]'
 const PATROL_SIDEBAR_COMPACT = 'max-lg:landscape:w-[119px]'
 const PATROL_SIDEBAR_COMPACT_PX = 119
+const PATROL_SIDEBAR_COLLAPSED_PX = 24
 
 export interface PatrolCameraPanelProps {
   selectedId?: string
@@ -65,6 +66,8 @@ export function PatrolCameraPanel({
       sidebarOpenClass={PATROL_SIDEBAR_LG}
       sidebarCompactClass={PATROL_SIDEBAR_COMPACT}
       sidebarCompactPx={PATROL_SIDEBAR_COMPACT_PX}
+      sidebarCollapsedPx={PATROL_SIDEBAR_COLLAPSED_PX}
+      sidebarCollapsedClass="lg:w-6"
       sidebarThumbCompact
       sidebarThumbFullWidth
       aspectVideoGrid
