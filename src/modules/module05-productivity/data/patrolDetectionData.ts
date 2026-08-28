@@ -31,6 +31,9 @@ export interface DetectionDot {
   tier?: PatrolTier
   /** true = đang trong tầm nhìn camera (ACTIVE / vừa detect) */
   inCameraView?: boolean
+  /** Lượt gặp SQLite — khóa upsert chấm heatmap. */
+  presenceId?: number
+  presenceSeq?: number
 }
 
 /* ── Seeded LCG — deterministic, no Math.random() ───────────── */

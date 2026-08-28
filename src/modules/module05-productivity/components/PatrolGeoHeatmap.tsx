@@ -35,6 +35,7 @@ import {
   PATROL_HEATMAP_DOT_HEX,
   resolveDetectionDotTier,
 } from '../utils/patrolDetectionDotUi'
+import { patrolTierToken } from '../utils/patrolTierTokens'
 import type { RouteHistory } from '../services/usePatrolWebSocket'
 import type { CameraPositions } from '../services/usePatrolWebSocket'
 import {
@@ -198,12 +199,13 @@ function createDetectionDotIcon(
   const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
   const isObject = tier === 'object'
   const border = isObject
-    ? `1px solid rgba(15,23,42,${inCameraView ? 0.65 : 0.4})`
+    ? `1.5px dashed ${color}`
     : `1px solid rgba(255,255,255,${inCameraView ? 0.85 : 0.35})`
+  const fill = isObject ? 'transparent' : color
   const html = `
     <div style="
       width:${size}px;height:${size}px;border-radius:50%;
-      background:${color};
+      background:${fill};
       border:${border};
       box-shadow:0 0 ${inCameraView ? 3 : 1}px ${color}${inCameraView ? 'cc' : '44'};
       opacity:${opacity};
@@ -689,6 +691,8 @@ export function PatrolGeoHeatmap({
           {/* ── LAYER 2: Detection / Object Dots — nhỏ, FOV blink ── */}
           {showDetections && visibleDetectionDots.map(dot => {
             const inView = dot.inCameraView ?? false
+            const dotTier = resolveDetectionDotTier(dot)
+            const tierLabel = patrolTierToken(dotTier).label
             const dotZ = !showHelmetMarkers && !showDroneMarkers && !showCameras
               ? (inView ? 820 : 780)
               : (inView ? 420 : 380)
@@ -697,7 +701,7 @@ export function PatrolGeoHeatmap({
                 <Marker
                   key={dot.id}
                   position={dot.position}
-                  icon={createDetectionDotIcon(inView, resolveDetectionDotTier(dot))}
+                  icon={createDetectionDotIcon(inView, dotTier)}
                   zIndexOffset={dotZ}
                   eventHandlers={
                     onDetectionClick && (dot.objectId || dot.type === 'person')
@@ -709,7 +713,7 @@ export function PatrolGeoHeatmap({
                     <span style={{ fontSize: 10 }}>
                       {dot.cameraId.startsWith('DR-')
                         ? `Đếm người · ${dot.label || 'flycam'}`
-                        : (dot.label ? dot.label : 'Nhân sự')}
+                        : `${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
                       <br />
                       Camera: {dot.cameraId}
                       {dot.objectId ? ` · ${dot.objectId}` : ''}

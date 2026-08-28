@@ -28,6 +28,8 @@ export interface PatrolTierToken {
   /** Nền nhãn ROI trên video. */
   roiLabelBg: string
   roiLabelText: string
+  /** Màu chấm heatmap — cùng token với ROI / badge. */
+  heatmapDotHex: string
 }
 
 export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
@@ -40,6 +42,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     roiBorder: 'border border-dashed border-slate-300/90',
     roiLabelBg: 'bg-slate-900/95',
     roiLabelText: 'text-slate-100',
+    heatmapDotHex: '#94a3b8',
   },
   person: {
     label: 'Người',
@@ -50,6 +53,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     roiBorder: 'border-2 border-solid border-sky-400/95',
     roiLabelBg: 'bg-sky-900/95',
     roiLabelText: 'text-sky-50',
+    heatmapDotHex: '#38bdf8',
   },
   identity: {
     label: 'Định danh',
@@ -60,6 +64,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     roiBorder: 'border-2 border-solid border-violet-400/95',
     roiLabelBg: 'bg-violet-900/95',
     roiLabelText: 'text-violet-50',
+    heatmapDotHex: '#a78bfa',
   },
 }
 
