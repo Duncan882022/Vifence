@@ -2218,6 +2218,24 @@ def _attach_track_velocity(
     person_det.velocity = [round(vx, 2), round(vy, 2)]
 
 
+def _flycam_prescan_for_flight_mode(frame: np.ndarray, camera_id: str) -> None:
+    """YOLO nhanh trước khi chọn aerial/proximity — chỉ khi thiếu telemetry độ cao."""
+    if not _is_patrol_flycam(camera_id):
+        return
+    from .patrol_flight_mode import note_patrol_flycam_visual_scale
+
+    h, w = frame.shape[:2]
+    if h <= 0:
+        return
+    detector = _get_person_detector()
+    raw = detector.predict(frame, conf=_PERSON_CONF_FLYCAM)
+    boxes = [
+        (float(p.bbox[0]), float(p.bbox[1]), float(p.bbox[2]), float(p.bbox[3]))
+        for p in raw
+    ]
+    note_patrol_flycam_visual_scale(camera_id, boxes, h)
+
+
 def _build_patrol_flycam_aerial_result(
     frame: np.ndarray,
     camera_id: str,

@@ -29,7 +29,10 @@ import {
   suppressPatrolObjectOverlappingIdentified,
 } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import { resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
+import {
+  readPatrolFlightModeFromMetrics,
+  resolvePatrolFlycamGateFlags,
+} from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import { isPatrolMetricsCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
@@ -145,8 +148,8 @@ export function CameraVideoFeed({
     const frameW = vmsFeed.snapshot.width ?? 0
     const frameH = vmsFeed.snapshot.height ?? 0
     const patrolCam = isPatrolMetricsCameraId(cameraId)
-    const flightMode = (vmsFeed.snapshot.metrics as { ppe?: { flight_mode?: string } } | undefined)?.ppe?.flight_mode
-    if (cameraId.startsWith('DR-')) {
+    const flightMode = readPatrolFlightModeFromMetrics(vmsFeed.snapshot.metrics)
+    if (cameraId.startsWith('DR-') && flightMode) {
       setPatrolFlightMode(cameraId, flightMode)
     }
     const flycamGates = resolvePatrolFlycamGateFlags(cameraId, flightMode)
@@ -180,7 +183,14 @@ export function CameraVideoFeed({
       cameraId,
       suppressPatrolObjectOverlappingIdentified(mapped),
     )
-  }, [runPatrolHeatmapAnalyze, cameraId, vmsFeed.snapshot?.updated_at, vmsFeed.snapshot?.width, vmsFeed.snapshot?.height])
+  }, [
+    runPatrolHeatmapAnalyze,
+    cameraId,
+    vmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.width,
+    vmsFeed.snapshot?.height,
+    vmsFeed.snapshot?.metrics,
+  ])
 
   useEffect(() => {
     const video = videoRef.current
