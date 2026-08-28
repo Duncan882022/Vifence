@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
@@ -697,16 +697,18 @@ export function TrainingCameraPanel({
                 )}>
                   <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(false)}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
-                  title="Thu gọn danh sách camera"
-                  aria-expanded={sidebarOpen}
-                  aria-label="Thu gọn danh sách camera"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </button>
+                {!sidebarThumbCompact && (
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0"
+                    title="Thu gọn danh sách camera"
+                    aria-expanded={sidebarOpen}
+                    aria-label="Thu gọn danh sách camera"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                )}
               </div>
 
               <div className={cn(
@@ -758,6 +760,29 @@ export function TrainingCameraPanel({
                   ))}
                 </div>
               </div>
+
+              {sidebarThumbCompact && (
+                <div className={cn(
+                  'shrink-0 border-t border-[#1e2433] flex items-center justify-center',
+                  thumbMini ? 'py-0.5' : 'py-1',
+                )}>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    className={cn(
+                      'rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors',
+                      thumbMini ? 'p-0.5' : 'p-1',
+                    )}
+                    title="Thu gọn danh sách camera"
+                    aria-expanded={sidebarOpen}
+                    aria-label="Thu gọn danh sách camera"
+                  >
+                    {stackedMobile
+                      ? <ChevronDown className="w-3 h-3" />
+                      : <ChevronRight className="w-3 h-3" />}
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <div className={cn(
