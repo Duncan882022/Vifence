@@ -51,7 +51,7 @@ describe('createPatrolPlaybackFetchers', () => {
     const eventRecord = res.items.find(i => i.id === 'ev-1')
     expect(eventRecord).toBeDefined()
     expect(eventRecord?.type).toBe('event')
-    expect(eventRecord?.videoUrl).toContain('https://playback.test/get?')
+    expect(eventRecord?.videoUrl).toBeUndefined()
   })
 
   it('băng MediaMTX — luôn dựng /get qua playback base (bỏ url nội bộ MediaMTX)', async () => {

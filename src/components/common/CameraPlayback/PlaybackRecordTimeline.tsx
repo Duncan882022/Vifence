@@ -108,9 +108,9 @@ export function PlaybackRecordTimeline({
               return (
                 <div
                   key={record.id}
-                  className="absolute top-0 flex flex-col items-start group cursor-pointer z-20 pointer-events-auto"
+                  className="absolute top-0 flex flex-col items-start z-10"
                   style={{ left: `${left}px` }}
-                  onClick={() => onSelectRecord(record, record.seekSec ?? 0)}
+                  title={record.name}
                 >
                   {record.thumbnailUrl ? (
                     <img
@@ -123,7 +123,7 @@ export function PlaybackRecordTimeline({
                       <Camera className="w-2.5 h-2.5 text-white/20" />
                     </div>
                   )}
-                  <div className="w-px h-6 bg-primary/30 group-hover:bg-primary/60 transition-opacity" />
+                  <div className="w-px h-6 bg-primary/30" />
                 </div>
               )
             })}

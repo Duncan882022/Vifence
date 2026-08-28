@@ -1,5 +1,6 @@
 /**
- * Playback tuần tra — băng MediaMTX + sự kiện patrol trong ngày.
+ * Playback tuần tra — băng MediaMTX (xem lại camera).
+ * Sự kiện patrol chỉ là marker thumbnail trên timeline, không phát video.
  *
  *   GET /list?path=hc-02&start=&end=
  *   GET /get?path=hc-02&start=<ISO8601>&duration=<giây>
@@ -7,7 +8,6 @@
 import dayjs from 'dayjs'
 import { formatVnDate, formatVnDateOffsetDays } from '@/utils/vnDateTime'
 import type {
-  CameraDetection,
   CameraPlaybackRecord,
   CameraDetectionsResponse,
   CameraPlaybackRecordsResponse,
@@ -25,7 +25,7 @@ interface MediaMtxSegment {
 /** Đoạn ngắn hơn ngần này thường là mẩu vụn lúc nguồn chập chờn. */
 const MIN_SEGMENT_SEC = 3
 
-/** Clip quanh thời điểm sự kiện khi bấm từ tab Sự kiện. */
+/** Clip sự kiện — chỉ Module 03 ATLĐ; Module 05 không dùng cho playback. */
 export const PATROL_EVENT_CLIP_SEC = 30
 
 /** Làm mới timeline khi đang ghi — hiện block xanh mới. */
@@ -92,23 +92,15 @@ function patrolEventsForCameraDay(
   })
 }
 
-function patrolEventToRecord(
-  ev: PatrolEvent,
-  base: string,
-  path: string,
-): CameraPlaybackRecord {
-  const at = eventInstant(ev)
+function patrolEventToMarker(ev: PatrolEvent): CameraPlaybackRecord {
   const started = dayjs(ev.startedAt)
-  const ended = ev.endedAt ? dayjs(ev.endedAt) : started.add(PATROL_EVENT_CLIP_SEC, 'second')
+  const ended = ev.endedAt ? dayjs(ev.endedAt) : started.add(1, 'minute')
   return {
     id: ev.id,
     name: ev.violationLabel?.trim() || ev.objectLabel?.trim() || 'Sự kiện tuần tra',
     startTime: started.toISOString(),
     endTime: ended.toISOString(),
     type: 'event',
-    videoUrl: buildGetUrl(base, path, at, PATROL_EVENT_CLIP_SEC),
-    seekSec: 0,
-    clipDurationSec: PATROL_EVENT_CLIP_SEC,
     thumbnailUrl: ev.snapshotUrl,
   }
 }
@@ -178,8 +170,8 @@ export interface PatrolPlaybackFetchers {
 }
 
 /**
- * Factory gắn sự kiện patrol — Module 05 only.
- * `fetchRecords` trả băng liên tục + chấm sự kiện; id sự kiện khớp tab Sự kiện.
+ * Factory playback tuần tra — Module 05 only.
+ * `fetchRecords`: băng liên tục (phát video) + marker sự kiện (thumbnail timeline).
  */
 export function createPatrolPlaybackFetchers(
   patrolEvents: PatrolEvent[],
@@ -195,30 +187,16 @@ export function createPatrolPlaybackFetchers(
       const segments = await fetchMediaMtxSegments(base, path, listStart, listEnd)
 
       const continuous = segmentsToRecords(cameraId, base, path, segments, from, to)
-      const eventItems = patrolEventsForCameraDay(patrolEvents, cameraId, dayKey)
-        .map(ev => patrolEventToRecord(ev, base, path))
+      const markers = patrolEventsForCameraDay(patrolEvents, cameraId, dayKey)
+        .map(ev => patrolEventToMarker(ev))
 
-      const items = [...continuous, ...eventItems].sort(
+      const items = [...continuous, ...markers].sort(
         (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
       )
       return { items }
     },
 
-    fetchDetections: async (recordId: string) => {
-      const ev = patrolEvents.find(e => e.id === recordId)
-      if (!ev) return { items: [] }
-
-      const items: CameraDetection[] = [
-        {
-          id: `${recordId}-patrol`,
-          label: ev.type,
-          confidenceScore: Math.round((ev.confidence ?? 0) * 100),
-          detectionResult: ev.violationLabel || ev.objectLabel,
-          createdAt: eventInstant(ev),
-        },
-      ]
-      return { items }
-    },
+    fetchDetections: async () => ({ items: [] }),
   }
 }
 

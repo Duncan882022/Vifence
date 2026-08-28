@@ -318,9 +318,6 @@ export function Module05Page() {
 
   const handleSelectEvent = (ev: PatrolEvent) => {
     setSelectedEventId(ev.id)
-    setSelectedCamId(ev.cameraId)
-    setCameraMode('playback')
-    setTier2Open(true)
   }
 
   const handlePlaybackRecordsLoaded = useCallback((
@@ -372,8 +369,6 @@ export function Module05Page() {
           maxDate={patrolToday}
           minDate={patrolMinDate}
           onDateChange={setPatrolViewDate}
-          selectedRecordId={selectedEventId}
-          onSelectRecord={() => setSelectedEventId(null)}
           onRecordsLoaded={handlePlaybackRecordsLoaded}
           filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
           filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}

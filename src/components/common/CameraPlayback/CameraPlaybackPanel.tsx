@@ -15,7 +15,6 @@ import {
   getLocationFilterTabs,
   groupCamerasByLocation,
   resolvePlaybackVideoUrl,
-  resolvePlaybackTarget,
 } from '@/utils/cameraPlaybackUi'
 import {
   fetchCameraRecords,
@@ -41,7 +40,7 @@ function pickDefaultPlaybackRecord(
 ): CameraPlaybackRecord | null {
   if (items.length === 0) return null
   if (prefer === 'continuous') {
-    return items.find(item => item.type === 'continuous' || item.type === 'continuous_event') ?? items[0]
+    return items.find(item => item.type === 'continuous' || item.type === 'continuous_event') ?? null
   }
   return items.find(item => item.type === 'event') ?? items[0]
 }
@@ -189,7 +188,8 @@ export function CameraPlaybackPanel({
     const syncId = selectedRecordIdRef.current
     const initId = initialRecordIdRef.current
     const fromEventPanel = syncId
-      ? items.find(item => item.id === syncId)
+      ? items.find(item => item.id === syncId
+        && (preferRecordType !== 'continuous' || item.type !== 'event'))
       : undefined
     const fromInitial = initId
       ? items.find(item => item.id === initId)
@@ -265,14 +265,14 @@ export function CameraPlaybackPanel({
 
     if (!selectedRecordId) return
     const match = recordsRef.current.find(item => item.id === selectedRecordId)
-    if (!match) return
+    if (!match || (preferRecordType === 'continuous' && match.type === 'event')) return
     setSelectedRecord(match)
     setSeekSec(match.seekSec ?? 0)
     setProgress(0)
     setCurrentTime(0)
     setIsPlaying(false)
     setPlaybackError(null)
-  }, [selectedRecordId])
+  }, [selectedRecordId, preferRecordType])
 
   useEffect(() => {
     if (!selectedRecord?.id) {
@@ -293,13 +293,12 @@ export function CameraPlaybackPanel({
       })
   }, [selectedRecord?.id, fetchDetections])
 
-  const playbackTarget = useMemo(
-    () => resolvePlaybackTarget(selectedRecord, records),
-    [selectedRecord, records],
+  const playbackTarget = selectedRecord
+  const videoSrc = resolvePlaybackVideoUrl(
+    playbackTarget?.type === 'event' ? null : playbackTarget,
   )
-  const videoSrc = resolvePlaybackVideoUrl(playbackTarget)
-  const playbackSeekSec = playbackTarget?.seekSec ?? seekSec
-  const isEventClip = selectedRecord?.type === 'event' && playbackTarget?.type === 'event'
+  const playbackSeekSec = seekSec
+  const isEventClip = selectedRecord?.type === 'event'
   const eventSeekSec = selectedRecord?.seekSec ?? 0
   const eventClipSec = selectedRecord?.clipDurationSec ?? EVENT_PLAYBACK_CLIP_SEC
 
@@ -398,6 +397,7 @@ export function CameraPlaybackPanel({
   }
 
   const handleSelectRecord = useCallback((record: CameraPlaybackRecord, seek = 0) => {
+    if (record.type === 'event') return
     setSelectedRecord(record)
     setSeekSec(seek)
     setProgress(0)
@@ -466,7 +466,10 @@ export function CameraPlaybackPanel({
   }
 
   const selectedIds = [activeCam.id]
-  const eventCount = records.filter(r => r.type === 'event').length
+  const continuousCount = records.filter(
+    r => r.type === 'continuous' || r.type === 'continuous_event',
+  ).length
+  const markerCount = records.filter(r => r.type === 'event').length
 
   return (
     <CameraPanelShell
@@ -483,9 +486,17 @@ export function CameraPlaybackPanel({
       sidebarGroups={sidebarGroups}
       sidebarSummary={(
         <>
-          <span className="text-primary font-semibold">{eventCount || records.length}</span>
+          <span className="text-primary font-semibold">{continuousCount}</span>
           {' '}
-          bản ghi
+          đoạn băng
+          {markerCount > 0 && (
+            <>
+              {' · '}
+              <span className="text-muted-foreground">{markerCount}</span>
+              {' '}
+              sự kiện
+            </>
+          )}
         </>
       )}
       sidebarFooter={(
