@@ -36,6 +36,21 @@ class PatrolGpsSimTests(unittest.TestCase):
     def test_site_center_fallback(self) -> None:
         self.assertEqual(patrol_site_center_fallback(), PATROL_SITE_CENTER)
 
+    def test_resolve_observation_gps_without_live_fix(self) -> None:
+        from app.patrol_gps_sim import resolve_patrol_observation_gps
+
+        lat, lng = resolve_patrol_observation_gps("HC-99")
+        self.assertEqual((lat, lng), PATROL_SITE_CENTER)
+
+    def test_resolve_observation_gps_uses_live_fix(self) -> None:
+        from app.patrol_gps_sim import resolve_patrol_observation_gps
+        from app.patrol_runtime import update_patrol_gps
+
+        update_patrol_gps("HC-01", 21.0285, 105.8542)
+        lat, lng = resolve_patrol_observation_gps("HC-01")
+        self.assertTrue(is_point_in_site(lat, lng))
+        self.assertEqual((lat, lng), PATROL_SITE_CENTER)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -564,11 +564,20 @@ def observe_person_face(
     """
     ts = now or time.time()
     try:
-        from ..patrol_runtime import get_patrol_gps
+        from ..patrol_gps_sim import (
+            patrol_site_center_fallback,
+            resolve_patrol_observation_gps,
+        )
 
-        gps_lat, gps_lng = get_patrol_gps(camera_id) if camera_id else (None, None)
+        gps_lat, gps_lng = (
+            resolve_patrol_observation_gps(camera_id)
+            if camera_id
+            else patrol_site_center_fallback()
+        )
     except Exception:
-        gps_lat, gps_lng = None, None
+        from ..patrol_gps_sim import patrol_site_center_fallback
+
+        gps_lat, gps_lng = patrol_site_center_fallback()
     pers_id, _ = identity.observe_face(
         embedding, quality=quality, camera_id=camera_id, now=ts
     )

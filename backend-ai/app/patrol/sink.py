@@ -417,13 +417,10 @@ def _stash_stale(
         del slots[:-24]
 
 
-def _resolve_observation_gps(camera_id: str) -> tuple[float | None, float | None]:
-    try:
-        from ..patrol_runtime import get_patrol_gps
+def _resolve_observation_gps(camera_id: str) -> tuple[float, float]:
+    from ..patrol_gps_sim import resolve_patrol_observation_gps
 
-        return get_patrol_gps(camera_id)
-    except Exception:
-        return None, None
+    return resolve_patrol_observation_gps(camera_id)
 
 
 def _bind_sgc_to_person(sgc_id: str, pers_id: str) -> None:
