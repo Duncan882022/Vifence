@@ -98,29 +98,27 @@ function LayerToggle({
   color,
   onClick,
   children,
-  compact,
 }: {
   active: boolean
   color: string
   onClick: () => void
   children: React.ReactNode
-  compact?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1 rounded font-medium transition-all border shrink-0',
-        compact ? 'px-2.5 py-1 text-[10px] min-h-[28px]' : 'px-2 py-0.5 text-[9px]',
+        'inline-flex items-center gap-0.5 rounded font-semibold transition-all border shrink-0',
+        'px-1.5 py-0.5 text-[8px] leading-none tracking-tight',
         active
           ? 'text-white border-transparent'
-          : 'bg-transparent text-[#475569] border-[#334155] hover:border-[#475569]',
+          : 'bg-transparent text-[#64748b] border-[#334155] hover:border-[#475569] hover:text-[#94a3b8]',
       )}
       style={active ? { background: color, borderColor: color } : {}}
     >
       <span
-        className={cn('w-1.5 h-1.5 rounded-full shrink-0 transition-all', active ? 'opacity-100' : 'opacity-30')}
+        className={cn('w-1 h-1 rounded-full shrink-0', active ? 'opacity-100' : 'opacity-40')}
         style={{ background: active ? '#fff' : color }}
       />
       {children}
@@ -370,18 +368,15 @@ export function PatrolDensityHeatmap({
 
   const mapBody = (
     <>
-      <div className={cn(
-        'shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3',
-        viewport.compactChrome ? 'py-1' : 'py-1.5',
-      )}>
+      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 py-0.5">
         <div className={cn(
-          'flex items-center gap-1 flex-wrap',
+          'flex items-center gap-0.5 flex-wrap',
           viewport.isTabletLandscape && 'justify-end',
         )}>
-          <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
+          <LayerToggle active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+          <LayerToggle active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
+          <LayerToggle active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
+          <LayerToggle active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
         </div>
       </div>
 
