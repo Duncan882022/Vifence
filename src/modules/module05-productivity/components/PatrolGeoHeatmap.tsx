@@ -194,20 +194,21 @@ function createDetectionDotIcon(
   tier: ReturnType<typeof resolveDetectionDotTier>,
 ): L.DivIcon {
   const color = PATROL_HEATMAP_DOT_HEX[tier]
-  const size = 7
+  const size = 9
   const anim = inCameraView ? 'animation:patrol-dot-blink 1.15s ease-in-out infinite;' : ''
   const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
   const isObject = tier === 'object'
   const border = isObject
-    ? `1.5px dashed ${color}`
-    : `1px solid rgba(255,255,255,${inCameraView ? 0.85 : 0.35})`
+    ? `2px dashed ${color}`
+    : `2px solid rgba(255,255,255,${inCameraView ? 0.95 : 0.7})`
   const fill = isObject ? 'transparent' : color
+  const glow = inCameraView ? 6 : 4
   const html = `
     <div style="
       width:${size}px;height:${size}px;border-radius:50%;
       background:${fill};
       border:${border};
-      box-shadow:0 0 ${inCameraView ? 3 : 1}px ${color}${inCameraView ? 'cc' : '44'};
+      box-shadow:0 0 ${glow}px ${color},0 0 1px rgba(0,0,0,0.85);
       opacity:${opacity};
       ${anim}
     "></div>`

@@ -89,15 +89,27 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].position[0]).toBeGreaterThan(startLat + 0.0001)
   })
 
-  it('hai presence cùng người khác lượt → hai chấm', () => {
+  it('hai presence cùng người khác lượt → một chấm (lượt mới nhất)', () => {
     const dots = buildPatrolPresenceHeatmapDots([
-      makePresence({ id: 1, presenceSeq: 1, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1] }),
+      makePresence({ id: 1, presenceSeq: 1, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1], endedAt: 1_700_000_010 }),
       makePresence({
         id: 2,
         presenceSeq: 2,
         gpsLat: PATROL_SITE_CENTER[0] + 0.0002,
         gpsLng: PATROL_SITE_CENTER[1] + 0.0002,
+        endedAt: 1_700_000_030,
       }),
+    ])
+    expect(dots).toHaveLength(1)
+    expect(dots[0].id).toBe('entity-pers-0001')
+    expect(dots[0].presenceSeq).toBe(2)
+    expect(dots[0].position[0]).toBeGreaterThan(PATROL_SITE_CENTER[0] + 0.0001)
+  })
+
+  it('hai người khác subjectId → hai chấm', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 1, subjectId: 'pers-0001' }),
+      makePresence({ id: 2, subjectId: 'pers-0002', displayName: 'pers-0002' }),
     ])
     expect(dots).toHaveLength(2)
     expect(dots[0].id).not.toBe(dots[1].id)

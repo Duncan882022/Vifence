@@ -1,5 +1,5 @@
 /**
- * Chấm bản đồ tuần tra — 1 chấm / qualified presence (L#), upsert tại chỗ như sự kiện.
+ * Chấm bản đồ tuần tra — 1 chấm / định danh (entity), gộp nhiều lượt L# cùng người.
  * Ba tầng: Đối tượng (obj-*) · Người · Định danh — cần includeUnassigned cho obj.
  */
 import type { DetectionDot } from '../data/patrolDetectionData'
@@ -12,10 +12,13 @@ import { isPatrolDroneCameraId } from '../data/patrolDrones'
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { resolvePatrolDetectionMapPosition } from './patrolDetectionMapOffset'
+import { resolveDetectionDotTier } from './patrolDetectionDotUi'
 import { isPatrolHeatmapEligibleEvent } from './patrolPatrolCounts'
 import {
+  resolvePatrolCanonicalEntityKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
+import { higherPatrolTier } from './patrolTierTokens'
 import {
   getPatrolManualIdentityForSgc,
   isPatrolManuallyIdentified,
@@ -130,7 +133,24 @@ export function filterRecentPresences(
   })
 }
 
-/** Một chấm / qualified presence — id ổn định, GPS end upsert như sự kiện. */
+function resolvePresenceEntityKey(presence: PatrolDayPresence): string {
+  return resolvePatrolCanonicalEntityKey({
+    objectId: presence.subjectId,
+    objectLabel: presence.displayName,
+  })
+}
+
+function shouldReplacePresenceDot(prev: DetectionDot, next: DetectionDot): boolean {
+  const prevSeen = prev.lastSeenAt ?? 0
+  const nextSeen = next.lastSeenAt ?? 0
+  if (nextSeen > prevSeen) return true
+  if (nextSeen < prevSeen) return false
+  const prevTier = resolveDetectionDotTier(prev)
+  const nextTier = resolveDetectionDotTier(next)
+  return higherPatrolTier(nextTier, prevTier) !== prevTier
+}
+
+/** Một chấm / định danh (entity) — gộp nhiều lượt L# cùng người, GPS lượt mới nhất. */
 export function buildPatrolPresenceHeatmapDots(
   presences: PatrolDayPresence[],
   opts?: {
@@ -150,7 +170,9 @@ export function buildPatrolPresenceHeatmapDots(
     scoped = scoped.filter(p => tierEligibleStandard(p.tier))
   }
 
-  return scoped.map(presence => {
+  const byEntity = new Map<string, DetectionDot>()
+
+  for (const presence of scoped) {
     const lastSeen = presence.endedAt * 1000
     const recent = now - lastSeen <= PATROL_LIVE_RECENT_MS
     const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
@@ -166,9 +188,10 @@ export function buildPatrolPresenceHeatmapDots(
       primaryCam,
       opts?.flightModeByCamera?.[primaryCam],
     )
+    const entityKey = resolvePresenceEntityKey(presence)
 
-    return {
-      id: `presence-${presence.id}`,
+    const dot: DetectionDot = {
+      id: `entity-${entityKey}`,
       type: 'person',
       position: [lat, lng],
       zoneId: presence.zoneId || 'ZONE_SITE',
@@ -186,7 +209,13 @@ export function buildPatrolPresenceHeatmapDots(
       presenceId: presence.id,
       presenceSeq: presence.presenceSeq,
     }
-  })
+
+    const prev = byEntity.get(entityKey)
+    if (prev && !shouldReplacePresenceDot(prev, dot)) continue
+    byEntity.set(entityKey, dot)
+  }
+
+  return [...byEntity.values()]
 }
 
 export interface PatrolHeatmapDeviceLayers {
