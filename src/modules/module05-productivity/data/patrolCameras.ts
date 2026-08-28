@@ -124,6 +124,7 @@ export function applyPatrolCameraStreamStatus(
   cameras: TrainingCamera[],
   perCamera: PatrolHelmetCameraMetricsSlice[],
   hc02MobileOnline = false,
+  framesLiveById?: ReadonlyMap<string, boolean>,
 ): TrainingCamera[] {
   const onlineById = new Map<string, boolean>()
   for (const row of perCamera) {
@@ -133,11 +134,13 @@ export function applyPatrolCameraStreamStatus(
 
   return cameras.map(cam => {
     const reported = onlineById.get(cam.id)
-    const online = reported ?? false
+    const framesLive = framesLiveById?.get(cam.id) ?? false
+    const online = framesLive || (reported ?? false)
     return {
       ...cam,
       status: online ? 'online' as const : 'offline' as const,
-      streamOfflineConfirmed: reported === false,
+      framesLive,
+      streamOfflineConfirmed: reported === false && !framesLive,
     }
   })
 }

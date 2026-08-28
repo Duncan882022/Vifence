@@ -60,4 +60,26 @@ describe('applyPatrolCameraStreamStatus', () => {
     expect(row.status).toBe('online')
     expect(row.streamOfflineConfirmed).toBe(false)
   })
+
+  it('video đang phát → badge LIVE dù backend báo offline', () => {
+    const frames = new Map([['HC-01', true]])
+    const [row] = applyPatrolCameraStreamStatus(
+      [cam('HC-01')],
+      [slice('HC-01', false)],
+      false,
+      frames,
+    )
+    expect(row.status).toBe('online')
+    expect(row.framesLive).toBe(true)
+    expect(row.streamOfflineConfirmed).toBe(false)
+  })
+
+  it('backend offline + không có hình → vẫn khẳng định offline', () => {
+    const [row] = applyPatrolCameraStreamStatus(
+      [cam('HC-01')],
+      [slice('HC-01', false)],
+    )
+    expect(row.status).toBe('offline')
+    expect(row.streamOfflineConfirmed).toBe(true)
+  })
 })
