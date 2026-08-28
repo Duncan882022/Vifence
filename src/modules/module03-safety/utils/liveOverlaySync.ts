@@ -1,3 +1,4 @@
+import { clearPatrolPersonRoiEngine } from '@/modules/module05-productivity/personRoi/patrolPersonRoiEngine'
 import type { TrackLockConfig } from './bboxTrackLock'
 import type { VmsDetectionSnapshot } from '../services/vmsDetections.service'
 
@@ -32,6 +33,17 @@ export function bumpVmsOverlaySceneEpoch(cameraId: string): void {
   const next = (sceneEpochByCamera.get(cameraId) ?? 0) + 1
   sceneEpochByCamera.set(cameraId, next)
   lastPtsByCamera.delete(cameraId)
+}
+
+/**
+ * Xóa toàn bộ nét vẽ overlay của frame trước — gọi ngay trước khi áp snapshot mới
+ * (WebSocket `onmessage` / HTTP poll). Tương đương `ctx.clearRect` trên canvas JSMpeg:
+ * Kalman, EMA và track-lock không được giữ bbox cũ khi camera đã lia khung hình.
+ */
+export function clearVmsDetectionOverlayFrame(cameraId: string): void {
+  if (!cameraId) return
+  clearPatrolPersonRoiEngine(cameraId)
+  bumpVmsOverlaySceneEpoch(cameraId)
 }
 
 function detectSceneEpochBump(cameraId: string, pts: number): number {

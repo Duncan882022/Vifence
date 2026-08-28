@@ -245,6 +245,7 @@ export interface VmsDetectionPollerOptions {
   backendUrl?: string
   intervalMs?: number
   onSnapshot: (snapshot: VmsDetectionSnapshot) => void
+  onBeforeSnapshot?: () => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
 }
 
@@ -254,6 +255,7 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
     backendUrl = getVmsBackendUrl(),
     intervalMs = 450,
     onSnapshot,
+    onBeforeSnapshot,
     onStatusChange,
   } = options
 
@@ -289,6 +291,7 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')
+      onBeforeSnapshot?.()
       onSnapshot(snapshot)
       schedule(intervalMs)
     } catch (err) {

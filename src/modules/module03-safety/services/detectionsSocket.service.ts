@@ -21,6 +21,8 @@ export interface DetectionsFeedOptions {
   cameraId: string
   backendUrl?: string
   onSnapshot: (snapshot: VmsDetectionSnapshot) => void
+  /** Xóa overlay frame cũ — gọi trước `onSnapshot` mỗi lần nhận detections. */
+  onBeforeSnapshot?: () => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
   onTransportChange?: (transport: DetectionsTransport) => void
   /** Nhịp poll khi phải fallback (ms). */
@@ -68,6 +70,7 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
     cameraId,
     backendUrl = getVmsBackendUrl(),
     onSnapshot,
+    onBeforeSnapshot,
     onStatusChange,
     onTransportChange,
     pollIntervalMs = 450,
@@ -90,6 +93,7 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
       backendUrl,
       intervalMs: pollIntervalMs,
       onSnapshot,
+      onBeforeSnapshot,
       onStatusChange,
     })
   }
@@ -164,6 +168,8 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
         if (type === 'heartbeat') return
         if (type !== 'detections') return
 
+        // Xóa hết bbox frame trước — tránh hộp đứng yên trên nền khi camera lia.
+        onBeforeSnapshot?.()
         onSnapshot(normalizeVmsDetectionSnapshot(data, cameraId))
         onStatusChange('connected')
       } catch {

@@ -9,6 +9,7 @@ import {
   isVmsLiveCamera,
   type VmsDetectionSnapshot,
 } from '../services/vmsDetections.service'
+import { clearVmsDetectionOverlayFrame } from '../utils/liveOverlaySync'
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 
 export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDetectionFeed {
@@ -34,6 +35,7 @@ export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDete
     feedRef.current = createDetectionsFeed({
       cameraId,
       backendUrl: getVmsBackendUrl(),
+      onBeforeSnapshot: () => clearVmsDetectionOverlayFrame(cameraId),
       onSnapshot: setSnapshot,
       onStatusChange: (next, msg) => {
         setStatus(next)
