@@ -36,6 +36,7 @@ import {
   buildPatrolPresenceHeatmapDots,
   filterPatrolHeatmapDotsByDevice,
   mergePatrolHeatmapDetectionDots,
+  resolveHeatmapDotMergeKey,
 } from '../utils/patrolDayHeatmapDots'
 import {
   getHeatmapPersonDots,
@@ -371,6 +372,7 @@ export function PatrolDensityHeatmap({
       const inCameraView = camOnline && Boolean(dot.inCameraView)
       return {
         ...dot,
+        objectId: resolveHeatmapDotMergeKey(dot),
         inCameraView,
         opacity: inCameraView
           ? DETECTION_DOT_OPACITY_IN_VIEW
@@ -378,7 +380,13 @@ export function PatrolDensityHeatmap({
       }
     })
 
-    let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots])
+    /* Presences API = nguồn ngày — tránh 2 chấm cùng người (presence + registry). */
+    let merged: typeof presenceDots
+    if (presences.length > 0) {
+      merged = presenceDots
+    } else {
+      merged = mergePatrolHeatmapDetectionDots([registryDots])
+    }
 
     if (merged.length === 0 && patrolEvents.length > 0) {
       let eventDots = buildPatrolDayHeatmapDots(patrolEvents, {

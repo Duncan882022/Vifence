@@ -7,6 +7,7 @@ import {
   filterRecentPatrolWorkerEvents,
   filterRecentPresences,
   mergePatrolHeatmapDetectionDots,
+  resolveHeatmapDotMergeKey,
 } from './patrolDayHeatmapDots'
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
@@ -187,6 +188,21 @@ describe('filterPatrolHeatmapDotsByDevice', () => {
 })
 
 describe('mergePatrolHeatmapDetectionDots', () => {
+  it('presences + registry cùng người → merge key trùng', () => {
+    const presence = buildPatrolPresenceHeatmapDots([makePresence({ subjectId: 'pers-0001' })])[0]
+    const registry: DetectionDot = {
+      id: 'pin-pers-0001',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-01',
+      confidence: 1,
+      objectId: 'pers-0001',
+      lastSeenAt: 500,
+    }
+    expect(resolveHeatmapDotMergeKey(presence)).toBe(resolveHeatmapDotMergeKey(registry))
+  })
+
   it('gộp theo objectId — ưu tiên inCameraView', () => {
     const live: DetectionDot = {
       id: 'pin-pers-0001',

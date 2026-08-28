@@ -52,9 +52,9 @@ function presencePosition(
   helmetHeadings?: Record<string, number | null | undefined>,
 ): [number, number] {
   const { lat, lng } = resolvePresenceGps(presence)
-  const { cameraId, id: presenceId } = presence
-  const offsetSeed = `presence-${presenceId}`
-  const primaryCam = cameraId || presence.sourceCameras[0] || ''
+  const entityKey = resolvePresenceEntityKey(presence)
+  const offsetSeed = resolveHeatmapEntityMasterId(entityKey).toLowerCase()
+  const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
   const helmetPos = primaryCam ? helmetPositions?.[primaryCam] : undefined
   const heading = primaryCam ? helmetHeadings?.[primaryCam] : undefined
 
@@ -153,6 +153,8 @@ export function buildPatrolPresenceHeatmapDots(
   }
 
   const built = scoped.map(presence => {
+    const entityKey = resolvePresenceEntityKey(presence)
+    const masterId = resolveHeatmapEntityMasterId(entityKey)
     const lastSeen = presence.endedAt * 1000
     const recent = now - lastSeen <= PATROL_LIVE_RECENT_MS
     const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
@@ -176,9 +178,9 @@ export function buildPatrolPresenceHeatmapDots(
       zoneId: presence.zoneId || 'ZONE_SITE',
       cameraId: primaryCam,
       confidence: 1,
-      label: presence.displayName?.trim() || presence.subjectId,
+      label: presence.displayName?.trim() || masterId,
       lastSeenAt: lastSeen,
-      objectId: presence.subjectId,
+      objectId: masterId,
       tier,
       verified,
       inCameraView,
@@ -199,17 +201,24 @@ export interface PatrolHeatmapDeviceLayers {
   flycam: boolean
 }
 
-function resolveHeatmapDotMergeKey(dot: DetectionDot): string {
+function resolvePresenceEntityKey(presence: PatrolDayPresence): string {
+  const canonical = resolvePatrolCanonicalEntityKey({
+    objectId: presence.subjectId,
+    objectLabel: presence.displayName,
+  })
+  if (canonical && canonical !== 'UNKNOWN') return canonical
+  return presence.subjectId?.trim() || `presence-${presence.id}`
+}
+
+export function resolveHeatmapDotMergeKey(dot: DetectionDot): string {
   const canonical = resolvePatrolCanonicalEntityKey({
     objectId: dot.objectId ?? null,
     objectLabel: dot.label ?? null,
   })
-  if (canonical && canonical !== 'UNKNOWN') {
-    return canonical.toLowerCase()
-  }
-  const oid = dot.objectId?.trim()
-  if (oid) return resolveHeatmapEntityMasterId(oid).toLowerCase()
-  return dot.id.toLowerCase()
+  const raw = canonical && canonical !== 'UNKNOWN'
+    ? canonical
+    : (dot.objectId?.trim() || dot.label?.trim() || dot.id)
+  return resolveHeatmapEntityMasterId(raw).toLowerCase()
 }
 
 /** Gộp nhiều nguồn chấm — ưu tiên inCameraView rồi lastSeenAt mới hơn. */

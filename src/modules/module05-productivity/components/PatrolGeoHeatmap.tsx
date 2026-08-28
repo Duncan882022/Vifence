@@ -197,16 +197,12 @@ function createDetectionDotIcon(
   const size = 7
   const anim = inCameraView ? 'animation:patrol-dot-blink 1.15s ease-in-out infinite;' : ''
   const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
-  const isObject = tier === 'object'
-  const border = isObject
-    ? `1px solid rgba(15,23,42,${inCameraView ? 0.55 : 0.35})`
-    : `1px solid rgba(255,255,255,${inCameraView ? 0.75 : 0.3})`
   const colorBoost = inCameraView ? 'filter:saturate(1.35);' : 'filter:saturate(1.25);'
   const html = `
     <div style="
       width:${size}px;height:${size}px;border-radius:50%;
       background:${color};
-      border:${border};
+      border:none;
       box-shadow:0 0 ${inCameraView ? 2 : 1}px ${color}${inCameraView ? 'dd' : '88'};
       opacity:${opacity};
       ${colorBoost}
