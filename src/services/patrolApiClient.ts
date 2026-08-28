@@ -74,6 +74,8 @@ function demoPatrolCredentials(): { username: string; password: string } | null 
 
 let ensureAuthPromise: Promise<boolean> | null = null
 
+const snapshotSignCache = new Map<string, { token: string; exp: number }>()
+
 /**
  * Demo mode (`VITE_DEMO_AUTH=true`) bypasses route guard nhưng backend vẫn cần JWT.
  * Tự đăng nhập một lần khi chưa có token — tránh tab Sự kiện / KPI rỗng dù SQLite có dữ liệu.
@@ -153,15 +155,25 @@ export async function fetchPatrol<T>(
 export async function signPatrolSnapshot(path: string): Promise<string | null> {
   const base = patrolBackendBase()
   if (!base) return null
+  const trimmed = path.trim()
+  if (!trimmed) return null
+
+  const cached = snapshotSignCache.get(trimmed)
+  if (cached && cached.exp * 1000 > Date.now() + 30_000) {
+    const q = encodeURIComponent(trimmed)
+    return `${base}/patrol/snapshot?path=${q}&token=${cached.token}&exp=${cached.exp}`
+  }
+
   const signed = await fetchPatrol<{ ok: boolean; token: string; exp: number }>(
     '/patrol/snapshot/sign',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path: trimmed }),
     },
   )
   if (!signed?.ok) return null
-  const q = encodeURIComponent(path)
+  snapshotSignCache.set(trimmed, { token: signed.token, exp: signed.exp })
+  const q = encodeURIComponent(trimmed)
   return `${base}/patrol/snapshot?path=${q}&token=${signed.token}&exp=${signed.exp}`
 }
