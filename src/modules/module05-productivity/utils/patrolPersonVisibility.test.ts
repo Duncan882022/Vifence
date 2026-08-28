@@ -85,6 +85,19 @@ describe('gate hiển thị flycam', () => {
   const flycamDisplay = (bbox: Bbox4) =>
     patrolPersonMeetsDisplayGate({ bbox, frameW: FRAME_W, frameH: FRAME_H, flycam: true })
 
+  const proximityDisplay = (bbox: Bbox4) =>
+    patrolPersonMeetsDisplayGate({
+      bbox,
+      frameW: FRAME_W,
+      frameH: FRAME_H,
+      proximityFlycam: true,
+    })
+
+  it('tầm thấp — người lớn giữa khung vẫn vẽ ROI', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.38, FRAME_H * 0.22, FRAME_W * 0.62, FRAME_H * 0.78]
+    expect(proximityDisplay(bbox)).toBe(true)
+  })
+
   it('người ngồi co lại rộng hơn cao vẫn được vẽ ROI', () => {
     const bbox: Bbox4 = [FRAME_W * 0.45, FRAME_H * 0.50, FRAME_W * 0.45 + 200, FRAME_H * 0.50 + 30]
     expect(flycamDisplay(bbox)).toBe(true)

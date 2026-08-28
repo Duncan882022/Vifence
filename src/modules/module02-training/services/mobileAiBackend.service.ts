@@ -65,6 +65,8 @@ export interface MobileAiAnalyzeResult {
   height: number
   detections: MobileAiDetection[]
   events: MobileAiViolationEvent[]
+  /** Patrol flycam — `flight_mode` aerial | proximity (tầm cao / tầm thấp). */
+  metrics?: Record<string, unknown>
 }
 
 /** Mặc định backend — bake từ VITE_MOBILE_AI_BACKEND_URL (.env.local / .env.ghpages). */

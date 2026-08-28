@@ -17,6 +17,7 @@ class PatrolFlightModeTests(unittest.TestCase):
 
         mod._altitude_state.clear()
         mod._mode_state.clear()
+        mod._visual_scale_state.clear()
 
     def test_high_altitude_is_aerial_density_only(self) -> None:
         update_patrol_drone_altitude("DR-03", 80.0)
@@ -31,6 +32,23 @@ class PatrolFlightModeTests(unittest.TestCase):
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
         update_patrol_drone_altitude("DR-03", 30.0)
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
+
+    def test_visual_scale_infers_proximity_without_telemetry(self) -> None:
+        from app.patrol_flight_mode import note_patrol_flycam_visual_scale
+
+        fw, fh = 1280, 720
+        # Người ~8% chiều cao khung — điển hình drone bay thấp.
+        large = (fw * 0.42, fh * 0.35, fw * 0.58, fh * 0.43)
+        note_patrol_flycam_visual_scale("DR-03", [large], fh)
+        self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
+
+    def test_visual_scale_tiny_person_stays_aerial(self) -> None:
+        from app.patrol_flight_mode import note_patrol_flycam_visual_scale
+
+        fw, fh = 1280, 720
+        tiny = (fw * 0.49, fh * 0.40, fw * 0.51, fh * 0.415)
+        note_patrol_flycam_visual_scale("DR-03", [tiny], fh)
+        self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.AERIAL)
 
 
 if __name__ == "__main__":
