@@ -54,6 +54,9 @@ export interface PatrolDayPresence {
   endedAt: number
   gpsLat: number | null
   gpsLng: number | null
+  /** GPS cuối lượt — cập nhật khi presence upsert (giống sự kiện). */
+  gpsLatEnd?: number | null
+  gpsLngEnd?: number | null
   presenceSeq: number
   tier: 'person' | 'identity' | 'object'
   displayName: string
@@ -209,6 +212,8 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     endedAt: Number(row.ended_at ?? 0),
     gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
     gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
+    gpsLatEnd: row.gps_lat_end != null ? Number(row.gps_lat_end) : null,
+    gpsLngEnd: row.gps_lng_end != null ? Number(row.gps_lng_end) : null,
     presenceSeq: Number(row.presence_seq ?? 1),
     tier: (row.tier === 'identity' ? 'identity' : row.tier === 'object' ? 'object' : 'person') as PatrolDayPresence['tier'],
     displayName: String(row.display_name ?? row.subject_id ?? ''),
@@ -277,6 +282,8 @@ export async function fetchPatrolDayPresences(
     endedAt: Number(row.ended_at ?? 0),
     gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
     gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
+    gpsLatEnd: row.gps_lat_end != null ? Number(row.gps_lat_end) : null,
+    gpsLngEnd: row.gps_lng_end != null ? Number(row.gps_lng_end) : null,
     presenceSeq: Number(row.presence_seq ?? 1),
     tier: (row.tier === 'identity' ? 'identity' : row.tier === 'object' ? 'object' : 'person') as PatrolDayPresence['tier'],
     displayName: String(row.display_name ?? row.subject_id ?? ''),

@@ -1,5 +1,5 @@
 /**
- * Chấm bản đồ tuần tra — 1 chấm / qualified presence tại GPS thật.
+ * Chấm bản đồ tuần tra — 1 chấm / qualified presence (L#), upsert tại chỗ như sự kiện.
  */
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
@@ -34,21 +34,32 @@ function isValidGps(lat: number | null, lng: number | null): boolean {
   return Math.abs(lat) <= 90 && Math.abs(lng) <= 180
 }
 
+function resolvePresenceGps(presence: PatrolDayPresence): { lat: number | null; lng: number | null } {
+  const endLat = presence.gpsLatEnd
+  const endLng = presence.gpsLngEnd
+  if (isValidGps(endLat, endLng)) {
+    return { lat: endLat!, lng: endLng! }
+  }
+  return { lat: presence.gpsLat, lng: presence.gpsLng }
+}
+
 function presencePosition(
   presence: PatrolDayPresence,
   helmetPositions?: Record<string, [number, number]>,
   helmetHeadings?: Record<string, number | null | undefined>,
 ): [number, number] {
-  const { gpsLat, gpsLng, subjectId, cameraId } = presence
+  const { lat, lng } = resolvePresenceGps(presence)
+  const { subjectId, cameraId, id: presenceId } = presence
+  const offsetSeed = `presence-${presenceId}`
   const primaryCam = cameraId || presence.sourceCameras[0] || ''
   const helmetPos = primaryCam ? helmetPositions?.[primaryCam] : undefined
   const heading = primaryCam ? helmetHeadings?.[primaryCam] : undefined
 
-  if (isValidGps(gpsLat, gpsLng)) {
+  if (isValidGps(lat, lng)) {
     return resolvePatrolDetectionMapPosition(
-      gpsLat!,
-      gpsLng!,
-      subjectId,
+      lat!,
+      lng!,
+      offsetSeed,
       helmetPos,
       heading,
     )
@@ -58,7 +69,7 @@ function presencePosition(
     return resolvePatrolDetectionMapPosition(
       helmetPos[0],
       helmetPos[1],
-      subjectId,
+      offsetSeed,
       helmetPos,
       heading,
     )
@@ -118,7 +129,7 @@ export function filterRecentPresences(
   })
 }
 
-/** Một chấm / qualified presence — GPS trong polygon công trường. */
+/** Một chấm / qualified presence — id ổn định, GPS end upsert như sự kiện. */
 export function buildPatrolPresenceHeatmapDots(
   presences: PatrolDayPresence[],
   opts?: {
@@ -171,6 +182,8 @@ export function buildPatrolPresenceHeatmapDots(
       opacity: tier === 'object'
         ? (inCameraView ? 0.55 : 0.35)
         : (inCameraView ? 0.92 : 0.45),
+      presenceId: presence.id,
+      presenceSeq: presence.presenceSeq,
     }
   })
 }

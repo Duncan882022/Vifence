@@ -1,16 +1,18 @@
 /**
- * Vị trí chấm Người / Định danh trên bản đồ — sát quanh mũ (~1 m theo heading),
- * không chồng icon mũ. Tắt layer Thiết bị vẫn thấy chấm qua layer thiết bị mũ.
+ * Vị trí chấm Người / Định danh trên bản đồ — lệch phía trước mũ (~3.5 m theo heading).
+ *
+ * Polygon đỏ (công trường) rộng hàng trăm mét — 3.5 m trên bản đồ vẫn rất nhỏ; nhiều chấm
+ * có thể chồng nhau. Mỗi chấm = một lượt presence (L#) — upsert cập nhật vị trí tại chỗ.
  */
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { offsetLatLngByMeters } from './patrolLivePersonDots'
 
-/** Khoảng cách mặc định phía trước mũ (m) — vòng quan sát sát mũ. */
-export const PATROL_DETECTION_FORWARD_M = 1
-/** Trải ngang tối đa khi nhiều người (m). */
-export const PATROL_DETECTION_LATERAL_MAX_M = 0.6
+/** Khoảng cách mặc định phía trước mũ (m) — quan sát quanh nắp, không chồng icon mũ. */
+export const PATROL_DETECTION_FORWARD_M = 3.5
+/** Trải ngang tối đa khi nhiều lượt presence (m). */
+export const PATROL_DETECTION_LATERAL_MAX_M = 1.5
 /** GPS gần mũ hơn ngưỡng này → coi là chồng mũ, cần offset. */
-export const PATROL_HELMET_COLLAPSE_THRESHOLD_M = 2
+export const PATROL_HELMET_COLLAPSE_THRESHOLD_M = 4
 
 export function haversineM(
   lat1: number,
@@ -28,26 +30,26 @@ export function haversineM(
   return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)))
 }
 
-function lateralOffsetM(subjectId: string): number {
+function lateralOffsetM(offsetSeed: string): number {
   let h = 2166136261
-  for (let i = 0; i < subjectId.length; i++) {
-    h ^= subjectId.charCodeAt(i)
+  for (let i = 0; i < offsetSeed.length; i++) {
+    h ^= offsetSeed.charCodeAt(i)
     h = Math.imul(h, 16777619)
   }
   const t = ((h >>> 0) % 1000) / 1000
   return (t - 0.5) * 2 * PATROL_DETECTION_LATERAL_MAX_M
 }
 
-/** Đặt chấm phía trước mũ theo heading + lệch ngang nhẹ theo subjectId. */
+/** Đặt chấm phía trước mũ theo heading + lệch ngang nhẹ theo offsetSeed (presence id). */
 export function offsetPatrolDetectionFromHelmet(
   helmetLat: number,
   helmetLng: number,
   headingDeg: number,
-  subjectId: string,
+  offsetSeed: string,
   forwardM = PATROL_DETECTION_FORWARD_M,
 ): [number, number] {
   const br = (headingDeg * Math.PI) / 180
-  const lateral = lateralOffsetM(subjectId)
+  const lateral = lateralOffsetM(offsetSeed)
   const forwardNorth = forwardM * Math.cos(br)
   const forwardEast = forwardM * Math.sin(br)
   const lateralNorth = lateral * Math.cos(br + Math.PI / 2)
@@ -65,10 +67,10 @@ export function offsetPatrolDetectionFromHelmet(
 export function offsetPatrolDetectionBelowHelmet(
   helmetLat: number,
   helmetLng: number,
-  subjectId: string,
+  offsetSeed: string,
   forwardM = PATROL_DETECTION_FORWARD_M,
 ): [number, number] {
-  const lateral = lateralOffsetM(subjectId)
+  const lateral = lateralOffsetM(offsetSeed)
   const [lat, lng] = offsetLatLngByMeters(helmetLat, helmetLng, lateral, -forwardM)
   return clampPointToSiteInterior(lat, lng)
 }
@@ -76,7 +78,7 @@ export function offsetPatrolDetectionBelowHelmet(
 export function resolvePatrolDetectionMapPosition(
   rawLat: number,
   rawLng: number,
-  subjectId: string,
+  offsetSeed: string,
   helmetPosition: [number, number] | null | undefined,
   headingDeg: number | null | undefined,
 ): [number, number] {
@@ -94,8 +96,8 @@ export function resolvePatrolDetectionMapPosition(
       helmetLat,
       helmetLng,
       headingDeg,
-      subjectId,
+      offsetSeed,
     )
   }
-  return offsetPatrolDetectionBelowHelmet(helmetLat, helmetLng, subjectId)
+  return offsetPatrolDetectionBelowHelmet(helmetLat, helmetLng, offsetSeed)
 }
