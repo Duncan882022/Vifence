@@ -47,6 +47,21 @@ def patrol_site_center_fallback() -> tuple[float, float]:
     return PATROL_SITE_CENTER
 
 
+def resolve_patrol_observation_gps(camera_id: str) -> tuple[float, float]:
+    """GPS ghi sự kiện / presence — fix live hoặc tâm Cầu Sông Hốt khi máy chưa có GPS."""
+    cid = (camera_id or "").strip()
+    if cid:
+        try:
+            from .patrol_runtime import get_patrol_gps
+
+            lat, lng = get_patrol_gps(cid)
+            if lat is not None and lng is not None and not (lat == 0 and lng == 0):
+                return float(lat), float(lng)
+        except Exception:
+            pass
+    return patrol_site_center_fallback()
+
+
 def reset_patrol_gps_anchors(camera_id: str | None = None) -> None:
     if camera_id is None:
         _gps_anchor.clear()

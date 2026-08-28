@@ -577,12 +577,20 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        from .patrol_runtime import get_patrol_gps
+        from .patrol_gps_sim import resolve_patrol_observation_gps
+        from .patrol_runtime import is_patrol_metrics_camera_id
 
-        gps_lat, gps_lng = get_patrol_gps(camera_id)
-        if gps_lat is not None and gps_lng is not None:
+        if is_patrol_metrics_camera_id(camera_id):
+            gps_lat, gps_lng = resolve_patrol_observation_gps(camera_id)
             event.gps_lat = gps_lat
             event.gps_lng = gps_lng
+        else:
+            from .patrol_runtime import get_patrol_gps
+
+            gps_lat, gps_lng = get_patrol_gps(camera_id)
+            if gps_lat is not None and gps_lng is not None:
+                event.gps_lat = gps_lat
+                event.gps_lng = gps_lng
         if raw_pb and len(raw_pb) >= 4:
             event.subject_bbox = [float(v) for v in raw_pb]
         stable_track = track_id or detection.behavior
@@ -630,12 +638,20 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        from .patrol_runtime import get_patrol_gps
+        from .patrol_gps_sim import resolve_patrol_observation_gps
+        from .patrol_runtime import is_patrol_metrics_camera_id
 
-        gps_lat, gps_lng = get_patrol_gps(camera_id)
-        if gps_lat is not None and gps_lng is not None:
+        if is_patrol_metrics_camera_id(camera_id):
+            gps_lat, gps_lng = resolve_patrol_observation_gps(camera_id)
             event.gps_lat = gps_lat
             event.gps_lng = gps_lng
+        else:
+            from .patrol_runtime import get_patrol_gps
+
+            gps_lat, gps_lng = get_patrol_gps(camera_id)
+            if gps_lat is not None and gps_lng is not None:
+                event.gps_lat = gps_lat
+                event.gps_lng = gps_lng
         from .ppe_analyzer import raw_person_bbox
 
         raw_pb = raw_person_bbox(detection)

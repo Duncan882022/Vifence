@@ -40,6 +40,8 @@ export interface PatrolAppearanceSegment {
   endedAt: number
   gpsLat?: number | null
   gpsLng?: number | null
+  gpsLatEnd?: number | null
+  gpsLngEnd?: number | null
   presenceSeq?: number
   sourceCameras?: string[]
   snapshotUrl?: string
@@ -165,6 +167,8 @@ export async function fetchPatrolSubjectAppearances(
     endedAt: Number(r.ended_at ?? 0),
     gpsLat: r.gps_lat != null ? Number(r.gps_lat) : null,
     gpsLng: r.gps_lng != null ? Number(r.gps_lng) : null,
+    gpsLatEnd: r.gps_lat_end != null ? Number(r.gps_lat_end) : null,
+    gpsLngEnd: r.gps_lng_end != null ? Number(r.gps_lng_end) : null,
     presenceSeq: r.presence_seq != null ? Number(r.presence_seq) : undefined,
     sourceCameras: Array.isArray(r.source_cameras)
       ? (r.source_cameras as string[])
