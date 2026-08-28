@@ -93,7 +93,7 @@ export function PlaybackVideoFrame({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground/40 z-[1]">
           <Camera className="w-8 h-8" />
           <span className="text-[9px]">
-            {loadingRecords ? 'Đang tải bản ghi...' : 'Không có bản ghi trong ngày này'}
+            {loadingRecords ? 'Đang tải bản ghi...' : 'Không có bản ghi — chọn ngày khác bên dưới'}
           </span>
         </div>
       )}

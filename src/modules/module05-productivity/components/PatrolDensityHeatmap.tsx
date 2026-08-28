@@ -158,12 +158,15 @@ export function PatrolDensityHeatmap({
   expanded = false,
   onCloseExpand,
   patrolEvents = [],
+  viewDate,
 }: {
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
   onCloseExpand?: () => void
   /** Feed sự kiện deduped — tooltip mũ + KPI detect (tránh fetch thêm). */
   patrolEvents?: PatrolEvent[]
+  /** Ngày lịch VN đồng bộ với tab Sự kiện / playback. */
+  viewDate?: string
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
@@ -327,8 +330,8 @@ export function PatrolDensityHeatmap({
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
-  const { presences } = usePatrolDayPresences()
-  const { stats: dayStats } = usePatrolDayStats()
+  const { presences } = usePatrolDayPresences(viewDate)
+  const { stats: dayStats } = usePatrolDayStats(viewDate)
 
   const headingDeg = hc02Helmet?.heading
 
