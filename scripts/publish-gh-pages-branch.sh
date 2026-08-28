@@ -20,6 +20,9 @@ git checkout -b gh-pages
 git add -A
 git commit -q -m "Deploy Pages: $(date -u +%Y-%m-%dT%H:%MZ)"
 
-REMOTE="${1:-origin}"
+REMOTE="${1:-${GITHUB_REPOSITORY:+https://github.com/${GITHUB_REPOSITORY}.git}}"
+if [[ -z "${REMOTE}" ]]; then
+  REMOTE="origin"
+fi
 git push -f "${REMOTE}" gh-pages:gh-pages
 echo "✓ Đã push gh-pages → ${REMOTE}"
