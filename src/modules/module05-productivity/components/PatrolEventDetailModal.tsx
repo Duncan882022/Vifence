@@ -22,6 +22,7 @@ import {
   PATROL_PERSON_STAGE_META,
 } from '../utils/patrolWorkforceEventLabels'
 import { getPatrolEventLocationLabel } from '../utils/patrolEventsUi'
+import { resolvePatrolCameraDisplayName } from '../data/patrolCameras'
 
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
@@ -262,7 +263,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                 <div className="space-y-2">
                   {appearanceCameras.map(cameraId => {
                     const blocks = appearances[cameraId] ?? []
-                    const camLabel = PATROL_BODYCAM_LABELS[cameraId] ?? cameraId
+                    const camLabel = resolvePatrolCameraDisplayName(cameraId) || cameraId
                     return (
                       <div key={cameraId} className="space-y-1">
                         <p className="text-[9px] font-medium text-muted-foreground">{camLabel}</p>

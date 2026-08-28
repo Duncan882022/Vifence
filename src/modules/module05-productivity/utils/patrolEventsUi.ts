@@ -141,7 +141,8 @@ export function buildPatrolSubjectCameraLookup(
 
   for (const presence of presences) {
     const subjectId = presence.subjectId.trim()
-    const cameraId = presence.cameraId.trim() || presence.sourceCameras.at(-1)?.trim() || ''
+    const lastSource = presence.sourceCameras[presence.sourceCameras.length - 1]
+    const cameraId = presence.cameraId.trim() || lastSource?.trim() || ''
     if (!subjectId || !cameraId) continue
 
     const zoneId = presence.zoneId?.trim() || 'ZONE_SITE'
