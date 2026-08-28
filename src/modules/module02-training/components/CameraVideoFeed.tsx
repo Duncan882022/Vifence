@@ -146,23 +146,23 @@ export function CameraVideoFeed({
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock)
 
   useEffect(() => {
-    if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
-    const fromMetrics = readPatrolFlightModeFromMetrics(vmsFeed.snapshot.metrics)
+    if (!runPatrolHeatmapAnalyze || !rawVmsFeed.snapshot) return
+    const fromMetrics = readPatrolFlightModeFromMetrics(rawVmsFeed.snapshot.metrics)
     if (cameraId.startsWith('DR-') && fromMetrics) {
       setPatrolFlightMode(cameraId, fromMetrics)
     }
-    const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
+    const flightMode = resolveEffectivePatrolFlightMode(cameraId, rawVmsFeed.snapshot.metrics)
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
-      gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
+      gateVmsPatrolPersonDetections(rawVmsFeed.snapshot, cameraId, flightMode),
     )
   }, [
     runPatrolHeatmapAnalyze,
     cameraId,
-    vmsFeed.snapshot?.updated_at,
-    vmsFeed.snapshot?.width,
-    vmsFeed.snapshot?.height,
-    vmsFeed.snapshot?.metrics,
+    rawVmsFeed.snapshot?.updated_at,
+    rawVmsFeed.snapshot?.width,
+    rawVmsFeed.snapshot?.height,
+    rawVmsFeed.snapshot?.metrics,
   ])
 
   useEffect(() => {

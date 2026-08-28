@@ -81,7 +81,10 @@ function matchCost(trackBbox: Bbox, detBbox: Bbox, cfg: PatrolPersonRoiConfig): 
 }
 
 function isKnownWorker(id?: string): id is string {
-  return Boolean(id && id.trim() && id !== 'unknown')
+  const s = (id ?? '').trim()
+  if (!s || s === 'unknown') return false
+  if (/^ptk/i.test(s) || /:person$/i.test(s)) return false
+  return true
 }
 
 /**

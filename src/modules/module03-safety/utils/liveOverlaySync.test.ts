@@ -20,7 +20,7 @@ function sampleSnapshot(cameraId: string): VmsDetectionSnapshot {
 }
 
 describe('clearVmsDetectionOverlayFrame', () => {
-  it('reset patrol ROI engine và đổi sync key overlay', () => {
+  it('đổi sync key overlay nhưng giữ patrol ROI engine (ingest tự cập nhật)', () => {
     const cameraId = 'HC-TEST-CLEAR'
     const engine = getPatrolPersonRoiEngine(cameraId)
     engine.ingest([
@@ -38,6 +38,6 @@ describe('clearVmsDetectionOverlayFrame', () => {
     const afterKey = buildVmsOverlaySyncKey(sampleSnapshot(cameraId))
 
     expect(afterKey).not.toBe(beforeKey)
-    expect(getPatrolPersonRoiEngine(cameraId).getDisplayTracks()).toHaveLength(0)
+    expect(getPatrolPersonRoiEngine(cameraId).getDisplayTracks().length).toBeGreaterThan(0)
   })
 })

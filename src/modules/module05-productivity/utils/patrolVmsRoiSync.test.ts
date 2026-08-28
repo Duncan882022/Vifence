@@ -70,4 +70,29 @@ describe('gateVmsPatrolPersonDetections', () => {
     expect(result).toHaveLength(1)
     expect(result[0]?.track_id).toBe('ptk-aerial')
   })
+
+  it('DR-03 proximity bbox thật (normalized) vẫn qua gate', () => {
+    const result = gateVmsPatrolPersonDetections(
+      snapshot(
+        [
+          {
+            behavior: 'person',
+            label: 'CN',
+            bbox: [0.281612, 0.244065, 0.45754, 1.0],
+            subject_bbox: [0.281612, 0.244065, 0.45754, 0.722077],
+            confidence: 0.512,
+            worker_id: 'ptk0001:person',
+            worker_name: 'CN',
+            track_id: 'ptk0001:person',
+            tier: 'object',
+          },
+        ],
+        { patrol: { flight_mode: 'proximity' } },
+      ),
+      'DR-03',
+      'proximity',
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0]?.track_id).toBe('ptk0001:person')
+  })
 })
