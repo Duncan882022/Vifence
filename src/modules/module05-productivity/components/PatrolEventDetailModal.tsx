@@ -231,7 +231,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     if (cameraLabel) {
       infoRows.push({
         icon: Camera,
-        label: 'Vị trí',
+        label: 'Camera',
         value: cameraLabel,
         iconClassName: 'text-cyan-400',
       })

@@ -14,6 +14,12 @@ import { resolvePatrolCameraDisplayName } from '../data/patrolCameras'
 import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 
+function resolvePatrolZoneDisplayName(zoneName: string): string {
+  const zone = zoneName.trim()
+  if (!zone || zone === 'ZONE_SITE') return PATROL_SITE_NAME
+  return zone
+}
+
 export const PATROL_EVENT_TYPES: EventType[] = [
   'PERSON_DETECTED',
   'POPULATION_OBSERVED',
@@ -116,7 +122,25 @@ export function shouldShowPatrolStatusBadge(status: EventStatus): boolean {
 }
 
 export function getPatrolEventPlace(cameraName: string, zoneName: string): string {
-  return `${cameraName} · ${zoneName}`
+  const zone = resolvePatrolZoneDisplayName(zoneName)
+  const camera = cameraName.trim()
+  if (camera && zone) return `${camera} - ${zone}`
+  return camera || zone
+}
+
+/** Nhãn địa điểm trên card sự kiện — vd. Helmet 02 - Cầu Sông Hốt. */
+export function getPatrolEventLocationLabel(
+  cameraName: string,
+  zoneName: string,
+  cameraId?: string,
+): string {
+  const zone = resolvePatrolZoneDisplayName(zoneName)
+  const camera = cameraName.trim()
+    || (cameraId?.trim() ? resolvePatrolCameraDisplayName(cameraId) : '')
+  if (camera && zone) return `${camera} - ${zone}`
+  if (camera) return camera
+  if (zone) return zone
+  return getPatrolEventPlace(cameraName, zoneName)
 }
 
 export interface PatrolSubjectCameraRef {
@@ -170,19 +194,4 @@ export function resolvePatrolSubjectCameraRef(
   subjectId: string,
 ): PatrolSubjectCameraRef {
   return lookup.get(subjectId.trim()) ?? DEFAULT_SUBJECT_CAMERA
-}
-
-/** Nhãn địa điểm trên card sự kiện — vd. Cầu Sông Hốt - Helmet 02. */
-export function getPatrolEventLocationLabel(
-  cameraName: string,
-  zoneName: string,
-  cameraId?: string,
-): string {
-  const zone = zoneName.trim() || PATROL_SITE_NAME
-  const camera = cameraName.trim()
-    || (cameraId?.trim() ? resolvePatrolCameraDisplayName(cameraId) : '')
-  if (zone && camera) return `${zone} - ${camera}`
-  if (zone) return zone
-  if (camera) return camera
-  return getPatrolEventPlace(cameraName, zoneName)
 }

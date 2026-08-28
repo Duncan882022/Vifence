@@ -7,9 +7,9 @@ import {
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 
 describe('getPatrolEventLocationLabel', () => {
-  it('combines zone and camera with dash separator', () => {
+  it('combines camera and zone with dash separator', () => {
     expect(getPatrolEventLocationLabel('Helmet 02', 'Cầu Sông Hốt')).toBe(
-      'Cầu Sông Hốt - Helmet 02',
+      'Helmet 02 - Cầu Sông Hốt',
     )
   })
 
@@ -18,15 +18,15 @@ describe('getPatrolEventLocationLabel', () => {
   })
 
   it('defaults zone to site name when zone is empty', () => {
-    expect(getPatrolEventLocationLabel('Helmet 01', '')).toBe('Cầu Sông Hốt - Helmet 01')
+    expect(getPatrolEventLocationLabel('Helmet 01', '')).toBe('Helmet 01 - Cầu Sông Hốt')
   })
 
   it('resolves camera name from cameraId when cameraName is empty', () => {
     expect(getPatrolEventLocationLabel('', 'Cầu Sông Hốt', 'HC-01')).toBe(
-      'Cầu Sông Hốt - Helmet 01',
+      'Helmet 01 - Cầu Sông Hốt',
     )
     expect(getPatrolEventLocationLabel('', 'Cầu Sông Hốt', 'DR-03')).toBe(
-      'Cầu Sông Hốt - Drone 03',
+      'Drone 03 - Cầu Sông Hốt',
     )
   })
 })
@@ -69,7 +69,7 @@ describe('buildPatrolSubjectCameraLookup', () => {
     expect(ref.cameraId).toBe('HC-02')
     expect(ref.cameraName).toBe('Helmet 02')
     expect(getPatrolEventLocationLabel(ref.cameraName, ref.zoneName)).toBe(
-      'Cầu Sông Hốt - Helmet 02',
+      'Helmet 02 - Cầu Sông Hốt',
     )
   })
 })
