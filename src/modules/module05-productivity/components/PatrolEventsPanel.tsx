@@ -109,7 +109,7 @@ function PatrolEventCard({
   const displayMeta = resolvePatrolEventDisplayMeta(event)
   const SubjectIcon = displayMeta.icon
   const eventDateTime = formatEventDateTime(event.lockedAt)
-  const eventPlace = getPatrolEventLocationLabel(event.cameraName, event.zoneName)
+  const eventPlace = getPatrolEventLocationLabel(event.cameraName, event.zoneName, event.cameraId)
   const cardDisplay = resolvePatrolPersonCardDisplay(event)
 
   return (

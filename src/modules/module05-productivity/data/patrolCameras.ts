@@ -83,6 +83,13 @@ export const PATROL_BODYCAM_LABELS: Record<string, string> = {
   'HC-02': 'Helmet 02',
 }
 
+/** Tên hiển thị camera ghi nhận sự kiện — bodycam + flycam. */
+export function resolvePatrolCameraDisplayName(cameraId: string): string {
+  const id = cameraId.trim()
+  if (!id) return ''
+  return PATROL_BODYCAM_LABELS[id] ?? PATROL_DRONE_LABELS[id] ?? id
+}
+
 /** Mũ tuần tra — danh sách dùng cho KPI, sự kiện và workforce (backend chỉ nhận HC-*). */
 export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
 

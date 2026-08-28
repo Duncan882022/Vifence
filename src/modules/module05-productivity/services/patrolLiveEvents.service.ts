@@ -6,7 +6,7 @@ import {
 import { fetchPatrol } from '@/services/patrolApiClient'
 import type { EventType, PatrolEvent } from '../data/patrolTypes'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
-import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
+import { resolvePatrolCameraDisplayName } from '../data/patrolCameras'
 import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFeed'
 import {
@@ -436,7 +436,7 @@ export function mapBackendEventToPatrolEvent(
     id: event.id,
     type: eventType,
     cameraId,
-    cameraName: PATROL_BODYCAM_LABELS[cameraId] ?? cameraId,
+    cameraName: resolvePatrolCameraDisplayName(cameraId),
     zoneId,
     zoneName,
     objectLabel: objectLabelHint ?? objectId,
