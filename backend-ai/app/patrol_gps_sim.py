@@ -10,7 +10,7 @@ import math
 from .patrol_site_geometry import PATROL_SITE_CENTER, snap_point_to_site
 
 M_PER_DEG_LAT = 111_320.0
-MAX_RELATIVE_OFFSET_M = 120.0
+MAX_RELATIVE_OFFSET_M = 1000.0
 
 _gps_anchor: dict[str, tuple[float, float]] = {}
 

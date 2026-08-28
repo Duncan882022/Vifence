@@ -14,8 +14,8 @@ import { isPatrolRelativeGpsCamera } from './patrolGpsConfig'
 const M_PER_DEG_LAT = 111_320
 const GPS_DEFAULT_ACCURACY_M = 8
 const MAX_PREDICT_DT_S = 0.5
-/** Giới hạn drift tương đối (~120m) — tránh GPS nhảy xa khỏi công trường. */
-const MAX_RELATIVE_OFFSET_M = 120
+/** Giới hạn drift tương đối (~1 km) — phủ polygon công trường rộng. */
+const MAX_RELATIVE_OFFSET_M = 1000
 
 export type HelmetPositionMethod =
   | 'raw'
