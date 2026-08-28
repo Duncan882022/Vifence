@@ -55,3 +55,9 @@ src/
 - Module 01 is the reference implementation
 - All other modules must follow Module 01 structure
 - Only change business data per module, not layout/camera/events
+
+## Module 05 (Patrol) — ngày / playback
+- **Không có ca kíp** — ngày sự kiện, playback, SQLite `event_date` = **ngày lịch VN (cắt 0h)**, đồng bộ `formatVnDate()` / backend `today_vn()`.
+- **Không** copy logic ngày ca từ Module 02/03 (ví dụ playback bắt đầu 06:00, rollover trước 6h sáng, `getPatrolWorkDate`).
+- Tab heatmap **「Ca」** = cửa sổ thời gian lọc chấm (time window), **không** đổi mốc ngày lịch.
+- Sau 0h VN: dữ liệu ghi trước nửa đêm thuộc **ngày hôm trước** — user chọn ngày trên date picker playback, không tự lùi ngày.

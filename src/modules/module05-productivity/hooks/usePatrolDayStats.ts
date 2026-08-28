@@ -2,7 +2,6 @@
  * KPI đếm chuẩn từ server — Người · Lượt gặp · Quan sát chưa gán.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getPatrolWorkDate } from '@/utils/vnDateTime'
 import {
   fetchPatrolDayStats,
   type PatrolDayStats,
@@ -20,14 +19,13 @@ const EMPTY: PatrolDayStats = {
 }
 
 export function usePatrolDayStats(date?: string) {
-  const workDate = date ?? getPatrolWorkDate()
   const [stats, setStats] = useState<PatrolDayStats>(EMPTY)
   const [loading, setLoading] = useState(true)
   const [reachable, setReachable] = useState(false)
   const mounted = useRef(true)
 
   const refresh = useCallback(async () => {
-    const data = await fetchPatrolDayStats(workDate)
+    const data = await fetchPatrolDayStats(date)
     if (!mounted.current) return
     if (data) {
       setStats(data)
@@ -36,7 +34,7 @@ export function usePatrolDayStats(date?: string) {
       setReachable(false)
     }
     setLoading(false)
-  }, [workDate])
+  }, [date])
 
   useEffect(() => {
     mounted.current = true

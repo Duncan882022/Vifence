@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getPatrolWorkDate } from '@/utils/vnDateTime'
 import {
   fetchPatrolDayPresences,
   type PatrolDayPresence,
@@ -8,19 +7,18 @@ import {
 const POLL_MS = 3000
 
 export function usePatrolDayPresences(date?: string) {
-  const workDate = date ?? getPatrolWorkDate()
   const [presences, setPresences] = useState<PatrolDayPresence[]>([])
   const [loading, setLoading] = useState(true)
   const [reachable, setReachable] = useState(false)
   const mounted = useRef(true)
 
   const refresh = useCallback(async () => {
-    const result = await fetchPatrolDayPresences(workDate)
+    const result = await fetchPatrolDayPresences(date)
     if (!mounted.current) return
     setPresences(result.items)
     setReachable(result.ok)
     setLoading(false)
-  }, [workDate])
+  }, [date])
 
   useEffect(() => {
     mounted.current = true

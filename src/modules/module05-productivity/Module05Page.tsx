@@ -225,7 +225,7 @@ export function Module05Page() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [detailEventId, setDetailEventId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
-  const playbackDate = getPatrolDefaultPlaybackDate()
+  const playbackDate = getPatrolDefaultPlaybackDate() // ngày lịch VN 0h — không ca/kíp
   const { cameras: visionCameras } = useCameras()
   // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
   // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.

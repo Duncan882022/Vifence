@@ -33,19 +33,6 @@ export function formatVnDate(date = new Date()): string {
   return `${y}-${m}-${d}`
 }
 
-/**
- * Ngày ca tuần tra Module 05 — trước 6h sáng VN vẫn thuộc ca hôm trước.
- * Tránh mất sự kiện / playback ngay sau 0h (ghi lúc 23:56 vẫn thấy lúc 00:05).
- */
-export function getPatrolWorkDate(now = new Date(), rolloverHour = 6): string {
-  const { y, m, d, h } = vnParts(now)
-  const calendar = `${y}-${m}-${d}`
-  if (Number(h) < rolloverHour) {
-    return formatVnDateOffsetDays(-1, calendar)
-  }
-  return calendar
-}
-
 /** YYYY-MM-DD cách baseYmd (YYYY-MM-DD) n ngày — không phụ thuộc múi giờ máy. */
 export function formatVnDateOffsetDays(offsetDays: number, baseYmd?: string): string {
   const base = baseYmd ?? formatVnDate()
