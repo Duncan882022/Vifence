@@ -236,7 +236,7 @@ export async function syncPatrolIdentityBindingsFromBackend(): Promise<number> {
     const workerId = normalizePatrolWorkerId(row.gallery_worker_id)
     const workerName = (row.worker_name ?? '').trim()
     const unitName = (row.contractor_name ?? '').trim()
-    if (!workerId || !workerName || !unitName) continue
+    if (!workerId || !workerName) continue
 
     const aliases = (row.aliases ?? [])
       .map(a => normalizePatrolIdentityKey(a))

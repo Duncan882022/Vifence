@@ -165,7 +165,7 @@ def _assign_patrol_person_identity(
             return
         # proximity flycam — rơi xuống nhánh bodycam bên dưới.
 
-    from .patrol_identity_lifecycle import observe as observe_track_identity
+    from .patrol_identity_lifecycle import observe as observe_track_identity, peek as peek_track_lifecycle
     from .person_identity_registry import (
         peek_patrol_track_identity,
         resolve_patrol_person_identity,
@@ -193,10 +193,18 @@ def _assign_patrol_person_identity(
         )
         frame_faces[worker_id] = face_emb
     else:
-        # Quay lưng: giữ mã cũ nếu track này từng nhận diện được, còn lại để
-        # trống — Đối tượng. Cấp mã lúc này là gán danh tính cho một cái lưng.
+        # Quay lưng: giữ mã + tên đã ổn định — không ghi đè tên bằng mã sgc/p-*.
+        cached = peek_track_lifecycle(camera_id, track_id)
         worker_id = peek_patrol_track_identity(camera_id, track_id)
-        worker_name = worker_id
+        if cached and cached.worker_id:
+            worker_id = cached.worker_id or worker_id
+            worker_name = cached.worker_name
+        else:
+            worker_name = ""
+        if worker_id and not worker_name:
+            from .patrol_entity import resolve_patrol_worker_display_name
+
+            worker_name = resolve_patrol_worker_display_name(worker_id, "")
 
     # Tầng lấy từ state machine chứ không suy lại mỗi frame: track đã lên Người /
     # Định danh thì giữ nguyên nhãn kể cả khung hình này quay lưng.

@@ -378,6 +378,32 @@ def _find_reusable_worker_id(
     return best_wid
 
 
+def _finalize_identity_pair(worker_id: str, worker_name: str) -> tuple[str, str]:
+    from .patrol_entity import resolve_patrol_worker_display_name
+
+    wid = (worker_id or "").strip()
+    return wid, resolve_patrol_worker_display_name(wid, worker_name)
+
+
+def _match_sqlite_patrol_face(face_emb: np.ndarray) -> tuple[str, str] | None:
+    """Khớp vector SQLite person_faces — ưu tiên hồ sơ patrol đã enroll."""
+    from .patrol import identity as patrol_identity
+    from .patrol_identity_store import patrol_gallery_worker_id
+
+    vec = face_emb.tolist() if hasattr(face_emb, "tolist") else list(face_emb)
+    matched, _sim = patrol_identity.match_face(vec)
+    if not matched:
+        return None
+    person = patrol_identity.get_person(matched)
+    if not person:
+        return None
+    if person.get("status") == patrol_identity.STATUS_IDENTIFIED:
+        code = str(person.get("employee_code") or "").strip()
+        gid = patrol_gallery_worker_id(code) if code else matched
+        return gid, patrol_identity.display_name(person)
+    return matched, str(matched)
+
+
 def _match_patrol_gallery_from_embedding(
     face_emb: np.ndarray,
     *,
@@ -402,11 +428,13 @@ def _match_patrol_gallery_from_embedding(
     if not gallery_id:
         return None
     row = lookup_patrol_identity(gallery_id)
-    if not row:
-        return None
+    name = str(
+        (row.get("worker_name") if row else None)
+        or profile.worker_name
+        or gallery_id
+    ).strip()
     if _conflicts_frame_faces(gallery_id, face_emb, frame_face_assignments):
         return None
-    name = str(row.get("worker_name") or profile.worker_name or gallery_id).strip()
     return gallery_id, name, float(score)
 
 
@@ -567,7 +595,7 @@ def resolve_patrol_person_identity(
             if person_bbox and len(person_bbox) >= 4:
                 _remember_track_meta(state, key, wid, person_bbox, face_emb)
             _save(state)
-        return wid, wname or wid
+        return _finalize_identity_pair(wid, wname or wid)
 
     pb = person_bbox
     if pb is None and detection.subject_bbox and len(detection.subject_bbox) >= 4:
@@ -591,7 +619,20 @@ def resolve_patrol_person_identity(
                     _remember_track_meta(state, key, gallery_id, pb, face_emb)
                 _save(state)
             _apply_patrol_gallery_to_detection(detection, gallery_id, gallery_name, score)
-            return gallery_id, gallery_name
+            return _finalize_identity_pair(gallery_id, gallery_name)
+
+        sqlite_hit = _match_sqlite_patrol_face(query_emb)
+        if sqlite_hit is not None:
+            gallery_id, gallery_name = sqlite_hit
+            key = _track_key(camera_id, track_id)
+            with _lock:
+                state = _load()
+                state["tracks"][key] = gallery_id
+                if pb and len(pb) >= 4:
+                    _remember_track_meta(state, key, gallery_id, pb, face_emb)
+                _save(state)
+            _apply_patrol_gallery_to_detection(detection, gallery_id, gallery_name, 1.0)
+            return _finalize_identity_pair(gallery_id, gallery_name)
 
     # Không có embedding mặt — giữ sgc/gallery đã gán; HC cận mặt vẫn cấp sgc mới.
     if query_emb is None:
@@ -610,12 +651,12 @@ def resolve_patrol_person_identity(
                     if pb and len(pb) >= 4:
                         _remember_track_meta(state, key, gallery_id, pb, None)
                     _save(state)
-                    return gallery_id, gallery_name
+                    return _finalize_identity_pair(gallery_id, gallery_name)
                 if is_sgc_worker_id(existing) or is_patrol_gallery_id(existing):
                     if pb and len(pb) >= 4:
                         _remember_track_meta(state, key, existing, pb, None)
                         _save(state)
-                    return existing, existing
+                    return _finalize_identity_pair(existing, existing)
 
             if pb and len(pb) >= 4:
                 _remember_track_meta(state, key, "", pb, None)
@@ -635,7 +676,7 @@ def resolve_patrol_person_identity(
                 if pb and len(pb) >= 4:
                     _remember_track_meta(state, key, gallery_id, pb, face_emb)
                 _save(state)
-                return gallery_id, gallery_name
+                return _finalize_identity_pair(gallery_id, gallery_name)
             if not is_sgc_worker_id(existing):
                 existing = ""
             else:
@@ -647,8 +688,8 @@ def resolve_patrol_person_identity(
                 _save(state)
                 bound = _gallery_from_patrol_binding(existing)
                 if bound:
-                    return bound[0], bound[1]
-                return existing, existing
+                    return _finalize_identity_pair(bound[0], bound[1])
+                return _finalize_identity_pair(existing, existing)
 
         if pb and len(pb) >= 4:
             reused = _find_reusable_worker_id(
@@ -667,7 +708,7 @@ def resolve_patrol_person_identity(
                 state["tracks"][key] = final_id
                 _remember_track_meta(state, key, final_id, pb, face_emb)
                 _save(state)
-                return final_id, final_name
+                return _finalize_identity_pair(final_id, final_name)
 
         seq = max(int(state.get("next_seq") or 1), 1)
         sgc = _format_sgc(seq)
@@ -676,4 +717,4 @@ def resolve_patrol_person_identity(
         if pb and len(pb) >= 4:
             _remember_track_meta(state, key, sgc, pb, face_emb)
         _save(state)
-        return sgc, sgc
+        return _finalize_identity_pair(sgc, sgc)

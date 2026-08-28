@@ -9,12 +9,7 @@ import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlay
 import { passesOverlayConfidence } from '@/modules/module03-safety/utils/overlayCoverage'
 import { PATROL_TIER_RANK, patrolTierToken } from '../utils/patrolTierTokens'
 import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
-import {
-  formatPersonOverlayBadge,
-  formatPersonOverlayLabel,
-} from '@/modules/module03-safety/utils/personOverlayLabel'
-import { resolvePatrolObjectLabel, getPatrolManualIdentity, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
-import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
+import { resolvePatrolRoiDisplayLabel } from './resolvePatrolRoiDisplayLabel'
 import { usePatrolPersonRoiTracks } from './usePatrolPersonRoiTracks'
 import type { PersonRoiDisplay } from './types'
 
@@ -72,27 +67,8 @@ const PersonRoiBox = memo(function PersonRoiBox({
   if (box.w <= 0.5 || box.h <= 0.5) return null
 
   const tierToken = patrolTierToken(track.tier)
-  const identityKey = track.workerId?.trim() || track.personId
-  const manual = getPatrolManualIdentity(identityKey)
-  const wid = track.workerId?.trim() ?? ''
-  const profileName = isPatrolGalleryWorkerId(wid)
-    ? (
-        track.workerName?.trim() && track.workerName.trim().toLowerCase() !== 'unknown'
-          ? track.workerName.trim()
-          : findPatrolIdentityByWorkerId(wid)?.workerName
-      )
-    : undefined
-  const displayLabel = manual?.workerName
-    ?? profileName
-    ?? resolvePatrolObjectLabel(identityKey, formatPersonOverlayLabel(track.workerName, {
-      workerId: track.workerId,
-      workerName: profileName ?? track.workerName,
-      manualDisplayName: manual?.workerName,
-    }))
-  const badge = formatPersonOverlayBadge(displayLabel, track.confidence, '', {
-    workerId: track.workerId,
-    workerName: displayLabel,
-  })
+  const displayLabel = resolvePatrolRoiDisplayLabel(track)
+  const badge = `${displayLabel}${track.confidence > 0 ? ` ${Math.round(track.confidence * 100)}%` : ''}`
   const opacity = track.displayOpacity ?? (track.state === 'lost' ? 0.72 : 1)
 
   return (
