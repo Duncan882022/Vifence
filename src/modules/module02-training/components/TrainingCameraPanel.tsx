@@ -575,7 +575,10 @@ export function TrainingCameraPanel({
   const compactSidebarPx = sidebarCompactPx ?? 108
   const collapsedSidebarPx = sidebarCollapsedPx ?? 32
   const sidebarRailPx = sidebarOpen ? compactSidebarPx : collapsedSidebarPx
-  const compactGridStyle = preferCompactVideo
+  /** Grid + width pixel — đồng bộ thu/mở sidebar patrol giữa desktop rộng và iPad ngang. */
+  const sidebarPixelGrid = preferCompactVideo
+    || (sidebarThumbCompact && sidebarCompactPx != null && isDesktop)
+  const compactGridStyle = sidebarPixelGrid
     ? { gridTemplateColumns: `minmax(0, 1fr) ${sidebarRailPx}px` } as const
     : undefined
   const thumbCompact = sidebarThumbCompact || !isDesktop
@@ -587,7 +590,7 @@ export function TrainingCameraPanel({
     <div
         className={cn(
           'w-full min-h-0 h-full',
-          preferCompactVideo
+          sidebarPixelGrid
             ? 'grid items-stretch min-h-0 flex-none lg:flex-none'
             : cn(
               'flex flex-col lg:flex-row',
@@ -605,14 +608,14 @@ export function TrainingCameraPanel({
         )}
         style={{
           ...compactGridStyle,
-          ...(sidebarCompactPx != null && !preferCompactVideo && !isDesktop
+          ...(sidebarCompactPx != null && !sidebarPixelGrid && !isDesktop
             ? { gridTemplateColumns: `minmax(0, 1fr) ${sidebarRailPx}px` }
             : {}),
         }}
       >
         <div className={cn(
           'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
-          preferCompactVideo && 'min-w-0',
+          sidebarPixelGrid && 'min-w-0',
           mobileFillPanel && 'overflow-hidden',
         )}>
           <div
@@ -646,21 +649,31 @@ export function TrainingCameraPanel({
             'border-t lg:border-t-0 lg:border-l',
             sidebarCompactClass,
             'lg:overflow-hidden',
-            preferCompactVideo && sidebarOpen && 'border-t-0 border-l',
+            sidebarPixelGrid && sidebarOpen && 'border-t-0 border-l',
             sidebarOpen
-              ? cn('w-full lg:h-full lg:min-h-0', !preferCompactVideo && sidebarOpenClass)
+              ? cn(
+                sidebarPixelGrid
+                  ? 'h-full min-h-0 shrink-0 overflow-hidden'
+                  : 'w-full lg:h-full lg:min-h-0',
+                !sidebarPixelGrid && sidebarOpenClass,
+              )
               : cn(
                 collapsedCompact
-                  ? 'shrink-0 self-end w-7 min-h-[1.75rem] border-t border-[#1e2433] lg:border-t-0 lg:self-auto'
+                  ? cn(
+                    'shrink-0 flex items-center justify-center',
+                    sidebarPixelGrid
+                      ? 'h-full min-h-0 px-0'
+                      : 'self-end w-7 min-h-[1.75rem] border-t border-[#1e2433] lg:border-t-0 lg:self-auto',
+                  )
                   : 'w-full shrink-0 min-h-[2.25rem] border-t border-[#1e2433] lg:border-t-0',
-                sidebarCollapsedClass,
-                'lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:px-0',
+                !sidebarPixelGrid && sidebarCollapsedClass,
+                !sidebarPixelGrid && 'lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:px-0',
               ),
           )}
           style={{
             ...(landscapeSidebarH ? { maxHeight: landscapeSidebarH } : {}),
-            ...(preferCompactVideo && sidebarOpen ? { width: compactSidebarPx } : {}),
-            ...(preferCompactVideo && !sidebarOpen ? { width: collapsedSidebarPx } : {}),
+            ...(sidebarPixelGrid && sidebarOpen ? { width: compactSidebarPx } : {}),
+            ...(sidebarPixelGrid && !sidebarOpen ? { width: collapsedSidebarPx } : {}),
           }}
         >
           {sidebarOpen ? (
