@@ -145,20 +145,13 @@ export function usePatrolHelmetLiveMetrics(
         const online = await pingMobileAiBackend(backendUrl)
         if (stopped) return
         backendLiveRef.current = online
-        if (!online) {
-          const mobileOnly = mergeHc02Mobile(EMPTY, getPatrolMobileLiveSnapshot(HC02))
-          baseRef.current = mobileOnly
-          setMetrics(mobileOnly)
-          timerId = window.setTimeout(tick, pollMs * 2)
-          return
-        }
 
         const snapshot = await fetchPatrolHelmetAggregateMetrics(ids, backendUrl)
         if (stopped) return
 
         if (!snapshot) {
           const merged = mergeHc02Mobile(
-            { ...baseRef.current, backendReachable: true },
+            { ...baseRef.current, backendReachable: online },
             getPatrolMobileLiveSnapshot(HC02),
           )
           baseRef.current = merged
@@ -179,7 +172,7 @@ export function usePatrolHelmetLiveMetrics(
         )
 
         const fromBackend: PatrolHelmetLiveMetrics = {
-          backendReachable: true,
+          backendReachable: online || Boolean(snapshot.backend_reachable),
           streamOnline,
           connected: streamOnline,
           personCount: framePersonCount,
