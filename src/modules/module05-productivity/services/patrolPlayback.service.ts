@@ -23,7 +23,7 @@ interface MediaMtxSegment {
 }
 
 /** Đoạn ngắn hơn ngần này thường là mẩu vụn lúc nguồn chập chờn. */
-const MIN_SEGMENT_SEC = 5
+const MIN_SEGMENT_SEC = 3
 
 /** Clip quanh thời điểm sự kiện khi bấm từ tab Sự kiện. */
 export const PATROL_EVENT_CLIP_SEC = 30

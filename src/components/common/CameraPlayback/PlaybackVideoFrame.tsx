@@ -67,6 +67,7 @@ export function PlaybackVideoFrame({
             className="z-[1]"
           >
             <video
+              key={videoSrc}
               ref={videoRef}
               src={videoSrc}
               className={cn(
@@ -81,6 +82,7 @@ export function PlaybackVideoFrame({
           </EventPlaybackViewport>
         ) : (
           <video
+            key={videoSrc}
             ref={videoRef}
             src={videoSrc}
             className="absolute inset-0 w-full h-full object-contain z-[1]"

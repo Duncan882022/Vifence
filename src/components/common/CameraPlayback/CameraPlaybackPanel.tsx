@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import dayjs from 'dayjs'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
@@ -107,7 +106,7 @@ export function CameraPlaybackPanel({
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [volume, setVolume] = useState(80)
-  const [muted, setMuted] = useState(false)
+  const [muted, setMuted] = useState(true)
   const videoRef = useRef<HTMLVideoElement>(null)
   const { isDesktop } = useShellLayout()
   const isMobile = !isDesktop
@@ -143,8 +142,9 @@ export function CameraPlaybackPanel({
     setRecords([])
     setSelectedRecord(null)
 
-    const startDate = dayjs(date).startOf('day').toISOString()
-    const endDate = dayjs(date).endOf('day').toISOString()
+    // Luôn dùng biên ngày lịch VN (+07) — không phụ thuộc múi giờ trình duyệt.
+    const startDate = `${date}T00:00:00+07:00`
+    const endDate = `${date}T23:59:59.999+07:00`
 
     fetchRecords(activeCam.id, { startDate, endDate })
       .then(res => {
@@ -221,13 +221,41 @@ export function CameraPlaybackPanel({
     const video = videoRef.current
     if (!video || !videoSrc || isEventClip) return
 
-    const onCanPlay = () => {
-      video.currentTime = seekSec
-      video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
+    let cancelled = false
+
+    const startPlayback = () => {
+      if (cancelled) return
+      try {
+        video.currentTime = Math.max(0, seekSec)
+      } catch {
+        /* seek trước khi metadata sẵn sàng */
+      }
+      void video.play()
+        .then(() => { if (!cancelled) setIsPlaying(true) })
+        .catch(() => { if (!cancelled) setIsPlaying(false) })
+    }
+
+    const onCanPlay = () => startPlayback()
+    const onLoadedMetadata = () => {
+      if (video.duration && Number.isFinite(video.duration)) {
+        setDuration(video.duration)
+      }
     }
 
     video.addEventListener('canplay', onCanPlay, { once: true })
-    return () => video.removeEventListener('canplay', onCanPlay)
+    video.addEventListener('loadedmetadata', onLoadedMetadata)
+
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      startPlayback()
+    } else {
+      video.load()
+    }
+
+    return () => {
+      cancelled = true
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('loadedmetadata', onLoadedMetadata)
+    }
   }, [selectedRecord?.id, videoSrc, seekSec, isEventClip])
 
   useEffect(() => {
