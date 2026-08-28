@@ -70,9 +70,20 @@ describe('ba tầng nhận diện HC-02', () => {
     ).toBe('Nguyễn Văn Trung')
   })
 
-  it('đã khớp thư viện thì không tụt về Người dù còn mã sgc', () => {
-    const event = makeEvent({ objectId: 'p-102', trackWorkerId: 'sgc-12' })
+  it('stage object từ SQLite vẫn lên profile khi đã khớp gallery', () => {
+    const event = makeEvent({
+      id: 'obj:OBJ-0099',
+      objectId: 'p-102',
+      objectLabel: 'Duncan',
+      violationLabel: 'Duncan',
+      stage: 'object',
+    })
     expect(resolvePatrolPersonStage(event)).toBe('profile')
+  })
+
+  it('tin stage person/object từ server khi chưa có dấu hiệu định danh', () => {
+    expect(resolvePatrolPersonStage(makeEvent({ stage: 'person', objectId: 'pers-1' }))).toBe('person')
+    expect(resolvePatrolPersonStage(makeEvent({ stage: 'object', objectId: 'OBJ-1' }))).toBe('object')
   })
 })
 

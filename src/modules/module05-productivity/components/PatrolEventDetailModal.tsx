@@ -150,6 +150,17 @@ function resolveEventDurationSeconds(event: PatrolEvent): number | null {
   return seconds > 0 ? seconds : null
 }
 
+function resolveEventDisplayName(
+  event: PatrolEvent,
+  objectDisplay: ReturnType<typeof resolveEventObjectDisplay>,
+): string | null {
+  const fromManual = objectDisplay.label?.trim()
+  if (fromManual && fromManual !== 'Đối tượng' && fromManual !== 'Unknown') return fromManual
+  const fromEvent = event.violationLabel?.trim() || event.objectLabel?.trim()
+  if (fromEvent && fromEvent !== 'Đối tượng') return fromEvent
+  return null
+}
+
 function resolvePrimaryCameraLabel(
   event: PatrolEvent,
   appearanceCameras: string[],
@@ -226,12 +237,13 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     const duration = resolveEventDurationSeconds(event)
 
     const infoRows: PatrolInfoRow[] = []
+    const displayName = resolveEventDisplayName(event, objectDisplay)
     if (stage === 'profile') {
-      if (objectDisplay.label && objectDisplay.label !== 'Đối tượng') {
+      if (displayName) {
         infoRows.push({
           icon: User,
           label: 'Họ tên',
-          value: objectDisplay.label,
+          value: displayName,
           iconClassName: 'text-fuchsia-400',
         })
       }
@@ -314,7 +326,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   const hasAppearanceHistory = appearanceSegments.length > 0
   const showAppearanceHistory = (stage === 'person' || stage === 'profile')
     && (appearancesLoading || hasAppearanceHistory)
-  const showTimeSection = !hasAppearanceHistory || (stage !== 'person' && stage !== 'profile')
+  const showTimeSection = !hasAppearanceHistory
   const portraitEvidence = Boolean(activeSnapshotUrl && isPortraitPatrolCameraId(event.cameraId))
 
   return createPortal(
@@ -364,19 +376,16 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
           </button>
         </div>
 
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {activeSnapshotUrl && (
-            <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17]">
-              <PatrolEventSnapshot
-                key={`${event.id}:${activeSnapshotUrl}`}
-                event={event}
-                snapshotUrl={activeSnapshotUrl}
-                variant="detail"
-              />
-            </div>
+            <PatrolEventSnapshot
+              key={`${event.id}:${activeSnapshotUrl}`}
+              event={event}
+              snapshotUrl={activeSnapshotUrl}
+              variant="detail"
+            />
           )}
 
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {(summary.infoPrimary.length > 0 || summary.infoSecondary.length > 0) && (
             <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5">
               <div className="flex items-center gap-1.5">
@@ -509,7 +518,6 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
               onAssigned={() => setIdentityTick(t => t + 1)}
             />
           )}
-          </div>
         </div>
       </div>
     </div>,
