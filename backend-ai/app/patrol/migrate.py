@@ -1,4 +1,4 @@
-"""Migration idempotent patrol DB — user_version → v3."""
+"""Migration idempotent patrol DB — user_version → v4."""
 
 from __future__ import annotations
 
@@ -34,4 +34,20 @@ def migrate_to_v3(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE enroll_sessions ADD COLUMN consented_at REAL")
 
     conn.execute("PRAGMA user_version=3")
+    conn.commit()
+
+
+def migrate_to_v4(conn: sqlite3.Connection) -> None:
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 4:
+        return
+
+    cols = {
+        str(r[1])
+        for r in conn.execute("PRAGMA table_info(appearances)").fetchall()
+    }
+    if "snapshot_path" not in cols:
+        conn.execute("ALTER TABLE appearances ADD COLUMN snapshot_path TEXT")
+
+    conn.execute("PRAGMA user_version=4")
     conn.commit()

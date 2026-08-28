@@ -123,6 +123,7 @@ def touch_object(
     if first > ts:
         first = ts
     date = db.today_vn(ts)
+    appearance_snapshot: str | None = None
 
     with db.tx() as conn:
         if not obj_id:
@@ -134,6 +135,7 @@ def touch_object(
                 " VALUES(?,?,?,?,?,?)",
                 (date, obj_id, first, ts, snapshot_path, snapshot_score),
             )
+            appearance_snapshot = snapshot_path
         else:
             row = conn.execute(
                 "SELECT snapshot_score, last_seen FROM daily_objects"
@@ -147,6 +149,7 @@ def touch_object(
                     " VALUES(?,?,?,?,?,?)",
                     (date, obj_id, first, ts, snapshot_path, snapshot_score),
                 )
+                appearance_snapshot = snapshot_path
             else:
                 write, keep_new = _should_refresh_presence(
                     row, ts, snapshot_path, snapshot_score
@@ -159,6 +162,7 @@ def touch_object(
                         " snapshot_score = ? WHERE event_date = ? AND obj_id = ?",
                         (ts, snapshot_path, snapshot_score, date, obj_id),
                     )
+                    appearance_snapshot = snapshot_path
                 else:
                     conn.execute(
                         "UPDATE daily_objects SET last_seen = ?"
@@ -168,6 +172,7 @@ def touch_object(
         _touch_appearance(
             conn, date, obj_id, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
+            snapshot_path=appearance_snapshot,
         )
 
     return obj_id
@@ -208,6 +213,7 @@ def touch_person_event(
     is_identified = bool(
         person and person.get("status") == identity.STATUS_IDENTIFIED
     )
+    appearance_snapshot: str | None = None
 
     with db.tx() as conn:
         row = conn.execute(
@@ -218,6 +224,7 @@ def touch_person_event(
         if row is None:
             attach_path = snapshot_path if face_eligible else None
             attach_score = snapshot_score if face_eligible else 0.0
+            appearance_snapshot = attach_path
             conn.execute(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
@@ -241,6 +248,7 @@ def touch_person_event(
                     " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
                     (ts, snapshot_path, snapshot_score, date, pid),
                 )
+                appearance_snapshot = snapshot_path
             else:
                 conn.execute(
                     "UPDATE daily_events SET last_seen = ?"
@@ -255,6 +263,7 @@ def touch_person_event(
         _touch_appearance(
             conn, date, pid, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
+            snapshot_path=appearance_snapshot,
         )
 
 
@@ -376,6 +385,7 @@ def _touch_appearance(
     gps_lat: float | None = None,
     gps_lng: float | None = None,
     qualified: bool = True,
+    snapshot_path: str | None = None,
 ) -> None:
     """Một qualified presence = một lượt gặp (chuẩn hoặc chưa gán).
 
@@ -405,11 +415,18 @@ def _touch_appearance(
             lat_end = row["gps_lat_end"] if row["gps_lat_end"] is not None else row["gps_lat"]
         if lng_end is None:
             lng_end = row["gps_lng_end"] if row["gps_lng_end"] is not None else row["gps_lng"]
-        conn.execute(
-            "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-            " camera_id = ?, source_cameras = ? WHERE id = ?",
-            (ts, lat_end, lng_end, camera_id, src, row["id"]),
-        )
+        if snapshot_path:
+            conn.execute(
+                "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
+                " camera_id = ?, source_cameras = ?, snapshot_path = ? WHERE id = ?",
+                (ts, lat_end, lng_end, camera_id, src, snapshot_path, row["id"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
+                " camera_id = ?, source_cameras = ? WHERE id = ?",
+                (ts, lat_end, lng_end, camera_id, src, row["id"]),
+            )
         return
 
     seq = _next_presence_seq(conn, date, subject_id)
@@ -417,11 +434,12 @@ def _touch_appearance(
     conn.execute(
         "INSERT INTO appearances"
         "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
-        " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq, source_cameras)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
+        " source_cameras, snapshot_path)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             date, subject_id, camera_id, zone_id, ts, ts,
-            gps_lat, gps_lng, lat_end, lng_end, q, seq, src,
+            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snapshot_path,
         ),
     )
 
@@ -441,7 +459,7 @@ def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]
     rows = db.query(
         "SELECT id, camera_id, zone_id, started_at, ended_at,"
         " gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
-        " qualified, presence_seq, source_cameras"
+        " qualified, presence_seq, source_cameras, snapshot_path"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
         " ORDER BY started_at ASC",
