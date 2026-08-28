@@ -167,6 +167,7 @@ def _assign_patrol_person_identity(
 
     from .patrol_identity_lifecycle import observe as observe_track_identity, peek as peek_track_lifecycle
     from .person_identity_registry import (
+        borrow_cross_camera_patrol_worker,
         peek_patrol_track_identity,
         resolve_patrol_person_identity,
     )
@@ -178,7 +179,20 @@ def _assign_patrol_person_identity(
         frame, person_bbox, camera_id=camera_id,
     )
     face_emb = face_vec.tolist() if face_vec is not None else None
+
+    # JPEG 480px từ /analyze/frame thường fail assess trong khi recover selfie vẫn
+    # lấy được embedding — nếu không bù thì HC-02 object còn HC-01 person/identity.
+    if not face_eligible and _is_helmet_bodycam(camera_id):
+        from .worker_identity.recognizer import recover_patrol_face_embedding
+
+        recovered = recover_patrol_face_embedding(frame, person_bbox, camera_id=camera_id)
+        if recovered is not None:
+            face_emb, _face_score = recovered
+            face_eligible = True
+
     frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})
+    worker_id = ""
+    worker_name = ""
 
     if face_eligible and face_emb is not None:
         worker_id, worker_name = resolve_patrol_person_identity(
@@ -191,16 +205,26 @@ def _assign_patrol_person_identity(
             frame_w=frame_w,
             frame_h=frame_h,
         )
-        frame_faces[worker_id] = face_emb
+        if worker_id:
+            frame_faces[worker_id] = face_emb
     else:
-        # Quay lưng: giữ mã + tên đã ổn định — không ghi đè tên bằng mã sgc/p-*.
+        borrowed = borrow_cross_camera_patrol_worker(
+            camera_id,
+            person_bbox,
+            frame=frame,
+            frame_w=frame_w,
+            frame_h=frame_h,
+            face_emb=face_emb,
+        )
         cached = peek_track_lifecycle(camera_id, track_id)
-        worker_id = peek_patrol_track_identity(camera_id, track_id)
-        if cached and cached.worker_id:
-            worker_id = cached.worker_id or worker_id
+        peek_id = peek_patrol_track_identity(camera_id, track_id) or ""
+        if borrowed:
+            worker_id, worker_name = borrowed
+        elif cached and cached.worker_id:
+            worker_id = cached.worker_id or peek_id
             worker_name = cached.worker_name
-        else:
-            worker_name = ""
+        elif peek_id:
+            worker_id = peek_id
         if worker_id and not worker_name:
             from .patrol_entity import resolve_patrol_worker_display_name
 

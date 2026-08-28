@@ -292,9 +292,8 @@ export function createMobileAiAnalyzeClient(
       return
     }
 
-    // HC-* patrol — 480px JPEG 0.65 giảm payload ~40%, rút ngắn round-trip, ROI mượt hơn
     const isHelmet = cameraId.startsWith('HC-')
-    const image = captureCameraAnalyzeFrame(video, cameraId, isHelmet ? 480 : 640, isHelmet ? 0.65 : 0.72)
+    const image = captureCameraAnalyzeFrame(video, cameraId, 640, isHelmet ? 0.68 : 0.72)
     if (!image) {
       scheduleNext(500)
       return

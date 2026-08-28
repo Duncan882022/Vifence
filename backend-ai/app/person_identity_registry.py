@@ -385,6 +385,49 @@ def _finalize_identity_pair(worker_id: str, worker_name: str) -> tuple[str, str]
     return wid, resolve_patrol_worker_display_name(wid, worker_name)
 
 
+def borrow_cross_camera_patrol_worker(
+    camera_id: str,
+    person_bbox: list[float],
+    *,
+    frame: np.ndarray,
+    frame_w: int,
+    frame_h: int,
+    face_emb: list[float] | None = None,
+) -> tuple[str, str] | None:
+    """Reuse worker_id từ mũ HC-* khác — cùng người phải cùng mã trên mọi camera."""
+    if not camera_id.startswith("HC-"):
+        return None
+
+    query = _as_emb(face_emb)
+    if query is None:
+        from .worker_identity.recognizer import recover_patrol_face_embedding
+
+        recovered = recover_patrol_face_embedding(frame, person_bbox, camera_id=camera_id)
+        if recovered is not None:
+            query = _as_emb(recovered[0])
+
+    if query is None:
+        return None
+
+    with _lock:
+        state = _load()
+        reused = _find_reusable_worker_id(
+            state,
+            camera_id,
+            person_bbox,
+            frame_w=frame_w,
+            frame_h=frame_h,
+            face_emb=query,
+        )
+    if not reused:
+        return None
+
+    bound = _gallery_from_patrol_binding(reused)
+    if bound:
+        return _finalize_identity_pair(bound[0], bound[1])
+    return _finalize_identity_pair(reused, reused)
+
+
 def _match_sqlite_patrol_face(face_emb: np.ndarray) -> tuple[str, str] | None:
     """Khớp vector SQLite person_faces — ưu tiên hồ sơ patrol đã enroll."""
     from .patrol import identity as patrol_identity
