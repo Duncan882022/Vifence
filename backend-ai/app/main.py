@@ -122,6 +122,7 @@ for _eng in (
     mesh_engine,
     atgt_engine,
     ppe_engine,
+    patrol_engine,
     pccc_engine,
     wah_engine,
     crane_engine,
@@ -943,9 +944,14 @@ async def analyze_ppe_frame_endpoint(payload: MobileFramePayload):
             roll=getattr(payload, "roll", None),
         )
     loop = asyncio.get_event_loop()
+    analyze_fn = (
+        _analyze_patrol_person_frame
+        if camera_id.startswith("HC-") or camera_id.startswith("DR-")
+        else _analyze_ppe_frame
+    )
     result = await loop.run_in_executor(
         _analyze_executor,
-        _analyze_ppe_frame,
+        analyze_fn,
         frame,
         camera_id,
     )
