@@ -21,7 +21,7 @@ import {
   resolvePatrolPersonStage,
   PATROL_PERSON_STAGE_META,
 } from '../utils/patrolWorkforceEventLabels'
-import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
+import { getPatrolEventLocationLabel } from '../utils/patrolEventsUi'
 
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
@@ -67,13 +67,15 @@ function resolvePrimaryCameraLabel(
   event: PatrolEvent,
   appearanceCameras: string[],
 ): string | null {
-  if (event.cameraId?.trim()) {
-    return PATROL_BODYCAM_LABELS[event.cameraId] ?? event.cameraId
-  }
-  if (event.cameraName?.trim()) return event.cameraName.trim()
+  const locationLabel = getPatrolEventLocationLabel(
+    event.cameraName,
+    event.zoneName,
+    event.cameraId,
+  ).trim()
+  if (locationLabel) return locationLabel
   if (appearanceCameras.length > 0) {
     const id = appearanceCameras[0]
-    return PATROL_BODYCAM_LABELS[id] ?? id
+    return getPatrolEventLocationLabel('', event.zoneName, id)
   }
   return null
 }

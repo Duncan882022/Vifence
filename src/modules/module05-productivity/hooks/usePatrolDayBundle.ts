@@ -10,6 +10,10 @@ import {
 } from '../services/patrolDayEvents.service'
 import { filterPatrolDayObjectsForDisplay } from '../utils/patrolDayObjectFilter'
 import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
+import {
+  buildPatrolSubjectCameraLookup,
+  resolvePatrolSubjectCameraRef,
+} from '../utils/patrolEventsUi'
 
 const POLL_MS = 3000
 
@@ -27,16 +31,18 @@ function isoFrom(sec: number): string {
 }
 
 function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
+  const cameraBySubject = buildPatrolSubjectCameraLookup(bundle.presences)
   const displayObjects = filterPatrolDayObjectsForDisplay(bundle.objects, bundle.persons)
   const personEvents: PatrolEvent[] = bundle.persons.map(row => {
     const identified = row.status === 'identified'
+    const camera = resolvePatrolSubjectCameraRef(cameraBySubject, row.persId)
     return {
       id: `pers:${row.persId}`,
       type: 'PERSON_DETECTED',
-      cameraId: '',
-      cameraName: '',
-      zoneId: 'ZONE_SITE',
-      zoneName: 'Cầu Sông Hốt',
+      cameraId: camera.cameraId,
+      cameraName: camera.cameraName,
+      zoneId: camera.zoneId,
+      zoneName: camera.zoneName,
       objectId: identified
         ? (row.employeeCode
             ? patrolGalleryWorkerIdFromEmployeeCode(row.employeeCode)
@@ -55,26 +61,29 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       stage: identified ? 'profile' : 'person',
     } as PatrolEvent
   })
-  const objectEvents: PatrolEvent[] = displayObjects.map(row => ({
-    id: `obj:${row.objId}`,
-    type: 'PERSON_DETECTED',
-    cameraId: '',
-    cameraName: '',
-    zoneId: 'ZONE_SITE',
-    zoneName: 'Cầu Sông Hốt',
-    objectId: row.objId,
-    objectLabel: 'Đối tượng',
-    violationLabel: 'Đối tượng',
-    startedAt: isoFrom(row.firstSeen),
-    lockedAt: isoFrom(row.lastSeen),
-    endedAt: null,
-    durationSeconds: null,
-    status: 'LOCKED',
-    confidence: 1,
-    gps: { lat: 0, lng: 0 },
-    snapshotUrl: row.snapshotUrl,
-    stage: 'object',
-  } as PatrolEvent))
+  const objectEvents: PatrolEvent[] = displayObjects.map(row => {
+    const camera = resolvePatrolSubjectCameraRef(cameraBySubject, row.objId)
+    return {
+      id: `obj:${row.objId}`,
+      type: 'PERSON_DETECTED',
+      cameraId: camera.cameraId,
+      cameraName: camera.cameraName,
+      zoneId: camera.zoneId,
+      zoneName: camera.zoneName,
+      objectId: row.objId,
+      objectLabel: 'Đối tượng',
+      violationLabel: 'Đối tượng',
+      startedAt: isoFrom(row.firstSeen),
+      lockedAt: isoFrom(row.lastSeen),
+      endedAt: null,
+      durationSeconds: null,
+      status: 'LOCKED',
+      confidence: 1,
+      gps: { lat: 0, lng: 0 },
+      snapshotUrl: row.snapshotUrl,
+      stage: 'object',
+    } as PatrolEvent
+  })
   return [...personEvents, ...objectEvents].sort(
     (a, b) => Date.parse(b.lockedAt) - Date.parse(a.lockedAt),
   )

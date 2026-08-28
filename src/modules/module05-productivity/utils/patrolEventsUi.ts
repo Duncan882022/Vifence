@@ -10,6 +10,9 @@ import {
   Flame,
 } from 'lucide-react'
 import type { EventStatus, EventType } from '../data/patrolTypes'
+import { resolvePatrolCameraDisplayName } from '../data/patrolCameras'
+import { PATROL_SITE_NAME } from '../data/patrolSiteMap'
+import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 
 export const PATROL_EVENT_TYPES: EventType[] = [
   'PERSON_DETECTED',
@@ -116,10 +119,67 @@ export function getPatrolEventPlace(cameraName: string, zoneName: string): strin
   return `${cameraName} · ${zoneName}`
 }
 
+export interface PatrolSubjectCameraRef {
+  cameraId: string
+  zoneId: string
+  zoneName: string
+  cameraName: string
+}
+
+const DEFAULT_SUBJECT_CAMERA: PatrolSubjectCameraRef = {
+  cameraId: '',
+  zoneId: 'ZONE_SITE',
+  zoneName: PATROL_SITE_NAME,
+  cameraName: '',
+}
+
+/** Camera ghi nhận gần nhất theo subject_id từ presences trong bundle ngày. */
+export function buildPatrolSubjectCameraLookup(
+  presences: PatrolDayPresence[],
+): Map<string, PatrolSubjectCameraRef> {
+  const scratch = new Map<string, { cameraId: string; zoneId: string; sortKey: number }>()
+
+  for (const presence of presences) {
+    const subjectId = presence.subjectId.trim()
+    const cameraId = presence.cameraId.trim() || presence.sourceCameras.at(-1)?.trim() || ''
+    if (!subjectId || !cameraId) continue
+
+    const zoneId = presence.zoneId?.trim() || 'ZONE_SITE'
+    const sortKey = presence.endedAt * 10 + presence.presenceSeq
+    const prev = scratch.get(subjectId)
+    if (!prev || sortKey >= prev.sortKey) {
+      scratch.set(subjectId, { cameraId, zoneId, sortKey })
+    }
+  }
+
+  const out = new Map<string, PatrolSubjectCameraRef>()
+  for (const [subjectId, { cameraId, zoneId }] of scratch) {
+    out.set(subjectId, {
+      cameraId,
+      zoneId,
+      zoneName: PATROL_SITE_NAME,
+      cameraName: resolvePatrolCameraDisplayName(cameraId),
+    })
+  }
+  return out
+}
+
+export function resolvePatrolSubjectCameraRef(
+  lookup: Map<string, PatrolSubjectCameraRef>,
+  subjectId: string,
+): PatrolSubjectCameraRef {
+  return lookup.get(subjectId.trim()) ?? DEFAULT_SUBJECT_CAMERA
+}
+
 /** Nhãn địa điểm trên card sự kiện — vd. Cầu Sông Hốt - Helmet 02. */
-export function getPatrolEventLocationLabel(cameraName: string, zoneName: string): string {
-  const zone = zoneName.trim()
+export function getPatrolEventLocationLabel(
+  cameraName: string,
+  zoneName: string,
+  cameraId?: string,
+): string {
+  const zone = zoneName.trim() || PATROL_SITE_NAME
   const camera = cameraName.trim()
+    || (cameraId?.trim() ? resolvePatrolCameraDisplayName(cameraId) : '')
   if (zone && camera) return `${zone} - ${camera}`
   if (zone) return zone
   if (camera) return camera
