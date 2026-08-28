@@ -171,11 +171,7 @@ function buildHelmetPins(): PatrolHelmetPin[] {
       label: `Helmet ${num}`,
       zoneId,
       color: zone.borderColor,
-      position: helmetId === 'HC-02'
-        ? PATROL_HELMET_02_FALLBACK
-        : helmetId === 'HC-01'
-          ? PATROL_HELMET_01_FALLBACK
-          : PATROL_SITE_CENTER,
+      position: PATROL_SITE_CENTER,
     }
   })
 }
@@ -203,8 +199,9 @@ export const PATROL_MAP_ACTIVE_DRONE_PINS: PatrolDronePin[] = [
     id: 'DR-03',
     label: 'Drone 03',
     zoneId: PATROL_SITE_ZONE_ID,
+<<<<<<< HEAD
     color: PATROL_GPS_ZONES[0]?.borderColor ?? '#ef4444',
-    position: PATROL_DRONE_03_FALLBACK,
+    position: PATROL_SITE_CENTER,
   },
 ]
 

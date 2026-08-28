@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
+import { formatPublisherGpsLabel } from './publisherGpsDefaults'
 import {
   getBrowserPublishHelmetId,
   getHelmetWhipUrl,
@@ -134,8 +135,9 @@ export function HelmetPublisherPage() {
   const facingLabel = state.facing === 'environment' ? 'Camera sau' : 'Camera trước'
 
   const gpsText = state.gps
-    ? `${state.gps.lat.toFixed(5)}, ${state.gps.lng.toFixed(5)}`
-    : 'Chưa có tín hiệu'
+    ? formatPublisherGpsLabel(state.gps)
+    : '—'
+  const gpsIsLive = Boolean(state.gps && !state.gps.isDefault)
 
   return (
     <div className="min-h-dvh bg-[#0a0f16] text-white flex flex-col items-center px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -227,9 +229,9 @@ export function HelmetPublisherPage() {
           <StatRow
             label="Vị trí GPS"
             value={gpsText}
-            tone={state.gps ? 'good' : 'warn'}
+            tone={gpsIsLive ? 'good' : state.gps ? 'normal' : 'warn'}
           />
-          {state.gps && (
+          {gpsIsLive && state.gps && (
             <StatRow
               label="Độ chính xác GPS"
               value={`±${Math.round(state.gps.accuracyM)} m`}

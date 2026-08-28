@@ -67,20 +67,12 @@ export function resolvePatrolHelmetMapPosition(
   return fallback
 }
 
-/** Luôn trả tọa độ — HC-* không GPS → neo công trường Cầu Sông Hốt. */
+/** Luôn trả tọa độ — không GPS → tâm Cầu Sông Hốt. */
 export function resolvePatrolHeatmapGps(cameraId: string): { lat: number; lng: number } {
   if (isPatrolHelmetCameraId(cameraId)) {
     const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
     if (snap && isValidGps(snap.lat, snap.lng)) {
       return { lat: snap.lat, lng: snap.lng }
-    }
-    const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === cameraId)
-    if (pin) return { lat: pin.position[0], lng: pin.position[1] }
-    if (cameraId === 'HC-02') {
-      return { lat: PATROL_HELMET_02_FALLBACK[0], lng: PATROL_HELMET_02_FALLBACK[1] }
-    }
-    if (cameraId === 'HC-01') {
-      return { lat: PATROL_HELMET_01_FALLBACK[0], lng: PATROL_HELMET_01_FALLBACK[1] }
     }
     return { lat: PATROL_SITE_CENTER[0], lng: PATROL_SITE_CENTER[1] }
   }
