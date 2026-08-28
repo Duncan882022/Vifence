@@ -76,6 +76,20 @@ function appearanceRowKey(segment: PatrolAppearanceSegment): string {
   return `${segment.cameraId}-${segment.startedAt}`
 }
 
+/** So sánh snapshot — bỏ query v= bust, cùng file path = cùng ảnh. */
+function snapshotStorageKey(url: string | undefined | null): string {
+  const raw = url?.trim()
+  if (!raw) return ''
+  try {
+    const u = new URL(raw, 'https://placeholder.local')
+    const path = u.searchParams.get('path')
+    if (path) return decodeURIComponent(path)
+    return u.pathname
+  } catch {
+    return raw.split('?')[0] ?? raw
+  }
+}
+
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
   const seen = new Set<string>()
   return segments.filter(segment => {
@@ -92,14 +106,21 @@ function resolveDefaultAppearanceKey(
 ): string | null {
   if (segments.length === 0) return null
 
-  const eventSnapshot = event.snapshotUrl?.trim()
-  if (eventSnapshot) {
-    const matched = segments.find(segment => segment.snapshotUrl?.trim() === eventSnapshot)
+  const eventSnapKey = snapshotStorageKey(event.snapshotUrl)
+  if (eventSnapKey) {
+    const matched = segments.find(
+      segment => snapshotStorageKey(segment.snapshotUrl) === eventSnapKey,
+    )
     if (matched) return appearanceRowKey(matched)
   }
 
   const eventEndSec = Math.round(Date.parse(event.lockedAt) / 1000)
   if (Number.isFinite(eventEndSec)) {
+    const containing = segments.find(
+      segment => eventEndSec >= segment.startedAt && eventEndSec <= segment.endedAt,
+    )
+    if (containing) return appearanceRowKey(containing)
+
     let best = segments[0]
     let bestDelta = Math.abs(best.endedAt - eventEndSec)
     for (const segment of segments) {
@@ -226,11 +247,14 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         [...segments].sort((a, b) => b.startedAt - a.startedAt),
       )
       setAppearanceSegments(sorted)
-      setSelectedAppearanceKey(resolveDefaultAppearanceKey(sorted, event))
+      setSelectedAppearanceKey(prev => {
+        if (prev && sorted.some(segment => appearanceRowKey(segment) === prev)) return prev
+        return resolveDefaultAppearanceKey(sorted, event)
+      })
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
-  }, [event, identityTick, viewDate])
+  }, [event?.id, identityTick, viewDate])
 
   const summary = useMemo(() => {
     if (!event) return null
