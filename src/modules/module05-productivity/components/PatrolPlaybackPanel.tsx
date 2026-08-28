@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
@@ -23,11 +23,8 @@ export function PatrolPlaybackPanel({
 }: PatrolPlaybackPanelProps) {
   const configured = isPatrolPlaybackConfigured()
   const [loadError, setLoadError] = useState<PatrolPlaybackFetchError>(null)
-
-  const fetchers = useMemo(
-    () => createPatrolPlaybackFetchers(patrolEvents),
-    [patrolEvents],
-  )
+  const patrolEventsRef = useRef(patrolEvents)
+  patrolEventsRef.current = patrolEvents
 
   const fetchRecords = useCallback(
     async (
@@ -40,16 +37,21 @@ export function PatrolPlaybackPanel({
       }
       try {
         setLoadError(null)
-        return await fetchers.fetchRecords(cameraId, params)
+        return await createPatrolPlaybackFetchers(patrolEventsRef.current)
+          .fetchRecords(cameraId, params)
       } catch {
         setLoadError('network')
         return { items: [] }
       }
     },
-    [configured, fetchers],
+    [configured],
   )
 
-  const fetchDetections = fetchers.fetchDetections
+  const fetchDetections = useCallback(
+    async (recordId: string) => createPatrolPlaybackFetchers(patrolEventsRef.current)
+      .fetchDetections(recordId),
+    [],
+  )
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2">

@@ -352,6 +352,7 @@ export function Module05Page() {
           minDate={patrolMinDate}
           onDateChange={setPatrolViewDate}
           selectedRecordId={selectedEventId}
+          onSelectRecord={() => setSelectedEventId(null)}
           filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
           filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
           groupFn={cams => groupPatrolCamerasForSidebar(cams)}

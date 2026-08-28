@@ -71,6 +71,8 @@ export interface CameraPlaybackPanelProps {
   videoAreaFlex?: number
   /** Module 05 tuần tra: ưu tiên băng liên tục MediaMTX (event clip hay 404 nếu lệch giây). */
   preferRecordType?: PlaybackPreferRecordType
+  /** Bấm block timeline — dùng để bỏ sync sự kiện từ panel ngoài. */
+  onSelectRecord?: (record: CameraPlaybackRecord) => void
 }
 
 export function CameraPlaybackPanel({
@@ -91,6 +93,7 @@ export function CameraPlaybackPanel({
   fetchDetections = fetchRecordDetections,
   videoAreaFlex = 70,
   preferRecordType = 'event',
+  onSelectRecord,
 }: CameraPlaybackPanelProps) {
   const resolveCamera = useCallback(
     (id?: string) => cameras.find(cam => cam.id === id) ?? cameras[0] ?? null,
@@ -125,6 +128,16 @@ export function CameraPlaybackPanel({
   const [muted, setMuted] = useState(true)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const fetchRecordsRef = useRef(fetchRecords)
+  const selectedRecordIdRef = useRef(selectedRecordId)
+  const initialRecordIdRef = useRef(initialRecordId)
+  const selectedRecordRef = useRef(selectedRecord)
+  const seekSecRef = useRef(seekSec)
+  fetchRecordsRef.current = fetchRecords
+  selectedRecordIdRef.current = selectedRecordId
+  initialRecordIdRef.current = initialRecordId
+  selectedRecordRef.current = selectedRecord
+  seekSecRef.current = seekSec
   const { isDesktop } = useShellLayout()
   const isMobile = !isDesktop
 
@@ -163,19 +176,40 @@ export function CameraPlaybackPanel({
     const startDate = `${date}T00:00:00+07:00`
     const endDate = `${date}T23:59:59.999+07:00`
 
-    fetchRecords(activeCam.id, { startDate, endDate })
+    fetchRecordsRef.current(activeCam.id, { startDate, endDate })
       .then(res => {
         if (cancelled) return
         const items = res.items ?? []
         setRecords(items)
-        const preferred = initialRecordId
-          ? items.find(item => item.id === initialRecordId)
+
+        const syncId = selectedRecordIdRef.current
+        const initId = initialRecordIdRef.current
+        const fromEventPanel = syncId
+          ? items.find(item => item.id === syncId)
           : undefined
-        const next = preferred ?? pickDefaultPlaybackRecord(items, preferRecordType)
+        const fromInitial = initId
+          ? items.find(item => item.id === initId)
+          : undefined
+        const keepCurrent = selectedRecordRef.current
+          ? items.find(item => item.id === selectedRecordRef.current!.id)
+          : undefined
+        const next = fromEventPanel
+          ?? fromInitial
+          ?? keepCurrent
+          ?? pickDefaultPlaybackRecord(items, preferRecordType)
+
         if (next) {
+          const sameId = selectedRecordRef.current?.id === next.id
           setSelectedRecord(next)
-          setSeekSec(next.seekSec ?? 0)
+          setSeekSec(sameId ? seekSecRef.current : (next.seekSec ?? 0))
+          if (!sameId) {
+            setProgress(0)
+            setCurrentTime(0)
+            setIsPlaying(false)
+          }
           setPlaybackError(null)
+        } else {
+          setSelectedRecord(null)
         }
       })
       .catch(err => console.error('Error loading records:', err))
@@ -184,10 +218,10 @@ export function CameraPlaybackPanel({
       })
 
     return () => { cancelled = true }
-  }, [activeCam, date, fetchRecords, initialRecordId, preferRecordType])
+  }, [activeCam?.id, date, preferRecordType])
 
   useEffect(() => {
-    if (!selectedRecordId || records.length === 0) return
+    if (!selectedRecordId) return
     const match = records.find(item => item.id === selectedRecordId)
     if (!match) return
     setSelectedRecord(match)
@@ -195,6 +229,7 @@ export function CameraPlaybackPanel({
     setProgress(0)
     setCurrentTime(0)
     setIsPlaying(false)
+    setPlaybackError(null)
   }, [selectedRecordId, records])
 
   useEffect(() => {
@@ -322,7 +357,8 @@ export function CameraPlaybackPanel({
     setCurrentTime(0)
     setIsPlaying(false)
     setPlaybackError(null)
-  }, [])
+    onSelectRecord?.(record)
+  }, [onSelectRecord])
 
   const handleTogglePlay = () => {
     const video = videoRef.current
