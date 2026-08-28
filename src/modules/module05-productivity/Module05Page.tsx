@@ -433,7 +433,7 @@ export function Module05Page() {
               title="HEATMAP"
               noPadding
               className={cn(
-                'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[3] min-h-0',
+                'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[3]',
                 isCompactLayout
                   ? 'min-h-[min(42dvh,360px)] h-[min(42dvh,360px)]'
                   : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
