@@ -359,17 +359,9 @@ export function PatrolDensityHeatmap({
     if (obj) setSelectedObject(obj)
   }
 
-  const workersStandard = dayStats.workersStandard
   const personCount = dayStats.personCount
   const identifiedCount = dayStats.identityCount
   const unassignedCount = dayStats.unassignedObservations
-
-  const siteHeadcount = useMemo(() => ({
-    observed: workersStandard,
-    identified: identifiedCount,
-    objects: unassignedCount,
-    persons: personCount,
-  }), [workersStandard, identifiedCount, unassignedCount, personCount])
 
   useEffect(() => {
     if (!expanded) return
@@ -410,7 +402,6 @@ export function PatrolDensityHeatmap({
           showCameras={false}
           helmetOnlineById={helmetOnlineById}
           helmetHeadingById={helmetHeadingById}
-          siteHeadcount={siteHeadcount}
           helmetDetectCountsById={helmetDetectCountsById}
           onDetectionClick={onDetectionClick}
           requireLiveGpsForHc02={false}

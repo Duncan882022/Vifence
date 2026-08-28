@@ -7,7 +7,7 @@
  * HQCV §12–16
  */
 import 'leaflet/dist/leaflet.css'
-import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet'
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, TileLayer, Tooltip, ZoomControl, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -236,6 +236,71 @@ function headingConePositions(
   ]
 }
 
+type PatrolDeviceDetectCounts = { person: number; identity: number; total: number }
+
+function PatrolDeviceTooltipBody({
+  label,
+  isActive,
+  zoneName,
+  detect,
+  heading,
+  aerial,
+}: {
+  label: string
+  isActive: boolean
+  zoneName: string
+  detect?: PatrolDeviceDetectCounts
+  heading?: number | null
+  aerial?: boolean
+}) {
+  return (
+    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+      <strong>{label}</strong>
+      {' · '}
+      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+        {isActive ? 'ONLINE' : 'OFFLINE'}
+      </span>
+      {heading != null && Number.isFinite(heading) && (
+        <>
+          <br />
+          Hướng: {Math.round(heading)}°
+        </>
+      )}
+      <br />
+      Phụ trách: {zoneName}
+      {detect != null && (
+        <>
+          <br />
+          <span style={{ color: '#38bdf8' }}>
+            {aerial
+              ? `Detect: ${detect.total} người (góc trên cao)`
+              : `Detect: ${detect.total} người`}
+          </span>
+          <br />
+          <span style={{ color: '#64748b', fontSize: 9 }}>
+            {detect.person} nhân sự · {detect.identity} định danh
+          </span>
+        </>
+      )}
+    </span>
+  )
+}
+
+function DismissDeviceTooltipOnMapClick({
+  openId,
+  onDismiss,
+}: {
+  openId: string | null
+  onDismiss: () => void
+}) {
+  useMapEvents({
+    click: () => {
+      if (openId) onDismiss()
+    },
+  })
+  return null
+}
+
 /* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
 function MapInvalidator() {
   const map = useMap()
@@ -455,14 +520,7 @@ export interface PatrolGeoHeatmapProps {
   helmetOnlineById?: Record<string, boolean>
   /** Heading degrees 0–360 per helmet — cone FOV on map. */
   helmetHeadingById?: Record<string, number | null | undefined>
-  /** Tổng hợp nhân lực công trường — hiển thị trên tooltip mũ. */
-  siteHeadcount?: {
-    observed: number
-    identified: number
-    objects: number
-    persons: number
-  }
-  helmetDetectCountsById?: Record<string, { person: number; identity: number; total: number }>
+  helmetDetectCountsById?: Record<string, PatrolDeviceDetectCounts>
   /** Click Object / detection with objectId → bottom sheet. */
   onDetectionClick?: (dot: DetectionDot) => void
   /** HC-02 luôn hiện marker (off = xám); false = ẩn khi chưa GPS. */
@@ -496,7 +554,6 @@ export function PatrolGeoHeatmap({
   showCameras,
   helmetOnlineById,
   helmetHeadingById,
-  siteHeadcount,
   helmetDetectCountsById,
   onDetectionClick,
   requireLiveGpsForHc02 = false,
@@ -635,6 +692,10 @@ export function PatrolGeoHeatmap({
           attributionControl={false}
         >
           <MapInvalidator />
+          <DismissDeviceTooltipOnMapClick
+            openId={openHelmetTipId}
+            onDismiss={() => setOpenHelmetTipId(null)}
+          />
           <MapSiteBoundsConfig followLiveGps={followLiveGps} />
           <MapFollowLiveGps enabled={followLiveGps} lat={liveGpsLat} lng={liveGpsLng} />
           <MapSiteOverlayClip enabled={clipOverlays} />
@@ -829,62 +890,29 @@ export function PatrolGeoHeatmap({
                   zIndexOffset={isActive ? 700 : 400}
                   opacity={markerOpacity}
                   eventHandlers={{
-                    click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
+                    click: (e) => {
+                      L.DomEvent.stopPropagation(e)
+                      setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id))
+                    },
                   }}
                 >
-                  <Tooltip
-                    direction="top"
-                    offset={[0, -20]}
-                    opacity={0.95}
-                    permanent={tipOpen}
-                  >
-                    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                      <strong>{pin.label}</strong>
-                      {' · '}
-                      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                        {isActive ? 'ONLINE' : 'OFFLINE'}
-                      </span>
-                      {heading != null && Number.isFinite(heading) && (
-                        <>
-                          <br />
-                          Heading: {Math.round(heading)}°
-                        </>
-                      )}
-                      <br />
-                      Phụ trách: {zoneName}
-                      {detect != null && (
-                        <>
-                          <br />
-                          <span style={{ color: '#38bdf8' }}>
-                            Đã detect: {detect.total} người
-                          </span>
-                          <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>
-                            {detect.person} Nhân sự · {detect.identity} Định danh
-                          </span>
-                        </>
-                      )}
-                      {siteHeadcount && (
-                        <>
-                          <br />
-                          <span style={{ color: '#94a3b8' }}>
-                            Công trường: {siteHeadcount.observed} chuẩn
-                            {' · '}{siteHeadcount.persons} người
-                            {' · '}{siteHeadcount.identified} định danh
-                            {siteHeadcount.objects > 0 && (
-                              <>{' · '}{siteHeadcount.objects} có thể người</>
-                            )}
-                          </span>
-                        </>
-                      )}
-                      {!tipOpen && (
-                        <>
-                          <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                        </>
-                      )}
-                    </span>
-                  </Tooltip>
+                  {tipOpen && (
+                    <Tooltip
+                      permanent
+                      direction="top"
+                      offset={[0, -20]}
+                      opacity={0.95}
+                      className="patrol-zone-tip"
+                    >
+                      <PatrolDeviceTooltipBody
+                        label={pin.label}
+                        isActive={isActive}
+                        zoneName={zoneName}
+                        detect={detect}
+                        heading={heading}
+                      />
+                    </Tooltip>
+                  )}
                 </Marker>
               </>
             )
@@ -908,39 +936,29 @@ export function PatrolGeoHeatmap({
                 zIndexOffset={isActive ? 720 : 420}
                 opacity={markerOpacity}
                 eventHandlers={{
-                  click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e)
+                    setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id))
+                  },
                 }}
               >
-                <Tooltip
-                  direction="top"
-                  offset={[0, -20]}
-                  opacity={0.95}
-                  permanent={tipOpen}
-                >
-                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                    <strong>{pin.label}</strong>
-                    {' · '}
-                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                      {isActive ? 'ONLINE' : 'OFFLINE'}
-                    </span>
-                    <br />
-                    Phụ trách: {zoneName}
-                    {detect != null && (
-                      <>
-                        <br />
-                        <span style={{ color: '#38bdf8' }}>
-                          Đếm: {detect.total} người (góc trên cao)
-                        </span>
-                      </>
-                    )}
-                    {!tipOpen && (
-                      <>
-                        <br />
-                        <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                      </>
-                    )}
-                  </span>
-                </Tooltip>
+                {tipOpen && (
+                  <Tooltip
+                    permanent
+                    direction="top"
+                    offset={[0, -20]}
+                    opacity={0.95}
+                    className="patrol-zone-tip"
+                  >
+                    <PatrolDeviceTooltipBody
+                      label={pin.label}
+                      isActive={isActive}
+                      zoneName={zoneName}
+                      detect={detect}
+                      aerial
+                    />
+                  </Tooltip>
+                )}
               </Marker>
             )
           })}
