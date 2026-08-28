@@ -24,17 +24,11 @@ import {
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
-import {
-  patrolPersonMeetsDisplayGate,
-  suppressPatrolObjectOverlappingIdentified,
-} from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
-import {
-  readPatrolFlightModeFromMetrics,
-  resolvePatrolFlycamGateFlags,
-} from '@/modules/module05-productivity/utils/patrolFlightMode'
+import { resolveEffectivePatrolFlightMode } from '@/modules/module05-productivity/utils/patrolFlightMode'
+import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
-import { isPatrolMetricsCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
@@ -145,43 +139,13 @@ export function CameraVideoFeed({
 
   useEffect(() => {
     if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
-    const frameW = vmsFeed.snapshot.width ?? 0
-    const frameH = vmsFeed.snapshot.height ?? 0
-    const patrolCam = isPatrolMetricsCameraId(cameraId)
-    const flightMode = readPatrolFlightModeFromMetrics(vmsFeed.snapshot.metrics)
+    const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
     if (cameraId.startsWith('DR-') && flightMode) {
       setPatrolFlightMode(cameraId, flightMode)
     }
-    const flycamGates = resolvePatrolFlycamGateFlags(cameraId, flightMode)
-    const mapped = vmsFeed.snapshot.detections
-      .map(d => ({
-        behavior: d.behavior,
-        label: d.label ?? d.behavior,
-        confidence: d.confidence,
-        bbox: d.bbox,
-        subject_bbox: d.subject_bbox,
-        worker_id: d.worker_id,
-        worker_name: d.worker_name,
-        track_id: d.track_id,
-        tier: d.tier,
-        velocity: d.velocity,
-      }))
-      .filter(d => {
-        if (!patrolCam || d.behavior !== 'person') return true
-        const raw = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
-        if (!raw || raw.length < 4 || frameW <= 0 || frameH <= 0) return false
-        return patrolPersonMeetsDisplayGate({
-          bbox: [raw[0], raw[1], raw[2], raw[3]],
-          frameW,
-          frameH,
-          workerId: d.worker_id,
-          flycam: flycamGates.flycam,
-          proximityFlycam: flycamGates.proximityFlycam,
-        })
-      })
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
-      suppressPatrolObjectOverlappingIdentified(mapped),
+      gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
     )
   }, [
     runPatrolHeatmapAnalyze,

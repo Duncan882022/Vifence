@@ -291,9 +291,11 @@ def _sibling_identity_for_worker(
     worker_id: str,
     exclude_camera_id: str,
 ) -> tuple[str, str] | None:
-    """Tier + tên cao nhất từ mũ HC-* khác cho cùng worker_id."""
+    """Tier + tên cao nhất từ cam tuần tra khác cho cùng worker_id."""
+    from .patrol_flight_mode import is_patrol_identity_unified_camera
+
     wid = (worker_id or "").strip()
-    if not wid or not exclude_camera_id.startswith("HC-"):
+    if not wid or not is_patrol_identity_unified_camera(exclude_camera_id):
         return None
     best_tier = ""
     best_rank = -1
@@ -301,7 +303,7 @@ def _sibling_identity_for_worker(
     with _lock:
         for key, state in _states.items():
             cam = key.split("|", 1)[0]
-            if cam == exclude_camera_id or not cam.startswith("HC-"):
+            if cam == exclude_camera_id or not is_patrol_identity_unified_camera(cam):
                 continue
             if state.worker_id != wid:
                 continue

@@ -158,6 +158,11 @@ def is_patrol_helmet_like(camera_id: str) -> bool:
     return False
 
 
+def is_patrol_identity_unified_camera(camera_id: str) -> bool:
+    """Camera dùng chung identity site-wide — HC-* + DR-* proximity."""
+    return is_patrol_helmet_like(camera_id)
+
+
 def patrol_flight_mode_payload(camera_id: str) -> dict[str, object]:
     mode = resolve_patrol_flight_mode(camera_id)
     alt = get_patrol_drone_altitude_m(camera_id)

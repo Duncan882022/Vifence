@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   readPatrolFlightModeFromMetrics,
+  resolveEffectivePatrolFlightMode,
   resolvePatrolFlycamGateFlags,
 } from './patrolFlightMode'
+
+vi.mock('@/services/patrolFlightModeBridge', () => ({
+  getPatrolFlightMode: vi.fn(() => 'proximity' as const),
+}))
 
 describe('readPatrolFlightModeFromMetrics', () => {
   it('đọc flight_mode từ bucket patrol (VMS DR-*)', () => {
@@ -40,5 +45,32 @@ describe('resolvePatrolFlycamGateFlags', () => {
       flycam: true,
       proximityFlycam: false,
     })
+  })
+
+  it('HC-* không bật flycam gate', () => {
+    expect(resolvePatrolFlycamGateFlags('HC-02', null)).toEqual({
+      flycam: false,
+      proximityFlycam: false,
+    })
+  })
+})
+
+describe('resolveEffectivePatrolFlightMode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('ưu tiên metrics snapshot', () => {
+    expect(
+      resolveEffectivePatrolFlightMode('DR-03', { patrol: { flight_mode: 'aerial' } }),
+    ).toBe('aerial')
+  })
+
+  it('fallback bridge TTL khi metrics thiếu (DR-*)', () => {
+    expect(resolveEffectivePatrolFlightMode('DR-03', null)).toBe('proximity')
+  })
+
+  it('HC-* không fallback bridge', () => {
+    expect(resolveEffectivePatrolFlightMode('HC-01', null)).toBeNull()
   })
 })
