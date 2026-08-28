@@ -18,6 +18,8 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 
+from .detector import MODULE05_BYTETRACK_MAX_AGE
+
 Bbox = tuple[float, float, float, float]
 
 # Track sống lâu hơn ngưỡng này mà không được đo lại thì bỏ hẳn.
@@ -106,6 +108,8 @@ class TrackerProfile:
     lost_strict_after_sec: float = 1.2
     lost_size_ratio_min: float = 0.45
     lost_center_ratio_max: float = 0.85
+    # ByteTrack max_age — bỏ track sau N frame không ghép được detection.
+    max_age_frames: int = MODULE05_BYTETRACK_MAX_AGE
 
 
 # Bodycam: người to, nhưng camera đội đầu rung và xoay nhanh nên vẫn cần gate rộng.
@@ -439,7 +443,11 @@ class PatrolTracker:
             track.miss_streak += 1
             if track.state == "confirmed":
                 track.state = "lost"
-            if now - track.last_measured_at > self.profile.lost_keep_sec:
+            drop = (
+                track.miss_streak >= self.profile.max_age_frames
+                or now - track.last_measured_at > self.profile.lost_keep_sec
+            )
+            if drop:
                 dropped_id = track.track_id
                 self.tracks.pop(dropped_id, None)
                 try:

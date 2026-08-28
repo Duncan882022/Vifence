@@ -128,9 +128,23 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
   })
 }
 
-function normalizeBbox(raw: number[] | undefined): [number, number, number, number] | null {
+function isNormalizedBboxCoords(raw: number[]): boolean {
+  return Math.max(...raw.slice(0, 4).map(v => Math.abs(v))) <= 1.5
+}
+
+function normalizeBbox(
+  raw: number[] | undefined,
+  frameWidth = 0,
+  frameHeight = 0,
+): [number, number, number, number] | null {
   if (!raw || raw.length < 4) return null
-  const [x1, y1, x2, y2] = raw
+  let [x1, y1, x2, y2] = raw
+  if (frameWidth > 0 && frameHeight > 0 && isNormalizedBboxCoords(raw)) {
+    x1 *= frameWidth
+    y1 *= frameHeight
+    x2 *= frameWidth
+    y2 *= frameHeight
+  }
   if (x2 <= x1 || y2 <= y1) return null
   return [x1, y1, x2, y2]
 }
@@ -149,12 +163,21 @@ function normalizeVelocity(raw: number[] | undefined): [number, number] | undefi
   return [Number(vx), Number(vy)]
 }
 
-function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null {
-  const bbox = normalizeBbox(raw.bbox as number[] | undefined)
+function mapDetection(
+  raw: Record<string, unknown>,
+  frameWidth: number,
+  frameHeight: number,
+): VmsOverlayDetection | null {
+  const bbox = normalizeBbox(raw.bbox as number[] | undefined, frameWidth, frameHeight)
   if (!bbox) return null
+  const workerId = raw.worker_id
+    ? String(raw.worker_id)
+    : raw.id
+      ? String(raw.id)
+      : undefined
   return {
-    behavior: String(raw.behavior ?? ''),
-    label: String(raw.label ?? raw.behavior ?? ''),
+    behavior: String(raw.behavior ?? 'person'),
+    label: String(raw.label ?? raw.behavior ?? 'person'),
     confidence: Number(raw.confidence ?? 0),
     bbox,
     scenario_id: raw.scenario_id ? String(raw.scenario_id) : undefined,
@@ -166,15 +189,15 @@ function mapDetection(raw: Record<string, unknown>): VmsOverlayDetection | null 
     vehicle_plate: raw.vehicle_plate ? String(raw.vehicle_plate) : undefined,
     vehicle_type: raw.vehicle_type ? String(raw.vehicle_type) : undefined,
     driver_name: raw.driver_name ? String(raw.driver_name) : undefined,
-    worker_id: raw.worker_id ? String(raw.worker_id) : undefined,
-    worker_name: raw.worker_name ? String(raw.worker_name) : undefined,
+    worker_id: workerId,
+    worker_name: raw.worker_name ? String(raw.worker_name) : workerId,
     employee_code: raw.employee_code ? String(raw.employee_code) : undefined,
     contractor_name: raw.contractor_name ? String(raw.contractor_name) : undefined,
     face_match_confidence:
       raw.face_match_confidence != null ? Number(raw.face_match_confidence) : undefined,
     face_match_source: raw.face_match_source ? String(raw.face_match_source) : undefined,
-    subject_bbox: normalizeBbox(raw.subject_bbox as number[] | undefined) ?? undefined,
-    related_bbox: normalizeBbox(raw.related_bbox as number[] | undefined) ?? undefined,
+    subject_bbox: normalizeBbox(raw.subject_bbox as number[] | undefined, frameWidth, frameHeight) ?? undefined,
+    related_bbox: normalizeBbox(raw.related_bbox as number[] | undefined, frameWidth, frameHeight) ?? undefined,
     tier: normalizeTier(raw.tier),
     velocity: normalizeVelocity(raw.velocity as number[] | undefined),
   }
@@ -191,6 +214,9 @@ interface RawVmsDetectionPayload {
   vms_ready?: boolean
   stream_online?: boolean
   frame_age_sec?: number | null
+  reset_state?: boolean
+  status?: string
+  total_workers?: number
   detections?: Record<string, unknown>[]
   roi_zones?: RoadAnalysisRoiZone[]
   metrics?: Record<string, unknown>
@@ -202,15 +228,17 @@ export function normalizeVmsDetectionSnapshot(
   cameraId: string,
 ): VmsDetectionSnapshot {
   const data = (raw ?? {}) as RawVmsDetectionPayload
+  const frameWidth = Number(data.width ?? 0)
+  const frameHeight = Number(data.height ?? 0)
 
   const detections = (data.detections ?? [])
-    .map(row => mapDetection(row))
+    .map(row => mapDetection(row, frameWidth, frameHeight))
     .filter((row): row is VmsOverlayDetection => Boolean(row))
 
   return {
     camera_id: data.camera_id ?? cameraId,
-    width: Number(data.width ?? 0),
-    height: Number(data.height ?? 0),
+    width: frameWidth,
+    height: frameHeight,
     updated_at: Number(data.updated_at ?? 0),
     source_pts_sec: data.source_pts_sec != null ? Number(data.source_pts_sec) : undefined,
     frame_wallclock_ms: data.frame_wallclock_ms != null
@@ -245,6 +273,7 @@ export interface VmsDetectionPollerOptions {
   backendUrl?: string
   intervalMs?: number
   onSnapshot: (snapshot: VmsDetectionSnapshot) => void
+  onBeforeSnapshot?: () => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
 }
 
@@ -254,6 +283,7 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
     backendUrl = getVmsBackendUrl(),
     intervalMs = 450,
     onSnapshot,
+    onBeforeSnapshot,
     onStatusChange,
   } = options
 
@@ -289,6 +319,7 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')
+      onBeforeSnapshot?.()
       onSnapshot(snapshot)
       schedule(intervalMs)
     } catch (err) {

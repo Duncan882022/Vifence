@@ -154,7 +154,25 @@ export function getVisibleVideoSourceRect(
   return { x: srcX, y: srcY, width: srcW, height: srcH }
 }
 
-/** Bbox từ backend (theo frame đã chụp) → % overlay trên video đang hiển thị. */
+/** Bbox 0–1 (Module 05 WS) vs pixel — ngưỡng giống backend `detector.py`. */
+export function isNormalizedBbox(bbox: [number, number, number, number]): boolean {
+  return Math.max(...bbox.map(v => Math.abs(v))) <= 1.5
+}
+
+/** Chuyển bbox chuẩn hoá → pixel theo kích thước khung gốc. */
+export function bboxToPixelSpace(
+  bbox: [number, number, number, number],
+  frameWidth: number,
+  frameHeight: number,
+): [number, number, number, number] {
+  if (!isNormalizedBbox(bbox) || frameWidth <= 0 || frameHeight <= 0) {
+    return bbox
+  }
+  const [x1, y1, x2, y2] = bbox
+  return [x1 * frameWidth, y1 * frameHeight, x2 * frameWidth, y2 * frameHeight]
+}
+
+/** Bbox từ backend (pixel hoặc 0–1) → % overlay trên video đang hiển thị. */
 export function mapBackendBboxToOverlay(
   bbox: [number, number, number, number],
   frameWidth: number,
@@ -163,7 +181,8 @@ export function mapBackendBboxToOverlay(
   fit: 'cover' | 'contain' = 'cover',
   objectPosition: 'center' | 'bottom' = 'center',
 ): { x: number; y: number; w: number; h: number } {
-  const [x1, y1, x2, y2] = bbox
+  const pixelBbox = bboxToPixelSpace(bbox, frameWidth, frameHeight)
+  const [x1, y1, x2, y2] = pixelBbox
   const visible = getVisibleVideoSourceRect(video, fit, objectPosition)
   const scaleX = frameWidth > 0 ? visible.width / frameWidth : 1
   const scaleY = frameHeight > 0 ? visible.height / frameHeight : 1
