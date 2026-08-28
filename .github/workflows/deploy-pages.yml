@@ -31,6 +31,9 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Restore Vite dev index.html
+        run: cp scripts/index.dev.html index.html
+
       - name: Install
         run: npm ci
 

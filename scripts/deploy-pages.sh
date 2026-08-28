@@ -11,6 +11,9 @@ cd "$ROOT"
 # động giả thì người ta sẽ bỏ qua nó, và lúc ấy nó thành vô dụng thật.
 #
 # Vẫn chạy được khi cần: npm run audit:predeploy
+echo "→ Restore Vite dev index.html (entry cho vite build)…"
+cp scripts/index.dev.html index.html
+
 echo "→ Build GitHub Pages…"
 npm run build:pages
 
