@@ -431,6 +431,15 @@ server {
         proxy_buffering off;
     }
 
+    # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
+    location = /Vifence {
+        return 301 /Vifence/;
+    }
+    location /Vifence/ {
+        alias /opt/vifence/frontend/;
+        index index.html;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -497,6 +506,15 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host \\\$host;
         proxy_buffering off;
+    }
+
+    # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
+    location = /Vifence {
+        return 301 /Vifence/;
+    }
+    location /Vifence/ {
+        alias /opt/vifence/frontend/;
+        index index.html;
     }
 
     location / {
@@ -596,6 +614,15 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host \\\$host;
         proxy_buffering off;
+    }
+
+    # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
+    location = /Vifence {
+        return 301 /Vifence/;
+    }
+    location /Vifence/ {
+        alias /opt/vifence/frontend/;
+        index index.html;
     }
 
     location / {
