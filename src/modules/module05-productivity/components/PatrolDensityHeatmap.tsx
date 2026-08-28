@@ -399,12 +399,12 @@ export function PatrolDensityHeatmap({
           countMode="current"
           showSiteBoundary={layers.polygon}
           showZonePolygons={false}
-          showDetections={layers.helmet || layers.flycam}
+          showDetections={layers.density}
           liveDetectionDots={filteredDots}
           followLiveGps={hc02Online && hc02Live.hasLiveGps}
           liveGpsLat={hc02Online ? hc02Live.lat : null}
           liveGpsLng={hc02Online ? hc02Live.lng : null}
-          showDensity={layers.density}
+          showDensity={false}
           showRoute={layers.helmet}
           showHelmetMarkers={layers.helmet}
           showDroneMarkers={layers.flycam}
