@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Users, MapPin, Footprints, ScanFace,
 } from 'lucide-react'
@@ -316,16 +315,6 @@ export function Module05Page() {
       <Header
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
-        headerRight={
-          <Link
-            to="/module05/quet-mat"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#334155] text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors"
-            title="Quét mặt đăng ký công nhân"
-          >
-            <ScanFace className="w-3.5 h-3.5" aria-hidden />
-            Quét mặt
-          </Link>
-        }
       />
       <PageLayout scrollable>
         {/* Tier 1 — KPIs */}
