@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPatrolPlaybackFetchers } from './patrolPlayback.service'
+import { createPatrolPlaybackFetchers, findLatestPatrolPlaybackDay } from './patrolPlayback.service'
 import type { PatrolEvent } from '../data/patrolTypes'
 
 vi.mock('../data/helmetIngest', async importOriginal => {
@@ -129,5 +129,28 @@ describe('createPatrolPlaybackFetchers', () => {
       endDate: '2026-08-29T23:59:59+07:00',
     })
     expect(res29.items.find(i => i.id === 'ev-late')).toBeDefined()
+  })
+})
+
+describe('findLatestPatrolPlaybackDay', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  it('trả ngày gần nhất có băng ≥ 3s', async () => {
+    let call = 0
+    vi.mocked(fetch).mockImplementation(async () => {
+      call += 1
+      if (call === 1) {
+        return { ok: false, status: 404, json: async () => [] } as Response
+      }
+      return {
+        ok: true,
+        json: async () => [{ start: '2026-08-28T09:00:49+02:00', duration: 12.6 }],
+      } as Response
+    })
+
+    const day = await findLatestPatrolPlaybackDay('HC-02', '2026-08-29', '2026-08-22')
+    expect(day).toBe('2026-08-28')
   })
 })

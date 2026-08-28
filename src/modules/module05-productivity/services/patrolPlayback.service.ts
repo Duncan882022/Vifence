@@ -28,6 +28,9 @@ const MIN_SEGMENT_SEC = 3
 /** Clip quanh thời điểm sự kiện khi bấm từ tab Sự kiện. */
 export const PATROL_EVENT_CLIP_SEC = 30
 
+/** Làm mới timeline khi đang ghi — hiện block xanh mới. */
+export const PATROL_PLAYBACK_REFRESH_MS = 20_000
+
 export type PatrolPlaybackFetchError = 'unconfigured' | 'network' | null
 
 function isoDayKey(value: string): string {
@@ -242,4 +245,38 @@ export function getPatrolPlaybackMinDate(): string {
 /** Ngày lịch VN (0h) — KHÔNG có ca/kíp; không dùng logic 06:00 từ Module 02/03. */
 export function getPatrolDefaultPlaybackDate(): string {
   return formatVnDate()
+}
+
+function dayHasContinuousSegments(
+  segments: MediaMtxSegment[],
+  from: Date,
+  to: Date,
+): boolean {
+  return segments.some(seg => {
+    const startedAt = dayjs(seg.start)
+    if (!startedAt.isValid()) return false
+    const startDate = startedAt.toDate()
+    if (startDate < from || startDate > to) return false
+    return seg.duration >= MIN_SEGMENT_SEC
+  })
+}
+
+/** Ngày gần nhất (≤ maxDate) có băng liên tục — tránh timeline trống khi hôm nay chưa có ghi. */
+export async function findLatestPatrolPlaybackDay(
+  cameraId: string,
+  maxDate: string,
+  minDate: string,
+): Promise<string | null> {
+  const base = getMediaMtxPlaybackBase()
+  if (!base) return null
+
+  const path = mediaMtxPathForCamera(cameraId)
+  let cursor = maxDate
+  while (cursor >= minDate) {
+    const { from, to, listStart, listEnd } = vnDayBounds(`${cursor}T00:00:00+07:00`)
+    const segments = await fetchMediaMtxSegments(base, path, listStart, listEnd)
+    if (dayHasContinuousSegments(segments, from, to)) return cursor
+    cursor = formatVnDateOffsetDays(-1, cursor)
+  }
+  return null
 }

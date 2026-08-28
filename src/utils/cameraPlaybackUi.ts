@@ -1,5 +1,8 @@
+import dayjs from 'dayjs'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import type { CameraPlaybackRecord } from '@/types/cameraPlayback'
+
+const CONTINUOUS_TYPES = new Set(['continuous', 'continuous_event'])
 
 export const ALL_LOCATIONS_TAB = 'Tất cả'
 
@@ -52,6 +55,55 @@ export function resolvePlaybackVideoUrl(record: CameraPlaybackRecord | null): st
     return `${base}ai-data/${record.videoId}`
   }
   return null
+}
+
+/** Bản ghi thực tế dùng cho `<video>` — clip sự kiện lệch giây hay 404, ưu tiên băng liên tục. */
+export function resolvePlaybackTarget(
+  selected: CameraPlaybackRecord | null,
+  records: CameraPlaybackRecord[],
+): CameraPlaybackRecord | null {
+  if (!selected) return null
+  if (CONTINUOUS_TYPES.has(selected.type)) return selected
+
+  const instant = dayjs(selected.startTime)
+  if (!instant.isValid()) return selected
+
+  const segments = records.filter(r => CONTINUOUS_TYPES.has(r.type))
+  if (segments.length === 0) return selected
+
+  for (const seg of segments) {
+    const start = dayjs(seg.startTime)
+    const end = dayjs(seg.endTime)
+    if (!instant.isBefore(start) && !instant.isAfter(end)) {
+      return {
+        ...seg,
+        seekSec: Math.max(0, instant.diff(start, 'second')),
+      }
+    }
+  }
+
+  let nearest: CameraPlaybackRecord | null = null
+  let nearestDeltaSec = Number.POSITIVE_INFINITY
+  for (const seg of segments) {
+    const start = dayjs(seg.startTime)
+    const deltaSec = Math.abs(instant.diff(start, 'second'))
+    if (deltaSec < nearestDeltaSec) {
+      nearestDeltaSec = deltaSec
+      nearest = seg
+    }
+  }
+
+  if (nearest && nearestDeltaSec <= 5 * 60) {
+    const start = dayjs(nearest.startTime)
+    const segDurationSec = Math.max(1, dayjs(nearest.endTime).diff(start, 'second'))
+    const seekSec = Math.min(
+      Math.max(0, instant.diff(start, 'second')),
+      segDurationSec - 1,
+    )
+    return { ...nearest, seekSec }
+  }
+
+  return selected
 }
 
 export function formatPlaybackClock(seconds: number): string {
