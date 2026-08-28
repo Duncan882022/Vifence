@@ -318,6 +318,7 @@ export function Module05Page() {
 
   const handleSelectEvent = (ev: PatrolEvent) => {
     setSelectedEventId(ev.id)
+    setDetailEventId(ev.id)
   }
 
   const handlePlaybackRecordsLoaded = useCallback((
