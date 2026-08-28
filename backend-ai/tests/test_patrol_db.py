@@ -231,6 +231,23 @@ class DailyEventTests(PatrolDbTestCase):
         card = daystore.list_person_events(db.today_vn(1_000.0))[0]
         self.assertEqual(card["snapshot_path"], "recent.jpg")
 
+    def test_identified_immediate_upsert_when_face_clearer(self) -> None:
+        """Định danh cũng upsert ngay khi ảnh rõ hơn — coi như sự kiện."""
+        pers_id, _ = identity.observe_face(_vec(27), quality=0.8)
+        identity.identify(pers_id, full_name="Bình", employee_code="NV27")
+        floor = daystore._person_snapshot_score_floor()
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="ok.jpg",
+            snapshot_score=floor + 0.1, face_eligible=True, now=1_000.0,
+        )
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="better.jpg",
+            snapshot_score=floor + 0.5, face_eligible=True, now=1_003.0,
+        )
+        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["snapshot_path"], "better.jpg")
+        self.assertEqual(card["last_seen"], 1_003.0)
+
 
 class ObjectTests(PatrolDbTestCase):
     def test_object_gets_day_scoped_code(self) -> None:

@@ -83,6 +83,8 @@ def _should_refresh_person_snapshot(
             return interval_ok, False
         if old_score < floor:
             return True, True
+        if snapshot_score >= old_score:
+            return True, True
         return interval_ok, True
 
     keep_new = snapshot_score >= old_score
