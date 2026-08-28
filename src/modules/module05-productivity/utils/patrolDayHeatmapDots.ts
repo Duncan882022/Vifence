@@ -5,6 +5,8 @@ import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
+import type { PatrolFlightMode } from './patrolFlightMode'
+import { isPatrolHelmetLikeCamera } from './patrolFlightMode'
 import { isPatrolDroneCameraId } from '../data/patrolDrones'
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
@@ -95,6 +97,7 @@ export function buildPatrolPresenceHeatmapDots(
     cameraOnlineById?: Record<string, boolean>
     helmetPositionsById?: Record<string, [number, number]>
     helmetHeadingsById?: Record<string, number | null | undefined>
+    flightModeByCamera?: Record<string, PatrolFlightMode | string | null | undefined>
   },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
@@ -110,6 +113,10 @@ export function buildPatrolPresenceHeatmapDots(
     const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
     const cameraOnline = isCameraOnlineForHeatmap(primaryCam, opts?.cameraOnlineById)
     const inCameraView = recent && cameraOnline
+    const helmetLike = isPatrolHelmetLikeCamera(
+      primaryCam,
+      opts?.flightModeByCamera?.[primaryCam],
+    )
     const [lat, lng] = presencePosition(
       presence,
       opts?.helmetPositionsById,
@@ -126,7 +133,7 @@ export function buildPatrolPresenceHeatmapDots(
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
       objectId: presence.subjectId,
-      verified: isPatrolDroneCameraId(primaryCam) ? false : tierVerified(presence.tier),
+      verified: helmetLike ? tierVerified(presence.tier) : false,
       inCameraView,
       opacity: presence.tier === 'object'
         ? (inCameraView ? 0.55 : 0.35)

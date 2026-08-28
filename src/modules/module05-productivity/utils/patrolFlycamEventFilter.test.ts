@@ -37,15 +37,15 @@ describe('filterPatrolEventsByFlycamAltitude', () => {
     expect(filtered[0]?.stage).toBe('object')
   })
 
-  it('tầm thấp — giữ người/định danh flycam', () => {
+  it('tầm thấp — giữ toàn bộ sự kiện như HC-*', () => {
     const object = makeEvent({ stage: 'object' })
     const person = makeEvent({ id: 'pers:2', stage: 'person' })
+    const identity = makeEvent({ id: 'pers:3', type: 'IDENTITY_VERIFIED', stage: 'profile' })
     const filtered = filterPatrolEventsByFlycamAltitude(
-      [object, person],
+      [object, person, identity],
       { 'DR-03': 'proximity' },
     )
-    expect(filtered).toHaveLength(1)
-    expect(filtered[0]?.stage).toBe('person')
+    expect(filtered).toHaveLength(3)
   })
 
   it('HC-* không bị lọc theo độ cao flycam', () => {

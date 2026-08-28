@@ -111,6 +111,15 @@ def is_patrol_flycam_proximity(camera_id: str) -> bool:
     return camera_id.startswith("DR-") and resolve_patrol_flight_mode(camera_id) == PatrolFlightMode.PROXIMITY
 
 
+def is_patrol_helmet_like(camera_id: str) -> bool:
+    """HC-* luôn; DR-* tầm thấp — cùng pipeline AI/gate/sự kiện với mũ."""
+    if camera_id.startswith("HC-"):
+        return True
+    if camera_id.startswith("DR-"):
+        return is_patrol_flycam_proximity(camera_id)
+    return False
+
+
 def patrol_flight_mode_payload(camera_id: str) -> dict[str, object]:
     mode = resolve_patrol_flight_mode(camera_id)
     alt = get_patrol_drone_altitude_m(camera_id)

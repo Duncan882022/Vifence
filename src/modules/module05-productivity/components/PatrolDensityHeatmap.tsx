@@ -33,6 +33,7 @@ import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
 import { buildPatrolPresenceHeatmapDots, filterPatrolHeatmapDotsByDevice } from '../utils/patrolDayHeatmapDots'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
+import { usePatrolFlycamFlightModes } from '../hooks/usePatrolFlycamFlightModes'
 import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { ObjectState } from '../types/workforceHeatmap'
@@ -124,6 +125,7 @@ export function PatrolDensityHeatmap({
 
   // Kể cả drone: nó cũng phát hiện người và đóng góp chấm lên bản đồ.
   const metrics = usePatrolHelmetLiveMetrics(PATROL_MAP_CAMERA_IDS)
+  const flycamFlightModes = usePatrolFlycamFlightModes(PATROL_DRONE_IDS)
 
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
@@ -267,6 +269,7 @@ export function PatrolDensityHeatmap({
       includeUnassigned: true,
       helmetPositionsById: mergedCameraPositions,
       helmetHeadingsById: helmetHeadingById,
+      flightModeByCamera: flycamFlightModes,
     })
     const byDevice = filterPatrolHeatmapDotsByDevice(dots, {
       helmet: layers.helmet,
@@ -287,6 +290,7 @@ export function PatrolDensityHeatmap({
     helmetHeadingById,
     layers.helmet,
     layers.flycam,
+    flycamFlightModes,
   ])
 
   const onDetectionClick = (dot: { objectId?: string; id: string }) => {

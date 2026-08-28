@@ -7,16 +7,26 @@ export interface PatrolFlycamGateFlags {
   proximityFlycam: boolean
 }
 
+/** HC-* luôn; DR-* tầm thấp — cùng gate/pipeline với mũ. */
+export function isPatrolHelmetLikeCamera(
+  cameraId: string,
+  flightMode?: PatrolFlightMode | string | null,
+): boolean {
+  if (cameraId.startsWith('HC-')) return true
+  if (cameraId.startsWith('DR-')) return flightMode === 'proximity'
+  return false
+}
+
 /** Đọc từ overlay metrics (`metrics.ppe.flight_mode`). */
 export function resolvePatrolFlycamGateFlags(
   cameraId: string,
   flightMode?: string | null,
 ): PatrolFlycamGateFlags {
-  if (!cameraId.startsWith('DR-')) {
+  if (isPatrolHelmetLikeCamera(cameraId, flightMode)) {
     return { flycam: false, proximityFlycam: false }
   }
-  if (flightMode === 'proximity') {
-    return { flycam: false, proximityFlycam: true }
+  if (!cameraId.startsWith('DR-')) {
+    return { flycam: false, proximityFlycam: false }
   }
   // Mặc định / aerial / chưa có telemetry → gate silhouette tầm cao.
   return { flycam: true, proximityFlycam: false }

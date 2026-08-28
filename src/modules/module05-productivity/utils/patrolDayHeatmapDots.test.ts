@@ -100,12 +100,20 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(scoped).toHaveLength(1)
   })
 
-  it('flycam — không badge định danh (chỉ đếm)', () => {
+  it('flycam tầm cao — không badge định danh (chỉ đếm)', () => {
     const dots = buildPatrolPresenceHeatmapDots([
       makePresence({ id: 2, cameraId: 'DR-03', tier: 'identity', subjectId: 'pers-0099' }),
-    ])
+    ], { flightModeByCamera: { 'DR-03': 'aerial' } })
     expect(dots).toHaveLength(1)
     expect(dots[0].verified).toBe(false)
+  })
+
+  it('flycam tầm thấp — badge định danh giống HC-*', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 2, cameraId: 'DR-03', tier: 'identity', subjectId: 'pers-0099' }),
+    ], { flightModeByCamera: { 'DR-03': 'proximity' } })
+    expect(dots).toHaveLength(1)
+    expect(dots[0].verified).toBe(true)
   })
 })
 

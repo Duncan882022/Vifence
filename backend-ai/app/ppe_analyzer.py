@@ -260,18 +260,16 @@ def _patrol_person_passes_display_gate(
     *,
     camera_id: str,
 ) -> bool:
-    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_flycam_proximity
+    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
     from .patrol_person_visibility import patrol_person_meets_display_gate
 
-    aerial = is_patrol_flycam_aerial(camera_id)
-    proximity = is_patrol_flycam_proximity(camera_id)
-    return patrol_person_meets_display_gate(
-        person_box,
-        frame_w,
-        frame_h,
-        flycam=aerial,
-        proximity_flycam=proximity,
-    )
+    if is_patrol_helmet_like(camera_id):
+        return patrol_person_meets_display_gate(person_box, frame_w, frame_h)
+    if is_patrol_flycam_aerial(camera_id):
+        return patrol_person_meets_display_gate(
+            person_box, frame_w, frame_h, flycam=True,
+        )
+    return patrol_person_meets_display_gate(person_box, frame_w, frame_h)
 
 
 def _assign_patrol_person_display_only(
@@ -1877,26 +1875,22 @@ def _filter_persons(
     for_display: bool = False,
 ) -> list[_PersonPpe]:
     h, w = frame.shape[:2]
-    bodycam = _is_helmet_bodycam(camera_id)
-    flycam = _is_patrol_flycam(camera_id)
-    proximity_flycam = False
-    aerial_flycam = False
-    if flycam:
-        from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_flycam_proximity
+    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
 
-        proximity_flycam = is_patrol_flycam_proximity(camera_id)
-        aerial_flycam = is_patrol_flycam_aerial(camera_id)
+    helmet_like = is_patrol_helmet_like(camera_id)
+    bodycam = helmet_like
+    flycam = _is_patrol_flycam(camera_id) and not helmet_like
+    aerial_flycam = flycam and is_patrol_flycam_aerial(camera_id)
+    proximity_flycam = False
     identity_strict = (
         (strict or camera_id in ("A-04", "HC-01"))
         and not bodycam
         and not flycam
     )
-    if proximity_flycam:
+    if helmet_like or bodycam:
         conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
     elif flycam:
         conf_floor = min_conf if min_conf is not None else _PERSON_CONF_FLYCAM
-    elif bodycam:
-        conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
     else:
         conf_floor = min_conf if min_conf is not None else (_PERSON_CONF_STRICT if identity_strict else _PERSON_CONF)
     machinery = _machinery_bboxes(frame, camera_id, source_pts_sec=source_pts_sec) if identity_strict else []
@@ -1909,12 +1903,12 @@ def _filter_persons(
             box,
             w,
             h,
-            frame=frame if (identity_strict or bodycam or proximity_flycam) else None,
+            frame=frame if (identity_strict or helmet_like) else None,
             machinery=machinery,
             strict=identity_strict,
-            bodycam=bodycam,
+            bodycam=helmet_like,
             flycam=aerial_flycam,
-            proximity_flycam=proximity_flycam,
+            proximity_flycam=False,
             for_display=for_display,
         ):
             continue
@@ -2094,11 +2088,16 @@ def _patrol_display_person_count(
     camera_id: str,
 ) -> int:
     """Số bbox ROI — mọi silhouette giống người trên khung (display gate)."""
-    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_flycam_proximity
+    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
     from .patrol_person_visibility import patrol_person_meets_display_gate
 
+    if is_patrol_helmet_like(camera_id):
+        return sum(
+            1
+            for p in persons
+            if patrol_person_meets_display_gate(p.person_box, frame_w, frame_h)
+        )
     aerial = is_patrol_flycam_aerial(camera_id)
-    proximity = is_patrol_flycam_proximity(camera_id)
     return sum(
         1
         for p in persons
@@ -2107,7 +2106,6 @@ def _patrol_display_person_count(
             frame_w,
             frame_h,
             flycam=aerial,
-            proximity_flycam=proximity,
         )
     )
 
