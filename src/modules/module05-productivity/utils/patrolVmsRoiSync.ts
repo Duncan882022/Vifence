@@ -5,6 +5,7 @@ import {
   patrolPersonMeetsDrFlycamDisplayGate,
   suppressPatrolObjectOverlappingIdentified,
 } from './patrolPersonVisibility'
+import { bboxToPixelSpace } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   resolveEffectivePatrolFlightMode,
   resolvePatrolFlycamGateFlags,
@@ -41,8 +42,13 @@ export function gateVmsPatrolPersonDetections(
       if (d.behavior !== 'person') return false
       const raw = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
       if (!raw || raw.length < 4 || frameW <= 0 || frameH <= 0) return false
+      const bbox = bboxToPixelSpace(
+        [raw[0], raw[1], raw[2], raw[3]] as [number, number, number, number],
+        frameW,
+        frameH,
+      )
       const gateInput = {
-        bbox: [raw[0], raw[1], raw[2], raw[3]] as [number, number, number, number],
+        bbox,
         frameW,
         frameH,
         workerId: d.worker_id,
