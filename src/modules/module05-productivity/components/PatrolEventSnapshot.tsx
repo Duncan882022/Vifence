@@ -33,12 +33,43 @@ export function PatrolEventSnapshot({
   const isDetail = variant === 'detail'
   const displayUrl = (snapshotUrlOverride ?? event.snapshotUrl)?.trim()
   const portraitEvidence = isDetail && isPortraitPatrolCameraId(event.cameraId)
-  const [loaded, setLoaded] = useState(false)
+  const [renderUrl, setRenderUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    setLoaded(false)
+    if (!displayUrl) {
+      setRenderUrl(null)
+      setLoading(false)
+      setFailed(false)
+      return
+    }
+
+    setLoading(true)
     setFailed(false)
+    setRenderUrl(null)
+
+    let cancelled = false
+    const img = new Image()
+    img.decoding = 'async'
+    img.onload = () => {
+      if (cancelled) return
+      setRenderUrl(displayUrl)
+      setLoading(false)
+    }
+    img.onerror = () => {
+      if (cancelled) return
+      setRenderUrl(null)
+      setFailed(true)
+      setLoading(false)
+    }
+    img.src = displayUrl
+
+    return () => {
+      cancelled = true
+      img.onload = null
+      img.onerror = null
+    }
   }, [displayUrl])
 
   const frameClass = cn(
@@ -59,7 +90,7 @@ export function PatrolEventSnapshot({
 
   const content = (
     <>
-      {!loaded && !failed && (
+      {loading && !failed && (
         <div
           className={cn(
             'absolute inset-0 flex items-center justify-center bg-[#0a0e17]',
@@ -70,30 +101,26 @@ export function PatrolEventSnapshot({
           <Loader2 className={cn('animate-spin text-muted-foreground/50', isDetail ? 'w-6 h-6' : 'w-3.5 h-3.5')} />
         </div>
       )}
-      <img
-        key={displayUrl}
-        src={displayUrl}
-        alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
-        className={cn(
-          isDetail
-            ? cn(
-              'block w-full h-full object-contain mx-auto bg-black',
-              portraitEvidence
-                ? 'max-h-[85dvh]'
-                : 'h-auto max-h-[min(48dvh,420px)]',
-            )
-            : 'absolute inset-0 h-full w-full object-cover',
-          !loaded && !failed && 'opacity-0',
-        )}
-        loading={isDetail ? 'eager' : 'lazy'}
-        decoding="async"
-        fetchPriority={isDetail ? 'high' : 'auto'}
-        onLoad={() => setLoaded(true)}
-        onError={() => {
-          setFailed(true)
-          setLoaded(true)
-        }}
-      />
+      {renderUrl === displayUrl && (
+        <img
+          key={displayUrl}
+          src={displayUrl}
+          alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
+          className={cn(
+            isDetail
+              ? cn(
+                'block w-full h-full object-contain mx-auto bg-black',
+                portraitEvidence
+                  ? 'max-h-[85dvh]'
+                  : 'h-auto max-h-[min(48dvh,420px)]',
+              )
+              : 'absolute inset-0 h-full w-full object-cover',
+          )}
+          loading={isDetail ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={isDetail ? 'high' : 'auto'}
+        />
+      )}
       {failed && (
         <div
           className={cn(
@@ -106,7 +133,7 @@ export function PatrolEventSnapshot({
           <span className={isDetail ? 'text-[10px]' : 'text-[6px]'}>Không tải được</span>
         </div>
       )}
-      {loaded && !failed && (
+      {renderUrl === displayUrl && !failed && (
         <>
           {!isDetail && (
             <>

@@ -376,16 +376,19 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
+        <div className="flex flex-col flex-1 min-h-0">
           {activeSnapshotUrl && (
-            <PatrolEventSnapshot
-              key={`${event.id}:${activeSnapshotUrl}`}
-              event={event}
-              snapshotUrl={activeSnapshotUrl}
-              variant="detail"
-            />
+            <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17]">
+              <PatrolEventSnapshot
+                key={`${event.id}:${selectedAppearanceKey ?? 'event'}:${activeSnapshotUrl}`}
+                event={event}
+                snapshotUrl={activeSnapshotUrl}
+                variant="detail"
+              />
+            </div>
           )}
 
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {(summary.infoPrimary.length > 0 || summary.infoSecondary.length > 0) && (
             <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5">
               <div className="flex items-center gap-1.5">
@@ -462,6 +465,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                         <div className="relative w-[72px] h-[52px] shrink-0 overflow-hidden rounded-md border border-[#1e2433]/90 bg-black">
                           {thumbUrl ? (
                             <img
+                              key={rowKey}
                               src={thumbUrl}
                               alt=""
                               className="absolute inset-0 h-full w-full object-cover"
@@ -518,6 +522,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
               onAssigned={() => setIdentityTick(t => t + 1)}
             />
           )}
+          </div>
         </div>
       </div>
     </div>,
