@@ -73,45 +73,6 @@ function appearanceRowKey(segment: PatrolAppearanceSegment): string {
   return `${segment.cameraId}-${segment.startedAt}`
 }
 
-function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
-  const seen = new Set<string>()
-  return segments.filter(segment => {
-    const key = appearanceRowKey(segment)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-function resolveDefaultAppearanceKey(
-  segments: PatrolAppearanceSegment[],
-  event: PatrolEvent,
-): string | null {
-  if (segments.length === 0) return null
-
-  const eventSnapshot = event.snapshotUrl?.trim()
-  if (eventSnapshot) {
-    const matched = segments.find(segment => segment.snapshotUrl?.trim() === eventSnapshot)
-    if (matched) return appearanceRowKey(matched)
-  }
-
-  const eventEndSec = Math.round(Date.parse(event.lockedAt) / 1000)
-  if (Number.isFinite(eventEndSec)) {
-    let best = segments[0]
-    let bestDelta = Math.abs(best.endedAt - eventEndSec)
-    for (const segment of segments) {
-      const delta = Math.abs(segment.endedAt - eventEndSec)
-      if (delta < bestDelta) {
-        best = segment
-        bestDelta = delta
-      }
-    }
-    return appearanceRowKey(best)
-  }
-
-  return appearanceRowKey(segments[0])
-}
-
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } | null {
   const lat = segment.gpsLat ?? null
   const lng = segment.gpsLng ?? null
@@ -205,11 +166,9 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     setAppearancesLoading(true)
     void fetchPatrolSubjectAppearances(subjectId).then(segments => {
       if (cancelled) return
-      const sorted = dedupeAppearanceSegments(
+      setAppearanceSegments(
         [...segments].sort((a, b) => b.startedAt - a.startedAt),
       )
-      setAppearanceSegments(sorted)
-      setSelectedAppearanceKey(resolveDefaultAppearanceKey(sorted, event))
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
@@ -292,11 +251,9 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   }, [event, appearanceSegments])
 
   const activeSnapshotUrl = useMemo(() => {
-    if (selectedAppearanceKey) {
-      const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
-      if (selected?.snapshotUrl?.trim()) return selected.snapshotUrl
-    }
-    return event?.snapshotUrl
+    if (!selectedAppearanceKey) return event?.snapshotUrl
+    const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
+    return selected?.snapshotUrl ?? event?.snapshotUrl
   }, [appearanceSegments, event?.snapshotUrl, selectedAppearanceKey])
 
   if (!event || !summary) return null
@@ -315,9 +272,6 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   const showAppearanceHistory = (stage === 'person' || stage === 'profile')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory || (stage !== 'person' && stage !== 'profile')
-  const showHeroSnapshot = Boolean(
-    activeSnapshotUrl && !hasAppearanceHistory,
-  )
   const portraitEvidence = Boolean(activeSnapshotUrl && isPortraitPatrolCameraId(event.cameraId))
 
   return createPortal(
@@ -368,7 +322,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
-          {showHeroSnapshot && (
+          {activeSnapshotUrl && (
             <PatrolEventSnapshot
               event={event}
               snapshotUrl={activeSnapshotUrl}
@@ -438,40 +392,29 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                       <button
                         key={rowKey}
                         type="button"
-                        onClick={() => setSelectedAppearanceKey(prev => (prev === rowKey ? null : rowKey))}
+                        onClick={() => setSelectedAppearanceKey(rowKey)}
                         className={cn(
-                          'w-full rounded-lg border px-2 py-2 text-left transition-colors',
+                          'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',
                           selected
                             ? 'border-sky-400/50 bg-sky-500/10 ring-1 ring-sky-400/30'
                             : 'border-[#1e2433] bg-[#0a0e17] hover:border-[#2a3855] hover:bg-[#0d121c]',
                         )}
                       >
-                        {selected && thumbUrl ? (
-                          <PatrolEventSnapshot
-                            event={event}
-                            snapshotUrl={thumbUrl}
-                            variant="detail"
-                            className="mb-2"
-                          />
-                        ) : null}
-                        <div className="flex items-stretch gap-2.5">
-                          {!selected && (
-                            <div className="relative w-[72px] h-[52px] shrink-0 overflow-hidden rounded-md border border-[#1e2433]/90 bg-black">
-                              {thumbUrl ? (
-                                <img
-                                  src={thumbUrl}
-                                  alt=""
-                                  className="absolute inset-0 h-full w-full object-cover"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
-                              ) : (
-                                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
-                                  <ImageOff className="w-4 h-4" aria-hidden />
-                                </div>
-                              )}
+                        <div className="relative w-[72px] h-[52px] shrink-0 overflow-hidden rounded-md border border-[#1e2433]/90 bg-black">
+                          {thumbUrl ? (
+                            <img
+                              src={thumbUrl}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
+                              <ImageOff className="w-4 h-4" aria-hidden />
                             </div>
                           )}
+                        </div>
                         <div className="min-w-0 flex-1 space-y-1 py-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] tabular-nums font-semibold text-foreground">
@@ -497,7 +440,6 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                           ) : (
                             <span className="text-[8px] text-muted-foreground/70">Chưa có toạ độ GPS</span>
                           )}
-                        </div>
                         </div>
                       </button>
                     )
