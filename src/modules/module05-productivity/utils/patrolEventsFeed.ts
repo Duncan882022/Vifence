@@ -1,7 +1,7 @@
 /**
  * Module 05 — feed sự kiện: chỉ bản có snapshot + thời gian hợp lệ (evidence).
  */
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import {
   isPatrolHeatmapEligibleEvent,
   summarizePatrolAlertCount,

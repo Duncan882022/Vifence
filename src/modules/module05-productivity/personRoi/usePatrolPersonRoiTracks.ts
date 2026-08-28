@@ -4,12 +4,6 @@ import type { PersonRoiDisplay } from './types'
 
 const EMPTY: PersonRoiDisplay[] = []
 
-/**
- * Nhịp cập nhật overlay. 30 FPS đã vượt ngưỡng mắt thấy mượt với khung chữ nhật,
- * trong khi 60 FPS buộc React dựng lại toàn bộ box mỗi frame và tranh CPU với
- * bộ giải mã video — chính nó làm hình giật khi mở nhiều tile.
- */
-const OVERLAY_UPDATE_INTERVAL_MS = 1000 / 60
 
 /** Dịch dưới ngưỡng này thì không đáng để React render lại — thấp hơn = mượt hơn. */
 const MIN_VISIBLE_SHIFT_PX = 0.12
@@ -31,8 +25,13 @@ function tracksVisuallyEqual(a: PersonRoiDisplay[], b: PersonRoiDisplay[]): bool
   return true
 }
 
-/** Hook overlay — subscribe engine + rAF predict, tiết chế ở 30 FPS. */
-export function usePatrolPersonRoiTracks(cameraId: string): PersonRoiDisplay[] {
+/** Hook overlay — subscribe engine + rAF predict; 60fps 1 tile, 30fps khi grid ≥2. */
+export function usePatrolPersonRoiTracks(
+  cameraId: string,
+  options?: { gridTileCount?: number },
+): PersonRoiDisplay[] {
+  const tileCount = options?.gridTileCount ?? 1
+  const intervalMs = tileCount >= 2 ? 1000 / 30 : 1000 / 60
   const engine = getPatrolPersonRoiEngine(cameraId)
   const [tracks, setTracks] = useState<PersonRoiDisplay[]>(() => engine.getDisplayTracks())
 
@@ -51,7 +50,7 @@ export function usePatrolPersonRoiTracks(cameraId: string): PersonRoiDisplay[] {
 
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
-      if (now - lastUpdate < OVERLAY_UPDATE_INTERVAL_MS) return
+      if (now - lastUpdate < intervalMs) return
       lastUpdate = now
 
       const nextTracks = engine.predictDisplay(now)
@@ -64,7 +63,7 @@ export function usePatrolPersonRoiTracks(cameraId: string): PersonRoiDisplay[] {
 
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [engine])
+  }, [engine, intervalMs])
 
   return tracks
 }

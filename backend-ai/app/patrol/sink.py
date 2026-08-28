@@ -314,7 +314,7 @@ def _stash_stale(
 
 def _resolve_observation_gps(camera_id: str) -> tuple[float | None, float | None]:
     try:
-        from ..patrol_api import get_patrol_gps
+        from ..patrol_runtime import get_patrol_gps
 
         return get_patrol_gps(camera_id)
     except Exception:

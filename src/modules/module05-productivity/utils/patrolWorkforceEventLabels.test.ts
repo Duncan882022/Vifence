@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import {
   dedupePatrolEventsByMasterEntity,
   patrolEventMasterEntityKey,

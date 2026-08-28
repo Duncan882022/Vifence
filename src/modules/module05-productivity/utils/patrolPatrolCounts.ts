@@ -2,7 +2,7 @@
  * Đếm entity patrol theo tier — dùng chung KPI, tooltip mũ, heatmap gate.
  * Nguồn sự thật: thẻ SQLite trong ngày (pers-* / iden-*), không union registry sgc-*.
  */
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import {
   countUniquePatrolTabEntities,
   isPatrolIdenId,

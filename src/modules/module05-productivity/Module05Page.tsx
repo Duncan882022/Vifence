@@ -11,7 +11,7 @@ import {
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
 import { LocalBroadcastControl } from './components/LocalBroadcastControl'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
-import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
+import { PatrolCameraPanel } from './components/PatrolCameraPanel'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
@@ -24,7 +24,7 @@ import {
 } from '@/services/patrolMobileMetricsBridge'
 import {
   type PatrolEvent,
-} from './data/patrolMockData'
+} from './data/patrolTypes'
 import {
   DEFAULT_PATROL_CAMERA_IDS,
   DEFAULT_PATROL_GRID_CAMERA_IDS,
@@ -44,7 +44,7 @@ import {
   applyPatrolUnifiedLiveRouting,
 } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
-import { usePatrolDayEvents } from './hooks/usePatrolDayEvents'
+import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
 import {
   fetchPatrolPlaybackRecords,
   fetchPatrolPlaybackDetections,
@@ -57,7 +57,6 @@ import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { usePatrolDayStats } from './hooks/usePatrolDayStats'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
@@ -236,9 +235,9 @@ export function Module05Page() {
 
   // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
   // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
-  const dayEvents = usePatrolDayEvents()
-  const dayStats = usePatrolDayStats()
-  const patrolEventsLive = dayEvents.events
+  const dayBundle = usePatrolDayBundle()
+  const patrolEventsLive = dayBundle.events
+  const dayStats = { stats: dayBundle.stats, loading: dayBundle.loading, reachable: dayBundle.reachable }
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
@@ -335,18 +334,13 @@ export function Module05Page() {
               {tier2Open && (
                 <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
                   {cameraMode === 'live' ? (
-                    <TrainingCameraPanel
+                    <PatrolCameraPanel
                       selectedId={selectedCamId}
                       onSelectCamera={handleSelectCamera}
                       onStreamCountChange={setActiveStreamCount}
                       cameras={patrolCamerasLive}
                       defaultCameraIds={patrolDefaultCameraIds}
-                      defaultSidebarOpen={false}
-                      aspectVideoGrid
-                      mobileCompactVideo={isMobileLayout}
-                      mobileStackedNoScroll={isMobileLayout}
-                      streamWhenOffline
-                      compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
+                      isMobileLayout={isMobileLayout}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}

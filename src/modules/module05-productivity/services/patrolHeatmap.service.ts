@@ -5,7 +5,7 @@
  * Modes   : count  | density            (§15 số lượng / mật độ)
  * Counts  : current | unique            (§16 current / unique)
  */
-import type { PatrolZone } from '../data/patrolMockData'
+import type { PatrolZone } from '../data/patrolTypes'
 
 /* ── Types ──────────────────────────────────────────────────── */
 

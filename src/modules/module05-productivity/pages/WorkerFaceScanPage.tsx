@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
+import { hasPatrolRole } from '@/services/patrolApiClient'
 import { PatrolFaceScannerPanel } from '../components/PatrolFaceScannerPanel'
 import {
   completePatrolEnrollSession,
@@ -20,7 +21,7 @@ type AdminStep = 'lookup' | 'scan'
 export function WorkerFaceScanPage() {
   const [params] = useSearchParams()
   const presetCode = params.get('code') ?? ''
-  const adminMode = params.get('admin') === '1' || Boolean(presetCode)
+  const adminMode = hasPatrolRole('hr')
 
   const [selfStep, setSelfStep] = useState<SelfStep>('scan')
   const [adminStep, setAdminStep] = useState<AdminStep>(presetCode ? 'lookup' : 'lookup')
@@ -41,6 +42,7 @@ export function WorkerFaceScanPage() {
   const [submittingProfile, setSubmittingProfile] = useState(false)
   const [savedPerson, setSavedPerson] = useState<PatrolWorkerPerson | null>(null)
   const [scanComplete, setScanComplete] = useState(false)
+  const [consentChecked, setConsentChecked] = useState(false)
 
   useEffect(() => {
     if (adminMode) {
@@ -125,6 +127,10 @@ export function WorkerFaceScanPage() {
       setError('Nhập đủ họ tên và mã nhân viên.')
       return
     }
+    if (!consentChecked) {
+      setError('Vui lòng đồng ý cho phép thu thập và lưu dữ liệu khuôn mặt.')
+      return
+    }
     setSubmittingProfile(true)
     setError(null)
     try {
@@ -132,6 +138,7 @@ export function WorkerFaceScanPage() {
         full_name,
         employee_code,
         contractor,
+        consented_at: Math.floor(Date.now() / 1000),
       })
       setSavedPerson(saved)
       setSelfStep('done')
@@ -243,6 +250,21 @@ export function WorkerFaceScanPage() {
                     className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
                   />
                 </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentChecked}
+                    onChange={e => {
+                      setConsentChecked(e.target.checked)
+                      setError(null)
+                    }}
+                    className="mt-0.5 rounded border-[#1e2433] bg-[#0a0e17] text-violet-500 focus:ring-violet-400/40"
+                  />
+                  <span className="text-[10px] text-muted-foreground leading-relaxed">
+                    Tôi đồng ý cho phép hệ thống thu thập, lưu trữ và sử dụng dữ liệu khuôn mặt
+                    nhằm mục đích nhận diện tuần tra an toàn lao động tại công trường.
+                  </span>
+                </label>
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
@@ -253,7 +275,7 @@ export function WorkerFaceScanPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={submittingProfile}
+                    disabled={submittingProfile || !consentChecked}
                     className="flex-[2] inline-flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold bg-violet-500 text-white hover:bg-violet-500/90 disabled:opacity-50"
                   >
                     {submittingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}

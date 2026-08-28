@@ -2,7 +2,7 @@
  * Chấm bản đồ tuần tra — 1 chấm / qualified presence tại GPS thật.
  */
 import type { DetectionDot } from '../data/patrolDetectionData'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { isPatrolDroneCameraId } from '../data/patrolDrones'

@@ -1,10 +1,7 @@
 /**
  * Module 05 — gán định danh patrol qua BE (gallery enroll + DB bindings).
  */
-import {
-  buildHealthUrl,
-  getMobileAiBackendUrl,
-} from '@/modules/module02-training/services/mobileAiBackend.service'
+import { fetchPatrol, patrolBackendBase } from '@/services/patrolApiClient'
 import { expandPatrolIdentityAliasKeys } from '../services/patrolSgcObjectLink.service'
 
 const TUNNEL_HEADERS: Record<string, string> = {
@@ -28,22 +25,6 @@ export interface PatrolIdentityAssignResult {
   employee_code?: string
   contractor_name?: string
   face_enrolled?: boolean
-}
-
-function backendBase(): string {
-  const raw = getMobileAiBackendUrl().trim().replace(/\/$/, '')
-  if (!raw) return ''
-  return raw.startsWith('http') ? raw : `https://${raw}`
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...TUNNEL_HEADERS, ...(init?.headers ?? {}) },
-    mode: 'cors',
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json() as Promise<T>
 }
 
 export async function fetchSnapshotAsBase64(snapshotUrl: string): Promise<string | null> {
@@ -85,17 +66,14 @@ export async function assignPatrolIdentityOnBackend(input: {
   cameraId?: string | null
   trackId?: string | null
 }): Promise<PatrolIdentityAssignResult> {
-  const base = backendBase()
+  const base = patrolBackendBase()
   if (!base) {
     return { ok: false, error: 'no_backend' }
   }
-  try {
-    const health = await fetchJson<{ status?: string }>(buildHealthUrl(base))
-    if (health.status !== 'ok') {
-      return { ok: false, error: 'backend_unhealthy' }
-    }
-  } catch {
-    return { ok: false, error: 'backend_unreachable' }
+
+  const health = await fetchPatrol<{ status?: string }>('/health', undefined, 8_000)
+  if (!health || health.status !== 'ok') {
+    return { ok: false, error: health ? 'backend_unhealthy' : 'backend_unreachable' }
   }
 
   const aliasKeys = expandPatrolIdentityAliasKeys(input.objectKey)
@@ -104,39 +82,32 @@ export async function assignPatrolIdentityOnBackend(input: {
     imageB64 = await fetchSnapshotAsBase64(input.snapshotUrl)
   }
 
-  try {
-    const data = await fetchJson<PatrolIdentityAssignResult>(
-      `${base}/patrol/identity/assign`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          object_key: input.objectKey,
-          worker_name: input.workerName,
-          employee_code: input.employeeCode,
-          contractor_name: input.contractorName,
-          image_b64: imageB64,
-          alias_keys: aliasKeys,
-          camera_id: input.cameraId ?? undefined,
-          track_id: input.trackId ?? undefined,
-        }),
-      },
-    )
-    return data
-  } catch {
-    return { ok: false, error: 'assign_failed' }
-  }
+  const data = await fetchPatrol<PatrolIdentityAssignResult>(
+    '/patrol/identity/assign',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        object_key: input.objectKey,
+        worker_name: input.workerName,
+        employee_code: input.employeeCode,
+        contractor_name: input.contractorName,
+        image_b64: imageB64,
+        alias_keys: aliasKeys,
+        camera_id: input.cameraId ?? undefined,
+        track_id: input.trackId ?? undefined,
+      }),
+    },
+    20_000,
+  )
+
+  if (!data) return { ok: false, error: 'assign_failed' }
+  return data
 }
 
 export async function fetchPatrolIdentityBindings(): Promise<PatrolIdentityBinding[]> {
-  const base = backendBase()
-  if (!base) return []
-  try {
-    const data = await fetchJson<{ ok: boolean; bindings?: PatrolIdentityBinding[] }>(
-      `${base}/patrol/identity/bindings`,
-    )
-    return data.bindings ?? []
-  } catch {
-    return []
-  }
+  const data = await fetchPatrol<{ ok: boolean; bindings?: PatrolIdentityBinding[] }>(
+    '/patrol/identity/bindings',
+  )
+  return data?.bindings ?? []
 }

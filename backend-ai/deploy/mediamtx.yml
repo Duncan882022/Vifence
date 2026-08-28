@@ -149,15 +149,15 @@ paths:
 # phải mở dải cổng ICE (mặc định 8189/udp) trên firewall.
 
 ###############################################
-# Xác thực — BẮT BUỘC đổi trước khi mở ra internet
-#
-# authInternalUsers:
-#   - user: helmet
-#     pass: doi-mat-khau-nay
-#     ips: []
-#     permissions:
-#       - action: publish
-#   - user: cms
-#     pass: doi-mat-khau-nay
-#     permissions:
-#       - action: read
+# Xác thực WHIP/WHEP — generate creds từ env trên VPS, không commit password thật.
+# Ví dụ (bật sau khi set WHIP_USER/WHIP_PASS trên CMS):
+authInternalUsers:
+  - user: helmet
+    pass: doi-mat-khau-whip-publish
+    ips: []
+    permissions:
+      - action: publish
+  - user: cms
+    pass: doi-mat-khau-whip-read
+    permissions:
+      - action: read

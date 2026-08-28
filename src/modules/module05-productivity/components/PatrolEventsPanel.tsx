@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Loader2 } from 'lucide-react'
+import { Clock, Loader2, Search } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import { getPatrolEventPlace } from '../utils/patrolEventsUi'
 import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
 import {
@@ -52,6 +52,27 @@ function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[]
     default:
       return feed
   }
+}
+
+function eventSearchHaystack(event: PatrolEvent): string {
+  const card = resolvePatrolPersonCardDisplay(event)
+  const persId = event.id.startsWith('pers:') ? event.id.slice(5) : event.objectId
+  return [
+    event.id,
+    persId,
+    event.objectId,
+    event.objectLabel,
+    event.violationLabel,
+    card.title,
+    card.subtitle,
+    card.workerId ?? '',
+  ].join(' ').toLowerCase()
+}
+
+function filterBySearch(events: PatrolEvent[], query: string): PatrolEvent[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return events
+  return events.filter(e => eventSearchHaystack(e).includes(q))
 }
 
 const INITIAL_COUNT = 6
@@ -166,11 +187,23 @@ export function PatrolEventsPanel({
   onDetailClick,
 }: PatrolEventsPanelProps) {
   const [filterTab, setFilterTab] = useState<PatrolFilterTab>('all')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
   const [loading, setLoading] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const activeItems = useMemo(() => filterByTab(events, filterTab), [events, filterTab])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim())
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+
+  const activeItems = useMemo(
+    () => filterBySearch(filterByTab(events, filterTab), searchQuery),
+    [events, filterTab, searchQuery],
+  )
 
   const tabCounts = useMemo(() => {
     const feed = events.filter(isPatrolPersonLifecycleWithSnapshot)
@@ -184,7 +217,7 @@ export function PatrolEventsPanel({
 
   useEffect(() => {
     setVisibleCount(INITIAL_COUNT)
-  }, [filterTab, activeItems.length])
+  }, [filterTab, searchQuery, activeItems.length])
 
   const visibleItems = useMemo(
     () => activeItems.slice(0, visibleCount),
@@ -243,6 +276,19 @@ export function PatrolEventsPanel({
         })}
       </div>
 
+      <div className="px-2 pt-2 shrink-0">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            placeholder="Tìm tên, mã NV, pers_id…"
+            className="w-full pl-8 pr-3 py-1.5 text-[10px] rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-primary/50"
+          />
+        </div>
+      </div>
+
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
         {events.filter(isPatrolPersonLifecycleWithSnapshot).length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
@@ -250,7 +296,7 @@ export function PatrolEventsPanel({
           </p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
-            Chưa có sự kiện loại này
+            {searchQuery ? 'Không có kết quả khớp tìm kiếm' : 'Chưa có sự kiện loại này'}
           </p>
         ) : (
           <div className="space-y-1.5">

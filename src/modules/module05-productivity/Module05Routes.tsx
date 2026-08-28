@@ -1,8 +1,18 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Header } from '@/components/common/Header/Header'
 import { Module05Page } from './Module05Page'
-import { WorkerProfileManagementPage } from './pages/WorkerProfileManagementPage'
-import { WorkerFaceScanPage } from './pages/WorkerFaceScanPage'
+
+const WorkerProfileManagementPage = lazy(() =>
+  import('./pages/WorkerProfileManagementPage').then(m => ({ default: m.WorkerProfileManagementPage })),
+)
+const WorkerFaceScanPage = lazy(() =>
+  import('./pages/WorkerFaceScanPage').then(m => ({ default: m.WorkerFaceScanPage })),
+)
+
+function RouteFallback() {
+  return <div className="min-h-[40vh] bg-[#0a0f16]" />
+}
 
 export function Module05Routes() {
   return (
@@ -16,7 +26,9 @@ export function Module05Routes() {
               title="Hồ Sơ Công Nhân"
               subtitle="Import Excel & quản lý danh tính tuần tra Module 05"
             />
-            <WorkerProfileManagementPage />
+            <Suspense fallback={<RouteFallback />}>
+              <WorkerProfileManagementPage />
+            </Suspense>
           </>
         )}
       />
@@ -26,9 +38,11 @@ export function Module05Routes() {
           <>
             <Header
               title="Quét Mặt Công Nhân"
-              subtitle="Công nhân tự quét → nhập thông tin · HR dùng ?admin=1"
+              subtitle="Công nhân tự quét → nhập thông tin · HR quản lý hồ sơ"
             />
-            <WorkerFaceScanPage />
+            <Suspense fallback={<RouteFallback />}>
+              <WorkerFaceScanPage />
+            </Suspense>
           </>
         )}
       />

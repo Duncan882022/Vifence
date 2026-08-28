@@ -10,6 +10,7 @@ import {
   clipPolygonToSiteBoundary,
   PATROL_SITE_CORNERS,
 } from './patrolSiteGeometry'
+import type { PatrolZone } from './patrolTypes'
 
 export const PATROL_SITE_NAME = 'Cầu Sông Hốt'
 export const PATROL_SITE_ZONE_ID = 'ZONE_SITE'
@@ -90,6 +91,22 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
     'primary',
     '#ef4444',
   ),
+]
+
+/** Chưa chia khu — một zone = công trường; seed cho bộ đếm zone live trên bản đồ. */
+export const PATROL_SITE_ZONE_SEED: PatrolZone[] = [
+  {
+    id: PATROL_SITE_ZONE_ID,
+    name: PATROL_SITE_NAME,
+    shortName: PATROL_SITE_NAME,
+    coverage: 'VISITED',
+    dwellSeconds: 624,
+    peopleCurrent: 42,
+    vehiclesCurrent: 8,
+    uniquePeople: 58,
+    uniqueVehicles: 11,
+    areaSqm: PATROL_SITE_AREA_M2,
+  },
 ]
 
 /* ── Helmet GPS pins ────────────────────────────────────────── */

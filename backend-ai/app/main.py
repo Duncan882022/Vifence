@@ -29,6 +29,10 @@ from . import overlay_bus
 from .websocket_server import build_detections_ws_payload
 from .patrol import db as patrol_db
 from .patrol.api import router as patrol_api_router
+from .auth_routes import router as auth_router
+from .patrol.legacy_routes import init_legacy_ctx, router as patrol_legacy_router
+from .auth import decode_access_token
+from .patrol_site_geometry import is_point_in_site, snap_point_to_site
 from .camera_stream import CameraStream
 from .config import settings
 from .crane_proximity_engine import CraneProximityEngine
@@ -44,19 +48,14 @@ from .pccc_engine import PcccEngine
 from .wah_engine import WahEngine
 from .atgt_engine import AtgtEngine
 from .mobile_frame_utils import analyze_engine_frame, downscale_for_mobile
-from .schemas import MobileAiConfigPayload, MobileFramePayload, PatrolIdentityAssignPayload, WorkerGalleryEnrollPayload
+from .schemas import MobileAiConfigPayload, MobileFramePayload, WorkerGalleryEnrollPayload
 from .worker_identity.gallery import enroll_face, get_enrollment_status, resolve_worker_id
 from .worker_identity.recognizer import gallery_status, reload_gallery
 from .vms_worker import CameraVmsWorker, CLIPS_DIR
-from .patrol_api import (
-    build_patrol_aggregate_events_payload,
-    build_patrol_aggregate_metrics_payload,
-    build_patrol_events_payload,
-    build_patrol_metrics_payload,
+from .patrol_runtime import (
     update_patrol_gps,
     update_patrol_mobile_metrics,
 )
-from .workforce_engine import workforce_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -71,10 +70,23 @@ WS_DETECTIONS_HEARTBEAT_SEC = 10.0
 _vms_workers: dict[str, CameraVmsWorker] = {}
 
 
-def _decode_frame(image_b64: str) -> Optional[np.ndarray]:
+def _decode_frame(image_b64: str, *, max_dim: int | None = None) -> Optional[np.ndarray]:
+    if len(image_b64) > settings.analyze_max_b64_len:
+        raise HTTPException(status_code=413, detail="payload_too_large")
     raw = base64.b64decode(image_b64)
     arr = np.frombuffer(raw, dtype=np.uint8)
-    return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if frame is None:
+        return None
+    cap = max_dim if max_dim is not None else settings.analyze_max_decode_dim
+    if cap and max(frame.shape[0], frame.shape[1]) > cap:
+        scale = cap / max(frame.shape[0], frame.shape[1])
+        frame = cv2.resize(
+            frame,
+            (int(frame.shape[1] * scale), int(frame.shape[0] * scale)),
+            interpolation=cv2.INTER_AREA,
+        )
+    return frame
 
 
 def _downscale_for_mobile(frame: np.ndarray, max_width: int = 480) -> np.ndarray:
@@ -259,8 +271,18 @@ async def lifespan(app: FastAPI):
     try:
         removed = patrol_db.purge_old_days()
         logger.info("Patrol DB sẵn sàng — xoá %d đối tượng của ngày trước.", removed)
+        if settings.patrol_retention_days > 0:
+            from datetime import datetime, timedelta
+
+            cutoff = (
+                datetime.now(tz=patrol_db.VN_TZ)
+                - timedelta(days=settings.patrol_retention_days)
+            ).strftime("%Y-%m-%d")
+            with patrol_db.tx() as conn:
+                conn.execute("DELETE FROM appearances WHERE event_date < ?", (cutoff,))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Không mở được patrol DB: %s", exc)
+    init_legacy_ctx(store=engine.store, vms_workers=_vms_workers)
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     if settings.event_test_mode:
         logger.warning(
@@ -283,12 +305,15 @@ app = FastAPI(title="Vifence Safety AI — local POC", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(patrol_api_router)
+app.include_router(patrol_legacy_router)
 
 
 @app.get("/")
@@ -390,143 +415,6 @@ def list_events(limit: int = 50, date: str | None = None, camera_id: str | None 
     ]
 
 
-@app.get("/patrol/metrics")
-def patrol_aggregate_metrics(cameras: str = "HC-01,HC-02"):
-    """Module 05 — gộp đếm công nhân / PPE từ nhiều mũ HC-*."""
-    camera_ids = [cam.strip() for cam in cameras.split(",") if cam.strip()]
-    return build_patrol_aggregate_metrics_payload(
-        camera_ids,
-        store=engine.store,
-        vms_workers=_vms_workers,
-    )
-
-
-@app.get("/patrol/events")
-def patrol_aggregate_events(
-    cameras: str = "HC-01,HC-02",
-    date: str | None = None,
-    limit: int = 500,
-):
-    """Module 05 — gộp sự kiện PPE từ nhiều mũ HC-*."""
-    camera_ids = [cam.strip() for cam in cameras.split(",") if cam.strip()]
-    return build_patrol_aggregate_events_payload(
-        camera_ids,
-        store=engine.store,
-        date=date,
-        limit=limit,
-    )
-
-
-@app.get("/patrol/workforce/state")
-def patrol_workforce_state(cameras: str = "HC-01,HC-02"):
-    """Module 05 — snapshot HELMET/OBJECT/POPULATION/HEAT/EVENT (spec MD)."""
-    camera_ids = [c.strip() for c in cameras.split(",") if c.strip()]
-    if len(camera_ids) == 1:
-        return workforce_engine.snapshot(camera_ids[0])
-    # Merge multi-helmet snapshot
-    merged: dict = {
-        "helmets": {},
-        "objects": {},
-        "zonePopulation": {},
-        "heatPoints": [],
-        "events": [],
-        "server_time": None,
-    }
-    for cam in camera_ids:
-        snap = workforce_engine.snapshot(cam)
-        merged["helmets"].update(snap.get("helmets") or {})
-        merged["objects"].update(snap.get("objects") or {})
-        merged["zonePopulation"].update(snap.get("zonePopulation") or {})
-        merged["heatPoints"].extend(snap.get("heatPoints") or [])
-        merged["events"].extend(snap.get("events") or [])
-        merged["server_time"] = snap.get("server_time")
-    # Dedupe events by id, newest first
-    seen = set()
-    uniq = []
-    for ev in sorted(merged["events"], key=lambda e: e.get("timestamp") or "", reverse=True):
-        eid = ev.get("event_id")
-        if eid in seen:
-            continue
-        seen.add(eid)
-        uniq.append(ev)
-    merged["events"] = uniq[:80]
-    return merged
-
-
-@app.get("/patrol/workforce/events")
-def patrol_workforce_events(limit: int = 50):
-    """Meaningful workforce events only (no raw PERSON_DETECTED)."""
-    snap = workforce_engine.snapshot()
-    return (snap.get("events") or [])[: max(1, min(limit, 200))]
-
-
-@app.get("/patrol/identity/bindings")
-def patrol_identity_bindings():
-    """Module 05 — danh sách định danh patrol đã lưu DB (gallery + alias)."""
-    from .patrol_identity_store import list_patrol_identity_bindings
-
-    return {"ok": True, "bindings": list_patrol_identity_bindings()}
-
-
-@app.get("/patrol/appearances")
-def patrol_appearances(master_id: str, date: str | None = None):
-    """Lịch sử xuất hiện theo master_id (sgc / gallery) — blocks popup."""
-    from .patrol_api import list_patrol_appearances_payload
-
-    return list_patrol_appearances_payload(master_id, date=date)
-
-
-@app.post("/patrol/identity/assign")
-def patrol_identity_assign(payload: PatrolIdentityAssignPayload):
-    """Enroll khuôn mặt + bind sgc/OBJ → gallery worker."""
-    from .patrol_api import assign_patrol_identity
-
-    result = assign_patrol_identity(payload.model_dump())
-    if not result.get("ok"):
-        return result
-    return result
-
-
-@app.get("/patrol/{camera_id}/events")
-def patrol_helmet_events(camera_id: str, date: str | None = None, limit: int = 500):
-    """Module 05 — chỉ sự kiện PPE của camera HC-* (không lẫn A-03/A-04)."""
-    return build_patrol_events_payload(
-        camera_id,
-        store=engine.store,
-        date=date,
-        limit=limit,
-    )
-
-
-@app.get("/patrol/{camera_id}/metrics")
-def patrol_helmet_metrics(camera_id: str):
-    """Module 05 — đếm công nhân live theo camera HC-* / DR-*."""
-    if camera_id.startswith("DR-"):
-        from .drone_heatmap import get_drone_heatmap_metrics
-
-        live = get_drone_heatmap_metrics(camera_id)
-        if live.get("updated_at"):
-            return live
-    return build_patrol_metrics_payload(
-        camera_id,
-        store=engine.store,
-        vms_workers=_vms_workers,
-    )
-
-
-@app.get("/patrol/{camera_id}/heatmap.png")
-def patrol_drone_heatmap_png(camera_id: str):
-    """DR-* — heatmap mật độ pixel (JET), render ~30s/lần."""
-    if not camera_id.startswith("DR-"):
-        raise HTTPException(status_code=404, detail="heatmap_only_for_drone")
-    from .drone_heatmap import get_drone_heatmap_png_path
-
-    path = get_drone_heatmap_png_path(camera_id)
-    if path is None:
-        raise HTTPException(status_code=404, detail="heatmap_not_ready")
-    return FileResponse(path, media_type="image/png")
-
-
 @app.get("/events/dates")
 def list_event_dates():
     return engine.store.list_event_dates()
@@ -535,6 +423,8 @@ def list_event_dates():
 @app.delete("/events")
 def clear_events():
     """Xóa toàn bộ sự kiện đã lưu (RAM + JSONL + snapshot)."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="disabled_in_production")
     return engine.store.clear_all()
 
 
@@ -561,14 +451,17 @@ def training_status():
 
 @app.post("/training/trigger")
 def training_trigger(task: str):
-    """Bắt buộc train ngay 1 task (không cần chờ đủ ngưỡng dữ liệu/thời
-    gian) — dùng để test hoặc ép train ngay khi vừa nạp thêm dữ liệu."""
+    """Bắt buộc train ngay 1 task — chỉ dev/staging."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="disabled_in_production")
     return auto_train_scheduler.trigger(task, background=True)
 
 
 @app.get("/debug/debouncers")
 def debug_debouncers():
-    """Trạng thái debounce realtime — test timing smoking (~2.5s) vs fire (~6s)."""
+    """Trạng thái debounce realtime — dev only."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="disabled_in_production")
     return {
         "config": engine.debouncer_config(),
         "state": engine.debouncer_snapshots(),
@@ -578,10 +471,9 @@ def debug_debouncers():
 
 @app.get("/debug/raw_detections")
 def debug_raw_detections():
-    """Chẩn đoán: lấy 1 frame TRỰC TIẾP từ camera mà server đang giữ (không mở
-    thêm kết nối camera nào khác, tránh xung đột thiết bị trên macOS) và chạy
-    toàn bộ detector với threshold rất thấp để xem confidence thật, kể cả dưới
-    ngưỡng báo động. Chỉ dùng để debug, không dùng trong production."""
+    """Chẩn đoán detector — dev only."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="disabled_in_production")
     frame = camera.get_frame()
     if frame is None:
         return {"error": "no_frame"}
@@ -618,8 +510,9 @@ def debug_raw_detections():
 
 @app.get("/debug/frame.jpg")
 def debug_frame():
-    """Trả về JPEG của frame hiện tại camera server đang giữ, để xem chính xác
-    server đang thấy gì tại thời điểm gọi."""
+    """Trả về JPEG frame hiện tại — dev only."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="disabled_in_production")
     frame = camera.get_frame()
     if frame is None:
         return {"error": "no_frame"}
@@ -694,12 +587,12 @@ def vms_stream_detections(camera_id: str):
 
 
 @app.websocket("/ws/helmet/{camera_id}/telemetry")
-async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str):
-    """GPS + IMU từ mũ — kênh riêng, không đi kèm frame video.
-
-    Tách khỏi video có hai lợi ích: vị trí vẫn cập nhật khi sóng yếu không đẩy
-    được video, và mọi người xem đều thấy vị trí thay vì chỉ tab đang mở camera.
-    """
+async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str, token: str | None = None):
+    """GPS + IMU từ mũ — validate JWT + bounding box site."""
+    if not settings.patrol_auth_disabled:
+        if not token or decode_access_token(token) is None:
+            await websocket.close(code=1008)
+            return
     await websocket.accept()
 
     try:
@@ -714,10 +607,16 @@ async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str):
             pitch = payload.get("pitch")
             roll = payload.get("roll")
 
+            gps_lat = float(lat) if isinstance(lat, (int, float)) else None
+            gps_lng = float(lng) if isinstance(lng, (int, float)) else None
+            if gps_lat is not None and gps_lng is not None:
+                if not is_point_in_site(gps_lat, gps_lng):
+                    gps_lat, gps_lng, _ = snap_point_to_site(gps_lat, gps_lng)
+
             update_patrol_gps(
                 camera_id,
-                float(lat) if isinstance(lat, (int, float)) else None,
-                float(lng) if isinstance(lng, (int, float)) else None,
+                gps_lat,
+                gps_lng,
                 heading=float(heading) if isinstance(heading, (int, float)) else None,
                 pitch=float(pitch) if isinstance(pitch, (int, float)) else None,
                 roll=float(roll) if isinstance(roll, (int, float)) else None,

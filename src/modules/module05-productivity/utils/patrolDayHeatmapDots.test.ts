@@ -7,7 +7,7 @@ import {
   filterRecentPatrolWorkerEvents,
   filterRecentPresences,
 } from './patrolDayHeatmapDots'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { countPatrolGlobalWorkers, summarizePatrolGlobalWorkers } from './patrolPatrolCounts'
 

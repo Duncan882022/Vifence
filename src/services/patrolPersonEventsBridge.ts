@@ -1,5 +1,5 @@
 /** Sự kiện vòng đời người từ MobileCameraFeed (HC-02) → heatmap. */
-import type { PatrolEvent } from '@/modules/module05-productivity/data/patrolMockData'
+import type { PatrolEvent } from '@/modules/module05-productivity/data/patrolTypes'
 import { mapBackendEventToPatrolEvent } from '@/modules/module05-productivity/services/patrolLiveEvents.service'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import type { MobileAiViolationEvent } from '@/modules/module02-training/services/mobileAiBackend.service'

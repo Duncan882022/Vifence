@@ -16,6 +16,27 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'ghpages' ? 'docs' : 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
+            return 'leaflet'
+          }
+          if (id.includes('/module05-productivity/personRoi/')) {
+            return 'patrol-roi'
+          }
+          if (
+            id.includes('/module05-productivity/pages/WorkerFaceScanPage')
+            || id.includes('/module05-productivity/components/PatrolFaceScannerPanel')
+            || id.includes('/module05-productivity/hooks/usePatrolAutoFaceScan')
+            || id.includes('/module05-productivity/utils/patrolFaceCapture')
+            || id.includes('/module02-training/services/faceDetection.service')
+          ) {
+            return 'face-scan'
+          }
+        },
+      },
+    },
   },
   plugins: [react()],
   resolve: {

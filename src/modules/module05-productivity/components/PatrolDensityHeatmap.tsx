@@ -29,7 +29,7 @@ import { WorkforceObjectSheet } from './WorkforceObjectSheet'
 import {
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
 import { buildPatrolPresenceHeatmapDots, filterPatrolHeatmapDotsByDevice } from '../utils/patrolDayHeatmapDots'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
