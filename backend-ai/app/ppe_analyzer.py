@@ -2151,8 +2151,6 @@ def _build_patrol_flycam_result(
     }
 
 
-analyze_patrol_person_frame = _build_patrol_bodycam_result
-
 def _build_vest_only_result(
     frame: np.ndarray,
     camera_id: str,
@@ -2254,11 +2252,10 @@ def analyze_ppe_frame(
 ) -> dict:
     from .cam04_ppe_demo import is_cam04_ppe_scene, resolve_cam04_ppe_demo
 
-    # Helmet bodycam — skip PPE model inference entirely for better frame throughput
-    if _is_helmet_bodycam(camera_id):
-        return _build_patrol_bodycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
-    if _is_patrol_flycam(camera_id):
-        return _build_patrol_flycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
+    if _is_helmet_bodycam(camera_id) or _is_patrol_flycam(camera_id):
+        from .patrol_engine import analyze_patrol_frame
+
+        return analyze_patrol_frame(frame, camera_id, source_pts_sec=source_pts_sec)
 
     demo_action = resolve_cam04_ppe_demo(camera_id, frame, source_pts_sec=source_pts_sec)
     if demo_action == "suppress":
