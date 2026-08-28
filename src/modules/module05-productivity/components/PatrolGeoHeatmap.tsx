@@ -214,6 +214,96 @@ function createDetectionDotIcon(
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
+type PatrolMapDeviceKind = 'helmet' | 'drone'
+
+interface PatrolMapDevicePin {
+  id: string
+  label: string
+  color: string
+  position: [number, number]
+  kind: PatrolMapDeviceKind
+}
+
+interface PatrolDeviceTooltipProps {
+  label: string
+  isActive: boolean
+  zoneName: string
+  heading?: number | null
+  detect?: { person: number; identity: number; total: number } | null
+  siteHeadcount?: PatrolGeoHeatmapProps['siteHeadcount']
+  tipOpen: boolean
+}
+
+function PatrolDeviceTooltipContent({
+  label,
+  isActive,
+  zoneName,
+  heading,
+  detect,
+  siteHeadcount,
+  tipOpen,
+}: PatrolDeviceTooltipProps) {
+  return (
+    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+      <strong>{label}</strong>
+      {' · '}
+      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+        {isActive ? 'ONLINE' : 'OFFLINE'}
+      </span>
+      {heading != null && Number.isFinite(heading) && (
+        <>
+          <br />
+          Heading: {Math.round(heading)}°
+        </>
+      )}
+      <br />
+      Phụ trách: {zoneName}
+      {detect != null && (
+        <>
+          <br />
+          <span style={{ color: '#38bdf8' }}>
+            Đã detect: {detect.total} người
+          </span>
+          <br />
+          <span style={{ color: '#64748b', fontSize: 9 }}>
+            {detect.person} Nhân sự · {detect.identity} Định danh
+          </span>
+        </>
+      )}
+      {siteHeadcount && (
+        <>
+          <br />
+          <span style={{ color: '#94a3b8' }}>
+            Công trường: {siteHeadcount.observed} chuẩn
+            {' · '}{siteHeadcount.persons} người
+            {' · '}{siteHeadcount.identified} định danh
+            {siteHeadcount.objects > 0 && (
+              <>{' · '}{siteHeadcount.objects} có thể người</>
+            )}
+          </span>
+        </>
+      )}
+      {!tipOpen && (
+        <>
+          <br />
+          <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+function createPatrolMapDeviceIcon(
+  kind: PatrolMapDeviceKind,
+  badgeNum: string,
+  isActive: boolean,
+  accent: string,
+): L.DivIcon {
+  return kind === 'drone'
+    ? createPatrolDroneMapIcon(badgeNum, isActive, accent)
+    : createPatrolHelmetMapIcon(badgeNum, isActive, accent)
+}
+
 /* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
 function MapInvalidator() {
   const map = useMap()
@@ -537,6 +627,26 @@ export function PatrolGeoHeatmap({
       return aOnline ? 1 : -1
     })
   }, [helmetOnlineById])
+
+  const visibleDevicePins = useMemo((): PatrolMapDevicePin[] => {
+    const pins: PatrolMapDevicePin[] = []
+    if (showHelmetMarkers || showCameras) {
+      for (const pin of sortedHelmetPins) {
+        pins.push({ ...pin, kind: 'helmet' })
+      }
+    }
+    if (showDroneMarkers || showCameras) {
+      for (const pin of sortedDronePins) {
+        pins.push({ ...pin, kind: 'drone' })
+      }
+    }
+    return pins.sort((a, b) => {
+      const aOnline = Boolean(helmetOnlineById?.[a.id])
+      const bOnline = Boolean(helmetOnlineById?.[b.id])
+      if (aOnline === bOnline) return a.id.localeCompare(b.id)
+      return aOnline ? 1 : -1
+    })
+  }, [showHelmetMarkers, showDroneMarkers, showCameras, sortedHelmetPins, sortedDronePins, helmetOnlineById])
   const mapZoomFallback = usePatrolMapZoom()
   const mapZoom = mapZoomProp ?? mapZoomFallback
   const clipOverlays = !followLiveGps && showDetections
@@ -691,9 +801,7 @@ export function PatrolGeoHeatmap({
                 >
                   <Tooltip sticky className="patrol-zone-tip">
                     <span style={{ fontSize: 10 }}>
-                      {dot.cameraId.startsWith('DR-')
-                        ? `Đếm người · ${dot.label || 'flycam'}`
-                        : `${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
+                      {`${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
                       <br />
                       Camera: {dot.cameraId}
                       {dot.objectId ? ` · ${dot.objectId}` : ''}
@@ -776,8 +884,8 @@ export function PatrolGeoHeatmap({
             )
           })}
 
-          {/* ── LAYER 4B: Helmet Markers — HC-01/02 luôn hiện (offline = xám) ─── */}
-          {(showHelmetMarkers || showCameras) && sortedHelmetPins.map(pin => {
+          {/* ── LAYER 4B: Thiết bị — mũ + flycam, tooltip thống nhất ─── */}
+          {visibleDevicePins.map(pin => {
             const fallback = pin.position
             const rawPos = cameraPositions[pin.id] ?? fallback
             const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
@@ -787,12 +895,19 @@ export function PatrolGeoHeatmap({
             const markerOpacity = isActive ? 1 : 0.88
             const detect = helmetDetectCountsById?.[pin.id]
             const tipOpen = openHelmetTipId === pin.id
+            const zBase = pin.kind === 'drone' ? 720 : 700
+            const zIdle = pin.kind === 'drone' ? 420 : 400
             return (
               <Marker
-                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
+                key={`${pin.kind}-${pin.id}-${isActive ? 'on' : 'off'}`}
                 position={livePos}
-                icon={createPatrolHelmetMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
-                zIndexOffset={isActive ? 700 : 400}
+                icon={createPatrolMapDeviceIcon(
+                  pin.kind,
+                  getPatrolMapDeviceBadgeNum(pin.id),
+                  isActive,
+                  pin.color,
+                )}
+                zIndexOffset={isActive ? zBase : zIdle}
                 opacity={markerOpacity}
                 eventHandlers={{
                   click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
@@ -804,107 +919,15 @@ export function PatrolGeoHeatmap({
                   opacity={0.95}
                   permanent={tipOpen}
                 >
-                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                    <strong>{pin.label}</strong>
-                    {' · '}
-                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                      {isActive ? 'ONLINE' : 'OFFLINE'}
-                    </span>
-                    {heading != null && Number.isFinite(heading) && (
-                      <>
-                        <br />
-                        Heading: {Math.round(heading)}°
-                      </>
-                    )}
-                    <br />
-                    Phụ trách: {zoneName}
-                    {detect != null && (
-                      <>
-                        <br />
-                        <span style={{ color: '#38bdf8' }}>
-                          Đã detect: {detect.total} người
-                        </span>
-                        <br />
-                        <span style={{ color: '#64748b', fontSize: 9 }}>
-                          {detect.person} Nhân sự · {detect.identity} Định danh
-                        </span>
-                      </>
-                    )}
-                    {siteHeadcount && (
-                      <>
-                        <br />
-                        <span style={{ color: '#94a3b8' }}>
-                          Công trường: {siteHeadcount.observed} chuẩn
-                          {' · '}{siteHeadcount.persons} người
-                          {' · '}{siteHeadcount.identified} định danh
-                          {siteHeadcount.objects > 0 && (
-                            <>{' · '}{siteHeadcount.objects} có thể người</>
-                          )}
-                        </span>
-                      </>
-                    )}
-                    {!tipOpen && (
-                      <>
-                        <br />
-                        <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                      </>
-                    )}
-                  </span>
-                </Tooltip>
-              </Marker>
-            )
-          })}
-
-          {/* ── LAYER 4C: Drone Markers — DR-03 badge số 3 ──────────────── */}
-          {(showDroneMarkers || showCameras) && sortedDronePins.map(pin => {
-            const fallback = pin.position
-            const rawPos = cameraPositions[pin.id] ?? fallback
-            const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
-            const zoneName = getPatrolHelmetZoneName(pin.id)
-            const isActive = Boolean(helmetOnlineById?.[pin.id])
-            const markerOpacity = isActive ? 1 : 0.88
-            const detect = helmetDetectCountsById?.[pin.id]
-            const tipOpen = openHelmetTipId === pin.id
-            return (
-              <Marker
-                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
-                position={livePos}
-                icon={createPatrolDroneMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
-                zIndexOffset={isActive ? 720 : 420}
-                opacity={markerOpacity}
-                eventHandlers={{
-                  click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
-                }}
-              >
-                <Tooltip
-                  direction="top"
-                  offset={[0, -20]}
-                  opacity={0.95}
-                  permanent={tipOpen}
-                >
-                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                    <strong>{pin.label}</strong>
-                    {' · '}
-                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                      {isActive ? 'ONLINE' : 'OFFLINE'}
-                    </span>
-                    <br />
-                    Phụ trách: {zoneName}
-                    {detect != null && (
-                      <>
-                        <br />
-                        <span style={{ color: '#38bdf8' }}>
-                          Đếm: {detect.total} người (góc trên cao)
-                        </span>
-                      </>
-                    )}
-                    {!tipOpen && (
-                      <>
-                        <br />
-                        <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                      </>
-                    )}
-                  </span>
+                  <PatrolDeviceTooltipContent
+                    label={pin.label}
+                    isActive={isActive}
+                    zoneName={zoneName}
+                    heading={heading}
+                    detect={detect}
+                    siteHeadcount={siteHeadcount}
+                    tipOpen={tipOpen}
+                  />
                 </Tooltip>
               </Marker>
             )
