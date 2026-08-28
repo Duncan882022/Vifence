@@ -11,12 +11,6 @@ import {
   Compass,
   Gauge,
   MapPin,
-  Radio,
-  RefreshCw,
-  Signal,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
   SwitchCamera,
   Timer,
   Wifi,
@@ -29,7 +23,7 @@ import {
   getHelmetWhipUrl,
   isBrowserPublishHelmet,
 } from '../data/helmetIngest'
-import { useHelmetPublisher, type HelmetPublisherState } from './useHelmetPublisher'
+import { useHelmetPublisher } from './useHelmetPublisher'
 import { usePublisherPatrolAuth } from './usePublisherPatrolAuth'
 import type { WhipConnectionState } from '@/services/webrtc/whipClient'
 
@@ -62,26 +56,6 @@ function connectionLabel(state: WhipConnectionState): string {
     default: return 'Chưa kết nối'
   }
 }
-
-type SignalLevel = 'good' | 'fair' | 'poor' | 'idle'
-
-function resolveSignalLevel(state: HelmetPublisherState): SignalLevel {
-  if (state.status !== 'live') return 'idle'
-  const { bitrateKbps, rttMs, qualityLimitation } = state.stats
-  if (qualityLimitation === 'bandwidth' || (bitrateKbps > 0 && bitrateKbps < 400)) return 'poor'
-  if (rttMs != null && rttMs > 350) return 'fair'
-  if (bitrateKbps >= 800 && (rttMs == null || rttMs < 200)) return 'good'
-  if (bitrateKbps > 0) return 'fair'
-  return 'poor'
-}
-
-const SignalIcon = memo(function SignalIcon({ level }: { level: SignalLevel }) {
-  const cls = 'w-4 h-4'
-  if (level === 'good') return <SignalHigh className={cn(cls, 'text-emerald-400')} aria-hidden />
-  if (level === 'fair') return <SignalMedium className={cn(cls, 'text-amber-400')} aria-hidden />
-  if (level === 'poor') return <SignalLow className={cn(cls, 'text-red-400')} aria-hidden />
-  return <Signal className={cn(cls, 'text-[#64748b]')} aria-hidden />
-})
 
 const KpiTile = memo(function KpiTile({
   icon: Icon,
@@ -141,74 +115,6 @@ const StatRow = memo(function StatRow({
   )
 })
 
-const StatusBanner = memo(function StatusBanner({
-  state,
-  signalLevel,
-}: {
-  state: HelmetPublisherState
-  signalLevel: SignalLevel
-}) {
-  if (state.status === 'live') {
-    return (
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-          <Radio className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden />
-          <div className="min-w-0">
-            <span className="text-[12px] font-semibold text-emerald-300">Đang phát sóng</span>
-            <p className="text-[10px] text-emerald-200/70 truncate">
-              {connectionLabel(state.connection)}
-            </p>
-          </div>
-        </div>
-        <SignalIcon level={signalLevel} />
-      </div>
-    )
-  }
-
-  if (state.status === 'starting') {
-    return (
-      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <RefreshCw className="w-4 h-4 text-sky-400 animate-spin shrink-0" aria-hidden />
-          <div>
-            <span className="text-[12px] font-semibold text-sky-300">Đang kết nối…</span>
-            <p className="text-[10px] text-sky-200/70">{connectionLabel(state.connection)}</p>
-          </div>
-        </div>
-        {state.errorMessage && (
-          <p className="mt-1.5 text-[11px] leading-relaxed text-sky-200/80">
-            {state.errorMessage}
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  if (state.status === 'error') {
-    return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <WifiOff className="w-4 h-4 text-red-400 shrink-0" aria-hidden />
-          <span className="text-[12px] font-semibold text-red-300">Chưa phát được</span>
-        </div>
-        {state.errorMessage && (
-          <p className="mt-1.5 text-[11px] leading-relaxed text-red-200/80">
-            {state.errorMessage}
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-[#334155] bg-[#111827] px-3 py-2.5">
-      <Camera className="w-4 h-4 text-[#94a3b8]" aria-hidden />
-      <span className="text-[12px] font-semibold text-[#cbd5e1]">Sẵn sàng phát sóng</span>
-    </div>
-  )
-})
-
 export function HelmetPublisherPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const helmetId = getBrowserPublishHelmetId()
@@ -225,7 +131,6 @@ export function HelmetPublisherPage() {
   const configured = publishesFromBrowser && Boolean(getHelmetWhipUrl(helmetId))
   const isBroadcasting = state.status === 'live' || state.status === 'starting'
   const limitation = qualityLabel(state.stats.qualityLimitation)
-  const signalLevel = resolveSignalLevel(state)
 
   const resolution = state.stats.frameWidth > 0
     ? `${state.stats.frameWidth}×${state.stats.frameHeight}`
@@ -251,8 +156,6 @@ export function HelmetPublisherPage() {
             </p>
           </div>
         </header>
-
-        <StatusBanner state={state} signalLevel={signalLevel} />
 
         {state.status === 'live' && (
           <div className="grid grid-cols-2 gap-2">
@@ -390,6 +293,12 @@ export function HelmetPublisherPage() {
         {publishesFromBrowser && !configured && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
             Chưa cấu hình máy chủ phát sóng (MediaMTX). Liên hệ quản trị để bật WHIP.
+          </p>
+        )}
+
+        {(state.status === 'error' || state.status === 'starting') && state.errorMessage && (
+          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] leading-relaxed text-red-200/90">
+            {state.errorMessage}
           </p>
         )}
 
