@@ -2,9 +2,10 @@
  * Patrol Person ROI overlay — Kalman + ByteTrack-lite (Module 05).
  * Không dùng ATLĐ bboxTrackLock / ROI cycle / sticky violation.
  */
-import { memo, useEffect, useRef, useState, type RefObject } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
 import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlayLayoutTick'
 import { passesOverlayConfidence } from '@/modules/module03-safety/utils/overlayCoverage'
 import { PATROL_TIER_RANK, patrolTierToken } from '../utils/patrolTierTokens'
 import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
@@ -35,6 +36,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
   compact,
   videoFit = 'cover',
   videoObjectPosition = 'center',
+  layoutTick,
 }: {
   track: PersonRoiDisplay
   frameWidth: number
@@ -43,10 +45,13 @@ const PersonRoiBox = memo(function PersonRoiBox({
   compact?: boolean
   videoFit: 'cover' | 'contain'
   videoObjectPosition?: 'center' | 'bottom'
+  layoutTick: number
 }) {
   const justPromoted = useTierPromotionFlash(track.tier)
 
   const video = videoRef.current
+  // layoutTick buộc tính lại khi video load metadata / resize / object-fit đổi.
+  void layoutTick
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
@@ -159,21 +164,35 @@ export function PatrolPersonRoiOverlay({
   videoObjectPosition = 'center',
 }: PatrolPersonRoiOverlayProps) {
   const tracks = usePatrolPersonRoiTracks(cameraId)
+  const layoutTick = useOverlayLayoutTick(videoRef)
+  const overlayFrameSize = useMemo(() => {
+    if (frameWidth > 0 && frameHeight > 0) {
+      return { width: frameWidth, height: frameHeight }
+    }
+    const video = videoRef.current
+    if (video?.videoWidth && video.videoHeight) {
+      return { width: video.videoWidth, height: video.videoHeight }
+    }
+    return { width: 0, height: 0 }
+  }, [frameWidth, frameHeight, videoRef, layoutTick])
 
-  if (tracks.length === 0 || frameWidth <= 0 || frameHeight <= 0) return null
+  if (tracks.length === 0 || overlayFrameSize.width <= 0 || overlayFrameSize.height <= 0) {
+    return null
+  }
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[9]">
       {tracks.map(track => (
         <PersonRoiBox
-          key={track.trackId}
+          key={`${track.trackId}-${layoutTick}`}
           track={track}
-          frameWidth={frameWidth}
-          frameHeight={frameHeight}
+          frameWidth={overlayFrameSize.width}
+          frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
           compact={compact}
           videoFit={videoFit}
           videoObjectPosition={videoObjectPosition}
+          layoutTick={layoutTick}
         />
       ))}
     </div>

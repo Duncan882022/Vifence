@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.schemas import PpeDetection  # noqa: E402
-from app.snapshot_sync import frame_scale, scale_detection  # noqa: E402
+from app.snapshot_sync import frame_scale, scale_detection, scale_overlay_detection_dicts  # noqa: E402
 
 
 class TestPatrolMobileUpsert(unittest.TestCase):
@@ -57,6 +57,26 @@ class TestPatrolMobileUpsert(unittest.TestCase):
         self.assertLess(det_small.bbox[2], fw * 0.25)
         self.assertGreater(scaled.bbox[2], det_small.bbox[2])
         self.assertLessEqual(scaled.bbox[2], fw)
+
+
+class TestVmsOverlayScale(unittest.TestCase):
+    def test_scale_overlay_detection_dicts_maps_to_capture(self):
+        rows = scale_overlay_detection_dicts(
+            [
+                {
+                    "behavior": "person",
+                    "bbox": [100.0, 50.0, 200.0, 150.0],
+                    "subject_bbox": [90.0, 40.0, 210.0, 160.0],
+                    "velocity": [12.0, -4.0],
+                },
+            ],
+            2.0,
+            2.0,
+        )
+        self.assertAlmostEqual(rows[0]["bbox"][2], 400.0)
+        self.assertAlmostEqual(rows[0]["subject_bbox"][2], 420.0)
+        self.assertAlmostEqual(rows[0]["velocity"][0], 24.0)
+        self.assertAlmostEqual(rows[0]["velocity"][1], -8.0)
 
 
 if __name__ == "__main__":

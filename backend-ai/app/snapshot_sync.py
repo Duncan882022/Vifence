@@ -60,6 +60,31 @@ def scale_detection(det: T, sx: float, sy: float) -> T:
     return det.model_copy(update=patch)  # type: ignore[attr-defined]
 
 
+def scale_overlay_detection_dicts(
+    detections: list[dict[str, Any]],
+    sx: float,
+    sy: float,
+) -> list[dict[str, Any]]:
+    """Scale bbox overlay VMS từ khung analyze → khung capture (WHEP/HLS trên FE)."""
+    if sx == 1.0 and sy == 1.0:
+        return detections
+    scaled: list[dict[str, Any]] = []
+    for row in detections:
+        item = dict(row)
+        bbox = item.get("bbox")
+        if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+            item["bbox"] = scale_bbox(bbox, sx, sy)
+        for key in ("subject_bbox", "related_bbox"):
+            sub = item.get(key)
+            if isinstance(sub, (list, tuple)) and len(sub) >= 4:
+                item[key] = scale_bbox(sub, sx, sy)
+        vel = item.get("velocity")
+        if isinstance(vel, (list, tuple)) and len(vel) >= 2:
+            item["velocity"] = [float(vel[0]) * sx, float(vel[1]) * sy]
+        scaled.append(item)
+    return scaled
+
+
 def build_snapshot_episode(
     *,
     detection: T,
