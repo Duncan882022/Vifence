@@ -210,8 +210,10 @@ export interface PatrolPersonDetectionGateInput {
   workerId?: string | null
   /** Backend đã assess mặt — tab Người */
   faceEligible?: boolean
-  /** DR-* flycam — người nhỏ từ góc cao */
+  /** DR-* flycam tầm cao — người nhỏ từ góc cao */
   flycam?: boolean
+  /** DR-* flycam tầm thấp — gate rộng như mũ */
+  proximityFlycam?: boolean
 }
 
 /**
@@ -222,11 +224,16 @@ export interface PatrolPersonDetectionGateInput {
  * Ở đây chỉ loại mảnh chân/tay và khung không thể là người.
  */
 export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
-  const { bbox, frameW, frameH, flycam = false } = input
+  const { bbox, frameW, frameH, flycam = false, proximityFlycam = false } = input
   if (frameW <= 0 || frameH <= 0) return false
   if (verticalStructureFpBox(bbox, frameW, frameH)) return false
   if (flycam) {
     return plausiblePersonSilhouette(bbox, frameW, frameH, true)
+  }
+  if (proximityFlycam) {
+    if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
+    if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
+    return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
   }
   if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false

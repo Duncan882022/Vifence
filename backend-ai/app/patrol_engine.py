@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import numpy as np
 
+from .patrol_flight_mode import (
+    PatrolFlightMode,
+    is_patrol_flycam_aerial,
+    patrol_flight_mode_payload,
+    resolve_patrol_flight_mode,
+)
 from .ppe_analyzer import (
     _build_patrol_bodycam_result,
-    _build_patrol_flycam_result,
+    _build_patrol_flycam_aerial_result,
+    _build_patrol_flycam_proximity_result,
     _is_helmet_bodycam,
     _is_patrol_flycam,
     reset_all_hc_patrol_state,
@@ -22,18 +29,27 @@ def analyze_patrol_frame(
 ) -> dict:
     """HC-* bodycam hoặc DR-* flycam — person-only, ghi sự kiện qua patrol/sink."""
     if _is_patrol_flycam(camera_id):
-        result = _build_patrol_flycam_result(
-            frame, camera_id, source_pts_sec=source_pts_sec,
-        )
-        from .drone_heatmap import ingest_drone_detections
+        mode = resolve_patrol_flight_mode(camera_id)
+        if mode == PatrolFlightMode.PROXIMITY:
+            result = _build_patrol_flycam_proximity_result(
+                frame, camera_id, source_pts_sec=source_pts_sec,
+            )
+        else:
+            result = _build_patrol_flycam_aerial_result(
+                frame, camera_id, source_pts_sec=source_pts_sec,
+            )
+            from .drone_heatmap import ingest_drone_detections
 
-        ingest_drone_detections(
-            camera_id,
-            int(result.get("width") or frame.shape[1]),
-            int(result.get("height") or frame.shape[0]),
-            result.get("detections") or [],
-            metrics=result.get("metrics") or {},
-        )
+            ingest_drone_detections(
+                camera_id,
+                int(result.get("width") or frame.shape[1]),
+                int(result.get("height") or frame.shape[0]),
+                result.get("detections") or [],
+                metrics=result.get("metrics") or {},
+            )
+        metrics = dict(result.get("metrics") or {})
+        metrics.update(patrol_flight_mode_payload(camera_id))
+        result["metrics"] = metrics
         return result
     return _build_patrol_bodycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
 
@@ -77,4 +93,5 @@ __all__ = [
     "analyze_patrol_person_frame",
     "patrol_engine",
     "reset_all_hc_patrol_state",
+    "is_patrol_flycam_aerial",
 ]

@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,https://duncan882022.github.io"
     patrol_embed_key: str = ""
     patrol_retention_days: int = 90
+    # Flycam DR-* — độ cao (m) quyết định chế độ AI.
+    # >= aerial_min: chỉ mật độ (heatmap); <= proximity_max: AI như mũ, gate rộng hơn.
+    patrol_flycam_aerial_min_m: float = 35.0
+    patrol_flycam_proximity_max_m: float = 25.0
+    patrol_drone_altitude_ttl_sec: float = 45.0
+    # Fallback khi chưa có telemetry: "DR-03:80" hoặc để trống (= aerial mặc định).
+    patrol_drone_altitude_overrides: str = ""
+    patrol_drone_default_altitude_m: float | None = None
     hc01_rtsp_url: str = ""
     whip_user: str = ""
     whip_pass: str = ""

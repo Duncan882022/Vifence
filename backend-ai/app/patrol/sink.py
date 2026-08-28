@@ -332,6 +332,7 @@ def record_observation(
     person_bbox: Sequence[float] | None = None,
     zone_id: str | None = None,
     now: float | None = None,
+    density_only: bool = False,
 ) -> str | None:
     """Ghi một lần quan sát. Trả `pers-*` nếu đã nhận ra mặt, `obj-*` nếu chưa.
 
@@ -347,8 +348,12 @@ def record_observation(
     _note_track_bbox(key, person_bbox)
 
     if not face_embedding or len(face_embedding) == 0:
-        # Flycam DR-* — không thử recover mặt; góc trên cao chỉ đếm silhouette.
-        if not camera_id.startswith("DR-") and frame is not None and person_bbox is not None:
+        skip_face_recovery = density_only
+        if camera_id.startswith("DR-"):
+            from ..patrol_flight_mode import is_patrol_flycam_aerial
+
+            skip_face_recovery = skip_face_recovery or is_patrol_flycam_aerial(camera_id)
+        if not skip_face_recovery and frame is not None and person_bbox is not None:
             from ..worker_identity.recognizer import recover_patrol_face_embedding
 
             recovered = recover_patrol_face_embedding(
