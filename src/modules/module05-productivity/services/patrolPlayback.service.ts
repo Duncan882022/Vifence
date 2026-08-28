@@ -124,6 +124,8 @@ async function fetchMediaMtxSegments(
     mode: 'cors',
     signal: AbortSignal.timeout(12_000),
   })
+  // MediaMTX trả 404 + "no recording segments found" khi ngày không có băng — không phải lỗi proxy.
+  if (res.status === 404) return []
   if (!res.ok) return []
   const data = (await res.json()) as MediaMtxSegment[] | null
   return Array.isArray(data) ? data : []
@@ -152,7 +154,7 @@ function segmentsToRecords(
       startTime: startedAt.toISOString(),
       endTime: endedAt.toISOString(),
       type: 'continuous',
-      videoUrl: seg.url ?? buildGetUrl(base, path, seg.start, seg.duration),
+      videoUrl: buildGetUrl(base, path, seg.start, seg.duration),
     })
   }
   return items

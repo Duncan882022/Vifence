@@ -51,6 +51,30 @@ describe('createPatrolPlaybackFetchers', () => {
     const eventRecord = res.items.find(i => i.id === 'ev-1')
     expect(eventRecord).toBeDefined()
     expect(eventRecord?.type).toBe('event')
-    expect(eventRecord?.videoUrl).toContain('/get?')
+    expect(eventRecord?.videoUrl).toContain('https://playback.test/get?')
+  })
+
+  it('băng MediaMTX — luôn dựng /get qua playback base (bỏ url nội bộ MediaMTX)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [{
+          start: '2026-08-28T09:00:49+02:00',
+          duration: 12.6,
+          url: 'http://217.217.253.247.nip.io/get?path=hc-01',
+        }],
+      }),
+    )
+
+    const fetch = createPatrolPlaybackFetchers([]).fetchRecords
+    const res = await fetch('HC-01', {
+      startDate: '2026-08-28T00:00:00+07:00',
+      endDate: '2026-08-28T23:59:59+07:00',
+    })
+
+    expect(res.items).toHaveLength(1)
+    expect(res.items[0].videoUrl).toMatch(/^https:\/\/playback\.test\/get\?/)
+    expect(res.items[0].videoUrl).not.toContain('217.217.253.247')
   })
 })
