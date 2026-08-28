@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, MapPin, Footprints, ScanFace,
+  Users, MapPin, Footprints, ScanFace, UserX,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -76,30 +76,23 @@ function PatrolWorkersKpiDetail({
   personCount: number
   identityCount: number
 }) {
-  const PersonIcon = PATROL_PERSON_STAGE_META.person.icon
   const IdentityIcon = PATROL_PERSON_STAGE_META.profile.icon
 
   return (
-    <span className="inline-flex items-center gap-x-1.5 gap-y-0.5 flex-wrap text-[10px] text-muted-foreground/80">
+    <span className="inline-flex items-center gap-x-2 gap-y-0.5 flex-wrap text-[10px]">
       {personCount > 0 && (
-        <span className="inline-flex items-center gap-0.5 tabular-nums">
-          <PersonIcon
-            className={cn('w-3 h-3 shrink-0', PATROL_PERSON_STAGE_META.person.color)}
-            aria-hidden
-          />
-          <span>{personCount} chưa định danh</span>
+        <span className="inline-flex items-center gap-0.5 tabular-nums text-sky-400">
+          <UserX className="w-3 h-3 shrink-0" aria-hidden />
+          <span className="font-semibold">{personCount}</span>
         </span>
       )}
-      {personCount > 0 && identityCount > 0 && (
-        <span className="text-muted-foreground/35" aria-hidden>·</span>
-      )}
       {identityCount > 0 && (
-        <span className="inline-flex items-center gap-0.5 tabular-nums">
-          <IdentityIcon
-            className={cn('w-3 h-3 shrink-0', PATROL_PERSON_STAGE_META.profile.color)}
-            aria-hidden
-          />
-          <span>{identityCount} Định danh</span>
+        <span className={cn(
+          'inline-flex items-center gap-0.5 tabular-nums',
+          PATROL_PERSON_STAGE_META.profile.color,
+        )}>
+          <IdentityIcon className="w-3 h-3 shrink-0" aria-hidden />
+          <span className="font-semibold">{identityCount}</span>
         </span>
       )}
     </span>
