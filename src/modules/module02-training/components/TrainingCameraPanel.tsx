@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
@@ -10,9 +9,6 @@ import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJs
 import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
-import {
-  getCameraMaximizeFrameClass,
-} from '../data/trainingCameraFeeds'
 import {
   CAMERA_FILTER_TABS,
   DEFAULT_COURSE_CAMERA_IDS,
@@ -161,14 +157,11 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
   )
 }
 
-function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false }: {
+function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false }: {
   cam: TrainingCamera
   compact?: boolean
-  onMaximize: () => void
-  isMaximized?: boolean
   analyzeThrottle?: boolean
   streamIndex?: number
-  /** false khi mobile đang mở fullscreen — tránh 2 getUserMedia (iPhone tile đen) */
   playing?: boolean
   streamWhenOffline?: boolean
 }) {
@@ -210,8 +203,6 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
       <CameraChrome
         cam={cam}
         compact={compact}
-        onMaximize={onMaximize}
-        isMaximized={isMaximized}
       />
     </div>
   )
@@ -231,6 +222,13 @@ const MOBILE_LANDSCAPE_MAX_VISIBLE_ROWS = 3
 const GRID_GAP_PX = 6
 const MOBILE_VIDEO_COL_PAD_Y = 12
 
+function getGridRowHeight(containerWidth: number, cols: number): number | null {
+  if (containerWidth <= 0 || cols <= 0) return null
+  const gap = GRID_GAP_PX
+  const cellWidth = (containerWidth - gap * (cols - 1)) / cols
+  return Math.ceil(cellWidth * (9 / 16))
+}
+
 function getMobileVideoViewportHeight(
   containerWidth: number,
   cols: number,
@@ -238,16 +236,15 @@ function getMobileVideoViewportHeight(
   maxVisibleRows: number,
 ): number | null {
   if (containerWidth <= 0 || rowCount <= 0) return null
+  const rowHeight = getGridRowHeight(containerWidth, cols)
+  if (rowHeight == null) return null
   const gap = GRID_GAP_PX
-  const cellWidth = (containerWidth - gap * (cols - 1)) / cols
-  const rowHeight = cellWidth * (9 / 16)
   const visibleRows = Math.min(rowCount, maxVisibleRows)
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, streamWhenOffline }: {
+function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol, compactVideo, compactVideoMaxClass, aspectVideoGrid, fixedRowHeightPx, streamWhenOffline }: {
   cams: TrainingCamera[]
-  onMaximize: (cam: TrainingCamera) => void
   stackedPortrait: boolean
   fillHeight: boolean
   forceSingleCol?: boolean
@@ -257,8 +254,8 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   compactVideoMaxClass?: string
   /** Patrol grid: luôn 16:9, không giới hạn max-h trên desktop. */
   aspectVideoGrid?: boolean
-  /** Camera đang phóng to — ô grid chỉ giữ chỗ, overlay render qua portal. */
-  focusedCamId?: string | null
+  /** Patrol tier scroll: chiều cao hàng grid cố định (px) — tránh hàng 2 đè hàng 1. */
+  fixedRowHeightPx?: number | null
   streamWhenOffline?: boolean
 }) {
   const count = cams.length
@@ -266,121 +263,53 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   const rows = Math.ceil(count / cols)
   const compact = count > 2
   const analyzeThrottle = count >= 2
-  const hasFocus = Boolean(focusedCamId)
+  const useFixedRows = fixedRowHeightPx != null && fixedRowHeightPx > 0
 
   return (
     <div
       className={cn(
         'grid gap-1.5 w-full',
         fillHeight ? 'h-full min-h-0' : 'h-auto content-start',
+        useFixedRows && 'auto-rows-[minmax(0,auto)]',
       )}
       style={{
         gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : {}),
+        ...(useFixedRows ? { gridAutoRows: `${fixedRowHeightPx}px` } : {}),
       }}
     >
       {cams.map((cam, index) => {
-        const isFocused = focusedCamId === cam.id
-        const isBackground = Boolean(focusedCamId && focusedCamId !== cam.id)
         const cellShellClass = cn(
-          'relative w-full min-w-0 shrink-0 bg-black',
+          'relative w-full min-w-0 bg-black overflow-hidden',
           fillHeight
             ? 'h-full min-h-[120px]'
-            : cn(
-              'aspect-video',
-              compactVideo
-                ? (compactVideoMaxClass ?? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]')
-                : aspectVideoGrid
-                  ? undefined
-                  : 'max-h-[min(36dvh,280px)]',
-            ),
+            : useFixedRows
+              ? 'h-full min-h-0'
+              : cn(
+                'aspect-video shrink-0',
+                compactVideo
+                  ? (compactVideoMaxClass ?? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]')
+                  : aspectVideoGrid
+                    ? undefined
+                    : 'max-h-[min(36dvh,280px)]',
+              ),
         )
         return (
-          <div key={cam.id} className="relative min-w-0">
-            {isFocused ? (
-              <div
-                className={cn(
-                  cellShellClass,
-                  'border border-dashed border-[#334155] bg-[#0a0e17]/80',
-                )}
-                aria-hidden
+          <div key={cam.id} className={cn('relative min-w-0 min-h-0', useFixedRows && 'h-full')}>
+            <div className={cellShellClass}>
+              <CameraCell
+                cam={cam}
+                compact={compact}
+                analyzeThrottle={analyzeThrottle}
+                streamIndex={index}
+                playing
+                streamWhenOffline={streamWhenOffline}
               />
-            ) : (
-              <div className={cn(cellShellClass, isBackground && 'invisible pointer-events-none')}>
-                <CameraCell
-                  cam={cam}
-                  compact={compact}
-                  analyzeThrottle={analyzeThrottle}
-                  streamIndex={index}
-                  playing={!hasFocus}
-                  streamWhenOffline={streamWhenOffline}
-                  onMaximize={() => onMaximize(cam)}
-                />
-              </div>
-            )}
+            </div>
           </div>
         )
       })}
     </div>
-  )
-}
-
-function FocusedCameraOverlay({
-  cam,
-  streamIndex,
-  onClose,
-  compact,
-  analyzeThrottle,
-  streamWhenOffline,
-}: {
-  cam: TrainingCamera
-  streamIndex: number
-  onClose: () => void
-  compact: boolean
-  analyzeThrottle: boolean
-  streamWhenOffline: boolean
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
-  }, [onClose])
-
-  return createPortal(
-    <>
-      <div
-        className="fixed inset-0 z-[190] bg-black/92 backdrop-blur-sm touch-none"
-        onClick={onClose}
-        role="presentation"
-      />
-      <div
-        className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 pointer-events-none"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Phóng to ${cameraDisplayLabel(cam)}`}
-      >
-        <div className={cn(
-          'relative pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black',
-          getCameraMaximizeFrameClass(cam.streamType),
-        )}>
-          <CameraCell
-            cam={cam}
-            compact={compact}
-            analyzeThrottle={analyzeThrottle}
-            streamIndex={streamIndex}
-            playing
-            streamWhenOffline={streamWhenOffline}
-            isMaximized
-            onMaximize={onClose}
-          />
-        </div>
-      </div>
-    </>,
-    document.body,
   )
 }
 
@@ -414,6 +343,10 @@ interface TrainingCameraPanelProps {
   sidebarCompactClass?: string
   /** Pixel width sidebar compact (iPad ngang / landscape) — dùng cho grid 2 cột. */
   sidebarCompactPx?: number
+  /** Chiều rộng sidebar khi thu gọn (px) — patrol mặc định hẹp hơn lg:w-8. */
+  sidebarCollapsedPx?: number
+  /** Class Tailwind sidebar thu gọn — desktop. */
+  sidebarCollapsedClass?: string
   /** Patrol sidebar: thumb nhỏ gọn + full width cột. */
   sidebarThumbCompact?: boolean
   sidebarThumbFullWidth?: boolean
@@ -441,6 +374,8 @@ export function TrainingCameraPanel({
   sidebarOpenClass = 'lg:w-[220px]',
   sidebarCompactClass = 'max-lg:landscape:w-[168px]',
   sidebarCompactPx,
+  sidebarCollapsedPx,
+  sidebarCollapsedClass = 'lg:w-8',
   sidebarThumbCompact = false,
   sidebarThumbFullWidth = false,
 }: TrainingCameraPanelProps) {
@@ -467,10 +402,10 @@ export function TrainingCameraPanel({
       setFilterTab(tabs[0] ?? 'Tất cả')
     }
   }, [tabs, filterTab])
-  const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const videoGridRef = useRef<HTMLDivElement>(null)
   const [landscapeSidebarH, setLandscapeSidebarH] = useState<number | null>(null)
   const [mobileViewportH, setMobileViewportH] = useState<number | null>(null)
+  const [gridRowHeightPx, setGridRowHeightPx] = useState<number | null>(null)
   const { isDesktop } = useShellLayout()
   const { hasDemoData } = useActiveTenant()
 
@@ -526,12 +461,14 @@ export function TrainingCameraPanel({
     if (!scrollNode || mobileStackedNoScroll) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
+      setGridRowHeightPx(null)
       return
     }
 
     if (isDesktop && !preferCompactVideo && !patrolTierScroll && fillHeightMain) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
+      setGridRowHeightPx(null)
       return
     }
 
@@ -539,6 +476,8 @@ export function TrainingCameraPanel({
     const landscapeMq = window.matchMedia('(max-width: 1023px) and (orientation: landscape)')
 
     const sync = () => {
+      const rowH = getGridRowHeight(scrollNode.clientWidth, gridCols)
+
       if (patrolTierScroll) {
         const viewportH = getMobileVideoViewportHeight(
           scrollNode.clientWidth,
@@ -547,6 +486,7 @@ export function TrainingCameraPanel({
           desktopMaxVisibleRows ?? 1,
         )
         setMobileViewportH(viewportH)
+        setGridRowHeightPx(rowH)
         if (sidebarOpen && viewportH) {
           setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
         } else {
@@ -558,6 +498,7 @@ export function TrainingCameraPanel({
       if (!mobileMq.matches && !preferCompactVideo) {
         setMobileViewportH(null)
         setLandscapeSidebarH(null)
+        setGridRowHeightPx(null)
         return
       }
 
@@ -567,6 +508,7 @@ export function TrainingCameraPanel({
         : portraitMaxRows
       const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
       setMobileViewportH(viewportH)
+      setGridRowHeightPx(rowH)
 
       if (landscapeCompact && sidebarOpen && viewportH) {
         setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
@@ -633,16 +575,18 @@ export function TrainingCameraPanel({
   }
 
   const compactSidebarPx = sidebarCompactPx ?? 108
+  const collapsedSidebarPx = sidebarCollapsedPx ?? 32
+  const sidebarRailPx = sidebarOpen ? compactSidebarPx : collapsedSidebarPx
   const compactGridStyle = preferCompactVideo
-    ? { gridTemplateColumns: `minmax(0, 1fr) ${compactSidebarPx}px` } as const
+    ? { gridTemplateColumns: `minmax(0, 1fr) ${sidebarRailPx}px` } as const
     : undefined
   const thumbCompact = sidebarThumbCompact || !isDesktop
   const thumbStrip = isDesktop && !sidebarThumbFullWidth
   const thumbMini = sidebarThumbCompact && sidebarThumbFullWidth
+  const collapsedCompact = sidebarThumbCompact && !sidebarOpen
 
   return (
-    <>
-      <div
+    <div
         className={cn(
           'w-full min-h-0 h-full',
           preferCompactVideo
@@ -651,9 +595,6 @@ export function TrainingCameraPanel({
               'flex flex-col lg:flex-row',
               !isDesktop && [
                 'max-lg:landscape:grid max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
-                sidebarCompactPx != null
-                  ? `max-lg:landscape:grid-cols-[minmax(0,1fr)_${compactSidebarPx}px]`
-                  : 'max-lg:landscape:grid-cols-[minmax(0,1fr)_108px]',
               ],
             ),
           aspectGridInTier
@@ -664,7 +605,12 @@ export function TrainingCameraPanel({
                 ? 'lg:h-auto lg:flex-none'
                 : 'lg:flex-1 lg:min-h-0',
         )}
-        style={compactGridStyle}
+        style={{
+          ...compactGridStyle,
+          ...(sidebarCompactPx != null && !preferCompactVideo && !isDesktop
+            ? { gridTemplateColumns: `minmax(0, 1fr) ${sidebarRailPx}px` }
+            : {}),
+        }}
       >
         <div className={cn(
           'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
@@ -674,8 +620,9 @@ export function TrainingCameraPanel({
           <div
             ref={videoGridRef}
             className={cn(
-              'w-full min-h-0 flex-1',
-              fillHeightMain && !mobileFillPanel
+              'w-full',
+              patrolTierScroll ? 'shrink-0' : 'min-h-0 flex-1',
+              fillHeightMain && !mobileFillPanel && !patrolTierScroll
                 ? 'overflow-hidden'
                 : 'overflow-y-auto overflow-x-hidden overscroll-y-contain',
             )}
@@ -683,14 +630,13 @@ export function TrainingCameraPanel({
           >
             <CameraGrid
               cams={safeCams}
-              onMaximize={cam => setFocusedCam(cam)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
               forceSingleCol={mobileStackedNoScroll && !isDesktop}
               compactVideo={useCompactVideoCaps}
               compactVideoMaxClass={compactVideoMaxClass}
               aspectVideoGrid={aspectVideoGrid}
-              focusedCamId={focusedCam?.id}
+              fixedRowHeightPx={gridRowHeightPx}
               streamWhenOffline={streamWhenOffline}
             />
           </div>
@@ -705,11 +651,18 @@ export function TrainingCameraPanel({
             preferCompactVideo && sidebarOpen && 'border-t-0 border-l',
             sidebarOpen
               ? cn('w-full lg:h-full lg:min-h-0', !preferCompactVideo && sidebarOpenClass)
-              : 'w-full shrink-0 min-h-[2.25rem] lg:flex lg:w-8 lg:h-full lg:min-h-0',
+              : cn(
+                collapsedCompact
+                  ? 'shrink-0 self-end w-7 min-h-[1.75rem] border-t border-[#1e2433] lg:border-t-0 lg:self-auto'
+                  : 'w-full shrink-0 min-h-[2.25rem] border-t border-[#1e2433] lg:border-t-0',
+                sidebarCollapsedClass,
+                'lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:px-0',
+              ),
           )}
           style={{
             ...(landscapeSidebarH ? { maxHeight: landscapeSidebarH } : {}),
             ...(preferCompactVideo && sidebarOpen ? { width: compactSidebarPx } : {}),
+            ...(preferCompactVideo && !sidebarOpen ? { width: collapsedSidebarPx } : {}),
           }}
         >
           {sidebarOpen ? (
@@ -807,53 +760,52 @@ export function TrainingCameraPanel({
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 w-full min-h-[2.25rem] border-t border-[#1e2433] lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0 lg:border-t-0">
-              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
-                {tabs.map(tab => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setFilterTab(tab)}
-                    className={cn(
-                      'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
-                      filterTab === tab
-                        ? 'bg-primary/20 text-primary'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
-                    )}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[8px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums lg:hidden">
-                <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
-              </span>
+            <div className={cn(
+              collapsedCompact
+                ? 'flex items-center justify-center w-full h-full min-h-[1.75rem] lg:min-h-0'
+                : 'flex items-center gap-1.5 px-2 py-1.5 w-full min-h-[2.25rem] lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0 lg:border-t-0',
+            )}>
+              {!collapsedCompact && (
+                <>
+                  <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
+                    {tabs.map(tab => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setFilterTab(tab)}
+                        className={cn(
+                          'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                          filterTab === tab
+                            ? 'bg-primary/20 text-primary'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
+                        )}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[8px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums lg:hidden">
+                    <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+                  </span>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0 lg:p-1.5"
+                className={cn(
+                  'rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0',
+                  collapsedCompact ? 'p-0.5' : 'p-1 lg:p-1.5',
+                )}
                 title="Mở danh sách camera"
                 aria-expanded={sidebarOpen}
                 aria-label="Mở danh sách camera"
               >
-                <ChevronLeft className="w-3 h-3 lg:w-3.5 lg:h-3.5" />
+                <ChevronLeft className={cn(collapsedCompact ? 'w-3 h-3' : 'w-3 h-3 lg:w-3.5 lg:h-3.5')} />
               </button>
             </div>
           )}
         </div>
       </div>
-
-      {focusedCam && (
-        <FocusedCameraOverlay
-          cam={focusedCam}
-          streamIndex={Math.max(0, safeCams.findIndex(c => c.id === focusedCam.id))}
-          onClose={() => setFocusedCam(null)}
-          compact={safeCams.length > 2}
-          analyzeThrottle={safeCams.length >= 2}
-          streamWhenOffline={streamWhenOffline}
-        />
-      )}
-    </>
   )
 }
 

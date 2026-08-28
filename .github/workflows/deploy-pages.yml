@@ -37,6 +37,9 @@ jobs:
       - name: Build
         run: npm run build:pages
 
+      - name: Sync build to repo root (Pages main/root)
+        run: bash scripts/sync-pages-to-root.sh
+
       - name: Verify docs build
         run: |
           test -f docs/index.html

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Maximize2, Wifi, WifiOff, AlertTriangle } from 'lucide-react'
+import { Wifi, WifiOff, AlertTriangle } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { Camera, CameraLayout } from '@/types/camera'
 
@@ -58,10 +58,6 @@ function CameraCell({ camera, isSelected, onClick }: {
         </div>
         <p className="text-[9px] text-white/50 leading-tight">{camera.location}</p>
       </div>
-
-      <button className="absolute top-1 right-1 p-1 rounded bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Maximize2 className="w-3 h-3 text-white" />
-      </button>
     </div>
   )
 }

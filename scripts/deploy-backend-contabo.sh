@@ -436,6 +436,12 @@ server {
     location = /phat-song {
         return 301 /Vifence/phat-song/;
     }
+    location = /phat-song/ {
+        return 301 /Vifence/phat-song/;
+    }
+    location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/)? {
+        return 301 /Vifence\\\$request_uri;
+    }
     location = /Vifence {
         return 301 /Vifence/;
     }
@@ -516,6 +522,12 @@ server {
     # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
     location = /phat-song {
         return 301 /Vifence/phat-song/;
+    }
+    location = /phat-song/ {
+        return 301 /Vifence/phat-song/;
+    }
+    location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/)? {
+        return 301 /Vifence\\\$request_uri;
     }
     location = /Vifence {
         return 301 /Vifence/;
@@ -628,6 +640,12 @@ server {
     # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
     location = /phat-song {
         return 301 /Vifence/phat-song/;
+    }
+    location = /phat-song/ {
+        return 301 /Vifence/phat-song/;
+    }
+    location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/)? {
+        return 301 /Vifence\\\$request_uri;
     }
     location = /Vifence {
         return 301 /Vifence/;
