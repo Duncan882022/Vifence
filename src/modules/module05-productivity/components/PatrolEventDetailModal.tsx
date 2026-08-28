@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Clock, MapPin, X } from 'lucide-react'
+import {
+  Building2,
+  Camera,
+  Clock,
+  Hash,
+  Info,
+  MapPin,
+  User,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { isPortraitPatrolCameraId } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { formatEventDateTime } from '@/utils/format'
@@ -27,6 +37,33 @@ import { resolvePatrolCameraDisplayName } from '../data/patrolCameras'
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
   onClose: () => void
+}
+
+interface PatrolInfoRow {
+  icon: LucideIcon
+  label: string
+  value: string
+  iconClassName: string
+}
+
+function PatrolDetailRow({ icon: Icon, label, value, iconClassName }: PatrolInfoRow) {
+  return (
+    <div className="flex items-start gap-2.5 min-w-0">
+      <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 border border-[#1e2433] bg-[#0a0e17]">
+        <Icon className={cn('w-3.5 h-3.5', iconClassName)} aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className="text-[8px] uppercase tracking-wide text-muted-foreground/70">{label}</p>
+        <p className="text-[11px] text-foreground font-medium mt-0.5 leading-snug break-all">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function splitInfoColumns(rows: PatrolInfoRow[]): [PatrolInfoRow[], PatrolInfoRow[]] {
+  if (rows.length <= 1) return [rows, []]
+  const mid = Math.ceil(rows.length / 2)
+  return [rows.slice(0, mid), rows.slice(mid)]
 }
 
 function hasValidGps(gps: { lat: number; lng: number } | null | undefined): gps is { lat: number; lng: number } {
@@ -130,20 +167,60 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     const cameraLabel = resolvePrimaryCameraLabel(event, appearanceCameras)
     const duration = resolveEventDurationSeconds(event)
 
-    const infoRows: Array<{ label: string; value: string }> = []
+    const infoRows: PatrolInfoRow[] = []
     if (stage === 'profile') {
       if (objectDisplay.label && objectDisplay.label !== 'Đối tượng') {
-        infoRows.push({ label: 'Họ tên', value: objectDisplay.label })
+        infoRows.push({
+          icon: User,
+          label: 'Họ tên',
+          value: objectDisplay.label,
+          iconClassName: 'text-fuchsia-400',
+        })
       }
-      if (objectDisplay.workerId) infoRows.push({ label: 'Mã nhân viên', value: objectDisplay.workerId })
-      if (objectDisplay.unit) infoRows.push({ label: 'Đơn vị', value: objectDisplay.unit })
+      if (objectDisplay.workerId) {
+        infoRows.push({
+          icon: Hash,
+          label: 'Mã nhân viên',
+          value: objectDisplay.workerId,
+          iconClassName: 'text-sky-400',
+        })
+      }
+      if (objectDisplay.unit) {
+        infoRows.push({
+          icon: Building2,
+          label: 'Đơn vị',
+          value: objectDisplay.unit,
+          iconClassName: 'text-amber-400/90',
+        })
+      }
     } else if (stage === 'person') {
-      if (cardDisplay.workerId) infoRows.push({ label: 'Mã theo dõi', value: cardDisplay.workerId })
+      if (cardDisplay.workerId) {
+        infoRows.push({
+          icon: Hash,
+          label: 'Mã theo dõi',
+          value: cardDisplay.workerId,
+          iconClassName: 'text-orange-400',
+        })
+      }
     } else {
-      infoRows.push({ label: 'Mã', value: event.objectId || event.id })
+      infoRows.push({
+        icon: Hash,
+        label: 'Mã',
+        value: event.objectId || event.id,
+        iconClassName: 'text-stone-400',
+      })
     }
 
-    if (cameraLabel) infoRows.push({ label: 'Camera', value: cameraLabel })
+    if (cameraLabel) {
+      infoRows.push({
+        icon: Camera,
+        label: 'Vị trí',
+        value: cameraLabel,
+        iconClassName: 'text-cyan-400',
+      })
+    }
+
+    const [infoPrimary, infoSecondary] = splitInfoColumns(infoRows)
 
     return {
       stage,
@@ -151,7 +228,8 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
       cardDisplay,
       timeRange: formatEventTimeRange(event),
       duration,
-      infoRows,
+      infoPrimary,
+      infoSecondary,
     }
   }, [event, appearances])
 
@@ -224,17 +302,28 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
             <PatrolEventSnapshot event={event} variant="detail" />
           )}
 
-          {summary.infoRows.length > 0 && (
-            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
-              <p className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Thông tin</p>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
-                {summary.infoRows.map(row => (
-                  <div key={row.label}>
-                    <dt className="text-muted-foreground">{row.label}</dt>
-                    <dd className="text-foreground font-medium mt-0.5 break-all">{row.value}</dd>
+          {(summary.infoPrimary.length > 0 || summary.infoSecondary.length > 0) && (
+            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5">
+              <div className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-violet-400 shrink-0" aria-hidden />
+                <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
+                  Thông tin
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                <div className="space-y-3">
+                  {summary.infoPrimary.map(row => (
+                    <PatrolDetailRow key={row.label} {...row} />
+                  ))}
+                </div>
+                {summary.infoSecondary.length > 0 && (
+                  <div className="space-y-3">
+                    {summary.infoSecondary.map(row => (
+                      <PatrolDetailRow key={row.label} {...row} />
+                    ))}
                   </div>
-                ))}
-              </dl>
+                )}
+              </div>
             </div>
           )}
 
