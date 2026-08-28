@@ -11,8 +11,8 @@ import {
   getPatrolMobileLiveSnapshot,
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
-import { DEFAULT_PATROL_CAMERA_IDS, PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
-import { PATROL_DRONE_IDS, PATROL_DRONE_LABELS } from '../data/patrolDrones'
+import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
+import { PATROL_DRONE_IDS } from '../data/patrolDrones'
 import {
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
@@ -313,11 +313,6 @@ export function PatrolDensityHeatmap({
     persons: personCount,
   }), [workersStandard, identifiedCount, unassignedCount, personCount])
 
-  const bodycamOnlineById = useMemo(() => ({
-    'HC-01': Boolean(helmetOnlineById['HC-01']),
-    'HC-02': hc02Online,
-  }), [helmetOnlineById, hc02Online])
-
   useEffect(() => {
     if (!expanded) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseExpand?.() }
@@ -348,45 +343,6 @@ export function PatrolDensityHeatmap({
             viewport.compactChrome && 'shrink-0 flex-nowrap',
             !viewport.isTabletLandscape && viewport.compactChrome && 'flex-wrap',
           )}>
-          {DEFAULT_PATROL_CAMERA_IDS.map(id => {
-            const online = bodycamOnlineById[id as keyof typeof bodycamOnlineById]
-            const label = PATROL_BODYCAM_LABELS[id] ?? id
-            return (
-              <span
-                key={id}
-                className={cn(
-                  'inline-flex items-center gap-1 font-semibold shrink-0',
-                  online ? 'text-emerald-400' : 'text-slate-500',
-                )}
-              >
-                <span className={cn(
-                  'w-1.5 h-1.5 rounded-full',
-                  online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500',
-                )} />
-                {label}
-              </span>
-            )
-          })}
-          {PATROL_DRONE_IDS.map(id => {
-            const online = Boolean(helmetOnlineById[id])
-            const label = PATROL_DRONE_LABELS[id] ?? id
-            return (
-              <span
-                key={id}
-                className={cn(
-                  'inline-flex items-center gap-1 font-semibold shrink-0',
-                  online ? 'text-sky-400' : 'text-slate-500',
-                )}
-              >
-                <span className={cn(
-                  'w-1.5 h-1.5 rounded-full',
-                  online ? 'bg-sky-400 animate-pulse' : 'bg-slate-500',
-                )} />
-                {label}
-              </span>
-            )
-          })}
-          <span className="text-[#334155] hidden sm:inline">·</span>
           <span className="text-sky-300/90 tabular-nums shrink-0">{workersStandard} người chuẩn</span>
           <span className="text-[#334155] hidden md:inline">·</span>
           <span className="text-cyan-300/85 tabular-nums shrink-0 hidden md:inline">{personCount} người</span>
