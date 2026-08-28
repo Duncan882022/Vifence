@@ -494,13 +494,12 @@ def patrol_snapshot(
     path: str,
     token: str | None = None,
     exp: int | None = None,
-    _user: RequirePatrolRead = None,  # noqa: ARG001
 ):
-    """Ảnh chụp — yêu cầu token HMAC khi không demo."""
+    """Ảnh chụp — `<img>` không gửi Bearer; dùng token HMAC ký từ POST /snapshot/sign."""
     from .sink import resolve_snapshot_path
 
     if token and exp is not None:
-        if not verify_snapshot_token(path, token, exp):
+        if not verify_snapshot_token(path, token, int(exp)):
             return Response(status_code=403)
     elif not settings_patrol_auth_disabled():
         return Response(status_code=401)

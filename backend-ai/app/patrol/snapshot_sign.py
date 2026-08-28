@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from ..config import settings
 
-SNAPSHOT_TTL_SEC = 60
+SNAPSHOT_TTL_SEC = 600
 
 
 def sign_snapshot_path(path: str, *, ttl_sec: int = SNAPSHOT_TTL_SEC) -> dict[str, str | int]:
