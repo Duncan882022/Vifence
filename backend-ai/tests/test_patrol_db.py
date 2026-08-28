@@ -262,6 +262,36 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["snapshot_path"], "better.jpg")
         self.assertEqual(card["last_seen"], 1_003.0)
 
+    def test_appearance_keeps_snapshot_when_card_keeps_best(self) -> None:
+        """Lượt mới sau gap vẫn lưu ảnh riêng dù thẻ giữ snapshot rõ hơn."""
+        pers_id, _ = identity.observe_face(_vec(29), quality=0.8)
+        daystore.touch_person_event(
+            pers_id,
+            camera_id="HC-01",
+            snapshot_path="20250828/pers-0001-1000.jpg",
+            snapshot_score=1.5,
+            face_eligible=True,
+            now=1_000.0,
+        )
+        daystore.touch_person_event(
+            pers_id,
+            camera_id="HC-01",
+            snapshot_path="20250828/pers-0001-5000.jpg",
+            snapshot_score=0.5,
+            face_eligible=True,
+            now=5_000.0,
+        )
+        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["snapshot_path"], "20250828/pers-0001-1000.jpg")
+
+        hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
+        self.assertEqual(len(hist["segments"]), 2)
+        paths = {s["snapshot_path"] for s in hist["segments"]}
+        self.assertEqual(
+            paths,
+            {"20250828/pers-0001-1000.jpg", "20250828/pers-0001-5000.jpg"},
+        )
+
 
 class ObjectTests(PatrolDbTestCase):
     def test_object_gets_day_scoped_code(self) -> None:

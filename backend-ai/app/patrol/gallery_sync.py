@@ -34,6 +34,9 @@ def _latest_snapshot_path(pers_id: str) -> Path | None:
         direct = day_dir / f"{pid}.jpg"
         if direct.is_file():
             candidates.append((direct.stat().st_mtime, direct))
+        for stamped in day_dir.glob(f"{pid}-*.jpg"):
+            if stamped.is_file():
+                candidates.append((stamped.stat().st_mtime, stamped))
         resolved = resolve_snapshot_path(f"{day_dir.name}/{pid}.jpg")
         if resolved is not None and resolved.is_file():
             candidates.append((resolved.stat().st_mtime, resolved))

@@ -76,6 +76,7 @@ def _write_snapshot(
     tier: str | None = None,
     worker_id: str | None = None,
     worker_name: str | None = None,
+    capture_ts: float | None = None,
 ) -> str | None:
     """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
@@ -149,10 +150,13 @@ def _write_snapshot(
             scale = max_side / max(fh, fw)
             out = cv2.resize(out, (int(fw * scale), int(fh * scale)), interpolation=cv2.INTER_AREA)
 
-        date = db.today_vn()
+        ts = float(capture_ts if capture_ts is not None else time.time())
+        date = db.today_vn(ts)
         folder = SNAPSHOT_DIR / date
         folder.mkdir(parents=True, exist_ok=True)
-        name = f"{subject_id}.jpg"
+        # Mỗi lần chụp một file — lịch sử popup đổi ảnh theo lượt xuất hiện.
+        stamp = int(ts * 1000)
+        name = f"{subject_id}-{stamp}.jpg"
         cv2.imwrite(str(folder / name), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         return f"{date}/{name}"
     except Exception:  # noqa: BLE001
@@ -522,6 +526,7 @@ def _commit_lifecycle_person_event(
             person_bbox,
             tier=lifecycle_tier,
             worker_id=lifecycle_worker_id,
+            capture_ts=ts,
         )
         shot_score = score if path else 0.0
     gps_lat, gps_lng = _resolve_observation_gps(camera_id)
@@ -589,6 +594,7 @@ def record_observation(
             tier=tier or lifecycle_tier,
             worker_id=worker_id or lifecycle_worker_id,
             worker_name=worker_name,
+            capture_ts=ts,
         )
         return path, score if path else 0.0
 
