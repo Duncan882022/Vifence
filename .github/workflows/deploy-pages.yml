@@ -37,8 +37,20 @@ jobs:
       - name: Build
         run: npm run build:pages
 
+      # Luôn chạy trước — không cần Pages bật sẵn (Settings → Deploy from branch gh-pages)
+      - name: Publish gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Deploy Pages from Actions ${{ github.sha }}"
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -48,13 +60,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-      # Fallback: nhánh gh-pages cho Settings → Pages → Deploy from branch
-      - name: Publish gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
-          publish_branch: gh-pages
-          force_orphan: true
-          commit_message: "Deploy Pages from Actions ${{ github.sha }}"
+        continue-on-error: true
