@@ -847,8 +847,12 @@ export function PatrolGeoHeatmap({
                         <>
                           <br />
                           <span style={{ color: '#94a3b8' }}>
-                            Công trường: {siteHeadcount.observed} quan sát
+                            Công trường: {siteHeadcount.observed} chuẩn
+                            {' · '}{siteHeadcount.persons} người
                             {' · '}{siteHeadcount.identified} định danh
+                            {siteHeadcount.objects > 0 && (
+                              <>{' · '}{siteHeadcount.objects} có thể người</>
+                            )}
                           </span>
                         </>
                       )}

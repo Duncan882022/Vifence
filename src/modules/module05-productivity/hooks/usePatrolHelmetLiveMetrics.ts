@@ -18,8 +18,9 @@ export interface PatrolHelmetLiveMetrics {
   streamOnline: boolean
   /** @deprecated dùng streamOnline */
   connected: boolean
-  /** Khung hiện tại — không dùng làm KPI đếm (xem usePatrolDayStats). */
+  /** Khung hiện tại — detection gate, không phải KPI ngày (xem usePatrolDayStats). */
   personCount: number
+  /** @deprecated alias của personCount — khung hiện tại */
   uniqueWorkers: number
   identifiedWorkers: number
   personEventsToday: number

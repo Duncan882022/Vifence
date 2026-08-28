@@ -76,6 +76,24 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
         self.assertIsNotNone(det["velocity"])
         self.assertEqual(len(det["velocity"]), 2)
 
+    def test_flycam_metrics_split_display_and_countable(self) -> None:
+        """Flycam: ROI (display) tách khỏi KPI khung (detection gate)."""
+        self.detector.next_boxes = [_FakeDetection((470, 250, 490, 300), 0.24)]
+        result = ppe_analyzer._build_patrol_flycam_result(self.frame, "DR-03")
+        metrics = result["metrics"]
+        self.assertIn("display_person_count", metrics)
+        self.assertIn("person_count", metrics)
+        self.assertGreaterEqual(metrics["display_person_count"], 1)
+        # Góc cao — silhouette nhỏ thường không qua detection gate chuẩn bodycam.
+        self.assertGreaterEqual(metrics["display_person_count"], metrics["person_count"])
+
+    def test_bodycam_metrics_include_display_person_count(self) -> None:
+        self.detector.next_boxes = [_FakeDetection((380, 80, 520, 420), 0.55)]
+        result = ppe_analyzer._build_patrol_bodycam_result(self.frame, "HC-01")
+        metrics = result["metrics"]
+        self.assertIn("display_person_count", metrics)
+        self.assertGreaterEqual(metrics["display_person_count"], metrics["person_count"])
+
     def test_track_id_stable_while_person_crosses_frame(self) -> None:
         """Người đi ngang khung: một track duy nhất từ đầu tới cuối."""
         seen: list[str] = []
