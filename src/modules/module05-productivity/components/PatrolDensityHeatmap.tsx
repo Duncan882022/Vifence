@@ -31,7 +31,16 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { buildPatrolPresenceHeatmapDots, filterPatrolHeatmapDotsByDevice } from '../utils/patrolDayHeatmapDots'
+import {
+  buildPatrolDayHeatmapDots,
+  buildPatrolPresenceHeatmapDots,
+  filterPatrolHeatmapDotsByDevice,
+  mergePatrolHeatmapDetectionDots,
+} from '../utils/patrolDayHeatmapDots'
+import {
+  getHeatmapPersonDots,
+  subscribeHeatmapPersonRegistry,
+} from '@/services/patrolHeatmapPersonRegistry'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
 import { usePatrolFlycamFlightModes } from '../hooks/usePatrolFlycamFlightModes'
 import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
@@ -61,9 +70,9 @@ function HeatmapSiteStatsOverlay({
   compactChrome?: boolean
 }) {
   const rows = [
-    { value: objectCount, label: 'đối tượng' },
-    { value: personCount, label: 'người' },
-    { value: identityCount, label: 'định danh' },
+    { value: objectCount, label: 'Đối tượng' },
+    { value: personCount, label: 'Người' },
+    { value: identityCount, label: 'Định danh' },
   ] as const
 
   return (
@@ -75,17 +84,19 @@ function HeatmapSiteStatsOverlay({
         'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
       )}
     >
-      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[92px]">
+      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[108px]">
         {rows.map((row, index) => (
           <div
             key={row.label}
             className={cn(
-              'px-2.5 py-1 text-[#e2e8f0] tabular-nums text-left leading-tight whitespace-nowrap',
+              'px-2.5 py-1 text-[#e2e8f0] text-left leading-tight whitespace-nowrap',
               compactChrome ? 'text-[9px]' : 'text-[10px]',
               index < rows.length - 1 && 'border-b border-[#334155]',
             )}
           >
-            {row.label} {row.value}
+            <span>{row.label}:</span>
+            {' '}
+            <span className="tabular-nums font-semibold">{row.value}</span>
           </div>
         ))}
       </div>
@@ -98,12 +109,11 @@ function HeatmapLayerControls({
   onToggle,
   compactChrome,
 }: {
-  layers: { polygon: boolean; density: boolean; helmet: boolean; flycam: boolean }
-  onToggle: (key: 'polygon' | 'density' | 'helmet' | 'flycam') => void
+  layers: { density: boolean; helmet: boolean; flycam: boolean }
+  onToggle: (key: 'density' | 'helmet' | 'flycam') => void
   compactChrome?: boolean
 }) {
   const items = [
-    { key: 'polygon' as const, label: 'Khu vực' },
     { key: 'density' as const, label: 'Mật độ' },
     { key: 'helmet' as const, label: 'Mũ' },
     { key: 'flycam' as const, label: 'Flycam' },
@@ -155,13 +165,13 @@ export function PatrolDensityHeatmap({
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
-    polygon: true,
     density: true,
     helmet: true,
     flycam: true,
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
+  const [registryRevision, setRegistryRevision] = useState(0)
   const [mobileHc02Live, setMobileHc02Live] = useState(
     () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
@@ -189,6 +199,10 @@ export function PatrolDensityHeatmap({
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
   }, [])
+
+  useEffect(() => subscribeHeatmapPersonRegistry(() => {
+    setRegistryRevision(t => t + 1)
+  }), [])
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
@@ -321,16 +335,52 @@ export function PatrolDensityHeatmap({
   }, [workforce.helmets, headingDeg])
 
   const filteredDots = useMemo(() => {
+    if (!layers.density) return []
+
     void identityRevision
-    const dots = buildPatrolPresenceHeatmapDots(presences, {
-      liveOnly: anyCameraOnline,
+    void registryRevision
+
+    const presenceOpts = {
       cameraOnlineById: helmetOnlineById,
       includeUnassigned: true,
       helmetPositionsById: mergedCameraPositions,
       helmetHeadingsById: helmetHeadingById,
       flightModeByCamera: flycamFlightModes,
+    } as const
+
+    let presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+      ...presenceOpts,
+      liveOnly: anyCameraOnline,
     })
-    const byDevice = filterPatrolHeatmapDotsByDevice(dots, {
+    if (anyCameraOnline && presenceDots.length === 0) {
+      presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+        ...presenceOpts,
+        liveOnly: false,
+      })
+    }
+
+    const registryDots = PATROL_MAP_CAMERA_IDS.flatMap(cameraId => {
+      if (!helmetOnlineById[cameraId]) return []
+      return getHeatmapPersonDots(cameraId)
+    })
+
+    let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots])
+
+    if (merged.length === 0 && patrolEvents.length > 0) {
+      let eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
+        liveOnly: anyCameraOnline,
+        cameraOnlineById: helmetOnlineById,
+      })
+      if (anyCameraOnline && eventDots.length === 0) {
+        eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
+          liveOnly: false,
+          cameraOnlineById: helmetOnlineById,
+        })
+      }
+      merged = eventDots
+    }
+
+    const byDevice = filterPatrolHeatmapDotsByDevice(merged, {
       helmet: layers.helmet,
       flycam: layers.flycam,
     })
@@ -341,10 +391,13 @@ export function PatrolDensityHeatmap({
         : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
     }))
   }, [
+    layers.density,
     presences,
+    patrolEvents,
     anyCameraOnline,
     helmetOnlineById,
     identityRevision,
+    registryRevision,
     mergedCameraPositions,
     helmetHeadingById,
     layers.helmet,
@@ -387,7 +440,7 @@ export function PatrolDensityHeatmap({
           layer="combined"
           displayMode="count"
           countMode="current"
-          showSiteBoundary={layers.polygon}
+          showSiteBoundary={false}
           showZonePolygons={false}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
@@ -395,7 +448,6 @@ export function PatrolDensityHeatmap({
           liveGpsLat={hc02Online ? hc02Live.lat : null}
           liveGpsLng={hc02Online ? hc02Live.lng : null}
           showDensity={false}
-          showZoneStatLabels={false}
           showRoute={layers.helmet}
           showHelmetMarkers={layers.helmet}
           showDroneMarkers={layers.flycam}
