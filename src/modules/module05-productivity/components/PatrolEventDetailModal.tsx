@@ -14,7 +14,6 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { isPortraitPatrolCameraId } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { formatPatrolTime } from '../data/patrolTypes'
@@ -327,7 +326,6 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   const showAppearanceHistory = (stage === 'person' || stage === 'profile')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
-  const portraitEvidence = Boolean(activeSnapshotUrl && isPortraitPatrolCameraId(event.cameraId))
 
   return createPortal(
     <div
@@ -338,11 +336,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
       <div
         className={cn(
           'relative flex flex-col w-full max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60',
-          portraitEvidence
-            ? 'sm:max-w-[min(96vw,calc(92dvh*9/16+2rem))]'
-            : activeSnapshotUrl
-              ? 'sm:max-w-xl lg:max-w-2xl'
-              : 'sm:max-w-md',
+          activeSnapshotUrl ? 'sm:max-w-xl lg:max-w-2xl' : 'sm:max-w-md',
         )}
         onClick={e => e.stopPropagation()}
         role="dialog"
