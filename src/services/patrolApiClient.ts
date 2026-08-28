@@ -63,6 +63,36 @@ export function isPatrolAuthenticated(): boolean {
   return IS_DEMO_AUTH || Boolean(getPatrolAccessToken())
 }
 
+/** Demo CMS — credentials baked at build (khớp PATROL_AUTH_USERS trên VPS). */
+function demoPatrolCredentials(): { username: string; password: string } | null {
+  if (!IS_DEMO_AUTH) return null
+  const username = import.meta.env.VITE_PATROL_DEMO_USERNAME?.trim()
+  const password = import.meta.env.VITE_PATROL_DEMO_PASSWORD?.trim()
+  if (username && password) return { username, password }
+  return null
+}
+
+let ensureAuthPromise: Promise<boolean> | null = null
+
+/**
+ * Demo mode (`VITE_DEMO_AUTH=true`) bypasses route guard nhưng backend vẫn cần JWT.
+ * Tự đăng nhập một lần khi chưa có token — tránh tab Sự kiện / KPI rỗng dù SQLite có dữ liệu.
+ */
+export async function ensurePatrolAuth(): Promise<boolean> {
+  if (!IS_DEMO_AUTH) return Boolean(getPatrolAccessToken())
+  if (getPatrolAccessToken()) return true
+  const creds = demoPatrolCredentials()
+  if (!creds) return false
+  if (!ensureAuthPromise) {
+    ensureAuthPromise = patrolSignin(creds.username, creds.password)
+      .then(res => Boolean(res?.ok && res.access_token))
+      .finally(() => {
+        ensureAuthPromise = null
+      })
+  }
+  return ensureAuthPromise
+}
+
 export function hasPatrolRole(minimum: 'viewer' | 'operator' | 'hr' | 'admin'): boolean {
   if (IS_DEMO_AUTH) return true
   const user = getPatrolAuthUser()
@@ -94,11 +124,12 @@ export async function fetchPatrol<T>(
 ): Promise<T | null> {
   const base = patrolBackendBase()
   if (!base) return null
+  await ensurePatrolAuth()
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> | undefined),
   }
   const token = getPatrolAccessToken()
-  if (token && !IS_DEMO_AUTH) {
+  if (token) {
     headers.Authorization = `Bearer ${token}`
   }
   const controller = new AbortController()
