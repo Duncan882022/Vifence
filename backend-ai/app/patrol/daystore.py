@@ -163,14 +163,14 @@ def touch_object(
                         (ts, snapshot_path, snapshot_score, date, obj_id),
                     )
                     appearance_snapshot = snapshot_path
-            else:
-                conn.execute(
-                    "UPDATE daily_objects SET last_seen = ?"
-                    " WHERE event_date = ? AND obj_id = ?",
-                    (ts, date, obj_id),
-                )
-                if snapshot_path:
-                    appearance_snapshot = snapshot_path
+                else:
+                    conn.execute(
+                        "UPDATE daily_objects SET last_seen = ?"
+                        " WHERE event_date = ? AND obj_id = ?",
+                        (ts, date, obj_id),
+                    )
+                    if snapshot_path:
+                        appearance_snapshot = snapshot_path
         _touch_appearance(
             conn, date, obj_id, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
