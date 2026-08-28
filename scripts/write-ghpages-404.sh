@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DOCS="${ROOT}/docs"
 
+# Jekyll bỏ qua thư mục _* và có thể phá asset Vite — bắt buộc cho GitHub Pages.
+touch "${DOCS}/.nojekyll"
+
 cat > "${DOCS}/404.html" <<'EOF'
 <!DOCTYPE html>
 <html lang="vi">
