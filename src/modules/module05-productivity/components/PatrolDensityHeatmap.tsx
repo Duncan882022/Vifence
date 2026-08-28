@@ -49,6 +49,53 @@ const PATROL_MAP_CAMERA_IDS: readonly string[] = [
   ...PATROL_DRONE_IDS,
 ]
 
+function HeatmapSiteStatsOverlay({
+  workersStandard,
+  personCount,
+  identifiedCount,
+  unassignedCount,
+  encounterCount,
+  compactChrome,
+}: {
+  workersStandard: number
+  personCount: number
+  identifiedCount: number
+  unassignedCount: number
+  encounterCount: number
+  compactChrome?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'absolute z-[500] pointer-events-none',
+        'right-2 max-sm:right-1.5',
+        compactChrome ? 'bottom-2 max-sm:bottom-1.5' : 'bottom-14 max-sm:bottom-12',
+        'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
+      )}
+    >
+      <div className={cn(
+        'rounded border border-[#1e2433]/90 bg-[#0a0e17]/78 backdrop-blur-[2px]',
+        'px-2 py-1.5 text-right max-w-[min(calc(100vw-1rem),320px)]',
+        compactChrome ? 'text-[9px]' : 'text-[10px]',
+      )}>
+        <div className={cn(
+          'flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 tabular-nums leading-tight',
+        )}>
+          <span className="text-sky-300/90 shrink-0">{workersStandard} người chuẩn</span>
+          <span className="text-[#334155] shrink-0">·</span>
+          <span className="text-cyan-300/85 shrink-0">{personCount} người</span>
+          <span className="text-[#334155] shrink-0">·</span>
+          <span className="text-violet-300/90 shrink-0">{identifiedCount} định danh</span>
+          <span className="text-[#334155] shrink-0">·</span>
+          <span className="text-amber-300/85 shrink-0">{unassignedCount} có thể người</span>
+          <span className="text-[#334155] shrink-0">·</span>
+          <span className="text-emerald-300/90 shrink-0">{encounterCount} lượt</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LayerToggle({
   active,
   color,
@@ -329,50 +376,17 @@ export function PatrolDensityHeatmap({
     <>
       <div className={cn(
         'shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3',
-        viewport.compactChrome ? 'py-1' : 'py-1.5 space-y-1',
+        viewport.compactChrome ? 'py-1' : 'py-1.5',
       )}>
         <div className={cn(
-          'flex items-center gap-x-2 gap-y-1 text-[10px] min-w-0',
-          viewport.isTabletLandscape
-            ? 'justify-between overflow-x-auto scrollbar-none flex-nowrap'
-            : viewport.compactChrome
-              ? 'overflow-x-auto scrollbar-none flex-nowrap'
-              : 'flex-wrap',
+          'flex items-center gap-1 flex-wrap',
+          viewport.isTabletLandscape && 'justify-end',
         )}>
-          <div className={cn(
-            'flex items-center gap-x-2 gap-y-1 min-w-0',
-            viewport.compactChrome && 'shrink-0 flex-nowrap',
-            !viewport.isTabletLandscape && viewport.compactChrome && 'flex-wrap',
-          )}>
-          <span className="text-sky-300/90 tabular-nums shrink-0">{workersStandard} người chuẩn</span>
-          <span className="text-[#334155] hidden md:inline">·</span>
-          <span className="text-cyan-300/85 tabular-nums shrink-0 hidden md:inline">{personCount} người</span>
-          <span className="text-[#334155]">·</span>
-          <span className="text-violet-300/90 tabular-nums shrink-0">{identifiedCount} định danh</span>
-          <span className="text-[#334155] hidden md:inline">·</span>
-          <span className="text-amber-300/85 tabular-nums shrink-0 hidden md:inline">{unassignedCount} có thể người</span>
-          <span className="text-[#334155]">·</span>
-          <span className="text-emerald-300/90 tabular-nums shrink-0">{encounterCount} lượt</span>
-          </div>
-
-          {viewport.isTabletLandscape && (
-            <div className="flex items-center gap-1 shrink-0">
-              <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
-              <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
-              <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
-              <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
-            </div>
-          )}
+          <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
         </div>
-
-        {!viewport.isTabletLandscape && (
-          <div className="flex items-center gap-1 flex-wrap">
-            <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
-            <LayerToggle compact={viewport.compactChrome} active={layers.density} color="#f59e0b" onClick={() => toggleLayer('density')}>Mật độ</LayerToggle>
-            <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
-            <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
-          </div>
-        )}
       </div>
 
       <div className={cn('min-w-0 relative', viewport.embeddedMapClass)}>
@@ -404,6 +418,14 @@ export function PatrolDensityHeatmap({
           hasHc02LiveGps={hc02Live.hasMapPosition}
           mapZoom={viewport.mapZoom}
           compactControls={viewport.compactChrome}
+        />
+        <HeatmapSiteStatsOverlay
+          workersStandard={workersStandard}
+          personCount={personCount}
+          identifiedCount={identifiedCount}
+          unassignedCount={unassignedCount}
+          encounterCount={encounterCount}
+          compactChrome={viewport.compactChrome}
         />
         <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
       </div>
