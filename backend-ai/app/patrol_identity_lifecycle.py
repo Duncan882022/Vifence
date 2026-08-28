@@ -159,7 +159,9 @@ def observe(
     ts = now if now is not None else time.time()
     observed_tier = tier_for_worker_id(worker_id)
     wid = (worker_id or "").strip()
-    wname = (worker_name or "").strip() or wid
+    from .patrol_entity import is_technical_patrol_worker_label, resolve_patrol_worker_display_name
+
+    wname = resolve_patrol_worker_display_name(wid, worker_name)
 
     with _lock:
         key = _key(camera_id, track_id)
@@ -207,7 +209,10 @@ def observe(
                 from_tier = state.tier
                 state.tier = observed_tier
                 state.worker_id = wid
-                state.worker_name = wname
+                if wname and not is_technical_patrol_worker_label(wname):
+                    state.worker_name = wname
+                elif not state.worker_name or is_technical_patrol_worker_label(state.worker_name):
+                    state.worker_name = wname
                 state.tier_since = ts
                 state.tier_history[observed_tier] = ts
                 state.pending_tier = ""
@@ -225,8 +230,8 @@ def observe(
 
         elif observed_rank == current_rank and wid:
             if wid == state.worker_id:
-                # Cùng người — chỉ làm tươi tên (gallery có thể vừa được đặt tên).
-                if wname and wname != state.worker_name:
+                # Cùng người — chỉ làm tươi tên khi có tên thật, không ghi mã lên tên.
+                if wname and not is_technical_patrol_worker_label(wname):
                     state.worker_name = wname
                 state.pending_tier = ""
                 state.pending_worker_id = ""
@@ -243,7 +248,8 @@ def observe(
                     state.pending_hits = 1
                 if state.pending_hits >= _IDENTITY_SWITCH_HITS:
                     state.worker_id = wid
-                    state.worker_name = wname
+                    if wname and not is_technical_patrol_worker_label(wname):
+                        state.worker_name = wname
                     state.pending_tier = ""
                     state.pending_worker_id = ""
                     state.pending_hits = 0

@@ -130,10 +130,62 @@ def format_patrol_person_snapshot_label(
     wid = (worker_id or "").strip()
     wname = (worker_name or "").strip()
     if is_patrol_gallery_id(wid):
-        return wname or wid
+        return resolve_patrol_worker_display_name(wid, wname)
     if is_sgc_worker_id(wid):
         return wid
     oid = (object_id or "").strip()
     if oid.upper().startswith("OBJ-"):
         return oid
     return "Đối tượng"
+
+
+def is_technical_patrol_worker_label(label: str | None) -> bool:
+    """True nếu chuỗi là mã kỹ thuật (sgc/p-/pers-) — không phải tên người."""
+    s = (label or "").strip()
+    if not s or s.lower() == "unknown":
+        return True
+    sl = s.lower()
+    return sl.startswith(("sgc-", "p-", "pers-", "iden-", "obj-", "ptk"))
+
+
+def resolve_patrol_worker_display_name(
+    worker_id: str | None,
+    worker_name: str | None = None,
+) -> str:
+    """Tên hiển thị ROI — ưu tiên binding/SQLite, không trả mã khi đã định danh."""
+    wid = (worker_id or "").strip()
+    wname = (worker_name or "").strip()
+
+    if wname and not is_technical_patrol_worker_label(wname) and wname != wid:
+        return wname
+
+    if wid:
+        try:
+            from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
+
+            for key in (wid, lookup_gallery_worker(wid) or ""):
+                if not key:
+                    continue
+                row = lookup_patrol_identity(key)
+                if row:
+                    name = str(row.get("worker_name") or "").strip()
+                    if name and not is_technical_patrol_worker_label(name):
+                        return name
+        except Exception:
+            pass
+
+        if wid.lower().startswith("pers-"):
+            try:
+                from .patrol import identity as patrol_identity
+
+                person = patrol_identity.get_person(wid)
+                if person and person.get("status") == patrol_identity.STATUS_IDENTIFIED:
+                    name = patrol_identity.display_name(person)
+                    if name and not is_technical_patrol_worker_label(name):
+                        return name
+            except Exception:
+                pass
+
+    if wname and wname != wid:
+        return wname
+    return wid or "Đối tượng"
