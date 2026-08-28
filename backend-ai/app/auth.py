@@ -16,8 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .config import settings
 
 ROLE_RANK = {"viewer": 0, "operator": 1, "hr": 2, "admin": 3}
-
-_bearer = HTTPBearer(auto_error=False)
+SCOPE_ALIASES = {"read": "viewer", "write": "operator"}
 
 
 @dataclass(frozen=True)
@@ -26,7 +25,11 @@ class AuthUser:
     role: str
 
     def has_scope(self, minimum: str) -> bool:
-        return ROLE_RANK.get(self.role, -1) >= ROLE_RANK.get(minimum, 99)
+        role_key = SCOPE_ALIASES.get(minimum, minimum)
+        return ROLE_RANK.get(self.role, -1) >= ROLE_RANK.get(role_key, 99)
+
+
+_bearer = HTTPBearer(auto_error=False)
 
 
 def _b64url(data: bytes) -> str:
