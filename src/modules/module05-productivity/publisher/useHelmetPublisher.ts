@@ -17,6 +17,7 @@ import {
   watchDeviceHeading,
 } from '@/modules/module02-training/services/deviceHeading.service'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
+import { getPatrolAccessToken } from '@/services/patrolApiClient'
 import {
   createHelmetTelemetrySender,
   type HelmetTelemetrySender,
@@ -62,6 +63,8 @@ interface UseHelmetPublisherOptions {
   helmetId: string
   videoRef: React.RefObject<HTMLVideoElement | null>
   maxBitrateBps?: number
+  /** Chờ JWT patrol sẵn sàng trước khi mở kênh telemetry. */
+  patrolAuthReady?: boolean
 }
 
 /** Chu kỳ đọc heading để gửi kèm telemetry. */
@@ -82,6 +85,7 @@ export function useHelmetPublisher({
   helmetId,
   videoRef,
   maxBitrateBps,
+  patrolAuthReady = true,
 }: UseHelmetPublisherOptions) {
   const publisherRef = useRef<WhipPublisher | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -337,7 +341,7 @@ export function useHelmetPublisher({
   const broadcasting = status === 'live' || status === 'starting'
 
   useEffect(() => {
-    if (!broadcasting) {
+    if (!broadcasting || !patrolAuthReady) {
       setTelemetryConnected(false)
       return
     }
@@ -348,6 +352,7 @@ export function useHelmetPublisher({
     const sender = createHelmetTelemetrySender({
       cameraId: helmetId,
       backendUrl,
+      accessToken: getPatrolAccessToken(),
       onStateChange: setTelemetryConnected,
     })
     telemetryRef.current = sender
@@ -356,7 +361,7 @@ export function useHelmetPublisher({
       sender.stop()
       telemetryRef.current = null
     }
-  }, [helmetId, broadcasting])
+  }, [helmetId, broadcasting, patrolAuthReady])
 
   useEffect(() => {
     return watchDeviceGps(reading => {
