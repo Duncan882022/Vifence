@@ -7,7 +7,7 @@
  * kết quả khác nhau.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import {
   fetchPatrolDayObjects,
   fetchPatrolDayPersons,

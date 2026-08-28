@@ -5,7 +5,7 @@
 import L from 'leaflet'
 import { useMap } from 'react-leaflet'
 import { useEffect, useState } from 'react'
-import type { PatrolZone } from '../data/patrolMockData'
+import type { PatrolZone } from '../data/patrolTypes'
 import { PATROL_DETECTION_DOTS } from '../data/patrolDetectionData'
 import { isPointInSiteBoundary, PATROL_SITE_CLIP_RING } from '../data/patrolSiteGeometry'
 import { PATROL_GPS_ZONES, patrolZoneInteriorPoint } from '../data/patrolSiteMap'

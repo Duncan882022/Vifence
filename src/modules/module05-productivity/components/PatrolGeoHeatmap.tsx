@@ -12,7 +12,7 @@ import L from 'leaflet'
 import type { Feature, FeatureCollection, Polygon as GeoJsonPolygon } from 'geojson'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PATROL_SITE_CLIP_RING, clampPointToSiteInterior, isPointInSiteBoundary } from '../data/patrolSiteGeometry'
-import type { PatrolZone } from '../data/patrolMockData'
+import type { PatrolZone } from '../data/patrolTypes'
 import {
   PATROL_GPS_ZONES,
   PATROL_MAP_ACTIVE_DRONE_PINS,

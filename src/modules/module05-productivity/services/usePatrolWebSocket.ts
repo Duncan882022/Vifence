@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 import { subscribePatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
-import { MOCK_PATROL_ZONES, type PatrolZone } from '../data/patrolMockData'
-import { PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
+import type { PatrolZone } from '../data/patrolTypes'
+import { PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_HELMET_02_FALLBACK, PATROL_SITE_ZONE_SEED } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { fetchPatrolHelmetMetrics } from './patrolLiveEvents.service'
 
@@ -82,7 +82,7 @@ export function usePatrolWebSocket(_patrolId: string): {
   routeHistory: RouteHistory
 } {
   const [liveZones, setLiveZones] = useState<LivePatrolZone[]>(
-    () => MOCK_PATROL_ZONES.map(z => ({ ...z })),
+    () => PATROL_SITE_ZONE_SEED.map(z => ({ ...z })),
   )
   const [cameraPositions, setCameraPositions] = useState<CameraPositions>(
     buildInitialPositions,

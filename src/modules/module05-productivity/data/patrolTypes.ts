@@ -2,8 +2,8 @@
  * Module 05 — kiểu dữ liệu tuần tra.
  *
  * Mọi dữ liệu hiển thị đều là live: sự kiện từ backend, chấm bản đồ từ
- * registry, băng xem lại từ MediaMTX. `MOCK_PATROL_ZONES` là mảnh cuối còn
- * sót, chỉ dùng làm hình dạng ban đầu cho bộ đếm zone của bản đồ.
+ * registry, băng xem lại từ MediaMTX. Seed zone bản đồ: `PATROL_SITE_ZONE_SEED`
+ * trong patrolSiteMap.ts.
  */
 
 export type CameraStatus = 'ONLINE' | 'OFFLINE'
@@ -79,22 +79,6 @@ export interface PatrolDashboard {
   activePatrolSeconds: number
   sessionLabel: string
 }
-
-/* ── Zones — chưa chia khu, một zone = công trường ─────────── */
-export const MOCK_PATROL_ZONES: PatrolZone[] = [
-  {
-    id: 'ZONE_SITE',
-    name: 'Cầu Sông Hốt',
-    shortName: 'Cầu Sông Hốt',
-    coverage: 'VISITED',
-    dwellSeconds: 624,
-    peopleCurrent: 42,
-    vehiclesCurrent: 8,
-    uniquePeople: 58,
-    uniqueVehicles: 11,
-    areaSqm: 98_000,
-  },
-]
 
 export function formatActiveTime(seconds: number): string {
   const h = Math.floor(seconds / 3600)

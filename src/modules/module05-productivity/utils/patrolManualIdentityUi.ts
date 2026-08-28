@@ -1,4 +1,4 @@
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import type { ObjectState } from '../types/workforceHeatmap'
 import {
   getPatrolManualIdentity,

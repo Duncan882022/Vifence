@@ -3,7 +3,7 @@ import {
   getPatrolHelmetGps,
   getPatrolHelmetGpsLastKnown,
 } from '@/services/patrolHelmetGpsBridge'
-import type { EventType, PatrolEvent } from '../data/patrolMockData'
+import type { EventType, PatrolEvent } from '../data/patrolTypes'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'

@@ -9,7 +9,7 @@ import {
   TrendingUp,
   Flame,
 } from 'lucide-react'
-import type { EventStatus, EventType } from '../data/patrolMockData'
+import type { EventStatus, EventType } from '../data/patrolTypes'
 
 export const PATROL_EVENT_TYPES: EventType[] = [
   'PERSON_DETECTED',

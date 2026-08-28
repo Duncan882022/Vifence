@@ -4,7 +4,7 @@ import { Clock, Loader2 } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import { getPatrolEventPlace } from '../utils/patrolEventsUi'
 import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
 import {

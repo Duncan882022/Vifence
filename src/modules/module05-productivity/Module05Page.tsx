@@ -24,7 +24,7 @@ import {
 } from '@/services/patrolMobileMetricsBridge'
 import {
   type PatrolEvent,
-} from './data/patrolMockData'
+} from './data/patrolTypes'
 import {
   DEFAULT_PATROL_CAMERA_IDS,
   DEFAULT_PATROL_GRID_CAMERA_IDS,

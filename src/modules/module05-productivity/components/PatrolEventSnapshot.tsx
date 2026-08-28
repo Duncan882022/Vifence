@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 
 interface PatrolEventSnapshotProps {
   event: PatrolEvent

@@ -1,4 +1,4 @@
-import type { PatrolEvent } from '../data/patrolMockData'
+import type { PatrolEvent } from '../data/patrolTypes'
 import { countPatrolDetectedByCamera } from './patrolPatrolCounts'
 
 /** Per-camera detect counts — memo-friendly input. */
