@@ -168,8 +168,10 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
         if (type === 'heartbeat') return
         if (type !== 'detections') return
 
-        // Xóa hết bbox frame trước — tránh hộp đứng yên trên nền khi camera lia.
-        onBeforeSnapshot?.()
+        // Backend Module 05 gửi reset_state — xóa overlay frame trước (tránh box ma).
+        if (data.reset_state !== false) {
+          onBeforeSnapshot?.()
+        }
         onSnapshot(normalizeVmsDetectionSnapshot(data, cameraId))
         onStatusChange('connected')
       } catch {

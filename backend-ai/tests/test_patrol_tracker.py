@@ -98,25 +98,29 @@ class TestTrackStability(unittest.TestCase):
         self.assertNotEqual(first, again)
 
     def test_track_survives_crowd_occlusion(self):
-        """Đồng nghiệp đi ngang che mất 3 giây — hiện lại vẫn phải là cùng một người.
-
-        Mốc cũ 2 giây khiến mỗi lần bị che lại sinh một mã `sgc-*` mới, và KPI
-        cộng thêm một người không có thật.
-        """
+        """Che ngắn (< max_age) giữ id; che dài thì ByteTrack max_age=5 bỏ track."""
         tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
         t = 0.0
         for _ in range(3):
             t += 0.17
             first = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
 
-        # Bị che hoàn toàn 3 giây ở nhịp AI 6 FPS.
-        for _ in range(18):
+        # Che 4 frame — vẫn cùng track.
+        for _ in range(4):
             t += 0.17
             tracker.update([], now=t)
 
         t += 0.17
         again = tracker.update([(_box(620, 400, 120, 300), 0.7)], now=t)[0]
         self.assertEqual(first, again)
+
+        # Che 18 frame (~3s @ 6 FPS) — max_age=5 đã drop, cấp id mới.
+        for _ in range(18):
+            t += 0.17
+            tracker.update([], now=t)
+        t += 0.17
+        after_long = tracker.update([(_box(620, 400, 120, 300), 0.7)], now=t)[0]
+        self.assertNotEqual(first, after_long)
 
     def test_long_lost_track_rejects_different_sized_person(self):
         """Giữ track lâu hơn chỉ an toàn khi cổng siết lại theo tuổi mất dấu."""

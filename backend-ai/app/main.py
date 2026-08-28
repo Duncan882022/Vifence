@@ -26,6 +26,7 @@ from .auto_train.frame_collectors import (
 from .auto_train.scheduler import scheduler as auto_train_scheduler
 from . import machinery_detector
 from . import overlay_bus
+from .websocket_server import build_detections_ws_payload
 from .patrol import db as patrol_db
 from .patrol.api import router as patrol_api_router
 from .camera_stream import CameraStream
@@ -684,11 +685,11 @@ def vms_stream_detections(camera_id: str):
         raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
     payload = worker.get_latest_overlay()
     stream_online = bool(payload.get("stream_online", True))
-    return {
-        "type": "detections",
-        "vms_ready": stream_online and payload.get("updated_at", 0) > 0,
-        **payload,
-    }
+    return build_detections_ws_payload(
+        camera_id,
+        payload,
+        stream_online=stream_online,
+    )
 
 
 @app.websocket("/ws/helmet/{camera_id}/telemetry")
@@ -759,12 +760,14 @@ async def ws_stream_detections(websocket: WebSocket, camera_id: str):
                 last_revision = revision
                 payload = worker.get_latest_overlay()
                 stream_online = bool(payload.get("stream_online", True))
-                await websocket.send_json({
-                    "type": "detections",
-                    "revision": revision,
-                    "vms_ready": stream_online and payload.get("updated_at", 0) > 0,
-                    **payload,
-                })
+                await websocket.send_json(
+                    build_detections_ws_payload(
+                        camera_id,
+                        payload,
+                        stream_online=stream_online,
+                        revision=revision,
+                    ),
+                )
                 continue
 
             try:
