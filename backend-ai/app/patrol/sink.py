@@ -34,6 +34,14 @@ def snapshot_score(*, face_quality: float, confidence: float) -> float:
     return float(face_quality) * 2.0 + float(confidence)
 
 
+# BGR — đồng bộ PATROL_TIER_TOKENS heatmapDotHex trên FE (slate / sky / violet).
+PATROL_SNAPSHOT_TIER_COLORS_BGR: dict[str, tuple[int, int, int]] = {
+    "object": (184, 163, 148),   # slate-400 #94a3b8
+    "person": (248, 189, 56),    # sky-400 #38bdf8
+    "identity": (250, 139, 167), # violet-400 #a78bfa
+}
+
+
 def _snapshot_tier(subject_id: str) -> str:
     if subject_id.startswith("obj-"):
         return "object"
@@ -43,12 +51,38 @@ def _snapshot_tier(subject_id: str) -> str:
     return "person"
 
 
-def _write_snapshot(subject_id: str, frame: Any, bbox: Sequence[float]) -> str | None:
+def _resolve_snapshot_tier(
+    subject_id: str,
+    *,
+    tier: str | None = None,
+    worker_id: str | None = None,
+) -> str:
+    """Ưu tiên lifecycle tier (ROI live) — không suy lại từ SQLite khi đã có."""
+    if subject_id.startswith("obj-"):
+        return "object"
+    explicit = (tier or "").strip()
+    if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR:
+        return explicit
+    from ..patrol_entity import patrol_tier_label
+
+    return patrol_tier_label(worker_id or subject_id)
+
+
+def _write_snapshot(
+    subject_id: str,
+    frame: Any,
+    bbox: Sequence[float],
+    *,
+    tier: str | None = None,
+    worker_id: str | None = None,
+    worker_name: str | None = None,
+) -> str | None:
     """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
         import cv2
         import numpy as np
 
+        from ..patrol_entity import resolve_patrol_worker_display_name
         from ..snapshot_compose import draw_dashed_rectangle, draw_snapshot_roi_badge
 
         if frame is None or not isinstance(frame, np.ndarray):
@@ -65,19 +99,35 @@ def _write_snapshot(subject_id: str, frame: Any, bbox: Sequence[float]) -> str |
             return None
 
         out = frame.copy()
-        tier = _snapshot_tier(subject_id)
-        colors_bgr = {
-            "object": (184, 163, 148),
-            "person": (250, 180, 56),
-            "identity": (250, 120, 167),
-        }
-        color = colors_bgr[tier]
-        if tier == "object":
+        resolved_tier = _resolve_snapshot_tier(
+            subject_id,
+            tier=tier,
+            worker_id=worker_id,
+        )
+        color = PATROL_SNAPSHOT_TIER_COLORS_BGR[resolved_tier]
+        if resolved_tier == "object":
             draw_dashed_rectangle(out, (bx1, by1), (bx2, by2), color, thickness=1)
         else:
             cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
 
-        person = identity.get_person(subject_id) if not subject_id.startswith("obj-") else None
+        person = identity.get_person(subject_id) if subject_id.startswith("pers-") else None
+        wid = (worker_id or "").strip()
+        if resolved_tier == "object":
+            badge_worker_id = None
+            badge_worker_name = None
+            badge_object_id = subject_id
+        elif resolved_tier == "identity":
+            badge_worker_id = wid or subject_id
+            badge_worker_name = resolve_patrol_worker_display_name(
+                badge_worker_id,
+                worker_name or (identity.display_name(person) if person else None),
+            )
+            badge_object_id = subject_id
+        else:
+            badge_worker_id = wid or subject_id
+            badge_worker_name = None
+            badge_object_id = subject_id
+
         draw_snapshot_roi_badge(
             out,
             bx1,
@@ -88,8 +138,9 @@ def _write_snapshot(subject_id: str, frame: Any, bbox: Sequence[float]) -> str |
             scenario_id=None,
             confidence=0.9,
             behavior="person",
-            object_id=subject_id,
-            worker_name=identity.display_name(person) if person else None,
+            worker_id=badge_worker_id,
+            worker_name=badge_worker_name,
+            object_id=badge_object_id,
         )
 
         max_side = 1280
@@ -453,6 +504,8 @@ def _commit_lifecycle_person_event(
     anchor_ts: float,
     seen_since: float | None = None,
     face_eligible: bool = False,
+    lifecycle_tier: str | None = None,
+    lifecycle_worker_id: str | None = None,
 ) -> str:
     pid = identity.resolve_alias(pers_id)
     with _lock:
@@ -463,7 +516,13 @@ def _commit_lifecycle_person_event(
     path: str | None = None
     shot_score = 0.0
     if face_eligible and frame is not None and person_bbox is not None:
-        path = _write_snapshot(pid, frame, person_bbox)
+        path = _write_snapshot(
+            pid,
+            frame,
+            person_bbox,
+            tier=lifecycle_tier,
+            worker_id=lifecycle_worker_id,
+        )
         shot_score = score if path else 0.0
     gps_lat, gps_lng = _resolve_observation_gps(camera_id)
     daystore.touch_person_event(
@@ -514,10 +573,23 @@ def record_observation(
     score = snapshot_score(face_quality=face_quality, confidence=confidence)
     gps_lat, gps_lng = _resolve_observation_gps(camera_id)
 
-    def _shot(subject_id: str) -> tuple[str | None, float]:
+    def _shot(
+        subject_id: str,
+        *,
+        tier: str | None = None,
+        worker_id: str | None = None,
+        worker_name: str | None = None,
+    ) -> tuple[str | None, float]:
         if frame is None or person_bbox is None:
             return None, 0.0
-        path = _write_snapshot(subject_id, frame, person_bbox)
+        path = _write_snapshot(
+            subject_id,
+            frame,
+            person_bbox,
+            tier=tier or lifecycle_tier,
+            worker_id=worker_id or lifecycle_worker_id,
+            worker_name=worker_name,
+        )
         return path, score if path else 0.0
 
     def _person_touch(
@@ -528,7 +600,14 @@ def record_observation(
     ) -> None:
         path, shot_score = (None, 0.0)
         if with_snapshot and face_eligible:
-            path, shot_score = _shot(pers_id)
+            from ..patrol_entity import patrol_tier_label
+
+            snap_tier = lifecycle_tier or patrol_tier_label(lifecycle_worker_id or pers_id)
+            path, shot_score = _shot(
+                pers_id,
+                tier=snap_tier,
+                worker_id=lifecycle_worker_id or pers_id,
+            )
         daystore.touch_person_event(
             pers_id,
             camera_id=camera_id,
@@ -618,6 +697,8 @@ def record_observation(
             ts=ts,
             anchor_ts=anchor_ts,
             face_eligible=face_eligible,
+            lifecycle_tier=lifecycle_tier,
+            lifecycle_worker_id=lifecycle_worker_id,
         )
 
     # Track mới, chưa mặt: ưu tiên nhận lại Người vừa mất track cùng chỗ
@@ -654,7 +735,7 @@ def record_observation(
         _track_to_object[key] = obj_id
     # Không gắn ảnh portrait lên thẻ Đối tượng — mặt đủ rõ thuộc tab Người.
     if face_quality < _OBJECT_FACE_QUALITY_MAX:
-        path, shot_score = _shot(obj_id)
+        path, shot_score = _shot(obj_id, tier="object")
         if path:
             daystore.touch_object(
                 obj_id,
