@@ -417,17 +417,6 @@ export function HelmetPublisherPage() {
           </button>
         )}
 
-        {isBroadcasting && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 space-y-1">
-            <p className="text-[11px] font-semibold text-amber-200">Lưu ý khi phát sóng</p>
-            <ul className="text-[10px] leading-relaxed text-amber-200/85 list-disc pl-4 space-y-0.5">
-              <li>Giữ nguyên trang này trên màn hình — chuyển tab sẽ tắt camera.</li>
-              <li>Mở Module 05 trên laptop/tablet để theo dõi tuần tra.</li>
-              <li>Mất mạng tạm thời — hệ thống tự phát lại khi có sóng.</li>
-            </ul>
-          </div>
-        )}
-
         <p className="px-1 text-[10px] leading-relaxed text-[#475569] text-center">
           Giữ màn hình sáng trong ca trực · AI nhận diện chạy tại trung tâm
         </p>
