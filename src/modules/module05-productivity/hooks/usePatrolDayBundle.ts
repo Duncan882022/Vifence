@@ -103,17 +103,24 @@ export function usePatrolDayBundle(date?: string): PatrolDayBundleState {
   const [loading, setLoading] = useState(true)
   const [reachable, setReachable] = useState(false)
   const mounted = useRef(true)
+  const inFlight = useRef(false)
 
   const refresh = useCallback(async () => {
-    const data = await fetchPatrolDayBundle(date)
-    if (!mounted.current) return
-    if (data) {
-      setBundle(data)
-      setReachable(true)
-    } else {
-      setReachable(false)
+    if (inFlight.current) return
+    inFlight.current = true
+    try {
+      const data = await fetchPatrolDayBundle(date)
+      if (!mounted.current) return
+      if (data) {
+        setBundle(data)
+        setReachable(true)
+      } else {
+        setReachable(false)
+      }
+      setLoading(false)
+    } finally {
+      inFlight.current = false
     }
-    setLoading(false)
   }, [date])
 
   useEffect(() => {
