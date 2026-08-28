@@ -37,6 +37,13 @@ jobs:
       - name: Build
         run: npm run build:pages
 
+      - name: Verify docs build
+        run: |
+          test -f docs/index.html
+          test -f docs/.nojekyll
+          test -f docs/module05/index.html
+          grep -q 'assets/index-' docs/index.html
+
       # Luôn publish — hoạt động khi Settings → Pages → branch gh-pages / (root)
       - name: Publish gh-pages branch
         id: publish_branch
@@ -67,6 +74,15 @@ jobs:
         if: steps.setup_pages.outcome == 'success'
         uses: actions/deploy-pages@v4
         continue-on-error: true
+
+      # Legacy Pages hay trỏ nhầm main/ (index Vite dev → 404 asset). Ép gh-pages khi token đủ quyền.
+      - name: Point Pages source to gh-pages
+        continue-on-error: true
+        run: |
+          gh api -X PUT "repos/${{ github.repository }}/pages" \
+            -f build_type=legacy \
+            -f "source[branch]=gh-pages" \
+            -f "source[path]=/"
 
       - name: Pages chưa bật — hướng dẫn
         if: steps.setup_pages.outcome != 'success'
