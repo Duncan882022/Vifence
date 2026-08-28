@@ -16,7 +16,8 @@ import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { cn } from '@/utils/cn'
-import { useCompactViewport } from '@/hooks/useCompactViewport'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useTabletLandscape } from '@/hooks/useTabletLandscape'
 import { useAppStore } from '@/store/app.store'
 import {
   getPatrolMobileLiveSnapshot,
@@ -166,11 +167,13 @@ function PatrolKPIs({
 
 /* ── Page ─────────────────────────────────────────────────────── */
 export function Module05Page() {
-  const { isTabletLandscape, isCompactLayout } = useCompactViewport()
+  const isMobileLayout = useMediaQuery('(max-width: 1023px)')
+  const isTabletLandscape = useTabletLandscape()
+  /** Phone/tablet dọc + iPad ngang (height hẹp dù width ≥1024). */
+  const isCompactLayout = isMobileLayout || isTabletLandscape
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
-  const cameraCollapsed = !tier2Open
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-02')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -261,14 +264,14 @@ export function Module05Page() {
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
       />
-      <PageLayout scrollable={isCompactLayout && !cameraCollapsed}>
+      <PageLayout scrollable>
         {/* Tier 1 — KPIs */}
         <Panel
           title="Tổng Quan"
           fit
           expandable={tier1Open}
           noPadding
-          className="shrink-0"
+          className="shrink-0 h-auto"
           headerRight={
             <TierCollapseButton
               open={tier1Open}
@@ -286,35 +289,29 @@ export function Module05Page() {
           )}
         </Panel>
 
-        {/* Tier 2 + Tier 3 */}
+        {/* Tier 2 + Tier 3 — scroll trang: stack dọc mobile, không ép max-h viewport */}
         <div className={cn(
-          'flex flex-col gap-2 sm:gap-3 flex-1 min-h-0',
-          isCompactLayout && !cameraCollapsed
-            ? 'pb-[env(safe-area-inset-bottom,0px)]'
-            : 'overflow-hidden',
+          'flex flex-col gap-2 sm:gap-3 shrink-0',
+          isCompactLayout && 'pb-[env(safe-area-inset-bottom,0px)]',
         )}>
           {/* Tier 2 — Camera */}
           <div className={cn(
-            'flex flex-col min-h-0',
-            tier2Open && (
-              isCompactLayout
-                ? 'flex-1 min-h-0'
-                : 'flex-[8] min-h-[min(40vh,400px)] max-h-[min(55vh,594px)]'
-            ),
-            !tier2Open && 'shrink-0',
+            'flex flex-col shrink-0',
+            tier2Open && (isCompactLayout ? 'min-h-0' : 'min-h-[min(52vh,560px)]'),
           )}>
             <Panel
               title="Camera"
               expandable={tier2Open}
               fit={!tier2Open}
               noPadding
+              overflowVisible={tier2Open && isCompactLayout}
               className={cn(
-                tier2Open && 'h-full min-h-0 overflow-hidden',
+                tier2Open && (isCompactLayout ? 'h-auto overflow-visible' : 'min-h-[min(52vh,560px)]'),
               )}
               headerRight={
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 max-w-full overflow-x-auto scrollbar-none">
+                <div className="flex items-center gap-2 min-w-0">
                   {tier2Open && cameraMode === 'live' && (
-                    <LocalBroadcastControl className="shrink-0" />
+                    <LocalBroadcastControl />
                   )}
                   {tier2Open && (
                     <CameraModeToggle mode={cameraMode} onChange={setCameraMode} />
@@ -333,7 +330,10 @@ export function Module05Page() {
               }
             >
               {tier2Open && (
-                <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
+                <div className={cn(
+                  'flex flex-col w-full',
+                  isCompactLayout ? 'h-auto overflow-visible' : 'flex-1 min-h-0 overflow-hidden',
+                )}>
                   {cameraMode === 'live' ? (
                     <PatrolCameraPanel
                       selectedId={selectedCamId}
@@ -368,23 +368,19 @@ export function Module05Page() {
             </Panel>
           </div>
 
-          {/* Tier 3 — HEATMAP | SỰ KIỆN (~36%) */}
+          {/* Tier 3 — HEATMAP | SỰ KIỆN */}
           <div className={cn(
-            'flex gap-2 sm:gap-3 flex-col md:flex-row min-h-0',
-            isCompactLayout && !cameraCollapsed
-              ? 'flex-1 min-h-0 shrink min-w-0'
-              : 'flex-[6] overflow-hidden max-h-[min(40vh,440px)] shrink-0',
+            'flex gap-2 sm:gap-3 flex-col lg:flex-row shrink-0',
+            !isCompactLayout && 'min-h-[min(36vh,400px)]',
           )}>
             <Panel
               title="HEATMAP"
               noPadding
               className={cn(
-                'flex flex-col overflow-hidden min-h-0 flex-1 md:flex-[3] min-w-0',
-                cameraCollapsed
-                  ? 'h-full'
-                  : isCompactLayout
-                    ? 'min-h-[120px] flex-1 md:min-h-0 md:h-full'
-                    : 'min-h-0 h-full',
+                'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[3]',
+                isCompactLayout
+                  ? 'min-h-[min(42dvh,360px)] h-[min(42dvh,360px)]'
+                  : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
               )}
               headerRight={
                 <button
@@ -410,13 +406,11 @@ export function Module05Page() {
               title="SỰ KIỆN"
               noPadding
               className={cn(
-                'min-h-0 flex flex-col overflow-hidden flex-1 md:flex-[2] min-w-0',
-                cameraCollapsed
-                  ? 'h-full'
-                  : isCompactLayout
-                    ? 'min-h-[100px] flex-1 md:min-h-0 md:h-full'
-                    : 'min-h-0 h-full',
-                tier3Focus === 'events' && 'md:flex-[3]',
+                'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[2]',
+                isCompactLayout
+                  ? 'min-h-[min(36dvh,320px)] h-[min(36dvh,320px)]'
+                  : 'min-h-[min(28vh,300px)] h-[min(32vh,360px)]',
+                tier3Focus === 'events' && 'lg:flex-[3]',
               )}
               headerRight={
                 <button

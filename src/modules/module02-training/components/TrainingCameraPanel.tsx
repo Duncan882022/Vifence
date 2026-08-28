@@ -11,6 +11,9 @@ import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolb
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
+  getCameraMaximizeFrameClass,
+} from '../data/trainingCameraFeeds'
+import {
   CAMERA_FILTER_TABS,
   DEFAULT_COURSE_CAMERA_IDS,
   MOCK_TRAINING_CAMERAS,
@@ -360,7 +363,10 @@ function FocusedCameraOverlay({
         aria-modal="true"
         aria-label={`Phóng to ${cameraDisplayLabel(cam)}`}
       >
-        <div className="relative w-full max-w-[96vw] aspect-video max-h-[92dvh] pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black">
+        <div className={cn(
+          'relative pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black',
+          getCameraMaximizeFrameClass(cam.streamType),
+        )}>
           <CameraCell
             cam={cam}
             compact={compact}
@@ -455,12 +461,9 @@ export function TrainingCameraPanel({
   useEffect(() => {
     preloadFaceDetection()
   }, [])
-  /** Mobile (portrait + landscape): stacked streams + thumb grid — same selection UX.
-   *  iPad ngang (preferCompactVideo) dùng sidebar dọc bên phải — không tính là stacked mobile. */
-  const stackedMobile = !isDesktop && !preferCompactVideo
+  /** Mobile (portrait + landscape): stacked streams + thumb grid — same selection UX */
+  const stackedMobile = !isDesktop
   const stackedPortrait = stackedMobile
-  /** Layout video | sidebar ngang — phone landscape hoặc iPad ngang. */
-  const sideBySideCompact = preferCompactVideo || !isDesktop
 
   useEffect(() => {
     if (!selectedId) return
@@ -480,11 +483,11 @@ export function TrainingCameraPanel({
   /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
   const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
   const useCompactVideoCaps = preferCompactVideo
-    || (mobileCompactVideo && !mobileStackedNoScroll)
-    || (aspectVideoGrid && !isDesktop)
+    || ((mobileCompactVideo && !mobileStackedNoScroll)
+      || (aspectVideoGrid && !isDesktop && !mobileStackedNoScroll))
   const aspectGridInTier = aspectVideoGrid && isDesktop && !preferCompactVideo
   /** Mobile compact: fill tier height — video scrolls inside, sidebar strip stays visible. */
-  const mobileFillPanel = mobileCompactVideo && !isDesktop
+  const mobileFillPanel = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
@@ -523,7 +526,7 @@ export function TrainingCameraPanel({
       const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
       setMobileViewportH(viewportH)
 
-      if (landscapeCompact && sidebarOpen && viewportH && !preferCompactVideo) {
+      if (landscapeCompact && sidebarOpen && viewportH) {
         setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
       } else {
         setLandscapeSidebarH(null)
@@ -583,12 +586,12 @@ export function TrainingCameraPanel({
           : mobileCompactVideo
             ? 'lg:h-auto lg:max-h-full'
             : 'lg:flex-1 lg:min-h-0',
-        sideBySideCompact && !preferCompactVideo && [
-          'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_min(176px,30vw)]',
-          'max-lg:landscape:items-stretch max-lg:landscape:min-h-0 max-lg:landscape:h-full',
+        (preferCompactVideo || !isDesktop) && [
+          'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
+          'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
         ],
         preferCompactVideo && [
-          'grid grid-cols-[minmax(0,1fr)_min(176px,30vw)] items-stretch min-h-0 h-full',
+          'grid grid-cols-[minmax(0,1fr)_168px] items-stretch min-h-0',
           'flex-none lg:flex-none',
         ],
       )}>
@@ -626,19 +629,14 @@ export function TrainingCameraPanel({
           className={cn(
             'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
             'border-t lg:border-t-0 lg:border-l',
-            sideBySideCompact && !preferCompactVideo && [
-              'max-lg:landscape:border-t-0 max-lg:landscape:border-l',
-              'max-lg:landscape:w-[min(176px,30vw)] max-lg:landscape:min-h-0 max-lg:landscape:h-full',
-            ],
-            preferCompactVideo && 'border-t-0 border-l w-[min(176px,30vw)] h-full min-h-0 self-stretch',
-            !preferCompactVideo && 'lg:overflow-hidden',
+            'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
+            preferCompactVideo && 'border-t-0 border-l w-[168px]',
+            'lg:overflow-hidden',
             sidebarOpen
-              ? preferCompactVideo
-                ? 'min-h-0'
-                : 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
+              ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
               : 'w-full shrink-0 min-h-[2.25rem] lg:flex lg:w-8 lg:h-full lg:min-h-0',
           )}
-          style={landscapeSidebarH && !preferCompactVideo ? { maxHeight: landscapeSidebarH } : undefined}
+          style={landscapeSidebarH ? { maxHeight: landscapeSidebarH } : undefined}
         >
           {sidebarOpen ? (
             <>
@@ -676,12 +674,12 @@ export function TrainingCameraPanel({
               </div>
 
               <div className={cn(
-                'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5 min-h-0',
+                'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5',
                 stackedMobile
                   ? 'shrink-0 max-h-[min(24dvh,168px)] overflow-y-auto overscroll-y-contain'
-                  : 'flex-1 min-h-0 overflow-y-auto overscroll-y-contain',
+                  : 'flex-1 min-h-0 overflow-y-auto',
               )}>
-                <div className="flex flex-col gap-2 lg:gap-3 pb-1">
+                <div className="flex flex-col gap-2 lg:gap-3">
                   {sidebarGroups.map(({ key, cameras }) => (
                     <div key={key}>
                       <div className="flex items-center gap-1.5 mb-1 lg:mb-2">

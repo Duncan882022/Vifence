@@ -217,8 +217,8 @@ export function WorkerProfileManagementPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-3 flex-1 min-h-0">
-        <Panel title="Danh sách hồ sơ" className="min-h-[360px] flex flex-col">
+      <div className="flex flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_320px] gap-3 shrink-0">
+        <Panel title="Danh sách hồ sơ" className="min-h-[360px] flex flex-col shrink-0">
           <div className="flex flex-col gap-2 p-3 border-b border-[#1e2433] shrink-0">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -238,7 +238,7 @@ export function WorkerProfileManagementPage() {
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="max-h-[min(60dvh,520px)] overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -316,7 +316,7 @@ export function WorkerProfileManagementPage() {
           </div>
         </Panel>
 
-        <Panel title="Import Excel" className="h-fit xl:sticky xl:top-3">
+        <Panel title="Import Excel" className="shrink-0 h-fit xl:sticky xl:top-3">
           <div className="p-3 space-y-3">
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               Cột bắt buộc: <strong className="text-foreground">Họ tên</strong>, <strong className="text-foreground">Mã nhân viên</strong>.

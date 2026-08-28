@@ -415,7 +415,7 @@ export function WorkerFaceScanPage() {
       )}
 
       {adminStep === 'scan' && person && (
-        <Panel title={person.full_name ?? person.display_name} className="flex flex-col min-h-0">
+        <Panel title={person.full_name ?? person.display_name} className="overflow-visible shrink-0">
           <div className="p-3 sm:p-4 border-b border-[#1e2433] text-[10px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
             <span>Mã: <strong className="text-foreground font-mono">{person.employee_code}</strong></span>
             {person.contractor && <span>Đơn vị: <strong className="text-foreground">{person.contractor}</strong></span>}
