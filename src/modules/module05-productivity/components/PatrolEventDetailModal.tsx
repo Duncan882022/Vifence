@@ -20,7 +20,7 @@ import type { PatrolEvent } from '../data/patrolTypes'
 import { formatPatrolTime } from '../data/patrolTypes'
 import { PatrolEventSnapshot } from './PatrolEventSnapshot'
 import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
-import { needsPatrolManualIdentity, isPatrolManuallyIdentified, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
+import { needsPatrolManualIdentity, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
 import {
   fetchPatrolSubjectAppearances,
   formatAppearanceTimeRange,
@@ -266,8 +266,8 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   const modalTitle = (stage === 'person' || stage === 'profile')
     ? summary.cardDisplay.title
     : event.violationLabel
-  const showIdentify = needsPatrolManualIdentity(objectKey, event.objectLabel)
-    || isPatrolManuallyIdentified(objectKey)
+  const showIdentify = stage !== 'profile'
+    && needsPatrolManualIdentity(objectKey, event.objectLabel)
   const hasAppearanceHistory = appearanceSegments.length > 0
   const showAppearanceHistory = (stage === 'person' || stage === 'profile')
     && (appearancesLoading || hasAppearanceHistory)
