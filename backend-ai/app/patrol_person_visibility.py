@@ -229,6 +229,7 @@ def patrol_person_meets_display_gate(
     frame_h: int,
     *,
     flycam: bool = False,
+    proximity_flycam: bool = False,
 ) -> bool:
     """Gate vẽ ROI — rộng hơn hẳn gate ghi sự kiện.
 
@@ -248,6 +249,14 @@ def patrol_person_meets_display_gate(
         if not plausible_person_silhouette(person_box, frame_w, frame_h, flycam=True):
             return False
         return True
+    if proximity_flycam:
+        if wide_crowd_rider_box(person_box, frame_w, frame_h):
+            return True
+        if not plausible_person_silhouette(
+            person_box, frame_w, frame_h, patrol_display=True,
+        ):
+            return False
+        return not limb_fragment_person_box(person_box, frame_w, frame_h)
     if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True
     if not plausible_person_silhouette(

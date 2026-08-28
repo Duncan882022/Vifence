@@ -578,3 +578,32 @@ def observe_person_face(
         gps_lng=gps_lng,
     )
     return pers_id
+
+
+@router.post("/drone/telemetry")
+def post_drone_telemetry(payload: dict[str, Any], _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    """Cập nhật độ cao flycam — quyết định aerial (mật độ) vs proximity (AI như mũ)."""
+    from ..patrol_flight_mode import (
+        patrol_flight_mode_payload,
+        update_patrol_drone_altitude,
+    )
+
+    camera_id = str(payload.get("camera_id") or "").strip().upper()
+    if not camera_id.startswith("DR-"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Chỉ hỗ trợ camera DR-*")
+    try:
+        altitude_m = float(payload["altitude_m"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="missing_altitude_m") from exc
+
+    lat = payload.get("lat")
+    lng = payload.get("lng")
+    heading = payload.get("heading")
+    update_patrol_drone_altitude(
+        camera_id,
+        altitude_m,
+        lat=float(lat) if lat is not None else None,
+        lng=float(lng) if lng is not None else None,
+        heading=float(heading) if heading is not None else None,
+    )
+    return {"ok": True, **patrol_flight_mode_payload(camera_id)}

@@ -54,6 +54,66 @@ def today_iso_date() -> str:
     return _event_date()
 
 
+def is_patrol_drone_id(camera_id: str) -> bool:
+    return camera_id.startswith(PATROL_DRONE_PREFIX)
+
+
+def update_patrol_drone_gps(
+    camera_id: str,
+    gps_lat: float,
+    gps_lng: float,
+    *,
+    heading: float | None = None,
+    pitch: float | None = None,
+    roll: float | None = None,
+) -> None:
+    """GPS flycam — gắn sự kiện / heatmap geo khi bay tầm thấp."""
+    if not is_patrol_drone_id(camera_id):
+        return
+    try:
+        lat = float(gps_lat)
+        lng = float(gps_lng)
+    except (TypeError, ValueError):
+        return
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        return
+    entry: dict[str, Any] = {
+        "gps_lat": lat,
+        "gps_lng": lng,
+        "updated_at": time.time(),
+    }
+    if heading is not None:
+        try:
+            entry["heading"] = float(heading) % 360.0
+        except (TypeError, ValueError):
+            pass
+    if pitch is not None:
+        try:
+            entry["pitch"] = float(pitch)
+        except (TypeError, ValueError):
+            pass
+    if roll is not None:
+        try:
+            entry["roll"] = float(roll)
+        except (TypeError, ValueError):
+            pass
+    _patrol_gps[camera_id] = entry
+    try:
+        from .workforce_engine import workforce_engine
+
+        workforce_engine.update_helmet(
+            camera_id,
+            lat=lat,
+            lon=lng,
+            heading=entry.get("heading"),
+            pitch=entry.get("pitch"),
+            roll=entry.get("roll"),
+            online=True,
+        )
+    except Exception:
+        pass
+
+
 def update_patrol_gps(
     camera_id: str,
     gps_lat: float | None,
@@ -128,7 +188,10 @@ def get_patrol_gps(camera_id: str) -> tuple[float | None, float | None]:
     entry = _patrol_gps.get(camera_id)
     if not entry:
         return None, None
-    if (time.time() - float(entry.get("updated_at") or 0)) > PATROL_GPS_TTL_SEC:
+    ttl = PATROL_GPS_TTL_SEC
+    if is_patrol_drone_id(camera_id):
+        ttl = max(ttl, 120.0)
+    if (time.time() - float(entry.get("updated_at") or 0)) > ttl:
         return None, None
     return entry.get("gps_lat"), entry.get("gps_lng")
 

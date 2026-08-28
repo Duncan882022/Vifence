@@ -63,7 +63,7 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
 
     def _flycam_frame(self, boxes: list[_FakeDetection]) -> list[dict]:
         self.detector.next_boxes = boxes
-        result = ppe_analyzer._build_patrol_flycam_result(self.frame, "DR-03")
+        result = ppe_analyzer._build_patrol_flycam_aerial_result(self.frame, "DR-03")
         return [d for d in result["detections"] if d["behavior"] == "person"]
 
     def test_flycam_person_carries_track_tier_and_velocity(self) -> None:
@@ -79,7 +79,7 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
     def test_flycam_metrics_split_display_and_countable(self) -> None:
         """Flycam: ROI (display) tách khỏi KPI khung (detection gate)."""
         self.detector.next_boxes = [_FakeDetection((470, 250, 490, 300), 0.24)]
-        result = ppe_analyzer._build_patrol_flycam_result(self.frame, "DR-03")
+        result = ppe_analyzer._build_patrol_flycam_aerial_result(self.frame, "DR-03")
         metrics = result["metrics"]
         self.assertIn("display_person_count", metrics)
         self.assertIn("person_count", metrics)

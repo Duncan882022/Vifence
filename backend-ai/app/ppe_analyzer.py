@@ -130,35 +130,40 @@ def _assign_patrol_person_identity(
     person_bbox = [float(v) for v in person_box]
 
     if _is_patrol_flycam(camera_id):
-        # Góc trên cao — YOLO đếm người, không nhận diện mặt / gallery.
-        from .patrol_identity_lifecycle import observe as observe_track_identity
+        from .patrol_flight_mode import is_patrol_flycam_aerial
 
-        observe_track_identity(
-            camera_id,
-            track_id,
-            worker_id="",
-            worker_name="",
-        )
-        person_det.worker_id = ""
-        person_det.worker_name = ""
-        person_det.track_id = track_id
-        person_det.tier = "object"
-        person_det.face_eligible = False
-        try:
-            from .patrol.sink import record_observation
+        if is_patrol_flycam_aerial(camera_id):
+            # Góc trên cao — YOLO đếm người, không nhận diện mặt / gallery.
+            from .patrol_identity_lifecycle import observe as observe_track_identity
 
-            record_observation(
-                camera_id=camera_id,
-                track_id=track_id,
-                face_embedding=None,
-                face_quality=0.0,
-                confidence=float(person_det.confidence or 0.0),
-                frame=frame,
-                person_bbox=person_bbox,
+            observe_track_identity(
+                camera_id,
+                track_id,
+                worker_id="",
+                worker_name="",
             )
-        except Exception:  # noqa: BLE001
-            logger.exception("[patrol] Flycam — không ghi được quan sát đếm người")
-        return
+            person_det.worker_id = ""
+            person_det.worker_name = ""
+            person_det.track_id = track_id
+            person_det.tier = "object"
+            person_det.face_eligible = False
+            try:
+                from .patrol.sink import record_observation
+
+                record_observation(
+                    camera_id=camera_id,
+                    track_id=track_id,
+                    face_embedding=None,
+                    face_quality=0.0,
+                    confidence=float(person_det.confidence or 0.0),
+                    frame=frame,
+                    person_bbox=person_bbox,
+                    density_only=True,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("[patrol] Flycam aerial — không ghi được quan sát mật độ")
+            return
+        # proximity flycam — rơi xuống nhánh bodycam bên dưới.
 
     from .patrol_identity_lifecycle import observe as observe_track_identity
     from .person_identity_registry import (
@@ -255,13 +260,17 @@ def _patrol_person_passes_display_gate(
     *,
     camera_id: str,
 ) -> bool:
+    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_flycam_proximity
     from .patrol_person_visibility import patrol_person_meets_display_gate
 
+    aerial = is_patrol_flycam_aerial(camera_id)
+    proximity = is_patrol_flycam_proximity(camera_id)
     return patrol_person_meets_display_gate(
         person_box,
         frame_w,
         frame_h,
-        flycam=_is_patrol_flycam(camera_id),
+        flycam=aerial,
+        proximity_flycam=proximity,
     )
 
 
@@ -1749,6 +1758,25 @@ def _visible_person_display_bbox(
     return _clip_box_to_frame(tight, frame_w, frame_h)
 
 
+def _plausible_flycam_proximity(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Flycam tầm thấp — người lớn hơn aerial, góc rộng hơn bodycam cận cảnh."""
+    x1, y1, x2, y2 = box
+    bw = max(x2 - x1, 1.0)
+    bh = max(y2 - y1, 1.0)
+    if bh < frame_h * 0.022 or bh > frame_h * 0.88:
+        return False
+    if bw < frame_w * 0.012 or bw > frame_w * 0.52:
+        return False
+    aspect = bh / bw
+    if aspect < 0.16 or aspect > 6.8:
+        return False
+    return True
+
+
 def _plausible_flycam_aerial(
     box: tuple[float, float, float, float],
     frame_w: int,
@@ -1778,6 +1806,7 @@ def _plausible_person_box(
     strict: bool = False,
     bodycam: bool = False,
     flycam: bool = False,
+    proximity_flycam: bool = False,
     for_display: bool = False,
 ) -> bool:
     """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng.
@@ -1786,12 +1815,23 @@ def _plausible_person_box(
     ghi sự kiện vẫn siết lại bằng gate riêng trong `ppe_engine`, nên nới ở đây
     không kéo theo sự kiện rác.
     """
-    if for_display and (bodycam or flycam):
+    if for_display and (bodycam or flycam or proximity_flycam):
         from .patrol_person_visibility import patrol_person_meets_display_gate
 
         return patrol_person_meets_display_gate(
-            box, frame_w, frame_h, flycam=flycam,
+            box,
+            frame_w,
+            frame_h,
+            flycam=flycam and not proximity_flycam,
+            proximity_flycam=proximity_flycam,
         )
+    if proximity_flycam:
+        close_ok = _plausible_flycam_proximity(box, frame_w, frame_h)
+        wide_ok = _plausible_patrol_wide(
+            box, frame_w, frame_h, frame=frame, machinery=None, strict=False,
+            min_bh_frac=0.022,
+        )
+        return close_ok or wide_ok
     if flycam:
         return _plausible_flycam_aerial(box, frame_w, frame_h)
     if bodycam:
@@ -1839,8 +1879,21 @@ def _filter_persons(
     h, w = frame.shape[:2]
     bodycam = _is_helmet_bodycam(camera_id)
     flycam = _is_patrol_flycam(camera_id)
-    identity_strict = (strict or camera_id in ("A-04", "HC-01")) and not bodycam and not flycam
+    proximity_flycam = False
+    aerial_flycam = False
     if flycam:
+        from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_flycam_proximity
+
+        proximity_flycam = is_patrol_flycam_proximity(camera_id)
+        aerial_flycam = is_patrol_flycam_aerial(camera_id)
+    identity_strict = (
+        (strict or camera_id in ("A-04", "HC-01"))
+        and not bodycam
+        and not flycam
+    )
+    if proximity_flycam:
+        conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
+    elif flycam:
         conf_floor = min_conf if min_conf is not None else _PERSON_CONF_FLYCAM
     elif bodycam:
         conf_floor = min_conf if min_conf is not None else _PERSON_CONF_BODYCAM
@@ -1856,11 +1909,12 @@ def _filter_persons(
             box,
             w,
             h,
-            frame=frame if (identity_strict or bodycam) else None,
+            frame=frame if (identity_strict or bodycam or proximity_flycam) else None,
             machinery=machinery,
             strict=identity_strict,
             bodycam=bodycam,
-            flycam=flycam,
+            flycam=aerial_flycam,
+            proximity_flycam=proximity_flycam,
             for_display=for_display,
         ):
             continue
@@ -2040,9 +2094,11 @@ def _patrol_display_person_count(
     camera_id: str,
 ) -> int:
     """Số bbox ROI — mọi silhouette giống người trên khung (display gate)."""
+    from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_flycam_proximity
     from .patrol_person_visibility import patrol_person_meets_display_gate
 
-    flycam = _is_patrol_flycam(camera_id)
+    aerial = is_patrol_flycam_aerial(camera_id)
+    proximity = is_patrol_flycam_proximity(camera_id)
     return sum(
         1
         for p in persons
@@ -2050,7 +2106,8 @@ def _patrol_display_person_count(
             p.person_box,
             frame_w,
             frame_h,
-            flycam=flycam,
+            flycam=aerial,
+            proximity_flycam=proximity,
         )
     )
 
@@ -2163,13 +2220,13 @@ def _attach_track_velocity(
     person_det.velocity = [round(vx, 2), round(vy, 2)]
 
 
-def _build_patrol_flycam_result(
+def _build_patrol_flycam_aerial_result(
     frame: np.ndarray,
     camera_id: str,
     *,
     source_pts_sec: float | None = None,
 ) -> dict:
-    """Flycam DR-* — YOLO person only; góc cao nên bỏ face-anchor bodycam."""
+    """Flycam tầm cao — YOLO person + mật độ; không face-anchor / gallery."""
     detector = _get_person_detector()
     h, w = frame.shape[:2]
     persons = _dedupe_person_boxes(
@@ -2207,6 +2264,66 @@ def _build_patrol_flycam_result(
             "display_person_count": max(display_count, track_count),
             "frame_person_count": frame_person_count,
             "track_count": track_count,
+            "ppe_violations": 0,
+        },
+        "detections": [d.model_dump() for d in detections],
+        "events": [],
+    }
+
+
+def _build_patrol_flycam_proximity_result(
+    frame: np.ndarray,
+    camera_id: str,
+    *,
+    source_pts_sec: float | None = None,
+) -> dict:
+    """Flycam tầm thấp — AI như mũ: face-anchor, identity, gate rộng hơn."""
+    detector = _get_person_detector()
+    h, w = frame.shape[:2]
+    raw_persons = _dedupe_person_boxes(
+        _filter_persons(
+            frame,
+            camera_id,
+            detector.predict(frame, conf=_PERSON_CONF_BODYCAM),
+            source_pts_sec=source_pts_sec,
+            strict=False,
+            min_conf=_PERSON_CONF_BODYCAM,
+            for_display=True,
+        ),
+        camera_id=camera_id,
+    )
+    from .patrol_face_anchor import anchor_patrol_person_boxes_to_faces
+
+    anchored = anchor_patrol_person_boxes_to_faces(
+        frame,
+        [(p.person_box, p.person_conf) for p in raw_persons],
+        camera_id=camera_id,
+    )
+    persons = [
+        _PersonPpe(person_box=box, person_conf=conf)
+        for box, conf in anchored
+    ]
+
+    detections = _build_patrol_person_detections(
+        frame,
+        camera_id,
+        persons,
+        w,
+        h,
+        source_pts_sec=source_pts_sec,
+        raw_yolo_boxes=[p.person_box for p in raw_persons],
+    )
+
+    return {
+        "type": "result",
+        "camera_id": camera_id,
+        "width": w,
+        "height": h,
+        "metrics": {
+            "person_count": _patrol_countable_person_count(persons, w, h),
+            "display_person_count": _patrol_display_person_count(
+                persons, w, h, camera_id=camera_id,
+            ),
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],

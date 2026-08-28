@@ -29,6 +29,7 @@ import {
   suppressPatrolObjectOverlappingIdentified,
 } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { isPatrolMetricsCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
   getCameraFeedPosterUrl,
@@ -143,7 +144,8 @@ export function CameraVideoFeed({
     const frameW = vmsFeed.snapshot.width ?? 0
     const frameH = vmsFeed.snapshot.height ?? 0
     const patrolCam = isPatrolMetricsCameraId(cameraId)
-    const patrolFlycam = cameraId.startsWith('DR-')
+    const flightMode = (vmsFeed.snapshot.metrics as { ppe?: { flight_mode?: string } } | undefined)?.ppe?.flight_mode
+    const flycamGates = resolvePatrolFlycamGateFlags(cameraId, flightMode)
     const mapped = vmsFeed.snapshot.detections
       .map(d => ({
         behavior: d.behavior,
@@ -166,7 +168,8 @@ export function CameraVideoFeed({
           frameW,
           frameH,
           workerId: d.worker_id,
-          flycam: patrolFlycam,
+          flycam: flycamGates.flycam,
+          proximityFlycam: flycamGates.proximityFlycam,
         })
       })
     syncLivePatrolPersonDetectionsToHeatmap(
