@@ -8,8 +8,10 @@ import { memo, useRef } from 'react'
 import {
   Camera,
   Compass,
+  Gauge,
   MapPin,
   SwitchCamera,
+  Timer,
   Wifi,
   WifiOff,
 } from 'lucide-react'
@@ -31,6 +33,12 @@ function formatDuration(totalSec: number): string {
   return [h, m, s].map(v => String(v).padStart(2, '0')).join(':')
 }
 
+function formatBitrate(kbps: number): string {
+  if (kbps <= 0) return '—'
+  if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`
+  return `${Math.round(kbps)} kbps`
+}
+
 function qualityLabel(reason: string): string | null {
   if (reason === 'bandwidth') return 'Mạng yếu'
   if (reason === 'cpu') return 'Máy quá tải'
@@ -47,6 +55,40 @@ function connectionLabel(state: WhipConnectionState): string {
     default: return 'Chưa kết nối'
   }
 }
+
+const KpiTile = memo(function KpiTile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone = 'normal',
+}: {
+  icon: typeof Timer
+  label: string
+  value: string
+  sub?: string
+  tone?: 'normal' | 'good' | 'warn'
+}) {
+  return (
+    <div className="rounded-lg border border-[#1f2937] bg-[#0d1117] px-2.5 py-2">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className="w-3 h-3 text-[#64748b]" aria-hidden />
+        <span className="text-[9px] font-medium uppercase tracking-wide text-[#64748b]">{label}</span>
+      </div>
+      <p className={cn(
+        'text-[15px] font-semibold tabular-nums leading-none',
+        tone === 'good' && 'text-emerald-400',
+        tone === 'warn' && 'text-amber-400',
+        tone === 'normal' && 'text-[#e2e8f0]',
+      )}>
+        {value}
+      </p>
+      {sub && (
+        <p className="mt-0.5 text-[9px] text-[#64748b] tabular-nums truncate">{sub}</p>
+      )}
+    </div>
+  )
+})
 
 const StatRow = memo(function StatRow({
   label,
@@ -109,6 +151,23 @@ export function HelmetPublisherPage() {
             </p>
           </div>
         </header>
+
+        {state.status === 'live' && (
+          <div className="grid grid-cols-2 gap-2">
+            <KpiTile
+              icon={Timer}
+              label="Thời lượng"
+              value={formatDuration(state.elapsedSec)}
+            />
+            <KpiTile
+              icon={Gauge}
+              label="Băng thông"
+              value={formatBitrate(state.stats.bitrateKbps)}
+              sub={limitation ?? undefined}
+              tone={limitation ? 'warn' : state.stats.bitrateKbps >= 800 ? 'good' : 'normal'}
+            />
+          </div>
+        )}
 
         <div className="relative aspect-[3/4] max-h-[40dvh] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black shadow-lg shadow-black/40">
           <video
