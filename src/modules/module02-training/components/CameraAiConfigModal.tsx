@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { PatrolCameraAiConfigModal } from '@/modules/module05-productivity/components/PatrolCameraAiConfigModal'
 import { createPortal } from 'react-dom'
 import { Check, Cpu, MapPin, X } from 'lucide-react'
@@ -285,7 +285,7 @@ interface CameraAiConfigButtonProps {
 
 export function CameraAiConfigButton({ cameraId, compact, className }: CameraAiConfigButtonProps) {
   const [open, setOpen] = useState(false)
-  const isPatrol = isPatrolHelmetCameraId(cameraId)
+  const isPatrol = isPatrolMetricsCameraId(cameraId)
 
   return (
     <>

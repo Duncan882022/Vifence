@@ -30,6 +30,7 @@ import { resolveEffectivePatrolFlightMode, readPatrolFlightModeFromMetrics } fro
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
 import {
   getCameraFeedPosterUrl,
   getFeedKeyForCamera,
@@ -73,10 +74,11 @@ export function CameraVideoFeed({
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
+  const droneRoiLocked = isPatrolDroneRoiMandatory(cameraId)
   const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
   const { isDesktop } = useShellLayout()
   const { enabledModels } = useCameraAiEnabledModels(cameraId)
-  const overlayActive = Boolean(aiOverlay && bboxVisible)
+  const overlayActive = Boolean(aiOverlay && (bboxVisible || droneRoiLocked))
   const runPatrolAnalyze = Boolean(
     playing && aiOverlay && (isPatrolHelmetAiCamera(cameraId) || isPatrolFlycamAiCamera(cameraId)) && isVmsLiveCamera(cameraId),
   )
@@ -105,7 +107,11 @@ export function CameraVideoFeed({
   const runPatrolHeatmapAnalyze = Boolean(
     runPatrolAnalyze && patrolPersonAnalysis && !overlayDisabled,
   )
-  const showPatrolPersonRoi = Boolean(runPatrolHeatmapAnalyze && overlayActive && isPatrolPersonRoiCameraId(cameraId))
+  const showPatrolPersonRoi = Boolean(
+    runPatrolHeatmapAnalyze
+    && (overlayActive || droneRoiLocked)
+    && isPatrolPersonRoiCameraId(cameraId),
+  )
   const showPpeOverlay = Boolean(
     overlayActive && (ppeAnalysis || patrolPersonAnalysis) && !overlayDisabled && !runPatrolHeatmapAnalyze,
   )

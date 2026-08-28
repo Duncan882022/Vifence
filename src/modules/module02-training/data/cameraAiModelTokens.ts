@@ -232,6 +232,13 @@ export const CAMERA_AI_CONFIG_SECTIONS: Record<string, CameraAiConfigSection[]> 
       modelIds: ['patrol_person', 'ppe'],
     },
   ],
+  'DR-03': [
+    {
+      title: 'Tuần tra flycam',
+      subtitle: 'Drone 03 · Cầu Sông Hốt',
+      modelIds: ['patrol_person'],
+    },
+  ],
 }
 
 export function getCameraAiConfigSections(cameraId: string): CameraAiConfigSection[] {

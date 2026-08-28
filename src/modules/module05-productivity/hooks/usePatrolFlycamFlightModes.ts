@@ -4,7 +4,7 @@ import {
   subscribePatrolFlightMode,
 } from '@/services/patrolFlightModeBridge'
 import type { PatrolFlightMode } from '../utils/patrolFlightMode'
-import { PATROL_DRONE_IDS } from '../data/patrolDrones'
+import { isPatrolDroneCameraId, PATROL_DRONE_IDS } from '../data/patrolDrones'
 
 /** flight_mode live theo từng flycam — mặc định aerial khi chưa có telemetry. */
 export function usePatrolFlycamFlightModes(
@@ -28,4 +28,26 @@ export function usePatrolFlycamFlightModes(
   }, [ids.join(',')])
 
   return modes
+}
+
+/** flight_mode live cho một tile flycam — mặc định aerial. */
+export function usePatrolDroneFlightMode(cameraId: string): PatrolFlightMode | null {
+  const [mode, setMode] = useState<PatrolFlightMode | null>(() => {
+    if (!isPatrolDroneCameraId(cameraId)) return null
+    return getPatrolFlightMode(cameraId) ?? 'aerial'
+  })
+
+  useEffect(() => {
+    if (!isPatrolDroneCameraId(cameraId)) {
+      setMode(null)
+      return
+    }
+    setMode(getPatrolFlightMode(cameraId) ?? 'aerial')
+    return subscribePatrolFlightMode((id, next) => {
+      if (id !== cameraId) return
+      setMode(next ?? 'aerial')
+    })
+  }, [cameraId])
+
+  return mode
 }

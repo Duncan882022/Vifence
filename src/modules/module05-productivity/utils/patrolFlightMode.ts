@@ -73,6 +73,12 @@ export function patrolFlightModeLabel(mode: PatrolFlightMode | string | null | u
   return 'Tầm cao · Mật độ'
 }
 
+/** Badge góc tile — rút gọn khi grid compact. */
+export function patrolFlightModeShortLabel(mode: PatrolFlightMode | string | null | undefined): string {
+  if (mode === 'proximity') return 'Tầm thấp'
+  return 'Tầm cao'
+}
+
 /** Sự kiện flycam khớp gate heatmap theo độ cao hiện tại. */
 export function patrolEventMatchesFlycamAltitude(
   event: { cameraId: string; type: string; stage?: 'object' | 'person' | 'profile'; objectId?: string; trackWorkerId?: string },

@@ -5,7 +5,19 @@ import { requestMobileCameraFlip } from '../services/mobileCameraFlip'
 import { CameraAiConfigButton } from './CameraAiConfigModal'
 import { CameraBboxToggle } from './CameraBboxToggle'
 import { BackendConnectionBadge } from './BackendConnectionBadge'
-import { CAMERA_LIVE_BADGE, CAMERA_TOOLBAR_SHELL, cameraToolbarBtn, cameraToolbarIconSize } from './cameraToolbarStyles'
+import {
+  CAMERA_FLIGHT_MODE_BADGE,
+  CAMERA_LIVE_BADGE,
+  CAMERA_TOOLBAR_SHELL,
+  cameraToolbarBtn,
+  cameraToolbarIconSize,
+} from './cameraToolbarStyles'
+import { isPatrolDroneCameraId, isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
+import { usePatrolDroneFlightMode } from '@/modules/module05-productivity/hooks/usePatrolFlycamFlightModes'
+import {
+  patrolFlightModeLabel,
+  patrolFlightModeShortLabel,
+} from '@/modules/module05-productivity/utils/patrolFlightMode'
 
 interface CameraLiveBadgeProps {
   compact?: boolean
@@ -16,6 +28,35 @@ export function CameraLiveBadge({ compact }: CameraLiveBadgeProps) {
     <span className={cn(CAMERA_LIVE_BADGE, compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]')}>
       <Radio className={cn(compact ? 'w-2 h-2' : 'w-2.5 h-2.5', 'text-red-400 animate-pulse')} aria-hidden />
       LIVE
+    </span>
+  )
+}
+
+interface CameraFlightModeBadgeProps {
+  cameraId: string
+  compact?: boolean
+}
+
+/** Chế độ bay flycam — chỉ DR-* cạnh badge LIVE. */
+export function CameraFlightModeBadge({ cameraId, compact }: CameraFlightModeBadgeProps) {
+  const mode = usePatrolDroneFlightMode(cameraId)
+  if (!isPatrolDroneCameraId(cameraId) || !mode) return null
+
+  const label = compact ? patrolFlightModeShortLabel(mode) : patrolFlightModeLabel(mode)
+  const isProximity = mode === 'proximity'
+
+  return (
+    <span
+      className={cn(
+        CAMERA_FLIGHT_MODE_BADGE,
+        compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]',
+        isProximity
+          ? 'border border-cyan-400/35 text-cyan-300'
+          : 'border border-sky-400/35 text-sky-300',
+      )}
+      title={patrolFlightModeLabel(mode)}
+    >
+      {label}
     </span>
   )
 }
@@ -76,6 +117,8 @@ export function CameraToolbar({
   compact,
   showFacingToggle,
 }: CameraToolbarProps) {
+  const droneRoiLocked = isPatrolDroneRoiMandatory(cameraId)
+
   return (
     <div className={cn(
       'absolute z-[8] pointer-events-auto',
@@ -107,12 +150,14 @@ export function CameraToolbar({
           compact={compact}
           className={cameraToolbarBtn(compact)}
         />
-        <CameraBboxToggle
-          cameraId={cameraId}
-          compact={compact}
-          className={cameraToolbarBtn(compact)}
-          activeClassName={cameraToolbarBtn(compact, true)}
-        />
+        {!droneRoiLocked && (
+          <CameraBboxToggle
+            cameraId={cameraId}
+            compact={compact}
+            className={cameraToolbarBtn(compact)}
+            activeClassName={cameraToolbarBtn(compact, true)}
+          />
+        )}
       </div>
     </div>
   )
@@ -130,12 +175,17 @@ export function CameraChrome({ cam, compact }: CameraChromeProps) {
   return (
     <>
       <div className={cn(
-        'absolute z-[8] pointer-events-none flex items-center gap-1',
+        'absolute z-[8] pointer-events-none flex items-center gap-1 flex-wrap max-w-[85%]',
         compact ? 'top-1.5 left-1.5' : 'top-2 left-2',
       )}>
         {isOffline
           ? <CameraOfflineBadge compact={compact} />
-          : <CameraLiveBadge compact={compact} />}
+          : (
+            <>
+              <CameraLiveBadge compact={compact} />
+              <CameraFlightModeBadge cameraId={cam.id} compact={compact} />
+            </>
+          )}
       </div>
       <CameraToolbar
         cameraId={cam.id}
