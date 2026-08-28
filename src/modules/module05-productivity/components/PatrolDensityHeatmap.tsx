@@ -402,7 +402,6 @@ export function PatrolDensityHeatmap({
         liveGpsLat={hc02Online ? hc02Live.lat : null}
         liveGpsLng={hc02Online ? hc02Live.lng : null}
         showDensity={false}
-        showZoneStatLabels={false}
         showRoute={layers.helmet}
         showHelmetMarkers={layers.helmet}
         showDroneMarkers={layers.flycam}
