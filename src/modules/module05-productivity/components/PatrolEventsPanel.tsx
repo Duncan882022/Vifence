@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Loader2, Search } from 'lucide-react'
+import { Clock, Loader2, MapPin, Search } from 'lucide-react'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { getPatrolEventPlace } from '../utils/patrolEventsUi'
+import { getPatrolEventLocationLabel } from '../utils/patrolEventsUi'
 import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
 import {
   PATROL_EVENTS_TAB_META,
@@ -64,7 +64,7 @@ function eventSearchHaystack(event: PatrolEvent): string {
     event.objectLabel,
     event.violationLabel,
     card.title,
-    card.subtitle,
+    card.subjectLabel,
     card.workerId ?? '',
   ].join(' ').toLowerCase()
 }
@@ -109,13 +109,8 @@ function PatrolEventCard({
   const displayMeta = resolvePatrolEventDisplayMeta(event)
   const SubjectIcon = displayMeta.icon
   const eventDateTime = formatEventDateTime(event.lockedAt)
-  const eventPlace = getPatrolEventPlace(event.cameraName, event.zoneName)
-  const stage = resolvePatrolPersonStage(event)
+  const eventPlace = getPatrolEventLocationLabel(event.cameraName, event.zoneName)
   const cardDisplay = resolvePatrolPersonCardDisplay(event)
-  const usePersonCard = stage === 'person' || stage === 'profile'
-  const cardTitle = usePersonCard ? cardDisplay.title : event.violationLabel
-  const cardSubtitle = usePersonCard ? cardDisplay.subtitle : event.objectLabel
-  const cardUnit = usePersonCard && cardDisplay.unit ? cardDisplay.unit : null
 
   return (
     <article
@@ -149,28 +144,23 @@ function PatrolEventCard({
             <PatrolStageBadge event={event} />
           </div>
 
-          <h3 className="text-[11px] font-semibold text-foreground leading-snug line-clamp-2 pr-1">
-            {cardTitle}
-          </h3>
-
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <SubjectIcon className={cn('w-2.5 h-2.5 shrink-0', displayMeta.color)} aria-hidden />
               <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
-                {cardSubtitle}
+                {cardDisplay.subjectLabel}
               </p>
             </div>
-            {cardUnit && (
-              <p className="text-[8px] min-w-0 truncate text-muted-foreground pl-4">
-                {cardUnit}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
+              <p className="text-[8px] tabular-nums text-foreground/80 truncate">
+                {eventDateTime}
               </p>
-            )}
-            <div className="flex items-start gap-1.5 min-w-0">
-              <Clock className="w-2.5 h-2.5 shrink-0 mt-px text-muted-foreground/45" aria-hidden />
-              <p className="text-[8px] min-w-0 leading-snug">
-                <span className="tabular-nums text-foreground/80">{eventDateTime}</span>
-                <span className="text-muted-foreground/30 mx-1">·</span>
-                <span className="text-foreground/70">{eventPlace}</span>
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <MapPin className="w-2.5 h-2.5 shrink-0 text-muted-foreground/45" aria-hidden />
+              <p className="text-[8px] text-foreground/70 truncate">
+                {eventPlace}
               </p>
             </div>
           </div>

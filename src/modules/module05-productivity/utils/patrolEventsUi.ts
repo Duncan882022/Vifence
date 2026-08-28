@@ -115,3 +115,12 @@ export function shouldShowPatrolStatusBadge(status: EventStatus): boolean {
 export function getPatrolEventPlace(cameraName: string, zoneName: string): string {
   return `${cameraName} · ${zoneName}`
 }
+
+/** Nhãn địa điểm trên card sự kiện — ưu tiên khu vực (vd. Cầu sông hốt). */
+export function getPatrolEventLocationLabel(cameraName: string, zoneName: string): string {
+  const zone = zoneName.trim()
+  const camera = cameraName.trim()
+  if (zone) return zone
+  if (camera) return camera
+  return getPatrolEventPlace(cameraName, zoneName)
+}
