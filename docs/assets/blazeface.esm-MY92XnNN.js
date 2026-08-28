@@ -1,4 +1,4 @@
-import{eh as U,du as E,g as N,b2 as y,dm as S,e0 as G,m as M,e as A,de as C,bM as J,co as T,r as V,v as I,ei as $,c3 as W,c as X,i2 as H,dx as Z,bQ as j}from"./graph_model-mPRx0fX-.js";import"./patrol-roi-WmPt7sZS.js";import"./face-scan-CiVFIAcC.js";/**
+import{eh as U,du as E,g as N,b2 as y,dm as S,e0 as G,m as M,e as A,de as C,bM as J,co as T,r as V,v as I,ei as $,c3 as W,c as X,i2 as H,dx as Z,bQ as j}from"./graph_model-Cu_-5fpO.js";import"./index-DxH8CpFE.js";/**
  * @license
  * Copyright 2023 Google LLC.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,4 +71,4 @@ PERFORMANCE OF THIS SOFTWARE.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  * =============================================================================
- */var ir="https://tfhub.dev/tensorflow/tfjs-model/blazeface/1/default/1";function dr(e){var o=e===void 0?{}:e,r=o.maxFaces,i=r===void 0?10:r,n=o.inputWidth,t=n===void 0?128:n,l=o.inputHeight,d=l===void 0?128:l,f=o.iouThreshold,a=f===void 0?.3:f,s=o.scoreThreshold,h=s===void 0?.75:s,p=o.modelUrl;return R(this,void 0,void 0,function(){var c,v;return P(this,function(u){switch(u.label){case 0:return p==null?[3,2]:[4,H(p)];case 1:return c=u.sent(),[3,4];case 2:return[4,H(ir,{fromTFHub:!0})];case 3:c=u.sent(),u.label=4;case 4:return v=new or(c,t,d,i,a,h),[2,v]}})})}export{or as BlazeFaceModel,dr as load};
+ */var ir="https://tfhub.dev/tensorflow/tfjs-model/blazeface/1/default/1";function ur(e){var o=e===void 0?{}:e,r=o.maxFaces,i=r===void 0?10:r,n=o.inputWidth,t=n===void 0?128:n,l=o.inputHeight,d=l===void 0?128:l,f=o.iouThreshold,a=f===void 0?.3:f,s=o.scoreThreshold,h=s===void 0?.75:s,p=o.modelUrl;return R(this,void 0,void 0,function(){var c,v;return P(this,function(u){switch(u.label){case 0:return p==null?[3,2]:[4,H(p)];case 1:return c=u.sent(),[3,4];case 2:return[4,H(ir,{fromTFHub:!0})];case 3:c=u.sent(),u.label=4;case 4:return v=new or(c,t,d,i,a,h),[2,v]}})})}export{or as BlazeFaceModel,ur as load};
