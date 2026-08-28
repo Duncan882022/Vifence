@@ -3,6 +3,7 @@ import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import {
   buildPatrolDayHeatmapDots,
   buildPatrolPresenceHeatmapDots,
+  filterPatrolHeatmapDotsByDevice,
   filterRecentPatrolWorkerEvents,
   filterRecentPresences,
 } from './patrolDayHeatmapDots'
@@ -97,6 +98,41 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     const recent = makePresence({ id: 2, endedAt: Date.now() / 1000 })
     const scoped = filterRecentPresences([old, recent], Date.now())
     expect(scoped).toHaveLength(1)
+  })
+
+  it('flycam — không badge định danh (chỉ đếm)', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 2, cameraId: 'DR-03', tier: 'identity', subjectId: 'pers-0099' }),
+    ])
+    expect(dots).toHaveLength(1)
+    expect(dots[0].verified).toBe(false)
+  })
+})
+
+describe('filterPatrolHeatmapDotsByDevice', () => {
+  it('chỉ mũ — giữ HC-*', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 1, cameraId: 'HC-01' }),
+      makePresence({ id: 2, cameraId: 'DR-03', subjectId: 'pers-0002' }),
+    ])
+    const filtered = filterPatrolHeatmapDotsByDevice(dots, { helmet: true, flycam: false })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].cameraId).toBe('HC-01')
+  })
+
+  it('chỉ flycam — giữ DR-*', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 1, cameraId: 'HC-02' }),
+      makePresence({ id: 2, cameraId: 'DR-03', subjectId: 'pers-0002' }),
+    ])
+    const filtered = filterPatrolHeatmapDotsByDevice(dots, { helmet: false, flycam: true })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].cameraId).toBe('DR-03')
+  })
+
+  it('cả hai tắt — không chấm', () => {
+    const dots = buildPatrolPresenceHeatmapDots([makePresence({})])
+    expect(filterPatrolHeatmapDotsByDevice(dots, { helmet: false, flycam: false })).toHaveLength(0)
   })
 })
 

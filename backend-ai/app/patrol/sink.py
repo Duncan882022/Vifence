@@ -347,7 +347,8 @@ def record_observation(
     _note_track_bbox(key, person_bbox)
 
     if not face_embedding or len(face_embedding) == 0:
-        if frame is not None and person_bbox is not None:
+        # Flycam DR-* — không thử recover mặt; góc trên cao chỉ đếm silhouette.
+        if not camera_id.startswith("DR-") and frame is not None and person_bbox is not None:
             from ..worker_identity.recognizer import recover_patrol_face_embedding
 
             recovered = recover_patrol_face_embedding(

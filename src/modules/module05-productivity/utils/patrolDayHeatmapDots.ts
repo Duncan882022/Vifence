@@ -4,6 +4,8 @@
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolMockData'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
+import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
+import { isPatrolDroneCameraId } from '../data/patrolDrones'
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { resolvePatrolDetectionMapPosition } from './patrolDetectionMapOffset'
@@ -124,12 +126,31 @@ export function buildPatrolPresenceHeatmapDots(
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
       objectId: presence.subjectId,
-      verified: tierVerified(presence.tier),
+      verified: isPatrolDroneCameraId(primaryCam) ? false : tierVerified(presence.tier),
       inCameraView,
       opacity: presence.tier === 'object'
         ? (inCameraView ? 0.55 : 0.35)
         : (inCameraView ? 0.92 : 0.45),
     }
+  })
+}
+
+export interface PatrolHeatmapDeviceLayers {
+  helmet: boolean
+  flycam: boolean
+}
+
+/** Chấm người theo thiết bị — không còn layer "Người" tách rời trên bản đồ. */
+export function filterPatrolHeatmapDotsByDevice(
+  dots: DetectionDot[],
+  layers: PatrolHeatmapDeviceLayers,
+): DetectionDot[] {
+  if (!layers.helmet && !layers.flycam) return []
+  return dots.filter(dot => {
+    const cam = (dot.cameraId || '').trim()
+    if (layers.flycam && isPatrolDroneCameraId(cam)) return true
+    if (layers.helmet && (isPatrolHelmetCameraId(cam) || !cam)) return true
+    return false
   })
 }
 

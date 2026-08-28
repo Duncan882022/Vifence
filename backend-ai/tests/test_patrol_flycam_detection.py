@@ -59,6 +59,17 @@ class TestPatrolFlycamDetection(unittest.TestCase):
         )
         self.assertEqual(len(persons), 1)
 
+    def test_flycam_skips_face_assessment(self):
+        import numpy as np
+        from app.worker_identity.recognizer import assess_patrol_face
+
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        bbox = [640.0, 360.0, 680.0, 400.0]
+        vec, score, eligible = assess_patrol_face(frame, bbox, camera_id="DR-03")
+        self.assertIsNone(vec)
+        self.assertEqual(score, 0.0)
+        self.assertFalse(eligible)
+
 
 if __name__ == "__main__":
     unittest.main()
