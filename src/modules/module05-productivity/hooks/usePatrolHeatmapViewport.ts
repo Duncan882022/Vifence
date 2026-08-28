@@ -33,10 +33,15 @@ export function usePatrolHeatmapViewport(): PatrolHeatmapViewport {
       ? (isLandscapeMobile || isTabletLandscape ? 17 : 16)
       : 17
 
-  /** Map phủ hết panel — flex-1 + min-h-0 để không còn khoảng trống dưới. */
-  const embeddedMapClass = 'flex-1 min-h-0 w-full h-full'
+  /**
+   * Map phủ hết panel — flex-1 để grow, min-h cố định để Leaflet không collapse
+   * (absolute tile layer không tạo intrinsic height; min-h-0 làm map biến mất).
+   */
+  const embeddedMapClass = isPhone || isTablet || isTabletLandscape
+    ? 'flex-1 min-h-[200px] w-full h-full max-lg:min-h-[180px] supports-[height:100dvh]:min-h-[min(200px,32dvh)]'
+    : 'flex-1 min-h-[240px] w-full h-full'
 
-  const modalMapClass = 'flex-1 min-h-0 w-full h-full'
+  const modalMapClass = 'flex-1 min-h-[200px] w-full h-full'
 
   return {
     isPhone,

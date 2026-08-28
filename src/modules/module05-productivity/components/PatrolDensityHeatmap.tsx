@@ -388,9 +388,10 @@ export function PatrolDensityHeatmap({
 
   const mapSurface = (
     <div className={cn(
-      'min-w-0 relative flex flex-col flex-1 min-h-0 w-full h-full',
+      'min-w-0 relative flex flex-col flex-1 w-full h-full',
       expanded ? viewport.modalMapClass : viewport.embeddedMapClass,
     )}>
+      <div className="absolute inset-0">
       <PatrolGeoHeatmap
         zones={liveZones}
         cameraPositions={mergedCameraPositions}
@@ -421,6 +422,7 @@ export function PatrolDensityHeatmap({
         mapZoom={viewport.mapZoom}
         compactControls={viewport.compactChrome}
       />
+      </div>
       <HeatmapLayerControls
         layers={layers}
         onToggle={toggleLayer}
