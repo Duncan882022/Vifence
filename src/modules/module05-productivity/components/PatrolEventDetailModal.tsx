@@ -5,6 +5,8 @@ import {
   Camera,
   Clock,
   Hash,
+  History,
+  ImageOff,
   Info,
   MapPin,
   User,
@@ -66,6 +68,27 @@ function splitInfoColumns(rows: PatrolInfoRow[]): [PatrolInfoRow[], PatrolInfoRo
   return [rows.slice(0, mid), rows.slice(mid)]
 }
 
+function appearanceRowKey(segment: PatrolAppearanceSegment): string {
+  if (segment.id != null) return String(segment.id)
+  return `${segment.cameraId}-${segment.startedAt}`
+}
+
+function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } | null {
+  const lat = segment.gpsLat ?? null
+  const lng = segment.gpsLng ?? null
+  if (lat == null || lng == null || lat === 0 || lng === 0) return null
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return { lat, lng }
+}
+
+function resolveAppearanceCameraLabel(segment: PatrolAppearanceSegment): string {
+  return getPatrolEventLocationLabel(
+    resolvePatrolCameraDisplayName(segment.cameraId) || segment.cameraId,
+    segment.zoneId ?? '',
+    segment.cameraId,
+  )
+}
+
 function hasValidGps(gps: { lat: number; lng: number } | null | undefined): gps is { lat: number; lng: number } {
   if (!gps) return false
   const { lat, lng } = gps
@@ -120,8 +143,9 @@ function resolvePrimaryCameraLabel(
 
 export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModalProps) {
   const [identityTick, setIdentityTick] = useState(0)
-  const [appearances, setAppearances] = useState<Record<string, PatrolAppearanceSegment[]>>({})
+  const [appearanceSegments, setAppearanceSegments] = useState<PatrolAppearanceSegment[]>([])
   const [appearancesLoading, setAppearancesLoading] = useState(false)
+  const [selectedAppearanceKey, setSelectedAppearanceKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!event) return
@@ -135,23 +159,29 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   }, [event, onClose])
 
   useEffect(() => {
+    setSelectedAppearanceKey(null)
+  }, [event?.id])
+
+  useEffect(() => {
     if (!event) {
-      setAppearances({})
+      setAppearanceSegments([])
       setAppearancesLoading(false)
       return
     }
     const stage = resolvePatrolPersonStage(event)
     if (stage !== 'person' && stage !== 'profile') {
-      setAppearances({})
+      setAppearanceSegments([])
       setAppearancesLoading(false)
       return
     }
     const subjectId = resolvePatrolAppearanceSubjectId(event)
     let cancelled = false
     setAppearancesLoading(true)
-    void fetchPatrolSubjectAppearances(subjectId).then(byCamera => {
+    void fetchPatrolSubjectAppearances(subjectId).then(segments => {
       if (cancelled) return
-      setAppearances(byCamera)
+      setAppearanceSegments(
+        [...segments].sort((a, b) => b.startedAt - a.startedAt),
+      )
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
@@ -163,8 +193,8 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     const stageMeta = PATROL_PERSON_STAGE_META[stage]
     const cardDisplay = resolvePatrolPersonCardDisplay(event)
     const objectDisplay = resolveEventObjectDisplay(event)
-    const appearanceCameras = Object.keys(appearances)
-    const cameraLabel = resolvePrimaryCameraLabel(event, appearanceCameras)
+    const appearanceCameraIds = [...new Set(appearanceSegments.map(s => s.cameraId))]
+    const cameraLabel = resolvePrimaryCameraLabel(event, appearanceCameraIds)
     const duration = resolveEventDurationSeconds(event)
 
     const infoRows: PatrolInfoRow[] = []
@@ -231,7 +261,13 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
       infoPrimary,
       infoSecondary,
     }
-  }, [event, appearances])
+  }, [event, appearanceSegments])
+
+  const activeSnapshotUrl = useMemo(() => {
+    if (!selectedAppearanceKey) return event?.snapshotUrl
+    const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
+    return selected?.snapshotUrl ?? event?.snapshotUrl
+  }, [appearanceSegments, event?.snapshotUrl, selectedAppearanceKey])
 
   if (!event || !summary) return null
   void identityTick
@@ -246,12 +282,11 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     : event.violationLabel
   const showIdentify = needsPatrolManualIdentity(objectKey, event.objectLabel)
     || isPatrolManuallyIdentified(objectKey)
-  const appearanceCameras = Object.keys(appearances)
-  const hasAppearanceHistory = appearanceCameras.length > 0
+  const hasAppearanceHistory = appearanceSegments.length > 0
   const showAppearanceHistory = (stage === 'person' || stage === 'profile')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory || (stage !== 'person' && stage !== 'profile')
-  const portraitEvidence = Boolean(event.snapshotUrl && isPortraitPatrolCameraId(event.cameraId))
+  const portraitEvidence = Boolean(activeSnapshotUrl && isPortraitPatrolCameraId(event.cameraId))
 
   return createPortal(
     <div
@@ -264,7 +299,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
           'relative flex flex-col w-full max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60',
           portraitEvidence
             ? 'sm:max-w-[min(96vw,calc(92dvh*9/16+2rem))]'
-            : event.snapshotUrl
+            : activeSnapshotUrl
               ? 'sm:max-w-xl lg:max-w-2xl'
               : 'sm:max-w-md',
         )}
@@ -301,8 +336,12 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
-          {event.snapshotUrl && (
-            <PatrolEventSnapshot event={event} variant="detail" />
+          {activeSnapshotUrl && (
+            <PatrolEventSnapshot
+              event={event}
+              snapshotUrl={activeSnapshotUrl}
+              variant="detail"
+            />
           )}
 
           {(summary.infoPrimary.length > 0 || summary.infoSecondary.length > 0) && (
@@ -348,7 +387,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
           {showAppearanceHistory && (
             <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
               <div className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
+                <History className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
                 <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
                   Lịch sử xuất hiện
                 </span>
@@ -356,51 +395,67 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
               {appearancesLoading && !hasAppearanceHistory ? (
                 <p className="text-[9px] text-muted-foreground/70">Đang tải…</p>
               ) : (
-                <div className="space-y-2">
-                  {appearanceCameras.map(cameraId => {
-                    const blocks = appearances[cameraId] ?? []
-                    const camLabel = resolvePatrolCameraDisplayName(cameraId) || cameraId
+                <div className="space-y-1.5">
+                  {appearanceSegments.map(segment => {
+                    const rowKey = appearanceRowKey(segment)
+                    const selected = selectedAppearanceKey === rowKey
+                    const gps = resolveAppearanceGps(segment)
+                    const camLabel = resolveAppearanceCameraLabel(segment)
+                    const thumbUrl = segment.snapshotUrl ?? event.snapshotUrl
                     return (
-                      <div key={cameraId} className="space-y-1">
-                        <p className="text-[9px] font-medium text-muted-foreground">{camLabel}</p>
-                        {blocks.map((block, index) => (
-                          <div
-                            key={`${cameraId}-${block.startedAt}-${index}`}
-                            className="rounded border border-[#1e2433] bg-[#0a0e17] px-2 py-1.5 text-[9px] text-foreground/90 space-y-0.5"
-                          >
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="tabular-nums font-medium">
-                                {formatAppearanceTimeRange(block.startedAt, block.endedAt)}
-                              </span>
-                              {block.presenceSeq != null && block.presenceSeq > 0 && (
-                                <span className="text-sky-400/90 font-semibold">
-                                  Lượt #{block.presenceSeq}
-                                </span>
-                              )}
+                      <button
+                        key={rowKey}
+                        type="button"
+                        onClick={() => setSelectedAppearanceKey(rowKey)}
+                        className={cn(
+                          'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',
+                          selected
+                            ? 'border-sky-400/50 bg-sky-500/10 ring-1 ring-sky-400/30'
+                            : 'border-[#1e2433] bg-[#0a0e17] hover:border-[#2a3855] hover:bg-[#0d121c]',
+                        )}
+                      >
+                        <div className="relative w-[72px] h-[52px] shrink-0 overflow-hidden rounded-md border border-[#1e2433]/90 bg-black">
+                          {thumbUrl ? (
+                            <img
+                              src={thumbUrl}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
+                              <ImageOff className="w-4 h-4" aria-hidden />
                             </div>
-                            {block.zoneId && (
-                              <span className="text-muted-foreground">· {block.zoneId}</span>
-                            )}
-                            {block.gpsLat != null && block.gpsLng != null
-                              && block.gpsLat !== 0 && block.gpsLng !== 0 && (
-                              <a
-                                href={mapsUrl(block.gpsLat, block.gpsLng)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-emerald-400/90 hover:text-emerald-300"
-                              >
-                                <MapPin className="w-2.5 h-2.5" />
-                                {block.gpsLat.toFixed(5)}, {block.gpsLng.toFixed(5)}
-                              </a>
-                            )}
-                            {(block.sourceCameras?.length ?? 0) > 1 && (
-                              <span className="text-muted-foreground text-[8px]">
-                                Mũ: {block.sourceCameras!.join(' · ')}
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1 py-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] tabular-nums font-semibold text-foreground">
+                              {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
+                            </span>
+                            {segment.presenceSeq != null && segment.presenceSeq > 0 && (
+                              <span className="text-[8px] text-sky-400/90 font-semibold">
+                                Lượt #{segment.presenceSeq}
                               </span>
                             )}
                           </div>
-                        ))}
-                      </div>
+                          <div className="flex items-center gap-1 min-w-0">
+                            <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
+                            <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
+                          </div>
+                          {gps ? (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <MapPin className="w-3 h-3 text-emerald-400/80 shrink-0" aria-hidden />
+                              <span className="text-[9px] text-muted-foreground font-mono truncate">
+                                {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[8px] text-muted-foreground/70">Chưa có toạ độ GPS</span>
+                          )}
+                        </div>
+                      </button>
                     )
                   })}
                 </div>

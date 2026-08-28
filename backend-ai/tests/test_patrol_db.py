@@ -179,6 +179,20 @@ class DailyEventTests(PatrolDbTestCase):
         hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
         self.assertEqual(len(hist["by_camera"]["HC-01"]), 2)
 
+    def test_appearance_stores_snapshot_path(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(28), quality=0.8)
+        daystore.touch_person_event(
+            pers_id,
+            camera_id="HC-01",
+            snapshot_path="20250828/pers-0001.jpg",
+            snapshot_score=1.5,
+            face_eligible=True,
+            now=1_000.0,
+        )
+        hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
+        self.assertEqual(len(hist["segments"]), 1)
+        self.assertEqual(hist["segments"][0]["snapshot_path"], "20250828/pers-0001.jpg")
+
     def test_better_snapshot_wins_over_newer(self) -> None:
         pers_id, _ = identity.observe_face(_vec(24), quality=0.8)
         daystore.touch_person_event(

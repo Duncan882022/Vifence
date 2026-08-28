@@ -42,6 +42,7 @@ export interface PatrolAppearanceSegment {
   gpsLng?: number | null
   presenceSeq?: number
   sourceCameras?: string[]
+  snapshotUrl?: string
 }
 
 export interface PatrolDayPresence {
@@ -137,32 +138,33 @@ export async function fetchPatrolDayObjects(date?: string): Promise<PatrolDayObj
 export async function fetchPatrolSubjectAppearances(
   subjectId: string,
   date?: string,
-): Promise<Record<string, PatrolAppearanceSegment[]>> {
+): Promise<PatrolAppearanceSegment[]> {
   const params = new URLSearchParams({ subject_id: subjectId })
   if (date) params.set('date', date)
   const data = await getJson<{
     ok: boolean
-    by_camera: Record<string, Record<string, unknown>[]>
+    segments: Record<string, unknown>[]
   }>(`/patrol/day/appearances?${params.toString()}`)
-  if (!data?.ok) return {}
+  if (!data?.ok) return []
 
-  const out: Record<string, PatrolAppearanceSegment[]> = {}
-  for (const [cameraId, rows] of Object.entries(data.by_camera ?? {})) {
-    out[cameraId] = rows.map(r => ({
-      id: r.id != null ? Number(r.id) : undefined,
-      cameraId,
-      zoneId: r.zone_id ? String(r.zone_id) : null,
-      startedAt: Number(r.started_at ?? 0),
-      endedAt: Number(r.ended_at ?? 0),
-      gpsLat: r.gps_lat != null ? Number(r.gps_lat) : null,
-      gpsLng: r.gps_lng != null ? Number(r.gps_lng) : null,
-      presenceSeq: r.presence_seq != null ? Number(r.presence_seq) : undefined,
-      sourceCameras: Array.isArray(r.source_cameras)
-        ? (r.source_cameras as string[])
-        : undefined,
-    }))
-  }
-  return out
+  const rows = data.segments ?? []
+  return Promise.all(rows.map(async r => ({
+    id: r.id != null ? Number(r.id) : undefined,
+    cameraId: String(r.camera_id ?? ''),
+    zoneId: r.zone_id ? String(r.zone_id) : null,
+    startedAt: Number(r.started_at ?? 0),
+    endedAt: Number(r.ended_at ?? 0),
+    gpsLat: r.gps_lat != null ? Number(r.gps_lat) : null,
+    gpsLng: r.gps_lng != null ? Number(r.gps_lng) : null,
+    presenceSeq: r.presence_seq != null ? Number(r.presence_seq) : undefined,
+    sourceCameras: Array.isArray(r.source_cameras)
+      ? (r.source_cameras as string[])
+      : undefined,
+    snapshotUrl: await snapshotUrl(
+      r.snapshot_path as string | null,
+      Number(r.ended_at ?? 0),
+    ),
+  })))
 }
 
 export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBundle | null> {

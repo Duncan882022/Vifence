@@ -6,6 +6,8 @@ import type { PatrolEvent } from '../data/patrolTypes'
 
 interface PatrolEventSnapshotProps {
   event: PatrolEvent
+  /** Override ảnh chính — ví dụ khi chọn lượt trong lịch sử xuất hiện. */
+  snapshotUrl?: string | null
   /** thumb = thumbnail list (crop) · detail = popup (full frame) */
   variant?: 'thumb' | 'detail'
   className?: string
@@ -23,11 +25,13 @@ export function preloadPatrolEventSnapshot(url?: string | null): void {
 
 export function PatrolEventSnapshot({
   event,
+  snapshotUrl: snapshotUrlOverride,
   variant = 'thumb',
   className,
   onClick,
 }: PatrolEventSnapshotProps) {
   const isDetail = variant === 'detail'
+  const displayUrl = (snapshotUrlOverride ?? event.snapshotUrl)?.trim()
   const portraitEvidence = isDetail && isPortraitPatrolCameraId(event.cameraId)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -35,7 +39,7 @@ export function PatrolEventSnapshot({
   useEffect(() => {
     setLoaded(false)
     setFailed(false)
-  }, [event.snapshotUrl])
+  }, [displayUrl])
 
   const frameClass = cn(
     isDetail
@@ -49,7 +53,7 @@ export function PatrolEventSnapshot({
     className,
   )
 
-  if (!event.snapshotUrl) {
+  if (!displayUrl) {
     return null
   }
 
@@ -67,7 +71,7 @@ export function PatrolEventSnapshot({
         </div>
       )}
       <img
-        src={event.snapshotUrl}
+        src={displayUrl}
         alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
         className={cn(
           isDetail
