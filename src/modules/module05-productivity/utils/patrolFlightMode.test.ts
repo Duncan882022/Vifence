@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
+  patrolFlightModeLabel,
+  patrolFlightModeShortLabel,
   readPatrolFlightModeFromMetrics,
   resolveEffectivePatrolFlightMode,
   resolvePatrolFlycamGateFlags,
@@ -78,5 +80,14 @@ describe('resolveEffectivePatrolFlightMode', () => {
 
   it('HC-* không fallback bridge', () => {
     expect(resolveEffectivePatrolFlightMode('HC-01', null)).toBeNull()
+  })
+})
+
+describe('patrolFlightModeLabel', () => {
+  it('label đầy đủ và rút gọn cho badge tile', () => {
+    expect(patrolFlightModeLabel('aerial')).toBe('Tầm cao · Mật độ')
+    expect(patrolFlightModeLabel('proximity')).toBe('Tầm thấp · AI')
+    expect(patrolFlightModeShortLabel('aerial')).toBe('Tầm cao')
+    expect(patrolFlightModeShortLabel('proximity')).toBe('Tầm thấp')
   })
 })
