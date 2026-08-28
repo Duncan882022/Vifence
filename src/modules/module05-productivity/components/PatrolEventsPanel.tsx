@@ -81,6 +81,20 @@ function filterBySearch(events: PatrolEvent[], query: string): PatrolEvent[] {
 const INITIAL_COUNT = 6
 const BATCH_SIZE = 4
 
+function patrolEventTabCountLabel(tab: PatrolFilterTab, count: number): string {
+  switch (tab) {
+    case 'object':
+      return `${count} đối tượng`
+    case 'person':
+      return `${count} người`
+    case 'identity':
+      return `${count} định danh`
+    case 'all':
+    default:
+      return `${count} mục`
+  }
+}
+
 function PatrolStageBadge({ event }: { event: PatrolEvent }) {
   const meta = resolvePatrolEventDisplayMeta(event)
   const Icon = meta.icon
@@ -304,17 +318,20 @@ export function PatrolEventsPanel({
             ))}
 
             {hasMore && (
-              <div ref={sentinelRef} className="flex items-center justify-center py-3">
+              <div ref={sentinelRef} className="flex flex-col items-center justify-center gap-1 py-3">
                 {loading
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
                   : <div className="h-3.5" />}
+                <span className="text-[9px] text-muted-foreground/50 tabular-nums">
+                  Hiển thị {visibleItems.length}/{activeItems.length}
+                </span>
               </div>
             )}
 
             {!hasMore && (
               <div className="flex items-center justify-center py-3">
-                <span className="text-[9px] text-muted-foreground/35">
-                  — {tabCounts[filterTab]} entity —
+                <span className="text-[9px] text-muted-foreground/35 tabular-nums">
+                  — {patrolEventTabCountLabel(filterTab, tabCounts[filterTab])} —
                 </span>
               </div>
             )}
