@@ -36,15 +36,11 @@ import {
 } from '@/services/webrtc/whipClient'
 import { getHelmetWhipUrl } from '../data/helmetIngest'
 import { canReuseOpenCamera } from './cameraReuse'
+import { createDefaultPublisherGps, type HelmetGpsState } from './publisherGpsDefaults'
 
 export type PublisherStatus = 'idle' | 'starting' | 'live' | 'error'
 
-export interface HelmetGpsState {
-  lat: number
-  lng: number
-  accuracyM: number
-  updatedAt: number
-}
+export type { HelmetGpsState } from './publisherGpsDefaults'
 
 export interface HelmetPublisherState {
   status: PublisherStatus
@@ -110,6 +106,8 @@ export function useHelmetPublisher({
   const [errorMessage, setErrorMessage] = useState<string>()
   const [stats, setStats] = useState<WhipPublishStats>(EMPTY_WHIP_STATS)
   const [gps, setGps] = useState<HelmetGpsState | null>(null)
+  const gpsRef = useRef<HelmetGpsState | null>(null)
+  const hasLiveGpsRef = useRef(false)
   const [headingDeg, setHeadingDeg] = useState<number | null>(null)
   const [telemetryConnected, setTelemetryConnected] = useState(false)
   const [facing, setFacing] = useState<CameraFacing>('environment')
@@ -128,6 +126,30 @@ export function useHelmetPublisher({
       // Trình duyệt từ chối — người dùng tự giữ màn sáng.
     }
   }, [])
+
+  const applyPublisherGps = useCallback((
+    sample: HelmetGpsState,
+    opts?: { pushTelemetry?: boolean },
+  ) => {
+    gpsRef.current = sample
+    setGps(sample)
+    setPatrolHelmetGps({
+      cameraId: helmetId,
+      lat: sample.lat,
+      lng: sample.lng,
+      accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+      updatedAt: sample.updatedAt,
+    })
+    if (opts?.pushTelemetry !== false) {
+      telemetryRef.current?.send({
+        lat: sample.lat,
+        lng: sample.lng,
+        accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+        heading: getLastDeviceHeading(),
+        wallclockMs: sample.updatedAt,
+      })
+    }
+  }, [helmetId])
 
   /**
    * Chỉ hạ WebRTC, giữ nguyên camera. Rớt sóng là lỗi đường truyền, không phải
@@ -341,6 +363,18 @@ export function useHelmetPublisher({
   const broadcasting = status === 'live' || status === 'starting'
 
   useEffect(() => {
+    if (!broadcasting) {
+      hasLiveGpsRef.current = false
+      gpsRef.current = null
+      setGps(null)
+      return
+    }
+    if (!hasLiveGpsRef.current) {
+      applyPublisherGps(createDefaultPublisherGps())
+    }
+  }, [broadcasting, applyPublisherGps])
+
+  useEffect(() => {
     if (!broadcasting || !patrolAuthReady) {
       setTelemetryConnected(false)
       return
@@ -356,6 +390,16 @@ export function useHelmetPublisher({
       onStateChange: setTelemetryConnected,
     })
     telemetryRef.current = sender
+    if (gpsRef.current) {
+      const sample = gpsRef.current
+      sender.send({
+        lat: sample.lat,
+        lng: sample.lng,
+        accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+        heading: getLastDeviceHeading(),
+        wallclockMs: sample.updatedAt,
+      })
+    }
 
     return () => {
       sender.stop()
@@ -364,25 +408,29 @@ export function useHelmetPublisher({
   }, [helmetId, broadcasting, patrolAuthReady])
 
   useEffect(() => {
+    if (!telemetryConnected || !gpsRef.current) return
+    const sample = gpsRef.current
+    telemetryRef.current?.send({
+      lat: sample.lat,
+      lng: sample.lng,
+      accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+      heading: getLastDeviceHeading(),
+      wallclockMs: sample.updatedAt,
+    })
+  }, [telemetryConnected])
+
+  useEffect(() => {
     return watchDeviceGps(reading => {
-      const next: HelmetGpsState = {
+      hasLiveGpsRef.current = true
+      applyPublisherGps({
         lat: reading.lat,
         lng: reading.lng,
         accuracyM: reading.accuracyM,
         updatedAt: reading.updatedAt,
-      }
-      setGps(next)
-      // Bridge cùng tab — bản đồ trong CMS trên chính máy này vẫn cập nhật.
-      setPatrolHelmetGps({ cameraId: helmetId, ...next })
-      telemetryRef.current?.send({
-        lat: next.lat,
-        lng: next.lng,
-        accuracyM: next.accuracyM,
-        heading: getLastDeviceHeading(),
-        wallclockMs: next.updatedAt,
+        isDefault: false,
       })
     })
-  }, [helmetId])
+  }, [applyPublisherGps])
 
   useEffect(() => {
     const unwatch = watchDeviceHeading()
