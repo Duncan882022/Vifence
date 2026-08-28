@@ -271,4 +271,12 @@ describe('vòng đời track', () => {
     expect([...tracks.keys()][0]).toBe(firstId)
     expect([...tracks.values()][0].state).toBe('confirmed')
   })
+
+  it('ẩn ROI sau hai nhịp miss liên tiếp — người rời khỏi cam', () => {
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    tracks = advance(tracks, [], 300)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
+    tracks = advance(tracks, [], 300)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
+  })
 })

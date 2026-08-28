@@ -30,12 +30,20 @@ export const PATROL_PERSON_ROI_CONFIG = {
    * nhận lại đúng track cũ thay vì bị cấp mã mới.
    */
   maxMissFrames: 5,
-  /** Coast ngắn giữa hai nhịp AI — mượt như TikTok, ẩn trước khi thành ghost. */
-  displayCoastMaxMiss: 2,
   /**
-   * Trần nội suy rAF (ms) — đủ trượt mượt giữa hai lần analyze ~90–150ms.
+   * Số nhịp analyze miss vẫn vẽ ROI (chỉ mờ dần).
+   * 1 = cho phép miss 1 nhịp (che thoáng / jitter YOLO), ẩn từ nhịp thứ 2.
+   */
+  displayCoastMaxMiss: 1,
+  /**
+   * Trần nội suy rAF (ms) khi track còn bám — mượt giữa hai lần analyze ~90–150ms.
    */
   maxPredictMs: 720,
+  /**
+   * Khi mất dấu (missStreak > 0): không trượt bbox — giữ tại vị trí đo cuối.
+   * Tránh ghost ROI lơ lửng / trượt ra khỏi khung sau khi người đã rời cam.
+   */
+  maxPredictMsLost: 0,
   /** Kalman — processNoise chỉ cộng vào lúc coast (track đang mất dấu). */
   processNoise: 0.06,
   measureNoise: 0.14,
