@@ -269,7 +269,7 @@ export function advancePersonRoiTracks(
     if (next.has(track.id)) continue
     const missStreak = track.missStreak + 1
     if (missStreak <= cfg.maxMissFrames) {
-      track.kalman.predict(dtMs)
+      // Không predict Kalman khi miss — bbox đứng tại chỗ đo cuối, tắt nhanh hơn khi rời cam.
       track.missStreak = missStreak
       track.state = track.state === 'tentative' ? 'tentative' : 'lost'
       track.lastSeenAt = now
@@ -329,7 +329,6 @@ export function predictPersonRoiTracks(
   elapsedMs: number,
   cfg: PatrolPersonRoiConfig = PATROL_PERSON_ROI_CONFIG,
 ): PersonRoiDisplay[] {
-  const dt = Math.min(Math.max(elapsedMs, 0), cfg.maxPredictMs)
   const out: PersonRoiDisplay[] = []
 
   for (const track of tracks.values()) {
@@ -338,12 +337,19 @@ export function predictPersonRoiTracks(
       continue
     }
 
-    const bbox = dt > 0 ? track.kalman.getPredictedBbox(dt) : track.kalman.getBbox()
+    const isCoasting = track.missStreak > 0
+    const predictCap = isCoasting
+      ? (cfg.maxPredictMsLost ?? 0)
+      : cfg.maxPredictMs
+    const dt = Math.min(Math.max(elapsedMs, 0), predictCap)
+    const bbox = !isCoasting && dt > 0
+      ? track.kalman.getPredictedBbox(dt)
+      : track.kalman.getBbox()
     const personId = canonicalPersonId(track)
 
     let displayOpacity = 1
     if (track.missStreak > 0) {
-      displayOpacity = Math.max(0.55, 1 - track.missStreak / (coastLimit + 1))
+      displayOpacity = Math.max(0.35, 1 - track.missStreak / (coastLimit + 1))
     } else if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
       displayOpacity = 0.62
     }
