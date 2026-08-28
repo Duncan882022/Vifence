@@ -11,7 +11,7 @@ import {
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
 import { LocalBroadcastControl } from './components/LocalBroadcastControl'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
-import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
+import { PatrolCameraPanel } from './components/PatrolCameraPanel'
 import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
@@ -335,18 +335,13 @@ export function Module05Page() {
               {tier2Open && (
                 <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
                   {cameraMode === 'live' ? (
-                    <TrainingCameraPanel
+                    <PatrolCameraPanel
                       selectedId={selectedCamId}
                       onSelectCamera={handleSelectCamera}
                       onStreamCountChange={setActiveStreamCount}
                       cameras={patrolCamerasLive}
                       defaultCameraIds={patrolDefaultCameraIds}
-                      defaultSidebarOpen={false}
-                      aspectVideoGrid
-                      mobileCompactVideo={isMobileLayout}
-                      mobileStackedNoScroll={isMobileLayout}
-                      streamWhenOffline
-                      compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
+                      isMobileLayout={isMobileLayout}
                       filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
                       filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
                       groupFn={cams => groupPatrolCamerasForSidebar(cams)}

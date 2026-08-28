@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Sidebar } from '@/components/common/Sidebar/Sidebar'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Module01Page } from '@/modules/module01-access-control/Module01Page'
 import { DTTTPage } from '@/modules/dao-tao-tuan-thu/DTTTPage'
 import { Module03Page } from '@/modules/module03-safety/Module03Page'
@@ -13,6 +14,7 @@ import { EquipmentPage } from '@/modules/equipment-intelligence/EquipmentPage'
 import { EquipmentProductivityPage } from '@/modules/module01-equipment-productivity/EquipmentProductivityPage'
 import { ProfilePage } from '@/modules/auth/ProfilePage'
 import { ScannerPage } from '@/modules/auth/ScannerPage'
+import { SigninPage } from '@/modules/auth/SigninPage'
 import { DEFAULT_HOME_PATH } from '@/config'
 
 /** Trang phát sóng chỉ dùng trên điện thoại người đeo mũ — tách chunk khỏi CMS. */
@@ -33,7 +35,7 @@ function AppRoutes() {
       {!isKiosk && <Sidebar />}
       <Routes>
         <Route path="/" element={<Navigate to={DEFAULT_HOME_PATH} replace />} />
-        <Route path="/signin" element={<Navigate to={DEFAULT_HOME_PATH} replace />} />
+        <Route path="/signin" element={<SigninPage />} />
 
         <Route path="/scanner" element={<ScannerPage />} />
         <Route path="/vifence/scanner" element={<ScannerPage />} />
@@ -58,7 +60,14 @@ function AppRoutes() {
         <Route path="/dttt/*" element={<DTTTPage />} />
         <Route path="/module03/*" element={<Module03Page />} />
         <Route path="/module04/*" element={<Module04Page />} />
-        <Route path="/module05/*" element={<Module05Routes />} />
+        <Route
+          path="/module05/*"
+          element={(
+            <ProtectedRoute>
+              <Module05Routes />
+            </ProtectedRoute>
+          )}
+        />
         <Route path="/module06/*" element={<Module06Page />} />
         <Route path="/module07/*" element={<Module07Page />} />
         <Route path="/module08/*" element={<Module08Page />} />

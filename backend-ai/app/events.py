@@ -577,7 +577,7 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        from .patrol_api import get_patrol_gps
+        from .patrol_runtime import get_patrol_gps
 
         gps_lat, gps_lng = get_patrol_gps(camera_id)
         if gps_lat is not None and gps_lng is not None:
@@ -630,7 +630,7 @@ class EventStore:
             event_date=event_date,
             camera_id=camera_id,
         )
-        from .patrol_api import get_patrol_gps
+        from .patrol_runtime import get_patrol_gps
 
         gps_lat, gps_lng = get_patrol_gps(camera_id)
         if gps_lat is not None and gps_lng is not None:

@@ -7,14 +7,35 @@ không mất gì, và hai máy khác nhau nhìn thấy cùng một danh sách.
 from __future__ import annotations
 
 import base64
+import threading
 import time
+import uuid
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse, Response
 
+from ..auth import RequirePatrolAdmin, RequirePatrolHr, RequirePatrolRead
+from ..rate_limit import rate_limit
 from . import daystore, db, identity
+from .audit import audit
+from .schemas import (
+    EnrollCompletePayload,
+    EnrollScanPayload,
+    IdentifyPayload,
+    ImportPersonsPayload,
+    MergePersonsPayload,
+    PersonScanPayload,
+    PersonUpdatePayload,
+    PurgeDayPayload,
+    SnapshotSignPayload,
+)
+from .snapshot_sign import sign_snapshot_path, verify_snapshot_token
 
 router = APIRouter(prefix="/patrol", tags=["patrol"])
+
+_import_jobs: dict[str, dict[str, Any]] = {}
+_import_lock = threading.Lock()
 
 
 def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> dict[str, Any]:
@@ -39,7 +60,7 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
 
 
 @router.get("/persons")
-def list_persons(status: str | None = None) -> dict[str, Any]:
+def list_persons(status: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Danh sách Người (`status=person`) hoặc Định danh (`status=identified`)."""
     rows = identity.list_persons(status)
     return {
@@ -49,7 +70,7 @@ def list_persons(status: str | None = None) -> dict[str, Any]:
 
 
 @router.get("/persons/lookup")
-def lookup_person(employee_code: str) -> dict[str, Any]:
+def lookup_person(employee_code: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Tra cứu hồ sơ theo mã nhân viên — dùng trước khi quét mặt."""
     code = (employee_code or "").strip()
     if not code:
@@ -61,7 +82,7 @@ def lookup_person(employee_code: str) -> dict[str, Any]:
 
 
 @router.get("/persons/{pers_id}")
-def get_person(pers_id: str) -> dict[str, Any]:
+def get_person(pers_id: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     row = identity.get_person(pers_id)
     if row is None:
         return {"ok": False, "error": "not_found"}
@@ -69,11 +90,15 @@ def get_person(pers_id: str) -> dict[str, Any]:
 
 
 @router.patch("/persons/{pers_id}")
-def update_person(pers_id: str, payload: dict) -> dict[str, Any]:
+def update_person(
+    pers_id: str,
+    payload: PersonUpdatePayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
     """Sửa họ tên, mã NV, đơn vị — giữ nguyên vector mặt."""
-    full_name = str(payload.get("full_name") or payload.get("ho_ten") or "").strip()
-    employee_code = str(payload.get("employee_code") or payload.get("ma_nv") or "").strip()
-    contractor = str(payload.get("contractor") or payload.get("don_vi") or "").strip()
+    full_name = (payload.full_name or "").strip()
+    employee_code = (payload.employee_code or "").strip()
+    contractor = (payload.contractor or "").strip()
     if not full_name or not employee_code:
         return {"ok": False, "error": "missing_fields"}
     if identity.get_person(pers_id) is None:
@@ -92,19 +117,21 @@ def update_person(pers_id: str, payload: dict) -> dict[str, Any]:
         return {"ok": False, "error": code}
     except KeyError:
         return {"ok": False, "error": "not_found"}
+    audit("person_update", actor=user.username, subject_id=pers_id)
     return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
 
 
 @router.delete("/persons/{pers_id}")
-def delete_person(pers_id: str) -> dict[str, Any]:
+def delete_person(pers_id: str, user: RequirePatrolAdmin = None) -> dict[str, Any]:  # noqa: ARG001
     """Xóa hồ sơ công nhân và vector mặt."""
     if not identity.delete_person(pers_id):
         return {"ok": False, "error": "not_found"}
+    audit("person_delete", actor=user.username, subject_id=pers_id)
     return {"ok": True}
 
 
 @router.get("/persons/{pers_id}/enrollment")
-def person_enrollment(pers_id: str) -> dict[str, Any]:
+def person_enrollment(pers_id: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     row = identity.get_person(pers_id)
     if row is None:
         return {"ok": False, "error": "not_found"}
@@ -112,7 +139,7 @@ def person_enrollment(pers_id: str) -> dict[str, Any]:
 
 
 @router.get("/day/events")
-def day_events(date: str | None = None) -> dict[str, Any]:
+def day_events(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Thẻ Người + Định danh trong ngày — mỗi người đúng một thẻ."""
     rows = daystore.list_person_events(date)
     items = [
@@ -135,7 +162,7 @@ def day_events(date: str | None = None) -> dict[str, Any]:
 
 
 @router.get("/day/objects")
-def day_objects(date: str | None = None) -> dict[str, Any]:
+def day_objects(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Đối tượng trong ngày — chưa thấy mặt, hết ngày là xoá."""
     return {
         "ok": True,
@@ -145,13 +172,13 @@ def day_objects(date: str | None = None) -> dict[str, Any]:
 
 
 @router.get("/day/stats")
-def day_stats(date: str | None = None) -> dict[str, Any]:
+def day_stats(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
     return {"ok": True, **daystore.day_stats(date)}
 
 
 @router.get("/day/presences")
-def day_presences(date: str | None = None) -> dict[str, Any]:
+def day_presences(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Mọi lượt gặp qualified — heatmap GPS."""
     d = date or db.today_vn()
     items = daystore.list_day_presences(d)
@@ -159,7 +186,11 @@ def day_presences(date: str | None = None) -> dict[str, Any]:
 
 
 @router.get("/day/appearances")
-def day_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
+def day_appearances(
+    subject_id: str,
+    date: str | None = None,
+    _user: RequirePatrolRead = None,  # noqa: ARG001
+) -> dict[str, Any]:
     sid = (subject_id or "").strip()
     if not sid:
         return {"ok": False, "error": "missing_subject_id"}
@@ -167,13 +198,43 @@ def day_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
     return {"ok": True, "subject_id": sid, "date": date or db.today_vn(), **result}
 
 
-@router.post("/persons/import")
-def import_persons(payload: dict) -> dict[str, Any]:
-    """Nhập hàng loạt từ Excel — upsert theo `employee_code`."""
-    items = payload.get("items") or []
-    if not isinstance(items, list):
-        return {"ok": False, "error": "invalid_items"}
+@router.get("/day/bundle")
+def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    """Gộp stats + events + objects + presences — một transaction đọc."""
+    d = date or db.today_vn()
+    with db.tx() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        stats = daystore.day_stats(d)
+        events = daystore.list_person_events(d)
+        objects = daystore.list_objects(d)
+        presences = daystore.list_day_presences(d)
+    event_items = [
+        {
+            "event_date": r["event_date"],
+            "pers_id": r["pers_id"],
+            "status": r["status"],
+            "iden_code": r.get("iden_code"),
+            "display_name": identity.display_name(r),
+            "full_name": r.get("full_name"),
+            "employee_code": r.get("employee_code"),
+            "contractor": r.get("contractor"),
+            "first_seen": r["first_seen"],
+            "last_seen": r["last_seen"],
+            "snapshot_path": r.get("snapshot_path"),
+        }
+        for r in events
+    ]
+    return {
+        "ok": True,
+        "date": d,
+        "stats": stats,
+        "events": event_items,
+        "objects": objects,
+        "presences": presences,
+    }
 
+
+def _run_import_job(job_id: str, items: list[dict[str, Any]], actor: str) -> None:
     results: list[dict[str, Any]] = []
     success = 0
     for raw in items:
@@ -181,7 +242,6 @@ def import_persons(payload: dict) -> dict[str, Any]:
         employee_code = str(raw.get("employee_code") or raw.get("ma_nv") or "").strip()
         contractor = str(raw.get("contractor") or raw.get("don_vi") or "").strip()
         image_b64 = raw.get("image_b64")
-
         if not full_name or not employee_code:
             results.append({
                 "ok": False,
@@ -189,11 +249,7 @@ def import_persons(payload: dict) -> dict[str, Any]:
                 "error": "missing_fields",
             })
             continue
-
-        embedding = None
-        if image_b64:
-            embedding = _embed_face_b64(str(image_b64))
-
+        embedding = _embed_face_b64(str(image_b64)) if image_b64 else None
         try:
             row = identity.import_identity(
                 full_name=full_name,
@@ -215,18 +271,53 @@ def import_persons(payload: dict) -> dict[str, Any]:
                 "employee_code": employee_code,
                 "error": str(exc),
             })
+    with _import_lock:
+        _import_jobs[job_id] = {
+            "status": "done",
+            "total": len(items),
+            "success": success,
+            "failed": len(items) - success,
+            "results": results,
+        }
+    audit("persons_import", actor=actor, meta={"job_id": job_id, "success": success})
 
-    return {
-        "ok": True,
-        "total": len(items),
-        "success": success,
-        "failed": len(items) - success,
-        "results": results,
-    }
+
+@router.post("/persons/import")
+def import_persons(
+    request: Request,
+    payload: ImportPersonsPayload,
+    user: RequirePatrolAdmin = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Nhập hàng loạt từ Excel — async job khi > 10 rows."""
+    rate_limit(request, key="patrol_import", max_calls=5, window_sec=60.0)
+    items = [row.model_dump() for row in payload.items]
+    if len(items) <= 10:
+        _run_import_job("__sync__", items, user.username)
+        job = _import_jobs.pop("__sync__")
+        return {"ok": True, **job}
+    job_id = uuid.uuid4().hex
+    with _import_lock:
+        _import_jobs[job_id] = {"status": "running", "total": len(items)}
+    thread = threading.Thread(
+        target=_run_import_job,
+        args=(job_id, items, user.username),
+        daemon=True,
+    )
+    thread.start()
+    return {"ok": True, "job_id": job_id, "status": "running"}
+
+
+@router.get("/import/{job_id}/status")
+def import_job_status(job_id: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    with _import_lock:
+        job = _import_jobs.get(job_id)
+    if job is None:
+        return {"ok": False, "error": "not_found"}
+    return {"ok": True, "job_id": job_id, **job}
 
 
 @router.post("/enroll/session")
-def create_enroll_session() -> dict[str, Any]:
+def create_enroll_session(user: RequirePatrolHr = None) -> dict[str, Any]:  # noqa: ARG001
     """Bắt đầu phiên quét tự phục vụ — công nhân quét trước, nhập hồ sơ sau."""
     session_id = identity.create_enroll_session()
     enrollment = identity.get_enroll_session_enrollment(session_id)
@@ -234,7 +325,7 @@ def create_enroll_session() -> dict[str, Any]:
 
 
 @router.get("/enroll/{session_id}")
-def enroll_session_status(session_id: str) -> dict[str, Any]:
+def enroll_session_status(session_id: str, _user: RequirePatrolHr = None) -> dict[str, Any]:  # noqa: ARG001
     enrollment = identity.get_enroll_session_enrollment(session_id)
     if enrollment is None:
         return {"ok": False, "error": "session_not_found"}
@@ -242,21 +333,22 @@ def enroll_session_status(session_id: str) -> dict[str, Any]:
 
 
 @router.post("/enroll/{session_id}/scan")
-def scan_enroll_session_face(session_id: str, payload: dict) -> dict[str, Any]:
+def scan_enroll_session_face(
+    request: Request,
+    session_id: str,
+    payload: EnrollScanPayload,
+    _user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
     """Quét góc mặt vào phiên tạm — chưa gắn hồ sơ."""
+    rate_limit(request, key="patrol_enroll_scan", max_calls=30, window_sec=60.0)
     if identity.get_enroll_session_enrollment(session_id) is None:
         return {"ok": False, "error": "session_not_found"}
 
-    image_b64 = payload.get("image_b64")
-    if not image_b64:
-        return {"ok": False, "error": "missing_image"}
-
-    emb = _embed_face_b64(str(image_b64))
+    emb = _embed_face_b64(payload.image_b64)
     if emb is None:
         return {"ok": False, "error": "no_face_detected"}
 
-    pose_slot = payload.get("pose_slot")
-    slot = int(pose_slot) if pose_slot is not None else None
+    slot = payload.pose_slot
     added = identity.add_enroll_session_face(session_id, emb, pose_slot=slot)
     enrollment = identity.get_enroll_session_enrollment(session_id)
     if enrollment is None:
@@ -272,11 +364,15 @@ def scan_enroll_session_face(session_id: str, payload: dict) -> dict[str, Any]:
 
 
 @router.post("/enroll/{session_id}/complete")
-def complete_enroll_session(session_id: str, payload: dict) -> dict[str, Any]:
+def complete_enroll_session(
+    session_id: str,
+    payload: EnrollCompletePayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
     """Hoàn tất — nhập hồ sơ giống import Excel, gắn vector đã quét."""
-    full_name = str(payload.get("full_name") or payload.get("ho_ten") or "").strip()
-    employee_code = str(payload.get("employee_code") or payload.get("ma_nv") or "").strip()
-    contractor = str(payload.get("contractor") or payload.get("don_vi") or "").strip()
+    full_name = payload.full_name.strip()
+    employee_code = payload.employee_code.strip()
+    contractor = (payload.contractor or "").strip()
     if not full_name or not employee_code:
         return {"ok": False, "error": "missing_fields"}
 
@@ -295,6 +391,7 @@ def complete_enroll_session(session_id: str, payload: dict) -> dict[str, Any]:
             return {"ok": False, "error": "incomplete_enrollment"}
         return {"ok": False, "error": code}
 
+    audit("enroll_complete", actor=user.username, subject_id=str(row["pers_id"]))
     return {
         "ok": True,
         "person": _person_payload(row, with_face_stats=True),
@@ -303,16 +400,18 @@ def complete_enroll_session(session_id: str, payload: dict) -> dict[str, Any]:
 
 
 @router.post("/persons/{pers_id}/scan")
-def scan_person_face(pers_id: str, payload: dict) -> dict[str, Any]:
+def scan_person_face(
+    request: Request,
+    pers_id: str,
+    payload: PersonScanPayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
     """Quét thêm góc mặt — vector lưu vào `person_faces` cho nhận diện tuần tra."""
+    rate_limit(request, key="patrol_person_scan", max_calls=30, window_sec=60.0)
     if identity.get_person(pers_id) is None:
         return {"ok": False, "error": "not_found"}
 
-    image_b64 = payload.get("image_b64")
-    if not image_b64:
-        return {"ok": False, "error": "missing_image"}
-
-    emb = _embed_face_b64(str(image_b64))
+    emb = _embed_face_b64(payload.image_b64)
     if emb is None:
         return {"ok": False, "error": "no_face_detected"}
 
@@ -335,72 +434,87 @@ def scan_person_face(pers_id: str, payload: dict) -> dict[str, Any]:
 
 
 @router.post("/persons/{pers_id}/identify")
-def identify_person(pers_id: str, payload: dict) -> dict[str, Any]:
-    """Gán tên cho một Người → Định danh.
+def identify_person(
+    pers_id: str,
+    payload: IdentifyPayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Gán tên cho một Người → Định danh."""
+    full_name = payload.full_name.strip()
+    employee_code = payload.employee_code.strip()
+    contractor = (payload.contractor or "").strip()
 
-    Ảnh gửi kèm được nhúng thành vector và lưu vào `person_faces`, nên lần sau
-    gặp lại là tự nhận — kể cả ngày hôm sau, kể cả mũ khác.
-    """
-    full_name = str(payload.get("full_name") or "").strip()
-    employee_code = str(payload.get("employee_code") or "").strip()
-    contractor = str(payload.get("contractor") or "").strip()
-    identified_by = str(payload.get("identified_by") or "").strip()
-    image_b64 = payload.get("image_b64")
-
-    if not full_name or not employee_code:
-        return {"ok": False, "error": "missing_fields"}
     if identity.get_person(pers_id) is None:
         return {"ok": False, "error": "not_found"}
-
-    face_added = False
-    if image_b64:
-        emb = _embed_face_b64(str(image_b64))
-        if emb is not None:
-            identity.add_face(
-                pers_id, emb, quality=1.0, source="manual", image_path=None
-            )
-            face_added = True
 
     row = identity.identify(
         pers_id,
         full_name=full_name,
         employee_code=employee_code,
         contractor=contractor,
-        identified_by=identified_by,
+        identified_by=user.username,
     )
-    return {"ok": True, "person": _person_payload(row), "face_added": face_added}
+    audit("person_identify", actor=user.username, subject_id=pers_id)
+    return {"ok": True, "person": _person_payload(row), "face_added": False}
 
 
 @router.post("/persons/merge")
-def merge_persons(payload: dict) -> dict[str, Any]:
+def merge_persons(
+    payload: MergePersonsPayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
     """Gộp hai mã của cùng một người — mã bị bỏ vẫn tra ra được."""
-    keep = str(payload.get("keep") or "").strip()
-    drop = str(payload.get("drop") or "").strip()
-    if not keep or not drop:
-        return {"ok": False, "error": "missing_fields"}
+    keep = payload.keep.strip()
+    drop = payload.drop.strip()
     identity.merge_persons(keep, drop)
     row = identity.get_person(keep)
+    audit("persons_merge", actor=user.username, subject_id=keep, meta={"drop": drop})
     return {"ok": True, "person": _person_payload(row) if row else None}
 
 
 @router.delete("/day/events")
-def purge_day_events(date: str | None = None) -> dict[str, Any]:
+def purge_day_events(
+    date: str | None = None,
+    user: RequirePatrolAdmin = None,  # noqa: ARG001
+) -> dict[str, Any]:
     """Xoá thẻ sự kiện một ngày — giữ nguyên hồ sơ Định danh đã import."""
     stats = db.purge_day(date)
+    audit("day_purge", actor=user.username, meta={"date": date or db.today_vn()})
     return {"ok": True, **stats}
 
 
-@router.get("/snapshot")
-def patrol_snapshot(path: str):
-    """Ảnh chụp của thẻ sự kiện. Đường dẫn bị chặn thoát khỏi thư mục ảnh."""
-    from fastapi.responses import FileResponse, Response
+@router.post("/snapshot/sign")
+def sign_snapshot(payload: SnapshotSignPayload, _user: RequirePatrolRead = None) -> dict:  # noqa: ARG001
+    signed = sign_snapshot_path(payload.path)
+    return {"ok": True, "path": payload.path, **signed}
 
+
+@router.get("/snapshot")
+def patrol_snapshot(
+    path: str,
+    token: str | None = None,
+    exp: int | None = None,
+    _user: RequirePatrolRead = None,  # noqa: ARG001
+):
+    """Ảnh chụp — yêu cầu token HMAC khi không demo."""
     from .sink import resolve_snapshot_path
+
+    if token and exp is not None:
+        if not verify_snapshot_token(path, token, exp):
+            return Response(status_code=403)
+    elif not settings_patrol_auth_disabled():
+        return Response(status_code=401)
 
     full = resolve_snapshot_path(path)
     if full is None:
         return Response(status_code=404)
     return FileResponse(str(full), media_type="image/jpeg")
+
+
+def settings_patrol_auth_disabled() -> bool:
+    from ..config import settings
+
+    return settings.patrol_auth_disabled
 
 
 def _embed_face_b64(image_b64: str) -> list[float] | None:
@@ -443,7 +557,7 @@ def observe_person_face(
     """
     ts = now or time.time()
     try:
-        from .patrol_api import get_patrol_gps
+        from ..patrol_runtime import get_patrol_gps
 
         gps_lat, gps_lng = get_patrol_gps(camera_id) if camera_id else (None, None)
     except Exception:

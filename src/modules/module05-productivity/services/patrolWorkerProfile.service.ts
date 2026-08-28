@@ -1,5 +1,4 @@
-import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
-import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { fetchPatrol, patrolBackendBase } from '@/services/patrolApiClient'
 
 export interface PatrolWorkerPerson {
   pers_id: string
@@ -42,6 +41,7 @@ export interface PatrolImportRow {
   employee_code: string
   contractor?: string
   image_b64?: string
+  consented_at?: number
 }
 
 export interface PatrolImportResult {
@@ -58,38 +58,18 @@ export interface PatrolImportResult {
   }>
 }
 
-function backendBase(): string {
-  return (getVmsBackendUrl() || getMobileAiBackendUrl() || '').replace(/\/$/, '')
-}
-
 async function patrolJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = backendBase()
-  if (!base) throw new Error('Chưa cấu hình URL backend AI.')
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    mode: 'cors',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    signal: init?.signal ?? AbortSignal.timeout(20_000),
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json() as Promise<T>
+  const data = await fetchPatrol<T>(path, init, 20_000)
+  if (data === null) {
+    if (!patrolBackendBase()) throw new Error('Chưa cấu hình URL backend AI.')
+    throw new Error('Không kết nối được backend patrol.')
+  }
+  return data
 }
 
 export async function pingPatrolProfileBackend(): Promise<boolean> {
-  const base = backendBase()
-  if (!base) return false
-  try {
-    const res = await fetch(`${base}/patrol/persons`, {
-      mode: 'cors',
-      signal: AbortSignal.timeout(8_000),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
+  const data = await fetchPatrol<{ ok?: boolean }>('/patrol/persons', undefined, 8_000)
+  return data !== null
 }
 
 export async function fetchPatrolWorkerProfiles(
@@ -290,6 +270,7 @@ export async function completePatrolEnrollSession(
       full_name: profile.full_name,
       employee_code: profile.employee_code,
       contractor: profile.contractor ?? '',
+      consented_at: profile.consented_at,
     }),
   })
   if (!data.ok || !data.person || !data.enrollment) {

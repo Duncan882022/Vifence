@@ -6,6 +6,15 @@ import { useAppStore } from '@/store/app.store'
 import axiosInstance from '@/utils/axios'
 import { signinWithAliases } from '@/utils/authSignin'
 import { DEFAULT_HOME_PATH } from '@/config'
+import { patrolBackendBase, patrolSignin } from '@/services/patrolApiClient'
+import type { UserRole } from '@/types/user'
+
+function mapPatrolRole(role: string): UserRole {
+  if (role === 'admin') return 'admin'
+  if (role === 'hr') return 'manager'
+  if (role === 'operator') return 'supervisor'
+  return 'user'
+}
 
 export function SigninPage() {
   const [username, setUsername] = useState('')
@@ -28,6 +37,23 @@ export function SigninPage() {
     setError(null)
 
     try {
+      if (patrolBackendBase()) {
+        const patrol = await patrolSignin(username, password)
+        if (patrol?.ok && patrol.access_token) {
+          const mappedUser = {
+            id: patrol.user.username,
+            username: patrol.user.username,
+            name: patrol.user.username,
+            email: '',
+            role: mapPatrolRole(patrol.user.role),
+          }
+          setUser(mappedUser)
+          localStorage.setItem('vifence_user', JSON.stringify(mappedUser))
+          navigate(DEFAULT_HOME_PATH)
+          return
+        }
+      }
+
       const data = await signinWithAliases(axiosInstance, username, password)
 
       if (!data) {

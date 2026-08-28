@@ -6,8 +6,7 @@
  * kết quả của một vòng gộp trùng chạy sau, nên hai máy khác nhau không thể
  * nhìn ra hai con số khác nhau.
  */
-import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
-import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
+import { fetchPatrol, patrolBackendBase, signPatrolSnapshot } from '@/services/patrolApiClient'
 
 export type PatrolPersonStatus = 'person' | 'identified'
 
@@ -69,29 +68,27 @@ export interface PatrolDayStats {
   unassignedObservations: number
 }
 
+export interface PatrolDayBundle {
+  date: string
+  stats: PatrolDayStats
+  persons: PatrolDayPerson[]
+  objects: PatrolDayObject[]
+  presences: PatrolDayPresence[]
+}
+
 function backendBase(): string {
-  return getVmsBackendUrl() || getMobileAiBackendUrl() || ''
+  return patrolBackendBase()
 }
 
 async function getJson<T>(path: string, timeoutMs = 12_000): Promise<T | null> {
-  const base = backendBase()
-  if (!base) return null
-  try {
-    const res = await fetch(`${base}${path}`, {
-      method: 'GET',
-      mode: 'cors',
-      signal: AbortSignal.timeout(timeoutMs),
-    })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
-  }
+  return fetchPatrol<T>(path, undefined, timeoutMs)
 }
 
-function snapshotUrl(path: string | null | undefined): string | undefined {
+async function snapshotUrl(path: string | null | undefined): Promise<string | undefined> {
   const p = (path ?? '').trim()
   if (!p) return undefined
+  const signed = await signPatrolSnapshot(p)
+  if (signed) return signed
   const base = backendBase()
   if (!base) return undefined
   return `${base}/patrol/snapshot?path=${encodeURIComponent(p)}`
@@ -103,7 +100,7 @@ export async function fetchPatrolDayPersons(date?: string): Promise<PatrolDayPer
     `/patrol/day/events${query}`,
   )
   if (!data?.ok) return []
-  return (data.items ?? []).map(row => ({
+  const rows = await Promise.all((data.items ?? []).map(async row => ({
     persId: String(row.pers_id ?? ''),
     status: (row.status === 'identified' ? 'identified' : 'person') as PatrolPersonStatus,
     idenCode: row.iden_code ? String(row.iden_code) : null,
@@ -113,8 +110,9 @@ export async function fetchPatrolDayPersons(date?: string): Promise<PatrolDayPer
     contractor: row.contractor ? String(row.contractor) : null,
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: snapshotUrl(row.snapshot_path as string | null),
-  }))
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+  })))
+  return rows
 }
 
 export async function fetchPatrolDayObjects(date?: string): Promise<PatrolDayObject[]> {
@@ -123,13 +121,13 @@ export async function fetchPatrolDayObjects(date?: string): Promise<PatrolDayObj
     `/patrol/day/objects${query}`,
   )
   if (!data?.ok) return []
-  return (data.items ?? []).map(row => ({
+  return Promise.all((data.items ?? []).map(async row => ({
     objId: String(row.obj_id ?? ''),
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: snapshotUrl(row.snapshot_path as string | null),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
     snapshotScore: Number(row.snapshot_score ?? 0),
-  }))
+  })))
 }
 
 export async function fetchPatrolSubjectAppearances(
@@ -161,6 +159,77 @@ export async function fetchPatrolSubjectAppearances(
     }))
   }
   return out
+}
+
+export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBundle | null> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  const data = await getJson<{
+    ok: boolean
+    date: string
+    stats: Record<string, unknown>
+    events: Record<string, unknown>[]
+    objects: Record<string, unknown>[]
+    presences: Record<string, unknown>[]
+  }>(`/patrol/day/bundle${query}`)
+  if (!data?.ok) return null
+
+  const persons = await Promise.all((data.events ?? []).map(async row => ({
+    persId: String(row.pers_id ?? ''),
+    status: (row.status === 'identified' ? 'identified' : 'person') as PatrolPersonStatus,
+    idenCode: row.iden_code ? String(row.iden_code) : null,
+    displayName: String(row.display_name ?? row.pers_id ?? ''),
+    fullName: row.full_name ? String(row.full_name) : null,
+    employeeCode: row.employee_code ? String(row.employee_code) : null,
+    contractor: row.contractor ? String(row.contractor) : null,
+    firstSeen: Number(row.first_seen ?? 0),
+    lastSeen: Number(row.last_seen ?? 0),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+  })))
+
+  const objects = await Promise.all((data.objects ?? []).map(async row => ({
+    objId: String(row.obj_id ?? ''),
+    firstSeen: Number(row.first_seen ?? 0),
+    lastSeen: Number(row.last_seen ?? 0),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+    snapshotScore: Number(row.snapshot_score ?? 0),
+  })))
+
+  const presences = (data.presences ?? []).map(row => ({
+    id: Number(row.id ?? 0),
+    subjectId: String(row.subject_id ?? ''),
+    cameraId: String(row.camera_id ?? ''),
+    zoneId: row.zone_id ? String(row.zone_id) : null,
+    startedAt: Number(row.started_at ?? 0),
+    endedAt: Number(row.ended_at ?? 0),
+    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
+    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
+    presenceSeq: Number(row.presence_seq ?? 1),
+    tier: (row.tier === 'identity' ? 'identity' : row.tier === 'object' ? 'object' : 'person') as PatrolDayPresence['tier'],
+    displayName: String(row.display_name ?? row.subject_id ?? ''),
+    sourceCameras: Array.isArray(row.source_cameras)
+      ? (row.source_cameras as string[])
+      : row.camera_id
+        ? [String(row.camera_id)]
+        : [],
+  }))
+
+  const statsRow = data.stats ?? {}
+  const stats: PatrolDayStats = {
+    date: data.date,
+    workersStandard: Number(statsRow.workers_standard ?? 0),
+    personCount: Number(statsRow.person_count ?? 0),
+    identityCount: Number(statsRow.identity_count ?? 0),
+    encountersStandard: Number(statsRow.encounters_standard ?? 0),
+    unassignedObservations: Number(statsRow.unassigned_observations ?? 0),
+  }
+
+  return {
+    date: data.date,
+    stats,
+    persons,
+    objects,
+    presences,
+  }
 }
 
 export async function fetchPatrolDayStats(date?: string): Promise<PatrolDayStats | null> {

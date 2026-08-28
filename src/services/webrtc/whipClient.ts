@@ -198,6 +198,28 @@ function resolveResourceUrl(endpoint: string, location: string | null): string |
   }
 }
 
+function readEnv(key: string): string | undefined {
+  const raw = import.meta.env[key as keyof ImportMetaEnv]
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
+}
+
+function whipAuthHeaders(): Record<string, string> {
+  const user = readEnv('VITE_WHIP_USER')
+  const pass = readEnv('VITE_WHIP_PASS')
+  if (!user || !pass) return {}
+  return { Authorization: `Basic ${btoa(`${user}:${pass}`)}` }
+}
+
+function whipFetchInit(init?: RequestInit): RequestInit {
+  return {
+    ...init,
+    headers: {
+      ...whipAuthHeaders(),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  }
+}
+
 export async function startWhipPublisher(
   options: WhipPublisherOptions,
 ): Promise<WhipPublisher> {
@@ -269,11 +291,11 @@ export async function startWhipPublisher(
 
   let response: Response
   try {
-    response = await fetch(endpoint, {
+    response = await fetch(endpoint, whipFetchInit({
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
       body: localSdp,
-    })
+    }))
   } catch (err) {
     pc.close()
     const msg = err instanceof Error ? err.message : 'Không gọi được endpoint WHIP.'
@@ -317,7 +339,7 @@ export async function startWhipPublisher(
     if (resourceUrl) {
       try {
         // keepalive: kịp báo server dừng ngay cả khi tab đang đóng.
-        await fetch(resourceUrl, { method: 'DELETE', keepalive: true })
+        await fetch(resourceUrl, whipFetchInit({ method: 'DELETE', keepalive: true }))
       } catch {
         // Server tự dọn session khi ICE timeout.
       }

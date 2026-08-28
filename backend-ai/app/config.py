@@ -13,6 +13,28 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    env: str = "development"
+    jwt_secret: str = "change-me-in-production"
+    jwt_ttl_sec: int = 86_400
+    patrol_auth_disabled: bool = False
+    patrol_auth_users: str = "admin:admin123:admin,hr:hr123:hr,viewer:view123:viewer"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,https://duncan882022.github.io"
+    patrol_embed_key: str = ""
+    patrol_retention_days: int = 90
+    hc01_rtsp_url: str = ""
+    whip_user: str = ""
+    whip_pass: str = ""
+    analyze_max_b64_len: int = 5_000_000
+    analyze_max_decode_dim: int = 4096
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.env.strip().lower() in {"production", "prod"}
+
     detection_fps: float = 5.0
     stream_fps: float = 12.0
 

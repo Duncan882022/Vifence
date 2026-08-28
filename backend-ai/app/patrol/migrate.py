@@ -1,0 +1,37 @@
+"""Migration idempotent patrol DB — user_version → v3."""
+
+from __future__ import annotations
+
+import sqlite3
+
+
+def migrate_to_v3(conn: sqlite3.Connection) -> None:
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 3:
+        return
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          action      TEXT NOT NULL,
+          actor       TEXT NOT NULL,
+          subject_id  TEXT,
+          meta_json   TEXT NOT NULL DEFAULT '{}',
+          created_at  REAL NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_audit_log_created ON audit_log(created_at)"
+    )
+
+    cols = {
+        str(r[1])
+        for r in conn.execute("PRAGMA table_info(enroll_sessions)").fetchall()
+    }
+    if "consented_at" not in cols:
+        conn.execute("ALTER TABLE enroll_sessions ADD COLUMN consented_at REAL")
+
+    conn.execute("PRAGMA user_version=3")
+    conn.commit()

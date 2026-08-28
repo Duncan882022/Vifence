@@ -131,12 +131,31 @@ function whipPublishers(): Set<string> {
   return new Set(raw.split(',').map(s => s.trim()).filter(Boolean))
 }
 
+/** HC-02 ingest — `VITE_HELMET_HC02_INGEST=whip|legacy-mobile`. */
+function hc02IngestKind(): HelmetIngestKind {
+  const explicit = readEnv('VITE_HELMET_HC02_INGEST')
+  if (explicit === 'legacy-mobile') return 'legacy-mobile'
+  if (explicit === 'whip') {
+    return isHelmetWebrtcAvailable() ? 'whip' : 'legacy-mobile'
+  }
+  // Production default: WHIP khi MediaMTX sẵn sàng.
+  return isHelmetWebrtcAvailable() ? 'whip' : 'legacy-mobile'
+}
+
 /**
  * Cấu hình ingest của một mũ.
  * Khi chưa có MediaMTX, helmet WHIP rơi về `legacy-mobile` để demo cũ vẫn chạy.
  */
 export function getHelmetIngest(helmetId: string): HelmetIngestConfig {
   const path = readEnv(`VITE_${helmetId.replace('-', '')}_PATH`) ?? defaultHelmetPath(helmetId)
+
+  if (helmetId === 'HC-02' && whipPublishers().has('HC-02')) {
+    return {
+      helmetId,
+      kind: hc02IngestKind(),
+      path,
+    }
+  }
 
   if (whipPublishers().has(helmetId)) {
     return {
