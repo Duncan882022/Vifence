@@ -218,14 +218,14 @@ def _assign_patrol_person_identity(
             face_emb=face_emb,
         )
         cached = peek_track_lifecycle(camera_id, track_id)
-        peek_id = peek_patrol_track_identity(camera_id, track_id) or ""
+        worker_id = peek_patrol_track_identity(camera_id, track_id)
         if borrowed:
             worker_id, worker_name = borrowed
         elif cached and cached.worker_id:
-            worker_id = cached.worker_id or peek_id
+            worker_id = cached.worker_id or worker_id
             worker_name = cached.worker_name
-        elif peek_id:
-            worker_id = peek_id
+        else:
+            worker_name = ""
         if worker_id and not worker_name:
             from .patrol_entity import resolve_patrol_worker_display_name
 
