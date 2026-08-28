@@ -11,6 +11,11 @@ import {
 } from '../services/vmsDetections.service'
 import { clearVmsDetectionOverlayFrame } from '../utils/liveOverlaySync'
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
+import { isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+
+/** HC-* / DR-* — poll nhanh hơn demo cam để ROI bám chuyển động. */
+const PATROL_VMS_DETECTIONS_POLL_MS = 280
+const DEFAULT_VMS_DETECTIONS_POLL_MS = 450
 
 export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDetectionFeed {
   const feedRef = useRef<{ stop: () => void } | null>(null)
@@ -35,6 +40,9 @@ export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDete
     feedRef.current = createDetectionsFeed({
       cameraId,
       backendUrl: getVmsBackendUrl(),
+      pollIntervalMs: isPatrolMetricsCameraId(cameraId)
+        ? PATROL_VMS_DETECTIONS_POLL_MS
+        : DEFAULT_VMS_DETECTIONS_POLL_MS,
       onBeforeSnapshot: () => clearVmsDetectionOverlayFrame(cameraId),
       onSnapshot: setSnapshot,
       onStatusChange: (next, msg) => {
