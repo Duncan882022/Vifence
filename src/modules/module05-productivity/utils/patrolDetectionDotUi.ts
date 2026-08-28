@@ -14,7 +14,9 @@ export function resolveDetectionDotTier(
   dot: Pick<DetectionDot, 'tier' | 'verified' | 'objectId'>,
 ): PatrolTier {
   if (dot.tier === 'object') return 'object'
-  if (dot.tier === 'identity' && dot.verified) return 'identity'
+  // Flycam tầm cao — tier identity nhưng không badge định danh trên map.
+  if (dot.tier === 'identity' && dot.verified === false) return 'person'
+  if (dot.tier === 'identity') return 'identity'
   if (dot.verified) return 'identity'
   if (dot.tier === 'person') return 'person'
   const oid = dot.objectId?.trim() ?? ''
