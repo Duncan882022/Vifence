@@ -14,8 +14,6 @@ import { isPatrolRelativeGpsCamera } from './patrolGpsConfig'
 const M_PER_DEG_LAT = 111_320
 const GPS_DEFAULT_ACCURACY_M = 8
 const MAX_PREDICT_DT_S = 0.5
-/** Giới hạn drift tương đối (~1 km) — phủ polygon công trường rộng. */
-const MAX_RELATIVE_OFFSET_M = 1000
 
 export type HelmetPositionMethod =
   | 'raw'
@@ -176,16 +174,9 @@ const ekfByHelmet = new Map<string, HelmetEkf>()
 /** Mốc GPS thật lần đầu — delta cộng vào PATROL_SITE_CENTER. */
 const gpsAnchorByHelmet = new Map<string, { lat: number; lng: number }>()
 
-function clampRelativeOffsetMeters(eastM: number, northM: number): [number, number] {
-  const dist = Math.hypot(eastM, northM)
-  if (dist <= MAX_RELATIVE_OFFSET_M || dist <= 1e-6) return [eastM, northM]
-  const scale = MAX_RELATIVE_OFFSET_M / dist
-  return [eastM * scale, northM * scale]
-}
-
 /**
  * Demo GPS: vị trí hiển thị = site center + (GPS hiện tại − GPS mốc ban đầu).
- * Lần fix đầu → neo tại center; đi bộ ở Hà Nội vẫn thấy di chuyển trong Cầu Sông Hốt.
+ * Không giới hạn km — delta thiết bị áp dụng nguyên; clamp chỉ ở polygon.
  */
 export function mapRelativeGpsToSite(
   cameraId: string,
@@ -199,10 +190,9 @@ export function mapRelativeGpsToSite(
   }
 
   const [dEast, dNorth] = latLonToEnu(lat, lng, anchor.lat, anchor.lng)
-  const [cEast, cNorth] = clampRelativeOffsetMeters(dEast, dNorth)
   return enuToLatLon(
-    cEast,
-    cNorth,
+    dEast,
+    dNorth,
     PATROL_SITE_CENTER[0],
     PATROL_SITE_CENTER[1],
   )
