@@ -2,6 +2,12 @@ import { useEffect } from 'react'
 import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
 import { preloadFaceDetection } from '@/modules/module02-training/services/faceDetection.service'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+
+/** Sidebar patrol — rộng hơn bản cũ ~10%. */
+const PATROL_SIDEBAR_LG = 'lg:w-[141px]'
+const PATROL_SIDEBAR_COMPACT = 'max-lg:landscape:w-[119px]'
+const PATROL_SIDEBAR_COMPACT_PX = 119
 
 export interface PatrolCameraPanelProps {
   selectedId?: string
@@ -22,7 +28,8 @@ export interface PatrolCameraPanelProps {
 
 /**
  * Module 05 — bọc TrainingCameraPanel với layout patrol + preload AI person detect.
- * Mobile: stack dọc 16:9, scroll theo trang — không cap max-h viewport.
+ * Desktop / iPad: 1 hàng camera cố định, scroll trong Tier 2.
+ * Phone dọc: stack 16:9, scroll theo trang.
  */
 export function PatrolCameraPanel({
   selectedId,
@@ -38,6 +45,9 @@ export function PatrolCameraPanel({
   isMobileLayout = false,
 }: PatrolCameraPanelProps) {
   const isCompactLayout = isCompactLayoutProp ?? isMobileLayout
+  const isTablet = useMediaQuery('(min-width: 640px) and (max-width: 1023px)')
+  /** Chỉ phone nhỏ scroll trang; iPad (dọc/ngang) scroll lồng trong Tier 2. */
+  const mobileStackedNoScroll = isCompactLayout && !isTabletLandscape && !isTablet
 
   useEffect(() => {
     preloadFaceDetection()
@@ -51,19 +61,17 @@ export function PatrolCameraPanel({
       cameras={cameras}
       defaultCameraIds={defaultCameraIds}
       defaultSidebarOpen={false}
-      desktopMaxVisibleRows={2}
-      sidebarOpenClass="lg:w-[128px]"
-      sidebarCompactClass="max-lg:landscape:w-[108px]"
+      desktopMaxVisibleRows={1}
+      sidebarOpenClass={PATROL_SIDEBAR_LG}
+      sidebarCompactClass={PATROL_SIDEBAR_COMPACT}
+      sidebarCompactPx={PATROL_SIDEBAR_COMPACT_PX}
+      sidebarThumbCompact
+      sidebarThumbFullWidth
       aspectVideoGrid
       mobileCompactVideo={isCompactLayout}
-      mobileStackedNoScroll={isCompactLayout && !isTabletLandscape}
+      mobileStackedNoScroll={mobileStackedNoScroll}
       preferCompactVideo={isTabletLandscape}
       streamWhenOffline
-      compactVideoMaxClass={
-        isTabletLandscape
-          ? 'max-h-[min(36dvh,320px)]'
-          : undefined
-      }
       filterTabs={filterTabs}
       filterFn={filterFn}
       groupFn={groupFn}
