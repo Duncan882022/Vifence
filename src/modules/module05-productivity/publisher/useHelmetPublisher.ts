@@ -24,6 +24,9 @@ import {
 } from '@/services/helmetTelemetrySocket'
 import { setPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import {
+  fuseHelmetPose,
+} from '@/modules/module05-productivity/utils/positionEngine'
+import {
   clearHelmetLocalBroadcast,
   setHelmetLocalBroadcast,
 } from '@/services/helmetLocalBroadcast'
@@ -107,6 +110,8 @@ export function useHelmetPublisher({
   const [stats, setStats] = useState<WhipPublishStats>(EMPTY_WHIP_STATS)
   const [gps, setGps] = useState<HelmetGpsState | null>(null)
   const gpsRef = useRef<HelmetGpsState | null>(null)
+  /** GPS thô từ thiết bị — gửi telemetry để backend tự map tâm + delta. */
+  const rawGpsRef = useRef<{ lat: number; lng: number; accuracyM: number; updatedAt: number } | null>(null)
   const hasLiveGpsRef = useRef(false)
   const [headingDeg, setHeadingDeg] = useState<number | null>(null)
   const [telemetryConnected, setTelemetryConnected] = useState(false)
@@ -131,20 +136,57 @@ export function useHelmetPublisher({
     sample: HelmetGpsState,
     opts?: { pushTelemetry?: boolean },
   ) => {
-    gpsRef.current = sample
-    setGps(sample)
+    if (sample.isDefault) {
+      gpsRef.current = sample
+      setGps(sample)
+      setPatrolHelmetGps({
+        cameraId: helmetId,
+        lat: sample.lat,
+        lng: sample.lng,
+        updatedAt: sample.updatedAt,
+        isDefault: true,
+      })
+      return
+    }
+
+    rawGpsRef.current = {
+      lat: sample.lat,
+      lng: sample.lng,
+      accuracyM: sample.accuracyM,
+      updatedAt: sample.updatedAt,
+    }
+
+    const fused = fuseHelmetPose({
+      cameraId: helmetId,
+      lat: sample.lat,
+      lng: sample.lng,
+      accuracyM: sample.accuracyM,
+      ts: sample.updatedAt,
+    })
+    if (fused.lat == null || fused.lng == null) return
+
+    const mapped: HelmetGpsState = {
+      lat: fused.lat,
+      lng: fused.lng,
+      accuracyM: sample.accuracyM,
+      updatedAt: sample.updatedAt,
+      isDefault: false,
+    }
+    gpsRef.current = mapped
+    setGps(mapped)
     setPatrolHelmetGps({
       cameraId: helmetId,
       lat: sample.lat,
       lng: sample.lng,
-      accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+      accuracyM: sample.accuracyM,
       updatedAt: sample.updatedAt,
     })
     if (opts?.pushTelemetry !== false) {
+      // Backend tự map: mốc = fix đầu, sự kiện = tâm + delta lat/lng thiết bị.
       telemetryRef.current?.send({
         lat: sample.lat,
         lng: sample.lng,
-        accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+        accuracyM: sample.accuracyM,
         heading: getLastDeviceHeading(),
         wallclockMs: sample.updatedAt,
       })
@@ -366,6 +408,7 @@ export function useHelmetPublisher({
     if (!broadcasting) {
       hasLiveGpsRef.current = false
       gpsRef.current = null
+      rawGpsRef.current = null
       setGps(null)
       return
     }
@@ -390,14 +433,14 @@ export function useHelmetPublisher({
       onStateChange: setTelemetryConnected,
     })
     telemetryRef.current = sender
-    if (gpsRef.current) {
-      const sample = gpsRef.current
+    const raw = rawGpsRef.current
+    if (raw) {
       sender.send({
-        lat: sample.lat,
-        lng: sample.lng,
-        accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+        lat: raw.lat,
+        lng: raw.lng,
+        accuracyM: raw.accuracyM,
         heading: getLastDeviceHeading(),
-        wallclockMs: sample.updatedAt,
+        wallclockMs: raw.updatedAt,
       })
     }
 
@@ -408,14 +451,14 @@ export function useHelmetPublisher({
   }, [helmetId, broadcasting, patrolAuthReady])
 
   useEffect(() => {
-    if (!telemetryConnected || !gpsRef.current) return
-    const sample = gpsRef.current
+    if (!telemetryConnected || !rawGpsRef.current) return
+    const raw = rawGpsRef.current
     telemetryRef.current?.send({
-      lat: sample.lat,
-      lng: sample.lng,
-      accuracyM: sample.isDefault ? undefined : sample.accuracyM,
+      lat: raw.lat,
+      lng: raw.lng,
+      accuracyM: raw.accuracyM,
       heading: getLastDeviceHeading(),
-      wallclockMs: sample.updatedAt,
+      wallclockMs: raw.updatedAt,
     })
   }, [telemetryConnected])
 

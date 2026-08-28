@@ -7,6 +7,7 @@
  * đúng vị trí của mũ kia.
  */
 import { fuseHelmetPose } from '@/modules/module05-productivity/utils/positionEngine'
+import { PATROL_SITE_CENTER } from '@/modules/module05-productivity/data/patrolSiteMap'
 
 export interface PatrolHelmetGpsSnapshot {
   cameraId: string
@@ -14,8 +15,10 @@ export interface PatrolHelmetGpsSnapshot {
   lng: number
   accuracyM?: number
   updatedAt: number
-  /** raw | ekf | ekf_map | map */
+  /** raw | ekf | ekf_map | map | relative | site_anchor */
   positionMethod?: string
+  /** Tâm công trường — không ghi mốc anchor GPS thật. */
+  isDefault?: boolean
 }
 
 const FRESH_TTL_MS = 45_000
@@ -25,6 +28,18 @@ const byCamera = new Map<string, PatrolHelmetGpsSnapshot>()
 const listeners = new Set<(snap: PatrolHelmetGpsSnapshot) => void>()
 
 export function setPatrolHelmetGps(snapshot: PatrolHelmetGpsSnapshot): void {
+  if (snapshot.isDefault) {
+    const next: PatrolHelmetGpsSnapshot = {
+      ...snapshot,
+      lat: PATROL_SITE_CENTER[0],
+      lng: PATROL_SITE_CENTER[1],
+      positionMethod: 'site_anchor',
+    }
+    byCamera.set(snapshot.cameraId, next)
+    listeners.forEach(fn => fn(next))
+    return
+  }
+
   const fused = fuseHelmetPose({
     cameraId: snapshot.cameraId,
     lat: snapshot.lat,
