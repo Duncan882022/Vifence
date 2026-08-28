@@ -124,12 +124,38 @@ export function getOverlayFitForFeed(feedKey: CameraFeedKey): 'cover' | 'contain
   return 'cover'
 }
 
+export type CameraStreamType = 'fixed' | 'bodycam' | 'flycam' | 'mobile'
+
+/** Suy ra streamType từ camera id — dùng khi catalog không truyền streamType. */
+export function inferCameraStreamType(cameraId: string): CameraStreamType {
+  const id = cameraId.trim().toUpperCase()
+  if (id.startsWith('HC-') || id.startsWith('BC-')) return 'bodycam'
+  if (id.startsWith('DR-') || id.startsWith('FC-')) return 'flycam'
+  if (id.startsWith('MOB-')) return 'mobile'
+  return 'fixed'
+}
+
+/** streamType tường minh ưu tiên; nếu `fixed` thì suy ra từ id / feedKey. */
+export function resolveCameraStreamType(
+  cameraId: string,
+  streamType: CameraStreamType = 'fixed',
+): CameraStreamType {
+  if (streamType !== 'fixed') return streamType
+  const inferred = inferCameraStreamType(cameraId)
+  if (inferred !== 'fixed') return inferred
+  const feedKey = getFeedKeyForCamera(cameraId)
+  if (feedKey?.startsWith('bodycam-')) return 'bodycam'
+  if (feedKey?.startsWith('flycam-')) return 'flycam'
+  return 'fixed'
+}
+
 /** object-position khi dùng object-cover — Cam 03/04 dùng contain nên luôn center. */
 export function getVideoObjectPositionForCamera(
   cameraId: string,
-  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'fixed',
+  streamType: CameraStreamType = 'fixed',
 ): 'center' | 'bottom' {
-  if (streamType === 'bodycam' || streamType === 'mobile') return 'center'
+  const resolved = resolveCameraStreamType(cameraId, streamType)
+  if (resolved === 'bodycam' || resolved === 'mobile') return 'center'
   const feedKey = getFeedKeyForCamera(cameraId)
   if (feedKey === 'ocp1-a-03' || feedKey === 'ocp1-a-04') return 'center'
   return 'center'
@@ -137,9 +163,10 @@ export function getVideoObjectPositionForCamera(
 
 export function getVideoObjectFitForCamera(
   cameraId: string,
-  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'fixed',
+  streamType: CameraStreamType = 'fixed',
 ): 'cover' | 'contain' {
-  if (streamType === 'bodycam' || streamType === 'mobile') return 'contain'
+  const resolved = resolveCameraStreamType(cameraId, streamType)
+  if (resolved === 'bodycam' || resolved === 'mobile') return 'contain'
   const feedKey = getFeedKeyForCamera(cameraId)
   if (feedKey) return getOverlayFitForFeed(feedKey)
   return 'cover'
@@ -204,4 +231,12 @@ export function getBestStreamUrl(cameraId: string): string | undefined {
     if (host.endsWith('github.io')) return mp4 ?? hls
   }
   return hls ?? mp4
+}
+
+/**
+ * Nguồn stream thống nhất cho mọi module — tránh Module 02 phát MP4 loop
+ * trong khi Module 03/05 + VMS worker dùng HLS cùng cameraId (bbox lệch).
+ */
+export function resolveCameraStreamUrl(cameraId: string): string | undefined {
+  return getBestStreamUrl(cameraId)
 }

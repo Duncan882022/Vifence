@@ -41,8 +41,8 @@ export function PlaybackVideoFrame({
 }: PlaybackVideoFrameProps) {
   const location = getLocation(cam)
   const isEventClip = selectedRecord?.type === 'event'
-  const playbackFit = getVideoObjectFitForCamera(cam.id)
-  const playbackObjectPosition = getVideoObjectPositionForCamera(cam.id)
+  const playbackFit = getVideoObjectFitForCamera(cam.id, cam.streamType)
+  const playbackObjectPosition = getVideoObjectPositionForCamera(cam.id, cam.streamType)
   const clipSec = selectedRecord?.clipDurationSec ?? 3
   const eventMeta = activeEventRecord ?? null
   const SeverityIcon = eventMeta ? SEVERITY_ICONS[eventMeta.severity] : null

@@ -4,7 +4,7 @@
  */
 import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { mapBackendBboxToOverlay, resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlayLayoutTick'
 import { passesOverlayConfidence } from '@/modules/module03-safety/utils/overlayCoverage'
 import { PATROL_TIER_RANK, patrolTierToken } from '../utils/patrolTierTokens'
@@ -142,14 +142,8 @@ export function PatrolPersonRoiOverlay({
   const tracks = usePatrolPersonRoiTracks(cameraId)
   const layoutTick = useOverlayLayoutTick(videoRef)
   const overlayFrameSize = useMemo(() => {
-    if (frameWidth > 0 && frameHeight > 0) {
-      return { width: frameWidth, height: frameHeight }
-    }
     const video = videoRef.current
-    if (video?.videoWidth && video.videoHeight) {
-      return { width: video.videoWidth, height: video.videoHeight }
-    }
-    return { width: 0, height: 0 }
+    return resolveOverlayAnalyzeFrameSize(video, frameWidth, frameHeight)
   }, [frameWidth, frameHeight, videoRef, layoutTick])
 
   if (tracks.length === 0 || overlayFrameSize.width <= 0 || overlayFrameSize.height <= 0) {
