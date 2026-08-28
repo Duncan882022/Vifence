@@ -261,11 +261,6 @@ export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   return key
 }
 
-/** @deprecated Dùng `resolvePatrolAppearanceSubjectId`. */
-export function patrolEventAppearanceMasterId(event: PatrolEvent): string {
-  return resolvePatrolAppearanceSubjectId(event)
-}
-
 /** Gộp list — giữ snapshot mới nhất theo master key. */
 export function dedupePatrolEventsByMasterEntity(events: PatrolEvent[]): PatrolEvent[] {
   const byKey = new Map<string, PatrolEvent>()

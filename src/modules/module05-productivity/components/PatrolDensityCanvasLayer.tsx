@@ -6,7 +6,6 @@ import L from 'leaflet'
 import { useMap } from 'react-leaflet'
 import { useEffect, useState } from 'react'
 import type { PatrolZone } from '../data/patrolTypes'
-import { PATROL_DETECTION_DOTS } from '../data/patrolDetectionData'
 import { isPointInSiteBoundary, PATROL_SITE_CLIP_RING } from '../data/patrolSiteGeometry'
 import { PATROL_GPS_ZONES, patrolZoneInteriorPoint } from '../data/patrolSiteMap'
 import {
@@ -69,24 +68,6 @@ function buildHeatSources(
 
   if (layer === 'people' || layer === 'combined') {
     mergeGridSources(sources, getPatrolHeatSources(heatWindowMs, zoom))
-  }
-
-  if (sources.length === 0) {
-    for (const dot of PATROL_DETECTION_DOTS) {
-      const zone = zoneMap.get(dot.zoneId)
-      if (!zone || zone.coverage !== 'VISITED') continue
-      const count = resolveCount(zone, layer, countMode)
-      if (count === 0) continue
-      const zoneT = count / maxCount
-      const typeW = dot.type === 'vehicle' ? 0.85 : dot.type === 'person' ? 0.55 : 0.4
-      pushSource(
-        sources,
-        dot.position[0],
-        dot.position[1],
-        (0.18 + zoneT * 0.55) * typeW,
-        baseR * (0.75 + typeW * 0.45),
-      )
-    }
   }
 
   const gridSteps = [0.25, 0.5, 0.75]

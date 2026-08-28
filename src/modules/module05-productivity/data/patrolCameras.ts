@@ -126,14 +126,13 @@ export function groupPatrolCamerasForSidebar(
 export function applyPatrolCameraStreamStatus(
   cameras: TrainingCamera[],
   perCamera: PatrolHelmetCameraMetricsSlice[],
-  hc02MobileOnline = false,
   framesLiveById?: ReadonlyMap<string, boolean>,
 ): TrainingCamera[] {
   return cameras.map(cam => {
     const { online, framesLive, streamOfflineConfirmed } = resolvePatrolCameraOnlineState(
       cam.id,
       perCamera,
-      { hc02MobileOnline, framesLiveById },
+      { framesLiveById },
     )
     return {
       ...cam,

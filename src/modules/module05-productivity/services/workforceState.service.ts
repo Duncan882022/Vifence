@@ -45,8 +45,4 @@ export async function fetchWorkforceSnapshot(
   }
 }
 
-export function resetWorkforceApiAvailability(): void {
-  apiAvailable = null
-}
-
 export { EMPTY_WORKFORCE_SNAPSHOT }

@@ -15,7 +15,7 @@ import {
 } from '../data/patrolSiteMap'
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { haversineM } from './patrolDetectionMapOffset'
-import { offsetLatLngByMeters } from './patrolLivePersonDots'
+import { offsetLatLngByMeters } from './patrolDetectionMapOffset'
 
 /** Khoảng cách tối thiểu giữa icon mũ trên bản đồ (m). */
 export const PATROL_HELMET_MIN_DISPLAY_SEPARATION_M = 55

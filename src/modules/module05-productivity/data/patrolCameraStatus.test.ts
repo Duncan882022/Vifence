@@ -51,11 +51,10 @@ describe('applyPatrolCameraStreamStatus', () => {
     expect(rows.every(r => r.streamOfflineConfirmed === false)).toBe(true)
   })
 
-  it('HC-02 phát từ điện thoại cùng tab vẫn tính là online', () => {
+  it('HC-02 phát từ mobile (đã merge perCamera) vẫn online', () => {
     const [row] = applyPatrolCameraStreamStatus(
       [cam('HC-02')],
-      [slice('HC-02', false)],
-      true,
+      [slice('HC-02', true)],
     )
     expect(row.status).toBe('online')
     expect(row.streamOfflineConfirmed).toBe(false)
@@ -66,7 +65,6 @@ describe('applyPatrolCameraStreamStatus', () => {
     const [row] = applyPatrolCameraStreamStatus(
       [cam('HC-01')],
       [slice('HC-01', false)],
-      false,
       frames,
     )
     expect(row.status).toBe('online')

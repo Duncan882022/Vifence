@@ -1,10 +1,8 @@
 /**
- * HC-02 live map dots — lịch sử theo từng người (ID ổn định), chỉ cập nhật vị trí khi gặp lại.
+ * HC-02 live map dots — GPS bridge + registry, không poll metrics trùng page.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { watchDeviceGps } from '@/modules/module02-training/services/deviceGps.service'
-import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 import {
   getPatrolHelmetGps,
   getPatrolHelmetGpsLastKnown,
@@ -23,10 +21,8 @@ import {
 import type { DetectionDot } from '../data/patrolDetectionData'
 import { PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
-import { fetchPatrolHelmetMetrics } from '../services/patrolLiveEvents.service'
 
 const HC02 = 'HC-02'
-const POLL_MS = 2500
 
 function isValidGps(lat: unknown, lng: unknown): lat is number {
   return typeof lat === 'number'
@@ -36,23 +32,13 @@ function isValidGps(lat: unknown, lng: unknown): lat is number {
     && !(lat === 0 && lng === 0)
 }
 
-function asGpsPair(lat: unknown, lng: unknown): [number, number] | null {
-  if (!isValidGps(lat, lng)) return null
-  return [lat, lng as number]
-}
-
 export interface Hc02LiveMapState {
-  /** GPS thật từ thiết bị / backend */
   hasLiveGps: boolean
-  /** Stream online nhưng chưa có GPS — dùng PATROL_SITE_CENTER */
   usingDefaultGps: boolean
-  /** Có tọa độ hiển thị trên map (GPS thật hoặc mặc định) */
   hasMapPosition: boolean
   lat: number | null
   lng: number | null
-  /** Số người trên frame hiện tại */
   personCount: number
-  /** Tổng dot lịch sử trên map (unique IDs) */
   historicalDotCount: number
   dots: DetectionDot[]
   waitingGpsForDots: boolean
@@ -93,7 +79,6 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     }
 
     applyMobileSnap(getPatrolMobileLiveSnapshot(HC02))
-
     return subscribePatrolMobileLiveSnapshot(snap => {
       if (!snap || snap.cameraId !== HC02) return
       applyMobileSnap(snap)
@@ -124,37 +109,6 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       if (snap.cameraId !== HC02) return
       applyGps(snap.lat, snap.lng)
     })
-  }, [streamOnline])
-
-  useEffect(() => {
-    if (!streamOnline) return
-    let cancelled = false
-
-    const poll = async () => {
-      const backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl()
-      if (!backendUrl) return
-      try {
-        const metrics = await fetchPatrolHelmetMetrics(HC02, backendUrl)
-        if (cancelled || !metrics) return
-        const pair = asGpsPair(metrics.gps_lat, metrics.gps_lng)
-        if (pair) applyGps(pair[0], pair[1])
-        const mobile = getPatrolMobileLiveSnapshot(HC02)
-        if (mobile) {
-          setPersonCount(mobile.personCount)
-        } else {
-          setPersonCount(Math.max(0, Math.floor(Number(metrics.person_count ?? 0))))
-        }
-      } catch {
-        // giữ trạng thái cuối
-      }
-    }
-
-    void poll()
-    const t = window.setInterval(() => { void poll() }, POLL_MS)
-    return () => {
-      cancelled = true
-      window.clearInterval(t)
-    }
   }, [streamOnline])
 
   useEffect(() => {

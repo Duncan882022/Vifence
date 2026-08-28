@@ -36,8 +36,7 @@ import {
   resolveDetectionDotTier,
 } from '../utils/patrolDetectionDotUi'
 import { patrolTierToken } from '../utils/patrolTierTokens'
-import type { RouteHistory } from '../services/usePatrolWebSocket'
-import type { CameraPositions } from '../services/usePatrolWebSocket'
+import type { CameraPositions, RouteHistory } from '../hooks/usePatrolLiveMapState'
 import {
   formatDisplayValue,
   resolveCount,

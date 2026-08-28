@@ -19,10 +19,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useTabletLandscape } from '@/hooks/useTabletLandscape'
 import { useAppStore } from '@/store/app.store'
 import {
-  getPatrolMobileLiveSnapshot,
-  subscribePatrolMobileLiveSnapshot,
-} from '@/services/patrolMobileMetricsBridge'
-import {
   getPatrolCameraFramesLiveMap,
   subscribePatrolCameraFramesLive,
 } from '@/services/patrolCameraFrameBridge'
@@ -32,22 +28,15 @@ import {
 import {
   DEFAULT_PATROL_CAMERA_IDS,
   DEFAULT_PATROL_GRID_CAMERA_IDS,
-  PATROL_CAMERAS,
   PATROL_CAMERA_FILTER_TABS,
-  applyPatrolCameraStreamStatus,
   filterPatrolCameras,
   groupPatrolCamerasForSidebar,
   type PatrolCameraFilterTab,
 } from './data/patrolCameras'
+import { buildPatrolCamerasLive } from './data/buildPatrolCamerasLive'
 import { PATROL_DRONE_IDS } from './data/patrolDrones'
 import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
-import {
-  mergePatrolCamerasWithVisionLive,
-  applyPatrolHelmetEnvLive,
-  applyPatrolHelmetMobileLive,
-  applyPatrolUnifiedLiveRouting,
-} from './data/patrolHelmetStreams'
-import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
+import { usePatrolVisionStreams } from './hooks/usePatrolVisionStreams'
 import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
 import {
   getPatrolDefaultPlaybackDate,
@@ -233,7 +222,8 @@ export function Module05Page() {
   const patrolToday = getPatrolDefaultPlaybackDate() // ngày lịch VN 0h — không ca/kíp
   const patrolMinDate = getPatrolPlaybackMinDate()
   const [patrolViewDate, setPatrolViewDate] = useState(patrolToday)
-  const { cameras: visionCameras } = useCameras({ enabled: !isHelmetWebrtcAvailable() })
+  const legacyVision = !isHelmetWebrtcAvailable()
+  const visionCameras = usePatrolVisionStreams(legacyVision)
   // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
   // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.
   const patrolDefaultCameraIds = useMemo(
@@ -249,9 +239,6 @@ export function Module05Page() {
   const liveMetrics = usePatrolHelmetLiveMetrics(patrolStreamMetricsIds)
   const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
 
-  const [hc02MobileOnline, setHc02MobileOnline] = useState(
-    () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
-  )
   const [framesLiveTick, setFramesLiveTick] = useState(0)
 
   useEffect(() => {
@@ -264,30 +251,13 @@ export function Module05Page() {
     })
   }, [])
 
-  useEffect(() => {
-    return subscribePatrolMobileLiveSnapshot(snap => {
-      if (!snap || snap.cameraId !== 'HC-02') {
-        setHc02MobileOnline(false)
-        return
-      }
-      setHc02MobileOnline(Boolean(snap.streamOnline))
-    })
-  }, [])
-
   const patrolCamerasLive = useMemo(
-    () => applyPatrolCameraStreamStatus(
-      applyPatrolUnifiedLiveRouting(
-        applyPatrolHelmetMobileLive(
-          applyPatrolHelmetEnvLive(
-            mergePatrolCamerasWithVisionLive(PATROL_CAMERAS, visionCameras),
-          ),
-        ),
-      ),
+    () => buildPatrolCamerasLive(
+      visionCameras,
       liveMetrics.perCamera,
-      hc02MobileOnline,
       getPatrolCameraFramesLiveMap(),
     ),
-    [visionCameras, liveMetrics.perCamera, hc02MobileOnline, framesLiveTick],
+    [visionCameras, liveMetrics.perCamera, framesLiveTick],
   )
 
   useEffect(() => {
@@ -312,9 +282,9 @@ export function Module05Page() {
     () => buildPatrolHelmetOnlineById(
       patrolMapCameraIds,
       liveMetrics.perCamera,
-      { hc02MobileOnline, framesLiveById: getPatrolCameraFramesLiveMap() },
+      { framesLiveById: getPatrolCameraFramesLiveMap() },
     ),
-    [patrolMapCameraIds, liveMetrics.perCamera, hc02MobileOnline, framesLiveTick],
+    [patrolMapCameraIds, liveMetrics.perCamera, framesLiveTick],
   )
 
   const dayPresences = useMemo(
@@ -487,7 +457,6 @@ export function Module05Page() {
                 viewDate={patrolViewDate}
                 presences={dayPresences}
                 dayStats={dayStats.stats}
-                liveMetrics={liveMetrics}
                 workforce={workforceSnap}
                 flycamFlightModes={flycamFlightModes}
                 helmetOnlineById={helmetOnlineById}

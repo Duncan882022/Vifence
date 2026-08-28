@@ -16,11 +16,11 @@ import {
 import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
-import { usePatrolWebSocket } from '../services/usePatrolWebSocket'
+import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
 import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
-import type { PatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
 import type { PatrolDayPresence, PatrolDayStats } from '../services/patrolDayEvents.service'
 import type { PatrolFlightMode } from '../utils/patrolFlightMode'
+import { buildPatrolLiveZonesFromWorkforce } from '../utils/patrolLiveZones'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
 import { WorkforceObjectSheet } from './WorkforceObjectSheet'
 import {
@@ -155,7 +155,6 @@ export function PatrolDensityHeatmap({
   viewDate: _viewDate,
   presences,
   dayStats,
-  liveMetrics: _liveMetrics,
   workforce,
   flycamFlightModes,
   helmetOnlineById,
@@ -167,10 +166,8 @@ export function PatrolDensityHeatmap({
   patrolEvents?: PatrolEvent[]
   /** Ngày lịch VN đồng bộ với tab Sự kiện / playback. */
   viewDate?: string
-  /** Dữ liệu ngày + live — một poll từ Module05Page, không gọi hook trùng. */
   presences: PatrolDayPresence[]
   dayStats: PatrolDayStats
-  liveMetrics: PatrolHelmetLiveMetrics
   workforce: WorkforceSnapshot
   flycamFlightModes: Record<string, PatrolFlightMode>
   helmetOnlineById: Record<string, boolean>
@@ -193,7 +190,12 @@ export function PatrolDensityHeatmap({
     [workforce.objects],
   )
 
-  const { liveZones, cameraPositions, routeHistory } = usePatrolWebSocket('PATROL_LIVE')
+  const liveZones = useMemo(
+    () => buildPatrolLiveZonesFromWorkforce(workforce),
+    [workforce],
+  )
+
+  const { cameraPositions, routeHistory } = usePatrolLiveMapState()
   const hc02Live = useHc02LiveDetectionDots()
 
   const helmetDetectCountsById = useMemo(

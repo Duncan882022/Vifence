@@ -1,38 +1,20 @@
 /**
- * Live map positions — chỉ HC-01 + HC-02.
- * HC-02: GPS thật. HC-01: pin khu ZONE_A (không zigzag). HC-03…05 tạm ẩn.
+ * Vị trí live trên bản đồ tuần tra — GPS bridge HC-02 + pin HC-01.
+ * (Không phải WebSocket — tên cũ usePatrolWebSocket gây hiểu nhầm.)
  */
 import { useEffect, useRef, useState } from 'react'
 import { subscribePatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import type { PatrolZone } from '../data/patrolTypes'
-import { PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_HELMET_02_FALLBACK, PATROL_SITE_ZONE_SEED } from '../data/patrolSiteMap'
+import { PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 
 export type LivePatrolZone = PatrolZone
-
 export type CameraPositions = Record<string, [number, number]>
 export type RouteHistory = Record<string, [number, number][]>
 
 const MAX_HISTORY = 150
 const HC01_CAMERA_ID = 'HC-01'
 const HC02_CAMERA_ID = 'HC-02'
-
-function jitter(value: number, max: number): number {
-  if (max <= 0) return 0
-  const delta = Math.floor(Math.random() * 5) - 2
-  return Math.max(0, Math.min(max, value + delta))
-}
-
-function tickZones(zones: LivePatrolZone[]): LivePatrolZone[] {
-  return zones.map(z => {
-    if (z.coverage !== 'VISITED') return z
-    return {
-      ...z,
-      peopleCurrent: jitter(z.peopleCurrent, z.uniquePeople + 8),
-      vehiclesCurrent: jitter(z.vehiclesCurrent, z.uniqueVehicles + 3),
-    }
-  })
-}
 
 function buildInitialPositions(): CameraPositions {
   const positions: CameraPositions = {}
@@ -59,14 +41,10 @@ function appendRouteHistory(
   }
 }
 
-export function usePatrolWebSocket(_patrolId: string): {
-  liveZones: LivePatrolZone[]
+export function usePatrolLiveMapState(): {
   cameraPositions: CameraPositions
   routeHistory: RouteHistory
 } {
-  const [liveZones, setLiveZones] = useState<LivePatrolZone[]>(
-    () => PATROL_SITE_ZONE_SEED.map(z => ({ ...z })),
-  )
   const [cameraPositions, setCameraPositions] = useState<CameraPositions>(
     buildInitialPositions,
   )
@@ -86,7 +64,6 @@ export function usePatrolWebSocket(_patrolId: string): {
     setRouteHistory(prev => appendRouteHistory(prev, HC02_CAMERA_ID, pos))
   }
 
-  /* HC-01: giữ pin tại center công trường (offline khi cam tắt — không giả lập di chuyển) */
   useEffect(() => {
     const pin = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === HC01_CAMERA_ID)
     if (!pin) return
@@ -100,7 +77,6 @@ export function usePatrolWebSocket(_patrolId: string): {
     })
   }, [])
 
-  /* HC-02: GPS từ bridge thiết bị — poll backend do useHc02LiveDetectionDots / workforce. */
   useEffect(() => {
     return subscribePatrolHelmetGps(snap => {
       if (snap.cameraId !== HC02_CAMERA_ID) return
@@ -108,13 +84,5 @@ export function usePatrolWebSocket(_patrolId: string): {
     })
   }, [])
 
-  /* zone_count_updated ── every 3.5 s (chỉ khi bật polygon mock) */
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      setLiveZones(prev => tickZones(prev))
-    }, 3500)
-    return () => window.clearInterval(t)
-  }, [])
-
-  return { liveZones, cameraPositions, routeHistory }
+  return { cameraPositions, routeHistory }
 }

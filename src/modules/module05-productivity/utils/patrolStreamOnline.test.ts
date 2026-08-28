@@ -38,10 +38,8 @@ describe('patrolStreamOnline', () => {
     expect(state.streamOfflineConfirmed).toBe(false)
   })
 
-  it('HC-02 mobile cùng tab → online', () => {
-    const state = resolvePatrolCameraOnlineState('HC-02', [slice('HC-02', false)], {
-      hc02MobileOnline: true,
-    })
+  it('HC-02 online qua perCamera (mobile đã merge)', () => {
+    const state = resolvePatrolCameraOnlineState('HC-02', [slice('HC-02', true)])
     expect(state.online).toBe(true)
     expect(state.streamOfflineConfirmed).toBe(false)
   })
