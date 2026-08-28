@@ -1,5 +1,5 @@
 /**
- * Poll /patrol/workforce/state — temporary substitute for HELMET/OBJECT/POPULATION/EVENT WS.
+ * Poll /patrol/workforce/state — fallback khi WS /ws/patrol/live không khả dụng.
  */
 import { fetchPatrol, patrolBackendBase } from '@/services/patrolApiClient'
 import {

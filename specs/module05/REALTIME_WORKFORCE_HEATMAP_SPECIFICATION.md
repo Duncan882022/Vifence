@@ -194,8 +194,13 @@ Không hiển thị GPS/Observability/Objects chips trên chrome — thông tin 
 
 **Không** dùng tab Persons / raw "Phát hiện người".
 
-### 8.3. WebSocket channels (mục tiêu)
-`HELMET_STATE` · `OBJECT_STATE` · `POPULATION_STATE` · `EVENT`
+### 8.3. WebSocket channels
+
+**Đã triển khai:** `WS /ws/patrol/live?cameras=HC-01,HC-02&token=` — push `live_bundle` (metrics + workforce) ~2.5s + heartbeat 10s.
+
+FE: `createPatrolLiveFeed` → ưu tiên WS, fallback HTTP `GET /patrol/live/bundle`.
+
+Mục tiêu tách kênh (tương lai): `HELMET_STATE` · `OBJECT_STATE` · `POPULATION_STATE` · `EVENT`
 
 Frontend state (KV, không append detection vô hạn):
 
@@ -216,7 +221,7 @@ heatPoints = []
 | Nguồn | Hook / service | Endpoint |
 |-------|----------------|----------|
 | Day bundle | `usePatrolDayBundle` → `patrolDayEvents.service` | `GET /patrol/day/bundle?date=` |
-| Live metrics + workforce | `usePatrolLivePoll` (~2.5s) | `GET /patrol/live/bundle` (ưu tiên) hoặc `/patrol/metrics` + `/workforce/state` fallback |
+| Live metrics + workforce | `usePatrolLivePoll` | `WS /ws/patrol/live` (ưu tiên) → fallback `GET /patrol/live/bundle` |
 | Mobile HC-02 bridge | `patrolMobileMetricsBridge` | Snapshot stream/person từ `MobileCameraFeed` |
 
 **Không còn** `usePatrolHelmetLiveEvents`, `mergePatrolAndWorkforceEvents`, hay poll `/patrol/events` live.
@@ -304,7 +309,7 @@ HEATMAP      EVENT ENGINE
 | Event POPULATION_* / IDENTITY_* | Workforce engine → `workforceEventsMapper` |
 | PPE / PERSON_DETECTED | Ẩn khỏi feed (`PATROL_PPE_UI_HIDDEN`, `isMeaningfulFeedEvent`) |
 | MACHINE_STOPPED | Tab **Hệ thống** — backend + workforce |
-| WebSocket §8.3 | Chưa — thay bằng poll HTTP |
+| WebSocket §8.3 | `WS /ws/patrol/live` + fallback HTTP live/bundle |
 | Playback timeline | Vẫn stub `MOCK_PATROL_EVENTS` (tách khỏi feed live) |
 | Heading cone | Khi có IMU heading từ stream |
 | Object bottom sheet | `WorkforceObjectSheet` trên heatmap |

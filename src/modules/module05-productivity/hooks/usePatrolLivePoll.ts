@@ -4,13 +4,10 @@ import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetectio
 import { subscribePatrolMobileLiveSnapshot } from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
 import { isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
-import { fetchPatrolHelmetAggregateMetrics } from '../services/patrolLiveEvents.service'
-import { fetchPatrolLiveBundle } from '../services/patrolLiveBundle.service'
-import {
-  EMPTY_WORKFORCE_SNAPSHOT,
-  fetchWorkforceSnapshot,
-} from '../services/workforceState.service'
+import { createPatrolLiveFeed } from '../services/patrolLiveFeed.service'
+import type { PatrolHelmetAggregateMetricsResponse } from '../services/patrolLiveEvents.service'
 import type { WorkforceSnapshot } from '../types/workforceHeatmap'
+import { EMPTY_WORKFORCE_SNAPSHOT } from '../services/workforceState.service'
 import {
   EMPTY_PATROL_HELMET_LIVE_METRICS,
   hc02MobileSnapshot,
@@ -18,7 +15,7 @@ import {
   type PatrolHelmetLiveMetrics,
 } from './patrolHelmetLiveMetricsState'
 
-/** Một nhịp poll cho metrics + workforce — thay 2.2s + 2s riêng lẻ. */
+/** Fallback HTTP poll khi WebSocket không khả dụng. */
 export const PATROL_LIVE_POLL_MS = 2500
 
 export interface PatrolLivePollState {
@@ -26,9 +23,7 @@ export interface PatrolLivePollState {
   workforceSnap: WorkforceSnapshot
 }
 
-function metricsFromSnapshot(
-  snapshot: NonNullable<Awaited<ReturnType<typeof fetchPatrolHelmetAggregateMetrics>>>,
-): PatrolHelmetLiveMetrics {
+function metricsFromSnapshot(snapshot: PatrolHelmetAggregateMetricsResponse): PatrolHelmetLiveMetrics {
   const streamOnline = Boolean(snapshot.stream_online)
   const perCamera = (snapshot.cameras ?? []).map(row => ({
     ...row,
@@ -42,7 +37,9 @@ function metricsFromSnapshot(
   }
 }
 
-/** Poll gom metrics mũ/flycam + workforce state trên cùng scheduler. */
+/**
+ * Live metrics + workforce — ưu tiên WS `/ws/patrol/live`, fallback HTTP live/bundle.
+ */
 export function usePatrolLivePoll(
   metricsCameraIds: readonly string[] = DEFAULT_PATROL_CAMERA_IDS,
   workforceCameras: string[] = ['HC-01', 'HC-02'],
@@ -71,56 +68,23 @@ export function usePatrolLivePoll(
     const bundleIds = [...new Set([...ids, ...workforceIds])]
     if (!backendUrl || bundleIds.length === 0) return
 
-    let stopped = false
-    let timerId = 0
-
     const applyMetrics = (fromBackend: PatrolHelmetLiveMetrics) => {
       const merged = mergeHc02Mobile(fromBackend, hc02MobileSnapshot())
       baseRef.current = merged
       setLiveMetrics(merged)
     }
 
-    const tick = async () => {
-      if (stopped) return
-      try {
-        const bundle = await fetchPatrolLiveBundle(bundleIds)
-        if (stopped) return
+    const feed = createPatrolLiveFeed({
+      cameraIds: bundleIds,
+      backendUrl,
+      pollIntervalMs: pollMs,
+      onPayload: ({ metrics, workforce }) => {
+        setWorkforceSnap(workforce)
+        applyMetrics(metricsFromSnapshot(metrics))
+      },
+    })
 
-        if (bundle) {
-          setWorkforceSnap(bundle.workforce)
-          applyMetrics(metricsFromSnapshot(bundle.metrics))
-          timerId = window.setTimeout(tick, pollMs)
-          return
-        }
-
-        const [snapshot, workforce] = await Promise.all([
-          fetchPatrolHelmetAggregateMetrics(ids, backendUrl),
-          fetchWorkforceSnapshot(workforceIds, backendUrl),
-        ])
-        if (stopped) return
-
-        if (workforce) setWorkforceSnap(workforce)
-
-        if (!snapshot) {
-          applyMetrics({ ...baseRef.current, backendReachable: false })
-          timerId = window.setTimeout(tick, pollMs * 2)
-          return
-        }
-
-        applyMetrics(metricsFromSnapshot(snapshot))
-        timerId = window.setTimeout(tick, pollMs)
-      } catch {
-        if (stopped) return
-        applyMetrics(baseRef.current)
-        timerId = window.setTimeout(tick, pollMs * 2)
-      }
-    }
-
-    void tick()
-    return () => {
-      stopped = true
-      window.clearTimeout(timerId)
-    }
+    return () => feed.stop()
   }, [metricsCameraIds.join(','), workforceCameras.join(','), pollMs])
 
   return { liveMetrics, workforceSnap }
