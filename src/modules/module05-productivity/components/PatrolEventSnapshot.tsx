@@ -71,6 +71,7 @@ export function PatrolEventSnapshot({
         </div>
       )}
       <img
+        key={displayUrl}
         src={displayUrl}
         alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
         className={cn(

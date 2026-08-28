@@ -18,7 +18,7 @@ import { isPortraitPatrolCameraId } from '@/modules/module02-training/data/train
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { formatPatrolTime } from '../data/patrolTypes'
-import { PatrolEventSnapshot } from './PatrolEventSnapshot'
+import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
 import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
 import { needsPatrolManualIdentity, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
 import {
@@ -71,6 +71,45 @@ function splitInfoColumns(rows: PatrolInfoRow[]): [PatrolInfoRow[], PatrolInfoRo
 function appearanceRowKey(segment: PatrolAppearanceSegment): string {
   if (segment.id != null) return String(segment.id)
   return `${segment.cameraId}-${segment.startedAt}`
+}
+
+function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
+  const seen = new Set<string>()
+  return segments.filter(segment => {
+    const key = appearanceRowKey(segment)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function resolveDefaultAppearanceKey(
+  segments: PatrolAppearanceSegment[],
+  event: PatrolEvent,
+): string | null {
+  if (segments.length === 0) return null
+
+  const eventSnapshot = event.snapshotUrl?.trim()
+  if (eventSnapshot) {
+    const matched = segments.find(segment => segment.snapshotUrl?.trim() === eventSnapshot)
+    if (matched) return appearanceRowKey(matched)
+  }
+
+  const eventEndSec = Math.round(Date.parse(event.lockedAt) / 1000)
+  if (Number.isFinite(eventEndSec)) {
+    let best = segments[0]
+    let bestDelta = Math.abs(best.endedAt - eventEndSec)
+    for (const segment of segments) {
+      const delta = Math.abs(segment.endedAt - eventEndSec)
+      if (delta < bestDelta) {
+        best = segment
+        bestDelta = delta
+      }
+    }
+    return appearanceRowKey(best)
+  }
+
+  return appearanceRowKey(segments[0])
 }
 
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } | null {
@@ -166,9 +205,11 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     setAppearancesLoading(true)
     void fetchPatrolSubjectAppearances(subjectId).then(segments => {
       if (cancelled) return
-      setAppearanceSegments(
+      const sorted = dedupeAppearanceSegments(
         [...segments].sort((a, b) => b.startedAt - a.startedAt),
       )
+      setAppearanceSegments(sorted)
+      setSelectedAppearanceKey(resolveDefaultAppearanceKey(sorted, event))
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
@@ -251,9 +292,11 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
   }, [event, appearanceSegments])
 
   const activeSnapshotUrl = useMemo(() => {
-    if (!selectedAppearanceKey) return event?.snapshotUrl
-    const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
-    return selected?.snapshotUrl ?? event?.snapshotUrl
+    if (selectedAppearanceKey) {
+      const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
+      if (selected?.snapshotUrl?.trim()) return selected.snapshotUrl
+    }
+    return event?.snapshotUrl
   }, [appearanceSegments, event?.snapshotUrl, selectedAppearanceKey])
 
   if (!event || !summary) return null
@@ -321,15 +364,19 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
+        <div className="flex flex-col flex-1 min-h-0">
           {activeSnapshotUrl && (
-            <PatrolEventSnapshot
-              event={event}
-              snapshotUrl={activeSnapshotUrl}
-              variant="detail"
-            />
+            <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17]">
+              <PatrolEventSnapshot
+                key={`${event.id}:${activeSnapshotUrl}`}
+                event={event}
+                snapshotUrl={activeSnapshotUrl}
+                variant="detail"
+              />
+            </div>
           )}
 
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {(summary.infoPrimary.length > 0 || summary.infoSecondary.length > 0) && (
             <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5">
               <div className="flex items-center gap-1.5">
@@ -392,7 +439,10 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
                       <button
                         key={rowKey}
                         type="button"
-                        onClick={() => setSelectedAppearanceKey(rowKey)}
+                        onClick={() => {
+                          if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
+                          setSelectedAppearanceKey(rowKey)
+                        }}
                         className={cn(
                           'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',
                           selected
@@ -459,6 +509,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
               onAssigned={() => setIdentityTick(t => t + 1)}
             />
           )}
+          </div>
         </div>
       </div>
     </div>,
