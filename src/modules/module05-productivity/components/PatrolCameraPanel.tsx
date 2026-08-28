@@ -17,6 +17,7 @@ export interface PatrolCameraPanelProps {
 
 /**
  * Module 05 — bọc TrainingCameraPanel với layout patrol + preload AI person detect.
+ * Mobile: stack dọc 16:9, scroll theo trang — không cap max-h viewport.
  */
 export function PatrolCameraPanel({
   selectedId,
@@ -45,7 +46,6 @@ export function PatrolCameraPanel({
       mobileCompactVideo={isMobileLayout}
       mobileStackedNoScroll={isMobileLayout}
       streamWhenOffline
-      compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
       filterTabs={filterTabs}
       filterFn={filterFn}
       groupFn={groupFn}

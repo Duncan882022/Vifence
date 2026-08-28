@@ -275,8 +275,8 @@ export function PatrolFaceScannerPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] gap-4">
-        <div className="relative aspect-[4/3] rounded-xl overflow-hidden border border-[#1e2433] bg-black">
+      <div className="flex flex-col gap-4">
+        <div className="relative aspect-[3/4] sm:aspect-[4/3] rounded-xl overflow-hidden border border-[#1e2433] bg-black w-full max-w-xl mx-auto lg:max-w-none">
           <video
             ref={videoRef}
             playsInline
@@ -347,7 +347,7 @@ export function PatrolFaceScannerPanel({
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 w-full max-w-xl mx-auto lg:max-w-none">
           <div className="rounded-xl border border-[#1e2433] bg-[#0b0f1a] p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tiến độ quét</span>

@@ -11,6 +11,9 @@ import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolb
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
+  getCameraMaximizeFrameClass,
+} from '../data/trainingCameraFeeds'
+import {
   CAMERA_FILTER_TABS,
   DEFAULT_COURSE_CAMERA_IDS,
   MOCK_TRAINING_CAMERAS,
@@ -360,7 +363,10 @@ function FocusedCameraOverlay({
         aria-modal="true"
         aria-label={`Phóng to ${cameraDisplayLabel(cam)}`}
       >
-        <div className="relative w-full max-w-[96vw] aspect-video max-h-[92dvh] pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black">
+        <div className={cn(
+          'relative pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black',
+          getCameraMaximizeFrameClass(cam.streamType),
+        )}>
           <CameraCell
             cam={cam}
             compact={compact}
@@ -473,10 +479,11 @@ export function TrainingCameraPanel({
   const safeCams = displayedCams.length > 0 ? displayedCams : fallback
   /** Compact: luôn aspect-video + object-contain trong ô đen — không stretch panel. */
   const fillHeightMain = !aspectVideoGrid && (!mobileCompactVideo || mobileStackedNoScroll)
-  const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll) || (aspectVideoGrid && !isDesktop)
+  const useCompactVideoCaps = (mobileCompactVideo && !mobileStackedNoScroll)
+    || (aspectVideoGrid && !isDesktop && !mobileStackedNoScroll)
   const aspectGridInTier = aspectVideoGrid && isDesktop
   /** Mobile compact: fill tier height — video scrolls inside, sidebar strip stays visible. */
-  const mobileFillPanel = mobileCompactVideo && !isDesktop
+  const mobileFillPanel = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
   const portraitMaxRows = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
     ? 1
     : MOBILE_PORTRAIT_MAX_VISIBLE_ROWS
