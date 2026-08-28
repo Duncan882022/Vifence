@@ -13,6 +13,13 @@ import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { resolvePatrolDetectionMapPosition } from './patrolDetectionMapOffset'
 import { isPatrolHeatmapEligibleEvent } from './patrolPatrolCounts'
 import {
+  resolvePatrolProfileEntityKey,
+} from './patrolIdentityEntity'
+import {
+  getPatrolManualIdentityForSgc,
+  isPatrolManuallyIdentified,
+} from '../services/patrolManualIdentity.service'
+import {
   resolvePatrolAppearanceSubjectId,
   resolvePatrolPersonStage,
 } from './patrolWorkforceEventLabels'
@@ -67,12 +74,36 @@ function isCameraOnlineForHeatmap(
   return Boolean(cameraId && onlineById?.[cameraId])
 }
 
-function tierVerified(tier: PatrolDayPresence['tier']): boolean {
-  return tier === 'identity'
-}
-
 function tierEligibleStandard(tier: PatrolDayPresence['tier']): boolean {
   return tier === 'person' || tier === 'identity'
+}
+
+/** Đồng bộ màu chấm với tab sự kiện — gồm định danh thủ công/gallery. */
+function resolvePresenceHeatmapTier(
+  presence: PatrolDayPresence,
+  cameraId: string,
+  flightMode?: PatrolFlightMode | string | null,
+): Pick<DetectionDot, 'tier' | 'verified'> {
+  const helmetLike = isPatrolHelmetLikeCamera(cameraId, flightMode)
+  const subjectId = presence.subjectId?.trim() ?? ''
+  const displayName = presence.displayName?.trim() ?? ''
+
+  if (presence.tier === 'object') {
+    return { tier: 'object', verified: false }
+  }
+
+  const profileKey = resolvePatrolProfileEntityKey({
+    objectId: subjectId,
+    objectLabel: displayName,
+  })
+  const manualIdentity = isPatrolManuallyIdentified(subjectId)
+    || Boolean(getPatrolManualIdentityForSgc(subjectId))
+
+  if (profileKey || manualIdentity || presence.tier === 'identity') {
+    return { tier: 'identity', verified: helmetLike }
+  }
+
+  return { tier: 'person', verified: false }
 }
 
 export function filterRecentPresences(
@@ -113,14 +144,15 @@ export function buildPatrolPresenceHeatmapDots(
     const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
     const cameraOnline = isCameraOnlineForHeatmap(primaryCam, opts?.cameraOnlineById)
     const inCameraView = recent && cameraOnline
-    const helmetLike = isPatrolHelmetLikeCamera(
-      primaryCam,
-      opts?.flightModeByCamera?.[primaryCam],
-    )
     const [lat, lng] = presencePosition(
       presence,
       opts?.helmetPositionsById,
       opts?.helmetHeadingsById,
+    )
+    const { tier, verified } = resolvePresenceHeatmapTier(
+      presence,
+      primaryCam,
+      opts?.flightModeByCamera?.[primaryCam],
     )
 
     return {
@@ -133,10 +165,10 @@ export function buildPatrolPresenceHeatmapDots(
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
       objectId: presence.subjectId,
-      tier: presence.tier,
-      verified: helmetLike ? tierVerified(presence.tier) : false,
+      tier,
+      verified,
       inCameraView,
-      opacity: presence.tier === 'object'
+      opacity: tier === 'object'
         ? (inCameraView ? 0.55 : 0.35)
         : (inCameraView ? 0.92 : 0.45),
     }

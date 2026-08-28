@@ -123,6 +123,19 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     ], { flightModeByCamera: { 'DR-03': 'proximity' } })
     expect(dots).toHaveLength(1)
     expect(dots[0].verified).toBe(true)
+    expect(dots[0].tier).toBe('identity')
+  })
+
+  it('displayName đã định danh (backend) → chấm tím dù subject pers-*', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({
+        tier: 'identity',
+        subjectId: 'pers-0042',
+        displayName: 'Nguyễn Văn A',
+      }),
+    ])
+    expect(dots[0].tier).toBe('identity')
+    expect(dots[0].verified).toBe(true)
   })
 })
 

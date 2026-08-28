@@ -36,7 +36,7 @@ export function WorkforceObjectSheet({ object, onClose }: Props) {
   const accuracyM = conf > 0 ? `±${(1.2 / Math.max(0.15, conf)).toFixed(1)}m` : '—'
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[500] px-2 pb-2 pointer-events-none">
+    <div className="absolute inset-x-0 bottom-0 z-[710] px-2 pb-2 pointer-events-none">
       <div className="pointer-events-auto mx-auto max-w-md rounded-lg border border-[#2a3348] bg-[#0d1117]/95 backdrop-blur-sm shadow-xl p-3 space-y-1.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

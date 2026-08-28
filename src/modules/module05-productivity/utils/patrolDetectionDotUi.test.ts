@@ -14,6 +14,10 @@ describe('resolveDetectionDotTier', () => {
     expect(resolveDetectionDotTier({ tier: 'identity', verified: true, objectId: 'p-102' })).toBe('identity')
   })
 
+  it('identity tier không cần verified (mũ) → tím', () => {
+    expect(resolveDetectionDotTier({ tier: 'identity', objectId: 'pers-0001' })).toBe('identity')
+  })
+
   it('identity tier nhưng chưa verified (flycam tầm cao) → xanh person', () => {
     expect(resolveDetectionDotTier({ tier: 'identity', verified: false, objectId: 'pers-0099' })).toBe('person')
   })

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, MapPin, Footprints, ScanFace, UserX,
+  Users, MapPin, Footprints, ScanFace, UserX, Maximize2,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -222,6 +222,7 @@ export function Module05Page() {
   const setSidebarCollapsed = useAppStore(s => s.setSidebarCollapsed)
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
+  const [heatmapExpanded, setHeatmapExpanded] = useState(false)
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-02')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -444,9 +445,22 @@ export function Module05Page() {
                   ? 'min-h-[min(42dvh,360px)] h-[min(42dvh,360px)]'
                   : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
               )}
+              headerRight={
+                <button
+                  type="button"
+                  onClick={() => setHeatmapExpanded(true)}
+                  className="p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Phóng to heatmap"
+                  aria-label="Phóng to heatmap"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              }
             >
               <PatrolDensityHeatmap
                 patrolEvents={patrolEventsLive}
+                expanded={heatmapExpanded}
+                onCloseExpand={() => setHeatmapExpanded(false)}
               />
             </Panel>
 
