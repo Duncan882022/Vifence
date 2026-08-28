@@ -305,7 +305,15 @@ export async function startWhipPublisher(
 
   if (!response.ok) {
     pc.close()
-    const msg = `WHIP trả về HTTP ${response.status}`
+    let detail = ''
+    try {
+      detail = (await response.text()).trim().slice(0, 120)
+    } catch {
+      // ignore
+    }
+    const msg = detail
+      ? `WHIP HTTP ${response.status}: ${detail}`
+      : `WHIP trả về HTTP ${response.status}`
     setState('failed', msg)
     throw new Error(msg)
   }

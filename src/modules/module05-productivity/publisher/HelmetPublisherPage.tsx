@@ -24,6 +24,7 @@ import {
   PATROL_HELMET_IDS,
 } from '../data/helmetIngest'
 import { useHelmetPublisher, type HelmetPublisherState } from './useHelmetPublisher'
+import { usePublisherPatrolAuth } from './usePublisherPatrolAuth'
 
 const DEFAULT_HELMET_ID = 'HC-02'
 
@@ -137,7 +138,12 @@ export function HelmetPublisherPage() {
     return DEFAULT_HELMET_ID
   }, [searchParams])
 
-  const { state, start, stop, flipCamera } = useHelmetPublisher({ helmetId, videoRef })
+  const patrolAuth = usePublisherPatrolAuth()
+  const { state, start, stop, flipCamera } = useHelmetPublisher({
+    helmetId,
+    videoRef,
+    patrolAuthReady: patrolAuth === 'ready',
+  })
 
   const label = PATROL_BODYCAM_LABELS[helmetId] ?? helmetId
   // Bodycam phần cứng tự publish RTSP — không ai phải mở trang này cho nó.
@@ -239,6 +245,13 @@ export function HelmetPublisherPage() {
           <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200/90">
             {label} là body cam phần cứng, tự phát sóng liên tục — không cần mở trang
             này. Xem trực tiếp trong mục Camera của CMS.
+          </p>
+        )}
+
+        {patrolAuth === 'failed' && (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
+            Chưa kết nối kênh vị trí — video vẫn phát được nhưng bản đồ CMS có thể
+            không cập nhật GPS. Liên hệ quản trị nếu lỗi kéo dài.
           </p>
         )}
 

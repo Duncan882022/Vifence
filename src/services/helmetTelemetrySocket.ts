@@ -20,6 +20,8 @@ export interface HelmetTelemetrySample {
 export interface HelmetTelemetrySenderOptions {
   cameraId: string
   backendUrl: string
+  /** JWT patrol — bắt buộc khi backend bật auth. */
+  accessToken?: string | null
   onStateChange?: (connected: boolean) => void
   /** Khoảng cách tối thiểu giữa 2 lần gửi (ms). */
   minIntervalMs?: number
@@ -41,19 +43,24 @@ function normalizeBaseUrl(baseUrl: string): string {
   return `https://${trimmed}`
 }
 
-export function buildTelemetryWsUrl(backendUrl: string, cameraId: string): string {
+export function buildTelemetryWsUrl(
+  backendUrl: string,
+  cameraId: string,
+  token?: string | null,
+): string {
   const base = normalizeBaseUrl(backendUrl)
   if (!base) return ''
   const url = new URL(base)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   url.pathname = `${url.pathname.replace(/\/$/, '')}/ws/helmet/${cameraId}/telemetry`
+  if (token?.trim()) url.searchParams.set('token', token.trim())
   return url.toString()
 }
 
 export function createHelmetTelemetrySender(
   options: HelmetTelemetrySenderOptions,
 ): HelmetTelemetrySender {
-  const { cameraId, backendUrl, onStateChange, minIntervalMs = 1000 } = options
+  const { cameraId, backendUrl, accessToken, onStateChange, minIntervalMs = 1000 } = options
 
   let socket: WebSocket | null = null
   let stopped = false
@@ -63,7 +70,7 @@ export function createHelmetTelemetrySender(
   /** Mẫu mới nhất chưa gửi — kết nối lại là gửi ngay, không mất vị trí hiện tại. */
   let pending: HelmetTelemetrySample | null = null
 
-  const wsUrl = buildTelemetryWsUrl(backendUrl, cameraId)
+  let wsUrl = buildTelemetryWsUrl(backendUrl, cameraId, accessToken)
 
   const flush = () => {
     if (!pending || socket?.readyState !== WebSocket.OPEN) return
@@ -86,6 +93,7 @@ export function createHelmetTelemetrySender(
   }
 
   const connect = () => {
+    wsUrl = buildTelemetryWsUrl(backendUrl, cameraId, accessToken)
     if (stopped || !wsUrl || typeof WebSocket === 'undefined') return
 
     let ws: WebSocket

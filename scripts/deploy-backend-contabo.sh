@@ -348,7 +348,7 @@ WORKER_MATCH_MIN_MARGIN=0.10
 ENV=production
 JWT_SECRET=${VPS_JWT_SECRET:-change-me-in-production}
 PATROL_AUTH_DISABLED=false
-PATROL_AUTH_USERS=${VPS_PATROL_AUTH_USERS:-admin:admin123:admin,hr:hr123:hr}
+PATROL_AUTH_USERS=${VPS_PATROL_AUTH_USERS:-admin:admin123:admin,hr:hr123:hr,publisher:pub5318:operator}
 CORS_ORIGINS=${VPS_CORS_ORIGINS:-https://duncan882022.github.io}
 PATROL_EMBED_KEY=${VPS_PATROL_EMBED_KEY:-}
 HC01_RTSP_URL=${VPS_HC01_RTSP:-}
@@ -409,6 +409,7 @@ server {
         proxy_set_header X-Forwarded-Proto \\\$scheme;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
+        proxy_buffering off;
         client_max_body_size 1M;
     }
 
@@ -432,6 +433,9 @@ server {
     }
 
     # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
+    location = /phat-song {
+        return 301 /Vifence/phat-song/;
+    }
     location = /Vifence {
         return 301 /Vifence/;
     }
@@ -486,6 +490,7 @@ server {
         proxy_set_header X-Forwarded-Proto \\\$scheme;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
+        proxy_buffering off;
         client_max_body_size 1M;
     }
 
@@ -509,6 +514,9 @@ server {
     }
 
     # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
+    location = /phat-song {
+        return 301 /Vifence/phat-song/;
+    }
     location = /Vifence {
         return 301 /Vifence/;
     }
@@ -594,6 +602,7 @@ server {
         proxy_set_header X-Forwarded-Proto \\\$scheme;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
+        proxy_buffering off;
         client_max_body_size 1M;
     }
 
@@ -617,6 +626,9 @@ server {
     }
 
     # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
+    location = /phat-song {
+        return 301 /Vifence/phat-song/;
+    }
     location = /Vifence {
         return 301 /Vifence/;
     }
