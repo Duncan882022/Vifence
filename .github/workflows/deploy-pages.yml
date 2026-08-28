@@ -67,3 +67,12 @@ jobs:
         if: steps.setup_pages.outcome == 'success'
         uses: actions/deploy-pages@v4
         continue-on-error: true
+
+      - name: Pages chưa bật — hướng dẫn
+        if: steps.setup_pages.outcome != 'success'
+        run: |
+          echo "::warning::GitHub Pages chưa được bật cho repo này."
+          echo "Build đã push lên nhánh gh-pages. Bật thủ công một lần:"
+          echo "  Settings → Pages → Deploy from branch → gh-pages / (root)"
+          echo "Fallback FE (Contabo): https://217.217.253.247.nip.io/Vifence/module05/"
+          exit 0
