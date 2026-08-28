@@ -32,6 +32,19 @@ import { buildEventClipWindow, EVENT_PLAYBACK_CLIP_SEC } from '@/modules/module0
 import { SafetyEventDetailContent } from '@/modules/module03-safety/components/SafetyEventDetailContent'
 import type { SafetyViolationRecord } from '@/modules/module03-safety/types/safety.types'
 
+export type PlaybackPreferRecordType = 'event' | 'continuous'
+
+function pickDefaultPlaybackRecord(
+  items: CameraPlaybackRecord[],
+  prefer: PlaybackPreferRecordType,
+): CameraPlaybackRecord | null {
+  if (items.length === 0) return null
+  if (prefer === 'continuous') {
+    return items.find(item => item.type === 'continuous' || item.type === 'continuous_event') ?? items[0]
+  }
+  return items.find(item => item.type === 'event') ?? items[0]
+}
+
 export interface CameraPlaybackPanelProps {
   cameras: TrainingCamera[]
   selectedCameraId?: string
@@ -56,6 +69,8 @@ export interface CameraPlaybackPanelProps {
   fetchDetections?: (recordId: string) => Promise<CameraDetectionsResponse>
   /** % chiều cao vùng video desktop (mặc định 70). Module 03 ATLĐ: ~82. */
   videoAreaFlex?: number
+  /** Module 05 tuần tra: ưu tiên băng liên tục MediaMTX (event clip hay 404 nếu lệch giây). */
+  preferRecordType?: PlaybackPreferRecordType
 }
 
 export function CameraPlaybackPanel({
@@ -75,6 +90,7 @@ export function CameraPlaybackPanel({
   fetchRecords = fetchCameraRecords,
   fetchDetections = fetchRecordDetections,
   videoAreaFlex = 70,
+  preferRecordType = 'event',
 }: CameraPlaybackPanelProps) {
   const resolveCamera = useCallback(
     (id?: string) => cameras.find(cam => cam.id === id) ?? cameras[0] ?? null,
@@ -107,6 +123,7 @@ export function CameraPlaybackPanel({
   const [currentTime, setCurrentTime] = useState(0)
   const [volume, setVolume] = useState(80)
   const [muted, setMuted] = useState(true)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const { isDesktop } = useShellLayout()
   const isMobile = !isDesktop
@@ -154,10 +171,11 @@ export function CameraPlaybackPanel({
         const preferred = initialRecordId
           ? items.find(item => item.id === initialRecordId)
           : undefined
-        const next = preferred ?? items.find(item => item.type === 'event') ?? items[0] ?? null
+        const next = preferred ?? pickDefaultPlaybackRecord(items, preferRecordType)
         if (next) {
           setSelectedRecord(next)
           setSeekSec(next.seekSec ?? 0)
+          setPlaybackError(null)
         }
       })
       .catch(err => console.error('Error loading records:', err))
@@ -166,7 +184,7 @@ export function CameraPlaybackPanel({
       })
 
     return () => { cancelled = true }
-  }, [activeCam, date, fetchRecords, initialRecordId])
+  }, [activeCam, date, fetchRecords, initialRecordId, preferRecordType])
 
   useEffect(() => {
     if (!selectedRecordId || records.length === 0) return
@@ -222,9 +240,11 @@ export function CameraPlaybackPanel({
     if (!video || !videoSrc || isEventClip) return
 
     let cancelled = false
+    setPlaybackError(null)
 
     const startPlayback = () => {
       if (cancelled) return
+      video.muted = muted || volume === 0
       try {
         video.currentTime = Math.max(0, seekSec)
       } catch {
@@ -241,9 +261,15 @@ export function CameraPlaybackPanel({
         setDuration(video.duration)
       }
     }
+    const onError = () => {
+      if (cancelled) return
+      setIsPlaying(false)
+      setPlaybackError('Không tải được video — thử chọn đoạn băng liên tục trên timeline')
+    }
 
     video.addEventListener('canplay', onCanPlay, { once: true })
     video.addEventListener('loadedmetadata', onLoadedMetadata)
+    video.addEventListener('error', onError)
 
     if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
       startPlayback()
@@ -255,8 +281,9 @@ export function CameraPlaybackPanel({
       cancelled = true
       video.removeEventListener('canplay', onCanPlay)
       video.removeEventListener('loadedmetadata', onLoadedMetadata)
+      video.removeEventListener('error', onError)
     }
-  }, [selectedRecord?.id, videoSrc, seekSec, isEventClip])
+  }, [selectedRecord?.id, videoSrc, seekSec, isEventClip, muted, volume])
 
   useEffect(() => {
     const video = videoRef.current
@@ -294,6 +321,7 @@ export function CameraPlaybackPanel({
     setProgress(0)
     setCurrentTime(0)
     setIsPlaying(false)
+    setPlaybackError(null)
   }, [])
 
   const handleTogglePlay = () => {
@@ -402,6 +430,7 @@ export function CameraPlaybackPanel({
             videoRef={videoRef}
             muted={muted || volume === 0}
             activeEventRecord={activeEventRecord}
+            playbackError={playbackError}
           />
         </div>
 

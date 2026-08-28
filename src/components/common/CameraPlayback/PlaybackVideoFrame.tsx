@@ -28,6 +28,7 @@ interface PlaybackVideoFrameProps {
   videoRef: RefObject<HTMLVideoElement | null>
   muted: boolean
   activeEventRecord?: SafetyViolationRecord | null
+  playbackError?: string | null
 }
 
 export function PlaybackVideoFrame({
@@ -38,6 +39,7 @@ export function PlaybackVideoFrame({
   videoRef,
   muted,
   activeEventRecord,
+  playbackError,
 }: PlaybackVideoFrameProps) {
   const location = getLocation(cam)
   const isEventClip = selectedRecord?.type === 'event'
@@ -92,14 +94,25 @@ export function PlaybackVideoFrame({
           />
         )
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground/40 z-[1]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground/40 z-[1] px-4 text-center">
           <Camera className="w-8 h-8" />
           <span className="text-[9px]">
-            {loadingRecords ? 'Đang tải bản ghi...' : 'Không có bản ghi — chọn ngày khác bên dưới'}
+            {playbackError
+              ? playbackError
+              : loadingRecords
+                ? 'Đang tải bản ghi...'
+                : 'Không có bản ghi — chọn ngày khác bên dưới'}
           </span>
         </div>
       )}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-[2]" style={CCTV_SCANLINE} />
+
+      {playbackError && videoSrc && (
+        <div className="absolute inset-0 z-[15] flex flex-col items-center justify-center gap-1 bg-black/70 px-4 text-center pointer-events-none">
+          <Camera className="w-7 h-7 text-amber-400/80" />
+          <span className="text-[9px] text-amber-200/90 max-w-[240px]">{playbackError}</span>
+        </div>
+      )}
 
       <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1.5 z-20 pointer-events-none">
         <div className="flex flex-col gap-1 min-w-0">

@@ -76,6 +76,7 @@ export function PatrolPlaybackPanel({
       <div className={cn('flex flex-col flex-1 min-h-0')}>
         <CameraPlaybackPanel
           {...panelProps}
+          preferRecordType="continuous"
           fetchRecords={fetchRecords}
           fetchDetections={fetchDetections}
         />
