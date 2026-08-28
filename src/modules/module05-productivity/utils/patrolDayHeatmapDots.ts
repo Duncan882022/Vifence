@@ -28,7 +28,7 @@ import {
 /** Coi là "đang quan sát" nếu endedAt trong khoảng này (ms). */
 export const PATROL_LIVE_RECENT_MS = 120_000
 
-function isValidGps(lat: number | null, lng: number | null): boolean {
+function isValidGps(lat: number | null | undefined, lng: number | null | undefined): boolean {
   if (lat == null || lng == null) return false
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
   if (lat === 0 && lng === 0) return false
@@ -50,7 +50,7 @@ function presencePosition(
   helmetHeadings?: Record<string, number | null | undefined>,
 ): [number, number] {
   const { lat, lng } = resolvePresenceGps(presence)
-  const { subjectId, cameraId, id: presenceId } = presence
+  const { cameraId, id: presenceId } = presence
   const offsetSeed = `presence-${presenceId}`
   const primaryCam = cameraId || presence.sourceCameras[0] || ''
   const helmetPos = primaryCam ? helmetPositions?.[primaryCam] : undefined
