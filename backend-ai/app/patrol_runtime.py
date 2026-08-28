@@ -148,9 +148,14 @@ def update_patrol_gps(
         return
     if lat == 0.0 and lng == 0.0:
         return
+    from .patrol_gps_sim import map_patrol_device_gps_to_site
+
+    mapped_lat, mapped_lng = map_patrol_device_gps_to_site(camera_id, lat, lng)
     entry: dict[str, Any] = {
-        "gps_lat": lat,
-        "gps_lng": lng,
+        "gps_lat": mapped_lat,
+        "gps_lng": mapped_lng,
+        "gps_lat_raw": lat,
+        "gps_lng_raw": lng,
         "updated_at": time.time(),
     }
     if heading is not None:
@@ -173,8 +178,8 @@ def update_patrol_gps(
         from .workforce_engine import workforce_engine
         workforce_engine.update_helmet(
             camera_id,
-            lat=lat,
-            lon=lng,
+            lat=mapped_lat,
+            lon=mapped_lng,
             heading=entry.get("heading"),
             pitch=entry.get("pitch"),
             roll=entry.get("roll"),

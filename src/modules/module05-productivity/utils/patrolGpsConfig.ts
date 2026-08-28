@@ -1,18 +1,17 @@
 /**
- * Chế độ GPS tương đối — chỉ dùng để trình diễn khi đứng xa công trường.
+ * Chế độ GPS tương đối — mặc định bật cho mọi camera tuần tra (HC-*, DR-*).
  *
- * Vị trí hiển thị = tâm công trường + (GPS hiện tại − GPS lần fix đầu). Đi bộ
- * ở Hà Nội vẫn thấy chấm di chuyển trong ranh giới Cầu Sông Hốt.
+ * Vị trí hiển thị = tâm Cầu Sông Hốt + (GPS hiện tại − GPS lần fix đầu).
+ * Không có GPS → neo tại PATROL_SITE_CENTER.
  *
- * Mặc định **tắt**: ngoài hiện trường thật nó cho toạ độ sai, và tệ hơn là mọi
- * mũ đều bị neo về đúng một điểm ở lần fix đầu — hai mũ chồng lên nhau trên
- * bản đồ cho tới khi ai đó bước đi. Bật lại bằng VITE_PATROL_GPS_RELATIVE=1
- * khi cần demo xa công trường.
+ * Tắt bằng VITE_PATROL_GPS_RELATIVE=0 khi chạy thật tại hiện trường (toạ độ thật).
  */
-export const PATROL_RELATIVE_GPS_ENABLED =
-  import.meta.env.VITE_PATROL_GPS_RELATIVE === '1'
+import { isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 
-/** Chỉ áp relative mapping cho helmet bodycam. */
+export const PATROL_RELATIVE_GPS_ENABLED =
+  import.meta.env.VITE_PATROL_GPS_RELATIVE !== '0'
+
+/** Áp relative mapping cho helmet + flycam tuần tra. */
 export function isPatrolRelativeGpsCamera(cameraId: string): boolean {
-  return PATROL_RELATIVE_GPS_ENABLED && cameraId.startsWith('HC-')
+  return PATROL_RELATIVE_GPS_ENABLED && isPatrolMetricsCameraId(cameraId)
 }

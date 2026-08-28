@@ -4,6 +4,7 @@
  */
 import {
   clampPointToSiteBoundary,
+  clampPointToSiteInterior,
   isPointInSiteBoundary,
   PATROL_SITE_CORNERS,
 } from '../data/patrolSiteGeometry'
@@ -24,6 +25,7 @@ export type HelmetPositionMethod =
   | 'imu_only'
   | 'relative'
   | 'relative_ekf'
+  | 'site_anchor'
 
 function latLonToEnu(
   lat: number,
@@ -278,16 +280,24 @@ export function fuseHelmetPose(input: FuseHelmetPoseInput): FusedHelmetPose {
   }
 
   if (outLat != null && outLng != null) {
-    const [mLat, mLng] = snapPointToSite(outLat, outLng)
+    const [mLat, mLng] = useRelative
+      ? clampPointToSiteInterior(outLat, outLng)
+      : snapPointToSite(outLat, outLng).slice(0, 2) as [number, number]
     outLat = mLat
     outLng = mLng
     if (method === 'relative_ekf') method = 'relative_ekf'
     else if (method === 'ekf') method = 'ekf_map'
   } else if (gpsLat != null && gpsLng != null && isValidGps(gpsLat, gpsLng)) {
-    const [mLat, mLng] = snapPointToSite(gpsLat, gpsLng)
+    const [mLat, mLng] = useRelative
+      ? clampPointToSiteInterior(gpsLat, gpsLng)
+      : snapPointToSite(gpsLat, gpsLng).slice(0, 2) as [number, number]
     outLat = mLat
     outLng = mLng
     method = useRelative ? 'relative' : 'map'
+  } else {
+    outLat = PATROL_SITE_CENTER[0]
+    outLng = PATROL_SITE_CENTER[1]
+    method = 'site_anchor'
   }
 
   if (input.heading != null && Number.isFinite(input.heading)) {
