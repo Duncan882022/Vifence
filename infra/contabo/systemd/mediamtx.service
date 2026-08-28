@@ -1,0 +1,14 @@
+[Unit]
+Description=MediaMTX — helmet ingest (RTSP/WHIP/HLS)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vifence
+ExecStart=/opt/vifence/mediamtx /opt/vifence/mediamtx.yml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
