@@ -9,6 +9,7 @@ import {
   type PatrolDayStats,
 } from '../services/patrolDayEvents.service'
 import { filterPatrolDayObjectsForDisplay } from '../utils/patrolDayObjectFilter'
+import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
 
 const POLL_MS = 3000
 
@@ -36,7 +37,11 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       cameraName: '',
       zoneId: 'ZONE_SITE',
       zoneName: 'Cầu Sông Hốt',
-      objectId: identified ? (row.idenCode ?? row.persId) : row.persId,
+      objectId: identified
+        ? (row.employeeCode
+            ? patrolGalleryWorkerIdFromEmployeeCode(row.employeeCode)
+            : (row.idenCode ?? row.persId))
+        : row.persId,
       objectLabel: row.displayName,
       violationLabel: row.displayName,
       startedAt: isoFrom(row.firstSeen),

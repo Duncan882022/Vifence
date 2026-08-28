@@ -59,8 +59,11 @@ export function resolvePatrolCanonicalEntityKey(event: {
   return objectId.toUpperCase() || trackWorkerId || 'UNKNOWN'
 }
 
-/** Gallery worker id (p-*, w-*, c-*, u-*) — không phải sgc/OBJ. */
-export function isPatrolGalleryWorkerId(id?: string | null): boolean {
+/** Mã gallery p-* từ mã nhân sự — khớp backend patrol_gallery_worker_id. */
+export function patrolGalleryWorkerIdFromEmployeeCode(code: string): string {
+  const safe = code.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)
+  return safe ? `p-${safe}` : 'p-unknown'
+}
   if (!id) return false
   const t = id.trim()
   if (!t || t === 'unknown') return false

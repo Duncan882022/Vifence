@@ -472,6 +472,14 @@ def merge_persons(
     return {"ok": True, "person": _person_payload(row) if row else None}
 
 
+@router.post("/persons/sync-gallery")
+def sync_gallery_persons(_user: RequirePatrolAdmin = None) -> dict:  # noqa: ARG001
+    """Backfill gallery live từ mọi hồ sơ đã định danh (admin)."""
+    from .gallery_sync import sync_all_identified_to_gallery
+
+    return sync_all_identified_to_gallery()
+
+
 @router.delete("/day/events")
 def purge_day_events(
     date: str | None = None,

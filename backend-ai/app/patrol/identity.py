@@ -10,6 +10,7 @@ kịp lưu ảnh.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import time
@@ -18,6 +19,8 @@ from typing import Any, Sequence
 import numpy as np
 
 from . import db
+
+logger = logging.getLogger("patrol.identity")
 
 # Ngưỡng nhận lại người cũ.
 #
@@ -43,6 +46,16 @@ FACE_ANGLE_DEDUPE_SIM = 0.88
 
 STATUS_PERSON = "person"
 STATUS_IDENTIFIED = "identified"
+
+
+def _sync_gallery_after_identify(pers_id: str) -> None:
+    """SQLite → worker_gallery + bindings để overlay live nhận tên."""
+    try:
+        from .gallery_sync import sync_person_to_gallery
+
+        sync_person_to_gallery(pers_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("gallery_sync skipped for %s", pers_id, exc_info=True)
 
 
 def _fmt_pers(seq: int) -> str:
@@ -427,6 +440,7 @@ def identify(
 
     result = get_person(pid)
     assert result is not None
+    _sync_gallery_after_identify(pid)
     return result
 
 
@@ -603,6 +617,8 @@ def import_identity(
 
     result = get_person(pers_id)
     assert result is not None
+    if result.get("status") == STATUS_IDENTIFIED:
+        _sync_gallery_after_identify(pers_id)
     return result
 
 
@@ -774,4 +790,5 @@ def complete_enroll_session(
 
     result = get_person(pers_id)
     assert result is not None
+    _sync_gallery_after_identify(pers_id)
     return result
