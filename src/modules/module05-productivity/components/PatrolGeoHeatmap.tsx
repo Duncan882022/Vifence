@@ -642,7 +642,7 @@ export function PatrolGeoHeatmap({
   const zoomControlPosition = compactControls ? 'topleft' as const : 'bottomright' as const
 
   return (
-    <div className="relative w-full h-full min-h-[200px] overflow-hidden isolate max-lg:min-h-[220px] supports-[height:100dvh]:min-h-[min(220px,38dvh)]">
+    <div className="relative flex flex-1 min-h-0 w-full h-full overflow-hidden isolate">
       <style>{`
         @keyframes patrol-dot-blink {
           0%,100%{opacity:0.95;transform:scale(1)}

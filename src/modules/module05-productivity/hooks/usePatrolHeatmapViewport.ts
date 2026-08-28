@@ -33,15 +33,9 @@ export function usePatrolHeatmapViewport(): PatrolHeatmapViewport {
       ? (isLandscapeMobile || isTabletLandscape ? 17 : 16)
       : 17
 
-  const embeddedMapClass = isPhone || isTablet || isTabletLandscape
-    ? 'min-h-[220px] h-full w-full supports-[height:100dvh]:min-h-[min(220px,38dvh)]'
-    : 'min-h-[280px] h-full w-full'
+  const embeddedMapClass = 'flex-1 min-h-0 w-full relative'
 
-  const modalMapClass = isPhone
-    ? 'flex-1 min-h-0'
-    : isTablet
-      ? 'flex-1 min-h-[50dvh]'
-      : 'flex-1 min-h-0'
+  const modalMapClass = 'flex-1 min-h-0 w-full relative'
 
   return {
     isPhone,
