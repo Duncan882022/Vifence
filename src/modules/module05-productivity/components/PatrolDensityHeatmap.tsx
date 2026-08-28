@@ -7,10 +7,6 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 import { cn } from '@/utils/cn'
-import {
-  getPatrolMobileLiveSnapshot,
-  subscribePatrolMobileLiveSnapshot,
-} from '@/services/patrolMobileMetricsBridge'
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
 import { PATROL_DRONE_IDS } from '../data/patrolDrones'
 import {
@@ -20,10 +16,11 @@ import {
 import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
-import { usePatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
-import { useWorkforceRealtimeState } from '../hooks/useWorkforceRealtimeState'
 import { usePatrolWebSocket } from '../services/usePatrolWebSocket'
 import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
+import type { PatrolHelmetLiveMetrics } from '../hooks/usePatrolHelmetLiveMetrics'
+import type { PatrolDayPresence, PatrolDayStats } from '../services/patrolDayEvents.service'
+import type { PatrolFlightMode } from '../utils/patrolFlightMode'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
 import { WorkforceObjectSheet } from './WorkforceObjectSheet'
 import {
@@ -42,11 +39,8 @@ import {
   subscribeHeatmapPersonRegistry,
   syncPatrolPersonEventsToHeatmap,
 } from '@/services/patrolHeatmapPersonRegistry'
-import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
-import { usePatrolFlycamFlightModes } from '../hooks/usePatrolFlycamFlightModes'
-import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
-import type { ObjectState } from '../types/workforceHeatmap'
+import type { ObjectState, WorkforceSnapshot } from '../types/workforceHeatmap'
 
 /**
  * Mọi camera đóng góp chấm lên bản đồ — hai mũ và một drone.
@@ -158,7 +152,13 @@ export function PatrolDensityHeatmap({
   expanded = false,
   onCloseExpand,
   patrolEvents = [],
-  viewDate,
+  viewDate: _viewDate,
+  presences,
+  dayStats,
+  liveMetrics: _liveMetrics,
+  workforce,
+  flycamFlightModes,
+  helmetOnlineById,
 }: {
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
@@ -167,6 +167,13 @@ export function PatrolDensityHeatmap({
   patrolEvents?: PatrolEvent[]
   /** Ngày lịch VN đồng bộ với tab Sự kiện / playback. */
   viewDate?: string
+  /** Dữ liệu ngày + live — một poll từ Module05Page, không gọi hook trùng. */
+  presences: PatrolDayPresence[]
+  dayStats: PatrolDayStats
+  liveMetrics: PatrolHelmetLiveMetrics
+  workforce: WorkforceSnapshot
+  flycamFlightModes: Record<string, PatrolFlightMode>
+  helmetOnlineById: Record<string, boolean>
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
@@ -178,11 +185,7 @@ export function PatrolDensityHeatmap({
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
   const [registryRevision, setRegistryRevision] = useState(0)
-  const [mobileHc02Live, setMobileHc02Live] = useState(
-    () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
-  )
 
-  const workforce = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
   const hc02Helmet = workforce.helmets['HC-02']
 
   const liveObjects = useMemo(
@@ -199,8 +202,6 @@ export function PatrolDensityHeatmap({
   )
 
   // Kể cả drone: nó cũng phát hiện người và đóng góp chấm lên bản đồ.
-  const metrics = usePatrolHelmetLiveMetrics(PATROL_MAP_CAMERA_IDS)
-  const flycamFlightModes = usePatrolFlycamFlightModes(PATROL_DRONE_IDS)
 
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
@@ -213,32 +214,6 @@ export function PatrolDensityHeatmap({
   useEffect(() => {
     syncPatrolPersonEventsToHeatmap(patrolEvents)
   }, [patrolEvents])
-
-  useEffect(() => {
-    return subscribePatrolMobileLiveSnapshot(snap => {
-      if (!snap || snap.cameraId !== 'HC-02') {
-        setMobileHc02Live(false)
-        return
-      }
-      setMobileHc02Live(Boolean(snap.streamOnline))
-    })
-  }, [])
-
-
-  const helmetOnlineById = useMemo(() => {
-    const map: Record<string, boolean> = Object.fromEntries(
-      PATROL_MAP_CAMERA_IDS.map(id => [id, false]),
-    )
-    for (const row of metrics.perCamera) {
-      map[row.camera_id] = Boolean(row.stream_online)
-    }
-    // HC-02 bodycam: CMS bridge là nguồn sự thật khi tab đã từng mở/tắt cam.
-    const mobile = getPatrolMobileLiveSnapshot('HC-02')
-    if (mobile) {
-      map['HC-02'] = Boolean(mobile.streamOnline)
-    }
-    return map
-  }, [metrics.perCamera, mobileHc02Live])
 
   const hc01Online = Boolean(helmetOnlineById['HC-01'])
   const hc02Online = Boolean(helmetOnlineById['HC-02'])
@@ -329,9 +304,6 @@ export function PatrolDensityHeatmap({
 
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
-
-  const { presences } = usePatrolDayPresences(viewDate)
-  const { stats: dayStats } = usePatrolDayStats(viewDate)
 
   const headingDeg = hc02Helmet?.heading
 

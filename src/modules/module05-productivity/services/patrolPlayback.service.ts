@@ -78,6 +78,11 @@ function eventInstant(ev: PatrolEvent): string {
   return ev.lockedAt || ev.startedAt
 }
 
+/** Ngày lịch VN của sự kiện — đồng bộ tab Sự kiện / playback / heatmap. */
+export function getPatrolEventViewDate(ev: PatrolEvent): string {
+  return isoDayKey(eventInstant(ev))
+}
+
 function patrolEventsForCameraDay(
   events: PatrolEvent[],
   cameraId: string,

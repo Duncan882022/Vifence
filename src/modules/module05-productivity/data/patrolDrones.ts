@@ -12,7 +12,7 @@
  * Chưa có nguồn thật thì retry HLS ~8s rồi tile chuyển Offline (retry nền vẫn chạy).
  */
 import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
-import { getMediaMtxHlsBase, getMediaMtxWebrtcBase } from './helmetIngest'
+import { getMediaMtxHlsBase, getMediaMtxWebrtcBase, mediaMtxPathForCamera } from './helmetIngest'
 import { isVmsHlsRelayEnabled } from './patrolHelmetScope'
 
 /** Camera thuộc nhóm flycam của Module 05. */
@@ -51,12 +51,11 @@ export function getPatrolDroneRtspSource(cameraId: string): string | undefined {
   return readEnv(`VITE_${envSuffix(cameraId)}_RTSP_URL`)
 }
 
-/** Path trên MediaMTX — `DR-03` → `dr03` (không dấu gạch, DJI/OBS hay dùng). */
+/** Path trên MediaMTX — đồng bộ với playback (`mediaMtxPathForCamera`). */
 export function getPatrolDroneMediaMtxPath(cameraId: string): string {
   const fromEnv = readEnv(`VITE_${envSuffix(cameraId)}_PATH`)
   if (fromEnv) return fromEnv
-  if (cameraId === 'DR-03') return 'dr03'
-  return cameraId.toLowerCase()
+  return mediaMtxPathForCamera(cameraId)
 }
 
 function getPatrolDroneMediaMtxHlsUrl(cameraId: string): string | undefined {

@@ -51,6 +51,7 @@ import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
 import {
   getPatrolDefaultPlaybackDate,
+  getPatrolEventViewDate,
   getPatrolPlaybackMinDate,
 } from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
@@ -68,6 +69,7 @@ import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualId
 import { ensurePatrolAuth } from '@/services/patrolApiClient'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
+import { buildPatrolHelmetOnlineById } from './utils/patrolStreamOnline'
 
 function PatrolWorkersKpiDetail({
   personCount,
@@ -301,6 +303,24 @@ export function Module05Page() {
     () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),
     [dayBundle.events, flycamFlightModes],
   )
+  const patrolMapCameraIds = useMemo(
+    () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
+    [],
+  )
+
+  const helmetOnlineById = useMemo(
+    () => buildPatrolHelmetOnlineById(
+      patrolMapCameraIds,
+      liveMetrics.perCamera,
+      { hc02MobileOnline, framesLiveById: getPatrolCameraFramesLiveMap() },
+    ),
+    [patrolMapCameraIds, liveMetrics.perCamera, hc02MobileOnline, framesLiveTick],
+  )
+
+  const dayPresences = useMemo(
+    () => dayBundle.bundle?.presences ?? [],
+    [dayBundle.bundle],
+  )
   const dayStats = { stats: dayBundle.stats, loading: dayBundle.loading, reachable: dayBundle.reachable }
   const dr03FlightLabel = patrolFlightModeLabel(flycamFlightModes['DR-03'] ?? 'aerial')
 
@@ -316,6 +336,9 @@ export function Module05Page() {
   const handleSelectEvent = (ev: PatrolEvent) => {
     setSelectedEventId(ev.id)
     setDetailEventId(ev.id)
+    setPatrolViewDate(getPatrolEventViewDate(ev))
+    if (ev.cameraId) setSelectedCamId(ev.cameraId)
+    setCameraMode('playback')
   }
 
   const renderCameraTierBody = (expanded: boolean) => (
@@ -462,6 +485,12 @@ export function Module05Page() {
               <PatrolDensityHeatmap
                 patrolEvents={patrolEventsLive}
                 viewDate={patrolViewDate}
+                presences={dayPresences}
+                dayStats={dayStats.stats}
+                liveMetrics={liveMetrics}
+                workforce={workforceSnap}
+                flycamFlightModes={flycamFlightModes}
+                helmetOnlineById={helmetOnlineById}
                 expanded={heatmapExpanded}
                 onCloseExpand={() => setHeatmapExpanded(false)}
               />

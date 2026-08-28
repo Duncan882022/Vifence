@@ -8,10 +8,7 @@
  * JSMpeg (Vision wsUrl) và VMS relay HLS chỉ còn khi chưa cấu hình MediaMTX.
  * Cùng tab đang phát WHIP → local MediaStream (không qua server).
  */
-import {
-  getStreamUrlForCamera,
-  getVmsHlsUrl,
-} from '@/modules/module02-training/data/trainingCameraFeeds'
+import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { getHelmetMediaMtxHlsUrl, isHelmetWebrtcAvailable, isLegacyMobileHelmet } from './helmetIngest'
 import { isPatrolMetricsCameraId, isVmsHlsRelayEnabled } from './patrolHelmetScope'
 
@@ -55,7 +52,8 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
   if (mediaMtxHls) return mediaMtxHls
 
-  return getVmsHlsUrl(cameraId) ?? getStreamUrlForCamera(cameraId)
+  // Chỉ VMS relay HLS — không fallback MP4 demo (Module 02 catalog).
+  return getVmsHlsUrl(cameraId)
 }
 
 /**

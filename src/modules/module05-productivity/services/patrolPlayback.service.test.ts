@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPatrolPlaybackFetchers } from './patrolPlayback.service'
+import { createPatrolPlaybackFetchers, getPatrolEventViewDate } from './patrolPlayback.service'
 import type { PatrolEvent } from '../data/patrolTypes'
 
 vi.mock('../data/helmetIngest', async importOriginal => {
@@ -129,5 +129,14 @@ describe('createPatrolPlaybackFetchers', () => {
       endDate: '2026-08-29T23:59:59+07:00',
     })
     expect(res29.items.find(i => i.id === 'ev-late')).toBeDefined()
+  })
+})
+
+describe('getPatrolEventViewDate', () => {
+  it('trả ngày lịch VN từ lockedAt', () => {
+    expect(getPatrolEventViewDate({
+      lockedAt: '2026-08-28T17:30:00.000Z',
+      startedAt: '2026-08-28T08:00:00Z',
+    } as PatrolEvent)).toBe('2026-08-29')
   })
 })

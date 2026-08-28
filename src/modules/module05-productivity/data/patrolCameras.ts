@@ -3,6 +3,7 @@ import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvent
 import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
 import { getPatrolHelmetStreamUrl, getPatrolHelmetStreamFallbackUrl } from './patrolHelmetStreams'
 import { getHelmetWhepUrl, isLegacyMobileHelmet } from './helmetIngest'
+import { resolvePatrolCameraOnlineState } from '../utils/patrolStreamOnline'
 import {
   PATROL_DRONE_IDS,
   PATROL_DRONE_LABELS,
@@ -133,21 +134,17 @@ export function applyPatrolCameraStreamStatus(
   hc02MobileOnline = false,
   framesLiveById?: ReadonlyMap<string, boolean>,
 ): TrainingCamera[] {
-  const onlineById = new Map<string, boolean>()
-  for (const row of perCamera) {
-    onlineById.set(row.camera_id, Boolean(row.stream_online))
-  }
-  if (hc02MobileOnline) onlineById.set('HC-02', true)
-
   return cameras.map(cam => {
-    const reported = onlineById.get(cam.id)
-    const framesLive = framesLiveById?.get(cam.id) ?? false
-    const online = framesLive || (reported ?? false)
+    const { online, framesLive, streamOfflineConfirmed } = resolvePatrolCameraOnlineState(
+      cam.id,
+      perCamera,
+      { hc02MobileOnline, framesLiveById },
+    )
     return {
       ...cam,
       status: online ? 'online' as const : 'offline' as const,
       framesLive,
-      streamOfflineConfirmed: reported === false && !framesLive,
+      streamOfflineConfirmed,
     }
   })
 }
