@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { isTechnicalPatrolWorkerLabel, resolvePatrolRoiDisplayLabel } from './resolvePatrolRoiDisplayLabel'
+import { resolvePatrolRoiDisplayLabel } from './resolvePatrolRoiDisplayLabel'
 import type { PersonRoiDisplay } from './types'
 
-function track(partial: Partial<PersonRoiDisplay>): PersonRoiDisplay {
+function track(partial: Partial<PersonRoiDisplay> & Pick<PersonRoiDisplay, 'tier'>): PersonRoiDisplay {
   return {
     trackId: 't1',
     personId: 'p1',
@@ -11,7 +11,7 @@ function track(partial: Partial<PersonRoiDisplay>): PersonRoiDisplay {
     bbox: [0, 0, 10, 10],
     state: 'confirmed',
     locked: true,
-    tier: 'person',
+    displayOpacity: 1,
     ...partial,
   }
 }
