@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import { createPlaybackStallChecker } from './videoPlaybackStall'
 
 /** Trình phát cần đọc được wallclock khung hình đang hiển thị để đồng bộ overlay. */
 export interface VideoClockSource {
@@ -171,13 +172,19 @@ export function useVideoFramesReady(
   return ready
 }
 
+export interface HlsVideoSourceHandle {
+  clock: VideoClockSource
+  /** Gắn lại nguồn HLS — dùng khi đứng hình hoặc nút làm mới luồng. */
+  recover: () => void
+}
+
 /** Gắn HLS (.m3u8) hoặc MP4 thuần vào <video>. Safari native HLS; Chrome dùng hls.js. */
 export function useHlsVideoSource(
   videoRef: RefObject<HTMLVideoElement | null>,
   src: string,
   playing: boolean,
   fallbackSrc?: string,
-): VideoClockSource {
+): HlsVideoSourceHandle {
   /**
    * Mũ chưa phát thì backend trả 503; Safari native HLS gặp lỗi là bỏ hẳn, không
    * thử lại. Nên phải tự luân phiên nguồn và gắn lại cho tới khi có khung hình.
@@ -190,10 +197,12 @@ export function useHlsVideoSource(
 
   const [attempt, setAttempt] = useState(0)
   const strikesRef = useRef(0)
+  const stallCheckerRef = useRef(createPlaybackStallChecker())
 
   useEffect(() => {
     setAttempt(0)
     strikesRef.current = 0
+    stallCheckerRef.current.reset()
   }, [candidates])
 
   const activeSrc = candidates[attempt % candidates.length] ?? src
@@ -300,8 +309,8 @@ export function useHlsVideoSource(
   }, [videoRef, activeSrc, isHls, attempt, playing])
 
   /**
-   * Không có khung hình sau vài nhịp → gắn lại (và đổi nguồn nếu có dự phòng).
-   * Nhờ vậy tile tự lên hình ngay khi mũ bắt đầu phát, không cần tải lại trang.
+   * Watchdog: không có khung hình HOẶC currentTime không tiến (dính khung cuối)
+   * → gắn lại nguồn / đổi URL dự phòng.
    */
   useEffect(() => {
     if (!playing || !isHls) return
@@ -309,12 +318,16 @@ export function useHlsVideoSource(
     const timer = window.setInterval(() => {
       const video = videoRef.current
       if (!video) return
-      if (hasDecodedFrame(video)) {
-        strikesRef.current = 0
+
+      if (!hasDecodedFrame(video)) {
+        strikesRef.current += 1
+        if (strikesRef.current >= WATCHDOG_STRIKES) retry()
         return
       }
-      strikesRef.current += 1
-      if (strikesRef.current >= WATCHDOG_STRIKES) retry()
+
+      strikesRef.current = 0
+      const stall = stallCheckerRef.current.tick(video, playing)
+      if (stall === 'stall') retry()
     }, WATCHDOG_MS)
 
     return () => window.clearInterval(timer)
@@ -346,7 +359,13 @@ export function useHlsVideoSource(
     return startMs + video.currentTime * 1000
   }, [isHls, videoRef])
 
-  return { getDisplayWallclockMs }
+  return useMemo(
+    () => ({
+      clock: { getDisplayWallclockMs },
+      recover: retry,
+    }),
+    [getDisplayWallclockMs, retry],
+  )
 }
 
 export function isHlsStreamUrl(src: string): boolean {
