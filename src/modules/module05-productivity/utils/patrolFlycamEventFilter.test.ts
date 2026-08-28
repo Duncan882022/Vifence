@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { filterPatrolEventsByFlycamAltitude } from './patrolFlycamEventFilter'
+import type { DetectionDot } from '../data/patrolDetectionData'
+import {
+  filterPatrolEventsByFlycamAltitude,
+  filterPatrolHeatmapDotsExcludeAerialFlycam,
+  filterPatrolPresencesForHeatmap,
+  isPatrolHeatmapFlycamDotIncluded,
+} from './patrolFlycamEventFilter'
 
 function makeEvent(over: Partial<PatrolEvent>): PatrolEvent {
   return {
@@ -55,5 +61,60 @@ describe('filterPatrolEventsByFlycamAltitude', () => {
       { 'DR-03': 'aerial' },
     )
     expect(filtered).toHaveLength(1)
+  })
+})
+
+describe('filterPatrolHeatmapDotsExcludeAerialFlycam', () => {
+  const dot = (cameraId: string): DetectionDot => ({
+    id: `dot-${cameraId}`,
+    type: 'person',
+    position: [0, 0],
+    zoneId: 'ZONE_SITE',
+    cameraId,
+    confidence: 1,
+  })
+
+  it('DR-03 tầm cao — loại khỏi heatmap Module 05', () => {
+    const filtered = filterPatrolHeatmapDotsExcludeAerialFlycam(
+      [dot('HC-01'), dot('DR-03')],
+      { 'DR-03': 'aerial' },
+    )
+    expect(filtered.map(d => d.cameraId)).toEqual(['HC-01'])
+  })
+
+  it('DR-03 tầm thấp — giữ trên heatmap', () => {
+    const filtered = filterPatrolHeatmapDotsExcludeAerialFlycam(
+      [dot('DR-03')],
+      { 'DR-03': 'proximity' },
+    )
+    expect(filtered).toHaveLength(1)
+  })
+
+  it('isPatrolHeatmapFlycamDotIncluded mặc định aerial = loại DR-*', () => {
+    expect(isPatrolHeatmapFlycamDotIncluded('DR-03', {})).toBe(false)
+    expect(isPatrolHeatmapFlycamDotIncluded('HC-02', {})).toBe(true)
+  })
+})
+
+describe('filterPatrolPresencesForHeatmap', () => {
+  it('bỏ presence DR-03 khi tầm cao', () => {
+    const filtered = filterPatrolPresencesForHeatmap(
+      [{
+        id: 1,
+        subjectId: 'pers-1',
+        cameraId: 'DR-03',
+        zoneId: 'ZONE_SITE',
+        startedAt: 1,
+        endedAt: 2,
+        gpsLat: 0,
+        gpsLng: 0,
+        presenceSeq: 1,
+        tier: 'person',
+        displayName: 'pers-1',
+        sourceCameras: ['DR-03'],
+      }],
+      { 'DR-03': 'aerial' },
+    )
+    expect(filtered).toHaveLength(0)
   })
 })

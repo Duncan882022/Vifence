@@ -45,6 +45,10 @@ import {
 } from '@/services/patrolHeatmapPersonRegistry'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
 import { usePatrolFlycamFlightModes } from '../hooks/usePatrolFlycamFlightModes'
+import {
+  filterPatrolHeatmapDotsExcludeAerialFlycam,
+  filterPatrolPresencesForHeatmap,
+} from '../utils/patrolFlycamEventFilter'
 import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { ObjectState } from '../types/workforceHeatmap'
@@ -356,18 +360,21 @@ export function PatrolDensityHeatmap({
       flightModeByCamera: flycamFlightModes,
     } as const
 
-    let presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+    const heatmapPresences = filterPatrolPresencesForHeatmap(presences, flycamFlightModes)
+
+    let presenceDots = buildPatrolPresenceHeatmapDots(heatmapPresences, {
       ...presenceOpts,
       liveOnly: anyCameraOnline,
     })
     if (anyCameraOnline && presenceDots.length === 0) {
-      presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+      presenceDots = buildPatrolPresenceHeatmapDots(heatmapPresences, {
         ...presenceOpts,
         liveOnly: false,
       })
     }
 
-    const registryDots = getHeatmapPersonDots().map(dot => {
+    const registryDots = filterPatrolHeatmapDotsExcludeAerialFlycam(
+      getHeatmapPersonDots().map(dot => {
       const camOnline = Boolean(helmetOnlineById[dot.cameraId])
       const inCameraView = camOnline && Boolean(dot.inCameraView)
       return {
@@ -378,7 +385,9 @@ export function PatrolDensityHeatmap({
           ? DETECTION_DOT_OPACITY_IN_VIEW
           : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
       }
-    })
+    }),
+      flycamFlightModes,
+    )
 
     /* Presences API = nguồn ngày — tránh 2 chấm cùng người (presence + registry). */
     let merged: typeof presenceDots
@@ -401,6 +410,8 @@ export function PatrolDensityHeatmap({
       }
       merged = eventDots
     }
+
+    merged = filterPatrolHeatmapDotsExcludeAerialFlycam(merged, flycamFlightModes)
 
     const byDevice = filterPatrolHeatmapDotsByDevice(merged, {
       helmet: layers.helmet,
