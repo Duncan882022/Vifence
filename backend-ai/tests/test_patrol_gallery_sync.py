@@ -45,6 +45,9 @@ class GallerySyncTests(unittest.TestCase):
         ]
         for p in self._patches:
             p.start()
+        from app import patrol_identity_store
+
+        patrol_identity_store._state = None
 
     def tearDown(self) -> None:
         from app.patrol import sink
@@ -83,6 +86,31 @@ class GallerySyncTests(unittest.TestCase):
         row_bind = lookup_patrol_identity("p-SGC-6688")
         self.assertIsNotNone(row_bind)
         self.assertIn(pers_id, row_bind["aliases"])
+
+    def test_sync_all_identified_on_startup(self) -> None:
+        row1 = identity.import_identity(
+            full_name="Alice",
+            employee_code="SGC-1001",
+            contractor="SGC",
+            source="self_enroll",
+        )
+        row2 = identity.import_identity(
+            full_name="Bob",
+            employee_code="SGC-1002",
+            contractor="SGC",
+            source="self_enroll",
+        )
+        snap_dir = self._snap_dir / "2026-08-28"
+        snap_dir.mkdir(parents=True)
+        img = np.zeros((120, 160, 3), dtype=np.uint8)
+        cv2.imwrite(str(snap_dir / f"{row1['pers_id']}.jpg"), img)
+
+        from app.patrol.gallery_sync import sync_all_identified_to_gallery
+
+        out = sync_all_identified_to_gallery()
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["total"], 2)
+        self.assertEqual(out["synced"], 2)
 
 
 if __name__ == "__main__":

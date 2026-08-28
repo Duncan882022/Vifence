@@ -282,6 +282,17 @@ async def lifespan(app: FastAPI):
                 conn.execute("DELETE FROM appearances WHERE event_date < ?", (cutoff,))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Không mở được patrol DB: %s", exc)
+    try:
+        from .patrol.gallery_sync import sync_all_identified_to_gallery
+
+        sync_out = sync_all_identified_to_gallery()
+        logger.info(
+            "Patrol gallery sync — %d/%d hồ sơ đã định danh vào gallery live.",
+            sync_out.get("synced", 0),
+            sync_out.get("total", 0),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Patrol gallery sync bỏ qua: %s", exc)
     init_legacy_ctx(store=engine.store, vms_workers=_vms_workers)
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     if settings.event_test_mode:
