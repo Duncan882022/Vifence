@@ -126,7 +126,7 @@ export function buildPatrolPresenceHeatmapDots(
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
       objectId: presence.subjectId,
-      verified: tierVerified(presence.tier),
+      verified: isPatrolDroneCameraId(primaryCam) ? false : tierVerified(presence.tier),
       inCameraView,
       opacity: presence.tier === 'object'
         ? (inCameraView ? 0.55 : 0.35)

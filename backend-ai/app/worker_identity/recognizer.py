@@ -270,6 +270,9 @@ def assess_patrol_face(
     camera_id: str = "",
 ) -> tuple[np.ndarray | None, float, bool]:
     """Trả (embedding, score, eligible) — chỉ eligible mới cấp sgc / tab Người."""
+    # Flycam góc cao — không có mặt đủ rõ; chỉ đếm người (obj-*), không gallery.
+    if camera_id.startswith("DR-"):
+        return None, 0.0, False
     if not person_bbox or len(person_bbox) < 4:
         return None, 0.0, False
     crop = _crop_person(frame, person_bbox)

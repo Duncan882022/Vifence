@@ -99,6 +99,14 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     const scoped = filterRecentPresences([old, recent], Date.now())
     expect(scoped).toHaveLength(1)
   })
+
+  it('flycam — không badge định danh (chỉ đếm)', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 2, cameraId: 'DR-03', tier: 'identity', subjectId: 'pers-0099' }),
+    ])
+    expect(dots).toHaveLength(1)
+    expect(dots[0].verified).toBe(false)
+  })
 })
 
 describe('filterPatrolHeatmapDotsByDevice', () => {

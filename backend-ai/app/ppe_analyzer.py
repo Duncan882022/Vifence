@@ -126,14 +126,46 @@ def _assign_patrol_person_identity(
         return
     if not track_id:
         return
+
+    person_bbox = [float(v) for v in person_box]
+
+    if _is_patrol_flycam(camera_id):
+        # Góc trên cao — YOLO đếm người, không nhận diện mặt / gallery.
+        from .patrol_identity_lifecycle import observe as observe_track_identity
+
+        observe_track_identity(
+            camera_id,
+            track_id,
+            worker_id="",
+            worker_name="",
+        )
+        person_det.worker_id = ""
+        person_det.worker_name = ""
+        person_det.track_id = track_id
+        person_det.tier = "object"
+        person_det.face_eligible = False
+        try:
+            from .patrol.sink import record_observation
+
+            record_observation(
+                camera_id=camera_id,
+                track_id=track_id,
+                face_embedding=None,
+                face_quality=0.0,
+                confidence=float(person_det.confidence or 0.0),
+                frame=frame,
+                person_bbox=person_bbox,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("[patrol] Flycam — không ghi được quan sát đếm người")
+        return
+
     from .patrol_identity_lifecycle import observe as observe_track_identity
     from .person_identity_registry import (
         peek_patrol_track_identity,
         resolve_patrol_person_identity,
     )
     from .worker_identity.recognizer import assess_patrol_face
-
-    person_bbox = [float(v) for v in person_box]
 
     # Cùng thước đo "thấy mặt" với đường ghi sự kiện — nếu không, nhãn ROI và
     # tab sự kiện sẽ nói hai điều khác nhau về cùng một người.

@@ -690,7 +690,10 @@ export function PatrolGeoHeatmap({
                 >
                   <Tooltip sticky className="patrol-zone-tip">
                     <span style={{ fontSize: 10 }}>
-                      {dot.label ? dot.label : 'Người'}<br />
+                      {dot.cameraId.startsWith('DR-')
+                        ? `Đếm người · ${dot.label || 'flycam'}`
+                        : (dot.label ? dot.label : 'Người')}
+                      <br />
                       Camera: {dot.cameraId}
                       {dot.objectId ? ` · ${dot.objectId}` : ''}
                       <br />
@@ -901,11 +904,7 @@ export function PatrolGeoHeatmap({
                       <>
                         <br />
                         <span style={{ color: '#38bdf8' }}>
-                          Đã detect: {detect.total} người
-                        </span>
-                        <br />
-                        <span style={{ color: '#64748b', fontSize: 9 }}>
-                          {detect.person} Người · {detect.identity} Định danh
+                          Đếm: {detect.total} người (góc trên cao)
                         </span>
                       </>
                     )}
