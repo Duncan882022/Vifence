@@ -6,6 +6,8 @@
 import { PATROL_GPS_ZONES } from './patrolSiteMap'
 import { clampPointToSiteBoundary, isPointInSiteBoundary } from './patrolSiteGeometry'
 
+import type { PatrolTier } from '../utils/patrolTierTokens'
+
 export type DetectionType = 'person' | 'vehicle' | 'equipment'
 
 export interface DetectionDot {
@@ -23,7 +25,10 @@ export interface DetectionDot {
   opacity?: number
   /** Object ID — click mở bottom sheet */
   objectId?: string
+  /** @deprecated Dùng tier — giữ cho flycam aerial (verified=false dù tier identity). */
   verified?: boolean
+  /** Ba tầng nhận diện — màu chấm heatmap */
+  tier?: PatrolTier
   /** true = đang trong tầm nhìn camera (ACTIVE / vừa detect) */
   inCameraView?: boolean
 }

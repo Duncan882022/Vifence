@@ -26,9 +26,15 @@ import {
   getPatrolMapDeviceBadgeNum,
 } from '../data/patrolSiteMap'
 import {
+  DETECTION_DOT_OPACITY_IN_VIEW,
+  DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   DETECTION_DOT_STYLE,
   type DetectionDot,
 } from '../data/patrolDetectionData'
+import {
+  PATROL_HEATMAP_DOT_HEX,
+  resolveDetectionDotTier,
+} from '../utils/patrolDetectionDotUi'
 import type { RouteHistory } from '../services/usePatrolWebSocket'
 import type { CameraPositions } from '../services/usePatrolWebSocket'
 import {
@@ -181,23 +187,25 @@ function createZoneStatIcon(
   return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
-/* ── Detection dot — nhỏ; trong FOV nhấp nháy, ngoài FOV mờ ── */
+/* ── Detection dot — tier color; trong FOV nhấp nháy, ngoài FOV mờ ── */
 function createDetectionDotIcon(
   inCameraView: boolean,
-  verified: boolean,
-  type: DetectionDot['type'],
+  tier: ReturnType<typeof resolveDetectionDotTier>,
 ): L.DivIcon {
-  const style = DETECTION_DOT_STYLE[type]
-  const color = verified && type === 'person' ? '#a78bfa' : style.color
+  const color = PATROL_HEATMAP_DOT_HEX[tier]
   const size = 7
   const anim = inCameraView ? 'animation:patrol-dot-blink 1.15s ease-in-out infinite;' : ''
-  const opacity = inCameraView ? 0.95 : 0.32
+  const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
+  const isObject = tier === 'object'
+  const border = isObject
+    ? `1px solid rgba(15,23,42,${inCameraView ? 0.65 : 0.4})`
+    : `1px solid rgba(255,255,255,${inCameraView ? 0.85 : 0.35})`
   const html = `
     <div style="
       width:${size}px;height:${size}px;border-radius:50%;
       background:${color};
-      border:1px solid rgba(255,255,255,${inCameraView ? 0.85 : 0.35});
-      box-shadow:0 0 ${inCameraView ? 3 : 1}px ${color}${inCameraView ? '99' : '44'};
+      border:${border};
+      box-shadow:0 0 ${inCameraView ? 3 : 1}px ${color}${inCameraView ? 'cc' : '44'};
       opacity:${opacity};
       ${anim}
     "></div>`
@@ -680,7 +688,7 @@ export function PatrolGeoHeatmap({
                 <Marker
                   key={dot.id}
                   position={dot.position}
-                  icon={createDetectionDotIcon(inView, Boolean(dot.verified), dot.type)}
+                  icon={createDetectionDotIcon(inView, resolveDetectionDotTier(dot))}
                   zIndexOffset={dotZ}
                   eventHandlers={
                     onDetectionClick && (dot.objectId || dot.type === 'person')

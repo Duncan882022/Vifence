@@ -133,6 +133,7 @@ export function buildPatrolPresenceHeatmapDots(
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
       objectId: presence.subjectId,
+      tier: presence.tier,
       verified: helmetLike ? tierVerified(presence.tier) : false,
       inCameraView,
       opacity: presence.tier === 'object'
@@ -203,6 +204,11 @@ export function buildPatrolDayHeatmapDots(
     const cameraOnline = isCameraOnlineForHeatmap(event.cameraId || '', opts?.cameraOnlineById)
     const inCameraView = recent && cameraOnline
     const stage = resolvePatrolPersonStage(event)
+    const tier: PatrolDayPresence['tier'] = stage === 'profile'
+      ? 'identity'
+      : stage === 'person'
+        ? 'person'
+        : 'object'
     const master = subjectId.toLowerCase()
     const prev = byMaster.get(master)
     if (prev && (prev.lastSeenAt ?? 0) >= lastSeen) continue
@@ -218,6 +224,7 @@ export function buildPatrolDayHeatmapDots(
       label: event.objectLabel?.trim() || event.violationLabel?.trim() || master,
       lastSeenAt: lastSeen,
       objectId: master,
+      tier,
       verified: stage === 'profile',
       inCameraView,
       opacity: inCameraView ? 0.92 : 0.45,
