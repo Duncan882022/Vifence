@@ -124,17 +124,16 @@ def _key(camera_id: str, track_id: str) -> str:
 
 def tier_for_worker_id(worker_id: str | None) -> str:
     """Tầng *thô* suy từ mã — chưa áp ràng buộc chỉ-tiến-không-lùi."""
-    from .patrol_entity import is_patrol_gallery_id
-    from .person_identity_registry import is_sgc_worker_id
+    from .patrol_entity import patrol_tier_label
 
     wid = (worker_id or "").strip()
     if not wid or wid == "unknown":
         return TIER_OBJECT
-    if is_patrol_gallery_id(wid):
+    tier = patrol_tier_label(wid)
+    if tier == "identity":
         return TIER_IDENTITY
-    if is_sgc_worker_id(wid):
+    if tier == "person":
         return TIER_PERSON
-    # Mã lạ không thuộc gallery cũng không phải sgc — coi như chưa định danh.
     return TIER_OBJECT
 
 

@@ -39,20 +39,20 @@ describe('ba tầng nhận diện HC-02', () => {
     ).toBe('Đối tượng')
   })
 
-  it('đủ mặt để nhận diện nhưng chưa có trong thư viện → Nhân sự', () => {
+  it('đủ mặt để nhận diện nhưng chưa có trong thư viện → Người', () => {
     const event = makeEvent({ objectId: 'OBJ-0008', trackWorkerId: 'sgc-12' })
     expect(resolvePatrolPersonStage(event)).toBe('person')
     expect(
       patrolWorkforceEventTitle(event.type, event.objectId, event.objectLabel, event.trackWorkerId),
-    ).toBe('Nhân sự')
+    ).toBe('Người')
   })
 
-  it('mã sgc nằm ở objectId cũng là Nhân sự', () => {
+  it('mã sgc nằm ở objectId cũng là Người', () => {
     const event = makeEvent({ objectId: 'sgc-12' })
     expect(resolvePatrolPersonStage(event)).toBe('person')
   })
 
-  it('mã pers-* từ SQLite day card → Nhân sự', () => {
+  it('mã pers-* từ SQLite day card → Người, không lộ mã kỹ thuật', () => {
     const event = makeEvent({
       id: 'pers:pers-0007',
       objectId: 'pers-0007',

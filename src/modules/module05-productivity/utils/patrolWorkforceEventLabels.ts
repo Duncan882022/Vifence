@@ -151,32 +151,47 @@ export function patrolWorkforceEventTitle(
       if (isVerifiedWorkerLabel(objectLabel ?? '')) return objectLabel!.trim()
       return 'Định danh'
     }
-    if (isPatrolSgcWorkerId(objectId) || isPatrolSgcWorkerId(trackWorkerId)) return 'Nhân sự'
-    if (isPatrolPersId(objectId) || isPatrolPersId(trackWorkerId)) return 'Nhân sự'
+    if (isPatrolSgcWorkerId(objectId) || isPatrolSgcWorkerId(trackWorkerId)) return 'Người'
+    if (isPatrolPersId(objectId) || isPatrolPersId(trackWorkerId)) return 'Người'
     return 'Đối tượng'
   }
   return ''
 }
 
-/** Dòng phụ — sgc master; OBJ hiển thị phụ khi có. */
+export function isPatrolTechnicalSubjectId(id?: string | null): boolean {
+  const s = id?.trim() ?? ''
+  if (!s) return false
+  return /^(pers-|iden-|obj-|ptk)/i.test(s)
+}
+
+/** Dòng phụ — chỉ hiện mã SGC khi đã định danh; ẩn pers/iden/obj. */
 export function patrolWorkforceEventSubjectId(
   objectId?: string | null,
   trackWorkerId?: string | null,
+  stage?: PatrolPersonStage,
 ): string {
   const oid = objectId?.trim() ?? ''
   const track = trackWorkerId?.trim() ?? ''
-  const sgc = isPatrolSgcWorkerId(track)
-    ? track
-    : isPatrolSgcWorkerId(oid)
-      ? oid
-      : ''
-  const obj = isPatrolObjectId(oid) ? oid : ''
 
-  if (sgc && obj) return `${sgc} · ${obj}`
-  if (sgc) return sgc
-  if (obj) return obj
-  if (track) return track
-  return oid || '—'
+  if (stage === 'profile') {
+    const code = track && !isPatrolPersId(track) && !isPatrolIdenId(track)
+      ? track
+      : oid && !isPatrolPersId(oid) && !isPatrolIdenId(oid) && !isPatrolObjectId(oid)
+        ? oid
+        : ''
+    if (code && isPatrolSgcWorkerId(code)) return code.toUpperCase()
+    if (code && !isPatrolTechnicalSubjectId(code)) return code
+    return '—'
+  }
+
+  if (stage === 'person') {
+    if (isPatrolSgcWorkerId(track)) return track.toUpperCase()
+    if (isPatrolSgcWorkerId(oid)) return oid.toUpperCase()
+    return '—'
+  }
+
+  const obj = isPatrolObjectId(oid) ? oid : ''
+  return obj || '—'
 }
 
 export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent {
@@ -187,13 +202,14 @@ export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent
     : isPatrolSgcWorkerId(event.objectId)
       ? event.objectId
       : undefined
+  const stage = resolvePatrolPersonStage(event)
   const title = patrolWorkforceEventTitle(
     event.type,
     event.objectId,
     event.objectLabel,
     trackWorkerId,
   )
-  const subjectId = patrolWorkforceEventSubjectId(event.objectId, trackWorkerId)
+  const subjectId = patrolWorkforceEventSubjectId(event.objectId, trackWorkerId, stage)
 
   return {
     ...event,

@@ -5,6 +5,14 @@ from __future__ import annotations
 from .person_identity_registry import is_sgc_worker_id
 
 
+def is_patrol_pers_id(worker_id: str | None) -> bool:
+    return (worker_id or "").strip().lower().startswith("pers-")
+
+
+def is_patrol_iden_id(worker_id: str | None) -> bool:
+    return (worker_id or "").strip().lower().startswith("iden-")
+
+
 def is_patrol_gallery_id(worker_id: str | None) -> bool:
     wid = (worker_id or "").strip()
     if not wid or wid == "unknown" or is_sgc_worker_id(wid):
@@ -110,13 +118,15 @@ def patrol_tier_label(worker_id: str | None) -> str:
     """
     Phân tier patrol person (chỉ áp dụng cho detection behavior=person):
     - identity: gallery / profile đã xác minh
-    - person: mã sgc-* ổn định (re-id)
-    - object: người chưa đủ tiêu chí nhận diện (chưa có sgc/gallery)
+    - person: đã phân biệt A≠B (sgc-* hoặc pers-* SQLite) nhưng chưa gallery
+    - object: chưa đủ tiêu chí nhận diện
     """
     wid = (worker_id or "").strip()
     if is_patrol_gallery_id(wid):
         return "identity"
-    if is_sgc_worker_id(wid):
+    if is_patrol_iden_id(wid):
+        return "identity"
+    if is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
         return "person"
     return "object"
 
@@ -131,11 +141,11 @@ def format_patrol_person_snapshot_label(
     wname = (worker_name or "").strip()
     if is_patrol_gallery_id(wid):
         return resolve_patrol_worker_display_name(wid, wname)
-    if is_sgc_worker_id(wid):
-        return wid
+    if is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
+        return "Người"
     oid = (object_id or "").strip()
     if oid.upper().startswith("OBJ-"):
-        return oid
+        return "Đối tượng"
     return "Đối tượng"
 
 

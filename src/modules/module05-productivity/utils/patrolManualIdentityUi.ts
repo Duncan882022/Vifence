@@ -8,6 +8,7 @@ import {
   resolvePatrolWorkerId,
 } from '../services/patrolManualIdentity.service'
 import {
+  isPatrolObjectId,
   isPatrolSgcWorkerId,
   patrolEventIdentityKeys,
   resolvePatrolPersonStage,
@@ -116,20 +117,21 @@ export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
   }
 
   if (stage === 'person') {
-    const sgc = (event.trackWorkerId ?? event.objectId ?? '').trim()
-    const code = isPatrolSgcWorkerId(sgc) ? sgc : (display.workerId ?? sgc)
+    const sgc = [event.trackWorkerId, event.objectId]
+      .map(v => v?.trim() ?? '')
+      .find(v => isPatrolSgcWorkerId(v))
     return {
-      title: 'Nhân sự',
-      subtitle: code ? `Mã: ${code}` : '—',
+      title: 'Người',
+      subtitle: sgc ? `Mã: ${sgc.toUpperCase()}` : 'Chưa có trong gallery',
       unit: null,
-      workerId: code || null,
+      workerId: sgc || null,
       stage,
     }
   }
 
   return {
     title: 'Đối tượng',
-    subtitle: display.workerId ? `Mã: ${display.workerId}` : (event.objectLabel?.trim() || '—'),
+    subtitle: isPatrolObjectId(event.objectId ?? '') ? 'Đang quan sát' : '—',
     unit: null,
     workerId: display.workerId,
     stage,

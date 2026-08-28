@@ -42,11 +42,11 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     roiLabelText: 'text-slate-100',
   },
   person: {
-    label: 'Nhân sự',
+    label: 'Người',
     color: 'text-sky-400',
     badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
     borderAccent: 'border-l-sky-400',
-    tooltip: 'Mã sgc ổn định — chưa gán profile',
+    tooltip: 'Đã phân biệt A≠B — chưa có trong gallery',
     roiBorder: 'border-2 border-solid border-sky-400/95',
     roiLabelBg: 'bg-sky-900/95',
     roiLabelText: 'text-sky-50',
