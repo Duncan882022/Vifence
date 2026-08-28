@@ -20,8 +20,8 @@ describe('patrolDetectionMapOffset', () => {
       PATROL_DETECTION_FORWARD_M,
     )
     const dist = haversineM(HELMET[0], HELMET[1], lat, lng)
-    expect(dist).toBeGreaterThan(2.5)
-    expect(dist).toBeLessThan(5)
+    expect(dist).toBeGreaterThan(0.7)
+    expect(dist).toBeLessThan(1.4)
     expect(lat).toBeGreaterThan(HELMET[0])
   })
 
@@ -56,6 +56,7 @@ describe('patrolDetectionMapOffset', () => {
       180,
     )
     const dist = haversineM(HELMET[0], HELMET[1], lat, lng)
-    expect(dist).toBeGreaterThan(2)
+    expect(dist).toBeGreaterThan(0.7)
+    expect(dist).toBeLessThan(1.4)
   })
 })

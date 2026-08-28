@@ -1,13 +1,13 @@
 import type { DetectionDot } from '../data/patrolDetectionData'
-import type { PatrolTier } from './patrolTierTokens'
+import { PATROL_TIER_TOKENS, type PatrolTier } from './patrolTierTokens'
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
 import { isPatrolObjectId, isPatrolPersId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
 
-/** Màu chấm heatmap — đồng bộ ba tầng nhận diện patrol. */
+/** Màu chấm heatmap — lấy từ PATROL_TIER_TOKENS (sky / violet / slate). */
 export const PATROL_HEATMAP_DOT_HEX: Record<PatrolTier, string> = {
-  object: '#f8fafc',
-  person: '#4ade80',
-  identity: '#a78bfa',
+  object: PATROL_TIER_TOKENS.object.heatmapDotHex,
+  person: PATROL_TIER_TOKENS.person.heatmapDotHex,
+  identity: PATROL_TIER_TOKENS.identity.heatmapDotHex,
 }
 
 export function resolveDetectionDotTier(

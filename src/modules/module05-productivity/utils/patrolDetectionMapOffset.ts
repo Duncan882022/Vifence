@@ -1,16 +1,16 @@
 /**
- * Vị trí chấm Người trên bản đồ — lệch phía trước mũ (~3–5 m theo heading),
- * không chồng icon mũ. Tắt layer Thiết bị vẫn thấy chấm qua layer Người.
+ * Vị trí chấm Người / Định danh trên bản đồ — sát quanh mũ (~1 m theo heading),
+ * không chồng icon mũ. Tắt layer Thiết bị vẫn thấy chấm qua layer thiết bị mũ.
  */
 import { clampPointToSiteInterior } from '../data/patrolSiteGeometry'
 import { offsetLatLngByMeters } from './patrolLivePersonDots'
 
-/** Khoảng cách mặc định phía trước mũ (m). */
-export const PATROL_DETECTION_FORWARD_M = 3.5
+/** Khoảng cách mặc định phía trước mũ (m) — vòng quan sát sát mũ. */
+export const PATROL_DETECTION_FORWARD_M = 1
 /** Trải ngang tối đa khi nhiều người (m). */
-export const PATROL_DETECTION_LATERAL_MAX_M = 1.5
+export const PATROL_DETECTION_LATERAL_MAX_M = 0.6
 /** GPS gần mũ hơn ngưỡng này → coi là chồng mũ, cần offset. */
-export const PATROL_HELMET_COLLAPSE_THRESHOLD_M = 4
+export const PATROL_HELMET_COLLAPSE_THRESHOLD_M = 2
 
 export function haversineM(
   lat1: number,
