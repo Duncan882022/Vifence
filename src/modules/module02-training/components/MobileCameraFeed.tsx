@@ -42,7 +42,7 @@ import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-prod
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
-import { isPatrolHelmetCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolHelmetCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -206,9 +206,11 @@ export function MobileCameraFeed({
           if (!raw || raw.length < 4) return null
           return [raw[0], raw[1], raw[2], raw[3]]
         }
+        const patrolPersonCam = isPatrolPersonRoiCameraId(cameraId)
+        const patrolFlycam = cameraId.startsWith('DR-')
         /** Vẽ ROI cho mọi người nhìn thấy được — chỉ loại mảnh chân/tay. */
         const patrolVisible = (d: MobileAiDetection) => {
-          if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
+          if (!patrolPersonCam || d.behavior !== 'person') return true
           const box = patrolBox(d)
           if (!box || frameW <= 0 || frameH <= 0) return false
           return patrolPersonMeetsDisplayGate({
@@ -216,11 +218,12 @@ export function MobileCameraFeed({
             frameW,
             frameH,
             workerId: d.worker_id,
+            flycam: patrolFlycam,
           })
         }
-        /** Đếm KPI vẫn theo tiêu chí sự kiện: đầu + ≥30% thân, hoặc đã có mặt/mã. */
+        /** Khung hiện tại — tiêu chí sự kiện: đầu + ≥30% thân, hoặc đã có mặt/mã. */
         const patrolCountable = (d: MobileAiDetection) => {
-          if (cameraId !== 'HC-02' || d.behavior !== 'person') return true
+          if (!patrolPersonCam || d.behavior !== 'person') return true
           const box = patrolBox(d)
           if (!box || frameW <= 0 || frameH <= 0) return false
           return patrolPersonMeetsDetectionGate({

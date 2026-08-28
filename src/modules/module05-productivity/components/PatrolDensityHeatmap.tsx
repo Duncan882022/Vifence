@@ -296,16 +296,18 @@ export function PatrolDensityHeatmap({
     if (obj) setSelectedObject(obj)
   }
 
-  const observedCount = dayStats.workersStandard
+  const workersStandard = dayStats.workersStandard
+  const personCount = dayStats.personCount
   const identifiedCount = dayStats.identityCount
   const encounterCount = dayStats.encountersStandard
+  const unassignedCount = dayStats.unassignedObservations
 
   const siteHeadcount = useMemo(() => ({
-    observed: dayStats.workersStandard,
-    identified: dayStats.identityCount,
-    objects: dayStats.unassignedObservations,
-    persons: dayStats.personCount,
-  }), [dayStats])
+    observed: workersStandard,
+    identified: identifiedCount,
+    objects: unassignedCount,
+    persons: personCount,
+  }), [workersStandard, identifiedCount, unassignedCount, personCount])
 
   const bodycamOnlineById = useMemo(() => ({
     'HC-01': Boolean(helmetOnlineById['HC-01']),
@@ -366,11 +368,15 @@ export function PatrolDensityHeatmap({
             )
           })}
           <span className="text-[#334155] hidden sm:inline">·</span>
-          <span className="text-sky-300/90 tabular-nums shrink-0">{observedCount} người chuẩn</span>
-          <span className="text-[#334155]">·</span>
-          <span className="text-emerald-300/90 tabular-nums shrink-0">{encounterCount} lượt</span>
+          <span className="text-sky-300/90 tabular-nums shrink-0">{workersStandard} người chuẩn</span>
+          <span className="text-[#334155] hidden md:inline">·</span>
+          <span className="text-cyan-300/85 tabular-nums shrink-0 hidden md:inline">{personCount} người</span>
           <span className="text-[#334155]">·</span>
           <span className="text-violet-300/90 tabular-nums shrink-0">{identifiedCount} định danh</span>
+          <span className="text-[#334155] hidden md:inline">·</span>
+          <span className="text-amber-300/85 tabular-nums shrink-0 hidden md:inline">{unassignedCount} có thể người</span>
+          <span className="text-[#334155]">·</span>
+          <span className="text-emerald-300/90 tabular-nums shrink-0">{encounterCount} lượt</span>
         </div>
 
         <div className="flex items-center gap-1 flex-wrap">

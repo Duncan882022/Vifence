@@ -1997,6 +1997,9 @@ def _build_patrol_bodycam_result(
         "height": h,
         "metrics": {
             "person_count": _patrol_countable_person_count(persons, w, h),
+            "display_person_count": _patrol_display_person_count(
+                persons, w, h, camera_id=camera_id,
+            ),
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],
@@ -2025,6 +2028,29 @@ def _patrol_countable_person_count(
             frame_w,
             frame_h,
             face_dominant=_face_dominant_person_box(p.person_box, frame_w, frame_h),
+        )
+    )
+
+
+def _patrol_display_person_count(
+    persons: list[_PersonPpe],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str,
+) -> int:
+    """Số bbox ROI — mọi silhouette giống người trên khung (display gate)."""
+    from .patrol_person_visibility import patrol_person_meets_display_gate
+
+    flycam = _is_patrol_flycam(camera_id)
+    return sum(
+        1
+        for p in persons
+        if patrol_person_meets_display_gate(
+            p.person_box,
+            frame_w,
+            frame_h,
+            flycam=flycam,
         )
     )
 
@@ -2164,8 +2190,10 @@ def _build_patrol_flycam_result(
     )
     person_dets = [d for d in detections if d.behavior == "person"]
     track_ids = {d.track_id for d in person_dets if d.track_id}
+    display_count = _patrol_display_person_count(persons, w, h, camera_id=camera_id)
     frame_person_count = len(person_dets)
     track_count = len(track_ids) if track_ids else frame_person_count
+    countable = _patrol_countable_person_count(persons, w, h)
 
     return {
         "type": "result",
@@ -2173,7 +2201,10 @@ def _build_patrol_flycam_result(
         "width": w,
         "height": h,
         "metrics": {
-            "person_count": track_count,
+            # Khung hiện tại — chuẩn sự kiện (flycam góc cao thường = 0).
+            "person_count": countable,
+            # ROI đang khoanh — silhouette có thể là người.
+            "display_person_count": max(display_count, track_count),
             "frame_person_count": frame_person_count,
             "track_count": track_count,
             "ppe_violations": 0,
