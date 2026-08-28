@@ -40,7 +40,7 @@ describe('fetchPatrolHelmetAggregateMetrics health merge', () => {
     vi.unstubAllGlobals()
   })
 
-  it('DR-03 online qua /health dù /patrol/metrics trả 401', async () => {
+  it('DR-03 online qua /health; metrics cần JWT (401 không token → legacy + health)', async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/health')) {

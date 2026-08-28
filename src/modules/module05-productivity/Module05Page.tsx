@@ -66,6 +66,7 @@ import { patrolFlightModeLabel } from './utils/patrolFlightMode'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
+import { ensurePatrolAuth } from '@/services/patrolApiClient'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
 
@@ -285,6 +286,7 @@ export function Module05Page() {
   )
 
   useEffect(() => {
+    void ensurePatrolAuth()
     void syncPatrolIdentityBindingsFromBackend()
   }, [])
 

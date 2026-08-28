@@ -130,12 +130,16 @@ async function probePatrolApi(backendUrl: string): Promise<boolean> {
   if (cached !== undefined) return cached
 
   try {
-    const res = await fetch(`${base}/patrol/metrics?cameras=HC-02`, {
+    const res = await fetch(`${base}/health`, {
       headers: TUNNEL_HEADERS,
       mode: 'cors',
     })
-    // 401 = route patrol đã deploy, chỉ thiếu JWT — không rơi legacy Contabo.
-    const ok = res.ok || res.status === 401
+    if (!res.ok) {
+      patrolApiByBase.set(base, false)
+      return false
+    }
+    const data = await res.json() as { cameras?: Record<string, unknown> }
+    const ok = Boolean(data.cameras && typeof data.cameras === 'object')
     patrolApiByBase.set(base, ok)
     return ok
   } catch {
@@ -205,6 +209,9 @@ async function fetchPatrolMetricsWithAuth(
 ): Promise<PatrolHelmetAggregateMetricsResponse | null> {
   const hasPatrol = await probePatrolApi(backendUrl)
   if (!hasPatrol) return null
+
+  const { ensurePatrolAuth } = await import('@/services/patrolApiClient')
+  await ensurePatrolAuth()
 
   const params = new URLSearchParams({ cameras: cameraIds.join(',') })
   const raw = await fetchPatrol<Record<string, unknown>>(
