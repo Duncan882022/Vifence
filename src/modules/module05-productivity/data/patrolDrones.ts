@@ -1,19 +1,10 @@
 /**
  * Flycam tuần tra (DR-*) — Module 05.
  *
- * Drone không đẩy được luồng thẳng vào trình duyệt: nguồn gốc là RTSP/RTMP, CMS
- * chỉ xem được HLS. Hai đường dẫn tới HLS đều chấp nhận, không phải chọn trước:
- *
- *  - MediaMTX phát lại path `dr03` — drone publish RTMP trực tiếp (HLS gốc, nét).
- *  - VMS relay `/stream/DR-03/index.m3u8` — backend pull RTSP để AI, re-encode 800k
- *    (chỉ dùng fallback khi MediaMTX chưa sẵn sàng).
- *
- * Tile ưu tiên MediaMTX HLS (không re-encode) rồi rơi về VMS relay.
- * Chưa có nguồn thật thì retry HLS ~8s rồi tile chuyển Offline (retry nền vẫn chạy).
+ * Nguồn gốc RTSP/RTMP → MediaMTX path `dr03` → CMS xem WHEP / LL-HLS.
+ * Không dùng VMS relay `/stream/DR-*` (backend trả 503 cho patrol ids).
  */
-import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
 import { getMediaMtxHlsBase, getMediaMtxWebrtcBase, mediaMtxPathForCamera } from './helmetIngest'
-import { isVmsHlsRelayEnabled } from './patrolHelmetScope'
 
 /** Camera thuộc nhóm flycam của Module 05. */
 export const PATROL_DRONE_CAMERA_PREFIX = 'DR-'
@@ -71,20 +62,9 @@ export function getPatrolDroneWhepUrl(cameraId: string): string | undefined {
   return `${base}/${getPatrolDroneMediaMtxPath(cameraId)}/whep`
 }
 
-/** HLS chính — override bằng env, mặc định MediaMTX (không re-encode, nét hơn VMS relay). */
+/** HLS chính — override env, mặc định MediaMTX (không re-encode VMS relay 503). */
 export function getPatrolDroneStreamUrl(cameraId: string): string | undefined {
   const override = readEnv(`VITE_${envSuffix(cameraId)}_STREAM_URL`)
   if (override) return override
-  return getPatrolDroneMediaMtxHlsUrl(cameraId) ?? getVmsHlsUrl(cameraId)
-}
-
-/**
- * HLS dự phòng — chỉ khi backend còn relay `/stream/<cam>/`.
- * Worker đã bỏ re-encode cho DR-*, nên mặc định không có nguồn thứ hai.
- */
-export function getPatrolDroneStreamFallbackUrl(cameraId: string): string | undefined {
-  if (!isVmsHlsRelayEnabled(cameraId)) return undefined
-  const vmsHls = getVmsHlsUrl(cameraId)
-  if (!vmsHls || vmsHls === getPatrolDroneStreamUrl(cameraId)) return undefined
-  return vmsHls
+  return getPatrolDroneMediaMtxHlsUrl(cameraId)
 }

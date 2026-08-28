@@ -18,7 +18,7 @@ export interface PatrolHelmetLiveMetrics {
   streamOnline: boolean
   /** @deprecated dùng streamOnline */
   connected: boolean
-  /** Khung hiện tại — detection gate, không phải KPI ngày (xem usePatrolDayStats). */
+  /** Khung hiện tại — detection gate, không phải KPI ngày (xem usePatrolDayBundle). */
   personCount: number
   /** @deprecated alias của personCount — khung hiện tại */
   uniqueWorkers: number
@@ -109,7 +109,7 @@ function mergeHc02Mobile(
   }
 }
 
-/** Trạng thái luồng live — KPI đếm lấy từ usePatrolDayStats. */
+/** Trạng thái luồng live — KPI đếm lấy từ usePatrolDayBundle.stats. */
 export function usePatrolHelmetLiveMetrics(
   cameraIds: readonly string[] = DEFAULT_PATROL_CAMERA_IDS,
   pollMs = 2200,

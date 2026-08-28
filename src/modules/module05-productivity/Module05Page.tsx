@@ -56,7 +56,7 @@ import {
 } from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
-import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
+import { hasLegacyMobileHelmet, isHelmetWebrtcAvailable, legacyMobileHelmetIds } from './data/helmetIngest'
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
@@ -233,7 +233,7 @@ export function Module05Page() {
   const patrolToday = getPatrolDefaultPlaybackDate() // ngày lịch VN 0h — không ca/kíp
   const patrolMinDate = getPatrolPlaybackMinDate()
   const [patrolViewDate, setPatrolViewDate] = useState(patrolToday)
-  const { cameras: visionCameras } = useCameras()
+  const { cameras: visionCameras } = useCameras({ enabled: !isHelmetWebrtcAvailable() })
   // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
   // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.
   const patrolDefaultCameraIds = useMemo(

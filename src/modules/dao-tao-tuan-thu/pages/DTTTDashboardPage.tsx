@@ -1,10 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { TrainingCameraPanel } from '../components/TrainingCameraPanel'
 import type { CameraWithWorker } from '../components/TrainingCameraPanel'
-import { CameraPlaybackPanel } from '../components/CameraPlaybackPanel'
+import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
+import {
+  filterCamerasByLocation,
+  getLocationFilterTabs,
+  groupCamerasByLocation,
+} from '@/utils/cameraPlaybackUi'
+import {
+  fetchDtttPlaybackDetections,
+  fetchDtttPlaybackRecords,
+  mapDtttCamerasToTraining,
+} from '../services/dtttPlayback.service'
 import { CameraModeToggle, type CameraViewMode } from '../components/CameraModeToggle'
 import { TrainingEventTable } from '../components/TrainingEventTable'
 import { useCourseStore } from '../store/courseStore'
@@ -44,6 +54,8 @@ export function DTTTDashboardPage() {
     courseName: string
   } | null>(null)
   const { cameras } = useCameras()
+  const playbackCameras = useMemo(() => mapDtttCamerasToTraining(cameras), [cameras])
+  const playbackFilterTabs = useMemo(() => getLocationFilterTabs(playbackCameras), [playbackCameras])
   const { isDesktop } = useShellLayout()
   const showCourses = coursesOpen || !isDesktop
 
@@ -283,9 +295,14 @@ export function DTTTDashboardPage() {
                     />
                   ) : (
                     <CameraPlaybackPanel
-                      cameras={cameras}
+                      cameras={playbackCameras}
                       selectedCameraId={selectedCamId}
-                      onSelectCamera={(cam) => setSelectedCamId(cam.id)}
+                      onSelectCamera={cam => setSelectedCamId(cam.id)}
+                      filterTabs={playbackFilterTabs}
+                      filterFn={tab => filterCamerasByLocation(playbackCameras, tab)}
+                      groupFn={groupCamerasByLocation}
+                      fetchRecords={fetchDtttPlaybackRecords}
+                      fetchDetections={fetchDtttPlaybackDetections}
                     />
                   )}
                 </div>

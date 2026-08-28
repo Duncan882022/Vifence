@@ -26,7 +26,7 @@ import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { fetchPatrolHelmetMetrics } from '../services/patrolLiveEvents.service'
 
 const HC02 = 'HC-02'
-const POLL_MS = 1800
+const POLL_MS = 2500
 
 function isValidGps(lat: unknown, lng: unknown): lat is number {
   return typeof lat === 'number'
@@ -79,14 +79,24 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
   }), [])
 
   useEffect(() => {
-    return subscribePatrolMobileLiveSnapshot(snap => {
-      const online = Boolean(snap && snap.cameraId === HC02 && snap.streamOnline)
+    const applyMobileSnap = (snap: ReturnType<typeof getPatrolMobileLiveSnapshot>) => {
+      if (!snap || snap.cameraId !== HC02) return
+      const online = Boolean(snap.streamOnline)
       setStreamOnline(online)
       if (!online) {
         setPersonCount(0)
         setLat(null)
         setLng(null)
+        return
       }
+      setPersonCount(Math.max(0, Math.floor(snap.personCount)))
+    }
+
+    applyMobileSnap(getPatrolMobileLiveSnapshot(HC02))
+
+    return subscribePatrolMobileLiveSnapshot(snap => {
+      if (!snap || snap.cameraId !== HC02) return
+      applyMobileSnap(snap)
     })
   }, [])
 
@@ -113,27 +123,6 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     return subscribePatrolHelmetGps(snap => {
       if (snap.cameraId !== HC02) return
       applyGps(snap.lat, snap.lng)
-    })
-  }, [streamOnline])
-
-  useEffect(() => {
-    const applyPerson = (count: number) => {
-      if (!streamOnline) {
-        setPersonCount(0)
-        return
-      }
-      setPersonCount(Math.max(0, Math.floor(count)))
-    }
-
-    const mobile = getPatrolMobileLiveSnapshot(HC02)
-    if (mobile) {
-      applyPerson(mobile.personCount)
-    }
-
-    return subscribePatrolMobileLiveSnapshot(snap => {
-      if (!snap || snap.cameraId !== HC02) return
-      setStreamOnline(Boolean(snap.streamOnline))
-      applyPerson(snap.personCount)
     })
   }, [streamOnline])
 

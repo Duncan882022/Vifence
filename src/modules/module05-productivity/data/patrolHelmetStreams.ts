@@ -5,33 +5,23 @@
  *   1. WHEP WebRTC (~200–500ms)
  *   2. MediaMTX LL-HLS (~1–2s) — fallback UDP/firewall
  *
- * JSMpeg (Vision wsUrl) và VMS relay HLS chỉ còn khi chưa cấu hình MediaMTX.
- * Cùng tab đang phát WHIP → local MediaStream (không qua server).
+ * JSMpeg (Vision wsUrl) chỉ còn khi chưa cấu hình MediaMTX.
  */
 import { getVmsHlsUrl } from '@/modules/module02-training/data/trainingCameraFeeds'
-import { getHelmetMediaMtxHlsUrl, isHelmetWebrtcAvailable, isLegacyMobileHelmet } from './helmetIngest'
-import { isPatrolMetricsCameraId, isVmsHlsRelayEnabled } from './patrolHelmetScope'
-
-/** RTSP pull — port 8554 (browser không phát RTSP trực tiếp → backend pull qua MediaMTX). */
-export const PATROL_HELMET_RTSP_SOURCES: Record<string, string> = {
-  'HC-01': 'rtsp://157.66.100.182:8554/866926048126915',
-}
-
-const MEDIAMTX_HLS_PORT =
-  (import.meta.env.VITE_MEDIAMTX_HLS_PORT as string | undefined)?.trim() || '8888'
+import { getHelmetIngest, getHelmetMediaMtxHlsUrl, isHelmetWebrtcAvailable, isLegacyMobileHelmet } from './helmetIngest'
+import { isPatrolMetricsCameraId } from './patrolHelmetScope'
 
 function readEnv(key: string): string | undefined {
   const raw = import.meta.env[key as keyof ImportMetaEnv]
   return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
 }
 
-/** Chuyển RTSP MediaMTX → HLS cùng path (port 8888 mặc định). */
-export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
+/** RTSP path suffix — khớp camera Vision API (nguồn: helmetIngest). */
+function getPatrolHelmetRtspPath(cameraId: string): string | undefined {
+  const rtsp = getHelmetIngest(cameraId).rtspUrl
+  if (!rtsp) return undefined
   try {
-    const u = new URL(rtspUrl)
-    const path = u.pathname.replace(/^\//, '')
-    if (!path) return undefined
-    return `http://${u.hostname}:${MEDIAMTX_HLS_PORT}/${path}/index.m3u8`
+    return new URL(rtsp).pathname.replace(/^\//, '')
   } catch {
     return undefined
   }
@@ -39,6 +29,7 @@ export function getMediaMtxHlsFromRtsp(rtspUrl: string): string | undefined {
 
 /**
  * HLS chính — override env, mặc định MediaMTX LL-HLS (không re-encode VMS).
+ * Patrol HC/DR không có fallback MP4 demo — không nguồn thì tile Offline.
  */
 export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   const envKey = `VITE_${cameraId.replace('-', '')}_STREAM_URL`
@@ -52,40 +43,12 @@ export function getPatrolHelmetStreamUrl(cameraId: string): string | undefined {
   const mediaMtxHls = getHelmetMediaMtxHlsUrl(cameraId)
   if (mediaMtxHls) return mediaMtxHls
 
-  // Chỉ VMS relay HLS — không fallback MP4 demo (Module 02 catalog).
+  // VMS relay chỉ cho id ngoài HC/DR — patrol trả undefined thay vì /stream/503.
   return getVmsHlsUrl(cameraId)
 }
 
 /**
- * HLS dự phòng — chỉ khi backend còn relay `/stream/<cam>/`.
- *
- * Từ khi worker bỏ re-encode cho camera tuần tra, endpoint đó trả 503 vĩnh viễn.
- * Trỏ fallback vào đấy khiến watchdog luân phiên hai nguồn và gắn lại hls.js
- * mỗi vài giây — chính là hiện tượng giật ngắt quãng đều đặn khi xem live.
- */
-export function getPatrolHelmetStreamFallbackUrl(cameraId: string): string | undefined {
-  if (isLegacyMobileHelmet(cameraId)) return undefined
-  if (!isVmsHlsRelayEnabled(cameraId)) return undefined
-  const primary = getPatrolHelmetStreamUrl(cameraId)
-  const vmsHls = getVmsHlsUrl(cameraId)
-  if (!vmsHls || vmsHls === primary) return undefined
-  return vmsHls
-}
-
-/** RTSP path suffix — khớp camera Vision API (vd 866926048126915). */
-export function getPatrolHelmetRtspPath(cameraId: string): string | undefined {
-  const rtsp = PATROL_HELMET_RTSP_SOURCES[cameraId]
-  if (!rtsp) return undefined
-  try {
-    return new URL(rtsp).pathname.replace(/^\//, '')
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Gỡ wsUrl / fallback VMS — mọi camera tuần tra xem qua MediaMTX (WHEP → LL-HLS).
- * Gọi sau các bước merge env/Vision để không còn nhánh JSMpeg song song.
+ * Gỡ wsUrl — mọi camera tuần tra xem qua MediaMTX (WHEP → LL-HLS).
  */
 export function applyPatrolUnifiedLiveRouting<
   T extends {

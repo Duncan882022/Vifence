@@ -224,19 +224,6 @@ export function createPatrolPlaybackFetchers(
   }
 }
 
-/** @deprecated Dùng createPatrolPlaybackFetchers — giữ cho test/import cũ. */
-export async function fetchPatrolPlaybackRecords(
-  cameraId: string,
-  params: { startDate: string; endDate: string },
-): Promise<CameraPlaybackRecordsResponse> {
-  return createPatrolPlaybackFetchers([]).fetchRecords(cameraId, params)
-}
-
-/** @deprecated Dùng createPatrolPlaybackFetchers */
-export async function fetchPatrolPlaybackDetections(): Promise<CameraDetectionsResponse> {
-  return { items: [] }
-}
-
 /** MediaMTX giữ băng 168h — giới hạn chọn ngày playback. */
 export const PATROL_PLAYBACK_RETAIN_DAYS = 7
 

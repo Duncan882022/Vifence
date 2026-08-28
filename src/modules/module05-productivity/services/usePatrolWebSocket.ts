@@ -3,13 +3,10 @@
  * HC-02: GPS thật. HC-01: pin khu ZONE_A (không zigzag). HC-03…05 tạm ẩn.
  */
 import { useEffect, useRef, useState } from 'react'
-import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
-import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 import { subscribePatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import type { PatrolZone } from '../data/patrolTypes'
 import { PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_HELMET_02_FALLBACK, PATROL_SITE_ZONE_SEED } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
-import { fetchPatrolHelmetMetrics } from './patrolLiveEvents.service'
 
 export type LivePatrolZone = PatrolZone
 
@@ -19,7 +16,6 @@ export type RouteHistory = Record<string, [number, number][]>
 const MAX_HISTORY = 150
 const HC01_CAMERA_ID = 'HC-01'
 const HC02_CAMERA_ID = 'HC-02'
-const BACKEND_GPS_POLL_MS = 2500
 
 function jitter(value: number, max: number): number {
   if (max <= 0) return 0
@@ -44,19 +40,6 @@ function buildInitialPositions(): CameraPositions {
     positions[pin.id] = pin.position
   }
   return positions
-}
-
-function asGpsPair(lat: unknown, lng: unknown): [number, number] | null {
-  if (
-    typeof lat !== 'number'
-    || typeof lng !== 'number'
-    || !Number.isFinite(lat)
-    || !Number.isFinite(lng)
-    || (lat === 0 && lng === 0)
-  ) {
-    return null
-  }
-  return [lat, lng]
 }
 
 function appendRouteHistory(
@@ -117,37 +100,12 @@ export function usePatrolWebSocket(_patrolId: string): {
     })
   }, [])
 
-  /* HC-02: GPS từ thiết bị đang stream (cùng tab) */
+  /* HC-02: GPS từ bridge thiết bị — poll backend do useHc02LiveDetectionDots / workforce. */
   useEffect(() => {
     return subscribePatrolHelmetGps(snap => {
       if (snap.cameraId !== HC02_CAMERA_ID) return
       applyHc02Position(snap.lat, snap.lng)
     })
-  }, [])
-
-  /* HC-02: poll backend cache */
-  useEffect(() => {
-    let cancelled = false
-
-    const poll = async () => {
-      const backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl()
-      if (!backendUrl) return
-      try {
-        const metrics = await fetchPatrolHelmetMetrics(HC02_CAMERA_ID, backendUrl)
-        if (cancelled || !metrics) return
-        const pair = asGpsPair(metrics.gps_lat, metrics.gps_lng)
-        if (pair) applyHc02Position(pair[0], pair[1])
-      } catch {
-        // Backend offline — giữ vị trí cuối.
-      }
-    }
-
-    void poll()
-    const t = window.setInterval(() => { void poll() }, BACKEND_GPS_POLL_MS)
-    return () => {
-      cancelled = true
-      window.clearInterval(t)
-    }
   }, [])
 
   /* zone_count_updated ── every 3.5 s (chỉ khi bật polygon mock) */

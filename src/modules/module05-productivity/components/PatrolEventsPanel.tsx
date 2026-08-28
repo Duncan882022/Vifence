@@ -244,11 +244,12 @@ export function PatrolEventsPanel({
   useEffect(() => {
     const el = sentinelRef.current
     if (!el || !hasMore) return
+    let scrollTimer: number | undefined
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry.isIntersecting || loading) return
         setLoading(true)
-        setTimeout(() => {
+        scrollTimer = window.setTimeout(() => {
           setVisibleCount(c => c + BATCH_SIZE)
           setLoading(false)
         }, 300)
@@ -256,7 +257,10 @@ export function PatrolEventsPanel({
       { threshold: 0.1 },
     )
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (scrollTimer != null) window.clearTimeout(scrollTimer)
+    }
   }, [hasMore, loading])
 
   const viewingToday = viewDate === maxViewDate

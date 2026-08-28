@@ -1,13 +1,12 @@
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import type { PatrolHelmetCameraMetricsSlice } from '../services/patrolLiveEvents.service'
 import { PATROL_SITE_NAME, PATROL_SITE_ZONE_ID } from './patrolSiteMap'
-import { getPatrolHelmetStreamUrl, getPatrolHelmetStreamFallbackUrl } from './patrolHelmetStreams'
+import { getPatrolHelmetStreamUrl } from './patrolHelmetStreams'
 import { getHelmetWhepUrl, isLegacyMobileHelmet } from './helmetIngest'
 import { resolvePatrolCameraOnlineState } from '../utils/patrolStreamOnline'
 import {
   PATROL_DRONE_IDS,
   PATROL_DRONE_LABELS,
-  getPatrolDroneStreamFallbackUrl,
   getPatrolDroneStreamUrl,
   getPatrolDroneWhepUrl,
 } from './patrolDrones'
@@ -32,7 +31,6 @@ function resolveStreamType(id: string): 'bodycam' | 'mobile' {
 function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
   const streamType = resolveStreamType(id)
   const streamUrl = streamType === 'bodycam' ? getPatrolHelmetStreamUrl(id) : undefined
-  const streamFallbackUrl = streamType === 'bodycam' ? getPatrolHelmetStreamFallbackUrl(id) : undefined
   const whepUrl = streamType === 'bodycam' ? getHelmetWhepUrl(id) : undefined
 
   return {
@@ -44,7 +42,6 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
     status: 'offline',
     streamType,
     ...(streamUrl ? { streamUrl } : {}),
-    ...(streamFallbackUrl ? { streamFallbackUrl } : {}),
     ...(whepUrl ? { whepUrl } : {}),
   }
 }
@@ -56,7 +53,6 @@ function buildPatrolCamera(id: string, assignee: string): TrainingCamera {
 function buildPatrolDroneCamera(id: string): TrainingCamera {
   const name = PATROL_DRONE_LABELS[id] ?? id
   const streamUrl = getPatrolDroneStreamUrl(id)
-  const streamFallbackUrl = getPatrolDroneStreamFallbackUrl(id)
   const whepUrl = getPatrolDroneWhepUrl(id)
 
   return {
@@ -68,7 +64,6 @@ function buildPatrolDroneCamera(id: string): TrainingCamera {
     status: 'offline',
     streamType: 'flycam',
     ...(streamUrl ? { streamUrl } : {}),
-    ...(streamFallbackUrl ? { streamFallbackUrl } : {}),
     ...(whepUrl ? { whepUrl } : {}),
   }
 }

@@ -110,42 +110,6 @@ async function snapshotUrl(
   return `${base}/patrol/snapshot?path=${encodeURIComponent(p)}${bust}`
 }
 
-export async function fetchPatrolDayPersons(date?: string): Promise<PatrolDayPerson[]> {
-  const query = date ? `?date=${encodeURIComponent(date)}` : ''
-  const data = await getJson<{ ok: boolean; items: Record<string, unknown>[] }>(
-    `/patrol/day/events${query}`,
-  )
-  if (!data?.ok) return []
-  const rows = await Promise.all((data.items ?? []).map(async row => ({
-    persId: String(row.pers_id ?? ''),
-    status: (row.status === 'identified' ? 'identified' : 'person') as PatrolPersonStatus,
-    idenCode: row.iden_code ? String(row.iden_code) : null,
-    displayName: String(row.display_name ?? row.pers_id ?? ''),
-    fullName: row.full_name ? String(row.full_name) : null,
-    employeeCode: row.employee_code ? String(row.employee_code) : null,
-    contractor: row.contractor ? String(row.contractor) : null,
-    firstSeen: Number(row.first_seen ?? 0),
-    lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
-  })))
-  return rows
-}
-
-export async function fetchPatrolDayObjects(date?: string): Promise<PatrolDayObject[]> {
-  const query = date ? `?date=${encodeURIComponent(date)}` : ''
-  const data = await getJson<{ ok: boolean; items: Record<string, unknown>[] }>(
-    `/patrol/day/objects${query}`,
-  )
-  if (!data?.ok) return []
-  return Promise.all((data.items ?? []).map(async row => ({
-    objId: String(row.obj_id ?? ''),
-    firstSeen: Number(row.first_seen ?? 0),
-    lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
-    snapshotScore: Number(row.snapshot_score ?? 0),
-  })))
-}
-
 export async function fetchPatrolSubjectAppearances(
   subjectId: string,
   date?: string,
@@ -254,59 +218,6 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     objects,
     presences,
   }
-}
-
-export async function fetchPatrolDayStats(date?: string): Promise<PatrolDayStats | null> {
-  const query = date ? `?date=${encodeURIComponent(date)}` : ''
-  const data = await getJson<{
-    ok: boolean
-    date: string
-    workers_standard: number
-    person_count: number
-    identity_count: number
-    encounters_standard: number
-    unassigned_observations: number
-  }>(`/patrol/day/stats${query}`)
-  if (!data?.ok) return null
-  return {
-    date: data.date,
-    workersStandard: Number(data.workers_standard ?? 0),
-    personCount: Number(data.person_count ?? 0),
-    identityCount: Number(data.identity_count ?? 0),
-    encountersStandard: Number(data.encounters_standard ?? 0),
-    unassignedObservations: Number(data.unassigned_observations ?? 0),
-  }
-}
-
-export async function fetchPatrolDayPresences(
-  date?: string,
-): Promise<{ items: PatrolDayPresence[]; ok: boolean }> {
-  const query = date ? `?date=${encodeURIComponent(date)}` : ''
-  const data = await getJson<{ ok: boolean; items: Record<string, unknown>[] }>(
-    `/patrol/day/presences${query}`,
-  )
-  if (!data?.ok) return { ok: false, items: [] }
-  const items = (data.items ?? []).map(row => ({
-    id: Number(row.id ?? 0),
-    subjectId: String(row.subject_id ?? ''),
-    cameraId: String(row.camera_id ?? ''),
-    zoneId: row.zone_id ? String(row.zone_id) : null,
-    startedAt: Number(row.started_at ?? 0),
-    endedAt: Number(row.ended_at ?? 0),
-    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
-    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
-    gpsLatEnd: row.gps_lat_end != null ? Number(row.gps_lat_end) : null,
-    gpsLngEnd: row.gps_lng_end != null ? Number(row.gps_lng_end) : null,
-    presenceSeq: Number(row.presence_seq ?? 1),
-    tier: (row.tier === 'identity' ? 'identity' : row.tier === 'object' ? 'object' : 'person') as PatrolDayPresence['tier'],
-    displayName: String(row.display_name ?? row.subject_id ?? ''),
-    sourceCameras: Array.isArray(row.source_cameras)
-      ? (row.source_cameras as string[])
-      : row.camera_id
-        ? [String(row.camera_id)]
-        : [],
-  }))
-  return { ok: true, items }
 }
 
 export function formatAppearanceTimeRange(startSec: number, endSec: number): string {

@@ -16,7 +16,7 @@ describe('patrolHelmetStreams unified routing', () => {
     Object.assign(import.meta.env, envBackup)
   })
 
-  it('applyPatrolUnifiedLiveRouting gỡ wsUrl và fallback VMS cho HC/DR', () => {
+  it('applyPatrolUnifiedLiveRouting gỡ wsUrl cho HC/DR', () => {
     const [row] = applyPatrolUnifiedLiveRouting([
       {
         id: 'HC-01',
