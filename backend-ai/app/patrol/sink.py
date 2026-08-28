@@ -2,7 +2,8 @@
 
 Luồng phân tích gọi `record_observation` mỗi khi phát hiện một người trong
 khung. **Chưa ghi thẻ ngay** — phải bám track đủ vài giây (`patrol_object_confirm_seconds`
-/ `patrol_face_object_confirm_seconds` trong config) rồi mới chốt sự kiện vào SQLite.
+cho Đối tượng / `patrol_person_confirm_seconds` khi `face_eligible`) rồi mới chốt SQLite.
+Chỉ thăng Người khi analyzer đã đánh dấu `face_eligible`; sink không tự recover embedding.
 Sau đó quyết định Đối tượng (chưa thấy mặt) hay Người/Định danh (có khuôn mặt),
 rồi ghi thẻ sự kiện và lịch sử xuất hiện.
 
@@ -128,6 +129,9 @@ _OBJECT_FACE_QUALITY_MAX = 0.2
 # nếu không tái dùng thẻ Đối tượng theo vị trí trên cùng camera.
 _STALE_OBJECT_SEC = 12.0
 _STALE_IOU_MIN = 0.30
+# Định danh đã biết — vươn vai / đổi tư thế làm bbox lệch nhiều; nới IoU + cửa sổ.
+_STALE_IDENTIFIED_SEC = 30.0
+_STALE_IDENTIFIED_IOU_MIN = 0.12
 _track_to_object: dict[str, str] = {}
 _track_to_person: dict[str, str] = {}
 _track_bbox: dict[str, tuple[float, float, float, float]] = {}
@@ -168,8 +172,19 @@ def _required_confirm_seconds(*, has_face: bool) -> float:
     from ..config import settings
 
     if has_face:
-        return float(settings.patrol_face_object_confirm_seconds)
+        return float(settings.patrol_person_confirm_seconds)
     return float(settings.patrol_object_confirm_seconds)
+
+
+def _face_commits_person_tier(
+    *,
+    face_eligible: bool,
+    face_embedding: Sequence[float] | None,
+) -> bool:
+    """Chỉ lên tab Người khi pipeline face đã pass eligible — không suy từ embedding lẻ."""
+    if not face_eligible:
+        return False
+    return face_embedding is not None and len(face_embedding) > 0
 
 
 def _gate_observation_commit(
@@ -294,9 +309,43 @@ def _reuse_stale_person(
     now: float,
 ) -> str | None:
     with _lock:
-        return _reuse_stale_slot(
+        reused = _reuse_stale_slot(
             _stale_persons, camera_id, person_bbox, now, _live_person_ids(),
         )
+    if reused:
+        return reused
+    return _reuse_stale_identified_person(camera_id, person_bbox, now)
+
+
+def _reuse_stale_identified_person(
+    camera_id: str,
+    person_bbox: Sequence[float] | None,
+    now: float,
+) -> str | None:
+    """Posture change — bbox lệch; hồ sơ đã định danh vẫn gộp, không đẻ pers mới."""
+    box = _as_bbox(person_bbox)
+    if box is None:
+        return None
+    with _lock:
+        slots = list(_stale_persons.get(camera_id) or [])
+        live_ids = _live_person_ids()
+    best_id: str | None = None
+    best_iou = _STALE_IDENTIFIED_IOU_MIN
+    for slot in slots:
+        if now - slot.last_seen > _STALE_IDENTIFIED_SEC:
+            continue
+        if slot.subject_id in live_ids:
+            continue
+        person = identity.get_person(slot.subject_id)
+        if not person or person.get("status") != identity.STATUS_IDENTIFIED:
+            continue
+        if slot.bbox is None:
+            continue
+        iou = _bbox_iou(box, slot.bbox)
+        if iou >= best_iou:
+            best_id = slot.subject_id
+            best_iou = iou
+    return best_id
 
 
 def _stash_stale(
@@ -327,6 +376,7 @@ def record_observation(
     track_id: str,
     face_embedding: Sequence[float] | None = None,
     face_quality: float = 0.0,
+    face_eligible: bool = False,
     confidence: float = 0.0,
     frame: Any = None,
     person_bbox: Sequence[float] | None = None,
@@ -336,9 +386,8 @@ def record_observation(
 ) -> str | None:
     """Ghi một lần quan sát. Trả `pers-*` nếu đã nhận ra mặt, `obj-*` nếu chưa.
 
-    Có khuôn mặt thì thăng thẳng lên Người: `promote_object` kéo theo cả lịch
-    sử xuất hiện đã tích luỹ lúc còn là Đối tượng, nên không mất quãng thời
-    gian quan sát ban đầu.
+    Chỉ thăng Người khi `face_eligible` (assess/recover đã pass ở analyzer).
+    Sink **không** tự recover embedding — tránh tay che mặt / bbox lệch bị cấp pers.
     """
     if not camera_id or not track_id:
         return None
@@ -346,23 +395,6 @@ def record_observation(
     key = _key(camera_id, track_id)
     ts = float(now if now is not None else time.time())
     _note_track_bbox(key, person_bbox)
-
-    if not face_embedding or len(face_embedding) == 0:
-        skip_face_recovery = density_only
-        if camera_id.startswith("DR-"):
-            from ..patrol_flight_mode import is_patrol_flycam_aerial
-
-            skip_face_recovery = skip_face_recovery or is_patrol_flycam_aerial(camera_id)
-        if not skip_face_recovery and frame is not None and person_bbox is not None:
-            from ..worker_identity.recognizer import recover_patrol_face_embedding
-
-            recovered = recover_patrol_face_embedding(
-                frame,
-                [float(v) for v in person_bbox[:4]],
-                camera_id=camera_id,
-            )
-            if recovered is not None:
-                face_embedding, face_quality = recovered
 
     score = snapshot_score(face_quality=face_quality, confidence=confidence)
     gps_lat, gps_lng = _resolve_observation_gps(camera_id)
@@ -373,7 +405,7 @@ def record_observation(
         path = _write_snapshot(subject_id, frame, person_bbox)
         return path, score if path else 0.0
 
-    if face_embedding is not None and len(face_embedding) > 0:
+    if _face_commits_person_tier(face_eligible=face_eligible, face_embedding=face_embedding):
         # Trong một track, danh tính chỉ được quyết **một lần**.
         #
         # Tracker đã bảo đảm đây vẫn là người lúc nãy; chạy lại so khớp mỗi

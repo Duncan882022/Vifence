@@ -189,12 +189,13 @@ class Settings(BaseSettings):
     patrol_face_reject_mask: bool = True
     # Tab Đối tượng — đầu + ≥30% thân, không đủ mặt, bám track ≥ N giây.
     patrol_object_confirm_seconds: float = 1.0
+    # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí (sink dùng trực tiếp).
+    patrol_person_confirm_seconds: float = 0.15
+    # Dwell legacy — giữ tương thích env cũ; sink ưu tiên patrol_person_confirm_seconds.
     patrol_face_object_confirm_seconds: float = 1.0
     # Presence tuần tra — gộp/tách lượt gặp (GPS + thời gian).
     patrol_presence_t_max_sec: float = 600.0
     patrol_presence_d_merge_m: float = 50.0
-    # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí.
-    patrol_person_confirm_seconds: float = 0.15
 
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True

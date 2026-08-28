@@ -85,6 +85,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0002:person",
             face_embedding=_vec(1),
+            face_eligible=True,
             face_quality=0.9,
             now=t0 + 100.0,
         )
@@ -103,6 +104,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0003:person",
             face_embedding=_vec(2),
+            face_eligible=True,
             face_quality=0.9,
             now=t0,
         )
@@ -110,6 +112,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0003:person",
             face_embedding=_vec(2),
+            face_eligible=True,
             face_quality=0.9,
             now=t0 + _FACE_CONFIRM,
         )
@@ -126,6 +129,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0001:person",
             face_embedding=_vec(5),
+            face_eligible=True,
             face_quality=0.9,
             now=t0,
         )
@@ -133,6 +137,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0001:person",
             face_embedding=_vec(5),
+            face_eligible=True,
             face_quality=0.9,
             now=t0 + _FACE_CONFIRM,
         )
@@ -140,6 +145,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-02",
             track_id="ptk0009:person",
             face_embedding=_vec(5),
+            face_eligible=True,
             face_quality=0.9,
             now=2_000.0,
         )
@@ -147,6 +153,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-02",
             track_id="ptk0009:person",
             face_embedding=_vec(5),
+            face_eligible=True,
             face_quality=0.9,
             now=2_000.0 + _FACE_CONFIRM,
         )
@@ -163,6 +170,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0001:person",
             face_embedding=_vec(7),
+            face_eligible=True,
             face_quality=0.9,
             now=t0,
         )
@@ -170,6 +178,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0001:person",
             face_embedding=_vec(7),
+            face_eligible=True,
             face_quality=0.9,
             now=t0 + _FACE_CONFIRM,
         )
@@ -177,6 +186,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0044:person",
             face_embedding=_vec(7),
+            face_eligible=True,
             face_quality=0.9,
             now=9_000.0,
         )
@@ -184,6 +194,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0044:person",
             face_embedding=_vec(7),
+            face_eligible=True,
             face_quality=0.9,
             now=9_000.0 + _FACE_CONFIRM,
         )
@@ -191,6 +202,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0044:person",
             face_embedding=_vec(7),
+            face_eligible=True,
             face_quality=0.9,
             now=9_050.0,
         )
@@ -206,6 +218,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0001:person",
             face_embedding=_vec(9),
+            face_eligible=True,
             face_quality=0.9,
             now=t0,
         )
@@ -213,6 +226,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk0001:person",
             face_embedding=_vec(9),
+            face_eligible=True,
             face_quality=0.9,
             now=t0 + _FACE_CONFIRM,
         )
@@ -223,6 +237,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-02",
             track_id="ptk0001:person",
             face_embedding=_vec(9),
+            face_eligible=True,
             face_quality=0.9,
             now=90_000.0,
         )
@@ -230,6 +245,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-02",
             track_id="ptk0001:person",
             face_embedding=_vec(9),
+            face_eligible=True,
             face_quality=0.9,
             now=90_000.0 + _FACE_CONFIRM,
         )
@@ -291,10 +307,12 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
             person_bbox=face_box, face_embedding=_vec(3), face_quality=0.9, now=t0,
+            face_eligible=True,
         )
         pers = sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
             person_bbox=face_box, face_embedding=_vec(3), face_quality=0.9,
+            face_eligible=True,
             now=t0 + _FACE_CONFIRM,
         )
         sink.record_observation(
@@ -318,10 +336,12 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
             person_bbox=box, face_embedding=_vec(4), face_quality=0.9, now=t0,
+            face_eligible=True,
         )
         pers = sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
             person_bbox=box, face_embedding=_vec(4), face_quality=0.9,
+            face_eligible=True,
             now=t0 + _FACE_CONFIRM,
         )
         sink.forget_track("HC-01", "ptk0001:person", now=t0 + 4.0)
