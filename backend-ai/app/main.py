@@ -1274,4 +1274,46 @@ async def ws_live(websocket: WebSocket):
         logger.info("Client WS ngắt kết nối.")
 
 
+PATROL_LIVE_WS_INTERVAL_S = 2.5
+PATROL_LIVE_WS_HEARTBEAT_S = 10.0
+
+
+@app.websocket("/ws/patrol/live")
+async def ws_patrol_live(websocket: WebSocket, cameras: str = "HC-01,HC-02", token: str | None = None):
+    """Push live/bundle (metrics + workforce) — thay poll HTTP Module 05."""
+    if not settings.patrol_auth_disabled:
+        if not token or decode_access_token(token) is None:
+            await websocket.close(code=1008)
+            return
+    await websocket.accept()
+    camera_ids = [c.strip() for c in cameras.split(",") if c.strip()]
+    if not camera_ids:
+        await websocket.close(code=1008)
+        return
+
+    from .patrol_runtime import build_patrol_live_bundle_payload
+
+    last_heartbeat = asyncio.get_event_loop().time()
+    try:
+        while True:
+            payload = build_patrol_live_bundle_payload(
+                camera_ids,
+                store=engine.store,
+                vms_workers=_vms_workers,
+            )
+            await websocket.send_json({"type": "live_bundle", **payload})
+            now = asyncio.get_event_loop().time()
+            if now - last_heartbeat >= PATROL_LIVE_WS_HEARTBEAT_S:
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "server_time": payload.get("server_time"),
+                })
+                last_heartbeat = now
+            await asyncio.sleep(PATROL_LIVE_WS_INTERVAL_S)
+    except WebSocketDisconnect:
+        logger.info("Client WS /ws/patrol/live ngắt kết nối.")
+    except Exception as exc:  # noqa: BLE001
+        logger.info("[ws patrol live] đóng: %s", exc)
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
