@@ -98,7 +98,7 @@ export function PatrolDensityHeatmap({
   const [layers, setLayers] = useState({
     polygon: true,
     helmet: true,
-    flycam: false,
+    flycam: true,
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
