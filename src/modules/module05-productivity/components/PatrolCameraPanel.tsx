@@ -25,11 +25,16 @@ export interface PatrolCameraPanelProps {
   isTabletLandscape?: boolean
   /** @deprecated dùng isCompactLayout */
   isMobileLayout?: boolean
+  /**
+   * Giới hạn hàng grid desktop trước khi scroll.
+   * Mặc định 1 hàng — scroll xem hàng 2 (Drone). `null` = hiện hết khi phóng to tier.
+   */
+  desktopMaxVisibleRows?: number | null
 }
 
 /**
  * Module 05 — bọc TrainingCameraPanel với layout patrol + preload AI person detect.
- * Desktop / iPad: 1 hàng camera cố định, scroll trong Tier 2.
+ * Desktop / iPad: 1 hàng cố định + scroll trong Tier 2; phóng to tier → đủ hàng.
  * Phone dọc: stack 16:9, scroll theo trang.
  */
 export function PatrolCameraPanel({
@@ -44,11 +49,15 @@ export function PatrolCameraPanel({
   isCompactLayout: isCompactLayoutProp,
   isTabletLandscape = false,
   isMobileLayout = false,
+  desktopMaxVisibleRows,
 }: PatrolCameraPanelProps) {
   const isCompactLayout = isCompactLayoutProp ?? isMobileLayout
   const isTablet = useMediaQuery('(min-width: 640px) and (max-width: 1023px)')
   /** Chỉ phone nhỏ scroll trang; iPad (dọc/ngang) scroll lồng trong Tier 2. */
   const mobileStackedNoScroll = isCompactLayout && !isTabletLandscape && !isTablet
+  const resolvedMaxVisibleRows = desktopMaxVisibleRows === null
+    ? undefined
+    : (desktopMaxVisibleRows ?? 1)
 
   useEffect(() => {
     preloadFaceDetection()
@@ -62,7 +71,7 @@ export function PatrolCameraPanel({
       cameras={cameras}
       defaultCameraIds={defaultCameraIds}
       defaultSidebarOpen={false}
-      desktopMaxVisibleRows={1}
+      desktopMaxVisibleRows={resolvedMaxVisibleRows}
       sidebarOpenClass={PATROL_SIDEBAR_LG}
       sidebarCompactClass={PATROL_SIDEBAR_COMPACT}
       sidebarCompactPx={PATROL_SIDEBAR_COMPACT_PX}

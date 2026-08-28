@@ -317,6 +317,46 @@ export function Module05Page() {
     setTier2Open(true)
   }
 
+  const renderCameraTierBody = (expanded: boolean) => (
+    <div className={cn(
+      'flex flex-col w-full',
+      expanded
+        ? 'flex-1 min-h-0 h-full overflow-hidden'
+        : isCompactLayout ? 'h-auto overflow-visible' : 'h-auto overflow-hidden',
+    )}>
+      {cameraMode === 'live' ? (
+        <PatrolCameraPanel
+          selectedId={selectedCamId}
+          onSelectCamera={handleSelectCamera}
+          onStreamCountChange={setActiveStreamCount}
+          cameras={patrolCamerasLive}
+          defaultCameraIds={patrolDefaultCameraIds}
+          isCompactLayout={isCompactLayout}
+          isTabletLandscape={isTabletLandscape}
+          filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
+          filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
+          groupFn={cams => groupPatrolCamerasForSidebar(cams)}
+          desktopMaxVisibleRows={expanded ? null : undefined}
+        />
+      ) : (
+        <CameraPlaybackPanel
+          cameras={patrolCamerasLive}
+          selectedCameraId={selectedCamId}
+          onSelectCamera={handleSelectCamera}
+          defaultDate={playbackDate}
+          maxDate={playbackDate}
+          selectedRecordId={selectedEventId}
+          filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
+          filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
+          groupFn={cams => groupPatrolCamerasForSidebar(cams)}
+          fetchRecords={fetchPatrolPlaybackRecords}
+          fetchDetections={fetchPatrolPlaybackDetections}
+          videoAreaFlex={82}
+        />
+      )}
+    </div>
+  )
+
   return (
     <>
       <Header
@@ -364,6 +404,7 @@ export function Module05Page() {
               fit={!tier2Open}
               noPadding
               overflowVisible={tier2Open && isCompactLayout}
+              expandedContent={tier2Open ? renderCameraTierBody(true) : undefined}
               className={cn(
                 tier2Open && (isCompactLayout ? 'h-auto overflow-visible' : 'min-h-0 overflow-hidden'),
               )}
@@ -385,42 +426,7 @@ export function Module05Page() {
                 </div>
               }
             >
-              {tier2Open && (
-                <div className={cn(
-                  'flex flex-col w-full',
-                  isCompactLayout ? 'h-auto overflow-visible' : 'h-auto overflow-hidden',
-                )}>
-                  {cameraMode === 'live' ? (
-                    <PatrolCameraPanel
-                      selectedId={selectedCamId}
-                      onSelectCamera={handleSelectCamera}
-                      onStreamCountChange={setActiveStreamCount}
-                      cameras={patrolCamerasLive}
-                      defaultCameraIds={patrolDefaultCameraIds}
-                      isCompactLayout={isCompactLayout}
-                      isTabletLandscape={isTabletLandscape}
-                      filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
-                      filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
-                      groupFn={cams => groupPatrolCamerasForSidebar(cams)}
-                    />
-                  ) : (
-                    <CameraPlaybackPanel
-                      cameras={patrolCamerasLive}
-                      selectedCameraId={selectedCamId}
-                      onSelectCamera={handleSelectCamera}
-                      defaultDate={playbackDate}
-                      maxDate={playbackDate}
-                      selectedRecordId={selectedEventId}
-                      filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
-                      filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
-                      groupFn={cams => groupPatrolCamerasForSidebar(cams)}
-                      fetchRecords={fetchPatrolPlaybackRecords}
-                      fetchDetections={fetchPatrolPlaybackDetections}
-                      videoAreaFlex={82}
-                    />
-                  )}
-                </div>
-              )}
+              {tier2Open && renderCameraTierBody(false)}
             </Panel>
           </div>
 
