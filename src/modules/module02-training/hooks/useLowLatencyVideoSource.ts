@@ -4,12 +4,20 @@
  * WHEP cho độ trễ ~200–500ms nên bbox bám video gần như tức thời. Nhưng WebRTC
  * cần UDP, hay bị firewall văn phòng chặn — nên phải tự rơi về HLS thay vì để
  * tile đen. Một khi đã rơi về HLS thì giữ nguyên, không thử lại WHEP giữa phiên
- * xem để tránh video giật khi chuyển qua lại.
+ * xem để tránh video giật khi chuyển qua lại — trừ khi user gọi recoverStream().
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { startWhepSubscriber, type WhepSubscriber } from '@/services/webrtc/whepClient'
 import { useHlsVideoSource, type VideoClockSource } from './useHlsVideoSource'
+import {
+  createPlaybackStallChecker,
+  PLAYBACK_STALL_CHECK_MS,
+  WHEP_DISCONNECTED_RECOVER_MS,
+  WHEP_NO_FRAME_RECOVER_MS,
+  WHEP_RECONNECT_BEFORE_HLS,
+  watchVideoFrameAdvance,
+} from './videoPlaybackStall'
 
 const WHEP_NO_FRAME_FALLBACK_MS = 2500
 
@@ -20,6 +28,8 @@ export interface LowLatencyVideoSource {
   clock: VideoClockSource
   /** WHEP đã kết nối được hay chưa — dùng cho badge độ trễ trên toolbar. */
   whepConnected: boolean
+  /** Làm mới luồng — reconnect WHEP hoặc gắn lại HLS. */
+  recoverStream: () => void
 }
 
 export function useLowLatencyVideoSource(
@@ -35,12 +45,55 @@ export function useLowLatencyVideoSource(
 
   const [mode, setMode] = useState<VideoSourceMode>(whepUrl ? 'whep' : 'hls')
   const [whepConnected, setWhepConnected] = useState(false)
+  const [whepSession, setWhepSession] = useState(0)
   const subscriberRef = useRef<WhepSubscriber | null>(null)
+  const whepReconnectsRef = useRef(0)
+  const disconnectedAtRef = useRef(0)
+  const lastFrameAtRef = useRef(0)
+  const stallCheckerRef = useRef(createPlaybackStallChecker())
+
+  const fallbackToHls = useCallback(() => {
+    const video = videoRef.current
+    if (video?.srcObject) video.srcObject = null
+    void subscriberRef.current?.stop()
+    subscriberRef.current = null
+    setWhepConnected(false)
+    whepReconnectsRef.current = 0
+    disconnectedAtRef.current = 0
+    lastFrameAtRef.current = 0
+    stallCheckerRef.current.reset()
+    setMode('hls')
+  }, [videoRef])
+
+  const reconnectWhep = useCallback(() => {
+    const video = videoRef.current
+    if (video?.srcObject) video.srcObject = null
+    void subscriberRef.current?.stop()
+    subscriberRef.current = null
+    setWhepConnected(false)
+    disconnectedAtRef.current = 0
+    lastFrameAtRef.current = 0
+    stallCheckerRef.current.reset()
+    setWhepSession(s => s + 1)
+  }, [videoRef])
+
+  const handleWhepStall = useCallback(() => {
+    whepReconnectsRef.current += 1
+    if (whepReconnectsRef.current > WHEP_RECONNECT_BEFORE_HLS) {
+      fallbackToHls()
+      return
+    }
+    reconnectWhep()
+  }, [fallbackToHls, reconnectWhep])
 
   // Đổi camera / endpoint → thử lại WHEP từ đầu.
   useEffect(() => {
     setMode(whepUrl ? 'whep' : 'hls')
     setWhepConnected(false)
+    whepReconnectsRef.current = 0
+    disconnectedAtRef.current = 0
+    lastFrameAtRef.current = 0
+    stallCheckerRef.current.reset()
   }, [whepUrl])
 
   useEffect(() => {
@@ -61,10 +114,17 @@ export function useLowLatencyVideoSource(
           },
           onStateChange: state => {
             if (cancelled) return
-            if (state === 'connected') setWhepConnected(true)
+            if (state === 'connected') {
+              setWhepConnected(true)
+              disconnectedAtRef.current = 0
+            }
+            if (state === 'reconnecting') {
+              if (!disconnectedAtRef.current) {
+                disconnectedAtRef.current = Date.now()
+              }
+            }
             if (state === 'failed') {
-              setWhepConnected(false)
-              setMode('hls')
+              fallbackToHls()
             }
           },
         })
@@ -74,7 +134,7 @@ export function useLowLatencyVideoSource(
         }
         subscriberRef.current = subscriber
       } catch {
-        if (!cancelled) setMode('hls')
+        if (!cancelled) fallbackToHls()
       }
     }
 
@@ -87,7 +147,7 @@ export function useLowLatencyVideoSource(
       void subscriberRef.current?.stop()
       subscriberRef.current = null
     }
-  }, [whepUrl, mode, playing, videoRef])
+  }, [whepUrl, mode, playing, videoRef, whepSession, fallbackToHls])
 
   // WHEP connected nhưng không nhận frame (UDP/firewall) → fallback HLS nhanh.
   useEffect(() => {
@@ -98,42 +158,87 @@ export function useLowLatencyVideoSource(
 
     let fallbackTimer = 0
 
-    const fallbackToHls = () => {
+    const fallbackIfNoFirstFrame = () => {
       if (video.videoWidth > 0) return
-      if (video.srcObject) video.srcObject = null
-      setWhepConnected(false)
-      setMode('hls')
+      fallbackToHls()
     }
 
     const onFirstFrame = () => {
       window.clearTimeout(fallbackTimer)
+      lastFrameAtRef.current = performance.now()
     }
 
     video.addEventListener('loadeddata', onFirstFrame)
     video.addEventListener('playing', onFirstFrame)
-    fallbackTimer = window.setTimeout(fallbackToHls, WHEP_NO_FRAME_FALLBACK_MS)
+    fallbackTimer = window.setTimeout(fallbackIfNoFirstFrame, WHEP_NO_FRAME_FALLBACK_MS)
 
     return () => {
       window.clearTimeout(fallbackTimer)
       video.removeEventListener('loadeddata', onFirstFrame)
       video.removeEventListener('playing', onFirstFrame)
     }
-  }, [mode, whepConnected, playing, videoRef])
+  }, [mode, whepConnected, playing, videoRef, whepSession, fallbackToHls])
 
-  // Hook HLS luôn được gọi (quy tắc hooks); src rỗng khi đang dùng WHEP.
-  const hlsClock = useHlsVideoSource(
+  // WHEP đang phát nhưng đứng hình / disconnected quá lâu → reconnect hoặc HLS.
+  useEffect(() => {
+    if (mode !== 'whep' || !whepConnected || !playing) return
+
+    const video = videoRef.current
+    if (!video) return
+
+    const unwatchFrames = watchVideoFrameAdvance(video, () => {
+      lastFrameAtRef.current = performance.now()
+      whepReconnectsRef.current = 0
+    })
+
+    const timer = window.setInterval(() => {
+      const now = performance.now()
+
+      if (
+        disconnectedAtRef.current > 0
+        && Date.now() - disconnectedAtRef.current >= WHEP_DISCONNECTED_RECOVER_MS
+      ) {
+        handleWhepStall()
+        return
+      }
+
+      if (lastFrameAtRef.current > 0 && now - lastFrameAtRef.current >= WHEP_NO_FRAME_RECOVER_MS) {
+        handleWhepStall()
+        return
+      }
+
+      const stall = stallCheckerRef.current.tick(video, playing)
+      if (stall === 'stall') handleWhepStall()
+    }, PLAYBACK_STALL_CHECK_MS)
+
+    return () => {
+      unwatchFrames()
+      window.clearInterval(timer)
+    }
+  }, [mode, whepConnected, playing, videoRef, whepSession, handleWhepStall])
+
+  const hlsSource = useHlsVideoSource(
     videoRef,
     mode === 'hls' ? hlsSrc : '',
     playing,
     mode === 'hls' ? hlsFallbackSrc : undefined,
   )
 
+  const recoverStream = useCallback(() => {
+    if (whepUrl && mode === 'whep') {
+      whepReconnectsRef.current = 0
+      reconnectWhep()
+      return
+    }
+    hlsSource.recover()
+  }, [whepUrl, mode, reconnectWhep, hlsSource])
+
   return useMemo(() => ({
     mode,
     whepConnected,
     clock: mode === 'hls'
-      ? hlsClock
-      // WebRTC không có PDT; độ trễ đủ thấp để dùng snapshot mới nhất.
+      ? hlsSource.clock
       : { getDisplayWallclockMs: () => null },
-  }), [mode, whepConnected, hlsClock])
+    recoverStream,
+  }), [mode, whepConnected, hlsSource, recoverStream])
 }

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { setVideoAnalyzeIntervalScale } from '../services/mobileAiBackend.service'
@@ -40,6 +41,7 @@ import {
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraLiveRoiVisible } from '../hooks/useCameraLiveRoiVisible'
 import { useCameraBboxVisible } from './CameraBboxToggle'
+import { cameraToolbarBtnStandalone, cameraToolbarIconSize } from './cameraToolbarStyles'
 
 interface CameraVideoFeedProps {
   cameraId: string
@@ -120,12 +122,21 @@ export function CameraVideoFeed({
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
+  const remoteStream = isHls || Boolean(whepUrl)
+  const { clock: videoClock, recoverStream } = useLowLatencyVideoSource(videoRef, {
     whepUrl,
     hlsSrc: src,
     hlsFallbackSrc,
     playing,
   })
+  const [recovering, setRecovering] = useState(false)
+
+  const handleRecoverStream = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRecovering(true)
+    recoverStream()
+    window.setTimeout(() => setRecovering(false), 1200)
+  }, [recoverStream])
 
   const framesReady = useVideoFramesReady(videoRef, playing)
   const remoteWaiting = Boolean(playing && (isHls || Boolean(whepUrl)))
@@ -306,6 +317,20 @@ export function CameraVideoFeed({
               Mũ phải đang phát sóng ở trang Phát sóng
             </span>
           )}
+          {remoteStream && (
+            <button
+              type="button"
+              onClick={handleRecoverStream}
+              className={cn(
+                'mt-1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1',
+                'text-[10px] font-medium text-white/85 bg-white/10 border border-white/15',
+                'hover:bg-white/15 transition-colors pointer-events-auto',
+              )}
+            >
+              <RefreshCw className={cn('w-3 h-3', recovering && 'animate-spin')} aria-hidden />
+              Làm mới luồng
+            </button>
+          )}
         </div>
       )}
       {showSignalOffline && (
@@ -314,7 +339,36 @@ export function CameraVideoFeed({
           <span className="text-[10px] text-muted-foreground/40">
             {streamType === 'bodycam' ? 'Chưa có tín hiệu từ mũ' : 'Chưa có tín hiệu'}
           </span>
+          {remoteStream && (
+            <button
+              type="button"
+              onClick={handleRecoverStream}
+              className={cn(
+                'mt-1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1',
+                'text-[10px] font-medium text-white/85 bg-white/10 border border-white/15',
+                'hover:bg-white/15 transition-colors pointer-events-auto',
+              )}
+            >
+              <RefreshCw className={cn('w-3 h-3', recovering && 'animate-spin')} aria-hidden />
+              Làm mới luồng
+            </button>
+          )}
         </div>
+      )}
+      {playing && remoteStream && !waitingForSignal && (
+        <button
+          type="button"
+          onClick={handleRecoverStream}
+          className={cn(
+            'absolute z-[8] pointer-events-auto opacity-60 hover:opacity-100 transition-opacity',
+            compact ? 'bottom-1.5 left-1.5' : 'bottom-2 left-2',
+            cameraToolbarBtnStandalone(compact),
+          )}
+          title="Làm mới luồng"
+          aria-label="Làm mới luồng"
+        >
+          <RefreshCw className={cn(cameraToolbarIconSize(compact), recovering && 'animate-spin')} aria-hidden />
+        </button>
       )}
       <VmsDetectionProvider value={vmsFeed.active ? vmsFeed : null}>
       {showFaceOverlay && feedKey && (
