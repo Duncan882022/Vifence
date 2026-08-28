@@ -39,7 +39,6 @@ import { patrolTierToken } from '../utils/patrolTierTokens'
 import type { RouteHistory } from '../services/usePatrolWebSocket'
 import type { CameraPositions } from '../services/usePatrolWebSocket'
 import {
-  formatDisplayValue,
   resolveCount,
   type PatrolCountMode,
   type PatrolDensityLayer,
@@ -137,57 +136,6 @@ function divIconOpts(
   }
 }
 
-/* ── Zone stat card — collapsed label / expanded stats on click ─ */
-function createZoneStatIcon(
-  shortName: string,
-  borderColor: string,
-  visited: boolean,
-  peopleCurrent: number,
-  vehiclesCurrent: number,
-  expanded: boolean,
-): L.DivIcon {
-  const interactive = 'pointer-events:auto;cursor:pointer;'
-
-  if (!expanded) {
-    const html = `
-      <div style="
-        background:rgba(8,11,18,0.88);
-        border:1px solid ${borderColor};
-        border-radius:4px;
-        padding:2px 6px;
-        font-family:system-ui,-apple-system,sans-serif;
-        ${interactive}
-        box-shadow:0 1px 4px rgba(0,0,0,0.5);
-        white-space:nowrap;
-      ">
-        <div style="color:${borderColor};font-weight:700;font-size:8px;letter-spacing:0.4px;">${shortName}</div>
-      </div>`
-    return L.divIcon(divIconOpts(html, [44, 18], [22, 9]))
-  }
-
-  const html = `
-    <div style="
-      background:rgba(8,11,18,0.95);
-      border:1.5px solid ${borderColor};
-      border-radius:6px;
-      padding:4px 8px 5px;
-      font-family:system-ui,-apple-system,sans-serif;
-      ${interactive}
-      min-width:72px;
-      text-align:left;
-      box-shadow:0 2px 10px rgba(0,0,0,0.7);
-    ">
-      <div style="color:${borderColor};font-weight:700;font-size:9px;letter-spacing:0.6px;margin-bottom:2px;">${shortName}</div>
-      ${visited
-        ? `<div style="color:#e2e8f0;font-size:10px;line-height:1.35;">👤 ${peopleCurrent} người</div>
-           <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">🚛 ${vehiclesCurrent} máy</div>`
-        : '<div style="color:#475569;font-size:9px;margin-top:1px;">Chưa đến</div>'
-      }
-    </div>`
-  const h = visited ? 60 : 42
-  return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
-}
-
 /* ── Detection dot — tier color; trong FOV nhấp nháy, ngoài FOV mờ ── */
 function createDetectionDotIcon(
   inCameraView: boolean,
@@ -214,26 +162,94 @@ function createDetectionDotIcon(
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
-/** Heading cone tip ~18m ahead, ±22° FOV wedge (MD §7.1 layer Thiết bị). */
-function headingConePositions(
-  lat: number,
-  lng: number,
-  headingDeg: number,
-  distM = 18,
-  halfFovDeg = 22,
-): [number, number][] {
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dest = (bearing: number): [number, number] => {
-    const br = toRad(bearing)
-    const dLat = (distM * Math.cos(br)) / 111_320
-    const dLng = (distM * Math.sin(br)) / (111_320 * Math.cos(toRad(lat)))
-    return [lat + dLat, lng + dLng]
-  }
-  return [
-    [lat, lng],
-    dest(headingDeg - halfFovDeg),
-    dest(headingDeg + halfFovDeg),
-  ]
+type PatrolMapDeviceKind = 'helmet' | 'drone'
+
+interface PatrolMapDevicePin {
+  id: string
+  label: string
+  color: string
+  position: [number, number]
+  kind: PatrolMapDeviceKind
+}
+
+interface PatrolDeviceTooltipProps {
+  label: string
+  isActive: boolean
+  zoneName: string
+  heading?: number | null
+  detect?: { person: number; identity: number; total: number } | null
+  siteHeadcount?: PatrolGeoHeatmapProps['siteHeadcount']
+  tipOpen: boolean
+}
+
+function PatrolDeviceTooltipContent({
+  label,
+  isActive,
+  zoneName,
+  heading,
+  detect,
+  siteHeadcount,
+  tipOpen,
+}: PatrolDeviceTooltipProps) {
+  return (
+    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+      <strong>{label}</strong>
+      {' · '}
+      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+        {isActive ? 'ONLINE' : 'OFFLINE'}
+      </span>
+      {heading != null && Number.isFinite(heading) && (
+        <>
+          <br />
+          Heading: {Math.round(heading)}°
+        </>
+      )}
+      <br />
+      Phụ trách: {zoneName}
+      {detect != null && (
+        <>
+          <br />
+          <span style={{ color: '#38bdf8' }}>
+            Đã detect: {detect.total} người
+          </span>
+          <br />
+          <span style={{ color: '#64748b', fontSize: 9 }}>
+            {detect.person} Nhân sự · {detect.identity} Định danh
+          </span>
+        </>
+      )}
+      {siteHeadcount && (
+        <>
+          <br />
+          <span style={{ color: '#94a3b8' }}>
+            Công trường: {siteHeadcount.observed} chuẩn
+            {' · '}{siteHeadcount.persons} người
+            {' · '}{siteHeadcount.identified} định danh
+            {siteHeadcount.objects > 0 && (
+              <>{' · '}{siteHeadcount.objects} có thể người</>
+            )}
+          </span>
+        </>
+      )}
+      {!tipOpen && (
+        <>
+          <br />
+          <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+function createPatrolMapDeviceIcon(
+  kind: PatrolMapDeviceKind,
+  badgeNum: string,
+  isActive: boolean,
+  accent: string,
+): L.DivIcon {
+  return kind === 'drone'
+    ? createPatrolDroneMapIcon(badgeNum, isActive, accent)
+    : createPatrolHelmetMapIcon(badgeNum, isActive, accent)
 }
 
 /* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
@@ -440,10 +456,8 @@ export interface PatrolGeoHeatmapProps {
   followLiveGps?: boolean
   liveGpsLat?: number | null
   liveGpsLng?: number | null
-  /* Layer 3 — Density heat blobs + zone stat cards */
+  /* Layer 3 — Density heat blobs */
   showDensity: boolean
-  /** Nhãn thống kê khu vực trên map — tách khỏi canvas mật độ. */
-  showZoneStatLabels?: boolean
   /* Layer 4 — Patrol route (mũ) + markers */
   showRoute: boolean
   /** Marker mũ HC-* — luôn hiện kể cả offline (tách khỏi layer route). */
@@ -489,7 +503,6 @@ export function PatrolGeoHeatmap({
   liveGpsLat = null,
   liveGpsLng = null,
   showDensity,
-  showZoneStatLabels,
   showRoute,
   showHelmetMarkers = true,
   showDroneMarkers = false,
@@ -504,18 +517,7 @@ export function PatrolGeoHeatmap({
   mapZoom: mapZoomProp,
   compactControls = false,
 }: PatrolGeoHeatmapProps) {
-  const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
   const [openHelmetTipId, setOpenHelmetTipId] = useState<string | null>(null)
-
-  const zoneStatLabelsVisible = showZoneStatLabels ?? showDensity
-
-  useEffect(() => {
-    if (!zoneStatLabelsVisible) setExpandedZoneId(null)
-  }, [zoneStatLabelsVisible])
-
-  const toggleZoneExpand = (zoneId: string) => {
-    setExpandedZoneId(prev => (prev === zoneId ? null : zoneId))
-  }
 
   const featureCollection = useMemo(
     () => buildFeatureCollection(zones, layer, countMode),
@@ -528,7 +530,6 @@ export function PatrolGeoHeatmap({
     return `${layer}_${countMode}_${displayMode}_${hash}`
   }, [zones, layer, countMode, displayMode])
 
-  const zoneMap = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
   const visibleDetectionDots = useMemo(() => {
     const raw = liveDetectionDots && liveDetectionDots.length > 0
       ? liveDetectionDots
@@ -559,6 +560,26 @@ export function PatrolGeoHeatmap({
       return aOnline ? 1 : -1
     })
   }, [helmetOnlineById])
+
+  const visibleDevicePins = useMemo((): PatrolMapDevicePin[] => {
+    const pins: PatrolMapDevicePin[] = []
+    if (showHelmetMarkers || showCameras) {
+      for (const pin of sortedHelmetPins) {
+        pins.push({ ...pin, kind: 'helmet' })
+      }
+    }
+    if (showDroneMarkers || showCameras) {
+      for (const pin of sortedDronePins) {
+        pins.push({ ...pin, kind: 'drone' })
+      }
+    }
+    return pins.sort((a, b) => {
+      const aOnline = Boolean(helmetOnlineById?.[a.id])
+      const bOnline = Boolean(helmetOnlineById?.[b.id])
+      if (aOnline === bOnline) return a.id.localeCompare(b.id)
+      return aOnline ? 1 : -1
+    })
+  }, [showHelmetMarkers, showDroneMarkers, showCameras, sortedHelmetPins, sortedDronePins, helmetOnlineById])
   const mapZoomFallback = usePatrolMapZoom()
   const mapZoom = mapZoomProp ?? mapZoomFallback
   const clipOverlays = !followLiveGps && showDetections
@@ -586,6 +607,8 @@ export function PatrolGeoHeatmap({
           background: transparent !important;
           border: none !important;
           overflow: visible !important;
+          pointer-events: auto !important;
+          cursor: pointer !important;
         }
         .leaflet-control-zoom a {
           background:#111827 !important;
@@ -711,9 +734,7 @@ export function PatrolGeoHeatmap({
                 >
                   <Tooltip sticky className="patrol-zone-tip">
                     <span style={{ fontSize: 10 }}>
-                      {dot.cameraId.startsWith('DR-')
-                        ? `Đếm người · ${dot.label || 'flycam'}`
-                        : `${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
+                      {`${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
                       <br />
                       Camera: {dot.cameraId}
                       {dot.objectId ? ` · ${dot.objectId}` : ''}
@@ -754,32 +775,6 @@ export function PatrolGeoHeatmap({
             )
           })}
 
-          {/* ── LAYER 3B: Zone labels — tap to expand stats ─────── */}
-          {zoneStatLabelsVisible && PATROL_GPS_ZONES.map(gpsZone => {
-            const zone = zoneMap.get(gpsZone.zone_id)
-            const visited = zone?.coverage === 'VISITED'
-            const expanded = expandedZoneId === gpsZone.zone_id
-            const displayVal = zone ? formatDisplayValue(zone, layer, countMode, displayMode) : '—'
-            return (
-              <Marker
-                key={`stat-${gpsZone.zone_id}-${expanded ? 'open' : 'closed'}-${displayVal}`}
-                position={gpsZone.center}
-                icon={createZoneStatIcon(
-                  gpsZone.shortName,
-                  gpsZone.borderColor,
-                  visited,
-                  zone?.peopleCurrent ?? 0,
-                  zone?.vehiclesCurrent ?? 0,
-                  expanded,
-                )}
-                zIndexOffset={expanded ? 900 : 300}
-                eventHandlers={{
-                  click: () => toggleZoneExpand(gpsZone.zone_id),
-                }}
-              />
-            )
-          })}
-
           {/* ── LAYER 4A: Patrol Route (accumulated history) ─── */}
           {showRoute && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
             const hist = routeHistory[pin.id]
@@ -796,8 +791,8 @@ export function PatrolGeoHeatmap({
             )
           })}
 
-          {/* ── LAYER 4B: Helmet Markers — HC-01/02 luôn hiện (offline = xám) ─── */}
-          {(showHelmetMarkers || showCameras) && sortedHelmetPins.map(pin => {
+          {/* ── LAYER 4B: Thiết bị — mũ + flycam, tooltip thống nhất ─── */}
+          {visibleDevicePins.map(pin => {
             const fallback = pin.position
             const rawPos = cameraPositions[pin.id] ?? fallback
             const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
@@ -807,105 +802,19 @@ export function PatrolGeoHeatmap({
             const markerOpacity = isActive ? 1 : 0.88
             const detect = helmetDetectCountsById?.[pin.id]
             const tipOpen = openHelmetTipId === pin.id
-            return (
-              <>
-                {heading != null && Number.isFinite(heading) && isActive && (
-                  <Polygon
-                    key={`cone-${pin.id}`}
-                    positions={headingConePositions(livePos[0], livePos[1], heading)}
-                    pathOptions={{
-                      color: pin.color,
-                      weight: 1,
-                      opacity: 0.55,
-                      fillColor: pin.color,
-                      fillOpacity: 0.18,
-                    }}
-                  />
-                )}
-                <Marker
-                  key={`${pin.id}-${isActive ? 'on' : 'off'}`}
-                  position={livePos}
-                  icon={createPatrolHelmetMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
-                  zIndexOffset={isActive ? 700 : 400}
-                  opacity={markerOpacity}
-                  eventHandlers={{
-                    click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
-                  }}
-                >
-                  <Tooltip
-                    direction="top"
-                    offset={[0, -20]}
-                    opacity={0.95}
-                    permanent={tipOpen}
-                  >
-                    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                      <strong>{pin.label}</strong>
-                      {' · '}
-                      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                        {isActive ? 'ONLINE' : 'OFFLINE'}
-                      </span>
-                      {heading != null && Number.isFinite(heading) && (
-                        <>
-                          <br />
-                          Heading: {Math.round(heading)}°
-                        </>
-                      )}
-                      <br />
-                      Phụ trách: {zoneName}
-                      {detect != null && (
-                        <>
-                          <br />
-                          <span style={{ color: '#38bdf8' }}>
-                            Đã detect: {detect.total} người
-                          </span>
-                          <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>
-                            {detect.person} Nhân sự · {detect.identity} Định danh
-                          </span>
-                        </>
-                      )}
-                      {siteHeadcount && (
-                        <>
-                          <br />
-                          <span style={{ color: '#94a3b8' }}>
-                            Công trường: {siteHeadcount.observed} chuẩn
-                            {' · '}{siteHeadcount.persons} người
-                            {' · '}{siteHeadcount.identified} định danh
-                            {siteHeadcount.objects > 0 && (
-                              <>{' · '}{siteHeadcount.objects} có thể người</>
-                            )}
-                          </span>
-                        </>
-                      )}
-                      {!tipOpen && (
-                        <>
-                          <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                        </>
-                      )}
-                    </span>
-                  </Tooltip>
-                </Marker>
-              </>
-            )
-          })}
-
-          {/* ── LAYER 4C: Drone Markers — DR-03 badge số 3 ──────────────── */}
-          {(showDroneMarkers || showCameras) && sortedDronePins.map(pin => {
-            const fallback = pin.position
-            const rawPos = cameraPositions[pin.id] ?? fallback
-            const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])
-            const zoneName = getPatrolHelmetZoneName(pin.id)
-            const isActive = Boolean(helmetOnlineById?.[pin.id])
-            const markerOpacity = isActive ? 1 : 0.88
-            const detect = helmetDetectCountsById?.[pin.id]
-            const tipOpen = openHelmetTipId === pin.id
+            const zBase = pin.kind === 'drone' ? 720 : 700
+            const zIdle = pin.kind === 'drone' ? 420 : 400
             return (
               <Marker
-                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
+                key={`${pin.kind}-${pin.id}-${isActive ? 'on' : 'off'}`}
                 position={livePos}
-                icon={createPatrolDroneMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
-                zIndexOffset={isActive ? 720 : 420}
+                icon={createPatrolMapDeviceIcon(
+                  pin.kind,
+                  getPatrolMapDeviceBadgeNum(pin.id),
+                  isActive,
+                  pin.color,
+                )}
+                zIndexOffset={isActive ? zBase : zIdle}
                 opacity={markerOpacity}
                 eventHandlers={{
                   click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
@@ -917,29 +826,15 @@ export function PatrolGeoHeatmap({
                   opacity={0.95}
                   permanent={tipOpen}
                 >
-                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                    <strong>{pin.label}</strong>
-                    {' · '}
-                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                      {isActive ? 'ONLINE' : 'OFFLINE'}
-                    </span>
-                    <br />
-                    Phụ trách: {zoneName}
-                    {detect != null && (
-                      <>
-                        <br />
-                        <span style={{ color: '#38bdf8' }}>
-                          Đếm: {detect.total} người (góc trên cao)
-                        </span>
-                      </>
-                    )}
-                    {!tipOpen && (
-                      <>
-                        <br />
-                        <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                      </>
-                    )}
-                  </span>
+                  <PatrolDeviceTooltipContent
+                    label={pin.label}
+                    isActive={isActive}
+                    zoneName={zoneName}
+                    heading={heading}
+                    detect={detect}
+                    siteHeadcount={siteHeadcount}
+                    tipOpen={tipOpen}
+                  />
                 </Tooltip>
               </Marker>
             )

@@ -160,8 +160,9 @@ function PatrolKPIs({
       iconColor: 'text-green-400',
     },
     {
-      label: 'Công nhân',
+      label: 'Nhân sự',
       value: stats.workersStandard,
+      unit: 'nhân sự',
       detail: workersDetailFallback,
       detailContent: workersDetailContent,
       change: 0,
