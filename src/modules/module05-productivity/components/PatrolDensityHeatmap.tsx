@@ -50,20 +50,22 @@ const PATROL_MAP_CAMERA_IDS: readonly string[] = [
 ]
 
 function HeatmapSiteStatsOverlay({
-  workersStandard,
+  objectCount,
   personCount,
-  identifiedCount,
-  unassignedCount,
-  encounterCount,
+  identityCount,
   compactChrome,
 }: {
-  workersStandard: number
+  objectCount: number
   personCount: number
-  identifiedCount: number
-  unassignedCount: number
-  encounterCount: number
+  identityCount: number
   compactChrome?: boolean
 }) {
+  const rows = [
+    { value: objectCount, label: 'đối tượng' },
+    { value: personCount, label: 'người' },
+    { value: identityCount, label: 'định danh' },
+  ] as const
+
   return (
     <div
       className={cn(
@@ -73,24 +75,19 @@ function HeatmapSiteStatsOverlay({
         'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
       )}
     >
-      <div className={cn(
-        'rounded border border-[#1e2433]/90 bg-[#0a0e17]/78 backdrop-blur-[2px]',
-        'px-2 py-1.5 text-right max-w-[min(calc(100vw-1rem),320px)]',
-        compactChrome ? 'text-[9px]' : 'text-[10px]',
-      )}>
-        <div className={cn(
-          'flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 tabular-nums leading-tight',
-        )}>
-          <span className="text-sky-300/90 shrink-0">{workersStandard} người chuẩn</span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="text-cyan-300/85 shrink-0">{personCount} người</span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="text-violet-300/90 shrink-0">{identifiedCount} định danh</span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="text-amber-300/85 shrink-0">{unassignedCount} có thể người</span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="text-emerald-300/90 shrink-0">{encounterCount} lượt</span>
-        </div>
+      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[92px]">
+        {rows.map((row, index) => (
+          <div
+            key={row.label}
+            className={cn(
+              'px-2.5 py-1 text-[#e2e8f0] tabular-nums text-center leading-tight whitespace-nowrap',
+              compactChrome ? 'text-[9px]' : 'text-[10px]',
+              index < rows.length - 1 && 'border-b border-[#334155]',
+            )}
+          >
+            {row.value} {row.label}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -351,7 +348,6 @@ export function PatrolDensityHeatmap({
   const workersStandard = dayStats.workersStandard
   const personCount = dayStats.personCount
   const identifiedCount = dayStats.identityCount
-  const encounterCount = dayStats.encountersStandard
   const unassignedCount = dayStats.unassignedObservations
 
   const siteHeadcount = useMemo(() => ({
@@ -420,11 +416,9 @@ export function PatrolDensityHeatmap({
           compactControls={viewport.compactChrome}
         />
         <HeatmapSiteStatsOverlay
-          workersStandard={workersStandard}
+          objectCount={unassignedCount}
           personCount={personCount}
-          identifiedCount={identifiedCount}
-          unassignedCount={unassignedCount}
-          encounterCount={encounterCount}
+          identityCount={identifiedCount}
           compactChrome={viewport.compactChrome}
         />
         <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
