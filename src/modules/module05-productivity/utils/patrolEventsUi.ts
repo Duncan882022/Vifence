@@ -116,10 +116,11 @@ export function getPatrolEventPlace(cameraName: string, zoneName: string): strin
   return `${cameraName} · ${zoneName}`
 }
 
-/** Nhãn địa điểm trên card sự kiện — ưu tiên khu vực (vd. Cầu sông hốt). */
+/** Nhãn địa điểm trên card sự kiện — vd. Cầu Sông Hốt - Helmet 02. */
 export function getPatrolEventLocationLabel(cameraName: string, zoneName: string): string {
   const zone = zoneName.trim()
   const camera = cameraName.trim()
+  if (zone && camera) return `${zone} - ${camera}`
   if (zone) return zone
   if (camera) return camera
   return getPatrolEventPlace(cameraName, zoneName)
