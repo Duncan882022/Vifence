@@ -137,9 +137,9 @@ export function getZoneDetectionCounts(zoneId: string): {
 
 /* ── Visual config per type ─────────────────────────────────── */
 export const DETECTION_DOT_STYLE: Record<DetectionType, { color: string; radius: number; weight: number }> = {
-  person:    { color: '#38bdf8', radius: 3, weight: 1 },
-  vehicle:   { color: '#f97316', radius: 3, weight: 1 },
-  equipment: { color: '#a78bfa', radius: 3, weight: 1 },
+  person:    { color: '#38bdf8', radius: 3, weight: 0 },
+  vehicle:   { color: '#f97316', radius: 3, weight: 0 },
+  equipment: { color: '#a78bfa', radius: 3, weight: 0 },
 }
 
 /** Dot trong FOV camera — nhấp nháy; ngoài FOV — mờ. */

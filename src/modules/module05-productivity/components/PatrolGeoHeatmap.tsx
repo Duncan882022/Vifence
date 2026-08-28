@@ -123,15 +123,17 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
 }
 
 const PATROL_DIV_ICON_CLASS = 'patrol-map-div-icon'
+const PATROL_DETECTION_DOT_ICON_CLASS = 'patrol-detection-dot-icon'
 
 function divIconOpts(
   html: string,
   iconSize: [number, number],
   iconAnchor: [number, number],
+  className = PATROL_DIV_ICON_CLASS,
 ): L.DivIconOptions {
   return {
     html,
-    className: PATROL_DIV_ICON_CLASS,
+    className,
     iconSize,
     iconAnchor,
   }
@@ -188,7 +190,7 @@ function createZoneStatIcon(
   return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
-/* ── Detection dot — tier color; trong FOV nhấp nháy, ngoài FOV mờ ── */
+/* ── Detection dot — tier color; trong FOV nhấp nháy, ngoài FOV mờ — không viền/halo ── */
 function createDetectionDotIcon(
   inCameraView: boolean,
   tier: ReturnType<typeof resolveDetectionDotTier>,
@@ -199,16 +201,17 @@ function createDetectionDotIcon(
   const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
   const colorBoost = inCameraView ? 'filter:saturate(1.35);' : 'filter:saturate(1.25);'
   const html = `
-    <div style="
+    <div class="patrol-detection-dot" style="
       width:${size}px;height:${size}px;border-radius:50%;
       background:${color};
-      border:none;
-      box-shadow:0 0 ${inCameraView ? 2 : 1}px ${color}${inCameraView ? 'dd' : '88'};
+      border:none;outline:none;box-shadow:none;
       opacity:${opacity};
       ${colorBoost}
       ${anim}
     "></div>`
-  return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
+  return L.divIcon(
+    divIconOpts(html, [size, size], [size / 2, size / 2], PATROL_DETECTION_DOT_ICON_CLASS),
+  )
 }
 
 type PatrolMapDeviceKind = 'helmet' | 'drone'
@@ -662,6 +665,17 @@ export function PatrolGeoHeatmap({
           overflow: visible !important;
           pointer-events: auto !important;
           cursor: pointer !important;
+        }
+        .${PATROL_DETECTION_DOT_ICON_CLASS} {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          outline: none !important;
+        }
+        .${PATROL_DETECTION_DOT_ICON_CLASS} .patrol-detection-dot {
+          border: none !important;
+          box-shadow: none !important;
+          outline: none !important;
         }
         .leaflet-control-zoom a {
           background:#111827 !important;
