@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, Radio, SwitchCamera } from 'lucide-react'
+import { Radio, SwitchCamera } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { cameraDisplayLabel, cameraMetaLabel, type TrainingCamera } from '../data/trainingCameras'
 import { requestMobileCameraFlip } from '../services/mobileCameraFlip'
@@ -67,8 +67,6 @@ export function CameraInfoBar({ cam, compact }: CameraInfoBarProps) {
 interface CameraToolbarProps {
   cameraId: string
   compact?: boolean
-  onMaximize?: () => void
-  isMaximized?: boolean
   /** Hiện nút đảo cam trước/sau (mobile stream) */
   showFacingToggle?: boolean
 }
@@ -76,8 +74,6 @@ interface CameraToolbarProps {
 export function CameraToolbar({
   cameraId,
   compact,
-  onMaximize,
-  isMaximized,
   showFacingToggle,
 }: CameraToolbarProps) {
   return (
@@ -117,22 +113,6 @@ export function CameraToolbar({
           className={cameraToolbarBtn(compact)}
           activeClassName={cameraToolbarBtn(compact, true)}
         />
-        {onMaximize && (
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation()
-              onMaximize()
-            }}
-            className={cameraToolbarBtn(compact)}
-            title={isMaximized ? 'Thu nhỏ' : 'Phóng to'}
-            aria-label={isMaximized ? 'Thu nhỏ' : 'Phóng to'}
-          >
-            {isMaximized
-              ? <Minimize2 className={cameraToolbarIconSize(compact)} aria-hidden />
-              : <Maximize2 className={cameraToolbarIconSize(compact)} aria-hidden />}
-          </button>
-        )}
       </div>
     </div>
   )
@@ -141,12 +121,10 @@ export function CameraToolbar({
 interface CameraChromeProps {
   cam: TrainingCamera
   compact?: boolean
-  onMaximize?: () => void
-  isMaximized?: boolean
 }
 
 /** LIVE + toolbar + thông tin cam — dùng chung mọi luồng. */
-export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraChromeProps) {
+export function CameraChrome({ cam, compact }: CameraChromeProps) {
   const isOffline = cam.status === 'offline'
 
   return (
@@ -162,8 +140,6 @@ export function CameraChrome({ cam, compact, onMaximize, isMaximized }: CameraCh
       <CameraToolbar
         cameraId={cam.id}
         compact={compact}
-        onMaximize={onMaximize}
-        isMaximized={isMaximized}
         showFacingToggle={cam.streamType === 'mobile'}
       />
       <CameraInfoBar cam={cam} compact={compact} />

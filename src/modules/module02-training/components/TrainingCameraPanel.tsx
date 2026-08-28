@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
@@ -10,9 +9,6 @@ import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJs
 import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
-import {
-  getCameraMaximizeFrameClass,
-} from '../data/trainingCameraFeeds'
 import {
   CAMERA_FILTER_TABS,
   DEFAULT_COURSE_CAMERA_IDS,
@@ -161,14 +157,11 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
   )
 }
 
-function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false }: {
+function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false }: {
   cam: TrainingCamera
   compact?: boolean
-  onMaximize: () => void
-  isMaximized?: boolean
   analyzeThrottle?: boolean
   streamIndex?: number
-  /** false khi mobile đang mở fullscreen — tránh 2 getUserMedia (iPhone tile đen) */
   playing?: boolean
   streamWhenOffline?: boolean
 }) {
@@ -210,8 +203,6 @@ function CameraCell({ cam, compact, onMaximize, isMaximized, analyzeThrottle, st
       <CameraChrome
         cam={cam}
         compact={compact}
-        onMaximize={onMaximize}
-        isMaximized={isMaximized}
       />
     </div>
   )
@@ -252,9 +243,8 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, fixedRowHeightPx, streamWhenOffline }: {
+function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol, compactVideo, compactVideoMaxClass, aspectVideoGrid, fixedRowHeightPx, streamWhenOffline }: {
   cams: TrainingCamera[]
-  onMaximize: (cam: TrainingCamera) => void
   stackedPortrait: boolean
   fillHeight: boolean
   forceSingleCol?: boolean
@@ -266,8 +256,6 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   aspectVideoGrid?: boolean
   /** Patrol tier scroll: chiều cao hàng grid cố định (px) — tránh hàng 2 đè hàng 1. */
   fixedRowHeightPx?: number | null
-  /** Camera đang phóng to — ô grid chỉ giữ chỗ, overlay render qua portal. */
-  focusedCamId?: string | null
   streamWhenOffline?: boolean
 }) {
   const count = cams.length
@@ -275,7 +263,6 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   const rows = Math.ceil(count / cols)
   const compact = count > 2
   const analyzeThrottle = count >= 2
-  const hasFocus = Boolean(focusedCamId)
   const useFixedRows = fixedRowHeightPx != null && fixedRowHeightPx > 0
 
   return (
@@ -292,8 +279,6 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
       }}
     >
       {cams.map((cam, index) => {
-        const isFocused = focusedCamId === cam.id
-        const isBackground = Boolean(focusedCamId && focusedCamId !== cam.id)
         const cellShellClass = cn(
           'relative w-full min-w-0 bg-black overflow-hidden',
           fillHeight
@@ -311,90 +296,20 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
         )
         return (
           <div key={cam.id} className={cn('relative min-w-0 min-h-0', useFixedRows && 'h-full')}>
-            {isFocused ? (
-              <div
-                className={cn(
-                  cellShellClass,
-                  'border border-dashed border-[#334155] bg-[#0a0e17]/80',
-                )}
-                aria-hidden
+            <div className={cellShellClass}>
+              <CameraCell
+                cam={cam}
+                compact={compact}
+                analyzeThrottle={analyzeThrottle}
+                streamIndex={index}
+                playing
+                streamWhenOffline={streamWhenOffline}
               />
-            ) : (
-              <div className={cn(cellShellClass, isBackground && 'invisible pointer-events-none')}>
-                <CameraCell
-                  cam={cam}
-                  compact={compact}
-                  analyzeThrottle={analyzeThrottle}
-                  streamIndex={index}
-                  playing={!hasFocus}
-                  streamWhenOffline={streamWhenOffline}
-                  onMaximize={() => onMaximize(cam)}
-                />
-              </div>
-            )}
+            </div>
           </div>
         )
       })}
     </div>
-  )
-}
-
-function FocusedCameraOverlay({
-  cam,
-  streamIndex,
-  onClose,
-  compact,
-  analyzeThrottle,
-  streamWhenOffline,
-}: {
-  cam: TrainingCamera
-  streamIndex: number
-  onClose: () => void
-  compact: boolean
-  analyzeThrottle: boolean
-  streamWhenOffline: boolean
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
-  }, [onClose])
-
-  return createPortal(
-    <>
-      <div
-        className="fixed inset-0 z-[190] bg-black/92 backdrop-blur-sm touch-none"
-        onClick={onClose}
-        role="presentation"
-      />
-      <div
-        className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 pointer-events-none"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Phóng to ${cameraDisplayLabel(cam)}`}
-      >
-        <div className={cn(
-          'relative pointer-events-auto rounded-xl overflow-hidden border border-[#2a3855] shadow-2xl bg-black',
-          getCameraMaximizeFrameClass(cam.streamType),
-        )}>
-          <CameraCell
-            cam={cam}
-            compact={compact}
-            analyzeThrottle={analyzeThrottle}
-            streamIndex={streamIndex}
-            playing
-            streamWhenOffline={streamWhenOffline}
-            isMaximized
-            onMaximize={onClose}
-          />
-        </div>
-      </div>
-    </>,
-    document.body,
   )
 }
 
@@ -487,7 +402,6 @@ export function TrainingCameraPanel({
       setFilterTab(tabs[0] ?? 'Tất cả')
     }
   }, [tabs, filterTab])
-  const [focusedCam, setFocusedCam] = useState<TrainingCamera | null>(null)
   const videoGridRef = useRef<HTMLDivElement>(null)
   const [landscapeSidebarH, setLandscapeSidebarH] = useState<number | null>(null)
   const [mobileViewportH, setMobileViewportH] = useState<number | null>(null)
@@ -672,8 +586,7 @@ export function TrainingCameraPanel({
   const collapsedCompact = sidebarThumbCompact && !sidebarOpen
 
   return (
-    <>
-      <div
+    <div
         className={cn(
           'w-full min-h-0 h-full',
           preferCompactVideo
@@ -717,7 +630,6 @@ export function TrainingCameraPanel({
           >
             <CameraGrid
               cams={safeCams}
-              onMaximize={cam => setFocusedCam(cam)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
               forceSingleCol={mobileStackedNoScroll && !isDesktop}
@@ -725,7 +637,6 @@ export function TrainingCameraPanel({
               compactVideoMaxClass={compactVideoMaxClass}
               aspectVideoGrid={aspectVideoGrid}
               fixedRowHeightPx={gridRowHeightPx}
-              focusedCamId={focusedCam?.id}
               streamWhenOffline={streamWhenOffline}
             />
           </div>
@@ -895,18 +806,6 @@ export function TrainingCameraPanel({
           )}
         </div>
       </div>
-
-      {focusedCam && (
-        <FocusedCameraOverlay
-          cam={focusedCam}
-          streamIndex={Math.max(0, safeCams.findIndex(c => c.id === focusedCam.id))}
-          onClose={() => setFocusedCam(null)}
-          compact={safeCams.length > 2}
-          analyzeThrottle={safeCams.length >= 2}
-          streamWhenOffline={streamWhenOffline}
-        />
-      )}
-    </>
   )
 }
 
