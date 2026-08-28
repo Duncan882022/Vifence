@@ -198,3 +198,31 @@ export function mapBackendBboxToOverlay(
     objectPosition,
   )
 }
+
+/**
+ * Kích thước khung analyze (VMS snapshot / JPEG local) khớp video đang phát.
+ * Nếu metadata snapshot lệch aspect so với `<video>`, ưu tiên intrinsic video
+ * để tránh bbox nhảy khi backend và player dùng pipeline khác nhau.
+ */
+export function resolveOverlayAnalyzeFrameSize(
+  video: HTMLVideoElement | null | undefined,
+  analyzeWidth: number,
+  analyzeHeight: number,
+): { width: number; height: number } {
+  const vw = video?.videoWidth ?? 0
+  const vh = video?.videoHeight ?? 0
+
+  if (analyzeWidth > 0 && analyzeHeight > 0) {
+    if (vw > 0 && vh > 0) {
+      const analyzeAspect = analyzeWidth / analyzeHeight
+      const videoAspect = vw / vh
+      const relDelta = Math.abs(analyzeAspect - videoAspect) / Math.max(analyzeAspect, videoAspect)
+      if (relDelta > 0.12) {
+        return { width: vw, height: vh }
+      }
+    }
+    return { width: analyzeWidth, height: analyzeHeight }
+  }
+
+  return { width: vw, height: vh }
+}

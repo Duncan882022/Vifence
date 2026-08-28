@@ -21,6 +21,7 @@ import {
   getVideoObjectFitForCamera,
   getVideoObjectPositionForCamera,
 } from '../data/trainingCameraFeeds'
+import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { isMobileSmokingFireCamera, isPatrolPersonCamera } from '../data/cameraAiRuntime'
 import {
   setPatrolMobileLiveSnapshot,
@@ -123,13 +124,14 @@ export function MobileCameraFeed({
 
   /** ROI cần frame size — ưu tiên kích thước khung JPEG local analyze. */
   const overlayFrameSize = useMemo(() => {
-    if (localRoiFrameSize.width > 0 && localRoiFrameSize.height > 0) return localRoiFrameSize
-    if (frameSize.width > 0 && frameSize.height > 0) return frameSize
-    const v = videoRef.current
-    if (v?.videoWidth && v?.videoHeight) {
-      return { width: v.videoWidth, height: v.videoHeight }
+    const video = videoRef.current
+    if (localRoiFrameSize.width > 0 && localRoiFrameSize.height > 0) {
+      return resolveOverlayAnalyzeFrameSize(video, localRoiFrameSize.width, localRoiFrameSize.height)
     }
-    return frameSize
+    if (frameSize.width > 0 && frameSize.height > 0) {
+      return resolveOverlayAnalyzeFrameSize(video, frameSize.width, frameSize.height)
+    }
+    return resolveOverlayAnalyzeFrameSize(video, 0, 0)
   }, [localRoiFrameSize, frameSize, layoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = detections

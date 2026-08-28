@@ -2,6 +2,7 @@
 import {
   getVideoObjectFitForCamera,
   getVideoObjectPositionForCamera,
+  resolveCameraStreamType,
 } from '@/modules/module02-training/data/trainingCameraFeeds'
 import {
   getVisibleVideoSourceRect,
@@ -123,8 +124,9 @@ export function captureCameraAnalyzeFrame(
   streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'mobile',
 ): string | null {
   const isPatrolHelmet = cameraId.startsWith('HC-')
+  const resolvedType = resolveCameraStreamType(cameraId, streamType)
   return captureVideoFrameBase64(video, maxWidth, quality, {
-    fit: getVideoObjectFitForCamera(cameraId, streamType),
-    objectPosition: getVideoObjectPositionForCamera(cameraId, streamType),
+    fit: getVideoObjectFitForCamera(cameraId, resolvedType),
+    objectPosition: getVideoObjectPositionForCamera(cameraId, resolvedType),
   }, isPatrolHelmet ? PATROL_CAPTURE_GAP_MS : MIN_CAPTURE_GAP_MS)
 }

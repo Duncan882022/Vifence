@@ -1,6 +1,6 @@
 import type { Camera } from '@/types/camera'
 import { getCourseZone, type TrainingZone } from './trainingCourseMeta'
-import { getStreamUrlForCamera } from './trainingCameraFeeds'
+import { getBestStreamUrl } from './trainingCameraFeeds'
 
 export type CameraStreamType = 'fixed' | 'bodycam' | 'flycam' | 'mobile'
 
@@ -61,7 +61,7 @@ export const CAMERA_FILTER_TABS: CameraFilterTab[] = [
 
 export const MOCK_TRAINING_CAMERAS: TrainingCamera[] = RAW_CAMERAS.map(cam => ({
   ...cam,
-  streamUrl: getStreamUrlForCamera(cam.id),
+  streamUrl: getBestStreamUrl(cam.id),
 }))
 
 export function filterCameras(tab: CameraFilterTab): TrainingCamera[] {

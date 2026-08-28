@@ -7,6 +7,7 @@ import {
   bboxToPixelSpace,
   isNormalizedBbox,
   mapBackendBboxToOverlay,
+  resolveOverlayAnalyzeFrameSize,
   videoRectToOverlayPercent,
 } from './videoOverlayCoords'
 
@@ -115,5 +116,19 @@ describe('mapBackendBboxToOverlay', () => {
     expect(mapped.y).toBeGreaterThan(0)
     expect(mapped.x + mapped.w).toBeLessThanOrEqual(100.5)
     expect(mapped.y + mapped.h).toBeLessThanOrEqual(100.5)
+  })
+})
+
+describe('resolveOverlayAnalyzeFrameSize', () => {
+  it('ưu tiên snapshot khi aspect khớp video', () => {
+    const video = mockVideo(1920, 1080, 640, 360)
+    const size = resolveOverlayAnalyzeFrameSize(video, 1920, 1080)
+    expect(size).toEqual({ width: 1920, height: 1080 })
+  })
+
+  it('fallback video intrinsic khi snapshot aspect lệch', () => {
+    const video = mockVideo(720, 1280, 320, 240)
+    const size = resolveOverlayAnalyzeFrameSize(video, 1920, 1080)
+    expect(size).toEqual({ width: 720, height: 1280 })
   })
 })
