@@ -11,7 +11,7 @@ import {
 } from '@/components/common/CameraModeToggle/CameraModeToggle'
 import { TierCollapseButton } from '@/modules/module02-training/components/TierCollapseButton'
 import { PatrolCameraPanel } from './components/PatrolCameraPanel'
-import { CameraPlaybackPanel } from '@/components/common/CameraPlayback'
+import { PatrolPlaybackPanel } from './components/PatrolPlaybackPanel'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { cn } from '@/utils/cn'
@@ -49,11 +49,7 @@ import {
 } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
-import {
-  fetchPatrolPlaybackRecords,
-  fetchPatrolPlaybackDetections,
-  getPatrolDefaultPlaybackDate,
-} from './services/patrolPlayback.service'
+import { getPatrolDefaultPlaybackDate } from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
@@ -341,7 +337,8 @@ export function Module05Page() {
           desktopMaxVisibleRows={expanded ? null : undefined}
         />
       ) : (
-        <CameraPlaybackPanel
+        <PatrolPlaybackPanel
+          patrolEvents={patrolEventsLive}
           cameras={patrolCamerasLive}
           selectedCameraId={selectedCamId}
           onSelectCamera={handleSelectCamera}
@@ -351,8 +348,6 @@ export function Module05Page() {
           filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
           filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
           groupFn={cams => groupPatrolCamerasForSidebar(cams)}
-          fetchRecords={fetchPatrolPlaybackRecords}
-          fetchDetections={fetchPatrolPlaybackDetections}
           videoAreaFlex={82}
         />
       )}

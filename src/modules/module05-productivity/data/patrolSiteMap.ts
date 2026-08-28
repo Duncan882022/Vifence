@@ -199,7 +199,6 @@ export const PATROL_MAP_ACTIVE_DRONE_PINS: PatrolDronePin[] = [
     id: 'DR-03',
     label: 'Drone 03',
     zoneId: PATROL_SITE_ZONE_ID,
-<<<<<<< HEAD
     color: PATROL_GPS_ZONES[0]?.borderColor ?? '#ef4444',
     position: PATROL_SITE_CENTER,
   },
