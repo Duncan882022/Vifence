@@ -57,7 +57,7 @@ export function PatrolCameraPanel({
       streamWhenOffline
       compactVideoMaxClass={
         isTabletLandscape
-          ? 'max-h-[min(36dvh,320px)]'
+          ? 'max-h-[min(32dvh,280px)]'
           : 'max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]'
       }
       filterTabs={filterTabs}

@@ -455,9 +455,12 @@ export function TrainingCameraPanel({
   useEffect(() => {
     preloadFaceDetection()
   }, [])
-  /** Mobile (portrait + landscape): stacked streams + thumb grid — same selection UX */
-  const stackedMobile = !isDesktop
+  /** Mobile (portrait + landscape): stacked streams + thumb grid — same selection UX.
+   *  iPad ngang (preferCompactVideo) dùng sidebar dọc bên phải — không tính là stacked mobile. */
+  const stackedMobile = !isDesktop && !preferCompactVideo
   const stackedPortrait = stackedMobile
+  /** Layout video | sidebar ngang — phone landscape hoặc iPad ngang. */
+  const sideBySideCompact = preferCompactVideo || !isDesktop
 
   useEffect(() => {
     if (!selectedId) return
@@ -520,7 +523,7 @@ export function TrainingCameraPanel({
       const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
       setMobileViewportH(viewportH)
 
-      if (landscapeCompact && sidebarOpen && viewportH) {
+      if (landscapeCompact && sidebarOpen && viewportH && !preferCompactVideo) {
         setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
       } else {
         setLandscapeSidebarH(null)
@@ -580,12 +583,12 @@ export function TrainingCameraPanel({
           : mobileCompactVideo
             ? 'lg:h-auto lg:max-h-full'
             : 'lg:flex-1 lg:min-h-0',
-        (preferCompactVideo || !isDesktop) && [
-          'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_168px]',
-          'max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
+        sideBySideCompact && !preferCompactVideo && [
+          'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_min(176px,30vw)]',
+          'max-lg:landscape:items-stretch max-lg:landscape:min-h-0 max-lg:landscape:h-full',
         ],
         preferCompactVideo && [
-          'grid grid-cols-[minmax(0,1fr)_168px] items-stretch min-h-0',
+          'grid grid-cols-[minmax(0,1fr)_min(176px,30vw)] items-stretch min-h-0 h-full',
           'flex-none lg:flex-none',
         ],
       )}>
@@ -623,14 +626,19 @@ export function TrainingCameraPanel({
           className={cn(
             'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
             'border-t lg:border-t-0 lg:border-l',
-            'max-lg:landscape:border-t-0 max-lg:landscape:border-l max-lg:landscape:w-[168px] max-lg:landscape:min-h-0',
-            preferCompactVideo && 'border-t-0 border-l w-[168px]',
-            'lg:overflow-hidden',
+            sideBySideCompact && !preferCompactVideo && [
+              'max-lg:landscape:border-t-0 max-lg:landscape:border-l',
+              'max-lg:landscape:w-[min(176px,30vw)] max-lg:landscape:min-h-0 max-lg:landscape:h-full',
+            ],
+            preferCompactVideo && 'border-t-0 border-l w-[min(176px,30vw)] h-full min-h-0 self-stretch',
+            !preferCompactVideo && 'lg:overflow-hidden',
             sidebarOpen
-              ? 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
+              ? preferCompactVideo
+                ? 'min-h-0'
+                : 'w-full lg:w-[220px] lg:h-full lg:min-h-0'
               : 'w-full shrink-0 min-h-[2.25rem] lg:flex lg:w-8 lg:h-full lg:min-h-0',
           )}
-          style={landscapeSidebarH ? { maxHeight: landscapeSidebarH } : undefined}
+          style={landscapeSidebarH && !preferCompactVideo ? { maxHeight: landscapeSidebarH } : undefined}
         >
           {sidebarOpen ? (
             <>
@@ -668,12 +676,12 @@ export function TrainingCameraPanel({
               </div>
 
               <div className={cn(
-                'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5',
+                'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5 min-h-0',
                 stackedMobile
                   ? 'shrink-0 max-h-[min(24dvh,168px)] overflow-y-auto overscroll-y-contain'
-                  : 'flex-1 min-h-0 overflow-y-auto',
+                  : 'flex-1 min-h-0 overflow-y-auto overscroll-y-contain',
               )}>
-                <div className="flex flex-col gap-2 lg:gap-3">
+                <div className="flex flex-col gap-2 lg:gap-3 pb-1">
                   {sidebarGroups.map(({ key, cameras }) => (
                     <div key={key}>
                       <div className="flex items-center gap-1.5 mb-1 lg:mb-2">
