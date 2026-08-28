@@ -91,9 +91,8 @@ interface PanelProps {
 
 export function Panel({
   title, children, className, headerRight, noPadding, fit = false, expandable = false,
-  expandedContent: _expandedContent, overflowVisible = false,
+  expandedContent, overflowVisible = false,
 }: PanelProps) {
-  void _expandedContent
   const [expanded, setExpanded] = useState(false)
 
   /* Close on Escape */
@@ -108,7 +107,8 @@ export function Panel({
     }
   }, [expanded])
 
-  const showBody = Boolean(children)
+  const bodyContent = expanded && expandedContent ? expandedContent : children
+  const showBody = Boolean(bodyContent)
 
   const headerContent = (onToggle: () => void, isExpanded: boolean) => (
     <div className={cn(
@@ -160,7 +160,7 @@ export function Panel({
         className,
       )}>
         {headerContent(() => setExpanded(v => !v), expanded)}
-        {showBody && <div className={bodyClass}>{children}</div>}
+        {showBody && <div className={bodyClass}>{bodyContent}</div>}
       </div>
     </>
   )

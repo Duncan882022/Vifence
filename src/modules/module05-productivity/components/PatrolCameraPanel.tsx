@@ -49,7 +49,7 @@ export function PatrolCameraPanel({
       onStreamCountChange={onStreamCountChange}
       cameras={cameras}
       defaultCameraIds={defaultCameraIds}
-      defaultSidebarOpen={false}
+      defaultSidebarOpen
       aspectVideoGrid
       mobileCompactVideo={isCompactLayout}
       mobileStackedNoScroll={isCompactLayout && !isTabletLandscape}
