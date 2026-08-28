@@ -201,10 +201,12 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
               <p id="patrol-event-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
                 {modalTitle}
               </p>
-              <p className="text-[9px] text-muted-foreground mt-0.5 truncate">
-                {summary.stageMeta.label}
-                {summary.cardDisplay.subtitle !== '—' ? ` · ${summary.cardDisplay.subtitle}` : ''}
-              </p>
+              {stage !== 'profile' && (
+                <p className="text-[9px] text-muted-foreground mt-0.5 truncate">
+                  {summary.stageMeta.label}
+                  {summary.cardDisplay.subtitle !== '—' ? ` · ${summary.cardDisplay.subtitle}` : ''}
+                </p>
+              )}
             </div>
           </div>
           <button
