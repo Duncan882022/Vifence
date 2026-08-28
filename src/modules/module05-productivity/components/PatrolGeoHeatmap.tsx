@@ -692,7 +692,7 @@ export function PatrolGeoHeatmap({
                     <span style={{ fontSize: 10 }}>
                       {dot.cameraId.startsWith('DR-')
                         ? `Đếm người · ${dot.label || 'flycam'}`
-                        : (dot.label ? dot.label : 'Người')}
+                        : (dot.label ? dot.label : 'Nhân sự')}
                       <br />
                       Camera: {dot.cameraId}
                       {dot.objectId ? ` · ${dot.objectId}` : ''}
@@ -839,7 +839,7 @@ export function PatrolGeoHeatmap({
                           </span>
                           <br />
                           <span style={{ color: '#64748b', fontSize: 9 }}>
-                            {detect.person} Người · {detect.identity} Định danh
+                            {detect.person} Nhân sự · {detect.identity} Định danh
                           </span>
                         </>
                       )}

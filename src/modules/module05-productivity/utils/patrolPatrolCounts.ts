@@ -104,9 +104,9 @@ export function summarizePatrolGlobalWorkers(
 export function summarizePatrolAlertCount(events: PatrolEvent[]): string {
   const { person, identity, total } = countPatrolDetectedByCamera(events)
   if (total === 0) return 'Chưa có sự kiện'
-  if (identity === 0) return `${total} người (${person} Người)`
+  if (identity === 0) return `${total} người (${person} Nhân sự)`
   if (person === 0) return `${total} người (${identity} Định danh)`
-  return `${total} người (${person} Người · ${identity} Định danh)`
+  return `${total} người (${person} Nhân sự · ${identity} Định danh)`
 }
 
 export type PatrolDetectedTabKey = Extract<PatrolEventsTabKey, 'person' | 'identity'>

@@ -119,7 +119,7 @@ export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
     const sgc = (event.trackWorkerId ?? event.objectId ?? '').trim()
     const code = isPatrolSgcWorkerId(sgc) ? sgc : (display.workerId ?? sgc)
     return {
-      title: 'Người',
+      title: 'Nhân sự',
       subtitle: code ? `Mã: ${code}` : '—',
       unit: null,
       workerId: code || null,

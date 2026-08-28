@@ -64,6 +64,44 @@ import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
+import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
+
+function PatrolWorkersKpiDetail({
+  personCount,
+  identityCount,
+}: {
+  personCount: number
+  identityCount: number
+}) {
+  const PersonIcon = PATROL_PERSON_STAGE_META.person.icon
+  const IdentityIcon = PATROL_PERSON_STAGE_META.profile.icon
+
+  return (
+    <span className="inline-flex items-center gap-x-1.5 gap-y-0.5 flex-wrap text-[10px] text-muted-foreground/80">
+      {personCount > 0 && (
+        <span className="inline-flex items-center gap-0.5 tabular-nums">
+          <PersonIcon
+            className={cn('w-3 h-3 shrink-0', PATROL_PERSON_STAGE_META.person.color)}
+            aria-hidden
+          />
+          <span>{personCount} chưa định danh</span>
+        </span>
+      )}
+      {personCount > 0 && identityCount > 0 && (
+        <span className="text-muted-foreground/35" aria-hidden>·</span>
+      )}
+      {identityCount > 0 && (
+        <span className="inline-flex items-center gap-0.5 tabular-nums">
+          <IdentityIcon
+            className={cn('w-3 h-3 shrink-0', PATROL_PERSON_STAGE_META.profile.color)}
+            aria-hidden
+          />
+          <span>{identityCount} Định danh</span>
+        </span>
+      )}
+    </span>
+  )
+}
 
 function PatrolKPIs({
   live,
@@ -85,8 +123,17 @@ function PatrolKPIs({
 
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
 
-  const workersDetail = stats.workersStandard > 0
-    ? `${stats.personCount} Người · ${stats.identityCount} Định danh`
+  const workersDetailContent = stats.workersStandard > 0
+    ? (
+      <PatrolWorkersKpiDetail
+        personCount={stats.personCount}
+        identityCount={stats.identityCount}
+      />
+    )
+    : undefined
+
+  const workersDetailFallback = stats.workersStandard > 0
+    ? undefined
     : anyCameraOnline
       ? live.backendReachable || live.streamOnline
         ? 'Đang tuần tra — chờ phát hiện'
@@ -116,10 +163,10 @@ function PatrolKPIs({
       iconColor: 'text-green-400',
     },
     {
-      label: 'Người (chuẩn)',
+      label: 'Công nhân',
       value: stats.workersStandard,
-      unit: 'người',
-      detail: workersDetail,
+      detail: workersDetailFallback,
+      detailContent: workersDetailContent,
       change: 0,
       changeType: 'neutral' as const,
       icon: Users,
@@ -153,7 +200,7 @@ function PatrolKPIs({
   return (
     <>
       {kpis.map(k => {
-        const { icon: Icon, iconBg, iconColor, ...kpiData } = k
+        const { icon: Icon, iconBg, iconColor, detailContent, ...kpiData } = k
         return (
           <KPICard
             key={k.label}
@@ -161,6 +208,7 @@ function PatrolKPIs({
             icon={Icon}
             iconBg={iconBg}
             iconColor={iconColor}
+            detailContent={detailContent}
           />
         )
       })}

@@ -151,8 +151,8 @@ export function patrolWorkforceEventTitle(
       if (isVerifiedWorkerLabel(objectLabel ?? '')) return objectLabel!.trim()
       return 'Định danh'
     }
-    if (isPatrolSgcWorkerId(objectId) || isPatrolSgcWorkerId(trackWorkerId)) return 'Người'
-    if (isPatrolPersId(objectId) || isPatrolPersId(trackWorkerId)) return 'Người'
+    if (isPatrolSgcWorkerId(objectId) || isPatrolSgcWorkerId(trackWorkerId)) return 'Nhân sự'
+    if (isPatrolPersId(objectId) || isPatrolPersId(trackWorkerId)) return 'Nhân sự'
     return 'Đối tượng'
   }
   return ''
