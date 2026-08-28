@@ -100,12 +100,11 @@ function HeatmapLayerControls({
   onToggle,
   compactChrome,
 }: {
-  layers: { polygon: boolean; density: boolean; helmet: boolean; flycam: boolean }
-  onToggle: (key: 'polygon' | 'density' | 'helmet' | 'flycam') => void
+  layers: { density: boolean; helmet: boolean; flycam: boolean }
+  onToggle: (key: 'density' | 'helmet' | 'flycam') => void
   compactChrome?: boolean
 }) {
   const items = [
-    { key: 'polygon' as const, label: 'Khu vực' },
     { key: 'density' as const, label: 'Mật độ' },
     { key: 'helmet' as const, label: 'Mũ' },
     { key: 'flycam' as const, label: 'Flycam' },
@@ -157,7 +156,6 @@ export function PatrolDensityHeatmap({
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
-    polygon: true,
     density: true,
     helmet: true,
     flycam: true,
@@ -396,7 +394,7 @@ export function PatrolDensityHeatmap({
         layer="combined"
         displayMode="count"
         countMode="current"
-        showSiteBoundary={layers.polygon}
+        showSiteBoundary={false}
         showZonePolygons={false}
         showDetections={layers.density}
         liveDetectionDots={filteredDots}

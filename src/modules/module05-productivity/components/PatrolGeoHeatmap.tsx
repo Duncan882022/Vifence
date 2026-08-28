@@ -214,28 +214,6 @@ function createDetectionDotIcon(
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
 }
 
-/** Heading cone tip ~18m ahead, ±22° FOV wedge (MD §7.1 layer Thiết bị). */
-function headingConePositions(
-  lat: number,
-  lng: number,
-  headingDeg: number,
-  distM = 18,
-  halfFovDeg = 22,
-): [number, number][] {
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dest = (bearing: number): [number, number] => {
-    const br = toRad(bearing)
-    const dLat = (distM * Math.cos(br)) / 111_320
-    const dLng = (distM * Math.sin(br)) / (111_320 * Math.cos(toRad(lat)))
-    return [lat + dLat, lng + dLng]
-  }
-  return [
-    [lat, lng],
-    dest(headingDeg - halfFovDeg),
-    dest(headingDeg + halfFovDeg),
-  ]
-}
-
 /* ── Fix Leaflet tile grid on mobile (iOS flex height = 0) ──── */
 function MapInvalidator() {
   const map = useMap()
@@ -586,6 +564,8 @@ export function PatrolGeoHeatmap({
           background: transparent !important;
           border: none !important;
           overflow: visible !important;
+          pointer-events: auto !important;
+          cursor: pointer !important;
         }
         .leaflet-control-zoom a {
           background:#111827 !important;
@@ -808,85 +788,70 @@ export function PatrolGeoHeatmap({
             const detect = helmetDetectCountsById?.[pin.id]
             const tipOpen = openHelmetTipId === pin.id
             return (
-              <>
-                {heading != null && Number.isFinite(heading) && isActive && (
-                  <Polygon
-                    key={`cone-${pin.id}`}
-                    positions={headingConePositions(livePos[0], livePos[1], heading)}
-                    pathOptions={{
-                      color: pin.color,
-                      weight: 1,
-                      opacity: 0.55,
-                      fillColor: pin.color,
-                      fillOpacity: 0.18,
-                    }}
-                  />
-                )}
-                <Marker
-                  key={`${pin.id}-${isActive ? 'on' : 'off'}`}
-                  position={livePos}
-                  icon={createPatrolHelmetMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
-                  zIndexOffset={isActive ? 700 : 400}
-                  opacity={markerOpacity}
-                  eventHandlers={{
-                    click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
-                  }}
+              <Marker
+                key={`${pin.id}-${isActive ? 'on' : 'off'}`}
+                position={livePos}
+                icon={createPatrolHelmetMapIcon(getPatrolMapDeviceBadgeNum(pin.id), isActive, pin.color)}
+                zIndexOffset={isActive ? 700 : 400}
+                opacity={markerOpacity}
+                eventHandlers={{
+                  click: () => setOpenHelmetTipId(prev => (prev === pin.id ? null : pin.id)),
+                }}
+              >
+                <Tooltip
+                  direction="top"
+                  offset={[0, -20]}
+                  opacity={0.95}
+                  permanent={tipOpen}
                 >
-                  <Tooltip
-                    direction="top"
-                    offset={[0, -20]}
-                    opacity={0.95}
-                    permanent={tipOpen}
-                  >
-                    <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
-                      <strong>{pin.label}</strong>
-                      {' · '}
-                      <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
-                        {isActive ? 'ONLINE' : 'OFFLINE'}
-                      </span>
-                      {heading != null && Number.isFinite(heading) && (
-                        <>
-                          <br />
-                          Heading: {Math.round(heading)}°
-                        </>
-                      )}
-                      <br />
-                      Phụ trách: {zoneName}
-                      {detect != null && (
-                        <>
-                          <br />
-                          <span style={{ color: '#38bdf8' }}>
-                            Đã detect: {detect.total} người
-                          </span>
-                          <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>
-                            {detect.person} Nhân sự · {detect.identity} Định danh
-                          </span>
-                        </>
-                      )}
-                      {siteHeadcount && (
-                        <>
-                          <br />
-                          <span style={{ color: '#94a3b8' }}>
-                            Công trường: {siteHeadcount.observed} chuẩn
-                            {' · '}{siteHeadcount.persons} người
-                            {' · '}{siteHeadcount.identified} định danh
-                            {siteHeadcount.objects > 0 && (
-                              <>{' · '}{siteHeadcount.objects} có thể người</>
-                            )}
-                          </span>
-                        </>
-                      )}
-                      {!tipOpen && (
-                        <>
-                          <br />
-                          <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
-                        </>
-                      )}
+                  <span style={{ fontSize: 10, fontFamily: 'system-ui, sans-serif' }}>
+                    <strong>{pin.label}</strong>
+                    {' · '}
+                    <span style={{ color: isActive ? '#4ade80' : '#94a3b8' }}>
+                      {isActive ? 'ONLINE' : 'OFFLINE'}
                     </span>
-                  </Tooltip>
-                </Marker>
-              </>
+                    {heading != null && Number.isFinite(heading) && (
+                      <>
+                        <br />
+                        Heading: {Math.round(heading)}°
+                      </>
+                    )}
+                    <br />
+                    Phụ trách: {zoneName}
+                    {detect != null && (
+                      <>
+                        <br />
+                        <span style={{ color: '#38bdf8' }}>
+                          Đã detect: {detect.total} người
+                        </span>
+                        <br />
+                        <span style={{ color: '#64748b', fontSize: 9 }}>
+                          {detect.person} Nhân sự · {detect.identity} Định danh
+                        </span>
+                      </>
+                    )}
+                    {siteHeadcount && (
+                      <>
+                        <br />
+                        <span style={{ color: '#94a3b8' }}>
+                          Công trường: {siteHeadcount.observed} chuẩn
+                          {' · '}{siteHeadcount.persons} người
+                          {' · '}{siteHeadcount.identified} định danh
+                          {siteHeadcount.objects > 0 && (
+                            <>{' · '}{siteHeadcount.objects} có thể người</>
+                          )}
+                        </span>
+                      </>
+                    )}
+                    {!tipOpen && (
+                      <>
+                        <br />
+                        <span style={{ color: '#64748b', fontSize: 9 }}>Bấm để xem detect</span>
+                      </>
+                    )}
+                  </span>
+                </Tooltip>
+              </Marker>
             )
           })}
 

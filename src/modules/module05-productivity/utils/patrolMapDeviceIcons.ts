@@ -28,7 +28,7 @@ function deviceMarkerColors(isActive: boolean, accent: string) {
 function createHelmetSvg(badgeNum: string, isActive: boolean, accent: string): string {
   const { fill, stroke, glow } = deviceMarkerColors(isActive, accent)
   return `
-    <div style="width:${ICON_W}px;height:${ICON_H}px;${glow}">
+    <div style="width:${ICON_W}px;height:${ICON_H}px;pointer-events:auto;cursor:pointer;${glow}">
       <svg viewBox="0 0 24 28" width="${ICON_W}" height="${ICON_H}" aria-hidden="true">
         <path
           d="M4 15v-2.2c0-3.4 2.8-6.2 6.2-6.2h3.6c3.4 0 6.2 2.8 6.2 6.2V15"
@@ -51,7 +51,7 @@ function createHelmetSvg(badgeNum: string, isActive: boolean, accent: string): s
 function createDroneSvg(badgeNum: string, isActive: boolean, accent: string): string {
   const { fill, stroke, glow } = deviceMarkerColors(isActive, accent)
   return `
-    <div style="width:${ICON_W}px;height:${ICON_H}px;${glow}">
+    <div style="width:${ICON_W}px;height:${ICON_H}px;pointer-events:auto;cursor:pointer;${glow}">
       <svg viewBox="0 0 24 28" width="${ICON_W}" height="${ICON_H}" aria-hidden="true">
         <line x1="6" y1="8" x2="18" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
         <line x1="18" y1="8" x2="6" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
