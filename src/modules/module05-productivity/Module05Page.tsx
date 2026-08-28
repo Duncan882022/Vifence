@@ -315,9 +315,7 @@ export function Module05Page() {
 
   const handleSelectEvent = (ev: PatrolEvent) => {
     setSelectedEventId(ev.id)
-    setSelectedCamId(ev.cameraId)
-    setCameraMode('playback')
-    setTier2Open(true)
+    setDetailEventId(ev.id)
   }
 
   const renderCameraTierBody = (expanded: boolean) => (
@@ -503,6 +501,7 @@ export function Module05Page() {
 
       <PatrolEventDetailModal
         event={detailEvent}
+        viewDate={patrolViewDate}
         onClose={() => setDetailEventId(null)}
       />
 

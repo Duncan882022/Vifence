@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
+import { formatVnDate } from '@/utils/vnDateTime'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { formatPatrolTime } from '../data/patrolTypes'
 import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
@@ -38,6 +39,8 @@ import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 
 interface PatrolEventDetailModalProps {
   event: PatrolEvent | null
+  /** Ngày lịch VN đang xem — bắt buộc để load lịch sử xuất hiện đúng ngày. */
+  viewDate?: string
   onClose: () => void
 }
 
@@ -180,7 +183,7 @@ function resolvePrimaryCameraLabel(
   return null
 }
 
-export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModalProps) {
+export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEventDetailModalProps) {
   const [identityTick, setIdentityTick] = useState(0)
   const [appearanceSegments, setAppearanceSegments] = useState<PatrolAppearanceSegment[]>([])
   const [appearancesLoading, setAppearancesLoading] = useState(false)
@@ -214,9 +217,10 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
       return
     }
     const subjectId = resolvePatrolAppearanceSubjectId(event)
+    const appearanceDate = viewDate ?? formatVnDate(new Date(event.lockedAt || event.startedAt))
     let cancelled = false
     setAppearancesLoading(true)
-    void fetchPatrolSubjectAppearances(subjectId).then(segments => {
+    void fetchPatrolSubjectAppearances(subjectId, appearanceDate).then(segments => {
       if (cancelled) return
       const sorted = dedupeAppearanceSegments(
         [...segments].sort((a, b) => b.startedAt - a.startedAt),
@@ -226,7 +230,7 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
-  }, [event, identityTick])
+  }, [event, identityTick, viewDate])
 
   const summary = useMemo(() => {
     if (!event) return null
