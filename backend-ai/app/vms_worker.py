@@ -27,6 +27,7 @@ import numpy as np
 
 from . import overlay_bus
 from .auto_train.frame_collectors import collect_vms_engine_sample
+from .snapshot_sync import frame_scale, scale_overlay_detection_dicts
 
 logger = logging.getLogger("vms_worker")
 
@@ -644,6 +645,14 @@ class CameraVmsWorker:
                                 self._on_event(ev)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("[VMS %s] Engine %s lỗi: %s", self.camera_id, engine_name, exc)
+
+                # Engine trả bbox theo khung analyze (≤960px). FE vẽ trên luồng
+                # WHEP/HLS full-res — scale về capture_frame giống `/analyze/frame`.
+                sx, sy = frame_scale(frame, capture_frame)
+                if sx != 1.0 or sy != 1.0:
+                    merged_detections = scale_overlay_detection_dicts(merged_detections, sx, sy)
+                    frame_w = int(capture_frame.shape[1])
+                    frame_h = int(capture_frame.shape[0])
 
                 with self._overlay_lock:
                     self._latest_overlay = {
