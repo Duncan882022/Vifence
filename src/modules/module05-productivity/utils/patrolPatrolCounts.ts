@@ -75,7 +75,7 @@ export function collectPatrolWorkerMasterIds(
 }
 
 /**
- * KPI Công nhân — dedupe Người + Định danh từ SQLite day events.
+ * KPI Nhân sự — dedupe Người + Định danh từ SQLite day events.
  * liveOnly: chỉ người có lastSeen trong ~2 phút gần nhất.
  */
 export function countPatrolGlobalWorkers(
