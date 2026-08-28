@@ -145,6 +145,32 @@ export function getVideoObjectFitForCamera(
   return 'cover'
 }
 
+export type CameraFrameOrientation = 'landscape' | 'portrait'
+
+/** Bodycam / mobile helmet — 9:16; flycam & CCTV — 16:9. */
+export function getCameraFrameOrientation(
+  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'fixed',
+): CameraFrameOrientation {
+  return streamType === 'bodycam' || streamType === 'mobile' ? 'portrait' : 'landscape'
+}
+
+/** Khung popup phóng to camera — scale theo tỉ lệ nguồn, không ép 16:9. */
+export function getCameraMaximizeFrameClass(
+  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'fixed',
+): string {
+  if (getCameraFrameOrientation(streamType) === 'portrait') {
+    return 'h-[min(92dvh,calc(100vw-1.5rem))] w-auto max-w-[min(96vw,calc(92dvh*9/16))] aspect-[9/16]'
+  }
+  return 'w-full max-w-[96vw] aspect-video max-h-[92dvh]'
+}
+
+/** Snapshot evidence từ bodycam thường dọc — popup chi tiết scale full theo khung. */
+export function isPortraitPatrolCameraId(cameraId?: string | null): boolean {
+  if (!cameraId?.trim()) return false
+  const id = cameraId.trim().toUpperCase()
+  return id.startsWith('HC-') || id.startsWith('BC-')
+}
+
 export function getFeedKeyForCamera(cameraId: string): CameraFeedKey | undefined {
   return CAMERA_FEED_BY_ID[cameraId]
 }

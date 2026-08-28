@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { isPortraitPatrolCameraId } from '@/modules/module02-training/data/trainingCameraFeeds'
 import type { PatrolEvent } from '../data/patrolTypes'
 
 interface PatrolEventSnapshotProps {
@@ -27,6 +28,7 @@ export function PatrolEventSnapshot({
   onClick,
 }: PatrolEventSnapshotProps) {
   const isDetail = variant === 'detail'
+  const portraitEvidence = isDetail && isPortraitPatrolCameraId(event.cameraId)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -37,7 +39,12 @@ export function PatrolEventSnapshot({
 
   const frameClass = cn(
     isDetail
-      ? 'relative shrink-0 w-full bg-black rounded-lg border border-[#1e2433] min-h-[120px]'
+      ? cn(
+        'relative shrink-0 w-full bg-black rounded-lg border border-[#1e2433]',
+        portraitEvidence
+          ? 'mx-auto max-w-[min(96vw,calc(85dvh*9/16))] aspect-[9/16]'
+          : 'min-h-[120px]',
+      )
       : 'relative shrink-0 w-[72px] min-h-[58px] overflow-hidden rounded-md border border-[#1e2433]/90 bg-black shadow-inner',
     className,
   )
@@ -64,7 +71,12 @@ export function PatrolEventSnapshot({
         alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
         className={cn(
           isDetail
-            ? 'block w-full h-auto max-h-[min(48dvh,420px)] object-contain mx-auto bg-black'
+            ? cn(
+              'block w-full h-full object-contain mx-auto bg-black',
+              portraitEvidence
+                ? 'max-h-[85dvh]'
+                : 'h-auto max-h-[min(48dvh,420px)]',
+            )
             : 'absolute inset-0 h-full w-full object-cover',
           !loaded && !failed && 'opacity-0',
         )}
