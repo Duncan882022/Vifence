@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Maximize2, X, Loader2, Video } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Video } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
 import { CameraJsmpegFeed } from './CameraJsmpegFeed'
@@ -15,8 +15,8 @@ import {
   groupCamerasByLocation,
 } from '../services/cameraFilter.service'
 
-function CameraCell({ cam, compact, onMaximize }: {
-  cam: CameraWithWorker; compact?: boolean; onMaximize: () => void
+function CameraCell({ cam, compact }: {
+  cam: CameraWithWorker; compact?: boolean
 }) {
   const mp4Url = getStreamUrlForCamera(cam.id)
 
@@ -52,13 +52,6 @@ function CameraCell({ cam, compact, onMaximize }: {
             LIVE
           </span>
         </div>
-        <button
-          onClick={onMaximize}
-          className="p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0"
-          title="Phóng to"
-        >
-          <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
-        </button>
       </div>
 
       <div className={cn(
@@ -119,9 +112,8 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol }: {
+function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol }: {
   cams: CameraWithWorker[]
-  onMaximize: (cam: CameraWithWorker) => void
   stackedPortrait: boolean
   fillHeight: boolean
   forceSingleCol?: boolean
@@ -150,51 +142,9 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
             fillHeight ? 'h-full min-h-[120px]' : 'aspect-video',
           )}
         >
-          <CameraCell cam={cam} compact={compact} onMaximize={() => onMaximize(cam)} />
+          <CameraCell cam={cam} compact={compact} />
         </div>
       ))}
-    </div>
-  )
-}
-
-function FullscreenOverlay({ cam, onClose }: { cam: CameraWithWorker | null; onClose: () => void }) {
-  useEffect(() => {
-    if (!cam) return
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [cam, onClose])
-
-  if (!cam) return null
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="relative flex flex-col gap-2"
-        style={{ width: '80vw', height: '75vh' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="bg-red-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
-            </span>
-            <span className="text-sm font-semibold text-white truncate">{cam.name}</span>
-            {cam.address && (
-              <span className="text-xs text-white/60 truncate">— {cam.address}</span>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0">
-          <CameraCell cam={cam} onMaximize={onClose} />
-        </div>
-      </div>
     </div>
   )
 }
@@ -210,7 +160,6 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   const { selectedIds, setSelectedIds } = useCameraLiveStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [locationTab, setLocationTab] = useState(CAMERA_LOCATION_ALL)
-  const [focusedCam, setFocusedCam] = useState<CameraWithWorker | null>(null)
   const videoGridRef = useRef<HTMLDivElement>(null)
   const [landscapeSidebarH, setLandscapeSidebarH] = useState<number | null>(null)
   const [mobileViewportH, setMobileViewportH] = useState<number | null>(null)
@@ -336,8 +285,7 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
   }
 
   return (
-    <>
-      <div className={cn(
+    <div className={cn(
         'w-full min-h-0',
         'flex flex-col lg:flex-row lg:flex-1 lg:min-h-0 lg:h-full',
         'max-lg:h-auto max-lg:flex-none',
@@ -358,7 +306,6 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           >
             <CameraGrid
               cams={safeCams}
-              onMaximize={cam => setFocusedCam(cam)}
               stackedPortrait={stackedPortrait}
               fillHeight={fillHeightMain}
             />
@@ -498,9 +445,6 @@ export function TrainingCameraPanel({ onSelectCamera, selectedId, onStreamCountC
           )}
         </div>
       </div>
-
-      <FullscreenOverlay cam={focusedCam} onClose={() => setFocusedCam(null)} />
-    </>
   )
 }
 

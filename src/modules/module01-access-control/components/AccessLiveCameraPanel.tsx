@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Maximize2, X, Grid2x2, LayoutGrid, Radio } from 'lucide-react'
+import { Grid2x2, LayoutGrid, Radio } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { AccessGateVideoFeed } from './AccessGateVideoFeed'
 import {
@@ -16,10 +16,9 @@ const CCTV_SCANLINE = {
 
 type ViewMode = 'grid' | 'single'
 
-function GateCell({ gate, compact, onMaximize }: {
+function GateCell({ gate, compact }: {
   gate: AccessGate
   compact?: boolean
-  onMaximize: () => void
 }) {
   const detections = ACCESS_AI_OVERLAYS[gate.id]
 
@@ -43,14 +42,6 @@ function GateCell({ gate, compact, onMaximize }: {
           <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
           LIVE
         </span>
-        <button
-          type="button"
-          onClick={onMaximize}
-          className="p-1 rounded bg-black/50 hover:bg-black/80 text-white transition-colors shrink-0"
-          title="Phóng to"
-        >
-          <Maximize2 className={compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} />
-        </button>
       </div>
 
       <div className={cn(
@@ -68,42 +59,9 @@ function GateCell({ gate, compact, onMaximize }: {
   )
 }
 
-function FullscreenOverlay({ gate, onClose }: { gate: AccessGate | null; onClose: () => void }) {
-  if (!gate) return null
-  return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="relative flex flex-col gap-2"
-        style={{ width: '80vw', height: '75vh' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="bg-red-500/90 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
-            </span>
-            <span className="text-sm font-semibold text-white truncate">{gate.name}</span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0 relative">
-          <GateCell gate={gate} onMaximize={onClose} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function AccessLiveCameraPanel() {
   const [gateFilter, setGateFilter] = useState<'all' | AccessGateId>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
-  const [focusedGate, setFocusedGate] = useState<AccessGate | null>(null)
 
   const visibleGates = gateFilter === 'all'
     ? ACCESS_GATES
@@ -113,8 +71,7 @@ export function AccessLiveCameraPanel() {
   const compact = displayGates.length > 2
 
   return (
-    <>
-      <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0">
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#1e2433] shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0">
@@ -168,7 +125,7 @@ export function AccessLiveCameraPanel() {
           >
             {displayGates.map(gate => (
               <div key={gate.id} className="relative min-h-[120px] min-w-0">
-                <GateCell gate={gate} compact={compact} onMaximize={() => setFocusedGate(gate)} />
+                <GateCell gate={gate} compact={compact} />
               </div>
             ))}
           </div>
@@ -189,8 +146,5 @@ export function AccessLiveCameraPanel() {
           </span>
         </div>
       </div>
-
-      <FullscreenOverlay gate={focusedGate} onClose={() => setFocusedGate(null)} />
-    </>
   )
 }
