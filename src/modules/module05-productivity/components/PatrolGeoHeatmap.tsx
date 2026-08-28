@@ -432,10 +432,12 @@ export interface PatrolGeoHeatmapProps {
   liveGpsLng?: number | null
   /* Layer 3 — Density heat blobs + zone stat cards */
   showDensity: boolean
-  /* Layer 4 — Patrol route polyline + helmet markers */
+  /* Layer 4 — Patrol route (mũ) + markers */
   showRoute: boolean
   /** Marker mũ HC-* — luôn hiện kể cả offline (tách khỏi layer route). */
   showHelmetMarkers?: boolean
+  /** Marker flycam DR-* — tách khỏi mũ. */
+  showDroneMarkers?: boolean
   showCameras: boolean
   /** Online theo stream live (HC-01 VMS / HC-02 mobile). */
   helmetOnlineById?: Record<string, boolean>
@@ -477,6 +479,7 @@ export function PatrolGeoHeatmap({
   showDensity,
   showRoute,
   showHelmetMarkers = true,
+  showDroneMarkers = false,
   showCameras,
   helmetOnlineById,
   helmetHeadingById,
@@ -669,7 +672,7 @@ export function PatrolGeoHeatmap({
           {/* ── LAYER 2: Detection / Object Dots — nhỏ, FOV blink ── */}
           {showDetections && visibleDetectionDots.map(dot => {
             const inView = dot.inCameraView ?? false
-            const dotZ = !showHelmetMarkers && !showCameras
+            const dotZ = !showHelmetMarkers && !showDroneMarkers && !showCameras
               ? (inView ? 820 : 780)
               : (inView ? 420 : 380)
             if (dot.type === 'person') {
@@ -860,7 +863,7 @@ export function PatrolGeoHeatmap({
           })}
 
           {/* ── LAYER 4C: Drone Markers — DR-03 badge số 3 ──────────────── */}
-          {(showHelmetMarkers || showCameras) && sortedDronePins.map(pin => {
+          {(showDroneMarkers || showCameras) && sortedDronePins.map(pin => {
             const fallback = pin.position
             const rawPos = cameraPositions[pin.id] ?? fallback
             const livePos = clampPointToSiteInterior(rawPos[0], rawPos[1])

@@ -31,7 +31,7 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolMockData'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { buildPatrolPresenceHeatmapDots } from '../utils/patrolDayHeatmapDots'
+import { buildPatrolPresenceHeatmapDots, filterPatrolHeatmapDotsByDevice } from '../utils/patrolDayHeatmapDots'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
 import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
@@ -97,8 +97,8 @@ export function PatrolDensityHeatmap({
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
     polygon: true,
-    detection: true,
-    route: true,
+    helmet: true,
+    flycam: false,
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
@@ -268,7 +268,11 @@ export function PatrolDensityHeatmap({
       helmetPositionsById: mergedCameraPositions,
       helmetHeadingsById: helmetHeadingById,
     })
-    return dots.map(dot => ({
+    const byDevice = filterPatrolHeatmapDotsByDevice(dots, {
+      helmet: layers.helmet,
+      flycam: layers.flycam,
+    })
+    return byDevice.map(dot => ({
       ...dot,
       opacity: dot.inCameraView
         ? DETECTION_DOT_OPACITY_IN_VIEW
@@ -281,6 +285,8 @@ export function PatrolDensityHeatmap({
     identityRevision,
     mergedCameraPositions,
     helmetHeadingById,
+    layers.helmet,
+    layers.flycam,
   ])
 
   const onDetectionClick = (dot: { objectId?: string; id: string }) => {
@@ -369,8 +375,8 @@ export function PatrolDensityHeatmap({
 
         <div className="flex items-center gap-1 flex-wrap">
           <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.detection} color="#38bdf8" onClick={() => toggleLayer('detection')}>Người</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.route} color="#22c55e" onClick={() => toggleLayer('route')}>Thiết bị</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
+          <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
         </div>
       </div>
 
@@ -384,15 +390,16 @@ export function PatrolDensityHeatmap({
           countMode="current"
           showSiteBoundary={layers.polygon}
           showZonePolygons={false}
-          showDetections={layers.detection}
+          showDetections={layers.helmet || layers.flycam}
           liveDetectionDots={filteredDots}
           followLiveGps={hc02Online && hc02Live.hasLiveGps}
           liveGpsLat={hc02Online ? hc02Live.lat : null}
           liveGpsLng={hc02Online ? hc02Live.lng : null}
           showDensity={false}
-          showRoute={layers.route}
-          showHelmetMarkers={layers.route}
-          showCameras={layers.route}
+          showRoute={layers.helmet}
+          showHelmetMarkers={layers.helmet}
+          showDroneMarkers={layers.flycam}
+          showCameras={false}
           helmetOnlineById={helmetOnlineById}
           helmetHeadingById={helmetHeadingById}
           siteHeadcount={siteHeadcount}
