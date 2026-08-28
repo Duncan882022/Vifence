@@ -1,18 +1,25 @@
 /**
  * Trang phát sóng cho người đeo mũ — tách hẳn khỏi CMS.
  *
- * CMS là màn giám sát (heatmap, KPI, sự kiện, overlay AI) — nặng và tốn pin.
- * Người đeo mũ chỉ cần: xem mình đang quay gì, biết còn kết nối không, và dừng
- * được khi hết ca. Không bbox, không KPI — AI chạy ở backend.
+ * Điện thoại chỉ làm nhiệm vụ quay và đẩy WHIP lên MediaMTX. Theo dõi tuần tra
+ * mở Module 05 trên thiết bị khác (laptop/tablet).
  */
 import { memo, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
+  Activity,
   Camera,
+  Compass,
+  Gauge,
   MapPin,
   Radio,
   RefreshCw,
+  Signal,
+  SignalHigh,
+  SignalLow,
+  SignalMedium,
   SwitchCamera,
+  Timer,
   Wifi,
   WifiOff,
 } from 'lucide-react'
@@ -25,6 +32,7 @@ import {
 } from '../data/helmetIngest'
 import { useHelmetPublisher, type HelmetPublisherState } from './useHelmetPublisher'
 import { usePublisherPatrolAuth } from './usePublisherPatrolAuth'
+import type { WhipConnectionState } from '@/services/webrtc/whipClient'
 
 const DEFAULT_HELMET_ID = 'HC-02'
 
@@ -38,7 +46,7 @@ function formatDuration(totalSec: number): string {
 function formatBitrate(kbps: number): string {
   if (kbps <= 0) return '—'
   if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`
-  return `${kbps} kbps`
+  return `${Math.round(kbps)} kbps`
 }
 
 function qualityLabel(reason: string): string | null {
@@ -46,6 +54,71 @@ function qualityLabel(reason: string): string | null {
   if (reason === 'cpu') return 'Máy quá tải'
   return null
 }
+
+function connectionLabel(state: WhipConnectionState): string {
+  switch (state) {
+    case 'connected': return 'Đã kết nối'
+    case 'connecting': return 'Đang bắt tay…'
+    case 'reconnecting': return 'Đang nối lại…'
+    case 'failed': return 'Lỗi kết nối'
+    case 'closed': return 'Đã ngắt'
+    default: return 'Chưa kết nối'
+  }
+}
+
+type SignalLevel = 'good' | 'fair' | 'poor' | 'idle'
+
+function resolveSignalLevel(state: HelmetPublisherState): SignalLevel {
+  if (state.status !== 'live') return 'idle'
+  const { bitrateKbps, rttMs, qualityLimitation } = state.stats
+  if (qualityLimitation === 'bandwidth' || (bitrateKbps > 0 && bitrateKbps < 400)) return 'poor'
+  if (rttMs != null && rttMs > 350) return 'fair'
+  if (bitrateKbps >= 800 && (rttMs == null || rttMs < 200)) return 'good'
+  if (bitrateKbps > 0) return 'fair'
+  return 'poor'
+}
+
+const SignalIcon = memo(function SignalIcon({ level }: { level: SignalLevel }) {
+  const cls = 'w-4 h-4'
+  if (level === 'good') return <SignalHigh className={cn(cls, 'text-emerald-400')} aria-hidden />
+  if (level === 'fair') return <SignalMedium className={cn(cls, 'text-amber-400')} aria-hidden />
+  if (level === 'poor') return <SignalLow className={cn(cls, 'text-red-400')} aria-hidden />
+  return <Signal className={cn(cls, 'text-[#64748b]')} aria-hidden />
+})
+
+const KpiTile = memo(function KpiTile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone = 'normal',
+}: {
+  icon: typeof Timer
+  label: string
+  value: string
+  sub?: string
+  tone?: 'normal' | 'good' | 'warn'
+}) {
+  return (
+    <div className="rounded-lg border border-[#1f2937] bg-[#0d1117] px-2.5 py-2">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className="w-3 h-3 text-[#64748b]" aria-hidden />
+        <span className="text-[9px] font-medium uppercase tracking-wide text-[#64748b]">{label}</span>
+      </div>
+      <p className={cn(
+        'text-[15px] font-semibold tabular-nums leading-none',
+        tone === 'good' && 'text-emerald-400',
+        tone === 'warn' && 'text-amber-400',
+        tone === 'normal' && 'text-[#e2e8f0]',
+      )}>
+        {value}
+      </p>
+      {sub && (
+        <p className="mt-0.5 text-[9px] text-[#64748b] tabular-nums truncate">{sub}</p>
+      )}
+    </div>
+  )
+})
 
 const StatRow = memo(function StatRow({
   label,
@@ -60,7 +133,7 @@ const StatRow = memo(function StatRow({
     <div className="flex items-center justify-between gap-3 py-1.5">
       <span className="text-[11px] text-[#94a3b8]">{label}</span>
       <span className={cn(
-        'text-[12px] font-medium tabular-nums',
+        'text-[12px] font-medium tabular-nums text-right',
         tone === 'good' && 'text-emerald-400',
         tone === 'warn' && 'text-amber-400',
         tone === 'normal' && 'text-[#e2e8f0]',
@@ -73,28 +146,41 @@ const StatRow = memo(function StatRow({
 
 const StatusBanner = memo(function StatusBanner({
   state,
+  signalLevel,
 }: {
   state: HelmetPublisherState
+  signalLevel: SignalLevel
 }) {
   if (state.status === 'live') {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <Radio className="w-4 h-4 text-emerald-400" aria-hidden />
-        <span className="text-[12px] font-semibold text-emerald-300">Đang phát sóng</span>
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <Radio className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <span className="text-[12px] font-semibold text-emerald-300">Đang phát sóng</span>
+            <p className="text-[10px] text-emerald-200/70 truncate">
+              {connectionLabel(state.connection)}
+            </p>
+          </div>
+        </div>
+        <SignalIcon level={signalLevel} />
       </div>
     )
   }
 
   if (state.status === 'starting') {
     return (
-      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2">
+      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <RefreshCw className="w-4 h-4 text-sky-400 animate-spin" aria-hidden />
-          <span className="text-[12px] font-semibold text-sky-300">Đang kết nối…</span>
+          <RefreshCw className="w-4 h-4 text-sky-400 animate-spin shrink-0" aria-hidden />
+          <div>
+            <span className="text-[12px] font-semibold text-sky-300">Đang kết nối…</span>
+            <p className="text-[10px] text-sky-200/70">{connectionLabel(state.connection)}</p>
+          </div>
         </div>
         {state.errorMessage && (
-          <p className="mt-1 text-[11px] leading-relaxed text-sky-200/80">
+          <p className="mt-1.5 text-[11px] leading-relaxed text-sky-200/80">
             {state.errorMessage}
           </p>
         )}
@@ -104,13 +190,13 @@ const StatusBanner = memo(function StatusBanner({
 
   if (state.status === 'error') {
     return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+      <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <WifiOff className="w-4 h-4 text-red-400" aria-hidden />
+          <WifiOff className="w-4 h-4 text-red-400 shrink-0" aria-hidden />
           <span className="text-[12px] font-semibold text-red-300">Chưa phát được</span>
         </div>
         {state.errorMessage && (
-          <p className="mt-1 text-[11px] leading-relaxed text-red-200/80">
+          <p className="mt-1.5 text-[11px] leading-relaxed text-red-200/80">
             {state.errorMessage}
           </p>
         )}
@@ -119,9 +205,9 @@ const StatusBanner = memo(function StatusBanner({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-[#334155] bg-[#111827] px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg border border-[#334155] bg-[#111827] px-3 py-2.5">
       <Camera className="w-4 h-4 text-[#94a3b8]" aria-hidden />
-      <span className="text-[12px] font-semibold text-[#cbd5e1]">Chưa phát sóng</span>
+      <span className="text-[12px] font-semibold text-[#cbd5e1]">Sẵn sàng phát sóng</span>
     </div>
   )
 })
@@ -146,34 +232,70 @@ export function HelmetPublisherPage() {
   })
 
   const label = PATROL_BODYCAM_LABELS[helmetId] ?? helmetId
-  // Bodycam phần cứng tự publish RTSP — không ai phải mở trang này cho nó.
   const publishesFromBrowser = isBrowserPublishHelmet(helmetId)
   const configured = publishesFromBrowser && Boolean(getHelmetWhipUrl(helmetId))
   const isBroadcasting = state.status === 'live' || state.status === 'starting'
   const limitation = qualityLabel(state.stats.qualityLimitation)
+  const signalLevel = resolveSignalLevel(state)
 
   const resolution = state.stats.frameWidth > 0
-    ? `${state.stats.frameWidth}×${state.stats.frameHeight} · ${state.stats.framesPerSecond} fps`
+    ? `${state.stats.frameWidth}×${state.stats.frameHeight}`
     : '—'
+
+  const facingLabel = state.facing === 'environment' ? 'Camera sau' : 'Camera trước'
+
+  const gpsText = state.gps
+    ? `${state.gps.lat.toFixed(5)}, ${state.gps.lng.toFixed(5)}`
+    : 'Chưa có tín hiệu'
 
   return (
     <div className="min-h-dvh bg-[#0a0f16] text-white flex flex-col items-center px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div className="w-full max-w-md space-y-2.5">
-        <header className="flex items-center justify-between">
+      <div className="w-full max-w-md space-y-3">
+        <header className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[15px] font-semibold">{label}</h1>
-            <p className="text-[11px] text-[#94a3b8]">Phát sóng tuần tra</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#64748b] mb-0.5">
+              Vifence · Tuần tra
+            </p>
+            <h1 className="text-[17px] font-bold leading-tight">{label}</h1>
+            <p className="text-[11px] text-[#94a3b8] mt-0.5">Phát sóng bodycam lên trung tâm</p>
           </div>
-          <span className="rounded border border-[#334155] px-2 py-0.5 text-[10px] font-medium text-[#94a3b8]">
+          <span className="rounded-md border border-[#334155] bg-[#111827] px-2 py-1 text-[11px] font-bold tabular-nums text-sky-300">
             {helmetId}
           </span>
         </header>
 
-        <StatusBanner state={state} />
+        <StatusBanner state={state} signalLevel={signalLevel} />
 
-        {/* Trần chiều cao để nút Dừng luôn nằm trong tầm tay, không phải cuộn —
-            người đeo mũ thường thao tác một tay giữa công trường. */}
-        <div className="relative aspect-[3/4] max-h-[42dvh] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black">
+        {state.status === 'live' && (
+          <div className="grid grid-cols-2 gap-2">
+            <KpiTile
+              icon={Timer}
+              label="Thời lượng"
+              value={formatDuration(state.elapsedSec)}
+            />
+            <KpiTile
+              icon={Gauge}
+              label="Băng thông"
+              value={formatBitrate(state.stats.bitrateKbps)}
+              sub={limitation ?? undefined}
+              tone={limitation ? 'warn' : state.stats.bitrateKbps >= 800 ? 'good' : 'normal'}
+            />
+            <KpiTile
+              icon={Activity}
+              label="Độ trễ RTT"
+              value={state.stats.rttMs != null ? `${state.stats.rttMs} ms` : '—'}
+              tone={state.stats.rttMs != null && state.stats.rttMs < 200 ? 'good' : 'normal'}
+            />
+            <KpiTile
+              icon={Camera}
+              label="Khung hình"
+              value={state.stats.framesPerSecond > 0 ? `${state.stats.framesPerSecond} fps` : '—'}
+              sub={resolution !== '—' ? resolution : undefined}
+            />
+          </div>
+        )}
+
+        <div className="relative aspect-[3/4] max-h-[40dvh] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black shadow-lg shadow-black/40">
           <video
             ref={videoRef}
             autoPlay
@@ -187,64 +309,86 @@ export function HelmetPublisherPage() {
 
           {!isBroadcasting && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#64748b]">
-              <Camera className="w-8 h-8" aria-hidden />
-              <span className="text-[11px]">Camera đang tắt</span>
+              <Camera className="w-10 h-10 opacity-40" aria-hidden />
+              <span className="text-[11px]">Xem trước camera</span>
             </div>
           )}
 
           {state.status === 'live' && (
-            <button
-              type="button"
-              onClick={() => { void flipCamera() }}
-              aria-label="Đổi camera trước/sau"
-              className="absolute bottom-3 right-3 rounded-full bg-black/60 p-2.5 text-white/90 backdrop-blur transition-colors hover:bg-black/80"
-            >
-              <SwitchCamera className="w-4 h-4" aria-hidden />
-            </button>
+            <>
+              <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-[10px] font-bold tracking-wide text-white">LIVE</span>
+              </div>
+              <div className="absolute top-3 right-3 rounded-full bg-black/65 px-2 py-1 text-[10px] text-white/90 backdrop-blur-sm tabular-nums">
+                {formatDuration(state.elapsedSec)}
+              </div>
+              <button
+                type="button"
+                onClick={() => { void flipCamera() }}
+                aria-label="Đổi camera trước/sau"
+                className="absolute bottom-3 right-3 rounded-full bg-black/65 p-2.5 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/85 active:scale-95"
+              >
+                <SwitchCamera className="w-4 h-4" aria-hidden />
+              </button>
+              <div className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[10px] text-white/80 backdrop-blur-sm">
+                {facingLabel}
+              </div>
+            </>
           )}
         </div>
 
-        <div className="rounded-xl border border-[#1f2937] bg-[#0d1117] px-3 py-2 divide-y divide-[#1f2937]">
-          <StatRow label="Thời lượng" value={formatDuration(state.elapsedSec)} />
+        <div className="rounded-xl border border-[#1f2937] bg-[#0d1117] px-3 py-1 divide-y divide-[#1f2937]">
+          <StatRow label="Kết nối WebRTC" value={connectionLabel(state.connection)} />
           <StatRow
-            label="Chất lượng"
-            value={resolution}
+            label="Gói mất (packets lost)"
+            value={state.stats.packetsLost > 0 ? String(state.stats.packetsLost) : '0'}
+            tone={state.stats.packetsLost > 20 ? 'warn' : 'normal'}
           />
           <StatRow
-            label="Băng thông"
-            value={limitation ? `${formatBitrate(state.stats.bitrateKbps)} · ${limitation}` : formatBitrate(state.stats.bitrateKbps)}
-            tone={limitation ? 'warn' : 'normal'}
-          />
-          <StatRow
-            label="Độ trễ"
-            value={state.stats.rttMs != null ? `${state.stats.rttMs} ms` : '—'}
-            tone={state.stats.rttMs != null && state.stats.rttMs < 200 ? 'good' : 'normal'}
+            label="Giới hạn chất lượng"
+            value={limitation ?? 'Không'}
+            tone={limitation ? 'warn' : 'good'}
           />
           <StatRow
             label="Vị trí GPS"
-            value={state.gps ? `±${Math.round(state.gps.accuracyM)} m` : 'Chưa có tín hiệu'}
+            value={gpsText}
             tone={state.gps ? 'good' : 'warn'}
           />
+          {state.gps && (
+            <StatRow
+              label="Độ chính xác GPS"
+              value={`±${Math.round(state.gps.accuracyM)} m`}
+            />
+          )}
           <StatRow
-            label="Hướng"
+            label="La bàn"
             value={state.headingDeg != null ? `${Math.round(state.headingDeg)}°` : '—'}
           />
         </div>
 
-        <div className="flex items-center gap-2 px-1 text-[10px] text-[#64748b]">
+        <div className={cn(
+          'flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px]',
+          state.telemetryConnected
+            ? 'border-emerald-500/25 bg-emerald-500/5 text-emerald-200/90'
+            : 'border-[#1f2937] bg-[#0d1117] text-[#64748b]',
+        )}>
           {state.telemetryConnected
-            ? <Wifi className="w-3 h-3 text-emerald-400" aria-hidden />
-            : <WifiOff className="w-3 h-3" aria-hidden />}
-          <span>
-            {state.telemetryConnected ? 'Đã gửi vị trí về trung tâm' : 'Chưa kết nối kênh vị trí'}
+            ? <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden />
+            : <WifiOff className="w-3.5 h-3.5 shrink-0" aria-hidden />}
+          <span className="flex-1">
+            {state.telemetryConnected
+              ? 'Đã gửi GPS & hướng về trung tâm'
+              : 'Chưa kết nối kênh telemetry'}
           </span>
-          <MapPin className="ml-auto w-3 h-3" aria-hidden />
+          <MapPin className="w-3.5 h-3.5 shrink-0 opacity-60" aria-hidden />
+          <Compass className="w-3.5 h-3.5 shrink-0 opacity-60" aria-hidden />
         </div>
 
         {!publishesFromBrowser && (
           <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200/90">
-            {label} là body cam phần cứng, tự phát sóng liên tục — không cần mở trang
-            này. Xem trực tiếp trong mục Camera của CMS.
+            {label} là bodycam phần cứng, tự phát RTSP liên tục — không cần trang này.
+            Xem trực tiếp trong Module 05 trên thiết bị khác.
           </p>
         )}
 
@@ -257,8 +401,7 @@ export function HelmetPublisherPage() {
 
         {publishesFromBrowser && !configured && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
-            Chưa cấu hình máy chủ phát sóng. Đặt <code>VITE_MEDIAMTX_HOST</code> hoặc{' '}
-            <code>VITE_MEDIAMTX_WEBRTC_URL</code> rồi build lại.
+            Chưa cấu hình máy chủ phát sóng (MediaMTX). Liên hệ quản trị để bật WHIP.
           </p>
         )}
 
@@ -266,7 +409,7 @@ export function HelmetPublisherPage() {
           <button
             type="button"
             onClick={stop}
-            className="w-full rounded-lg border border-red-500/40 bg-red-500/15 py-3 text-[13px] font-semibold text-red-200 transition-colors hover:bg-red-500/25"
+            className="w-full rounded-xl border border-red-500/40 bg-red-500/15 py-3.5 text-[14px] font-semibold text-red-200 transition-colors hover:bg-red-500/25 active:scale-[0.99]"
           >
             Dừng phát sóng
           </button>
@@ -276,7 +419,7 @@ export function HelmetPublisherPage() {
             onClick={() => { void start() }}
             disabled={!configured}
             className={cn(
-              'w-full rounded-lg border py-3 text-[13px] font-semibold transition-colors',
+              'w-full rounded-xl border py-3.5 text-[14px] font-semibold transition-colors active:scale-[0.99]',
               configured
                 ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
                 : 'cursor-not-allowed border-[#1f2937] bg-[#0d1117] text-[#475569]',
@@ -287,14 +430,18 @@ export function HelmetPublisherPage() {
         )}
 
         {isBroadcasting && (
-          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
-            Giữ nguyên trang này trên màn hình. Chuyển sang tab hoặc ứng dụng khác là
-            điện thoại tắt camera và mất sóng — muốn theo dõi CMS thì mở trên máy khác.
-          </p>
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 space-y-1">
+            <p className="text-[11px] font-semibold text-amber-200">Lưu ý khi phát sóng</p>
+            <ul className="text-[10px] leading-relaxed text-amber-200/85 list-disc pl-4 space-y-0.5">
+              <li>Giữ nguyên trang này trên màn hình — chuyển tab sẽ tắt camera.</li>
+              <li>Mở Module 05 trên laptop/tablet để theo dõi tuần tra.</li>
+              <li>Mất mạng tạm thời — hệ thống tự phát lại khi có sóng.</li>
+            </ul>
+          </div>
         )}
 
-        <p className="px-1 text-[10px] leading-relaxed text-[#475569]">
-          Giữ màn hình bật trong ca trực. Mất sóng thì hệ thống tự phát lại khi có mạng.
+        <p className="px-1 text-[10px] leading-relaxed text-[#475569] text-center">
+          Giữ màn hình sáng trong ca trực · AI nhận diện chạy tại trung tâm
         </p>
       </div>
     </div>

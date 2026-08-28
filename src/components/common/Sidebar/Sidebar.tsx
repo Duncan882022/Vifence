@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard,
   DoorOpen, GraduationCap, ShieldAlert, Sparkles,
   TrendingUp, Package, ClipboardCheck, BarChart3, Cpu,
-  Lock, Activity, Gauge, Users, ScanFace,
+  Lock, Activity, Gauge, Users, ScanFace, Radio,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -49,6 +49,7 @@ const navItems: NavItem[] = [
       { path: '/module05', label: 'Tuần tra', icon: TrendingUp, available: true },
       { path: '/module05/ho-so', label: 'Hồ sơ công nhân', icon: Users, available: true },
       { path: '/module05/quet-mat', label: 'Quét mặt', icon: ScanFace, available: true },
+      { path: '/phat-song', label: 'Phát sóng', icon: Radio, available: true },
     ],
   },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
