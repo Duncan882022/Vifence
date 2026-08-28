@@ -16,6 +16,7 @@ import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlay
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
 import { isHlsStreamUrl, useStreamSignalPhase, useVideoFramesReady } from '../hooks/useHlsVideoSource'
+import { setPatrolCameraFramesLive } from '@/services/patrolCameraFrameBridge'
 import { useLowLatencyVideoSource } from '../hooks/useLowLatencyVideoSource'
 import {
   isAiOverlayDisabledCamera,
@@ -130,6 +131,13 @@ export function CameraVideoFeed({
   )
   const waitingForSignal = signalPhase === 'waiting'
   const showSignalOffline = signalPhase === 'offline'
+
+  useEffect(() => {
+    if (!isPatrolPersonRoiCameraId(cameraId)) return
+    setPatrolCameraFramesLive(cameraId, framesReady)
+    return () => setPatrolCameraFramesLive(cameraId, false)
+  }, [cameraId, framesReady])
+
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),

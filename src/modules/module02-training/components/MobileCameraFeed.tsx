@@ -30,6 +30,7 @@ import {
   cancelScheduledClearPatrolMobile,
   clearPatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
+import { setPatrolCameraFramesLive } from '@/services/patrolCameraFrameBridge'
 import { pushPatrolMobilePersonEvents } from '@/services/patrolPersonEventsBridge'
 import {
   getPatrolHelmetGps,
@@ -121,13 +122,17 @@ export function MobileCameraFeed({
   const showAiOverlay = runAiAnalyze && bboxVisible
   /** Module 05 patrol — Kalman/ByteTrack ROI (HC + DR). */
   const usePatrolPersonRoi = isPatrolPersonRoiCameraId(cameraId) && isPatrolCam
+  /** Mũ đang phát từ chính máy này — ROI local, không chờ VMS (trễ ~1s). */
+  const isLocalPublisher = Boolean(externalStream) || (status === 'live' && autoStartCapture)
   /** VMS worker — cùng nguồn detections với HC-01 / DR-* (không dual pipeline local). */
   const vmsPatrolRoiActive = Boolean(
-    usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId),
+    usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
   const vmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
-  /** Local analyze chỉ khi chưa có VMS (legacy-mobile fallback). */
-  const patrolLocalRoiEnabled = usePatrolPersonRoi && runAiAnalyze && status === 'live' && !isVmsLiveCamera(cameraId)
+  /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
+  const patrolLocalRoiEnabled = Boolean(
+    usePatrolPersonRoi && runAiAnalyze && status === 'live' && (!isVmsLiveCamera(cameraId) || isLocalPublisher),
+  )
   const localRoiFrameSize = usePatrolLocalFrameAnalyze(cameraId, videoRef, patrolLocalRoiEnabled)
 
   useEffect(() => {
@@ -193,6 +198,12 @@ export function MobileCameraFeed({
     if (status === 'live') return
     cancelScheduledClearPatrolMobile()
     clearPatrolMobileLiveSnapshot(cameraId)
+  }, [cameraId, status])
+
+  useEffect(() => {
+    if (!isPatrolPersonRoiCameraId(cameraId)) return
+    setPatrolCameraFramesLive(cameraId, status === 'live')
+    return () => setPatrolCameraFramesLive(cameraId, false)
   }, [cameraId, status])
 
   const startAiClient = useCallback(() => {

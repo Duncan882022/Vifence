@@ -23,6 +23,8 @@ export interface TrainingCamera extends Camera {
    * 404 vào camera đã tắt suốt cả buổi.
    */
   streamOfflineConfirmed?: boolean
+  /** Video tile đang decode khung hình — badge LIVE ưu tiên hơn metrics trễ. */
+  framesLive?: boolean
 }
 
 const RAW_CAMERAS: Omit<TrainingCamera, 'streamUrl'>[] = [

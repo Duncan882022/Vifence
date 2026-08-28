@@ -125,7 +125,7 @@ interface CameraChromeProps {
 
 /** LIVE + toolbar + thông tin cam — dùng chung mọi luồng. */
 export function CameraChrome({ cam, compact }: CameraChromeProps) {
-  const isOffline = cam.status === 'offline'
+  const isOffline = cam.status === 'offline' && !cam.framesLive
 
   return (
     <>

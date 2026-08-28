@@ -23,6 +23,10 @@ import {
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
 import {
+  getPatrolCameraFramesLiveMap,
+  subscribePatrolCameraFramesLive,
+} from '@/services/patrolCameraFrameBridge'
+import {
   type PatrolEvent,
 } from './data/patrolTypes'
 import {
@@ -249,10 +253,17 @@ export function Module05Page() {
   const [hc02MobileOnline, setHc02MobileOnline] = useState(
     () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
+  const [framesLiveTick, setFramesLiveTick] = useState(0)
 
   useEffect(() => {
     setSidebarCollapsed(true)
   }, [setSidebarCollapsed])
+
+  useEffect(() => {
+    return subscribePatrolCameraFramesLive(() => {
+      setFramesLiveTick(t => t + 1)
+    })
+  }, [])
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
@@ -275,8 +286,9 @@ export function Module05Page() {
       ),
       liveMetrics.perCamera,
       hc02MobileOnline,
+      getPatrolCameraFramesLiveMap(),
     ),
-    [visionCameras, liveMetrics.perCamera, hc02MobileOnline],
+    [visionCameras, liveMetrics.perCamera, hc02MobileOnline, framesLiveTick],
   )
 
   useEffect(() => {

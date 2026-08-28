@@ -95,7 +95,7 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
   cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean; mini?: boolean
 }) {
   /** Mobile bodycam — luôn thử getUserMedia, không khóa bởi stream_online backend. */
-  const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
+  const isOffline = cam.status === 'offline' && !cam.framesLive && cam.streamType !== 'mobile'
 
   return (
     <div
@@ -166,7 +166,7 @@ function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true
   streamWhenOffline?: boolean
 }) {
   /** Mobile bodycam — luôn mount feed; offline chỉ áp dụng luồng remote (HLS/WS). */
-  const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
+  const isOffline = cam.status === 'offline' && !cam.framesLive && cam.streamType !== 'mobile'
   /**
    * Badge thường trễ hơn nguồn vài giây nên tile vẫn thử tải khi báo offline.
    * Nhưng khi backend đã khẳng định không có tín hiệu thì thôi: mũ tắt cả buổi
