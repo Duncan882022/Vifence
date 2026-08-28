@@ -18,6 +18,41 @@ class PatrolFlightMode(str, Enum):
 
 _mode_state: dict[str, dict[str, object]] = {}
 _altitude_state: dict[str, dict[str, float]] = {}
+_visual_scale_state: dict[str, dict[str, float]] = {}
+
+# Người > ~4% chiều cao khung → drone đang bay thấp (aerial thường 1–2%).
+_VISUAL_PROXIMITY_BH_RATIO = 0.040
+_VISUAL_SCALE_TTL_SEC = 4.0
+
+
+def note_patrol_flycam_visual_scale(
+    camera_id: str,
+    person_boxes: list[tuple[float, float, float, float]],
+    frame_h: int,
+) -> None:
+    """Cập nhật gợi ý tầm thấp từ kích thước bbox YOLO khi thiếu telemetry độ cao."""
+    if not camera_id.startswith("DR-") or frame_h <= 0 or not person_boxes:
+        return
+    max_bh = 0.0
+    for box in person_boxes:
+        _x1, y1, _x2, y2 = box
+        max_bh = max(max_bh, max(y2 - y1, 0.0) / float(frame_h))
+    if max_bh <= 0.0:
+        return
+    _visual_scale_state[camera_id] = {
+        "max_bh_ratio": max_bh,
+        "updated_at": time.time(),
+    }
+
+
+def _visual_scale_suggests_proximity(camera_id: str) -> bool:
+    entry = _visual_scale_state.get(camera_id)
+    if not entry:
+        return False
+    age = time.time() - float(entry.get("updated_at") or 0)
+    if age > _VISUAL_SCALE_TTL_SEC:
+        return False
+    return float(entry.get("max_bh_ratio") or 0.0) >= _VISUAL_PROXIMITY_BH_RATIO
 
 
 def _parse_altitude_overrides(raw: str) -> dict[str, float]:
@@ -89,7 +124,10 @@ def resolve_patrol_flight_mode(camera_id: str) -> PatrolFlightMode:
 
     prev = _mode_state.get(camera_id, {}).get("mode")
     if alt is None:
-        mode = PatrolFlightMode.AERIAL
+        if _visual_scale_suggests_proximity(camera_id):
+            mode = PatrolFlightMode.PROXIMITY
+        else:
+            mode = PatrolFlightMode.AERIAL
     elif alt >= aerial_min:
         mode = PatrolFlightMode.AERIAL
     elif alt <= proximity_max:

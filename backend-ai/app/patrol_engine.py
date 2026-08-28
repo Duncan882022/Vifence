@@ -6,7 +6,9 @@ import numpy as np
 
 from .patrol_flight_mode import (
     PatrolFlightMode,
+    get_patrol_drone_altitude_m,
     is_patrol_flycam_aerial,
+    note_patrol_flycam_visual_scale,
     patrol_flight_mode_payload,
     resolve_patrol_flight_mode,
 )
@@ -14,6 +16,7 @@ from .ppe_analyzer import (
     _build_patrol_bodycam_result,
     _build_patrol_flycam_aerial_result,
     _build_patrol_flycam_proximity_result,
+    _flycam_prescan_for_flight_mode,
     _is_helmet_bodycam,
     _is_patrol_flycam,
     reset_all_hc_patrol_state,
@@ -29,6 +32,8 @@ def analyze_patrol_frame(
 ) -> dict:
     """HC-* bodycam hoặc DR-* flycam — person-only, ghi sự kiện qua patrol/sink."""
     if _is_patrol_flycam(camera_id):
+        if get_patrol_drone_altitude_m(camera_id) is None:
+            _flycam_prescan_for_flight_mode(frame, camera_id)
         mode = resolve_patrol_flight_mode(camera_id)
         if mode == PatrolFlightMode.PROXIMITY:
             result = _build_patrol_flycam_proximity_result(
@@ -47,6 +52,21 @@ def analyze_patrol_frame(
                 result.get("detections") or [],
                 metrics=result.get("metrics") or {},
             )
+        person_boxes: list[tuple[float, float, float, float]] = []
+        for det in result.get("detections") or []:
+            if det.get("behavior") != "person":
+                continue
+            raw_bbox = det.get("subject_bbox") or det.get("bbox")
+            if not isinstance(raw_bbox, list) or len(raw_bbox) < 4:
+                continue
+            person_boxes.append(
+                (float(raw_bbox[0]), float(raw_bbox[1]), float(raw_bbox[2]), float(raw_bbox[3])),
+            )
+        note_patrol_flycam_visual_scale(
+            camera_id,
+            person_boxes,
+            int(result.get("height") or frame.shape[0]),
+        )
         metrics = dict(result.get("metrics") or {})
         metrics.update(patrol_flight_mode_payload(camera_id))
         result["metrics"] = metrics

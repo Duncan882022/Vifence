@@ -7,7 +7,23 @@ export interface PatrolFlycamGateFlags {
   proximityFlycam: boolean
 }
 
-/** Đọc từ overlay metrics (`metrics.ppe.flight_mode`). */
+/** VMS worker ghi metrics theo tên engine — patrol DR-* là `patrol`, A-04 là `ppe`. */
+export function readPatrolFlightModeFromMetrics(
+  metrics?: Record<string, unknown> | null,
+): PatrolFlightMode | null {
+  if (!metrics) return null
+  for (const bucket of ['patrol', 'ppe'] as const) {
+    const nested = metrics[bucket]
+    if (!nested || typeof nested !== 'object') continue
+    const mode = (nested as Record<string, unknown>).flight_mode
+    if (mode === 'proximity' || mode === 'aerial') return mode
+  }
+  const top = metrics.flight_mode
+  if (top === 'proximity' || top === 'aerial') return top
+  return null
+}
+
+/** Đọc từ overlay metrics VMS hoặc `/analyze/frame`. */
 export function resolvePatrolFlycamGateFlags(
   cameraId: string,
   flightMode?: string | null,

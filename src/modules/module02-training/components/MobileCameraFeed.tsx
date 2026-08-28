@@ -42,6 +42,7 @@ import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-prod
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
+import { readPatrolFlightModeFromMetrics, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { isPatrolHelmetCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
@@ -207,7 +208,10 @@ export function MobileCameraFeed({
           return [raw[0], raw[1], raw[2], raw[3]]
         }
         const patrolPersonCam = isPatrolPersonRoiCameraId(cameraId)
-        const patrolFlycam = cameraId.startsWith('DR-')
+        const flycamGates = resolvePatrolFlycamGateFlags(
+          cameraId,
+          readPatrolFlightModeFromMetrics(result.metrics),
+        )
         /** Vẽ ROI cho mọi người nhìn thấy được — chỉ loại mảnh chân/tay. */
         const patrolVisible = (d: MobileAiDetection) => {
           if (!patrolPersonCam || d.behavior !== 'person') return true
@@ -218,7 +222,8 @@ export function MobileCameraFeed({
             frameW,
             frameH,
             workerId: d.worker_id,
-            flycam: patrolFlycam,
+            flycam: flycamGates.flycam,
+            proximityFlycam: flycamGates.proximityFlycam,
           })
         }
         /** Khung hiện tại — tiêu chí sự kiện: đầu + ≥30% thân, hoặc đã có mặt/mã. */
