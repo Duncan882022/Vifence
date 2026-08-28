@@ -41,6 +41,25 @@ describe('ensurePatrolAuth', () => {
     storage.clear()
   })
 
+  it('auto signin khi build có VITE_PATROL_DEMO_* dù không bật IS_DEMO_AUTH guard', async () => {
+    vi.doUnmock('@/modules/dao-tao-tuan-thu/services/ghpagesDemo.service')
+    vi.resetModules()
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        access_token: 'build-jwt',
+        token_type: 'bearer',
+        user: { username: 'admin', role: 'admin' },
+      }),
+    } as Response)
+
+    const { ensurePatrolAuth } = await import('./patrolApiClient')
+    const authed = await ensurePatrolAuth()
+    expect(authed).toBe(true)
+    expect(storage.get('vifence_patrol_access_token')).toBe('build-jwt')
+  })
+
   it('tự signin và gửi Bearer khi demo mode chưa có token', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce({

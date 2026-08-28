@@ -63,9 +63,8 @@ export function isPatrolAuthenticated(): boolean {
   return IS_DEMO_AUTH || Boolean(getPatrolAccessToken())
 }
 
-/** Demo CMS — credentials baked at build (khớp PATROL_AUTH_USERS trên VPS). */
+/** Demo CMS / VPS build — credentials baked at build (khớp PATROL_AUTH_USERS backend). */
 function demoPatrolCredentials(): { username: string; password: string } | null {
-  if (!IS_DEMO_AUTH) return null
   const username = import.meta.env.VITE_PATROL_DEMO_USERNAME?.trim()
   const password = import.meta.env.VITE_PATROL_DEMO_PASSWORD?.trim()
   if (username && password) return { username, password }
@@ -77,11 +76,10 @@ let ensureAuthPromise: Promise<boolean> | null = null
 const snapshotSignCache = new Map<string, { token: string; exp: number }>()
 
 /**
- * Demo mode (`VITE_DEMO_AUTH=true`) bypasses route guard nhưng backend vẫn cần JWT.
- * Tự đăng nhập một lần khi chưa có token — tránh tab Sự kiện / KPI rỗng dù SQLite có dữ liệu.
+ * Tự đăng nhập patrol khi build có VITE_PATROL_DEMO_* (ghpages/VPS).
+ * Backend bật JWT — /patrol/metrics, /patrol/day/* cần Bearer.
  */
 export async function ensurePatrolAuth(): Promise<boolean> {
-  if (!IS_DEMO_AUTH) return Boolean(getPatrolAccessToken())
   if (getPatrolAccessToken()) return true
   const creds = demoPatrolCredentials()
   if (!creds) return false
@@ -143,6 +141,22 @@ export async function fetchPatrol<T>(
       signal: controller.signal,
       mode: 'cors',
     })
+    if (res.status === 401 && token) {
+      clearPatrolAccessToken()
+      const reauthed = await ensurePatrolAuth()
+      const retryToken = getPatrolAccessToken()
+      if (reauthed && retryToken) {
+        const retryHeaders = { ...headers, Authorization: `Bearer ${retryToken}` }
+        const retry = await fetch(`${base}${path}`, {
+          ...init,
+          headers: retryHeaders,
+          signal: controller.signal,
+          mode: 'cors',
+        })
+        if (!retry.ok) return null
+        return (await retry.json()) as T
+      }
+    }
     if (!res.ok) return null
     return (await res.json()) as T
   } catch {
