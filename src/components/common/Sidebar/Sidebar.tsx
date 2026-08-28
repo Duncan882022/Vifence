@@ -56,6 +56,16 @@ const navItems: NavItem[] = [
   { path: '/module08', label: 'Báo cáo điều hành',    icon: BarChart3,      available: false },
 ]
 
+function defaultNavChildPath(item: NavItem): string {
+  const child = item.children?.find(c => c.available) ?? item.children?.[0]
+  return child?.path ?? item.path
+}
+
+function isNavChildActive(pathname: string, childPath: string): boolean {
+  if (childPath === '/module05') return pathname === '/module05'
+  return pathname === childPath || pathname.startsWith(`${childPath}/`)
+}
+
 export function Sidebar() {
   const location = useLocation()
   const { sidebarCollapsed, toggleSidebar, closeMobileNav } = useAppStore()
@@ -120,47 +130,87 @@ export function Sidebar() {
 
               /* ── Group item with children ── */
               if (item.children) {
-                const isGroupActive = item.children.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
+                const isGroupActive = item.children.some(c => isNavChildActive(location.pathname, c.path))
                 const isOpen = openGroups[item.path] ?? isGroupActive
+                const primaryPath = defaultNavChildPath(item)
+
+                if (!showLabels) {
+                  return (
+                    <li key={item.path}>
+                      <NavLink
+                        to={primaryPath}
+                        title={item.label}
+                        onClick={closeMobileNav}
+                        className={cn(
+                          'flex items-center justify-center px-2.5 py-2.5 rounded-md transition-colors group',
+                          isGroupActive
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-[#8b9cb8] hover:bg-[#1a2235] hover:text-foreground',
+                        )}
+                      >
+                        <Icon className={cn(
+                          'w-4 h-4 shrink-0',
+                          isGroupActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                        )} />
+                      </NavLink>
+                    </li>
+                  )
+                }
 
                 return (
                   <li key={item.path}>
-                    <button
-                      type="button"
-                      title={!showLabels ? item.label : undefined}
-                      onClick={() => setOpenGroups(g => ({ ...g, [item.path]: !(g[item.path] ?? isGroupActive) }))}
+                    <div
                       className={cn(
-                        'w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-md transition-colors group',
-                        isGroupActive
-                          ? 'bg-[#1a2235] text-foreground'
-                          : 'text-[#8b9cb8] hover:bg-[#1a2235] hover:text-foreground',
+                        'flex items-stretch rounded-md transition-colors group',
+                        isGroupActive ? 'bg-[#1a2235] text-foreground' : 'text-[#8b9cb8]',
                       )}
                     >
-                      <Icon className={cn(
-                        'w-4 h-4 shrink-0',
-                        isGroupActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
-                      )} />
-                      {showLabels && (
-                        <>
-                          <span className="text-xs font-medium leading-snug whitespace-normal flex-1 text-left">
-                            {item.label}
-                          </span>
-                          <ChevronDown className={cn(
-                            'w-3 h-3 shrink-0 text-muted-foreground/60 transition-transform duration-200',
-                            isOpen ? 'rotate-0' : '-rotate-90',
-                          )} />
-                        </>
-                      )}
-                    </button>
+                      <NavLink
+                        to={primaryPath}
+                        title={item.label}
+                        onClick={() => {
+                          setOpenGroups(g => ({ ...g, [item.path]: true }))
+                          closeMobileNav()
+                        }}
+                        className={cn(
+                          'flex flex-1 items-center gap-2.5 px-2.5 py-2.5 rounded-l-md transition-colors min-w-0',
+                          isGroupActive
+                            ? 'text-foreground'
+                            : 'hover:bg-[#1a2235] hover:text-foreground',
+                        )}
+                      >
+                        <Icon className={cn(
+                          'w-4 h-4 shrink-0',
+                          isGroupActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                        )} />
+                        <span className="text-xs font-medium leading-snug whitespace-normal flex-1 text-left">
+                          {item.label}
+                        </span>
+                      </NavLink>
+                      <button
+                        type="button"
+                        aria-label={isOpen ? 'Thu gọn menu con' : 'Mở menu con'}
+                        aria-expanded={isOpen}
+                        onClick={() => setOpenGroups(g => ({ ...g, [item.path]: !(g[item.path] ?? isGroupActive) }))}
+                        className={cn(
+                          'flex items-center px-2 rounded-r-md transition-colors shrink-0',
+                          isGroupActive
+                            ? 'text-muted-foreground/80 hover:text-foreground'
+                            : 'text-muted-foreground/60 hover:bg-[#1a2235] hover:text-foreground',
+                        )}
+                      >
+                        <ChevronDown className={cn(
+                          'w-3 h-3 shrink-0 transition-transform duration-200',
+                          isOpen ? 'rotate-0' : '-rotate-90',
+                        )} />
+                      </button>
+                    </div>
 
-                    {/* Children */}
-                    {showLabels && isOpen && (
+                    {isOpen && (
                       <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-[#1e2433]/60 pl-2">
                         {item.children.map(child => {
                           const ChildIcon = child.icon
-                          const isChildActive = child.path === '/module05'
-                            ? location.pathname === '/module05'
-                            : location.pathname === child.path || location.pathname.startsWith(`${child.path}/`)
+                          const isChildActive = isNavChildActive(location.pathname, child.path)
 
                           return (
                             <li key={child.path}>
