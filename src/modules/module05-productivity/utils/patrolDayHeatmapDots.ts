@@ -194,12 +194,39 @@ export interface PatrolHeatmapDeviceLayers {
   flycam: boolean
 }
 
-/** Chấm người theo thiết bị — không còn layer "Người" tách rời trên bản đồ. */
+function resolveHeatmapDotMergeKey(dot: DetectionDot): string {
+  const oid = dot.objectId?.trim()
+  if (oid) return oid.toLowerCase()
+  return dot.id.toLowerCase()
+}
+
+/** Gộp nhiều nguồn chấm — ưu tiên inCameraView rồi lastSeenAt mới hơn. */
+export function mergePatrolHeatmapDetectionDots(groups: DetectionDot[][]): DetectionDot[] {
+  const byKey = new Map<string, DetectionDot>()
+  for (const group of groups) {
+    for (const dot of group) {
+      const key = resolveHeatmapDotMergeKey(dot)
+      const prev = byKey.get(key)
+      if (!prev) {
+        byKey.set(key, dot)
+        continue
+      }
+      const prevTs = prev.lastSeenAt ?? 0
+      const nextTs = dot.lastSeenAt ?? 0
+      const preferNext = (dot.inCameraView && !prev.inCameraView)
+        || (Boolean(dot.inCameraView) === Boolean(prev.inCameraView) && nextTs >= prevTs)
+      if (preferNext) byKey.set(key, dot)
+    }
+  }
+  return [...byKey.values()]
+}
+
+/** Chấm người theo thiết bị — khi cả hai tắt vẫn giữ chấm (layer Mật độ điều khiển hiển thị). */
 export function filterPatrolHeatmapDotsByDevice(
   dots: DetectionDot[],
   layers: PatrolHeatmapDeviceLayers,
 ): DetectionDot[] {
-  if (!layers.helmet && !layers.flycam) return []
+  if (!layers.helmet && !layers.flycam) return dots
   return dots.filter(dot => {
     const cam = (dot.cameraId || '').trim()
     if (layers.flycam && isPatrolDroneCameraId(cam)) return true
