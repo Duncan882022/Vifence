@@ -9,6 +9,7 @@ import {
 } from '../services/patrolManualIdentity.service'
 import {
   isPatrolObjectId,
+  isPatrolPersId,
   isPatrolSgcWorkerId,
   patrolEventIdentityKeys,
   resolvePatrolPersonStage,
@@ -95,8 +96,10 @@ export function resolveEventObjectDisplay(event: PatrolEvent): {
   }
 }
 
-/** Card list — tab Người / Định danh dùng chung layout. */
+/** Card list — nhãn chính cạnh icon + meta cho modal chi tiết. */
 export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
+  /** Dòng chính cạnh icon người trên card list. */
+  subjectLabel: string
   title: string
   subtitle: string
   unit: string | null
@@ -108,6 +111,7 @@ export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
 
   if (stage === 'profile') {
     return {
+      subjectLabel: display.label,
       title: display.label,
       subtitle: display.workerId ? `Mã: ${display.workerId}` : '—',
       unit: display.unit,
@@ -120,17 +124,23 @@ export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
     const sgc = [event.trackWorkerId, event.objectId]
       .map(v => v?.trim() ?? '')
       .find(v => isPatrolSgcWorkerId(v))
+    const persId = [event.trackWorkerId, event.objectId]
+      .map(v => v?.trim() ?? '')
+      .find(v => isPatrolPersId(v))
+    const code = sgc ? sgc.toUpperCase() : (persId ?? display.workerId ?? '')
     return {
-      title: 'Người',
-      subtitle: sgc ? `Mã: ${sgc.toUpperCase()}` : 'Chưa có trong gallery',
+      subjectLabel: code || '—',
+      title: code || 'Người',
+      subtitle: code ? `Mã: ${code}` : 'Chưa có trong gallery',
       unit: null,
-      workerId: sgc || null,
+      workerId: code || null,
       stage,
     }
   }
 
   return {
-    title: 'Đối tượng',
+    subjectLabel: 'Unknown',
+    title: 'Unknown',
     subtitle: isPatrolObjectId(event.objectId ?? '') ? 'Đang quan sát' : '—',
     unit: null,
     workerId: display.workerId,
