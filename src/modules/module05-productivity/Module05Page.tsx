@@ -307,8 +307,6 @@ export function Module05Page() {
     setSelectedEventId(ev.id)
     setDetailEventId(ev.id)
     setPatrolViewDate(getPatrolEventViewDate(ev))
-    if (ev.cameraId) setSelectedCamId(ev.cameraId)
-    setCameraMode('playback')
   }
 
   const renderCameraTierBody = (expanded: boolean) => (
@@ -342,8 +340,6 @@ export function Module05Page() {
           maxDate={patrolToday}
           minDate={patrolMinDate}
           onDateChange={setPatrolViewDate}
-          selectedRecordId={selectedEventId}
-          onSelectRecord={() => setSelectedEventId(null)}
           filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
           filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
           groupFn={cams => groupPatrolCamerasForSidebar(cams)}
