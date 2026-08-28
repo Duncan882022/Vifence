@@ -1,5 +1,6 @@
 /**
  * Chấm bản đồ tuần tra — 1 chấm / qualified presence (L#), upsert tại chỗ như sự kiện.
+ * Ba tầng: Đối tượng (obj-*) · Người · Định danh — cần includeUnassigned cho obj.
  */
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
