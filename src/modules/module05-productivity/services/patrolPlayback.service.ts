@@ -1,6 +1,5 @@
 /**
- * Playback tuần tra — băng MediaMTX (xem lại camera).
- * Sự kiện patrol chỉ là marker thumbnail trên timeline, không phát video.
+ * Playback tuần tra — băng MediaMTX + sự kiện patrol trong ngày.
  *
  *   GET /list?path=hc-02&start=&end=
  *   GET /get?path=hc-02&start=<ISO8601>&duration=<giây>
@@ -8,6 +7,7 @@
 import dayjs from 'dayjs'
 import { formatVnDate, formatVnDateOffsetDays } from '@/utils/vnDateTime'
 import type {
+  CameraDetection,
   CameraPlaybackRecord,
   CameraDetectionsResponse,
   CameraPlaybackRecordsResponse,
@@ -25,11 +25,8 @@ interface MediaMtxSegment {
 /** Đoạn ngắn hơn ngần này thường là mẩu vụn lúc nguồn chập chờn. */
 const MIN_SEGMENT_SEC = 3
 
-/** Clip sự kiện — chỉ Module 03 ATLĐ; Module 05 không dùng cho playback. */
+/** Clip quanh thời điểm sự kiện khi bấm từ tab Sự kiện. */
 export const PATROL_EVENT_CLIP_SEC = 30
-
-/** Làm mới timeline khi đang ghi — hiện block xanh mới. */
-export const PATROL_PLAYBACK_REFRESH_MS = 20_000
 
 export type PatrolPlaybackFetchError = 'unconfigured' | 'network' | null
 
@@ -92,15 +89,23 @@ function patrolEventsForCameraDay(
   })
 }
 
-function patrolEventToMarker(ev: PatrolEvent): CameraPlaybackRecord {
+function patrolEventToRecord(
+  ev: PatrolEvent,
+  base: string,
+  path: string,
+): CameraPlaybackRecord {
+  const at = eventInstant(ev)
   const started = dayjs(ev.startedAt)
-  const ended = ev.endedAt ? dayjs(ev.endedAt) : started.add(1, 'minute')
+  const ended = ev.endedAt ? dayjs(ev.endedAt) : started.add(PATROL_EVENT_CLIP_SEC, 'second')
   return {
     id: ev.id,
     name: ev.violationLabel?.trim() || ev.objectLabel?.trim() || 'Sự kiện tuần tra',
     startTime: started.toISOString(),
     endTime: ended.toISOString(),
     type: 'event',
+    videoUrl: buildGetUrl(base, path, at, PATROL_EVENT_CLIP_SEC),
+    seekSec: 0,
+    clipDurationSec: PATROL_EVENT_CLIP_SEC,
     thumbnailUrl: ev.snapshotUrl,
   }
 }
@@ -170,8 +175,8 @@ export interface PatrolPlaybackFetchers {
 }
 
 /**
- * Factory playback tuần tra — Module 05 only.
- * `fetchRecords`: băng liên tục (phát video) + marker sự kiện (thumbnail timeline).
+ * Factory gắn sự kiện patrol — Module 05 only.
+ * `fetchRecords` trả băng liên tục + chấm sự kiện; id sự kiện khớp tab Sự kiện.
  */
 export function createPatrolPlaybackFetchers(
   patrolEvents: PatrolEvent[],
@@ -187,16 +192,30 @@ export function createPatrolPlaybackFetchers(
       const segments = await fetchMediaMtxSegments(base, path, listStart, listEnd)
 
       const continuous = segmentsToRecords(cameraId, base, path, segments, from, to)
-      const markers = patrolEventsForCameraDay(patrolEvents, cameraId, dayKey)
-        .map(ev => patrolEventToMarker(ev))
+      const eventItems = patrolEventsForCameraDay(patrolEvents, cameraId, dayKey)
+        .map(ev => patrolEventToRecord(ev, base, path))
 
-      const items = [...continuous, ...markers].sort(
+      const items = [...continuous, ...eventItems].sort(
         (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
       )
       return { items }
     },
 
-    fetchDetections: async () => ({ items: [] }),
+    fetchDetections: async (recordId: string) => {
+      const ev = patrolEvents.find(e => e.id === recordId)
+      if (!ev) return { items: [] }
+
+      const items: CameraDetection[] = [
+        {
+          id: `${recordId}-patrol`,
+          label: ev.type,
+          confidenceScore: Math.round((ev.confidence ?? 0) * 100),
+          detectionResult: ev.violationLabel || ev.objectLabel,
+          createdAt: eventInstant(ev),
+        },
+      ]
+      return { items }
+    },
   }
 }
 
@@ -223,38 +242,4 @@ export function getPatrolPlaybackMinDate(): string {
 /** Ngày lịch VN (0h) — KHÔNG có ca/kíp; không dùng logic 06:00 từ Module 02/03. */
 export function getPatrolDefaultPlaybackDate(): string {
   return formatVnDate()
-}
-
-function dayHasContinuousSegments(
-  segments: MediaMtxSegment[],
-  from: Date,
-  to: Date,
-): boolean {
-  return segments.some(seg => {
-    const startedAt = dayjs(seg.start)
-    if (!startedAt.isValid()) return false
-    const startDate = startedAt.toDate()
-    if (startDate < from || startDate > to) return false
-    return seg.duration >= MIN_SEGMENT_SEC
-  })
-}
-
-/** Ngày gần nhất (≤ maxDate) có băng liên tục — tránh timeline trống khi hôm nay chưa có ghi. */
-export async function findLatestPatrolPlaybackDay(
-  cameraId: string,
-  maxDate: string,
-  minDate: string,
-): Promise<string | null> {
-  const base = getMediaMtxPlaybackBase()
-  if (!base) return null
-
-  const path = mediaMtxPathForCamera(cameraId)
-  let cursor = maxDate
-  while (cursor >= minDate) {
-    const { from, to, listStart, listEnd } = vnDayBounds(`${cursor}T00:00:00+07:00`)
-    const segments = await fetchMediaMtxSegments(base, path, listStart, listEnd)
-    if (dayHasContinuousSegments(segments, from, to)) return cursor
-    cursor = formatVnDateOffsetDays(-1, cursor)
-  }
-  return null
 }

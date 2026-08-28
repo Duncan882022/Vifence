@@ -40,7 +40,7 @@ function pickDefaultPlaybackRecord(
 ): CameraPlaybackRecord | null {
   if (items.length === 0) return null
   if (prefer === 'continuous') {
-    return items.find(item => item.type === 'continuous' || item.type === 'continuous_event') ?? null
+    return items.find(item => item.type === 'continuous' || item.type === 'continuous_event') ?? items[0]
   }
   return items.find(item => item.type === 'event') ?? items[0]
 }
@@ -73,13 +73,6 @@ export interface CameraPlaybackPanelProps {
   preferRecordType?: PlaybackPreferRecordType
   /** Bấm block timeline — dùng để bỏ sync sự kiện từ panel ngoài. */
   onSelectRecord?: (record: CameraPlaybackRecord) => void
-  /** Sau khi tải bản ghi — Module 05 dùng để gợi ý ngày có băng. */
-  onRecordsLoaded?: (
-    items: CameraPlaybackRecord[],
-    ctx: { date: string; cameraId: string },
-  ) => void
-  /** Làm mới timeline định kỳ (ms) — hiện block xanh khi đang ghi. */
-  recordsRefreshMs?: number
 }
 
 export function CameraPlaybackPanel({
@@ -101,8 +94,6 @@ export function CameraPlaybackPanel({
   videoAreaFlex = 70,
   preferRecordType = 'event',
   onSelectRecord,
-  onRecordsLoaded,
-  recordsRefreshMs = 0,
 }: CameraPlaybackPanelProps) {
   const resolveCamera = useCallback(
     (id?: string) => cameras.find(cam => cam.id === id) ?? cameras[0] ?? null,
@@ -142,16 +133,11 @@ export function CameraPlaybackPanel({
   const initialRecordIdRef = useRef(initialRecordId)
   const selectedRecordRef = useRef(selectedRecord)
   const seekSecRef = useRef(seekSec)
-  const onRecordsLoadedRef = useRef(onRecordsLoaded)
-  const prevSelectedRecordIdRef = useRef<string | null | undefined>(selectedRecordId)
-  const recordsRef = useRef(records)
   fetchRecordsRef.current = fetchRecords
   selectedRecordIdRef.current = selectedRecordId
   initialRecordIdRef.current = initialRecordId
   selectedRecordRef.current = selectedRecord
   seekSecRef.current = seekSec
-  onRecordsLoadedRef.current = onRecordsLoaded
-  recordsRef.current = records
   const { isDesktop } = useShellLayout()
   const isMobile = !isDesktop
 
@@ -179,100 +165,72 @@ export function CameraPlaybackPanel({
     if (cam) setActiveCam(cam)
   }, [selectedCameraId, resolveCamera])
 
-  const applyLoadedRecords = useCallback((
-    items: CameraPlaybackRecord[],
-    mode: 'reset' | 'refresh',
-  ) => {
-    setRecords(items)
-
-    const syncId = selectedRecordIdRef.current
-    const initId = initialRecordIdRef.current
-    const fromEventPanel = syncId
-      ? items.find(item => item.id === syncId
-        && (preferRecordType !== 'continuous' || item.type !== 'event'))
-      : undefined
-    const fromInitial = initId
-      ? items.find(item => item.id === initId)
-      : undefined
-    const keepCurrent = selectedRecordRef.current
-      ? items.find(item => item.id === selectedRecordRef.current!.id)
-      : undefined
-    const next = fromEventPanel
-      ?? fromInitial
-      ?? keepCurrent
-      ?? pickDefaultPlaybackRecord(items, preferRecordType)
-
-    if (next) {
-      const sameId = selectedRecordRef.current?.id === next.id
-      setSelectedRecord(next)
-      if (mode === 'reset' || !sameId) {
-        setSeekSec(sameId ? seekSecRef.current : (next.seekSec ?? 0))
-      }
-      if (!sameId) {
-        setProgress(0)
-        setCurrentTime(0)
-        setIsPlaying(false)
-      }
-      setPlaybackError(null)
-    } else if (mode === 'reset') {
-      setSelectedRecord(null)
-    }
-
-    if (activeCam?.id) {
-      onRecordsLoadedRef.current?.(items, { date, cameraId: activeCam.id })
-    }
-  }, [activeCam?.id, date, preferRecordType])
-
   useEffect(() => {
     if (!activeCam) return
     let cancelled = false
+    setLoadingRecords(true)
+    setRecords([])
+    setSelectedRecord(null)
 
-    const loadRecords = (mode: 'reset' | 'refresh') => {
-      if (mode === 'reset') {
-        setLoadingRecords(true)
-        setRecords([])
-        setSelectedRecord(null)
-      }
+    // Luôn dùng biên ngày lịch VN (+07) — không phụ thuộc múi giờ trình duyệt.
+    const startDate = `${date}T00:00:00+07:00`
+    const endDate = `${date}T23:59:59.999+07:00`
 
-      const startDate = `${date}T00:00:00+07:00`
-      const endDate = `${date}T23:59:59.999+07:00`
+    fetchRecordsRef.current(activeCam.id, { startDate, endDate })
+      .then(res => {
+        if (cancelled) return
+        const items = res.items ?? []
+        setRecords(items)
 
-      fetchRecordsRef.current(activeCam.id, { startDate, endDate })
-        .then(res => {
-          if (cancelled) return
-          applyLoadedRecords(res.items ?? [], mode)
-        })
-        .catch(err => console.error('Error loading records:', err))
-        .finally(() => {
-          if (!cancelled && mode === 'reset') setLoadingRecords(false)
-        })
-    }
+        const syncId = selectedRecordIdRef.current
+        const initId = initialRecordIdRef.current
+        const fromEventPanel = syncId
+          ? items.find(item => item.id === syncId)
+          : undefined
+        const fromInitial = initId
+          ? items.find(item => item.id === initId)
+          : undefined
+        const keepCurrent = selectedRecordRef.current
+          ? items.find(item => item.id === selectedRecordRef.current!.id)
+          : undefined
+        const next = fromEventPanel
+          ?? fromInitial
+          ?? keepCurrent
+          ?? pickDefaultPlaybackRecord(items, preferRecordType)
 
-    loadRecords('reset')
-    const timer = recordsRefreshMs > 0
-      ? window.setInterval(() => loadRecords('refresh'), recordsRefreshMs)
-      : undefined
+        if (next) {
+          const sameId = selectedRecordRef.current?.id === next.id
+          setSelectedRecord(next)
+          setSeekSec(sameId ? seekSecRef.current : (next.seekSec ?? 0))
+          if (!sameId) {
+            setProgress(0)
+            setCurrentTime(0)
+            setIsPlaying(false)
+          }
+          setPlaybackError(null)
+        } else {
+          setSelectedRecord(null)
+        }
+      })
+      .catch(err => console.error('Error loading records:', err))
+      .finally(() => {
+        if (!cancelled) setLoadingRecords(false)
+      })
 
-    return () => {
-      cancelled = true
-      if (timer) window.clearInterval(timer)
-    }
-  }, [activeCam?.id, date, preferRecordType, recordsRefreshMs, applyLoadedRecords])
+    return () => { cancelled = true }
+  }, [activeCam?.id, date, preferRecordType])
 
   useEffect(() => {
-    if (selectedRecordId === prevSelectedRecordIdRef.current) return
-    prevSelectedRecordIdRef.current = selectedRecordId
-
     if (!selectedRecordId) return
-    const match = recordsRef.current.find(item => item.id === selectedRecordId)
-    if (!match || (preferRecordType === 'continuous' && match.type === 'event')) return
+    const match = records.find(item => item.id === selectedRecordId)
+    if (!match) return
     setSelectedRecord(match)
     setSeekSec(match.seekSec ?? 0)
     setProgress(0)
     setCurrentTime(0)
     setIsPlaying(false)
     setPlaybackError(null)
-  }, [selectedRecordId, preferRecordType])
+  }, [selectedRecordId, records])
 
   useEffect(() => {
     if (!selectedRecord?.id) {
@@ -293,11 +251,7 @@ export function CameraPlaybackPanel({
       })
   }, [selectedRecord?.id, fetchDetections])
 
-  const playbackTarget = selectedRecord
-  const videoSrc = resolvePlaybackVideoUrl(
-    playbackTarget?.type === 'event' ? null : playbackTarget,
-  )
-  const playbackSeekSec = seekSec
+  const videoSrc = resolvePlaybackVideoUrl(selectedRecord)
   const isEventClip = selectedRecord?.type === 'event'
   const eventSeekSec = selectedRecord?.seekSec ?? 0
   const eventClipSec = selectedRecord?.clipDurationSec ?? EVENT_PLAYBACK_CLIP_SEC
@@ -327,7 +281,7 @@ export function CameraPlaybackPanel({
       if (cancelled) return
       video.muted = muted || volume === 0
       try {
-        video.currentTime = Math.max(0, playbackSeekSec)
+        video.currentTime = Math.max(0, seekSec)
       } catch {
         /* seek trước khi metadata sẵn sàng */
       }
@@ -364,7 +318,7 @@ export function CameraPlaybackPanel({
       video.removeEventListener('loadedmetadata', onLoadedMetadata)
       video.removeEventListener('error', onError)
     }
-  }, [selectedRecord?.id, videoSrc, playbackSeekSec, isEventClip, muted, volume])
+  }, [selectedRecord?.id, videoSrc, seekSec, isEventClip, muted, volume])
 
   useEffect(() => {
     const video = videoRef.current
@@ -397,7 +351,6 @@ export function CameraPlaybackPanel({
   }
 
   const handleSelectRecord = useCallback((record: CameraPlaybackRecord, seek = 0) => {
-    if (record.type === 'event') return
     setSelectedRecord(record)
     setSeekSec(seek)
     setProgress(0)
@@ -466,10 +419,7 @@ export function CameraPlaybackPanel({
   }
 
   const selectedIds = [activeCam.id]
-  const continuousCount = records.filter(
-    r => r.type === 'continuous' || r.type === 'continuous_event',
-  ).length
-  const markerCount = records.filter(r => r.type === 'event').length
+  const eventCount = records.filter(r => r.type === 'event').length
 
   return (
     <CameraPanelShell
@@ -486,17 +436,9 @@ export function CameraPlaybackPanel({
       sidebarGroups={sidebarGroups}
       sidebarSummary={(
         <>
-          <span className="text-primary font-semibold">{continuousCount}</span>
+          <span className="text-primary font-semibold">{eventCount || records.length}</span>
           {' '}
-          đoạn băng
-          {markerCount > 0 && (
-            <>
-              {' · '}
-              <span className="text-muted-foreground">{markerCount}</span>
-              {' '}
-              sự kiện
-            </>
-          )}
+          bản ghi
         </>
       )}
       sidebarFooter={(

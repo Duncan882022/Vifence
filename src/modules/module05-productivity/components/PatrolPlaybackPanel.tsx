@@ -7,7 +7,6 @@ import type { PatrolEvent } from '../data/patrolTypes'
 import {
   createPatrolPlaybackFetchers,
   isPatrolPlaybackConfigured,
-  PATROL_PLAYBACK_REFRESH_MS,
   type PatrolPlaybackFetchError,
 } from '../services/patrolPlayback.service'
 
@@ -80,7 +79,6 @@ export function PatrolPlaybackPanel({
         <CameraPlaybackPanel
           {...panelProps}
           preferRecordType="continuous"
-          recordsRefreshMs={PATROL_PLAYBACK_REFRESH_MS}
           fetchRecords={fetchRecords}
           fetchDetections={fetchDetections}
         />

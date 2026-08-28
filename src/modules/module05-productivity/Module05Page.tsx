@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Users, MapPin, Footprints, ScanFace, UserX, Maximize2,
 } from 'lucide-react'
@@ -50,11 +50,9 @@ import {
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
 import {
-  findLatestPatrolPlaybackDay,
   getPatrolDefaultPlaybackDate,
   getPatrolPlaybackMinDate,
 } from './services/patrolPlayback.service'
-import type { CameraPlaybackRecord } from '@/types/cameraPlayback'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
@@ -233,7 +231,6 @@ export function Module05Page() {
   const patrolToday = getPatrolDefaultPlaybackDate() // ngày lịch VN 0h — không ca/kíp
   const patrolMinDate = getPatrolPlaybackMinDate()
   const [patrolViewDate, setPatrolViewDate] = useState(patrolToday)
-  const autoPlaybackDateRef = useRef(false)
   const { cameras: visionCameras } = useCameras()
   // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
   // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.
@@ -318,26 +315,10 @@ export function Module05Page() {
 
   const handleSelectEvent = (ev: PatrolEvent) => {
     setSelectedEventId(ev.id)
-    setDetailEventId(ev.id)
+    setSelectedCamId(ev.cameraId)
+    setCameraMode('playback')
+    setTier2Open(true)
   }
-
-  const handlePlaybackRecordsLoaded = useCallback((
-    items: CameraPlaybackRecord[],
-    ctx: { date: string; cameraId: string },
-  ) => {
-    if (autoPlaybackDateRef.current) return
-    const hasContinuous = items.some(item => item.type === 'continuous' || item.type === 'continuous_event')
-    if (hasContinuous || ctx.date !== patrolToday) return
-
-    autoPlaybackDateRef.current = true
-    void findLatestPatrolPlaybackDay(ctx.cameraId, patrolToday, patrolMinDate)
-      .then(day => {
-        if (day && day !== patrolViewDate) setPatrolViewDate(day)
-      })
-      .finally(() => {
-        autoPlaybackDateRef.current = false
-      })
-  }, [patrolMinDate, patrolToday, patrolViewDate])
 
   const renderCameraTierBody = (expanded: boolean) => (
     <div className={cn(
@@ -370,7 +351,8 @@ export function Module05Page() {
           maxDate={patrolToday}
           minDate={patrolMinDate}
           onDateChange={setPatrolViewDate}
-          onRecordsLoaded={handlePlaybackRecordsLoaded}
+          selectedRecordId={selectedEventId}
+          onSelectRecord={() => setSelectedEventId(null)}
           filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
           filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
           groupFn={cams => groupPatrolCamerasForSidebar(cams)}
