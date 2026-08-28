@@ -231,6 +231,13 @@ const MOBILE_LANDSCAPE_MAX_VISIBLE_ROWS = 3
 const GRID_GAP_PX = 6
 const MOBILE_VIDEO_COL_PAD_Y = 12
 
+function getGridRowHeight(containerWidth: number, cols: number): number | null {
+  if (containerWidth <= 0 || cols <= 0) return null
+  const gap = GRID_GAP_PX
+  const cellWidth = (containerWidth - gap * (cols - 1)) / cols
+  return Math.ceil(cellWidth * (9 / 16))
+}
+
 function getMobileVideoViewportHeight(
   containerWidth: number,
   cols: number,
@@ -238,14 +245,14 @@ function getMobileVideoViewportHeight(
   maxVisibleRows: number,
 ): number | null {
   if (containerWidth <= 0 || rowCount <= 0) return null
+  const rowHeight = getGridRowHeight(containerWidth, cols)
+  if (rowHeight == null) return null
   const gap = GRID_GAP_PX
-  const cellWidth = (containerWidth - gap * (cols - 1)) / cols
-  const rowHeight = cellWidth * (9 / 16)
   const visibleRows = Math.min(rowCount, maxVisibleRows)
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, streamWhenOffline }: {
+function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingleCol, focusedCamId, compactVideo, compactVideoMaxClass, aspectVideoGrid, fixedRowHeightPx, streamWhenOffline }: {
   cams: TrainingCamera[]
   onMaximize: (cam: TrainingCamera) => void
   stackedPortrait: boolean
@@ -257,6 +264,8 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   compactVideoMaxClass?: string
   /** Patrol grid: luôn 16:9, không giới hạn max-h trên desktop. */
   aspectVideoGrid?: boolean
+  /** Patrol tier scroll: chiều cao hàng grid cố định (px) — tránh hàng 2 đè hàng 1. */
+  fixedRowHeightPx?: number | null
   /** Camera đang phóng to — ô grid chỉ giữ chỗ, overlay render qua portal. */
   focusedCamId?: string | null
   streamWhenOffline?: boolean
@@ -267,36 +276,41 @@ function CameraGrid({ cams, onMaximize, stackedPortrait, fillHeight, forceSingle
   const compact = count > 2
   const analyzeThrottle = count >= 2
   const hasFocus = Boolean(focusedCamId)
+  const useFixedRows = fixedRowHeightPx != null && fixedRowHeightPx > 0
 
   return (
     <div
       className={cn(
         'grid gap-1.5 w-full',
         fillHeight ? 'h-full min-h-0' : 'h-auto content-start',
+        useFixedRows && 'auto-rows-[minmax(0,auto)]',
       )}
       style={{
         gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` } : {}),
+        ...(useFixedRows ? { gridAutoRows: `${fixedRowHeightPx}px` } : {}),
       }}
     >
       {cams.map((cam, index) => {
         const isFocused = focusedCamId === cam.id
         const isBackground = Boolean(focusedCamId && focusedCamId !== cam.id)
         const cellShellClass = cn(
-          'relative w-full min-w-0 shrink-0 bg-black',
+          'relative w-full min-w-0 bg-black overflow-hidden',
           fillHeight
             ? 'h-full min-h-[120px]'
-            : cn(
-              'aspect-video',
-              compactVideo
-                ? (compactVideoMaxClass ?? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]')
-                : aspectVideoGrid
-                  ? undefined
-                  : 'max-h-[min(36dvh,280px)]',
-            ),
+            : useFixedRows
+              ? 'h-full min-h-0'
+              : cn(
+                'aspect-video shrink-0',
+                compactVideo
+                  ? (compactVideoMaxClass ?? 'max-h-[min(20dvh,160px)] sm:max-h-[min(24dvh,180px)] max-lg:landscape:max-h-[min(18dvh,140px)] lg:max-h-[min(28vh,220px)]')
+                  : aspectVideoGrid
+                    ? undefined
+                    : 'max-h-[min(36dvh,280px)]',
+              ),
         )
         return (
-          <div key={cam.id} className="relative min-w-0">
+          <div key={cam.id} className={cn('relative min-w-0 min-h-0', useFixedRows && 'h-full')}>
             {isFocused ? (
               <div
                 className={cn(
@@ -471,6 +485,7 @@ export function TrainingCameraPanel({
   const videoGridRef = useRef<HTMLDivElement>(null)
   const [landscapeSidebarH, setLandscapeSidebarH] = useState<number | null>(null)
   const [mobileViewportH, setMobileViewportH] = useState<number | null>(null)
+  const [gridRowHeightPx, setGridRowHeightPx] = useState<number | null>(null)
   const { isDesktop } = useShellLayout()
   const { hasDemoData } = useActiveTenant()
 
@@ -526,12 +541,14 @@ export function TrainingCameraPanel({
     if (!scrollNode || mobileStackedNoScroll) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
+      setGridRowHeightPx(null)
       return
     }
 
     if (isDesktop && !preferCompactVideo && !patrolTierScroll && fillHeightMain) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
+      setGridRowHeightPx(null)
       return
     }
 
@@ -539,6 +556,8 @@ export function TrainingCameraPanel({
     const landscapeMq = window.matchMedia('(max-width: 1023px) and (orientation: landscape)')
 
     const sync = () => {
+      const rowH = getGridRowHeight(scrollNode.clientWidth, gridCols)
+
       if (patrolTierScroll) {
         const viewportH = getMobileVideoViewportHeight(
           scrollNode.clientWidth,
@@ -547,6 +566,7 @@ export function TrainingCameraPanel({
           desktopMaxVisibleRows ?? 1,
         )
         setMobileViewportH(viewportH)
+        setGridRowHeightPx(rowH)
         if (sidebarOpen && viewportH) {
           setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
         } else {
@@ -558,6 +578,7 @@ export function TrainingCameraPanel({
       if (!mobileMq.matches && !preferCompactVideo) {
         setMobileViewportH(null)
         setLandscapeSidebarH(null)
+        setGridRowHeightPx(null)
         return
       }
 
@@ -567,6 +588,7 @@ export function TrainingCameraPanel({
         : portraitMaxRows
       const viewportH = getMobileVideoViewportHeight(scrollNode.clientWidth, gridCols, gridRows, maxRows)
       setMobileViewportH(viewportH)
+      setGridRowHeightPx(rowH)
 
       if (landscapeCompact && sidebarOpen && viewportH) {
         setLandscapeSidebarH(viewportH + MOBILE_VIDEO_COL_PAD_Y)
@@ -674,8 +696,9 @@ export function TrainingCameraPanel({
           <div
             ref={videoGridRef}
             className={cn(
-              'w-full min-h-0 flex-1',
-              fillHeightMain && !mobileFillPanel
+              'w-full',
+              patrolTierScroll ? 'shrink-0' : 'min-h-0 flex-1',
+              fillHeightMain && !mobileFillPanel && !patrolTierScroll
                 ? 'overflow-hidden'
                 : 'overflow-y-auto overflow-x-hidden overscroll-y-contain',
             )}
@@ -690,6 +713,7 @@ export function TrainingCameraPanel({
               compactVideo={useCompactVideoCaps}
               compactVideoMaxClass={compactVideoMaxClass}
               aspectVideoGrid={aspectVideoGrid}
+              fixedRowHeightPx={gridRowHeightPx}
               focusedCamId={focusedCam?.id}
               streamWhenOffline={streamWhenOffline}
             />
