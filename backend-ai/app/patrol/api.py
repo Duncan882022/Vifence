@@ -580,6 +580,7 @@ def observe_person_face(
         zone_id=zone_id,
         snapshot_path=snapshot_path,
         snapshot_score=snapshot_score,
+        face_eligible=True,
         now=ts,
         gps_lat=gps_lat,
         gps_lng=gps_lng,

@@ -183,15 +183,70 @@ class DailyEventTests(PatrolDbTestCase):
         pers_id, _ = identity.observe_face(_vec(24), quality=0.8)
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="rõ.jpg",
-            snapshot_score=0.9, now=100.0,
+            snapshot_score=0.9, face_eligible=True, now=100.0,
         )
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="lưng.jpg",
-            snapshot_score=0.2, now=200.0,
+            snapshot_score=0.2, face_eligible=True, now=200.0,
         )
         card = daystore.list_person_events(db.today_vn(100.0))[0]
         self.assertEqual(card["snapshot_path"], "rõ.jpg")
         self.assertEqual(card["last_seen"], 200.0)
+
+    def test_no_snapshot_without_face_eligible(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(25), quality=0.8)
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="mặt.jpg",
+            snapshot_score=1.8, face_eligible=True, now=100.0,
+        )
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="lưng.jpg",
+            snapshot_score=0.9, face_eligible=False, now=110.0,
+        )
+        card = daystore.list_person_events(db.today_vn(100.0))[0]
+        self.assertEqual(card["snapshot_path"], "mặt.jpg")
+        self.assertEqual(card["last_seen"], 110.0)
+
+    def test_identified_prefers_latest_face_over_best_of(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(26), quality=0.8)
+        identity.identify(pers_id, full_name="An", employee_code="NV26")
+        floor = daystore._person_snapshot_score_floor()
+        strong = floor + 0.6
+        decent = floor + 0.05
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="best.jpg",
+            snapshot_score=strong, face_eligible=True, now=1_000.0,
+        )
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="recent.jpg",
+            snapshot_score=decent, face_eligible=True, now=1_005.0,
+        )
+        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["snapshot_path"], "best.jpg")
+
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="recent.jpg",
+            snapshot_score=decent, face_eligible=True, now=1_011.0,
+        )
+        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["snapshot_path"], "recent.jpg")
+
+    def test_identified_immediate_upsert_when_face_clearer(self) -> None:
+        """Định danh cũng upsert ngay khi ảnh rõ hơn — coi như sự kiện."""
+        pers_id, _ = identity.observe_face(_vec(27), quality=0.8)
+        identity.identify(pers_id, full_name="Bình", employee_code="NV27")
+        floor = daystore._person_snapshot_score_floor()
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="ok.jpg",
+            snapshot_score=floor + 0.1, face_eligible=True, now=1_000.0,
+        )
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="better.jpg",
+            snapshot_score=floor + 0.5, face_eligible=True, now=1_003.0,
+        )
+        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["snapshot_path"], "better.jpg")
+        self.assertEqual(card["last_seen"], 1_003.0)
 
 
 class ObjectTests(PatrolDbTestCase):

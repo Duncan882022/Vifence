@@ -57,6 +57,7 @@ class TrackIdentityStabilityTests(unittest.TestCase):
                 camera_id="HC-02",
                 track_id="ptk0001:person",
                 face_embedding=emb,
+                face_eligible=True,
                 face_quality=0.9,
                 now=t,
             )
@@ -76,6 +77,7 @@ class TrackIdentityStabilityTests(unittest.TestCase):
                 camera_id="HC-02",
                 track_id="ptk0002:person",
                 face_embedding=_angle(base, 0.40 + i * 0.015, seed=200 + i),
+                face_eligible=True,
                 face_quality=0.9,
                 now=t,
             )
@@ -93,12 +95,14 @@ class TrackIdentityStabilityTests(unittest.TestCase):
             sink.record_observation(
                 camera_id="HC-02", track_id="ptk0003:person",
                 face_embedding=_angle(base, 0.45 + i * 0.02, seed=300 + i),
+                face_eligible=True,
                 face_quality=0.9, now=t,
             )
             t += 0.17
         first = sink.record_observation(
             camera_id="HC-02", track_id="ptk0003:person",
             face_embedding=_angle(base, 0.9, seed=999), face_quality=0.9, now=t,
+            face_eligible=True,
         )
 
         # Người bị che rồi hiện lại: tracker cấp track mới, góc mặt gần một
@@ -106,11 +110,13 @@ class TrackIdentityStabilityTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-02", track_id="ptk0077:person",
             face_embedding=_angle(base, 0.85, seed=301), face_quality=0.9,
+            face_eligible=True,
             now=t + 10,
         )
         again = sink.record_observation(
             camera_id="HC-02", track_id="ptk0077:person",
             face_embedding=_angle(base, 0.85, seed=301), face_quality=0.9,
+            face_eligible=True,
             now=t + 10 + 1.5,
         )
         self.assertEqual(again, first)
@@ -121,18 +127,22 @@ class TrackIdentityStabilityTests(unittest.TestCase):
         a = sink.record_observation(
             camera_id="HC-02", track_id="ptk0001:person",
             face_embedding=_vec(10).tolist(), face_quality=0.9, now=1_000.0,
+            face_eligible=True,
         )
         a = sink.record_observation(
             camera_id="HC-02", track_id="ptk0001:person",
             face_embedding=_vec(10).tolist(), face_quality=0.9, now=1_001.5,
+            face_eligible=True,
         )
         sink.record_observation(
             camera_id="HC-02", track_id="ptk0002:person",
             face_embedding=_vec(11).tolist(), face_quality=0.9, now=1_100.0,
+            face_eligible=True,
         )
         b = sink.record_observation(
             camera_id="HC-02", track_id="ptk0002:person",
             face_embedding=_vec(11).tolist(), face_quality=0.9, now=1_101.5,
+            face_eligible=True,
         )
         self.assertNotEqual(a, b)
         self.assertEqual(len(identity.list_persons()), 2)
@@ -142,20 +152,24 @@ class TrackIdentityStabilityTests(unittest.TestCase):
         pers = sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
             face_embedding=_angle(base, 0.95, seed=1), face_quality=0.9, now=1_000.0,
+            face_eligible=True,
         )
         pers = sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
             face_embedding=_angle(base, 0.95, seed=1), face_quality=0.9, now=1_001.5,
+            face_eligible=True,
         )
         identity.identify(str(pers), full_name="Nguyễn Văn A", employee_code="NV001")
 
         again = sink.record_observation(
             camera_id="HC-02", track_id="ptk0050:person",
             face_embedding=_angle(base, 0.90, seed=2), face_quality=0.9, now=2_000.0,
+            face_eligible=True,
         )
         again = sink.record_observation(
             camera_id="HC-02", track_id="ptk0050:person",
             face_embedding=_angle(base, 0.90, seed=2), face_quality=0.9, now=2_001.5,
+            face_eligible=True,
         )
         self.assertEqual(again, pers)
         row = identity.get_person(str(again))

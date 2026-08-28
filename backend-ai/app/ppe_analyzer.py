@@ -257,6 +257,7 @@ def _assign_patrol_person_identity(
             track_id=track_id,
             face_embedding=face_emb if person_det.face_eligible else None,
             face_quality=float(_face_score or 0.0),
+            face_eligible=bool(person_det.face_eligible),
             confidence=float(person_det.confidence or 0.0),
             frame=frame,
             person_bbox=person_bbox,
