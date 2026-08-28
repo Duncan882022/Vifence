@@ -49,7 +49,10 @@ import {
 } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
 import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
-import { getPatrolDefaultPlaybackDate } from './services/patrolPlayback.service'
+import {
+  getPatrolDefaultPlaybackDate,
+  getPatrolPlaybackMinDate,
+} from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetIngest'
@@ -225,7 +228,9 @@ export function Module05Page() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [detailEventId, setDetailEventId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
-  const playbackDate = getPatrolDefaultPlaybackDate() // ngày lịch VN 0h — không ca/kíp
+  const patrolToday = getPatrolDefaultPlaybackDate() // ngày lịch VN 0h — không ca/kíp
+  const patrolMinDate = getPatrolPlaybackMinDate()
+  const [patrolViewDate, setPatrolViewDate] = useState(patrolToday)
   const { cameras: visionCameras } = useCameras()
   // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
   // chạy luồng cũ (điện thoại vừa là camera vừa là màn hình) mới ưu tiên mũ đó.
@@ -290,7 +295,7 @@ export function Module05Page() {
 
   // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
   // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
-  const dayBundle = usePatrolDayBundle(playbackDate)
+  const dayBundle = usePatrolDayBundle(patrolViewDate)
   const flycamFlightModes = usePatrolFlycamFlightModes(PATROL_DRONE_IDS)
   const patrolEventsLive = useMemo(
     () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),
@@ -342,8 +347,10 @@ export function Module05Page() {
           cameras={patrolCamerasLive}
           selectedCameraId={selectedCamId}
           onSelectCamera={handleSelectCamera}
-          defaultDate={playbackDate}
-          maxDate={playbackDate}
+          defaultDate={patrolViewDate}
+          maxDate={patrolToday}
+          minDate={patrolMinDate}
+          onDateChange={setPatrolViewDate}
           selectedRecordId={selectedEventId}
           filterTabs={[...PATROL_CAMERA_FILTER_TABS]}
           filterFn={tab => filterPatrolCameras(tab as PatrolCameraFilterTab, patrolCamerasLive)}
@@ -455,6 +462,7 @@ export function Module05Page() {
             >
               <PatrolDensityHeatmap
                 patrolEvents={patrolEventsLive}
+                viewDate={patrolViewDate}
                 expanded={heatmapExpanded}
                 onCloseExpand={() => setHeatmapExpanded(false)}
               />
@@ -479,6 +487,10 @@ export function Module05Page() {
             >
               <PatrolEventsPanel
                 events={patrolEventsLive}
+                viewDate={patrolViewDate}
+                onViewDateChange={setPatrolViewDate}
+                maxViewDate={patrolToday}
+                minViewDate={patrolMinDate}
                 selectedId={selectedEventId}
                 onSelect={handleSelectEvent}
                 onDetailClick={ev => setDetailEventId(ev.id)}

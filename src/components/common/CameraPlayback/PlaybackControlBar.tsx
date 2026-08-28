@@ -5,6 +5,7 @@ interface PlaybackControlBarProps {
   date: string
   onDateChange: (date: string) => void
   maxDate?: string
+  minDate?: string
   progress: number
   onScrub: (pct: number) => void
   isPlaying: boolean
@@ -23,6 +24,7 @@ export function PlaybackControlBar({
   date,
   onDateChange,
   maxDate,
+  minDate,
   progress,
   onScrub,
   isPlaying,
@@ -38,7 +40,7 @@ export function PlaybackControlBar({
 }: PlaybackControlBarProps) {
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-[#1e2433] bg-[#060b14] shrink-0 min-h-[44px]">
-      <PlaybackDatePicker date={date} onDateChange={onDateChange} maxDate={maxDate} compact />
+      <PlaybackDatePicker date={date} onDateChange={onDateChange} maxDate={maxDate} minDate={minDate} compact />
       <button
         type="button"
         onClick={onTogglePlay}
@@ -90,6 +92,7 @@ export function PlaybackMobileControls({
   date,
   onDateChange,
   maxDate,
+  minDate,
   progress,
   onScrub,
   isPlaying,
@@ -105,7 +108,7 @@ export function PlaybackMobileControls({
 }: PlaybackControlBarProps) {
   return (
     <div className="rounded-lg border border-[#1e2433] bg-[#060b14] px-3 py-2 shrink-0 space-y-2">
-      <PlaybackDatePicker date={date} onDateChange={onDateChange} maxDate={maxDate} />
+      <PlaybackDatePicker date={date} onDateChange={onDateChange} maxDate={maxDate} minDate={minDate} />
       <div
         className="relative w-full h-1 bg-[#1a2235] rounded-full cursor-pointer group"
         onClick={e => {

@@ -5,7 +5,7 @@
  *   GET /get?path=hc-02&start=<ISO8601>&duration=<giây>
  */
 import dayjs from 'dayjs'
-import { formatVnDate } from '@/utils/vnDateTime'
+import { formatVnDate, formatVnDateOffsetDays } from '@/utils/vnDateTime'
 import type {
   CameraDetection,
   CameraPlaybackRecord,
@@ -32,6 +32,8 @@ export type PatrolPlaybackFetchError = 'unconfigured' | 'network' | null
 
 function isoDayKey(value: string): string {
   const m = value.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (m && value.length <= 10) return m[1]
+  if (m && value.includes('T')) return formatVnDate(new Date(value))
   return m?.[1] ?? formatVnDate(new Date(value))
 }
 
@@ -228,6 +230,13 @@ export async function fetchPatrolPlaybackRecords(
 /** @deprecated Dùng createPatrolPlaybackFetchers */
 export async function fetchPatrolPlaybackDetections(): Promise<CameraDetectionsResponse> {
   return { items: [] }
+}
+
+/** MediaMTX giữ băng 168h — giới hạn chọn ngày playback. */
+export const PATROL_PLAYBACK_RETAIN_DAYS = 7
+
+export function getPatrolPlaybackMinDate(): string {
+  return formatVnDateOffsetDays(-(PATROL_PLAYBACK_RETAIN_DAYS - 1))
 }
 
 /** Ngày lịch VN (0h) — KHÔNG có ca/kíp; không dùng logic 06:00 từ Module 02/03. */

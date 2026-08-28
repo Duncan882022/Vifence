@@ -39,6 +39,8 @@ export interface CameraPlaybackPanelProps {
   onSelectCamera?: (cam: TrainingCamera) => void
   defaultDate?: string
   maxDate?: string
+  minDate?: string
+  onDateChange?: (date: string) => void
   initialRecordId?: string
   /** Đồng bộ bản ghi đang chọn từ danh sách sự kiện (tier ATLĐ). */
   selectedRecordId?: string | null
@@ -63,6 +65,8 @@ export function CameraPlaybackPanel({
   onSelectCamera,
   defaultDate,
   maxDate,
+  minDate,
+  onDateChange,
   initialRecordId,
   selectedRecordId,
   activeEventRecord,
@@ -83,6 +87,15 @@ export function CameraPlaybackPanel({
   const defaultSidebarTab = filterTabs?.[0] ?? ALL_LOCATIONS_TAB
   const [sidebarTab, setSidebarTab] = useState(defaultSidebarTab)
   const [date, setDate] = useState(defaultDate ?? getDefaultPlaybackDate())
+
+  useEffect(() => {
+    if (defaultDate) setDate(defaultDate)
+  }, [defaultDate])
+
+  const handleDateChange = useCallback((next: string) => {
+    setDate(next)
+    onDateChange?.(next)
+  }, [onDateChange])
   const [records, setRecords] = useState<CameraPlaybackRecord[]>([])
   const [selectedRecord, setSelectedRecord] = useState<CameraPlaybackRecord | null>(null)
   const [detections, setDetections] = useState<CameraDetection[]>([])
@@ -393,8 +406,9 @@ export function CameraPlaybackPanel({
             />
             <PlaybackControlBar
               date={date}
-              onDateChange={setDate}
+              onDateChange={handleDateChange}
               maxDate={maxDate}
+              minDate={minDate}
               progress={progress}
               onScrub={handleScrub}
               isPlaying={isPlaying}
@@ -423,8 +437,9 @@ export function CameraPlaybackPanel({
             />
             <PlaybackMobileControls
               date={date}
-              onDateChange={setDate}
+              onDateChange={handleDateChange}
               maxDate={maxDate}
+              minDate={minDate}
               progress={progress}
               onScrub={handleScrub}
               isPlaying={isPlaying}

@@ -77,4 +77,57 @@ describe('createPatrolPlaybackFetchers', () => {
     expect(res.items[0].videoUrl).toMatch(/^https:\/\/playback\.test\/get\?/)
     expect(res.items[0].videoUrl).not.toContain('217.217.253.247')
   })
+
+  it('404 MediaMTX — coi như không có băng, không ném lỗi', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'no recording segments found' }),
+      }),
+    )
+
+    const fetch = createPatrolPlaybackFetchers([]).fetchRecords
+    const res = await fetch('HC-02', {
+      startDate: '2026-08-27',
+      endDate: '2026-08-27',
+    })
+
+    expect(res.items).toEqual([])
+  })
+
+  it('ISO UTC sau nửa đêm VN — map đúng ngày lịch VN', async () => {
+    const events: PatrolEvent[] = [{
+      id: 'ev-late',
+      type: 'PERSON_DETECTED',
+      cameraId: 'HC-02',
+      cameraName: 'HC-02',
+      zoneId: 'z1',
+      zoneName: 'Zone',
+      objectId: 'OBJ-1',
+      objectLabel: 'Người',
+      violationLabel: 'Phát hiện người',
+      startedAt: '2026-08-28T17:30:00.000Z',
+      lockedAt: '2026-08-28T17:30:00.000Z',
+      endedAt: null,
+      durationSeconds: null,
+      status: 'LOCKED',
+      confidence: 0.9,
+      gps: { lat: 10, lng: 106 },
+    }]
+
+    const fetch = createPatrolPlaybackFetchers(events).fetchRecords
+    const res28 = await fetch('HC-02', {
+      startDate: '2026-08-28T00:00:00+07:00',
+      endDate: '2026-08-28T23:59:59+07:00',
+    })
+    expect(res28.items.find(i => i.id === 'ev-late')).toBeUndefined()
+
+    const res29 = await fetch('HC-02', {
+      startDate: '2026-08-29T00:00:00+07:00',
+      endDate: '2026-08-29T23:59:59+07:00',
+    })
+    expect(res29.items.find(i => i.id === 'ev-late')).toBeDefined()
+  })
 })

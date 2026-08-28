@@ -7,6 +7,7 @@ interface PlaybackDatePickerProps {
   date: string
   onDateChange: (date: string) => void
   maxDate?: string
+  minDate?: string
   compact?: boolean
 }
 
@@ -14,16 +15,19 @@ export function PlaybackDatePicker({
   date,
   onDateChange,
   maxDate = dayjs().format('YYYY-MM-DD'),
+  minDate,
   compact = false,
 }: PlaybackDatePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const current = dayjs(date)
   const label = current.format('DD/MM/YYYY')
   const isToday = date === maxDate
+  const atMin = minDate ? !current.isAfter(dayjs(minDate), 'day') : false
 
   const shiftDay = (delta: number) => {
     const next = current.add(delta, 'day')
     if (next.isAfter(dayjs(maxDate), 'day')) return
+    if (minDate && next.isBefore(dayjs(minDate), 'day')) return
     onDateChange(next.format('YYYY-MM-DD'))
   }
 
@@ -49,9 +53,10 @@ export function PlaybackDatePicker({
           <button
             type="button"
             aria-label="Ngày trước"
+            disabled={atMin}
             onClick={() => shiftDay(-1)}
             className={cn(
-              'rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors',
+              'rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none',
               compact ? 'p-1' : 'p-1.5',
             )}
           >
@@ -74,6 +79,7 @@ export function PlaybackDatePicker({
               type="date"
               value={date}
               max={maxDate}
+              min={minDate}
               onChange={e => {
                 if (e.target.value) onDateChange(e.target.value)
               }}

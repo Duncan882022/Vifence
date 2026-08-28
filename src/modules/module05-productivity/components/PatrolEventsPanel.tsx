@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Clock, Loader2, MapPin, Search } from 'lucide-react'
+import { PlaybackDatePicker } from '@/components/common/CameraPlayback/PlaybackDatePicker'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
@@ -19,6 +20,10 @@ import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSn
 
 interface PatrolEventsPanelProps {
   events: PatrolEvent[]
+  viewDate: string
+  onViewDateChange: (date: string) => void
+  maxViewDate: string
+  minViewDate?: string
   selectedId?: string | null
   onSelect?: (event: PatrolEvent) => void
   onDetailClick?: (event: PatrolEvent) => void
@@ -189,6 +194,10 @@ function PatrolEventCard({
 
 export function PatrolEventsPanel({
   events,
+  viewDate,
+  onViewDateChange,
+  maxViewDate,
+  minViewDate,
   selectedId,
   onSelect,
   onDetailClick,
@@ -250,8 +259,25 @@ export function PatrolEventsPanel({
     return () => observer.disconnect()
   }, [hasMore, loading])
 
+  const viewingToday = viewDate === maxViewDate
+
   return (
     <div className="flex flex-col h-full min-h-0">
+      <div className="flex items-center justify-between gap-2 px-2 pt-2 pb-1 shrink-0 border-b border-[#1e2433]/60">
+        <PlaybackDatePicker
+          date={viewDate}
+          onDateChange={onViewDateChange}
+          maxDate={maxViewDate}
+          minDate={minViewDate}
+          compact
+        />
+        {!viewingToday && (
+          <span className="text-[8px] text-muted-foreground/70 shrink-0 hidden sm:inline">
+            Đang xem ngày trước
+          </span>
+        )}
+      </div>
+
       <div className="flex border-b border-[#1e2433] shrink-0 overflow-x-auto scrollbar-none overscroll-x-contain snap-x snap-mandatory">
         {FILTER_TABS.map(t => {
           const count = tabCounts[t.key]
@@ -298,8 +324,10 @@ export function PatrolEventsPanel({
 
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
         {events.filter(isPatrolPersonLifecycleWithSnapshot).length === 0 ? (
-          <p className="text-[10px] text-muted-foreground text-center py-8">
-            Chưa có sự kiện — đang chờ backend / workforce engine
+          <p className="text-[10px] text-muted-foreground text-center py-8 px-3">
+            {viewingToday
+              ? 'Chưa có sự kiện hôm nay — chọn ngày khác phía trên hoặc đang chờ backend'
+              : 'Không có sự kiện ngày này — chọn ngày khác phía trên'}
           </p>
         ) : activeItems.length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8">
