@@ -440,7 +440,7 @@ server {
         return 301 /Vifence/phat-song/;
     }
     location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/|$) {
-        return 301 /Vifence$request_uri;
+        return 301 /Vifence\$request_uri;
     }
     location = /Vifence {
         return 301 /Vifence/;
@@ -527,7 +527,7 @@ server {
         return 301 /Vifence/phat-song/;
     }
     location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/|$) {
-        return 301 /Vifence$request_uri;
+        return 301 /Vifence\$request_uri;
     }
     location = /Vifence {
         return 301 /Vifence/;
@@ -645,7 +645,7 @@ server {
         return 301 /Vifence/phat-song/;
     }
     location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/|$) {
-        return 301 /Vifence$request_uri;
+        return 301 /Vifence\$request_uri;
     }
     location = /Vifence {
         return 301 /Vifence/;
