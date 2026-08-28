@@ -290,7 +290,7 @@ export function Module05Page() {
 
   // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
   // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
-  const dayBundle = usePatrolDayBundle()
+  const dayBundle = usePatrolDayBundle(playbackDate)
   const flycamFlightModes = usePatrolFlycamFlightModes(PATROL_DRONE_IDS)
   const patrolEventsLive = useMemo(
     () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),

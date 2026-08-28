@@ -5,7 +5,7 @@
  *   GET /get?path=hc-02&start=<ISO8601>&duration=<giây>
  */
 import dayjs from 'dayjs'
-import { formatVnDate } from '@/utils/vnDateTime'
+import { formatVnDate, getPatrolWorkDate } from '@/utils/vnDateTime'
 import type {
   CameraDetection,
   CameraPlaybackRecord,
@@ -231,5 +231,5 @@ export async function fetchPatrolPlaybackDetections(): Promise<CameraDetectionsR
 }
 
 export function getPatrolDefaultPlaybackDate(): string {
-  return formatVnDate()
+  return getPatrolWorkDate()
 }

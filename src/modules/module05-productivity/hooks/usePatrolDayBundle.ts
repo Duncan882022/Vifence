@@ -2,6 +2,7 @@
  * Gộp stats + events + objects + presences — một poll /patrol/day/bundle.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getPatrolWorkDate } from '@/utils/vnDateTime'
 import type { PatrolEvent } from '../data/patrolTypes'
 import {
   fetchPatrolDayBundle,
@@ -138,6 +139,7 @@ export interface PatrolDayBundleState {
 }
 
 export function usePatrolDayBundle(date?: string): PatrolDayBundleState {
+  const workDate = date ?? getPatrolWorkDate()
   const [bundle, setBundle] = useState<PatrolDayBundle | null>(null)
   const [loading, setLoading] = useState(true)
   const [reachable, setReachable] = useState(false)
@@ -148,7 +150,7 @@ export function usePatrolDayBundle(date?: string): PatrolDayBundleState {
     if (inFlight.current) return
     inFlight.current = true
     try {
-      const data = await fetchPatrolDayBundle(date)
+      const data = await fetchPatrolDayBundle(workDate)
       if (!mounted.current) return
       if (data) {
         setBundle(data)
@@ -160,7 +162,7 @@ export function usePatrolDayBundle(date?: string): PatrolDayBundleState {
     } finally {
       inFlight.current = false
     }
-  }, [date])
+  }, [workDate])
 
   useEffect(() => {
     mounted.current = true
