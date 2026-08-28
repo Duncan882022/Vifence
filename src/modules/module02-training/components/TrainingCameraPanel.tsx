@@ -6,7 +6,7 @@ import { useActiveTenant } from '@/hooks/useTenantTrainingScope'
 import { CameraVideoFeed } from './CameraVideoFeed'
 import { useHelmetLocalStream } from '@/hooks/useHelmetLocalStream'
 import { CameraJsmpegFeed } from '@/modules/dao-tao-tuan-thu/components/CameraJsmpegFeed'
-import { CameraChrome, CameraLiveBadge, CameraOfflineBadge } from './CameraToolbar'
+import { CameraChrome } from './CameraToolbar'
 import { MobileCameraFeed } from './MobileCameraFeed'
 import { preloadFaceDetection } from '../services/faceDetection.service'
 import {
@@ -110,19 +110,17 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
       )}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1922] via-[#0a1219] to-[#060d14]" />
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <span className={cn(
+          'font-bold tracking-widest uppercase',
+          mini ? 'text-[6px]' : compact ? 'text-[7px]' : 'text-[8px]',
+          isOffline ? 'text-muted-foreground/50' : 'text-red-400/70',
+        )}>
+          {isOffline ? 'Offline' : 'LIVE'}
+        </span>
+      </div>
       {!isOffline && <CameraLiveFeed cam={cam} playing={false} compact aiOverlay={false} />}
-      {isOffline && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[8px] font-bold tracking-widest text-muted-foreground/50 uppercase">Offline</span>
-        </div>
-      )}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
-
-      <span className="absolute top-0.5 left-0.5 z-[1]">
-        {isOffline
-          ? <CameraOfflineBadge compact={compact || mini} />
-          : ((cam.streamType !== 'mobile' || selected) && <CameraLiveBadge compact={compact || mini} />)}
-      </span>
 
       <div className={cn(
         'absolute top-0.5 right-0.5 rounded-sm border-2 flex items-center justify-center transition-all',
