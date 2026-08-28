@@ -40,6 +40,7 @@ import {
 import {
   getHeatmapPersonDots,
   subscribeHeatmapPersonRegistry,
+  syncPatrolPersonEventsToHeatmap,
 } from '@/services/patrolHeatmapPersonRegistry'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
 import { usePatrolFlycamFlightModes } from '../hooks/usePatrolFlycamFlightModes'
@@ -207,6 +208,10 @@ export function PatrolDensityHeatmap({
   }), [])
 
   useEffect(() => {
+    syncPatrolPersonEventsToHeatmap(patrolEvents)
+  }, [patrolEvents])
+
+  useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
       if (!snap || snap.cameraId !== 'HC-02') {
         setMobileHc02Live(false)
@@ -361,9 +366,16 @@ export function PatrolDensityHeatmap({
       })
     }
 
-    const registryDots = PATROL_MAP_CAMERA_IDS.flatMap(cameraId => {
-      if (!helmetOnlineById[cameraId]) return []
-      return getHeatmapPersonDots(cameraId)
+    const registryDots = getHeatmapPersonDots().map(dot => {
+      const camOnline = Boolean(helmetOnlineById[dot.cameraId])
+      const inCameraView = camOnline && Boolean(dot.inCameraView)
+      return {
+        ...dot,
+        inCameraView,
+        opacity: inCameraView
+          ? DETECTION_DOT_OPACITY_IN_VIEW
+          : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+      }
     })
 
     let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots])
