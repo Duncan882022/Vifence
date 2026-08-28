@@ -15,7 +15,6 @@ from .patrol_flight_mode import (
 from .ppe_analyzer import (
     _build_patrol_bodycam_result,
     _build_patrol_flycam_aerial_result,
-    _build_patrol_flycam_proximity_result,
     _flycam_prescan_for_flight_mode,
     _is_helmet_bodycam,
     _is_patrol_flycam,
@@ -36,7 +35,7 @@ def analyze_patrol_frame(
             _flycam_prescan_for_flight_mode(frame, camera_id)
         mode = resolve_patrol_flight_mode(camera_id)
         if mode == PatrolFlightMode.PROXIMITY:
-            result = _build_patrol_flycam_proximity_result(
+            result = _build_patrol_bodycam_result(
                 frame, camera_id, source_pts_sec=source_pts_sec,
             )
         else:

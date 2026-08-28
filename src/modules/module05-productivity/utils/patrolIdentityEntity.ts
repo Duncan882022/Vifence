@@ -65,6 +65,7 @@ export function patrolGalleryWorkerIdFromEmployeeCode(code: string): string {
   return safe ? `p-${safe}` : 'p-unknown'
 }
 
+/** Gallery worker id (p-*, w-*, c-*, u-*) — không phải sgc/OBJ. */
 export function isPatrolGalleryWorkerId(id?: string | null): boolean {
   if (!id) return false
   const t = id.trim()

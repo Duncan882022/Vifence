@@ -6,6 +6,7 @@ import unittest
 
 from app.patrol_flight_mode import (
     PatrolFlightMode,
+    is_patrol_helmet_like,
     resolve_patrol_flight_mode,
     update_patrol_drone_altitude,
 )
@@ -32,6 +33,14 @@ class PatrolFlightModeTests(unittest.TestCase):
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
         update_patrol_drone_altitude("DR-03", 30.0)
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
+
+    def test_helmet_like_cameras(self) -> None:
+        self.assertTrue(is_patrol_helmet_like("HC-01"))
+        self.assertTrue(is_patrol_helmet_like("HC-02"))
+        update_patrol_drone_altitude("DR-03", 80.0)
+        self.assertFalse(is_patrol_helmet_like("DR-03"))
+        update_patrol_drone_altitude("DR-03", 18.0)
+        self.assertTrue(is_patrol_helmet_like("DR-03"))
 
     def test_visual_scale_infers_proximity_without_telemetry(self) -> None:
         from app.patrol_flight_mode import note_patrol_flycam_visual_scale

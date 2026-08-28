@@ -7,6 +7,16 @@ export interface PatrolFlycamGateFlags {
   proximityFlycam: boolean
 }
 
+/** HC-* luôn; DR-* tầm thấp — cùng gate/pipeline với mũ. */
+export function isPatrolHelmetLikeCamera(
+  cameraId: string,
+  flightMode?: PatrolFlightMode | string | null,
+): boolean {
+  if (cameraId.startsWith('HC-')) return true
+  if (cameraId.startsWith('DR-')) return flightMode === 'proximity'
+  return false
+}
+
 /** VMS worker ghi metrics theo tên engine — patrol DR-* là `patrol`, A-04 là `ppe`. */
 export function readPatrolFlightModeFromMetrics(
   metrics?: Record<string, unknown> | null,
@@ -28,11 +38,11 @@ export function resolvePatrolFlycamGateFlags(
   cameraId: string,
   flightMode?: string | null,
 ): PatrolFlycamGateFlags {
-  if (!cameraId.startsWith('DR-')) {
+  if (isPatrolHelmetLikeCamera(cameraId, flightMode)) {
     return { flycam: false, proximityFlycam: false }
   }
-  if (flightMode === 'proximity') {
-    return { flycam: false, proximityFlycam: true }
+  if (!cameraId.startsWith('DR-')) {
+    return { flycam: false, proximityFlycam: false }
   }
   // Mặc định / aerial / chưa có telemetry → gate silhouette tầm cao.
   return { flycam: true, proximityFlycam: false }
@@ -41,4 +51,27 @@ export function resolvePatrolFlycamGateFlags(
 export function patrolFlightModeLabel(mode: PatrolFlightMode | string | null | undefined): string {
   if (mode === 'proximity') return 'Tầm thấp · AI'
   return 'Tầm cao · Mật độ'
+}
+
+/** Sự kiện flycam khớp gate heatmap theo độ cao hiện tại. */
+export function patrolEventMatchesFlycamAltitude(
+  event: { cameraId: string; type: string; stage?: 'object' | 'person' | 'profile'; objectId?: string; trackWorkerId?: string },
+  flightMode: PatrolFlightMode | string | null | undefined,
+  resolveStage?: (event: { stage?: 'object' | 'person' | 'profile'; type: string; objectId?: string; trackWorkerId?: string }) => 'object' | 'person' | 'profile',
+): boolean {
+  if (!event.cameraId.startsWith('DR-')) return true
+
+  const stage = event.stage ?? resolveStage?.(event) ?? 'object'
+  const isProximity = flightMode === 'proximity'
+
+  if (isProximity) {
+    return stage === 'person' || stage === 'profile' || event.type === 'IDENTITY_VERIFIED'
+  }
+
+  return (
+    stage === 'object'
+    || event.type === 'POPULATION_OBSERVED'
+    || event.type === 'POPULATION_CHANGE'
+    || event.type === 'HIGH_DENSITY'
+  )
 }

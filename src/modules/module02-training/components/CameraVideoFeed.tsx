@@ -33,6 +33,7 @@ import {
   readPatrolFlightModeFromMetrics,
   resolvePatrolFlycamGateFlags,
 } from '@/modules/module05-productivity/utils/patrolFlightMode'
+import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import { isPatrolMetricsCameraId, isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import {
   getCameraFeedPosterUrl,
@@ -148,6 +149,9 @@ export function CameraVideoFeed({
     const frameH = vmsFeed.snapshot.height ?? 0
     const patrolCam = isPatrolMetricsCameraId(cameraId)
     const flightMode = readPatrolFlightModeFromMetrics(vmsFeed.snapshot.metrics)
+    if (cameraId.startsWith('DR-') && flightMode) {
+      setPatrolFlightMode(cameraId, flightMode)
+    }
     const flycamGates = resolvePatrolFlycamGateFlags(cameraId, flightMode)
     const mapped = vmsFeed.snapshot.detections
       .map(d => ({
