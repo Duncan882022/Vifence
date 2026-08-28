@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown, Minus, LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { cn } from '@/utils/cn'
 import type { KPIData } from '@/types/api'
 
@@ -8,6 +9,8 @@ interface KPICardProps {
   iconColor?: string
   iconBg?: string
   className?: string
+  /** Thay cho `data.detail` — hỗ trợ icon / layout phức tạp. */
+  detailContent?: ReactNode
 }
 
 function formatDelta(change: number, changeUnit?: string): string {
@@ -16,7 +19,7 @@ function formatDelta(change: number, changeUnit?: string): string {
   return `${prefix}${change}${suffix}`
 }
 
-export function KPICard({ data, icon: Icon, iconColor, iconBg, className }: KPICardProps) {
+export function KPICard({ data, icon: Icon, iconColor, iconBg, className, detailContent }: KPICardProps) {
   const {
     label, value, unit, detail, change, changeType,
     previousValue, higherIsBetter = true, changeUnit,
@@ -53,8 +56,10 @@ export function KPICard({ data, icon: Icon, iconColor, iconBg, className }: KPIC
             <span className="text-2xl font-bold text-foreground leading-none tabular-nums">{value}</span>
             {unit && <span className="text-[11px] text-muted-foreground shrink-0">{unit}</span>}
           </div>
-          {detail && (
-            <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{detail}</p>
+          {(detailContent || detail) && (
+            detailContent
+              ? <div className="mt-0.5">{detailContent}</div>
+              : <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{detail}</p>
           )}
         </div>
       </div>
