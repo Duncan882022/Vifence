@@ -18,24 +18,58 @@ export const PATROL_SITE_ZONE_ID = 'ZONE_SITE'
 /** Map centre — tọa độ mặc định công trường. */
 export const PATROL_SITE_CENTER: [number, number] = [20.933094, 106.923950]
 
-/** HC-02 không GPS → neo cạnh HC-01 tại công trường (~8m offset). */
-export const PATROL_HELMET_02_FALLBACK: [number, number] = [
-  parseFloat((PATROL_SITE_CENTER[0] + 0.00006).toFixed(6)),
-  parseFloat((PATROL_SITE_CENTER[1] + 0.00004).toFixed(6)),
-]
-
-/** DR-03 không GPS → neo phía Bắc-Đông công trường (~15m offset). */
-export const PATROL_DRONE_03_FALLBACK: [number, number] = [
-  parseFloat((PATROL_SITE_CENTER[0] + 0.00012).toFixed(6)),
-  parseFloat((PATROL_SITE_CENTER[1] + 0.00010).toFixed(6)),
-]
-
 function polygonCenter(polygon: [number, number][]): [number, number] {
   if (polygon.length === 0) return PATROL_SITE_CENTER
   const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
   const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
+
+/** Point inside zone quad — u/v ∈ [0,1], inset from edges. */
+export function patrolZoneInteriorPoint(
+  polygon: [number, number][],
+  u: number,
+  v: number,
+): [number, number] {
+  if (polygon.length < 4) {
+    return polygonCenter(polygon)
+  }
+  const [tl, tr, br, bl] = polygon
+  const lat =
+    (1 - u) * (1 - v) * tl[0] +
+    u * (1 - v) * tr[0] +
+    u * v * br[0] +
+    (1 - u) * v * bl[0]
+  const lng =
+    (1 - u) * (1 - v) * tl[1] +
+    u * (1 - v) * tr[1] +
+    u * v * br[1] +
+    (1 - u) * v * bl[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+const _SITE_POLY = [...PATROL_SITE_CORNERS] as [number, number][]
+
+/** HC-01 không GPS → neo tây-nam công trường. */
+export const PATROL_HELMET_01_FALLBACK: [number, number] = patrolZoneInteriorPoint(
+  _SITE_POLY,
+  0.18,
+  0.22,
+)
+
+/** HC-02 không GPS → neo đông-bắc (~120m+ tách HC-01). */
+export const PATROL_HELMET_02_FALLBACK: [number, number] = patrolZoneInteriorPoint(
+  _SITE_POLY,
+  0.82,
+  0.78,
+)
+
+/** DR-03 không GPS → neo phía bắc giữa công trường. */
+export const PATROL_DRONE_03_FALLBACK: [number, number] = patrolZoneInteriorPoint(
+  _SITE_POLY,
+  0.52,
+  0.12,
+)
 
 /* ── GPS Zone type ──────────────────────────────────────────── */
 export interface PatrolGpsZone {
@@ -137,7 +171,11 @@ function buildHelmetPins(): PatrolHelmetPin[] {
       label: `Helmet ${num}`,
       zoneId,
       color: zone.borderColor,
-      position: helmetId === 'HC-02' ? PATROL_HELMET_02_FALLBACK : PATROL_SITE_CENTER,
+      position: helmetId === 'HC-02'
+        ? PATROL_HELMET_02_FALLBACK
+        : helmetId === 'HC-01'
+          ? PATROL_HELMET_01_FALLBACK
+          : PATROL_SITE_CENTER,
     }
   })
 }
@@ -180,29 +218,6 @@ export function getPatrolMapDeviceBadgeNum(deviceId: string): string {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
-}
-
-/** Point inside zone quad — u/v ∈ [0,1], inset from edges. */
-export function patrolZoneInteriorPoint(
-  polygon: [number, number][],
-  u: number,
-  v: number,
-): [number, number] {
-  if (polygon.length < 4) {
-    return polygonCenter(polygon)
-  }
-  const [tl, tr, br, bl] = polygon
-  const lat =
-    (1 - u) * (1 - v) * tl[0] +
-    u * (1 - v) * tr[0] +
-    u * v * br[0] +
-    (1 - u) * v * bl[0]
-  const lng =
-    (1 - u) * (1 - v) * tl[1] +
-    u * (1 - v) * tr[1] +
-    u * v * br[1] +
-    (1 - u) * v * bl[1]
-  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
 export function buildHelmetZoneTrail(
