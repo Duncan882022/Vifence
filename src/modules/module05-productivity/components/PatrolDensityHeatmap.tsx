@@ -69,7 +69,7 @@ function HeatmapSiteStatsOverlay({
   return (
     <div
       className={cn(
-        'absolute z-[500] pointer-events-none',
+        'absolute z-30 pointer-events-none',
         'right-2 max-sm:right-1.5',
         compactChrome ? 'bottom-2 max-sm:bottom-1.5' : 'bottom-14 max-sm:bottom-12',
         'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
@@ -112,14 +112,14 @@ function HeatmapLayerControls({
   return (
     <div
       className={cn(
-        'absolute z-[500] top-2 max-sm:top-1.5',
+        'absolute z-30 top-2 max-sm:top-1.5',
         compactChrome ? 'right-2 max-sm:right-1.5' : 'left-2 max-sm:left-1.5',
         compactChrome
           ? 'pr-[env(safe-area-inset-right,0px)] pt-[env(safe-area-inset-top,0px)]'
           : 'pl-[env(safe-area-inset-left,0px)] pt-[env(safe-area-inset-top,0px)]',
       )}
     >
-      <div className="flex items-stretch overflow-hidden rounded border border-[#334155] bg-[#111827]/95 shadow-sm">
+      <div className="flex items-stretch overflow-hidden rounded border border-[#334155] bg-[#111827]/95 shadow-sm pointer-events-auto">
         {items.map((item, index) => {
           const active = layers[item.key]
           return (
@@ -386,59 +386,61 @@ export function PatrolDensityHeatmap({
     }
   }, [expanded, onCloseExpand])
 
-  const mapBody = (
-    <>
-      <div className={cn('min-w-0 relative', viewport.embeddedMapClass)}>
-        <PatrolGeoHeatmap
-          zones={liveZones}
-          cameraPositions={mergedCameraPositions}
-          routeHistory={mergedRouteHistory}
-          layer="combined"
-          displayMode="count"
-          countMode="current"
-          showSiteBoundary={layers.polygon}
-          showZonePolygons={false}
-          showDetections={layers.density}
-          liveDetectionDots={filteredDots}
-          followLiveGps={hc02Online && hc02Live.hasLiveGps}
-          liveGpsLat={hc02Online ? hc02Live.lat : null}
-          liveGpsLng={hc02Online ? hc02Live.lng : null}
-          showDensity={false}
-          showRoute={layers.helmet}
-          showHelmetMarkers={layers.helmet}
-          showDroneMarkers={layers.flycam}
-          showCameras={false}
-          helmetOnlineById={helmetOnlineById}
-          helmetHeadingById={helmetHeadingById}
-          siteHeadcount={siteHeadcount}
-          helmetDetectCountsById={helmetDetectCountsById}
-          onDetectionClick={onDetectionClick}
-          requireLiveGpsForHc02={false}
-          hasHc02LiveGps={hc02Live.hasMapPosition}
-          mapZoom={viewport.mapZoom}
-          compactControls={viewport.compactChrome}
-        />
-        <HeatmapLayerControls
-          layers={layers}
-          onToggle={toggleLayer}
-          compactChrome={viewport.compactChrome}
-        />
-        <HeatmapSiteStatsOverlay
-          objectCount={unassignedCount}
-          personCount={personCount}
-          identityCount={identifiedCount}
-          compactChrome={viewport.compactChrome}
-        />
-        <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
-      </div>
-    </>
+  const mapSurface = (
+    <div className={cn(
+      'min-w-0 relative flex flex-col flex-1 min-h-0 w-full h-full',
+      expanded ? viewport.modalMapClass : viewport.embeddedMapClass,
+    )}>
+      <PatrolGeoHeatmap
+        zones={liveZones}
+        cameraPositions={mergedCameraPositions}
+        routeHistory={mergedRouteHistory}
+        layer="combined"
+        displayMode="count"
+        countMode="current"
+        showSiteBoundary={layers.polygon}
+        showZonePolygons={false}
+        showDetections={layers.density}
+        liveDetectionDots={filteredDots}
+        followLiveGps={hc02Online && hc02Live.hasLiveGps}
+        liveGpsLat={hc02Online ? hc02Live.lat : null}
+        liveGpsLng={hc02Online ? hc02Live.lng : null}
+        showDensity={false}
+        showZoneStatLabels={layers.polygon}
+        showRoute={layers.helmet}
+        showHelmetMarkers={layers.helmet}
+        showDroneMarkers={layers.flycam}
+        showCameras={false}
+        helmetOnlineById={helmetOnlineById}
+        helmetHeadingById={helmetHeadingById}
+        siteHeadcount={siteHeadcount}
+        helmetDetectCountsById={helmetDetectCountsById}
+        onDetectionClick={onDetectionClick}
+        requireLiveGpsForHc02={false}
+        hasHc02LiveGps={hc02Live.hasMapPosition}
+        mapZoom={viewport.mapZoom}
+        compactControls={viewport.compactChrome}
+      />
+      <HeatmapLayerControls
+        layers={layers}
+        onToggle={toggleLayer}
+        compactChrome={viewport.compactChrome}
+      />
+      <HeatmapSiteStatsOverlay
+        objectCount={unassignedCount}
+        personCount={personCount}
+        identityCount={identifiedCount}
+        compactChrome={viewport.compactChrome}
+      />
+      <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
+    </div>
   )
 
   return (
     <>
       {expanded && createPortal(
         <div
-          className="fixed inset-0 z-[110] bg-black/80 sm:bg-black/75 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[120] bg-black/80 sm:bg-black/75 backdrop-blur-[2px]"
           onClick={() => onCloseExpand?.()}
           role="presentation"
           aria-hidden
@@ -447,9 +449,9 @@ export function PatrolDensityHeatmap({
       )}
       <div
         className={cn(
-          'flex flex-col overflow-hidden h-full min-h-0 flex-1',
+          'flex flex-col overflow-hidden h-full min-h-0 flex-1 w-full',
           expanded && [
-            'fixed inset-0 z-[120] bg-[#0a0e17] shadow-2xl shadow-black/60',
+            'fixed inset-0 z-[130] bg-[#0a0e17] shadow-2xl shadow-black/60',
             'pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]',
             'sm:inset-4 sm:rounded-xl sm:border sm:border-[#2a3855]',
           ],
@@ -472,7 +474,7 @@ export function PatrolDensityHeatmap({
             </button>
           </div>
         )}
-        {mapBody}
+        {mapSurface}
       </div>
     </>
   )

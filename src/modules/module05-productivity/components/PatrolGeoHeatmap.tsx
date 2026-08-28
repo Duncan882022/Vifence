@@ -440,6 +440,8 @@ export interface PatrolGeoHeatmapProps {
   liveGpsLng?: number | null
   /* Layer 3 — Density heat blobs + zone stat cards */
   showDensity: boolean
+  /** Nhãn thống kê khu vực trên map — tách khỏi canvas mật độ. */
+  showZoneStatLabels?: boolean
   /* Layer 4 — Patrol route (mũ) + markers */
   showRoute: boolean
   /** Marker mũ HC-* — luôn hiện kể cả offline (tách khỏi layer route). */
@@ -485,6 +487,7 @@ export function PatrolGeoHeatmap({
   liveGpsLat = null,
   liveGpsLng = null,
   showDensity,
+  showZoneStatLabels,
   showRoute,
   showHelmetMarkers = true,
   showDroneMarkers = false,
@@ -502,9 +505,11 @@ export function PatrolGeoHeatmap({
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
   const [openHelmetTipId, setOpenHelmetTipId] = useState<string | null>(null)
 
+  const zoneStatLabelsVisible = showZoneStatLabels ?? showDensity
+
   useEffect(() => {
-    if (!showDensity) setExpandedZoneId(null)
-  }, [showDensity])
+    if (!zoneStatLabelsVisible) setExpandedZoneId(null)
+  }, [zoneStatLabelsVisible])
 
   const toggleZoneExpand = (zoneId: string) => {
     setExpandedZoneId(prev => (prev === zoneId ? null : zoneId))
@@ -558,7 +563,7 @@ export function PatrolGeoHeatmap({
   const zoomControlPosition = compactControls ? 'topleft' as const : 'bottomright' as const
 
   return (
-    <div className="relative w-full h-full min-h-[200px] overflow-hidden isolate max-lg:min-h-[220px] supports-[height:100dvh]:min-h-[min(220px,38dvh)]">
+    <div className="relative w-full h-full min-h-0 overflow-hidden">
       <style>{`
         @keyframes patrol-dot-blink {
           0%,100%{opacity:0.95;transform:scale(1)}
@@ -609,6 +614,10 @@ export function PatrolGeoHeatmap({
           padding:3px 7px !important;
         }
         .patrol-zone-tip::before { display:none; }
+        .leaflet-pane { z-index: 400 !important; }
+        .leaflet-marker-pane { z-index: 620 !important; }
+        .leaflet-tooltip-pane { z-index: 680 !important; }
+        .leaflet-popup-pane { z-index: 700 !important; }
       `}</style>
 
       <div className="absolute inset-0">
@@ -742,7 +751,7 @@ export function PatrolGeoHeatmap({
           })}
 
           {/* ── LAYER 3B: Zone labels — tap to expand stats ─────── */}
-          {showDensity && PATROL_GPS_ZONES.map(gpsZone => {
+          {zoneStatLabelsVisible && PATROL_GPS_ZONES.map(gpsZone => {
             const zone = zoneMap.get(gpsZone.zone_id)
             const visited = zone?.coverage === 'VISITED'
             const expanded = expandedZoneId === gpsZone.zone_id
@@ -759,7 +768,7 @@ export function PatrolGeoHeatmap({
                   zone?.vehiclesCurrent ?? 0,
                   expanded,
                 )}
-                zIndexOffset={expanded ? 400 : 300}
+                zIndexOffset={expanded ? 900 : 300}
                 eventHandlers={{
                   click: () => toggleZoneExpand(gpsZone.zone_id),
                 }}
