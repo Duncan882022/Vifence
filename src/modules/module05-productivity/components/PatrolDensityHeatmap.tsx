@@ -80,12 +80,12 @@ function HeatmapSiteStatsOverlay({
           <div
             key={row.label}
             className={cn(
-              'px-2.5 py-1 text-[#e2e8f0] tabular-nums text-center leading-tight whitespace-nowrap',
+              'px-2.5 py-1 text-[#e2e8f0] tabular-nums text-left leading-tight whitespace-nowrap',
               compactChrome ? 'text-[9px]' : 'text-[10px]',
               index < rows.length - 1 && 'border-b border-[#334155]',
             )}
           >
-            {row.value} {row.label}
+            {row.label} {row.value}
           </div>
         ))}
       </div>
@@ -103,10 +103,10 @@ function HeatmapLayerControls({
   compactChrome?: boolean
 }) {
   const items = [
-    { key: 'polygon' as const, label: 'Khu vực', color: '#6366f1' },
-    { key: 'density' as const, label: 'Mật độ', color: '#f59e0b' },
-    { key: 'helmet' as const, label: 'Mũ', color: '#ef4444' },
-    { key: 'flycam' as const, label: 'Flycam', color: '#38bdf8' },
+    { key: 'polygon' as const, label: 'Khu vực' },
+    { key: 'density' as const, label: 'Mật độ' },
+    { key: 'helmet' as const, label: 'Mũ' },
+    { key: 'flycam' as const, label: 'Flycam' },
   ]
 
   return (
@@ -128,15 +128,11 @@ function HeatmapLayerControls({
               type="button"
               onClick={() => onToggle(item.key)}
               className={cn(
-                'inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] leading-none font-medium transition-colors',
+                'inline-flex items-center px-1.5 py-0.5 text-[8px] leading-none font-medium transition-colors',
                 index > 0 && 'border-l border-[#334155]',
                 active ? 'text-[#e2e8f0]' : 'text-[#64748b] hover:text-[#94a3b8]',
               )}
             >
-              <span
-                className="w-1 h-1 rounded-full shrink-0"
-                style={{ background: item.color, opacity: active ? 1 : 0.35 }}
-              />
               {item.label}
             </button>
           )
