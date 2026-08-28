@@ -85,7 +85,7 @@ function HeatmapSiteStatsOverlay({
               index < rows.length - 1 && 'border-b border-[#334155]',
             )}
           >
-            <span>{row.label}</span>
+            <span>{row.label}:</span>
             {' '}
             <span className="tabular-nums font-semibold">{row.value}</span>
           </div>
