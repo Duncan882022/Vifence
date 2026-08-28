@@ -428,6 +428,10 @@ interface TrainingCameraPanelProps {
   sidebarCompactClass?: string
   /** Pixel width sidebar compact (iPad ngang / landscape) — dùng cho grid 2 cột. */
   sidebarCompactPx?: number
+  /** Chiều rộng sidebar khi thu gọn (px) — patrol mặc định hẹp hơn lg:w-8. */
+  sidebarCollapsedPx?: number
+  /** Class Tailwind sidebar thu gọn — desktop. */
+  sidebarCollapsedClass?: string
   /** Patrol sidebar: thumb nhỏ gọn + full width cột. */
   sidebarThumbCompact?: boolean
   sidebarThumbFullWidth?: boolean
@@ -455,6 +459,8 @@ export function TrainingCameraPanel({
   sidebarOpenClass = 'lg:w-[220px]',
   sidebarCompactClass = 'max-lg:landscape:w-[168px]',
   sidebarCompactPx,
+  sidebarCollapsedPx,
+  sidebarCollapsedClass = 'lg:w-8',
   sidebarThumbCompact = false,
   sidebarThumbFullWidth = false,
 }: TrainingCameraPanelProps) {
@@ -655,12 +661,15 @@ export function TrainingCameraPanel({
   }
 
   const compactSidebarPx = sidebarCompactPx ?? 108
+  const collapsedSidebarPx = sidebarCollapsedPx ?? 32
+  const sidebarRailPx = sidebarOpen ? compactSidebarPx : collapsedSidebarPx
   const compactGridStyle = preferCompactVideo
-    ? { gridTemplateColumns: `minmax(0, 1fr) ${compactSidebarPx}px` } as const
+    ? { gridTemplateColumns: `minmax(0, 1fr) ${sidebarRailPx}px` } as const
     : undefined
   const thumbCompact = sidebarThumbCompact || !isDesktop
   const thumbStrip = isDesktop && !sidebarThumbFullWidth
   const thumbMini = sidebarThumbCompact && sidebarThumbFullWidth
+  const collapsedCompact = sidebarThumbCompact && !sidebarOpen
 
   return (
     <>
@@ -673,9 +682,6 @@ export function TrainingCameraPanel({
               'flex flex-col lg:flex-row',
               !isDesktop && [
                 'max-lg:landscape:grid max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
-                sidebarCompactPx != null
-                  ? `max-lg:landscape:grid-cols-[minmax(0,1fr)_${compactSidebarPx}px]`
-                  : 'max-lg:landscape:grid-cols-[minmax(0,1fr)_108px]',
               ],
             ),
           aspectGridInTier
@@ -686,7 +692,12 @@ export function TrainingCameraPanel({
                 ? 'lg:h-auto lg:flex-none'
                 : 'lg:flex-1 lg:min-h-0',
         )}
-        style={compactGridStyle}
+        style={{
+          ...compactGridStyle,
+          ...(sidebarCompactPx != null && !preferCompactVideo && !isDesktop
+            ? { gridTemplateColumns: `minmax(0, 1fr) ${sidebarRailPx}px` }
+            : {}),
+        }}
       >
         <div className={cn(
           'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
@@ -729,11 +740,18 @@ export function TrainingCameraPanel({
             preferCompactVideo && sidebarOpen && 'border-t-0 border-l',
             sidebarOpen
               ? cn('w-full lg:h-full lg:min-h-0', !preferCompactVideo && sidebarOpenClass)
-              : 'w-full shrink-0 min-h-[2.25rem] lg:flex lg:w-8 lg:h-full lg:min-h-0',
+              : cn(
+                collapsedCompact
+                  ? 'shrink-0 self-end w-7 min-h-[1.75rem] border-t border-[#1e2433] lg:border-t-0 lg:self-auto'
+                  : 'w-full shrink-0 min-h-[2.25rem] border-t border-[#1e2433] lg:border-t-0',
+                sidebarCollapsedClass,
+                'lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:px-0',
+              ),
           )}
           style={{
             ...(landscapeSidebarH ? { maxHeight: landscapeSidebarH } : {}),
             ...(preferCompactVideo && sidebarOpen ? { width: compactSidebarPx } : {}),
+            ...(preferCompactVideo && !sidebarOpen ? { width: collapsedSidebarPx } : {}),
           }}
         >
           {sidebarOpen ? (
@@ -831,36 +849,47 @@ export function TrainingCameraPanel({
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 w-full min-h-[2.25rem] border-t border-[#1e2433] lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0 lg:border-t-0">
-              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
-                {tabs.map(tab => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setFilterTab(tab)}
-                    className={cn(
-                      'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
-                      filterTab === tab
-                        ? 'bg-primary/20 text-primary'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
-                    )}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[8px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums lg:hidden">
-                <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
-              </span>
+            <div className={cn(
+              collapsedCompact
+                ? 'flex items-center justify-center w-full h-full min-h-[1.75rem] lg:min-h-0'
+                : 'flex items-center gap-1.5 px-2 py-1.5 w-full min-h-[2.25rem] lg:flex-col lg:items-center lg:justify-center lg:h-full lg:min-h-[2.5rem] lg:px-0 lg:gap-0 lg:border-t-0',
+            )}>
+              {!collapsedCompact && (
+                <>
+                  <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1 lg:hidden">
+                    {tabs.map(tab => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setFilterTab(tab)}
+                        className={cn(
+                          'px-1.5 py-0.5 text-[8px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                          filterTab === tab
+                            ? 'bg-primary/20 text-primary'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
+                        )}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[8px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums lg:hidden">
+                    <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
+                  </span>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0 lg:p-1.5"
+                className={cn(
+                  'rounded text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors shrink-0',
+                  collapsedCompact ? 'p-0.5' : 'p-1 lg:p-1.5',
+                )}
                 title="Mở danh sách camera"
                 aria-expanded={sidebarOpen}
                 aria-label="Mở danh sách camera"
               >
-                <ChevronLeft className="w-3 h-3 lg:w-3.5 lg:h-3.5" />
+                <ChevronLeft className={cn(collapsedCompact ? 'w-3 h-3' : 'w-3 h-3 lg:w-3.5 lg:h-3.5')} />
               </button>
             </div>
           )}
