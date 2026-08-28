@@ -29,13 +29,20 @@ APPEARANCE_GAP_SEC = 45.0
 TOUCH_MIN_INTERVAL_SEC = 10.0
 
 
+def _person_snapshot_score_floor() -> float:
+    """Điểm tối thiểu coi là ảnh có mặt đủ rõ (bodycam gate ×2 + confidence modest)."""
+    from ..config import settings
+
+    return float(settings.patrol_face_detect_min_score_bodycam) * 2.0 + 0.4
+
+
 def _should_refresh_presence(
     row,
     ts: float,
     snapshot_path: str | None,
     snapshot_score: float,
 ) -> tuple[bool, bool]:
-    """(ghi DB, giữ snapshot mới). Hàng mới luôn ghi."""
+    """(ghi DB, giữ snapshot mới). Hàng mới luôn ghi — dùng cho Đối tượng."""
     if row is None:
         return True, bool(snapshot_path)
     keep_new = bool(snapshot_path) and snapshot_score >= float(row["snapshot_score"] or 0)
@@ -43,6 +50,45 @@ def _should_refresh_presence(
         return True, True
     last = float(row["last_seen"] or 0)
     return (ts - last) >= TOUCH_MIN_INTERVAL_SEC, False
+
+
+def _should_refresh_person_snapshot(
+    row,
+    ts: float,
+    snapshot_path: str | None,
+    snapshot_score: float,
+    *,
+    face_eligible: bool,
+    is_identified: bool,
+) -> tuple[bool, bool]:
+    """(ghi DB, giữ snapshot mới) cho Người / Định danh.
+
+    Không gắn ảnh lưng/tay lên thẻ khi chưa face_eligible. Định danh dùng
+    khung mặt mới nhất đủ rõ — không giữ best-of cả đời khiến ảnh đứng im.
+    """
+    if row is None:
+        return True, bool(snapshot_path) and face_eligible
+
+    last = float(row["last_seen"] or 0)
+    interval_ok = (ts - last) >= TOUCH_MIN_INTERVAL_SEC
+
+    if not face_eligible or not snapshot_path:
+        return interval_ok, False
+
+    old_score = float(row["snapshot_score"] or 0)
+    floor = _person_snapshot_score_floor()
+
+    if is_identified:
+        if snapshot_score < floor:
+            return interval_ok, False
+        if old_score < floor:
+            return True, True
+        return interval_ok, True
+
+    keep_new = snapshot_score >= old_score
+    if keep_new:
+        return True, True
+    return interval_ok, False
 
 
 def _fmt_obj(date: str, seq: int) -> str:
@@ -144,6 +190,7 @@ def touch_person_event(
     zone_id: str | None = None,
     snapshot_path: str | None = None,
     snapshot_score: float = 0.0,
+    face_eligible: bool = False,
     now: float | None = None,
     seen_since: float | None = None,
     gps_lat: float | None = None,
@@ -155,6 +202,10 @@ def touch_person_event(
         first = ts
     date = db.today_vn(ts)
     pid = identity.resolve_alias(pers_id)
+    person = identity.get_person(pid)
+    is_identified = bool(
+        person and person.get("status") == identity.STATUS_IDENTIFIED
+    )
 
     with db.tx() as conn:
         row = conn.execute(
@@ -163,15 +214,22 @@ def touch_person_event(
             (date, pid),
         ).fetchone()
         if row is None:
+            attach_path = snapshot_path if face_eligible else None
+            attach_score = snapshot_score if face_eligible else 0.0
             conn.execute(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, pid, first, ts, snapshot_path, snapshot_score),
+                (date, pid, first, ts, attach_path, attach_score),
             )
         else:
-            write, keep_new = _should_refresh_presence(
-                row, ts, snapshot_path, snapshot_score
+            write, keep_new = _should_refresh_person_snapshot(
+                row,
+                ts,
+                snapshot_path,
+                snapshot_score,
+                face_eligible=face_eligible,
+                is_identified=is_identified,
             )
             if not write:
                 return

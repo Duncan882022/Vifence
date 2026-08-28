@@ -405,6 +405,28 @@ def record_observation(
         path = _write_snapshot(subject_id, frame, person_bbox)
         return path, score if path else 0.0
 
+    def _person_touch(
+        pers_id: str,
+        *,
+        seen_since: float | None = None,
+        with_snapshot: bool = True,
+    ) -> None:
+        path, shot_score = (None, 0.0)
+        if with_snapshot and face_eligible:
+            path, shot_score = _shot(pers_id)
+        daystore.touch_person_event(
+            pers_id,
+            camera_id=camera_id,
+            zone_id=zone_id,
+            snapshot_path=path,
+            snapshot_score=shot_score,
+            face_eligible=face_eligible,
+            now=ts,
+            seen_since=seen_since,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+        )
+
     if _face_commits_person_tier(face_eligible=face_eligible, face_embedding=face_embedding):
         # Trong một track, danh tính chỉ được quyết **một lần**.
         #
@@ -437,35 +459,18 @@ def record_observation(
                 daystore.promote_object(obj_id, pers_id, now=anchor_ts)
             with _lock:
                 _track_to_person[key] = pers_id
-        path, shot_score = _shot(pers_id)
-        daystore.touch_person_event(
+        _person_touch(
             pers_id,
-            camera_id=camera_id,
-            zone_id=zone_id,
-            snapshot_path=path,
-            snapshot_score=shot_score,
-            now=ts,
             seen_since=None if bound else anchor_ts,
-            gps_lat=gps_lat,
-            gps_lng=gps_lng,
+            with_snapshot=True,
         )
         return pers_id
 
     # Track này từng thấy mặt rồi thì đã là Người — quay lưng một lúc không
-    # kéo nó tụt về Đối tượng.
+    # kéo nó tụt về Đối tượng. Không chụp ảnh khi không còn mặt đủ rõ.
     known = _known_person_for_track(key)
     if known:
-        path, shot_score = _shot(known)
-        daystore.touch_person_event(
-            known,
-            camera_id=camera_id,
-            zone_id=zone_id,
-            snapshot_path=path,
-            snapshot_score=shot_score,
-            now=ts,
-            gps_lat=gps_lat,
-            gps_lng=gps_lng,
-        )
+        _person_touch(known, with_snapshot=face_eligible)
         return known
 
     ok, anchor_ts = _gate_observation_commit(key, has_face=False, now=ts)
@@ -480,17 +485,10 @@ def record_observation(
         pers_id = identity.resolve_alias(reused_person)
         with _lock:
             _track_to_person[key] = pers_id
-        path, shot_score = _shot(pers_id)
-        daystore.touch_person_event(
+        _person_touch(
             pers_id,
-            camera_id=camera_id,
-            zone_id=zone_id,
-            snapshot_path=path,
-            snapshot_score=shot_score,
-            now=ts,
             seen_since=anchor_ts,
-            gps_lat=gps_lat,
-            gps_lng=gps_lng,
+            with_snapshot=face_eligible,
         )
         return pers_id
 

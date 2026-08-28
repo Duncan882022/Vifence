@@ -102,6 +102,51 @@ class PatrolSinkFaceGateTests(unittest.TestCase):
         row = identity.get_person(str(pers))
         self.assertEqual(identity.display_name(row), "Duncan")
 
+    def test_known_track_without_face_keeps_snapshot(self) -> None:
+        """Quay lưng / tay che — không ghi đè ảnh định danh bằng khung không mặt."""
+        t0 = 1_000.0
+        box = [80.0, 60.0, 220.0, 420.0]
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        sink.record_observation(
+            camera_id="HC-01",
+            track_id="ptk0001:person",
+            person_bbox=box,
+            face_embedding=_vec(8),
+            face_quality=0.9,
+            face_eligible=True,
+            confidence=0.85,
+            frame=frame,
+            now=t0,
+        )
+        pers = sink.record_observation(
+            camera_id="HC-01",
+            track_id="ptk0001:person",
+            person_bbox=box,
+            face_embedding=_vec(8),
+            face_quality=0.9,
+            face_eligible=True,
+            confidence=0.85,
+            frame=frame,
+            now=t0 + _FACE_CONFIRM,
+        )
+        identity.identify(str(pers), full_name="Duncan", employee_code="SGC-6688")
+        card = daystore.list_person_events(db.today_vn(t0))[0]
+        first_path = card["snapshot_path"]
+        self.assertTrue(first_path)
+
+        sink.record_observation(
+            camera_id="HC-01",
+            track_id="ptk0001:person",
+            person_bbox=box,
+            face_quality=0.0,
+            face_eligible=False,
+            confidence=0.9,
+            frame=frame,
+            now=t0 + 20.0,
+        )
+        card = daystore.list_person_events(db.today_vn(t0))[0]
+        self.assertEqual(card["snapshot_path"], first_path)
+
 
 if __name__ == "__main__":
     unittest.main()

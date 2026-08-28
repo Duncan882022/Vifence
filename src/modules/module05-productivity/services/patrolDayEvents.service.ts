@@ -84,14 +84,18 @@ async function getJson<T>(path: string, timeoutMs = 12_000): Promise<T | null> {
   return fetchPatrol<T>(path, undefined, timeoutMs)
 }
 
-async function snapshotUrl(path: string | null | undefined): Promise<string | undefined> {
+async function snapshotUrl(
+  path: string | null | undefined,
+  lastSeen?: number,
+): Promise<string | undefined> {
   const p = (path ?? '').trim()
   if (!p) return undefined
   const signed = await signPatrolSnapshot(p)
-  if (signed) return signed
+  const bust = lastSeen && lastSeen > 0 ? `&v=${Math.floor(lastSeen)}` : ''
+  if (signed) return `${signed}${bust}`
   const base = backendBase()
   if (!base) return undefined
-  return `${base}/patrol/snapshot?path=${encodeURIComponent(p)}`
+  return `${base}/patrol/snapshot?path=${encodeURIComponent(p)}${bust}`
 }
 
 export async function fetchPatrolDayPersons(date?: string): Promise<PatrolDayPerson[]> {
@@ -110,7 +114,7 @@ export async function fetchPatrolDayPersons(date?: string): Promise<PatrolDayPer
     contractor: row.contractor ? String(row.contractor) : null,
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
   })))
   return rows
 }
@@ -125,7 +129,7 @@ export async function fetchPatrolDayObjects(date?: string): Promise<PatrolDayObj
     objId: String(row.obj_id ?? ''),
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
     snapshotScore: Number(row.snapshot_score ?? 0),
   })))
 }
@@ -183,14 +187,14 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     contractor: row.contractor ? String(row.contractor) : null,
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
   })))
 
   const objects = await Promise.all((data.objects ?? []).map(async row => ({
     objId: String(row.obj_id ?? ''),
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
-    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null),
+    snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
     snapshotScore: Number(row.snapshot_score ?? 0),
   })))
 
