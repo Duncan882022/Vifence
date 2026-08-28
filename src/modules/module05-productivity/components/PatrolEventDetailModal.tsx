@@ -248,6 +248,9 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
     || isPatrolManuallyIdentified(objectKey)
   const appearanceCameras = Object.keys(appearances)
   const hasAppearanceHistory = appearanceCameras.length > 0
+  const showAppearanceHistory = (stage === 'person' || stage === 'profile')
+    && (appearancesLoading || hasAppearanceHistory)
+  const showTimeSection = !hasAppearanceHistory || (stage !== 'person' && stage !== 'profile')
   const portraitEvidence = Boolean(event.snapshotUrl && isPortraitPatrolCameraId(event.cameraId))
 
   return createPortal(
@@ -327,20 +330,22 @@ export function PatrolEventDetailModal({ event, onClose }: PatrolEventDetailModa
             </div>
           )}
 
-          <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-1">
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
-              <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Thời gian</span>
+          {showTimeSection && (
+            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-1">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
+                <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Thời gian</span>
+              </div>
+              <p className="text-[11px] text-foreground font-medium tabular-nums">{summary.timeRange}</p>
+              {summary.duration != null && (
+                <p className="text-[9px] text-muted-foreground">
+                  Tổng thời lượng quan sát: {formatPatrolTime(summary.duration)}
+                </p>
+              )}
             </div>
-            <p className="text-[11px] text-foreground font-medium tabular-nums">{summary.timeRange}</p>
-            {summary.duration != null && (
-              <p className="text-[9px] text-muted-foreground">
-                Tổng thời lượng quan sát: {formatPatrolTime(summary.duration)}
-              </p>
-            )}
-          </div>
+          )}
 
-          {(appearancesLoading || hasAppearanceHistory) && (stage === 'person' || stage === 'profile') && (
+          {showAppearanceHistory && (
             <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
