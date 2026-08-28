@@ -40,8 +40,8 @@ function createHelmetSvg(badgeNum: string, isActive: boolean, accent: string): s
         />
         <rect x="10.2" y="7.2" width="3.6" height="2.2" rx="0.6" fill="${stroke}" opacity="0.85"/>
         <text
-          x="12" y="18.2" text-anchor="middle"
-          font-size="8.5" font-weight="800" fill="#fff"
+          x="12" y="11.2" text-anchor="middle" dominant-baseline="middle"
+          font-size="8" font-weight="800" fill="#fff"
           font-family="system-ui,sans-serif"
         >${badgeNum}</text>
       </svg>
