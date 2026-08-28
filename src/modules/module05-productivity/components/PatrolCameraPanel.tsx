@@ -1,5 +1,5 @@
-import { TrainingCameraPanel } from '@/modules/module02-training/components/TrainingCameraPanel'
-import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import { CameraGridPanel } from '@/components/common/CameraGrid/CameraGridPanel'
+import type { TrainingCamera } from '@/components/common/CameraGrid/CameraGridPanel'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 /** Sidebar patrol — rộng hơn bản cũ ~10%. */
@@ -29,7 +29,7 @@ export interface PatrolCameraPanelProps {
 }
 
 /**
- * Module 05 — bọc TrainingCameraPanel với layout patrol.
+ * Module 05 — bọc CameraGridPanel với layout patrol.
  * Desktop / iPad: 1 hàng cố định + scroll trong Tier 2; phóng to tier → đủ hàng.
  * Phone dọc: stack 16:9, scroll theo trang.
  */
@@ -54,7 +54,7 @@ export function PatrolCameraPanel({
     : (desktopMaxVisibleRows ?? 1)
 
   return (
-    <TrainingCameraPanel
+    <CameraGridPanel
       selectedId={selectedId}
       onSelectCamera={onSelectCamera}
       onStreamCountChange={onStreamCountChange}

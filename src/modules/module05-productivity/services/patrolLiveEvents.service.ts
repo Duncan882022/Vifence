@@ -7,7 +7,7 @@ import { fetchPatrol } from '@/services/patrolApiClient'
 import type { EventType, PatrolEvent } from '../data/patrolTypes'
 import { PATROL_HELMET_ZONE_ASSIGNMENTS, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { resolvePatrolCameraDisplayName } from '../data/patrolCameras'
-import { isPatrolHelmetCameraId, isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
+import { isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFeed'
 import {
   formatPatrolPersonDetectedEvent,
@@ -108,16 +108,36 @@ function normalizeCameraSlice(row: Record<string, unknown>): PatrolHelmetCameraM
 /** Contabo cũ chưa deploy /patrol/* — cache để tránh spam 404. */
 const patrolApiByBase = new Map<string, boolean>()
 
-function todayIsoDate(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+function emptyCameraMetrics(cameraId: string, eventsToday = 0): PatrolHelmetCameraMetricsSlice {
+  return {
+    camera_id: cameraId,
+    stream_online: false,
+    person_count: 0,
+    identified_workers: 0,
+    person_events_today: eventsToday,
+    gps_lat: null,
+    gps_lng: null,
+  }
 }
 
-/** Module 05 chỉ nhận vòng đời người (PERS-*) — kịch bản PPE chặn ngay tại biên. */
-function isPatrolModuleBackendEvent(row: BackendViolationEvent): boolean {
-  if (!isPatrolHelmetCameraId(row.camera_id ?? '')) return false
-  if (!row.snapshot_file?.trim()) return false
-  return (row.scenario_id ?? '').toUpperCase().startsWith('PERS')
+function emptyAggregateFromHealth(
+  ids: readonly string[],
+  healthMap: Map<string, boolean>,
+): PatrolHelmetAggregateMetricsResponse {
+  const cameras = ids.map(id => ({
+    ...emptyCameraMetrics(id),
+    stream_online: healthMap.get(id) ?? false,
+  }))
+  const anyOnline = cameras.some(row => row.stream_online)
+  return {
+    cameras,
+    backend_reachable: healthMap.size > 0,
+    stream_online: anyOnline,
+    person_count: 0,
+    identified_workers: 0,
+    worker_names: [],
+    person_events_today: 0,
+  }
 }
 
 function patrolApiBase(backendUrl: string): string {
@@ -241,68 +261,6 @@ async function fetchPatrolMetricsWithAuth(
   return normalizeMetricsResponse({ ...raw, cameras }) as unknown as PatrolHelmetAggregateMetricsResponse
 }
 
-/** Legacy Contabo: GET /events?camera_id=&date= */
-async function fetchLegacyHelmetEvents(
-  cameraId: string,
-  backendUrl: string,
-  limit = 500,
-): Promise<BackendViolationEvent[]> {
-  if (!isPatrolHelmetCameraId(cameraId)) return []
-  const date = todayIsoDate()
-  const params = new URLSearchParams({
-    limit: String(limit),
-    date,
-    camera_id: cameraId,
-  })
-  const res = await fetch(`${patrolApiBase(backendUrl)}/events?${params.toString()}`, {
-    headers: TUNNEL_HEADERS,
-    mode: 'cors',
-  })
-  if (!res.ok) return []
-  const rows = await res.json() as BackendViolationEvent[]
-  return rows.filter(isPatrolModuleBackendEvent)
-}
-
-function emptyCameraMetrics(cameraId: string, eventsToday = 0): PatrolHelmetCameraMetricsSlice {
-  return {
-    camera_id: cameraId,
-    stream_online: false,
-    person_count: 0,
-    identified_workers: 0,
-    person_events_today: eventsToday,
-    gps_lat: null,
-    gps_lng: null,
-  }
-}
-
-/** Metrics khi chưa có /patrol — chỉ biết alerts từ /events; person_count do bridge mobile. */
-async function fetchLegacyAggregateMetrics(
-  cameraIds: readonly string[],
-  backendUrl: string,
-): Promise<PatrolHelmetAggregateMetricsResponse> {
-  const ids = cameraIds.filter(isPatrolMetricsCameraId)
-  const cameras: PatrolHelmetCameraMetricsSlice[] = []
-  let totalEvents = 0
-
-  for (const id of ids) {
-    const events = isPatrolHelmetCameraId(id)
-      ? await fetchLegacyHelmetEvents(id, backendUrl, 500)
-      : []
-    totalEvents += events.length
-    cameras.push(emptyCameraMetrics(id, events.length))
-  }
-
-  return {
-    cameras,
-    backend_reachable: true,
-    stream_online: false,
-    person_count: 0,
-    identified_workers: 0,
-    worker_names: [],
-    person_events_today: totalEvents,
-  }
-}
-
 export async function fetchPatrolHelmetAggregateMetrics(
   cameraIds: readonly string[],
   backendUrl = getVmsBackendUrl(),
@@ -316,7 +274,7 @@ export async function fetchPatrolHelmetAggregateMetrics(
     ? await fetchPatrolMetricsWithAuth(ids, backendUrl, true)
     : null
 
-  const base = metrics ?? await fetchLegacyAggregateMetrics(ids, backendUrl)
+  const base = metrics ?? emptyAggregateFromHealth(ids, healthMap)
   return applyHealthStreamOnline(base, healthMap, ids)
 }
 

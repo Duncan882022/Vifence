@@ -216,7 +216,7 @@ heatPoints = []
 | Nguồn | Hook / service | Endpoint |
 |-------|----------------|----------|
 | Day bundle | `usePatrolDayBundle` → `patrolDayEvents.service` | `GET /patrol/day/bundle?date=` |
-| Live metrics + workforce | `usePatrolLivePoll` (~2.5s) | `GET /patrol/metrics` + `/health` (1 lần) + `/patrol/workforce/state` song song |
+| Live metrics + workforce | `usePatrolLivePoll` (~2.5s) | `GET /patrol/live/bundle` (ưu tiên) hoặc `/patrol/metrics` + `/workforce/state` fallback |
 | Mobile HC-02 bridge | `patrolMobileMetricsBridge` | Snapshot stream/person từ `MobileCameraFeed` |
 
 **Không còn** `usePatrolHelmetLiveEvents`, `mergePatrolAndWorkforceEvents`, hay poll `/patrol/events` live.

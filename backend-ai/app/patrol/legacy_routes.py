@@ -13,9 +13,11 @@ from ..patrol_runtime import (
     build_patrol_aggregate_events_payload,
     build_patrol_aggregate_metrics_payload,
     build_patrol_events_payload,
+    build_patrol_live_bundle_payload,
     build_patrol_metrics_payload,
     assign_patrol_identity,
     list_patrol_appearances_payload,
+    merge_workforce_snapshots,
 )
 from ..workforce_engine import workforce_engine
 
@@ -44,6 +46,20 @@ def patrol_aggregate_metrics(
     )
 
 
+@router.get("/live/bundle")
+def patrol_live_bundle(
+    cameras: str = "HC-01,HC-02",
+    _user: RequirePatrolRead = None,  # noqa: ARG001
+):
+    """Metrics + workforce — một round-trip cho Module 05 live poll."""
+    camera_ids = [cam.strip() for cam in cameras.split(",") if cam.strip()]
+    return build_patrol_live_bundle_payload(
+        camera_ids,
+        store=_store,
+        vms_workers=_vms_workers,
+    )
+
+
 @router.get("/events")
 def patrol_aggregate_events(
     cameras: str = "HC-01,HC-02",
@@ -66,34 +82,7 @@ def patrol_workforce_state(
     _user: RequirePatrolRead = None,  # noqa: ARG001
 ):
     camera_ids = [c.strip() for c in cameras.split(",") if c.strip()]
-    if len(camera_ids) == 1:
-        return workforce_engine.snapshot(camera_ids[0])
-    merged: dict = {
-        "helmets": {},
-        "objects": {},
-        "zonePopulation": {},
-        "heatPoints": [],
-        "events": [],
-        "server_time": None,
-    }
-    for cam in camera_ids:
-        snap = workforce_engine.snapshot(cam)
-        merged["helmets"].update(snap.get("helmets") or {})
-        merged["objects"].update(snap.get("objects") or {})
-        merged["zonePopulation"].update(snap.get("zonePopulation") or {})
-        merged["heatPoints"].extend(snap.get("heatPoints") or [])
-        merged["events"].extend(snap.get("events") or [])
-        merged["server_time"] = snap.get("server_time")
-    seen = set()
-    uniq = []
-    for ev in sorted(merged["events"], key=lambda e: e.get("timestamp") or "", reverse=True):
-        eid = ev.get("event_id")
-        if eid in seen:
-            continue
-        seen.add(eid)
-        uniq.append(ev)
-    merged["events"] = uniq[:80]
-    return merged
+    return merge_workforce_snapshots(camera_ids)
 
 
 @router.get("/workforce/events")

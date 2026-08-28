@@ -607,3 +607,92 @@ def _collect_patrol_identity_alias_keys(object_key: str, alias_keys: list[str]) 
         for alias in list_track_aliases_for_worker(key):
             expanded.add(normalize_alias_key(alias))
     return sorted(expanded)
+
+
+def merge_workforce_snapshots(camera_ids: list[str]) -> dict[str, Any]:
+    """Gộp snapshot workforce nhiều camera — cùng logic /patrol/workforce/state."""
+    from .workforce_engine import workforce_engine
+
+    ids = [c.strip() for c in camera_ids if c and str(c).strip()]
+    if not ids:
+        return {
+            "helmets": {},
+            "objects": {},
+            "zonePopulation": {},
+            "heatPoints": [],
+            "events": [],
+            "server_time": None,
+        }
+    if len(ids) == 1:
+        return workforce_engine.snapshot(ids[0])
+
+    merged: dict[str, Any] = {
+        "helmets": {},
+        "objects": {},
+        "zonePopulation": {},
+        "heatPoints": [],
+        "events": [],
+        "server_time": None,
+    }
+    for cam in ids:
+        snap = workforce_engine.snapshot(cam)
+        merged["helmets"].update(snap.get("helmets") or {})
+        merged["objects"].update(snap.get("objects") or {})
+        merged["zonePopulation"].update(snap.get("zonePopulation") or {})
+        merged["heatPoints"].extend(snap.get("heatPoints") or [])
+        merged["events"].extend(snap.get("events") or [])
+        merged["server_time"] = snap.get("server_time")
+    seen: set[str] = set()
+    uniq: list[dict[str, Any]] = []
+    for ev in sorted(
+        merged["events"],
+        key=lambda e: e.get("timestamp") or "",
+        reverse=True,
+    ):
+        eid = ev.get("event_id")
+        if eid in seen:
+            continue
+        seen.add(str(eid))
+        uniq.append(ev)
+    merged["events"] = uniq[:80]
+    return merged
+
+
+def apply_vms_stream_online(
+    metrics: dict[str, Any],
+    vms_workers: dict,
+) -> dict[str, Any]:
+    """Đồng bộ stream_online từ VMS worker — khớp GET /health."""
+    cameras = metrics.get("cameras") or []
+    any_online = False
+    for row in cameras:
+        cam_id = row.get("camera_id")
+        worker = vms_workers.get(cam_id)
+        if worker is not None and worker.is_stream_live():
+            row["stream_online"] = True
+        if row.get("stream_online"):
+            any_online = True
+    metrics["stream_online"] = any_online or bool(metrics.get("stream_online"))
+    return metrics
+
+
+def build_patrol_live_bundle_payload(
+    camera_ids: list[str],
+    *,
+    store,
+    vms_workers: dict,
+) -> dict[str, Any]:
+    """Metrics + workforce + stream_online trong một response."""
+    metrics = build_patrol_aggregate_metrics_payload(
+        camera_ids,
+        store=store,
+        vms_workers=vms_workers,
+    )
+    metrics = apply_vms_stream_online(metrics, vms_workers)
+    workforce = merge_workforce_snapshots(camera_ids)
+    return {
+        "ok": True,
+        "metrics": metrics,
+        "workforce": workforce,
+        "server_time": workforce.get("server_time"),
+    }

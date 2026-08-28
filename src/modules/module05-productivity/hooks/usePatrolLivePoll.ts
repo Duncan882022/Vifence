@@ -5,6 +5,7 @@ import { subscribePatrolMobileLiveSnapshot } from '@/services/patrolMobileMetric
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
 import { isPatrolMetricsCameraId } from '../data/patrolHelmetScope'
 import { fetchPatrolHelmetAggregateMetrics } from '../services/patrolLiveEvents.service'
+import { fetchPatrolLiveBundle } from '../services/patrolLiveBundle.service'
 import {
   EMPTY_WORKFORCE_SNAPSHOT,
   fetchWorkforceSnapshot,
@@ -23,6 +24,22 @@ export const PATROL_LIVE_POLL_MS = 2500
 export interface PatrolLivePollState {
   liveMetrics: PatrolHelmetLiveMetrics
   workforceSnap: WorkforceSnapshot
+}
+
+function metricsFromSnapshot(
+  snapshot: NonNullable<Awaited<ReturnType<typeof fetchPatrolHelmetAggregateMetrics>>>,
+): PatrolHelmetLiveMetrics {
+  const streamOnline = Boolean(snapshot.stream_online)
+  const perCamera = (snapshot.cameras ?? []).map(row => ({
+    ...row,
+    stream_online: Boolean(row.stream_online),
+    person_count: Math.max(0, Number(row.person_count ?? 0)),
+  }))
+  return {
+    backendReachable: Boolean(snapshot.backend_reachable) || streamOnline,
+    streamOnline,
+    perCamera,
+  }
 }
 
 /** Poll gom metrics mũ/flycam + workforce state trên cùng scheduler. */
@@ -50,7 +67,9 @@ export function usePatrolLivePoll(
   useEffect(() => {
     const backendUrl = getMobileAiBackendUrl() || getVmsBackendUrl()
     const ids = metricsCameraIds.filter(isPatrolMetricsCameraId)
-    if (!backendUrl || ids.length === 0) return
+    const workforceIds = [...new Set(workforceCameras.map(c => c.trim()).filter(Boolean))]
+    const bundleIds = [...new Set([...ids, ...workforceIds])]
+    if (!backendUrl || bundleIds.length === 0) return
 
     let stopped = false
     let timerId = 0
@@ -64,9 +83,19 @@ export function usePatrolLivePoll(
     const tick = async () => {
       if (stopped) return
       try {
+        const bundle = await fetchPatrolLiveBundle(bundleIds)
+        if (stopped) return
+
+        if (bundle) {
+          setWorkforceSnap(bundle.workforce)
+          applyMetrics(metricsFromSnapshot(bundle.metrics))
+          timerId = window.setTimeout(tick, pollMs)
+          return
+        }
+
         const [snapshot, workforce] = await Promise.all([
           fetchPatrolHelmetAggregateMetrics(ids, backendUrl),
-          fetchWorkforceSnapshot(workforceCameras, backendUrl),
+          fetchWorkforceSnapshot(workforceIds, backendUrl),
         ])
         if (stopped) return
 
@@ -78,18 +107,7 @@ export function usePatrolLivePoll(
           return
         }
 
-        const streamOnline = Boolean(snapshot.stream_online)
-        const perCamera = (snapshot.cameras ?? []).map(row => ({
-          ...row,
-          stream_online: Boolean(row.stream_online),
-          person_count: Math.max(0, Number(row.person_count ?? 0)),
-        }))
-
-        applyMetrics({
-          backendReachable: Boolean(snapshot.backend_reachable) || streamOnline,
-          streamOnline,
-          perCamera,
-        })
+        applyMetrics(metricsFromSnapshot(snapshot))
         timerId = window.setTimeout(tick, pollMs)
       } catch {
         if (stopped) return

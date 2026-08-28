@@ -20,8 +20,10 @@ import {
   buildPatrolSubjectCameraLookup,
   resolvePatrolSubjectCameraRef,
 } from '../utils/patrolEventsUi'
+import { getPatrolDefaultPlaybackDate } from '../services/patrolPlayback.service'
 
-const POLL_MS = 3000
+const POLL_MS_LIVE = 3000
+const POLL_MS_HISTORICAL = 8000
 
 const STAGE_RANK: Record<PatrolPersonStage, number> = {
   object: 1,
@@ -166,12 +168,15 @@ export function usePatrolDayBundle(date?: string): PatrolDayBundleState {
     mounted.current = true
     setLoading(true)
     void refresh()
-    const id = window.setInterval(() => { void refresh() }, POLL_MS)
+    const pollMs = date && date !== getPatrolDefaultPlaybackDate()
+      ? POLL_MS_HISTORICAL
+      : POLL_MS_LIVE
+    const id = window.setInterval(() => { void refresh() }, pollMs)
     return () => {
       mounted.current = false
       window.clearInterval(id)
     }
-  }, [refresh])
+  }, [refresh, date])
 
   const events = useMemo(
     () => (bundle ? bundleToEvents(bundle) : []),
