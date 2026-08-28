@@ -89,18 +89,20 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].position[0]).toBeGreaterThan(startLat + 0.0001)
   })
 
-  it('hai presence cùng người khác lượt → hai chấm', () => {
+  it('hai lượt L# cùng subjectId → một chấm tại lượt mới nhất', () => {
+    const newerLat = PATROL_SITE_CENTER[0] + 0.0002
     const dots = buildPatrolPresenceHeatmapDots([
-      makePresence({ id: 1, presenceSeq: 1, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1] }),
+      makePresence({ id: 1, presenceSeq: 1, endedAt: 1_700_000_010, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1] }),
       makePresence({
         id: 2,
         presenceSeq: 2,
-        gpsLat: PATROL_SITE_CENTER[0] + 0.0002,
+        endedAt: 1_700_000_040,
+        gpsLat: newerLat,
         gpsLng: PATROL_SITE_CENTER[1] + 0.0002,
       }),
     ])
-    expect(dots).toHaveLength(2)
-    expect(dots[0].id).not.toBe(dots[1].id)
+    expect(dots).toHaveLength(1)
+    expect(dots[0].position[0]).toBeCloseTo(newerLat, 4)
   })
 
   it('obj tier khi includeUnassigned', () => {

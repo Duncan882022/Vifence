@@ -14,6 +14,8 @@ import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { resolvePatrolDetectionMapPosition } from './patrolDetectionMapOffset'
 import { isPatrolHeatmapEligibleEvent } from './patrolPatrolCounts'
 import {
+  resolveHeatmapEntityMasterId,
+  resolvePatrolCanonicalEntityKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
 import {
@@ -150,7 +152,7 @@ export function buildPatrolPresenceHeatmapDots(
     scoped = scoped.filter(p => tierEligibleStandard(p.tier))
   }
 
-  return scoped.map(presence => {
+  const built = scoped.map(presence => {
     const lastSeen = presence.endedAt * 1000
     const recent = now - lastSeen <= PATROL_LIVE_RECENT_MS
     const primaryCam = presence.cameraId || presence.sourceCameras[0] || ''
@@ -169,12 +171,12 @@ export function buildPatrolPresenceHeatmapDots(
 
     return {
       id: `presence-${presence.id}`,
-      type: 'person',
-      position: [lat, lng],
+      type: 'person' as const,
+      position: [lat, lng] as [number, number],
       zoneId: presence.zoneId || 'ZONE_SITE',
       cameraId: primaryCam,
       confidence: 1,
-      label: `${presence.displayName} · L#${presence.presenceSeq}`,
+      label: presence.displayName?.trim() || presence.subjectId,
       lastSeenAt: lastSeen,
       objectId: presence.subjectId,
       tier,
@@ -187,6 +189,9 @@ export function buildPatrolPresenceHeatmapDots(
       presenceSeq: presence.presenceSeq,
     }
   })
+
+  /* Một định danh / master ID → một chấm — lượt xuất hiện lại chỉ cập nhật vị trí. */
+  return mergePatrolHeatmapDetectionDots([built])
 }
 
 export interface PatrolHeatmapDeviceLayers {
@@ -195,8 +200,15 @@ export interface PatrolHeatmapDeviceLayers {
 }
 
 function resolveHeatmapDotMergeKey(dot: DetectionDot): string {
+  const canonical = resolvePatrolCanonicalEntityKey({
+    objectId: dot.objectId ?? null,
+    objectLabel: dot.label ?? null,
+  })
+  if (canonical && canonical !== 'UNKNOWN') {
+    return canonical.toLowerCase()
+  }
   const oid = dot.objectId?.trim()
-  if (oid) return oid.toLowerCase()
+  if (oid) return resolveHeatmapEntityMasterId(oid).toLowerCase()
   return dot.id.toLowerCase()
 }
 
@@ -282,7 +294,10 @@ export function buildPatrolDayHeatmapDots(
       : stage === 'person'
         ? 'person'
         : 'object'
-    const master = subjectId.toLowerCase()
+    const master = resolvePatrolCanonicalEntityKey({
+      objectId: subjectId,
+      objectLabel: event.objectLabel,
+    }).toLowerCase()
     const prev = byMaster.get(master)
     if (prev && (prev.lastSeenAt ?? 0) >= lastSeen) continue
 

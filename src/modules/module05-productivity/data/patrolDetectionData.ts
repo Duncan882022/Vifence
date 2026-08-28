@@ -145,4 +145,4 @@ export const DETECTION_DOT_STYLE: Record<DetectionType, { color: string; radius:
 /** Dot trong FOV camera — nhấp nháy; ngoài FOV — mờ. */
 export const DETECTION_DOT_IN_VIEW_MS = 8000
 export const DETECTION_DOT_OPACITY_IN_VIEW = 0.92
-export const DETECTION_DOT_OPACITY_OUT_OF_VIEW = 0.28
+export const DETECTION_DOT_OPACITY_OUT_OF_VIEW = 0.42

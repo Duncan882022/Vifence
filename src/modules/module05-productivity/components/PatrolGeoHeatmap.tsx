@@ -199,16 +199,17 @@ function createDetectionDotIcon(
   const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
   const isObject = tier === 'object'
   const border = isObject
-    ? `1.5px dashed ${color}`
-    : `1px solid rgba(255,255,255,${inCameraView ? 0.85 : 0.35})`
-  const fill = isObject ? 'transparent' : color
+    ? `1px solid rgba(15,23,42,${inCameraView ? 0.55 : 0.35})`
+    : `1px solid rgba(255,255,255,${inCameraView ? 0.75 : 0.3})`
+  const colorBoost = inCameraView ? 'filter:saturate(1.35);' : 'filter:saturate(1.25);'
   const html = `
     <div style="
       width:${size}px;height:${size}px;border-radius:50%;
-      background:${fill};
+      background:${color};
       border:${border};
-      box-shadow:0 0 ${inCameraView ? 3 : 1}px ${color}${inCameraView ? 'cc' : '44'};
+      box-shadow:0 0 ${inCameraView ? 2 : 1}px ${color}${inCameraView ? 'dd' : '88'};
       opacity:${opacity};
+      ${colorBoost}
       ${anim}
     "></div>`
   return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
@@ -646,7 +647,7 @@ export function PatrolGeoHeatmap({
       <style>{`
         @keyframes patrol-dot-blink {
           0%,100%{opacity:0.95;transform:scale(1)}
-          50%{opacity:0.35;transform:scale(1.35)}
+          50%{opacity:0.45;transform:scale(1.08)}
         }
         @keyframes patrol-pulse {
           0%,100%{opacity:1;transform:scale(1)}
