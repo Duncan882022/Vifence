@@ -230,14 +230,6 @@ export function syncHeatmapFramePresence(
   }
 }
 
-/** @deprecated Dùng syncHeatmapFramePresence — không xóa dot inactive. */
-export function pruneHeatmapActivePersons(
-  cameraId: string,
-  activePersonIds: string[],
-): void {
-  syncHeatmapFramePresence(cameraId, activePersonIds)
-}
-
 export function rekeyHeatmapPerson(fromId: string, toId: string): void {
   const src = resolveHeatmapDotMasterId(fromId)
   const dst = resolveHeatmapDotMasterId(toId)

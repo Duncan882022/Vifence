@@ -182,10 +182,10 @@ check('PERSON_DETECTED hidden in PatrolEventsPanel source', () => {
   assert.match(src, /Hệ thống/)
 })
 
-check('Module05Page merges workforce events', () => {
+check('Module05Page polls live metrics + workforce together', () => {
   const src = readFileSync(join(root, 'src/modules/module05-productivity/Module05Page.tsx'), 'utf8')
-  assert.match(src, /mergePatrolAndWorkforceEvents/)
-  assert.match(src, /useWorkforceRealtimeState/)
+  assert.match(src, /usePatrolLivePoll/)
+  assert.match(src, /usePatrolDayBundle/)
 })
 
 check('Heatmap has layer toggles + object sheet (live-only)', () => {

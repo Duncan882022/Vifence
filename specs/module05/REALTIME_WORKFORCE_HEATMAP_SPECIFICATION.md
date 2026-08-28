@@ -207,20 +207,21 @@ events = []
 heatPoints = []
 ```
 
-### 8.4. Triển khai FE hiện tại (Module 05 — **live only, không mock feed**)
+### 8.4. Triển khai FE hiện tại (Module 05 — **SQLite day bundle + live poll**)
 
 **Component:** `PatrolEventsPanel` (không dùng shared `EventList`).
 
-**Nguồn dữ liệu (poll ~3s, merge theo `event.id`):**
+**Nguồn dữ liệu sự kiện (poll ~3s, một người một thẻ/ngày từ SQLite):**
 
-| Nguồn | Hook / service | Endpoint / bridge |
-|-------|----------------|-------------------|
-| Backend helmet | `usePatrolHelmetLiveEvents` → `patrolLiveEvents.service` | `GET /patrol/events?cameras=HC-01,HC-02` hoặc legacy `/events?camera_id=` |
-| Mobile HC-02 | `patrolMobileEventsBridge` | `pushPatrolMobilePpeEvents()` từ `MobileCameraFeed` |
-| Workforce engine | `useWorkforceRealtimeState` → `workforceState.service` | `GET /patrol/workforce/state?cameras=HC-01,HC-02` |
-| Merge | `mergePatrolAndWorkforceEvents` | Dedupe + sort `lockedAt` desc |
+| Nguồn | Hook / service | Endpoint |
+|-------|----------------|----------|
+| Day bundle | `usePatrolDayBundle` → `patrolDayEvents.service` | `GET /patrol/day/bundle?date=` |
+| Live metrics + workforce | `usePatrolLivePoll` (~2.5s) | `GET /patrol/metrics` + `/health` (1 lần) + `/patrol/workforce/state` song song |
+| Mobile HC-02 bridge | `patrolMobileMetricsBridge` | Snapshot stream/person từ `MobileCameraFeed` |
 
-**Không có fallback mock** trong tab Sự kiện. Khi chưa có dữ liệu: *「Chưa có sự kiện live — đang chờ backend Contabo」*.
+**Không còn** `usePatrolHelmetLiveEvents`, `mergePatrolAndWorkforceEvents`, hay poll `/patrol/events` live.
+
+**Không có fallback mock** trong tab Sự kiện. Khi chưa có dữ liệu: *「Chưa có sự kiện — đang chờ backend」*.
 
 **Ẩn khỏi feed chính** (`isMeaningfulFeedEvent`):
 - `PERSON_DETECTED` — raw detection, không hiển thị

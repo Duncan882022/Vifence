@@ -240,31 +240,28 @@ export async function identifyPatrolPerson(input: {
   contractor?: string
   imageB64?: string | null
 }): Promise<{ ok: boolean; error?: string; displayName?: string; idenCode?: string }> {
-  const base = backendBase()
-  if (!base) return { ok: false, error: 'Chưa cấu hình URL backend.' }
+  if (!backendBase()) return { ok: false, error: 'Chưa cấu hình URL backend.' }
 
   try {
-    const res = await fetch(
-      `${base}/patrol/persons/${encodeURIComponent(input.persId)}/identify`,
+    const data = await fetchPatrol<{
+      ok: boolean
+      error?: string
+      person?: { display_name?: string; iden_code?: string }
+    }>(
+      `/patrol/persons/${encodeURIComponent(input.persId)}/identify`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        mode: 'cors',
         body: JSON.stringify({
           full_name: input.fullName,
           employee_code: input.employeeCode,
           contractor: input.contractor ?? '',
           image_b64: input.imageB64 ?? undefined,
         }),
-        signal: AbortSignal.timeout(20_000),
       },
+      20_000,
     )
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
-    const data = await res.json() as {
-      ok: boolean
-      error?: string
-      person?: { display_name?: string; iden_code?: string }
-    }
+    if (!data) return { ok: false, error: 'Không kết nối được backend.' }
     if (!data.ok) return { ok: false, error: data.error ?? 'Không rõ nguyên nhân.' }
     return {
       ok: true,

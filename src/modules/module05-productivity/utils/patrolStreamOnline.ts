@@ -13,7 +13,7 @@ export interface PatrolCameraOnlineState {
 
 /**
  * Nguồn sự thật online/offline stream tuần tra (tile + heatmap).
- * HC-02 mobile đã merge vào `perCamera` qua usePatrolHelmetLiveMetrics.
+ * HC-02 mobile đã merge vào `perCamera` qua usePatrolLivePoll.
  */
 export function resolvePatrolCameraOnlineState(
   cameraId: string,

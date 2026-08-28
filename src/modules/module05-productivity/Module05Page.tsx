@@ -48,11 +48,11 @@ import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionG
 import { hasLegacyMobileHelmet, isHelmetWebrtcAvailable, legacyMobileHelmetIds } from './data/helmetIngest'
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
-import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
+import type { PatrolHelmetLiveMetrics } from './hooks/patrolHelmetLiveMetricsState'
+import { usePatrolLivePoll } from './hooks/usePatrolLivePoll'
 import { usePatrolFlycamFlightModes } from './hooks/usePatrolFlycamFlightModes'
 import { filterPatrolEventsByFlycamAltitude } from './utils/patrolFlycamEventFilter'
 import { patrolFlightModeLabel } from './utils/patrolFlightMode'
-import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import { ensurePatrolAuth } from '@/services/patrolApiClient'
@@ -236,8 +236,10 @@ export function Module05Page() {
     () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
     [],
   )
-  const liveMetrics = usePatrolHelmetLiveMetrics(patrolStreamMetricsIds)
-  const workforceSnap = useWorkforceRealtimeState([...DEFAULT_PATROL_CAMERA_IDS])
+  const { liveMetrics, workforceSnap } = usePatrolLivePoll(
+    patrolStreamMetricsIds,
+    [...DEFAULT_PATROL_CAMERA_IDS],
+  )
 
   const [framesLiveTick, setFramesLiveTick] = useState(0)
 

@@ -41,9 +41,11 @@ describe('fetchPatrolHelmetAggregateMetrics health merge', () => {
   })
 
   it('DR-03 online qua /health; metrics cần JWT (401 không token → legacy + health)', async () => {
+    let healthCallCount = 0
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/health')) {
+        healthCallCount += 1
         return {
           ok: true,
           json: async () => ({
@@ -59,6 +61,7 @@ describe('fetchPatrolHelmetAggregateMetrics health merge', () => {
     })
 
     const snapshot = await fetchPatrolHelmetAggregateMetrics(['DR-03'], 'https://example.test')
+    expect(healthCallCount).toBe(1)
     expect(snapshot).not.toBeNull()
     expect(snapshot?.cameras).toHaveLength(1)
     expect(snapshot?.cameras[0]?.camera_id).toBe('DR-03')
