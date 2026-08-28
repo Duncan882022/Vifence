@@ -12,6 +12,11 @@ export interface PatrolCameraPanelProps {
   filterTabs: string[]
   filterFn: (tab: string) => TrainingCamera[]
   groupFn: (cameras: TrainingCamera[]) => { key: string; cameras: TrainingCamera[] }[]
+  /** Phone / tablet dọc — layout stacked. */
+  isCompactLayout?: boolean
+  /** iPad ngang — width ≥1024 nhưng viewport thấp. */
+  isTabletLandscape?: boolean
+  /** @deprecated dùng isCompactLayout */
   isMobileLayout?: boolean
 }
 
@@ -27,8 +32,12 @@ export function PatrolCameraPanel({
   filterTabs,
   filterFn,
   groupFn,
+  isCompactLayout: isCompactLayoutProp,
+  isTabletLandscape = false,
   isMobileLayout = false,
 }: PatrolCameraPanelProps) {
+  const isCompactLayout = isCompactLayoutProp ?? isMobileLayout
+
   useEffect(() => {
     preloadFaceDetection()
   }, [])
@@ -42,10 +51,15 @@ export function PatrolCameraPanel({
       defaultCameraIds={defaultCameraIds}
       defaultSidebarOpen={false}
       aspectVideoGrid
-      mobileCompactVideo={isMobileLayout}
-      mobileStackedNoScroll={isMobileLayout}
+      mobileCompactVideo={isCompactLayout}
+      mobileStackedNoScroll={isCompactLayout && !isTabletLandscape}
+      preferCompactVideo={isTabletLandscape}
       streamWhenOffline
-      compactVideoMaxClass="max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]"
+      compactVideoMaxClass={
+        isTabletLandscape
+          ? 'max-h-[min(36dvh,320px)]'
+          : 'max-h-[min(41dvh,360px)] sm:max-h-[min(45dvh,396px)] max-lg:landscape:max-h-[min(32dvh,288px)]'
+      }
       filterTabs={filterTabs}
       filterFn={filterFn}
       groupFn={groupFn}

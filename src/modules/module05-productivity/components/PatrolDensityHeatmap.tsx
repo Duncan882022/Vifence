@@ -327,8 +327,23 @@ export function PatrolDensityHeatmap({
 
   const mapBody = (
     <>
-      <div className="shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3 py-1.5 space-y-1">
-        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-[10px] min-w-0">
+      <div className={cn(
+        'shrink-0 border-b border-[#1e2433] bg-[#0d1117] px-2 sm:px-3',
+        viewport.compactChrome ? 'py-1' : 'py-1.5 space-y-1',
+      )}>
+        <div className={cn(
+          'flex items-center gap-x-2 gap-y-1 text-[10px] min-w-0',
+          viewport.isTabletLandscape
+            ? 'justify-between overflow-x-auto scrollbar-none flex-nowrap'
+            : viewport.compactChrome
+              ? 'overflow-x-auto scrollbar-none flex-nowrap'
+              : 'flex-wrap',
+        )}>
+          <div className={cn(
+            'flex items-center gap-x-2 gap-y-1 min-w-0',
+            viewport.compactChrome && 'shrink-0 flex-nowrap',
+            !viewport.isTabletLandscape && viewport.compactChrome && 'flex-wrap',
+          )}>
           {DEFAULT_PATROL_CAMERA_IDS.map(id => {
             const online = bodycamOnlineById[id as keyof typeof bodycamOnlineById]
             const label = PATROL_BODYCAM_LABELS[id] ?? id
@@ -377,13 +392,24 @@ export function PatrolDensityHeatmap({
           <span className="text-amber-300/85 tabular-nums shrink-0 hidden md:inline">{unassignedCount} có thể người</span>
           <span className="text-[#334155]">·</span>
           <span className="text-emerald-300/90 tabular-nums shrink-0">{encounterCount} lượt</span>
+          </div>
+
+          {viewport.isTabletLandscape && (
+            <div className="flex items-center gap-1 shrink-0">
+              <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+              <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
+              <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-1 flex-wrap">
-          <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
-          <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
-        </div>
+        {!viewport.isTabletLandscape && (
+          <div className="flex items-center gap-1 flex-wrap">
+            <LayerToggle compact={viewport.compactChrome} active={layers.polygon} color="#6366f1" onClick={() => toggleLayer('polygon')}>Khu vực</LayerToggle>
+            <LayerToggle compact={viewport.compactChrome} active={layers.helmet} color="#ef4444" onClick={() => toggleLayer('helmet')}>Mũ</LayerToggle>
+            <LayerToggle compact={viewport.compactChrome} active={layers.flycam} color="#38bdf8" onClick={() => toggleLayer('flycam')}>Flycam</LayerToggle>
+          </div>
+        )}
       </div>
 
       <div className={cn('min-w-0 relative', viewport.embeddedMapClass)}>
