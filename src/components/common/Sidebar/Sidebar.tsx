@@ -81,6 +81,7 @@ export function Sidebar() {
     '/equipment-group': isEquipmentActive,
     '/module05': isModule05Active,
   })
+  const [collapsedFlyout, setCollapsedFlyout] = useState<string | null>(null)
 
   useEffect(() => {
     closeMobileNav()
@@ -90,6 +91,10 @@ export function Sidebar() {
     if (isEquipmentActive) setOpenGroups(g => ({ ...g, '/equipment-group': true }))
     if (isModule05Active) setOpenGroups(g => ({ ...g, '/module05': true }))
   }, [isEquipmentActive, isModule05Active])
+
+  useEffect(() => {
+    setCollapsedFlyout(null)
+  }, [location.pathname, sidebarCollapsed])
 
   return (
     <>
@@ -135,14 +140,15 @@ export function Sidebar() {
                 const primaryPath = defaultNavChildPath(item)
 
                 if (!showLabels) {
+                  const flyoutOpen = collapsedFlyout === item.path
                   return (
-                    <li key={item.path}>
-                      <NavLink
-                        to={primaryPath}
+                    <li key={item.path} className="relative">
+                      <button
+                        type="button"
                         title={item.label}
-                        onClick={closeMobileNav}
+                        onClick={() => setCollapsedFlyout(prev => (prev === item.path ? null : item.path))}
                         className={cn(
-                          'flex items-center justify-center px-2.5 py-2.5 rounded-md transition-colors group',
+                          'w-full flex items-center justify-center px-2.5 py-2.5 rounded-md transition-colors group',
                           isGroupActive
                             ? 'bg-primary text-primary-foreground'
                             : 'text-[#8b9cb8] hover:bg-[#1a2235] hover:text-foreground',
@@ -152,7 +158,34 @@ export function Sidebar() {
                           'w-4 h-4 shrink-0',
                           isGroupActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
                         )} />
-                      </NavLink>
+                      </button>
+                      {flyoutOpen && (
+                        <div className="absolute left-full top-0 ml-1 z-[60] min-w-[168px] rounded-md border border-[#1e2433] bg-[#0d1117] py-1 shadow-xl">
+                          {item.children.map(child => {
+                            const ChildIcon = child.icon
+                            const isChildActive = isNavChildActive(location.pathname, child.path)
+                            return (
+                              <NavLink
+                                key={child.path}
+                                to={child.path}
+                                onClick={() => {
+                                  setCollapsedFlyout(null)
+                                  closeMobileNav()
+                                }}
+                                className={cn(
+                                  'flex items-center gap-2 px-3 py-2 text-xs transition-colors',
+                                  isChildActive
+                                    ? 'bg-primary/15 text-primary'
+                                    : 'text-[#8b9cb8] hover:bg-[#1a2235] hover:text-foreground',
+                                )}
+                              >
+                                <ChildIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                                <span className="font-medium">{child.label}</span>
+                              </NavLink>
+                            )
+                          })}
+                        </div>
+                      )}
                     </li>
                   )
                 }

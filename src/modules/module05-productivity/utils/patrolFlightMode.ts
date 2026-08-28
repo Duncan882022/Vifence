@@ -26,3 +26,26 @@ export function patrolFlightModeLabel(mode: PatrolFlightMode | string | null | u
   if (mode === 'proximity') return 'Tầm thấp · AI'
   return 'Tầm cao · Mật độ'
 }
+
+/** Sự kiện flycam khớp gate heatmap theo độ cao hiện tại. */
+export function patrolEventMatchesFlycamAltitude(
+  event: { cameraId: string; type: string; stage?: 'object' | 'person' | 'profile'; objectId?: string; trackWorkerId?: string },
+  flightMode: PatrolFlightMode | string | null | undefined,
+  resolveStage?: (event: { stage?: 'object' | 'person' | 'profile'; type: string; objectId?: string; trackWorkerId?: string }) => 'object' | 'person' | 'profile',
+): boolean {
+  if (!event.cameraId.startsWith('DR-')) return true
+
+  const stage = event.stage ?? resolveStage?.(event) ?? 'object'
+  const isProximity = flightMode === 'proximity'
+
+  if (isProximity) {
+    return stage === 'person' || stage === 'profile' || event.type === 'IDENTITY_VERIFIED'
+  }
+
+  return (
+    stage === 'object'
+    || event.type === 'POPULATION_OBSERVED'
+    || event.type === 'POPULATION_CHANGE'
+    || event.type === 'HIGH_DENSITY'
+  )
+}

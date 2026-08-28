@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Users, MapPin, Footprints, ScanFace, Maximize2, Minimize2,
 } from 'lucide-react'
@@ -57,6 +58,9 @@ import { hasLegacyMobileHelmet, legacyMobileHelmetIds } from './data/helmetInges
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
+import { usePatrolFlycamFlightModes } from './hooks/usePatrolFlycamFlightModes'
+import { filterPatrolEventsByFlycamAltitude } from './utils/patrolFlycamEventFilter'
+import { patrolFlightModeLabel } from './utils/patrolFlightMode'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
@@ -239,8 +243,13 @@ export function Module05Page() {
   // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
   // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
   const dayBundle = usePatrolDayBundle()
-  const patrolEventsLive = dayBundle.events
+  const flycamFlightModes = usePatrolFlycamFlightModes(PATROL_DRONE_IDS)
+  const patrolEventsLive = useMemo(
+    () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),
+    [dayBundle.events, flycamFlightModes],
+  )
   const dayStats = { stats: dayBundle.stats, loading: dayBundle.loading, reachable: dayBundle.reachable }
+  const dr03FlightLabel = patrolFlightModeLabel(flycamFlightModes['DR-03'] ?? 'aerial')
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,
@@ -263,6 +272,16 @@ export function Module05Page() {
       <Header
         title="Hiệu Quả Công Việc"
         subtitle="Giám sát tuần tra helmet camera & mật độ lao động"
+        headerRight={
+          <Link
+            to="/module05/quet-mat"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#334155] text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-[#1a2235] transition-colors"
+            title="Quét mặt đăng ký công nhân"
+          >
+            <ScanFace className="w-3.5 h-3.5" aria-hidden />
+            Quét mặt
+          </Link>
+        }
       />
       <PageLayout scrollable>
         {/* Tier 1 — KPIs */}
@@ -297,7 +316,7 @@ export function Module05Page() {
           {/* Tier 2 — Camera */}
           <div className={cn(
             'flex flex-col shrink-0',
-            tier2Open && (isCompactLayout ? 'min-h-0' : 'min-h-[min(52vh,560px)]'),
+            tier2Open && !isCompactLayout && 'min-h-0',
           )}>
             <Panel
               title="Camera"
@@ -306,7 +325,7 @@ export function Module05Page() {
               noPadding
               overflowVisible={tier2Open && isCompactLayout}
               className={cn(
-                tier2Open && (isCompactLayout ? 'h-auto overflow-visible' : 'min-h-[min(52vh,560px)]'),
+                tier2Open && (isCompactLayout ? 'h-auto overflow-visible' : 'min-h-0 overflow-hidden'),
               )}
               headerRight={
                 <div className="flex items-center gap-2 min-w-0">
@@ -413,17 +432,23 @@ export function Module05Page() {
                 tier3Focus === 'events' && 'lg:flex-[3]',
               )}
               headerRight={
-                <button
-                  onClick={() => setTier3Focus(f => f === 'events' ? 'none' : 'events')}
-                  className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                  title={tier3Focus === 'events' ? 'Thu nhỏ' : 'Phóng to'}
-                  aria-label={tier3Focus === 'events' ? 'Thu nhỏ sự kiện' : 'Phóng to sự kiện'}
-                >
-                  {tier3Focus === 'events'
-                    ? <Minimize2 className="w-3.5 h-3.5" />
-                    : <Maximize2 className="w-3.5 h-3.5" />
-                  }
-                </button>
+                <div className="flex items-center gap-2">
+                  {PATROL_DRONE_IDS.length > 0 && (
+                    <span className="hidden sm:inline text-[9px] text-muted-foreground/80 tabular-nums">
+                      {dr03FlightLabel}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setTier3Focus(f => f === 'events' ? 'none' : 'events')}
+                    className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+                    title={tier3Focus === 'events' ? 'Thu nhỏ' : 'Phóng to'}
+                    aria-label={tier3Focus === 'events' ? 'Thu nhỏ sự kiện' : 'Phóng to sự kiện'}
+                  >
+                    {tier3Focus === 'events'
+                      ? <Minimize2 className="w-3.5 h-3.5" />
+                      : <Maximize2 className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               }
             >
               <PatrolEventsPanel

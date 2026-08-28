@@ -50,7 +50,10 @@ export function PatrolCameraPanel({
       onStreamCountChange={onStreamCountChange}
       cameras={cameras}
       defaultCameraIds={defaultCameraIds}
-      defaultSidebarOpen
+      defaultSidebarOpen={false}
+      desktopMaxVisibleRows={2}
+      sidebarOpenClass="lg:w-[128px]"
+      sidebarCompactClass="max-lg:landscape:w-[108px]"
       aspectVideoGrid
       mobileCompactVideo={isCompactLayout}
       mobileStackedNoScroll={isCompactLayout && !isTabletLandscape}
