@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Users, MapPin, Footprints, ScanFace, Maximize2, Minimize2,
+  Users, MapPin, Footprints, ScanFace,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -230,9 +230,6 @@ export function Module05Page() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [detailEventId, setDetailEventId] = useState<string | null>(null)
   const [activeStreamCount, setActiveStreamCount] = useState(2)
-  const [tier3Focus, setTier3Focus] = useState<'none' | 'events'>('none')
-  const [heatmapExpanded, setHeatmapExpanded] = useState(false)
-
   const playbackDate = getPatrolDefaultPlaybackDate()
   const { cameras: visionCameras } = useCameras()
   // Luồng thống nhất: mọi thiết bị đều xem đủ hai mũ và flycam. Chỉ khi còn mũ
@@ -395,7 +392,7 @@ export function Module05Page() {
               {tier2Open && (
                 <div className={cn(
                   'flex flex-col w-full',
-                  isCompactLayout ? 'h-auto overflow-visible' : 'flex-1 min-h-0 overflow-hidden',
+                  isCompactLayout ? 'h-auto overflow-visible' : 'h-auto overflow-hidden',
                 )}>
                   {cameraMode === 'live' ? (
                     <PatrolCameraPanel
@@ -445,22 +442,8 @@ export function Module05Page() {
                   ? 'min-h-[min(42dvh,360px)] h-[min(42dvh,360px)]'
                   : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
               )}
-              headerRight={
-                <button
-                  onClick={() => setHeatmapExpanded(v => !v)}
-                  className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                  title={heatmapExpanded ? 'Thu nhỏ' : 'Phóng to'}
-                  aria-label={heatmapExpanded ? 'Thu nhỏ heatmap' : 'Phóng to heatmap'}
-                >
-                  {heatmapExpanded
-                    ? <Minimize2 className="w-3.5 h-3.5" />
-                    : <Maximize2 className="w-3.5 h-3.5" />}
-                </button>
-              }
             >
               <PatrolDensityHeatmap
-                expanded={heatmapExpanded}
-                onCloseExpand={() => setHeatmapExpanded(false)}
                 patrolEvents={patrolEventsLive}
               />
             </Panel>
@@ -471,28 +454,15 @@ export function Module05Page() {
               className={cn(
                 'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[2]',
                 isCompactLayout
-                  ? 'min-h-[min(36dvh,320px)] h-[min(36dvh,320px)]'
-                  : 'min-h-[min(28vh,300px)] h-[min(32vh,360px)]',
-                tier3Focus === 'events' && 'lg:flex-[3]',
+                  ? 'min-h-[min(42dvh,360px)] h-[min(42dvh,360px)]'
+                  : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
               )}
               headerRight={
-                <div className="flex items-center gap-2">
-                  {PATROL_DRONE_IDS.length > 0 && (
-                    <span className="hidden sm:inline text-[9px] text-muted-foreground/80 tabular-nums">
-                      {dr03FlightLabel}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => setTier3Focus(f => f === 'events' ? 'none' : 'events')}
-                    className="p-1.5 sm:p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                    title={tier3Focus === 'events' ? 'Thu nhỏ' : 'Phóng to'}
-                    aria-label={tier3Focus === 'events' ? 'Thu nhỏ sự kiện' : 'Phóng to sự kiện'}
-                  >
-                    {tier3Focus === 'events'
-                      ? <Minimize2 className="w-3.5 h-3.5" />
-                      : <Maximize2 className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                PATROL_DRONE_IDS.length > 0 ? (
+                  <span className="hidden sm:inline text-[9px] text-muted-foreground/80 tabular-nums">
+                    {dr03FlightLabel}
+                  </span>
+                ) : undefined
               }
             >
               <PatrolEventsPanel

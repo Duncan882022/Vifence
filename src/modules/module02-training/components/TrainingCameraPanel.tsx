@@ -95,8 +95,8 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
   return null
 }
 
-function CameraThumb({ cam, selected, onClick, compact = false, strip = false }: {
-  cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean
+function CameraThumb({ cam, selected, onClick, compact = false, strip = false, mini = false }: {
+  cam: TrainingCamera; selected: boolean; onClick: () => void; compact?: boolean; strip?: boolean; mini?: boolean
 }) {
   /** Mobile bodycam — luôn thử getUserMedia, không khóa bởi stream_online backend. */
   const isOffline = cam.status === 'offline' && cam.streamType !== 'mobile'
@@ -124,34 +124,34 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false }:
 
       <span className="absolute top-0.5 left-0.5 z-[1]">
         {isOffline
-          ? <CameraOfflineBadge compact={compact} />
-          : ((cam.streamType !== 'mobile' || selected) && <CameraLiveBadge compact={compact} />)}
+          ? <CameraOfflineBadge compact={compact || mini} />
+          : ((cam.streamType !== 'mobile' || selected) && <CameraLiveBadge compact={compact || mini} />)}
       </span>
 
       <div className={cn(
         'absolute top-0.5 right-0.5 rounded-sm border-2 flex items-center justify-center transition-all',
-        compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5',
+        mini ? 'w-2 h-2' : compact ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5',
         selected
           ? 'bg-primary border-primary'
           : 'border-white/30 bg-black/30 opacity-0 group-hover:opacity-100',
       )}>
-        {selected && <Check className={cn('text-white', compact ? 'w-1.5 h-1.5' : 'w-2.5 h-2.5')} strokeWidth={3} />}
+        {selected && <Check className={cn('text-white', mini ? 'w-1 h-1' : compact ? 'w-1.5 h-1.5' : 'w-2.5 h-2.5')} strokeWidth={3} />}
       </div>
 
       <div className={cn(
         'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 to-transparent',
-        compact ? 'px-1 pb-1 pt-2' : 'px-1.5 pb-1.5 pt-4',
+        mini ? 'px-0.5 pb-0.5 pt-1.5' : compact ? 'px-1 pb-1 pt-2' : 'px-1.5 pb-1.5 pt-4',
       )}>
         <p className={cn(
           'text-white/90 font-semibold truncate leading-snug',
-          compact ? 'text-[6.5px]' : 'text-[9px]',
+          mini ? 'text-[6px]' : compact ? 'text-[6.5px]' : 'text-[9px]',
         )}>
           {cameraDisplayLabel(cam)}
         </p>
         {cameraMetaLabel(cam) && cam.streamType !== 'mobile' && (
           <p className={cn(
             'text-blue-300/80 truncate leading-tight',
-            compact ? 'text-[5.5px]' : 'text-[7.5px]',
+            mini ? 'text-[5px]' : compact ? 'text-[5.5px]' : 'text-[7.5px]',
           )}>
             {cameraMetaLabel(cam)}
           </p>
@@ -407,11 +407,16 @@ interface TrainingCameraPanelProps {
   aspectVideoGrid?: boolean
   /** iPad ngang — ép cap chiều cao video dù width ≥1024 (desktop). */
   preferCompactVideo?: boolean
-  /** Patrol desktop: giới hạn số hàng grid + scroll bên trong Tier 2. */
+  /** Patrol desktop/iPad: giới hạn số hàng grid + scroll bên trong Tier 2. */
   desktopMaxVisibleRows?: number
   /** Chiều rộng sidebar — class Tailwind đầy đủ (patrol: hẹp hơn mặc định). */
   sidebarOpenClass?: string
   sidebarCompactClass?: string
+  /** Pixel width sidebar compact (iPad ngang / landscape) — dùng cho grid 2 cột. */
+  sidebarCompactPx?: number
+  /** Patrol sidebar: thumb nhỏ gọn + full width cột. */
+  sidebarThumbCompact?: boolean
+  sidebarThumbFullWidth?: boolean
   /** Patrol bodycam/flycam: vẫn thử load HLS khi badge offline (metrics trễ hơn nguồn). */
   streamWhenOffline?: boolean
 }
@@ -435,6 +440,9 @@ export function TrainingCameraPanel({
   desktopMaxVisibleRows,
   sidebarOpenClass = 'lg:w-[220px]',
   sidebarCompactClass = 'max-lg:landscape:w-[168px]',
+  sidebarCompactPx,
+  sidebarThumbCompact = false,
+  sidebarThumbFullWidth = false,
 }: TrainingCameraPanelProps) {
   const catalog = cameras ?? MOCK_TRAINING_CAMERAS
   const tabs = filterTabs ?? CAMERA_FILTER_TABS
@@ -494,9 +502,9 @@ export function TrainingCameraPanel({
     || ((mobileCompactVideo && !mobileStackedNoScroll)
       || (aspectVideoGrid && !isDesktop && !mobileStackedNoScroll))
   const aspectGridInTier = aspectVideoGrid && isDesktop && !preferCompactVideo && !desktopMaxVisibleRows
-  /** Desktop patrol: 2 hàng + scroll trong Tier 2. */
-  const patrolDesktopScroll = Boolean(
-    aspectVideoGrid && isDesktop && desktopMaxVisibleRows != null && !preferCompactVideo,
+  /** Desktop / iPad patrol: giới hạn hàng + scroll trong Tier 2. */
+  const patrolTierScroll = Boolean(
+    aspectVideoGrid && desktopMaxVisibleRows != null && !mobileStackedNoScroll,
   )
   /** Mobile compact: fill tier height — video scrolls inside, sidebar strip stays visible. */
   const mobileFillPanel = mobileCompactVideo && !isDesktop && !mobileStackedNoScroll
@@ -521,7 +529,7 @@ export function TrainingCameraPanel({
       return
     }
 
-    if (isDesktop && !preferCompactVideo && !patrolDesktopScroll && fillHeightMain) {
+    if (isDesktop && !preferCompactVideo && !patrolTierScroll && fillHeightMain) {
       setMobileViewportH(null)
       setLandscapeSidebarH(null)
       return
@@ -531,12 +539,12 @@ export function TrainingCameraPanel({
     const landscapeMq = window.matchMedia('(max-width: 1023px) and (orientation: landscape)')
 
     const sync = () => {
-      if (patrolDesktopScroll) {
+      if (patrolTierScroll) {
         const viewportH = getMobileVideoViewportHeight(
           scrollNode.clientWidth,
           gridCols,
           gridRows,
-          desktopMaxVisibleRows ?? 2,
+          desktopMaxVisibleRows ?? 1,
         )
         setMobileViewportH(viewportH)
         if (sidebarOpen && viewportH) {
@@ -580,7 +588,7 @@ export function TrainingCameraPanel({
   }, [
     isDesktop,
     preferCompactVideo,
-    patrolDesktopScroll,
+    patrolTierScroll,
     desktopMaxVisibleRows,
     fillHeightMain,
     gridCols,
@@ -624,26 +632,39 @@ export function TrainingCameraPanel({
     )
   }
 
+  const compactSidebarPx = sidebarCompactPx ?? 108
+  const compactGridStyle = preferCompactVideo
+    ? { gridTemplateColumns: `minmax(0, 1fr) ${compactSidebarPx}px` } as const
+    : undefined
+  const thumbCompact = sidebarThumbCompact || !isDesktop
+  const thumbStrip = isDesktop && !sidebarThumbFullWidth
+  const thumbMini = sidebarThumbCompact && sidebarThumbFullWidth
+
   return (
     <>
       <div
         className={cn(
           'w-full min-h-0 h-full',
-          'flex flex-col lg:flex-row',
+          preferCompactVideo
+            ? 'grid items-stretch min-h-0 flex-none lg:flex-none'
+            : cn(
+              'flex flex-col lg:flex-row',
+              !isDesktop && [
+                'max-lg:landscape:grid max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
+                sidebarCompactPx != null
+                  ? `max-lg:landscape:grid-cols-[minmax(0,1fr)_${compactSidebarPx}px]`
+                  : 'max-lg:landscape:grid-cols-[minmax(0,1fr)_108px]',
+              ],
+            ),
           aspectGridInTier
             ? 'lg:flex-1 lg:min-h-0'
             : mobileCompactVideo
               ? 'lg:h-auto lg:max-h-full'
-              : patrolDesktopScroll
+              : patrolTierScroll
                 ? 'lg:h-auto lg:flex-none'
                 : 'lg:flex-1 lg:min-h-0',
-          (preferCompactVideo || !isDesktop) && [
-            'max-lg:landscape:grid max-lg:landscape:grid-cols-[minmax(0,1fr)_108px] max-lg:landscape:items-stretch max-lg:landscape:min-h-0',
-          ],
-          preferCompactVideo && [
-            'grid grid-cols-[minmax(0,1fr)_108px] items-stretch min-h-0 flex-none lg:flex-none',
-          ],
         )}
+        style={compactGridStyle}
       >
         <div className={cn(
           'flex flex-1 min-h-0 min-w-0 p-2 max-lg:pb-1 lg:min-h-0 max-lg:landscape:min-w-0',
@@ -680,17 +701,23 @@ export function TrainingCameraPanel({
             'shrink-0 flex flex-col border-[#1e2433] transition-all duration-200 min-h-0',
             'border-t lg:border-t-0 lg:border-l',
             sidebarCompactClass,
-            preferCompactVideo && 'border-t-0 border-l w-[108px]',
             'lg:overflow-hidden',
+            preferCompactVideo && sidebarOpen && 'border-t-0 border-l',
             sidebarOpen
-              ? cn('w-full lg:h-full lg:min-h-0', sidebarOpenClass)
+              ? cn('w-full lg:h-full lg:min-h-0', !preferCompactVideo && sidebarOpenClass)
               : 'w-full shrink-0 min-h-[2.25rem] lg:flex lg:w-8 lg:h-full lg:min-h-0',
           )}
-          style={landscapeSidebarH ? { maxHeight: landscapeSidebarH } : undefined}
+          style={{
+            ...(landscapeSidebarH ? { maxHeight: landscapeSidebarH } : {}),
+            ...(preferCompactVideo && sidebarOpen ? { width: compactSidebarPx } : {}),
+          }}
         >
           {sidebarOpen ? (
             <>
-              <div className="flex items-center gap-1.5 px-2 py-1.5 lg:px-2.5 lg:py-2 border-b border-[#1e2433] shrink-0">
+              <div className={cn(
+                'flex items-center gap-1.5 border-b border-[#1e2433] shrink-0',
+                thumbMini ? 'px-1 py-1' : 'px-2 py-1.5 lg:px-2.5 lg:py-2',
+              )}>
                 <div className="flex items-center gap-1 overflow-x-auto scrollbar-none min-w-0 flex-1">
                   {tabs.map(tab => (
                     <button
@@ -698,7 +725,10 @@ export function TrainingCameraPanel({
                       type="button"
                       onClick={() => setFilterTab(tab)}
                       className={cn(
-                        'px-1.5 lg:px-2 py-0.5 lg:py-1 text-[8px] lg:text-[9px] font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                        'font-semibold rounded whitespace-nowrap transition-colors shrink-0',
+                        thumbMini
+                          ? 'px-1 py-0.5 text-[7px]'
+                          : 'px-1.5 lg:px-2 py-0.5 lg:py-1 text-[8px] lg:text-[9px]',
                         filterTab === tab
                           ? 'bg-primary/20 text-primary'
                           : 'text-muted-foreground hover:text-foreground hover:bg-[#1a2235]',
@@ -708,7 +738,10 @@ export function TrainingCameraPanel({
                     </button>
                   ))}
                 </div>
-                <span className="text-[8px] lg:text-[9px] text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums">
+                <span className={cn(
+                  'text-muted-foreground/60 whitespace-nowrap shrink-0 tabular-nums',
+                  thumbMini ? 'text-[7px]' : 'text-[8px] lg:text-[9px]',
+                )}>
                   <span className="text-primary font-semibold">{selectedIds.length}</span> luồng
                 </span>
                 <button
@@ -724,26 +757,36 @@ export function TrainingCameraPanel({
               </div>
 
               <div className={cn(
-                'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5',
+                'overflow-y-auto overscroll-y-contain',
+                thumbMini ? 'px-1 py-1' : 'px-1.5 py-1.5 lg:px-2.5 lg:py-2.5',
                 stackedMobile
-                  ? 'shrink-0 max-h-[min(24dvh,168px)] overflow-y-auto overscroll-y-contain'
-                  : 'flex-1 min-h-0 overflow-y-auto',
+                  ? 'shrink-0 max-h-[min(24dvh,168px)]'
+                  : 'flex-1 min-h-0',
               )}>
-                <div className="flex flex-col gap-2 lg:gap-3">
+                <div className={cn('flex flex-col', thumbMini ? 'gap-1' : 'gap-2 lg:gap-3')}>
                   {sidebarGroups.map(({ key, cameras }) => (
                     <div key={key}>
-                      <div className="flex items-center gap-1.5 mb-1 lg:mb-2">
-                        <span className="text-[8px] lg:text-[9px] font-bold text-muted-foreground/70 uppercase tracking-widest whitespace-nowrap">
+                      <div className={cn(
+                        'flex items-center gap-1.5',
+                        thumbMini ? 'mb-0.5' : 'mb-1 lg:mb-2',
+                      )}>
+                        <span className={cn(
+                          'font-bold text-muted-foreground/70 uppercase tracking-widest whitespace-nowrap',
+                          thumbMini ? 'text-[7px]' : 'text-[8px] lg:text-[9px]',
+                        )}>
                           {key}
                         </span>
                         <div className="flex-1 h-px bg-[#1e2433]" />
-                        <span className="text-[8px] lg:text-[9px] text-muted-foreground/40 shrink-0">
+                        <span className={cn(
+                          'text-muted-foreground/40 shrink-0',
+                          thumbMini ? 'text-[7px]' : 'text-[8px] lg:text-[9px]',
+                        )}>
                           {cameras.length}
                         </span>
                       </div>
                       <div className={cn(
                         isDesktop
-                          ? 'flex flex-col gap-1 lg:gap-1.5'
+                          ? cn('flex flex-col', thumbMini ? 'gap-0.5' : 'gap-1 lg:gap-1.5')
                           : 'grid grid-cols-3 max-[360px]:grid-cols-2 gap-1',
                       )}>
                         {cameras.map(cam => (
@@ -752,8 +795,9 @@ export function TrainingCameraPanel({
                             cam={cam}
                             selected={selectedIds.includes(cam.id)}
                             onClick={() => handleThumbClick(cam)}
-                            compact={!isDesktop}
-                            strip={isDesktop}
+                            compact={thumbCompact}
+                            strip={thumbStrip}
+                            mini={thumbMini}
                           />
                         ))}
                       </div>
