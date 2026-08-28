@@ -12,9 +12,6 @@ import {
   type PatrolIdentityAssignResult,
 } from './patrolIdentityAssign.service'
 
-const STORAGE_KEY = 'vifence_patrol_manual_identity_v2'
-const LEGACY_STORAGE_KEY = 'vifence_patrol_manual_identity_v1'
-
 export interface PatrolManualIdentity {
   workerId: string
   workerName: string
@@ -31,6 +28,7 @@ interface PatrolIdentityStore {
 }
 
 const listeners = new Set<() => void>()
+let _memoryStore: PatrolIdentityStore = emptyStore()
 
 function notify(): void {
   listeners.forEach(fn => fn())
@@ -54,76 +52,13 @@ function isUsableWorkerId(workerId: string): boolean {
   return true
 }
 
-function inferWorkerIdFromObjectKey(objectKey: string): string {
-  const key = normalizePatrolIdentityKey(objectKey)
-  if (/^sgc-/i.test(key)) return normalizePatrolWorkerId(key)
-  return `MAN-${key}`
-}
-
 function readStore(): PatrolIdentityStore {
-  if (typeof localStorage === 'undefined') return emptyStore()
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as PatrolIdentityStore
-      if (parsed?.version === 2 && parsed.byWorkerId && parsed.aliasToWorkerId) {
-        return parsed
-      }
-    }
-    return migrateLegacyStore()
-  } catch {
-    return emptyStore()
-  }
+  return _memoryStore
 }
 
 function writeStore(store: PatrolIdentityStore): void {
-  if (typeof localStorage === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
-  } catch {
-    // quota
-  }
-}
-
-function migrateLegacyStore(): PatrolIdentityStore {
-  const store = emptyStore()
-  if (typeof localStorage === 'undefined') return store
-  try {
-    const raw = localStorage.getItem(LEGACY_STORAGE_KEY)
-    if (!raw) return store
-    const legacy = JSON.parse(raw) as Record<string, {
-      objectKey: string
-      workerName: string
-      unitName: string
-      assignedAt: number
-    }>
-    for (const row of Object.values(legacy)) {
-      const objectKey = normalizePatrolIdentityKey(row.objectKey)
-      if (!objectKey || !row.workerName?.trim() || !row.unitName?.trim()) continue
-      const workerId = inferWorkerIdFromObjectKey(objectKey)
-      let identity = store.byWorkerId[workerId]
-      if (!identity) {
-        identity = {
-          workerId,
-          workerName: row.workerName.trim(),
-          unitName: row.unitName.trim(),
-          objectKeys: [],
-          assignedAt: row.assignedAt || Date.now(),
-          updatedAt: row.assignedAt || Date.now(),
-        }
-        store.byWorkerId[workerId] = identity
-      }
-      if (!identity.objectKeys.includes(objectKey)) {
-        identity.objectKeys.push(objectKey)
-      }
-      store.aliasToWorkerId[objectKey] = workerId
-      rekeyHeatmapPerson(objectKey, workerId)
-    }
-  } catch {
-    // ignore corrupt legacy
-  }
-  writeStore(store)
-  return store
+  _memoryStore = store
+  notify()
 }
 
 function resolveWorkerIdForObject(objectKey: string, store = readStore()): string | null {

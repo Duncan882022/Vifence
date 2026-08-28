@@ -44,7 +44,7 @@ import {
   applyPatrolUnifiedLiveRouting,
 } from './data/patrolHelmetStreams'
 import { useCameras } from '@/modules/dao-tao-tuan-thu/hooks/useCameras'
-import { usePatrolDayEvents } from './hooks/usePatrolDayEvents'
+import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
 import {
   fetchPatrolPlaybackRecords,
   fetchPatrolPlaybackDetections,
@@ -57,7 +57,6 @@ import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import { usePatrolHelmetLiveMetrics, type PatrolHelmetLiveMetrics } from './hooks/usePatrolHelmetLiveMetrics'
 import { useWorkforceRealtimeState } from './hooks/useWorkforceRealtimeState'
-import { usePatrolDayStats } from './hooks/usePatrolDayStats'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
@@ -236,9 +235,9 @@ export function Module05Page() {
 
   // Thẻ sự kiện đọc thẳng từ SQLite: một người một thẻ mỗi ngày là khoá chính
   // của bảng, và tầng do server chốt — không còn lớp gộp trùng nào ở đây.
-  const dayEvents = usePatrolDayEvents()
-  const dayStats = usePatrolDayStats()
-  const patrolEventsLive = dayEvents.events
+  const dayBundle = usePatrolDayBundle()
+  const patrolEventsLive = dayBundle.events
+  const dayStats = { stats: dayBundle.stats, loading: dayBundle.loading, reachable: dayBundle.reachable }
 
   const detailEvent = useMemo(
     () => patrolEventsLive.find(e => e.id === detailEventId) ?? null,

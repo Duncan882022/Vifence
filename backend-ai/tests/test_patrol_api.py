@@ -10,6 +10,7 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.patrol import daystore, db, identity
 from app.patrol.api import router
 
@@ -22,6 +23,8 @@ def _vec(seed: int, dim: int = 128) -> list[float]:
 
 class PatrolApiTests(unittest.TestCase):
     def setUp(self) -> None:
+        self._prev_auth = settings.patrol_auth_disabled
+        settings.patrol_auth_disabled = True
         self._tmp = tempfile.TemporaryDirectory()
         db.close()
         db.DATA_DIR = Path(self._tmp.name)
@@ -33,6 +36,7 @@ class PatrolApiTests(unittest.TestCase):
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        settings.patrol_auth_disabled = self._prev_auth
         db.close()
         self._tmp.cleanup()
 
