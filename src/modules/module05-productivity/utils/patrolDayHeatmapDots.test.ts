@@ -6,7 +6,9 @@ import {
   filterPatrolHeatmapDotsByDevice,
   filterRecentPatrolWorkerEvents,
   filterRecentPresences,
+  mergePatrolHeatmapDetectionDots,
 } from './patrolDayHeatmapDots'
+import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { countPatrolGlobalWorkers, summarizePatrolGlobalWorkers } from './patrolPatrolCounts'
@@ -176,9 +178,35 @@ describe('filterPatrolHeatmapDotsByDevice', () => {
     expect(filtered[0].cameraId).toBe('DR-03')
   })
 
-  it('cả hai tắt — không chấm', () => {
+  it('cả hai tắt — vẫn giữ chấm (layer Mật độ điều khiển hiển thị)', () => {
     const dots = buildPatrolPresenceHeatmapDots([makePresence({})])
-    expect(filterPatrolHeatmapDotsByDevice(dots, { helmet: false, flycam: false })).toHaveLength(0)
+    expect(filterPatrolHeatmapDotsByDevice(dots, { helmet: false, flycam: false })).toHaveLength(1)
+  })
+})
+
+describe('mergePatrolHeatmapDetectionDots', () => {
+  it('gộp theo objectId — ưu tiên inCameraView', () => {
+    const live: DetectionDot = {
+      id: 'pin-pers-0001',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-02',
+      confidence: 1,
+      objectId: 'pers-0001',
+      inCameraView: true,
+      lastSeenAt: 1000,
+    }
+    const history: DetectionDot = {
+      ...live,
+      id: 'presence-1',
+      inCameraView: false,
+      lastSeenAt: 900,
+    }
+    const merged = mergePatrolHeatmapDetectionDots([[history], [live]])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].inCameraView).toBe(true)
+    expect(merged[0].id).toBe('pin-pers-0001')
   })
 })
 

@@ -112,25 +112,29 @@ export function isPatrolIdenId(id?: string | null): boolean {
  * - object:  quay lưng / không thấy mặt, chỉ đủ đầu + 1/3 thân trên
  */
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
-  // Server đã chốt tầng thì tin server. Suy lại ở đây chỉ đúng khi mã và
-  // localStorage cùng khớp, mà đó là hai nguồn có thể lệch nhau.
-  if (event.stage) return event.stage
-
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
 
-  // Định danh — gallery hoặc gán thủ công trực tiếp lên sgc (không kéo từ OBJ dùng chung)
-  if (resolvePatrolProfileEntityKey(event)) return 'profile'
-  if (trackWorkerId && getPatrolManualIdentityForSgc(trackWorkerId)) return 'profile'
-  if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolSgcWorkerId(trackWorkerId)) return 'profile'
-  if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return 'profile'
-  // Chỉ coi label là định danh khi đã có manual/gallery — không dùng hex event id
+  /** Thăng tầng lên Định danh — ưu tiên hơn `stage: object` từ SQLite obj card. */
+  const promoteProfile = (): boolean => {
+    if (resolvePatrolProfileEntityKey(event)) return true
+    if (trackWorkerId && getPatrolManualIdentityForSgc(trackWorkerId)) return true
+    if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolSgcWorkerId(trackWorkerId)) return true
+    if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return true
+    if (isPatrolIdenId(objectId)) return true
+    return false
+  }
 
-  // Tab Người — mã pers-* (SQLite) hoặc sgc-* (live legacy).
+  if (promoteProfile()) return 'profile'
+
+  if (event.stage === 'profile') return 'profile'
+  if (event.stage === 'person') return 'person'
+  if (event.stage === 'object') return 'object'
+
+  // Chỉ suy lại khi server chưa gửi stage (legacy / live feed).
   if (isPatrolPersId(objectId)) return 'person'
   if (isPatrolSgcWorkerId(objectId)) return 'person'
   if (isPatrolSgcWorkerId(trackWorkerId)) return 'person'
-  if (isPatrolIdenId(objectId)) return 'profile'
 
   return 'object'
 }
@@ -228,8 +232,17 @@ export function patrolEventMasterEntityKey(event: PatrolEvent): string {
 
 /** Subject id tra lịch sử xuất hiện (popup) — ưu tiên pers/obj từ SQLite day cards. */
 export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
-  const fromDayCard = event.id.match(/^(?:pers|obj):(.+)$/i)?.[1]?.trim()
-  if (fromDayCard) return fromDayCard
+  const fromDayCardPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
+  if (fromDayCardPers) return fromDayCardPers
+
+  const stage = resolvePatrolPersonStage(event)
+  if (stage === 'profile') {
+    const profileKey = resolvePatrolProfileEntityKey(event)
+    if (profileKey && !isPatrolObjectId(profileKey)) return profileKey
+  }
+
+  const fromDayCardObj = event.id.match(/^obj:(.+)$/i)?.[1]?.trim()
+  if (fromDayCardObj) return fromDayCardObj
 
   const objectId = event.objectId?.trim() ?? ''
   if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId

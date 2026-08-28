@@ -9,13 +9,48 @@ import {
   type PatrolDayStats,
 } from '../services/patrolDayEvents.service'
 import { filterPatrolDayObjectsForDisplay } from '../utils/patrolDayObjectFilter'
-import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
+import { patrolGalleryWorkerIdFromEmployeeCode, resolvePatrolCanonicalEntityKey } from '../utils/patrolIdentityEntity'
+import {
+  dedupePatrolEventsByMasterEntity,
+  resolvePatrolPersonStage,
+  type PatrolPersonStage,
+} from '../utils/patrolWorkforceEventLabels'
+import { applyManualIdentityToPatrolEvents } from '../utils/patrolManualIdentityUi'
 import {
   buildPatrolSubjectCameraLookup,
   resolvePatrolSubjectCameraRef,
 } from '../utils/patrolEventsUi'
 
 const POLL_MS = 3000
+
+const STAGE_RANK: Record<PatrolPersonStage, number> = {
+  object: 1,
+  person: 2,
+  profile: 3,
+}
+
+/** Gộp pers/obj trùng entity — giữ tầng cao hơn (Định danh thắng Đối tượng). */
+function dedupePatrolBundleEvents(events: PatrolEvent[]): PatrolEvent[] {
+  const byKey = new Map<string, PatrolEvent>()
+  for (const event of events) {
+    const key = resolvePatrolCanonicalEntityKey(event).toLowerCase()
+    const prev = byKey.get(key)
+    if (!prev) {
+      byKey.set(key, event)
+      continue
+    }
+    const rankA = STAGE_RANK[resolvePatrolPersonStage(event)]
+    const rankB = STAGE_RANK[resolvePatrolPersonStage(prev)]
+    if (rankA > rankB) {
+      byKey.set(key, event)
+      continue
+    }
+    if (rankA === rankB && Date.parse(event.lockedAt) > Date.parse(prev.lockedAt)) {
+      byKey.set(key, event)
+    }
+  }
+  return [...byKey.values()]
+}
 
 const EMPTY_STATS: PatrolDayStats = {
   date: '',
@@ -84,7 +119,11 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       stage: 'object',
     } as PatrolEvent
   })
-  return [...personEvents, ...objectEvents].sort(
+  return applyManualIdentityToPatrolEvents(
+    dedupePatrolBundleEvents(
+      dedupePatrolEventsByMasterEntity([...personEvents, ...objectEvents]),
+    ),
+  ).sort(
     (a, b) => Date.parse(b.lockedAt) - Date.parse(a.lockedAt),
   )
 }

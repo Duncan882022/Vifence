@@ -91,11 +91,17 @@ async function getJson<T>(path: string, timeoutMs = 12_000): Promise<T | null> {
 async function snapshotUrl(
   path: string | null | undefined,
   lastSeen?: number,
+  cacheKey?: string | number,
 ): Promise<string | undefined> {
   const p = (path ?? '').trim()
   if (!p) return undefined
   const signed = await signPatrolSnapshot(p)
-  const bust = lastSeen && lastSeen > 0 ? `&v=${Math.floor(lastSeen)}` : ''
+  const bustToken = cacheKey != null && String(cacheKey).length > 0
+    ? String(cacheKey)
+    : lastSeen && lastSeen > 0
+      ? String(Math.floor(lastSeen))
+      : ''
+  const bust = bustToken ? `&v=${encodeURIComponent(bustToken)}` : ''
   if (signed) return `${signed}${bust}`
   const base = backendBase()
   if (!base) return undefined
@@ -166,6 +172,9 @@ export async function fetchPatrolSubjectAppearances(
     snapshotUrl: await snapshotUrl(
       r.snapshot_path as string | null,
       Number(r.ended_at ?? 0),
+      r.id != null
+        ? `ap-${Number(r.id)}`
+        : `ap-${Number(r.started_at ?? 0)}-${Number(r.ended_at ?? 0)}`,
     ),
   })))
 }

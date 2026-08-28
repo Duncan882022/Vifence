@@ -31,7 +31,16 @@ import {
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
-import { buildPatrolPresenceHeatmapDots, filterPatrolHeatmapDotsByDevice } from '../utils/patrolDayHeatmapDots'
+import {
+  buildPatrolDayHeatmapDots,
+  buildPatrolPresenceHeatmapDots,
+  filterPatrolHeatmapDotsByDevice,
+  mergePatrolHeatmapDetectionDots,
+} from '../utils/patrolDayHeatmapDots'
+import {
+  getHeatmapPersonDots,
+  subscribeHeatmapPersonRegistry,
+} from '@/services/patrolHeatmapPersonRegistry'
 import { usePatrolDayPresences } from '../hooks/usePatrolDayPresences'
 import { usePatrolFlycamFlightModes } from '../hooks/usePatrolFlycamFlightModes'
 import { usePatrolDayStats } from '../hooks/usePatrolDayStats'
@@ -162,6 +171,7 @@ export function PatrolDensityHeatmap({
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
+  const [registryRevision, setRegistryRevision] = useState(0)
   const [mobileHc02Live, setMobileHc02Live] = useState(
     () => Boolean(getPatrolMobileLiveSnapshot('HC-02')?.streamOnline),
   )
@@ -189,6 +199,10 @@ export function PatrolDensityHeatmap({
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
   }, [])
+
+  useEffect(() => subscribeHeatmapPersonRegistry(() => {
+    setRegistryRevision(t => t + 1)
+  }), [])
 
   useEffect(() => {
     return subscribePatrolMobileLiveSnapshot(snap => {
@@ -321,16 +335,52 @@ export function PatrolDensityHeatmap({
   }, [workforce.helmets, headingDeg])
 
   const filteredDots = useMemo(() => {
+    if (!layers.density) return []
+
     void identityRevision
-    const dots = buildPatrolPresenceHeatmapDots(presences, {
-      liveOnly: anyCameraOnline,
+    void registryRevision
+
+    const presenceOpts = {
       cameraOnlineById: helmetOnlineById,
       includeUnassigned: true,
       helmetPositionsById: mergedCameraPositions,
       helmetHeadingsById: helmetHeadingById,
       flightModeByCamera: flycamFlightModes,
+    } as const
+
+    let presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+      ...presenceOpts,
+      liveOnly: anyCameraOnline,
     })
-    const byDevice = filterPatrolHeatmapDotsByDevice(dots, {
+    if (anyCameraOnline && presenceDots.length === 0) {
+      presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+        ...presenceOpts,
+        liveOnly: false,
+      })
+    }
+
+    const registryDots = PATROL_MAP_CAMERA_IDS.flatMap(cameraId => {
+      if (!helmetOnlineById[cameraId]) return []
+      return getHeatmapPersonDots(cameraId)
+    })
+
+    let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots])
+
+    if (merged.length === 0 && patrolEvents.length > 0) {
+      let eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
+        liveOnly: anyCameraOnline,
+        cameraOnlineById: helmetOnlineById,
+      })
+      if (anyCameraOnline && eventDots.length === 0) {
+        eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
+          liveOnly: false,
+          cameraOnlineById: helmetOnlineById,
+        })
+      }
+      merged = eventDots
+    }
+
+    const byDevice = filterPatrolHeatmapDotsByDevice(merged, {
       helmet: layers.helmet,
       flycam: layers.flycam,
     })
@@ -341,10 +391,13 @@ export function PatrolDensityHeatmap({
         : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
     }))
   }, [
+    layers.density,
     presences,
+    patrolEvents,
     anyCameraOnline,
     helmetOnlineById,
     identityRevision,
+    registryRevision,
     mergedCameraPositions,
     helmetHeadingById,
     layers.helmet,
@@ -382,60 +435,62 @@ export function PatrolDensityHeatmap({
     }
   }, [expanded, onCloseExpand])
 
-  const mapSurface = (
-    <div className={cn(
-      'min-w-0 relative flex flex-col flex-1 min-h-0 w-full h-full',
-      expanded ? viewport.modalMapClass : viewport.embeddedMapClass,
-    )}>
-      <PatrolGeoHeatmap
-        zones={liveZones}
-        cameraPositions={mergedCameraPositions}
-        routeHistory={mergedRouteHistory}
-        layer="combined"
-        displayMode="count"
-        countMode="current"
-        showSiteBoundary={false}
-        showZonePolygons={false}
-        showDetections={layers.density}
-        liveDetectionDots={filteredDots}
-        followLiveGps={hc02Online && hc02Live.hasLiveGps}
-        liveGpsLat={hc02Online ? hc02Live.lat : null}
-        liveGpsLng={hc02Online ? hc02Live.lng : null}
-        showDensity={false}
-        showRoute={layers.helmet}
-        showHelmetMarkers={layers.helmet}
-        showDroneMarkers={layers.flycam}
-        showCameras={false}
-        helmetOnlineById={helmetOnlineById}
-        helmetHeadingById={helmetHeadingById}
-        siteHeadcount={siteHeadcount}
-        helmetDetectCountsById={helmetDetectCountsById}
-        onDetectionClick={onDetectionClick}
-        requireLiveGpsForHc02={false}
-        hasHc02LiveGps={hc02Live.hasMapPosition}
-        mapZoom={viewport.mapZoom}
-        compactControls={viewport.compactChrome}
-      />
-      <HeatmapLayerControls
-        layers={layers}
-        onToggle={toggleLayer}
-        compactChrome={viewport.compactChrome}
-      />
-      <HeatmapSiteStatsOverlay
-        objectCount={unassignedCount}
-        personCount={personCount}
-        identityCount={identifiedCount}
-        compactChrome={viewport.compactChrome}
-      />
-      <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
-    </div>
+  const mapBody = (
+    <>
+      <div className={cn(
+        'min-w-0 relative',
+        expanded ? viewport.modalMapClass : viewport.embeddedMapClass,
+      )}>
+        <PatrolGeoHeatmap
+          zones={liveZones}
+          cameraPositions={mergedCameraPositions}
+          routeHistory={mergedRouteHistory}
+          layer="combined"
+          displayMode="count"
+          countMode="current"
+          showSiteBoundary={false}
+          showZonePolygons={false}
+          showDetections={layers.density}
+          liveDetectionDots={filteredDots}
+          followLiveGps={hc02Online && hc02Live.hasLiveGps}
+          liveGpsLat={hc02Online ? hc02Live.lat : null}
+          liveGpsLng={hc02Online ? hc02Live.lng : null}
+          showDensity={false}
+          showRoute={layers.helmet}
+          showHelmetMarkers={layers.helmet}
+          showDroneMarkers={layers.flycam}
+          showCameras={false}
+          helmetOnlineById={helmetOnlineById}
+          helmetHeadingById={helmetHeadingById}
+          siteHeadcount={siteHeadcount}
+          helmetDetectCountsById={helmetDetectCountsById}
+          onDetectionClick={onDetectionClick}
+          requireLiveGpsForHc02={false}
+          hasHc02LiveGps={hc02Live.hasMapPosition}
+          mapZoom={viewport.mapZoom}
+          compactControls={viewport.compactChrome}
+        />
+        <HeatmapLayerControls
+          layers={layers}
+          onToggle={toggleLayer}
+          compactChrome={viewport.compactChrome}
+        />
+        <HeatmapSiteStatsOverlay
+          objectCount={unassignedCount}
+          personCount={personCount}
+          identityCount={identifiedCount}
+          compactChrome={viewport.compactChrome}
+        />
+        <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
+      </div>
+    </>
   )
 
   return (
     <>
       {expanded && createPortal(
         <div
-          className="fixed inset-0 z-[120] bg-black/80 sm:bg-black/75 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[110] bg-black/80 sm:bg-black/75 backdrop-blur-[2px]"
           onClick={() => onCloseExpand?.()}
           role="presentation"
           aria-hidden
@@ -444,9 +499,9 @@ export function PatrolDensityHeatmap({
       )}
       <div
         className={cn(
-          'flex flex-col overflow-hidden h-full min-h-0 flex-1 w-full',
+          'flex flex-col overflow-hidden h-full min-h-0 flex-1',
           expanded && [
-            'fixed inset-0 z-[130] bg-[#0a0e17] shadow-2xl shadow-black/60',
+            'fixed inset-0 z-[120] bg-[#0a0e17] shadow-2xl shadow-black/60',
             'pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]',
             'sm:inset-4 sm:rounded-xl sm:border sm:border-[#2a3855]',
           ],
@@ -469,7 +524,7 @@ export function PatrolDensityHeatmap({
             </button>
           </div>
         )}
-        {mapSurface}
+        {mapBody}
       </div>
     </>
   )
