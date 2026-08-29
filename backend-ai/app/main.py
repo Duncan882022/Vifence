@@ -633,9 +633,7 @@ async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str, token: str |
 
             gps_lat = float(lat) if isinstance(lat, (int, float)) else None
             gps_lng = float(lng) if isinstance(lng, (int, float)) else None
-            if gps_lat is not None and gps_lng is not None:
-                if not is_point_in_site(gps_lat, gps_lng):
-                    gps_lat, gps_lng, _ = snap_point_to_site(gps_lat, gps_lng)
+            # GPS thô → map_patrol_device_gps_to_site (neo + delta). Không snap trước khi map.
 
             update_patrol_gps(
                 camera_id,

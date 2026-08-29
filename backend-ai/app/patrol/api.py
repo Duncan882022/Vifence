@@ -589,7 +589,7 @@ def observe_person_face(
         )
 
         gps_lat, gps_lng = (
-            resolve_patrol_observation_gps(camera_id)
+            resolve_patrol_observation_gps(camera_id, at_ts=ts)
             if camera_id
             else patrol_site_center_fallback()
         )

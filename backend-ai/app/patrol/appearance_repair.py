@@ -17,6 +17,23 @@ from .presence import GAP_FALLBACK_SEC, merge_source_cameras
 
 logger = logging.getLogger("patrol.appearance_repair")
 
+
+def _resolve_repair_encounter_gps(
+    camera_id: str,
+    at_ts: float,
+    template: Any | None,
+) -> tuple[float, float]:
+    """Tọa độ lượt gặp — tra lịch sử GPS theo thời điểm ảnh (tâm site + delta)."""
+    from ..patrol_gps_sim import patrol_site_center_fallback, resolve_patrol_observation_gps
+
+    lat, lng = resolve_patrol_observation_gps(camera_id, at_ts=at_ts)
+    center = patrol_site_center_fallback()
+    if (lat, lng) != center:
+        return lat, lng
+    if template is not None and template["gps_lat"] is not None and template["gps_lng"] is not None:
+        return float(template["gps_lat"]), float(template["gps_lng"])
+    return lat, lng
+
 _SNAPSHOT_TS_RE = re.compile(r"^(.+)-(\d{10,16})$")
 
 
@@ -115,8 +132,6 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
 
             cam = str(template["camera_id"]) if template else "HC-02"
             zone = template["zone_id"] if template else None
-            glat = template["gps_lat"] if template else None
-            glng = template["gps_lng"] if template else None
 
             for start_ts, end_ts, rel_path in encounters:
                 seq_row = conn.execute(
@@ -126,6 +141,8 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
                 ).fetchone()
                 seq = int(seq_row["mx"] or 0) + 1
                 src = merge_source_cameras(None, cam)
+                glat_start, glng_start = _resolve_repair_encounter_gps(cam, start_ts, template)
+                glat_end, glng_end = _resolve_repair_encounter_gps(cam, end_ts, template)
                 conn.execute(
                     "INSERT INTO appearances"
                     "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
@@ -134,7 +151,7 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
                     " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         d, subject_id, cam, zone, start_ts, end_ts,
-                        glat, glng, glat, glng, 1, seq, src, rel_path,
+                        glat_start, glng_start, glat_end, glng_end, 1, seq, src, rel_path,
                     ),
                 )
                 inserted += 1

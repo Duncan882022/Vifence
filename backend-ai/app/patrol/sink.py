@@ -451,10 +451,14 @@ def _stash_stale(
         del slots[:-24]
 
 
-def _resolve_observation_gps(camera_id: str) -> tuple[float, float]:
+def _resolve_observation_gps(
+    camera_id: str,
+    *,
+    at_ts: float | None = None,
+) -> tuple[float, float]:
     from ..patrol_gps_sim import resolve_patrol_observation_gps
 
-    return resolve_patrol_observation_gps(camera_id)
+    return resolve_patrol_observation_gps(camera_id, at_ts=at_ts)
 
 
 def _bind_sgc_to_person(sgc_id: str, pers_id: str) -> None:
@@ -561,7 +565,7 @@ def _commit_lifecycle_person_event(
             capture_ts=ts,
         )
         shot_score = score if path else 0.0
-    gps_lat, gps_lng = _resolve_observation_gps(camera_id)
+    gps_lat, gps_lng = _resolve_observation_gps(camera_id, at_ts=ts)
     daystore.touch_person_event(
         pid,
         camera_id=camera_id,
@@ -608,7 +612,7 @@ def record_observation(
     _note_track_bbox(key, person_bbox)
 
     score = snapshot_score(face_quality=face_quality, confidence=confidence)
-    gps_lat, gps_lng = _resolve_observation_gps(camera_id)
+    gps_lat, gps_lng = _resolve_observation_gps(camera_id, at_ts=ts)
 
     def _shot(
         subject_id: str,

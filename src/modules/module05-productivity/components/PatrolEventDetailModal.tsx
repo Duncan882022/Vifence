@@ -138,8 +138,8 @@ function resolveDefaultAppearanceKey(
 }
 
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } {
-  const lat = segment.gpsLatEnd ?? segment.gpsLat ?? null
-  const lng = segment.gpsLngEnd ?? segment.gpsLng ?? null
+  const lat = segment.gpsLat ?? segment.gpsLatEnd ?? null
+  const lng = segment.gpsLng ?? segment.gpsLngEnd ?? null
   if (lat != null && lng != null && lat !== 0 && lng !== 0
     && Number.isFinite(lat) && Number.isFinite(lng)) {
     return { lat, lng }

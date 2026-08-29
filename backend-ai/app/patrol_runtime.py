@@ -18,7 +18,12 @@ PATROL_MOBILE_PEAK_TTL_SEC = 3600.0
 
 _patrol_mobile_metrics: dict[str, dict[str, Any]] = {}
 _patrol_gps: dict[str, dict[str, Any]] = {}
+# Lịch sử GPS đã map (ts, lat, lng) — tra cứu tọa độ sự kiện theo thời điểm ảnh.
+_patrol_gps_history: dict[str, list[tuple[float, float, float]]] = {}
 PATROL_GPS_TTL_SEC = 30.0
+PATROL_GPS_HISTORY_MAX_AGE_SEC = 3600.0
+PATROL_GPS_HISTORY_MAX_SAMPLES = 720
+PATROL_GPS_LAST_KNOWN_MAX_AGE_SEC = 600.0
 # WHIP publish: telemetry GPS gần đây = đang phát (trước khi VMS ingest kịp frame đầu).
 HELMET_TELEMETRY_ONLINE_SEC = 15.0
 
@@ -151,12 +156,13 @@ def update_patrol_gps(
     from .patrol_gps_sim import map_patrol_device_gps_to_site
 
     mapped_lat, mapped_lng = map_patrol_device_gps_to_site(camera_id, lat, lng)
+    now = time.time()
     entry: dict[str, Any] = {
         "gps_lat": mapped_lat,
         "gps_lng": mapped_lng,
         "gps_lat_raw": lat,
         "gps_lng_raw": lng,
-        "updated_at": time.time(),
+        "updated_at": now,
     }
     if heading is not None:
         try:
@@ -174,6 +180,7 @@ def update_patrol_gps(
         except (TypeError, ValueError):
             pass
     _patrol_gps[camera_id] = entry
+    _append_patrol_gps_history(camera_id, now, mapped_lat, mapped_lng)
     try:
         from .workforce_engine import workforce_engine
         workforce_engine.update_helmet(
@@ -187,6 +194,85 @@ def update_patrol_gps(
         )
     except Exception:
         pass
+
+
+def _append_patrol_gps_history(
+    camera_id: str,
+    ts: float,
+    lat: float,
+    lng: float,
+) -> None:
+    hist = _patrol_gps_history.setdefault(camera_id, [])
+    hist.append((ts, lat, lng))
+    cutoff = ts - PATROL_GPS_HISTORY_MAX_AGE_SEC
+    while hist and hist[0][0] < cutoff:
+        hist.pop(0)
+    overflow = len(hist) - PATROL_GPS_HISTORY_MAX_SAMPLES
+    if overflow > 0:
+        del hist[:overflow]
+
+
+def clear_patrol_gps_state(camera_id: str | None = None) -> None:
+    """Test / admin — xoá cache GPS + lịch sử."""
+    if camera_id is None:
+        _patrol_gps.clear()
+        _patrol_gps_history.clear()
+        return
+    cid = camera_id.strip()
+    _patrol_gps.pop(cid, None)
+    _patrol_gps_history.pop(cid, None)
+
+
+def get_patrol_gps_at(
+    camera_id: str,
+    at_ts: float,
+    *,
+    max_delta_sec: float = 25.0,
+) -> tuple[float | None, float | None]:
+    """GPS đã map (tâm công trường + delta) gần nhất với `at_ts`."""
+    hist = _patrol_gps_history.get(camera_id)
+    if hist:
+        best: tuple[float, float] | None = None
+        best_delta = max_delta_sec + 1.0
+        for ts, lat, lng in hist:
+            delta = abs(ts - at_ts)
+            if delta <= max_delta_sec and delta < best_delta:
+                best = (lat, lng)
+                best_delta = delta
+        if best is not None:
+            return best
+
+    entry = _patrol_gps.get(camera_id)
+    if not entry:
+        return None, None
+    updated = float(entry.get("updated_at") or 0)
+    if abs(updated - at_ts) <= max_delta_sec:
+        lat, lng = entry.get("gps_lat"), entry.get("gps_lng")
+        if lat is not None and lng is not None:
+            return float(lat), float(lng)
+    return None, None
+
+
+def get_patrol_gps_last_known(
+    camera_id: str,
+    *,
+    max_age_sec: float | None = None,
+) -> tuple[float | None, float | None]:
+    """Fix map gần nhất — dùng khi ghi sự kiện, tránh fallback tâm khi mũ vừa có GPS."""
+    entry = _patrol_gps.get(camera_id)
+    if not entry:
+        return None, None
+    age_limit = (
+        float(max_age_sec)
+        if max_age_sec is not None
+        else PATROL_GPS_LAST_KNOWN_MAX_AGE_SEC
+    )
+    if (time.time() - float(entry.get("updated_at") or 0)) > age_limit:
+        return None, None
+    lat, lng = entry.get("gps_lat"), entry.get("gps_lng")
+    if lat is None or lng is None or (lat == 0 and lng == 0):
+        return None, None
+    return float(lat), float(lng)
 
 
 def get_patrol_gps(camera_id: str) -> tuple[float | None, float | None]:
