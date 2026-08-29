@@ -21,6 +21,8 @@ export interface PatrolDayPerson {
   firstSeen: number
   lastSeen: number
   snapshotUrl?: string
+  /** face_quality×2 + confidence — tab Người cần ≥ ngưỡng mặt rõ. */
+  snapshotScore?: number
 }
 
 export interface PatrolDayObject {
@@ -170,6 +172,7 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     firstSeen: Number(row.first_seen ?? 0),
     lastSeen: Number(row.last_seen ?? 0),
     snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
+    snapshotScore: Number(row.snapshot_score ?? 0),
   })))
 
   const objects = await Promise.all((data.objects ?? []).map(async row => ({

@@ -282,7 +282,24 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(len(snaps), 1)
         self.assertEqual(snaps[0]["started_at"], 1_000.0)
         self.assertEqual(snaps[0]["ended_at"], 1_011.0)
-        self.assertEqual(snaps[0]["snapshot_path"], "b.jpg")
+        self.assertEqual(snaps[0]["snapshot_path"], "a.jpg")
+
+    def test_appearance_accumulates_across_encounters(self) -> None:
+        """Hai lần gặp cách >45s — popup giữ 2 dòng, không đè ảnh."""
+        pers_id, _ = identity.observe_face(_vec(33), quality=0.8)
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="enc-1.jpg",
+            snapshot_score=1.2, face_eligible=True, now=3_000.0,
+        )
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="enc-2.jpg",
+            snapshot_score=1.2, face_eligible=True, now=3_100.0,
+        )
+        hist = daystore.list_appearances(pers_id, db.today_vn(3_000.0))
+        snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
+        self.assertEqual(len(snaps), 2)
+        self.assertEqual(snaps[0]["snapshot_path"], "enc-1.jpg")
+        self.assertEqual(snaps[1]["snapshot_path"], "enc-2.jpg")
 
     def test_rapid_snapshot_touches_single_history_row(self) -> None:
         """6 FPS — đứng trong khung ~1s vẫn chỉ một lần gặp."""
@@ -302,7 +319,7 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(len(snaps), 1)
         self.assertEqual(snaps[0]["started_at"], base)
         self.assertAlmostEqual(snaps[0]["ended_at"], base + 7 * 0.15, places=3)
-        self.assertEqual(snaps[0]["snapshot_path"], "20260829/pers-burst-7.jpg")
+        self.assertEqual(snaps[0]["snapshot_path"], "20260829/pers-burst-0.jpg")
 
     def test_separate_encounters_after_gap(self) -> None:
         """Mỗi lần gặp cách >45s — popup tách dòng."""

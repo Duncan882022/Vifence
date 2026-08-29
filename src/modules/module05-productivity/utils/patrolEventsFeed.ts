@@ -2,6 +2,8 @@
  * Module 05 — feed sự kiện: chỉ bản có snapshot + thời gian hợp lệ (evidence).
  */
 import type { PatrolEvent } from '../data/patrolTypes'
+import { PATROL_OBJECT_FACE_SNAPSHOT_SCORE } from './patrolDayObjectFilter'
+import { resolvePatrolPersonStage } from './patrolWorkforceEventLabels'
 
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000
 
@@ -32,8 +34,21 @@ export function isValidPatrolEventTime(iso: string): boolean {
   return true
 }
 
-/** Sự kiện vòng đời người (3 tab) — bắt buộc có snapshot evidence. */
+function meetsPatrolSnapshotScoreGate(event: PatrolEvent): boolean {
+  const score = event.snapshotScore ?? 0
+  const stage = resolvePatrolPersonStage(event)
+  if (stage === 'object') {
+    return score < PATROL_OBJECT_FACE_SNAPSHOT_SCORE
+  }
+  if (stage === 'person' || stage === 'profile') {
+    return score >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE
+  }
+  return true
+}
+
+/** Sự kiện vòng đời người (3 tab) — snapshot evidence + điểm ảnh đúng tầng. */
 export function isPatrolPersonLifecycleWithSnapshot(event: PatrolEvent): boolean {
   if (event.type !== 'PERSON_DETECTED' && event.type !== 'IDENTITY_VERIFIED') return false
-  return hasPatrolEventSnapshot(event)
+  if (!hasPatrolEventSnapshot(event)) return false
+  return meetsPatrolSnapshotScoreGate(event)
 }

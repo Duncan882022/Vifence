@@ -92,14 +92,8 @@ function snapshotStorageKey(url: string | undefined | null): string {
 
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
   const seenIds = new Set<string>()
-  const seenSnaps = new Set<string>()
   return segments.filter(segment => {
     if (!segment.snapshotUrl?.trim()) return false
-    const snapKey = snapshotStorageKey(segment.snapshotUrl)
-    if (snapKey) {
-      if (seenSnaps.has(snapKey)) return false
-      seenSnaps.add(snapKey)
-    }
     const key = appearanceRowKey(segment)
     if (seenIds.has(key)) return false
     seenIds.add(key)
@@ -162,14 +156,7 @@ function resolveAppearanceCameraLabel(segment: PatrolAppearanceSegment): string 
 }
 
 function formatEventTimeRange(event: PatrolEvent): string {
-  const first = formatEventDateTime(event.startedAt)
-  const last = formatEventDateTime(event.lockedAt)
-  if (first === last) return last
-  if (event.endedAt) {
-    const ended = formatEventDateTime(event.endedAt)
-    if (ended !== last) return `${first} – ${ended}`
-  }
-  return `${first} – ${last}`
+  return formatEventDateTime(event.lockedAt)
 }
 
 function resolveEventDurationSeconds(event: PatrolEvent): number | null {

@@ -58,6 +58,8 @@ export interface PatrolEvent {
   gps: { lat: number; lng: number }
   /** Snapshot từ backend VMS — `/events/{id}/snapshot` */
   snapshotUrl?: string
+  /** face_quality×2 + confidence từ daily_events — lọc tab Người/Đối tượng. */
+  snapshotScore?: number
   /** Mã ẩn danh sgc-* khi objectId đã promote sang OBJ-* */
   trackWorkerId?: string
   /**

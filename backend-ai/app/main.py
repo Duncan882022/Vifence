@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -296,8 +297,13 @@ async def lifespan(app: FastAPI):
     try:
         from .patrol.appearance_repair import repair_recent_appearance_history
 
-        repair_out = repair_recent_appearance_history(days=2)
-        logger.info("Patrol appearance repair (2 ngày gần nhất): %s", repair_out)
+        if os.environ.get("PATROL_APPEARANCE_REPAIR_ON_STARTUP", "").strip() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            repair_out = repair_recent_appearance_history(days=2)
+            logger.info("Patrol appearance repair (2 ngày gần nhất): %s", repair_out)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Patrol appearance repair bỏ qua: %s", exc)
     init_legacy_ctx(store=engine.store, vms_workers=_vms_workers)

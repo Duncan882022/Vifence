@@ -24,6 +24,8 @@ from .presence import (
 
 # Legacy alias — không GPS thì fallback trong should_extend_presence.
 APPEARANCE_GAP_SEC = 45.0
+# Tab Người / Định danh — điểm tối thiểu (face_quality×2 + confidence), đồng bộ FE.
+PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
 TOUCH_MIN_INTERVAL_SEC = 10.0
@@ -422,11 +424,15 @@ def _touch_appearance(
             lat_end = row["gps_lat_end"] if row["gps_lat_end"] is not None else row["gps_lat"]
         if lng_end is None:
             lng_end = row["gps_lng_end"] if row["gps_lng_end"] is not None else row["gps_lng"]
-        snap = (snapshot_path or "").strip() or row["snapshot_path"]
+        # Lịch sử tích lũy — giữ ảnh lúc bắt đầu lần gặp; card ngoài vẫn upsert ảnh mới.
+        prev_snap = str(row["snapshot_path"] or "").strip() or None
+        incoming = (snapshot_path or "").strip() or None
+        snap = prev_snap or incoming
         conn.execute(
             "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-            " camera_id = ?, source_cameras = ?, snapshot_path = ? WHERE id = ?",
-            (ts, lat_end, lng_end, camera_id, src, snap, row["id"]),
+            " camera_id = ?, source_cameras = ?,"
+            " snapshot_path = COALESCE(snapshot_path, ?) WHERE id = ?",
+            (ts, lat_end, lng_end, camera_id, src, incoming, row["id"]),
         )
         return
 
@@ -541,14 +547,18 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
     person_row = db.query_one(
         "SELECT COUNT(*) AS c FROM daily_events e"
         " JOIN persons p ON p.pers_id = e.pers_id"
-        " WHERE e.event_date = ? AND p.status = ?",
-        (d, identity.STATUS_PERSON),
+        " WHERE e.event_date = ? AND p.status = ?"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?",
+        (d, identity.STATUS_PERSON, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
     identity_row = db.query_one(
         "SELECT COUNT(*) AS c FROM daily_events e"
         " JOIN persons p ON p.pers_id = e.pers_id"
-        " WHERE e.event_date = ? AND p.status = ?",
-        (d, identity.STATUS_IDENTIFIED),
+        " WHERE e.event_date = ? AND p.status = ?"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?",
+        (d, identity.STATUS_IDENTIFIED, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
     enc_row = db.query_one(
         "SELECT COUNT(*) AS c FROM appearances"

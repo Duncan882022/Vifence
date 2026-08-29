@@ -95,6 +95,7 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       confidence: 1,
       gps: { lat: 0, lng: 0 },
       snapshotUrl: row.snapshotUrl,
+      snapshotScore: row.snapshotScore,
       stage: identified ? 'profile' : 'person',
     } as PatrolEvent
   })
@@ -118,6 +119,7 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       confidence: 1,
       gps: { lat: 0, lng: 0 },
       snapshotUrl: row.snapshotUrl,
+      snapshotScore: row.snapshotScore,
       stage: 'object',
     } as PatrolEvent
   })
