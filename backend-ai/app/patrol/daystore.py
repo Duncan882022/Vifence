@@ -154,23 +154,22 @@ def touch_object(
                 write, keep_new = _should_refresh_presence(
                     row, ts, snapshot_path, snapshot_score
                 )
-                if not write:
-                    return obj_id
-                if keep_new:
-                    conn.execute(
-                        "UPDATE daily_objects SET last_seen = ?, snapshot_path = ?,"
-                        " snapshot_score = ? WHERE event_date = ? AND obj_id = ?",
-                        (ts, snapshot_path, snapshot_score, date, obj_id),
-                    )
-                    appearance_snapshot = snapshot_path
-                else:
-                    conn.execute(
-                        "UPDATE daily_objects SET last_seen = ?"
-                        " WHERE event_date = ? AND obj_id = ?",
-                        (ts, date, obj_id),
-                    )
-                    if snapshot_path:
+                if write:
+                    if keep_new:
+                        conn.execute(
+                            "UPDATE daily_objects SET last_seen = ?, snapshot_path = ?,"
+                            " snapshot_score = ? WHERE event_date = ? AND obj_id = ?",
+                            (ts, snapshot_path, snapshot_score, date, obj_id),
+                        )
                         appearance_snapshot = snapshot_path
+                    else:
+                        conn.execute(
+                            "UPDATE daily_objects SET last_seen = ?"
+                            " WHERE event_date = ? AND obj_id = ?",
+                            (ts, date, obj_id),
+                        )
+                        if snapshot_path:
+                            appearance_snapshot = snapshot_path
         _touch_appearance(
             conn, date, obj_id, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
@@ -242,23 +241,22 @@ def touch_person_event(
                 face_eligible=face_eligible,
                 is_identified=is_identified,
             )
-            if not write:
-                return
-            if keep_new:
-                conn.execute(
-                    "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
-                    " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
-                    (ts, snapshot_path, snapshot_score, date, pid),
-                )
-                appearance_snapshot = snapshot_path
-            else:
-                conn.execute(
-                    "UPDATE daily_events SET last_seen = ?"
-                    " WHERE event_date = ? AND pers_id = ?",
-                    (ts, date, pid),
-                )
-                if face_eligible and snapshot_path:
+            if write:
+                if keep_new:
+                    conn.execute(
+                        "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
+                        " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
+                        (ts, snapshot_path, snapshot_score, date, pid),
+                    )
                     appearance_snapshot = snapshot_path
+                else:
+                    conn.execute(
+                        "UPDATE daily_events SET last_seen = ?"
+                        " WHERE event_date = ? AND pers_id = ?",
+                        (ts, date, pid),
+                    )
+                    if face_eligible and snapshot_path:
+                        appearance_snapshot = snapshot_path
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
             " WHERE pers_id = ?",
@@ -456,10 +454,29 @@ def _appearance_row_payload(row: Any) -> dict[str, Any]:
     return item
 
 
+def _resolve_appearance_subject_id(subject_id: str) -> str:
+    """Map gallery/sgc alias → pers-* / obj-* lưu trong appearances."""
+    sid = identity.resolve_alias((subject_id or "").strip())
+    if sid.startswith("pers-") or sid.startswith("obj-"):
+        return sid
+    try:
+        from ..patrol_identity_store import lookup_patrol_identity
+
+        row = lookup_patrol_identity(sid)
+        if row:
+            for alias in row.get("aliases") or []:
+                key = str(alias).strip()
+                if key.startswith("pers-") or key.startswith("obj-"):
+                    return identity.resolve_alias(key)
+    except Exception:  # noqa: BLE001
+        pass
+    return sid
+
+
 def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
     """Lịch sử xuất hiện cho popup — nhóm theo camera."""
     d = date or db.today_vn()
-    sid = identity.resolve_alias(subject_id)
+    sid = _resolve_appearance_subject_id(subject_id)
     rows = db.query(
         "SELECT id, camera_id, zone_id, started_at, ended_at,"
         " gps_lat, gps_lng, gps_lat_end, gps_lng_end,"

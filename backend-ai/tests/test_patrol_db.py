@@ -262,6 +262,24 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["snapshot_path"], "better.jpg")
         self.assertEqual(card["last_seen"], 1_003.0)
 
+    def test_appearance_extends_when_card_throttled(self) -> None:
+        """Thẻ không ghi trong 10s — lịch sử popup vẫn gộp lượt."""
+        pers_id, _ = identity.observe_face(_vec(30), quality=0.8)
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="a.jpg",
+            snapshot_score=1.0, face_eligible=True, now=1_000.0,
+        )
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", snapshot_path="b.jpg",
+            snapshot_score=0.5, face_eligible=True, now=1_005.0,
+        )
+        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
+        self.assertEqual(card["last_seen"], 1_000.0)
+
+        hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
+        self.assertEqual(len(hist["segments"]), 1)
+        self.assertEqual(hist["segments"][0]["ended_at"], 1_005.0)
+
     def test_appearance_keeps_snapshot_when_card_keeps_best(self) -> None:
         """Lượt mới sau gap vẫn lưu ảnh riêng dù thẻ giữ snapshot rõ hơn."""
         pers_id, _ = identity.observe_face(_vec(29), quality=0.8)
