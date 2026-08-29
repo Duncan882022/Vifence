@@ -488,7 +488,10 @@ export function Module05Page() {
                 minViewDate={patrolMinDate}
                 selectedId={selectedEventId}
                 onSelect={handleSelectEvent}
-                onDetailClick={ev => setDetailEventId(ev.id)}
+                onDetailClick={ev => {
+                  setPatrolViewDate(getPatrolEventViewDate(ev))
+                  setDetailEventId(ev.id)
+                }}
               />
             </Panel>
           </div>

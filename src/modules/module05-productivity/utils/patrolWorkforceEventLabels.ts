@@ -230,16 +230,10 @@ export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   return resolvePatrolCanonicalEntityKey(event)
 }
 
-/** Subject id tra lịch sử xuất hiện (popup) — ưu tiên pers/obj từ SQLite day cards. */
+/** Subject id tra lịch sử xuất hiện (popup) — chỉ pers-* / obj-* trong SQLite. */
 export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const fromDayCardPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
   if (fromDayCardPers) return fromDayCardPers
-
-  const stage = resolvePatrolPersonStage(event)
-  if (stage === 'profile') {
-    const profileKey = resolvePatrolProfileEntityKey(event)
-    if (profileKey && !isPatrolObjectId(profileKey)) return profileKey
-  }
 
   const fromDayCardObj = event.id.match(/^obj:(.+)$/i)?.[1]?.trim()
   if (fromDayCardObj) return fromDayCardObj
@@ -255,7 +249,6 @@ export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
     const track = event.trackWorkerId?.trim()
     if (track && isPatrolSgcWorkerId(track)) return track.toUpperCase()
     if (objectId && isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
-    if (objectId && isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
     return objectId || track || event.id
   }
   return key

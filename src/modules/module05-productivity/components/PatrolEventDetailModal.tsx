@@ -232,7 +232,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       return
     }
     const stage = resolvePatrolPersonStage(event)
-    if (stage !== 'person' && stage !== 'profile') {
+    if (stage !== 'person' && stage !== 'profile' && stage !== 'object') {
       setAppearanceSegments([])
       setAppearancesLoading(false)
       return
@@ -354,7 +354,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const showIdentify = stage !== 'profile'
     && needsPatrolManualIdentity(objectKey, event.objectLabel)
   const hasAppearanceHistory = appearanceSegments.length > 0
-  const showAppearanceHistory = (stage === 'person' || stage === 'profile')
+  const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
 
