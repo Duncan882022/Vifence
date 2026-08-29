@@ -133,11 +133,42 @@ export function filterRecentPresences(
   })
 }
 
-function resolvePresenceEntityKey(presence: PatrolDayPresence): string {
+function stripPatrolHeatmapDotLabel(label?: string | null): string | undefined {
+  const t = label?.trim()
+  if (!t) return undefined
+  const idx = t.lastIndexOf(' · L#')
+  return idx > 0 ? t.slice(0, idx).trim() : t
+}
+
+/** pers-* → gallery/iden canonical — từ bundle events, không cần chờ sync alias local. */
+export function buildPatrolPersEntityLookup(
+  events: PatrolEvent[],
+): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const event of events) {
+    const persMatch = event.id.match(/^pers:(.+)$/i)
+    if (!persMatch) continue
+    const persId = persMatch[1].trim().toLowerCase()
+    if (!persId) continue
+    const canonical = resolvePatrolCanonicalEntityKey(event).toLowerCase()
+    if (canonical && canonical !== persId) {
+      map[persId] = canonical
+    }
+  }
+  return map
+}
+
+function resolvePresenceEntityKey(
+  presence: PatrolDayPresence,
+  persEntityLookup?: Record<string, string>,
+): string {
+  const subject = presence.subjectId.trim()
+  const mapped = persEntityLookup?.[subject.toLowerCase()]
+  if (mapped) return mapped
   return resolvePatrolCanonicalEntityKey({
-    objectId: presence.subjectId,
+    objectId: subject,
     objectLabel: presence.displayName,
-  })
+  }).toLowerCase()
 }
 
 function shouldReplacePresenceDot(prev: DetectionDot, next: DetectionDot): boolean {
@@ -161,6 +192,8 @@ export function buildPatrolPresenceHeatmapDots(
     helmetPositionsById?: Record<string, [number, number]>
     helmetHeadingsById?: Record<string, number | null | undefined>
     flightModeByCamera?: Record<string, PatrolFlightMode | string | null | undefined>
+    /** pers-* → gallery từ bundle — gộp presence với registry trước khi alias local sync. */
+    persEntityLookup?: Record<string, string>
   },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
@@ -188,7 +221,7 @@ export function buildPatrolPresenceHeatmapDots(
       primaryCam,
       opts?.flightModeByCamera?.[primaryCam],
     )
-    const entityKey = resolvePresenceEntityKey(presence)
+    const entityKey = resolvePresenceEntityKey(presence, opts?.persEntityLookup)
 
     const dot: DetectionDot = {
       id: `entity-${entityKey}`,
@@ -199,7 +232,7 @@ export function buildPatrolPresenceHeatmapDots(
       confidence: 1,
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
-      objectId: presence.subjectId,
+      objectId: entityKey,
       tier,
       verified,
       inCameraView,
@@ -224,24 +257,37 @@ export interface PatrolHeatmapDeviceLayers {
 }
 
 /** Khóa gộp chấm — cùng logic dedup presence/registry (gallery thắng sgc/pers). */
-function resolveHeatmapDotMergeKey(dot: DetectionDot): string {
+function resolveHeatmapDotMergeKey(
+  dot: DetectionDot,
+  persEntityLookup?: Record<string, string>,
+): string {
   const oid = dot.objectId?.trim()
+  const label = stripPatrolHeatmapDotLabel(dot.label)
   if (oid) {
-    return resolvePatrolCanonicalEntityKey({ objectId: oid }).toLowerCase()
+    const mapped = persEntityLookup?.[oid.toLowerCase()]
+    if (mapped) return mapped
+    return resolvePatrolCanonicalEntityKey({ objectId: oid, objectLabel: label }).toLowerCase()
   }
   const entityId = dot.id.match(/^entity-(.+)$/i)?.[1]
   if (entityId) return entityId.toLowerCase()
   const pinId = dot.id.match(/^pin-(.+)$/i)?.[1]
-  if (pinId) return resolvePatrolCanonicalEntityKey({ objectId: pinId }).toLowerCase()
+  if (pinId) {
+    const mapped = persEntityLookup?.[pinId.toLowerCase()]
+    if (mapped) return mapped
+    return resolvePatrolCanonicalEntityKey({ objectId: pinId, objectLabel: label }).toLowerCase()
+  }
   return dot.id.toLowerCase()
 }
 
 /** Gộp nhiều nguồn chấm — ưu tiên inCameraView rồi lastSeenAt mới hơn. */
-export function mergePatrolHeatmapDetectionDots(groups: DetectionDot[][]): DetectionDot[] {
+export function mergePatrolHeatmapDetectionDots(
+  groups: DetectionDot[][],
+  opts?: { persEntityLookup?: Record<string, string> },
+): DetectionDot[] {
   const byKey = new Map<string, DetectionDot>()
   for (const group of groups) {
     for (const dot of group) {
-      const key = resolveHeatmapDotMergeKey(dot)
+      const key = resolveHeatmapDotMergeKey(dot, opts?.persEntityLookup)
       const prev = byKey.get(key)
       if (!prev) {
         byKey.set(key, dot)

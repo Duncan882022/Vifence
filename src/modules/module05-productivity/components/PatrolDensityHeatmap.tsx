@@ -30,6 +30,7 @@ import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
 import {
   buildPatrolDayHeatmapDots,
+  buildPatrolPersEntityLookup,
   buildPatrolPresenceHeatmapDots,
   filterPatrolHeatmapDotsByDevice,
   mergePatrolHeatmapDetectionDots,
@@ -324,12 +325,15 @@ export function PatrolDensityHeatmap({
     void identityRevision
     void registryRevision
 
+    const persEntityLookup = buildPatrolPersEntityLookup(patrolEvents)
+
     const presenceOpts = {
       cameraOnlineById: helmetOnlineById,
       includeUnassigned: true,
       helmetPositionsById: mergedCameraPositions,
       helmetHeadingsById: helmetHeadingById,
       flightModeByCamera: flycamFlightModes,
+      persEntityLookup,
     } as const
 
     let presenceDots = buildPatrolPresenceHeatmapDots(presences, {
@@ -355,7 +359,9 @@ export function PatrolDensityHeatmap({
       }
     })
 
-    let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots])
+    let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots], {
+      persEntityLookup,
+    })
 
     if (merged.length === 0 && patrolEvents.length > 0) {
       let eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
