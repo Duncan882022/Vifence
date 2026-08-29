@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
+import { assignPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import {
   buildPatrolDayHeatmapDots,
   buildPatrolPresenceHeatmapDots,
@@ -219,6 +220,82 @@ describe('mergePatrolHeatmapDetectionDots', () => {
     expect(merged).toHaveLength(1)
     expect(merged[0].inCameraView).toBe(true)
     expect(merged[0].id).toBe('pin-pers-0001')
+  })
+
+  it('presence pers-* + registry gallery — một chấm / người định danh', () => {
+    assignPatrolManualIdentity({
+      objectKey: 'pers-0042',
+      workerId: 'P-SGC-6688',
+      workerName: 'Nguyễn Văn A',
+      unitName: 'Công ty A',
+    })
+
+    const presenceDot: DetectionDot = {
+      id: 'entity-p-sgc-6688',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-02',
+      confidence: 1,
+      objectId: 'pers-0042',
+      tier: 'identity',
+      inCameraView: false,
+      lastSeenAt: 900,
+    }
+    const registryDot: DetectionDot = {
+      id: 'pin-P-SGC-6688',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0] + 0.0001, PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-02',
+      confidence: 1,
+      objectId: 'P-SGC-6688',
+      tier: 'identity',
+      inCameraView: true,
+      lastSeenAt: 1000,
+    }
+
+    const merged = mergePatrolHeatmapDetectionDots([[presenceDot], [registryDot]])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].inCameraView).toBe(true)
+    expect(merged[0].id).toBe('pin-P-SGC-6688')
+  })
+
+  it('presence sgc + registry gallery cùng người — một chấm', () => {
+    assignPatrolManualIdentity({
+      objectKey: 'SGC-7701',
+      workerId: 'P-WORKER-99',
+      workerName: 'Trần B',
+      unitName: 'Công ty B',
+    })
+
+    const presenceDot: DetectionDot = {
+      id: 'entity-p-worker-99',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-01',
+      confidence: 1,
+      objectId: 'SGC-7701',
+      tier: 'identity',
+      inCameraView: false,
+      lastSeenAt: 500,
+    }
+    const registryDot: DetectionDot = {
+      id: 'pin-P-WORKER-99',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-01',
+      confidence: 1,
+      objectId: 'P-WORKER-99',
+      tier: 'identity',
+      inCameraView: true,
+      lastSeenAt: 800,
+    }
+
+    const merged = mergePatrolHeatmapDetectionDots([[presenceDot], [registryDot]])
+    expect(merged).toHaveLength(1)
   })
 })
 
