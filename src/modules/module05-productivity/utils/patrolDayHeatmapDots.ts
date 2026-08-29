@@ -223,9 +223,16 @@ export interface PatrolHeatmapDeviceLayers {
   flycam: boolean
 }
 
+/** Khóa gộp chấm — cùng logic dedup presence/registry (gallery thắng sgc/pers). */
 function resolveHeatmapDotMergeKey(dot: DetectionDot): string {
   const oid = dot.objectId?.trim()
-  if (oid) return oid.toLowerCase()
+  if (oid) {
+    return resolvePatrolCanonicalEntityKey({ objectId: oid }).toLowerCase()
+  }
+  const entityId = dot.id.match(/^entity-(.+)$/i)?.[1]
+  if (entityId) return entityId.toLowerCase()
+  const pinId = dot.id.match(/^pin-(.+)$/i)?.[1]
+  if (pinId) return resolvePatrolCanonicalEntityKey({ objectId: pinId }).toLowerCase()
   return dot.id.toLowerCase()
 }
 
