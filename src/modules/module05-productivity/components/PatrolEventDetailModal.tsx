@@ -91,12 +91,18 @@ function snapshotStorageKey(url: string | undefined | null): string {
 }
 
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
-  const seen = new Set<string>()
+  const seenIds = new Set<string>()
+  const seenSnaps = new Set<string>()
   return segments.filter(segment => {
     if (!segment.snapshotUrl?.trim()) return false
+    const snapKey = snapshotStorageKey(segment.snapshotUrl)
+    if (snapKey) {
+      if (seenSnaps.has(snapKey)) return false
+      seenSnaps.add(snapKey)
+    }
     const key = appearanceRowKey(segment)
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (seenIds.has(key)) return false
+    seenIds.add(key)
     return true
   })
 }

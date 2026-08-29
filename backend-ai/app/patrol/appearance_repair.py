@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from . import db, identity, sink
+from .daystore import TOUCH_MIN_INTERVAL_SEC
 from .daystore import _resolve_appearance_subject_id
 from .presence import merge_source_cameras, parse_source_cameras
 
@@ -89,8 +90,14 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
             }
             template = existing[-1] if existing else None
 
+            last_snap_ts: float | None = None
             for ts, rel_path in files:
                 if rel_path in known_paths:
+                    continue
+                if (
+                    last_snap_ts is not None
+                    and (ts - last_snap_ts) < TOUCH_MIN_INTERVAL_SEC
+                ):
                     continue
                 cam = str(template["camera_id"]) if template else "HC-02"
                 zone = template["zone_id"] if template else None
@@ -115,6 +122,7 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
                     ),
                 )
                 known_paths.add(rel_path)
+                last_snap_ts = ts
                 inserted += 1
 
             merged_rows = [

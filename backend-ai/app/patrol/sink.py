@@ -24,6 +24,40 @@ from . import daystore, db, identity
 
 SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
 
+_SNAPSHOT_WRITE_LOCK = threading.Lock()
+_last_snapshot_write: dict[str, tuple[float, float]] = {}
+
+
+def _maybe_write_snapshot(
+    subject_id: str,
+    frame: Any,
+    bbox: Sequence[float],
+    *,
+    score: float = 0.0,
+    tier: str | None = None,
+    worker_id: str | None = None,
+    worker_name: str | None = None,
+    capture_ts: float | None = None,
+) -> str | None:
+    """Ghi file JPG — tối đa mỗi TOUCH_MIN_INTERVAL_SEC, trừ khi ảnh rõ hơn."""
+    ts = float(capture_ts if capture_ts is not None else time.time())
+    with _SNAPSHOT_WRITE_LOCK:
+        last = _last_snapshot_write.get(subject_id)
+        if last is not None:
+            last_ts, last_score = last
+            if score <= last_score and (ts - last_ts) < daystore.TOUCH_MIN_INTERVAL_SEC:
+                return None
+        _last_snapshot_write[subject_id] = (ts, max(score, last[1] if last else 0.0))
+    return _write_snapshot(
+        subject_id,
+        frame,
+        bbox,
+        tier=tier,
+        worker_id=worker_id,
+        worker_name=worker_name,
+        capture_ts=ts,
+    )
+
 
 def snapshot_score(*, face_quality: float, confidence: float) -> float:
     """Ảnh nào đáng giữ hơn.
@@ -517,10 +551,11 @@ def _commit_lifecycle_person_event(
     path: str | None = None
     shot_score = 0.0
     if face_eligible and frame is not None and person_bbox is not None:
-        path = _write_snapshot(
+        path = _maybe_write_snapshot(
             pid,
             frame,
             person_bbox,
+            score=score,
             tier=lifecycle_tier,
             worker_id=lifecycle_worker_id,
             capture_ts=ts,
@@ -584,10 +619,11 @@ def record_observation(
     ) -> tuple[str | None, float]:
         if frame is None or person_bbox is None:
             return None, 0.0
-        path = _write_snapshot(
+        path = _maybe_write_snapshot(
             subject_id,
             frame,
             person_bbox,
+            score=score,
             tier=tier or lifecycle_tier,
             worker_id=worker_id or lifecycle_worker_id,
             worker_name=worker_name,

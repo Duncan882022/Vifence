@@ -260,7 +260,6 @@ def touch_person_event(
                     if face_eligible and snapshot_path:
                         appearance_snapshot = snapshot_path
             elif face_eligible and snapshot_path:
-                # Thẻ throttle — vẫn ghi từng ảnh vào lịch sử popup.
                 appearance_snapshot = snapshot_path
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
@@ -381,6 +380,36 @@ def _next_presence_seq(conn, date: str, subject_id: str) -> int:
     return int(row["mx"] or 0) + 1
 
 
+def _should_record_snapshot_appearance(
+    conn,
+    date: str,
+    subject_id: str,
+    ts: float,
+    snapshot_path: str,
+) -> bool:
+    """Popup — tối đa một dòng ảnh mỗi TOUCH_MIN_INTERVAL_SEC; không trùng path."""
+    path = (snapshot_path or "").strip()
+    if not path:
+        return False
+    dup = conn.execute(
+        "SELECT id FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND snapshot_path = ?",
+        (date, subject_id, path),
+    ).fetchone()
+    if dup is not None:
+        return False
+    last = conn.execute(
+        "SELECT ended_at FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " AND snapshot_path IS NOT NULL AND snapshot_path != ''"
+        " ORDER BY ended_at DESC LIMIT 1",
+        (date, subject_id),
+    ).fetchone()
+    if last is None:
+        return True
+    return (ts - float(last["ended_at"])) >= TOUCH_MIN_INTERVAL_SEC
+
+
 def _touch_appearance(
     conn,
     date: str,
@@ -412,8 +441,12 @@ def _touch_appearance(
     lng_end = gps_lng
     prev_snapshot = row["snapshot_path"] if row is not None and row["snapshot_path"] else None
 
-    # Mỗi ảnh chụp = một dòng lịch sử popup — không kéo dài 10:03→10:07.
+    # Mỗi ảnh chụp = một dòng popup (started=ended), nhưng throttle ~10s — tránh spam 6 FPS.
     if snapshot_path:
+        if not _should_record_snapshot_appearance(
+            conn, date, subject_id, ts, snapshot_path,
+        ):
+            return
         seq = _next_presence_seq(conn, date, subject_id)
         src = merge_source_cameras(None, camera_id)
         conn.execute(

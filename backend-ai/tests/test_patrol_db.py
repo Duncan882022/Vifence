@@ -263,7 +263,7 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["last_seen"], 1_003.0)
 
     def test_appearance_extends_when_card_throttled(self) -> None:
-        """Throttle thẻ — mỗi ảnh chụp vẫn là một dòng lịch sử riêng."""
+        """Throttle thẻ — ảnh cách ≥10s vẫn là dòng lịch sử riêng."""
         pers_id, _ = identity.observe_face(_vec(30), quality=0.8)
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="a.jpg",
@@ -271,18 +271,37 @@ class DailyEventTests(PatrolDbTestCase):
         )
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="b.jpg",
-            snapshot_score=0.5, face_eligible=True, now=1_005.0,
+            snapshot_score=0.5, face_eligible=True, now=1_011.0,
         )
         card = daystore.list_person_events(db.today_vn(1_000.0))[0]
-        self.assertEqual(card["last_seen"], 1_000.0)
+        self.assertEqual(card["snapshot_path"], "a.jpg")
+        self.assertEqual(card["last_seen"], 1_011.0)
 
         hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
         snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
         self.assertEqual(len(snaps), 2)
         self.assertEqual(snaps[0]["started_at"], 1_000.0)
         self.assertEqual(snaps[0]["ended_at"], 1_000.0)
-        self.assertEqual(snaps[1]["started_at"], 1_005.0)
-        self.assertEqual(snaps[1]["ended_at"], 1_005.0)
+        self.assertEqual(snaps[1]["started_at"], 1_011.0)
+        self.assertEqual(snaps[1]["ended_at"], 1_011.0)
+
+    def test_rapid_snapshot_touches_single_history_row(self) -> None:
+        """6 FPS — nhiều ảnh trong 1 giây chỉ ghi một dòng popup."""
+        pers_id, _ = identity.observe_face(_vec(32), quality=0.8)
+        base = 2_000.0
+        for i in range(8):
+            daystore.touch_person_event(
+                pers_id,
+                camera_id="HC-01",
+                snapshot_path=f"20260829/pers-burst-{i}.jpg",
+                snapshot_score=1.0,
+                face_eligible=True,
+                now=base + i * 0.15,
+            )
+        hist = daystore.list_appearances(pers_id, db.today_vn(base))
+        snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
+        self.assertEqual(len(snaps), 1)
+        self.assertEqual(snaps[0]["snapshot_path"], "20260829/pers-burst-0.jpg")
 
     def test_snapshot_appearance_never_merges_time_window(self) -> None:
         """Popup — mỗi ảnh một dòng, không gộp 10:03→10:07."""
