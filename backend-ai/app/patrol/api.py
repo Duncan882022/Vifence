@@ -472,6 +472,23 @@ def merge_persons(
     return {"ok": True, "person": _person_payload(row) if row else None}
 
 
+@router.post("/admin/repair-appearances")
+def repair_appearances(
+    date: str | None = None,
+    days: int = 2,
+    user: RequirePatrolAdmin = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Backfill lịch sử popup từ snapshot files — sửa dòng gộp 10:03→10:07."""
+    from .appearance_repair import repair_day_appearance_history, repair_recent_appearance_history
+
+    if date:
+        out = repair_day_appearance_history(date)
+    else:
+        out = {"ok": True, "days": repair_recent_appearance_history(max(1, min(days, 14)))}
+    audit("appearance_repair", actor=user.username, meta={"date": date, "days": days})
+    return out
+
+
 @router.post("/persons/sync-gallery")
 def sync_gallery_persons(_user: RequirePatrolAdmin = None) -> dict:  # noqa: ARG001
     """Backfill gallery live từ mọi hồ sơ đã định danh (admin)."""

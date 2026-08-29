@@ -293,6 +293,13 @@ async def lifespan(app: FastAPI):
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Patrol gallery sync bỏ qua: %s", exc)
+    try:
+        from .patrol.appearance_repair import repair_recent_appearance_history
+
+        repair_out = repair_recent_appearance_history(days=2)
+        logger.info("Patrol appearance repair (2 ngày gần nhất): %s", repair_out)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Patrol appearance repair bỏ qua: %s", exc)
     init_legacy_ctx(store=engine.store, vms_workers=_vms_workers)
     logger.info("Backend AI sẵn sàng tại http://%s:%s", settings.host, settings.port)
     if settings.event_test_mode:
