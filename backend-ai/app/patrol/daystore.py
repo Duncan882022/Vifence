@@ -380,36 +380,6 @@ def _next_presence_seq(conn, date: str, subject_id: str) -> int:
     return int(row["mx"] or 0) + 1
 
 
-def _should_record_snapshot_appearance(
-    conn,
-    date: str,
-    subject_id: str,
-    ts: float,
-    snapshot_path: str,
-) -> bool:
-    """Popup — tối đa một dòng ảnh mỗi TOUCH_MIN_INTERVAL_SEC; không trùng path."""
-    path = (snapshot_path or "").strip()
-    if not path:
-        return False
-    dup = conn.execute(
-        "SELECT id FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? AND snapshot_path = ?",
-        (date, subject_id, path),
-    ).fetchone()
-    if dup is not None:
-        return False
-    last = conn.execute(
-        "SELECT ended_at FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
-        " AND snapshot_path IS NOT NULL AND snapshot_path != ''"
-        " ORDER BY ended_at DESC LIMIT 1",
-        (date, subject_id),
-    ).fetchone()
-    if last is None:
-        return True
-    return (ts - float(last["ended_at"])) >= TOUCH_MIN_INTERVAL_SEC
-
-
 def _touch_appearance(
     conn,
     date: str,
@@ -423,10 +393,11 @@ def _touch_appearance(
     qualified: bool = True,
     snapshot_path: str | None = None,
 ) -> None:
-    """Một qualified presence = một lượt gặp (chuẩn hoặc chưa gán).
+    """Một lần gặp = một dòng popup + heatmap.
 
-    Gộp khi GPS gần + trong T_max (cross-camera nếu có GPS). Không GPS: gộp
-    theo camera + gap 45s — tương thích test và indoor.
+    Đứng trong khung liên tục (≤45s / cùng GPS) → gộp một lần gặp, kéo ended_at.
+    Ra khỏi khung hoặc vắng lâu → lần gặp mới. Ảnh popup = snapshot mới nhất
+    trong phiên gặp đó.
     """
     q = 1 if qualified else 0
     row = conn.execute(
@@ -439,35 +410,10 @@ def _touch_appearance(
 
     lat_end = gps_lat
     lng_end = gps_lng
-    prev_snapshot = row["snapshot_path"] if row is not None and row["snapshot_path"] else None
-
-    # Mỗi ảnh chụp = một dòng popup (started=ended), nhưng throttle ~10s — tránh spam 6 FPS.
-    if snapshot_path:
-        if not _should_record_snapshot_appearance(
-            conn, date, subject_id, ts, snapshot_path,
-        ):
-            return
-        seq = _next_presence_seq(conn, date, subject_id)
-        src = merge_source_cameras(None, camera_id)
-        conn.execute(
-            "INSERT INTO appearances"
-            "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
-            " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
-            " source_cameras, snapshot_path)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                date, subject_id, camera_id, zone_id, ts, ts,
-                gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snapshot_path,
-            ),
-        )
-        return
 
     if row is not None and should_extend_presence(
         row, ts, gps_lat, gps_lng, camera_id=camera_id,
     ):
-        # Chỉ gộp dòng tracking (không ảnh) — KPI/heatmap; popup lọc snapshot.
-        if prev_snapshot:
-            return
         src = merge_source_cameras(
             str(row["source_cameras"]) if row["source_cameras"] else None,
             camera_id,
@@ -476,15 +422,17 @@ def _touch_appearance(
             lat_end = row["gps_lat_end"] if row["gps_lat_end"] is not None else row["gps_lat"]
         if lng_end is None:
             lng_end = row["gps_lng_end"] if row["gps_lng_end"] is not None else row["gps_lng"]
+        snap = (snapshot_path or "").strip() or row["snapshot_path"]
         conn.execute(
             "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-            " camera_id = ?, source_cameras = ? WHERE id = ?",
-            (ts, lat_end, lng_end, camera_id, src, row["id"]),
+            " camera_id = ?, source_cameras = ?, snapshot_path = ? WHERE id = ?",
+            (ts, lat_end, lng_end, camera_id, src, snap, row["id"]),
         )
         return
 
     seq = _next_presence_seq(conn, date, subject_id)
     src = merge_source_cameras(None, camera_id)
+    snap = (snapshot_path or "").strip() or None
     conn.execute(
         "INSERT INTO appearances"
         "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
@@ -493,7 +441,7 @@ def _touch_appearance(
         " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             date, subject_id, camera_id, zone_id, ts, ts,
-            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, None,
+            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snap,
         ),
     )
 

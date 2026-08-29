@@ -79,7 +79,10 @@ def should_extend_presence(
 
     if has_current and has_last:
         dist = haversine_m(last_lat, last_lng, float(gps_lat), float(gps_lng))
-        return dist <= d_merge
+        if dist > d_merge:
+            return False
+        # Cùng GPS vẫn tách lần gặp nếu vắng >45s (ra khỏi khung / quay lại sau).
+        return gap <= GAP_FALLBACK_SEC
 
     # Không GPS: giữ hành vi cũ theo camera + gap ngắn (test / indoor).
     prev_cam = str(row["camera_id"] or "")

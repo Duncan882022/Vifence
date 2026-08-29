@@ -1,22 +1,19 @@
-"""Sửa lịch sử xuất hiện bị gộp sai — tái tạo từ file snapshot trên disk.
+"""Sửa lịch sử popup — tái tạo theo lần gặp từ file snapshot trên disk.
 
-Trước fix PR #162, `_touch_appearance` kéo dài `ended_at` trên cùng một dòng
-(10:03→10:07). Ảnh vẫn lưu riêng từng file `{subject_id}-{ts_ms}.jpg` — dùng
-để backfill mỗi ảnh = một dòng popup.
+Mỗi lần gặp = các ảnh liên tiếp cách nhau ≤ GAP_FALLBACK_SEC (45s).
+Burst 6 FPS trong cùng phiên → một dòng started..ended, ảnh mới nhất.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from pathlib import Path
 from typing import Any
 
-from . import db, identity, sink
-from .daystore import TOUCH_MIN_INTERVAL_SEC
+from . import db, sink
 from .daystore import _resolve_appearance_subject_id
-from .presence import merge_source_cameras, parse_source_cameras
+from .presence import GAP_FALLBACK_SEC, merge_source_cameras
 
 logger = logging.getLogger("patrol.appearance_repair")
 
@@ -54,8 +51,30 @@ def _list_disk_snapshots(date: str) -> list[tuple[str, float, str]]:
     return out
 
 
+def _group_encounter_snapshots(
+    files: list[tuple[float, str]],
+    *,
+    gap_sec: float = GAP_FALLBACK_SEC,
+) -> list[tuple[float, float, str]]:
+    """Gom burst ảnh → (started_at, ended_at, snapshot_path cuối phiên)."""
+    if not files:
+        return []
+    ordered = sorted(files, key=lambda x: x[0])
+    groups: list[tuple[float, float, str]] = []
+    start_ts, end_ts, snap = ordered[0][0], ordered[0][0], ordered[0][1]
+    for ts, rel_path in ordered[1:]:
+        if ts - end_ts <= gap_sec:
+            end_ts = ts
+            snap = rel_path
+        else:
+            groups.append((start_ts, end_ts, snap))
+            start_ts, end_ts, snap = ts, ts, rel_path
+    groups.append((start_ts, end_ts, snap))
+    return groups
+
+
 def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
-    """Backfill popup history từ snapshot files; xoá dòng gộp sai."""
+    """Backfill popup theo lần gặp; xoá dòng ảnh trùng burst cũ."""
     d = date or db.today_vn()
     disk = _list_disk_snapshots(d)
     if not disk:
@@ -72,37 +91,34 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
 
     with db.tx() as conn:
         for subject_id, files in by_subject.items():
-            files.sort(key=lambda x: x[0])
+            encounters = _group_encounter_snapshots(files)
             existing = conn.execute(
-                "SELECT id, started_at, ended_at, camera_id, zone_id,"
-                " gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
-                " snapshot_path, source_cameras, presence_seq"
+                "SELECT id, started_at, ended_at, snapshot_path"
                 " FROM appearances"
                 " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+                " AND snapshot_path IS NOT NULL AND snapshot_path != ''"
                 " ORDER BY started_at ASC",
                 (d, subject_id),
             ).fetchall()
 
-            known_paths = {
-                str(r["snapshot_path"]).strip()
-                for r in existing
-                if r["snapshot_path"]
-            }
-            template = existing[-1] if existing else None
+            template = conn.execute(
+                "SELECT camera_id, zone_id, gps_lat, gps_lng FROM appearances"
+                " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+                " ORDER BY ended_at DESC LIMIT 1",
+                (d, subject_id),
+            ).fetchone()
 
-            last_snap_ts: float | None = None
-            for ts, rel_path in files:
-                if rel_path in known_paths:
-                    continue
-                if (
-                    last_snap_ts is not None
-                    and (ts - last_snap_ts) < TOUCH_MIN_INTERVAL_SEC
-                ):
-                    continue
-                cam = str(template["camera_id"]) if template else "HC-02"
-                zone = template["zone_id"] if template else None
-                glat = template["gps_lat"] if template else None
-                glng = template["gps_lng"] if template else None
+            # Xoá dòng ảnh cũ (burst / per-frame) — rebuild sạch từ disk.
+            for row in existing:
+                conn.execute("DELETE FROM appearances WHERE id = ?", (int(row["id"]),))
+                removed += 1
+
+            cam = str(template["camera_id"]) if template else "HC-02"
+            zone = template["zone_id"] if template else None
+            glat = template["gps_lat"] if template else None
+            glng = template["gps_lng"] if template else None
+
+            for start_ts, end_ts, rel_path in encounters:
                 seq_row = conn.execute(
                     "SELECT COALESCE(MAX(presence_seq), 0) AS mx FROM appearances"
                     " WHERE event_date = ? AND subject_id = ?",
@@ -117,53 +133,12 @@ def repair_day_appearance_history(date: str | None = None) -> dict[str, Any]:
                     " source_cameras, snapshot_path)"
                     " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
-                        d, subject_id, cam, zone, ts, ts,
+                        d, subject_id, cam, zone, start_ts, end_ts,
                         glat, glng, glat, glng, 1, seq, src, rel_path,
                     ),
                 )
-                known_paths.add(rel_path)
-                last_snap_ts = ts
                 inserted += 1
-
-            merged_rows = [
-                r for r in existing
-                if float(r["ended_at"]) - float(r["started_at"]) > 1.0
-            ]
-            for row in merged_rows:
-                row_id = int(row["id"])
-                start = float(row["started_at"])
-                end = float(row["ended_at"])
-                snaps_in_range = [
-                    (ts, path) for ts, path in files
-                    if start - 1.0 <= ts <= end + 1.0
-                ]
-                row_path = str(row["snapshot_path"] or "").strip()
-
-                if len(snaps_in_range) > 1:
-                    conn.execute("DELETE FROM appearances WHERE id = ?", (row_id,))
-                    removed += 1
-                    continue
-
-                if len(snaps_in_range) == 1:
-                    ts, path = snaps_in_range[0]
-                    if row_path and row_path != path:
-                        conn.execute("DELETE FROM appearances WHERE id = ?", (row_id,))
-                        removed += 1
-                    else:
-                        conn.execute(
-                            "UPDATE appearances SET started_at = ?, ended_at = ?, snapshot_path = ?"
-                            " WHERE id = ?",
-                            (ts, ts, path, row_id),
-                        )
-                        fixed += 1
-                    continue
-
-                if row_path:
-                    conn.execute(
-                        "UPDATE appearances SET ended_at = started_at WHERE id = ?",
-                        (row_id,),
-                    )
-                    fixed += 1
+                fixed += 1
 
     result = {
         "ok": True,

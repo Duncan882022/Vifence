@@ -81,8 +81,8 @@ class AppearanceRepairTest(unittest.TestCase):
         hist = daystore.list_appearances(pers_id, date)
         snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
         self.assertEqual(len(snaps), 2)
-        for seg in snaps:
-            self.assertEqual(seg["started_at"], seg["ended_at"])
+        self.assertEqual(snaps[0]["started_at"], t1)
+        self.assertEqual(snaps[1]["started_at"], t2)
 
 
 if __name__ == "__main__":

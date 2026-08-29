@@ -263,7 +263,7 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["last_seen"], 1_003.0)
 
     def test_appearance_extends_when_card_throttled(self) -> None:
-        """Throttle thẻ — ảnh cách ≥10s vẫn là dòng lịch sử riêng."""
+        """Cùng lần gặp (<45s) — popup một dòng, kéo ended_at."""
         pers_id, _ = identity.observe_face(_vec(30), quality=0.8)
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="a.jpg",
@@ -279,14 +279,13 @@ class DailyEventTests(PatrolDbTestCase):
 
         hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
         snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
-        self.assertEqual(len(snaps), 2)
+        self.assertEqual(len(snaps), 1)
         self.assertEqual(snaps[0]["started_at"], 1_000.0)
-        self.assertEqual(snaps[0]["ended_at"], 1_000.0)
-        self.assertEqual(snaps[1]["started_at"], 1_011.0)
-        self.assertEqual(snaps[1]["ended_at"], 1_011.0)
+        self.assertEqual(snaps[0]["ended_at"], 1_011.0)
+        self.assertEqual(snaps[0]["snapshot_path"], "b.jpg")
 
     def test_rapid_snapshot_touches_single_history_row(self) -> None:
-        """6 FPS — nhiều ảnh trong 1 giây chỉ ghi một dòng popup."""
+        """6 FPS — đứng trong khung ~1s vẫn chỉ một lần gặp."""
         pers_id, _ = identity.observe_face(_vec(32), quality=0.8)
         base = 2_000.0
         for i in range(8):
@@ -301,13 +300,15 @@ class DailyEventTests(PatrolDbTestCase):
         hist = daystore.list_appearances(pers_id, db.today_vn(base))
         snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
         self.assertEqual(len(snaps), 1)
-        self.assertEqual(snaps[0]["snapshot_path"], "20260829/pers-burst-0.jpg")
+        self.assertEqual(snaps[0]["started_at"], base)
+        self.assertAlmostEqual(snaps[0]["ended_at"], base + 7 * 0.15, places=3)
+        self.assertEqual(snaps[0]["snapshot_path"], "20260829/pers-burst-7.jpg")
 
-    def test_snapshot_appearance_never_merges_time_window(self) -> None:
-        """Popup — mỗi ảnh một dòng, không gộp 10:03→10:07."""
+    def test_separate_encounters_after_gap(self) -> None:
+        """Mỗi lần gặp cách >45s — popup tách dòng."""
         pers_id, _ = identity.observe_face(_vec(31), quality=0.8)
         lat, lng = 20.93309, 106.92395
-        base = 1_735_000_000.0  # arbitrary epoch
+        base = 1_735_000_000.0
         for i, offset in enumerate((0, 60, 120, 240)):
             daystore.touch_person_event(
                 pers_id,
@@ -322,8 +323,6 @@ class DailyEventTests(PatrolDbTestCase):
         hist = daystore.list_appearances(pers_id, db.today_vn(base))
         snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
         self.assertEqual(len(snaps), 4)
-        for seg in snaps:
-            self.assertEqual(seg["started_at"], seg["ended_at"])
 
     def test_appearance_keeps_snapshot_when_card_keeps_best(self) -> None:
         """Lượt mới sau gap vẫn lưu ảnh riêng dù thẻ giữ snapshot rõ hơn."""
