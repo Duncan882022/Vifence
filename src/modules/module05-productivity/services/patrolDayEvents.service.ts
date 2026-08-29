@@ -223,7 +223,7 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
   }
 }
 
-export function formatAppearanceTimeRange(startSec: number, endSec: number): string {
+export function formatAppearanceTimeRange(startSec: number, _endSec?: number): string {
   const d = new Date(startSec * 1000)
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
