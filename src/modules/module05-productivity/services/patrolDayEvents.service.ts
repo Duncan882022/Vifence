@@ -224,15 +224,10 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
 }
 
 export function formatAppearanceTimeRange(startSec: number, endSec: number): string {
-  const fmt = (sec: number) => {
-    const d = new Date(sec * 1000)
-    const hh = String(d.getHours()).padStart(2, '0')
-    const mm = String(d.getMinutes()).padStart(2, '0')
-    return `${hh}:${mm}`
-  }
-  const a = fmt(startSec)
-  const b = fmt(endSec)
-  return a === b ? a : `${a} – ${b}`
+  const d = new Date(startSec * 1000)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
 /** Gán tên cho một Người → Định danh. Ảnh kèm theo được lưu làm khuôn mặt. */

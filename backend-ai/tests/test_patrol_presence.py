@@ -18,6 +18,26 @@ def _vec(seed: int, dim: int = 128) -> list[float]:
     return (v / np.linalg.norm(v)).tolist()
 
 
+def _touch_person_card(
+    pers_id: str,
+    *,
+    camera_id: str = "HC-01",
+    now: float = 1_000.0,
+    snapshot_path: str = "20260829/test.jpg",
+    snapshot_score: float = 1.2,
+    **kwargs,
+) -> None:
+    daystore.touch_person_event(
+        pers_id,
+        camera_id=camera_id,
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+        face_eligible=True,
+        now=now,
+        **kwargs,
+    )
+
+
 class PresenceGeoTest(unittest.TestCase):
     def test_haversine_zero_same_point(self) -> None:
         self.assertAlmostEqual(haversine_m(10.0, 106.0, 10.0, 106.0), 0.0, places=1)
@@ -57,11 +77,11 @@ class PresenceDbTest(unittest.TestCase):
 
     def test_gps_split_far_apart_two_encounters(self) -> None:
         pers_id, _ = identity.observe_face(_vec(102), quality=0.8)
-        daystore.touch_person_event(
+        _touch_person_card(
             pers_id, camera_id="HC-01", now=2_000.0,
             gps_lat=10.772100, gps_lng=106.659200,
         )
-        daystore.touch_person_event(
+        _touch_person_card(
             pers_id, camera_id="HC-01", now=2_100.0,
             gps_lat=10.773000, gps_lng=106.659200,
         )

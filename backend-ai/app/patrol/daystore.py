@@ -38,6 +38,18 @@ def _person_snapshot_score_floor() -> float:
     return float(settings.patrol_face_detect_min_score_bodycam) * 2.0 + 0.4
 
 
+def _person_card_eligible(
+    *,
+    face_eligible: bool,
+    snapshot_path: str | None,
+    snapshot_score: float,
+) -> bool:
+    """Tab Người / popup — chỉ khi mặt đủ rõ (đồng bộ FE ≥1.05)."""
+    if not face_eligible or not snapshot_path:
+        return False
+    return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
+
+
 def _should_refresh_presence(
     row,
     ts: float,
@@ -178,6 +190,7 @@ def touch_object(
             conn, date, obj_id, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
             snapshot_path=appearance_snapshot,
+            new_encounter=seen_since is not None,
         )
 
     return obj_id
@@ -219,6 +232,11 @@ def touch_person_event(
         person and person.get("status") == identity.STATUS_IDENTIFIED
     )
     appearance_snapshot: str | None = None
+    card_eligible = _person_card_eligible(
+        face_eligible=face_eligible,
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+    )
 
     with db.tx() as conn:
         row = conn.execute(
@@ -227,15 +245,14 @@ def touch_person_event(
             (date, pid),
         ).fetchone()
         if row is None:
-            attach_path = snapshot_path if face_eligible else None
-            attach_score = snapshot_score if face_eligible else 0.0
-            appearance_snapshot = attach_path
-            conn.execute(
-                "INSERT INTO daily_events"
-                "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
-                " VALUES(?,?,?,?,?,?)",
-                (date, pid, first, ts, attach_path, attach_score),
-            )
+            if card_eligible:
+                appearance_snapshot = snapshot_path
+                conn.execute(
+                    "INSERT INTO daily_events"
+                    "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (date, pid, first, ts, snapshot_path, snapshot_score),
+                )
         else:
             write, keep_new = _should_refresh_person_snapshot(
                 row,
@@ -246,7 +263,7 @@ def touch_person_event(
                 is_identified=is_identified,
             )
             if write:
-                if keep_new:
+                if keep_new and card_eligible:
                     conn.execute(
                         "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
                         " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
@@ -259,9 +276,9 @@ def touch_person_event(
                         " WHERE event_date = ? AND pers_id = ?",
                         (ts, date, pid),
                     )
-                    if face_eligible and snapshot_path:
+                    if card_eligible and snapshot_path:
                         appearance_snapshot = snapshot_path
-            elif face_eligible and snapshot_path:
+            elif card_eligible and snapshot_path:
                 appearance_snapshot = snapshot_path
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
@@ -272,6 +289,7 @@ def touch_person_event(
             conn, date, pid, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
             snapshot_path=appearance_snapshot,
+            new_encounter=seen_since is not None,
         )
 
 
@@ -394,15 +412,16 @@ def _touch_appearance(
     gps_lng: float | None = None,
     qualified: bool = True,
     snapshot_path: str | None = None,
+    new_encounter: bool = False,
 ) -> None:
     """Một lần gặp = một dòng popup + heatmap.
 
     Đứng trong khung liên tục (≤45s / cùng GPS) → gộp một lần gặp, kéo ended_at.
-    Ra khỏi khung hoặc vắng lâu → lần gặp mới. Ảnh popup = snapshot mới nhất
-    trong phiên gặp đó.
+    Track mới (`new_encounter`) hoặc vắng lâu → dòng mới. Ảnh popup = snapshot
+    lúc bắt đầu lần gặp (card ngoài giữ ảnh mới nhất).
     """
     q = 1 if qualified else 0
-    row = conn.execute(
+    row = None if new_encounter else conn.execute(
         "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
         " source_cameras, snapshot_path FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND qualified = 1"

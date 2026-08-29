@@ -155,6 +155,7 @@ def day_events(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "first_seen": r["first_seen"],
             "last_seen": r["last_seen"],
             "snapshot_path": r.get("snapshot_path"),
+            "snapshot_score": float(r.get("snapshot_score") or 0),
         }
         for r in rows
     ]
@@ -221,6 +222,7 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "first_seen": r["first_seen"],
             "last_seen": r["last_seen"],
             "snapshot_path": r.get("snapshot_path"),
+            "snapshot_score": float(r.get("snapshot_score") or 0),
         }
         for r in events
     ]

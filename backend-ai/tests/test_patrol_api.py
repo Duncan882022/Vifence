@@ -21,6 +21,26 @@ def _vec(seed: int, dim: int = 128) -> list[float]:
     return (v / np.linalg.norm(v)).tolist()
 
 
+def _touch_person_card(
+    pers_id: str,
+    *,
+    camera_id: str = "HC-01",
+    now: float = 1_000.0,
+    snapshot_path: str = "20260829/test.jpg",
+    snapshot_score: float = 1.2,
+    **kwargs,
+) -> None:
+    daystore.touch_person_event(
+        pers_id,
+        camera_id=camera_id,
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+        face_eligible=True,
+        now=now,
+        **kwargs,
+    )
+
+
 class PatrolApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._prev_auth = settings.patrol_auth_disabled
@@ -73,7 +93,7 @@ class PatrolApiTests(unittest.TestCase):
 
     def test_day_events_reflect_identity_change(self) -> None:
         pers_id, _ = identity.observe_face(_vec(5), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-01")
+        _touch_person_card(pers_id, camera_id="HC-01")
 
         before = self.client.get("/patrol/day/events").json()
         self.assertEqual(before["items"][0]["status"], "person")
@@ -88,8 +108,8 @@ class PatrolApiTests(unittest.TestCase):
 
     def test_appearances_grouped_by_camera(self) -> None:
         pers_id, _ = identity.observe_face(_vec(6), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-01")
-        daystore.touch_person_event(pers_id, camera_id="DR-03")
+        _touch_person_card(pers_id, camera_id="HC-01")
+        _touch_person_card(pers_id, camera_id="DR-03")
 
         res = self.client.get(f"/patrol/day/appearances?subject_id={pers_id}").json()
         self.assertTrue(res["ok"])
@@ -97,7 +117,7 @@ class PatrolApiTests(unittest.TestCase):
 
     def test_day_stats_and_presences(self) -> None:
         pers_id, _ = identity.observe_face(_vec(9), quality=0.8)
-        daystore.touch_person_event(
+        _touch_person_card(
             pers_id, camera_id="HC-01", now=1_000.0,
             gps_lat=10.7721, gps_lng=106.6592,
         )
@@ -117,6 +137,21 @@ class PatrolApiTests(unittest.TestCase):
         self.assertEqual(len(pres["items"]), 2)
         gps_items = [i for i in pres["items"] if i.get("gps_lat")]
         self.assertGreaterEqual(len(gps_items), 1)
+
+    def test_day_bundle_includes_snapshot_score(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(10), quality=0.8)
+        _touch_person_card(
+            pers_id,
+            camera_id="HC-01",
+            now=3_000.0,
+            snapshot_path="bundle.jpg",
+            snapshot_score=1.35,
+        )
+        bundle = self.client.get("/patrol/day/bundle").json()
+        self.assertTrue(bundle["ok"])
+        self.assertEqual(len(bundle["events"]), 1)
+        self.assertEqual(bundle["events"][0]["snapshot_path"], "bundle.jpg")
+        self.assertAlmostEqual(bundle["events"][0]["snapshot_score"], 1.35)
 
     def test_merge_endpoint_keeps_old_code_resolvable(self) -> None:
         a, _ = identity.observe_face(_vec(7), quality=0.8)
@@ -161,7 +196,7 @@ class PatrolApiTests(unittest.TestCase):
             embedding=_vec(88),
         )
         pers, _ = identity.observe_face(_vec(89), quality=0.8)
-        daystore.touch_person_event(pers, camera_id="HC-01", now=2_000.0)
+        _touch_person_card(pers, camera_id="HC-01", now=2_000.0)
         date = db.today_vn(2_000.0)
 
         res = self.client.delete(f"/patrol/day/events?date={date}").json()

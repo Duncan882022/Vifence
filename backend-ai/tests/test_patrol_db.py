@@ -32,6 +32,26 @@ def _nudge(vec: list[float], cosine: float, seed: int = 99) -> list[float]:
     return (v / np.linalg.norm(v)).tolist()
 
 
+def _touch_person_card(
+    pers_id: str,
+    *,
+    camera_id: str = "HC-01",
+    now: float = 1_000.0,
+    snapshot_path: str = "20260829/test.jpg",
+    snapshot_score: float = 1.2,
+    **kwargs,
+) -> None:
+    daystore.touch_person_event(
+        pers_id,
+        camera_id=camera_id,
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+        face_eligible=True,
+        now=now,
+        **kwargs,
+    )
+
+
 class PatrolDbTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -124,8 +144,10 @@ class MergeTests(PatrolDbTestCase):
     def test_merge_folds_same_day_cards(self) -> None:
         a, _ = identity.observe_face(_vec(14), quality=0.8)
         b, _ = identity.observe_face(_vec(15), quality=0.8)
-        daystore.touch_person_event(a, camera_id="HC-01", now=1000.0)
-        daystore.touch_person_event(b, camera_id="HC-02", now=2000.0)
+        daystore.touch_person_event(a, camera_id="HC-01", now=1000.0,
+            snapshot_path="a.jpg", snapshot_score=1.2, face_eligible=True)
+        daystore.touch_person_event(b, camera_id="HC-02", now=2000.0,
+            snapshot_path="b.jpg", snapshot_score=1.2, face_eligible=True)
 
         identity.merge_persons(a, b)
         cards = daystore.list_person_events(db.today_vn(1000.0))
@@ -138,7 +160,7 @@ class DailyEventTests(PatrolDbTestCase):
     def test_one_card_per_person_per_day(self) -> None:
         pers_id, _ = identity.observe_face(_vec(20), quality=0.8)
         for t in (100.0, 200.0, 300.0):
-            daystore.touch_person_event(pers_id, camera_id="HC-01", now=t)
+            _touch_person_card(pers_id, camera_id="HC-01", now=t)
 
         cards = daystore.list_person_events(db.today_vn(100.0))
         self.assertEqual(len(cards), 1)
@@ -147,8 +169,8 @@ class DailyEventTests(PatrolDbTestCase):
 
     def test_reencounter_updates_time_not_new_card(self) -> None:
         pers_id, _ = identity.observe_face(_vec(21), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-01", now=1_000.0)
-        daystore.touch_person_event(pers_id, camera_id="HC-02", now=9_000.0)
+        _touch_person_card(pers_id, camera_id="HC-01", now=1_000.0)
+        _touch_person_card(pers_id, camera_id="HC-02", now=9_000.0)
 
         cards = daystore.list_person_events(db.today_vn(1_000.0))
         self.assertEqual(len(cards), 1)
@@ -160,7 +182,7 @@ class DailyEventTests(PatrolDbTestCase):
 
     def test_card_moves_tab_when_identified(self) -> None:
         pers_id, _ = identity.observe_face(_vec(22), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-01", now=500.0)
+        _touch_person_card(pers_id, camera_id="HC-01", now=500.0)
         date = db.today_vn(500.0)
 
         self.assertEqual(daystore.list_person_events(date)[0]["status"], "person")
@@ -172,9 +194,9 @@ class DailyEventTests(PatrolDbTestCase):
 
     def test_appearance_segments_split_on_long_gap(self) -> None:
         pers_id, _ = identity.observe_face(_vec(23), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-01", now=1_000.0)
-        daystore.touch_person_event(pers_id, camera_id="HC-01", now=1_010.0)
-        daystore.touch_person_event(pers_id, camera_id="HC-01", now=5_000.0)
+        _touch_person_card(pers_id, camera_id="HC-01", now=1_000.0)
+        _touch_person_card(pers_id, camera_id="HC-01", now=1_010.0)
+        _touch_person_card(pers_id, camera_id="HC-01", now=5_000.0)
 
         hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
         self.assertEqual(len(hist["by_camera"]["HC-01"]), 2)
@@ -197,7 +219,7 @@ class DailyEventTests(PatrolDbTestCase):
         pers_id, _ = identity.observe_face(_vec(24), quality=0.8)
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="rõ.jpg",
-            snapshot_score=0.9, face_eligible=True, now=100.0,
+            snapshot_score=1.2, face_eligible=True, now=100.0,
         )
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="lưng.jpg",
@@ -267,11 +289,11 @@ class DailyEventTests(PatrolDbTestCase):
         pers_id, _ = identity.observe_face(_vec(30), quality=0.8)
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="a.jpg",
-            snapshot_score=1.0, face_eligible=True, now=1_000.0,
+            snapshot_score=1.2, face_eligible=True, now=1_000.0,
         )
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="b.jpg",
-            snapshot_score=0.5, face_eligible=True, now=1_011.0,
+            snapshot_score=1.1, face_eligible=True, now=1_011.0,
         )
         card = daystore.list_person_events(db.today_vn(1_000.0))[0]
         self.assertEqual(card["snapshot_path"], "a.jpg")
@@ -310,7 +332,7 @@ class DailyEventTests(PatrolDbTestCase):
                 pers_id,
                 camera_id="HC-01",
                 snapshot_path=f"20260829/pers-burst-{i}.jpg",
-                snapshot_score=1.0,
+                snapshot_score=1.2,
                 face_eligible=True,
                 now=base + i * 0.15,
             )
@@ -331,7 +353,7 @@ class DailyEventTests(PatrolDbTestCase):
                 pers_id,
                 camera_id="HC-02",
                 snapshot_path=f"20260829/pers-snap-{i}.jpg",
-                snapshot_score=1.0,
+                snapshot_score=1.2,
                 face_eligible=True,
                 now=base + offset,
                 gps_lat=lat,
@@ -356,7 +378,7 @@ class DailyEventTests(PatrolDbTestCase):
             pers_id,
             camera_id="HC-01",
             snapshot_path="20250828/pers-0001-5000.jpg",
-            snapshot_score=0.5,
+            snapshot_score=1.1,
             face_eligible=True,
             now=5_000.0,
         )
@@ -370,6 +392,33 @@ class DailyEventTests(PatrolDbTestCase):
             paths,
             {"20250828/pers-0001-1000.jpg", "20250828/pers-0001-5000.jpg"},
         )
+
+    def test_no_card_without_eligible_snapshot(self) -> None:
+        pers_id, _ = identity.observe_face(_vec(34), quality=0.8)
+        daystore.touch_person_event(pers_id, camera_id="HC-01", now=1_000.0)
+        self.assertEqual(daystore.list_person_events(db.today_vn(1_000.0)), [])
+
+        _touch_person_card(pers_id, camera_id="HC-01", now=1_010.0, snapshot_path="face.jpg")
+        self.assertEqual(len(daystore.list_person_events(db.today_vn(1_000.0))), 1)
+
+    def test_new_encounter_splits_within_gap(self) -> None:
+        """Track mới (seen_since) → dòng lịch sử mới dù cách <45s."""
+        pers_id, _ = identity.observe_face(_vec(35), quality=0.8)
+        _touch_person_card(
+            pers_id, camera_id="HC-01", now=1_000.0, snapshot_path="enc-1.jpg",
+        )
+        _touch_person_card(
+            pers_id,
+            camera_id="HC-01",
+            now=1_020.0,
+            snapshot_path="enc-2.jpg",
+            seen_since=1_020.0,
+        )
+        hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
+        snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
+        self.assertEqual(len(snaps), 2)
+        self.assertEqual(snaps[0]["snapshot_path"], "enc-1.jpg")
+        self.assertEqual(snaps[1]["snapshot_path"], "enc-2.jpg")
 
 
 class ObjectTests(PatrolDbTestCase):
@@ -419,7 +468,7 @@ class ObjectTests(PatrolDbTestCase):
     def test_promote_merges_into_existing_card(self) -> None:
         """Người đã có thẻ hôm nay: Đối tượng phải gộp vào, không đẻ thẻ mới."""
         pers_id, _ = identity.observe_face(_vec(31), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-02", now=500.0)
+        _touch_person_card(pers_id, camera_id="HC-02", now=500.0)
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
         daystore.promote_object(obj_id, pers_id, now=1_100.0)
 
@@ -433,7 +482,7 @@ class ObjectTests(PatrolDbTestCase):
         today = yesterday + 86_400 * 2
         daystore.touch_object(None, camera_id="HC-01", now=yesterday)
         pers_id, _ = identity.observe_face(_vec(32), quality=0.8)
-        daystore.touch_person_event(pers_id, camera_id="HC-01", now=yesterday)
+        _touch_person_card(pers_id, camera_id="HC-01", now=yesterday)
 
         db.purge_old_days(db.today_vn(today))
 
@@ -461,7 +510,7 @@ class PurgeDayTests(PatrolDbTestCase):
             embedding=_vec(50),
         )
         stray, _ = identity.observe_face(_vec(51), quality=0.8)
-        daystore.touch_person_event(stray, camera_id="HC-01", now=1_000.0)
+        _touch_person_card(stray, camera_id="HC-01", now=1_000.0)
         daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
         date = db.today_vn(1_000.0)
 
