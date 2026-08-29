@@ -3,6 +3,7 @@ import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { assignPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import {
   buildPatrolDayHeatmapDots,
+  buildPatrolPersEntityLookup,
   buildPatrolPresenceHeatmapDots,
   filterPatrolHeatmapDotsByDevice,
   filterRecentPatrolWorkerEvents,
@@ -167,6 +168,41 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     ])
     expect(dots[0].tier).toBe('identity')
     expect(dots[0].verified).toBe(true)
+  })
+
+  it('lookup bundle — presence pers-* map gallery, gộp registry không cần alias local', () => {
+    const lookup = buildPatrolPersEntityLookup([
+      makeDayEvent({
+        id: 'pers:pers-0042',
+        objectId: 'p-DUNCAN',
+        objectLabel: 'Nguyễn Văn A',
+        stage: 'profile',
+      }),
+    ])
+    const presenceDots = buildPatrolPresenceHeatmapDots([
+      makePresence({
+        tier: 'identity',
+        subjectId: 'pers-0042',
+        displayName: 'Nguyễn Văn A',
+      }),
+    ], { persEntityLookup: lookup })
+    const registryDot: DetectionDot = {
+      id: 'pin-P-DUNCAN',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-02',
+      confidence: 1,
+      objectId: 'P-DUNCAN',
+      tier: 'identity',
+      inCameraView: true,
+      lastSeenAt: 1000,
+    }
+    const merged = mergePatrolHeatmapDetectionDots([presenceDots, [registryDot]], {
+      persEntityLookup: lookup,
+    })
+    expect(merged).toHaveLength(1)
+    expect(merged[0].objectId?.toLowerCase()).toBe('p-duncan')
   })
 })
 
