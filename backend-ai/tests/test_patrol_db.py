@@ -263,7 +263,7 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["last_seen"], 1_003.0)
 
     def test_appearance_extends_when_card_throttled(self) -> None:
-        """Thẻ không ghi trong 10s — lịch sử popup vẫn gộp lượt."""
+        """Throttle thẻ — mỗi ảnh chụp vẫn là một dòng lịch sử riêng."""
         pers_id, _ = identity.observe_face(_vec(30), quality=0.8)
         daystore.touch_person_event(
             pers_id, camera_id="HC-01", snapshot_path="a.jpg",
@@ -277,8 +277,34 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["last_seen"], 1_000.0)
 
         hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
-        self.assertEqual(len(hist["segments"]), 1)
-        self.assertEqual(hist["segments"][0]["ended_at"], 1_005.0)
+        snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
+        self.assertEqual(len(snaps), 2)
+        self.assertEqual(snaps[0]["started_at"], 1_000.0)
+        self.assertEqual(snaps[0]["ended_at"], 1_000.0)
+        self.assertEqual(snaps[1]["started_at"], 1_005.0)
+        self.assertEqual(snaps[1]["ended_at"], 1_005.0)
+
+    def test_snapshot_appearance_never_merges_time_window(self) -> None:
+        """Popup — mỗi ảnh một dòng, không gộp 10:03→10:07."""
+        pers_id, _ = identity.observe_face(_vec(31), quality=0.8)
+        lat, lng = 20.93309, 106.92395
+        base = 1_735_000_000.0  # arbitrary epoch
+        for i, offset in enumerate((0, 60, 120, 240)):
+            daystore.touch_person_event(
+                pers_id,
+                camera_id="HC-02",
+                snapshot_path=f"20260829/pers-snap-{i}.jpg",
+                snapshot_score=1.0,
+                face_eligible=True,
+                now=base + offset,
+                gps_lat=lat,
+                gps_lng=lng,
+            )
+        hist = daystore.list_appearances(pers_id, db.today_vn(base))
+        snaps = [s for s in hist["segments"] if s.get("snapshot_path")]
+        self.assertEqual(len(snaps), 4)
+        for seg in snaps:
+            self.assertEqual(seg["started_at"], seg["ended_at"])
 
     def test_appearance_keeps_snapshot_when_card_keeps_best(self) -> None:
         """Lượt mới sau gap vẫn lưu ảnh riêng dù thẻ giữ snapshot rõ hơn."""

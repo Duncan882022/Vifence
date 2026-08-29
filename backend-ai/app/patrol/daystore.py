@@ -170,6 +170,8 @@ def touch_object(
                         )
                         if snapshot_path:
                             appearance_snapshot = snapshot_path
+                elif snapshot_path:
+                    appearance_snapshot = snapshot_path
         _touch_appearance(
             conn, date, obj_id, camera_id, zone_id, ts,
             gps_lat=gps_lat, gps_lng=gps_lng,
@@ -257,6 +259,9 @@ def touch_person_event(
                     )
                     if face_eligible and snapshot_path:
                         appearance_snapshot = snapshot_path
+            elif face_eligible and snapshot_path:
+                # Thẻ throttle — vẫn ghi từng ảnh vào lịch sử popup.
+                appearance_snapshot = snapshot_path
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
             " WHERE pers_id = ?",
@@ -397,7 +402,7 @@ def _touch_appearance(
     q = 1 if qualified else 0
     row = conn.execute(
         "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
-        " source_cameras FROM appearances"
+        " source_cameras, snapshot_path FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC LIMIT 1",
         (date, subject_id),
@@ -405,10 +410,31 @@ def _touch_appearance(
 
     lat_end = gps_lat
     lng_end = gps_lng
+    prev_snapshot = row["snapshot_path"] if row is not None and row["snapshot_path"] else None
+
+    # Mỗi ảnh chụp = một dòng lịch sử popup — không kéo dài 10:03→10:07.
+    if snapshot_path:
+        seq = _next_presence_seq(conn, date, subject_id)
+        src = merge_source_cameras(None, camera_id)
+        conn.execute(
+            "INSERT INTO appearances"
+            "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
+            " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
+            " source_cameras, snapshot_path)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                date, subject_id, camera_id, zone_id, ts, ts,
+                gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snapshot_path,
+            ),
+        )
+        return
 
     if row is not None and should_extend_presence(
         row, ts, gps_lat, gps_lng, camera_id=camera_id,
     ):
+        # Chỉ gộp dòng tracking (không ảnh) — KPI/heatmap; popup lọc snapshot.
+        if prev_snapshot:
+            return
         src = merge_source_cameras(
             str(row["source_cameras"]) if row["source_cameras"] else None,
             camera_id,
@@ -417,18 +443,11 @@ def _touch_appearance(
             lat_end = row["gps_lat_end"] if row["gps_lat_end"] is not None else row["gps_lat"]
         if lng_end is None:
             lng_end = row["gps_lng_end"] if row["gps_lng_end"] is not None else row["gps_lng"]
-        if snapshot_path:
-            conn.execute(
-                "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-                " camera_id = ?, source_cameras = ?, snapshot_path = ? WHERE id = ?",
-                (ts, lat_end, lng_end, camera_id, src, snapshot_path, row["id"]),
-            )
-        else:
-            conn.execute(
-                "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-                " camera_id = ?, source_cameras = ? WHERE id = ?",
-                (ts, lat_end, lng_end, camera_id, src, row["id"]),
-            )
+        conn.execute(
+            "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
+            " camera_id = ?, source_cameras = ? WHERE id = ?",
+            (ts, lat_end, lng_end, camera_id, src, row["id"]),
+        )
         return
 
     seq = _next_presence_seq(conn, date, subject_id)
@@ -441,7 +460,7 @@ def _touch_appearance(
         " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             date, subject_id, camera_id, zone_id, ts, ts,
-            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snapshot_path,
+            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, None,
         ),
     )
 

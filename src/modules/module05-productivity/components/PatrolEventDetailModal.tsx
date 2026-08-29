@@ -93,6 +93,7 @@ function snapshotStorageKey(url: string | undefined | null): string {
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
   const seen = new Set<string>()
   return segments.filter(segment => {
+    if (!segment.snapshotUrl?.trim()) return false
     const key = appearanceRowKey(segment)
     if (seen.has(key)) return false
     seen.add(key)
