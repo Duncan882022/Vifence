@@ -152,6 +152,30 @@ export async function fetchPatrolScanEnrollment(persId: string): Promise<PatrolS
   return data.enrollment
 }
 
+export async function createPatrolWorkerProfile(
+  profile: PatrolImportRow,
+): Promise<PatrolWorkerPerson> {
+  const data = await patrolJson<{ ok: boolean; error?: string; person?: PatrolWorkerPerson }>(
+    '/patrol/persons',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: profile.full_name,
+        employee_code: profile.employee_code,
+        contractor: profile.contractor ?? '',
+      }),
+    },
+  )
+  if (!data.ok || !data.person) {
+    const err = data.error === 'missing_fields'
+      ? 'Nhập đủ họ tên và mã nhân viên.'
+      : (data.error ?? 'Tạo hồ sơ thất bại.')
+    throw new Error(err)
+  }
+  return data.person
+}
+
 export async function importPatrolWorkerProfiles(
   items: PatrolImportRow[],
 ): Promise<PatrolImportResult> {

@@ -13,6 +13,12 @@ class PersonUpdatePayload(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class PersonCreatePayload(BaseModel):
+    full_name: str = Field(min_length=1, max_length=200)
+    employee_code: str = Field(min_length=1, max_length=64)
+    contractor: str | None = Field(default=None, max_length=200)
+
+
 class IdentifyPayload(BaseModel):
     full_name: str = Field(min_length=1, max_length=200)
     employee_code: str = Field(min_length=1, max_length=64)

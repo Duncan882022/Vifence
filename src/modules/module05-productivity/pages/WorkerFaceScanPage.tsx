@@ -10,7 +10,7 @@ import { PatrolFaceScannerPanel } from '../components/PatrolFaceScannerPanel'
 import {
   completePatrolEnrollSession,
   createPatrolEnrollSession,
-  importPatrolWorkerProfiles,
+  createPatrolWorkerProfile,
   lookupPatrolWorkerByCode,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
@@ -21,7 +21,9 @@ type AdminStep = 'lookup' | 'scan'
 export function WorkerFaceScanPage() {
   const [params] = useSearchParams()
   const presetCode = params.get('code') ?? ''
-  const adminMode = hasPatrolRole('hr')
+  /** Link ?code= — công nhân tự đăng ký: quét mặt trước, không dùng màn HR tra cứu. */
+  const forceSelfEnroll = Boolean(presetCode.trim())
+  const adminMode = hasPatrolRole('hr') && !forceSelfEnroll
 
   const [selfStep, setSelfStep] = useState<SelfStep>('scan')
   const [adminStep, setAdminStep] = useState<AdminStep>(presetCode ? 'lookup' : 'lookup')
@@ -32,7 +34,7 @@ export function WorkerFaceScanPage() {
   const [nameInput, setNameInput] = useState('')
   const [contractorInput, setContractorInput] = useState('')
   const [profileName, setProfileName] = useState('')
-  const [profileCode, setProfileCode] = useState('')
+  const [profileCode, setProfileCode] = useState(presetCode)
   const [profileContractor, setProfileContractor] = useState('')
 
   const [error, setError] = useState<string | null>(null)
@@ -98,17 +100,12 @@ export function WorkerFaceScanPage() {
     setCreating(true)
     setError(null)
     try {
-      const result = await importPatrolWorkerProfiles([{
+      const created = await createPatrolWorkerProfile({
         full_name: name,
         employee_code: code,
         contractor: contractorInput.trim(),
-      }])
-      const row = result.results.find(r => r.ok && r.pers_id)
-      if (!row?.pers_id) {
-        throw new Error(result.results[0]?.error ?? 'Không tạo được hồ sơ.')
-      }
-      const found = await lookupPatrolWorkerByCode(code)
-      setPerson(found)
+      })
+      setPerson(created)
       setAdminStep('scan')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Tạo hồ sơ thất bại.')
@@ -391,10 +388,18 @@ export function WorkerFaceScanPage() {
             <form onSubmit={e => void handleCreateAndScan(e)} className="p-4 space-y-3">
               <p className="text-[10px] text-muted-foreground">Tạo nhanh hồ sơ rồi quét mặt ngay (không cần Excel).</p>
               <input
+                value={codeInput}
+                onChange={e => setCodeInput(e.target.value)}
+                placeholder="Mã nhân viên *"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] font-mono"
+                required
+              />
+              <input
                 value={nameInput}
                 onChange={e => setNameInput(e.target.value)}
-                placeholder="Họ tên"
+                placeholder="Họ tên *"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17]"
+                required
               />
               <input
                 value={contractorInput}
@@ -405,7 +410,7 @@ export function WorkerFaceScanPage() {
               <button
                 type="submit"
                 disabled={creating || !codeInput.trim() || !nameInput.trim()}
-                className="w-full py-2 rounded-lg text-[11px] font-semibold border border-[#1e2433] hover:bg-[#1a2235] disabled:opacity-50"
+                className="w-full py-2 rounded-lg text-[11px] font-semibold border border-violet-400/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
               >
                 {creating ? 'Đang tạo…' : 'Tạo hồ sơ & quét mặt'}
               </button>

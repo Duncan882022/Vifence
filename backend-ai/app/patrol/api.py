@@ -25,6 +25,7 @@ from .schemas import (
     IdentifyPayload,
     ImportPersonsPayload,
     MergePersonsPayload,
+    PersonCreatePayload,
     PersonScanPayload,
     PersonUpdatePayload,
     PurgeDayPayload,
@@ -79,6 +80,31 @@ def lookup_person(employee_code: str, _user: RequirePatrolRead = None) -> dict[s
     if row is None:
         return {"ok": False, "error": "not_found"}
     return {"ok": True, "person": _person_payload(row)}
+
+
+@router.post("/persons")
+def create_person(
+    payload: PersonCreatePayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Tạo một hồ sơ rồi quét mặt — HR, không cần quyền admin import."""
+    full_name = payload.full_name.strip()
+    employee_code = payload.employee_code.strip()
+    contractor = (payload.contractor or "").strip()
+    if not full_name or not employee_code:
+        return {"ok": False, "error": "missing_fields"}
+    try:
+        row = identity.import_identity(
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+            embedding=None,
+            source="hr_create",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    audit("person_create", actor=user.username, subject_id=str(row["pers_id"]))
+    return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
 
 
 @router.get("/persons/{pers_id}")
