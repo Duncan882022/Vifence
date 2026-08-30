@@ -278,5 +278,71 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
 
 
+class AggregatorContinuousPresenceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def test_standing_in_frame_does_not_create_repeat_appearances(self) -> None:
+        """Còn trong khung — một lần chốt; không INSERT appearance liên tục."""
+        from unittest.mock import patch
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.engine import ingest_observation, finalize_track
+
+        ts = 5_000.0
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value="pers-0001",
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
+            return_value=PersonIdentity(
+                person_id="sgc-7001",
+                identity_type=IdentityType.ANONYMOUS,
+                confidence=0.9,
+            ),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            from app.patrol import identity
+
+            identity.create_person(origin="sgc", now=ts)
+            for i in range(30):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-stand",
+                    now=ts + i * 0.5,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="sgc-7001",
+                    confidence=0.9,
+                )
+
+        rows = daystore.list_day_presences(db.today_vn(ts))
+        self.assertEqual(len(rows), 1)
+
+        finalize_track("HC-01", "ptk-stand", now=ts + 20.0)
+        rows_after = daystore.list_day_presences(db.today_vn(ts))
+        self.assertEqual(len(rows_after), 1)
+        self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 20.0, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

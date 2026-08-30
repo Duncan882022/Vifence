@@ -16,6 +16,15 @@ logger = logging.getLogger("patrol.aggregator.flush")
 FLUSH_MIN_INTERVAL_SEC = 10.0
 
 
+def _needs_flush(session: TrackSession, *, finalize: bool) -> bool:
+    """Một lần chốt khi vào khung; chỉ ghi lại khi finalize hoặc thay đổi đáng kể."""
+    if finalize:
+        return True
+    if not session.committed:
+        return session.dirty or session.appearance_row_id is None
+    return session.dirty
+
+
 def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str | None, float]:
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
         return None, 0.0
@@ -42,11 +51,12 @@ def flush_session(
     finalize: bool = False,
 ) -> None:
     """INSERT/UPDATE aggregated appearance + card ngoài (throttled)."""
-    if not session.dirty and not finalize:
+    if not _needs_flush(session, finalize=finalize):
         return
     now = obs.ts
     if (
         not finalize
+        and not session.committed
         and session.last_flush_at > 0
         and (now - session.last_flush_at) < FLUSH_MIN_INTERVAL_SEC
     ):
@@ -138,6 +148,7 @@ def flush_session(
     )
     session.appearance_row_id = row_id
     session.last_flush_at = now
+    session.committed = True
     session.dirty = False
 
 

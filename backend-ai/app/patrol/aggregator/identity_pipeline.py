@@ -165,6 +165,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
             obs.face_eligible
             and obs.face_embedding is not None
             and session.subject_id.startswith("pers-")
+            and not session.committed
         ):
             try:
                 identity.add_face_angle(
@@ -175,7 +176,6 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                 )
             except Exception:  # noqa: BLE001
                 logger.debug("add_face_angle skip", exc_info=True)
-        session.dirty = True
         return session.subject_id
 
     _note_best_frame(session, obs)
@@ -189,6 +189,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
         )
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
+        else:
+            session.dirty = True
         session.identity_resolved = True
 
     if not session.identity_resolved:

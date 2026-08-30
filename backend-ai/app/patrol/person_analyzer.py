@@ -332,11 +332,7 @@ def _assign_patrol_person_display_only(
     frame: np.ndarray | None = None,
     person_box: tuple[float, float, float, float] | None = None,
 ) -> None:
-    """ROI-only — track id + nhãn đã cache, không chạy face/embed lại.
-
-    Track đã commit (obj/pers) vẫn touch sink để sự kiện không đứng khi quay
-    lưng hoặc ngồi — những khung hình không đủ gate hình học ghi sự kiện.
-    """
+    """ROI-only — track id + nhãn đã cache; không ghi sink liên tục khi còn trong khung."""
     if not track_id:
         return
     from ..patrol_identity_lifecycle import peek as peek_track_identity
@@ -347,44 +343,44 @@ def _assign_patrol_person_display_only(
         person_det.worker_id = cached.worker_id
         person_det.worker_name = cached.worker_name
         person_det.tier = cached.tier
-    else:
-        from ..patrol_entity import resolve_patrol_worker_display_name
-        from ..person_identity_registry import (
-            borrow_cross_camera_patrol_worker,
-            peek_patrol_track_identity,
-        )
-
-        worker_id = peek_patrol_track_identity(camera_id, track_id) or ""
-        worker_name = ""
-        if person_box is not None and frame is not None:
-            borrowed = borrow_cross_camera_patrol_worker(
-                camera_id,
-                person_box,
-                frame=frame,
-                frame_w=int(frame.shape[1]),
-                frame_h=int(frame.shape[0]),
-            )
-            if borrowed:
-                worker_id, worker_name = borrowed
-        if worker_id and not worker_name:
-            worker_name = resolve_patrol_worker_display_name(worker_id, "")
-        if worker_id:
-            from ..patrol_identity_lifecycle import observe as observe_track_identity
-
-            resolved = observe_track_identity(
-                camera_id,
-                track_id,
-                worker_id=worker_id,
-                worker_name=worker_name,
-            )
-            person_det.worker_id = resolved.worker_id
-            person_det.worker_name = resolved.worker_name
-            person_det.tier = resolved.tier
-        else:
-            person_det.tier = "object"
-
-    if not person_det.worker_id:
         return
+
+    from ..patrol_entity import resolve_patrol_worker_display_name
+    from ..person_identity_registry import (
+        borrow_cross_camera_patrol_worker,
+        peek_patrol_track_identity,
+    )
+
+    worker_id = peek_patrol_track_identity(camera_id, track_id) or ""
+    worker_name = ""
+    if person_box is not None and frame is not None:
+        borrowed = borrow_cross_camera_patrol_worker(
+            camera_id,
+            person_box,
+            frame=frame,
+            frame_w=int(frame.shape[1]),
+            frame_h=int(frame.shape[0]),
+        )
+        if borrowed:
+            worker_id, worker_name = borrowed
+    if worker_id and not worker_name:
+        worker_name = resolve_patrol_worker_display_name(worker_id, "")
+    if worker_id:
+        from ..patrol_identity_lifecycle import observe as observe_track_identity
+
+        resolved = observe_track_identity(
+            camera_id,
+            track_id,
+            worker_id=worker_id,
+            worker_name=worker_name,
+        )
+        person_det.worker_id = resolved.worker_id
+        person_det.worker_name = resolved.worker_name
+        person_det.tier = resolved.tier
+    else:
+        person_det.tier = "object"
+        return
+
     try:
         from .sink import record_observation
 

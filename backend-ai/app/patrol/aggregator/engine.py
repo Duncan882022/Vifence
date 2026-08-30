@@ -8,6 +8,7 @@ from .behavior_pipeline import process_behavior
 from .flush import finalize_session, flush_session
 from .identity_pipeline import process_identity
 from .session_store import get_or_create, pop_session, reset
+from .tripwire import site_entry_counted
 from .types import ObservationInput
 
 logger = logging.getLogger("patrol.aggregator.engine")
@@ -45,10 +46,22 @@ def ingest_observation(**kwargs) -> str | None:
     )
     session.touch(obs.ts, obs.person_bbox)
 
-    # Song song: identity ∥ behavior (không if/else loại trừ)
+    if session.committed and not obs.density_only:
+        process_identity(session, obs)
+        if obs.touched_object_id:
+            process_behavior(session, obs)
+        if not session.counted:
+            from ..sink import _resolve_observation_gps
+
+            gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=obs.ts)
+            if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
+                session.dirty = True
+        if session.dirty:
+            flush_session(session, obs)
+        return session.subject_id
+
     process_identity(session, obs)
     process_behavior(session, obs)
-
     flush_session(session, obs)
     return session.subject_id
 

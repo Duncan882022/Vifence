@@ -78,6 +78,7 @@ class TrackSession:
     appearance_row_id: int | None = None
     last_flush_at: float = 0.0
     dirty: bool = False
+    committed: bool = False
 
     @property
     def session_key(self) -> str:
@@ -93,7 +94,6 @@ class TrackSession:
         self.last_seen_at = ts
         if bbox is not None:
             self.bbox = bbox
-        self.dirty = True
 
 
 @dataclass
