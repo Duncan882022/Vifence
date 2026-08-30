@@ -80,18 +80,46 @@ def lookup_patrol_identity(alias: str) -> dict[str, Any] | None:
 def list_patrol_identity_bindings() -> list[dict[str, Any]]:
     state = _load()
     rows: list[dict[str, Any]] = []
+    alias_map = state.get("alias_to_gallery") or {}
     for wid, row in (state.get("by_gallery_worker") or {}).items():
         if not isinstance(row, dict):
             continue
+        canonical_aliases = sorted({
+            alias
+            for alias, owner in alias_map.items()
+            if str(owner).strip() == str(wid).strip()
+        })
         rows.append({
             "gallery_worker_id": wid,
             "worker_name": row.get("worker_name"),
             "employee_code": row.get("employee_code"),
             "contractor_name": row.get("contractor_name"),
-            "aliases": row.get("aliases") or [],
+            "aliases": canonical_aliases or (row.get("aliases") or []),
             "updated_at": row.get("updated_at"),
         })
     return rows
+
+
+def repair_patrol_identity_bindings() -> dict[str, Any]:
+    """Đồng bộ aliases[] từ alias_to_gallery — gỡ alias ma còn trong row cũ."""
+    with _lock:
+        state = _load()
+        by_gallery = state.setdefault("by_gallery_worker", {})
+        alias_map = state.setdefault("alias_to_gallery", {})
+        repaired = 0
+        for wid, row in list(by_gallery.items()):
+            if not isinstance(row, dict):
+                continue
+            canonical = sorted({
+                alias for alias, owner in alias_map.items()
+                if str(owner).strip() == str(wid).strip()
+            })
+            if canonical != sorted(row.get("aliases") or []):
+                row["aliases"] = canonical
+                by_gallery[wid] = row
+                repaired += 1
+        _save(state)
+    return {"repaired": repaired, "workers": len(by_gallery)}
 
 
 def bind_patrol_identity(
@@ -117,6 +145,19 @@ def bind_patrol_identity(
         alias_map = state.setdefault("alias_to_gallery", {})
         prev = by_gallery.get(wid) if isinstance(by_gallery.get(wid), dict) else {}
         merged_aliases = sorted(set([*(prev.get("aliases") or []), *aliases, wid]))
+
+        # Alias thuộc về đúng một gallery worker — gỡ khỏi hồ sơ cũ (An/NV01…).
+        for alias in merged_aliases:
+            for other_wid, other_row in list(by_gallery.items()):
+                if other_wid == wid or not isinstance(other_row, dict):
+                    continue
+                other_aliases = other_row.get("aliases") or []
+                if alias not in other_aliases:
+                    continue
+                other_row["aliases"] = [a for a in other_aliases if a != alias]
+                by_gallery[other_wid] = other_row
+            alias_map[alias] = wid
+
         row = {
             "gallery_worker_id": wid,
             "worker_name": worker_name.strip(),
@@ -126,8 +167,6 @@ def bind_patrol_identity(
             "updated_at": now,
         }
         by_gallery[wid] = row
-        for alias in merged_aliases:
-            alias_map[alias] = wid
         alias_map[wid] = wid
         _save(state)
     return row

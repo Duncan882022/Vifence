@@ -96,9 +96,17 @@ def patrol_workforce_events(
 
 @router.get("/identity/bindings")
 def patrol_identity_bindings(_user: RequirePatrolRead = None):  # noqa: ARG001
-    from ..patrol_identity_store import list_patrol_identity_bindings
+    from ..patrol_identity_store import list_patrol_identity_bindings, repair_patrol_identity_bindings
 
-    return {"ok": True, "bindings": list_patrol_identity_bindings()}
+    repair_patrol_identity_bindings()
+    from ..patrol_identity_store import _load
+
+    state = _load()
+    return {
+        "ok": True,
+        "bindings": list_patrol_identity_bindings(),
+        "alias_to_gallery": state.get("alias_to_gallery") or {},
+    }
 
 
 @router.get("/appearances")

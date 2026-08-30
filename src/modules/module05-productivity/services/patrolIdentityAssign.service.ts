@@ -106,8 +106,22 @@ export async function assignPatrolIdentityOnBackend(input: {
 }
 
 export async function fetchPatrolIdentityBindings(): Promise<PatrolIdentityBinding[]> {
-  const data = await fetchPatrol<{ ok: boolean; bindings?: PatrolIdentityBinding[] }>(
+  const data = await fetchPatrol<{
+    ok: boolean
+    bindings?: PatrolIdentityBinding[]
+    alias_to_gallery?: Record<string, string>
+  }>(
     '/patrol/identity/bindings',
   )
-  return data?.bindings ?? []
+  const bindings = data?.bindings ?? []
+  const aliasMap = data?.alias_to_gallery ?? {}
+  if (Object.keys(aliasMap).length === 0) return bindings
+  return bindings.map(row => {
+    const wid = row.gallery_worker_id.trim()
+    const canonical = (row.aliases ?? []).filter(alias => {
+      const owner = aliasMap[alias.trim()] ?? aliasMap[alias]
+      return String(owner ?? '').trim() === wid
+    })
+    return { ...row, aliases: canonical.length > 0 ? canonical : row.aliases }
+  })
 }
