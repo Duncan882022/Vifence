@@ -330,6 +330,7 @@ export function PatrolDensityHeatmap({
     const presenceOpts = {
       cameraOnlineById: helmetOnlineById,
       includeUnassigned: true,
+      countedOnly: true,
       helmetPositionsById: mergedCameraPositions,
       helmetHeadingsById: helmetHeadingById,
       flightModeByCamera: flycamFlightModes,

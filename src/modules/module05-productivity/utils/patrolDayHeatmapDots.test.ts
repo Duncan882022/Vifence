@@ -91,6 +91,36 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].position[0]).toBeGreaterThan(startLat + 0.0001)
   })
 
+  it('hai presence cùng session_id → một row (lượt mới nhất)', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({
+        id: 1,
+        sessionId: 'sess-abc',
+        counted: true,
+        endedAt: 1_700_000_010,
+        gpsLat: PATROL_SITE_CENTER[0],
+      }),
+      makePresence({
+        id: 2,
+        sessionId: 'sess-abc',
+        counted: true,
+        endedAt: 1_700_000_030,
+        gpsLat: PATROL_SITE_CENTER[0] + 0.0002,
+      }),
+    ], { countedOnly: true })
+    expect(dots).toHaveLength(1)
+    expect(dots[0].position[0]).toBeGreaterThan(PATROL_SITE_CENTER[0] + 0.0001)
+  })
+
+  it('countedOnly — bỏ presence chưa qua tripwire', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({ id: 1, counted: false }),
+      makePresence({ id: 2, subjectId: 'pers-0002', counted: true }),
+    ], { countedOnly: true })
+    expect(dots).toHaveLength(1)
+    expect(dots[0].objectId).toBe('pers-0002')
+  })
+
   it('hai presence cùng người khác lượt → một chấm (lượt mới nhất)', () => {
     const dots = buildPatrolPresenceHeatmapDots([
       makePresence({ id: 1, presenceSeq: 1, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1], endedAt: 1_700_000_010 }),

@@ -66,6 +66,25 @@ class AggregatorBehaviorTest(unittest.TestCase):
 
 
 class AggregatorReIdTest(unittest.TestCase):
+    def test_lost_track_reclaim_cross_camera(self) -> None:
+        reset()
+        emb = tuple(0.02 * i for i in range(512))
+        s1 = get_or_create("HC-01", "ptk-a", ts=100.0, face_embedding=emb)
+        s1.session_id = "sess-cross-1"
+        s1.subject_id = "pers-0001"
+        s1.identity_resolved = True
+        stash_session(s1, embedding=emb)
+
+        reclaimed = try_reclaim(
+            "HC-02",
+            bbox=(100.0, 100.0, 200.0, 400.0),
+            embedding=emb,
+            now=150.0,
+        )
+        self.assertIsNotNone(reclaimed)
+        self.assertEqual(reclaimed.session_id, "sess-cross-1")
+        reset()
+
     def test_lost_track_reclaim_by_embedding(self) -> None:
         reset()
         emb = tuple(0.01 * i for i in range(512))

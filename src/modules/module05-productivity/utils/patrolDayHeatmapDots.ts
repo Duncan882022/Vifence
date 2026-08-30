@@ -133,6 +133,26 @@ export function filterRecentPresences(
   })
 }
 
+/** Gộp nhiều row cùng session_id — giữ lượt mới nhất (anti-duplicate aggregator). */
+export function collapsePresencesBySession(
+  presences: PatrolDayPresence[],
+): PatrolDayPresence[] {
+  const bySession = new Map<string, PatrolDayPresence>()
+  const passthrough: PatrolDayPresence[] = []
+  for (const presence of presences) {
+    const sid = presence.sessionId?.trim()
+    if (!sid) {
+      passthrough.push(presence)
+      continue
+    }
+    const prev = bySession.get(sid)
+    if (!prev || presence.endedAt >= prev.endedAt) {
+      bySession.set(sid, presence)
+    }
+  }
+  return [...bySession.values(), ...passthrough]
+}
+
 function stripPatrolHeatmapDotLabel(label?: string | null): string | undefined {
   const t = label?.trim()
   if (!t) return undefined
@@ -194,10 +214,18 @@ export function buildPatrolPresenceHeatmapDots(
     flightModeByCamera?: Record<string, PatrolFlightMode | string | null | undefined>
     /** pers-* → gallery từ bundle — gộp presence với registry trước khi alias local sync. */
     persEntityLookup?: Record<string, string>
+    /** Chỉ hiển thị lượt đã qua tripwire (counted=1) — đồng bộ KPI encounters_standard. */
+    countedOnly?: boolean
   },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
   let scoped = opts?.liveOnly ? filterRecentPresences(presences, now) : presences
+
+  scoped = collapsePresencesBySession(scoped)
+
+  if (opts?.countedOnly) {
+    scoped = scoped.filter(p => p.counted === true)
+  }
 
   if (!opts?.includeUnassigned) {
     scoped = scoped.filter(p => tierEligibleStandard(p.tier))

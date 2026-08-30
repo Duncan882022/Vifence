@@ -1,4 +1,4 @@
-"""Bộ nhớ Re-ID — giữ session 180s sau khi mất track ByteTrack."""
+"""Bộ nhớ Re-ID — giữ session 180s sau khi mất track ByteTrack (cross-camera)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .types import IdentityType, PersonIdentity, TrackSession
+from .types import PersonIdentity, TrackSession
 
 _lock = threading.RLock()
-_slots: dict[str, list["_LostSlot"]] = {}
+_slots: list["_LostSlot"] = []
 
 MEMORY_TTL_SEC = 180.0
 REID_MIN_COSINE = 0.85
@@ -59,19 +59,14 @@ def _bbox_iou(
     return inter / union if union > 0 else 0.0
 
 
-def _prune(camera_id: str, now: float) -> None:
-    kept = [
-        s for s in _slots.get(camera_id, [])
-        if now - s.last_seen <= MEMORY_TTL_SEC
-    ]
-    if kept:
-        _slots[camera_id] = kept
-    else:
-        _slots.pop(camera_id, None)
+def _prune(now: float) -> None:
+    global _slots
+    _slots = [s for s in _slots if now - s.last_seen <= MEMORY_TTL_SEC]
 
 
 def stash_session(session: TrackSession, *, embedding: tuple[float, ...] | None) -> None:
-    """Lưu session vừa finalize để track mới có thể nhận lại."""
+    """Lưu session vừa finalize để track mới (mọi camera) có thể nhận lại."""
+    global _slots
     if not session.session_id or not session.subject_id:
         return
     slot = _LostSlot(
@@ -89,8 +84,8 @@ def stash_session(session: TrackSession, *, embedding: tuple[float, ...] | None)
         zone_id=session.zone_id,
     )
     with _lock:
-        _prune(session.camera_id, session.last_seen_at)
-        _slots.setdefault(session.camera_id, []).append(slot)
+        _prune(session.last_seen_at)
+        _slots.append(slot)
 
 
 def try_reclaim(
@@ -100,18 +95,19 @@ def try_reclaim(
     embedding: tuple[float, ...] | None,
     now: float,
 ) -> _LostSlot | None:
-    """Track mới — thử gộp lại session cũ qua embedding hoặc IoU."""
+    """Track mới — thử gộp session cũ qua embedding hoặc IoU (cross-camera)."""
+    global _slots
+    del camera_id  # Re-ID không giới hạn cùng camera
     with _lock:
-        _prune(camera_id, now)
-        slots = _slots.get(camera_id) or []
-        if not slots:
+        _prune(now)
+        if not _slots:
             return None
 
         best: _LostSlot | None = None
         best_score = REID_MIN_COSINE
         kept: list[_LostSlot] = []
 
-        for slot in slots:
+        for slot in _slots:
             if embedding is not None and slot.embedding is not None:
                 sim = _cosine(embedding, slot.embedding)
                 if sim >= best_score:
@@ -131,11 +127,9 @@ def try_reclaim(
             kept.append(slot)
 
         if best is not None:
-            _slots[camera_id] = [s for s in kept if s is not best]
-            if not _slots[camera_id]:
-                _slots.pop(camera_id, None)
+            _slots = [s for s in kept if s is not best]
             return best
-        _slots[camera_id] = kept
+        _slots = kept
         return None
 
 
@@ -153,8 +147,9 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot) -> None:
 
 
 def reset(camera_id: str | None = None) -> None:
+    global _slots
     with _lock:
         if camera_id is None:
-            _slots.clear()
+            _slots = []
             return
-        _slots.pop(camera_id, None)
+        _slots = [s for s in _slots if s.camera_id != camera_id]

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "by_gallery_worker": {
+    "p-SGC-6688": {
+      "gallery_worker_id": "p-SGC-6688",
+      "worker_name": "Duncan",
+      "employee_code": "SGC-6688",
+      "contractor_name": "",
+      "aliases": [
+        "iden-0001",
+        "p-SGC-6688",
+        "pers-0001",
+        "sgc-6688"
+      ],
+      "updated_at": 1788075581.0878794
+    },
+    "p-NV001": {
+      "gallery_worker_id": "p-NV001",
+      "worker_name": "Nguyễn Văn A",
+      "employee_code": "NV001",
+      "contractor_name": "",
+      "aliases": [
+        "NV001",
+        "iden-0001",
+        "p-NV001",
+        "pers-0001"
+      ],
+      "updated_at": 1788075580.9934287
+    },
+    "p-NV-SELF-001": {
+      "gallery_worker_id": "p-NV-SELF-001",
+      "worker_name": "Nguyễn Văn A",
+      "employee_code": "NV-SELF-001",
+      "contractor_name": "Vincons",
+      "aliases": [
+        "NV-SELF-001",
+        "iden-0001",
+        "p-NV-SELF-001",
+        "pers-0001"
+      ],
+      "updated_at": 1788075580.9760606
+    },
+    "p-NV01": {
+      "gallery_worker_id": "p-NV01",
+      "worker_name": "An",
+      "employee_code": "NV01",
+      "contractor_name": "",
+      "aliases": [
+        "NV01",
+        "iden-0001",
+        "p-NV01",
+        "pers-0001"
+      ],
+      "updated_at": 1788075581.1285815
+    }
+  },
+  "alias_to_gallery": {
+    "iden-0001": "p-NV01",
+    "p-SGC-6688": "p-SGC-6688",
+    "pers-0001": "p-NV01",
+    "sgc-6688": "p-SGC-6688",
+    "NV001": "p-NV001",
+    "p-NV001": "p-NV001",
+    "NV-SELF-001": "p-NV-SELF-001",
+    "p-NV-SELF-001": "p-NV-SELF-001",
+    "NV01": "p-NV01",
+    "p-NV01": "p-NV01"
+  }
+}

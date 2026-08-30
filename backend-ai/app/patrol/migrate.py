@@ -105,9 +105,6 @@ def migrate_to_v6(conn: sqlite3.Connection) -> None:
         "UPDATE appearances SET session_id = 'sess-legacy-' || id"
         " WHERE session_id IS NULL OR session_id = ''"
     )
-    conn.execute(
-        "UPDATE appearances SET counted = 1 WHERE counted = 0 AND qualified = 1"
-    )
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS ix_appearances_session"

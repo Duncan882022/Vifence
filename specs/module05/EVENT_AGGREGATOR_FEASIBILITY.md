@@ -16,11 +16,9 @@ ppe_analyzer → patrol.person_analyzer → sink.record_observation
                     (session_id, counted, event_payload_json)
 ```
 
-### Tắt aggregator (legacy)
+### Legacy
 
-```bash
-PATROL_USE_AGGREGATOR=0
-```
+Luồng legacy đã gỡ — aggregator là luồng duy nhất (`record_observation` → `aggregator.engine`).
 
 ## Schema v6 (`appearances`)
 

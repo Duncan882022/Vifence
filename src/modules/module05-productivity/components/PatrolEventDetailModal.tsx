@@ -511,7 +511,29 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                                 {segment.trackId}
                               </span>
                             )}
+                            {segment.sessionId && (
+                              <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[120px]" title={segment.sessionId}>
+                                {segment.sessionId}
+                              </span>
+                            )}
+                            {segment.counted && (
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold">
+                                Đã đếm
+                              </span>
+                            )}
                           </div>
+                          {segment.interactions && segment.interactions.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {segment.interactions.map((item, idx) => (
+                                <span
+                                  key={`${item.object_id}-${item.timestamp}-${idx}`}
+                                  className="text-[8px] px-1 py-0.5 rounded bg-amber-400/10 text-amber-300/90 font-mono"
+                                >
+                                  {item.action} · {item.object_id}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           <div className="flex items-center gap-1 min-w-0">
                             <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
                             <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
