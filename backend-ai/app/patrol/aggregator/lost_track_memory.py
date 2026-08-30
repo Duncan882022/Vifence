@@ -133,16 +133,22 @@ def try_reclaim(
         return None
 
 
-def apply_reclaim(session: TrackSession, slot: _LostSlot) -> None:
-    session.session_id = slot.session_id
+def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None = None) -> None:
+    ts = float(now if now is not None else session.last_seen_at or slot.last_seen)
+    gap = ts - float(slot.last_seen)
+    from ..presence import GAP_FALLBACK_SEC
+
+    same_encounter = gap <= GAP_FALLBACK_SEC
     session.subject_id = slot.subject_id
     session.identity_resolved = slot.identity_resolved
     session.identity = slot.identity
-    session.appearance_row_id = slot.appearance_row_id
     session.counted = slot.counted
     session.was_inside_site = slot.was_inside_site
     if slot.zone_id:
         session.zone_id = slot.zone_id
+    if same_encounter:
+        session.session_id = slot.session_id
+        session.appearance_row_id = slot.appearance_row_id
     session.dirty = True
 
 

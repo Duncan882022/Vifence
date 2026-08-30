@@ -360,6 +360,13 @@ def update_patrol_mobile_metrics(camera_id: str, result: dict) -> None:
         "last_frame_at": time.time(),
     }
 
+    try:
+        from .patrol_stream_lifecycle import mark_patrol_stream_online
+
+        mark_patrol_stream_online(camera_id)
+    except Exception:  # noqa: BLE001
+        pass
+
     # Workforce heatmap engines (observability / objects / population / events)
     try:
         from .workforce_engine import ingest_patrol_analyze_result
@@ -445,6 +452,17 @@ def build_patrol_metrics_payload(
         age = time.time() - float(cached.get("updated_at") or cached.get("last_frame_at") or 0)
         stream_online = age <= PATROL_MOBILE_ONLINE_GRACE_SEC
         keep_peak = age <= PATROL_MOBILE_PEAK_TTL_SEC
+        if not stream_online and age > PATROL_MOBILE_ONLINE_GRACE_SEC:
+            last_frame = float(
+                cached.get("last_frame_at") or cached.get("updated_at") or 0,
+            )
+            if last_frame > 0:
+                try:
+                    from .patrol_stream_lifecycle import on_patrol_stream_offline
+
+                    on_patrol_stream_offline(camera_id, at_ts=last_frame)
+                except Exception:  # noqa: BLE001
+                    pass
         if stream_online or keep_peak:
             return {
                 "camera_id": camera_id,

@@ -143,6 +143,10 @@ PROFILE_DEFAULT = TrackerProfile(
 )
 
 
+def is_patrol_tracker_camera(camera_id: str) -> bool:
+    return camera_id.startswith("HC-") or camera_id.startswith("DR-")
+
+
 def profile_for_camera(camera_id: str) -> TrackerProfile:
     if camera_id.startswith("DR-"):
         from .patrol_flight_mode import is_patrol_flycam_proximity

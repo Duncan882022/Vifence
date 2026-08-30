@@ -55,7 +55,7 @@ def get_or_create(
             now=ts,
         )
         if reclaimed is not None:
-            lost_track_memory.apply_reclaim(session, reclaimed)
+            lost_track_memory.apply_reclaim(session, reclaimed, now=ts)
             if session.started_at > ts:
                 session.started_at = ts
 
@@ -83,3 +83,16 @@ def reset(camera_id: str | None = None) -> None:
 def all_sessions() -> list[TrackSession]:
     with _lock:
         return list(_sessions.values())
+
+
+def session_keys_for_camera(camera_id: str) -> list[str]:
+    prefix = f"{camera_id}|"
+    with _lock:
+        return [k for k in _sessions if k.startswith(prefix)]
+
+
+def pop_all_sessions(camera_id: str) -> list[TrackSession]:
+    prefix = f"{camera_id}|"
+    with _lock:
+        keys = [k for k in _sessions if k.startswith(prefix)]
+        return [_sessions.pop(k) for k in keys]
