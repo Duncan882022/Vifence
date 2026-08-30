@@ -17,6 +17,8 @@ def build_event_payload(session: TrackSession) -> dict[str, Any]:
     return {
         "event_id": event_id,
         "track_id": session.track_id,
+        "session_id": session.session_id or "",
+        "counted": bool(session.counted),
         "person_identity": session.identity.to_dict(),
         "interactions": [i.to_dict() for i in session.interactions],
         "appearance_span": {

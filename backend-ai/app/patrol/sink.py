@@ -929,6 +929,10 @@ def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> 
         from .aggregator.engine import finalize_track
 
         finalize_track(camera_id, track_id, now=now)
+        key = _key(camera_id, track_id)
+        with _lock:
+            _track_watch.pop(key, None)
+        return
 
     key = _key(camera_id, track_id)
     ts = float(now if now is not None else time.time())

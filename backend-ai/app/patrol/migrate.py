@@ -77,3 +77,41 @@ def migrate_to_v5(conn: sqlite3.Connection) -> None:
     )
     conn.execute("PRAGMA user_version=5")
     conn.commit()
+
+
+def migrate_to_v6(conn: sqlite3.Connection) -> None:
+    """Aggregator Phase 2 — session_id + counted trên appearances."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 6:
+        return
+
+    cols = {
+        str(r[1])
+        for r in conn.execute("PRAGMA table_info(appearances)").fetchall()
+    }
+    for name, typedef in (
+        ("session_id", "TEXT"),
+        ("counted", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE appearances ADD COLUMN {name} {typedef}")
+
+    conn.execute(
+        "UPDATE appearances SET session_id = 'sess-' || track_id || '-' || event_date"
+        " WHERE (session_id IS NULL OR session_id = '') AND track_id IS NOT NULL"
+        " AND track_id != ''"
+    )
+    conn.execute(
+        "UPDATE appearances SET session_id = 'sess-legacy-' || id"
+        " WHERE session_id IS NULL OR session_id = ''"
+    )
+    conn.execute(
+        "UPDATE appearances SET counted = 1 WHERE counted = 0 AND qualified = 1"
+    )
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_appearances_session"
+        " ON appearances(event_date, session_id)"
+    )
+    conn.execute("PRAGMA user_version=6")
+    conn.commit()

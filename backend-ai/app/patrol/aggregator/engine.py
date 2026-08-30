@@ -40,6 +40,8 @@ def ingest_observation(**kwargs) -> str | None:
         obs.track_id,
         ts=obs.ts,
         zone_id=obs.zone_id,
+        bbox=obs.person_bbox,
+        face_embedding=obs.face_embedding,
     )
     session.touch(obs.ts, obs.person_bbox)
 
@@ -52,12 +54,16 @@ def ingest_observation(**kwargs) -> str | None:
 
 
 def finalize_track(camera_id: str, track_id: str, *, now: float | None = None) -> None:
+    from .lost_track_memory import stash_session
+
     session = pop_session(camera_id, track_id)
     if session is None:
         return
     if now is not None:
         session.last_seen_at = float(now)
     finalize_session(session)
+    emb = session.best_faces[0].embedding if session.best_faces else None
+    stash_session(session, embedding=emb)
 
 
 def reset_sessions(camera_id: str | None = None) -> None:

@@ -91,12 +91,11 @@ function snapshotStorageKey(url: string | undefined | null): string {
 }
 
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
-  const seenIds = new Set<string>()
+  const seenKeys = new Set<string>()
   return segments.filter(segment => {
-    if (!segment.snapshotUrl?.trim()) return false
     const key = appearanceRowKey(segment)
-    if (seenIds.has(key)) return false
-    seenIds.add(key)
+    if (seenKeys.has(key)) return false
+    seenKeys.add(key)
     return true
   })
 }
@@ -505,6 +504,11 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             {segment.presenceSeq != null && segment.presenceSeq > 0 && (
                               <span className="text-[8px] text-sky-400/90 font-semibold">
                                 Lượt #{segment.presenceSeq}
+                              </span>
+                            )}
+                            {segment.trackId && (
+                              <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[100px]">
+                                {segment.trackId}
                               </span>
                             )}
                           </div>

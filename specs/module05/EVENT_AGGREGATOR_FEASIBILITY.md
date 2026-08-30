@@ -1,78 +1,54 @@
-# Patrol Event Aggregator — Đánh giá khả thi & lộ trình
+# Patrol Event Aggregator — Phase 2 hoàn tất
 
-## Hiện trạng lỗi (xác nhận qua code)
-
-| Vấn đề | Nguyên nhân trong code |
-|---|---|
-| Face vs object loại trừ | `sink._record_observation_legacy` (~220 dòng if/else): có mặt → pers, không → object |
-| Data bloat | Mỗi frame gated vẫn gọi `daystore.touch_*` (throttle 10s, không buffer session) |
-| Cache phân mảnh | 6 store: `_track_to_*`, lifecycle, registry JSON, identity SQLite, analyzer frame dedupe |
-| touch_object không song song | Không có pipeline hành vi riêng; object chỉ là nhánh cuối cùng khi không pers |
-
-## Thiết kế mới (Phase 1 — đã implement)
+## Luồng mới (mặc định bật)
 
 ```
 ppe_analyzer → sink.record_observation
-                    ↓ (PATROL_USE_AGGREGATOR=1)
+                    ↓ (PATROL_USE_AGGREGATOR=1, default)
               aggregator.engine.ingest_observation
-                    ├─ identity_pipeline.process_identity  (cache ptk → skip gallery)
-                    ├─ behavior_pipeline.process_behavior  (touch obj-* ∥)
+                    ├─ session_store (Re-ID 180s / cosine ≥0.85)
+                    ├─ identity_pipeline.process_identity
+                    ├─ behavior_pipeline.process_behavior
+                    ├─ tripwire.site_entry_counted (polygon site)
                     └─ flush.flush_session (≥10s / finalize)
                               ↓
-                    daystore.upsert_track_appearance (1 row / track)
-                    + touch_person_event / touch_object (card ngoài, throttled)
+                    daystore.upsert_track_appearance
+                    (session_id, counted, event_payload_json)
 ```
 
-### Bật thử nghiệm
+### Tắt aggregator (legacy)
 
 ```bash
-PATROL_USE_AGGREGATOR=1
+PATROL_USE_AGGREGATOR=0
 ```
 
-Mặc định `false` — production giữ luồng legacy.
+## Schema v6 (`appearances`)
 
-### Schema v5 (`appearances`)
+| Cột | Ý nghĩa |
+|---|---|
+| `track_id` | ptk-* ByteTrack |
+| `session_id` | sess-* ổn định qua Re-ID |
+| `counted` | 1 = đã qua tripwire, tính KPI lượt gặp |
+| `event_payload_json` | JSON chuẩn |
+| `interactions_json` | touch object |
 
-- `track_id` — ptk-*
-- `event_payload_json` — JSON chuẩn yêu cầu
-- `interactions_json` — mảng touch
+## Anti-duplicate
 
-### JSON đầu ra
+- **Re-ID memory**: 180s, cosine ≥ 0.85 hoặc IoU ≥ 0.30 — gộp session khi mất track
+- **Tripwire**: GPS trong polygon Cầu Sông Hốt → `counted=1` một lần / session
+- **KPI `encounters_standard`**: chỉ đếm `counted=1`
 
-Xem `aggregator/serialize.build_event_payload()`.
+## FE sync
 
-## Khả thi tổng thể
+- `/patrol/day/appearances` + `/patrol/day/bundle` trả `session_id`, `counted`, JSON payload
+- Popup lịch sử dedupe theo `id`, hiển thị track/session
 
-| Hạng mục | Khả thi | Ghi chú |
-|---|---|---|
-| Track cache thống nhất | ✅ Cao | `session_store.py` — Phase 1 xong |
-| Identity skip re-gallery | ✅ Cao | `identity_resolved` flag |
-| Best-frame 1–3 rồi search 1 lần | ✅ Cao | `best_faces[]` |
-| Behavior song song | ⚠️ Trung bình | Pipeline có; **analyzer chưa gửi `touched_object_id`** — cần nối YOLO/object detector |
-| 1 appearance / track session | ✅ Cao | `upsert_track_appearance` |
-| Giảm 90% INSERT | ✅ Cao | Flush 10s + UPDATE in-place |
-| Full spec workforce heatmap | ⚠️ Thấp–TB | Cần Phase 2–4 (Object State JSON, dedup deferred, WS events) |
-
-## Việc còn lại (Phase 2+)
-
-1. **Analyzer → `touched_object_id`**: nối object-in-hand / proximity detector vào `record_observation`
-2. **Gộp identity stores**: lifecycle + registry → session_store
-3. **Deferred dedup / match_candidates** table
-4. **API FE**: expose `event_payload_json` trong `/patrol/day/appearances`
-5. **Shadow mode**: chạy aggregator song song legacy, so sánh log trước khi bật prod
-6. **Load test**: batch TX per frame thay vì N tx/person
-
-## Rủi ro
-
-- Bật aggregator trên prod ngay → regression tab Người / popup — **phải A/B với flag**
-- Dữ liệu cũ không có `track_id` / JSON — FE cần fallback
-- touch_object detection chưa có → `interactions[]` rỗng cho đến Phase 2
-
-## Files mới
+## Files
 
 ```
 backend-ai/app/patrol/aggregator/
-  types.py, session_store.py, identity_pipeline.py,
-  behavior_pipeline.py, flush.py, engine.py, serialize.py
+  lost_track_memory.py, tripwire.py (+ Phase 1 modules)
 backend-ai/tests/test_patrol_aggregator.py
+src/.../patrolDayEvents.service.ts
+src/.../PatrolEventDetailModal.tsx
 ```

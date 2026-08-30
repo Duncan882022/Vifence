@@ -1,6 +1,6 @@
 """Event Aggregator — gom quan sát theo track trước khi ghi SQLite.
 
-Bật qua env ``PATROL_USE_AGGREGATOR=1``. Khi tắt, ``sink.record_observation`` giữ luồng cũ.
+Mặc định bật (`PATROL_USE_AGGREGATOR=1`). Tắt bằng env để dùng luồng legacy.
 """
 
 from .engine import finalize_track, ingest_observation, reset_sessions

@@ -62,6 +62,11 @@ class TrackSession:
     last_seen_at: float = 0.0
     bbox: tuple[float, float, float, float] | None = None
 
+    # session_id ổn định qua Re-ID — khác track_id ByteTrack
+    session_id: str | None = None
+    counted: bool = False
+    was_inside_site: bool | None = None
+
     # Cache định danh — True → bỏ qua re-embedding/gallery
     identity_resolved: bool = False
     identity: PersonIdentity = field(default_factory=PersonIdentity)

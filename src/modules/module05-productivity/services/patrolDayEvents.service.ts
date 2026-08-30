@@ -47,6 +47,11 @@ export interface PatrolAppearanceSegment {
   presenceSeq?: number
   sourceCameras?: string[]
   snapshotUrl?: string
+  trackId?: string
+  sessionId?: string
+  counted?: boolean
+  eventPayload?: Record<string, unknown>
+  interactions?: Array<{ object_id: string; action: string; timestamp: string }>
 }
 
 export interface PatrolDayPresence {
@@ -65,6 +70,9 @@ export interface PatrolDayPresence {
   tier: 'person' | 'identity' | 'object'
   displayName: string
   sourceCameras: string[]
+  trackId?: string
+  sessionId?: string
+  counted?: boolean
 }
 
 export interface PatrolDayStats {
@@ -125,28 +133,57 @@ export async function fetchPatrolSubjectAppearances(
   if (!data?.ok) return []
 
   const rows = data.segments ?? []
-  return Promise.all(rows.map(async r => ({
-    id: r.id != null ? Number(r.id) : undefined,
-    cameraId: String(r.camera_id ?? ''),
-    zoneId: r.zone_id ? String(r.zone_id) : null,
-    startedAt: Number(r.started_at ?? 0),
-    endedAt: Number(r.ended_at ?? 0),
-    gpsLat: r.gps_lat != null ? Number(r.gps_lat) : null,
-    gpsLng: r.gps_lng != null ? Number(r.gps_lng) : null,
-    gpsLatEnd: r.gps_lat_end != null ? Number(r.gps_lat_end) : null,
-    gpsLngEnd: r.gps_lng_end != null ? Number(r.gps_lng_end) : null,
-    presenceSeq: r.presence_seq != null ? Number(r.presence_seq) : undefined,
-    sourceCameras: Array.isArray(r.source_cameras)
-      ? (r.source_cameras as string[])
-      : undefined,
-    snapshotUrl: await snapshotUrl(
-      r.snapshot_path as string | null,
-      Number(r.ended_at ?? 0),
-      r.id != null
-        ? `ap-${Number(r.id)}`
-        : `ap-${Number(r.started_at ?? 0)}-${Number(r.ended_at ?? 0)}`,
-    ),
-  })))
+  return Promise.all(rows.map(async r => {
+    let eventPayload: Record<string, unknown> | undefined
+    let interactions: PatrolAppearanceSegment['interactions']
+    const rawPayload = r.event_payload_json
+    if (typeof rawPayload === 'string' && rawPayload.trim()) {
+      try {
+        eventPayload = JSON.parse(rawPayload) as Record<string, unknown>
+      } catch {
+        eventPayload = undefined
+      }
+    } else if (rawPayload && typeof rawPayload === 'object') {
+      eventPayload = rawPayload as Record<string, unknown>
+    }
+    const rawInteractions = r.interactions_json
+    if (typeof rawInteractions === 'string' && rawInteractions.trim()) {
+      try {
+        interactions = JSON.parse(rawInteractions) as PatrolAppearanceSegment['interactions']
+      } catch {
+        interactions = undefined
+      }
+    } else if (Array.isArray(rawInteractions)) {
+      interactions = rawInteractions as PatrolAppearanceSegment['interactions']
+    }
+    return {
+      id: r.id != null ? Number(r.id) : undefined,
+      cameraId: String(r.camera_id ?? ''),
+      zoneId: r.zone_id ? String(r.zone_id) : null,
+      startedAt: Number(r.started_at ?? 0),
+      endedAt: Number(r.ended_at ?? 0),
+      gpsLat: r.gps_lat != null ? Number(r.gps_lat) : null,
+      gpsLng: r.gps_lng != null ? Number(r.gps_lng) : null,
+      gpsLatEnd: r.gps_lat_end != null ? Number(r.gps_lat_end) : null,
+      gpsLngEnd: r.gps_lng_end != null ? Number(r.gps_lng_end) : null,
+      presenceSeq: r.presence_seq != null ? Number(r.presence_seq) : undefined,
+      sourceCameras: Array.isArray(r.source_cameras)
+        ? (r.source_cameras as string[])
+        : undefined,
+      trackId: r.track_id ? String(r.track_id) : undefined,
+      sessionId: r.session_id ? String(r.session_id) : undefined,
+      counted: r.counted != null ? Boolean(Number(r.counted)) : undefined,
+      eventPayload,
+      interactions,
+      snapshotUrl: await snapshotUrl(
+        r.snapshot_path as string | null,
+        Number(r.ended_at ?? 0),
+        r.id != null
+          ? `ap-${Number(r.id)}`
+          : `ap-${Number(r.started_at ?? 0)}-${Number(r.ended_at ?? 0)}`,
+      ),
+    }
+  }))
 }
 
 export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBundle | null> {
@@ -202,6 +239,9 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
       : row.camera_id
         ? [String(row.camera_id)]
         : [],
+    trackId: row.track_id ? String(row.track_id) : undefined,
+    sessionId: row.session_id ? String(row.session_id) : undefined,
+    counted: row.counted != null ? Boolean(Number(row.counted)) : undefined,
   }))
 
   const statsRow = data.stats ?? {}

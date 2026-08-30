@@ -8,6 +8,7 @@ import logging
 from .. import daystore, db
 from ..sink import _gate_observation_commit, _resolve_observation_gps, snapshot_score
 from .serialize import build_event_payload
+from .tripwire import site_entry_counted
 from .types import ObservationInput, TrackSession
 
 logger = logging.getLogger("patrol.aggregator.flush")
@@ -74,6 +75,9 @@ def flush_session(
         return
 
     gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
+    if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
+        session.counted = True
+
     payload = build_event_payload(session)
     payload_json = json.dumps(payload, ensure_ascii=False)
     interactions_json = json.dumps(
@@ -115,6 +119,7 @@ def flush_session(
         camera_id=session.camera_id,
         zone_id=session.zone_id,
         track_id=session.track_id,
+        session_id=session.session_id or "",
         started_at=session.started_at,
         ended_at=session.last_seen_at,
         gps_lat=gps_lat,
@@ -122,6 +127,7 @@ def flush_session(
         payload_json=payload_json,
         interactions_json=interactions_json,
         snapshot_path=path,
+        counted=session.counted,
         finalize=finalize,
     )
     session.appearance_row_id = row_id

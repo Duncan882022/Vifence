@@ -509,7 +509,8 @@ def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]
     rows = db.query(
         "SELECT id, camera_id, zone_id, started_at, ended_at,"
         " gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
-        " qualified, presence_seq, source_cameras, snapshot_path"
+        " qualified, presence_seq, source_cameras, snapshot_path,"
+        " track_id, session_id, counted, event_payload_json, interactions_json"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
         " ORDER BY started_at ASC",
@@ -535,6 +536,8 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
         "SELECT a.id, a.subject_id, a.camera_id, a.zone_id,"
         " a.started_at, a.ended_at, a.gps_lat, a.gps_lng,"
         " a.gps_lat_end, a.gps_lng_end, a.presence_seq, a.source_cameras,"
+        " a.track_id, a.session_id, a.counted,"
+        " a.event_payload_json, a.interactions_json,"
         " p.status AS person_status, p.iden_code, p.full_name"
         " FROM appearances a"
         " LEFT JOIN persons p ON p.pers_id = a.subject_id"
@@ -569,6 +572,7 @@ def upsert_track_appearance(
     camera_id: str,
     zone_id: str | None,
     track_id: str,
+    session_id: str,
     started_at: float,
     ended_at: float,
     gps_lat: float | None,
@@ -576,15 +580,18 @@ def upsert_track_appearance(
     payload_json: str,
     interactions_json: str,
     snapshot_path: str | None = None,
+    counted: bool = False,
     finalize: bool = False,
 ) -> int:
     """Một appearance / track session — UPDATE in-place thay vì INSERT mỗi frame."""
     _ = finalize  # reserved — close semantics via ended_at
+    counted_int = 1 if counted else 0
     with db.tx() as conn:
         if appearance_id is not None:
             conn.execute(
                 "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-                " event_payload_json = ?, interactions_json = ?,"
+                " event_payload_json = ?, interactions_json = ?, session_id = ?,"
+                " counted = MAX(counted, ?),"
                 " snapshot_path = COALESCE(snapshot_path, ?)"
                 " WHERE id = ?",
                 (
@@ -593,6 +600,8 @@ def upsert_track_appearance(
                     gps_lng,
                     payload_json,
                     interactions_json,
+                    session_id,
+                    counted_int,
                     snapshot_path,
                     appearance_id,
                 ),
@@ -610,8 +619,9 @@ def upsert_track_appearance(
             "INSERT INTO appearances"
             "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
             " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
-            " source_cameras, snapshot_path, track_id, event_payload_json, interactions_json)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " source_cameras, snapshot_path, track_id, session_id, counted,"
+            " event_payload_json, interactions_json)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_date,
                 subject_id,
@@ -628,6 +638,8 @@ def upsert_track_appearance(
                 src,
                 snapshot_path,
                 track_id,
+                session_id,
+                counted_int,
                 payload_json,
                 interactions_json,
             ),
@@ -659,12 +671,14 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
     )
     enc_row = db.query_one(
         "SELECT COUNT(*) AS c FROM appearances"
-        " WHERE event_date = ? AND qualified = 1 AND subject_id NOT LIKE 'obj-%'",
+        " WHERE event_date = ? AND qualified = 1 AND counted = 1"
+        " AND subject_id NOT LIKE 'obj-%'",
         (d,),
     )
     obj_row = db.query_one(
         "SELECT COUNT(*) AS c FROM appearances"
-        " WHERE event_date = ? AND qualified = 1 AND subject_id LIKE 'obj-%'",
+        " WHERE event_date = ? AND qualified = 1 AND counted = 1"
+        " AND subject_id LIKE 'obj-%'",
         (d,),
     )
     return {
