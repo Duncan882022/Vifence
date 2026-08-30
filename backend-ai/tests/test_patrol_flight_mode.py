@@ -25,21 +25,25 @@ class PatrolFlightModeTests(unittest.TestCase):
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.AERIAL)
 
     def test_low_altitude_is_proximity_ai(self) -> None:
-        update_patrol_drone_altitude("DR-03", 18.0)
+        update_patrol_drone_altitude("DR-03", 4.5)
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
 
     def test_hysteresis_between_bands(self) -> None:
-        update_patrol_drone_altitude("DR-03", 18.0)
+        update_patrol_drone_altitude("DR-03", 4.0)
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
-        update_patrol_drone_altitude("DR-03", 30.0)
+        update_patrol_drone_altitude("DR-03", 5.5)
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
+
+    def test_above_6m_is_aerial(self) -> None:
+        update_patrol_drone_altitude("DR-03", 7.0)
+        self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.AERIAL)
 
     def test_helmet_like_cameras(self) -> None:
         self.assertTrue(is_patrol_helmet_like("HC-01"))
         self.assertTrue(is_patrol_helmet_like("HC-02"))
         update_patrol_drone_altitude("DR-03", 80.0)
         self.assertFalse(is_patrol_helmet_like("DR-03"))
-        update_patrol_drone_altitude("DR-03", 18.0)
+        update_patrol_drone_altitude("DR-03", 4.0)
         self.assertTrue(is_patrol_helmet_like("DR-03"))
 
     def test_visual_scale_infers_proximity_without_telemetry(self) -> None:
