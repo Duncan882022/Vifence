@@ -32,17 +32,19 @@ interface PatrolFaceScannerPanelProps {
 /** SVG ellipse — viewBox 100×133 khớp aspect 3:4 của khung quét mặt. */
 const RING_CX = 50
 const RING_CY = 66.5
-const RING_RX = 44
-const RING_RY = 58
-const RING_STROKE = 7
+const RING_RX = 43
+const RING_RY = 57
+const RING_STROKE = 11
+/** Cung tối thiểu luôn hiện (~30%) để thấy rõ trên mobile Safari. */
+const RING_MIN_ARC = 0.3
 
 function FaceScanOvalFrame({
   progress,
   holdProgress,
   complete,
   poseMatched,
-  faceDetected,
-  capturing,
+  faceDetected: _faceDetected,
+  capturing: _capturing,
   children,
 }: {
   progress: number
@@ -55,10 +57,10 @@ function FaceScanOvalFrame({
 }) {
   const mainProgress = complete ? 1 : Math.max(0, Math.min(1, progress))
   const hold = complete ? 0 : Math.max(0, Math.min(1, holdProgress))
-  const accent = complete || poseMatched ? '#4ade80' : '#38bdf8'
+  const accent = complete || poseMatched ? '#22c55e' : '#0ea5e9'
   const visibleProgress = complete
     ? 1
-    : Math.max(mainProgress, faceDetected || capturing ? 0.14 : 0.1)
+    : Math.max(mainProgress, RING_MIN_ARC)
   const ringDash = `${(visibleProgress * 100).toFixed(1)} 100`
 
   return (
@@ -83,8 +85,8 @@ function FaceScanOvalFrame({
           rx={RING_RX}
           ry={RING_RY}
           fill="none"
-          stroke="rgba(255,255,255,0.38)"
-          strokeWidth={RING_STROKE}
+          stroke="rgba(255,255,255,0.72)"
+          strokeWidth={RING_STROKE + 1}
         />
         <ellipse
           cx={RING_CX}
@@ -93,15 +95,15 @@ function FaceScanOvalFrame({
           ry={RING_RY}
           fill="none"
           stroke={accent}
-          strokeWidth={complete ? RING_STROKE + 2 : RING_STROKE}
+          strokeWidth={complete ? RING_STROKE + 3 : RING_STROKE}
           strokeLinecap="round"
           pathLength={100}
           strokeDasharray={ringDash}
           transform={`rotate(-90 ${RING_CX} ${RING_CY})`}
           style={{
             filter: complete
-              ? 'drop-shadow(0 0 10px rgba(74,222,128,1)) drop-shadow(0 0 4px rgba(134,239,172,0.95))'
-              : 'drop-shadow(0 0 6px rgba(56,189,248,0.65))',
+              ? 'drop-shadow(0 0 14px rgba(34,197,94,1)) drop-shadow(0 0 6px rgba(134,239,172,1))'
+              : 'drop-shadow(0 0 10px rgba(14,165,233,0.95)) drop-shadow(0 0 4px rgba(56,189,248,0.8))',
             transition: 'stroke-dasharray 0.15s ease, stroke 0.2s ease',
           }}
         />
@@ -117,12 +119,12 @@ function FaceScanOvalFrame({
       )}
       <div
         className={cn(
-          'absolute inset-[7px] rounded-[999px] z-[20] pointer-events-none border-2',
+          'absolute inset-[5px] rounded-[999px] z-[20] pointer-events-none border-[3px]',
           complete
-            ? 'border-green-400/50'
+            ? 'border-green-400/70'
             : poseMatched
-              ? 'border-green-400/45'
-              : 'border-white/30',
+              ? 'border-green-400/60'
+              : 'border-sky-400/55',
         )}
         aria-hidden
       />
@@ -381,10 +383,10 @@ export function PatrolFaceScannerPanel({
                 {capturedCount}/{enrollment?.faces_required ?? 3}
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
+            <div className="h-2 rounded-full bg-[#1e2433] overflow-hidden">
               <div
                 className={cn('h-full transition-all duration-300', complete ? 'bg-green-400' : 'bg-sky-400')}
-                style={{ width: `${Math.round(autoScan.ringProgress * 100)}%` }}
+                style={{ width: `${Math.round(Math.max(autoScan.ringProgress, complete ? 1 : 0.08) * 100)}%` }}
               />
             </div>
             <div className="space-y-2">
