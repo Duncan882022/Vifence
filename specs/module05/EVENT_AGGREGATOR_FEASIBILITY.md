@@ -32,7 +32,7 @@ Luồng legacy đã gỡ — aggregator là luồng duy nhất (`record_observat
 
 ## Anti-duplicate
 
-- **Re-ID memory**: 180s, cosine ≥ 0.85 hoặc IoU ≥ 0.30 — gộp session khi mất track
+- **Re-ID memory**: 180s, cosine ≥ 0.85 hoặc IoU ≥ 0.30 — gộp session khi mất track (**cross-camera**)
 - **Tripwire**: GPS trong polygon Cầu Sông Hốt → `counted=1` một lần / session
 - **KPI `encounters_standard`**: chỉ đếm `counted=1`
 
