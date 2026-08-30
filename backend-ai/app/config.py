@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     jwt_ttl_sec: int = 86_400
     patrol_auth_disabled: bool = False
     patrol_auth_users: str = "admin:admin123:admin,hr:hr123:hr,viewer:view123:viewer"
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,https://duncan882022.github.io"
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "https://duncan882022.github.io,https://217.217.253.247.nip.io"
+    )
     patrol_embed_key: str = ""
     patrol_retention_days: int = 90
     # Flycam DR-* — độ cao (m) quyết định chế độ AI.

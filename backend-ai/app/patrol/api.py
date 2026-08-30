@@ -39,6 +39,12 @@ _import_jobs: dict[str, dict[str, Any]] = {}
 _import_lock = threading.Lock()
 
 
+@router.get("/health")
+def patrol_health() -> dict[str, Any]:
+    """Ping công khai — FE kiểm tra backend (không cần JWT)."""
+    return {"ok": True, "service": "patrol"}
+
+
 def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> dict[str, Any]:
     payload = {
         "pers_id": row["pers_id"],
@@ -346,15 +352,16 @@ def import_job_status(job_id: str, _user: RequirePatrolRead = None) -> dict[str,
 
 
 @router.post("/enroll/session")
-def create_enroll_session(user: RequirePatrolHr = None) -> dict[str, Any]:  # noqa: ARG001
+def create_enroll_session(request: Request) -> dict[str, Any]:
     """Bắt đầu phiên quét tự phục vụ — công nhân quét trước, nhập hồ sơ sau."""
+    rate_limit(request, key="patrol_enroll_session", max_calls=20, window_sec=60.0)
     session_id = identity.create_enroll_session()
     enrollment = identity.get_enroll_session_enrollment(session_id)
     return {"ok": True, "session_id": session_id, "enrollment": enrollment}
 
 
 @router.get("/enroll/{session_id}")
-def enroll_session_status(session_id: str, _user: RequirePatrolHr = None) -> dict[str, Any]:  # noqa: ARG001
+def enroll_session_status(session_id: str) -> dict[str, Any]:
     enrollment = identity.get_enroll_session_enrollment(session_id)
     if enrollment is None:
         return {"ok": False, "error": "session_not_found"}
@@ -366,7 +373,6 @@ def scan_enroll_session_face(
     request: Request,
     session_id: str,
     payload: EnrollScanPayload,
-    _user: RequirePatrolHr = None,  # noqa: ARG001
 ) -> dict[str, Any]:
     """Quét góc mặt vào phiên tạm — chưa gắn hồ sơ."""
     rate_limit(request, key="patrol_enroll_scan", max_calls=30, window_sec=60.0)
@@ -399,11 +405,12 @@ def scan_enroll_session_face(
 
 @router.post("/enroll/{session_id}/complete")
 def complete_enroll_session(
+    request: Request,
     session_id: str,
     payload: EnrollCompletePayload,
-    user: RequirePatrolHr = None,  # noqa: ARG001
 ) -> dict[str, Any]:
     """Hoàn tất — nhập hồ sơ giống import Excel, gắn vector đã quét."""
+    rate_limit(request, key="patrol_enroll_complete", max_calls=10, window_sec=60.0)
     full_name = payload.full_name.strip()
     employee_code = payload.employee_code.strip()
     contractor = (payload.contractor or "").strip()
@@ -425,7 +432,7 @@ def complete_enroll_session(
             return {"ok": False, "error": "incomplete_enrollment"}
         return {"ok": False, "error": code}
 
-    audit("enroll_complete", actor=user.username, subject_id=str(row["pers_id"]))
+    audit("enroll_complete", actor="self_enroll", subject_id=str(row["pers_id"]))
     return {
         "ok": True,
         "person": _person_payload(row, with_face_stats=True),

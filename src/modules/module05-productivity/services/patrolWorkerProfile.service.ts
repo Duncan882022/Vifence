@@ -61,15 +61,18 @@ export interface PatrolImportResult {
 async function patrolJson<T>(path: string, init?: RequestInit): Promise<T> {
   const data = await fetchPatrol<T>(path, init, 20_000)
   if (data === null) {
-    if (!patrolBackendBase()) throw new Error('Chưa cấu hình URL backend AI.')
-    throw new Error('Không kết nối được backend patrol.')
+    const base = patrolBackendBase()
+    if (!base) throw new Error('Chưa cấu hình URL backend AI.')
+    throw new Error(
+      'Không kết nối backend tuần tra. Kiểm tra mạng hoặc thử tải lại trang.',
+    )
   }
   return data
 }
 
 export async function pingPatrolProfileBackend(): Promise<boolean> {
-  const data = await fetchPatrol<{ ok?: boolean }>('/patrol/persons', undefined, 8_000)
-  return data !== null
+  const data = await fetchPatrol<{ ok?: boolean }>('/patrol/health', undefined, 8_000)
+  return data?.ok === true
 }
 
 export async function fetchPatrolWorkerProfiles(
