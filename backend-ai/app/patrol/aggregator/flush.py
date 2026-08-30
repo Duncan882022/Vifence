@@ -107,7 +107,7 @@ def flush_session(
     )
 
     path, shot_score = (None, 0.0)
-    if obs.face_eligible and subject_id:
+    if subject_id and obs.frame is not None and obs.person_bbox is not None:
         path, shot_score = _write_snapshot(session, obs)
 
     skip_appearance = True

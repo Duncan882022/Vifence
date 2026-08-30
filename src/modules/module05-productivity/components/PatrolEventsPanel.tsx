@@ -7,7 +7,7 @@ import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { getPatrolEventLocationLabel } from '../utils/patrolEventsUi'
-import { isPatrolPersonLifecycleWithSnapshot } from '../utils/patrolEventsFeed'
+import { isPatrolPersonLifecycleEvent } from '../utils/patrolEventsFeed'
 import {
   PATROL_EVENTS_TAB_META,
   countUniquePatrolTabEntities,
@@ -47,7 +47,7 @@ function isPersonEvent(event: PatrolEvent): boolean {
 
 function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
   const feed = dedupePatrolEventsByMasterEntity(
-    events.filter(isPatrolPersonLifecycleWithSnapshot),
+    events.filter(isPatrolPersonLifecycleEvent),
   )
   switch (tab) {
     case 'object':
@@ -222,7 +222,7 @@ export function PatrolEventsPanel({
   )
 
   const tabCounts = useMemo(() => {
-    const feed = events.filter(isPatrolPersonLifecycleWithSnapshot)
+    const feed = events.filter(isPatrolPersonLifecycleEvent)
     return {
       all: countUniquePatrolTabEntities(feed, 'all'),
       object: countUniquePatrolTabEntities(feed, 'object'),
@@ -327,7 +327,7 @@ export function PatrolEventsPanel({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
-        {events.filter(isPatrolPersonLifecycleWithSnapshot).length === 0 ? (
+        {events.filter(isPatrolPersonLifecycleEvent).length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8 px-3">
             {viewingToday
               ? 'Chưa có sự kiện hôm nay — chọn ngày khác phía trên hoặc đang chờ backend'

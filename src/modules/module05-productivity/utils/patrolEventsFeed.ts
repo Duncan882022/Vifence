@@ -46,9 +46,15 @@ function meetsPatrolSnapshotScoreGate(event: PatrolEvent): boolean {
   return true
 }
 
-/** Sự kiện vòng đời người (3 tab) — snapshot evidence + điểm ảnh đúng tầng. */
-export function isPatrolPersonLifecycleWithSnapshot(event: PatrolEvent): boolean {
+/** Sự kiện vòng đời người (3 tab) — thời gian hợp lệ; snapshot tùy chọn. */
+export function isPatrolPersonLifecycleEvent(event: PatrolEvent): boolean {
   if (event.type !== 'PERSON_DETECTED' && event.type !== 'IDENTITY_VERIFIED') return false
-  if (!hasPatrolEventSnapshot(event)) return false
+  if (!isValidPatrolEventTime(event.lockedAt)) return false
+  if (!hasPatrolEventSnapshot(event)) return true
   return meetsPatrolSnapshotScoreGate(event)
+}
+
+/** @deprecated Dùng {@link isPatrolPersonLifecycleEvent} — giữ alias tránh gãy import cũ. */
+export function isPatrolPersonLifecycleWithSnapshot(event: PatrolEvent): boolean {
+  return isPatrolPersonLifecycleEvent(event)
 }

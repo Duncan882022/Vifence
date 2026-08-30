@@ -78,7 +78,21 @@ export function PatrolEventSnapshot({
   )
 
   if (!displayUrl) {
-    return null
+    return (
+      <div className={frameClass} aria-hidden>
+        <div
+          className={cn(
+            'absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-[#0a0e17] text-muted-foreground',
+            isDetail && 'rounded-lg',
+          )}
+        >
+          <Camera className={cn('opacity-40', isDetail ? 'w-8 h-8' : 'w-4 h-4')} />
+          <span className={isDetail ? 'text-[10px] opacity-60' : 'text-[6px] opacity-60'}>
+            Chờ ảnh
+          </span>
+        </div>
+      </div>
+    )
   }
 
   const content = (
