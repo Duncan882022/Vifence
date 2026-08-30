@@ -14,6 +14,7 @@ from ..patrol.camera_scope import is_patrol_flycam, is_patrol_helmet_bodycam
 
 logger = logging.getLogger("patrol.person_analyzer")
 
+from ..patrol_person_visibility import _face_dominant_person_box
 from ..ppe_analyzer import (
     PPE_LABELS,
     PPE_SCENARIO,

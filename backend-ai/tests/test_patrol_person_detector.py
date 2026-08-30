@@ -68,5 +68,23 @@ class PatrolPersonDetectorTests(unittest.TestCase):
         self.assertEqual(len(ids), 1)
 
 
+    def test_analyze_patrol_frame_with_person_detection(self) -> None:
+        from app.patrol_engine import analyze_patrol_frame
+
+        frame = __import__("numpy").random.randint(0, 255, (720, 1280, 3), dtype=__import__("numpy").uint8)
+        mock_box = MagicMock()
+        mock_box.bbox = (400, 100, 600, 500)
+        mock_box.confidence = 0.85
+        mock_det = MagicMock()
+        mock_det.predict.return_value = [mock_box]
+        with patch(
+            "app.patrol.person_analyzer._get_person_detector",
+            return_value=mock_det,
+        ):
+            result = analyze_patrol_frame(frame, "HC-01")
+        self.assertEqual(len(result.get("detections") or []), 1)
+        self.assertGreaterEqual(int(result.get("metrics", {}).get("display_person_count") or 0), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
