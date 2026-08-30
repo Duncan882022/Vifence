@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Building2,
@@ -19,14 +19,19 @@ import { formatVnDate } from '@/utils/vnDateTime'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { formatPatrolTime } from '../data/patrolTypes'
 import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
-import { PatrolManualIdentityPanel } from './PatrolManualIdentityPanel'
-import { needsPatrolManualIdentity, suggestPatrolWorkerId } from '../services/patrolManualIdentity.service'
 import {
   fetchPatrolSubjectAppearances,
   formatAppearanceTimeRange,
   type PatrolAppearanceSegment,
 } from '../services/patrolDayEvents.service'
+import {
+  fetchPatrolGalleryFaces,
+  listCapturedGalleryFacePoses,
+  resolveFrontGalleryFaceUrl,
+  type PatrolGalleryFacePose,
+} from '../services/patrolGalleryFaces.service'
 import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
+import { resolveEventGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import {
   resolvePatrolAppearanceSubjectId,
   resolvePatrolEventDisplayMeta,
@@ -45,18 +50,46 @@ interface PatrolEventDetailModalProps {
 }
 
 interface PatrolInfoRow {
-  icon: LucideIcon
+  icon?: LucideIcon
+  avatarUrl?: string | null
+  avatarActive?: boolean
+  onAvatarClick?: () => void
   label: string
   value: string
-  iconClassName: string
+  iconClassName?: string
 }
 
-function PatrolDetailRow({ icon: Icon, label, value, iconClassName }: PatrolInfoRow) {
+function PatrolDetailRow({
+  icon: Icon,
+  avatarUrl,
+  avatarActive,
+  onAvatarClick,
+  label,
+  value,
+  iconClassName,
+}: PatrolInfoRow) {
+  const showAvatar = Boolean(avatarUrl && onAvatarClick)
   return (
     <div className="flex items-start gap-2.5 min-w-0">
-      <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 border border-[#1e2433] bg-[#0a0e17]">
-        <Icon className={cn('w-3.5 h-3.5', iconClassName)} aria-hidden />
-      </div>
+      {showAvatar ? (
+        <button
+          type="button"
+          onClick={onAvatarClick}
+          className={cn(
+            'w-7 h-7 rounded-md shrink-0 border overflow-hidden bg-[#0a0e17] transition-colors',
+            avatarActive
+              ? 'border-fuchsia-400/70 ring-1 ring-fuchsia-400/40'
+              : 'border-[#1e2433] hover:border-fuchsia-400/50',
+          )}
+          aria-label="Xem ảnh quét mặt"
+        >
+          <img src={avatarUrl!} alt="" className="w-full h-full object-cover" />
+        </button>
+      ) : (
+        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 border border-[#1e2433] bg-[#0a0e17]">
+          {Icon && <Icon className={cn('w-3.5 h-3.5', iconClassName)} aria-hidden />}
+        </div>
+      )}
       <div className="min-w-0 flex-1 pt-0.5">
         <p className="text-[8px] uppercase tracking-wide text-muted-foreground/70">{label}</p>
         <p className="text-[11px] text-foreground font-medium mt-0.5 leading-snug break-all">{value}</p>
@@ -148,10 +181,12 @@ function resolvePrimaryCameraLabel(
 }
 
 export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEventDetailModalProps) {
-  const [identityTick, setIdentityTick] = useState(0)
   const [appearanceSegments, setAppearanceSegments] = useState<PatrolAppearanceSegment[]>([])
   const [appearancesLoading, setAppearancesLoading] = useState(false)
   const [selectedAppearanceKey, setSelectedAppearanceKey] = useState<string | null>(null)
+  const [facePoses, setFacePoses] = useState<PatrolGalleryFacePose[]>([])
+  const [faceGalleryOpen, setFaceGalleryOpen] = useState(false)
+  const [selectedFaceSlot, setSelectedFaceSlot] = useState<number | null>(null)
   const [heroFromHistory, setHeroFromHistory] = useState(false)
 
   useEffect(() => {
@@ -168,6 +203,9 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   useEffect(() => {
     setSelectedAppearanceKey(null)
     setHeroFromHistory(false)
+    setFaceGalleryOpen(false)
+    setSelectedFaceSlot(null)
+    setFacePoses([])
   }, [event?.id, viewDate])
 
   useEffect(() => {
@@ -195,7 +233,38 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
-  }, [event?.id, viewDate, identityTick])
+  }, [event?.id, viewDate])
+
+  useEffect(() => {
+    if (!event) return
+    const stage = resolvePatrolPersonStage(event)
+    if (stage !== 'profile') return
+    const objectDisplay = resolveEventObjectDisplay(event)
+    const galleryWorkerId = resolveEventGalleryWorkerId(event, objectDisplay.workerId)
+    if (!galleryWorkerId) return
+    let cancelled = false
+    void fetchPatrolGalleryFaces(galleryWorkerId).then(poses => {
+      if (cancelled) return
+      setFacePoses(poses)
+      const captured = listCapturedGalleryFacePoses(poses)
+      if (captured[0]) setSelectedFaceSlot(captured[0].slot)
+    })
+    return () => { cancelled = true }
+  }, [event?.id])
+
+  const capturedFacePoses = useMemo(
+    () => listCapturedGalleryFacePoses(facePoses),
+    [facePoses],
+  )
+  const frontFaceUrl = useMemo(
+    () => resolveFrontGalleryFaceUrl(facePoses),
+    [facePoses],
+  )
+
+  const handleFaceAvatarClick = useCallback(() => {
+    setFaceGalleryOpen(open => !open)
+    setHeroFromHistory(false)
+  }, [])
 
   const summary = useMemo(() => {
     if (!event) return null
@@ -212,6 +281,9 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     if (stage === 'profile') {
       if (displayName) {
         infoRows.push({
+          avatarUrl: frontFaceUrl,
+          avatarActive: faceGalleryOpen,
+          onAvatarClick: frontFaceUrl ? handleFaceAvatarClick : undefined,
           icon: User,
           label: 'Họ tên',
           value: displayName,
@@ -272,9 +344,18 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       infoPrimary,
       infoSecondary,
     }
-  }, [event, appearanceSegments])
+  }, [event, appearanceSegments, frontFaceUrl, faceGalleryOpen, handleFaceAvatarClick])
+
+  const selectedFaceUrl = useMemo(() => {
+    if (selectedFaceSlot != null) {
+      const picked = capturedFacePoses.find(p => p.slot === selectedFaceSlot)?.url
+      if (picked) return picked
+    }
+    return frontFaceUrl
+  }, [capturedFacePoses, frontFaceUrl, selectedFaceSlot])
 
   const activeSnapshotUrl = useMemo(() => {
+    if (faceGalleryOpen) return undefined
     if (heroFromHistory && selectedAppearanceKey) {
       const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
       if (selected) {
@@ -282,24 +363,21 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       }
     }
     return event?.snapshotUrl
-  }, [appearanceSegments, event?.snapshotUrl, heroFromHistory, selectedAppearanceKey])
+  }, [appearanceSegments, event?.snapshotUrl, faceGalleryOpen, heroFromHistory, selectedAppearanceKey])
 
   if (!event || !summary) return null
-  void identityTick
 
   const meta = resolvePatrolEventDisplayMeta(event)
   const TypeIcon = meta.icon
-  const objectKey = event.objectId?.trim() || event.id
   const stage = summary.stage
   const modalTitle = (stage === 'person' || stage === 'profile')
     ? summary.cardDisplay.title
     : event.violationLabel
-  const showIdentify = stage !== 'profile'
-    && needsPatrolManualIdentity(objectKey, event.objectLabel)
   const hasAppearanceHistory = appearanceSegments.length > 0
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
+  const showHeroPanel = Boolean(faceGalleryOpen && selectedFaceUrl) || Boolean(activeSnapshotUrl)
 
   return createPortal(
     <div
@@ -310,7 +388,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       <div
         className={cn(
           'relative flex flex-col w-full max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60',
-          activeSnapshotUrl ? 'sm:max-w-xl lg:max-w-2xl' : 'sm:max-w-md',
+          showHeroPanel ? 'sm:max-w-xl lg:max-w-2xl' : 'sm:max-w-md',
         )}
         onClick={e => e.stopPropagation()}
         role="dialog"
@@ -345,7 +423,50 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         </div>
 
         <div className="flex flex-col flex-1 min-h-0">
-          {activeSnapshotUrl && (
+          {faceGalleryOpen && selectedFaceUrl && (
+            <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17] space-y-2">
+              <div className="relative aspect-[4/3] max-h-[42vh] rounded-lg overflow-hidden border border-[#1e2433] bg-black">
+                <img
+                  src={selectedFaceUrl}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+              </div>
+              {capturedFacePoses.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-0.5">
+                  {capturedFacePoses.map(pose => {
+                    const selected = selectedFaceSlot === pose.slot
+                    return (
+                      <button
+                        key={pose.slot}
+                        type="button"
+                        onClick={() => setSelectedFaceSlot(pose.slot)}
+                        className={cn(
+                          'shrink-0 flex flex-col items-center gap-1 rounded-md border p-1 transition-colors',
+                          selected
+                            ? 'border-fuchsia-400/60 bg-fuchsia-500/10 ring-1 ring-fuchsia-400/30'
+                            : 'border-[#1e2433] bg-[#0a0e17] hover:border-fuchsia-400/40',
+                        )}
+                      >
+                        <div className="w-14 h-14 rounded overflow-hidden bg-black">
+                          <img
+                            src={pose.url!}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <span className="text-[8px] text-muted-foreground max-w-[56px] truncate">
+                          {pose.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!faceGalleryOpen && activeSnapshotUrl && (
             <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17]">
               <PatrolEventSnapshot
                 key={`${event.id}:${selectedAppearanceKey ?? 'event'}:${activeSnapshotUrl}`}
@@ -422,6 +543,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                         onClick={() => {
                           if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
                           setSelectedAppearanceKey(rowKey)
+                          setFaceGalleryOpen(false)
                           setHeroFromHistory(true)
                         }}
                         className={cn(
@@ -505,17 +627,6 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                 </div>
               )}
             </div>
-          )}
-
-          {showIdentify && (
-            <PatrolManualIdentityPanel
-              objectKey={objectKey}
-              suggestedWorkerId={suggestPatrolWorkerId(objectKey, event.objectId)}
-              snapshotUrl={event.snapshotUrl}
-              cameraId={event.cameraId}
-              trackId={event.trackWorkerId}
-              onAssigned={() => setIdentityTick(t => t + 1)}
-            />
           )}
           </div>
         </div>
