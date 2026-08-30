@@ -23,7 +23,7 @@ function baseEvent(overrides: Partial<PatrolEvent> = {}): PatrolEvent {
     status: 'LOCKED',
     confidence: 1,
     gps: { lat: 0, lng: 0 },
-    snapshotUrl: null,
+    snapshotUrl: undefined,
     snapshotScore: 0,
     stage: 'person',
     ...overrides,
@@ -32,7 +32,7 @@ function baseEvent(overrides: Partial<PatrolEvent> = {}): PatrolEvent {
 
 describe('isPatrolPersonLifecycleEvent', () => {
   it('shows events without snapshot (pending evidence)', () => {
-    const event = baseEvent({ snapshotUrl: null, snapshotScore: 0, stage: 'profile' })
+    const event = baseEvent({ snapshotUrl: undefined, snapshotScore: 0, stage: 'profile' })
     expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
     expect(isPatrolPersonLifecycleWithSnapshot(event)).toBe(true)
   })
@@ -43,7 +43,7 @@ describe('isPatrolPersonLifecycleEvent', () => {
       objectId: 'obj-1',
       objectLabel: 'Đối tượng',
       stage: 'object',
-      snapshotUrl: null,
+      snapshotUrl: undefined,
       snapshotScore: 0,
     })
     expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
