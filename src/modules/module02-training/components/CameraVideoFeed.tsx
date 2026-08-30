@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useShellLayout } from '@/hooks/useShellLayout'
@@ -33,6 +33,12 @@ import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
+import {
+  getCameraFeedPosterUrl,
+  getFeedKeyForCamera,
+  getVideoObjectFitForCamera,
+  getVideoObjectPositionForCamera,
+} from '../data/trainingCameraFeeds'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraLiveRoiVisible } from '../hooks/useCameraLiveRoiVisible'
 import { useCameraBboxVisible } from './CameraBboxToggle'
