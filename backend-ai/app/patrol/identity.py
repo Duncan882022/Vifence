@@ -556,6 +556,13 @@ def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> No
             (drop, keep, ts),
         )
     _invalidate_face_index()
+    from .daystore import coalesce_subject_appearances
+
+    for row in db.query(
+        "SELECT DISTINCT event_date FROM appearances WHERE subject_id = ?",
+        (keep,),
+    ):
+        coalesce_subject_appearances(keep, str(row["event_date"]))
 
 
 def import_identity(

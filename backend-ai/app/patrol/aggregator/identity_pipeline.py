@@ -119,6 +119,9 @@ def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> 
             session.track_id,
         )
     session.subject_id = pers_id
+    from .session_store import link_subject_session
+
+    link_subject_session(session)
     session.dirty = True
 
 
@@ -202,6 +205,16 @@ def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) ->
             else IdentityType.ANONYMOUS
         ),
         confidence=max(session.identity.confidence, obs.confidence),
+    )
+    from .session_store import link_subject_session
+
+    link_subject_session(session)
+    from .. import db as patrol_db
+
+    daystore.coalesce_subject_appearances(
+        session.subject_id,
+        patrol_db.today_vn(obs.ts),
+        camera_id=session.camera_id,
     )
     session.dirty = True
     logger.info(

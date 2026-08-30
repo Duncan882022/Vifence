@@ -441,5 +441,141 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
 
 
+class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def test_link_subject_session_shares_appearance_row(self) -> None:
+        from app.patrol.aggregator.session_store import get_or_create, link_subject_session
+
+        s1 = get_or_create("HC-02", "ptk0001", ts=1000.0)
+        s1.subject_id = "pers-0007"
+        s1.appearance_row_id = 42
+        s1.session_id = "sess-shared"
+        s1.committed = True
+
+        s2 = get_or_create("HC-02", "ptk0002", ts=1020.0)
+        s2.subject_id = "pers-0007"
+        link_subject_session(s2)
+
+        self.assertEqual(s2.appearance_row_id, 42)
+        self.assertEqual(s2.session_id, "sess-shared")
+        self.assertTrue(s2.committed)
+
+    def test_upsert_coalesces_second_track_same_subject(self) -> None:
+        from app.patrol import daystore, db
+
+        row1 = daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="pers-0007",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk0001",
+            session_id="sess-1",
+            started_at=1000.0,
+            ended_at=1024.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="2026-08-30/pers-0007-1000.jpg",
+        )
+        row2 = daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="pers-0007",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk0002",
+            session_id="sess-2",
+            started_at=1022.0,
+            ended_at=1025.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="2026-08-30/pers-0007-1025.jpg",
+        )
+        self.assertEqual(row1, row2)
+        rows = daystore.list_day_presences("2026-08-30")
+        self.assertEqual(len(rows), 1)
+        snap = db.query_one(
+            "SELECT snapshot_path FROM appearances WHERE id = ?",
+            (row1,),
+        )
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/pers-0007-1000.jpg")
+
+    def test_coalesce_merges_duplicate_rows(self) -> None:
+        from app.patrol import daystore, db
+
+        daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="pers-0007",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-a",
+            session_id="sess-a",
+            started_at=1000.0,
+            ended_at=1020.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="snap-a.jpg",
+        )
+        with db.tx() as conn:
+            conn.execute(
+                "INSERT INTO appearances"
+                "(event_date, subject_id, camera_id, started_at, ended_at,"
+                " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified,"
+                " presence_seq, source_cameras, snapshot_path, track_id,"
+                " session_id, counted, event_payload_json, interactions_json)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "2026-08-30",
+                    "pers-0007",
+                    "HC-02",
+                    1022.0,
+                    1025.0,
+                    20.93,
+                    106.92,
+                    20.93,
+                    106.92,
+                    1,
+                    2,
+                    '["HC-02"]',
+                    "snap-b.jpg",
+                    "ptk-b",
+                    "sess-b",
+                    0,
+                    "{}",
+                    "[]",
+                ),
+            )
+        merged = daystore.coalesce_subject_appearances(
+            "pers-0007", "2026-08-30", camera_id="HC-02",
+        )
+        self.assertEqual(merged, 1)
+        rows = daystore.list_day_presences("2026-08-30")
+        self.assertEqual(len(rows), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

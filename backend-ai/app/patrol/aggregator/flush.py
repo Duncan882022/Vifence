@@ -108,7 +108,34 @@ def flush_session(
     )
 
     path, shot_score = (None, 0.0)
-    if subject_id and obs.frame is not None and obs.person_bbox is not None:
+    appearance_id = session.appearance_row_id
+    if appearance_id is None:
+        appearance_id = daystore.find_extendable_track_appearance_row(
+            db.today_vn(now),
+            subject_id,
+            session.camera_id,
+            now,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+        )
+        if appearance_id is not None:
+            session.appearance_row_id = appearance_id
+
+    skip_snapshot = False
+    if appearance_id is not None and not finalize:
+        existing = db.query_one(
+            "SELECT snapshot_path FROM appearances WHERE id = ?",
+            (appearance_id,),
+        )
+        if existing and (existing["snapshot_path"] or "").strip():
+            skip_snapshot = True
+
+    if (
+        not skip_snapshot
+        and subject_id
+        and obs.frame is not None
+        and obs.person_bbox is not None
+    ):
         path, shot_score = _write_snapshot(session, obs)
 
     skip_appearance = True

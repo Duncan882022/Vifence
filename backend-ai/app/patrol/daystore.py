@@ -596,6 +596,100 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
     return out
 
 
+def coalesce_subject_appearances(
+    subject_id: str,
+    event_date: str,
+    *,
+    camera_id: str | None = None,
+) -> int:
+    """Gộp appearance trùng lượt gặp (2 ByteTrack / merge pers-*)."""
+    params: list[Any] = [event_date, subject_id]
+    cam_clause = ""
+    if camera_id:
+        cam_clause = " AND camera_id = ?"
+        params.append(camera_id)
+    rows = db.query(
+        "SELECT id, started_at, ended_at, camera_id, gps_lat, gps_lng,"
+        " gps_lat_end, gps_lng_end, snapshot_path, track_id, session_id,"
+        " event_payload_json, interactions_json, counted"
+        " FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        f"{cam_clause}"
+        " ORDER BY started_at ASC, id ASC",
+        tuple(params),
+    )
+    if len(rows) < 2:
+        return 0
+
+    merged = 0
+    with db.tx() as conn:
+        keep = rows[0]
+        for nxt in rows[1:]:
+            if str(nxt["camera_id"] or "") != str(keep["camera_id"] or ""):
+                keep = nxt
+                continue
+            if not should_extend_presence(
+                keep, float(nxt["ended_at"]), None, None,
+                camera_id=str(keep["camera_id"] or ""),
+            ):
+                keep = nxt
+                continue
+            snap = (keep["snapshot_path"] or "").strip() or (nxt["snapshot_path"] or "").strip() or None
+            conn.execute(
+                "UPDATE appearances SET"
+                " ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
+                " snapshot_path = COALESCE(snapshot_path, ?),"
+                " counted = MAX(counted, ?)"
+                " WHERE id = ?",
+                (
+                    max(float(keep["ended_at"]), float(nxt["ended_at"])),
+                    nxt["gps_lat_end"] or nxt["gps_lat"],
+                    nxt["gps_lng_end"] or nxt["gps_lng"],
+                    (nxt["snapshot_path"] or "").strip() or None,
+                    int(nxt["counted"] or 0),
+                    int(keep["id"]),
+                ),
+            )
+            conn.execute("DELETE FROM appearances WHERE id = ?", (int(nxt["id"]),))
+            merged += 1
+            keep = conn.execute(
+                "SELECT id, started_at, ended_at, camera_id, gps_lat, gps_lng,"
+                " gps_lat_end, gps_lng_end, snapshot_path, track_id, session_id,"
+                " event_payload_json, interactions_json, counted"
+                " FROM appearances WHERE id = ?",
+                (int(keep["id"]),),
+            ).fetchone()
+            if keep is None:
+                break
+    return merged
+
+
+def find_extendable_track_appearance_row(
+    event_date: str,
+    subject_id: str,
+    camera_id: str,
+    ts: float,
+    *,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
+) -> int | None:
+    """Track mới cùng pers + camera trong gap — UPDATE row cũ thay vì INSERT."""
+    row = db.query_one(
+        "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end"
+        " FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
+        " ORDER BY ended_at DESC LIMIT 1",
+        (event_date, subject_id, camera_id),
+    )
+    if row is None:
+        return None
+    if not should_extend_presence(
+        row, ts, gps_lat, gps_lng, camera_id=camera_id,
+    ):
+        return None
+    return int(row["id"])
+
+
 def upsert_track_appearance(
     *,
     appearance_id: int | None,
@@ -619,11 +713,25 @@ def upsert_track_appearance(
     _ = finalize  # reserved — close semantics via ended_at
     counted_int = 1 if counted else 0
     with db.tx() as conn:
-        if appearance_id is not None:
+        row_id = appearance_id
+        if row_id is None:
+            extend = conn.execute(
+                "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end"
+                " FROM appearances"
+                " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
+                " ORDER BY ended_at DESC LIMIT 1",
+                (event_date, subject_id, camera_id),
+            ).fetchone()
+            if extend is not None and should_extend_presence(
+                extend, ended_at, gps_lat, gps_lng, camera_id=camera_id,
+            ):
+                row_id = int(extend["id"])
+
+        if row_id is not None:
             conn.execute(
                 "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
                 " event_payload_json = ?, interactions_json = ?, session_id = ?,"
-                " counted = MAX(counted, ?),"
+                " track_id = ?, counted = MAX(counted, ?),"
                 " snapshot_path = COALESCE(snapshot_path, ?)"
                 " WHERE id = ?",
                 (
@@ -633,12 +741,13 @@ def upsert_track_appearance(
                     payload_json,
                     interactions_json,
                     session_id,
+                    track_id,
                     counted_int,
                     snapshot_path,
-                    appearance_id,
+                    row_id,
                 ),
             )
-            return appearance_id
+            return row_id
 
         seq_row = conn.execute(
             "SELECT COALESCE(MAX(presence_seq), 0) AS mx FROM appearances"

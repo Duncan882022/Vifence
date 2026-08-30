@@ -83,3 +83,24 @@ def reset(camera_id: str | None = None) -> None:
 def all_sessions() -> list[TrackSession]:
     with _lock:
         return list(_sessions.values())
+
+
+def link_subject_session(session: TrackSession) -> None:
+    """Cùng pers-* + camera — gộp appearance (YOLO tách 2 track một người)."""
+    subject_id = (session.subject_id or "").strip()
+    if not subject_id:
+        return
+    with _lock:
+        for other in _sessions.values():
+            if other is session or other.camera_id != session.camera_id:
+                continue
+            if (other.subject_id or "").strip() != subject_id:
+                continue
+            if other.appearance_row_id is None:
+                continue
+            session.appearance_row_id = other.appearance_row_id
+            session.session_id = other.session_id
+            if other.committed:
+                session.committed = True
+                session.last_flush_at = max(session.last_flush_at, other.last_flush_at)
+            return
