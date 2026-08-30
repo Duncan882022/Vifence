@@ -480,7 +480,11 @@ def _appearance_row_payload(row: Any) -> dict[str, Any]:
 
 
 def _resolve_appearance_subject_id(subject_id: str) -> str:
-    """Map gallery/sgc alias → pers-* / obj-* lưu trong appearances."""
+    """Map gallery/sgc alias → pers-* lưu trong appearances.
+
+    Không map sang obj-* — OBJ là quan sát chưa định danh, gộp nhầm sẽ trộn
+    snapshot Unknown với người đã gán gallery (vd. Duncan).
+    """
     sid = identity.resolve_alias((subject_id or "").strip())
     if sid.startswith("pers-") or sid.startswith("obj-"):
         return sid
@@ -491,7 +495,7 @@ def _resolve_appearance_subject_id(subject_id: str) -> str:
         if row:
             for alias in row.get("aliases") or []:
                 key = str(alias).strip()
-                if key.startswith("pers-") or key.startswith("obj-"):
+                if key.startswith("pers-"):
                     return identity.resolve_alias(key)
     except Exception:  # noqa: BLE001
         pass

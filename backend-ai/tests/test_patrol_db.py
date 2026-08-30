@@ -528,5 +528,23 @@ class PurgeDayTests(PatrolDbTestCase):
         self.assertIsNone(identity.get_person(stray))
 
 
+class AppearanceSubjectResolveTests(PatrolDbTestCase):
+    def test_gallery_alias_maps_to_pers_not_obj(self) -> None:
+        from unittest.mock import patch
+
+        from app.patrol.daystore import _resolve_appearance_subject_id
+
+        pers_id, _ = identity.observe_face(_vec(60), quality=0.8)
+        obj_id = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
+
+        fake_row = {
+            "aliases": [str(pers_id), str(obj_id), "sgc-12"],
+        }
+        with patch("app.patrol_identity_store.lookup_patrol_identity", return_value=fake_row):
+            self.assertEqual(_resolve_appearance_subject_id("p-DUNCAN"), str(pers_id))
+            self.assertEqual(_resolve_appearance_subject_id(str(obj_id)), str(obj_id))
+            self.assertEqual(_resolve_appearance_subject_id(str(pers_id)), str(pers_id))
+
+
 if __name__ == "__main__":
     unittest.main()

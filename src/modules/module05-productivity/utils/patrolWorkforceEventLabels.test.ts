@@ -5,6 +5,7 @@ import {
   dedupePatrolEventsByMasterEntity,
   patrolEventMasterEntityKey,
   patrolWorkforceEventTitle,
+  resolvePatrolAppearanceSubjectId,
   resolvePatrolPersonStage,
 } from './patrolWorkforceEventLabels'
 
@@ -127,5 +128,39 @@ describe('gộp bản ghi theo người, không theo mã track', () => {
     const a = makeEvent({ id: 'e-1', objectId: 'p-102' })
     const b = makeEvent({ id: 'e-2', objectId: 'p-205' })
     expect(dedupePatrolEventsByMasterEntity([a, b])).toHaveLength(2)
+  })
+})
+
+describe('resolvePatrolAppearanceSubjectId — popup lịch sử', () => {
+  it('ưu tiên pers từ day card dù objectId đã promote gallery', () => {
+    const event = makeEvent({
+      id: 'pers:pers-0042',
+      objectId: 'p-DUNCAN',
+      objectLabel: 'Duncan',
+      violationLabel: 'Duncan',
+      stage: 'profile',
+    })
+    expect(resolvePatrolAppearanceSubjectId(event)).toBe('pers-0042')
+  })
+
+  it('giữ obj-* cho thẻ Đối tượng — không fallback sgc', () => {
+    const event = makeEvent({
+      id: 'obj:OBJ-0007',
+      objectId: 'OBJ-0007',
+      trackWorkerId: 'sgc-12',
+      stage: 'object',
+    })
+    expect(resolvePatrolAppearanceSubjectId(event)).toBe('OBJ-0007')
+  })
+
+  it('không tra lịch sử qua mã gallery khi thiếu day card', () => {
+    const event = makeEvent({
+      id: 'live-ev-99',
+      objectId: 'p-DUNCAN',
+      trackWorkerId: 'sgc-12',
+      stage: 'profile',
+    })
+    expect(resolvePatrolAppearanceSubjectId(event)).toBe('p-DUNCAN')
+    expect(resolvePatrolAppearanceSubjectId(event)).not.toBe('sgc-12')
   })
 })
