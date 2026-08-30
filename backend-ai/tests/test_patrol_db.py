@@ -243,6 +243,16 @@ class DailyEventTests(PatrolDbTestCase):
         self.assertEqual(card["snapshot_path"], "mặt.jpg")
         self.assertEqual(card["last_seen"], 110.0)
 
+    def test_person_card_created_without_face_snapshot(self) -> None:
+        """Aggregator có thể chốt pers trước khi có ảnh — vẫn phải có thẻ tab Người."""
+        pers_id, _ = identity.observe_face(_vec(25), quality=0.8)
+        daystore.touch_person_event(
+            pers_id, camera_id="HC-01", now=500.0, face_eligible=False,
+        )
+        cards = daystore.list_person_events(db.today_vn(500.0))
+        self.assertEqual(len(cards), 1)
+        self.assertIsNone(cards[0]["snapshot_path"])
+
     def test_identified_prefers_latest_face_over_best_of(self) -> None:
         pers_id, _ = identity.observe_face(_vec(26), quality=0.8)
         identity.identify(pers_id, full_name="An", employee_code="NV26")

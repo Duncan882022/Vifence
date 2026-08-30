@@ -87,6 +87,7 @@ def flush_session(
             seen_since=session.started_at if session.last_flush_at <= 0 else None,
             gps_lat=gps_lat,
             gps_lng=gps_lng,
+            skip_appearance=True,
         )
         session.subject_id = obj_id
 

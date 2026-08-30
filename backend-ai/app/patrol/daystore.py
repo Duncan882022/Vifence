@@ -248,14 +248,15 @@ def touch_person_event(
             (date, pid),
         ).fetchone()
         if row is None:
-            if card_eligible:
-                appearance_snapshot = snapshot_path
-                conn.execute(
-                    "INSERT INTO daily_events"
-                    "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
-                    " VALUES(?,?,?,?,?,?)",
-                    (date, pid, first, ts, snapshot_path, snapshot_score),
-                )
+            card_snap = snapshot_path if card_eligible else None
+            card_score = snapshot_score if card_eligible else 0.0
+            appearance_snapshot = card_snap
+            conn.execute(
+                "INSERT INTO daily_events"
+                "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
+                " VALUES(?,?,?,?,?,?)",
+                (date, pid, first, ts, card_snap, card_score),
+            )
         else:
             write, keep_new = _should_refresh_person_snapshot(
                 row,
