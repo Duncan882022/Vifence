@@ -114,7 +114,7 @@ def get_patrol_drone_altitude_m(camera_id: str) -> float | None:
 
 
 def resolve_patrol_flight_mode(camera_id: str) -> PatrolFlightMode:
-    """Tầm cao → chỉ mật độ; tầm thấp → AI như mũ (gate rộng hơn)."""
+    """Tầm cao → chỉ mật độ; tầm thấp (≤ proximity_max m) → AI như mũ."""
     if not camera_id.startswith("DR-"):
         return PatrolFlightMode.PROXIMITY
 
@@ -128,14 +128,14 @@ def resolve_patrol_flight_mode(camera_id: str) -> PatrolFlightMode:
             mode = PatrolFlightMode.PROXIMITY
         else:
             mode = PatrolFlightMode.AERIAL
-    elif alt >= aerial_min:
-        mode = PatrolFlightMode.AERIAL
     elif alt <= proximity_max:
         mode = PatrolFlightMode.PROXIMITY
+    elif alt >= aerial_min:
+        mode = PatrolFlightMode.AERIAL
     elif prev in (PATROL_FLIGHT_MODE_AERIAL, PATROL_FLIGHT_MODE_PROXIMITY):
         mode = PatrolFlightMode(str(prev))
     else:
-        mode = PatrolFlightMode.AERIAL
+        mode = PatrolFlightMode.PROXIMITY
 
     _mode_state[camera_id] = {"mode": mode.value, "altitude_m": alt, "updated_at": time.time()}
     return mode
