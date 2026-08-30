@@ -116,22 +116,49 @@ export function resolvePatrolProfileEntityKey(event: {
   return null
 }
 
+/** Giữ đúng hoa/thường — BE + file gallery phân biệt `p-SGC-6688` vs `P-SGC-6688`. */
+function normalizeGalleryWorkerId(id: string): string {
+  const t = id.trim()
+  if (!t) return t
+  if (/^p-/i.test(t)) {
+    return `p-${t.slice(2)}`
+  }
+  return t
+}
+
+/** Mã track ẩn danh sgc-* — khác mã nhân sự SGC-* (phân biệt hoa/thường). */
+function isPatrolAnonymousTrackId(id: string): boolean {
+  return /^sgc-/.test(id.trim())
+}
+
+function resolveGalleryIdFromEmployeeCode(code: string): string | null {
+  const trimmed = code.trim()
+  if (!trimmed) return null
+  if (isPatrolGalleryWorkerId(trimmed)) return normalizeGalleryWorkerId(trimmed)
+  if (isPatrolPersId(trimmed) || isPatrolObjectId(trimmed) || isPatrolAnonymousTrackId(trimmed)) {
+    return null
+  }
+  return patrolGalleryWorkerIdFromEmployeeCode(trimmed)
+}
+
 /** Mã gallery worker để load ảnh quét mặt — ưu tiên p-* từ sự kiện đã khớp AI. */
 export function resolveEventGalleryWorkerId(event: {
   objectId?: string | null
   trackWorkerId?: string | null
   objectLabel?: string | null
-}, employeeCode?: string | null): string | null {
+  employeeCode?: string | null
+}, fallbackWorkerId?: string | null): string | null {
   const profileKey = resolvePatrolProfileEntityKey(event)
-  if (profileKey && isPatrolGalleryWorkerId(profileKey)) return profileKey.toUpperCase()
-  for (const raw of [event.objectId, event.trackWorkerId]) {
-    const key = raw?.trim() ?? ''
-    if (isPatrolGalleryWorkerId(key)) return key.toUpperCase()
+  if (profileKey && isPatrolGalleryWorkerId(profileKey)) {
+    return normalizeGalleryWorkerId(profileKey)
   }
-  const code = employeeCode?.trim() ?? ''
-  if (code) {
-    if (isPatrolGalleryWorkerId(code)) return code.toUpperCase()
-    return patrolGalleryWorkerIdFromEmployeeCode(code)
+  for (const raw of [event.objectId, event.trackWorkerId, fallbackWorkerId]) {
+    const key = raw?.trim() ?? ''
+    if (isPatrolGalleryWorkerId(key)) return normalizeGalleryWorkerId(key)
+  }
+  for (const raw of [event.employeeCode, fallbackWorkerId]) {
+    const galleryId = resolveGalleryIdFromEmployeeCode(raw ?? '')
+    if (galleryId) return galleryId
   }
   return null
 }

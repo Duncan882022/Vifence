@@ -97,6 +97,7 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       snapshotUrl: row.snapshotUrl,
       snapshotScore: row.snapshotScore,
       stage: identified ? 'profile' : 'person',
+      employeeCode: row.employeeCode,
     } as PatrolEvent
   })
   const objectEvents: PatrolEvent[] = displayObjects.map(row => {

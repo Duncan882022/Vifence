@@ -70,6 +70,8 @@ export interface PatrolEvent {
    * khi một alias cũ còn kẹt trong trình duyệt.
    */
   stage?: 'object' | 'person' | 'profile'
+  /** Mã nhân viên từ daily_events — load avatar gallery. */
+  employeeCode?: string | null
 }
 
 export interface PatrolDashboard {
