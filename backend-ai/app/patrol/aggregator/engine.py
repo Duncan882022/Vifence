@@ -56,7 +56,14 @@ def ingest_observation(**kwargs) -> str | None:
             gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=obs.ts)
             if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
                 session.dirty = True
-        if session.dirty:
+        from ..daystore import TOUCH_MIN_INTERVAL_SEC
+
+        due = (
+            session.dirty
+            or session.last_flush_at <= 0
+            or (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC
+        )
+        if due:
             flush_session(session, obs)
         return session.subject_id
 

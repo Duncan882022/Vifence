@@ -91,10 +91,13 @@ class TrackSession:
     def touch(self, ts: float, bbox: tuple[float, float, float, float] | None) -> None:
         if self.started_at <= 0:
             self.started_at = ts
+        advanced = ts > self.last_seen_at + 1e-6
         self.last_seen_at = ts
         if bbox is not None:
             self.bbox = bbox
-        if not self.committed:
+        # Session đã committed vẫn phải flush lại khi gặp lại sau khi tắt cam —
+        # trước đây dirty=False khiến phiên stream mới không cập nhật last_seen.
+        if not self.committed or advanced:
             self.dirty = True
 
 
