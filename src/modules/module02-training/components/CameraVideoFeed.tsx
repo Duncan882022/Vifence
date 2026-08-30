@@ -32,12 +32,7 @@ import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/u
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
-import {
-  getCameraFeedPosterUrl,
-  getFeedKeyForCamera,
-  getVideoObjectFitForCamera,
-  getVideoObjectPositionForCamera,
-} from '../data/trainingCameraFeeds'
+import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraLiveRoiVisible } from '../hooks/useCameraLiveRoiVisible'
 import { useCameraBboxVisible } from './CameraBboxToggle'
@@ -161,6 +156,27 @@ export function CameraVideoFeed({
   )
   // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock)
+
+  const patrolRoiFrameSize = useMemo(() => {
+    const video = videoRef.current
+    const snapW = rawVmsFeed.snapshot?.width ?? 0
+    const snapH = rawVmsFeed.snapshot?.height ?? 0
+    if (snapW > 0 && snapH > 0) {
+      return resolveOverlayAnalyzeFrameSize(video, snapW, snapH)
+    }
+    const vw = video?.videoWidth ?? 0
+    const vh = video?.videoHeight ?? 0
+    if (vw > 0 && vh > 0) {
+      return resolveOverlayAnalyzeFrameSize(video, vw, vh)
+    }
+    return { width: 0, height: 0 }
+  }, [
+    rawVmsFeed.snapshot?.width,
+    rawVmsFeed.snapshot?.height,
+    rawVmsFeed.snapshot?.updated_at,
+    framesReady,
+    videoClock,
+  ])
 
   useEffect(() => {
     if (!runPatrolHeatmapAnalyze || !rawVmsFeed.snapshot) return
@@ -407,8 +423,8 @@ export function CameraVideoFeed({
         {showPatrolPersonRoi && (
           <PatrolPersonRoiOverlay
             cameraId={cameraId}
-            frameWidth={vmsFeed.snapshot?.width ?? 0}
-            frameHeight={vmsFeed.snapshot?.height ?? 0}
+            frameWidth={patrolRoiFrameSize.width}
+            frameHeight={patrolRoiFrameSize.height}
             videoRef={videoRef}
             compact={compact}
             videoFit={videoFit}

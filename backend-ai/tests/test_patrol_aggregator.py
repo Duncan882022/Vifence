@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.patrol.aggregator.behavior_pipeline import process_behavior
 from app.patrol.aggregator.lost_track_memory import apply_reclaim, stash_session, try_reclaim
@@ -179,6 +180,102 @@ class AggregatorDaystoreTest(unittest.TestCase):
         self.assertAlmostEqual(float(rows[0]["ended_at"]), 1020.0, places=3)
         self.assertEqual(rows[0]["session_id"], "sess-HC-02-test")
         self.assertEqual(int(rows[0]["counted"]), 1)
+
+
+class AggregatorIdentityPromoteTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def test_promote_obj_when_identity_already_resolved(self) -> None:
+        """obj-* đã flush nhưng gallery resolve sau → promote sang pers-*."""
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.identity_pipeline import process_identity
+        from app.patrol.aggregator.session_store import get_or_create
+        from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
+
+        ts = 1_000.0
+        pers_id = identity.create_person(origin="sgc", now=ts)
+        obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
+        session = get_or_create("HC-01", "ptk-promote", ts=ts)
+        session.subject_id = obj_id
+        session.identity_resolved = True
+        session.identity = PersonIdentity(
+            person_id="sgc-6688",
+            identity_type=IdentityType.ANONYMOUS,
+            confidence=0.85,
+        )
+
+        obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-promote",
+            ts=ts + 5,
+            lifecycle_tier="person",
+            lifecycle_worker_id="sgc-6688",
+            confidence=0.85,
+        )
+        with patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value=pers_id,
+        ):
+            result = process_identity(session, obs)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.startswith("pers-"))
+        self.assertEqual(session.subject_id, result)
+        self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
+
+    def test_lifecycle_resolve_promotes_obj_on_first_pass(self) -> None:
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.identity_pipeline import process_identity
+        from app.patrol.aggregator.session_store import get_or_create
+        from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
+
+        ts = 2_000.0
+        pers_id = identity.create_person(origin="sgc", now=ts)
+        obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
+        session = get_or_create("HC-01", "ptk-first", ts=ts)
+        session.subject_id = obj_id
+
+        obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-first",
+            ts=ts + 2,
+            lifecycle_tier="person",
+            lifecycle_worker_id="sgc-9901",
+            confidence=0.9,
+        )
+        with patch(
+            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
+            return_value=PersonIdentity(
+                person_id="sgc-9901",
+                identity_type=IdentityType.ANONYMOUS,
+                confidence=0.9,
+            ),
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value=pers_id,
+        ):
+            result = process_identity(session, obs)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.startswith("pers-"))
+        self.assertTrue(session.identity_resolved)
+        self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
 
 
 if __name__ == "__main__":
