@@ -11,7 +11,6 @@ import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
   isPatrolGalleryWorkerId,
   resolvePatrolCanonicalEntityKey,
-  resolvePatrolEventSgcKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
 
