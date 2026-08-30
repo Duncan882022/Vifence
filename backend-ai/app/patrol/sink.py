@@ -38,6 +38,7 @@ def _maybe_write_snapshot(
     worker_id: str | None = None,
     worker_name: str | None = None,
     capture_ts: float | None = None,
+    face_eligible: bool = False,
 ) -> str | None:
     """Ghi file JPG — tối đa mỗi TOUCH_MIN_INTERVAL_SEC, trừ khi ảnh rõ hơn."""
     ts = float(capture_ts if capture_ts is not None else time.time())
@@ -56,6 +57,8 @@ def _maybe_write_snapshot(
         worker_id=worker_id,
         worker_name=worker_name,
         capture_ts=ts,
+        score=score,
+        face_eligible=face_eligible,
     )
 
 
@@ -87,6 +90,17 @@ def _snapshot_tier(subject_id: str) -> str:
 
 def _snapshot_tier_rank(tier: str) -> int:
     return {"object": 0, "person": 1, "identity": 2}.get(tier, 0)
+
+
+def _snapshot_meets_person_evidence_gate(
+    *,
+    face_eligible: bool,
+    snapshot_score: float,
+) -> bool:
+    """Badge Người/Định danh trên JPG — cùng ngưỡng tab sự kiện (≥1.05 + face)."""
+    if not face_eligible:
+        return False
+    return float(snapshot_score) >= daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE
 
 
 def _resolve_snapshot_tier(
@@ -133,6 +147,8 @@ def _write_snapshot(
     worker_id: str | None = None,
     worker_name: str | None = None,
     capture_ts: float | None = None,
+    score: float = 0.0,
+    face_eligible: bool = False,
 ) -> str | None:
     """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
@@ -156,11 +172,17 @@ def _write_snapshot(
             return None
 
         out = frame.copy()
-        resolved_tier = _resolve_snapshot_tier(
-            subject_id,
-            tier=tier,
-            worker_id=worker_id,
-        )
+        if _snapshot_meets_person_evidence_gate(
+            face_eligible=face_eligible,
+            snapshot_score=score,
+        ):
+            resolved_tier = _resolve_snapshot_tier(
+                subject_id,
+                tier=tier,
+                worker_id=worker_id,
+            )
+        else:
+            resolved_tier = "object"
         color = PATROL_SNAPSHOT_TIER_COLORS_BGR[resolved_tier]
         if resolved_tier == "object":
             draw_dashed_rectangle(out, (bx1, by1), (bx2, by2), color, thickness=1)

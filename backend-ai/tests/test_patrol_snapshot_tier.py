@@ -32,7 +32,7 @@ class PatrolSnapshotTierTests(unittest.TestCase):
         self.assertEqual(sink._snapshot_tier(pers_id), "identity")
         self.assertEqual(
             sink._resolve_snapshot_tier(pers_id, tier=TIER_PERSON),
-            TIER_PERSON,
+            "identity",
         )
 
     def test_object_subject_always_slate_tier(self) -> None:
@@ -59,6 +59,29 @@ class PatrolSnapshotTierTests(unittest.TestCase):
         self.assertEqual(
             sink._resolve_snapshot_tier(pers_id, tier=TIER_OBJECT),
             "identity",
+        )
+
+    def test_evidence_gate_downgrades_identified_profile_to_object(self) -> None:
+        pers_id, _ = identity.observe_face([0.4] * 128, quality=0.9)
+        identity.identify(pers_id, full_name="Duncan", employee_code="SGC-6688")
+        self.assertEqual(sink._resolve_snapshot_tier(pers_id, tier="identity"), "identity")
+        self.assertFalse(
+            sink._snapshot_meets_person_evidence_gate(
+                face_eligible=False,
+                snapshot_score=2.5,
+            )
+        )
+        self.assertFalse(
+            sink._snapshot_meets_person_evidence_gate(
+                face_eligible=True,
+                snapshot_score=0.9,
+            )
+        )
+        self.assertTrue(
+            sink._snapshot_meets_person_evidence_gate(
+                face_eligible=True,
+                snapshot_score=1.2,
+            )
         )
 
 

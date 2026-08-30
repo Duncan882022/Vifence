@@ -50,6 +50,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         worker_id=worker_id,
         worker_name=obs.worker_name,
         capture_ts=obs.ts,
+        face_eligible=obs.face_eligible,
     )
     return path, score if path else 0.0
 
