@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
   Camera,
@@ -29,79 +29,76 @@ interface PatrolFaceScannerPanelProps {
   onScanComplete?: (enrollment: PatrolScanEnrollment) => void
 }
 
-function FaceScanProgressRing({
-  stepProgress,
+function FaceScanOvalFrame({
+  progress,
   holdProgress,
-  poseMatched,
-  capturing,
   complete,
+  poseMatched,
+  faceDetected,
+  capturing,
+  children,
 }: {
-  stepProgress: number
+  progress: number
   holdProgress: number
-  poseMatched: boolean
-  capturing: boolean
   complete: boolean
+  poseMatched: boolean
+  faceDetected: boolean
+  capturing: boolean
+  children?: ReactNode
 }) {
-  const stepClamped = Math.max(0, Math.min(1, stepProgress))
-  const holdClamped = Math.max(0, Math.min(1, holdProgress))
-  const stepDash = 100 - stepClamped * 100
-  const holdDash = 100 - holdClamped * 100
-  const ringColor = complete
+  const mainProgress = complete ? 1 : Math.max(0, Math.min(1, progress))
+  const hold = complete ? 0 : Math.max(0, Math.min(1, holdProgress))
+  const accent = complete || poseMatched
     ? '#4ade80'
     : capturing
       ? '#38bdf8'
-      : poseMatched
-        ? '#4ade80'
-        : 'rgba(56,189,248,0.45)'
+      : faceDetected
+        ? '#38bdf8'
+        : 'rgba(56,189,248,0.55)'
+  const ringDegrees = mainProgress * 360
+  const ringBackground = complete
+    ? 'linear-gradient(#4ade80, #22c55e)'
+    : `conic-gradient(from -90deg, ${accent} 0deg, ${accent} ${ringDegrees}deg, rgba(255,255,255,0.16) ${ringDegrees}deg, rgba(255,255,255,0.16) 360deg)`
 
   return (
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden
+    <div
+      className={cn(
+        'relative w-[46%] aspect-[3/4] shrink-0',
+        complete && 'animate-pulse',
+      )}
+      style={complete ? { filter: 'drop-shadow(0 0 14px rgba(74,222,128,0.85))' } : undefined}
     >
-      <ellipse cx="50" cy="50" rx="21" ry="28" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
-      <ellipse
-        cx="50"
-        cy="50"
-        rx="21"
-        ry="28"
-        fill="none"
-        stroke={ringColor}
-        strokeWidth={complete ? 3 : 2.5}
-        strokeLinecap="round"
-        pathLength={100}
-        strokeDasharray="100"
-        strokeDashoffset={stepDash}
-        transform="rotate(-90 50 50)"
-        className={complete ? 'animate-pulse' : undefined}
-        style={{
-          transition: complete ? 'stroke 0.4s ease' : 'stroke-dashoffset 0.25s ease, stroke 0.3s ease',
-          filter: complete ? 'drop-shadow(0 0 10px rgba(74,222,128,0.85))' : undefined,
-        }}
+      <div
+        className="absolute inset-0 rounded-[999px] p-[5px] sm:p-1.5"
+        style={{ background: ringBackground }}
+        aria-hidden
       />
-      {!complete && poseMatched && holdClamped > 0.02 && (
-        <ellipse
-          cx="50"
-          cy="50"
-          rx="18"
-          ry="24"
-          fill="none"
-          stroke="#86efac"
-          strokeWidth="2"
-          strokeLinecap="round"
-          pathLength={100}
-          strokeDasharray="100"
-          strokeDashoffset={holdDash}
-          transform="rotate(-90 50 50)"
+      {!complete && hold > 0.04 && (
+        <div
+          className="absolute inset-[8%] rounded-[999px] pointer-events-none z-[3]"
           style={{
-            transition: 'stroke-dashoffset 0.12s linear',
-            filter: 'drop-shadow(0 0 5px rgba(134,239,172,0.65))',
+            boxShadow: `inset 0 0 0 4px rgba(134,239,172,${0.25 + hold * 0.75})`,
           }}
+          aria-hidden
         />
       )}
-    </svg>
+      <div
+        className={cn(
+          'absolute inset-[5px] sm:inset-1.5 rounded-[999px] z-[2]',
+          'shadow-[0_0_0_9999px_rgba(0,0,0,0.42)]',
+          'border-2 transition-colors duration-300',
+          complete
+            ? 'border-green-300/90'
+            : poseMatched
+              ? 'border-green-400/75'
+              : faceDetected
+                ? 'border-sky-400/55'
+                : 'border-white/20',
+        )}
+      >
+        {children}
+      </div>
+    </div>
   )
 }
 
@@ -293,34 +290,21 @@ export function PatrolFaceScannerPanel({
             className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
           />
 
-          <FaceScanProgressRing
-            stepProgress={autoScan.ringProgress}
-            holdProgress={autoScan.holdProgress}
-            poseMatched={autoScan.poseMatched}
-            capturing={busy}
-            complete={complete}
-          />
-
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div
-              className={cn(
-                'w-[42%] aspect-[3/4] rounded-[999px] transition-colors duration-300 relative',
-                'border-2 shadow-[0_0_0_9999px_rgba(0,0,0,0.38)]',
-                complete
-                  ? 'border-green-400/90'
-                  : autoScan.poseMatched
-                    ? 'border-green-400/70'
-                    : autoScan.faceDetected
-                      ? 'border-sky-400/50'
-                      : 'border-sky-400/35',
-              )}
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+            <FaceScanOvalFrame
+              progress={autoScan.ringProgress}
+              holdProgress={autoScan.holdProgress}
+              complete={complete}
+              poseMatched={autoScan.poseMatched}
+              faceDetected={autoScan.faceDetected}
+              capturing={busy}
             >
               {complete && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <CheckCircle className="w-12 h-12 sm:w-14 sm:h-14 text-green-400 drop-shadow-[0_0_12px_rgba(74,222,128,0.9)]" />
+                  <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-400 drop-shadow-[0_0_14px_rgba(74,222,128,1)]" />
                 </div>
               )}
-            </div>
+            </FaceScanOvalFrame>
           </div>
 
           <div className="absolute inset-x-0 bottom-0 p-4 pt-12 bg-gradient-to-t from-black/90 via-black/55 to-transparent pointer-events-none">
