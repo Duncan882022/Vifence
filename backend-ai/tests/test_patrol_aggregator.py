@@ -80,10 +80,34 @@ class AggregatorReIdTest(unittest.TestCase):
             "HC-02",
             bbox=(100.0, 100.0, 200.0, 400.0),
             embedding=emb,
-            now=150.0,
+            now=140.0,
         )
         self.assertIsNotNone(reclaimed)
         self.assertEqual(reclaimed.session_id, "sess-cross-1")
+        reset()
+
+    def test_reclaim_after_long_gap_keeps_identity_not_appearance(self) -> None:
+        reset()
+        emb = tuple(0.01 * i for i in range(512))
+        s1 = get_or_create("HC-02", "ptk-a", ts=100.0, face_embedding=emb)
+        s1.session_id = "sess-merge-1"
+        s1.subject_id = "pers-0001"
+        s1.appearance_row_id = 99
+        s1.identity_resolved = True
+        stash_session(s1, embedding=emb)
+
+        reclaimed = try_reclaim(
+            "HC-02",
+            bbox=(100.0, 100.0, 200.0, 400.0),
+            embedding=emb,
+            now=150.0,
+        )
+        self.assertIsNotNone(reclaimed)
+        s2 = get_or_create("HC-02", "ptk-b", ts=150.0, face_embedding=emb)
+        apply_reclaim(s2, reclaimed, now=150.0)
+        self.assertEqual(s2.subject_id, "pers-0001")
+        self.assertNotEqual(s2.session_id, "sess-merge-1")
+        self.assertIsNone(s2.appearance_row_id)
         reset()
 
     def test_lost_track_reclaim_by_embedding(self) -> None:
@@ -99,13 +123,13 @@ class AggregatorReIdTest(unittest.TestCase):
             "HC-02",
             bbox=(100.0, 100.0, 200.0, 400.0),
             embedding=emb,
-            now=150.0,
+            now=140.0,
         )
         self.assertIsNotNone(reclaimed)
         self.assertEqual(reclaimed.session_id, "sess-merge-1")
 
-        s2 = get_or_create("HC-02", "ptk-b", ts=150.0, face_embedding=emb)
-        apply_reclaim(s2, reclaimed)
+        s2 = get_or_create("HC-02", "ptk-b", ts=140.0, face_embedding=emb)
+        apply_reclaim(s2, reclaimed, now=140.0)
         self.assertEqual(s2.session_id, "sess-merge-1")
         self.assertEqual(s2.subject_id, "pers-0001")
         reset()
@@ -391,7 +415,8 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         finalize_track("HC-01", "ptk-stand", now=ts + 20.0)
         rows_after = daystore.list_day_presences(db.today_vn(ts))
         self.assertEqual(len(rows_after), 1)
-        self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 20.0, places=3)
+        # ended_at = lần quan sát cuối, không kéo tới lúc finalize muộn.
+        self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 14.5, places=3)
 
     def test_dwell_gate_retries_until_committed(self) -> None:
         """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được."""

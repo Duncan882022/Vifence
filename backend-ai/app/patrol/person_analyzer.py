@@ -57,10 +57,12 @@ def reset_hc_patrol_face_assignments(camera_id: str) -> None:
 def reset_all_hc_patrol_state() -> int:
     """Xóa toàn bộ patrol person tracks và face assignments — dùng khi reset test data."""
     from ..patrol_identity_lifecycle import reset as reset_identity_lifecycle
+    from ..patrol_stream_lifecycle import reset_patrol_stream_lifecycle
     from ..patrol_tracker import reset_patrol_trackers
 
     count = reset_patrol_trackers()
     reset_identity_lifecycle()
+    reset_patrol_stream_lifecycle()
     _hc_frame_face_assignments.clear()
     return count
 

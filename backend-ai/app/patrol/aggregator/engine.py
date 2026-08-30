@@ -72,11 +72,24 @@ def finalize_track(camera_id: str, track_id: str, *, now: float | None = None) -
     session = pop_session(camera_id, track_id)
     if session is None:
         return
-    if now is not None:
+    # Giữ last_seen_at = lần quan sát cuối (touch). Không kéo ended_at tới lúc
+    # drop muộn khi cam tắt lâu rồi mới finalize lúc bật lại.
+    if now is not None and session.last_seen_at <= 0:
         session.last_seen_at = float(now)
     finalize_session(session)
     emb = session.best_faces[0].embedding if session.best_faces else None
     stash_session(session, embedding=emb)
+
+
+def finalize_orphan_sessions(camera_id: str) -> int:
+    """Session aggregator còn trong RAM nhưng tracker đã drop."""
+    from .session_store import pop_all_sessions
+
+    closed = 0
+    for session in pop_all_sessions(camera_id):
+        finalize_session(session)
+        closed += 1
+    return closed
 
 
 def reset_sessions(camera_id: str | None = None) -> None:

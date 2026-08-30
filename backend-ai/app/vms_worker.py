@@ -200,6 +200,7 @@ class CameraVmsWorker:
         self._pipe_hls_retry_after: float = 0.0
         self._hls_pipe_stdin = None
         self._hls_pipe_size: Optional[tuple[int, int]] = None
+        self._patrol_offline_finalized = False
         self._refresh_source_mode()
 
         self._overlay_lock = threading.Lock()
@@ -626,6 +627,36 @@ class CameraVmsWorker:
                 frame_age = time.time() - frame_received_at
                 if frame_received_at <= 0 or frame_age > LIVE_FRAME_STALE_SEC:
                     frame = None
+
+            is_patrol_cam = self.camera_id.startswith("HC-") or self.camera_id.startswith(
+                "DR-",
+            )
+            if frame is None and is_patrol_cam and frame_received_at > 0:
+                if not self._patrol_offline_finalized:
+                    try:
+                        from .patrol_stream_lifecycle import on_patrol_stream_offline
+
+                        on_patrol_stream_offline(
+                            self.camera_id,
+                            at_ts=frame_received_at,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug(
+                            "[VMS %s] patrol offline finalize: %s",
+                            self.camera_id,
+                            exc,
+                        )
+                    self._patrol_offline_finalized = True
+            elif frame is not None and is_patrol_cam:
+                if self._patrol_offline_finalized:
+                    try:
+                        from .patrol_stream_lifecycle import mark_patrol_stream_online
+
+                        mark_patrol_stream_online(self.camera_id)
+                    except Exception:  # noqa: BLE001
+                        pass
+                self._patrol_offline_finalized = False
+
             if frame is not None:
                 # Frame gốc vẫn là nguồn cắt snapshot/clip; AI chạy trên bản thu
                 # nhỏ nên engine tự scale bbox về ảnh gốc qua `capture_frame`.
