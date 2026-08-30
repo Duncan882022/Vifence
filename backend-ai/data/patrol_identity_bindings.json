@@ -5,14 +5,14 @@
       "gallery_worker_id": "p-SGC-6688",
       "worker_name": "Duncan",
       "employee_code": "SGC-6688",
-      "contractor_name": "",
+      "contractor_name": "SGC",
       "aliases": [
         "iden-0001",
         "p-SGC-6688",
         "pers-0001",
         "sgc-6688"
       ],
-      "updated_at": 1788075581.0878794
+      "updated_at": 1788088505.929026
     },
     "p-NV001": {
       "gallery_worker_id": "p-NV001",
@@ -55,9 +55,9 @@
     }
   },
   "alias_to_gallery": {
-    "iden-0001": "p-NV01",
+    "iden-0001": "p-SGC-6688",
     "p-SGC-6688": "p-SGC-6688",
-    "pers-0001": "p-NV01",
+    "pers-0001": "p-SGC-6688",
     "sgc-6688": "p-SGC-6688",
     "NV001": "p-NV001",
     "p-NV001": "p-NV001",
