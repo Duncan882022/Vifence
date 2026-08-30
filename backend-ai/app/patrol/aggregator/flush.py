@@ -29,7 +29,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
         return None, 0.0
     from .. import sink
-    from ..patrol_identity_lifecycle import tier_for_worker_id
+    from ...patrol_identity_lifecycle import tier_for_worker_id
     from .types import IdentityType
 
     score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
