@@ -19,7 +19,7 @@ from typing import Any, Iterator
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_FILE = DATA_DIR / "patrol.db"
 
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -176,10 +176,11 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE appearances ADD COLUMN {name} {typedef}")
         conn.execute("PRAGMA user_version=2")
         conn.commit()
-    from .migrate import migrate_to_v3, migrate_to_v4
+    from .migrate import migrate_to_v3, migrate_to_v4, migrate_to_v5
 
     migrate_to_v3(conn)
     migrate_to_v4(conn)
+    migrate_to_v5(conn)
 
 
 def _connect() -> sqlite3.Connection:

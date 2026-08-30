@@ -561,6 +561,80 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
     return out
 
 
+def upsert_track_appearance(
+    *,
+    appearance_id: int | None,
+    event_date: str,
+    subject_id: str,
+    camera_id: str,
+    zone_id: str | None,
+    track_id: str,
+    started_at: float,
+    ended_at: float,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    payload_json: str,
+    interactions_json: str,
+    snapshot_path: str | None = None,
+    finalize: bool = False,
+) -> int:
+    """Một appearance / track session — UPDATE in-place thay vì INSERT mỗi frame."""
+    _ = finalize  # reserved — close semantics via ended_at
+    with db.tx() as conn:
+        if appearance_id is not None:
+            conn.execute(
+                "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
+                " event_payload_json = ?, interactions_json = ?,"
+                " snapshot_path = COALESCE(snapshot_path, ?)"
+                " WHERE id = ?",
+                (
+                    ended_at,
+                    gps_lat,
+                    gps_lng,
+                    payload_json,
+                    interactions_json,
+                    snapshot_path,
+                    appearance_id,
+                ),
+            )
+            return appearance_id
+
+        seq_row = conn.execute(
+            "SELECT COALESCE(MAX(presence_seq), 0) AS mx FROM appearances"
+            " WHERE event_date = ? AND subject_id = ?",
+            (event_date, subject_id),
+        ).fetchone()
+        seq = int(seq_row["mx"] or 0) + 1
+        src = merge_source_cameras(None, camera_id)
+        cur = conn.execute(
+            "INSERT INTO appearances"
+            "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
+            " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
+            " source_cameras, snapshot_path, track_id, event_payload_json, interactions_json)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                event_date,
+                subject_id,
+                camera_id,
+                zone_id,
+                started_at,
+                ended_at,
+                gps_lat,
+                gps_lng,
+                gps_lat,
+                gps_lng,
+                1,
+                seq,
+                src,
+                snapshot_path,
+                track_id,
+                payload_json,
+                interactions_json,
+            ),
+        )
+        return int(cur.lastrowid)
+
+
 def day_stats(date: str | None = None) -> dict[str, Any]:
     """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
     d = date or db.today_vn()

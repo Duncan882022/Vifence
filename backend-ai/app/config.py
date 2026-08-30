@@ -197,6 +197,8 @@ class Settings(BaseSettings):
     # Presence tuần tra — gộp/tách lượt gặp (GPS + thời gian).
     patrol_presence_t_max_sec: float = 600.0
     patrol_presence_d_merge_m: float = 50.0
+    # Event Aggregator — gom track session trước khi ghi SQLite (Phase 1).
+    patrol_use_aggregator: bool = False
 
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True

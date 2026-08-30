@@ -651,14 +651,72 @@ def record_observation(
     lifecycle_tier: str | None = None,
     lifecycle_worker_id: str | None = None,
     worker_name: str | None = None,
+    touched_object_id: str | None = None,
 ) -> str | None:
     """Ghi một lần quan sát. Trả `pers-*` nếu đã nhận ra (mặt hoặc lifecycle ROI).
 
-    Chỉ thăng Người khi `face_eligible` (assess/recover đã pass ở analyzer).
-    Sink **không** tự recover embedding — tránh tay che mặt / bbox lệch bị cấp pers.
-    `lifecycle_tier` / `lifecycle_worker_id` đồng bộ với nhãn ROI live — tránh
-    ghi `obj-*` khi ROI đã lên Người/Định danh.
+    Khi ``PATROL_USE_AGGREGATOR=1``: delegate sang ``aggregator.engine`` (buffer
+    theo track, identity ∥ behavior). Ngược lại giữ cây if/else legacy bên dưới.
     """
+    from ..config import settings
+
+    if settings.patrol_use_aggregator:
+        from .aggregator.engine import ingest_observation
+
+        return ingest_observation(
+            camera_id=camera_id,
+            track_id=track_id,
+            face_embedding=face_embedding,
+            face_quality=face_quality,
+            face_eligible=face_eligible,
+            confidence=confidence,
+            frame=frame,
+            person_bbox=person_bbox,
+            zone_id=zone_id,
+            now=now,
+            density_only=density_only,
+            lifecycle_tier=lifecycle_tier,
+            lifecycle_worker_id=lifecycle_worker_id,
+            worker_name=worker_name,
+            touched_object_id=touched_object_id,
+        )
+
+    return _record_observation_legacy(
+        camera_id=camera_id,
+        track_id=track_id,
+        face_embedding=face_embedding,
+        face_quality=face_quality,
+        face_eligible=face_eligible,
+        confidence=confidence,
+        frame=frame,
+        person_bbox=person_bbox,
+        zone_id=zone_id,
+        now=now,
+        density_only=density_only,
+        lifecycle_tier=lifecycle_tier,
+        lifecycle_worker_id=lifecycle_worker_id,
+        worker_name=worker_name,
+    )
+
+
+def _record_observation_legacy(
+    *,
+    camera_id: str,
+    track_id: str,
+    face_embedding: Sequence[float] | None = None,
+    face_quality: float = 0.0,
+    face_eligible: bool = False,
+    confidence: float = 0.0,
+    frame: Any = None,
+    person_bbox: Sequence[float] | None = None,
+    zone_id: str | None = None,
+    now: float | None = None,
+    density_only: bool = False,
+    lifecycle_tier: str | None = None,
+    lifecycle_worker_id: str | None = None,
+    worker_name: str | None = None,
+) -> str | None:
+    """Luồng ghi sự kiện legacy — sequential if/else."""
     if not camera_id or not track_id:
         return None
 
@@ -865,6 +923,13 @@ def _known_person_for_track(key: str) -> str | None:
 
 
 def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> None:
+    from ..config import settings
+
+    if settings.patrol_use_aggregator:
+        from .aggregator.engine import finalize_track
+
+        finalize_track(camera_id, track_id, now=now)
+
     key = _key(camera_id, track_id)
     ts = float(now if now is not None else time.time())
     with _lock:
@@ -879,6 +944,13 @@ def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> 
 
 
 def reset(camera_id: str | None = None) -> None:
+    from ..config import settings
+
+    if settings.patrol_use_aggregator:
+        from .aggregator.engine import reset_sessions
+
+        reset_sessions(camera_id)
+
     with _lock:
         if camera_id is None:
             _track_to_object.clear()

@@ -51,3 +51,29 @@ def migrate_to_v4(conn: sqlite3.Connection) -> None:
 
     conn.execute("PRAGMA user_version=4")
     conn.commit()
+
+
+def migrate_to_v5(conn: sqlite3.Connection) -> None:
+    """Aggregator — track_id + JSON payload trên appearances."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 5:
+        return
+
+    cols = {
+        str(r[1])
+        for r in conn.execute("PRAGMA table_info(appearances)").fetchall()
+    }
+    for name, typedef in (
+        ("track_id", "TEXT"),
+        ("event_payload_json", "TEXT"),
+        ("interactions_json", "TEXT"),
+    ):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE appearances ADD COLUMN {name} {typedef}")
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_appearances_track"
+        " ON appearances(event_date, track_id)"
+    )
+    conn.execute("PRAGMA user_version=5")
+    conn.commit()
