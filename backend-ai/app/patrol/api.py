@@ -543,6 +543,75 @@ def settings_patrol_auth_disabled() -> bool:
     return settings.patrol_auth_disabled
 
 
+def _gallery_face_sign_path(worker_id: str, slot: int) -> str:
+    return f"gallery-face/{worker_id.strip()}/{int(slot)}"
+
+
+@router.get("/gallery/{worker_id}/faces")
+def gallery_worker_faces(worker_id: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    """Trạng thái quét mặt gallery + URL ảnh đã ký cho popup định danh."""
+    from urllib.parse import quote
+
+    from ..worker_identity.gallery import get_enrollment_status
+
+    wid = worker_id.strip()
+    if not wid:
+        return {"ok": False, "error": "missing_worker_id"}
+
+    enrollment = get_enrollment_status(wid)
+    poses_out: list[dict[str, Any]] = []
+    for pose in enrollment.get("poses") or []:
+        slot = int(pose.get("slot") or 0)
+        entry = dict(pose)
+        entry["url"] = None
+        if pose.get("captured") and slot >= 1:
+            signed = sign_snapshot_path(_gallery_face_sign_path(wid, slot))
+            entry["url"] = (
+                f"/patrol/gallery/face?worker_id={quote(wid, safe='')}"
+                f"&slot={slot}&token={signed['token']}&exp={signed['exp']}"
+            )
+        poses_out.append(entry)
+
+    return {
+        "ok": True,
+        "worker_id": wid,
+        "worker_name": enrollment.get("worker_name"),
+        "employee_code": enrollment.get("employee_code"),
+        "poses": poses_out,
+        "poses_captured": enrollment.get("poses_captured", 0),
+        "complete": enrollment.get("complete", False),
+    }
+
+
+@router.get("/gallery/face")
+def gallery_worker_face(
+    worker_id: str,
+    slot: int,
+    token: str | None = None,
+    exp: int | None = None,
+):
+    """Ảnh khuôn mặt gallery — `<img>` dùng token HMAC ký từ GET /gallery/{id}/faces."""
+    from ..worker_identity.gallery import face_filename, gallery_dir
+
+    wid = worker_id.strip()
+    pose_slot = int(slot)
+    if not wid or pose_slot < 1 or pose_slot > 3:
+        return Response(status_code=400)
+
+    sign_path = _gallery_face_sign_path(wid, pose_slot)
+    if token and exp is not None:
+        if not verify_snapshot_token(sign_path, token, int(exp)):
+            return Response(status_code=403)
+    elif not settings_patrol_auth_disabled():
+        return Response(status_code=401)
+
+    filename = face_filename(wid, pose_slot)
+    full = gallery_dir() / "faces" / filename
+    if not full.is_file():
+        return Response(status_code=404)
+    return FileResponse(str(full), media_type="image/jpeg")
+
+
 def _embed_face_b64(image_b64: str) -> list[float] | None:
     """Ảnh base64 → vector khuôn mặt. Không thấy mặt thì trả None."""
     import cv2

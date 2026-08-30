@@ -116,6 +116,26 @@ export function resolvePatrolProfileEntityKey(event: {
   return null
 }
 
+/** Mã gallery worker để load ảnh quét mặt — ưu tiên p-* từ sự kiện đã khớp AI. */
+export function resolveEventGalleryWorkerId(event: {
+  objectId?: string | null
+  trackWorkerId?: string | null
+  objectLabel?: string | null
+}, employeeCode?: string | null): string | null {
+  const profileKey = resolvePatrolProfileEntityKey(event)
+  if (profileKey && isPatrolGalleryWorkerId(profileKey)) return profileKey.toUpperCase()
+  for (const raw of [event.objectId, event.trackWorkerId]) {
+    const key = raw?.trim() ?? ''
+    if (isPatrolGalleryWorkerId(key)) return key.toUpperCase()
+  }
+  const code = employeeCode?.trim() ?? ''
+  if (code) {
+    if (isPatrolGalleryWorkerId(code)) return code.toUpperCase()
+    return patrolGalleryWorkerIdFromEmployeeCode(code)
+  }
+  return null
+}
+
 export function resolveHeatmapEntityMasterId(rawId: string): string {
   const id = rawId.trim()
   if (!id) return id
