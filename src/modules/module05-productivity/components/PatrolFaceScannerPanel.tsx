@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
   Camera,
@@ -29,12 +29,12 @@ interface PatrolFaceScannerPanelProps {
   onScanComplete?: (enrollment: PatrolScanEnrollment) => void
 }
 
-const FACE_SCAN_RING_MASK: CSSProperties = {
-  WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-  WebkitMaskComposite: 'xor',
-  mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-  maskComposite: 'exclude',
-}
+/** SVG ellipse — viewBox 100×133 khớp aspect 3:4 của khung quét mặt. */
+const RING_CX = 50
+const RING_CY = 66.5
+const RING_RX = 44
+const RING_RY = 58
+const RING_STROKE = 7
 
 function FaceScanOvalFrame({
   progress,
@@ -55,59 +55,74 @@ function FaceScanOvalFrame({
 }) {
   const mainProgress = complete ? 1 : Math.max(0, Math.min(1, progress))
   const hold = complete ? 0 : Math.max(0, Math.min(1, holdProgress))
-  const accent = complete || poseMatched
-    ? '#4ade80'
-    : capturing
-      ? '#38bdf8'
-      : faceDetected
-        ? '#38bdf8'
-        : '#38bdf8'
-  const ringDegrees = Math.max(mainProgress * 360, complete ? 360 : 8)
-  const ringBackground = complete
-    ? 'linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #86efac 100%)'
-    : `conic-gradient(from -90deg, ${accent} 0deg, ${accent} ${ringDegrees}deg, rgba(255,255,255,0.22) ${ringDegrees}deg, rgba(255,255,255,0.22) 360deg)`
+  const accent = complete || poseMatched ? '#4ade80' : '#38bdf8'
+  const visibleProgress = complete
+    ? 1
+    : Math.max(mainProgress, faceDetected || capturing ? 0.14 : 0.1)
+  const ringDash = `${(visibleProgress * 100).toFixed(1)} 100`
 
   return (
-    <div className="relative w-[50%] max-w-[280px] aspect-[3/4] shrink-0">
-      {/* Vignette — tách khỏi vòng, không che ring */}
+    <div className="relative w-[50%] max-w-[280px] aspect-[3/4] shrink-0 overflow-visible">
       <div
         className="absolute inset-0 rounded-[999px] z-[1] pointer-events-none"
         style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.48)' }}
         aria-hidden
       />
-      {/* Vòng tiến độ — trên cùng, mask chỉ giữ dải viền */}
-      <div
+      <svg
         className={cn(
-          'absolute inset-0 rounded-[999px] z-[40] pointer-events-none',
+          'absolute inset-0 w-full h-full z-[40] pointer-events-none overflow-visible',
           complete && 'animate-pulse',
         )}
-        style={{
-          ...FACE_SCAN_RING_MASK,
-          padding: '8px',
-          background: ringBackground,
-          filter: complete
-            ? 'drop-shadow(0 0 18px rgba(74,222,128,1)) drop-shadow(0 0 6px rgba(134,239,172,0.9))'
-            : 'drop-shadow(0 0 8px rgba(56,189,248,0.45))',
-        }}
+        viewBox="0 0 100 133"
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden
-      />
+      >
+        <ellipse
+          cx={RING_CX}
+          cy={RING_CY}
+          rx={RING_RX}
+          ry={RING_RY}
+          fill="none"
+          stroke="rgba(255,255,255,0.38)"
+          strokeWidth={RING_STROKE}
+        />
+        <ellipse
+          cx={RING_CX}
+          cy={RING_CY}
+          rx={RING_RX}
+          ry={RING_RY}
+          fill="none"
+          stroke={accent}
+          strokeWidth={complete ? RING_STROKE + 2 : RING_STROKE}
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray={ringDash}
+          transform={`rotate(-90 ${RING_CX} ${RING_CY})`}
+          style={{
+            filter: complete
+              ? 'drop-shadow(0 0 10px rgba(74,222,128,1)) drop-shadow(0 0 4px rgba(134,239,172,0.95))'
+              : 'drop-shadow(0 0 6px rgba(56,189,248,0.65))',
+            transition: 'stroke-dasharray 0.15s ease, stroke 0.2s ease',
+          }}
+        />
+      </svg>
       {!complete && hold > 0.04 && (
         <div
-          className="absolute inset-[12%] rounded-[999px] pointer-events-none z-[35]"
+          className="absolute inset-[10%] rounded-[999px] pointer-events-none z-[35]"
           style={{
-            boxShadow: `inset 0 0 0 4px rgba(134,239,172,${0.35 + hold * 0.65})`,
+            boxShadow: `inset 0 0 0 3px rgba(134,239,172,${0.35 + hold * 0.65})`,
           }}
           aria-hidden
         />
       )}
       <div
         className={cn(
-          'absolute inset-[8px] rounded-[999px] z-[20] pointer-events-none border-2',
+          'absolute inset-[7px] rounded-[999px] z-[20] pointer-events-none border-2',
           complete
-            ? 'border-green-400/35'
+            ? 'border-green-400/50'
             : poseMatched
-              ? 'border-green-400/50'
-              : 'border-white/25',
+              ? 'border-green-400/45'
+              : 'border-white/30',
         )}
         aria-hidden
       />

@@ -1,4 +1,11 @@
-/** Tiến độ vòng tròn quét mặt — gộp góc đã xong + giữ yên góc hiện tại. */
+/** SVG vòng tròn tiến độ — tương thích mọi browser, không dùng CSS mask. */
+export function faceScanRingDash(progress: number, radius: number): string {
+  const p = Math.max(0, Math.min(1, progress))
+  const circumference = 2 * Math.PI * radius
+  const filled = circumference * p
+  return `${filled} ${circumference}`
+}
+
 export function computeFaceScanRingProgress(
   capturedCount: number,
   required: number,
