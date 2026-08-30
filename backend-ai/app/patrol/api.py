@@ -54,9 +54,10 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
         "identified_at": row.get("identified_at"),
     }
     if with_face_stats:
-        count = identity.face_count(str(row["pers_id"]))
-        payload["face_count"] = count
-        payload["face_enrollment_complete"] = count >= identity.SCAN_FACES_REQUIRED
+        captured, complete, _poses = identity.scan_enrollment_progress(str(row["pers_id"]))
+        payload["face_count"] = captured
+        payload["face_enrollment_complete"] = complete
+        payload["face_vector_count"] = identity.face_count(str(row["pers_id"]))
     return payload
 
 
