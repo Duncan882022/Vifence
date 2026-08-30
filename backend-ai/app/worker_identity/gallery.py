@@ -264,6 +264,20 @@ def enroll_face(
     return get_enrollment_status(worker_id)
 
 
+def remove_gallery_worker_registry(worker_id: str) -> bool:
+    """Xóa một worker khỏi workers.json (không xóa file JPG — dùng enroll_images)."""
+    global _REGISTRY  # noqa: PLW0603
+    wid = worker_id.strip()
+    rows = registry_rows()
+    kept = [r for r in rows if str(r.get("worker_id")) != wid]
+    if len(kept) == len(rows):
+        return False
+    _write_registry(kept)
+    _REGISTRY = []
+    load_gallery()
+    return True
+
+
 def clear_gallery_storage() -> dict[str, int]:
     """Xóa toàn bộ workers.json + ảnh faces/ và làm trống registry RAM."""
     global _REGISTRY  # noqa: PLW0603

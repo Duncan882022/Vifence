@@ -350,8 +350,13 @@ def scan_enroll_session_face(
     if emb is None:
         return {"ok": False, "error": "no_face_detected"}
 
+    frame = _decode_face_b64(payload.image_b64)
     slot = payload.pose_slot
     added = identity.add_enroll_session_face(session_id, emb, pose_slot=slot)
+    if added and frame is not None:
+        from .enroll_images import save_enroll_session_face_image
+
+        save_enroll_session_face_image(session_id, slot, frame)
     enrollment = identity.get_enroll_session_enrollment(session_id)
     if enrollment is None:
         return {"ok": False, "error": "session_not_found"}
@@ -417,9 +422,32 @@ def scan_person_face(
     if emb is None:
         return {"ok": False, "error": "no_face_detected"}
 
+    frame = _decode_face_b64(payload.image_b64)
     added = identity.add_face_angle(
         pers_id, emb, quality=1.0, camera_id="SCAN", now=time.time()
     )
+    if added and frame is not None:
+        person = identity.get_person(pers_id)
+        code = str(person.get("employee_code") or "").strip() if person else ""
+        name = str(person.get("full_name") or "").strip() if person else ""
+        contractor = str(person.get("contractor") or "").strip() if person else ""
+        if code and name:
+            from ..patrol_identity_store import patrol_gallery_worker_id
+            from .enroll_images import enroll_person_scan_image
+
+            enrollment = identity.get_scan_enrollment(pers_id)
+            slot = int(payload.pose_slot or len(enrollment.get("poses") or []) or 1)
+            enroll_person_scan_image(
+                patrol_gallery_worker_id(code),
+                worker_name=name,
+                employee_code=code,
+                image_bgr=frame,
+                contractor_name=contractor or None,
+                pose_slot=slot,
+            )
+            from .gallery_sync import sync_person_to_gallery
+
+            sync_person_to_gallery(pers_id)
     if not added:
         return {
             "ok": True,
@@ -614,6 +642,20 @@ def gallery_worker_face(
 
 def _embed_face_b64(image_b64: str) -> list[float] | None:
     """Ảnh base64 → vector khuôn mặt. Không thấy mặt thì trả None."""
+    frame = _decode_face_b64(image_b64)
+    if frame is None:
+        return None
+
+    from ..worker_identity.recognizer import embed_enrollment_selfie
+
+    emb = embed_enrollment_selfie(frame)
+    if emb is None:
+        return None
+    return emb.tolist()
+
+
+def _decode_face_b64(image_b64: str):
+    """Ảnh base64 → frame BGR (OpenCV)."""
     import cv2
     import numpy as np
 
@@ -625,13 +667,7 @@ def _embed_face_b64(image_b64: str) -> list[float] | None:
         return None
     if frame is None:
         return None
-
-    from ..worker_identity.recognizer import embed_enrollment_selfie
-
-    emb = embed_enrollment_selfie(frame)
-    if emb is None:
-        return None
-    return emb.tolist()
+    return frame
 
 
 def observe_person_face(

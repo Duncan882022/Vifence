@@ -484,12 +484,35 @@ def update_profile(
 def delete_person(pers_id: str) -> bool:
     """Xóa hồ sơ và vector khuôn mặt (CASCADE)."""
     pid = resolve_alias(pers_id)
+    person = get_person(pid)
     with db.tx() as c:
         cur = c.execute("DELETE FROM persons WHERE pers_id = ?", (pid,))
         deleted = cur.rowcount > 0
     if deleted:
         _invalidate_face_index()
+        if person is not None:
+            _purge_person_gallery_assets(person)
     return deleted
+
+
+def _purge_person_gallery_assets(person: dict[str, Any]) -> None:
+    """Gỡ gallery JPG + binding khi xóa hồ sơ định danh."""
+    code = str(person.get("employee_code") or "").strip()
+    if not code:
+        return
+    try:
+        from ..patrol_identity_store import patrol_gallery_worker_id, unbind_patrol_identity
+        from .enroll_images import remove_gallery_worker_faces
+        from ..worker_identity.gallery import remove_gallery_worker_registry
+        from ..worker_identity.recognizer import reload_gallery
+
+        wid = patrol_gallery_worker_id(code)
+        remove_gallery_worker_faces(wid)
+        remove_gallery_worker_registry(wid)
+        unbind_patrol_identity(wid)
+        reload_gallery()
+    except Exception:  # noqa: BLE001
+        logger.warning("gallery purge skipped for %s", person.get("pers_id"), exc_info=True)
 
 
 def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> None:
@@ -797,5 +820,15 @@ def complete_enroll_session(
 
     result = get_person(pers_id)
     assert result is not None
+    from .enroll_images import promote_enroll_session_to_gallery
+    from ..patrol_identity_store import patrol_gallery_worker_id
+
+    promote_enroll_session_to_gallery(
+        sid,
+        gallery_worker_id=patrol_gallery_worker_id(employee_code),
+        worker_name=full_name,
+        employee_code=employee_code,
+        contractor_name=contractor or None,
+    )
     _sync_gallery_after_identify(pers_id)
     return result

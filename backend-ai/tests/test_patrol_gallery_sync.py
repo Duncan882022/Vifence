@@ -1,4 +1,4 @@
-"""Sync SQLite identified profile → worker gallery + bindings."""
+"""Sync SQLite identified profile → worker gallery bindings (no snapshot JPG)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.patrol import db, identity  # noqa: E402
+from app.patrol.enroll_images import (  # noqa: E402
+    promote_enroll_session_to_gallery,
+    save_enroll_session_face_image,
+)
 from app.patrol.gallery_sync import sync_person_to_gallery  # noqa: E402
 
 
@@ -30,6 +34,7 @@ class GallerySyncTests(unittest.TestCase):
         self._gallery_root = self._root / "worker_gallery"
         self._bindings = self._root / "patrol_identity_bindings.json"
         self._snap_dir = self._root / "patrol_snapshots"
+        self._session_images = self._root / "enroll_session_images"
 
         from app.patrol import sink
 
@@ -40,8 +45,7 @@ class GallerySyncTests(unittest.TestCase):
             patch("app.worker_identity.gallery._BASE", self._gallery_root),
             patch("app.patrol_identity_store.BINDINGS_FILE", self._bindings),
             patch("app.patrol_identity_store.DATA_DIR", self._root),
-            patch("app.patrol.gallery_sync.SNAPSHOT_DIR", self._snap_dir),
-            patch("app.patrol.sink.SNAPSHOT_DIR", self._snap_dir),
+            patch("app.patrol.enroll_images.SESSION_IMAGES_ROOT", self._session_images),
         ]
         for p in self._patches:
             p.start()
@@ -59,7 +63,7 @@ class GallerySyncTests(unittest.TestCase):
         db.DB_FILE = self._old_db
         self._tmpdir.cleanup()
 
-    def test_sync_identified_person_enrolls_gallery_from_snapshot(self) -> None:
+    def test_sync_identified_person_binds_without_snapshot_jpg(self) -> None:
         row = identity.import_identity(
             full_name="Duncan",
             employee_code="SGC-6688",
@@ -76,16 +80,37 @@ class GallerySyncTests(unittest.TestCase):
         out = sync_person_to_gallery(pers_id)
         self.assertTrue(out["ok"])
         self.assertEqual(out["gallery_worker_id"], "p-SGC-6688")
-        self.assertTrue(out["face_enrolled"])
+        self.assertFalse(out["face_enrolled"])
 
-        from app.patrol_identity_store import list_patrol_identity_bindings, lookup_patrol_identity
+        from app.worker_identity.gallery import get_enrollment_status
 
-        bindings = list_patrol_identity_bindings()
-        self.assertEqual(len(bindings), 1)
-        self.assertEqual(bindings[0]["worker_name"], "Duncan")
-        row_bind = lookup_patrol_identity("p-SGC-6688")
-        self.assertIsNotNone(row_bind)
-        self.assertIn(pers_id, row_bind["aliases"])
+        enrollment = get_enrollment_status("p-SGC-6688")
+        self.assertEqual(enrollment["poses_captured"], 0)
+
+    def test_promote_enroll_session_writes_three_selfie_jpgs(self) -> None:
+        session_id = identity.create_enroll_session()
+        img = np.zeros((240, 240, 3), dtype=np.uint8)
+        cv2.rectangle(img, (80, 60), (160, 180), (200, 180, 160), -1)
+        for slot in (1, 2, 3):
+            emb = np.random.randn(512).astype(np.float32)
+            emb /= np.linalg.norm(emb)
+            identity.add_enroll_session_face(session_id, emb.tolist(), pose_slot=slot)
+            save_enroll_session_face_image(session_id, slot, img)
+
+        out = promote_enroll_session_to_gallery(
+            session_id,
+            gallery_worker_id="p-SGC-6688",
+            worker_name="Duncan",
+            employee_code="SGC-6688",
+            contractor_name="SGC",
+        )
+        self.assertEqual(out["poses_enrolled"], 3)
+
+        from app.worker_identity.gallery import get_enrollment_status
+
+        enrollment = get_enrollment_status("p-SGC-6688")
+        self.assertTrue(enrollment["complete"])
+        self.assertEqual(enrollment["poses_captured"], 3)
 
     def test_sync_all_identified_on_startup(self) -> None:
         row1 = identity.import_identity(

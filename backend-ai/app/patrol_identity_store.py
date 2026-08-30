@@ -140,3 +140,24 @@ def clear_patrol_identity_bindings() -> int:
         _state = _empty()
         _save(_state)
     return count
+
+
+def unbind_patrol_identity(gallery_worker_id: str) -> bool:
+    """Gỡ một gallery worker và mọi alias trỏ tới nó."""
+    wid = gallery_worker_id.strip()
+    if not wid:
+        return False
+    with _lock:
+        state = _load()
+        by_gallery = state.get("by_gallery_worker") or {}
+        row = by_gallery.pop(wid, None)
+        if row is None:
+            return False
+        alias_map = state.setdefault("alias_to_gallery", {})
+        for alias in row.get("aliases") or []:
+            if alias_map.get(alias) == wid:
+                alias_map.pop(alias, None)
+        if alias_map.get(wid) == wid:
+            alias_map.pop(wid, None)
+        _save(state)
+    return True
