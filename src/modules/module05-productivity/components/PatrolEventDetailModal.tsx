@@ -168,7 +168,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   useEffect(() => {
     setSelectedAppearanceKey(null)
     setHeroFromHistory(false)
-  }, [event?.id])
+  }, [event?.id, viewDate])
 
   useEffect(() => {
     if (!event) {
@@ -192,12 +192,10 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         [...segments].sort((a, b) => b.startedAt - a.startedAt),
       )
       setAppearanceSegments(sorted)
-      setSelectedAppearanceKey(null)
-      setHeroFromHistory(false)
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
-  }, [event, identityTick, viewDate])
+  }, [event?.id, viewDate, identityTick])
 
   const summary = useMemo(() => {
     if (!event) return null
@@ -279,7 +277,9 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const activeSnapshotUrl = useMemo(() => {
     if (heroFromHistory && selectedAppearanceKey) {
       const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
-      if (selected?.snapshotUrl?.trim()) return selected.snapshotUrl
+      if (selected) {
+        return selected.snapshotUrl?.trim() || undefined
+      }
     }
     return event?.snapshotUrl
   }, [appearanceSegments, event?.snapshotUrl, heroFromHistory, selectedAppearanceKey])
