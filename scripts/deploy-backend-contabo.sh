@@ -354,6 +354,9 @@ PATROL_EMBED_KEY=${VPS_PATROL_EMBED_KEY:-}
 HC01_RTSP_URL=${VPS_HC01_RTSP:-}
 PATROL_FLYCAM_PROXIMITY_MAX_M=5
 PATROL_FLYCAM_AERIAL_MIN_M=6
+# DR-03 chưa có telemetry độ cao ổn định — giả định 3m (tầm thấp) thay vì
+# nhảy nhãn theo bbox YOLO. Telemetry POST /patrol/drone/telemetry vẫn ưu tiên.
+PATROL_DRONE_ALTITUDE_OVERRIDES=DR-03:3
 PATROL_RETENTION_DAYS=90
 EOF
 REMOTE_ENV

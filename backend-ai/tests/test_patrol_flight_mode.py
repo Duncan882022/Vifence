@@ -63,6 +63,30 @@ class PatrolFlightModeTests(unittest.TestCase):
         note_patrol_flycam_visual_scale("DR-03", [tiny], fh)
         self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.AERIAL)
 
+    def test_altitude_override_defaults_proximity_without_telemetry(self) -> None:
+        from unittest.mock import patch
+
+        with patch("app.patrol_flight_mode.settings") as mock_settings:
+            mock_settings.patrol_flycam_proximity_max_m = 5.0
+            mock_settings.patrol_flycam_aerial_min_m = 6.0
+            mock_settings.patrol_drone_altitude_ttl_sec = 45.0
+            mock_settings.patrol_drone_altitude_overrides = "DR-03:3"
+            mock_settings.patrol_drone_default_altitude_m = None
+            self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
+
+    def test_live_telemetry_overrides_static_default(self) -> None:
+        from unittest.mock import patch
+
+        with patch("app.patrol_flight_mode.settings") as mock_settings:
+            mock_settings.patrol_flycam_proximity_max_m = 5.0
+            mock_settings.patrol_flycam_aerial_min_m = 6.0
+            mock_settings.patrol_drone_altitude_ttl_sec = 45.0
+            mock_settings.patrol_drone_altitude_overrides = "DR-03:3"
+            mock_settings.patrol_drone_default_altitude_m = None
+            self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.PROXIMITY)
+            update_patrol_drone_altitude("DR-03", 80.0)
+            self.assertEqual(resolve_patrol_flight_mode("DR-03"), PatrolFlightMode.AERIAL)
+
 
 if __name__ == "__main__":
     unittest.main()
