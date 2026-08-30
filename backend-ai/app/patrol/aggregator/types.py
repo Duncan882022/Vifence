@@ -94,6 +94,8 @@ class TrackSession:
         self.last_seen_at = ts
         if bbox is not None:
             self.bbox = bbox
+        if not self.committed:
+            self.dirty = True
 
 
 @dataclass

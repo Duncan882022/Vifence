@@ -343,6 +343,53 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertEqual(len(rows_after), 1)
         self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 20.0, places=3)
 
+    def test_dwell_gate_retries_until_committed(self) -> None:
+        """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được."""
+        from unittest.mock import patch
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.engine import ingest_observation
+
+        ts = 6_000.0
+        gate_calls = {"n": 0}
+
+        def _gate(key, *, has_face, now):  # noqa: ANN001
+            gate_calls["n"] += 1
+            return gate_calls["n"] >= 3, ts
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            side_effect=_gate,
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
+            return_value=PersonIdentity(
+                person_id="sgc-7002",
+                identity_type=IdentityType.ANONYMOUS,
+                confidence=0.9,
+            ),
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value="pers-0001",
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            from app.patrol import identity
+
+            identity.create_person(origin="sgc", now=ts)
+            for i in range(5):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-dwell",
+                    now=ts + i * 0.2,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="sgc-7002",
+                    confidence=0.9,
+                )
+
+        rows = daystore.list_day_presences(db.today_vn(ts))
+        self.assertEqual(len(rows), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
