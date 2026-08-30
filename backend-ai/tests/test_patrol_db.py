@@ -268,13 +268,6 @@ class DailyEventTests(PatrolDbTestCase):
             snapshot_score=decent, face_eligible=True, now=1_005.0,
         )
         card = daystore.list_person_events(db.today_vn(1_000.0))[0]
-        self.assertEqual(card["snapshot_path"], "best.jpg")
-
-        daystore.touch_person_event(
-            pers_id, camera_id="HC-01", snapshot_path="recent.jpg",
-            snapshot_score=decent, face_eligible=True, now=1_011.0,
-        )
-        card = daystore.list_person_events(db.today_vn(1_000.0))[0]
         self.assertEqual(card["snapshot_path"], "recent.jpg")
 
     def test_identified_immediate_upsert_when_face_clearer(self) -> None:

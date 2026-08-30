@@ -39,12 +39,13 @@ def _maybe_write_snapshot(
     worker_name: str | None = None,
     capture_ts: float | None = None,
     face_eligible: bool = False,
+    force: bool = False,
 ) -> str | None:
     """Ghi file JPG — tối đa mỗi TOUCH_MIN_INTERVAL_SEC, trừ khi ảnh rõ hơn."""
     ts = float(capture_ts if capture_ts is not None else time.time())
     with _SNAPSHOT_WRITE_LOCK:
         last = _last_snapshot_write.get(subject_id)
-        if last is not None:
+        if not force and last is not None:
             last_ts, last_score = last
             if score <= last_score and (ts - last_ts) < daystore.TOUCH_MIN_INTERVAL_SEC:
                 return None

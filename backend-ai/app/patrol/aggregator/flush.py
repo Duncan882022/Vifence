@@ -25,6 +25,25 @@ def _needs_flush(session: TrackSession, *, finalize: bool) -> bool:
     return session.dirty
 
 
+def _card_has_snapshot(subject_id: str, ts: float) -> bool:
+    """Thẻ ngày đã có JPG — dùng để ép chụp lần đầu cho Đối tượng."""
+    from .. import identity
+
+    date = db.today_vn(ts)
+    if subject_id.startswith("pers-"):
+        pid = identity.resolve_alias(subject_id)
+        row = db.query_one(
+            "SELECT snapshot_path FROM daily_events WHERE event_date = ? AND pers_id = ?",
+            (date, pid),
+        )
+    else:
+        row = db.query_one(
+            "SELECT snapshot_path FROM daily_objects WHERE event_date = ? AND obj_id = ?",
+            (date, subject_id),
+        )
+    return bool(row and (row["snapshot_path"] or "").strip())
+
+
 def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str | None, float]:
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
         return None, 0.0
@@ -41,6 +60,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         inferred = tier_for_worker_id(worker_id)
         if inferred != "object":
             tier = inferred
+    force = not _card_has_snapshot(session.subject_id, obs.ts)
     path = sink._maybe_write_snapshot(  # noqa: SLF001
         session.subject_id,
         obs.frame,
@@ -51,7 +71,20 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         worker_name=obs.worker_name,
         capture_ts=obs.ts,
         face_eligible=obs.face_eligible,
+        force=force,
     )
+    if path is None and force:
+        path = sink._write_snapshot(  # noqa: SLF001
+            session.subject_id,
+            obs.frame,
+            obs.person_bbox,
+            score=score,
+            tier=tier,
+            worker_id=worker_id,
+            worker_name=obs.worker_name,
+            capture_ts=obs.ts,
+            face_eligible=obs.face_eligible,
+        )
     return path, score if path else 0.0
 
 
@@ -121,21 +154,7 @@ def flush_session(
         if appearance_id is not None:
             session.appearance_row_id = appearance_id
 
-    skip_snapshot = False
-    if appearance_id is not None and not finalize:
-        existing = db.query_one(
-            "SELECT snapshot_path FROM appearances WHERE id = ?",
-            (appearance_id,),
-        )
-        if existing and (existing["snapshot_path"] or "").strip():
-            skip_snapshot = True
-
-    if (
-        not skip_snapshot
-        and subject_id
-        and obs.frame is not None
-        and obs.person_bbox is not None
-    ):
+    if subject_id and obs.frame is not None and obs.person_bbox is not None:
         path, shot_score = _write_snapshot(session, obs)
 
     skip_appearance = True
