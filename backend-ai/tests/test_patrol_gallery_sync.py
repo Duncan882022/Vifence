@@ -137,6 +137,30 @@ class GallerySyncTests(unittest.TestCase):
         self.assertEqual(out["total"], 2)
         self.assertEqual(out["synced"], 2)
 
+    def test_gallery_stats_ignore_person_faces_vector_count(self) -> None:
+        row = identity.import_identity(
+            full_name="Duncan",
+            employee_code="SGC-6688",
+            contractor="SGC",
+            source="self_enroll",
+        )
+        pers_id = str(row["pers_id"])
+        for seed in (0.1, 0.2, 0.3):
+            vec = np.zeros(512, dtype=np.float32)
+            vec[0] = seed
+            vec /= np.linalg.norm(vec)
+            identity.add_face_angle(pers_id, vec.tolist(), quality=1.0, camera_id="CAM")
+
+        self.assertEqual(identity.face_count(pers_id), 3)
+        stats = identity.gallery_enrollment_stats("SGC-6688")
+        self.assertEqual(stats["face_count"], 0)
+        self.assertFalse(stats["complete"])
+
+        enrollment = identity.get_scan_enrollment(pers_id)
+        self.assertEqual(enrollment["faces_captured"], 0)
+        self.assertFalse(enrollment["complete"])
+        self.assertFalse(any(p["captured"] for p in enrollment["poses"]))
+
 
 if __name__ == "__main__":
     unittest.main()

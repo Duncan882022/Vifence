@@ -84,8 +84,8 @@ export function WorkerProfileManagementPage() {
         setProfiles([])
         return
       }
-      const items = await fetchPatrolWorkerProfiles()
-      setProfiles(items.filter(p => p.status === 'identified' || p.employee_code))
+      const items = await fetchPatrolWorkerProfiles('identified')
+      setProfiles(items)
     } catch {
       setBackendOk(false)
       setProfiles([])

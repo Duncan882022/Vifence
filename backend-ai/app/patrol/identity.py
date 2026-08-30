@@ -126,24 +126,65 @@ def face_count(pers_id: str) -> int:
     return int(row["c"]) if row else 0
 
 
+def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
+    """Thống kê quét mặt — nguồn sự thật là JPG gallery (3 góc), không phải COUNT person_faces."""
+    from ..patrol_identity_store import patrol_gallery_worker_id
+    from ..worker_identity.gallery import get_enrollment_status
+
+    code = (employee_code or "").strip()
+    empty_poses = [
+        {"slot": slot, "label": SCAN_POSE_LABELS[slot - 1], "captured": False}
+        for slot in range(1, SCAN_FACES_REQUIRED + 1)
+    ]
+    if not code:
+        return {
+            "gallery_worker_id": None,
+            "poses_captured": 0,
+            "face_count": 0,
+            "complete": False,
+            "poses": empty_poses,
+        }
+
+    wid = patrol_gallery_worker_id(code)
+    enrollment = get_enrollment_status(wid)
+    captured = int(enrollment.get("poses_captured") or 0)
+    poses = list(enrollment.get("poses") or empty_poses)
+    return {
+        "gallery_worker_id": wid,
+        "poses_captured": captured,
+        "face_count": captured,
+        "complete": bool(enrollment.get("complete")),
+        "poses": poses,
+    }
+
+
 def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
     """Trạng thái quét mặt cho trang enroll — 3 góc tối thiểu."""
     pid = resolve_alias(pers_id)
     person = get_person(pid)
-    count = face_count(pid)
+    employee_code = str(person.get("employee_code") or "").strip() if person else ""
+
+    if employee_code:
+        stats = gallery_enrollment_stats(employee_code)
+        count = int(stats["poses_captured"])
+        poses = list(stats["poses"])
+        complete = bool(stats["complete"])
+    else:
+        count = face_count(pid)
+        complete = count >= SCAN_FACES_REQUIRED
+        poses = []
+        for slot in range(1, SCAN_FACES_REQUIRED + 1):
+            poses.append({
+                "slot": slot,
+                "label": SCAN_POSE_LABELS[slot - 1],
+                "captured": False,
+            })
+
     rows = db.query(
         "SELECT id, quality, source, created_at FROM person_faces"
         " WHERE pers_id = ? ORDER BY created_at ASC",
         (pid,),
     )
-    poses: list[dict[str, Any]] = []
-    for slot in range(1, SCAN_FACES_REQUIRED + 1):
-        captured = count >= slot
-        poses.append({
-            "slot": slot,
-            "label": SCAN_POSE_LABELS[slot - 1],
-            "captured": captured,
-        })
     return {
         "pers_id": pid,
         "full_name": person.get("full_name") if person else None,
@@ -152,7 +193,7 @@ def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
         "status": person.get("status") if person else None,
         "faces_captured": count,
         "faces_required": SCAN_FACES_REQUIRED,
-        "complete": count >= SCAN_FACES_REQUIRED,
+        "complete": complete,
         "poses": poses,
         "face_records": len(rows),
     }
