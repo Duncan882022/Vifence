@@ -41,6 +41,26 @@ class PatrolSnapshotTierTests(unittest.TestCase):
             TIER_OBJECT,
         )
 
+    def test_stale_object_lifecycle_upgrades_with_gallery_worker(self) -> None:
+        pers_id, _ = identity.observe_face([0.2] * 128, quality=0.9)
+        identity.identify(pers_id, full_name="Duncan", employee_code="SGC-6688")
+        self.assertEqual(
+            sink._resolve_snapshot_tier(
+                pers_id,
+                tier=TIER_OBJECT,
+                worker_id="p-SGC-6688",
+            ),
+            "identity",
+        )
+
+    def test_stale_object_lifecycle_uses_sqlite_for_pers(self) -> None:
+        pers_id, _ = identity.observe_face([0.3] * 128, quality=0.9)
+        identity.identify(pers_id, full_name="An", employee_code="NV01")
+        self.assertEqual(
+            sink._resolve_snapshot_tier(pers_id, tier=TIER_OBJECT),
+            "identity",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,6 +48,26 @@ class PatrolTierSemanticsTests(unittest.TestCase):
             "Người",
         )
 
+    def test_snapshot_label_identified_pers_without_worker_id(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from app.patrol import db, identity
+
+        tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(tmp.name)
+        db.DB_FILE = Path(tmp.name) / "patrol.db"
+        db.get_conn()
+        pers_id, _ = identity.observe_face([0.4] * 128, quality=0.9)
+        identity.identify(pers_id, full_name="Duncan", employee_code="SGC-6688")
+        self.assertEqual(
+            format_patrol_person_snapshot_label(None, None, pers_id),
+            "Duncan",
+        )
+        db.close()
+        tmp.cleanup()
+
 
 if __name__ == "__main__":
     unittest.main()

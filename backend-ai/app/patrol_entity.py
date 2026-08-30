@@ -219,6 +219,20 @@ def format_patrol_person_snapshot_label(
     if is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
         return "Người"
     oid = (object_id or "").strip()
+    if oid.lower().startswith("pers-"):
+        try:
+            from .patrol import identity as patrol_identity
+
+            person = patrol_identity.get_person(oid)
+            if person and person.get("status") == patrol_identity.STATUS_IDENTIFIED:
+                return resolve_patrol_worker_display_name(
+                    str(person.get("employee_code") or oid),
+                    str(person.get("full_name") or ""),
+                )
+            if person:
+                return "Người"
+        except Exception:  # noqa: BLE001
+            pass
     if oid.upper().startswith("OBJ-"):
         return "Đối tượng"
     return "Đối tượng"

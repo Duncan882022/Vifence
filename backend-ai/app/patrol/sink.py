@@ -85,21 +85,43 @@ def _snapshot_tier(subject_id: str) -> str:
     return "person"
 
 
+def _snapshot_tier_rank(tier: str) -> int:
+    return {"object": 0, "person": 1, "identity": 2}.get(tier, 0)
+
+
 def _resolve_snapshot_tier(
     subject_id: str,
     *,
     tier: str | None = None,
     worker_id: str | None = None,
 ) -> str:
-    """Ưu tiên lifecycle tier (ROI live) — không suy lại từ SQLite khi đã có."""
-    if subject_id.startswith("obj-"):
-        return "object"
-    explicit = (tier or "").strip()
-    if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR:
-        return explicit
+    """Tier khung/badge snapshot — lifecycle `object` không được chèn khi đã có mặt/gallery."""
     from ..patrol_entity import patrol_tier_label
+    from ..patrol_identity_lifecycle import tier_for_worker_id
 
-    return patrol_tier_label(worker_id or subject_id)
+    wid = (worker_id or "").strip()
+    explicit = (tier or "").strip()
+    inferred = tier_for_worker_id(wid) if wid else "object"
+
+    if subject_id.startswith("obj-"):
+        if _snapshot_tier_rank(inferred) > 0:
+            return inferred
+        return "object"
+
+    candidates: list[str] = []
+    if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR and explicit != "object":
+        candidates.append(explicit)
+    if _snapshot_tier_rank(inferred) > 0:
+        candidates.append(inferred)
+    if subject_id.startswith("pers-"):
+        candidates.append(_snapshot_tier(subject_id))
+
+    if candidates:
+        return max(candidates, key=_snapshot_tier_rank)
+
+    if explicit == "object":
+        return "object"
+    return patrol_tier_label(wid or subject_id)
 
 
 def _write_snapshot(
