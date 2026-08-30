@@ -106,21 +106,61 @@ def _synth_conf_from_face(face: _FrameFace) -> float:
     return min(0.92, 0.55 + face.score * 0.35)
 
 
+def _bbox_containment(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    """Tỉ lệ diện tích bbox nhỏ hơn nằm trong giao — bắt nested synth/YOLO trùng người."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter_area = (ix2 - ix1) * (iy2 - iy1)
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    smaller = min(area_a, area_b)
+    return inter_area / smaller if smaller > 0 else 0.0
+
+
+def _boxes_overlap(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+    *,
+    iou_threshold: float = 0.34,
+    containment_threshold: float = 0.46,
+) -> bool:
+    return (
+        _bbox_iou(a, b) >= iou_threshold
+        or _bbox_containment(a, b) >= containment_threshold
+    )
+
+
 def _dedupe_anchor_boxes(
     boxes: list[tuple[tuple[float, float, float, float], float]],
     *,
     iou_threshold: float = 0.34,
+    containment_threshold: float = 0.46,
 ) -> list[tuple[tuple[float, float, float, float], float]]:
     if len(boxes) <= 1:
         return boxes
     ranked = sorted(
         boxes,
-        key=lambda item: item[1] * max(1.0, (item[0][2] - item[0][0]) * (item[0][3] - item[0][1])),
+        key=lambda item: max(1.0, (item[0][2] - item[0][0]) * (item[0][3] - item[0][1])),
         reverse=True,
     )
     kept: list[tuple[tuple[float, float, float, float], float]] = []
     for candidate_box, candidate_conf in ranked:
-        if any(_bbox_iou(candidate_box, kept_box) >= iou_threshold for kept_box, _ in kept):
+        if any(
+            _boxes_overlap(
+                candidate_box,
+                kept_box,
+                iou_threshold=iou_threshold,
+                containment_threshold=containment_threshold,
+            )
+            for kept_box, _ in kept
+        ):
             continue
         kept.append((candidate_box, candidate_conf))
     return kept
@@ -133,7 +173,7 @@ def _synth_duplicate_of_matched(
 ) -> bool:
     """Chỉ gộp synth với YOLO khi mặt nằm trong box YOLO — tránh bbox YOLO rộng nuốt cả đám."""
     for box, _ in matched_yolo:
-        if _face_center_in_box(face, box) and _bbox_iou(synth_box, box) >= 0.34:
+        if _face_center_in_box(face, box) and _boxes_overlap(synth_box, box):
             return True
     return False
 
@@ -194,6 +234,8 @@ def anchor_patrol_person_boxes_to_faces(
     covered_face_indices: set[int] = set()
 
     for box, conf in person_boxes:
+        if legs_only_person_box(box, w, h):
+            continue
         matching = [
             (idx, face)
             for idx, face in enumerate(faces)
@@ -207,6 +249,8 @@ def anchor_patrol_person_boxes_to_faces(
         if len(matching) > 1:
             for _idx, face in matching:
                 synth_box = _person_box_from_face(face, w, h)
+                if legs_only_person_box(synth_box, w, h):
+                    continue
                 matched_yolo.append((synth_box, _synth_conf_from_face(face)))
             continue
 
@@ -221,6 +265,8 @@ def anchor_patrol_person_boxes_to_faces(
             matched_yolo.append((box, conf))
             continue
         synth_box = _person_box_from_face(face, w, h)
+        if legs_only_person_box(synth_box, w, h):
+            continue
         matched_yolo.append((synth_box, _synth_conf_from_face(face)))
 
     synth_boxes: list[tuple[tuple[float, float, float, float], float]] = []
@@ -228,7 +274,11 @@ def anchor_patrol_person_boxes_to_faces(
         if face_index in covered_face_indices:
             continue
         synth_box = _person_box_from_face(face, w, h)
+        if legs_only_person_box(synth_box, w, h):
+            continue
         if _synth_duplicate_of_matched(face, synth_box, matched_yolo):
+            continue
+        if any(_boxes_overlap(synth_box, other) for other in [box for box, _ in matched_yolo]):
             continue
         synth_boxes.append((synth_box, _synth_conf_from_face(face)))
 
@@ -239,7 +289,7 @@ def anchor_patrol_person_boxes_to_faces(
             continue
         if conf < BACK_TURN_MIN_CONF or not _yolo_plausible_without_face(box, w, h):
             continue
-        if any(_bbox_iou(box, other) >= 0.34 for other in existing_boxes):
+        if any(_boxes_overlap(box, other) for other in existing_boxes):
             continue
         back_turn.append((box, conf))
         existing_boxes.append(box)

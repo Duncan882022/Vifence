@@ -296,6 +296,12 @@ def _patrol_person_should_run_identity(
     frame: np.ndarray | None = None,
 ) -> bool:
     """Chạy nhận diện đầy đủ khi gate hình học pass hoặc vẫn thấy mặt."""
+    from ..patrol_person_visibility import legs_only_person_box, limb_fragment_person_box
+
+    if legs_only_person_box(person_box, frame_w, frame_h):
+        return False
+    if limb_fragment_person_box(person_box, frame_w, frame_h):
+        return False
     if _patrol_person_passes_display_gate(person_box, frame_w, frame_h, camera_id=camera_id):
         return True
     if frame is None:
@@ -444,10 +450,10 @@ def _build_patrol_bodycam_result(
         [(p.person_box, p.person_conf) for p in raw_persons],
         camera_id=camera_id,
     )
-    persons = [
-        _PersonPpe(person_box=box, person_conf=conf)
-        for box, conf in anchored
-    ]
+    persons = _dedupe_person_boxes(
+        [_PersonPpe(person_box=box, person_conf=conf) for box, conf in anchored],
+        camera_id=camera_id,
+    )
 
     detections = _build_patrol_person_detections(
         frame,
@@ -738,10 +744,10 @@ def _build_patrol_flycam_proximity_result(
         [(p.person_box, p.person_conf) for p in raw_persons],
         camera_id=camera_id,
     )
-    persons = [
-        _PersonPpe(person_box=box, person_conf=conf)
-        for box, conf in anchored
-    ]
+    persons = _dedupe_person_boxes(
+        [_PersonPpe(person_box=box, person_conf=conf) for box, conf in anchored],
+        camera_id=camera_id,
+    )
 
     detections = _build_patrol_person_detections(
         frame,

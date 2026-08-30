@@ -193,6 +193,39 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertEqual(out, [])
 
 
+    def test_nested_legs_inside_large_person_deduped(self):
+        """VPS HC-02: bbox chân lồng trong synth người — chỉ một detection."""
+        frame = np.zeros((1280, 720, 3), dtype=np.uint8)
+        large = (5.0, 148.0, 720.0, 1280.0)
+        legs = (464.0, 828.0, 594.0, 1135.0)
+        face = _FrameFace(box=(360.0, 200.0, 480.0, 380.0), score=0.92)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(large, 0.82), (legs, 0.58)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 1)
+
+    def test_legs_yolo_with_false_face_inside_skipped(self):
+        """YOLO chân có mặt giả bên trong — không tạo bbox thứ hai."""
+        frame = np.zeros((1280, 720, 3), dtype=np.uint8)
+        person = (280.0, 120.0, 620.0, 900.0)
+        legs = (464.0, 828.0, 594.0, 1135.0)
+        face_real = _FrameFace(box=(380.0, 180.0, 520.0, 360.0), score=0.9)
+        face_fp = _FrameFace(box=(510.0, 860.0, 550.0, 920.0), score=0.41)
+        with patch(
+            "app.patrol_face_anchor._list_frame_faces",
+            return_value=[face_real, face_fp],
+        ):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(person, 0.72), (legs, 0.55)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 1)
+
+
 class TestFabricRejectedByAppearance(unittest.TestCase):
     """Bạt/tường bị loại ở _filter_persons (chạy trước anchor) bằng màu sắc —
     hình học không tách được bạt treo với người quay lưng."""
