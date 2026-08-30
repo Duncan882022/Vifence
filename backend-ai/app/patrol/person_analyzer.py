@@ -227,10 +227,18 @@ def _assign_patrol_person_identity(
         worker_name=worker_name,
     )
 
+    from ..patrol_identity_lifecycle import tier_for_worker_id
+
+    display_tier = resolved.tier
+    tier_rank = {"object": 0, "person": 1, "identity": 2}
+    inferred = tier_for_worker_id(resolved.worker_id or worker_id)
+    if tier_rank.get(inferred, 0) > tier_rank.get(display_tier, 0):
+        display_tier = inferred
+
     person_det.worker_id = resolved.worker_id
     person_det.worker_name = resolved.worker_name
     person_det.track_id = track_id
-    person_det.tier = resolved.tier
+    person_det.tier = display_tier
     person_det.face_eligible = face_eligible and face_emb is not None
 
     # Ghi vào kho tuần tra (SQLite). Vector khuôn mặt chỉ tồn tại ở đúng chỗ
@@ -248,7 +256,7 @@ def _assign_patrol_person_identity(
             confidence=float(person_det.confidence or 0.0),
             frame=frame,
             person_bbox=person_bbox,
-            lifecycle_tier=resolved.tier,
+            lifecycle_tier=display_tier,
             lifecycle_worker_id=resolved.worker_id,
             worker_name=resolved.worker_name,
         )
