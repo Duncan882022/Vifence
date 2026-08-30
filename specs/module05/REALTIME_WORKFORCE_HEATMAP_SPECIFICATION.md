@@ -249,7 +249,7 @@ heatPoints = []
 
 **Popup chi tiết (`PatrolEventDetailModal`):** loại, tiêu đề, trạng thái, vị trí, đối tượng, thời gian, confidence, GPS, actions — **không snapshot** (backend chưa cung cấp ảnh sự kiện).
 
-**Cấu hình AI (`PatrolCameraAiConfigModal`):** HC-* mở modal tuần tra riêng — chỉ `patrol_person` (PERS-001) + `ppe` (PPE-*); không hiện BPTC/DZ/PCCC/WAH/ATGT của Module 03. PPE overlay ẩn khi `PATROL_PPE_UI_HIDDEN`.
+**Cấu hình AI (`PatrolCameraAiConfigModal`):** HC-* / DR-* chỉ `patrol_person` (PERS-001); không PPE / ATLĐ Module 03.
 
 **Mock còn lại (không vào feed):** `MOCK_PATROL_EVENTS` chỉ dùng cho playback timeline stub (`patrolCameraPlayback.service`).
 

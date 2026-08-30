@@ -12,7 +12,7 @@ from .patrol_flight_mode import (
     patrol_flight_mode_payload,
     resolve_patrol_flight_mode,
 )
-from .ppe_analyzer import (
+from .patrol.person_analyzer import (
     _build_patrol_bodycam_result,
     _build_patrol_flycam_aerial_result,
     _flycam_prescan_for_flight_mode,
@@ -103,7 +103,7 @@ class PatrolEngine:
 
 patrol_engine = PatrolEngine()
 
-# Giữ alias cũ cho script/test import từ ppe_analyzer.
+# Module 05 — person-only inference entry (HC-* / DR-*).
 analyze_patrol_person_frame = analyze_patrol_frame
 
 __all__ = [

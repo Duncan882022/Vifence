@@ -725,11 +725,11 @@ def audit_ppe_bptc_smoke() -> list[CaseResult]:
 
 def audit_ppe_snapshot_bbox() -> list[CaseResult]:
     """Snapshot PPE — bbox áo bám thân; góc bán thân không log thiếu giày."""
+    from app.patrol_engine import analyze_patrol_frame
     from app.ppe_analyzer import (
         _feet_assessable,
         _half_body_person,
         _torso_violation_display_bbox,
-        analyze_ppe_frame,
         ppe_violation_display_bbox,
     )
 
@@ -766,7 +766,7 @@ def audit_ppe_snapshot_bbox() -> list[CaseResult]:
     frame = np.full((480, 320, 3), 90, dtype=np.uint8)
     cv2.rectangle(frame, (90, 30), (230, 340), (140, 120, 100), -1)
     cv2.rectangle(frame, (110, 50), (210, 120), (30, 30, 30), -1)  # tóc/đầu
-    r = analyze_ppe_frame(frame, "HC-02")
+    r = analyze_patrol_frame(frame, "HC-02")
     beh = {d["behavior"] for d in r.get("detections", [])}
     ok_syn = "no_shoes" not in beh
     results.append(

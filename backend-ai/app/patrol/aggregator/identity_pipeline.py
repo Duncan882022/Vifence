@@ -81,9 +81,21 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
     _note_best_frame(session, obs)
 
-    # Lifecycle ROI đã có worker_id từ analyzer
+    # Lifecycle ROI đã có worker_id từ analyzer → map pers-* trước khi flush
     if obs.lifecycle_worker_id and not session.identity_resolved:
         session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
+        try:
+            from ..sink import _pers_id_for_lifecycle
+
+            pers_id = _pers_id_for_lifecycle(
+                obs.lifecycle_tier,
+                obs.lifecycle_worker_id,
+                now=obs.ts,
+            )
+            if pers_id:
+                session.subject_id = pers_id
+        except Exception:  # noqa: BLE001
+            logger.debug("lifecycle pers map skip", exc_info=True)
         session.identity_resolved = True
 
     # Chưa resolve — chờ đủ best-frame rồi search gallery một lần

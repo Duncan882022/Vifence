@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from app.ppe_analyzer import (
+from app.patrol.person_analyzer import (
     _PersonPpe,
     _assign_patrol_person_display_only,
     _assign_patrol_person_identity,

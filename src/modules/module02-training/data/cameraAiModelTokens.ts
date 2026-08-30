@@ -222,14 +222,14 @@ export const CAMERA_AI_CONFIG_SECTIONS: Record<string, CameraAiConfigSection[]> 
     {
       title: 'Tuần tra bodycam',
       subtitle: 'Helmet 01 · Cầu Sông Hốt',
-      modelIds: ['patrol_person', 'ppe'],
+      modelIds: ['patrol_person'],
     },
   ],
   'HC-02': [
     {
       title: 'Tuần tra mobile',
       subtitle: 'Helmet 02 · GPS + workforce',
-      modelIds: ['patrol_person', 'ppe'],
+      modelIds: ['patrol_person'],
     },
   ],
   'DR-03': [

@@ -405,12 +405,12 @@ def audit_mobile_frame_scale() -> list[CaseResult]:
     return results
 
 
-def audit_hc02_ppe_analyzer() -> list[CaseResult]:
+def audit_hc02_person_analyzer() -> list[CaseResult]:
+    from app.patrol_engine import analyze_patrol_frame
     from app.ppe_analyzer import (
         _feet_assessable,
         _half_body_person,
         _plausible_person_box,
-        analyze_ppe_frame,
         ppe_violation_display_bbox,
     )
 
@@ -472,7 +472,7 @@ def audit_hc02_ppe_analyzer() -> list[CaseResult]:
     cv2.rectangle(frame, (110, 50), (210, 120), (30, 30, 30), -1)
     reg_patch, state_patch = _temp_person_registry()
     with reg_patch, state_patch:
-        r = analyze_ppe_frame(frame, "HC-02")
+        r = analyze_patrol_frame(frame, "HC-02")
     beh = {d.get("behavior") for d in r.get("detections", [])}
     persons = [d for d in r.get("detections", []) if d.get("behavior") == "person"]
     ok_syn = "no_shoes" not in beh
@@ -488,7 +488,7 @@ def audit_hc02_ppe_analyzer() -> list[CaseResult]:
     if img is not None:
         reg_patch2, state_patch2 = _temp_person_registry()
         with reg_patch2, state_patch2:
-            live = analyze_ppe_frame(img, "HC-02")
+            live = analyze_patrol_frame(img, "HC-02")
         lp = [d for d in live.get("detections", []) if d.get("behavior") == "person"]
         lv = [d for d in live.get("detections", []) if str(d.get("behavior", "")).startswith("no_")]
         ok_live = len(lp) >= 1 and all(
@@ -739,7 +739,7 @@ def main() -> int:
         ("GPS bridge", audit_patrol_gps()),
         ("Mobile metrics", audit_mobile_metrics()),
         ("Mobile frame scale", audit_mobile_frame_scale()),
-        ("HC-02 PPE analyzer", audit_hc02_ppe_analyzer()),
+        ("HC-02 person analyzer", audit_hc02_person_analyzer()),
         ("No-vest snapshot ROI", audit_no_vest_snapshot_roi()),
         ("HC-02 engine events", audit_hc02_engine_events()),
         ("Person snapshot", audit_person_snapshot_crop()),

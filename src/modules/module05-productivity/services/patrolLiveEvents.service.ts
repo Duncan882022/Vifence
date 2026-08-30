@@ -81,8 +81,6 @@ export interface PatrolHelmetAggregateMetricsResponse {
 function normalizePersonEventsToday(row: Record<string, unknown>): number {
   const primary = row.person_events_today
   if (typeof primary === 'number' && Number.isFinite(primary)) return primary
-  const legacy = row.ppe_alerts_today
-  if (typeof legacy === 'number' && Number.isFinite(legacy)) return legacy
   return 0
 }
 

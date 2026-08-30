@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.ppe_analyzer import (  # noqa: E402
+from app.patrol.person_analyzer import (  # noqa: E402
     _PERSON_CONF_FLYCAM,
     _filter_persons,
     _is_patrol_flycam,

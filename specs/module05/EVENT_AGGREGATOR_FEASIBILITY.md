@@ -3,7 +3,7 @@
 ## Luồng mới (mặc định bật)
 
 ```
-ppe_analyzer → sink.record_observation
+ppe_analyzer → patrol.person_analyzer → sink.record_observation
                     ↓ (PATROL_USE_AGGREGATOR=1, default)
               aggregator.engine.ingest_observation
                     ├─ session_store (Re-ID 180s / cosine ≥0.85)

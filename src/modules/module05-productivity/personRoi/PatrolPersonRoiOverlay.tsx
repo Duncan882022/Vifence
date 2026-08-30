@@ -50,7 +50,7 @@ const PersonRoiBox = memo(function PersonRoiBox({
   if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
     return null
   }
-  // HC-* person YOLO 0.35–0.65 — không dùng OVERLAY_MIN_CONFIDENCE (0.70) của PPE/vi phạm.
+  // HC-* person YOLO 0.35–0.65 — ngưỡng riêng Module 05 tuần tra.
   if (!passesOverlayConfidence(track.confidence, PATROL_PERSON_ROI_CONFIG.birthMinConfidence)) {
     return null
   }

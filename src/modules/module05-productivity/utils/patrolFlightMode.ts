@@ -19,14 +19,13 @@ export function isPatrolHelmetLikeCamera(
   return false
 }
 
-/** VMS worker ghi metrics theo tên engine — patrol DR-* là `patrol`, A-04 là `ppe`. */
+/** VMS worker ghi metrics patrol cho HC-/DR-*. */
 export function readPatrolFlightModeFromMetrics(
   metrics?: Record<string, unknown> | null,
 ): PatrolFlightMode | null {
   if (!metrics) return null
-  for (const bucket of ['patrol', 'ppe'] as const) {
-    const nested = metrics[bucket]
-    if (!nested || typeof nested !== 'object') continue
+  const nested = metrics.patrol
+  if (nested && typeof nested === 'object') {
     const mode = (nested as Record<string, unknown>).flight_mode
     if (mode === 'proximity' || mode === 'aerial') return mode
   }

@@ -26,8 +26,7 @@ function nextTrackId(): string {
 /**
  * Chỉ nhận detection `person`.
  *
- * Trước đây khi không có box người nào, hàm này rơi xuống lấy bbox PPE
- * (mũ, áo, giày) làm bằng chứng có người. Module 05 không chạy model PPE nên
+ * Module 05 chỉ dùng bbox người YOLO — không suy luận từ vật thể PPE (Module 03).
  * nhánh đó chỉ còn là đường cho dữ liệu lạ lọt vào — mà bbox một cái mũ thì
  * cũng không phải khung người để mà bám.
  */

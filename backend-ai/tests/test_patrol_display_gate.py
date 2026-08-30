@@ -21,7 +21,7 @@ from app.patrol_person_visibility import (  # noqa: E402
     patrol_person_meets_display_gate,
     plausible_person_silhouette,
 )
-from app.ppe_analyzer import _plausible_flycam_aerial  # noqa: E402
+from app.patrol.person_analyzer import _plausible_flycam_aerial  # noqa: E402
 
 FW, FH = 1280, 720
 

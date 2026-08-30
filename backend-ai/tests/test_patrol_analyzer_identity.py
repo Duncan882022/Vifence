@@ -18,7 +18,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.ppe_analyzer import (  # noqa: E402
+from app.patrol.person_analyzer import (  # noqa: E402
     _assign_patrol_person_identity,
     assign_patrol_track_ids,
 )
@@ -60,7 +60,7 @@ class PatrolAnalyzerIdentityTests(unittest.TestCase):
         self.frame = np.zeros((720, 1280, 3), dtype=np.uint8)
         from app.patrol_identity_lifecycle import reset as reset_lifecycle
         from app.patrol_tracker import reset_patrol_trackers
-        from app.ppe_analyzer import _hc_frame_face_assignments
+        from app.patrol.person_analyzer import _hc_frame_face_assignments
 
         _hc_frame_face_assignments.clear()
         reset_patrol_trackers()

@@ -21,12 +21,12 @@ describe('readPatrolFlightModeFromMetrics', () => {
     ).toBe('proximity')
   })
 
-  it('fallback bucket ppe cho camera legacy', () => {
+  it('trả null khi thiếu bucket patrol', () => {
     expect(
       readPatrolFlightModeFromMetrics({
-        ppe: { flight_mode: 'aerial' },
+        person_count: 2,
       }),
-    ).toBe('aerial')
+    ).toBeNull()
   })
 
   it('trả null khi thiếu metrics', () => {
