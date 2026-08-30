@@ -76,20 +76,6 @@ function appearanceRowKey(segment: PatrolAppearanceSegment): string {
   return `${segment.cameraId}-${segment.startedAt}`
 }
 
-/** So sánh snapshot — bỏ query v= bust, cùng file path = cùng ảnh. */
-function snapshotStorageKey(url: string | undefined | null): string {
-  const raw = url?.trim()
-  if (!raw) return ''
-  try {
-    const u = new URL(raw, 'https://placeholder.local')
-    const path = u.searchParams.get('path')
-    if (path) return decodeURIComponent(path)
-    return u.pathname
-  } catch {
-    return raw.split('?')[0] ?? raw
-  }
-}
-
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
   const seenKeys = new Set<string>()
   return segments.filter(segment => {
@@ -98,42 +84,6 @@ function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAp
     seenKeys.add(key)
     return true
   })
-}
-
-function resolveDefaultAppearanceKey(
-  segments: PatrolAppearanceSegment[],
-  event: PatrolEvent,
-): string | null {
-  if (segments.length === 0) return null
-
-  const eventSnapKey = snapshotStorageKey(event.snapshotUrl)
-  if (eventSnapKey) {
-    const matched = segments.find(
-      segment => snapshotStorageKey(segment.snapshotUrl) === eventSnapKey,
-    )
-    if (matched) return appearanceRowKey(matched)
-  }
-
-  const eventEndSec = Math.round(Date.parse(event.lockedAt) / 1000)
-  if (Number.isFinite(eventEndSec)) {
-    const containing = segments.find(
-      segment => eventEndSec >= segment.startedAt && eventEndSec <= segment.endedAt,
-    )
-    if (containing) return appearanceRowKey(containing)
-
-    let best = segments[0]
-    let bestDelta = Math.abs(best.endedAt - eventEndSec)
-    for (const segment of segments) {
-      const delta = Math.abs(segment.endedAt - eventEndSec)
-      if (delta < bestDelta) {
-        best = segment
-        bestDelta = delta
-      }
-    }
-    return appearanceRowKey(best)
-  }
-
-  return appearanceRowKey(segments[0])
 }
 
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } {
@@ -202,6 +152,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const [appearanceSegments, setAppearanceSegments] = useState<PatrolAppearanceSegment[]>([])
   const [appearancesLoading, setAppearancesLoading] = useState(false)
   const [selectedAppearanceKey, setSelectedAppearanceKey] = useState<string | null>(null)
+  const [heroFromHistory, setHeroFromHistory] = useState(false)
 
   useEffect(() => {
     if (!event) return
@@ -216,6 +167,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   useEffect(() => {
     setSelectedAppearanceKey(null)
+    setHeroFromHistory(false)
   }, [event?.id])
 
   useEffect(() => {
@@ -240,10 +192,8 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         [...segments].sort((a, b) => b.startedAt - a.startedAt),
       )
       setAppearanceSegments(sorted)
-      setSelectedAppearanceKey(prev => {
-        if (prev && sorted.some(segment => appearanceRowKey(segment) === prev)) return prev
-        return resolveDefaultAppearanceKey(sorted, event)
-      })
+      setSelectedAppearanceKey(null)
+      setHeroFromHistory(false)
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
@@ -327,12 +277,12 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   }, [event, appearanceSegments])
 
   const activeSnapshotUrl = useMemo(() => {
-    if (selectedAppearanceKey) {
+    if (heroFromHistory && selectedAppearanceKey) {
       const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
       if (selected?.snapshotUrl?.trim()) return selected.snapshotUrl
     }
     return event?.snapshotUrl
-  }, [appearanceSegments, event?.snapshotUrl, selectedAppearanceKey])
+  }, [appearanceSegments, event?.snapshotUrl, heroFromHistory, selectedAppearanceKey])
 
   if (!event || !summary) return null
   void identityTick
@@ -472,6 +422,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                         onClick={() => {
                           if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
                           setSelectedAppearanceKey(rowKey)
+                          setHeroFromHistory(true)
                         }}
                         className={cn(
                           'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',

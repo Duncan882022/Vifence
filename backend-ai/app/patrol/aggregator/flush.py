@@ -86,9 +86,11 @@ def flush_session(
     )
 
     path, shot_score = (None, 0.0)
+    if obs.face_eligible and subject_id:
+        path, shot_score = _write_snapshot(session, obs)
+
+    skip_appearance = True
     if subject_id.startswith("pers-"):
-        if obs.face_eligible:
-            path, shot_score = _write_snapshot(session, obs)
         daystore.touch_person_event(
             subject_id,
             camera_id=session.camera_id,
@@ -100,16 +102,20 @@ def flush_session(
             seen_since=session.started_at if session.last_flush_at <= 0 else None,
             gps_lat=gps_lat,
             gps_lng=gps_lng,
+            skip_appearance=skip_appearance,
         )
     else:
         daystore.touch_object(
             subject_id,
             camera_id=session.camera_id,
             zone_id=session.zone_id,
+            snapshot_path=path,
+            snapshot_score=shot_score,
             now=now,
             seen_since=session.started_at if session.last_flush_at <= 0 else None,
             gps_lat=gps_lat,
             gps_lng=gps_lng,
+            skip_appearance=skip_appearance,
         )
 
     row_id = daystore.upsert_track_appearance(

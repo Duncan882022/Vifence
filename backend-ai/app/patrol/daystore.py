@@ -126,6 +126,7 @@ def touch_object(
     seen_since: float | None = None,
     gps_lat: float | None = None,
     gps_lng: float | None = None,
+    skip_appearance: bool = False,
 ) -> str:
     """Ghi nhận một Đối tượng. Không truyền `obj_id` thì cấp mã mới.
 
@@ -186,12 +187,13 @@ def touch_object(
                             appearance_snapshot = snapshot_path
                 elif snapshot_path:
                     appearance_snapshot = snapshot_path
-        _touch_appearance(
-            conn, date, obj_id, camera_id, zone_id, ts,
-            gps_lat=gps_lat, gps_lng=gps_lng,
-            snapshot_path=appearance_snapshot,
-            new_encounter=seen_since is not None,
-        )
+        if not skip_appearance:
+            _touch_appearance(
+                conn, date, obj_id, camera_id, zone_id, ts,
+                gps_lat=gps_lat, gps_lng=gps_lng,
+                snapshot_path=appearance_snapshot,
+                new_encounter=seen_since is not None,
+            )
 
     return obj_id
 
@@ -220,6 +222,7 @@ def touch_person_event(
     seen_since: float | None = None,
     gps_lat: float | None = None,
     gps_lng: float | None = None,
+    skip_appearance: bool = False,
 ) -> None:
     ts = now or time.time()
     first = float(seen_since) if seen_since is not None else ts
@@ -285,12 +288,13 @@ def touch_person_event(
             " WHERE pers_id = ?",
             (ts, first, pid),
         )
-        _touch_appearance(
-            conn, date, pid, camera_id, zone_id, ts,
-            gps_lat=gps_lat, gps_lng=gps_lng,
-            snapshot_path=appearance_snapshot,
-            new_encounter=seen_since is not None,
-        )
+        if not skip_appearance:
+            _touch_appearance(
+                conn, date, pid, camera_id, zone_id, ts,
+                gps_lat=gps_lat, gps_lng=gps_lng,
+                snapshot_path=appearance_snapshot,
+                new_encounter=seen_since is not None,
+            )
 
 
 def promote_object(
@@ -479,6 +483,32 @@ def _appearance_row_payload(row: Any) -> dict[str, Any]:
     return item
 
 
+def _dedupe_aggregator_appearance_rows(rows: list[Any]) -> list[Any]:
+    """Bỏ dòng legacy (_touch_appearance) trùng session aggregator (track_id)."""
+    track_rows = [r for r in rows if str(r["track_id"] or "").strip()]
+    if not track_rows:
+        return rows
+    legacy_rows = [r for r in rows if not str(r["track_id"] or "").strip()]
+    if not legacy_rows:
+        return rows
+
+    def _overlaps_track(leg: Any) -> bool:
+        leg_start = float(leg["started_at"])
+        leg_cam = str(leg["camera_id"])
+        for tr in track_rows:
+            if str(tr["camera_id"]) != leg_cam:
+                continue
+            tr_start = float(tr["started_at"])
+            if abs(tr_start - leg_start) <= 45.0:
+                return True
+        return False
+
+    kept_legacy = [leg for leg in legacy_rows if not _overlaps_track(leg)]
+    merged = list(track_rows) + kept_legacy
+    merged.sort(key=lambda r: float(r["started_at"]))
+    return merged
+
+
 def _resolve_appearance_subject_id(subject_id: str) -> str:
     """Map gallery/sgc alias → pers-* lưu trong appearances.
 
@@ -516,6 +546,7 @@ def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]
         " ORDER BY started_at ASC",
         (d, sid),
     )
+    rows = _dedupe_aggregator_appearance_rows(rows)
     by_camera: dict[str, list[dict[str, Any]]] = {}
     segments: list[dict[str, Any]] = []
     for r in rows:

@@ -141,7 +141,14 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
     for tier, worker_id in candidates:
         if not worker_id:
             continue
-        pers_id = _ensure_pers_for_worker(worker_id, tier=tier, now=obs.ts)
+        from ...patrol_identity_lifecycle import TIER_OBJECT, tier_for_worker_id
+
+        resolved_tier = (tier or "").strip()
+        if not resolved_tier or resolved_tier == TIER_OBJECT:
+            inferred = tier_for_worker_id(worker_id)
+            if inferred != TIER_OBJECT:
+                resolved_tier = inferred
+        pers_id = _ensure_pers_for_worker(worker_id, tier=resolved_tier or None, now=obs.ts)
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
             return

@@ -277,6 +277,34 @@ def _patrol_person_passes_event_gate(
     )
 
 
+def _patrol_person_should_run_identity(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    camera_id: str,
+    frame: np.ndarray | None = None,
+) -> bool:
+    """Chạy nhận diện đầy đủ khi gate hình học pass hoặc vẫn thấy mặt."""
+    if _patrol_person_passes_display_gate(person_box, frame_w, frame_h, camera_id=camera_id):
+        return True
+    if frame is None:
+        return False
+    from ..patrol_flight_mode import is_patrol_helmet_like
+
+    if not is_patrol_helmet_like(camera_id) and not _is_patrol_flycam(camera_id):
+        return False
+    from ..worker_identity.recognizer import assess_patrol_face, recover_patrol_face_embedding
+
+    bbox = [float(v) for v in person_box]
+    _vec, _score, face_eligible = assess_patrol_face(frame, bbox, camera_id=camera_id)
+    if face_eligible:
+        return True
+    if is_patrol_helmet_like(camera_id):
+        return recover_patrol_face_embedding(frame, bbox, camera_id=camera_id) is not None
+    return False
+
+
 def _patrol_person_passes_display_gate(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -554,7 +582,9 @@ def _build_patrol_person_detections(
             subject_bbox=[float(v) for v in raw_pb],
         )
         track_id = track_ids[person_index] if person_index < len(track_ids) else None
-        if _patrol_person_passes_display_gate(pb, frame_w, frame_h, camera_id=camera_id):
+        if _patrol_person_should_run_identity(
+            pb, frame_w, frame_h, camera_id=camera_id, frame=frame,
+        ):
             _assign_patrol_person_identity(
                 person_det,
                 pb,
