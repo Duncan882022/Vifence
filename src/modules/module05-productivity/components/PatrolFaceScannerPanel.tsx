@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   AlertCircle,
   Camera,
@@ -29,6 +29,13 @@ interface PatrolFaceScannerPanelProps {
   onScanComplete?: (enrollment: PatrolScanEnrollment) => void
 }
 
+const FACE_SCAN_RING_MASK: CSSProperties = {
+  WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+  WebkitMaskComposite: 'xor',
+  mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+  maskComposite: 'exclude',
+}
+
 function FaceScanOvalFrame({
   progress,
   holdProgress,
@@ -54,48 +61,57 @@ function FaceScanOvalFrame({
       ? '#38bdf8'
       : faceDetected
         ? '#38bdf8'
-        : 'rgba(56,189,248,0.55)'
-  const ringDegrees = mainProgress * 360
+        : '#38bdf8'
+  const ringDegrees = Math.max(mainProgress * 360, complete ? 360 : 8)
   const ringBackground = complete
-    ? 'linear-gradient(#4ade80, #22c55e)'
-    : `conic-gradient(from -90deg, ${accent} 0deg, ${accent} ${ringDegrees}deg, rgba(255,255,255,0.16) ${ringDegrees}deg, rgba(255,255,255,0.16) 360deg)`
+    ? 'linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #86efac 100%)'
+    : `conic-gradient(from -90deg, ${accent} 0deg, ${accent} ${ringDegrees}deg, rgba(255,255,255,0.22) ${ringDegrees}deg, rgba(255,255,255,0.22) 360deg)`
 
   return (
-    <div
-      className={cn(
-        'relative w-[46%] aspect-[3/4] shrink-0',
-        complete && 'animate-pulse',
-      )}
-      style={complete ? { filter: 'drop-shadow(0 0 14px rgba(74,222,128,0.85))' } : undefined}
-    >
+    <div className="relative w-[50%] max-w-[280px] aspect-[3/4] shrink-0">
+      {/* Vignette — tách khỏi vòng, không che ring */}
       <div
-        className="absolute inset-0 rounded-[999px] p-[5px] sm:p-1.5"
-        style={{ background: ringBackground }}
+        className="absolute inset-0 rounded-[999px] z-[1] pointer-events-none"
+        style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.48)' }}
+        aria-hidden
+      />
+      {/* Vòng tiến độ — trên cùng, mask chỉ giữ dải viền */}
+      <div
+        className={cn(
+          'absolute inset-0 rounded-[999px] z-[40] pointer-events-none',
+          complete && 'animate-pulse',
+        )}
+        style={{
+          ...FACE_SCAN_RING_MASK,
+          padding: '8px',
+          background: ringBackground,
+          filter: complete
+            ? 'drop-shadow(0 0 18px rgba(74,222,128,1)) drop-shadow(0 0 6px rgba(134,239,172,0.9))'
+            : 'drop-shadow(0 0 8px rgba(56,189,248,0.45))',
+        }}
         aria-hidden
       />
       {!complete && hold > 0.04 && (
         <div
-          className="absolute inset-[8%] rounded-[999px] pointer-events-none z-[3]"
+          className="absolute inset-[12%] rounded-[999px] pointer-events-none z-[35]"
           style={{
-            boxShadow: `inset 0 0 0 4px rgba(134,239,172,${0.25 + hold * 0.75})`,
+            boxShadow: `inset 0 0 0 4px rgba(134,239,172,${0.35 + hold * 0.65})`,
           }}
           aria-hidden
         />
       )}
       <div
         className={cn(
-          'absolute inset-[5px] sm:inset-1.5 rounded-[999px] z-[2]',
-          'shadow-[0_0_0_9999px_rgba(0,0,0,0.42)]',
-          'border-2 transition-colors duration-300',
+          'absolute inset-[8px] rounded-[999px] z-[20] pointer-events-none border-2',
           complete
-            ? 'border-green-300/90'
+            ? 'border-green-400/35'
             : poseMatched
-              ? 'border-green-400/75'
-              : faceDetected
-                ? 'border-sky-400/55'
-                : 'border-white/20',
+              ? 'border-green-400/50'
+              : 'border-white/25',
         )}
-      >
+        aria-hidden
+      />
+      <div className="absolute inset-0 z-[50] flex items-center justify-center pointer-events-none">
         {children}
       </div>
     </div>
