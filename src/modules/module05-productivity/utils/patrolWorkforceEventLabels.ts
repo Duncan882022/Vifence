@@ -241,17 +241,11 @@ export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const objectId = event.objectId?.trim() ?? ''
   if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId
 
-  const sgc = resolvePatrolEventSgcKey(event)
-  if (sgc) return sgc
+  const track = event.trackWorkerId?.trim() ?? ''
+  if (isPatrolPersId(track) || isPatrolObjectId(track)) return track
 
-  const key = patrolEventMasterEntityKey(event)
-  if (key.startsWith('EV:')) {
-    const track = event.trackWorkerId?.trim()
-    if (track && isPatrolSgcWorkerId(track)) return track.toUpperCase()
-    if (objectId && isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
-    return objectId || track || event.id
-  }
-  return key
+  // Không fallback sgc/gallery — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
+  return objectId || track || event.id
 }
 
 /** Gộp list — giữ snapshot mới nhất theo master key. */

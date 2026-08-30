@@ -95,22 +95,56 @@ export function getPatrolManualIdentityForSgc(sgcKey: string): PatrolManualIdent
   return hasDirectAlias ? identity : null
 }
 
+function hasDirectPatrolManualAlias(identity: PatrolManualIdentity, key: string): boolean {
+  const norm = normalizePatrolIdentityKey(key).toLowerCase()
+  if (!norm) return false
+  return identity.objectKeys.some(
+    alias => normalizePatrolIdentityKey(alias).toLowerCase() === norm,
+  )
+}
+
+function getPatrolManualIdentityForDirectAlias(key: string): PatrolManualIdentity | null {
+  const trimmed = normalizePatrolIdentityKey(key)
+  if (!trimmed) return null
+  const manual = getPatrolManualIdentity(trimmed)
+  if (!manual) return null
+  return hasDirectPatrolManualAlias(manual, trimmed) ? manual : null
+}
+
 export function getPatrolManualIdentityForPatrolEvent(event: {
   id: string
   objectId?: string | null
   trackWorkerId?: string | null
 }): PatrolManualIdentity | null {
-  const track = event.trackWorkerId?.trim() ?? ''
-  if (track && /^sgc-/i.test(track)) {
-    const bound = getPatrolManualIdentityForSgc(track)
-    if (bound) return bound
+  const dayPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
+  if (dayPers) return getPatrolManualIdentityForDirectAlias(dayPers)
+
+  const dayObj = event.id.match(/^obj:(.+)$/i)?.[1]?.trim()
+  if (dayObj) {
+    const direct = getPatrolManualIdentityForDirectAlias(dayObj)
+    if (direct) return direct
+    const track = event.trackWorkerId?.trim() ?? ''
+    if (track && /^sgc-/i.test(track)) {
+      return getPatrolManualIdentityForSgc(track)
+    }
     return null
   }
+
+  const track = event.trackWorkerId?.trim() ?? ''
+  if (track && /^sgc-/i.test(track)) {
+    return getPatrolManualIdentityForSgc(track)
+  }
+
   for (const key of [event.objectId?.trim(), track].filter(Boolean) as string[]) {
+    if (/^(pers-|obj-)/i.test(key)) {
+      const bound = getPatrolManualIdentityForDirectAlias(key)
+      if (bound) return bound
+      continue
+    }
     const manual = getPatrolManualIdentity(key)
     if (manual) return manual
   }
-  return getPatrolManualIdentity(event.id)
+  return null
 }
 
 export function isPatrolManuallyIdentified(objectKey: string): boolean {

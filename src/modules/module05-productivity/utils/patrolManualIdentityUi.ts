@@ -20,14 +20,28 @@ function findManualIdentityForEvent(event: PatrolEvent) {
   return getPatrolManualIdentityForPatrolEvent(event)
 }
 
+function resolvePatrolTechnicalObjectId(event: PatrolEvent): string {
+  const fromDayCard = event.id.match(/^(?:pers|obj):(.+)$/i)?.[1]?.trim()
+  if (fromDayCard) return fromDayCard
+  const objectId = event.objectId?.trim() ?? ''
+  if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId
+  return objectId
+}
+
 export function applyManualIdentityToPatrolEvent(event: PatrolEvent): PatrolEvent {
   const manual = findManualIdentityForEvent(event)
   if (!manual) return event
   const unitSuffix = manual.unitName ? ` · ${manual.unitName}` : ''
+  const technicalObjectId = resolvePatrolTechnicalObjectId(event)
+  const preserveTechnicalId = Boolean(
+    event.id.match(/^(?:pers|obj):/i)
+    || isPatrolPersId(technicalObjectId)
+    || isPatrolObjectId(technicalObjectId),
+  )
   return {
     ...event,
-    objectId: manual.workerId,
-    trackWorkerId: undefined,
+    objectId: preserveTechnicalId ? technicalObjectId : manual.workerId,
+    trackWorkerId: isPatrolSgcWorkerId(event.trackWorkerId) ? event.trackWorkerId : undefined,
     objectLabel: `${manual.workerName}${unitSuffix}`,
     violationLabel: event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
       ? manual.workerName

@@ -248,7 +248,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       setAppearancesLoading(false)
     })
     return () => { cancelled = true }
-  }, [event?.id, identityTick, viewDate])
+  }, [event, identityTick, viewDate])
 
   const summary = useMemo(() => {
     if (!event) return null
