@@ -277,6 +277,56 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         self.assertTrue(session.identity_resolved)
         self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
 
+    def test_upgrade_anonymous_pers_to_identified_profile(self) -> None:
+        """sgc pers-* tạm → gallery khớp Duncan — gộp một thẻ, giữ hồ sơ identified."""
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.identity_pipeline import process_identity
+        from app.patrol.aggregator.session_store import get_or_create
+        from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
+
+        ts = 3_000.0
+        duncan = identity.create_person(origin="self_enroll", now=ts)
+        identity.identify(
+            duncan,
+            full_name="Duncan",
+            employee_code="SGC-6688",
+            contractor="SGC",
+            identified_by="test",
+            now=ts,
+        )
+        stray = identity.create_person(origin="sgc", now=ts)
+        daystore.touch_person_event(stray, camera_id="HC-01", now=ts, face_eligible=True)
+
+        session = get_or_create("HC-01", "ptk-duncan", ts=ts)
+        session.subject_id = stray
+        session.identity_resolved = True
+        session.identity = PersonIdentity(
+            person_id=stray,
+            identity_type=IdentityType.ANONYMOUS,
+            confidence=0.85,
+        )
+
+        obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-duncan",
+            ts=ts + 2,
+            lifecycle_tier="identity",
+            lifecycle_worker_id="p-SGC-6688",
+            confidence=0.95,
+        )
+        with patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value=duncan,
+        ):
+            process_identity(session, obs)
+
+        self.assertEqual(session.subject_id, duncan)
+        cards = daystore.list_person_events(db.today_vn(ts))
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["pers_id"], duncan)
+        self.assertEqual(cards[0]["status"], identity.STATUS_IDENTIFIED)
+        self.assertEqual(identity.resolve_alias(stray), duncan)
+
 
 class AggregatorContinuousPresenceTest(unittest.TestCase):
     def setUp(self) -> None:

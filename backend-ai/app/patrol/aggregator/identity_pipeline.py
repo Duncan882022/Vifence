@@ -154,6 +154,64 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
             return
 
 
+def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) -> None:
+    """pers-* tạm (sgc) → hồ sơ gallery/identified đã có — gộp thẻ ngày."""
+    current = (session.subject_id or "").strip()
+    if not current.startswith("pers-"):
+        return
+    wid = (obs.lifecycle_worker_id or "").strip()
+    if not wid:
+        return
+
+    from ...patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
+    from ...person_identity_registry import is_sgc_worker_id
+
+    tier = (obs.lifecycle_tier or "").strip() or None
+    lookup_id = wid
+    if is_sgc_worker_id(wid) and not is_patrol_gallery_id(wid):
+        gallery = resolve_patrol_gallery_id_for_worker(wid)
+        if not gallery:
+            return
+        lookup_id = gallery
+        tier = tier or "identity"
+
+    canonical = _ensure_pers_for_worker(lookup_id, tier=tier, now=obs.ts)
+    if not canonical or canonical == current:
+        return
+
+    keep_row = identity.get_person(canonical)
+    drop_row = identity.get_person(current)
+    if keep_row is None:
+        return
+
+    def _rank(row: dict | None) -> int:
+        if row is None:
+            return 0
+        return 2 if row.get("status") == identity.STATUS_IDENTIFIED else 1
+
+    if _rank(keep_row) < _rank(drop_row):
+        return
+
+    identity.merge_persons(canonical, current, now=obs.ts)
+    session.subject_id = identity.resolve_alias(canonical)
+    session.identity = PersonIdentity(
+        person_id=session.subject_id,
+        identity_type=(
+            IdentityType.KNOWN
+            if keep_row.get("status") == identity.STATUS_IDENTIFIED
+            else IdentityType.ANONYMOUS
+        ),
+        confidence=max(session.identity.confidence, obs.confidence),
+    )
+    session.dirty = True
+    logger.info(
+        "aggregator upgrade pers %s -> %s track %s",
+        current,
+        session.subject_id,
+        session.track_id,
+    )
+
+
 def process_identity(session: TrackSession, obs: ObservationInput) -> str | None:
     """Cập nhật session; trả pers-* / obj-* subject_id nếu có."""
     if obs.density_only:
@@ -161,6 +219,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
     if session.identity_resolved and session.subject_id:
         _maybe_promote_object_subject(session, obs)
+        _maybe_upgrade_pers_subject(session, obs)
         if (
             obs.face_eligible
             and obs.face_embedding is not None
@@ -179,19 +238,6 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
         return session.subject_id
 
     _note_best_frame(session, obs)
-
-    if obs.lifecycle_worker_id and not session.identity_resolved:
-        session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
-        pers_id = _ensure_pers_for_worker(
-            obs.lifecycle_worker_id,
-            tier=obs.lifecycle_tier,
-            now=obs.ts,
-        )
-        if pers_id:
-            _assign_pers_subject(session, pers_id, now=obs.ts)
-        else:
-            session.dirty = True
-        session.identity_resolved = True
 
     if not session.identity_resolved:
         picked = _pick_search_embedding(session)
@@ -220,7 +266,21 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
             except Exception:  # noqa: BLE001
                 logger.exception("aggregator observe_face failed")
 
+    if obs.lifecycle_worker_id and not session.identity_resolved:
+        session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
+        pers_id = _ensure_pers_for_worker(
+            obs.lifecycle_worker_id,
+            tier=obs.lifecycle_tier,
+            now=obs.ts,
+        )
+        if pers_id:
+            _assign_pers_subject(session, pers_id, now=obs.ts)
+        else:
+            session.dirty = True
+        session.identity_resolved = True
+
     _maybe_promote_object_subject(session, obs)
+    _maybe_upgrade_pers_subject(session, obs)
     return session.subject_id
 
 
