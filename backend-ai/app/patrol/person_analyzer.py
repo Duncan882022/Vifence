@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 
+from ..detectors.person_detector import PersonDetector
 from ..schemas import PpeDetection
 
 from ..patrol.camera_scope import is_patrol_flycam, is_patrol_helmet_bodycam
@@ -16,14 +17,25 @@ logger = logging.getLogger("patrol.person_analyzer")
 from ..ppe_analyzer import (
     PPE_LABELS,
     PPE_SCENARIO,
+    _PERSON_CONF,
     _PERSON_CONF_BODYCAM,
     _PERSON_CONF_FLYCAM,
     _PersonPpe,
     _dedupe_person_boxes,
     _filter_persons,
-    _get_person_detector,
     _plausible_flycam_aerial,
 )
+
+_person_detector: PersonDetector | None = None
+
+
+def _get_person_detector() -> PersonDetector:
+    """YOLO person — singleton riêng Module 05, không phụ thuộc state ppe_analyzer."""
+    global _person_detector
+    if _person_detector is None:
+        _person_detector = PersonDetector(conf_threshold=_PERSON_CONF)
+        _person_detector.load()
+    return _person_detector
 
 def _is_helmet_bodycam(camera_id: str) -> bool:
     return is_patrol_helmet_bodycam(camera_id)
@@ -73,7 +85,7 @@ def assign_patrol_track_ids(
 
     shift = (0.0, 0.0)
     if frame is not None:
-        from .patrol.egomotion import estimate_shift
+        from .egomotion import estimate_shift
 
         shift = estimate_shift(camera_id, frame)
 
@@ -201,7 +213,7 @@ def _assign_patrol_person_identity(
         else:
             worker_name = ""
         if worker_id and not worker_name:
-            from .patrol_entity import resolve_patrol_worker_display_name
+            from ..patrol_entity import resolve_patrol_worker_display_name
 
             worker_name = resolve_patrol_worker_display_name(worker_id, "")
 
@@ -307,7 +319,7 @@ def _assign_patrol_person_display_only(
         person_det.worker_name = cached.worker_name
         person_det.tier = cached.tier
     else:
-        from .patrol_entity import resolve_patrol_worker_display_name
+        from ..patrol_entity import resolve_patrol_worker_display_name
         from ..person_identity_registry import (
             borrow_cross_camera_patrol_worker,
             peek_patrol_track_identity,

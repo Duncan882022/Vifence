@@ -59,6 +59,7 @@ _HELMET_MODEL_MIN_CONF = 0.55
 _SHOE_MODEL_MIN_CONF = 0.52
 _MODEL_MIN_CONF = 0.62
 
+_person_detector: PersonDetector | None = None
 
 
 def _get_person_detector() -> PersonDetector:
