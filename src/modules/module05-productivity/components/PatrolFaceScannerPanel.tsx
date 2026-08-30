@@ -52,7 +52,7 @@ function FaceScanProgressRing({
       ? '#38bdf8'
       : poseMatched
         ? '#4ade80'
-        : 'rgba(56,189,248,0.35)'
+        : 'rgba(56,189,248,0.45)'
 
   return (
     <svg
@@ -61,7 +61,7 @@ function FaceScanProgressRing({
       preserveAspectRatio="xMidYMid meet"
       aria-hidden
     >
-      <ellipse cx="50" cy="50" rx="21" ry="28" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
+      <ellipse cx="50" cy="50" rx="21" ry="28" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
       <ellipse
         cx="50"
         cy="50"
@@ -69,23 +69,27 @@ function FaceScanProgressRing({
         ry="28"
         fill="none"
         stroke={ringColor}
-        strokeWidth="2"
+        strokeWidth={complete ? 3 : 2.5}
         strokeLinecap="round"
         pathLength={100}
         strokeDasharray="100"
         strokeDashoffset={stepDash}
         transform="rotate(-90 50 50)"
-        style={{ transition: 'stroke-dashoffset 0.35s ease' }}
+        className={complete ? 'animate-pulse' : undefined}
+        style={{
+          transition: complete ? 'stroke 0.4s ease' : 'stroke-dashoffset 0.25s ease, stroke 0.3s ease',
+          filter: complete ? 'drop-shadow(0 0 10px rgba(74,222,128,0.85))' : undefined,
+        }}
       />
-      {poseMatched && !complete && holdClamped > 0 && (
+      {!complete && poseMatched && holdClamped > 0.02 && (
         <ellipse
           cx="50"
           cy="50"
           rx="18"
           ry="24"
           fill="none"
-          stroke="#4ade80"
-          strokeWidth="2.5"
+          stroke="#86efac"
+          strokeWidth="2"
           strokeLinecap="round"
           pathLength={100}
           strokeDasharray="100"
@@ -93,7 +97,7 @@ function FaceScanProgressRing({
           transform="rotate(-90 50 50)"
           style={{
             transition: 'stroke-dashoffset 0.12s linear',
-            filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.7))',
+            filter: 'drop-shadow(0 0 5px rgba(134,239,172,0.65))',
           }}
         />
       )}
@@ -119,8 +123,8 @@ export function PatrolFaceScannerPanel({
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [manualCapturing, setManualCapturing] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
 
   const handleEnrollment = useCallback((next: PatrolScanEnrollment) => {
     setEnrollment(next)
@@ -202,15 +206,13 @@ export function PatrolFaceScannerPanel({
       setPanelError('Không quét được khung hình.')
       return
     }
-    setManualCapturing(true)
+    setManualOpen(false)
     setPanelError(null)
     try {
       const result = await submitScan(imageB64, autoScan.activeSlot)
       handleEnrollment(result.enrollment)
     } catch (err) {
       setPanelError(err instanceof Error ? err.message : 'Lưu vector thất bại.')
-    } finally {
-      setManualCapturing(false)
     }
   }
 
@@ -229,7 +231,14 @@ export function PatrolFaceScannerPanel({
   )
 
   const showError = panelError ?? autoScan.error
-  const busy = autoScan.capturing || manualCapturing
+  const busy = autoScan.capturing
+  const scanModeLabel = complete
+    ? 'Hoàn thành'
+    : autoScan.scanMode === 'fallback'
+      ? 'Tự quét (giữ yên)'
+      : autoScan.modelStatus === 'loading'
+        ? 'Đang tải AI…'
+        : 'Tự quét'
 
   return (
     <div className="space-y-5">
@@ -295,17 +304,23 @@ export function PatrolFaceScannerPanel({
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
             <div
               className={cn(
-                'w-[42%] aspect-[3/4] rounded-[999px] transition-colors duration-300',
+                'w-[42%] aspect-[3/4] rounded-[999px] transition-colors duration-300 relative',
                 'border-2 shadow-[0_0_0_9999px_rgba(0,0,0,0.38)]',
                 complete
-                  ? 'border-green-400/80'
+                  ? 'border-green-400/90'
                   : autoScan.poseMatched
                     ? 'border-green-400/70'
                     : autoScan.faceDetected
                       ? 'border-sky-400/50'
                       : 'border-sky-400/35',
               )}
-            />
+            >
+              {complete && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <CheckCircle className="w-12 h-12 sm:w-14 sm:h-14 text-green-400 drop-shadow-[0_0_12px_rgba(74,222,128,0.9)]" />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="absolute inset-x-0 bottom-0 p-4 pt-12 bg-gradient-to-t from-black/90 via-black/55 to-transparent pointer-events-none">
@@ -324,12 +339,8 @@ export function PatrolFaceScannerPanel({
 
           <div className="absolute left-3 top-3 flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/55 border border-white/10 text-[10px]">
             <Camera className="w-3 h-3 text-sky-400" />
-            <span className={cameraReady ? 'text-green-400' : 'text-amber-400'}>
-              {cameraReady
-                ? autoScan.modelStatus === 'loading'
-                  ? 'Đang tải AI…'
-                  : 'Tự quét'
-                : 'Đang mở camera…'}
+            <span className={complete ? 'text-green-400' : cameraReady ? 'text-sky-300' : 'text-amber-400'}>
+              {cameraReady ? scanModeLabel : 'Đang mở camera…'}
             </span>
           </div>
 
@@ -357,8 +368,8 @@ export function PatrolFaceScannerPanel({
             </div>
             <div className="h-1.5 rounded-full bg-[#1e2433] overflow-hidden">
               <div
-                className={cn('h-full transition-all', complete ? 'bg-green-400' : 'bg-sky-400')}
-                style={{ width: `${Math.round((capturedCount / (enrollment?.faces_required ?? 3)) * 100)}%` }}
+                className={cn('h-full transition-all duration-300', complete ? 'bg-green-400' : 'bg-sky-400')}
+                style={{ width: `${Math.round(autoScan.ringProgress * 100)}%` }}
               />
             </div>
             <div className="space-y-2">
@@ -391,21 +402,38 @@ export function PatrolFaceScannerPanel({
 
           <div className="rounded-xl border border-[#1e2433] bg-[#0b0f1a] p-4 space-y-3">
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Góc đang quét: <span className="text-foreground font-semibold">{poses.find(p => p.slot === autoScan.activeSlot)?.label}</span>.
-              Giữ mặt trong khung oval, ánh sáng đều, không che khuôn mặt — giống quét eKYC.
+              {complete
+                ? 'Đủ 3 góc — vòng tròn xanh hoàn tất. Không cần bấm chụp.'
+                : (
+                  <>
+                    Góc đang quét:{' '}
+                    <span className="text-foreground font-semibold">
+                      {poses.find(p => p.slot === autoScan.activeSlot)?.label}
+                    </span>
+                    . Đưa mặt vào khung oval và giữ yên — hệ thống tự chụp (eKYC).
+                  </>
+                )}
             </p>
-            <button
-              type="button"
-              onClick={() => void handleManualCapture()}
-              disabled={busy || !cameraReady || backendOnline === false || complete}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold bg-sky-500 text-white hover:bg-sky-500/90 transition-all disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanFace className="w-4 h-4" />}
-              {complete ? 'Đã đủ 3 góc' : `Quét ${poses.find(p => p.slot === autoScan.activeSlot)?.label ?? 'góc này'}`}
-            </button>
-            <p className="text-[9px] text-muted-foreground/80 text-center">
-              Hệ thống tự quét khi giữ yên. Nếu không tự quét, bấm nút trên.
-            </p>
+            {!complete && (
+              <button
+                type="button"
+                onClick={() => setManualOpen(v => !v)}
+                className="text-[10px] text-muted-foreground/90 underline underline-offset-2 hover:text-foreground"
+              >
+                {manualOpen ? 'Ẩn quét thủ công' : 'Không tự quét được? Bấm quét thủ công'}
+              </button>
+            )}
+            {!complete && manualOpen && (
+              <button
+                type="button"
+                onClick={() => void handleManualCapture()}
+                disabled={busy || !cameraReady || backendOnline === false}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold border border-sky-400/30 text-sky-300 hover:bg-sky-400/10 transition-all disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanFace className="w-4 h-4" />}
+                Quét thủ công — {poses.find(p => p.slot === autoScan.activeSlot)?.label ?? 'góc này'}
+              </button>
+            )}
           </div>
         </div>
       </div>
