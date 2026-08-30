@@ -357,6 +357,59 @@ class PatrolSinkTests(unittest.TestCase):
         self.assertEqual(again, pers)
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
 
+    def test_gallery_match_promotes_day_event_to_identified(self) -> None:
+        """Gallery p-DUNCAN → thẻ sự kiện tab Định danh, không còn Người."""
+        from unittest.mock import patch
+
+        bindings = {
+            "version": 1,
+            "by_gallery_worker": {
+                "p-DUNCAN": {
+                    "gallery_worker_id": "p-DUNCAN",
+                    "worker_name": "Duncan",
+                    "employee_code": "DUNCAN",
+                    "contractor_name": "SGC",
+                    "aliases": ["p-DUNCAN"],
+                },
+            },
+            "alias_to_gallery": {"p-DUNCAN": "p-DUNCAN"},
+        }
+        t0 = 1_000.0
+        with patch("app.patrol_identity_store._load", return_value=bindings):
+            sink.record_observation(
+                camera_id="HC-01",
+                track_id="ptk0010:person",
+                person_bbox=[40.0, 50.0, 160.0, 400.0],
+                face_embedding=_vec(10),
+                face_quality=0.9,
+                face_eligible=True,
+                now=t0,
+                lifecycle_tier="identity",
+                lifecycle_worker_id="p-DUNCAN",
+                worker_name="Duncan",
+            )
+            pers = sink.record_observation(
+                camera_id="HC-01",
+                track_id="ptk0010:person",
+                person_bbox=[40.0, 50.0, 160.0, 400.0],
+                face_embedding=_vec(10),
+                face_quality=0.9,
+                face_eligible=True,
+                now=t0 + _FACE_CONFIRM,
+                lifecycle_tier="identity",
+                lifecycle_worker_id="p-DUNCAN",
+                worker_name="Duncan",
+            )
+        self.assertTrue(str(pers).startswith("pers-"))
+        person = identity.get_person(str(pers))
+        self.assertIsNotNone(person)
+        assert person is not None
+        self.assertEqual(person["status"], identity.STATUS_IDENTIFIED)
+        self.assertEqual(person["full_name"], "Duncan")
+        cards = daystore.list_person_events(db.today_vn(t0))
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["status"], identity.STATUS_IDENTIFIED)
+
 
 if __name__ == "__main__":
     unittest.main()

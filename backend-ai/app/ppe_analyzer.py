@@ -263,6 +263,7 @@ def _assign_patrol_person_identity(
             person_bbox=person_bbox,
             lifecycle_tier=resolved.tier,
             lifecycle_worker_id=resolved.worker_id,
+            worker_name=resolved.worker_name,
         )
     except Exception:  # noqa: BLE001
         # Kho tuần tra hỏng không được kéo sập luồng live.
@@ -380,6 +381,7 @@ def _assign_patrol_person_display_only(
             person_bbox=[float(v) for v in person_box] if person_box is not None else None,
             lifecycle_tier=person_det.tier,
             lifecycle_worker_id=person_det.worker_id,
+            worker_name=person_det.worker_name,
         )
     except Exception:  # noqa: BLE001
         logger.exception("[patrol] Không touch sink cho track display-only")

@@ -457,6 +457,52 @@ def _resolve_observation_gps(camera_id: str) -> tuple[float, float]:
     return resolve_patrol_observation_gps(camera_id)
 
 
+def _apply_gallery_identity_to_pers(
+    pers_id: str,
+    lifecycle_worker_id: str | None,
+    worker_name: str | None = None,
+    *,
+    lifecycle_tier: str | None = None,
+    now: float | None = None,
+) -> None:
+    """Gallery match (p-DUNCAN, …) → SQLite persons.status = identified."""
+    from ..patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
+
+    wid = (lifecycle_worker_id or "").strip()
+    gallery = wid if is_patrol_gallery_id(wid) else resolve_patrol_gallery_id_for_worker(wid)
+    if not gallery:
+        return
+
+    pid = identity.resolve_alias(pers_id)
+    person = identity.get_person(pid)
+    if person is None or person.get("status") == identity.STATUS_IDENTIFIED:
+        return
+
+    try:
+        from ..patrol_identity_store import lookup_patrol_identity
+
+        row = lookup_patrol_identity(gallery) or {}
+    except Exception:
+        row = {}
+
+    full_name = (worker_name or row.get("worker_name") or gallery).strip()
+    employee_code = str(row.get("employee_code") or "").strip()
+    if not employee_code and gallery.lower().startswith("p-"):
+        employee_code = gallery[2:].strip()
+    if not employee_code:
+        employee_code = gallery
+    contractor = str(row.get("contractor_name") or "").strip()
+
+    identity.identify(
+        pid,
+        full_name=full_name,
+        employee_code=employee_code,
+        contractor=contractor,
+        identified_by="gallery_match",
+        now=now,
+    )
+
+
 def _bind_sgc_to_person(sgc_id: str, pers_id: str) -> None:
     sgc = (sgc_id or "").strip().lower()
     pid = identity.resolve_alias((pers_id or "").strip())
@@ -541,6 +587,7 @@ def _commit_lifecycle_person_event(
     face_eligible: bool = False,
     lifecycle_tier: str | None = None,
     lifecycle_worker_id: str | None = None,
+    worker_name: str | None = None,
 ) -> str:
     pid = identity.resolve_alias(pers_id)
     with _lock:
@@ -548,6 +595,13 @@ def _commit_lifecycle_person_event(
         _track_to_person[key] = pid
     if obj_id:
         daystore.promote_object(obj_id, pid, now=anchor_ts)
+    _apply_gallery_identity_to_pers(
+        pid,
+        lifecycle_worker_id,
+        worker_name=worker_name,
+        lifecycle_tier=lifecycle_tier,
+        now=ts,
+    )
     path: str | None = None
     shot_score = 0.0
     if face_eligible and frame is not None and person_bbox is not None:
@@ -592,6 +646,7 @@ def record_observation(
     density_only: bool = False,
     lifecycle_tier: str | None = None,
     lifecycle_worker_id: str | None = None,
+    worker_name: str | None = None,
 ) -> str | None:
     """Ghi một lần quan sát. Trả `pers-*` nếu đã nhận ra (mặt hoặc lifecycle ROI).
 
@@ -637,6 +692,13 @@ def record_observation(
         seen_since: float | None = None,
         with_snapshot: bool = True,
     ) -> None:
+        _apply_gallery_identity_to_pers(
+            pers_id,
+            lifecycle_worker_id,
+            worker_name,
+            lifecycle_tier=lifecycle_tier,
+            now=ts,
+        )
         path, shot_score = (None, 0.0)
         if with_snapshot and face_eligible:
             from ..patrol_entity import patrol_tier_label
@@ -738,6 +800,7 @@ def record_observation(
             face_eligible=face_eligible,
             lifecycle_tier=lifecycle_tier,
             lifecycle_worker_id=lifecycle_worker_id,
+            worker_name=worker_name,
         )
 
     # Track mới, chưa mặt: ưu tiên nhận lại Người vừa mất track cùng chỗ
