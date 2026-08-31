@@ -473,7 +473,9 @@ def identify(
     """
     ts = now or time.time()
     pid = resolve_alias(pers_id)
-    code = employee_code.strip()
+    code = (employee_code or "").strip()
+    contractor_val = (contractor or "").strip()
+    identified_by_val = (identified_by or "").strip()
 
     existing = db.query_one(
         "SELECT * FROM persons WHERE employee_code = ? AND pers_id <> ?", (code, pid)
@@ -501,9 +503,9 @@ def identify(
                 iden_code,
                 full_name.strip(),
                 code or None,
-                contractor.strip(),
+                contractor_val or None,
                 ts,
-                identified_by.strip(),
+                identified_by_val,
                 pid,
             ),
         )

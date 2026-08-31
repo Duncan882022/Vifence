@@ -371,6 +371,7 @@ EOF
 REMOTE_ENV
 
 echo "→ systemd service…"
+ssh_cmd "test -f ${REMOTE_DIR}/data/patrol.db && sqlite3 ${REMOTE_DIR}/data/patrol.db 'PRAGMA wal_checkpoint(TRUNCATE);' || true"
 ssh_cmd "bash ${INFRA_REMOTE}/install-systemd.sh && systemctl restart vifence-backend"
 
 echo "→ Nginx reverse proxy (infra/contabo — API + MediaMTX, FE = GitHub Pages)…"
