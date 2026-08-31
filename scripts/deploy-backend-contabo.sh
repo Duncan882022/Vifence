@@ -153,6 +153,9 @@ ssh_cmd "chmod +x ${INFRA_REMOTE}/render-nginx.sh ${INFRA_REMOTE}/install-system
 
 echo "→ Rsync backend-ai…"
 ssh_cmd "mkdir -p ${REMOTE_DIR}"
+echo "→ Dừng backend + checkpoint SQLite trước rsync (tránh corrupt patrol.db)…"
+ssh_cmd "systemctl stop vifence-backend || true"
+ssh_cmd "test -f ${REMOTE_DIR}/data/patrol.db && sqlite3 ${REMOTE_DIR}/data/patrol.db 'PRAGMA wal_checkpoint(TRUNCATE);' || true"
 rsync_cmd
 
 echo "→ Rsync model inference (crane_machinery + safety_mesh_cover + worker_face YOLO)…"
@@ -371,8 +374,7 @@ EOF
 REMOTE_ENV
 
 echo "→ systemd service…"
-ssh_cmd "test -f ${REMOTE_DIR}/data/patrol.db && sqlite3 ${REMOTE_DIR}/data/patrol.db 'PRAGMA wal_checkpoint(TRUNCATE);' || true"
-ssh_cmd "bash ${INFRA_REMOTE}/install-systemd.sh && systemctl restart vifence-backend"
+ssh_cmd "bash ${INFRA_REMOTE}/install-systemd.sh && systemctl start vifence-backend"
 
 echo "→ Nginx reverse proxy (infra/contabo — API + MediaMTX, FE = GitHub Pages)…"
 render_remote_nginx
