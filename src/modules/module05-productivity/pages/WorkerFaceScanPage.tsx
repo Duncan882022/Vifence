@@ -12,6 +12,7 @@ import {
   createPatrolEnrollSession,
   createPatrolWorkerProfile,
   lookupPatrolWorkerByCode,
+  type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 
@@ -28,6 +29,7 @@ export function WorkerFaceScanPage() {
   const [selfStep, setSelfStep] = useState<SelfStep>('scan')
   const [adminStep, setAdminStep] = useState<AdminStep>(presetCode ? 'lookup' : 'lookup')
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionEnrollment, setSessionEnrollment] = useState<PatrolScanEnrollment | null>(null)
   const [sessionBooting, setSessionBooting] = useState(!adminMode)
 
   const [codeInput, setCodeInput] = useState(presetCode)
@@ -56,8 +58,11 @@ export function WorkerFaceScanPage() {
       setSessionBooting(true)
       setError(null)
       try {
-        const { sessionId: sid } = await createPatrolEnrollSession()
-        if (!cancelled) setSessionId(sid)
+        const { sessionId: sid, enrollment } = await createPatrolEnrollSession()
+        if (!cancelled) {
+          setSessionId(sid)
+          setSessionEnrollment(enrollment)
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Không tạo được phiên quét.')
@@ -156,7 +161,7 @@ export function WorkerFaceScanPage() {
             </div>
             <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Bước 1: Đưa mặt vào khung, làm theo hướng dẫn (hệ thống tự quét 3 góc) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
+              Bước 1: Đưa mặt vào khung, làm theo hướng dẫn (tự quét 4 góc TRÊN·TRÁI·PHẢI·DƯỚI) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
             </p>
           </div>
 
@@ -186,6 +191,7 @@ export function WorkerFaceScanPage() {
                 <div className="p-3 sm:p-4">
                   <PatrolFaceScannerPanel
                     sessionId={sessionId}
+                    initialEnrollment={sessionEnrollment ?? undefined}
                     onEnrollmentChange={e => setScanComplete(e.complete)}
                     onScanComplete={() => {
                       setScanComplete(true)

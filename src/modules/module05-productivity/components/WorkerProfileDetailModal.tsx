@@ -174,7 +174,7 @@ export function WorkerProfileDetailModal({
                       'mt-0.5 font-semibold tabular-nums',
                       person.face_enrollment_complete ? 'text-green-400' : 'text-violet-400',
                     )}>
-                      {person.face_count ?? 0}/3
+                      {person.face_count ?? 0}/4
                       {person.face_enrollment_complete && ' ✓'}
                     </p>
                   </div>

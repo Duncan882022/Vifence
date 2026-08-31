@@ -56,7 +56,7 @@ function FaceBadge({ count, complete }: { count: number; complete?: boolean }) {
           : 'bg-amber-400/10 text-amber-400 border-amber-400/30',
     )}>
       <ScanFace className="w-2.5 h-2.5" />
-      {count}/3
+      {count}/4
     </span>
   )
 }
@@ -201,7 +201,7 @@ export function WorkerProfileManagementPage() {
           {[
             { label: 'Hồ sơ', value: stats.total, icon: Users, color: 'text-sky-400' },
             { label: 'Có vector', value: stats.withFace, icon: ScanFace, color: 'text-violet-400' },
-            { label: 'Đủ 3 góc', value: stats.complete, icon: UserCheck, color: 'text-green-400' },
+            { label: 'Đủ 4 góc', value: stats.complete, icon: UserCheck, color: 'text-green-400' },
           ].map(k => {
             const Icon = k.icon
             return (

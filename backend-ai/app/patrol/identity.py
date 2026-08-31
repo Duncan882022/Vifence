@@ -106,8 +106,10 @@ def list_persons(status: str | None = None) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-SCAN_FACES_REQUIRED = 3
-SCAN_POSE_LABELS = ("Chính diện", "Nghiêng trái", "Nghiêng phải")
+from ..worker_identity.gallery import ENROLLMENT_POSE_COUNT, POSE_LABELS
+
+SCAN_FACES_REQUIRED = ENROLLMENT_POSE_COUNT
+SCAN_POSE_LABELS = POSE_LABELS
 
 
 def find_by_employee_code(employee_code: str) -> dict[str, Any] | None:
@@ -139,7 +141,7 @@ def _hr_scan_face_count(pers_id: str) -> int:
 
 
 def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
-    """Thống kê quét mặt — nguồn sự thật là JPG gallery (3 góc), không phải COUNT person_faces."""
+    """Thống kê quét mặt — nguồn sự thật là JPG gallery (4 góc), không phải COUNT person_faces."""
     from ..patrol_identity_store import patrol_gallery_worker_id
     from ..worker_identity.gallery import get_enrollment_status
 
@@ -171,7 +173,7 @@ def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
 
 
 def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, Any]]]:
-    """Tiến độ quét mặt UI (x/3) — gallery JPG khi đã định danh, không đếm vector patrol."""
+    """Tiến độ quét mặt UI — gallery JPG khi đã định danh, không đếm vector patrol."""
     pid = resolve_alias(pers_id)
     person = get_person(pid)
     if person and person.get("status") == STATUS_IDENTIFIED:
@@ -203,7 +205,7 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
 
 
 def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
-    """Trạng thái quét mặt cho trang enroll — 3 góc tối thiểu."""
+    """Trạng thái quét mặt cho trang enroll — 4 góc tối thiểu."""
     pid = resolve_alias(pers_id)
     person = get_person(pid)
     captured, complete, poses = scan_enrollment_progress(pid)

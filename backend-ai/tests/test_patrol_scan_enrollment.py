@@ -1,4 +1,4 @@
-"""Quét mặt UI — x/3 phải đếm gallery selfie, không gom vector patrol."""
+"""Quét mặt UI — x/4 phải đếm gallery selfie, không gom vector patrol."""
 
 from __future__ import annotations
 
@@ -58,18 +58,19 @@ class ScanEnrollmentProgressTest(unittest.TestCase):
         with patch(
             "app.worker_identity.gallery.get_enrollment_status",
             return_value={
-                "poses_captured": 3,
+                "poses_captured": 4,
                 "complete": True,
                 "poses": [
                     {"slot": 1, "label": "Chính diện", "captured": True},
-                    {"slot": 2, "label": "Nghiêng trái", "captured": True},
-                    {"slot": 3, "label": "Nghiêng phải", "captured": True},
+                    {"slot": 2, "label": "Quay trái", "captured": True},
+                    {"slot": 3, "label": "Quay phải", "captured": True},
+                    {"slot": 4, "label": "Cúi xuống", "captured": True},
                 ],
             },
         ):
             enrollment = identity.get_scan_enrollment(pers_id)
 
-        self.assertEqual(enrollment["faces_captured"], 3)
+        self.assertEqual(enrollment["faces_captured"], 4)
         self.assertTrue(enrollment["complete"])
         self.assertEqual(enrollment["face_records"], 7)
 

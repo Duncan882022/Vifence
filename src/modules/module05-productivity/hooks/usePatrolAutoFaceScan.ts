@@ -3,6 +3,7 @@ import { captureFaceEnrollmentFrameBase64 } from '../utils/patrolFaceCapture'
 import type { PatrolScanEnrollment } from '../services/patrolWorkerProfile.service'
 import {
   analyzeFaceScanFrame,
+  faceLooseInFrame,
   faceReadyForSlot,
   getPatrolFaceScanModelStatus,
   guidanceForHint,
@@ -12,14 +13,15 @@ import {
 } from '../utils/patrolFaceScanGuide'
 import {
   computeFaceScanRingProgress,
+  FACE_SCAN_AI_HOLD_MS,
+  FACE_SCAN_HOLD_CAPTURE_MS,
   FACE_SCAN_MODEL_LOAD_TIMEOUT_MS,
 } from '../utils/patrolFaceScanProgress'
 
 const TICK_MS = 200
-const STABLE_FRAMES = 3
 const CAPTURE_COOLDOWN_MS = 1400
-/** Khi AI local không tải được — vẫn tự quét sau giữ yên (eKYC fallback). */
-const FALLBACK_HOLD_MS = 1800
+/** BlazeFace báo ready nhưng không detect — chuyển hold-capture sau ~1.2s. */
+const NO_FACE_FORCE_HOLD_TICKS = 6
 
 export type PatrolFaceScanSubmit = (
   imageB64: string,
@@ -29,14 +31,12 @@ export type PatrolFaceScanSubmit = (
 export interface PatrolAutoFaceScanState {
   activeSlot: ScanPoseSlot
   guidance: string
-  /** Vòng ngoài — góc đã xong + phần giữ yên góc hiện tại (0–1). */
   ringProgress: number
   holdProgress: number
   faceDetected: boolean
   poseMatched: boolean
   capturing: boolean
   modelStatus: 'loading' | 'ready' | 'unavailable'
-  /** AI local hay fallback giữ yên khi model không tải. */
   scanMode: 'ai' | 'fallback'
   error: string | null
   successFlash: string | null
@@ -48,6 +48,7 @@ export function usePatrolAutoFaceScan(
   enrollment: PatrolScanEnrollment | null,
   enabled: boolean,
   onEnrollmentChange: (enrollment: PatrolScanEnrollment) => void,
+  captureMode: 'auto' | 'manual' = 'auto',
 ): PatrolAutoFaceScanState & { retry: () => void } {
   const [activeSlot, setActiveSlot] = useState<ScanPoseSlot>(1)
   const [guidance, setGuidance] = useState(guidanceForSlot(1))
@@ -56,20 +57,20 @@ export function usePatrolAutoFaceScan(
   const [holdProgress, setHoldProgress] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
-  const [scanMode, setScanMode] = useState<'ai' | 'fallback'>('ai')
+  const [scanMode, setScanMode] = useState<'ai' | 'fallback'>('fallback')
   const [error, setError] = useState<string | null>(null)
   const [successFlash, setSuccessFlash] = useState<string | null>(null)
 
-  const stableCountRef = useRef(0)
   const holdStartRef = useRef(0)
   const lastCaptureAtRef = useRef(0)
   const capturingRef = useRef(false)
   const analyzingRef = useRef(false)
-  const slotEnteredAtRef = useRef(Date.now())
   const modelLoadStartedRef = useRef(Date.now())
+  const noFaceStreakRef = useRef(0)
+  const forceHoldCaptureRef = useRef(true)
 
   const capturedCount = enrollment?.faces_captured ?? 0
-  const required = enrollment?.faces_required ?? 3
+  const required = enrollment?.faces_required ?? 4
   const complete = enrollment?.complete ?? false
   const holdProgressClamped = Math.max(0, Math.min(1, holdProgress))
   const ringProgress = computeFaceScanRingProgress(
@@ -90,17 +91,21 @@ export function usePatrolAutoFaceScan(
     return raw
   }, [])
 
+  const resetHold = useCallback(() => {
+    holdStartRef.current = 0
+    setHoldProgress(0)
+  }, [])
+
   useEffect(() => {
     if (!enrollment) return
     const pending = enrollment.poses.find(p => !p.captured)
     const slot = (pending?.slot ?? 1) as ScanPoseSlot
     setActiveSlot(slot)
-    setGuidance(enrollment.complete ? 'Hoàn thành! Đủ 3 góc mặt rồi.' : guidanceForSlot(slot))
-    slotEnteredAtRef.current = Date.now()
-    stableCountRef.current = 0
-    holdStartRef.current = 0
-    setHoldProgress(0)
-  }, [enrollment?.pers_id, enrollment?.session_id, enrollment?.faces_captured, enrollment?.complete])
+    setGuidance(enrollment.complete ? `Hoàn thành! Đủ ${required} góc mặt.` : guidanceForSlot(slot))
+    noFaceStreakRef.current = 0
+    forceHoldCaptureRef.current = true
+    resetHold()
+  }, [enrollment?.pers_id, enrollment?.session_id, enrollment?.faces_captured, enrollment?.complete, resetHold])
 
   const runCapture = useCallback(async (slot: ScanPoseSlot) => {
     const video = videoRef.current
@@ -122,9 +127,9 @@ export function usePatrolAutoFaceScan(
       const result = await submitScan(imageB64, slot)
       onEnrollmentChange(result.enrollment)
       lastCaptureAtRef.current = Date.now()
-      stableCountRef.current = 0
-      holdStartRef.current = 0
-      setHoldProgress(0)
+      resetHold()
+      noFaceStreakRef.current = 0
+      forceHoldCaptureRef.current = true
 
       if (result.message === 'duplicate_angle') {
         setSuccessFlash('Góc này giống ảnh trước — quay thêm một chút.')
@@ -133,14 +138,27 @@ export function usePatrolAutoFaceScan(
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lưu vector thất bại.')
-      stableCountRef.current = 0
-      holdStartRef.current = 0
-      setHoldProgress(0)
+      resetHold()
     } finally {
       capturingRef.current = false
       setCapturing(false)
     }
-  }, [complete, onEnrollmentChange, submitScan, videoRef])
+  }, [complete, onEnrollmentChange, resetHold, submitScan, videoRef])
+
+  const runHoldCapture = useCallback(async (slot: ScanPoseSlot, now: number, holdMs: number) => {
+    if (holdStartRef.current === 0) holdStartRef.current = now
+    const elapsed = now - holdStartRef.current
+    const progress = Math.min(1, elapsed / holdMs)
+    setHoldProgress(progress)
+    setGuidance(
+      progress >= 1
+        ? 'Đang quét…'
+        : 'Giữ yên trong khung tròn — hệ thống tự chụp',
+    )
+    if (elapsed >= holdMs) {
+      await runCapture(slot)
+    }
+  }, [runCapture])
 
   useEffect(() => {
     modelLoadStartedRef.current = Date.now()
@@ -148,17 +166,12 @@ export function usePatrolAutoFaceScan(
     const poll = window.setInterval(() => {
       const s = resolveModelStatus()
       setModelStatus(prev => (prev === s ? prev : s))
-      setScanMode(prev => {
-        if (s === 'ready') return 'ai'
-        if (s === 'unavailable') return 'fallback'
-        return prev
-      })
     }, 400)
     return () => window.clearInterval(poll)
   }, [resolveModelStatus])
 
   useEffect(() => {
-    if (!enabled || complete || !enrollment) return
+    if (!enabled || complete || !enrollment || captureMode !== 'auto') return
 
     let cancelled = false
 
@@ -177,72 +190,56 @@ export function usePatrolAutoFaceScan(
         try {
           const status = resolveModelStatus()
           setModelStatus(status)
-          if (status === 'ready') setScanMode('ai')
-          else if (status === 'unavailable') setScanMode('fallback')
 
-          let matched = false
-          let hasFace = false
+          const modelTimedOut = now - modelLoadStartedRef.current >= FACE_SCAN_MODEL_LOAD_TIMEOUT_MS
+          const useHoldCapture = forceHoldCaptureRef.current
+            || status === 'unavailable'
+            || status === 'loading' && modelTimedOut
 
-          if (status === 'ready') {
-            const metrics = await analyzeFaceScanFrame(video)
-            if (cancelled) return
-
-            hasFace = metrics.hasFace
-            matched = faceReadyForSlot(metrics, slot)
-            setFaceDetected(hasFace)
-            setPoseMatched(matched)
-
-            if (capturingRef.current) {
-              setGuidance('Đang lưu… giữ yên')
-              return
-            }
-
-            if (!hasFace || !matched) {
-              stableCountRef.current = 0
-              holdStartRef.current = 0
-              setHoldProgress(0)
-              setGuidance(
-                hasFace
-                  ? guidanceForHint(metrics.poseHint, slot)
-                  : guidanceForSlot(slot),
-              )
-              return
-            }
-          } else if (status === 'unavailable') {
-            // Fallback eKYC: giữ yên trong khung ~1.8s rồi tự quét (backend xác thực mặt)
-            hasFace = true
-            matched = now - slotEnteredAtRef.current > 600
+          if (useHoldCapture) {
+            setScanMode('fallback')
             setFaceDetected(true)
-            setPoseMatched(matched)
-            if (!matched) {
-              setGuidance('Đưa mặt vào khung tròn — giữ yên')
-              return
-            }
-          } else {
-            setGuidance('Đang tải AI nhận diện…')
+            setPoseMatched(true)
+            await runHoldCapture(slot, now, FACE_SCAN_HOLD_CAPTURE_MS)
             return
           }
 
-          if (holdStartRef.current === 0) holdStartRef.current = now
+          setScanMode('ai')
+          const metrics = await analyzeFaceScanFrame(video)
+          if (cancelled) return
 
-          if (status === 'ready') {
-            stableCountRef.current += 1
-            const progress = Math.min(1, stableCountRef.current / STABLE_FRAMES)
-            setHoldProgress(progress)
-            setGuidance(progress >= 1 ? 'Đang quét…' : `Giữ yên… ${Math.ceil((1 - progress) * STABLE_FRAMES * TICK_MS / 1000) || 1}s`)
+          const hasFace = metrics.hasFace
+          const loose = faceLooseInFrame(metrics)
+          const matched = faceReadyForSlot(metrics, slot) || (slot === 1 && loose)
 
-            if (stableCountRef.current >= STABLE_FRAMES) {
-              await runCapture(slot)
+          setFaceDetected(hasFace)
+          setPoseMatched(matched)
+
+          if (!hasFace) {
+            noFaceStreakRef.current += 1
+            if (noFaceStreakRef.current >= NO_FACE_FORCE_HOLD_TICKS) {
+              forceHoldCaptureRef.current = true
+              setScanMode('fallback')
+              setFaceDetected(true)
+              setPoseMatched(true)
+              await runHoldCapture(slot, now, FACE_SCAN_HOLD_CAPTURE_MS)
+              return
             }
-          } else {
-            const elapsed = now - holdStartRef.current
-            const progress = Math.min(1, elapsed / FALLBACK_HOLD_MS)
-            setHoldProgress(progress)
-            setGuidance(progress >= 1 ? 'Đang quét…' : 'Giữ yên trong khung…')
-            if (elapsed >= FALLBACK_HOLD_MS) {
-              await runCapture(slot)
-            }
+            resetHold()
+            setGuidance(guidanceForSlot(slot))
+            return
           }
+
+          noFaceStreakRef.current = 0
+          forceHoldCaptureRef.current = false
+
+          if (!matched) {
+            resetHold()
+            setGuidance(guidanceForHint(metrics.poseHint, slot))
+            return
+          }
+
+          await runHoldCapture(slot, now, FACE_SCAN_AI_HOLD_MS)
         } finally {
           analyzingRef.current = false
         }
@@ -254,14 +251,25 @@ export function usePatrolAutoFaceScan(
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [activeSlot, complete, enabled, enrollment, resolveModelStatus, runCapture, videoRef])
+  }, [
+    activeSlot,
+    complete,
+    enabled,
+    enrollment,
+    resetHold,
+    resolveModelStatus,
+    runCapture,
+    captureMode,
+    runHoldCapture,
+    videoRef,
+  ])
 
   const retry = useCallback(() => {
     setError(null)
-    stableCountRef.current = 0
-    holdStartRef.current = 0
-    setHoldProgress(0)
-  }, [])
+    noFaceStreakRef.current = 0
+    forceHoldCaptureRef.current = true
+    resetHold()
+  }, [resetHold])
 
   return {
     activeSlot,

@@ -1,9 +1,15 @@
 /**
- * Hướng dẫn quét mặt tự động — kiểu eKYC: đưa mặt vào khung, giữ yên, hệ thống tự quét.
- * Phân tích trên khung đã mirror để khớp preview camera trước (scale-x-[-1]).
+ * Hướng dẫn quét mặt eKYC — 4 góc: chính diện, trái, phải, cúi xuống.
  */
 
-export type ScanPoseSlot = 1 | 2 | 3
+import type { ScanPoseSlot } from './patrolFaceScanPoses'
+
+export type { ScanPoseSlot } from './patrolFaceScanPoses'
+export {
+  FACE_SCAN_POSE_COUNT,
+  FACE_SCAN_POSE_LABELS,
+  guidanceForSlot,
+} from './patrolFaceScanPoses'
 
 export type HeadPoseHint =
   | 'no_face'
@@ -13,32 +19,31 @@ export type HeadPoseHint =
   | 'front'
   | 'left'
   | 'right'
+  | 'up'
+  | 'down'
 
 export type FaceScanModelStatus = 'loading' | 'ready' | 'unavailable'
 
 export interface FaceScanMetrics {
   hasFace: boolean
   poseHint: HeadPoseHint
-  /** 0–1 — mức lấp đầy khung oval */
   fillScore: number
-  /** Tâm mặt chuẩn hoá [0,1] — đã mirror khớp preview */
   centerX: number
   centerY: number
 }
 
-const FACE_SCORE_MIN = 0.35
+const FACE_SCORE_MIN = 0.32
 const DETECT_WIDTH = 480
-
-/** Ngưỡng lệch ngang — nới rộng cho dễ quét. */
-const YAW_FRONT = 0.14
-const YAW_SIDE = 0.06
-
-const FILL_MIN = 0.14
-const FILL_MAX = 0.68
-const CENTER_X_MIN = 0.22
-const CENTER_X_MAX = 0.78
-const CENTER_Y_MIN = 0.2
-const CENTER_Y_MAX = 0.8
+const YAW_FRONT = 0.12
+const YAW_SIDE = 0.05
+const FILL_MIN = 0.12
+const FILL_MAX = 0.72
+const CENTER_X_MIN = 0.2
+const CENTER_X_MAX = 0.8
+const CENTER_Y_MIN = 0.18
+const CENTER_Y_MAX = 0.82
+const PITCH_UP_Y = 0.38
+const PITCH_DOWN_Y = 0.58
 
 type BlazeFaceModel = {
   estimateFaces: (
@@ -88,16 +93,14 @@ function getSampleCtx(): CanvasRenderingContext2D {
   return sampleCtx
 }
 
-/** Vẽ frame mirror ngang — khớp preview camera trước trên màn hình. */
 function drawVideoSampleMirrored(video: HTMLVideoElement): HTMLCanvasElement | null {
   const vw = video.videoWidth
   const vh = video.videoHeight
   if (!vw || !vh || video.readyState < 2) return null
   const ctx = getSampleCtx()
   const canvas = ctx.canvas
-  const aspect = vw / vh
   canvas.width = DETECT_WIDTH
-  canvas.height = Math.round(DETECT_WIDTH / aspect)
+  canvas.height = Math.round(DETECT_WIDTH / (vw / vh))
   ctx.save()
   ctx.translate(canvas.width, 0)
   ctx.scale(-1, 1)
@@ -106,56 +109,46 @@ function drawVideoSampleMirrored(video: HTMLVideoElement): HTMLCanvasElement | n
   return canvas
 }
 
-function classifyHeadPose(centerX: number): Exclude<HeadPoseHint, 'no_face' | 'too_far' | 'too_close' | 'off_center'> {
-  const dx = centerX - 0.5
+function faceInOval(cx: number, cy: number, fw: number): boolean {
+  if (cx < CENTER_X_MIN || cx > CENTER_X_MAX) return false
+  if (cy < CENTER_Y_MIN || cy > CENTER_Y_MAX) return false
+  return fw >= FILL_MIN * 0.7
+}
+
+function classifyHeadPose(cx: number, cy: number): HeadPoseHint {
+  if (cy <= PITCH_UP_Y && Math.abs(cx - 0.5) < 0.18) return 'up'
+  if (cy >= PITCH_DOWN_Y && Math.abs(cx - 0.5) < 0.18) return 'down'
+  const dx = cx - 0.5
   if (dx <= -YAW_FRONT) return 'left'
   if (dx >= YAW_FRONT) return 'right'
   if (Math.abs(dx) <= YAW_SIDE) return 'front'
   return dx < 0 ? 'left' : 'right'
 }
 
-/** Kiểm tra mặt nằm trong vùng oval (chuẩn hoá 0–1). */
-function faceInOval(cx: number, cy: number, fw: number): boolean {
-  if (cx < CENTER_X_MIN || cx > CENTER_X_MAX) return false
-  if (cy < CENTER_Y_MIN || cy > CENTER_Y_MAX) return false
-  return fw >= FILL_MIN * 0.75
+export function faceLooseInFrame(metrics: FaceScanMetrics): boolean {
+  if (!metrics.hasFace) return false
+  if (metrics.poseHint === 'too_far' || metrics.poseHint === 'too_close') return false
+  return faceInOval(metrics.centerX, metrics.centerY, metrics.fillScore * FILL_MAX)
 }
 
-export function poseHintMatchesSlot(hint: HeadPoseHint, slot: ScanPoseSlot): boolean {
-  return faceReadyForSlot(
-    { hasFace: true, poseHint: hint, fillScore: 1, centerX: 0.5, centerY: 0.5 },
-    slot,
-  )
-}
-
-/**
- * eKYC-style: bước 1 chỉ cần mặt trong khung; bước 2/3 nới lỏng góc quay.
- */
 export function faceReadyForSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
   if (!metrics.hasFace) return false
   if (metrics.poseHint === 'too_far' || metrics.poseHint === 'too_close') return false
-
   const inOval = faceInOval(metrics.centerX, metrics.centerY, metrics.fillScore * FILL_MAX)
+  if (!inOval && slot !== 1) return false
 
-  if (slot === 1) {
-    return inOval && (
-      metrics.poseHint === 'front'
-      || metrics.poseHint === 'off_center'
-      || Math.abs(metrics.centerX - 0.5) < 0.2
-    )
+  switch (slot) {
+    case 1:
+      return faceLooseInFrame(metrics)
+    case 2:
+      return metrics.poseHint === 'left' || metrics.centerX < 0.44
+    case 3:
+      return metrics.poseHint === 'right' || metrics.centerX > 0.56
+    case 4:
+      return metrics.poseHint === 'down' || metrics.centerY > PITCH_DOWN_Y
+    default:
+      return false
   }
-
-  if (slot === 2) {
-    return inOval && (
-      metrics.poseHint === 'left'
-      || metrics.centerX < 0.46
-    )
-  }
-
-  return inOval && (
-    metrics.poseHint === 'right'
-    || metrics.centerX > 0.54
-  )
 }
 
 export function guidanceForHint(hint: HeadPoseHint, slot: ScanPoseSlot): string {
@@ -163,26 +156,27 @@ export function guidanceForHint(hint: HeadPoseHint, slot: ScanPoseSlot): string 
     case 'no_face':
       return 'Đưa mặt vào giữa khung tròn'
     case 'too_far':
-      return 'Tiến lại gần camera một chút'
+      return 'Tiến lại gần — mặt hơi xa camera'
     case 'too_close':
-      return 'Lùi xa camera một chút'
+      return 'Lùi xa một chút — mặt quá gần'
     case 'off_center':
-      return 'Căn mặt vào giữa khung tròn'
+      return 'Căn mặt vào giữa khung — hơi lệch'
     case 'front':
-      return slot === 1 ? 'Giữ yên — đang quét…' : slot === 2 ? 'Từ từ quay sang TRÁI' : 'Từ từ quay sang PHẢI'
+      if (slot === 1) return 'Giữ yên — đang quét chính diện…'
+      if (slot === 2) return 'Từ từ quay mặt sang TRÁI'
+      if (slot === 3) return 'Từ từ quay mặt sang PHẢI'
+      return 'Từ từ cúi đầu xuống (DƯỚI)'
     case 'left':
-      return slot === 2 ? 'Giữ yên — đang quét…' : 'Quay chậm sang TRÁI'
+      return slot === 2 ? 'Giữ yên — đang quét góc TRÁI…' : 'Quay chậm sang TRÁI'
     case 'right':
-      return slot === 3 ? 'Giữ yên — đang quét…' : 'Quay chậm sang PHẢI'
+      return slot === 3 ? 'Giữ yên — đang quét góc PHẢI…' : 'Quay chậm sang PHẢI'
+    case 'up':
+      return 'Hơi ngửa đầu lên (TRÊN) — rồi về chính diện'
+    case 'down':
+      return slot === 4 ? 'Giữ yên — đang quét góc DƯỚI…' : 'Từ từ cúi đầu xuống (DƯỚI)'
     default:
       return 'Đưa mặt vào giữa khung tròn'
   }
-}
-
-export function guidanceForSlot(slot: ScanPoseSlot): string {
-  if (slot === 1) return 'Bước 1: Nhìn thẳng vào camera'
-  if (slot === 2) return 'Bước 2: Quay chậm sang TRÁI'
-  return 'Bước 3: Quay chậm sang PHẢI'
 }
 
 export async function analyzeFaceScanFrame(video: HTMLVideoElement): Promise<FaceScanMetrics> {
@@ -240,7 +234,7 @@ export async function analyzeFaceScanFrame(video: HTMLVideoElement): Promise<Fac
     return { hasFace: true, poseHint: 'off_center', fillScore, centerX: cx, centerY: cy }
   }
 
-  const poseHint = classifyHeadPose(cx)
+  const poseHint = classifyHeadPose(cx, cy)
   return { hasFace: true, poseHint, fillScore, centerX: cx, centerY: cy }
 }
 
@@ -250,4 +244,11 @@ export function getPatrolFaceScanModelStatus(): FaceScanModelStatus {
 
 export function preloadPatrolFaceScanModels(): void {
   void loadBlazeFace()
+}
+
+export function poseHintMatchesSlot(hint: HeadPoseHint, slot: ScanPoseSlot): boolean {
+  return faceReadyForSlot(
+    { hasFace: true, poseHint: hint, fillScore: 1, centerX: 0.5, centerY: 0.5 },
+    slot,
+  )
 }

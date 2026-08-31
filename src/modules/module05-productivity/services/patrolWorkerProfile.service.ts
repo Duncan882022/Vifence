@@ -304,7 +304,7 @@ export async function completePatrolEnrollSession(
     const err = data.error === 'missing_fields'
       ? 'Nhập đủ họ tên và mã nhân viên.'
       : data.error === 'incomplete_enrollment'
-        ? 'Chưa đủ 3 góc mặt — quay lại bước quét.'
+        ? 'Chưa đủ 4 góc mặt — quay lại bước quét.'
         : data.error === 'session_not_found'
           ? 'Phiên quét đã hết hạn — tải lại trang.'
           : (data.error ?? 'Lưu hồ sơ thất bại.')
