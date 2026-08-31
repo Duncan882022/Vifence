@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, MapPin, Footprints, ScanFace, UserX, Maximize2,
+  Users, MapPin, Footprints, ScanFace, UserX,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -44,6 +44,7 @@ import {
   getPatrolPlaybackMinDate,
 } from './services/patrolPlayback.service'
 import { PatrolDensityHeatmap } from './components/PatrolDensityHeatmap'
+import { PatrolHeatmapSectionControls } from './components/PatrolHeatmapSectionControls'
 import { PatrolDevicePermissionGate } from './components/PatrolDevicePermissionGate'
 import { hasLegacyMobileHelmet, isHelmetWebrtcAvailable, legacyMobileHelmetIds } from './data/helmetIngest'
 import { PatrolEventsPanel } from './components/PatrolEventsPanel'
@@ -214,6 +215,7 @@ export function Module05Page() {
   const [tier1Open, setTier1Open] = useState(true)
   const [tier2Open, setTier2Open] = useState(true)
   const [heatmapExpanded, setHeatmapExpanded] = useState(false)
+  const [flymapActive, setFlymapActive] = useState(false)
   const [cameraMode, setCameraMode] = useState<CameraPanelMode>('live')
   const [selectedCamId, setSelectedCamId] = useState<string | undefined>('HC-02')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -260,6 +262,11 @@ export function Module05Page() {
       getPatrolCameraFramesLiveMap(),
     ),
     [visionCameras, liveMetrics.perCamera, framesLiveTick],
+  )
+
+  const patrolDroneCamera = useMemo(
+    () => patrolCamerasLive.find(cam => PATROL_DRONE_IDS.includes(cam.id as typeof PATROL_DRONE_IDS[number])),
+    [patrolCamerasLive],
   )
 
   useEffect(() => {
@@ -430,7 +437,7 @@ export function Module05Page() {
             !isCompactLayout && 'min-h-[min(36vh,400px)]',
           )}>
             <Panel
-              title="HEATMAP"
+              title={flymapActive ? 'FLYMAP' : 'HEATMAP'}
               noPadding
               className={cn(
                 'flex flex-col overflow-hidden shrink-0 flex-1 lg:flex-[3]',
@@ -439,15 +446,11 @@ export function Module05Page() {
                   : 'min-h-[min(32vh,340px)] h-[min(36vh,400px)]',
               )}
               headerRight={
-                <button
-                  type="button"
-                  onClick={() => setHeatmapExpanded(true)}
-                  className="p-1 rounded hover:bg-[#1a2235] text-muted-foreground hover:text-foreground transition-colors"
-                  title="Phóng to heatmap"
-                  aria-label="Phóng to heatmap"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                </button>
+                <PatrolHeatmapSectionControls
+                  flymapActive={flymapActive}
+                  onFlymapToggle={() => setFlymapActive(v => !v)}
+                  onExpand={() => setHeatmapExpanded(true)}
+                />
               }
             >
               <PatrolDensityHeatmap
@@ -460,6 +463,9 @@ export function Module05Page() {
                 helmetOnlineById={helmetOnlineById}
                 expanded={heatmapExpanded}
                 onCloseExpand={() => setHeatmapExpanded(false)}
+                showFlymap={flymapActive}
+                onFlymapToggle={() => setFlymapActive(v => !v)}
+                droneCamera={patrolDroneCamera}
               />
             </Panel>
 
