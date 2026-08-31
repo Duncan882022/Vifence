@@ -40,8 +40,9 @@ import {
 import {
   attachFaceScanStreamToVideo,
   faceScanCameraErrorMessage,
+  isFaceScanStreamLive,
   openFaceScanCameraStream,
-  shouldPromptFaceScanCameraOnTap,
+  stopFaceScanStream,
   type FaceScanCameraErrorCode,
 } from '../utils/patrolFaceScanCamera'
 
@@ -71,12 +72,13 @@ export function PatrolFaceScannerPanel({
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const cameraStartingRef = useRef(false)
 
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [enrollment, setEnrollment] = useState<PatrolScanEnrollment | null>(initialEnrollment ?? null)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraStarting, setCameraStarting] = useState(false)
-  const [cameraAwaitingTap, setCameraAwaitingTap] = useState(shouldPromptFaceScanCameraOnTap)
+  const [cameraAwaitingTap, setCameraAwaitingTap] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
@@ -91,6 +93,9 @@ export function PatrolFaceScannerPanel({
     onEnrollmentChange?.(next)
     if (next.complete) onScanComplete?.(next)
   }, [onEnrollmentChange, onScanComplete])
+
+  const handleEnrollmentRef = useRef(handleEnrollment)
+  handleEnrollmentRef.current = handleEnrollment
 
   const submitScan = useCallback(async (imageB64: string, slot: number) => {
     if (isSession) {
@@ -122,33 +127,51 @@ export function PatrolFaceScannerPanel({
       const status = isSession
         ? await fetchPatrolEnrollSession(sessionId!)
         : await fetchPatrolScanEnrollment(person!.pers_id)
-      handleEnrollment(status)
+      handleEnrollmentRef.current(status)
     } catch (err) {
       setBackendOnline(false)
       setPanelError(err instanceof Error ? err.message : 'Không tải được trạng thái quét.')
     } finally {
       setLoading(false)
     }
-  }, [subjectKey, isSession, sessionId, person, handleEnrollment])
+  }, [subjectKey, isSession, sessionId, person])
 
   const startCamera = useCallback(async () => {
+    if (cameraStartingRef.current) return
+
+    const video = videoRef.current
+    const existing = streamRef.current
+    if (isFaceScanStreamLive(existing) && video) {
+      await attachFaceScanStreamToVideo(video, existing!)
+      setCameraReady(true)
+      setCameraAwaitingTap(false)
+      setCameraError(null)
+      return
+    }
+
+    cameraStartingRef.current = true
     setCameraStarting(true)
     setCameraError(null)
     setCameraAwaitingTap(false)
+
     try {
-      streamRef.current?.getTracks().forEach(track => track.stop())
+      stopFaceScanStream(streamRef.current)
+      streamRef.current = null
+
       const stream = await openFaceScanCameraStream()
       streamRef.current = stream
-      const video = videoRef.current
-      if (!video) return
-      await attachFaceScanStreamToVideo(video, stream)
+      if (!videoRef.current) return
+      await attachFaceScanStreamToVideo(videoRef.current, stream)
       setCameraReady(true)
     } catch (err) {
+      stopFaceScanStream(streamRef.current)
+      streamRef.current = null
       setCameraReady(false)
       const code = (err as { code?: FaceScanCameraErrorCode }).code ?? 'failed'
       setCameraError(faceScanCameraErrorMessage(code))
       setCameraAwaitingTap(true)
     } finally {
+      cameraStartingRef.current = false
       setCameraStarting(false)
     }
   }, [])
@@ -159,17 +182,13 @@ export function PatrolFaceScannerPanel({
 
   useEffect(() => {
     void refreshStatus()
-  }, [refreshStatus, subjectKey])
+  }, [subjectKey])
 
   useEffect(() => {
-    if (shouldPromptFaceScanCameraOnTap()) {
-      return () => {
-        streamRef.current?.getTracks().forEach(track => track.stop())
-      }
-    }
     void startCamera()
     return () => {
-      streamRef.current?.getTracks().forEach(track => track.stop())
+      stopFaceScanStream(streamRef.current)
+      streamRef.current = null
     }
   }, [startCamera])
 
@@ -341,7 +360,7 @@ export function PatrolFaceScannerPanel({
           className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
         />
 
-        {(cameraAwaitingTap || cameraStarting) && !cameraReady && (
+        {(cameraAwaitingTap || (cameraStarting && !cameraReady)) && (
           <div className="absolute inset-0 z-[25] flex flex-col items-center justify-center gap-3 px-6 bg-black/55">
             <button
               type="button"
@@ -358,7 +377,7 @@ export function PatrolFaceScannerPanel({
             </button>
             {cameraAwaitingTap && !cameraStarting && (
               <p className="text-[11px] text-white/60 text-center max-w-[240px] leading-relaxed">
-                iPhone/Safari cần bạn bấm nút này để cấp quyền camera.
+                Safari cần bạn bấm nút này nếu chưa cấp quyền camera.
               </p>
             )}
           </div>
