@@ -3,6 +3,9 @@
  */
 
 import {
+  isHandheldDevice,
+} from '@/modules/module02-training/services/deviceCamera.service'
+import {
   faceScanPoseLabel,
   type ScanPoseSlot,
 } from './patrolFaceScanPoses'
@@ -35,8 +38,9 @@ export interface FaceScanMetrics {
   centerY: number
 }
 
-const FACE_SCORE_MIN = 0.32
-const DETECT_WIDTH = 480
+const FACE_SCORE_MIN = 0.28
+const DETECT_WIDTH_DESKTOP = 480
+const DETECT_WIDTH_MOBILE = 320
 const YAW_SIDE = 0.09
 const YAW_TURN = 0.10
 const YAW_TURN_NEAR = 0.07
@@ -72,8 +76,13 @@ async function loadBlazeFace(): Promise<BlazeFaceModel | null> {
   blazePromise = (async () => {
     try {
       const tf = await import('@tensorflow/tfjs')
-      if (tf.findBackend('webgl')) await tf.setBackend('webgl')
-      else await tf.setBackend('cpu')
+      if (isHandheldDevice()) {
+        await tf.setBackend('cpu')
+      } else if (tf.findBackend('webgl')) {
+        await tf.setBackend('webgl')
+      } else {
+        await tf.setBackend('cpu')
+      }
       await tf.ready()
       const blazeface = await import('@tensorflow-models/blazeface')
       const model = (await blazeface.load({ maxFaces: 1 })) as BlazeFaceModel
@@ -102,8 +111,8 @@ function drawVideoSampleMirrored(video: HTMLVideoElement): HTMLCanvasElement | n
   if (!vw || !vh || video.readyState < 2) return null
   const ctx = getSampleCtx()
   const canvas = ctx.canvas
-  canvas.width = DETECT_WIDTH
-  canvas.height = Math.round(DETECT_WIDTH / (vw / vh))
+  canvas.width = isHandheldDevice() ? DETECT_WIDTH_MOBILE : DETECT_WIDTH_DESKTOP
+  canvas.height = Math.round(canvas.width / (vw / vh))
   ctx.save()
   ctx.translate(canvas.width, 0)
   ctx.scale(-1, 1)
@@ -180,7 +189,8 @@ export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
   if (n < 12) return false
   const mean = sum / n
   const variance = sumSq / n - mean * mean
-  return variance > 160 && mean > 35 && mean < 230
+  const minVariance = isHandheldDevice() ? 55 : 160
+  return variance > minVariance && mean > 25 && mean < 245
 }
 
 export function basicFacePresentInVideo(video: HTMLVideoElement): boolean {

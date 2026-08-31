@@ -74,7 +74,15 @@ export function FaceScanProgressRing({
               y1={y1}
               x2={x2}
               y2={y2}
-              stroke={lit ? (complete ? '#4ade80' : '#ffffff') : 'rgba(255,255,255,0.22)'}
+              stroke={lit
+                ? (complete
+                  ? '#4ade80'
+                  : isActiveBand
+                    ? '#4ade80'
+                    : holdProgress > 0
+                      ? '#86efac'
+                      : '#ffffff')
+                : 'rgba(255,255,255,0.22)'}
               strokeWidth={isActiveBand ? TICK_W + 0.4 : TICK_W}
               strokeLinecap="round"
               style={{
