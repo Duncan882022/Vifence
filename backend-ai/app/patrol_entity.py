@@ -20,14 +20,21 @@ def is_patrol_gallery_id(worker_id: str | None) -> bool:
     wl = wid.lower()
     if wl.startswith(("pers-", "iden-")):
         return False
-    if wl.startswith("p-"):
-        return True
     try:
         from .patrol_identity_store import lookup_patrol_identity
 
-        return lookup_patrol_identity(wid) is not None
+        if lookup_patrol_identity(wid) is not None:
+            return True
     except Exception:
-        return False
+        pass
+    if wl.startswith("p-"):
+        try:
+            from .worker_identity.gallery import registry_rows
+
+            return any(str(r.get("worker_id") or "").strip() == wid for r in registry_rows())
+        except Exception:
+            return False
+    return False
 
 
 def _resolve_patrol_sgc_canonical(
@@ -197,6 +204,8 @@ def patrol_tier_label(worker_id: str | None) -> str:
         return "object"
     if wid.lower().startswith("iden-"):
         return "identity"
+    if wid.lower().startswith("p-"):
+        return "identity" if is_patrol_gallery_id(wid) else "person"
     if resolve_patrol_gallery_id_for_worker(wid) or is_patrol_gallery_id(wid):
         return "identity"
     if is_patrol_iden_id(wid):
@@ -272,6 +281,9 @@ def resolve_patrol_worker_display_name(
                         return name
         except Exception:
             pass
+
+        if wid.lower().startswith("p-") and not is_patrol_gallery_id(wid):
+            return "Người"
 
         if wid.lower().startswith("pers-"):
             try:

@@ -548,6 +548,40 @@ def bind_all_tracks_for_aliases(aliases: list[str], gallery_worker_id: str) -> i
     return bound
 
 
+def purge_gallery_worker_from_registry(
+    gallery_worker_id: str,
+    aliases: list[str] | None = None,
+) -> int:
+    """Gỡ gallery worker khỏi track map — hạ về sgc-* nếu có trong aliases."""
+    wid = (gallery_worker_id or "").strip()
+    if not wid:
+        return 0
+    alias_set = {wid, *(a.strip() for a in (aliases or []) if a and a.strip())}
+    sgc_fallback = next((a for a in alias_set if is_sgc_worker_id(a)), "")
+    changed = 0
+    with _lock:
+        state = _load()
+        tracks = state.setdefault("tracks", {})
+        meta = state.setdefault("track_meta", {})
+        for key, existing in list(tracks.items()):
+            ex = str(existing or "").strip()
+            if ex not in alias_set:
+                continue
+            replacement = sgc_fallback
+            tracks[key] = replacement
+            entry = meta.get(key)
+            if isinstance(entry, dict) and str(entry.get("worker_id") or "").strip() in alias_set:
+                entry["worker_id"] = replacement
+            changed += 1
+        for entry in meta.values():
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("worker_id") or "").strip() in alias_set:
+                entry["worker_id"] = sgc_fallback
+        _save(state)
+    return changed
+
+
 def bind_patrol_track_identity(
     camera_id: str,
     track_id: str,

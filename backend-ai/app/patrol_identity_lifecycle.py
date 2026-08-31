@@ -297,11 +297,45 @@ def observe(
                     state.pending_worker_id = ""
                     state.pending_hits = 0
         else:
-            # Quan sát thấp hơn tầng đang giữ (quay lưng, mất mặt một frame).
-            # Giữ nguyên — đây chính là điều kiện "chỉ tiến không lùi".
-            state.pending_tier = ""
-            state.pending_worker_id = ""
-            state.pending_hits = 0
+            # Quan sát thấp hơn tầng đang giữ — thường giữ nguyên (quay lưng).
+            # Ngoại lệ: hồ sơ/gallery vừa xóa → hạ khỏi Định danh về Người.
+            from .patrol_entity import is_patrol_gallery_id, is_sgc_worker_id
+
+            gallery_revoked = (
+                state.tier == TIER_IDENTITY
+                and state.worker_id
+                and not is_patrol_gallery_id(state.worker_id)
+            )
+            if gallery_revoked:
+                fallback_wid = wid if is_sgc_worker_id(wid) else ""
+                if not fallback_wid:
+                    for candidate in (state.worker_id, wid):
+                        if is_sgc_worker_id(candidate):
+                            fallback_wid = candidate
+                            break
+                from_tier = state.tier
+                state.tier = TIER_PERSON
+                if fallback_wid:
+                    state.worker_id = fallback_wid
+                state.worker_name = "Người"
+                state.tier_since = ts
+                state.tier_history[TIER_PERSON] = ts
+                state.pending_tier = ""
+                state.pending_worker_id = ""
+                state.pending_hits = 0
+                transition = TierTransition(
+                    camera_id=camera_id,
+                    track_id=track_id,
+                    from_tier=from_tier,
+                    to_tier=TIER_PERSON,
+                    worker_id=state.worker_id,
+                    worker_name=state.worker_name,
+                    at=ts,
+                )
+            else:
+                state.pending_tier = ""
+                state.pending_worker_id = ""
+                state.pending_hits = 0
 
         if state.tier == TIER_OBJECT and not state.worker_id and wid:
             # Mã lạ chưa xếp được tầng nhưng vẫn nên giữ để hiển thị nhất quán.
@@ -364,6 +398,38 @@ def peek(camera_id: str, track_id: str) -> TrackIdentity | None:
             tier_since=state.tier_since,
             first_seen=state.first_seen,
         )
+
+
+def revoke_gallery_worker(gallery_worker_id: str, aliases: list[str] | None = None) -> int:
+    """Hạ mọi track đang giữ gallery worker — gọi khi xóa hồ sơ nhân sự."""
+    from .patrol_entity import is_sgc_worker_id
+
+    wid = (gallery_worker_id or "").strip()
+    if not wid:
+        return 0
+    alias_set = {wid, *(a.strip() for a in (aliases or []) if a and a.strip())}
+    sgc_fallback = next((a for a in alias_set if is_sgc_worker_id(a)), "")
+    ts = time.time()
+    count = 0
+    with _lock:
+        for state in _states.values():
+            if state.worker_id not in alias_set:
+                continue
+            state.tier = TIER_PERSON
+            if sgc_fallback:
+                state.worker_id = sgc_fallback
+            elif state.worker_id in alias_set:
+                state.worker_id = ""
+            state.worker_name = "Người"
+            state.tier_since = ts
+            state.tier_history[TIER_PERSON] = ts
+            state.pending_tier = ""
+            state.pending_worker_id = ""
+            state.pending_hits = 0
+            count += 1
+        for alias in alias_set:
+            _worker_global.pop(alias, None)
+    return count
 
 
 def reset(camera_id: str | None = None) -> int:

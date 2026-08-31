@@ -573,12 +573,28 @@ def _purge_person_gallery_assets(person: dict[str, Any]) -> None:
     if not code:
         return
     try:
-        from ..patrol_identity_store import patrol_gallery_worker_id, unbind_patrol_identity
+        from ..patrol_identity_lifecycle import revoke_gallery_worker
+        from ..patrol_identity_store import (
+            lookup_patrol_identity,
+            patrol_gallery_worker_id,
+            unbind_patrol_identity,
+        )
+        from ..person_identity_registry import purge_gallery_worker_from_registry
         from .enroll_images import remove_gallery_worker_faces
         from ..worker_identity.gallery import remove_gallery_worker_registry
         from ..worker_identity.recognizer import reload_gallery
 
         wid = patrol_gallery_worker_id(code)
+        binding = lookup_patrol_identity(wid) or {}
+        aliases = [str(a).strip() for a in (binding.get("aliases") or []) if str(a).strip()]
+        if wid not in aliases:
+            aliases.append(wid)
+        pers_id = str(person.get("pers_id") or "").strip()
+        if pers_id and pers_id not in aliases:
+            aliases.append(pers_id)
+
+        purge_gallery_worker_from_registry(wid, aliases)
+        revoke_gallery_worker(wid, aliases)
         remove_gallery_worker_faces(wid)
         remove_gallery_worker_registry(wid)
         unbind_patrol_identity(wid)
