@@ -205,6 +205,20 @@ class PatrolApiTests(unittest.TestCase):
         self.assertEqual(daystore.list_person_events(date), [])
         self.assertIsNotNone(identity.get_person(str(profile["pers_id"])))
 
+    def test_public_health_and_enroll_session_without_auth(self) -> None:
+        settings.patrol_auth_disabled = False
+        health = self.client.get("/patrol/health").json()
+        self.assertTrue(health["ok"])
+
+        created = self.client.post("/patrol/enroll/session").json()
+        self.assertTrue(created["ok"])
+        session_id = created["session_id"]
+        self.assertTrue(session_id)
+
+        status = self.client.get(f"/patrol/enroll/{session_id}").json()
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["enrollment"]["faces_captured"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

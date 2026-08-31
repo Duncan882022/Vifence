@@ -10,12 +10,16 @@ import {
   preloadPatrolFaceScanModels,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanGuide'
+import {
+  computeFaceScanRingProgress,
+  FACE_SCAN_MODEL_LOAD_TIMEOUT_MS,
+} from '../utils/patrolFaceScanProgress'
 
 const TICK_MS = 200
-const STABLE_FRAMES = 4
-const CAPTURE_COOLDOWN_MS = 1800
+const STABLE_FRAMES = 3
+const CAPTURE_COOLDOWN_MS = 1400
 /** Khi AI local không tải được — vẫn tự quét sau giữ yên (eKYC fallback). */
-const FALLBACK_HOLD_MS = 2200
+const FALLBACK_HOLD_MS = 1800
 
 export type PatrolFaceScanSubmit = (
   imageB64: string,
@@ -25,12 +29,15 @@ export type PatrolFaceScanSubmit = (
 export interface PatrolAutoFaceScanState {
   activeSlot: ScanPoseSlot
   guidance: string
+  /** Vòng ngoài — góc đã xong + phần giữ yên góc hiện tại (0–1). */
   ringProgress: number
   holdProgress: number
   faceDetected: boolean
   poseMatched: boolean
   capturing: boolean
   modelStatus: 'loading' | 'ready' | 'unavailable'
+  /** AI local hay fallback giữ yên khi model không tải. */
+  scanMode: 'ai' | 'fallback'
   error: string | null
   successFlash: string | null
 }
@@ -49,6 +56,7 @@ export function usePatrolAutoFaceScan(
   const [holdProgress, setHoldProgress] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [scanMode, setScanMode] = useState<'ai' | 'fallback'>('ai')
   const [error, setError] = useState<string | null>(null)
   const [successFlash, setSuccessFlash] = useState<string | null>(null)
 
@@ -58,11 +66,29 @@ export function usePatrolAutoFaceScan(
   const capturingRef = useRef(false)
   const analyzingRef = useRef(false)
   const slotEnteredAtRef = useRef(Date.now())
+  const modelLoadStartedRef = useRef(Date.now())
 
   const capturedCount = enrollment?.faces_captured ?? 0
   const required = enrollment?.faces_required ?? 3
   const complete = enrollment?.complete ?? false
-  const ringProgress = complete ? 1 : capturedCount / required
+  const holdProgressClamped = Math.max(0, Math.min(1, holdProgress))
+  const ringProgress = computeFaceScanRingProgress(
+    capturedCount,
+    required,
+    holdProgressClamped,
+    complete,
+  )
+
+  const resolveModelStatus = useCallback((): 'loading' | 'ready' | 'unavailable' => {
+    const raw = getPatrolFaceScanModelStatus()
+    if (raw === 'loading') {
+      if (Date.now() - modelLoadStartedRef.current >= FACE_SCAN_MODEL_LOAD_TIMEOUT_MS) {
+        return 'unavailable'
+      }
+      return 'loading'
+    }
+    return raw
+  }, [])
 
   useEffect(() => {
     if (!enrollment) return
@@ -117,13 +143,19 @@ export function usePatrolAutoFaceScan(
   }, [complete, onEnrollmentChange, submitScan, videoRef])
 
   useEffect(() => {
+    modelLoadStartedRef.current = Date.now()
     preloadPatrolFaceScanModels()
     const poll = window.setInterval(() => {
-      const s = getPatrolFaceScanModelStatus()
+      const s = resolveModelStatus()
       setModelStatus(prev => (prev === s ? prev : s))
+      setScanMode(prev => {
+        if (s === 'ready') return 'ai'
+        if (s === 'unavailable') return 'fallback'
+        return prev
+      })
     }, 400)
     return () => window.clearInterval(poll)
-  }, [])
+  }, [resolveModelStatus])
 
   useEffect(() => {
     if (!enabled || complete || !enrollment) return
@@ -143,8 +175,10 @@ export function usePatrolAutoFaceScan(
         analyzingRef.current = true
 
         try {
-          const status = getPatrolFaceScanModelStatus()
+          const status = resolveModelStatus()
           setModelStatus(status)
+          if (status === 'ready') setScanMode('ai')
+          else if (status === 'unavailable') setScanMode('fallback')
 
           let matched = false
           let hasFace = false
@@ -175,9 +209,9 @@ export function usePatrolAutoFaceScan(
               return
             }
           } else if (status === 'unavailable') {
-            // Fallback eKYC: giữ yên trong khung ~2.2s rồi quét (backend xác thực mặt)
+            // Fallback eKYC: giữ yên trong khung ~1.8s rồi tự quét (backend xác thực mặt)
             hasFace = true
-            matched = now - slotEnteredAtRef.current > 800
+            matched = now - slotEnteredAtRef.current > 600
             setFaceDetected(true)
             setPoseMatched(matched)
             if (!matched) {
@@ -220,7 +254,7 @@ export function usePatrolAutoFaceScan(
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [activeSlot, complete, enabled, enrollment, runCapture, videoRef])
+  }, [activeSlot, complete, enabled, enrollment, resolveModelStatus, runCapture, videoRef])
 
   const retry = useCallback(() => {
     setError(null)
@@ -233,11 +267,12 @@ export function usePatrolAutoFaceScan(
     activeSlot,
     guidance,
     ringProgress,
-    holdProgress,
+    holdProgress: holdProgressClamped,
     faceDetected,
     poseMatched,
     capturing,
     modelStatus,
+    scanMode,
     error,
     successFlash,
     retry,

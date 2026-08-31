@@ -124,7 +124,10 @@ export async function fetchPatrol<T>(
 ): Promise<T | null> {
   const base = patrolBackendBase()
   if (!base) return null
-  await ensurePatrolAuth()
+  const publicPath = path === '/patrol/health' || path.startsWith('/patrol/enroll/')
+  if (!publicPath) {
+    await ensurePatrolAuth()
+  }
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> | undefined),
   }
