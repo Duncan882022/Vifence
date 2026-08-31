@@ -12,7 +12,6 @@ import {
   fetchPatrolWorkerProfilesForManagement,
   importPatrolWorkerProfiles,
   pingPatrolProfileBackend,
-  verifyPatrolDraftProfile,
   type PatrolImportRow,
   type PatrolImportResult,
   type PatrolWorkerPerson,

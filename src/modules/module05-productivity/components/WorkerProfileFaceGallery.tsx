@@ -5,6 +5,7 @@ import { cn } from '@/utils/cn'
 import {
   fetchPatrolScanEnrollment,
   type PatrolScanEnrollment,
+  type PatrolScanPose,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { fetchPatrolGalleryFaces } from '../services/patrolGalleryFaces.service'
@@ -27,7 +28,9 @@ function mergeProfileFacePoses(
   enrollment: PatrolScanEnrollment,
   galleryUrls: Map<number, string | null>,
 ): ProfileFacePose[] {
-  const base = enrollment.poses?.length ? enrollment.poses : defaultFaceScanPoses()
+  const base: PatrolScanPose[] = enrollment.poses?.length
+    ? enrollment.poses
+    : defaultFaceScanPoses().map(p => ({ ...p, url: null }))
   return base.map(pose => ({
     slot: pose.slot,
     label: pose.label,
