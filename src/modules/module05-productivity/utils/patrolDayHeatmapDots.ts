@@ -93,6 +93,45 @@ function tierEligibleStandard(tier: PatrolDayPresence['tier']): boolean {
   return tier === 'person' || tier === 'identity'
 }
 
+function isObjectTierPresence(presence: PatrolDayPresence): boolean {
+  return presence.tier === 'object'
+}
+
+/** Đối tượng (obj-*) — không lọc live/count như người; đồng bộ KPI unassigned. */
+function scopePresencesForHeatmap(
+  presences: PatrolDayPresence[],
+  opts: {
+    liveOnly?: boolean
+    countedOnly?: boolean
+    includeUnassigned?: boolean
+    now: number
+  },
+): PatrolDayPresence[] {
+  let scoped = presences
+
+  if (opts.liveOnly) {
+    if (opts.includeUnassigned) {
+      scoped = presences.filter(
+        p => isObjectTierPresence(p) || filterRecentPresences([p], opts.now).length > 0,
+      )
+    } else {
+      scoped = filterRecentPresences(presences, opts.now)
+    }
+  }
+
+  scoped = collapsePresencesBySession(scoped)
+
+  if (opts.countedOnly) {
+    scoped = scoped.filter(p => p.counted === true)
+  }
+
+  if (!opts.includeUnassigned) {
+    scoped = scoped.filter(p => tierEligibleStandard(p.tier))
+  }
+
+  return scoped
+}
+
 /** Đồng bộ màu chấm với tab sự kiện — gồm định danh thủ công/gallery. */
 function resolvePresenceHeatmapTier(
   presence: PatrolDayPresence,
@@ -219,17 +258,12 @@ export function buildPatrolPresenceHeatmapDots(
   },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
-  let scoped = opts?.liveOnly ? filterRecentPresences(presences, now) : presences
-
-  scoped = collapsePresencesBySession(scoped)
-
-  if (opts?.countedOnly) {
-    scoped = scoped.filter(p => p.counted === true)
-  }
-
-  if (!opts?.includeUnassigned) {
-    scoped = scoped.filter(p => tierEligibleStandard(p.tier))
-  }
+  const scoped = scopePresencesForHeatmap(presences, {
+    liveOnly: opts?.liveOnly,
+    countedOnly: opts?.countedOnly,
+    includeUnassigned: opts?.includeUnassigned,
+    now,
+  })
 
   const byEntity = new Map<string, DetectionDot>()
 
