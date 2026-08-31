@@ -26,7 +26,6 @@ import {
   getPatrolMapDeviceBadgeNum,
 } from '../data/patrolSiteMap'
 import {
-  DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
   DETECTION_DOT_STYLE,
   type DetectionDot,
@@ -187,26 +186,19 @@ function createZoneStatIcon(
   return L.divIcon(divIconOpts(html, [96, h], [48, h / 2]))
 }
 
-/* ── Detection dot — tier color; trong FOV nhấp nháy, ngoài FOV mờ ── */
+/* ── Detection dot — tier color; active (FOV) nhấp nháy opacity nhẹ ── */
 function createDetectionDotIcon(
   inCameraView: boolean,
   tier: ReturnType<typeof resolveDetectionDotTier>,
 ): L.DivIcon {
   const color = PATROL_HEATMAP_DOT_HEX[tier]
   const size = 7
-  const anim = inCameraView ? 'animation:patrol-dot-blink 1.15s ease-in-out infinite;' : ''
-  const opacity = inCameraView ? DETECTION_DOT_OPACITY_IN_VIEW : DETECTION_DOT_OPACITY_OUT_OF_VIEW
-  const colorBoost = inCameraView ? 'filter:saturate(1.35);' : 'filter:saturate(1.25);'
+  const innerClass = inCameraView ? 'patrol-dot-live-inner' : 'patrol-dot-hist-inner'
   const html = `
-    <div style="
-      width:${size}px;height:${size}px;border-radius:50%;
-      background:${color};
-      border:none;
-      box-shadow:0 0 ${inCameraView ? 2 : 1}px ${color}${inCameraView ? 'dd' : '88'};
-      opacity:${opacity};
-      ${colorBoost}
-      ${anim}
-    "></div>`
+    <div
+      class="${innerClass}"
+      style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:none;"
+    ></div>`
   // Leaflet cache divIcon theo className — mỗi tier/view phải class riêng.
   return L.divIcon({
     html,
@@ -646,24 +638,31 @@ export function PatrolGeoHeatmap({
   return (
     <div className="relative w-full h-full min-h-[200px] overflow-hidden isolate max-lg:min-h-[220px] supports-[height:100dvh]:min-h-[min(220px,38dvh)]">
       <style>{`
-        @keyframes patrol-dot-blink {
-          0%,100%{opacity:0.95;transform:scale(1)}
-          50%{opacity:0.35;transform:scale(1.35)}
+        @keyframes patrol-map-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
         }
-        @keyframes patrol-pulse {
-          0%,100%{opacity:1;transform:scale(1)}
-          50%{opacity:.35;transform:scale(1.7)}
+        .patrol-dot-live-inner {
+          animation: patrol-map-blink 1.75s ease-in-out infinite;
         }
-        @keyframes patrol-helmet-glow {
-          0%,100%{ box-shadow:0 1px 5px rgba(0,0,0,0.55),0 0 0 0px rgba(255,255,255,0.55); }
-          55%    { box-shadow:0 1px 5px rgba(0,0,0,0.55),0 0 0 6px rgba(255,255,255,0); }
+        .patrol-dot-hist-inner {
+          opacity: ${DETECTION_DOT_OPACITY_OUT_OF_VIEW};
+        }
+        /* Chỉ nhấp nháy silhouette SVG — không animate khung div vuông Leaflet. */
+        .patrol-device-live svg {
+          animation: patrol-map-blink 1.75s ease-in-out infinite;
+        }
+        .patrol-device-marker {
+          background: transparent !important;
+          line-height: 0;
         }
         ${PATROL_MAP_DEVICE_PIN_STYLES}
         .leaflet-marker-icon { transition: transform 260ms linear !important; }
         .leaflet-container { background:#080b12 !important; touch-action: manipulation; }
-        .${PATROL_DIV_ICON_CLASS} {
+        .${PATROL_DIV_ICON_CLASS}, .patrol-device-map-icon {
           background: transparent !important;
           border: none !important;
+          box-shadow: none !important;
           overflow: visible !important;
           pointer-events: auto !important;
           cursor: pointer !important;
