@@ -5,10 +5,6 @@ import {
 
 export type FaceScanCameraErrorCode = 'unsupported' | 'insecure' | 'denied' | 'failed'
 
-export function shouldPromptFaceScanCameraOnTap(): boolean {
-  return isHandheldDevice()
-}
-
 export function faceScanCameraErrorMessage(code: FaceScanCameraErrorCode): string {
   switch (code) {
     case 'unsupported':
@@ -22,11 +18,34 @@ export function faceScanCameraErrorMessage(code: FaceScanCameraErrorCode): strin
   }
 }
 
+export function isFaceScanStreamLive(stream: MediaStream | null | undefined): boolean {
+  return Boolean(stream?.getVideoTracks().some(track => track.readyState === 'live'))
+}
+
 function classifyCameraError(err: unknown): FaceScanCameraErrorCode {
   const name = err instanceof DOMException ? err.name : ''
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return 'denied'
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return 'failed'
   return 'failed'
+}
+
+function shouldRetryConstraint(err: unknown): boolean {
+  const name = err instanceof DOMException ? err.name : ''
+  return name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError'
+}
+
+function faceScanCameraConstraints(): MediaStreamConstraints[] {
+  if (isHandheldDevice()) {
+    return [
+      { video: { facingMode: { ideal: 'user' } }, audio: false },
+      { video: true, audio: false },
+    ]
+  }
+  return [
+    { video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: { facingMode: { ideal: 'user' } }, audio: false },
+    { video: true, audio: false },
+  ]
 }
 
 export async function openFaceScanCameraStream(): Promise<MediaStream> {
@@ -37,14 +56,9 @@ export async function openFaceScanCameraStream(): Promise<MediaStream> {
     throw Object.assign(new Error('insecure'), { code: 'insecure' satisfies FaceScanCameraErrorCode })
   }
 
-  const attempts: MediaStreamConstraints[] = [
-    { video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-    { video: { facingMode: { ideal: 'user' } }, audio: false },
-    { video: { facingMode: 'user' }, audio: false },
-    { video: true, audio: false },
-  ]
-
+  const attempts = faceScanCameraConstraints()
   let lastErr: unknown = null
+
   for (const constraints of attempts) {
     try {
       return await navigator.mediaDevices.getUserMedia(constraints)
@@ -54,6 +68,7 @@ export async function openFaceScanCameraStream(): Promise<MediaStream> {
       if (code === 'denied') {
         throw Object.assign(err instanceof Error ? err : new Error('denied'), { code: 'denied' satisfies FaceScanCameraErrorCode })
       }
+      if (!shouldRetryConstraint(err)) break
     }
   }
 
@@ -65,9 +80,17 @@ export async function attachFaceScanStreamToVideo(
   video: HTMLVideoElement,
   stream: MediaStream,
 ): Promise<void> {
-  video.setAttribute('playsinline', 'true')
-  video.setAttribute('webkit-playsinline', 'true')
-  video.muted = true
-  video.srcObject = stream
-  await video.play()
+  if (video.srcObject !== stream) {
+    video.setAttribute('playsinline', 'true')
+    video.setAttribute('webkit-playsinline', 'true')
+    video.muted = true
+    video.srcObject = stream
+  }
+  if (video.paused) {
+    await video.play().catch(() => {})
+  }
+}
+
+export function stopFaceScanStream(stream: MediaStream | null | undefined): void {
+  stream?.getTracks().forEach(track => track.stop())
 }

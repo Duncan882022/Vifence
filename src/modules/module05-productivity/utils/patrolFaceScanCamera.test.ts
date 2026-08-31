@@ -1,16 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   faceScanCameraErrorMessage,
-  shouldPromptFaceScanCameraOnTap,
+  isFaceScanStreamLive,
 } from './patrolFaceScanCamera'
 
 describe('patrolFaceScanCamera', () => {
-  it('prompts tap on handheld user agents', () => {
-    vi.stubGlobal('navigator', {
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
-    })
-    expect(shouldPromptFaceScanCameraOnTap()).toBe(true)
-    vi.unstubAllGlobals()
+  it('detects live camera tracks', () => {
+    const live = { getVideoTracks: () => [{ readyState: 'live' as const }] } as MediaStream
+    const dead = { getVideoTracks: () => [{ readyState: 'ended' as const }] } as MediaStream
+    expect(isFaceScanStreamLive(live)).toBe(true)
+    expect(isFaceScanStreamLive(dead)).toBe(false)
   })
 
   it('maps error codes to Vietnamese instructions', () => {
