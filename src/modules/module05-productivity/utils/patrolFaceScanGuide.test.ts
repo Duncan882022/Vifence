@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   faceLooseInFrame,
+  faceReadyForManualCapture,
   faceReadyForSlot,
   guidanceForSlot,
+  manualScanBlockedInstruction,
   poseHintMatchesSlot,
 } from './patrolFaceScanGuide'
 import { FACE_SCAN_POSE_COUNT } from './patrolFaceScanPoses'
@@ -69,6 +71,32 @@ describe('patrolFaceScanGuide', () => {
       centerX: 0.5,
       centerY: 0.5,
     })).toBe(true)
+  })
+
+  it('blocks manual capture without AI', () => {
+    expect(manualScanBlockedInstruction('loading')).toContain('chờ')
+    expect(manualScanBlockedInstruction('unavailable')).toContain('Tự động')
+    expect(faceReadyForManualCapture({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1, 'unavailable')).toBe(false)
+    expect(faceReadyForManualCapture({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1, 'ready')).toBe(true)
+    expect(faceReadyForManualCapture({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.34,
+      centerY: 0.5,
+    }, 1, 'ready')).toBe(false)
   })
 
   it('exposes 4 gallery step labels', () => {

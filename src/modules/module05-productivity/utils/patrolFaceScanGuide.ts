@@ -133,12 +133,24 @@ export function faceLooseInFrame(metrics: FaceScanMetrics): boolean {
   return faceInOval(metrics.centerX, metrics.centerY, metrics.fillScore * FILL_MAX)
 }
 
+export function manualScanBlockedInstruction(modelStatus: FaceScanModelStatus): string {
+  switch (modelStatus) {
+    case 'loading':
+      return 'Đang tải AI nhận diện góc mặt — chờ sẵn sàng rồi mới chụp thủ công.'
+    case 'unavailable':
+      return 'AI nhận diện góc mặt không khả dụng — tải lại trang hoặc chuyển sang Tự động.'
+    default:
+      return ''
+  }
+}
+
 export function faceReadyForManualCapture(
   metrics: FaceScanMetrics,
-  modelAvailable: boolean,
+  slot: ScanPoseSlot,
+  modelStatus: FaceScanModelStatus,
 ): boolean {
-  if (!modelAvailable) return true
-  return faceLooseInFrame(metrics)
+  if (modelStatus !== 'ready') return false
+  return faceReadyForSlot(metrics, slot)
 }
 
 export function faceReadyForSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {

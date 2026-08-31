@@ -24,9 +24,9 @@ import { FaceScanProgressRing } from './FaceScanProgressRing'
 import {
   analyzeFaceScanFrame,
   faceReadyForManualCapture,
-  getPatrolFaceScanModelStatus,
   guidanceForHint,
   guidanceForSlot,
+  manualScanBlockedInstruction,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanGuide'
 import {
@@ -157,15 +157,15 @@ export function PatrolFaceScannerPanel({
       void (async () => {
         const video = videoRef.current
         if (!video || cancelled) return
-        const modelAvailable = getPatrolFaceScanModelStatus() === 'ready'
-        const metrics = modelAvailable ? await analyzeFaceScanFrame(video) : null
-        if (cancelled) return
-        if (!modelAvailable) {
-          setManualHint(guidanceForSlot(autoScan.activeSlot))
+        const modelStatus = autoScan.modelStatus
+        if (modelStatus !== 'ready') {
+          setManualHint(manualScanBlockedInstruction(modelStatus))
           return
         }
+        const metrics = await analyzeFaceScanFrame(video)
+        if (cancelled) return
         setManualHint(
-          metrics?.hasFace
+          metrics.hasFace
             ? guidanceForHint(metrics.poseHint, autoScan.activeSlot)
             : guidanceForSlot(autoScan.activeSlot),
         )
@@ -175,23 +175,27 @@ export function PatrolFaceScannerPanel({
       cancelled = true
       window.clearInterval(poll)
     }
-  }, [autoScan.activeSlot, cameraReady, captureMode, enrollment])
+  }, [autoScan.activeSlot, autoScan.modelStatus, cameraReady, captureMode, enrollment])
 
   const handleManualCapture = async () => {
     const video = videoRef.current
     if (!video || !cameraReady || complete) return
     const slot = autoScan.activeSlot as ScanPoseSlot
-    const modelAvailable = getPatrolFaceScanModelStatus() === 'ready'
-    if (modelAvailable) {
-      const metrics = await analyzeFaceScanFrame(video)
-      if (!faceReadyForManualCapture(metrics, true)) {
-        setPanelError(
-          metrics.hasFace
-            ? guidanceForHint(metrics.poseHint, slot)
-            : 'Đưa mặt vào giữa khung tròn',
-        )
-        return
-      }
+    const modelStatus = autoScan.modelStatus
+
+    if (modelStatus !== 'ready') {
+      setPanelError(manualScanBlockedInstruction(modelStatus))
+      return
+    }
+
+    const metrics = await analyzeFaceScanFrame(video)
+    if (!faceReadyForManualCapture(metrics, slot, modelStatus)) {
+      setPanelError(
+        metrics.hasFace
+          ? guidanceForHint(metrics.poseHint, slot)
+          : guidanceForSlot(slot),
+      )
+      return
     }
     const imageB64 = captureFaceEnrollmentFrameBase64(video)
     if (!imageB64) {
@@ -235,17 +239,25 @@ export function PatrolFaceScannerPanel({
       : `Quét ${facesRequired} góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}).`
   )
 
+  const manualAiBlocked = captureMode === 'manual' && autoScan.modelStatus !== 'ready'
+
   const mainInstruction = complete
     ? (isSession ? 'Đủ 4 góc — nhấn Tiếp tục để nhập thông tin.' : 'Hoàn thành — hồ sơ sẵn sàng nhận diện.')
-    : captureMode === 'auto'
-      ? autoScan.guidance
-      : manualHint || faceScanMainInstruction(autoScan.activeSlot, false, 'manual')
+    : manualAiBlocked
+      ? manualScanBlockedInstruction(autoScan.modelStatus)
+      : captureMode === 'auto'
+        ? autoScan.guidance
+        : manualHint || faceScanMainInstruction(autoScan.activeSlot, false, 'manual')
 
   const subInstruction = complete
     ? null
-    : captureMode === 'auto'
-      ? faceScanMainInstruction(autoScan.activeSlot, false, 'auto')
-      : `Góc tiếp theo: ${faceScanPoseLabel(autoScan.activeSlot)}`
+    : manualAiBlocked
+      ? (autoScan.modelStatus === 'loading'
+        ? 'Nút Chụp sẽ bật khi AI tải xong.'
+        : 'Hoặc dùng chế độ Tự động (giữ yên theo hướng dẫn).')
+      : captureMode === 'auto'
+        ? faceScanMainInstruction(autoScan.activeSlot, false, 'auto')
+        : `Góc tiếp theo: ${faceScanPoseLabel(autoScan.activeSlot)}`
 
   const showError = panelError ?? autoScan.error
   const busy = autoScan.capturing || startingOver
@@ -366,11 +378,15 @@ export function PatrolFaceScannerPanel({
             <button
               type="button"
               onClick={() => void handleManualCapture()}
-              disabled={busy || !cameraReady || backendOnline === false}
+              disabled={busy || !cameraReady || backendOnline === false || autoScan.modelStatus !== 'ready'}
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-semibold bg-white/10 text-white hover:bg-white/15 disabled:opacity-40 border border-white/10"
             >
               {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ScanFace className="w-5 h-5" />}
-              Chụp góc {faceScanPoseLabel(autoScan.activeSlot)}
+              {autoScan.modelStatus === 'ready'
+                ? `Chụp góc ${faceScanPoseLabel(autoScan.activeSlot)}`
+                : autoScan.modelStatus === 'loading'
+                  ? 'Đang chờ AI…'
+                  : 'AI không khả dụng'}
             </button>
           )}
 
