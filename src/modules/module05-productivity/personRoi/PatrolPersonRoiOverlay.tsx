@@ -47,7 +47,17 @@ const PersonRoiBox = memo(function PersonRoiBox({
   const video = videoRef.current
   // layoutTick buộc tính lại khi video load metadata / resize / object-fit đổi.
   void layoutTick
-  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
+  const intrinsicW = video?.videoWidth || frameWidth
+  const intrinsicH = video?.videoHeight || frameHeight
+  if (
+    !video
+    || intrinsicW <= 0
+    || intrinsicH <= 0
+    || frameWidth <= 0
+    || frameHeight <= 0
+    || video.clientWidth <= 0
+    || video.clientHeight <= 0
+  ) {
     return null
   }
   // HC-* person YOLO 0.35–0.65 — ngưỡng riêng Module 05 tuần tra.

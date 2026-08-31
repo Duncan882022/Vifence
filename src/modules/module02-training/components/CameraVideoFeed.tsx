@@ -14,6 +14,7 @@ import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetec
 import { useSyncedVmsDetections } from '@/modules/module03-safety/hooks/useSyncedVmsDetections'
 import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlayCycleSync'
+import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlayLayoutTick'
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
 import { isHlsStreamUrl, useStreamSignalPhase, useVideoFramesReady } from '../hooks/useHlsVideoSource'
@@ -140,6 +141,7 @@ export function CameraVideoFeed({
   }, [recoverStream])
 
   const framesReady = useVideoFramesReady(videoRef, playing)
+  const roiLayoutTick = useOverlayLayoutTick(videoRef)
   const remoteWaiting = Boolean(playing && (isHls || Boolean(whepUrl)))
   const signalPhase = useStreamSignalPhase(
     framesReady,
@@ -182,6 +184,7 @@ export function CameraVideoFeed({
     rawVmsFeed.snapshot?.updated_at,
     framesReady,
     videoClock,
+    roiLayoutTick,
   ])
 
   useEffect(() => {

@@ -36,17 +36,34 @@ export function videoRectToOverlayPercent(
   }
 }
 
+export interface VideoIntrinsicFallback {
+  width?: number
+  height?: number
+}
+
+function resolveVideoIntrinsicSize(
+  video: HTMLVideoElement,
+  fallback?: VideoIntrinsicFallback,
+): { width: number; height: number } {
+  return {
+    width: video.videoWidth || fallback?.width || 0,
+    height: video.videoHeight || fallback?.height || 0,
+  }
+}
+
 /** Map bbox từ phần tử video — cover (CCTV/fly) hoặc contain (body cam). */
 export function mapVideoRectToOverlay(
   rect: { x: number; y: number; width: number; height: number },
   video: HTMLVideoElement,
   fit: 'cover' | 'contain' = 'cover',
   objectPosition: 'center' | 'bottom' = 'center',
+  intrinsicFallback?: VideoIntrinsicFallback,
 ): { x: number; y: number; w: number; h: number } {
+  const { width, height } = resolveVideoIntrinsicSize(video, intrinsicFallback)
   return videoRectToOverlayPercent(
     rect,
-    video.videoWidth,
-    video.videoHeight,
+    width,
+    height,
     video.clientWidth,
     video.clientHeight,
     fit,
@@ -128,9 +145,9 @@ export function getVisibleVideoSourceRect(
   video: HTMLVideoElement,
   fit: 'cover' | 'contain' = 'cover',
   objectPosition: 'center' | 'bottom' = 'center',
+  intrinsicFallback?: VideoIntrinsicFallback,
 ): VideoSourceRect {
-  const vw = video.videoWidth
-  const vh = video.videoHeight
+  const { width: vw, height: vh } = resolveVideoIntrinsicSize(video, intrinsicFallback)
   const cw = video.clientWidth
   const ch = video.clientHeight
   if (!vw || !vh || !cw || !ch) {
@@ -181,9 +198,10 @@ export function mapBackendBboxToOverlay(
   fit: 'cover' | 'contain' = 'cover',
   objectPosition: 'center' | 'bottom' = 'center',
 ): { x: number; y: number; w: number; h: number } {
+  const intrinsicFallback = { width: frameWidth, height: frameHeight }
   const pixelBbox = bboxToPixelSpace(bbox, frameWidth, frameHeight)
   const [x1, y1, x2, y2] = pixelBbox
-  const visible = getVisibleVideoSourceRect(video, fit, objectPosition)
+  const visible = getVisibleVideoSourceRect(video, fit, objectPosition, intrinsicFallback)
   const scaleX = frameWidth > 0 ? visible.width / frameWidth : 1
   const scaleY = frameHeight > 0 ? visible.height / frameHeight : 1
   return mapVideoRectToOverlay(
@@ -196,6 +214,7 @@ export function mapBackendBboxToOverlay(
     video,
     fit,
     objectPosition,
+    intrinsicFallback,
   )
 }
 

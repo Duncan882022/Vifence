@@ -3,24 +3,62 @@ import { useEffect, useState, type RefObject } from 'react'
 /**
  * Đếm tick khi kích thước video đổi (loadedmetadata/resize) — dùng làm key
  * remount cho các DetectionBox overlay để chúng tính lại vị trí map lên video.
+ *
+ * iOS Safari (WHEP/HLS): `<video>` có thể mount sau effect đầu — poll gắn lại
+ * listener cho tới khi có metadata + client box.
  */
 export function useOverlayLayoutTick(videoRef: RefObject<HTMLVideoElement | null>): number {
   const [layoutTick, setLayoutTick] = useState(0)
 
   useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
+    let attachedVideo: HTMLVideoElement | null = null
+    let observer: ResizeObserver | null = null
+    let pollId = 0
+    let cancelled = false
+
     const bump = () => setLayoutTick(v => v + 1)
-    video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('loadeddata', bump)
-    video.addEventListener('resize', bump)
+
+    const detach = () => {
+      if (!attachedVideo) return
+      attachedVideo.removeEventListener('loadedmetadata', bump)
+      attachedVideo.removeEventListener('loadeddata', bump)
+      attachedVideo.removeEventListener('resize', bump)
+      attachedVideo.removeEventListener('playing', bump)
+      observer?.disconnect()
+      observer = null
+      attachedVideo = null
+    }
+
+    const attach = () => {
+      const video = videoRef.current
+      if (!video || video === attachedVideo) return
+
+      detach()
+      attachedVideo = video
+      video.addEventListener('loadedmetadata', bump)
+      video.addEventListener('loadeddata', bump)
+      video.addEventListener('resize', bump)
+      video.addEventListener('playing', bump)
+      observer = new ResizeObserver(bump)
+      observer.observe(video)
+      if (video.videoWidth > 0 && video.clientWidth > 0) bump()
+    }
+
+    attach()
     window.addEventListener('resize', bump)
-    if (video.videoWidth > 0) bump()
+
+    pollId = window.setInterval(() => {
+      if (cancelled) return
+      attach()
+      const video = videoRef.current
+      if (video && video.videoWidth > 0 && video.clientWidth > 0) bump()
+    }, 280)
+
     return () => {
-      video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('loadeddata', bump)
-      video.removeEventListener('resize', bump)
+      cancelled = true
+      window.clearInterval(pollId)
       window.removeEventListener('resize', bump)
+      detach()
     }
   }, [videoRef])
 
