@@ -74,6 +74,7 @@ export function PatrolCameraPanel({
       mobileStackedNoScroll={mobileStackedNoScroll}
       preferCompactVideo={isTabletLandscape}
       streamWhenOffline
+      minimalCameraTile
       filterTabs={filterTabs}
       filterFn={filterFn}
       groupFn={groupFn}

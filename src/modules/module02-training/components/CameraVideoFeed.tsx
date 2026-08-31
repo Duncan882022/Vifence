@@ -62,6 +62,8 @@ interface CameraVideoFeedProps {
   analyzeThrottle?: boolean
   /** Thứ tự luồng trong grid — mobile phát lệch nhau tránh iOS chặn decode song song. */
   streamIndex?: number
+  /** Module 05 — ẩn nút/nhãn làm mới luồng và overlay chờ tín hiệu. */
+  minimalTile?: boolean
 }
 
 export function CameraVideoFeed({
@@ -75,6 +77,7 @@ export function CameraVideoFeed({
   compact,
   analyzeThrottle,
   streamIndex = 0,
+  minimalTile = false,
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
@@ -330,57 +333,71 @@ export function CameraVideoFeed({
         )}
       />
       {waitingForSignal && (
-        <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4">
+        <div className={cn(
+          'absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/60 text-center px-4',
+          minimalTile && 'bg-black/40',
+        )}>
           <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white/70 animate-spin" aria-hidden />
-          <span className="text-[11px] font-semibold tracking-wide text-white/80">
-            {streamType === 'bodycam'
-              ? 'Đang chờ tín hiệu từ mũ'
-              : 'Đang chờ tín hiệu'}
-          </span>
-          {streamType === 'bodycam' && (
-            <span className="text-[9px] leading-relaxed text-white/45">
-              Mũ phải đang phát sóng ở trang Phát sóng
-            </span>
-          )}
-          {remoteStream && (
-            <button
-              type="button"
-              onClick={handleRecoverStream}
-              className={cn(
-                'mt-1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1',
-                'text-[10px] font-medium text-white/85 bg-white/10 border border-white/15',
-                'hover:bg-white/15 transition-colors pointer-events-auto',
+          {!minimalTile && (
+            <>
+              <span className="text-[11px] font-semibold tracking-wide text-white/80">
+                {streamType === 'bodycam'
+                  ? 'Đang chờ tín hiệu từ mũ'
+                  : 'Đang chờ tín hiệu'}
+              </span>
+              {streamType === 'bodycam' && (
+                <span className="text-[9px] leading-relaxed text-white/45">
+                  Mũ phải đang phát sóng ở trang Phát sóng
+                </span>
               )}
-            >
-              <RefreshCw className={cn('w-3 h-3', recovering && 'animate-spin')} aria-hidden />
-              Làm mới luồng
-            </button>
+              {remoteStream && (
+                <button
+                  type="button"
+                  onClick={handleRecoverStream}
+                  className={cn(
+                    'mt-1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1',
+                    'text-[10px] font-medium text-white/85 bg-white/10 border border-white/15',
+                    'hover:bg-white/15 transition-colors pointer-events-auto',
+                  )}
+                >
+                  <RefreshCw className={cn('w-3 h-3', recovering && 'animate-spin')} aria-hidden />
+                  Làm mới luồng
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
       {showSignalOffline && (
-        <div className="absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/80 text-center px-4">
-          <span className="text-xs font-bold tracking-[0.2em] uppercase text-muted-foreground/50">Offline</span>
-          <span className="text-[10px] text-muted-foreground/40">
-            {streamType === 'bodycam' ? 'Chưa có tín hiệu từ mũ' : 'Chưa có tín hiệu'}
-          </span>
-          {remoteStream && (
-            <button
-              type="button"
-              onClick={handleRecoverStream}
-              className={cn(
-                'mt-1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1',
-                'text-[10px] font-medium text-white/85 bg-white/10 border border-white/15',
-                'hover:bg-white/15 transition-colors pointer-events-auto',
+        <div className={cn(
+          'absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-black/80 text-center px-4',
+          minimalTile && 'bg-black/70',
+        )}>
+          {!minimalTile && (
+            <>
+              <span className="text-xs font-bold tracking-[0.2em] uppercase text-muted-foreground/50">Offline</span>
+              <span className="text-[10px] text-muted-foreground/40">
+                {streamType === 'bodycam' ? 'Chưa có tín hiệu từ mũ' : 'Chưa có tín hiệu'}
+              </span>
+              {remoteStream && (
+                <button
+                  type="button"
+                  onClick={handleRecoverStream}
+                  className={cn(
+                    'mt-1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1',
+                    'text-[10px] font-medium text-white/85 bg-white/10 border border-white/15',
+                    'hover:bg-white/15 transition-colors pointer-events-auto',
+                  )}
+                >
+                  <RefreshCw className={cn('w-3 h-3', recovering && 'animate-spin')} aria-hidden />
+                  Làm mới luồng
+                </button>
               )}
-            >
-              <RefreshCw className={cn('w-3 h-3', recovering && 'animate-spin')} aria-hidden />
-              Làm mới luồng
-            </button>
+            </>
           )}
         </div>
       )}
-      {playing && remoteStream && !waitingForSignal && (
+      {playing && remoteStream && !waitingForSignal && !minimalTile && (
         <button
           type="button"
           onClick={handleRecoverStream}

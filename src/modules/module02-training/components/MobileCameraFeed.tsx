@@ -79,6 +79,8 @@ interface MobileCameraFeedProps {
    * gọi getUserMedia lần hai. Không sở hữu luồng ⇒ không được stop track.
    */
   externalStream?: MediaStream | null
+  /** Nhãn「Cam trước/sau」góc tile — tắt trên Module 05 minimal tile. */
+  showFacingLabel?: boolean
 }
 
 export function MobileCameraFeed({
@@ -89,6 +91,7 @@ export function MobileCameraFeed({
   compact,
   aiEnabled = false,
   externalStream = null,
+  showFacingLabel = true,
 }: MobileCameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -582,7 +585,7 @@ export function MobileCameraFeed({
         )}
       />
 
-      {status === 'live' && (
+      {status === 'live' && showFacingLabel && (
         <span className={cn(
           'absolute z-[6] rounded bg-black/55 text-white/85 font-medium pointer-events-none',
           compact ? 'bottom-8 left-1.5 text-[7px] px-1 py-0.5' : 'bottom-12 left-2 text-[9px] px-1.5 py-0.5',
