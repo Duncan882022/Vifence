@@ -471,8 +471,9 @@ def _touch_appearance(
         conn.execute(
             "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
             " camera_id = ?, source_cameras = ?,"
-            " snapshot_path = COALESCE(snapshot_path, ?) WHERE id = ?",
-            (ts, lat_end, lng_end, camera_id, src, incoming, row["id"]),
+            " snapshot_path = COALESCE(snapshot_path, ?),"
+            " counted = MAX(counted, ?) WHERE id = ?",
+            (ts, lat_end, lng_end, camera_id, src, incoming, q, row["id"]),
         )
         return
 
@@ -483,11 +484,11 @@ def _touch_appearance(
         "INSERT INTO appearances"
         "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
         " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
-        " source_cameras, snapshot_path)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " source_cameras, snapshot_path, counted)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             date, subject_id, camera_id, zone_id, ts, ts,
-            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snap,
+            gps_lat, gps_lng, lat_end, lng_end, q, seq, src, snap, q,
         ),
     )
 
@@ -816,9 +817,6 @@ def upsert_track_appearance(
 def day_stats(date: str | None = None) -> dict[str, Any]:
     """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
     d = date or db.today_vn()
-    workers = db.query_one(
-        "SELECT COUNT(*) AS c FROM daily_events WHERE event_date = ?", (d,),
-    )
     person_row = db.query_one(
         "SELECT COUNT(*) AS c FROM daily_events e"
         " JOIN persons p ON p.pers_id = e.pers_id"
@@ -847,11 +845,21 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
         " AND subject_id LIKE 'obj-%'",
         (d,),
     )
+    obj_card_row = db.query_one(
+        "SELECT COUNT(*) AS c FROM daily_objects"
+        " WHERE event_date = ?"
+        " AND snapshot_path IS NOT NULL AND snapshot_path != ''"
+        " AND COALESCE(snapshot_score, 0) < ?",
+        (d, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+    )
+    person_n = int(person_row["c"] if person_row else 0)
+    identity_n = int(identity_row["c"] if identity_row else 0)
     return {
         "date": d,
-        "workers_standard": int(workers["c"] if workers else 0),
-        "person_count": int(person_row["c"] if person_row else 0),
-        "identity_count": int(identity_row["c"] if identity_row else 0),
+        "workers_standard": person_n + identity_n,
+        "person_count": person_n,
+        "identity_count": identity_n,
+        "object_card_count": int(obj_card_row["c"] if obj_card_row else 0),
         "encounters_standard": int(enc_row["c"] if enc_row else 0),
         "unassigned_observations": int(obj_row["c"] if obj_row else 0),
     }

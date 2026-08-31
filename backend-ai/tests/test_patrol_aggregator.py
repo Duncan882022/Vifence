@@ -251,6 +251,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             lifecycle_tier="person",
             lifecycle_worker_id="sgc-6688",
             confidence=0.85,
+            face_eligible=True,
         )
         with patch(
             "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
@@ -282,6 +283,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             lifecycle_tier="person",
             lifecycle_worker_id="sgc-9901",
             confidence=0.9,
+            face_eligible=True,
         )
         with patch(
             "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
@@ -350,6 +352,39 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         self.assertEqual(cards[0]["pers_id"], duncan)
         self.assertEqual(cards[0]["status"], identity.STATUS_IDENTIFIED)
         self.assertEqual(identity.resolve_alias(stray), duncan)
+
+    def test_back_turn_lifecycle_worker_stays_object_without_face(self) -> None:
+        """ROI gán sgc trên lưng — không tạo pers-* / daily_events."""
+        from unittest.mock import patch
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+
+        ts = 4_000.0
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=("obj.jpg", 0.5),
+        ):
+            ingest_observation(
+                camera_id="HC-01",
+                track_id="ptk-back",
+                now=ts,
+                lifecycle_tier="person",
+                lifecycle_worker_id="sgc-8800",
+                confidence=0.85,
+                face_eligible=False,
+            )
+            finalize_track("HC-01", "ptk-back", now=ts + 5.0)
+
+        date = db.today_vn(ts)
+        self.assertEqual(daystore.list_person_events(date), [])
+        self.assertEqual(len(daystore.list_objects(date)), 1)
+        stats = daystore.day_stats(date)
+        self.assertEqual(stats["workers_standard"], 0)
+        self.assertGreaterEqual(stats["unassigned_observations"], 1)
 
 
 class AggregatorContinuousPresenceTest(unittest.TestCase):

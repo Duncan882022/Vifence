@@ -29,7 +29,7 @@ import {
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
+import { buildHelmetDetectCountsFromPresences } from '../utils/patrolHelmetDetectCounts'
 import {
   buildPatrolDayHeatmapDots,
   buildPatrolPersEntityLookup,
@@ -216,6 +216,7 @@ export function PatrolDensityHeatmap({
   workforce,
   flycamFlightModes,
   helmetOnlineById,
+  visitedByZoneId,
 }: {
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
@@ -234,6 +235,8 @@ export function PatrolDensityHeatmap({
   workforce: WorkforceSnapshot
   flycamFlightModes: Record<string, PatrolFlightMode>
   helmetOnlineById: Record<string, boolean>
+  /** KPI phủ khu — ưu tiên hơn observed_count workforce. */
+  visitedByZoneId?: Record<string, boolean>
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
@@ -254,16 +257,16 @@ export function PatrolDensityHeatmap({
   )
 
   const liveZones = useMemo(
-    () => buildPatrolLiveZonesFromWorkforce(workforce),
-    [workforce],
+    () => buildPatrolLiveZonesFromWorkforce(workforce, visitedByZoneId),
+    [workforce, visitedByZoneId],
   )
 
   const { cameraPositions, routeHistory } = usePatrolLiveMapState()
   const hc02Live = useHc02LiveDetectionDots()
 
   const helmetDetectCountsById = useMemo(
-    () => buildHelmetDetectCountsById(patrolEvents, PATROL_MAP_CAMERA_IDS),
-    [patrolEvents],
+    () => buildHelmetDetectCountsFromPresences(presences, PATROL_MAP_CAMERA_IDS),
+    [presences],
   )
 
   // Kể cả drone: nó cũng phát hiện người và đóng góp chấm lên bản đồ.

@@ -39,7 +39,7 @@ export interface PatrolTabCounts {
   identity: number
 }
 
-/** Một nguồn đếm cho tab badge, phân trang, KPI Tier 1 và overlay heatmap. */
+/** Một nguồn đếm cho tab badge và phân trang listing — không dùng KPI Tier1. */
 export function computePatrolTabCounts(events: PatrolEvent[]): PatrolTabCounts {
   return {
     all: listPatrolEventsForTab(events, 'all').length,

@@ -33,13 +33,14 @@ const backendStats: PatrolDayStats = {
   workersStandard: 99,
   personCount: 88,
   identityCount: 77,
-  objectCount: 0,
+  objectCount: 3,
+  objectEncounterCount: 5,
   encountersStandard: 12,
   unassignedObservations: 5,
 }
 
 describe('derivePatrolDisplayStats', () => {
-  it('gom KPI entity về cùng bộ đếm tab sự kiện', () => {
+  it('KPI từ SQLite; tab badge từ listing dedupe', () => {
     const events = [
       makeEvent({ id: 'pers:pers-0001', objectId: 'pers-0001', stage: 'person' }),
       makeEvent({
@@ -64,12 +65,17 @@ describe('derivePatrolDisplayStats', () => {
         snapshotScore: 0,
       }),
     ]
-    const stats = derivePatrolDisplayStats(events, backendStats)
-    expect(stats.workersStandard).toBe(3)
-    expect(stats.personCount).toBe(1)
-    expect(stats.identityCount).toBe(1)
-    expect(stats.objectCount).toBe(1)
+    const { stats, tabCounts } = derivePatrolDisplayStats(events, backendStats)
+    expect(stats.workersStandard).toBe(165)
+    expect(stats.personCount).toBe(88)
+    expect(stats.identityCount).toBe(77)
+    expect(stats.objectCount).toBe(3)
+    expect(stats.objectEncounterCount).toBe(5)
     expect(stats.encountersStandard).toBe(12)
     expect(stats.unassignedObservations).toBe(5)
+    expect(tabCounts.object).toBe(1)
+    expect(tabCounts.person).toBe(1)
+    expect(tabCounts.identity).toBe(1)
+    expect(tabCounts.all).toBe(3)
   })
 })

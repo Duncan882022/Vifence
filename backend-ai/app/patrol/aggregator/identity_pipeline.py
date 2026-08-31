@@ -108,6 +108,18 @@ def _ensure_pers_for_worker(
     return pers_id
 
 
+def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bool:
+    """Chỉ gán pers-* khi có mặt hoặc session đã thăng từ face trước đó."""
+    if obs.face_eligible:
+        return True
+    current = (session.subject_id or "").strip()
+    if current.startswith("pers-"):
+        return True
+    if session.best_faces:
+        return True
+    return False
+
+
 def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> None:
     obj_id = (session.subject_id or "").strip()
     if obj_id.startswith("obj-"):
@@ -127,6 +139,8 @@ def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> 
 
 def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) -> None:
     if not (session.subject_id or "").startswith("obj-"):
+        return
+    if not _may_assign_pers_subject(session, obs):
         return
 
     candidates: list[tuple[str | None, str | None]] = [
@@ -257,21 +271,22 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
     # sgc-* đã ổn định trên ROI → một hồ sơ bản nháp, không tạo pers-* rời.
     if not session.identity_resolved and wid and is_sgc_worker_id(wid):
-        pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
-        if pers_id:
-            _assign_pers_subject(session, pers_id, now=obs.ts)
-            session.identity = _map_worker_to_identity(wid, obs.confidence)
-            session.identity_resolved = True
-            if obs.face_eligible and obs.face_embedding is not None:
-                try:
-                    identity.add_face_angle(
-                        pers_id,
-                        obs.face_embedding,
-                        quality=obs.face_quality,
-                        camera_id=obs.camera_id,
-                    )
-                except Exception:  # noqa: BLE001
-                    logger.debug("add_face_angle draft skip", exc_info=True)
+        if _may_assign_pers_subject(session, obs):
+            pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
+            if pers_id:
+                _assign_pers_subject(session, pers_id, now=obs.ts)
+                session.identity = _map_worker_to_identity(wid, obs.confidence)
+                session.identity_resolved = True
+                if obs.face_eligible and obs.face_embedding is not None:
+                    try:
+                        identity.add_face_angle(
+                            pers_id,
+                            obs.face_embedding,
+                            quality=obs.face_quality,
+                            camera_id=obs.camera_id,
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.debug("add_face_angle draft skip", exc_info=True)
 
     if not session.identity_resolved:
         picked = _pick_search_embedding(session)
@@ -305,17 +320,20 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                 logger.exception("aggregator observe_face failed")
 
     if obs.lifecycle_worker_id and not session.identity_resolved:
-        session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
-        pers_id = _ensure_pers_for_worker(
-            obs.lifecycle_worker_id,
-            tier=obs.lifecycle_tier,
-            now=obs.ts,
-        )
-        if pers_id:
-            _assign_pers_subject(session, pers_id, now=obs.ts)
+        if _may_assign_pers_subject(session, obs):
+            session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
+            pers_id = _ensure_pers_for_worker(
+                obs.lifecycle_worker_id,
+                tier=obs.lifecycle_tier,
+                now=obs.ts,
+            )
+            if pers_id:
+                _assign_pers_subject(session, pers_id, now=obs.ts)
+            else:
+                session.dirty = True
+            session.identity_resolved = True
         else:
             session.dirty = True
-        session.identity_resolved = True
 
     _maybe_promote_object_subject(session, obs)
     _maybe_upgrade_pers_subject(session, obs)

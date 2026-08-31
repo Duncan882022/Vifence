@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Users, MapPin, Footprints, ScanFace, UserX,
+  Users, MapPin, Footprints, UserX, Plane,
 } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout, Tier1, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -35,7 +35,6 @@ import {
 } from './data/patrolCameras'
 import { buildPatrolCamerasLive } from './data/buildPatrolCamerasLive'
 import { PATROL_DRONE_IDS } from './data/patrolDrones'
-import { PATROL_GPS_ZONES } from './data/patrolSiteMap'
 import { usePatrolVisionStreams } from './hooks/usePatrolVisionStreams'
 import { usePatrolDayBundle } from './hooks/usePatrolDayBundle'
 import {
@@ -57,11 +56,11 @@ import { patrolFlightModeLabel } from './utils/patrolFlightMode'
 import type { PatrolDayStats } from './services/patrolDayEvents.service'
 import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualIdentity.service'
 import { ensurePatrolAuth } from '@/services/patrolApiClient'
-import type { WorkforceSnapshot } from './types/workforceHeatmap'
 import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
 import { buildPatrolHelmetOnlineById } from './utils/patrolStreamOnline'
+import { computePatrolZoneCoverage, type PatrolZoneCoverageResult } from './utils/patrolZoneCoverage'
+import { usePatrolFlymapMetrics } from './hooks/usePatrolFlymapMetrics'
 import { derivePatrolDisplayStats } from './utils/patrolDisplayStats'
-import { computePatrolTabCounts } from './utils/patrolEventsTabList'
 
 function PatrolWorkersKpiDetail({
   personCount,
@@ -95,25 +94,27 @@ function PatrolWorkersKpiDetail({
 
 function PatrolKPIs({
   live,
-  workforce,
   stats,
+  zoneCoverage,
+  flymapPersonCount,
+  flymapLoading,
+  dr03Online,
 }: {
   live: PatrolHelmetLiveMetrics
-  workforce: WorkforceSnapshot
   stats: PatrolDayStats
+  zoneCoverage: PatrolZoneCoverageResult
+  flymapPersonCount: number
+  flymapLoading: boolean
+  dr03Online: boolean
 }) {
-  const zoneEntries = Object.values(workforce.zonePopulation)
-  const visitedZones = zoneEntries.filter(
-    z => z.observed_count > 0 || z.kpi.peak > 0,
-  ).length
-  const totalZones = zoneEntries.length > 0 ? zoneEntries.length : PATROL_GPS_ZONES.length
-  const coveragePercent = totalZones > 0
-    ? Math.round((visitedZones / totalZones) * 100)
-    : 0
+  const { visitedZones, totalZones, coveragePercent } = zoneCoverage
 
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
+  const peakTimeActive = live.perCamera.some(row => row.peak_time_active)
+  const headcount = stats.personCount + stats.identityCount
+  const objectEncounters = stats.objectEncounterCount ?? stats.unassignedObservations
 
-  const workersDetailContent = stats.workersStandard > 0
+  const workersDetailContent = headcount > 0
     ? (
       <PatrolWorkersKpiDetail
         personCount={stats.personCount}
@@ -122,7 +123,7 @@ function PatrolKPIs({
     )
     : undefined
 
-  const workersDetailFallback = stats.workersStandard > 0
+  const workersDetailFallback = headcount > 0
     ? undefined
     : anyCameraOnline
       ? live.backendReachable || live.streamOnline
@@ -130,22 +131,30 @@ function PatrolKPIs({
         : 'Chưa có luồng live'
       : 'Chưa có dữ liệu hôm nay'
 
-  const encountersDetail = stats.encountersStandard > 0
-    ? `${stats.encountersStandard} lượt gặp qualified`
-    : 'Chưa ghi nhận lượt gặp'
+  const zoneDetail = visitedZones > 0
+    ? `${coveragePercent}% khu có thiết bị tuần tra active`
+    : anyCameraOnline
+      ? 'Thiết bị online — chờ xác nhận phủ khu'
+      : 'Chưa có thiết bị tuần tra online'
 
-  const unassignedDetail = stats.objectCount > 0
-    ? 'Thẻ chưa định danh — đồng bộ tab Đối tượng'
-    : 'Không có đối tượng'
+  const objectEncounterDetail = peakTimeActive
+    ? 'Peak time — chỉ đếm lượt gặp; mặt rõ mới định danh'
+    : objectEncounters > 0
+      ? 'Silhouette chưa gán danh tính — không tính Nhân sự'
+      : 'Chưa ghi nhận lượt gặp Đối tượng'
+
+  const flymapDetail = !dr03Online
+    ? 'Flycam chưa online'
+    : flymapLoading
+      ? 'Đang tải mật độ…'
+      : 'YOLO tầm cao — không cộng Nhân sự'
 
   const kpis = [
     {
       label: 'Khu vực tuần tra',
       value: `${visitedZones}/${totalZones}`,
       unit: 'khu vực',
-      detail: visitedZones > 0
-        ? `${coveragePercent}% diện tích đã phủ · mật độ tuần tra`
-        : 'Chưa có dữ liệu tuần tra',
+      detail: zoneDetail,
       change: 0,
       changeType: 'neutral' as const,
       icon: MapPin,
@@ -154,7 +163,7 @@ function PatrolKPIs({
     },
     {
       label: 'Nhân sự',
-      value: stats.workersStandard,
+      value: headcount,
       unit: 'nhân sự',
       detail: workersDetailFallback,
       detailContent: workersDetailContent,
@@ -165,26 +174,26 @@ function PatrolKPIs({
       iconColor: 'text-sky-400',
     },
     {
-      label: 'Lượt gặp',
-      value: stats.encountersStandard,
+      label: 'Lượt gặp · ĐT',
+      value: objectEncounters,
       unit: 'lượt',
-      detail: encountersDetail,
+      detail: objectEncounterDetail,
       change: 0,
       changeType: 'neutral' as const,
       icon: Footprints,
-      iconBg: 'bg-emerald-400/10',
-      iconColor: 'text-emerald-400',
-    },
-    {
-      label: 'Đối tượng',
-      value: stats.objectCount,
-      unit: 'thẻ',
-      detail: unassignedDetail,
-      change: 0,
-      changeType: 'neutral' as const,
-      icon: ScanFace,
       iconBg: 'bg-slate-400/10',
       iconColor: 'text-slate-400',
+    },
+    {
+      label: 'Mật độ flymap',
+      value: dr03Online ? flymapPersonCount : '—',
+      unit: dr03Online ? 'người/khung' : '',
+      detail: flymapDetail,
+      change: 0,
+      changeType: 'neutral' as const,
+      icon: Plane,
+      iconBg: 'bg-orange-400/10',
+      iconColor: 'text-orange-400',
     },
   ]
 
@@ -284,13 +293,9 @@ export function Module05Page() {
     () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),
     [dayBundle.events, flycamFlightModes],
   )
-  const displayStats = useMemo(
+  const { stats: patrolDisplayStats, tabCounts } = useMemo(
     () => derivePatrolDisplayStats(patrolEventsLive, dayBundle.stats),
     [patrolEventsLive, dayBundle.stats],
-  )
-  const tabCounts = useMemo(
-    () => computePatrolTabCounts(patrolEventsLive),
-    [patrolEventsLive],
   )
   const patrolMapCameraIds = useMemo(
     () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
@@ -306,11 +311,26 @@ export function Module05Page() {
     [patrolMapCameraIds, liveMetrics.perCamera, framesLiveTick],
   )
 
+  const zoneCoverage = useMemo(
+    () => computePatrolZoneCoverage({
+      cameraOnlineById: helmetOnlineById,
+      workforce: workforceSnap,
+    }),
+    [helmetOnlineById, workforceSnap],
+  )
+
+  const primaryDroneId = PATROL_DRONE_IDS[0] ?? 'DR-03'
+  const dr03Online = Boolean(helmetOnlineById[primaryDroneId])
+  const { personInFrame: flymapPersonCount, loading: flymapLoading } = usePatrolFlymapMetrics(
+    primaryDroneId,
+    dr03Online,
+  )
+
   const dayPresences = useMemo(
     () => dayBundle.bundle?.presences ?? [],
     [dayBundle.bundle],
   )
-  const dayStats = { stats: displayStats, loading: dayBundle.loading, reachable: dayBundle.reachable }
+  const dayStats = { stats: patrolDisplayStats, loading: dayBundle.loading, reachable: dayBundle.reachable }
   const dr03FlightLabel = patrolFlightModeLabel(flycamFlightModes['DR-03'] ?? 'aerial')
 
   const detailEvent = useMemo(
@@ -393,7 +413,14 @@ export function Module05Page() {
           {tier1Open && (
             <div className="p-2 sm:p-3">
               <Tier1 className="grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-                <PatrolKPIs live={liveMetrics} workforce={workforceSnap} stats={dayStats.stats} />
+                <PatrolKPIs
+                  live={liveMetrics}
+                  stats={dayStats.stats}
+                  zoneCoverage={zoneCoverage}
+                  flymapPersonCount={flymapPersonCount}
+                  flymapLoading={flymapLoading}
+                  dr03Online={dr03Online}
+                />
               </Tier1>
             </div>
           )}
@@ -472,6 +499,7 @@ export function Module05Page() {
                 workforce={workforceSnap}
                 flycamFlightModes={flycamFlightModes}
                 helmetOnlineById={helmetOnlineById}
+                visitedByZoneId={zoneCoverage.visitedByZoneId}
                 expanded={heatmapExpanded}
                 onCloseExpand={() => setHeatmapExpanded(false)}
                 showFlymap={flymapActive}

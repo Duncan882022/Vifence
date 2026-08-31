@@ -109,11 +109,18 @@ class PresenceDbTest(unittest.TestCase):
         daystore.touch_object(
             None, camera_id="HC-01", now=4_000.0,
             gps_lat=10.772100, gps_lng=106.659200,
+            snapshot_path="back.jpg",
+            snapshot_score=0.5,
         )
         stats = daystore.day_stats(db.today_vn(4_000.0))
         self.assertEqual(stats["unassigned_observations"], 1)
         self.assertEqual(stats["encounters_standard"], 0)
         self.assertEqual(stats["workers_standard"], 0)
+        self.assertEqual(stats["object_card_count"], 1)
+        self.assertEqual(
+            stats["workers_standard"],
+            stats["person_count"] + stats["identity_count"],
+        )
 
     def test_list_day_presences_includes_gps(self) -> None:
         pers_id, _ = identity.observe_face(_vec(104), quality=0.8)

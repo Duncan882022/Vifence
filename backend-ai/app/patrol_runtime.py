@@ -413,6 +413,8 @@ def _metrics_from_vms_overlay(overlay: dict) -> dict[str, Any]:
     return {
         "stream_online": True,
         "person_count": int(patrol_metrics.get("person_count") or len(persons)),
+        "display_person_count": int(patrol_metrics.get("display_person_count") or len(persons)),
+        "peak_time_active": bool(patrol_metrics.get("peak_time_active")),
         "identified_workers": identified_workers,
         "worker_names": list(dict.fromkeys(worker_names))[:5],
     }

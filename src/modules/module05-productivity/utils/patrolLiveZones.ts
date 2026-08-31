@@ -2,9 +2,10 @@ import type { PatrolZone } from '../data/patrolTypes'
 import { PATROL_GPS_ZONES, PATROL_SITE_ZONE_SEED } from '../data/patrolSiteMap'
 import type { WorkforceSnapshot } from '../types/workforceHeatmap'
 
-/** Zone live trên bản đồ — từ workforce backend, không mock jitter. */
+/** Zone live trên bản đồ — coverage từ thiết bị tuần tra, không từ observed_count. */
 export function buildPatrolLiveZonesFromWorkforce(
   workforce: WorkforceSnapshot,
+  visitedByZoneId?: Record<string, boolean>,
 ): PatrolZone[] {
   const seed = PATROL_SITE_ZONE_SEED[0]
 
@@ -12,7 +13,8 @@ export function buildPatrolLiveZonesFromWorkforce(
     const pop = workforce.zonePopulation[zoneDef.zone_id]
     const observed = pop?.observed_count ?? 0
     const peak = pop?.kpi.peak ?? 0
-    const visited = observed > 0 || peak > 0
+    const visited = visitedByZoneId?.[zoneDef.zone_id]
+      ?? (observed > 0 || peak > 0)
 
     return {
       id: zoneDef.zone_id,

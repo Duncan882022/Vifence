@@ -12,7 +12,6 @@ import {
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
-import { countPatrolGlobalWorkers, summarizePatrolGlobalWorkers } from './patrolPatrolCounts'
 
 function makeDayEvent(over: Partial<PatrolEvent>): PatrolEvent {
   return {
@@ -250,23 +249,5 @@ describe('buildPatrolDayHeatmapDots legacy fallback', () => {
     const scoped = filterRecentPatrolWorkerEvents([old, recent], Date.now())
     expect(scoped).toHaveLength(1)
     expect(scoped[0].objectId).toBe('pers-0003')
-  })
-})
-
-describe('countPatrolGlobalWorkers SQLite-first', () => {
-  it('đếm theo pers day card, không cộng registry', () => {
-    const events = [
-      makeDayEvent({ id: 'pers:pers-0001', objectId: 'pers-0001' }),
-      makeDayEvent({
-        id: 'pers:pers-0002',
-        objectId: 'pers-0002',
-        objectLabel: 'pers-0002',
-        lockedAt: '2026-08-26T09:00:00Z',
-      }),
-    ]
-    expect(countPatrolGlobalWorkers(events)).toBe(2)
-    const summary = summarizePatrolGlobalWorkers(events)
-    expect(summary.total).toBe(2)
-    expect(summary.person).toBe(2)
   })
 })
