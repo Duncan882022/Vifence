@@ -11,11 +11,14 @@ export function computeFaceScanRingProgress(
   required: number,
   holdProgress: number,
   complete: boolean,
+  approachProgress = 0,
 ): number {
   if (complete || required <= 0) return 1
   const safeHold = Math.max(0, Math.min(1, holdProgress))
+  const safeApproach = Math.max(0, Math.min(0.88, approachProgress))
+  const slotProgress = safeHold > 0 ? safeHold : safeApproach
   const safeCaptured = Math.max(0, capturedCount)
-  return Math.min(1, (safeCaptured + safeHold) / required)
+  return Math.min(1, (safeCaptured + slotProgress) / required)
 }
 
 export const FACE_SCAN_MODEL_LOAD_TIMEOUT_MS = 8000

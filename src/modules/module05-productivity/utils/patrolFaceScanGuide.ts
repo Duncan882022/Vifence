@@ -7,6 +7,7 @@ import {
 } from '@/modules/module02-training/services/deviceCamera.service'
 import {
   faceScanPoseLabel,
+  guidanceForSlot,
   type ScanPoseSlot,
 } from './patrolFaceScanPoses'
 
@@ -137,26 +138,170 @@ function classifyHeadPose(cx: number, cy: number): HeadPoseHint {
   return dx < 0 ? 'left' : 'right'
 }
 
+/** Tiến độ 0→1 khi quay đầu về phía góc slot — vòng tròn fill dần như Face ID. */
+export function poseApproachProgress(metrics: FaceScanMetrics, slot: ScanPoseSlot): number {
+  if (!metrics.hasFace) return 0
+  if (metrics.poseHint === 'too_far' || metrics.poseHint === 'too_close') return 0.04
+
+  const { centerX: cx, centerY: cy } = metrics
+  let raw = 0
+
+  switch (slot) {
+    case 1: {
+      const dx = Math.abs(cx - 0.5)
+      const dyFront = Math.max(0, cy - (PITCH_DOWN_Y - 0.02))
+      const dyUp = Math.max(0, 0.42 - cy)
+      raw = 1 - Math.min(1, dx / 0.14 * 0.55 + dyFront / 0.1 * 0.25 + dyUp / 0.08 * 0.2)
+      break
+    }
+    case 2: {
+      const target = 0.5 - YAW_TURN
+      raw = (0.5 - cx) / Math.max(0.01, 0.5 - target)
+      break
+    }
+    case 3: {
+      const target = 0.5 + YAW_TURN
+      raw = (cx - 0.5) / Math.max(0.01, target - 0.5)
+      break
+    }
+    case 4: {
+      raw = (cy - 0.44) / Math.max(0.01, PITCH_DOWN_Y - 0.44)
+      break
+    }
+    default:
+      return 0
+  }
+
+  if (!faceLooseInFrame(metrics)) raw *= 0.35
+  return Math.max(0, Math.min(0.92, raw))
+}
+
+const AUTO_POSE_MATCH_THRESHOLD = 0.72
+
 export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
   if (!faceLooseInFrame(metrics)) return false
   const { poseHint, centerX: cx, centerY: cy } = metrics
   switch (slot) {
     case 1:
       return poseHint === 'front'
-        || (Math.abs(cx - 0.5) <= YAW_SIDE + 0.04 && cy <= PITCH_DOWN_Y)
+        || (Math.abs(cx - 0.5) <= YAW_SIDE + 0.05 && cy <= PITCH_DOWN_Y + 0.02)
     case 2:
       return poseHint === 'left' || cx <= 0.5 - YAW_TURN_NEAR
     case 3:
       return poseHint === 'right' || cx >= 0.5 + YAW_TURN_NEAR
     case 4:
-      return poseHint === 'down' || cy >= PITCH_DOWN_Y - 0.05
+      return poseHint === 'down' || cy >= PITCH_DOWN_Y - 0.06
     default:
       return false
   }
 }
 
 export function faceReadyForAutoSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
+  if (!faceLooseInFrame(metrics)) return false
   return faceNearSlot(metrics, slot)
+    || poseApproachProgress(metrics, slot) >= AUTO_POSE_MATCH_THRESHOLD
+}
+
+export type AutoScanPhase =
+  | 'loading'
+  | 'no_face'
+  | 'approach'
+  | 'hold'
+  | 'capture'
+  | 'fallback'
+
+/** Hướng dẫn phụ cho chế độ tự động — luôn nói rõ cần quay đi đâu nếu chưa đủ góc. */
+export function autoScanInstruction(
+  metrics: FaceScanMetrics | null,
+  slot: ScanPoseSlot,
+  phase: AutoScanPhase,
+  holdProgress = 0,
+): string {
+  return liveScanHint(metrics, slot, phase, holdProgress).text
+}
+
+export type LiveScanDirection =
+  | 'front'
+  | 'left'
+  | 'right'
+  | 'down'
+  | 'hold'
+  | 'closer'
+  | 'farther'
+  | 'center'
+  | 'loading'
+  | 'none'
+
+export type LiveScanTone = 'neutral' | 'active' | 'success' | 'warn'
+
+export interface LiveScanHint {
+  text: string
+  direction: LiveScanDirection
+  tone: LiveScanTone
+}
+
+/** Hint trực tiếp trên camera — ngắn, có hướng quay đầu. */
+export function liveScanHint(
+  metrics: FaceScanMetrics | null,
+  slot: ScanPoseSlot,
+  phase: AutoScanPhase,
+  holdProgress = 0,
+): LiveScanHint {
+  if (phase === 'loading') {
+    return { text: 'Đang tải AI…', direction: 'loading', tone: 'neutral' }
+  }
+  if (phase === 'capture') {
+    return { text: 'Đang quét…', direction: 'hold', tone: 'success' }
+  }
+  if (phase === 'hold') {
+    return holdProgress >= 1
+      ? { text: 'Đang quét…', direction: 'hold', tone: 'success' }
+      : { text: 'Giữ yên', direction: 'hold', tone: 'active' }
+  }
+  if (phase === 'fallback') {
+    const dir = slot === 2 ? 'left' : slot === 3 ? 'right' : slot === 4 ? 'down' : 'front'
+    return { text: guidanceForSlot(slot), direction: dir, tone: 'active' }
+  }
+
+  if (!metrics?.hasFace) {
+    return { text: 'Đưa mặt vào khung tròn', direction: 'center', tone: 'warn' }
+  }
+
+  if (metrics.poseHint === 'too_far') {
+    return { text: 'Tiến lại gần', direction: 'closer', tone: 'warn' }
+  }
+  if (metrics.poseHint === 'too_close') {
+    return { text: 'Lùi xa một chút', direction: 'farther', tone: 'warn' }
+  }
+  if (metrics.poseHint === 'off_center') {
+    return { text: 'Căn mặt vào giữa', direction: 'center', tone: 'warn' }
+  }
+
+  if (faceReadyForAutoSlot(metrics, slot)) {
+    return { text: 'Giữ yên', direction: 'hold', tone: 'success' }
+  }
+
+  switch (slot) {
+    case 1:
+      if (metrics.poseHint === 'left' || metrics.centerX < 0.46) {
+        return { text: 'Quay về giữa', direction: 'right', tone: 'active' }
+      }
+      if (metrics.poseHint === 'right' || metrics.centerX > 0.54) {
+        return { text: 'Quay về giữa', direction: 'left', tone: 'active' }
+      }
+      if (metrics.poseHint === 'down' || metrics.centerY > 0.52) {
+        return { text: 'Ngẩng lên nhẹ', direction: 'front', tone: 'active' }
+      }
+      return { text: 'Nhìn thẳng camera', direction: 'front', tone: 'active' }
+    case 2:
+      return { text: 'Quay sang trái', direction: 'left', tone: 'active' }
+    case 3:
+      return { text: 'Quay sang phải', direction: 'right', tone: 'active' }
+    case 4:
+      return { text: 'Cúi cằm xuống', direction: 'down', tone: 'active' }
+    default:
+      return { text: guidanceForSlot(slot), direction: 'none', tone: 'neutral' }
+  }
 }
 
 export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
@@ -189,8 +334,8 @@ export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
   if (n < 12) return false
   const mean = sum / n
   const variance = sumSq / n - mean * mean
-  const minVariance = isHandheldDevice() ? 55 : 160
-  return variance > minVariance && mean > 25 && mean < 245
+  const minVariance = isHandheldDevice() ? 28 : 160
+  return variance > minVariance && mean > 20 && mean < 248
 }
 
 export function basicFacePresentInVideo(video: HTMLVideoElement): boolean {
