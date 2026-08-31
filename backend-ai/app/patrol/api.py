@@ -49,7 +49,6 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
     payload = {
         "pers_id": row["pers_id"],
         "status": row["status"],
-        "iden_code": row.get("iden_code"),
         "display_name": identity.display_name(row),
         "full_name": row.get("full_name"),
         "employee_code": row.get("employee_code"),
@@ -255,7 +254,6 @@ def day_events(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "event_date": r["event_date"],
             "pers_id": r["pers_id"],
             "status": r["status"],
-            "iden_code": r.get("iden_code"),
             "display_name": identity.display_name(r),
             "full_name": r.get("full_name"),
             "employee_code": r.get("employee_code"),
@@ -322,7 +320,6 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "event_date": r["event_date"],
             "pers_id": r["pers_id"],
             "status": r["status"],
-            "iden_code": r.get("iden_code"),
             "display_name": identity.display_name(r),
             "full_name": r.get("full_name"),
             "employee_code": r.get("employee_code"),

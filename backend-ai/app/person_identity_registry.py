@@ -1,4 +1,4 @@
-"""ID ẩn danh sgc-0xxxxxxx — dedup người chưa nhận diện (Module 05 HC-*)."""
+"""ID ẩn danh tk-xxxxxxx — dedup người chưa nhận diện (Module 05 HC-*)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import numpy as np
 
 from .schemas import PpeDetection
 from .track_matching import bbox_iou
+from .patrol_ids import format_tk, is_anonymous_track_id, is_tk_worker_id, normalize_track_id
 from .worker_identity.gallery import embedding_similarity
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -74,12 +75,17 @@ def _save(state: dict) -> None:
     )
 
 
-def _format_sgc(seq: int) -> str:
-    return f"sgc-0{seq:07d}"
+def _format_tk(seq: int) -> str:
+    return format_tk(seq)
+
+
+def is_sgc_worker_id(worker_id: str | None) -> bool:
+    """Legacy alias — tk-* thay sgc-*."""
+    return is_anonymous_track_id(worker_id)
 
 
 def clear_registry() -> int:
-    """Xóa toàn bộ registry sgc-* trong RAM và file — dùng khi reset test data.
+    """Xóa toàn bộ registry tk-* trong RAM và file — dùng khi reset test data.
 
     Giữ next_seq để ID không bao giờ bị cấp lại: alias thủ công cũ còn trong
     localStorage sẽ không dán tên người cũ lên người mới sau khi reset.
@@ -101,10 +107,6 @@ def _track_key(camera_id: str, track_id: str) -> str:
     return f"{camera_id}|{track_id}"
 
 
-def is_sgc_worker_id(worker_id: str | None) -> bool:
-    return bool(worker_id and str(worker_id).startswith("sgc-"))
-
-
 def peek_patrol_track_identity(camera_id: str, track_id: str) -> str:
     """Mã đã gắn cho track, hoặc "" — tra cứu thuần, không bao giờ cấp mã mới.
 
@@ -113,7 +115,8 @@ def peek_patrol_track_identity(camera_id: str, track_id: str) -> str:
     """
     with _lock:
         state = _load()
-        return str(state.get("tracks", {}).get(_track_key(camera_id, track_id)) or "")
+        raw = str(state.get("tracks", {}).get(_track_key(camera_id, track_id)) or "")
+        return normalize_track_id(raw) if raw else ""
 
 
 def is_identified_gallery_worker(worker_id: str | None) -> bool:
@@ -628,15 +631,15 @@ def _bodycam_face_dominant_bbox(
     return False
 
 
-def _assign_new_sgc(state: dict, key: str, pb: list[float] | None, face_emb: list[float] | None) -> tuple[str, str]:
+def _assign_new_tk(state: dict, key: str, pb: list[float] | None, face_emb: list[float] | None) -> tuple[str, str]:
     seq = max(int(state.get("next_seq") or 1), 1)
-    sgc = _format_sgc(seq)
+    tk_id = _format_tk(seq)
     state["next_seq"] = seq + 1
-    state["tracks"][key] = sgc
+    state["tracks"][key] = tk_id
     if pb and len(pb) >= 4:
-        _remember_track_meta(state, key, sgc, pb, face_emb)
+        _remember_track_meta(state, key, tk_id, pb, face_emb)
     _save(state)
-    return sgc, sgc
+    return tk_id, tk_id
 
 
 def resolve_patrol_person_identity(
@@ -650,7 +653,7 @@ def resolve_patrol_person_identity(
     frame_w: int = 640,
     frame_h: int = 480,
 ) -> tuple[str, str]:
-    """Trả (worker_id, worker_name) — gallery verified hoặc sgc-0xxxxxxx."""
+    """Trả (worker_id, worker_name) — gallery verified hoặc tk-xxxxxxx."""
     from .worker_identity.verify import is_verified_face_match, worker_match_from_detection
 
     query_emb = _as_emb(face_emb)
@@ -790,10 +793,10 @@ def resolve_patrol_person_identity(
                 return _finalize_identity_pair(final_id, final_name)
 
         seq = max(int(state.get("next_seq") or 1), 1)
-        sgc = _format_sgc(seq)
+        tk_id = _format_tk(seq)
         state["next_seq"] = seq + 1
-        state["tracks"][key] = sgc
+        state["tracks"][key] = tk_id
         if pb and len(pb) >= 4:
-            _remember_track_meta(state, key, sgc, pb, face_emb)
+            _remember_track_meta(state, key, tk_id, pb, face_emb)
         _save(state)
-        return _finalize_identity_pair(sgc, sgc)
+        return _finalize_identity_pair(tk_id, tk_id)

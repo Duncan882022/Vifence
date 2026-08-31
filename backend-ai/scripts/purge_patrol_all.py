@@ -24,7 +24,7 @@ def main() -> None:
     parser.add_argument(
         "--reset-counters",
         action="store_true",
-        help="Reset pers/iden counters (next person starts at pers-0001)",
+        help="Reset tk counter (next anonymous track starts at tk-0000001)",
     )
     args = parser.parse_args()
 

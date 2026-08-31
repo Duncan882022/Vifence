@@ -19,7 +19,7 @@ from typing import Any, Iterator
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_FILE = DATA_DIR / "patrol.db"
 
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 8
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -33,12 +33,11 @@ def today_vn(ts: float | None = None) -> str:
 
 
 _SCHEMA = """
--- Người và Định danh chung một bảng: định danh là *trạng thái* của một người,
--- không phải thực thể khác. Tách hai bảng chỉ đẻ ra một phép join vô nghĩa.
+-- Hồ sơ tuần tra: pers_id = tk-* (draft) hoặc gallery id p-* (identified).
+-- Không còn pers-0001 / iden-0001 tự sinh.
 CREATE TABLE IF NOT EXISTS persons (
   pers_id       TEXT PRIMARY KEY,
   status        TEXT NOT NULL,
-  iden_code     TEXT UNIQUE,
   full_name     TEXT,
   employee_code TEXT UNIQUE,
   contractor    TEXT,
@@ -48,19 +47,15 @@ CREATE TABLE IF NOT EXISTS persons (
   identified_at REAL,
   identified_by TEXT,
   created_at    REAL NOT NULL,
-  CHECK (status IN ('person', 'draft', 'identified')),
-  -- Bất biến nghiệp vụ thành ràng buộc lưu trữ: đã định danh thì phải có mã,
-  -- có mã thì phải là đã định danh. Không trông vào code nhớ kiểm.
-  CHECK ((status = 'identified') = (iden_code IS NOT NULL))
+  CHECK (status IN ('draft', 'identified')),
+  CHECK (
+    (status = 'identified') = (
+      employee_code IS NOT NULL
+      AND employee_code NOT LIKE 'tk-%'
+      AND employee_code NOT LIKE 'sgc-%'
+    )
+  )
 );
-
--- sgc-* ổn định trên ROI → một pers-* bản nháp — tránh pers-0001/0002/0003 trùng người.
-CREATE TABLE IF NOT EXISTS person_sgc_map (
-  sgc_id     TEXT PRIMARY KEY,
-  pers_id    TEXT NOT NULL REFERENCES persons(pers_id) ON DELETE CASCADE,
-  created_at REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_person_sgc_map_pers ON person_sgc_map(pers_id);
 
 -- Một người nhiều khuôn mặt (nhiều góc, nhiều nguồn) — 1:N thật.
 CREATE TABLE IF NOT EXISTS person_faces (
@@ -190,6 +185,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         migrate_to_v5,
         migrate_to_v6,
         migrate_to_v7,
+        migrate_to_v8,
     )
 
     migrate_to_v3(conn)
@@ -197,6 +193,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     migrate_to_v5(conn)
     migrate_to_v6(conn)
     migrate_to_v7(conn)
+    migrate_to_v8(conn)
 
 
 def _connect() -> sqlite3.Connection:
@@ -317,7 +314,7 @@ def purge_day(date: str | None = None) -> dict[str, Any]:
             "SELECT pers_id FROM persons"
             " WHERE status = ? AND origin = 'camera'"
             " AND pers_id NOT IN (SELECT DISTINCT pers_id FROM daily_events)",
-            (identity.STATUS_PERSON,),
+            (identity.STATUS_DRAFT,),
         ).fetchall()
         orphan_ids = [str(r["pers_id"]) for r in orphan_rows]
         for pid in orphan_ids:

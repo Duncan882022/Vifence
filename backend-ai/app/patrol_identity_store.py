@@ -78,8 +78,8 @@ def _is_verified_patrol_alias(alias: str) -> bool:
                 and person.get("status") == patrol_identity.STATUS_IDENTIFIED
             )
         row = db.query_one(
-            "SELECT status FROM persons WHERE iden_code = ?",
-            (key,),
+            "SELECT status FROM persons WHERE employee_code = ? OR pers_id = ?",
+            (key, key),
         )
         return (
             row is not None

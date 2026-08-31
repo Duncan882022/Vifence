@@ -137,7 +137,7 @@ def _resolve_snapshot_tier(
         candidates.append(explicit)
     if _snapshot_tier_rank(inferred) > 0:
         candidates.append(inferred)
-    if subject_id.startswith("pers-"):
+    if identity.get_person(subject_id):
         candidates.append(_snapshot_tier(subject_id))
 
     if candidates:
@@ -199,7 +199,7 @@ def _write_snapshot(
         else:
             cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
 
-        person = identity.get_person(subject_id) if subject_id.startswith("pers-") else None
+        person = identity.get_person(subject_id)
         wid = (worker_id or "").strip()
         if resolved_tier == "object":
             badge_worker_id = None

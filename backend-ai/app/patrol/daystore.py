@@ -400,7 +400,7 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
     rows = db.query(
         "SELECT e.event_date, e.pers_id, e.first_seen, e.last_seen,"
         "       e.snapshot_path, e.snapshot_score,"
-        "       p.status, p.iden_code, p.full_name, p.employee_code, p.contractor"
+        "       p.status, p.full_name, p.employee_code, p.contractor"
         "  FROM daily_events e JOIN persons p ON p.pers_id = e.pers_id"
         " WHERE e.event_date = ? ORDER BY e.last_seen DESC",
         (d,),
@@ -587,7 +587,7 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
         " a.gps_lat_end, a.gps_lng_end, a.presence_seq, a.source_cameras,"
         " a.track_id, a.session_id, a.counted,"
         " a.event_payload_json, a.interactions_json,"
-        " p.status AS person_status, p.iden_code, p.full_name"
+        " p.status AS person_status, p.full_name, p.employee_code"
         " FROM appearances a"
         " LEFT JOIN persons p ON p.pers_id = a.subject_id"
         " WHERE a.event_date = ? AND a.qualified = 1"
@@ -607,7 +607,7 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
         item["display_name"] = (
             str(r["full_name"]).strip()
             if r["full_name"]
-            else (str(r["iden_code"]) if r["iden_code"] else sid)
+            else (str(r["employee_code"]) if r["employee_code"] else sid)
         )
         out.append(item)
     return out
