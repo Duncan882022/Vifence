@@ -87,11 +87,11 @@ class GallerySyncTests(unittest.TestCase):
         enrollment = get_enrollment_status("p-SGC-6688")
         self.assertEqual(enrollment["poses_captured"], 0)
 
-    def test_promote_enroll_session_writes_three_selfie_jpgs(self) -> None:
+    def test_promote_enroll_session_writes_four_selfie_jpgs(self) -> None:
         session_id = identity.create_enroll_session()
         img = np.zeros((240, 240, 3), dtype=np.uint8)
         cv2.rectangle(img, (80, 60), (160, 180), (200, 180, 160), -1)
-        for slot in (1, 2, 3):
+        for slot in (1, 2, 3, 4):
             emb = np.random.randn(512).astype(np.float32)
             emb /= np.linalg.norm(emb)
             identity.add_enroll_session_face(session_id, emb.tolist(), pose_slot=slot)
@@ -104,13 +104,13 @@ class GallerySyncTests(unittest.TestCase):
             employee_code="SGC-6688",
             contractor_name="SGC",
         )
-        self.assertEqual(out["poses_enrolled"], 3)
+        self.assertEqual(out["poses_enrolled"], 4)
 
         from app.worker_identity.gallery import get_enrollment_status
 
         enrollment = get_enrollment_status("p-SGC-6688")
         self.assertTrue(enrollment["complete"])
-        self.assertEqual(enrollment["poses_captured"], 3)
+        self.assertEqual(enrollment["poses_captured"], 4)
 
     def test_sync_all_identified_on_startup(self) -> None:
         row1 = identity.import_identity(
@@ -146,10 +146,9 @@ class GallerySyncTests(unittest.TestCase):
         )
         pers_id = str(row["pers_id"])
         for seed in (0.1, 0.2, 0.3):
-            vec = np.zeros(512, dtype=np.float32)
-            vec[0] = seed
+            vec = np.random.default_rng(int(seed * 1000)).standard_normal(512).astype(np.float32)
             vec /= np.linalg.norm(vec)
-            identity.add_face_angle(pers_id, vec.tolist(), quality=1.0, camera_id="CAM")
+            identity.add_face_angle(pers_id, vec.tolist(), quality=1.0, camera_id="HC-02")
 
         self.assertEqual(identity.face_count(pers_id), 3)
         stats = identity.gallery_enrollment_stats("SGC-6688")

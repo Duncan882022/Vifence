@@ -534,7 +534,7 @@ class WorkerGalleryEnrollPayload(BaseModel):
     employee_code: str
     contractor_name: Optional[str] = None
     image_b64: str
-    pose_slot: int = Field(ge=1, le=3)
+    pose_slot: int = Field(ge=1, le=4)
 
 
 class PatrolIdentityAssignPayload(BaseModel):

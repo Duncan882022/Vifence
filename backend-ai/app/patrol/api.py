@@ -671,11 +671,11 @@ def gallery_worker_face(
     exp: int | None = None,
 ):
     """Ảnh khuôn mặt gallery — `<img>` dùng token HMAC ký từ GET /gallery/{id}/faces."""
-    from ..worker_identity.gallery import face_filename, gallery_dir
+    from ..worker_identity.gallery import ENROLLMENT_POSE_COUNT, face_filename, gallery_dir
 
     wid = worker_id.strip()
     pose_slot = int(slot)
-    if not wid or pose_slot < 1 or pose_slot > 3:
+    if not wid or pose_slot < 1 or pose_slot > ENROLLMENT_POSE_COUNT:
         return Response(status_code=400)
 
     sign_path = _gallery_face_sign_path(wid, pose_slot)
