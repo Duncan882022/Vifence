@@ -11,6 +11,7 @@ import {
   verifyPatrolDraftProfile,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
+import { WorkerProfileFaceGallery } from './WorkerProfileFaceGallery'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
@@ -189,6 +190,8 @@ export function WorkerProfileDetailModal({
                 </div>
               </div>
 
+              <WorkerProfileFaceGallery person={person} />
+
               <div className="flex flex-wrap gap-2 pt-1">
                 {person.status === 'draft' ? (
                   <button
@@ -274,6 +277,7 @@ export function WorkerProfileDetailModal({
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
                 />
               </label>
+              {person && <WorkerProfileFaceGallery person={person} compact />}
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"

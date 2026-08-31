@@ -20,6 +20,7 @@ export interface PatrolScanPose {
   slot: number
   label: string
   captured: boolean
+  url?: string | null
 }
 
 export interface PatrolScanEnrollment {
