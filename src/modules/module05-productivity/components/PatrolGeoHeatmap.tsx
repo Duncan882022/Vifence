@@ -35,6 +35,8 @@ import {
   resolveDetectionDotTier,
 } from '../utils/patrolDetectionDotUi'
 import { patrolTierToken } from '../utils/patrolTierTokens'
+import type { PatrolFlightMode } from '../utils/patrolFlightMode'
+import { patrolDroneMapAccent } from '../data/patrolDrones'
 import type { CameraPositions, RouteHistory } from '../hooks/usePatrolLiveMapState'
 import {
   formatDisplayValue,
@@ -530,6 +532,8 @@ export interface PatrolGeoHeatmapProps {
   simpleDotTooltip?: boolean
   /** Thiết bị vẽ polyline GPS — mặc định chỉ mũ HC-*. */
   routeDeviceIds?: string[]
+  /** Chế độ bay flycam — accent pin/route tầm cao sky. */
+  flightModeByCamera?: Record<string, PatrolFlightMode>
 }
 
 export function PatrolGeoHeatmap({
@@ -563,6 +567,7 @@ export function PatrolGeoHeatmap({
   uniformDotColor,
   simpleDotTooltip = false,
   routeDeviceIds,
+  flightModeByCamera,
 }: PatrolGeoHeatmapProps) {
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
   const [openHelmetTipId, setOpenHelmetTipId] = useState<string | null>(null)
@@ -898,11 +903,18 @@ export function PatrolGeoHeatmap({
             const hist = routeHistory[pin.id]
             if (!hist?.length) return null
             if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) return null
+            const isActive = Boolean(helmetOnlineById?.[pin.id])
+            const routeColor = patrolDroneMapAccent(
+              pin.id,
+              isActive,
+              flightModeByCamera?.[pin.id],
+              pin.color,
+            )
             return (
               <Polyline
                 key={`route-hist-${pin.id}`}
                 positions={hist}
-                color={pin.color}
+                color={routeColor}
                 weight={2}
                 opacity={0.75}
               />
@@ -920,6 +932,12 @@ export function PatrolGeoHeatmap({
             const markerOpacity = isActive ? 1 : 0.88
             const detect = helmetDetectCountsById?.[pin.id]
             const tipOpen = openHelmetTipId === pin.id
+            const pinAccent = patrolDroneMapAccent(
+              pin.id,
+              isActive,
+              flightModeByCamera?.[pin.id],
+              pin.color,
+            )
             const zBase = pin.kind === 'drone' ? 720 : 700
             const zIdle = pin.kind === 'drone' ? 420 : 400
             return (
@@ -930,7 +948,7 @@ export function PatrolGeoHeatmap({
                   pin.kind,
                   getPatrolMapDeviceBadgeNum(pin.id),
                   isActive,
-                  pin.color,
+                  pinAccent,
                 )}
                 zIndexOffset={isActive ? zBase : zIdle}
                 opacity={markerOpacity}

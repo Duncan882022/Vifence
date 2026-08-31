@@ -8,6 +8,7 @@ import { BackendConnectionBadge } from './BackendConnectionBadge'
 import {
   CAMERA_FLIGHT_MODE_BADGE,
   CAMERA_LIVE_BADGE,
+  CAMERA_LIVE_BADGE_SKY,
   CAMERA_TOOLBAR_SHELL,
   cameraToolbarBtn,
   cameraToolbarIconSize,
@@ -21,12 +22,15 @@ import {
 
 interface CameraLiveBadgeProps {
   compact?: boolean
+  /** Flycam tầm cao online — sky thay vì đỏ. */
+  variant?: 'default' | 'sky'
 }
 
-export function CameraLiveBadge({ compact }: CameraLiveBadgeProps) {
+export function CameraLiveBadge({ compact, variant = 'default' }: CameraLiveBadgeProps) {
+  const isSky = variant === 'sky'
   return (
-    <span className={cn(CAMERA_LIVE_BADGE, compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]')}>
-      <Radio className={cn(compact ? 'w-2 h-2' : 'w-2.5 h-2.5', 'text-red-400 animate-pulse')} aria-hidden />
+    <span className={cn(isSky ? CAMERA_LIVE_BADGE_SKY : CAMERA_LIVE_BADGE, compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]')}>
+      <Radio className={cn(compact ? 'w-2 h-2' : 'w-2.5 h-2.5', isSky ? 'text-sky-400 animate-pulse' : 'text-red-400 animate-pulse')} aria-hidden />
       LIVE
     </span>
   )
@@ -171,6 +175,10 @@ interface CameraChromeProps {
 /** LIVE + toolbar + thông tin cam — dùng chung mọi luồng. */
 export function CameraChrome({ cam, compact }: CameraChromeProps) {
   const isOffline = cam.status === 'offline' && !cam.framesLive
+  const flightMode = usePatrolDroneFlightMode(cam.id)
+  const aerialLive = isPatrolDroneCameraId(cam.id)
+    && !isOffline
+    && (flightMode ?? 'aerial') === 'aerial'
 
   return (
     <>
@@ -182,7 +190,7 @@ export function CameraChrome({ cam, compact }: CameraChromeProps) {
           ? <CameraOfflineBadge compact={compact} />
           : (
             <>
-              <CameraLiveBadge compact={compact} />
+              <CameraLiveBadge compact={compact} variant={aerialLive ? 'sky' : 'default'} />
               <CameraFlightModeBadge cameraId={cam.id} compact={compact} />
             </>
           )}

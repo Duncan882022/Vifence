@@ -41,6 +41,12 @@ export const CAMERA_LIVE_BADGE = cn(
   'shadow-md shadow-black/35 ring-1 ring-inset ring-white/[0.05]',
 )
 
+export const CAMERA_LIVE_BADGE_SKY = cn(
+  'inline-flex items-center gap-1 rounded-lg font-bold tracking-wide',
+  'bg-white/[0.07] backdrop-blur-xl backdrop-saturate-150 border border-sky-400/40 text-sky-300',
+  'shadow-md shadow-black/35 ring-1 ring-inset ring-white/[0.05]',
+)
+
 export const CAMERA_FLIGHT_MODE_BADGE = cn(
   'inline-flex items-center rounded-lg font-semibold tracking-wide',
   'bg-white/[0.07] backdrop-blur-xl backdrop-saturate-150',

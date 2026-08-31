@@ -5,6 +5,7 @@
  * Không dùng VMS relay `/stream/DR-*` (backend trả 503 cho patrol ids).
  */
 import { getMediaMtxHlsBase, getMediaMtxWebrtcBase, mediaMtxPathForCamera } from './helmetIngest'
+import type { PatrolFlightMode } from '../utils/patrolFlightMode'
 
 /** Camera thuộc nhóm flycam của Module 05. */
 export const PATROL_DRONE_CAMERA_PREFIX = 'DR-'
@@ -15,8 +16,22 @@ export const PATROL_DRONE_LABELS: Record<string, string> = {
   'DR-03': 'Drone 03',
 }
 
+/** Flycam tầm cao + online — accent sky (tile LIVE, pin map, route). */
+export const PATROL_DRONE_AERIAL_ACTIVE_HEX = '#38bdf8'
+
 export function isPatrolDroneCameraId(cameraId: string): boolean {
   return cameraId.startsWith(PATROL_DRONE_CAMERA_PREFIX)
+}
+
+export function patrolDroneMapAccent(
+  cameraId: string,
+  isActive: boolean,
+  flightMode: PatrolFlightMode | string | null | undefined,
+  fallbackColor: string,
+): string {
+  if (!isActive || !isPatrolDroneCameraId(cameraId)) return fallbackColor
+  if ((flightMode ?? 'aerial') === 'aerial') return PATROL_DRONE_AERIAL_ACTIVE_HEX
+  return fallbackColor
 }
 
 /** DR-* — ROI người luôn bật trên tile; không tắt qua bbox toggle. */

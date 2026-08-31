@@ -7,6 +7,8 @@ import { CameraVideoFeed } from '@/modules/module02-training/components/CameraVi
 import { useHelmetLocalStream } from '@/hooks/useHelmetLocalStream'
 import { CameraJsmpegFeed } from '@/components/common/CameraGrid/CameraJsmpegFeed'
 import { CameraChrome } from '@/modules/module02-training/components/CameraToolbar'
+import { isPatrolDroneCameraId } from '@/modules/module05-productivity/data/patrolDrones'
+import { usePatrolDroneFlightMode } from '@/modules/module05-productivity/hooks/usePatrolFlycamFlightModes'
 import { MobileCameraFeed } from '@/modules/module02-training/components/MobileCameraFeed'
 import { preloadFaceDetection } from '@/modules/module02-training/services/faceDetection.service'
 import {
@@ -96,6 +98,10 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
 }) {
   /** Mobile bodycam — luôn thử getUserMedia, không khóa bởi stream_online backend. */
   const isOffline = cam.status === 'offline' && !cam.framesLive && cam.streamType !== 'mobile'
+  const flightMode = usePatrolDroneFlightMode(cam.id)
+  const aerialLive = isPatrolDroneCameraId(cam.id)
+    && !isOffline
+    && (flightMode ?? 'aerial') === 'aerial'
 
   return (
     <div
@@ -114,7 +120,7 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
         <span className={cn(
           'font-bold tracking-widest uppercase',
           mini ? 'text-[6px]' : compact ? 'text-[7px]' : 'text-[8px]',
-          isOffline ? 'text-muted-foreground/50' : 'text-red-400/70',
+          isOffline ? 'text-muted-foreground/50' : aerialLive ? 'text-sky-400/80' : 'text-red-400/70',
         )}>
           {isOffline ? 'Offline' : 'LIVE'}
         </span>

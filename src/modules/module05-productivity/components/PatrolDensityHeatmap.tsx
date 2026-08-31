@@ -596,6 +596,7 @@ export function PatrolDensityHeatmap({
           uniformDotColor={showFlymap ? PATROL_FLYMAP_DOT_HEX : undefined}
           simpleDotTooltip={showFlymap}
           routeDeviceIds={showFlymap ? [...PATROL_DRONE_IDS] : undefined}
+          flightModeByCamera={flycamFlightModes}
         />
         <HeatmapLayerControls
           layers={layers}
