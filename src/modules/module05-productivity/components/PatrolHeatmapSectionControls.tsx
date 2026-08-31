@@ -27,7 +27,7 @@ export function PatrolHeatmapSectionControls({
             ? 'bg-sky-500/20 text-sky-300 hover:bg-sky-500/30'
             : 'hover:bg-[#1a2235] text-muted-foreground hover:text-foreground',
         )}
-        title={flymapActive ? 'Tắt Flymap — về heatmap site' : 'Bật Flymap — xem mật độ flycam'}
+        title={flymapActive ? 'Tắt Flymap — về heatmap mũ + site' : 'Bật Flymap — bản đồ drone (polygon + GPS)'}
         aria-pressed={flymapActive}
         aria-label={flymapActive ? 'Tắt Flymap' : 'Bật Flymap'}
       >

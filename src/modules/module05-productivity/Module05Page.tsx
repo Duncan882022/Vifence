@@ -465,6 +465,7 @@ export function Module05Page() {
             >
               <PatrolDensityHeatmap
                 patrolEvents={patrolEventsLive}
+                patrolEventsAll={dayBundle.events}
                 viewDate={patrolViewDate}
                 presences={dayPresences}
                 dayStats={dayStats.stats}

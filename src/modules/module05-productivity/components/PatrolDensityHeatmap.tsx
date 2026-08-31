@@ -8,7 +8,7 @@ import { X } from 'lucide-react'
 
 import { cn } from '@/utils/cn'
 import { DEFAULT_PATROL_CAMERA_IDS } from '../data/patrolCameras'
-import { PATROL_DRONE_IDS } from '../data/patrolDrones'
+import { isPatrolDroneCameraId, PATROL_DRONE_IDS } from '../data/patrolDrones'
 import {
   DETECTION_DOT_OPACITY_IN_VIEW,
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
@@ -22,7 +22,6 @@ import type { PatrolDayPresence, PatrolDayStats } from '../services/patrolDayEve
 import type { PatrolFlightMode } from '../utils/patrolFlightMode'
 import { buildPatrolLiveZonesFromWorkforce } from '../utils/patrolLiveZones'
 import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
-import { PatrolFlymapView } from './PatrolFlymapView'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
 import { PatrolHeatmapSectionControls } from './PatrolHeatmapSectionControls'
 import { WorkforceObjectSheet } from './WorkforceObjectSheet'
@@ -38,7 +37,11 @@ import {
   filterPatrolHeatmapDotsByDevice,
   mergePatrolHeatmapDetectionDots,
 } from '../utils/patrolDayHeatmapDots'
-import { PATROL_HEATMAP_DOT_HEX } from '../utils/patrolDetectionDotUi'
+import { PATROL_FLYMAP_DOT_HEX, PATROL_HEATMAP_DOT_HEX } from '../utils/patrolDetectionDotUi'
+import {
+  filterPatrolHeatmapDotsExcludeAerialFlycam,
+  filterPatrolPresencesForHeatmap,
+} from '../utils/patrolFlycamEventFilter'
 import {
   getHeatmapPersonDots,
   subscribeHeatmapPersonRegistry,
@@ -114,17 +117,25 @@ function HeatmapLayerControls({
   layers,
   onToggle,
   compactChrome,
+  flymapMode = false,
 }: {
   layers: { polygon: boolean; density: boolean; helmet: boolean; flycam: boolean }
   onToggle: (key: 'polygon' | 'density' | 'helmet' | 'flycam') => void
   compactChrome?: boolean
+  flymapMode?: boolean
 }) {
-  const items = [
-    { key: 'polygon' as const, label: 'Khu vực' },
-    { key: 'density' as const, label: 'Mật độ' },
-    { key: 'helmet' as const, label: 'Mũ' },
-    { key: 'flycam' as const, label: 'Flycam' },
-  ]
+  const items = flymapMode
+    ? [
+        { key: 'polygon' as const, label: 'Khu vực' },
+        { key: 'density' as const, label: 'Mật độ' },
+        { key: 'flycam' as const, label: 'Drone' },
+      ]
+    : [
+        { key: 'polygon' as const, label: 'Khu vực' },
+        { key: 'density' as const, label: 'Mật độ' },
+        { key: 'helmet' as const, label: 'Mũ' },
+        { key: 'flycam' as const, label: 'Flycam' },
+      ]
 
   return (
     <div
@@ -159,6 +170,38 @@ function HeatmapLayerControls({
   )
 }
 
+function FlymapStatsOverlay({
+  detectionCount,
+  compactChrome,
+}: {
+  detectionCount: number
+  compactChrome?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'absolute z-30 pointer-events-none',
+        'right-2 max-sm:right-1.5',
+        compactChrome ? 'bottom-2 max-sm:bottom-1.5' : 'bottom-14 max-sm:bottom-12',
+        'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
+      )}
+    >
+      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[108px] px-2.5 py-1.5 text-[#e2e8f0] text-left leading-tight whitespace-nowrap">
+        <div className={cn('flex items-center gap-1.5', compactChrome ? 'text-[9px]' : 'text-[10px]')}>
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: PATROL_FLYMAP_DOT_HEX }}
+            aria-hidden
+          />
+          <span>Phát hiện:</span>
+          {' '}
+          <span className="tabular-nums font-semibold">{detectionCount}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PatrolDensityHeatmap({
   expanded = false,
   onCloseExpand,
@@ -166,6 +209,7 @@ export function PatrolDensityHeatmap({
   onFlymapToggle,
   droneCamera,
   patrolEvents = [],
+  patrolEventsAll,
   viewDate: _viewDate,
   presences,
   dayStats,
@@ -176,12 +220,13 @@ export function PatrolDensityHeatmap({
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
   onCloseExpand?: () => void
-  /** Thay heatmap site bằng flymap DR-* (mật độ tầm cao). */
+  /** Thay heatmap site bằng flymap — bản đồ Cầu Sông Hốt clone, chỉ drone, chấm một màu. */
   showFlymap?: boolean
   onFlymapToggle?: () => void
   droneCamera?: TrainingCamera | null
   /** Feed sự kiện deduped — tooltip mũ + KPI detect (tránh fetch thêm). */
   patrolEvents?: PatrolEvent[]
+  patrolEventsAll?: PatrolEvent[]
   /** Ngày lịch VN đồng bộ với tab Sự kiện / playback. */
   viewDate?: string
   presences: PatrolDayPresence[]
@@ -283,27 +328,71 @@ export function PatrolDensityHeatmap({
   ])
 
   const mergedRouteHistory = useMemo(() => {
-    if (!hc02Online) {
-      const { 'HC-02': _drop, ...rest } = routeHistory
-      return rest
+    const appendPos = (
+      base: typeof routeHistory,
+      deviceId: string,
+      pos: [number, number],
+    ) => {
+      const hist = base[deviceId] ?? []
+      const filtered = hist.filter(([la, ln]) => {
+        const dLat = (la - pos[0]) * 111_320
+        const dLng = (ln - pos[1]) * 111_320 * Math.cos((pos[0] * Math.PI) / 180)
+        return Math.hypot(dLat, dLng) < 80
+      })
+      const last = filtered[filtered.length - 1]
+      if (last && last[0] === pos[0] && last[1] === pos[1]) {
+        return { ...base, [deviceId]: filtered }
+      }
+      return { ...base, [deviceId]: [...filtered, pos].slice(-150) }
     }
-    if (hc02Live.lat == null || hc02Live.lng == null) {
-      const { 'HC-02': _drop, ...rest } = routeHistory
-      return rest
+
+    let next: typeof routeHistory = { ...routeHistory }
+
+    if (hc02Online && hc02Live.lat != null && hc02Live.lng != null) {
+      const pos = resolvePatrolHelmetMapPosition(hc02Live.lat, hc02Live.lng, PATROL_HELMET_02_FALLBACK)
+      next = appendPos(next, 'HC-02', pos)
+    } else {
+      const { 'HC-02': _drop, ...rest } = next
+      next = rest
     }
-    const pos = resolvePatrolHelmetMapPosition(hc02Live.lat, hc02Live.lng, PATROL_HELMET_02_FALLBACK)
-    const hist = routeHistory['HC-02'] ?? []
-    const filtered = hist.filter(([la, ln]) => {
-      const dLat = (la - pos[0]) * 111_320
-      const dLng = (ln - pos[1]) * 111_320 * Math.cos((pos[0] * Math.PI) / 180)
-      return Math.hypot(dLat, dLng) < 80
-    })
-    const last = filtered[filtered.length - 1]
-    if (last && last[0] === pos[0] && last[1] === pos[1]) {
-      return { ...routeHistory, 'HC-02': filtered }
+
+    for (const dronePin of PATROL_MAP_ACTIVE_DRONE_PINS) {
+      const droneWf = workforce.helmets[dronePin.id]
+      if (!helmetOnlineById[dronePin.id] || droneWf?.lat == null || droneWf?.lon == null) {
+        const { [dronePin.id]: _drop, ...rest } = next
+        next = rest
+        continue
+      }
+      const pos = resolvePatrolHelmetMapPosition(
+        droneWf.lat,
+        droneWf.lon,
+        dronePin.position ?? PATROL_DRONE_03_FALLBACK,
+      )
+      next = appendPos(next, dronePin.id, pos)
     }
-    return { ...routeHistory, 'HC-02': [...filtered, pos].slice(-150) }
-  }, [routeHistory, hc02Live.lat, hc02Live.lng, hc02Online])
+
+    if (showFlymap) {
+      const flyRoutes: typeof routeHistory = {}
+      for (const id of PATROL_DRONE_IDS) {
+        if (next[id]?.length) flyRoutes[id] = next[id]
+      }
+      return flyRoutes
+    }
+
+    const helmetRoutes: typeof routeHistory = {}
+    for (const pin of PATROL_MAP_ACTIVE_HELMET_PINS) {
+      if (next[pin.id]?.length) helmetRoutes[pin.id] = next[pin.id]
+    }
+    return helmetRoutes
+  }, [
+    routeHistory,
+    hc02Live.lat,
+    hc02Live.lng,
+    hc02Online,
+    workforce.helmets,
+    helmetOnlineById,
+    showFlymap,
+  ])
 
   useEffect(() => {
     if (hc01Online) return
@@ -342,7 +431,15 @@ export function PatrolDensityHeatmap({
     void identityRevision
     void registryRevision
 
-    const persEntityLookup = buildPatrolPersEntityLookup(patrolEvents)
+    const eventCatalog = patrolEventsAll ?? patrolEvents
+    const persEntityLookup = buildPatrolPersEntityLookup(eventCatalog)
+    const scopedPresences = showFlymap
+      ? presences.filter(p => isPatrolDroneCameraId(p.cameraId || p.sourceCameras[0] || ''))
+      : filterPatrolPresencesForHeatmap(presences, flycamFlightModes)
+    const scopedEvents = showFlymap
+      ? eventCatalog.filter(e => isPatrolDroneCameraId(e.cameraId))
+      : patrolEvents
+    const liveOnlyOnline = showFlymap ? droneOnline : anyCameraOnline
 
     const presenceOpts = {
       cameraOnlineById: helmetOnlineById,
@@ -354,41 +451,42 @@ export function PatrolDensityHeatmap({
       persEntityLookup,
     } as const
 
-    let presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+    let presenceDots = buildPatrolPresenceHeatmapDots(scopedPresences, {
       ...presenceOpts,
-      liveOnly: anyCameraOnline,
+      liveOnly: liveOnlyOnline,
     })
-    if (anyCameraOnline && presenceDots.length === 0) {
-      presenceDots = buildPatrolPresenceHeatmapDots(presences, {
+    if (liveOnlyOnline && presenceDots.length === 0) {
+      presenceDots = buildPatrolPresenceHeatmapDots(scopedPresences, {
         ...presenceOpts,
         liveOnly: false,
       })
     }
 
-    const registryDots = getHeatmapPersonDots().map(dot => {
-      const camOnline = Boolean(helmetOnlineById[dot.cameraId])
-      const inCameraView = camOnline && Boolean(dot.inCameraView)
-      return {
-        ...dot,
-        inCameraView,
-        opacity: inCameraView
-          ? DETECTION_DOT_OPACITY_IN_VIEW
-          : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
-      }
-    })
+    const registryDots = getHeatmapPersonDots()
+      .filter(dot => !showFlymap || isPatrolDroneCameraId(dot.cameraId))
+      .map(dot => {
+        const camOnline = Boolean(helmetOnlineById[dot.cameraId])
+        const inCameraView = camOnline && Boolean(dot.inCameraView)
+        return {
+          ...dot,
+          inCameraView,
+          opacity: inCameraView
+            ? DETECTION_DOT_OPACITY_IN_VIEW
+            : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
+        }
+      })
 
-    /* Presences = nguồn ngày — tránh 2 chấm cùng người (presence + registry). */
-    let merged = presences.length > 0
+    let merged = scopedPresences.length > 0
       ? presenceDots
       : mergePatrolHeatmapDetectionDots([registryDots], { persEntityLookup })
 
-    if (merged.length === 0 && patrolEvents.length > 0) {
-      let eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
-        liveOnly: anyCameraOnline,
+    if (merged.length === 0 && scopedEvents.length > 0) {
+      let eventDots = buildPatrolDayHeatmapDots(scopedEvents, {
+        liveOnly: liveOnlyOnline,
         cameraOnlineById: helmetOnlineById,
       })
-      if (anyCameraOnline && eventDots.length === 0) {
-        eventDots = buildPatrolDayHeatmapDots(patrolEvents, {
+      if (liveOnlyOnline && eventDots.length === 0) {
+        eventDots = buildPatrolDayHeatmapDots(scopedEvents, {
           liveOnly: false,
           cameraOnlineById: helmetOnlineById,
         })
@@ -396,12 +494,20 @@ export function PatrolDensityHeatmap({
       merged = eventDots
     }
 
+    if (!showFlymap) {
+      merged = filterPatrolHeatmapDotsExcludeAerialFlycam(merged, flycamFlightModes)
+    }
+
     const byDevice = filterPatrolHeatmapDotsByDevice(merged, {
-      helmet: layers.helmet,
-      flycam: layers.flycam,
+      helmet: showFlymap ? false : layers.helmet,
+      flycam: showFlymap ? true : layers.flycam,
     })
+
     return byDevice.map(dot => ({
       ...dot,
+      ...(showFlymap
+        ? { tier: 'person' as const, verified: false, label: undefined, objectId: undefined }
+        : null),
       opacity: dot.inCameraView
         ? DETECTION_DOT_OPACITY_IN_VIEW
         : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
@@ -410,7 +516,10 @@ export function PatrolDensityHeatmap({
     layers.density,
     presences,
     patrolEvents,
+    patrolEventsAll,
+    showFlymap,
     anyCameraOnline,
+    droneOnline,
     helmetOnlineById,
     identityRevision,
     registryRevision,
@@ -444,27 +553,11 @@ export function PatrolDensityHeatmap({
   }, [expanded, onCloseExpand])
 
   const primaryDroneId = droneCamera?.id ?? PATROL_DRONE_IDS[0]
-  const droneFlightMode = flycamFlightModes[primaryDroneId] ?? 'aerial'
   const primaryDroneOnline = Boolean(primaryDroneId && helmetOnlineById[primaryDroneId])
+  const primaryDroneWf = workforce.helmets[primaryDroneId]
+  const droneHasLiveGps = primaryDroneWf?.lat != null && primaryDroneWf?.lon != null
 
-  const mapBody = showFlymap ? (
-    droneCamera ? (
-      <PatrolFlymapView
-        droneCamera={droneCamera}
-        flightMode={droneFlightMode}
-        streamOnline={primaryDroneOnline}
-        expanded={expanded}
-      />
-    ) : (
-      <div className={cn(
-        'flex items-center justify-center text-[11px] text-muted-foreground',
-        expanded ? viewport.modalMapClass : viewport.embeddedMapClass,
-      )}
-      >
-        Chưa có cấu hình flycam (DR-*).
-      </div>
-    )
-  ) : (
+  const mapBody = (
     <>
       <div className={cn(
         'min-w-0 relative',
@@ -481,36 +574,51 @@ export function PatrolDensityHeatmap({
           showZonePolygons={false}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
-          followLiveGps={hc02Online && hc02Live.hasLiveGps}
-          liveGpsLat={hc02Online ? hc02Live.lat : null}
-          liveGpsLng={hc02Online ? hc02Live.lng : null}
+          followLiveGps={showFlymap
+            ? (primaryDroneOnline && droneHasLiveGps)
+            : (hc02Online && hc02Live.hasLiveGps)}
+          liveGpsLat={showFlymap ? (primaryDroneWf?.lat ?? null) : (hc02Online ? hc02Live.lat : null)}
+          liveGpsLng={showFlymap ? (primaryDroneWf?.lon ?? null) : (hc02Online ? hc02Live.lng : null)}
           showDensity={false}
           showZoneStatLabels={false}
-          showRoute={layers.helmet}
-          showHelmetMarkers={layers.helmet}
-          showDroneMarkers={layers.flycam}
+          showRoute={showFlymap ? layers.flycam : layers.helmet}
+          showHelmetMarkers={!showFlymap && layers.helmet}
+          showDroneMarkers={showFlymap ? layers.flycam : layers.flycam}
           showCameras={false}
           helmetOnlineById={helmetOnlineById}
           helmetHeadingById={helmetHeadingById}
           helmetDetectCountsById={helmetDetectCountsById}
-          onDetectionClick={onDetectionClick}
+          onDetectionClick={showFlymap ? undefined : onDetectionClick}
           requireLiveGpsForHc02={false}
           hasHc02LiveGps={hc02Live.hasMapPosition}
           mapZoom={viewport.mapZoom}
           compactControls={viewport.compactChrome}
+          uniformDotColor={showFlymap ? PATROL_FLYMAP_DOT_HEX : undefined}
+          simpleDotTooltip={showFlymap}
+          routeDeviceIds={showFlymap ? [...PATROL_DRONE_IDS] : undefined}
         />
         <HeatmapLayerControls
           layers={layers}
           onToggle={toggleLayer}
           compactChrome={viewport.compactChrome}
+          flymapMode={showFlymap}
         />
-        <HeatmapSiteStatsOverlay
-          objectCount={objectCount}
-          personCount={personCount}
-          identityCount={identifiedCount}
-          compactChrome={viewport.compactChrome}
-        />
-        <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
+        {showFlymap ? (
+          <FlymapStatsOverlay
+            detectionCount={filteredDots.length}
+            compactChrome={viewport.compactChrome}
+          />
+        ) : (
+          <HeatmapSiteStatsOverlay
+            objectCount={objectCount}
+            personCount={personCount}
+            identityCount={identifiedCount}
+            compactChrome={viewport.compactChrome}
+          />
+        )}
+        {!showFlymap && (
+          <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
+        )}
       </div>
     </>
   )

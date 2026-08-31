@@ -6,7 +6,7 @@ import type { PatrolFlightMode } from './patrolFlightMode'
 import { patrolEventMatchesFlycamAltitude } from './patrolFlightMode'
 import { resolvePatrolPersonStage } from './patrolWorkforceEventLabels'
 
-/** Heatmap Module 05 — HC-* + DR-* tầm thấp; tầm cao dùng map riêng. */
+/** Heatmap site — HC-* + DR-* tầm thấp; DR-* tầm cao chỉ trên Flymap (bản đồ clone, chấm một màu). */
 export function isPatrolHeatmapFlycamDotIncluded(
   cameraId: string,
   flightModeByCamera: Record<string, PatrolFlightMode | string | null | undefined>,

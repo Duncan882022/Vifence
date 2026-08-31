@@ -190,8 +190,9 @@ function createZoneStatIcon(
 function createDetectionDotIcon(
   inCameraView: boolean,
   tier: ReturnType<typeof resolveDetectionDotTier>,
+  colorOverride?: string,
 ): L.DivIcon {
-  const color = PATROL_HEATMAP_DOT_HEX[tier]
+  const color = colorOverride ?? PATROL_HEATMAP_DOT_HEX[tier]
   const size = 7
   const innerClass = inCameraView ? 'patrol-dot-live-inner' : 'patrol-dot-hist-inner'
   const html = `
@@ -523,6 +524,12 @@ export interface PatrolGeoHeatmapProps {
   mapZoom?: number
   /** Mobile/tablet — zoom góc trên, safe-area */
   compactControls?: boolean
+  /** Flymap — một màu chấm (không phân tier). */
+  uniformDotColor?: string
+  /** Tooltip chấm rút gọn — không hiện loại định danh. */
+  simpleDotTooltip?: boolean
+  /** Thiết bị vẽ polyline GPS — mặc định chỉ mũ HC-*. */
+  routeDeviceIds?: string[]
 }
 
 export function PatrolGeoHeatmap({
@@ -553,6 +560,9 @@ export function PatrolGeoHeatmap({
   hasHc02LiveGps = false,
   mapZoom: mapZoomProp,
   compactControls = false,
+  uniformDotColor,
+  simpleDotTooltip = false,
+  routeDeviceIds,
 }: PatrolGeoHeatmapProps) {
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
   const [openHelmetTipId, setOpenHelmetTipId] = useState<string | null>(null)
@@ -610,6 +620,16 @@ export function PatrolGeoHeatmap({
       return aOnline ? 1 : -1
     })
   }, [helmetOnlineById])
+
+  const routePins = useMemo(() => {
+    const ids = routeDeviceIds ?? PATROL_MAP_ACTIVE_HELMET_PINS.map(p => p.id)
+    return ids.flatMap(id => {
+      const helmet = PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === id)
+      if (helmet) return [helmet]
+      const drone = PATROL_MAP_ACTIVE_DRONE_PINS.find(p => p.id === id)
+      return drone ? [drone] : []
+    })
+  }, [routeDeviceIds])
 
   const visibleDevicePins = useMemo((): PatrolMapDevicePin[] => {
     const pins: PatrolMapDevicePin[] = []
@@ -777,6 +797,7 @@ export function PatrolGeoHeatmap({
             const inView = dot.inCameraView ?? false
             const dotTier = resolveDetectionDotTier(dot)
             const tierLabel = patrolTierToken(dotTier).label
+            const dotColor = uniformDotColor
             const dotZ = !showHelmetMarkers && !showDroneMarkers && !showCameras
               ? (inView ? 820 : 780)
               : (inView ? 420 : 380)
@@ -785,22 +806,32 @@ export function PatrolGeoHeatmap({
                 <Marker
                   key={dot.id}
                   position={dot.position}
-                  icon={createDetectionDotIcon(inView, dotTier)}
+                  icon={createDetectionDotIcon(inView, dotTier, dotColor)}
                   zIndexOffset={dotZ}
                   eventHandlers={
-                    onDetectionClick && (dot.objectId || dot.type === 'person')
+                    !simpleDotTooltip && onDetectionClick && (dot.objectId || dot.type === 'person')
                       ? { click: () => onDetectionClick(dot) }
                       : undefined
                   }
                 >
                   <Tooltip sticky className="patrol-zone-tip">
                     <span style={{ fontSize: 10 }}>
-                      {`${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
-                      <br />
-                      Camera: {dot.cameraId}
-                      {dot.objectId ? ` · ${dot.objectId}` : ''}
-                      <br />
-                      {inView ? 'Đang trong FOV' : 'Ngoài FOV / lịch sử'}
+                      {simpleDotTooltip ? (
+                        <>
+                          {dot.cameraId}
+                          <br />
+                          {inView ? 'Trong FOV drone' : 'Lịch sử'}
+                        </>
+                      ) : (
+                        <>
+                          {`${tierLabel}${dot.label ? ` · ${dot.label}` : ''}`}
+                          <br />
+                          Camera: {dot.cameraId}
+                          {dot.objectId ? ` · ${dot.objectId}` : ''}
+                          <br />
+                          {inView ? 'Đang trong FOV' : 'Ngoài FOV / lịch sử'}
+                        </>
+                      )}
                     </span>
                   </Tooltip>
                 </Marker>
@@ -863,7 +894,7 @@ export function PatrolGeoHeatmap({
           })}
 
           {/* ── LAYER 4A: Patrol Route (accumulated history) ─── */}
-          {showRoute && PATROL_MAP_ACTIVE_HELMET_PINS.map(pin => {
+          {showRoute && routePins.map(pin => {
             const hist = routeHistory[pin.id]
             if (!hist?.length) return null
             if (pin.id === 'HC-02' && requireLiveGpsForHc02 && !hasHc02LiveGps) return null
