@@ -24,7 +24,7 @@ export function Module05Routes() {
           <>
             <Header
               title="Hồ Sơ Công Nhân"
-              subtitle="Import Excel & quản lý danh tính tuần tra Module 05"
+              subtitle="Import Excel · xem · sửa · xóa hồ sơ công nhân"
             />
             <Suspense fallback={<RouteFallback />}>
               <WorkerProfileManagementPage />
@@ -38,7 +38,7 @@ export function Module05Routes() {
           <>
             <Header
               title="Quét Mặt Công Nhân"
-              subtitle="Công nhân tự quét → nhập thông tin · HR quản lý hồ sơ"
+              subtitle="Quét 4 góc eKYC · công nhân tự đăng ký hoặc HR tra mã đã import"
             />
             <Suspense fallback={<RouteFallback />}>
               <WorkerFaceScanPage />

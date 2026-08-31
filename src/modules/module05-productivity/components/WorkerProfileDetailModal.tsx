@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
-  AlertCircle, CheckCircle, Loader2, Pencil, ScanFace, Trash2, X,
+  AlertCircle, Loader2, Pencil, Trash2, X,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
 import {
   deletePatrolWorkerProfile,
-  fetchPatrolScanEnrollment,
   fetchPatrolWorkerProfile,
   updatePatrolWorkerProfile,
-  type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 
@@ -34,7 +31,6 @@ export function WorkerProfileDetailModal({
 }: WorkerProfileDetailModalProps) {
   const [mode, setMode] = useState<'view' | 'edit'>(initialMode)
   const [person, setPerson] = useState<PatrolWorkerPerson | null>(null)
-  const [enrollment, setEnrollment] = useState<PatrolScanEnrollment | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -50,12 +46,8 @@ export function WorkerProfileDetailModal({
     setLoading(true)
     setError(null)
     try {
-      const [p, e] = await Promise.all([
-        fetchPatrolWorkerProfile(persId),
-        fetchPatrolScanEnrollment(persId).catch(() => null),
-      ])
+      const p = await fetchPatrolWorkerProfile(persId)
       setPerson(p)
-      setEnrollment(e)
       setFullName(p.full_name ?? '')
       setEmployeeCode(p.employee_code ?? '')
       setContractor(p.contractor ?? '')
@@ -70,10 +62,7 @@ export function WorkerProfileDetailModal({
     setMode(initialMode)
     setConfirmDelete(false)
     if (persId) void load()
-    else {
-      setPerson(null)
-      setEnrollment(null)
-    }
+    else setPerson(null)
   }, [persId, initialMode, load])
 
   if (!persId) return null
@@ -179,19 +168,6 @@ export function WorkerProfileDetailModal({
                     </p>
                   </div>
                 </div>
-                {enrollment && (
-                  <div className="rounded-lg border border-[#1e2433] p-3 space-y-1.5">
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Góc đã quét</p>
-                    {enrollment.poses.map(pose => (
-                      <div key={pose.slot} className="flex items-center justify-between text-[11px]">
-                        <span>{pose.label}</span>
-                        {pose.captured
-                          ? <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-                          : <span className="text-muted-foreground text-[9px]">Chưa quét</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
                 <div className="grid grid-cols-2 gap-3 text-[10px] text-muted-foreground">
                   <div>
                     <span className="text-[9px] uppercase tracking-wider block">Lần đầu thấy</span>
@@ -213,14 +189,6 @@ export function WorkerProfileDetailModal({
                   <Pencil className="w-3.5 h-3.5" />
                   Sửa
                 </button>
-                <Link
-                  to={`/module05/quet-mat?code=${encodeURIComponent(person.employee_code ?? '')}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white hover:bg-violet-500/90"
-                  onClick={onClose}
-                >
-                  <ScanFace className="w-3.5 h-3.5" />
-                  Quét mặt
-                </Link>
                 {!confirmDelete ? (
                   <button
                     type="button"

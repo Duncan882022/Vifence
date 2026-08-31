@@ -187,13 +187,6 @@ export function WorkerProfileManagementPage() {
               {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
               Làm mới
             </button>
-            <Link
-              to="/module05/quet-mat?admin=1"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-semibold bg-violet-500 text-white hover:bg-violet-500/90"
-            >
-              <ScanFace className="w-3 h-3" />
-              Quét mặt
-            </Link>
           </div>
         </div>
 
@@ -288,13 +281,6 @@ export function WorkerProfileManagementPage() {
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <Link
-                            to={`/module05/quet-mat?code=${encodeURIComponent(p.employee_code ?? '')}`}
-                            title="Quét mặt"
-                            className="p-1.5 rounded text-violet-300 hover:bg-violet-500/10"
-                          >
-                            <ScanFace className="w-3.5 h-3.5" />
-                          </Link>
                           <button
                             type="button"
                             title="Xóa hồ sơ"
@@ -320,7 +306,7 @@ export function WorkerProfileManagementPage() {
           <div className="p-3 space-y-3">
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               Cột bắt buộc: <strong className="text-foreground">Họ tên</strong>, <strong className="text-foreground">Mã nhân viên</strong>.
-              Upsert theo mã — trùng mã sẽ cập nhật tên/đơn vị. Sau import, sang trang Quét mặt để lưu vector.
+              Upsert theo mã — trùng mã sẽ cập nhật tên/đơn vị. Vector mặt được quét riêng tại menu Quét mặt.
             </p>
 
             <button
