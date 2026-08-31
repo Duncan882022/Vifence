@@ -366,6 +366,9 @@ export function suppressPatrolObjectOverlappingIdentified<T extends {
         const keptWid = patrolKnownWorkerId(keptDet.d.worker_id)
         if (candWid && keptWid && candWid !== keptWid) return false
       }
+      const candTrack = candidate.d.track_id?.trim() ?? ''
+      const keptTrack = keptDet.d.track_id?.trim() ?? ''
+      if (candTrack && keptTrack && candTrack !== keptTrack) return false
       return true
     })
     if (dominated) {

@@ -109,6 +109,23 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertLess(centers[0], 400.0)
         self.assertGreater(centers[1], 700.0)
 
+    def test_two_adjacent_faces_in_crowd_yield_two_boxes(self):
+        """Hai người đi sát nhau — bbox hẹp theo mặt, không gộp thành một ROI."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        crowd_box = (220.0, 120.0, 880.0, 640.0)
+        face_a = _FrameFace(box=(420.0, 180.0, 500.0, 300.0), score=0.9)
+        face_b = _FrameFace(box=(580.0, 190.0, 660.0, 310.0), score=0.88)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_a, face_b]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(crowd_box, 0.74)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 2)
+        centers = sorted((box[0] + box[2]) / 2 for box, _ in out)
+        self.assertLess(centers[1] - centers[0], 350.0)
+        self.assertGreater(centers[1] - centers[0], 80.0)
+
     def test_large_yolo_does_not_suppress_distant_face_synth(self):
         """Mặt ngoài bbox YOLO vẫn được synth dù IoU với box YOLO lớn."""
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
