@@ -116,7 +116,7 @@ describe('patrolFaceScanGuide', () => {
     }, 2)).toBe(true)
   })
 
-  it('auto instruction tells user how to turn when pose insufficient', () => {
+  it('auto instruction only shows current slot angle (photographer view)', () => {
     expect(autoScanInstruction(null, 2, 'fallback')).toContain('trái')
     expect(liveScanHint({
       hasFace: true,
@@ -124,14 +124,19 @@ describe('patrolFaceScanGuide', () => {
       fillScore: 0.5,
       centerX: 0.5,
       centerY: 0.5,
-    }, 2, 'approach').direction).toBe('left')
+    }, 2, 'approach')).toEqual({
+      text: 'Quay đầu chậm sang trái',
+      direction: 'left',
+      tone: 'active',
+    })
     expect(liveScanHint({
       hasFace: true,
       poseHint: 'left',
       fillScore: 0.5,
       centerX: 0.34,
       centerY: 0.5,
-    }, 2, 'approach').text).toContain('Giữ yên')
+    }, 2, 'approach').text).toBe('Giữ yên')
+    expect(liveScanHint(null, 3, 'no_face').text).toBe('Đưa mặt vào khung tròn')
   })
 
   it('blocks manual capture without AI', () => {

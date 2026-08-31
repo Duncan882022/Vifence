@@ -240,15 +240,31 @@ export interface LiveScanHint {
   tone: LiveScanTone
 }
 
-/** Hint trực tiếp trên camera — ngắn, có hướng quay đầu. */
+function slotLiveDirection(slot: ScanPoseSlot): LiveScanDirection {
+  switch (slot) {
+    case 2:
+      return 'left'
+    case 3:
+      return 'right'
+    case 4:
+      return 'down'
+    default:
+      return 'front'
+  }
+}
+
+/** Hint trực tiếp trên camera — chỉ hướng dẫn góc đang quét (góc nhìn người chụp). */
 export function liveScanHint(
   metrics: FaceScanMetrics | null,
   slot: ScanPoseSlot,
   phase: AutoScanPhase,
   holdProgress = 0,
 ): LiveScanHint {
+  const slotText = guidanceForSlot(slot)
+  const slotDir = slotLiveDirection(slot)
+
   if (phase === 'loading') {
-    return { text: 'Đang tải AI…', direction: 'loading', tone: 'neutral' }
+    return { text: 'Đang tải…', direction: 'loading', tone: 'neutral' }
   }
   if (phase === 'capture') {
     return { text: 'Đang quét…', direction: 'hold', tone: 'success' }
@@ -258,50 +274,16 @@ export function liveScanHint(
       ? { text: 'Đang quét…', direction: 'hold', tone: 'success' }
       : { text: 'Giữ yên', direction: 'hold', tone: 'active' }
   }
-  if (phase === 'fallback') {
-    const dir = slot === 2 ? 'left' : slot === 3 ? 'right' : slot === 4 ? 'down' : 'front'
-    return { text: guidanceForSlot(slot), direction: dir, tone: 'active' }
-  }
 
-  if (!metrics?.hasFace) {
+  if (!metrics?.hasFace && phase === 'no_face') {
     return { text: 'Đưa mặt vào khung tròn', direction: 'center', tone: 'warn' }
   }
 
-  if (metrics.poseHint === 'too_far') {
-    return { text: 'Tiến lại gần', direction: 'closer', tone: 'warn' }
-  }
-  if (metrics.poseHint === 'too_close') {
-    return { text: 'Lùi xa một chút', direction: 'farther', tone: 'warn' }
-  }
-  if (metrics.poseHint === 'off_center') {
-    return { text: 'Căn mặt vào giữa', direction: 'center', tone: 'warn' }
-  }
-
-  if (faceReadyForAutoSlot(metrics, slot)) {
+  if (metrics && faceReadyForAutoSlot(metrics, slot)) {
     return { text: 'Giữ yên', direction: 'hold', tone: 'success' }
   }
 
-  switch (slot) {
-    case 1:
-      if (metrics.poseHint === 'left' || metrics.centerX < 0.46) {
-        return { text: 'Quay về giữa', direction: 'right', tone: 'active' }
-      }
-      if (metrics.poseHint === 'right' || metrics.centerX > 0.54) {
-        return { text: 'Quay về giữa', direction: 'left', tone: 'active' }
-      }
-      if (metrics.poseHint === 'down' || metrics.centerY > 0.52) {
-        return { text: 'Ngẩng lên nhẹ', direction: 'front', tone: 'active' }
-      }
-      return { text: 'Nhìn thẳng camera', direction: 'front', tone: 'active' }
-    case 2:
-      return { text: 'Quay sang trái', direction: 'left', tone: 'active' }
-    case 3:
-      return { text: 'Quay sang phải', direction: 'right', tone: 'active' }
-    case 4:
-      return { text: 'Cúi cằm xuống', direction: 'down', tone: 'active' }
-    default:
-      return { text: guidanceForSlot(slot), direction: 'none', tone: 'neutral' }
-  }
+  return { text: slotText, direction: slotDir, tone: 'active' }
 }
 
 export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
