@@ -318,8 +318,7 @@ export interface PatrolHeatmapDeviceLayers {
   flycam: boolean
 }
 
-/** Khóa gộp chấm — cùng logic dedup presence/registry (gallery thắng sgc/pers). */
-function resolveHeatmapDotMergeKey(
+export function resolveHeatmapDotMergeKey(
   dot: DetectionDot,
   persEntityLookup?: Record<string, string>,
 ): string {

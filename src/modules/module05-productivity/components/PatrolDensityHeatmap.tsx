@@ -367,9 +367,10 @@ export function PatrolDensityHeatmap({
       }
     })
 
-    let merged = mergePatrolHeatmapDetectionDots([presenceDots, registryDots], {
-      persEntityLookup,
-    })
+    /* Presences = nguồn ngày — tránh 2 chấm cùng người (presence + registry). */
+    let merged = presences.length > 0
+      ? presenceDots
+      : mergePatrolHeatmapDetectionDots([registryDots], { persEntityLookup })
 
     if (merged.length === 0 && patrolEvents.length > 0) {
       let eventDots = buildPatrolDayHeatmapDots(patrolEvents, {

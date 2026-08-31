@@ -33,6 +33,7 @@ function makeDayEvent(over: Partial<PatrolEvent>): PatrolEvent {
     confidence: 1,
     gps: { lat: 0, lng: 0 },
     snapshotUrl: 'https://example.com/snap.jpg',
+    snapshotScore: 1.2,
     stage: 'person',
     ...over,
   } as PatrolEvent

@@ -204,13 +204,8 @@ def patrol_tier_label(worker_id: str | None) -> str:
         except Exception:
             pass
         return "object"
-<<<<<<< HEAD
-=======
-    if wid.lower().startswith("iden-"):
-        return "identity"
     if wid.lower().startswith("p-"):
         return "identity" if is_patrol_gallery_id(wid) else "person"
->>>>>>> origin/cursor/delete-profile-tier-downgrade-5956
     if resolve_patrol_gallery_id_for_worker(wid) or is_patrol_gallery_id(wid):
         return "identity"
     if is_patrol_iden_id(wid):
