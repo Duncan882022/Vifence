@@ -55,7 +55,16 @@ describe('patrolFaceScanGuide', () => {
       poseHint: 'up',
       fillScore: 0.5,
       centerX: 0.5,
-      centerY: 0.34,
+      centerY: 0.42,
+      faceAspect: 1.15,
+    }, 5)).toBe(true)
+    expect(faceReadyForAutoSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.44,
+      faceAspect: 1.2,
     }, 5)).toBe(true)
   })
 

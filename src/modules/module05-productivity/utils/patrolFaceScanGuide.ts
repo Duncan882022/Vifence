@@ -37,6 +37,8 @@ export interface FaceScanMetrics {
   fillScore: number
   centerX: number
   centerY: number
+  /** fh/fw — ngửa lên thường làm bbox cao hơn (BlazeFace). */
+  faceAspect: number
 }
 
 const FACE_SCORE_MIN = 0.28
@@ -52,7 +54,10 @@ const CENTER_X_MAX = 0.8
 const CENTER_Y_MIN = 0.18
 const CENTER_Y_MAX = 0.82
 const PITCH_DOWN_Y = 0.54
-const PITCH_UP_Y = 0.39
+/** cy thấp hơn = mặt lên trên khung (ngửa cằm). Nới so v0.39 — BlazeFace ít dịch bbox. */
+const PITCH_UP_Y = 0.46
+const PITCH_UP_ASPECT = 1.12
+const AUTO_POSE_MATCH_THRESHOLD_UP = 0.55
 
 type BlazeFaceModel = {
   estimateFaces: (
@@ -129,13 +134,25 @@ function faceInOval(cx: number, cy: number, fw: number): boolean {
   return fw >= FILL_MIN * 0.7
 }
 
-function classifyHeadPose(cx: number, cy: number): HeadPoseHint {
+function looksLikeUpPose(metrics: FaceScanMetrics): boolean {
+  const { centerX: cx, centerY: cy, faceAspect = 1 } = metrics
+  if (Math.abs(cx - 0.5) > YAW_SIDE + 0.10) return false
+  if (metrics.poseHint === 'up') return true
+  if (cy <= PITCH_UP_Y + 0.02) return true
+  if (faceAspect >= PITCH_UP_ASPECT && cy <= 0.50) return true
+  return false
+}
+
+function classifyHeadPose(cx: number, cy: number, faceAspect = 1): HeadPoseHint {
   const dx = cx - 0.5
   if (cy >= PITCH_DOWN_Y && Math.abs(dx) <= YAW_SIDE + 0.06) return 'down'
   if (dx <= -YAW_TURN) return 'left'
   if (dx >= YAW_TURN) return 'right'
-  if (cy <= PITCH_UP_Y && Math.abs(dx) <= YAW_SIDE + 0.04) return 'up'
-  if (Math.abs(dx) <= YAW_SIDE && cy <= PITCH_DOWN_Y - 0.04) return 'front'
+  const centered = Math.abs(dx) <= YAW_SIDE + 0.08
+  if (centered && (cy <= PITCH_UP_Y || (faceAspect >= PITCH_UP_ASPECT && cy <= 0.50))) {
+    return 'up'
+  }
+  if (centered && cy <= PITCH_DOWN_Y - 0.04 && cy > PITCH_UP_Y) return 'front'
   return dx < 0 ? 'left' : 'right'
 }
 
@@ -170,7 +187,7 @@ export function poseApproachProgress(metrics: FaceScanMetrics, slot: ScanPoseSlo
       break
     }
     case 5: {
-      raw = (PITCH_UP_Y + 0.03 - cy) / Math.max(0.01, PITCH_UP_Y + 0.03 - 0.30)
+      raw = (PITCH_UP_Y + 0.04 - cy) / Math.max(0.01, PITCH_UP_Y + 0.04 - 0.32)
       break
     }
   }
@@ -195,7 +212,7 @@ export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): bool
     case 4:
       return poseHint === 'down' || cy >= PITCH_DOWN_Y - 0.06
     case 5:
-      return poseHint === 'up' || cy <= PITCH_UP_Y + 0.03
+      return looksLikeUpPose(metrics)
     default:
       return false
   }
@@ -203,8 +220,9 @@ export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): bool
 
 export function faceReadyForAutoSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
   if (!faceLooseInFrame(metrics)) return false
+  const threshold = slot === 5 ? AUTO_POSE_MATCH_THRESHOLD_UP : AUTO_POSE_MATCH_THRESHOLD
   return faceNearSlot(metrics, slot)
-    || poseApproachProgress(metrics, slot) >= AUTO_POSE_MATCH_THRESHOLD
+    || poseApproachProgress(metrics, slot) >= threshold
 }
 
 export type AutoScanPhase =
@@ -377,7 +395,7 @@ export function faceReadyForSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): 
     case 4:
       return metrics.poseHint === 'down'
     case 5:
-      return metrics.poseHint === 'up'
+      return looksLikeUpPose(metrics)
     default:
       return false
   }
@@ -422,6 +440,7 @@ export async function analyzeFaceScanFrame(video: HTMLVideoElement): Promise<Fac
     fillScore: 0,
     centerX: 0.5,
     centerY: 0.5,
+    faceAspect: 1,
   }
 
   const canvas = drawVideoSampleMirrored(video)
@@ -460,18 +479,20 @@ export async function analyzeFaceScanFrame(video: HTMLVideoElement): Promise<Fac
   const cy = ((y1 + y2) / 2) / h
   const fillScore = Math.min(1, (fw / FILL_MAX) * 0.85 + (fh / 0.55) * 0.15)
 
+  const faceAspect = fh / Math.max(fw, 0.01)
+
   if (fw < FILL_MIN) {
-    return { hasFace: true, poseHint: 'too_far', fillScore, centerX: cx, centerY: cy }
+    return { hasFace: true, poseHint: 'too_far', fillScore, centerX: cx, centerY: cy, faceAspect }
   }
   if (fw > FILL_MAX) {
-    return { hasFace: true, poseHint: 'too_close', fillScore, centerX: cx, centerY: cy }
+    return { hasFace: true, poseHint: 'too_close', fillScore, centerX: cx, centerY: cy, faceAspect }
   }
   if (!faceInOval(cx, cy, fw)) {
-    return { hasFace: true, poseHint: 'off_center', fillScore, centerX: cx, centerY: cy }
+    return { hasFace: true, poseHint: 'off_center', fillScore, centerX: cx, centerY: cy, faceAspect }
   }
 
-  const poseHint = classifyHeadPose(cx, cy)
-  return { hasFace: true, poseHint, fillScore, centerX: cx, centerY: cy }
+  const poseHint = classifyHeadPose(cx, cy, faceAspect)
+  return { hasFace: true, poseHint, fillScore, centerX: cx, centerY: cy, faceAspect }
 }
 
 export function getPatrolFaceScanModelStatus(): FaceScanModelStatus {
@@ -487,13 +508,21 @@ const HINT_SAMPLE_CENTERS: Partial<Record<HeadPoseHint, { centerX: number; cente
   left: { centerX: 0.34, centerY: 0.5 },
   right: { centerX: 0.66, centerY: 0.5 },
   down: { centerX: 0.5, centerY: 0.62 },
-  up: { centerX: 0.5, centerY: 0.34 },
+  up: { centerX: 0.5, centerY: 0.42 },
 }
 
 export function poseHintMatchesSlot(hint: HeadPoseHint, slot: ScanPoseSlot): boolean {
   const sample = HINT_SAMPLE_CENTERS[hint] ?? { centerX: 0.5, centerY: 0.5 }
+  const aspect = hint === 'up' ? 1.15 : 1
   return faceReadyForSlot(
-    { hasFace: true, poseHint: hint, fillScore: 1, centerX: sample.centerX, centerY: sample.centerY },
+    {
+      hasFace: true,
+      poseHint: hint,
+      fillScore: 1,
+      centerX: sample.centerX,
+      centerY: sample.centerY,
+      faceAspect: aspect,
+    },
     slot,
   )
 }
