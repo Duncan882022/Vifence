@@ -1,5 +1,6 @@
-import { getPatrolManualIdentity, getPatrolManualIdentityForSgc, findPatrolIdentityByWorkerId, resolvePatrolObjectLabel } from '../services/patrolManualIdentity.service'
+import { getPatrolManualIdentity, getPatrolManualIdentityForTk, findPatrolIdentityByWorkerId, resolvePatrolObjectLabel } from '../services/patrolManualIdentity.service'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
+import { isPatrolTkWorkerId, isPatrolAnonymousTrackId } from '../utils/patrolWorkforceEventLabels'
 import { formatPersonOverlayLabel } from '@/modules/module03-safety/utils/personOverlayLabel'
 import type { PersonRoiDisplay } from './types'
 
@@ -7,15 +8,15 @@ import type { PersonRoiDisplay } from './types'
 export function isTechnicalPatrolWorkerLabel(label?: string | null): boolean {
   const s = (label ?? '').trim()
   if (!s || s.toLowerCase() === 'unknown') return true
-  return /^(sgc-|p-|pers-|iden-|obj-|ptk)/i.test(s)
+  return /^(tk-|p-|pers-|iden-|obj-|ptk)/i.test(s)
 }
 
 /**
- * Nhãn ROI live — tier `identity` luôn ưu tiên tên người, không mã sgc/p-*.
+ * Nhãn ROI live — tier `identity` luôn ưu tiên tên người, không mã tk/p-*.
  */
 export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
   const wid = track.workerId?.trim() ?? ''
-  const manual = getPatrolManualIdentity(wid) ?? getPatrolManualIdentityForSgc(wid)
+  const manual = getPatrolManualIdentity(wid) ?? getPatrolManualIdentityForTk(wid)
   if (manual?.workerName) return manual.workerName
 
   if (track.tier === 'identity') {
@@ -31,6 +32,11 @@ export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
     }
 
     return '—'
+  }
+
+  if (track.tier === 'person') {
+    const raw = track.workerName?.trim() ?? wid
+    if (isPatrolTkWorkerId(wid) || isPatrolAnonymousTrackId(wid)) return raw || wid
   }
 
   return formatPersonOverlayLabel(track.workerName, {

@@ -35,7 +35,15 @@ describe('resolveEventGalleryWorkerId', () => {
     expect(id).toBe('p-SGC-6688')
   })
 
-  it('does not treat lowercase sgc-* track id as employee code', () => {
+  it('does not treat tk-* track id as employee code', () => {
+    const id = resolveEventGalleryWorkerId(
+      { objectId: 'pers-0007', objectLabel: 'Duncan' },
+      'tk-6688',
+    )
+    expect(id).toBeNull()
+  })
+
+  it('does not treat legacy sgc-* track id as employee code', () => {
     const id = resolveEventGalleryWorkerId(
       { objectId: 'pers-0007', objectLabel: 'Duncan' },
       'sgc-6688',

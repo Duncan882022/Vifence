@@ -35,11 +35,20 @@ describe('resolvePatrolRoiDisplayLabel', () => {
     expect(label).toBe('—')
   })
 
-  it('person tier — vẫn hiện mã sgc', () => {
+  it('identity tier — ẩn mã tk kỹ thuật', () => {
+    const label = resolvePatrolRoiDisplayLabel(track({
+      tier: 'identity',
+      workerId: 'tk-00000042',
+      workerName: 'tk-00000042',
+    }))
+    expect(label).toBe('—')
+  })
+
+  it('person tier — vẫn hiện mã tk', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
       tier: 'person',
-      workerId: 'sgc-00000042',
-      workerName: 'sgc-00000042',
-    }))).toBe('sgc-00000042')
+      workerId: 'tk-00000042',
+      workerName: 'tk-00000042',
+    }))).toBe('tk-00000042')
   })
 })

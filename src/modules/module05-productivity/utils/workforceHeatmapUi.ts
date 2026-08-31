@@ -24,7 +24,7 @@ export function isVerifiedWorkerLabel(label?: string | null): boolean {
   if (!label) return false
   const t = label.trim()
   if (!t || t === 'person' || t === 'unknown') return false
-  if (t.startsWith('sgc-') || t.startsWith('obj-') || t.startsWith('track-')) return false
+  if (t.startsWith('tk-') || t.startsWith('sgc-') || t.startsWith('obj-') || t.startsWith('track-')) return false
   if (/^p[-_]?\d+$/i.test(t)) return false
   if (/^[0-9a-f]{6,16}$/i.test(t)) return false
   if (/^p\d+:/i.test(t) || t.includes(':person:')) return false

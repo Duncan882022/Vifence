@@ -59,12 +59,12 @@ describe('khoá đối tượng theo track id backend', () => {
   })
 
   it('hai người khác track id không bị gộp dù bbox chồng nhau', () => {
-    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'sgc-00000107' })], 1_000)
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'tk-00000107' })], 1_000)
     tracks = advance(
       tracks,
       [
-        person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'sgc-00000107' }),
-        person([110, 105, 210, 405], { track_id: 'p2', tier: 'person', worker_id: 'sgc-00000109' }),
+        person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'tk-00000107' }),
+        person([110, 105, 210, 405], { track_id: 'p2', tier: 'person', worker_id: 'tk-00000109' }),
       ],
       1_180,
     )
@@ -76,7 +76,7 @@ describe('khoá đối tượng theo track id backend', () => {
     let tracks = advance(
       empty(),
       [
-        person([100, 100, 220, 480], { track_id: 'a', tier: 'person', worker_id: 'sgc-00000107' }),
+        person([100, 100, 220, 480], { track_id: 'a', tier: 'person', worker_id: 'tk-00000107' }),
         person([130, 180, 200, 360], { track_id: 'b', tier: 'object', confidence: 0.77 }),
       ],
       1_000,
@@ -99,9 +99,9 @@ describe('khoá đối tượng theo track id backend', () => {
   })
 
   it('worker_id làm khoá khi backend chưa gửi track id', () => {
-    let tracks = advance(empty(), [person([100, 100, 200, 400], { worker_id: 'sgc-00000001' })], 1_000)
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { worker_id: 'tk-00000001' })], 1_000)
     const firstId = [...tracks.keys()][0]
-    tracks = advance(tracks, [person([600, 120, 700, 420], { worker_id: 'sgc-00000001' })], 1_180)
+    tracks = advance(tracks, [person([600, 120, 700, 420], { worker_id: 'tk-00000001' })], 1_180)
     expect([...tracks.keys()][0]).toBe(firstId)
   })
 })

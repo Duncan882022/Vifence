@@ -312,7 +312,7 @@ export function resolvePatrolDetectionTier(input: {
   if (/^ptk/i.test(wid) || /:person$/i.test(wid)) return 'object'
   if (isPatrolGalleryWorkerId(wid)) return 'identity'
   if (/^iden-/i.test(wid)) return 'identity'
-  if (/^(sgc-|pers-)/i.test(wid)) return 'person'
+  if (/^(tk-|sgc-|pers-)/i.test(wid)) return 'person'
   return 'object'
 }
 

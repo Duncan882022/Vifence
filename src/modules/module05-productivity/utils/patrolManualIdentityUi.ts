@@ -10,7 +10,7 @@ import {
 import {
   isPatrolObjectId,
   isPatrolPersId,
-  isPatrolSgcWorkerId,
+  isPatrolTrackWorkerId,
   patrolEventIdentityKeys,
   resolvePatrolPersonStage,
   type PatrolPersonStage,
@@ -41,7 +41,7 @@ export function applyManualIdentityToPatrolEvent(event: PatrolEvent): PatrolEven
   return {
     ...event,
     objectId: preserveTechnicalId ? technicalObjectId : manual.workerId,
-    trackWorkerId: isPatrolSgcWorkerId(event.trackWorkerId) ? event.trackWorkerId : undefined,
+    trackWorkerId: isPatrolTrackWorkerId(event.trackWorkerId) ? event.trackWorkerId : undefined,
     objectLabel: `${manual.workerName}${unitSuffix}`,
     violationLabel: event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
       ? manual.workerName
@@ -137,7 +137,7 @@ export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
   if (stage === 'person') {
     const sgc = [event.trackWorkerId, event.objectId]
       .map(v => v?.trim() ?? '')
-      .find(v => isPatrolSgcWorkerId(v))
+      .find(v => isPatrolTrackWorkerId(v))
     const persId = [event.trackWorkerId, event.objectId]
       .map(v => v?.trim() ?? '')
       .find(v => isPatrolPersId(v))

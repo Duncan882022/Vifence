@@ -12,7 +12,7 @@ import { unixSecondsToIso, normalizeUnixSeconds } from '../utils/patrolEventsFee
 import {
   formatPatrolPersonDetectedEvent,
   isPatrolObjectId,
-  isPatrolSgcWorkerId,
+  isPatrolTrackWorkerId,
   patrolWorkforceEventTitle,
 } from '../utils/patrolWorkforceEventLabels'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
@@ -341,7 +341,7 @@ export function mapBackendEventToPatrolEvent(
   const objectIdRaw = event.object_id?.trim()
   const dedupTail = event.dedup_key?.split('|').pop()?.trim() ?? ''
   const isGalleryWorker = isPatrolGalleryWorkerId(workerIdRaw)
-  let trackWorkerId = isPatrolSgcWorkerId(workerIdRaw) ? workerIdRaw : undefined
+  let trackWorkerId = isPatrolTrackWorkerId(workerIdRaw) ? workerIdRaw : undefined
   const objectId = objectIdRaw && isPatrolObjectId(objectIdRaw)
     ? objectIdRaw
     : isGalleryWorker
@@ -352,8 +352,8 @@ export function mapBackendEventToPatrolEvent(
           || ''))
   if (isGalleryWorker && !trackWorkerId) {
     const manual = findPatrolIdentityByWorkerId(workerIdRaw)
-    const sgcAlias = manual?.objectKeys.find(k => isPatrolSgcWorkerId(k))
-    if (sgcAlias) trackWorkerId = sgcAlias
+    const tkAlias = manual?.objectKeys.find(k => isPatrolTrackWorkerId(k))
+    if (tkAlias) trackWorkerId = tkAlias
   }
   const objectLabelHint = isGalleryWorker && workerNameRaw ? workerNameRaw : undefined
   const eventType = eventTypeFromScenario(event.scenario_id, event.behavior)

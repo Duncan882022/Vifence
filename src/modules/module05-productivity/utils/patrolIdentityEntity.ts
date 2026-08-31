@@ -1,39 +1,48 @@
-import { getPatrolManualIdentity, getPatrolManualIdentityForSgc, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
-import { expandPatrolIdentityAliasKeys, getPatrolSgcKeysForObject } from '../services/patrolSgcObjectLink.service'
-import { isPatrolObjectId, isPatrolPersId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
+import { getPatrolManualIdentity, getPatrolManualIdentityForTk, findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
+import { expandPatrolIdentityAliasKeys, getPatrolTkKeysForObject } from '../services/patrolTkObjectLink.service'
+import {
+  isPatrolObjectId,
+  isPatrolPersId,
+  isPatrolTkWorkerId,
+  isPatrolAnonymousTrackId,
+  isPatrolTrackWorkerId,
+} from './patrolWorkforceEventLabels'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 
-/** sgc-* gắn với event — từ track, object hoặc alias gallery/manual. */
-export function resolvePatrolEventSgcKey(event: {
+/** tk-* gắn với event — từ track, object hoặc alias gallery/manual. */
+export function resolvePatrolEventTkKey(event: {
   objectId?: string | null
   trackWorkerId?: string | null
 }): string | null {
   for (const raw of [event.trackWorkerId, event.objectId]) {
     const key = raw?.trim() ?? ''
-    if (isPatrolSgcWorkerId(key)) return key.toUpperCase()
+    if (isPatrolTrackWorkerId(key)) return key.toUpperCase()
   }
   for (const raw of [event.objectId, event.trackWorkerId]) {
     const key = raw?.trim() ?? ''
     if (!key) continue
     for (const alias of expandPatrolIdentityAliasKeys(key)) {
-      if (isPatrolSgcWorkerId(alias)) return alias.toUpperCase()
+      if (isPatrolTrackWorkerId(alias)) return alias.toUpperCase()
     }
     if (isPatrolObjectId(key)) {
-      for (const sgc of getPatrolSgcKeysForObject(key)) {
-        if (isPatrolSgcWorkerId(sgc)) return sgc.toUpperCase()
+      for (const tk of getPatrolTkKeysForObject(key)) {
+        if (isPatrolTrackWorkerId(tk)) return tk.toUpperCase()
       }
     }
   }
   return null
 }
 
+/** @deprecated Use resolvePatrolEventTkKey */
+export const resolvePatrolEventSgcKey = resolvePatrolEventTkKey
+
 /**
- * Khóa dedup thống nhất — một người là một entity dù mang nhiều sgc/OBJ/tên.
+ * Khóa dedup thống nhất — một người là một entity dù mang nhiều tk/OBJ/tên.
  *
- * Mã hồ sơ (gallery / gán tay) phải thắng sgc. Một người có thể được cấp nhiều
- * sgc trong ca — mỗi lần bị che khuất hay camera lia đủ mạnh là tracker đứt và
- * cấp mã mới. Lấy sgc làm khoá thì cùng một người đã định danh vẫn tách thành
- * nhiều dòng trong tab Định danh: dòng còn sgc và dòng đã mang mã gallery.
+ * Mã hồ sơ (gallery / gán tay) phải thắng tk. Một người có thể được cấp nhiều
+ * tk trong ca — mỗi lần bị che khuất hay camera lia đủ mạnh là tracker đứt và
+ * cấp mã mới. Lấy tk làm khoá thì cùng một người đã định danh vẫn tách thành
+ * nhiều dòng trong tab Định danh: dòng còn tk và dòng đã mang mã gallery.
  *
  * Cùng thứ tự ưu tiên với `resolveHeatmapEntityMasterId` để bảng sự kiện và
  * bản đồ nhiệt không đếm ra hai con số khác nhau.
@@ -45,14 +54,14 @@ export function resolvePatrolCanonicalEntityKey(event: {
 }): string {
   const profileKey = resolvePatrolProfileEntityKey(event)
   if (profileKey) return profileKey.toUpperCase()
-  const sgc = resolvePatrolEventSgcKey(event)
-  if (sgc) return sgc
+  const tk = resolvePatrolEventTkKey(event)
+  if (tk) return tk
   const objectId = event.objectId?.trim() ?? ''
   const trackWorkerId = event.trackWorkerId?.trim() ?? ''
   if (isPatrolPersId(objectId)) return objectId.toLowerCase()
   if (isPatrolPersId(trackWorkerId)) return trackWorkerId.toLowerCase()
-  if (isPatrolSgcWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
-  if (isPatrolSgcWorkerId(objectId)) return objectId.toUpperCase()
+  if (isPatrolTrackWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
+  if (isPatrolTrackWorkerId(objectId)) return objectId.toUpperCase()
   if (isPatrolGalleryWorkerId(objectId)) return objectId.toUpperCase()
   if (isPatrolGalleryWorkerId(trackWorkerId)) return trackWorkerId.toUpperCase()
   if (isPatrolObjectId(objectId)) return objectId.toUpperCase()
@@ -65,12 +74,12 @@ export function patrolGalleryWorkerIdFromEmployeeCode(code: string): string {
   return safe ? `p-${safe}` : 'p-unknown'
 }
 
-/** Gallery worker id (p-*, w-*, c-*, u-*) — không phải sgc/OBJ. */
+/** Gallery worker id (p-*, w-*, c-*, u-*) — không phải tk/OBJ. */
 export function isPatrolGalleryWorkerId(id?: string | null): boolean {
   if (!id) return false
   const t = id.trim()
   if (!t || t === 'unknown') return false
-  if (isPatrolSgcWorkerId(t) || isPatrolObjectId(t)) return false
+  if (isPatrolTrackWorkerId(t) || isPatrolObjectId(t)) return false
   if (/^(p-|w-|c-|u-|man-)/i.test(t)) return true
   return false
 }
@@ -80,18 +89,18 @@ export function isPatrolProfileWorkerId(id?: string | null): boolean {
   const t = id.trim()
   if (isPatrolGalleryWorkerId(t)) return true
   if (getPatrolManualIdentity(t) || findPatrolIdentityByWorkerId(t)) return true
-  return isVerifiedWorkerLabel(t) && !isPatrolSgcWorkerId(t) && !isPatrolObjectId(t)
+  return isVerifiedWorkerLabel(t) && !isPatrolTrackWorkerId(t) && !isPatrolObjectId(t)
 }
 
-/** Khóa entity tab Định danh — gallery/manual workerId, không dùng sgc. */
+/** Khóa entity tab Định danh — gallery/manual workerId, không dùng tk. */
 export function resolvePatrolProfileEntityKey(event: {
   objectId?: string | null
   trackWorkerId?: string | null
   objectLabel?: string | null
 }): string | null {
-  const sgc = resolvePatrolEventSgcKey(event)
-  if (sgc) {
-    const direct = getPatrolManualIdentityForSgc(sgc)
+  const tk = resolvePatrolEventTkKey(event)
+  if (tk) {
+    const direct = getPatrolManualIdentityForTk(tk)
     if (direct) return direct.workerId.toUpperCase()
   }
   for (const raw of [event.objectId, event.trackWorkerId]) {
@@ -107,7 +116,7 @@ export function resolvePatrolProfileEntityKey(event: {
   const label = event.objectLabel?.trim() ?? ''
   if (
     isVerifiedWorkerLabel(label)
-    && !isPatrolSgcWorkerId(label)
+    && !isPatrolTrackWorkerId(label)
     && !isPatrolObjectId(label)
     && (getPatrolManualIdentity(label) || isPatrolGalleryWorkerId(label))
   ) {
@@ -126,16 +135,15 @@ function normalizeGalleryWorkerId(id: string): string {
   return t
 }
 
-/** Mã track ẩn danh sgc-* — khác mã nhân sự SGC-* (phân biệt hoa/thường). */
-function isPatrolAnonymousTrackId(id: string): boolean {
-  return /^sgc-/.test(id.trim())
+function isAnonymousTrackIdForGallery(id: string): boolean {
+  return isPatrolTkWorkerId(id) || isPatrolAnonymousTrackId(id)
 }
 
 function resolveGalleryIdFromEmployeeCode(code: string): string | null {
   const trimmed = code.trim()
   if (!trimmed) return null
   if (isPatrolGalleryWorkerId(trimmed)) return normalizeGalleryWorkerId(trimmed)
-  if (isPatrolPersId(trimmed) || isPatrolObjectId(trimmed) || isPatrolAnonymousTrackId(trimmed)) {
+  if (isPatrolPersId(trimmed) || isPatrolObjectId(trimmed) || isAnonymousTrackIdForGallery(trimmed)) {
     return null
   }
   return patrolGalleryWorkerIdFromEmployeeCode(trimmed)
@@ -169,13 +177,13 @@ export function resolveHeatmapEntityMasterId(rawId: string): string {
   const manual = getPatrolManualIdentity(id) ?? findPatrolIdentityByWorkerId(id)
   if (manual) return manual.workerId.toUpperCase()
   if (isPatrolGalleryWorkerId(id)) return id.toUpperCase()
-  if (/^sgc-/i.test(id)) return id.toUpperCase()
+  if (/^(tk-|sgc-)/i.test(id)) return id.toUpperCase()
   if (/^OBJ-/i.test(id)) {
-    const sgcs = getPatrolSgcKeysForObject(id)
-    if (sgcs[0]) {
-      const bound = getPatrolManualIdentity(sgcs[0])
+    const tks = getPatrolTkKeysForObject(id)
+    if (tks[0]) {
+      const bound = getPatrolManualIdentity(tks[0])
       if (bound) return bound.workerId.toUpperCase()
-      return sgcs[0].toUpperCase()
+      return tks[0].toUpperCase()
     }
     return id
   }
