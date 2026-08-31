@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Clock, Loader2, MapPin, Search } from 'lucide-react'
 import { PlaybackDatePicker } from '@/components/common/CameraPlayback/PlaybackDatePicker'
@@ -206,8 +206,10 @@ export function PatrolEventsPanel({
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT)
-  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadingMoreRef = useRef(false)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -233,7 +235,9 @@ export function PatrolEventsPanel({
 
   useEffect(() => {
     setVisibleCount(INITIAL_COUNT)
-  }, [filterTab, searchQuery, activeItems.length])
+    loadingMoreRef.current = false
+    setLoadingMore(false)
+  }, [filterTab, searchQuery])
 
   const visibleItems = useMemo(
     () => activeItems.slice(0, visibleCount),
@@ -241,27 +245,31 @@ export function PatrolEventsPanel({
   )
   const hasMore = visibleCount < activeItems.length
 
+  const loadMore = useCallback(() => {
+    if (loadingMoreRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    setVisibleCount(c => Math.min(c + BATCH_SIZE, activeItems.length))
+    window.requestAnimationFrame(() => {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    })
+  }, [activeItems.length])
+
   useEffect(() => {
+    const root = scrollRef.current
     const el = sentinelRef.current
-    if (!el || !hasMore) return
-    let scrollTimer: number | undefined
+    if (!root || !el || !hasMore) return
+
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting || loading) return
-        setLoading(true)
-        scrollTimer = window.setTimeout(() => {
-          setVisibleCount(c => c + BATCH_SIZE)
-          setLoading(false)
-        }, 300)
+        if (entry?.isIntersecting) loadMore()
       },
-      { threshold: 0.1 },
+      { root, threshold: 0, rootMargin: '48px' },
     )
     observer.observe(el)
-    return () => {
-      observer.disconnect()
-      if (scrollTimer != null) window.clearTimeout(scrollTimer)
-    }
-  }, [hasMore, loading])
+    return () => observer.disconnect()
+  }, [hasMore, loadMore])
 
   const viewingToday = viewDate === maxViewDate
 
@@ -326,7 +334,7 @@ export function PatrolEventsPanel({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-1.5 sm:p-2">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-1.5 sm:p-2">
         {events.filter(isPatrolPersonLifecycleEvent).length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8 px-3">
             {viewingToday
@@ -351,7 +359,7 @@ export function PatrolEventsPanel({
 
             {hasMore && (
               <div ref={sentinelRef} className="flex flex-col items-center justify-center gap-1 py-3">
-                {loading
+                {loadingMore
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
                   : <div className="h-3.5" />}
                 <span className="text-[9px] text-muted-foreground/50 tabular-nums">
