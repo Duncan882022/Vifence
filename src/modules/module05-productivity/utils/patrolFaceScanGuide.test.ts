@@ -5,7 +5,7 @@ import {
   guidanceForSlot,
   poseHintMatchesSlot,
 } from './patrolFaceScanGuide'
-import { FACE_SCAN_POSE_COUNT, FACE_SCAN_POSE_LABELS } from './patrolFaceScanPoses'
+import { FACE_SCAN_POSE_COUNT } from './patrolFaceScanPoses'
 
 describe('patrolFaceScanGuide', () => {
   it('maps head pose to 4 enrollment slots', () => {
