@@ -435,7 +435,16 @@ export function PatrolFaceScannerPanel({
         {!complete && (
           <p className="text-[10px] text-white/40 tabular-nums">
             {capturedCount}/{facesRequired} góc
-            {captureMode === 'auto' && autoScan.scanMode === 'fallback' ? ' · chế độ giữ yên' : ''}
+            {captureMode === 'auto' && (
+              <>
+                {autoScan.scanMode === 'fallback' ? ' · giữ yên' : ''}
+                {autoScan.holdProgress > 0
+                  ? ` · quét ${Math.round(autoScan.holdProgress * 100)}%`
+                  : autoScan.faceDetected
+                    ? autoScan.poseMatched ? ' · giữ yên…' : ' · chỉnh góc…'
+                    : ' · đưa mặt vào khung'}
+              </>
+            )}
           </p>
         )}
       </div>
