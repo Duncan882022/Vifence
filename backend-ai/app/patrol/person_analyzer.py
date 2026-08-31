@@ -100,6 +100,46 @@ def assign_patrol_track_ids(
     )
 
 
+def _record_patrol_density_encounter(
+    person_det: PpeDetection,
+    *,
+    camera_id: str,
+    track_id: str,
+    frame: np.ndarray,
+    person_bbox: list[float],
+    confidence: float,
+) -> None:
+    """Chỉ lượt gặp obj-* — flycam aerial hoặc peak time (chưa đủ mặt)."""
+    from ..patrol_identity_lifecycle import observe as observe_track_identity
+
+    observe_track_identity(
+        camera_id,
+        track_id,
+        worker_id="",
+        worker_name="",
+    )
+    person_det.worker_id = ""
+    person_det.worker_name = ""
+    person_det.track_id = track_id
+    person_det.tier = "object"
+    person_det.face_eligible = False
+    try:
+        from .sink import record_observation
+
+        record_observation(
+            camera_id=camera_id,
+            track_id=track_id,
+            face_embedding=None,
+            face_quality=0.0,
+            confidence=float(confidence),
+            frame=frame,
+            person_bbox=person_bbox,
+            density_only=True,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("[patrol] density encounter — không ghi được quan sát")
+
+
 def _assign_patrol_person_identity(
     person_det: PpeDetection,
     person_box: tuple[float, float, float, float],
@@ -122,35 +162,14 @@ def _assign_patrol_person_identity(
         from ..patrol_flight_mode import is_patrol_flycam_aerial
 
         if is_patrol_flycam_aerial(camera_id):
-            # Góc trên cao — YOLO đếm người, không nhận diện mặt / gallery.
-            from ..patrol_identity_lifecycle import observe as observe_track_identity
-
-            observe_track_identity(
-                camera_id,
-                track_id,
-                worker_id="",
-                worker_name="",
+            _record_patrol_density_encounter(
+                person_det,
+                camera_id=camera_id,
+                track_id=track_id,
+                frame=frame,
+                person_bbox=person_bbox,
+                confidence=float(person_det.confidence or 0.0),
             )
-            person_det.worker_id = ""
-            person_det.worker_name = ""
-            person_det.track_id = track_id
-            person_det.tier = "object"
-            person_det.face_eligible = False
-            try:
-                from .sink import record_observation
-
-                record_observation(
-                    camera_id=camera_id,
-                    track_id=track_id,
-                    face_embedding=None,
-                    face_quality=0.0,
-                    confidence=float(person_det.confidence or 0.0),
-                    frame=frame,
-                    person_bbox=person_bbox,
-                    density_only=True,
-                )
-            except Exception:  # noqa: BLE001
-                logger.exception("[patrol] Flycam aerial — không ghi được quan sát mật độ")
             return
         # proximity flycam — rơi xuống nhánh bodycam bên dưới.
 
@@ -179,6 +198,23 @@ def _assign_patrol_person_identity(
         if recovered is not None:
             face_emb, _face_score = recovered
             face_eligible = True
+
+    from .peak_time import is_peak_time, peak_identity_allowed
+
+    if is_peak_time(camera_id) and not peak_identity_allowed(
+        face_eligible=bool(face_eligible),
+        face_quality=float(_face_score or 0.0),
+        confidence=float(person_det.confidence or 0.0),
+    ):
+        _record_patrol_density_encounter(
+            person_det,
+            camera_id=camera_id,
+            track_id=track_id,
+            frame=frame,
+            person_bbox=person_bbox,
+            confidence=float(person_det.confidence or 0.0),
+        )
+        return
 
     frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})
     worker_id = ""
@@ -467,6 +503,8 @@ def _build_patrol_bodycam_result(
         raw_yolo_boxes=[p.person_box for p in raw_persons],
     )
 
+    from .peak_time import is_peak_time
+
     return {
         "type": "result",
         "camera_id": camera_id,
@@ -477,6 +515,7 @@ def _build_patrol_bodycam_result(
             "display_person_count": _patrol_display_person_count(
                 persons, w, h, camera_id=camera_id,
             ),
+            "peak_time_active": is_peak_time(camera_id),
             "ppe_violations": 0,
         },
         "detections": [d.model_dump() for d in detections],
@@ -578,6 +617,9 @@ def _build_patrol_person_detections(
     dùng cho KPI legacy, không chặn đường ghi sự kiện chính nữa.
     """
     reset_hc_patrol_face_assignments(camera_id)
+    from .peak_time import update_peak_time_density
+
+    update_peak_time_density(camera_id, len(persons))
     track_ids = assign_patrol_track_ids(
         camera_id,
         [(p.person_box, p.person_conf) for p in persons],

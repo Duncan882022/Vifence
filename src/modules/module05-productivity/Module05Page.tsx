@@ -110,6 +110,7 @@ function PatrolKPIs({
   const { visitedZones, totalZones, coveragePercent } = zoneCoverage
 
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
+  const peakTimeActive = live.perCamera.some(row => row.peak_time_active)
   const headcount = stats.personCount + stats.identityCount
   const objectEncounters = stats.objectEncounterCount ?? stats.unassignedObservations
 
@@ -136,9 +137,11 @@ function PatrolKPIs({
       ? 'Thiết bị online — chờ xác nhận phủ khu'
       : 'Chưa có thiết bị tuần tra online'
 
-  const objectEncounterDetail = objectEncounters > 0
-    ? 'Silhouette chưa gán danh tính — không tính Nhân sự'
-    : 'Chưa ghi nhận lượt gặp Đối tượng'
+  const objectEncounterDetail = peakTimeActive
+    ? 'Peak time — chỉ đếm lượt gặp; mặt rõ mới định danh'
+    : objectEncounters > 0
+      ? 'Silhouette chưa gán danh tính — không tính Nhân sự'
+      : 'Chưa ghi nhận lượt gặp Đối tượng'
 
   const flymapDetail = !dr03Online
     ? 'Flycam chưa online'

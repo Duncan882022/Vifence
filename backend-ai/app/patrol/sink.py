@@ -452,8 +452,10 @@ def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> 
 
 def reset(camera_id: str | None = None) -> None:
     from .aggregator.engine import reset_sessions
+    from .peak_time import reset_peak_time
 
     reset_sessions(camera_id)
+    reset_peak_time(camera_id)
     with _lock:
         if camera_id is None:
             _track_watch.clear()

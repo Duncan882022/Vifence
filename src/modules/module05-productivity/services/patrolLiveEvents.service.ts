@@ -64,6 +64,7 @@ export interface PatrolHelmetCameraMetricsSlice {
   person_count: number
   identified_workers: number
   person_events_today: number
+  peak_time_active?: boolean
   gps_lat?: number | null
   gps_lng?: number | null
 }
@@ -98,6 +99,7 @@ function normalizeCameraSlice(row: Record<string, unknown>): PatrolHelmetCameraM
     person_count: Number(row.person_count ?? 0),
     identified_workers: Number(row.identified_workers ?? 0),
     person_events_today: normalizePersonEventsToday(row),
+    peak_time_active: Boolean(row.peak_time_active),
     gps_lat: row.gps_lat as number | null | undefined,
     gps_lng: row.gps_lng as number | null | undefined,
   }

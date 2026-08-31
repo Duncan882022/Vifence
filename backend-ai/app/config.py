@@ -202,6 +202,10 @@ class Settings(BaseSettings):
     patrol_presence_d_merge_m: float = 50.0
     # Event Aggregator — gom track session trước khi ghi SQLite (mặc định bật).
     patrol_use_aggregator: bool = True
+    # Peak time — ≥ enter_count silhouette/khung: chỉ lượt gặp; mặt rõ mới gallery.
+    patrol_peak_time_enabled: bool = True
+    patrol_peak_time_enter_count: int = 20
+    patrol_peak_time_exit_count: int = 15
 
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True
