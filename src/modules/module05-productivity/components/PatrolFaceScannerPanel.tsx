@@ -298,12 +298,6 @@ export function PatrolFaceScannerPanel({
   const capturedCount = enrollment?.faces_captured ?? 0
   const complete = enrollment?.complete ?? false
   const displayName = person?.full_name ?? person?.display_name
-  const defaultSubtitle = subtitle ?? (
-    isSession
-      ? 'Quét 5 góc mặt — tự động hoặc thủ công.'
-      : `Quét ${facesRequired} góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}).`
-  )
-
   const manualAiBlocked = captureMode === 'manual' && autoScan.modelStatus !== 'ready'
 
   const mainInstruction = complete
@@ -324,16 +318,54 @@ export function PatrolFaceScannerPanel({
         ? autoScan.subGuidance
         : `Bước ${autoScan.activeSlot}/${facesRequired} · ${faceScanPoseLabel(autoScan.activeSlot)}`
 
+  const headerInstruction = complete
+    ? mainInstruction
+    : captureMode === 'auto' && !manualAiBlocked
+      ? autoScan.liveHint.text
+      : mainInstruction
+
+  const headerSubline = complete
+    ? null
+    : captureMode === 'auto' && !manualAiBlocked
+      ? autoScan.guidance
+      : subInstruction
+
+  const defaultSubtitle = subtitle ?? (
+    !isSession && displayName
+      ? `${displayName}${person?.employee_code ? ` · ${person.employee_code}` : ''}`
+      : null
+  )
+
   const showError = panelError ?? autoScan.error
   const busy = autoScan.capturing || startingOver
+  const showSuccessFlash = autoScan.successFlash && autoScan.successFlash !== 'Đã lưu!'
 
   return (
     <div className="space-y-5">
-      {defaultSubtitle && (
-        <p className="text-[11px] text-muted-foreground text-center max-w-md mx-auto">{defaultSubtitle}</p>
+      {!complete && (
+        <div className="text-center space-y-1 px-4 max-w-md mx-auto min-h-[3.25rem]">
+          <p className={cn(
+            'text-base sm:text-lg font-semibold leading-snug',
+            autoScan.liveHint.tone === 'success' ? 'text-green-400' : 'text-foreground',
+          )}>
+            {headerInstruction}
+          </p>
+          {headerSubline && (
+            <p className="text-[11px] text-muted-foreground">{headerSubline}</p>
+          )}
+          {captureMode === 'auto' && (
+            <p className="text-[10px] text-muted-foreground/80 tabular-nums">
+              {capturedCount}/{facesRequired} góc · vòng xanh = đã lưu
+            </p>
+          )}
+        </div>
       )}
 
-      {(autoScan.successFlash || complete) && (
+      {defaultSubtitle && (
+        <p className="text-[10px] text-muted-foreground/70 text-center max-w-md mx-auto">{defaultSubtitle}</p>
+      )}
+
+      {(showSuccessFlash || complete) && (
         <div className="flex items-center gap-2 p-3 rounded-xl border border-green-500/25 bg-green-500/10 text-green-400 text-xs max-w-md mx-auto">
           <CheckCircle className="w-4 h-4 shrink-0" />
           <span>{complete ? mainInstruction : autoScan.successFlash}</span>
@@ -397,7 +429,7 @@ export function PatrolFaceScannerPanel({
               ? autoScan.faceDetected || autoScan.approachProgress > 0.05 || autoScan.scanMode === 'fallback'
               : manualNear || manualReady)}
           />
-          {captureMode === 'auto' && !complete && cameraReady && (
+          {captureMode === 'manual' && !complete && cameraReady && (
             <FaceScanLiveHint
               hint={autoScan.liveHint}
               holdProgress={autoScan.holdProgress}
@@ -432,37 +464,10 @@ export function PatrolFaceScannerPanel({
         )}
       </div>
 
-      {/* Instruction */}
-      <div className="text-center space-y-1.5 px-4 max-w-md mx-auto">
-        <p className={cn(
-          'text-base sm:text-lg font-medium leading-snug',
-          complete ? 'text-green-400' : 'text-white',
-        )}>
-          {mainInstruction}
-        </p>
-        {subInstruction && captureMode !== 'auto' && (
-          <p className="text-sm text-white/55">{subInstruction}</p>
-        )}
-        {!complete && captureMode === 'auto' && (
-          <p className="text-xs text-white/45 tabular-nums">
-            {capturedCount}/{facesRequired} góc
-            {autoScan.faceDetected
-              ? autoScan.poseMatched
-                ? autoScan.holdProgress > 0
-                  ? ` · quét ${Math.round(autoScan.holdProgress * 100)}%`
-                  : ' · giữ yên…'
-                : ' · chỉnh góc…'
-              : ' · đưa mặt vào khung'}
-            {autoScan.scanMode === 'fallback' && ' · chế độ cơ bản'}
-            {backendOnline === false && ' · chờ backend'}
-          </p>
-        )}
-        {!complete && captureMode === 'manual' && (
-          <p className="text-[10px] text-white/40 tabular-nums">
-            {capturedCount}/{facesRequired} góc
-          </p>
-        )}
-      </div>
+      {/* Manual-only extra hint below viewport */}
+      {!complete && captureMode === 'manual' && subInstruction && (
+        <p className="text-center text-sm text-white/55 px-4 max-w-md mx-auto">{subInstruction}</p>
+      )}
 
       {/* Mode + actions */}
       {!complete && (

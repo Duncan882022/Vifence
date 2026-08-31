@@ -5,7 +5,6 @@ import {
   FACE_SCAN_RING_QUADRANT_LABELS,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanPoses'
-import { computeFaceScanRingProgress } from '../utils/patrolFaceScanProgress'
 
 const CX = 50
 const CY = 50
@@ -47,14 +46,12 @@ export function FaceScanProgressRing({
   scanLine = true,
 }: FaceScanProgressRingProps) {
   const required = facesRequired || FACE_SCAN_POSE_COUNT
-  const ringProgress = computeFaceScanRingProgress(
-    capturedCount,
-    required,
-    holdProgress,
-    complete,
-    approachProgress,
-  )
-  const litTicks = Math.round(ringProgress * TICK_COUNT)
+  const ticksPerPose = TICK_COUNT / required
+  const savedTicks = Math.round(capturedCount * ticksPerPose)
+  const currentSlotTicks = Math.round(ticksPerPose)
+  const progressOnCurrent = holdProgress > 0 ? holdProgress : approachProgress
+  const activeTicks = complete ? 0 : Math.round(progressOnCurrent * currentSlotTicks)
+  const activeEnd = savedTicks + activeTicks
 
   return (
     <div className="relative w-[min(78vw,320px)] aspect-square shrink-0">
@@ -73,8 +70,9 @@ export function FaceScanProgressRing({
       >
         {Array.from({ length: TICK_COUNT }, (_, i) => {
           const { x1, y1, x2, y2 } = tickEndpoints(i)
-          const lit = complete || i < litTicks
-          const isActiveBand = !complete && i >= capturedCount * (TICK_COUNT / required) && i < litTicks + 1
+          const isSaved = complete || i < savedTicks
+          const isScanning = !complete && i >= savedTicks && i < activeEnd
+          const lit = isSaved || isScanning
           return (
             <line
               key={i}
@@ -83,19 +81,17 @@ export function FaceScanProgressRing({
               x2={x2}
               y2={y2}
               stroke={lit
-                ? (complete
+                ? (isSaved
                   ? '#4ade80'
-                  : isActiveBand
-                    ? '#4ade80'
-                    : holdProgress > 0 || approachProgress > 0.08
-                      ? '#86efac'
-                      : '#ffffff')
+                  : holdProgress > 0
+                    ? '#e0f2fe'
+                    : '#ffffff')
                 : 'rgba(255,255,255,0.22)'}
-              strokeWidth={isActiveBand ? TICK_W + 0.4 : TICK_W}
+              strokeWidth={isScanning && holdProgress > 0 ? TICK_W + 0.4 : TICK_W}
               strokeLinecap="round"
               style={{
-                opacity: lit ? (complete ? 1 : isActiveBand ? 1 : 0.85) : 0.55,
-                filter: lit && !complete ? 'drop-shadow(0 0 2px rgba(255,255,255,0.6))' : undefined,
+                opacity: lit ? (isSaved ? 1 : 0.9) : 0.55,
+                filter: isScanning ? 'drop-shadow(0 0 2px rgba(255,255,255,0.6))' : undefined,
                 transition: 'stroke 0.15s ease, opacity 0.15s ease',
               }}
             />
