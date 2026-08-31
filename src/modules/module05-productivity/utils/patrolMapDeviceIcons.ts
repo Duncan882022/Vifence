@@ -6,11 +6,16 @@ import L from 'leaflet'
 
 const ICON_W = 22
 const ICON_H = 26
-const DIV_CLASS = 'patrol-map-div-icon'
+const DIV_CLASS = 'patrol-device-map-icon'
 
-function divIconOpts(html: string, iconSize: [number, number], iconAnchor: [number, number]) {
+function divIconOpts(
+  html: string,
+  iconSize: [number, number],
+  iconAnchor: [number, number],
+  isActive: boolean,
+) {
   return {
-    className: DIV_CLASS,
+    className: `${DIV_CLASS} patrol-device-${isActive ? 'on' : 'off'}`,
     html,
     iconSize,
     iconAnchor,
@@ -21,14 +26,14 @@ function deviceMarkerColors(isActive: boolean, accent: string) {
   return {
     fill: isActive ? accent : '#64748b',
     stroke: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(203,213,225,0.8)',
-    glow: isActive ? 'animation:patrol-helmet-glow 1.6s ease-out infinite;' : '',
+    liveClass: isActive ? 'patrol-device-live' : '',
   }
 }
 
 function createHelmetSvg(badgeNum: string, isActive: boolean, accent: string): string {
-  const { fill, stroke, glow } = deviceMarkerColors(isActive, accent)
+  const { fill, stroke, liveClass } = deviceMarkerColors(isActive, accent)
   return `
-    <div style="width:${ICON_W}px;height:${ICON_H}px;pointer-events:auto;cursor:pointer;${glow}">
+    <div class="patrol-device-marker ${liveClass}" style="width:${ICON_W}px;height:${ICON_H}px;pointer-events:auto;cursor:pointer;">
       <svg viewBox="0 0 24 28" width="${ICON_W}" height="${ICON_H}" aria-hidden="true">
         <path
           d="M4 15v-2.2c0-3.4 2.8-6.2 6.2-6.2h3.6c3.4 0 6.2 2.8 6.2 6.2V15"
@@ -49,9 +54,9 @@ function createHelmetSvg(badgeNum: string, isActive: boolean, accent: string): s
 }
 
 function createDroneSvg(badgeNum: string, isActive: boolean, accent: string): string {
-  const { fill, stroke, glow } = deviceMarkerColors(isActive, accent)
+  const { fill, stroke, liveClass } = deviceMarkerColors(isActive, accent)
   return `
-    <div style="width:${ICON_W}px;height:${ICON_H}px;pointer-events:auto;cursor:pointer;${glow}">
+    <div class="patrol-device-marker ${liveClass}" style="width:${ICON_W}px;height:${ICON_H}px;pointer-events:auto;cursor:pointer;">
       <svg viewBox="0 0 24 28" width="${ICON_W}" height="${ICON_H}" aria-hidden="true">
         <line x1="6" y1="8" x2="18" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
         <line x1="18" y1="8" x2="6" y2="20" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round"/>
@@ -75,7 +80,7 @@ export function createPatrolHelmetMapIcon(
   accent: string,
 ): L.DivIcon {
   const html = createHelmetSvg(badgeNum, isActive, accent)
-  return L.divIcon(divIconOpts(html, [ICON_W, ICON_H], [ICON_W / 2, ICON_H / 2]))
+  return L.divIcon(divIconOpts(html, [ICON_W, ICON_H], [ICON_W / 2, ICON_H / 2], isActive))
 }
 
 export function createPatrolDroneMapIcon(
@@ -84,7 +89,7 @@ export function createPatrolDroneMapIcon(
   accent: string,
 ): L.DivIcon {
   const html = createDroneSvg(badgeNum, isActive, accent)
-  return L.divIcon(divIconOpts(html, [ICON_W, ICON_H], [ICON_W / 2, ICON_H / 2]))
+  return L.divIcon(divIconOpts(html, [ICON_W, ICON_H], [ICON_W / 2, ICON_H / 2], isActive))
 }
 
 export const PATROL_MAP_DEVICE_PIN_STYLES = ''

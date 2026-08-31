@@ -42,7 +42,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     roiBorder: 'border border-dashed border-slate-300/90',
     roiLabelBg: 'bg-slate-900/95',
     roiLabelText: 'text-slate-100',
-    heatmapDotHex: '#94a3b8',
+    heatmapDotHex: '#4ade80',
   },
   person: {
     label: 'Người',

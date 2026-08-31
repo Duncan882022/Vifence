@@ -156,6 +156,44 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].tier).toBe('object')
   })
 
+  it('obj tier vẫn hiện khi liveOnly + countedOnly (camera online)', () => {
+    const now = Date.now()
+    const oldObject = makePresence({
+      id: 10,
+      subjectId: 'obj-20260826-0001',
+      tier: 'object',
+      counted: true,
+      endedAt: (now - 600_000) / 1000,
+    })
+    const recentPerson = makePresence({
+      id: 11,
+      subjectId: 'pers-0099',
+      tier: 'person',
+      counted: true,
+      endedAt: now / 1000,
+    })
+    const dots = buildPatrolPresenceHeatmapDots(
+      [oldObject, recentPerson],
+      {
+        includeUnassigned: true,
+        countedOnly: true,
+        liveOnly: true,
+        now,
+        cameraOnlineById: { 'HC-01': true },
+      },
+    )
+    expect(dots.some(d => d.tier === 'object')).toBe(true)
+    expect(dots.some(d => d.objectId === 'pers-0099')).toBe(true)
+  })
+
+  it('obj tier bị lọc khi countedOnly và chưa qua tripwire', () => {
+    const dots = buildPatrolPresenceHeatmapDots(
+      [makePresence({ subjectId: 'obj-20260826-0001', tier: 'object', counted: false })],
+      { includeUnassigned: true, countedOnly: true },
+    )
+    expect(dots).toHaveLength(0)
+  })
+
   it('identity tier gán tier + verified', () => {
     const dots = buildPatrolPresenceHeatmapDots([
       makePresence({ tier: 'identity', subjectId: 'p-102' }),
