@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from app.patrol.aggregator.engine import finalize_track, ingest_observation
 from app.patrol.aggregator.session_store import get_or_create, reset
@@ -94,6 +98,41 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
 
         rows = daystore.list_day_presences(db.today_vn(t0))
         self.assertEqual(len(rows), 2)
+
+    def test_committed_session_updates_last_seen_on_resume(self) -> None:
+        """Phiên stream mới — session committed vẫn phải flush last_seen."""
+        from app.patrol import db, identity
+
+        t0 = 5_000.0
+        identity.create_person(origin="sgc", now=t0)
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, t0),
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
+            return_value=PersonIdentity(
+                person_id="sgc-9001",
+                identity_type=IdentityType.ANONYMOUS,
+                confidence=0.9,
+            ),
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value="pers-0001",
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            self._ingest(track_id="ptk0001:person", now=t0)
+            on_patrol_stream_offline("HC-02", at_ts=t0 + 5.0)
+            self._ingest(track_id="ptk0001:person", now=t0 + 120.0)
+
+        row = db.query_one(
+            "SELECT last_seen FROM daily_events WHERE pers_id = ?",
+            ("pers-0001",),
+        )
+        self.assertIsNotNone(row)
+        self.assertAlmostEqual(float(row["last_seen"]), t0 + 120.0, places=3)
 
 
 if __name__ == "__main__":

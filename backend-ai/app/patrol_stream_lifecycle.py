@@ -35,11 +35,20 @@ def on_patrol_stream_offline(camera_id: str, *, at_ts: float) -> int:
     from .patrol.sink import forget_track
     from .patrol_tracker import get_patrol_tracker, is_patrol_tracker_camera
 
+    # Session aggregator còn sót khi ByteTrack đã drop track trước lúc stream ngắt.
+    closed = finalize_orphan_sessions(cid)
+
     if not is_patrol_tracker_camera(cid):
-        return finalize_orphan_sessions(cid)
+        if closed:
+            logger.info(
+                "patrol stream offline %s — finalized %d session(s) at ts=%.3f",
+                cid,
+                closed,
+                ts,
+            )
+        return closed
 
     tracker = get_patrol_tracker(cid)
-    closed = 0
     for track_id, track in list(tracker.tracks.items()):
         end_ts = float(track.last_measured_at) if track.last_measured_at > 0 else ts
         tracker.tracks.pop(track_id, None)
