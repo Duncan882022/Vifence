@@ -39,10 +39,10 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     badge: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
     borderAccent: 'border-l-slate-400',
     tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / che mặt / khẩu trang',
-    roiBorder: 'border border-dashed border-slate-300/90',
+    roiBorder: 'border-2 border-dashed border-green-400/95',
     roiLabelBg: 'bg-slate-900/95',
     roiLabelText: 'text-slate-100',
-    heatmapDotHex: '#94a3b8',
+    heatmapDotHex: '#4ade80',
   },
   person: {
     label: 'Người',

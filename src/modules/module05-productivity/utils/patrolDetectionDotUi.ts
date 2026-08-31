@@ -3,7 +3,7 @@ import { PATROL_TIER_TOKENS, type PatrolTier } from './patrolTierTokens'
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
 import { isPatrolObjectId, isPatrolPersId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
 
-/** Màu chấm heatmap — lấy từ PATROL_TIER_TOKENS (sky / violet / slate). */
+/** Màu chấm heatmap — lấy từ PATROL_TIER_TOKENS (green / sky / violet). */
 export const PATROL_HEATMAP_DOT_HEX: Record<PatrolTier, string> = {
   object: PATROL_TIER_TOKENS.object.heatmapDotHex,
   person: PATROL_TIER_TOKENS.person.heatmapDotHex,

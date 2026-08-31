@@ -72,9 +72,9 @@ def snapshot_score(*, face_quality: float, confidence: float) -> float:
     return float(face_quality) * 2.0 + float(confidence)
 
 
-# BGR — đồng bộ PATROL_TIER_TOKENS heatmapDotHex trên FE (slate / sky / violet).
+# BGR — đồng bộ PATROL_TIER_TOKENS heatmapDotHex trên FE (green / sky / violet).
 PATROL_SNAPSHOT_TIER_COLORS_BGR: dict[str, tuple[int, int, int]] = {
-    "object": (184, 163, 148),   # slate-400 #94a3b8
+    "object": (128, 222, 74),    # green-400 #4ade80 — khung nét đứt trên snapshot
     "person": (248, 189, 56),    # sky-400 #38bdf8
     "identity": (250, 139, 167), # violet-400 #a78bfa
 }
