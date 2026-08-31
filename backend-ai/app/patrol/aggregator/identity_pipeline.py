@@ -64,13 +64,13 @@ def _ensure_pers_for_worker(
     tier: str | None,
     now: float,
 ) -> str | None:
-    """Map gallery/sgc/pers → pers-*; tạo hồ sơ SQLite nếu gallery đã biết."""
+    """Map gallery/tk → pers_id (tk-* hoặc gallery); tạo hồ sơ SQLite nếu cần."""
     wid = (worker_id or "").strip()
     if not wid:
         return None
 
     from ...patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON
-    from ..sink import _ensure_pers_for_sgc, _pers_id_for_lifecycle
+    from ..sink import _ensure_profile_for_tk, _pers_id_for_lifecycle
 
     resolved_tier = (tier or "").strip() or TIER_PERSON
     if resolved_tier not in (TIER_PERSON, TIER_IDENTITY):
@@ -83,7 +83,7 @@ def _ensure_pers_for_worker(
     from ...person_identity_registry import is_sgc_worker_id
 
     if is_sgc_worker_id(wid):
-        return _ensure_pers_for_sgc(wid, now=now)
+        return _ensure_profile_for_tk(wid, now=now)
 
     from ...patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
     from ...patrol_identity_store import lookup_patrol_identity
@@ -96,16 +96,14 @@ def _ensure_pers_for_worker(
     if not row:
         return None
 
-    pers_id = identity.create_person(origin="gallery", now=now)
-    identity.identify(
-        pers_id,
+    return identity.ensure_identified_for_gallery(
+        gallery,
         full_name=str(row.get("worker_name") or gallery).strip(),
-        employee_code=str(row.get("employee_code") or "").strip() or None,
-        contractor=str(row.get("contractor_name") or "").strip() or None,
+        employee_code=str(row.get("employee_code") or "").strip(),
+        contractor=str(row.get("contractor_name") or "").strip(),
         identified_by="gallery_match",
         now=now,
     )
-    return pers_id
 
 
 def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bool:
@@ -300,9 +298,9 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     now=obs.ts,
                 )
                 if wid and is_sgc_worker_id(wid):
-                    from ..sink import _bind_sgc_to_person
+                    from ..sink import _bind_tk_profile
 
-                    _bind_sgc_to_person(wid, pers_id)
+                    _bind_tk_profile(wid, pers_id)
                 _assign_pers_subject(session, pers_id, now=obs.ts)
                 session.identity = PersonIdentity(
                     person_id=pers_id,

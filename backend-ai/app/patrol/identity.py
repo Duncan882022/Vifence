@@ -1,11 +1,11 @@
-"""Danh tính tuần tra — `pers-xxxx` (Người) và `iden-xxxx` (Định danh).
+"""Danh tính tuần tra — schema v8.
 
-Một bảng `persons`, phân biệt bằng `status`. Định danh là *trạng thái* của một
-người chứ không phải thực thể khác, nên tách hai bảng chỉ đẻ ra một phép join.
+Cột `pers_id` lưu `tk-*` (bản nháp) hoặc gallery id `p-*` (đã định danh).
+Không tự sinh `pers-0001` / `iden-0001`.
 
-Vector khuôn mặt nằm thẳng trong SQLite. Cách cũ dựng lại embedding từ ảnh JPG
-mỗi lần khởi động — vừa chậm vừa mất mọi khuôn mặt bắt được từ camera mà chưa
-kịp lưu ảnh.
+Một bảng `persons`, phân biệt bằng `status` (`draft` | `identified`).
+Vector khuôn mặt nằm thẳng trong SQLite — không dựng lại embedding từ JPG mỗi
+lần khởi động.
 """
 
 from __future__ import annotations
@@ -44,9 +44,9 @@ MAX_FACES_PER_PERSON = 24
 # tin mà chỉ làm chậm vòng so khớp.
 FACE_ANGLE_DEDUPE_SIM = 0.88
 
-STATUS_PERSON = "person"
 STATUS_DRAFT = "draft"
 STATUS_IDENTIFIED = "identified"
+STATUS_PERSON = STATUS_DRAFT  # alias — legacy callers
 
 
 def _sync_gallery_after_identify(pers_id: str) -> None:
@@ -57,14 +57,6 @@ def _sync_gallery_after_identify(pers_id: str) -> None:
         sync_person_to_gallery(pers_id)
     except Exception:  # noqa: BLE001
         logger.warning("gallery_sync skipped for %s", pers_id, exc_info=True)
-
-
-def _fmt_pers(seq: int) -> str:
-    return f"pers-{seq:04d}"
-
-
-def _fmt_iden(seq: int) -> str:
-    return f"iden-{seq:04d}"
 
 
 def _to_blob(vec: Sequence[float]) -> tuple[bytes, int]:
@@ -235,7 +227,7 @@ def display_name(person: dict[str, Any] | None) -> str:
         return "Đối tượng"
     if person.get("status") == STATUS_IDENTIFIED:
         name = (person.get("full_name") or "").strip()
-        return name or str(person.get("iden_code") or person["pers_id"])
+        return name or str(person.get("employee_code") or person["pers_id"])
     if person.get("status") == STATUS_DRAFT:
         code = str(person.get("employee_code") or "").strip()
         return code or str(person["pers_id"])
@@ -353,23 +345,26 @@ def add_face(
 # Ghi
 
 
-def create_person(
+def allocate_tk_profile(
     *,
     origin: str = "camera",
     now: float | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> str:
+    """Cấp mã tk-* mới — pers_id = tk id, status=draft."""
+    from ..patrol_ids import format_tk
+
     ts = now or time.time()
 
     def _run(c: sqlite3.Connection) -> str:
-        seq = db.next_counter(c, "pers")
-        pers_id = _fmt_pers(seq)
+        seq = db.next_counter(c, "tk")
+        tk_id = format_tk(seq)
         c.execute(
-            "INSERT INTO persons(pers_id, status, origin, first_seen, last_seen, created_at)"
-            " VALUES(?,?,?,?,?,?)",
-            (pers_id, STATUS_PERSON, origin, ts, ts, ts),
+            "INSERT INTO persons(pers_id, status, employee_code, origin, first_seen, last_seen, created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (tk_id, STATUS_DRAFT, tk_id, origin, ts, ts, ts),
         )
-        return pers_id
+        return tk_id
 
     if conn is not None:
         return _run(conn)
@@ -377,62 +372,125 @@ def create_person(
         return _run(c)
 
 
-def lookup_pers_by_sgc(sgc_id: str) -> str | None:
-    """Tra pers-* đã gắn với mã sgc-* — map bền SQLite."""
-    sgc = (sgc_id or "").strip().lower()
-    if not sgc or not sgc.startswith("sgc-"):
+def lookup_profile_by_tk(tk_id: str) -> str | None:
+    """Tra hồ sơ draft theo tk-* (hoặc sgc-* legacy) — trả pers_id (= tk cho draft)."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    tk = normalize_track_id(tk_id)
+    if not tk or not is_anonymous_track_id(tk):
         return None
-    row = db.query_one("SELECT pers_id FROM person_sgc_map WHERE sgc_id = ?", (sgc,))
+    row = db.query_one("SELECT pers_id FROM persons WHERE pers_id = ?", (tk,))
     if row is not None:
         return resolve_alias(str(row["pers_id"]))
-    found = find_by_employee_code(sgc)
-    if found and found.get("status") in (STATUS_DRAFT, STATUS_PERSON):
+    found = find_by_employee_code(tk)
+    if found and found.get("status") == STATUS_DRAFT:
         return resolve_alias(str(found["pers_id"]))
     return None
 
 
-def _bind_sgc_pers_map(sgc_id: str, pers_id: str, *, now: float | None = None) -> None:
-    sgc = (sgc_id or "").strip().lower()
-    pid = resolve_alias((pers_id or "").strip())
-    if not sgc or not pid.startswith("pers-"):
-        return
+def ensure_draft_for_tk(tk_id: str, *, now: float | None = None) -> str:
+    """Đủ điều kiện nhận diện (tk-*) → hồ sơ bản nháp, pers_id = tk normalized."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
     ts = now or time.time()
-    with db.tx() as c:
-        c.execute(
-            "INSERT INTO person_sgc_map(sgc_id, pers_id, created_at)"
-            " VALUES(?,?,?)"
-            " ON CONFLICT(sgc_id) DO UPDATE SET pers_id = excluded.pers_id",
-            (sgc, pid, ts),
-        )
+    tk = normalize_track_id(tk_id)
+    if not is_anonymous_track_id(tk):
+        raise ValueError("invalid_tk")
 
-
-def ensure_draft_for_sgc(sgc_id: str, *, now: float | None = None) -> str:
-    """Đủ điều kiện nhận diện (sgc-*) → một hồ sơ bản nháp + mã tạm = sgc."""
-    ts = now or time.time()
-    sgc = (sgc_id or "").strip().lower()
-    if not sgc.startswith("sgc-"):
-        raise ValueError("invalid_sgc")
-
-    existing = lookup_pers_by_sgc(sgc)
+    existing = lookup_profile_by_tk(tk)
     if existing:
         touch_person(existing, now=ts)
-        _bind_sgc_pers_map(sgc, existing, now=ts)
         return existing
 
     with db.tx() as c:
-        seq = db.next_counter(c, "pers")
-        pers_id = _fmt_pers(seq)
         c.execute(
             "INSERT INTO persons("
             " pers_id, status, employee_code, origin, first_seen, last_seen, created_at"
             ") VALUES(?,?,?,?,?,?,?)",
-            (pers_id, STATUS_DRAFT, sgc, "sgc", ts, ts, ts),
+            (tk, STATUS_DRAFT, tk, "tk", ts, ts, ts),
         )
+    return tk
+
+
+def ensure_draft_for_sgc(sgc_id: str, *, now: float | None = None) -> str:
+    """Alias legacy sgc-* → ensure_draft_for_tk."""
+    from ..patrol_ids import normalize_track_id
+
+    return ensure_draft_for_tk(normalize_track_id(sgc_id), now=now)
+
+
+def ensure_identified_for_gallery(
+    gallery_id: str,
+    *,
+    full_name: str,
+    employee_code: str,
+    contractor: str = "",
+    identified_by: str = "",
+    now: float | None = None,
+) -> str:
+    """Đảm bảo hồ sơ identified — pers_id = gallery_id."""
+    ts = now or time.time()
+    gid = (gallery_id or "").strip()
+    if not gid:
+        raise ValueError("invalid_gallery")
+
+    pid = resolve_alias(gid)
+    existing = get_person(pid)
+    if existing is not None:
+        touch_person(pid, now=ts)
+        name = full_name.strip()
+        code = (employee_code or "").strip()
+        contractor_val = (contractor or "").strip()
+        identified_by_val = (identified_by or "").strip()
+        with db.tx() as c:
+            c.execute(
+                "UPDATE persons SET status = ?, full_name = COALESCE(?, full_name),"
+                " employee_code = COALESCE(?, employee_code),"
+                " contractor = COALESCE(?, contractor),"
+                " identified_at = COALESCE(identified_at, ?),"
+                " identified_by = COALESCE(?, identified_by)"
+                " WHERE pers_id = ?",
+                (
+                    STATUS_IDENTIFIED,
+                    name or None,
+                    code or None,
+                    contractor_val or None,
+                    ts,
+                    identified_by_val or None,
+                    pid,
+                ),
+            )
+        _sync_gallery_after_identify(pid)
+        return pid
+
+    code = (employee_code or "").strip()
+    if not code:
+        raise ValueError("missing_employee_code")
+
+    by_code = find_by_employee_code(code)
+    if by_code is not None:
+        return str(by_code["pers_id"])
+
+    with db.tx() as c:
         c.execute(
-            "INSERT INTO person_sgc_map(sgc_id, pers_id, created_at) VALUES(?,?,?)",
-            (sgc, pers_id, ts),
+            "INSERT INTO persons("
+            " pers_id, status, full_name, employee_code, contractor,"
+            " origin, identified_at, identified_by, created_at"
+            ") VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                gid,
+                STATUS_IDENTIFIED,
+                full_name.strip(),
+                code,
+                (contractor or "").strip() or None,
+                "gallery",
+                ts,
+                (identified_by or "").strip(),
+                ts,
+            ),
         )
-    return pers_id
+    _sync_gallery_after_identify(gid)
+    return gid
 
 
 def verify_draft_profile(
@@ -449,7 +507,7 @@ def verify_draft_profile(
     row = get_person(pid)
     if row is None:
         raise KeyError("not_found")
-    if row.get("status") not in (STATUS_DRAFT, STATUS_PERSON):
+    if row.get("status") != STATUS_DRAFT:
         raise ValueError("not_draft")
     return identify(
         pid,
@@ -539,7 +597,7 @@ def observe_face(
         return pid, False
 
     with db.tx() as c:
-        pers_id = create_person(origin="camera", now=ts, conn=c)
+        pers_id = allocate_tk_profile(origin="camera", now=ts, conn=c)
         add_face(pers_id, embedding, quality=quality, camera_id=camera_id, conn=c)
     return pers_id, True
 
@@ -578,17 +636,12 @@ def identify(
         if row is None:
             raise KeyError(f"Không có người {pers_id}")
 
-        iden_code = row["iden_code"]
-        if not iden_code:
-            iden_code = _fmt_iden(db.next_counter(c, "iden"))
-
         c.execute(
-            "UPDATE persons SET status = ?, iden_code = ?, full_name = ?,"
+            "UPDATE persons SET status = ?, full_name = ?,"
             " employee_code = ?, contractor = ?, identified_at = ?, identified_by = ?"
             " WHERE pers_id = ?",
             (
                 STATUS_IDENTIFIED,
-                iden_code,
                 full_name.strip(),
                 code or None,
                 contractor_val or None,
@@ -781,21 +834,24 @@ def import_identity(
     """
     ts = now or time.time()
     code = employee_code.strip()
-    existing = db.query_one("SELECT * FROM persons WHERE employee_code = ?", (code,))
+    from ..patrol_identity_store import patrol_gallery_worker_id
+
+    gallery_id = patrol_gallery_worker_id(code)
+    existing = db.query_one(
+        "SELECT * FROM persons WHERE employee_code = ? OR pers_id = ?",
+        (code, gallery_id),
+    )
 
     with db.tx() as c:
         if existing is None:
-            seq = db.next_counter(c, "pers")
-            pers_id = _fmt_pers(seq)
-            iden_code = _fmt_iden(db.next_counter(c, "iden"))
+            pers_id = gallery_id
             c.execute(
-                "INSERT INTO persons(pers_id, status, iden_code, full_name,"
+                "INSERT INTO persons(pers_id, status, full_name,"
                 " employee_code, contractor, origin, identified_at, created_at)"
-                " VALUES(?,?,?,?,?,?,?,?,?)",
+                " VALUES(?,?,?,?,?,?,?,?)",
                 (
                     pers_id,
                     STATUS_IDENTIFIED,
-                    iden_code,
                     full_name.strip(),
                     code or None,
                     contractor.strip(),

@@ -120,6 +120,15 @@ def migrate_to_v7(conn: sqlite3.Connection) -> None:
     if version >= 7:
         return
 
+    person_cols = {
+        str(r[1]) for r in conn.execute("PRAGMA table_info(persons)").fetchall()
+    }
+    if "iden_code" not in person_cols:
+        # Fresh install: `_SCHEMA` already created v8-style persons — skip v7 reshape.
+        conn.execute("PRAGMA user_version=7")
+        conn.commit()
+        return
+
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS person_sgc_map (
@@ -158,4 +167,58 @@ def migrate_to_v7(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE persons_v7 RENAME TO persons")
 
     conn.execute("PRAGMA user_version=7")
+    conn.commit()
+
+
+def migrate_to_v8(conn: sqlite3.Connection) -> None:
+    """tk-* redesign — xoá sạch patrol, pers_id = tk-* hoặc gallery, bỏ pers-/iden- tự sinh."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 8:
+        return
+
+    conn.execute("DELETE FROM appearances")
+    conn.execute("DELETE FROM daily_events")
+    conn.execute("DELETE FROM daily_objects")
+    conn.execute("DELETE FROM person_aliases")
+    conn.execute("DELETE FROM person_faces")
+    conn.execute("DELETE FROM enroll_session_faces")
+    conn.execute("DELETE FROM enroll_sessions")
+    conn.execute("DELETE FROM persons")
+    conn.execute("DROP TABLE IF EXISTS person_sgc_map")
+    conn.execute("DROP TABLE IF EXISTS person_tk_map")
+
+    conn.execute(
+        """
+        CREATE TABLE persons_v8 (
+          pers_id       TEXT PRIMARY KEY,
+          status        TEXT NOT NULL,
+          full_name     TEXT,
+          employee_code TEXT UNIQUE,
+          contractor    TEXT,
+          origin        TEXT NOT NULL DEFAULT 'camera',
+          first_seen    REAL,
+          last_seen     REAL,
+          identified_at REAL,
+          identified_by TEXT,
+          created_at    REAL NOT NULL,
+          CHECK (status IN ('draft', 'identified')),
+          CHECK (
+            (status = 'identified') = (
+              employee_code IS NOT NULL
+              AND employee_code NOT LIKE 'tk-%'
+              AND employee_code NOT LIKE 'sgc-%'
+            )
+          )
+        )
+        """
+    )
+    conn.execute("DROP TABLE IF EXISTS persons")
+    conn.execute("ALTER TABLE persons_v8 RENAME TO persons")
+
+    conn.execute("DELETE FROM counters WHERE name IN ('pers', 'iden', 'sgc')")
+    conn.execute(
+        "INSERT INTO counters(name, value) VALUES('tk', 0) ON CONFLICT(name) DO NOTHING"
+    )
+
+    conn.execute("PRAGMA user_version=8")
     conn.commit()
