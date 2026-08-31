@@ -69,6 +69,10 @@ class PpeDetection(BaseModel):
     tier: Optional[str] = None
     # px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect.
     velocity: Optional[list[float]] = None
+    # Peak time — silhouette gom nhóm 1 obj-*; ROI vẫn đánh số từng người.
+    peak_group: Optional[bool] = None
+    peak_group_index: Optional[int] = None
+    peak_group_size: Optional[int] = None
 
 
 class MobileAiConfigPayload(BaseModel):

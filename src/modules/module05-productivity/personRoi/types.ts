@@ -26,6 +26,9 @@ export interface PersonRoiDetection {
   tier?: PersonRoiTier
   /** px/giây theo hệ toạ độ frame AI — mồi vận tốc Kalman ngay từ frame đầu. */
   velocity?: [number, number]
+  peak_group?: boolean
+  peak_group_index?: number
+  peak_group_size?: number
 }
 
 /** Track nội bộ — Kalman + lifecycle. */
@@ -44,6 +47,9 @@ export interface PersonRoiTrack {
   anchorKey?: string
   tier: PersonRoiTier
   kalman: KalmanBox2D
+  peakGroup?: boolean
+  peakGroupIndex?: number
+  peakGroupSize?: number
 }
 
 /** Output hiển thị overlay / heatmap. */
@@ -60,4 +66,7 @@ export interface PersonRoiDisplay {
   tier: PersonRoiTier
   /** 0–1 — mờ dần khi track coast / tentative */
   displayOpacity: number
+  peakGroup?: boolean
+  peakGroupIndex?: number
+  peakGroupSize?: number
 }

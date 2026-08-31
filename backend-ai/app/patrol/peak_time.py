@@ -1,13 +1,33 @@
-"""Peak time — đám đông trong khung: ưu tiên lượt gặp, mặt rõ mới định danh."""
+"""Peak time — đám đông trong khung: định danh rõ → pers; còn lại gom 1 obj nhóm."""
 
 from __future__ import annotations
 
 import threading
+import time
+from dataclasses import dataclass
+from typing import Any, Sequence
 
 from ..config import settings
 
 _lock = threading.Lock()
 _peak_active: dict[str, bool] = {}
+
+
+@dataclass
+class PeakCrowdMember:
+    track_id: str
+    person_bbox: list[float]
+    confidence: float
+
+
+@dataclass
+class _CrowdSession:
+    object_id: str | None = None
+    locked: bool = False
+    last_touch_at: float = 0.0
+
+
+_crowd_sessions: dict[str, _CrowdSession] = {}
 
 
 def update_peak_time_density(camera_id: str, frame_person_count: int) -> bool:
@@ -20,12 +40,15 @@ def update_peak_time_density(camera_id: str, frame_person_count: int) -> bool:
     enter = int(settings.patrol_peak_time_enter_count)
     exit_at = int(settings.patrol_peak_time_exit_count)
     with _lock:
-        active = _peak_active.get(cam, False)
+        was_active = _peak_active.get(cam, False)
+        active = was_active
         if frame_person_count >= enter:
             active = True
         elif frame_person_count <= exit_at:
             active = False
         _peak_active[cam] = active
+        if was_active and not active:
+            _crowd_sessions.pop(cam, None)
         return active
 
 
@@ -53,9 +76,116 @@ def peak_identity_allowed(
     return score >= PERSON_LIST_MIN_SNAPSHOT_SCORE
 
 
+def _ensure_crowd_object_id(camera_id: str, ts: float) -> str:
+    """Một obj-* cố định cho cả phiên peak trên camera — lock sự kiện duy nhất."""
+    cam = (camera_id or "").strip()
+    with _lock:
+        state = _crowd_sessions.get(cam)
+        if state and state.object_id:
+            return state.object_id
+
+    from . import daystore
+
+    obj_id = daystore.touch_object(
+        None,
+        camera_id=cam,
+        now=ts,
+        seen_since=ts,
+    )
+    with _lock:
+        _crowd_sessions[cam] = _CrowdSession(object_id=obj_id, locked=True, last_touch_at=ts)
+    return obj_id
+
+
+def record_peak_crowd_frame(
+    camera_id: str,
+    members: list[PeakCrowdMember],
+    frame: Any,
+    now: float | None = None,
+) -> str | None:
+    """Upsert một lượt gặp nhóm — không tạo obj-* riêng từng track."""
+    if not members:
+        return None
+    ts = now or time.time()
+    cam = (camera_id or "").strip()
+    if not cam:
+        return None
+
+    obj_id = _ensure_crowd_object_id(cam, ts)
+    best = max(members, key=lambda m: float(m.confidence))
+
+    from . import daystore
+    from .sink import _maybe_write_snapshot, _resolve_observation_gps, snapshot_score
+
+    shot_score = snapshot_score(face_quality=0.0, confidence=float(best.confidence))
+    path = _maybe_write_snapshot(
+        obj_id,
+        frame,
+        best.person_bbox,
+        score=shot_score,
+        tier="object",
+        worker_name=f"Nhóm {len(members)}",
+    )
+    gps_lat, gps_lng = _resolve_observation_gps(cam, at_ts=ts)
+
+    with _lock:
+        state = _crowd_sessions.setdefault(cam, _CrowdSession())
+        state.object_id = obj_id
+        state.locked = True
+        state.last_touch_at = ts
+
+    daystore.touch_object(
+        obj_id,
+        camera_id=cam,
+        snapshot_path=path,
+        snapshot_score=shot_score if path else 0.0,
+        now=ts,
+        seen_since=None,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+    )
+    return obj_id
+
+
+def assign_peak_crowd_detection_fields(
+    detections: Sequence[Any],
+    members: list[PeakCrowdMember],
+    crowd_object_id: str,
+) -> None:
+    """Gắn tag nhóm + số thứ tự ROI cho từng silhouette trong đám."""
+    if not members or not crowd_object_id:
+        return
+    track_to_index = _rank_crowd_indices(members)
+    size = len(members)
+    track_ids = set(track_to_index)
+    for det in detections:
+        tid = (getattr(det, "track_id", None) or "").strip()
+        if tid not in track_ids:
+            continue
+        idx = track_to_index[tid]
+        det.worker_id = crowd_object_id
+        det.worker_name = f"Nhóm {size}"
+        det.tier = "object"
+        det.peak_group = True
+        det.peak_group_index = idx
+        det.peak_group_size = size
+        det.label = f"#{idx}"
+
+
+def _rank_crowd_indices(members: list[PeakCrowdMember]) -> dict[str, int]:
+    ordered = sorted(
+        members,
+        key=lambda m: (float(m.person_bbox[0]), float(m.person_bbox[1]), m.track_id),
+    )
+    return {m.track_id: i + 1 for i, m in enumerate(ordered)}
+
+
 def reset_peak_time(camera_id: str | None = None) -> None:
     with _lock:
         if camera_id is None:
             _peak_active.clear()
+            _crowd_sessions.clear()
             return
-        _peak_active.pop((camera_id or "").strip(), None)
+        cam = (camera_id or "").strip()
+        _peak_active.pop(cam, None)
+        _crowd_sessions.pop(cam, None)

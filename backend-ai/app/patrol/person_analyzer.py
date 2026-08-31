@@ -149,6 +149,7 @@ def _assign_patrol_person_identity(
     frame_w: int,
     frame_h: int,
     track_id: str | None,
+    crowd_members: list | None = None,
 ) -> None:
     """HC-* / DR-* — gán sgc hoặc để trống (Đối tượng) lên detection trả về FE."""
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
@@ -199,21 +200,41 @@ def _assign_patrol_person_identity(
             face_emb, _face_score = recovered
             face_eligible = True
 
-    from .peak_time import is_peak_time, peak_identity_allowed
+    from .peak_time import PeakCrowdMember, is_peak_time, peak_identity_allowed
 
     if is_peak_time(camera_id) and not peak_identity_allowed(
         face_eligible=bool(face_eligible),
         face_quality=float(_face_score or 0.0),
         confidence=float(person_det.confidence or 0.0),
     ):
-        _record_patrol_density_encounter(
-            person_det,
-            camera_id=camera_id,
-            track_id=track_id,
-            frame=frame,
-            person_bbox=person_bbox,
-            confidence=float(person_det.confidence or 0.0),
+        observe_track_identity(
+            camera_id,
+            track_id,
+            worker_id="",
+            worker_name="",
         )
+        person_det.worker_id = ""
+        person_det.worker_name = ""
+        person_det.track_id = track_id
+        person_det.tier = "object"
+        person_det.face_eligible = False
+        if crowd_members is not None:
+            crowd_members.append(
+                PeakCrowdMember(
+                    track_id=str(track_id),
+                    person_bbox=person_bbox,
+                    confidence=float(person_det.confidence or 0.0),
+                ),
+            )
+        else:
+            _record_patrol_density_encounter(
+                person_det,
+                camera_id=camera_id,
+                track_id=track_id,
+                frame=frame,
+                person_bbox=person_bbox,
+                confidence=float(person_det.confidence or 0.0),
+            )
         return
 
     frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})
@@ -617,9 +638,16 @@ def _build_patrol_person_detections(
     dùng cho KPI legacy, không chặn đường ghi sự kiện chính nữa.
     """
     reset_hc_patrol_face_assignments(camera_id)
-    from .peak_time import update_peak_time_density
+    from .peak_time import (
+        PeakCrowdMember,
+        assign_peak_crowd_detection_fields,
+        is_peak_time,
+        record_peak_crowd_frame,
+        update_peak_time_density,
+    )
 
-    update_peak_time_density(camera_id, len(persons))
+    peak_active = update_peak_time_density(camera_id, len(persons))
+    crowd_members: list[PeakCrowdMember] = [] if peak_active else []
     track_ids = assign_patrol_track_ids(
         camera_id,
         [(p.person_box, p.person_conf) for p in persons],
@@ -654,6 +682,7 @@ def _build_patrol_person_detections(
                 frame_w=frame_w,
                 frame_h=frame_h,
                 track_id=track_id,
+                crowd_members=crowd_members if peak_active else None,
             )
         else:
             _assign_patrol_person_display_only(
@@ -665,6 +694,15 @@ def _build_patrol_person_detections(
             )
         _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)
+
+    if crowd_members:
+        obj_id = record_peak_crowd_frame(
+            camera_id,
+            crowd_members,
+            frame,
+        )
+        if obj_id:
+            assign_peak_crowd_detection_fields(detections, crowd_members, obj_id)
 
     return detections
 
