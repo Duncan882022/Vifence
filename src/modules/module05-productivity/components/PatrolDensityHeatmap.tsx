@@ -216,6 +216,7 @@ export function PatrolDensityHeatmap({
   workforce,
   flycamFlightModes,
   helmetOnlineById,
+  visitedByZoneId,
 }: {
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
@@ -234,6 +235,8 @@ export function PatrolDensityHeatmap({
   workforce: WorkforceSnapshot
   flycamFlightModes: Record<string, PatrolFlightMode>
   helmetOnlineById: Record<string, boolean>
+  /** KPI phủ khu — ưu tiên hơn observed_count workforce. */
+  visitedByZoneId?: Record<string, boolean>
 }) {
   const viewport = usePatrolHeatmapViewport()
   const [layers, setLayers] = useState({
@@ -254,8 +257,8 @@ export function PatrolDensityHeatmap({
   )
 
   const liveZones = useMemo(
-    () => buildPatrolLiveZonesFromWorkforce(workforce),
-    [workforce],
+    () => buildPatrolLiveZonesFromWorkforce(workforce, visitedByZoneId),
+    [workforce, visitedByZoneId],
   )
 
   const { cameraPositions, routeHistory } = usePatrolLiveMapState()

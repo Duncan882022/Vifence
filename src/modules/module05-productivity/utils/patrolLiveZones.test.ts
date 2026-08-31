@@ -30,6 +30,14 @@ describe('buildPatrolLiveZonesFromWorkforce', () => {
     expect(zones[0]?.uniquePeople).toBe(7)
   })
 
+  it('visitedByZoneId override — phủ khu theo thiết bị', () => {
+    const zones = buildPatrolLiveZonesFromWorkforce(
+      EMPTY_WORKFORCE_SNAPSHOT,
+      { [PATROL_SITE_ZONE_ID]: true },
+    )
+    expect(zones[0]?.coverage).toBe('VISITED')
+  })
+
   it('chưa quan sát → NOT_VISITED', () => {
     const zones = buildPatrolLiveZonesFromWorkforce(EMPTY_WORKFORCE_SNAPSHOT)
     expect(zones[0]?.coverage).toBe('NOT_VISITED')
