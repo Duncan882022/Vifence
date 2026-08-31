@@ -7,11 +7,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+INFRA_DIR="${ROOT}/infra/contabo"
+# shellcheck source=/dev/null
+[[ -f "${INFRA_DIR}/hosts.defaults.env" ]] && source "${INFRA_DIR}/hosts.defaults.env"
 LOCAL_CAM03="${LOCAL_CAM03:-${ROOT}/public/camera-feeds/ttdv-a-cam03-test.mp4}"
 LOCAL_CAM04="${LOCAL_CAM04:-${ROOT}/public/camera-feeds/ttdv-a-cam04-test.mp4}"
 VPS_HOST="${VPS_HOST:-217.217.253.247}"
 VPS_USER="${VPS_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/vifence/backend-ai}"
+INFRA_REMOTE="${INFRA_REMOTE:-/opt/vifence/infra/contabo}"
 API_DOMAIN="${API_DOMAIN:-217.217.253.247.nip.io}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/vifence_contabo}"
 
@@ -91,6 +95,23 @@ rsync_cmd() {
     "$ROOT/backend-ai/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 }
 
+rsync_infra() {
+  local ssh_rsh
+  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+    ssh_rsh="sshpass -e ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no"
+  elif [[ -f "$SSH_KEY" ]]; then
+    ssh_rsh="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+  else
+    ssh_rsh="ssh -o StrictHostKeyChecking=no"
+  fi
+  rsync -avz -e "$ssh_rsh" \
+    "${INFRA_DIR}/" "${VPS_USER}@${VPS_HOST}:${INFRA_REMOTE}/"
+}
+
+render_remote_nginx() {
+  ssh_cmd "API_DOMAIN='${API_DOMAIN}' VPS_HOST='${VPS_HOST}' INFRA_DIR='${INFRA_REMOTE}' bash ${INFRA_REMOTE}/render-nginx.sh"
+}
+
 echo "→ Kiểm tra SSH tới ${VPS_USER}@${VPS_HOST}…"
 ssh_cmd "echo SSH_OK && uname -a"
 
@@ -124,6 +145,11 @@ elif [[ -x "${ROOT}/backend-ai/.venv/bin/python" ]]; then
 else
   echo "⚠ Bỏ qua audit — chưa có backend-ai/.venv"
 fi
+
+echo "→ Rsync infra/contabo…"
+ssh_cmd "mkdir -p ${INFRA_REMOTE}"
+rsync_infra
+ssh_cmd "chmod +x ${INFRA_REMOTE}/render-nginx.sh ${INFRA_REMOTE}/install-systemd.sh"
 
 echo "→ Rsync backend-ai…"
 ssh_cmd "mkdir -p ${REMOTE_DIR}"
@@ -207,25 +233,7 @@ cp /opt/vifence/backend-ai/deploy/mediamtx.yml "${MEDIAMTX_YML}"
 cp /opt/vifence/backend-ai/deploy/rtsp-relay.sh /opt/vifence/rtsp-relay.sh
 chmod +x /opt/vifence/rtsp-relay.sh
 
-cat > /etc/systemd/system/mediamtx.service <<'EOF'
-[Unit]
-Description=MediaMTX — helmet ingest (RTSP/WHIP/HLS)
-After=network.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/vifence
-ExecStart=/opt/vifence/mediamtx /opt/vifence/mediamtx.yml
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable mediamtx
+bash "${INFRA_REMOTE:-/opt/vifence/infra/contabo}/install-systemd.sh"
 systemctl restart mediamtx
 sleep 2
 systemctl is-active --quiet mediamtx && echo "   MediaMTX OK" || {
@@ -363,213 +371,10 @@ EOF
 REMOTE_ENV
 
 echo "→ systemd service…"
-ssh_cmd "bash -s" <<'REMOTE_SYSTEMD'
-set -euo pipefail
-cat > /etc/systemd/system/vifence-backend.service <<'EOF'
-[Unit]
-Description=Vifence Safety AI Backend
-After=network.target
+ssh_cmd "bash ${INFRA_REMOTE}/install-systemd.sh && systemctl restart vifence-backend"
 
-[Service]
-Type=simple
-WorkingDirectory=/opt/vifence/backend-ai
-EnvironmentFile=/opt/vifence/backend-ai/.env
-Environment=TORCHDYNAMO_DISABLE=1
-Environment=PYTORCH_JIT=0
-ExecStart=/opt/vifence/backend-ai/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=5
-TimeoutStartSec=120
-
-[Install]
-WantedBy=multi-user.target
-EOF
-systemctl daemon-reload
-systemctl enable vifence-backend
-systemctl restart vifence-backend
-REMOTE_SYSTEMD
-
-echo "→ Nginx reverse proxy…"
-# CORS do FastAPI CORSMiddleware — không add_header trên nginx (tránh duplicate *, *)
-ssh_cmd "bash -s" <<REMOTE_NGINX
-set -euo pipefail
-API_DOMAIN="${API_DOMAIN}"
-VPS_HOST="${VPS_HOST}"
-CERT_DIR="/etc/letsencrypt/live/\${API_DOMAIN}"
-
-write_http_only() {
-  cat > /etc/nginx/sites-available/vifence-api <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name \${API_DOMAIN} \${VPS_HOST};
-
-    client_max_body_size 20M;
-
-    location /mediamtx/webrtc/ {
-        proxy_pass http://127.0.0.1:8889/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-        proxy_buffering off;
-        client_max_body_size 1M;
-    }
-
-    location /mediamtx/hls/ {
-        proxy_pass http://127.0.0.1:8888/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_buffering off;
-        add_header Cache-Control "no-cache, no-store";
-    }
-
-    # Playback Server — đọc lại băng đã ghi (MediaMTX :9996).
-    # Không thêm Access-Control-Allow-Origin: MediaMTX đã gửi sẵn, thêm nữa
-    # là hai header trùng nhau và trình duyệt từ chối hẳn request.
-    location /mediamtx/playback/ {
-        proxy_pass http://127.0.0.1:9996/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_buffering off;
-    }
-
-    # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
-    location = /phat-song {
-        return 301 /Vifence/phat-song/;
-    }
-    location = /phat-song/ {
-        return 301 /Vifence/phat-song/;
-    }
-    location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/)? {
-        return 301 /Vifence\\\$request_uri;
-    }
-    location = /Vifence {
-        return 301 /Vifence/;
-    }
-    location /Vifence/ {
-        alias /opt/vifence/frontend/;
-        index index.html;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \\\$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-}
-EOF
-}
-
-write_https() {
-  cat > /etc/nginx/sites-available/vifence-api <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name \${API_DOMAIN} \${VPS_HOST};
-    return 301 https://\${API_DOMAIN}\\\$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name \${API_DOMAIN} \${VPS_HOST};
-
-    ssl_certificate \${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key \${CERT_DIR}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    client_max_body_size 20M;
-
-    location /mediamtx/webrtc/ {
-        proxy_pass http://127.0.0.1:8889/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-        proxy_buffering off;
-        client_max_body_size 1M;
-    }
-
-    location /mediamtx/hls/ {
-        proxy_pass http://127.0.0.1:8888/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_buffering off;
-        add_header Cache-Control "no-cache, no-store";
-    }
-
-    # Playback Server — đọc lại băng đã ghi (MediaMTX :9996).
-    # Không thêm Access-Control-Allow-Origin: MediaMTX đã gửi sẵn, thêm nữa
-    # là hai header trùng nhau và trình duyệt từ chối hẳn request.
-    location /mediamtx/playback/ {
-        proxy_pass http://127.0.0.1:9996/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_buffering off;
-    }
-
-    # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
-    location = /phat-song {
-        return 301 /Vifence/phat-song/;
-    }
-    location = /phat-song/ {
-        return 301 /Vifence/phat-song/;
-    }
-    location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/)? {
-        return 301 /Vifence\\\$request_uri;
-    }
-    location = /Vifence {
-        return 301 /Vifence/;
-    }
-    location /Vifence/ {
-        alias /opt/vifence/frontend/;
-        index index.html;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \\\$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-}
-EOF
-}
-
-if [[ -f "\${CERT_DIR}/fullchain.pem" && -f "\${CERT_DIR}/privkey.pem" ]]; then
-  write_https
-else
-  write_http_only
-fi
-
-ln -sf /etc/nginx/sites-available/vifence-api /etc/nginx/sites-enabled/vifence-api
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl reload nginx
-REMOTE_NGINX
+echo "→ Nginx reverse proxy (infra/contabo — API + MediaMTX, FE = GitHub Pages)…"
+render_remote_nginx
 
 echo "→ Let's Encrypt (HTTPS)…"
 ssh_cmd "bash -s" <<REMOTE_SSL
@@ -584,101 +389,8 @@ else
 fi
 REMOTE_SSL
 
-echo "→ Bật lại HTTPS nginx nếu đã có cert…"
-ssh_cmd "bash -s" <<REMOTE_HTTPS_RELOAD
-set -euo pipefail
-API_DOMAIN="${API_DOMAIN}"
-VPS_HOST="${VPS_HOST}"
-CERT_DIR="/etc/letsencrypt/live/\${API_DOMAIN}"
-if [[ -f "\${CERT_DIR}/fullchain.pem" && -f "\${CERT_DIR}/privkey.pem" ]] && ! grep -q 'listen 443' /etc/nginx/sites-available/vifence-api; then
-  cat > /etc/nginx/sites-available/vifence-api <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name \${API_DOMAIN} \${VPS_HOST};
-    return 301 https://\${API_DOMAIN}\\\$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name \${API_DOMAIN} \${VPS_HOST};
-
-    ssl_certificate \${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key \${CERT_DIR}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    client_max_body_size 20M;
-
-    location /mediamtx/webrtc/ {
-        proxy_pass http://127.0.0.1:8889/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-        proxy_buffering off;
-        client_max_body_size 1M;
-    }
-
-    location /mediamtx/hls/ {
-        proxy_pass http://127.0.0.1:8888/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_buffering off;
-        add_header Cache-Control "no-cache, no-store";
-    }
-
-    # Playback Server — đọc lại băng đã ghi (MediaMTX :9996).
-    # Không thêm Access-Control-Allow-Origin: MediaMTX đã gửi sẵn, thêm nữa
-    # là hai header trùng nhau và trình duyệt từ chối hẳn request.
-    location /mediamtx/playback/ {
-        proxy_pass http://127.0.0.1:9996/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_buffering off;
-    }
-
-    # FE static — fallback khi GitHub Pages chưa bật (Vite base /Vifence/)
-    location = /phat-song {
-        return 301 /Vifence/phat-song/;
-    }
-    location = /phat-song/ {
-        return 301 /Vifence/phat-song/;
-    }
-    location ~ ^/(module0[1-8]|dttt|equipment|profile|scanner)(/)? {
-        return 301 /Vifence\\\$request_uri;
-    }
-    location = /Vifence {
-        return 301 /Vifence/;
-    }
-    location /Vifence/ {
-        alias /opt/vifence/frontend/;
-        index index.html;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \\\$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-}
-EOF
-  nginx -t
-  systemctl reload nginx
-fi
-REMOTE_HTTPS_RELOAD
+echo "→ Render lại nginx sau certbot…"
+render_remote_nginx
 
 echo "→ Chờ /health…"
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -705,6 +417,6 @@ echo "✓ Deploy xong."
 echo "  API: ${API_URL}"
 echo "  Health: ${API_URL}/health"
 echo ""
-echo "Cập nhật FE:"
-echo "  VITE_MOBILE_AI_BACKEND_URL=${API_URL}"
-echo "  npm run build:pages && npm run deploy:pages"
+echo "FE (GitHub Pages — không deploy static lên Contabo):"
+echo "  https://duncan882022.github.io/Vifence/"
+echo "  VITE_MOBILE_AI_BACKEND_URL=${API_URL}  → npm run build:pages && npm run deploy:pages"

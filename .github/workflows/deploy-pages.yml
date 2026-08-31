@@ -96,5 +96,5 @@ jobs:
           echo "::warning::GitHub Pages chưa được bật cho repo này."
           echo "Build đã push lên nhánh gh-pages. Bật thủ công một lần:"
           echo "  Settings → Pages → Deploy from branch → gh-pages / (root)"
-          echo "Fallback FE (Contabo): https://217.217.253.247.nip.io/Vifence/module05/"
+          echo "FE: https://duncan882022.github.io/Vifence/module05/"
           exit 0
