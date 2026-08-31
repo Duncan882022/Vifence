@@ -173,7 +173,7 @@ export function WorkerFaceScanPage() {
               {isAdminCreate ? 'Tạo hồ sơ mới + quét mặt' : 'Đăng ký khuôn mặt tuần tra'}
             </h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Bước 1: Quét 4 góc mặt · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
+              Bước 1: Quét 5 góc mặt · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
             </p>
           </div>
 
@@ -373,7 +373,7 @@ export function WorkerFaceScanPage() {
             </div>
             <h1 className="text-lg font-bold">Quét mặt công nhân</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Tra cứu mã đã có để bổ sung vector, hoặc tạo hồ sơ mới kèm quét 4 góc.
+              Tra cứu mã đã có để bổ sung vector, hoặc tạo hồ sơ mới kèm quét 5 góc.
             </p>
           </div>
 
@@ -422,7 +422,7 @@ export function WorkerFaceScanPage() {
           <Panel title="Tạo hồ sơ mới" className="overflow-visible">
             <div className="p-4 space-y-3">
               <p className="text-[10px] text-muted-foreground leading-relaxed">
-                Chưa có mã trong hệ thống? Tạo hồ sơ mới: quét 4 góc mặt rồi nhập họ tên, mã nhân viên và đơn vị.
+                Chưa có mã trong hệ thống? Tạo hồ sơ mới: quét 5 góc mặt rồi nhập họ tên, mã nhân viên và đơn vị.
                 Không cần import Excel trước.
               </p>
               <button

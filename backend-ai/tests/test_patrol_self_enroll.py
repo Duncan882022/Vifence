@@ -40,7 +40,7 @@ class TestPatrolSelfEnroll(unittest.TestCase):
         session_id = identity.create_enroll_session()
         self.assertTrue(session_id)
 
-        for slot, seed in enumerate((0.2, 0.6, 0.9, 0.95), start=1):
+        for slot, seed in enumerate((0.2, 0.6, 0.9, 0.95, 0.98), start=1):
             added = identity.add_enroll_session_face(
                 session_id, _fake_embedding(seed), pose_slot=slot,
             )
@@ -60,11 +60,11 @@ class TestPatrolSelfEnroll(unittest.TestCase):
         self.assertEqual(row["employee_code"], "NV-SELF-001")
         self.assertEqual(row["contractor"], "Vincons")
         self.assertEqual(row["origin"], "self_enroll")
-        self.assertGreaterEqual(identity.face_count(row["pers_id"]), 4)
+        self.assertGreaterEqual(identity.face_count(row["pers_id"]), 5)
 
         self.assertIsNone(identity.get_enroll_session_enrollment(session_id))
 
-    def test_complete_requires_four_angles(self) -> None:
+    def test_complete_requires_five_angles(self) -> None:
         session_id = identity.create_enroll_session()
         identity.add_enroll_session_face(session_id, _fake_embedding(0.3), pose_slot=1)
         with self.assertRaises(ValueError):

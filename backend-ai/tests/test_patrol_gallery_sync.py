@@ -87,11 +87,11 @@ class GallerySyncTests(unittest.TestCase):
         enrollment = get_enrollment_status("p-SGC-6688")
         self.assertEqual(enrollment["poses_captured"], 0)
 
-    def test_promote_enroll_session_writes_four_selfie_jpgs(self) -> None:
+    def test_promote_enroll_session_writes_five_selfie_jpgs(self) -> None:
         session_id = identity.create_enroll_session()
         img = np.zeros((240, 240, 3), dtype=np.uint8)
         cv2.rectangle(img, (80, 60), (160, 180), (200, 180, 160), -1)
-        for slot in (1, 2, 3, 4):
+        for slot in (1, 2, 3, 4, 5):
             emb = np.random.randn(512).astype(np.float32)
             emb /= np.linalg.norm(emb)
             identity.add_enroll_session_face(session_id, emb.tolist(), pose_slot=slot)
@@ -104,13 +104,13 @@ class GallerySyncTests(unittest.TestCase):
             employee_code="SGC-6688",
             contractor_name="SGC",
         )
-        self.assertEqual(out["poses_enrolled"], 4)
+        self.assertEqual(out["poses_enrolled"], 5)
 
         from app.worker_identity.gallery import get_enrollment_status
 
         enrollment = get_enrollment_status("p-SGC-6688")
         self.assertTrue(enrollment["complete"])
-        self.assertEqual(enrollment["poses_captured"], 4)
+        self.assertEqual(enrollment["poses_captured"], 5)
 
     def test_sync_all_identified_on_startup(self) -> None:
         row1 = identity.import_identity(

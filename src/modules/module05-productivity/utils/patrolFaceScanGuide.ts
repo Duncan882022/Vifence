@@ -1,5 +1,5 @@
 /**
- * Hướng dẫn quét mặt eKYC — 4 góc gallery: chính diện, trái, phải, cúi xuống.
+ * Hướng dẫn quét mặt eKYC — 5 góc gallery: chính diện, trái, phải, cúi, ngửa.
  */
 
 import {
@@ -52,6 +52,7 @@ const CENTER_X_MAX = 0.8
 const CENTER_Y_MIN = 0.18
 const CENTER_Y_MAX = 0.82
 const PITCH_DOWN_Y = 0.54
+const PITCH_UP_Y = 0.39
 
 type BlazeFaceModel = {
   estimateFaces: (
@@ -133,8 +134,8 @@ function classifyHeadPose(cx: number, cy: number): HeadPoseHint {
   if (cy >= PITCH_DOWN_Y && Math.abs(dx) <= YAW_SIDE + 0.06) return 'down'
   if (dx <= -YAW_TURN) return 'left'
   if (dx >= YAW_TURN) return 'right'
+  if (cy <= PITCH_UP_Y && Math.abs(dx) <= YAW_SIDE + 0.04) return 'up'
   if (Math.abs(dx) <= YAW_SIDE && cy <= PITCH_DOWN_Y - 0.04) return 'front'
-  if (cy <= 0.4 && Math.abs(dx) <= YAW_SIDE) return 'up'
   return dx < 0 ? 'left' : 'right'
 }
 
@@ -168,8 +169,10 @@ export function poseApproachProgress(metrics: FaceScanMetrics, slot: ScanPoseSlo
       raw = (cy - 0.44) / Math.max(0.01, PITCH_DOWN_Y - 0.44)
       break
     }
-    default:
-      return 0
+    case 5: {
+      raw = (PITCH_UP_Y + 0.03 - cy) / Math.max(0.01, PITCH_UP_Y + 0.03 - 0.30)
+      break
+    }
   }
 
   if (!faceLooseInFrame(metrics)) raw *= 0.35
@@ -191,6 +194,8 @@ export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): bool
       return poseHint === 'right' || cx >= 0.5 + YAW_TURN_NEAR
     case 4:
       return poseHint === 'down' || cy >= PITCH_DOWN_Y - 0.06
+    case 5:
+      return poseHint === 'up' || cy <= PITCH_UP_Y + 0.03
     default:
       return false
   }
@@ -248,6 +253,8 @@ function slotLiveDirection(slot: ScanPoseSlot): LiveScanDirection {
       return 'right'
     case 4:
       return 'down'
+    case 5:
+      return 'up'
     default:
       return 'front'
   }
@@ -368,6 +375,8 @@ export function faceReadyForSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): 
       return metrics.poseHint === 'right'
     case 4:
       return metrics.poseHint === 'down'
+    case 5:
+      return metrics.poseHint === 'up'
     default:
       return false
   }
@@ -395,7 +404,9 @@ export function guidanceForHint(hint: HeadPoseHint, slot: ScanPoseSlot): string 
     case 'right':
       return slot === 3 ? 'Giữ yên — đang quét Quay phải…' : `Quay sang phải thêm — cần ${target}`
     case 'up':
-      return slot === 1 ? 'Hạ cằm về — nhìn thẳng Chính diện, không ngửa đầu' : `Cúi cằm nhẹ — cần ${target}`
+      if (slot === 5) return 'Giữ yên — đang quét Ngửa lên…'
+      if (slot === 1) return 'Hạ cằm về — nhìn thẳng Chính diện'
+      return `Ngửa cằm nhẹ — cần ${target}`
     case 'down':
       return slot === 4 ? 'Giữ yên — đang quét Cúi xuống…' : `Cúi cằm thêm — cần ${target}`
     default:
@@ -471,10 +482,11 @@ export function preloadPatrolFaceScanModels(): void {
 }
 
 const HINT_SAMPLE_CENTERS: Partial<Record<HeadPoseHint, { centerX: number; centerY: number }>> = {
-  front: { centerX: 0.5, centerY: 0.5 },
+  front: { centerX: 0.5, centerY: 0.48 },
   left: { centerX: 0.34, centerY: 0.5 },
   right: { centerX: 0.66, centerY: 0.5 },
   down: { centerX: 0.5, centerY: 0.62 },
+  up: { centerX: 0.5, centerY: 0.34 },
 }
 
 export function poseHintMatchesSlot(hint: HeadPoseHint, slot: ScanPoseSlot): boolean {

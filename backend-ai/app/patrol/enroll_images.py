@@ -66,7 +66,7 @@ def promote_enroll_session_to_gallery(
     employee_code: str,
     contractor_name: str | None = None,
 ) -> dict[str, Any]:
-    """Ghi 4 góc selfie phiên quét vào worker_gallery — không dùng snapshot patrol."""
+    """Ghi 5 góc selfie phiên quét vào worker_gallery — không dùng snapshot patrol."""
     from ..worker_identity.recognizer import reload_gallery
 
     wid = gallery_worker_id.strip()

@@ -17,8 +17,8 @@ logger = logging.getLogger("worker_identity.gallery")
 
 _BASE = Path(__file__).resolve().parent.parent.parent / "data" / "worker_gallery"
 _REGISTRY: list[tuple[WorkerProfile, np.ndarray]] = []
-ENROLLMENT_POSE_COUNT = 4
-POSE_LABELS = ("Chính diện", "Quay trái", "Quay phải", "Cúi xuống")
+ENROLLMENT_POSE_COUNT = 5
+POSE_LABELS = ("Chính diện", "Quay trái", "Quay phải", "Cúi xuống", "Ngửa lên")
 
 
 def gallery_dir() -> Path:
