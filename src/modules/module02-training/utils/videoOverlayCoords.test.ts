@@ -117,6 +117,20 @@ describe('mapBackendBboxToOverlay', () => {
     expect(mapped.x + mapped.w).toBeLessThanOrEqual(100.5)
     expect(mapped.y + mapped.h).toBeLessThanOrEqual(100.5)
   })
+
+  it('fallback frame intrinsic khi iOS chưa có videoWidth (WHEP)', () => {
+    const video = mockVideo(0, 0, 320, 240)
+    const mapped = mapBackendBboxToOverlay(
+      [100, 200, 300, 600],
+      720,
+      1280,
+      video,
+      'contain',
+      'center',
+    )
+    expect(mapped.w).toBeGreaterThan(0)
+    expect(mapped.h).toBeGreaterThan(0)
+  })
 })
 
 describe('resolveOverlayAnalyzeFrameSize', () => {
