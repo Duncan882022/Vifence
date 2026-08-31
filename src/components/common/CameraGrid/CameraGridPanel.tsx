@@ -27,8 +27,8 @@ const CCTV_SCANLINE = {
     'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)',
 } as const
 
-function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle, streamIndex, minimalTile = false }: {
-  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean; streamIndex?: number; minimalTile?: boolean
+function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analyzeThrottle, streamIndex }: {
+  cam: TrainingCamera; playing?: boolean; compact?: boolean; aiOverlay?: boolean; analyzeThrottle?: boolean; streamIndex?: number
 }) {
   const localStream = useHelmetLocalStream(cam.id)
 
@@ -47,7 +47,6 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
         externalStream={localStream}
         compact={compact}
         aiEnabled={aiOverlay}
-        showFacingLabel={!minimalTile}
       />
     )
   }
@@ -61,7 +60,6 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
         autoStartCapture={playing}
         compact={compact}
         aiEnabled={aiOverlay}
-        showFacingLabel={!minimalTile}
       />
     )
   }
@@ -80,7 +78,6 @@ function CameraLiveFeed({ cam, playing = true, compact, aiOverlay = false, analy
         compact={compact}
         analyzeThrottle={analyzeThrottle}
         streamIndex={streamIndex}
-        minimalTile={minimalTile}
       />
     )
   }
@@ -158,14 +155,13 @@ function CameraThumb({ cam, selected, onClick, compact = false, strip = false, m
   )
 }
 
-function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false, minimalTile = false }: {
+function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true, streamWhenOffline = false }: {
   cam: TrainingCamera
   compact?: boolean
   analyzeThrottle?: boolean
   streamIndex?: number
   playing?: boolean
   streamWhenOffline?: boolean
-  minimalTile?: boolean
 }) {
   /** Mobile bodycam — luôn mount feed; offline chỉ áp dụng luồng remote (HLS/WS). */
   const isOffline = cam.status === 'offline' && !cam.framesLive && cam.streamType !== 'mobile'
@@ -187,14 +183,10 @@ function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true
     <div className="relative w-full h-full overflow-hidden rounded-lg bg-black border border-[#1e2433]">
       <div className="absolute inset-0 bg-black" />
       {blockFeed ? (
-        minimalTile ? (
-          <div className="absolute inset-0 bg-black z-[5]" aria-hidden />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 z-[5]">
-            <span className="text-xs font-bold tracking-[0.2em] uppercase">Offline</span>
-            <span className="text-[10px] text-muted-foreground/40">{cameraDisplayLabel(cam)}</span>
-          </div>
-        )
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 z-[5]">
+          <span className="text-xs font-bold tracking-[0.2em] uppercase">Offline</span>
+          <span className="text-[10px] text-muted-foreground/40">{cameraDisplayLabel(cam)}</span>
+        </div>
       ) : (
         <CameraLiveFeed
           cam={cam}
@@ -203,16 +195,13 @@ function CameraCell({ cam, compact, analyzeThrottle, streamIndex, playing = true
           aiOverlay={playing}
           analyzeThrottle={analyzeThrottle}
           streamIndex={streamIndex}
-          minimalTile={minimalTile}
         />
       )}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={CCTV_SCANLINE} />
-      {!minimalTile && (
-        <CameraChrome
-          cam={cam}
-          compact={compact}
-        />
-      )}
+      <CameraChrome
+        cam={cam}
+        compact={compact}
+      />
     </div>
   )
 }
@@ -252,7 +241,7 @@ function getMobileVideoViewportHeight(
   return Math.ceil(visibleRows * rowHeight + (visibleRows - 1) * gap)
 }
 
-function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol, compactVideo, compactVideoMaxClass, aspectVideoGrid, fixedRowHeightPx, streamWhenOffline, minimalTile = false }: {
+function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol, compactVideo, compactVideoMaxClass, aspectVideoGrid, fixedRowHeightPx, streamWhenOffline }: {
   cams: TrainingCamera[]
   stackedPortrait: boolean
   fillHeight: boolean
@@ -266,8 +255,6 @@ function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol, compact
   /** Patrol tier scroll: chiều cao hàng grid cố định (px) — tránh hàng 2 đè hàng 1. */
   fixedRowHeightPx?: number | null
   streamWhenOffline?: boolean
-  /** Module 05 — chỉ video + ROI, không toolbar / LIVE / làm mới luồng. */
-  minimalTile?: boolean
 }) {
   const count = cams.length
   const cols = getGridCols(count, stackedPortrait, forceSingleCol)
@@ -315,7 +302,6 @@ function CameraGrid({ cams, stackedPortrait, fillHeight, forceSingleCol, compact
                 streamIndex={index}
                 playing
                 streamWhenOffline={streamWhenOffline}
-                minimalTile={minimalTile}
               />
             </div>
           </div>
@@ -364,8 +350,6 @@ interface CameraGridPanelProps {
   sidebarThumbFullWidth?: boolean
   /** Patrol bodycam/flycam: vẫn thử load HLS khi badge offline (metrics trễ hơn nguồn). */
   streamWhenOffline?: boolean
-  /** Patrol — tile sạch: không LIVE badge, toolbar, nhãn cam, nút làm mới luồng. */
-  minimalCameraTile?: boolean
 }
 
 export function CameraGridPanel({
@@ -384,7 +368,6 @@ export function CameraGridPanel({
   aspectVideoGrid = false,
   preferCompactVideo = false,
   streamWhenOffline = false,
-  minimalCameraTile = false,
   desktopMaxVisibleRows,
   sidebarOpenClass = 'lg:w-[220px]',
   sidebarCompactClass = 'max-lg:landscape:w-[168px]',
@@ -656,7 +639,6 @@ export function CameraGridPanel({
               aspectVideoGrid={aspectVideoGrid}
               fixedRowHeightPx={gridRowHeightPx}
               streamWhenOffline={streamWhenOffline}
-              minimalTile={minimalCameraTile}
             />
           </div>
         </div>
