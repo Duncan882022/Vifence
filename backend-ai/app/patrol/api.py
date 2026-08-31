@@ -75,7 +75,7 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
 
 @router.get("/persons")
 def list_persons(status: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
-    """Danh sách Người (`status=person`) hoặc Định danh (`status=identified`)."""
+    """Danh sách Người (`person`), bản nháp (`draft`) hoặc xác minh (`identified`)."""
     rows = identity.list_persons(status)
     return {
         "ok": True,
@@ -167,6 +167,39 @@ def delete_person(pers_id: str, user: RequirePatrolAdmin = None) -> dict[str, An
         return {"ok": False, "error": "not_found"}
     audit("person_delete", actor=user.username, subject_id=pers_id)
     return {"ok": True}
+
+
+@router.post("/persons/{pers_id}/verify")
+def verify_draft_person(
+    pers_id: str,
+    payload: PersonUpdatePayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Xác minh hồ sơ bản nháp (camera) → identified + gallery."""
+    full_name = (payload.full_name or "").strip()
+    employee_code = (payload.employee_code or "").strip()
+    contractor = (payload.contractor or "").strip()
+    if not full_name or not employee_code:
+        return {"ok": False, "error": "missing_fields"}
+    if identity.get_person(pers_id) is None:
+        return {"ok": False, "error": "not_found"}
+    try:
+        row = identity.verify_draft_profile(
+            pers_id,
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+            identified_by=user.username,
+        )
+    except KeyError:
+        return {"ok": False, "error": "not_found"}
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_draft":
+            return {"ok": False, "error": "not_draft"}
+        return {"ok": False, "error": code}
+    audit("person_verify", actor=user.username, subject_id=pers_id)
+    return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
 
 
 @router.get("/persons/{pers_id}/enrollment")

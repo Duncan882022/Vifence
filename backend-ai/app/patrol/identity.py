@@ -45,6 +45,7 @@ MAX_FACES_PER_PERSON = 24
 FACE_ANGLE_DEDUPE_SIM = 0.88
 
 STATUS_PERSON = "person"
+STATUS_DRAFT = "draft"
 STATUS_IDENTIFIED = "identified"
 
 
@@ -235,6 +236,9 @@ def display_name(person: dict[str, Any] | None) -> str:
     if person.get("status") == STATUS_IDENTIFIED:
         name = (person.get("full_name") or "").strip()
         return name or str(person.get("iden_code") or person["pers_id"])
+    if person.get("status") == STATUS_DRAFT:
+        code = str(person.get("employee_code") or "").strip()
+        return code or str(person["pers_id"])
     return str(person["pers_id"])
 
 
@@ -371,6 +375,90 @@ def create_person(
         return _run(conn)
     with db.tx() as c:
         return _run(c)
+
+
+def lookup_pers_by_sgc(sgc_id: str) -> str | None:
+    """Tra pers-* đã gắn với mã sgc-* — map bền SQLite."""
+    sgc = (sgc_id or "").strip().lower()
+    if not sgc or not sgc.startswith("sgc-"):
+        return None
+    row = db.query_one("SELECT pers_id FROM person_sgc_map WHERE sgc_id = ?", (sgc,))
+    if row is not None:
+        return resolve_alias(str(row["pers_id"]))
+    found = find_by_employee_code(sgc)
+    if found and found.get("status") in (STATUS_DRAFT, STATUS_PERSON):
+        return resolve_alias(str(found["pers_id"]))
+    return None
+
+
+def _bind_sgc_pers_map(sgc_id: str, pers_id: str, *, now: float | None = None) -> None:
+    sgc = (sgc_id or "").strip().lower()
+    pid = resolve_alias((pers_id or "").strip())
+    if not sgc or not pid.startswith("pers-"):
+        return
+    ts = now or time.time()
+    with db.tx() as c:
+        c.execute(
+            "INSERT INTO person_sgc_map(sgc_id, pers_id, created_at)"
+            " VALUES(?,?,?)"
+            " ON CONFLICT(sgc_id) DO UPDATE SET pers_id = excluded.pers_id",
+            (sgc, pid, ts),
+        )
+
+
+def ensure_draft_for_sgc(sgc_id: str, *, now: float | None = None) -> str:
+    """Đủ điều kiện nhận diện (sgc-*) → một hồ sơ bản nháp + mã tạm = sgc."""
+    ts = now or time.time()
+    sgc = (sgc_id or "").strip().lower()
+    if not sgc.startswith("sgc-"):
+        raise ValueError("invalid_sgc")
+
+    existing = lookup_pers_by_sgc(sgc)
+    if existing:
+        touch_person(existing, now=ts)
+        _bind_sgc_pers_map(sgc, existing, now=ts)
+        return existing
+
+    with db.tx() as c:
+        seq = db.next_counter(c, "pers")
+        pers_id = _fmt_pers(seq)
+        c.execute(
+            "INSERT INTO persons("
+            " pers_id, status, employee_code, origin, first_seen, last_seen, created_at"
+            ") VALUES(?,?,?,?,?,?,?)",
+            (pers_id, STATUS_DRAFT, sgc, "sgc", ts, ts, ts),
+        )
+        c.execute(
+            "INSERT INTO person_sgc_map(sgc_id, pers_id, created_at) VALUES(?,?,?)",
+            (sgc, pers_id, ts),
+        )
+    return pers_id
+
+
+def verify_draft_profile(
+    pers_id: str,
+    *,
+    full_name: str,
+    employee_code: str,
+    contractor: str = "",
+    identified_by: str = "",
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Bản nháp → xác minh (identified) — giữ vector mặt đã thu từ camera."""
+    pid = resolve_alias(pers_id)
+    row = get_person(pid)
+    if row is None:
+        raise KeyError("not_found")
+    if row.get("status") not in (STATUS_DRAFT, STATUS_PERSON):
+        raise ValueError("not_draft")
+    return identify(
+        pid,
+        full_name=full_name,
+        employee_code=employee_code,
+        contractor=contractor,
+        identified_by=identified_by or "verify_draft",
+        now=now,
+    )
 
 
 def touch_person(pers_id: str, now: float | None = None) -> None:

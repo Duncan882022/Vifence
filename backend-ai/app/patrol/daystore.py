@@ -599,7 +599,7 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
         sid = str(r["subject_id"])
         if sid.startswith("obj-"):
             item["tier"] = "object"
-        elif r["person_status"] == identity.STATUS_IDENTIFIED:
+        elif r["person_status"] in (identity.STATUS_IDENTIFIED,):
             item["tier"] = "identity"
         else:
             item["tier"] = "person"
@@ -822,10 +822,10 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
     person_row = db.query_one(
         "SELECT COUNT(*) AS c FROM daily_events e"
         " JOIN persons p ON p.pers_id = e.pers_id"
-        " WHERE e.event_date = ? AND p.status = ?"
+        " WHERE e.event_date = ? AND p.status IN (?, ?)"
         " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
         " AND e.snapshot_score >= ?",
-        (d, identity.STATUS_PERSON, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+        (d, identity.STATUS_PERSON, identity.STATUS_DRAFT, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
     identity_row = db.query_one(
         "SELECT COUNT(*) AS c FROM daily_events e"

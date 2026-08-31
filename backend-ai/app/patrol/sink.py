@@ -337,6 +337,7 @@ def _bind_sgc_to_person(sgc_id: str, pers_id: str) -> None:
         return
     with _lock:
         _sgc_to_person[sgc] = pid
+    identity._bind_sgc_pers_map(sgc, pid)
 
 
 def _ensure_pers_for_sgc(sgc_id: str, *, now: float) -> str:
@@ -345,8 +346,9 @@ def _ensure_pers_for_sgc(sgc_id: str, *, now: float) -> str:
         existing = _sgc_to_person.get(sgc)
     if existing:
         return identity.resolve_alias(existing)
-    pers_id = identity.create_person(origin="sgc", now=now)
-    _bind_sgc_to_person(sgc, pers_id)
+    pers_id = identity.ensure_draft_for_sgc(sgc, now=now)
+    with _lock:
+        _sgc_to_person[sgc] = pers_id
     return pers_id
 
 

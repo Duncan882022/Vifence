@@ -112,3 +112,50 @@ def migrate_to_v6(conn: sqlite3.Connection) -> None:
     )
     conn.execute("PRAGMA user_version=6")
     conn.commit()
+
+
+def migrate_to_v7(conn: sqlite3.Connection) -> None:
+    """Hồ sơ bản nháp (draft) + map sgc-* → pers-* bền vững."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 7:
+        return
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS person_sgc_map (
+          sgc_id     TEXT PRIMARY KEY,
+          pers_id    TEXT NOT NULL REFERENCES persons(pers_id) ON DELETE CASCADE,
+          created_at REAL NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_person_sgc_map_pers ON person_sgc_map(pers_id)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE persons_v7 (
+          pers_id       TEXT PRIMARY KEY,
+          status        TEXT NOT NULL,
+          iden_code     TEXT UNIQUE,
+          full_name     TEXT,
+          employee_code TEXT UNIQUE,
+          contractor    TEXT,
+          origin        TEXT NOT NULL DEFAULT 'camera',
+          first_seen    REAL,
+          last_seen     REAL,
+          identified_at REAL,
+          identified_by TEXT,
+          created_at    REAL NOT NULL,
+          CHECK (status IN ('person', 'draft', 'identified')),
+          CHECK ((status = 'identified') = (iden_code IS NOT NULL))
+        )
+        """
+    )
+    conn.execute("INSERT INTO persons_v7 SELECT * FROM persons")
+    conn.execute("DROP TABLE persons")
+    conn.execute("ALTER TABLE persons_v7 RENAME TO persons")
+
+    conn.execute("PRAGMA user_version=7")
+    conn.commit()

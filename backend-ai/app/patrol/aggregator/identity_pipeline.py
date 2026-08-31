@@ -252,6 +252,27 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
     _note_best_frame(session, obs)
 
+    wid = (obs.lifecycle_worker_id or "").strip()
+    from ...person_identity_registry import is_sgc_worker_id
+
+    # sgc-* đã ổn định trên ROI → một hồ sơ bản nháp, không tạo pers-* rời.
+    if not session.identity_resolved and wid and is_sgc_worker_id(wid):
+        pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
+        if pers_id:
+            _assign_pers_subject(session, pers_id, now=obs.ts)
+            session.identity = _map_worker_to_identity(wid, obs.confidence)
+            session.identity_resolved = True
+            if obs.face_eligible and obs.face_embedding is not None:
+                try:
+                    identity.add_face_angle(
+                        pers_id,
+                        obs.face_embedding,
+                        quality=obs.face_quality,
+                        camera_id=obs.camera_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("add_face_angle draft skip", exc_info=True)
+
     if not session.identity_resolved:
         picked = _pick_search_embedding(session)
         if picked is not None:
@@ -263,6 +284,10 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     camera_id=obs.camera_id,
                     now=obs.ts,
                 )
+                if wid and is_sgc_worker_id(wid):
+                    from ..sink import _bind_sgc_to_person
+
+                    _bind_sgc_to_person(wid, pers_id)
                 _assign_pers_subject(session, pers_id, now=obs.ts)
                 session.identity = PersonIdentity(
                     person_id=pers_id,

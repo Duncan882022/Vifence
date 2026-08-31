@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  AlertCircle, Loader2, Pencil, Trash2, X,
+  AlertCircle, CheckCircle2, Loader2, Pencil, Trash2, X,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
@@ -8,12 +8,13 @@ import {
   deletePatrolWorkerProfile,
   fetchPatrolWorkerProfile,
   updatePatrolWorkerProfile,
+  verifyPatrolDraftProfile,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
-  initialMode?: 'view' | 'edit'
+  initialMode?: 'view' | 'edit' | 'verify'
   onClose: () => void
   onChanged: () => void
 }
@@ -29,7 +30,7 @@ export function WorkerProfileDetailModal({
   onClose,
   onChanged,
 }: WorkerProfileDetailModalProps) {
-  const [mode, setMode] = useState<'view' | 'edit'>(initialMode)
+  const [mode, setMode] = useState<'view' | 'edit' | 'verify'>(initialMode)
   const [person, setPerson] = useState<PatrolWorkerPerson | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -73,11 +74,14 @@ export function WorkerProfileDetailModal({
     setSaving(true)
     setError(null)
     try {
-      const updated = await updatePatrolWorkerProfile(persId, {
+      const payload = {
         full_name: fullName.trim(),
         employee_code: employeeCode.trim(),
         contractor: contractor.trim(),
-      })
+      }
+      const updated = mode === 'verify'
+        ? await verifyPatrolDraftProfile(persId, payload)
+        : await updatePatrolWorkerProfile(persId, payload)
       setPerson(updated)
       setMode('view')
       onChanged()
@@ -119,7 +123,7 @@ export function WorkerProfileDetailModal({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-[#1e2433] bg-[#0b0f1a]/95 backdrop-blur-sm">
           <h3 className="text-sm font-bold">
-            {mode === 'edit' ? 'Sửa hồ sơ' : 'Chi tiết hồ sơ'}
+            {mode === 'verify' ? 'Xác minh hồ sơ' : mode === 'edit' ? 'Sửa hồ sơ' : 'Chi tiết hồ sơ'}
           </h3>
           <button
             type="button"
@@ -137,6 +141,11 @@ export function WorkerProfileDetailModal({
             </div>
           ) : person && mode === 'view' ? (
             <>
+              {person.status === 'draft' && (
+                <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[10px] text-amber-300">
+                  Hồ sơ bản nháp — tạo tự động từ camera. Nhập họ tên + mã NV thật rồi xác minh.
+                </div>
+              )}
               <div className="space-y-3">
                 <div>
                   <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Họ tên</p>
@@ -181,14 +190,25 @@ export function WorkerProfileDetailModal({
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setMode('edit')}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold border border-[#1e2433] hover:bg-[#1a2235]"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Sửa
-                </button>
+                {person.status === 'draft' ? (
+                  <button
+                    type="button"
+                    onClick={() => setMode('verify')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Xác minh
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setMode('edit')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold border border-[#1e2433] hover:bg-[#1a2235]"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Sửa
+                  </button>
+                )}
                 {!confirmDelete ? (
                   <button
                     type="button"
@@ -220,8 +240,14 @@ export function WorkerProfileDetailModal({
                 )}
               </div>
             </>
-          ) : person && mode === 'edit' ? (
+          ) : person && (mode === 'edit' || mode === 'verify') ? (
             <form onSubmit={e => void handleSave(e)} className="space-y-3">
+              {mode === 'verify' && (
+                <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
+                  Mã tạm hiện tại: <span className="font-mono">{person.employee_code ?? person.pers_id}</span>
+                  — thay bằng mã nhân viên chính thức.
+                </p>
+              )}
               <label className="block space-y-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Họ tên *</span>
                 <input
@@ -261,7 +287,7 @@ export function WorkerProfileDetailModal({
                   disabled={saving}
                   className="flex-[2] inline-flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white disabled:opacity-50"
                 >
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Lưu thay đổi'}
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (mode === 'verify' ? 'Xác minh hồ sơ' : 'Lưu thay đổi')}
                 </button>
               </div>
             </form>
