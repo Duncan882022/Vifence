@@ -15,6 +15,7 @@ class PersonUpdatePayload(BaseModel):
 
 class VerifyDraftPayload(PersonUpdatePayload):
     enroll_session_id: str | None = Field(default=None, max_length=64)
+    face_image_b64: str | None = Field(default=None, max_length=5_000_000)
 
 
 class PersonCreatePayload(BaseModel):

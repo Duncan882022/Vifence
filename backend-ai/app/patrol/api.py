@@ -227,7 +227,7 @@ def verify_draft_person(
     payload: VerifyDraftPayload,
     user: RequirePatrolHr = None,  # noqa: ARG001
 ) -> dict[str, Any]:
-    """Xác minh hồ sơ bản nháp — bắt buộc quét ≥3 góc HR + gán tên."""
+    """Xác minh hồ sơ bản nháp — upload chính diện hoặc phiên quét 3 góc (tuỳ chọn)."""
     full_name = (payload.full_name or "").strip()
     employee_code = (payload.employee_code or "").strip()
     contractor = (payload.contractor or "").strip()
@@ -235,6 +235,16 @@ def verify_draft_person(
         return {"ok": False, "error": "missing_fields"}
     if identity.get_person(pers_id) is None:
         return {"ok": False, "error": "not_found"}
+
+    face_embedding = None
+    face_frame = None
+    image_b64 = (payload.face_image_b64 or "").strip()
+    if image_b64:
+        face_embedding = _embed_face_b64(image_b64)
+        if face_embedding is None:
+            return {"ok": False, "error": "no_face_detected"}
+        face_frame = _decode_face_b64(image_b64)
+
     try:
         row = identity.verify_draft_profile(
             pers_id,
@@ -243,6 +253,8 @@ def verify_draft_person(
             contractor=contractor,
             identified_by=user.username,
             enroll_session_id=payload.enroll_session_id,
+            face_embedding=face_embedding,
+            face_frame=face_frame,
         )
     except KeyError:
         return {"ok": False, "error": "not_found"}

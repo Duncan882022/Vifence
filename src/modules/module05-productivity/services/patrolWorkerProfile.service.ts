@@ -102,26 +102,35 @@ export async function fetchPatrolWorkerProfilesForManagement(): Promise<PatrolWo
   return [...draft, ...identified].sort((a, b) => (b.last_seen ?? 0) - (a.last_seen ?? 0))
 }
 
+export interface VerifyPatrolDraftInput extends PatrolImportRow {
+  /** Ảnh chính diện base64 (không prefix data URL) — bắt buộc nếu không có enroll_session_id. */
+  image_b64?: string
+  enroll_session_id?: string
+}
+
 export async function verifyPatrolDraftProfile(
   persId: string,
-  profile: PatrolImportRow,
-  enrollSessionId: string,
+  profile: VerifyPatrolDraftInput,
 ): Promise<PatrolWorkerPerson> {
-  const sessionId = enrollSessionId.trim()
-  if (!sessionId) {
-    throw new Error('Chưa quét đủ 3 góc mặt — hoàn thành bước quét trước khi xác minh.')
+  const faceB64 = (profile.image_b64 ?? '').trim()
+  const sessionId = (profile.enroll_session_id ?? '').trim()
+  if (!faceB64 && !sessionId) {
+    throw new Error('Tải ảnh chính diện hoặc hoàn thành quét 3 góc trước khi xác minh.')
   }
+  const body: Record<string, string> = {
+    full_name: profile.full_name,
+    employee_code: profile.employee_code,
+    contractor: profile.contractor ?? '',
+  }
+  if (faceB64) body.face_image_b64 = faceB64
+  if (sessionId) body.enroll_session_id = sessionId
+
   const data = await patrolJson<{ ok: boolean; error?: string; person?: PatrolWorkerPerson }>(
     `/patrol/persons/${encodeURIComponent(persId)}/verify`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        full_name: profile.full_name,
-        employee_code: profile.employee_code,
-        contractor: profile.contractor ?? '',
-        enroll_session_id: sessionId,
-      }),
+      body: JSON.stringify(body),
     },
   )
   if (!data.ok || !data.person) {
@@ -131,9 +140,11 @@ export async function verifyPatrolDraftProfile(
         ? 'Hồ sơ này không ở trạng thái bản nháp.'
         : data.error === 'missing_fields'
           ? 'Nhập đủ họ tên và mã nhân viên.'
-          : data.error === 'incomplete_enrollment'
-            ? 'Chưa đủ 3 góc mặt bắt buộc — hoàn thành quét trước.'
-            : (data.error ?? 'Xác minh thất bại.')
+          : data.error === 'no_face_detected'
+            ? 'Không phát hiện khuôn mặt — chọn ảnh chính diện rõ hơn.'
+            : data.error === 'incomplete_enrollment'
+              ? 'Chưa đủ 3 góc mặt bắt buộc — hoàn thành quét trước.'
+              : (data.error ?? 'Xác minh thất bại.')
     throw new Error(err)
   }
   return data.person

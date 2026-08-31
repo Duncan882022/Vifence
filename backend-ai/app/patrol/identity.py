@@ -527,9 +527,11 @@ def verify_draft_profile(
     contractor: str = "",
     identified_by: str = "",
     enroll_session_id: str | None = None,
+    face_embedding: Sequence[float] | None = None,
+    face_frame: Any = None,
     now: float | None = None,
 ) -> dict[str, Any]:
-    """Bản nháp → xác minh — bắt buộc phiên quét ≥3 góc HR trước khi gán tên."""
+    """Bản nháp → xác minh — upload ảnh chính diện (verify) hoặc phiên quét 3 góc."""
     pid = resolve_alias(pers_id)
     row = get_person(pid)
     if row is None:
@@ -537,11 +539,17 @@ def verify_draft_profile(
     if row.get("status") != STATUS_DRAFT:
         raise ValueError("not_draft")
 
+    ts = now or time.time()
     sid = (enroll_session_id or "").strip()
-    if not sid:
-        raise ValueError("incomplete_enrollment")
-    enrollment = get_enroll_session_enrollment(sid)
-    if enrollment is None or not enrollment.get("complete"):
+    has_session = False
+    if sid:
+        enrollment = get_enroll_session_enrollment(sid)
+        if enrollment is None or not enrollment.get("complete"):
+            raise ValueError("incomplete_enrollment")
+        has_session = True
+
+    has_manual_face = face_embedding is not None
+    if not has_session and not has_manual_face:
         raise ValueError("incomplete_enrollment")
 
     result = identify(
@@ -550,28 +558,80 @@ def verify_draft_profile(
         employee_code=employee_code,
         contractor=contractor,
         identified_by=identified_by or "verify_draft",
-        now=now,
+        now=ts,
     )
     verified_id = str(result["pers_id"])
-    _apply_enroll_session_vectors(
-        verified_id,
-        sid,
-        camera_id="VERIFY",
-        now=now,
-    )
-    _promote_enroll_session_front_jpg(
-        sid,
-        gallery_worker_id=_gallery_id_for_employee(employee_code),
-        worker_name=full_name,
-        employee_code=employee_code,
-        contractor_name=contractor or None,
-    )
-    with db.tx() as c:
-        c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (sid,))
+
+    if has_session:
+        _apply_enroll_session_vectors(
+            verified_id,
+            sid,
+            camera_id="VERIFY",
+            now=ts,
+        )
+        _promote_enroll_session_front_jpg(
+            sid,
+            gallery_worker_id=_gallery_id_for_employee(employee_code),
+            worker_name=full_name,
+            employee_code=employee_code,
+            contractor_name=contractor or None,
+        )
+        with db.tx() as c:
+            c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (sid,))
+
+    if has_manual_face:
+        _apply_verify_front_image(
+            verified_id,
+            face_embedding,
+            face_frame,
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+            now=ts,
+        )
+
     _sync_gallery_after_identify(verified_id)
     final = get_person(verified_id)
     assert final is not None
     return final
+
+
+def _apply_verify_front_image(
+    pers_id: str,
+    embedding: Sequence[float],
+    frame_bgr: Any,
+    *,
+    full_name: str,
+    employee_code: str,
+    contractor: str,
+    now: float,
+) -> None:
+    """Ảnh chính diện upload tay — vector VERIFY + JPG avatar gallery."""
+    add_face_angle(
+        pers_id,
+        embedding,
+        quality=1.0,
+        camera_id="VERIFY",
+        now=now,
+    )
+    if frame_bgr is None:
+        return
+    try:
+        import numpy as np
+        from .enroll_images import enroll_person_scan_image
+
+        if not isinstance(frame_bgr, np.ndarray):
+            return
+        enroll_person_scan_image(
+            _gallery_id_for_employee(employee_code),
+            worker_name=full_name.strip(),
+            employee_code=employee_code.strip(),
+            image_bgr=frame_bgr,
+            contractor_name=(contractor or "").strip() or None,
+            pose_slot=1,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("verify front jpg skip", exc_info=True)
 
 
 def _gallery_id_for_employee(employee_code: str) -> str:

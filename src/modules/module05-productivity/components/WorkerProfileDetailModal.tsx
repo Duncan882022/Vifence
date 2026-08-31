@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  AlertCircle, CheckCircle2, Loader2, Pencil, Trash2, X,
+  AlertCircle, CheckCircle2, Loader2, Pencil, ScanFace, Trash2, Upload, X,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
 import {
-  createPatrolEnrollSession,
   deletePatrolWorkerProfile,
   fetchPatrolWorkerProfile,
   updatePatrolWorkerProfile,
   verifyPatrolDraftProfile,
-  type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { WorkerProfileFaceGallery } from './WorkerProfileFaceGallery'
-import { PatrolFaceScannerPanel } from './PatrolFaceScannerPanel'
 import { FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 
 interface WorkerProfileDetailModalProps {
@@ -27,6 +25,23 @@ interface WorkerProfileDetailModalProps {
 function tsLabel(ts: number | null | undefined): string {
   if (!ts) return '—'
   return formatTime(new Date(ts * 1000))
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const data = reader.result
+      if (typeof data !== 'string') {
+        reject(new Error('Không đọc được ảnh.'))
+        return
+      }
+      const comma = data.indexOf(',')
+      resolve(comma >= 0 ? data.slice(comma + 1) : data)
+    }
+    reader.onerror = () => reject(new Error('Không đọc được ảnh.'))
+    reader.readAsDataURL(file)
+  })
 }
 
 export function WorkerProfileDetailModal({
@@ -47,9 +62,9 @@ export function WorkerProfileDetailModal({
   const [employeeCode, setEmployeeCode] = useState('')
   const [contractor, setContractor] = useState('')
 
-  const [verifySessionId, setVerifySessionId] = useState<string | null>(null)
-  const [verifyEnrollment, setVerifyEnrollment] = useState<PatrolScanEnrollment | null>(null)
-  const [verifySessionLoading, setVerifySessionLoading] = useState(false)
+  const [verifyFaceB64, setVerifyFaceB64] = useState<string | null>(null)
+  const [verifyFacePreview, setVerifyFacePreview] = useState<string | null>(null)
+  const [verifyFaceLoading, setVerifyFaceLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!persId) return
@@ -71,48 +86,45 @@ export function WorkerProfileDetailModal({
   useEffect(() => {
     setMode(initialMode)
     setConfirmDelete(false)
+    setVerifyFaceB64(null)
+    setVerifyFacePreview(null)
     if (persId) void load()
     else setPerson(null)
   }, [persId, initialMode, load])
 
-  useEffect(() => {
-    if (mode !== 'verify' || !persId) {
-      setVerifySessionId(null)
-      setVerifyEnrollment(null)
-      return
-    }
-    let cancelled = false
-    setVerifySessionLoading(true)
-    setError(null)
-    void (async () => {
-      try {
-        const { sessionId, enrollment } = await createPatrolEnrollSession()
-        if (!cancelled) {
-          setVerifySessionId(sessionId)
-          setVerifyEnrollment(enrollment)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Không tạo phiên quét mặt.')
-        }
-      } finally {
-        if (!cancelled) setVerifySessionLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [mode, persId])
-
   if (!persId) return null
 
-  const verifyScanReady = verifyEnrollment?.complete === true
+  const verifyReady = Boolean(verifyFaceB64?.trim())
+  const supplementScanHref = employeeCode.trim()
+    ? `/module05/quet-mat?code=${encodeURIComponent(employeeCode.trim())}`
+    : null
+
+  const handleVerifyFaceFile = async (file: File | null) => {
+    if (!file) {
+      setVerifyFaceB64(null)
+      setVerifyFacePreview(null)
+      return
+    }
+    setVerifyFaceLoading(true)
+    setError(null)
+    try {
+      const b64 = await fileToBase64(file)
+      setVerifyFaceB64(b64)
+      setVerifyFacePreview(URL.createObjectURL(file))
+    } catch (err) {
+      setVerifyFaceB64(null)
+      setVerifyFacePreview(null)
+      setError(err instanceof Error ? err.message : 'Không đọc được ảnh.')
+    } finally {
+      setVerifyFaceLoading(false)
+    }
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!persId) return
-    if (mode === 'verify' && (!verifySessionId || !verifyScanReady)) {
-      setError(`Quét đủ ${FACE_SCAN_POSE_REQUIRED} góc mặt bắt buộc trước khi xác minh.`)
+    if (mode === 'verify' && !verifyReady) {
+      setError('Tải ảnh chính diện trước khi xác minh.')
       return
     }
     setSaving(true)
@@ -124,12 +136,15 @@ export function WorkerProfileDetailModal({
         contractor: contractor.trim(),
       }
       const updated = mode === 'verify'
-        ? await verifyPatrolDraftProfile(persId, payload, verifySessionId!)
+        ? await verifyPatrolDraftProfile(persId, {
+            ...payload,
+            image_b64: verifyFaceB64!,
+          })
         : await updatePatrolWorkerProfile(persId, payload)
       setPerson(updated)
       setMode('view')
-      setVerifySessionId(null)
-      setVerifyEnrollment(null)
+      setVerifyFaceB64(null)
+      setVerifyFacePreview(null)
       onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lưu thất bại.')
@@ -189,7 +204,7 @@ export function WorkerProfileDetailModal({
             <>
               {person.status === 'draft' && (
                 <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[10px] text-amber-300">
-                  Hồ sơ bản nháp — tạo tự động từ camera. Quét 3 góc mặt rồi xác minh với mã NV thật.
+                  Hồ sơ bản nháp — tạo tự động từ camera. Tải ảnh chính diện và nhập mã NV thật để xác minh.
                 </div>
               )}
               <div className="space-y-3">
@@ -293,20 +308,52 @@ export function WorkerProfileDetailModal({
               {mode === 'verify' && (
                 <>
                   <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
-                    Bước 1: Quét {FACE_SCAN_POSE_REQUIRED} góc (chính diện, trái, phải) · Bước 2: Nhập mã NV chính thức.
+                    Bước 1: Tải ảnh chính diện · Bước 2: Nhập mã NV chính thức.
+                    Cần thêm góc trái/phải? Sau xác minh mở Quét mặt theo mã NV.
                   </p>
-                  {verifySessionLoading ? (
-                    <div className="flex justify-center py-8 text-muted-foreground">
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                  <label className="block space-y-1.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Ảnh chính diện *
+                    </span>
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        'shrink-0 w-20 h-20 rounded-lg border border-dashed border-[#1e2433] bg-[#0a0e17] overflow-hidden flex items-center justify-center',
+                        verifyFacePreview && 'border-violet-400/40',
+                      )}>
+                        {verifyFaceLoading ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        ) : verifyFacePreview ? (
+                          <img
+                            src={verifyFacePreview}
+                            alt="Ảnh xác minh"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Upload className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-1.5">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={e => void handleVerifyFaceFile(e.target.files?.[0] ?? null)}
+                          className="block w-full text-[10px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-violet-500 file:text-white"
+                        />
+                        <p className="text-[9px] text-muted-foreground leading-relaxed">
+                          Ảnh rõ mặt, ánh sáng đủ — dùng làm avatar và vector nhận diện.
+                        </p>
+                      </div>
                     </div>
-                  ) : verifySessionId ? (
-                    <PatrolFaceScannerPanel
-                      sessionId={verifySessionId}
-                      initialEnrollment={verifyEnrollment ?? undefined}
-                      subtitle="Vector cho nhận diện — chỉ chính diện lưu JPG avatar"
-                      onEnrollmentChange={setVerifyEnrollment}
-                    />
-                  ) : null}
+                  </label>
+                  {supplementScanHref && (
+                    <Link
+                      to={supplementScanHref}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-violet-400 hover:text-violet-300"
+                    >
+                      <ScanFace className="w-3.5 h-3.5" />
+                      Quét thêm góc tại Quét mặt (mã {employeeCode.trim()})
+                    </Link>
+                  )}
                 </>
               )}
               <label className="block space-y-1">
@@ -346,7 +393,7 @@ export function WorkerProfileDetailModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || (mode === 'verify' && !verifyScanReady)}
+                  disabled={saving || (mode === 'verify' && !verifyReady)}
                   className="flex-[2] inline-flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (mode === 'verify' ? 'Xác minh hồ sơ' : 'Lưu thay đổi')}
