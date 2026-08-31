@@ -35,12 +35,14 @@ import {
   filterPatrolHeatmapDotsByDevice,
   mergePatrolHeatmapDetectionDots,
 } from '../utils/patrolDayHeatmapDots'
+import { PATROL_HEATMAP_DOT_HEX } from '../utils/patrolDetectionDotUi'
 import {
   getHeatmapPersonDots,
   subscribeHeatmapPersonRegistry,
   syncPatrolPersonEventsToHeatmap,
 } from '@/services/patrolHeatmapPersonRegistry'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
+import type { PatrolTier } from '../utils/patrolTierTokens'
 import type { ObjectState, WorkforceSnapshot } from '../types/workforceHeatmap'
 
 /**
@@ -65,11 +67,11 @@ function HeatmapSiteStatsOverlay({
   identityCount: number
   compactChrome?: boolean
 }) {
-  const rows = [
-    { value: objectCount, label: 'Đối tượng' },
-    { value: personCount, label: 'Người' },
-    { value: identityCount, label: 'Định danh' },
-  ] as const
+  const rows: Array<{ value: number; label: string; tier: PatrolTier }> = [
+    { value: objectCount, label: 'Đối tượng', tier: 'object' },
+    { value: personCount, label: 'Người', tier: 'person' },
+    { value: identityCount, label: 'Định danh', tier: 'identity' },
+  ]
 
   return (
     <div
@@ -85,11 +87,16 @@ function HeatmapSiteStatsOverlay({
           <div
             key={row.label}
             className={cn(
-              'px-2.5 py-1 text-[#e2e8f0] text-left leading-tight whitespace-nowrap',
+              'flex items-center gap-1.5 px-2.5 py-1 text-[#e2e8f0] text-left leading-tight whitespace-nowrap',
               compactChrome ? 'text-[9px]' : 'text-[10px]',
               index < rows.length - 1 && 'border-b border-[#334155]',
             )}
           >
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ backgroundColor: PATROL_HEATMAP_DOT_HEX[row.tier] }}
+              aria-hidden
+            />
             <span>{row.label}:</span>
             {' '}
             <span className="tabular-nums font-semibold">{row.value}</span>

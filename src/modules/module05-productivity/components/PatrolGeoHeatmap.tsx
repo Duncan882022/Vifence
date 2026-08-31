@@ -207,7 +207,13 @@ function createDetectionDotIcon(
       ${colorBoost}
       ${anim}
     "></div>`
-  return L.divIcon(divIconOpts(html, [size, size], [size / 2, size / 2]))
+  // Leaflet cache divIcon theo className — mỗi tier/view phải class riêng.
+  return L.divIcon({
+    html,
+    className: `${PATROL_DIV_ICON_CLASS} patrol-dot-${tier}-${inCameraView ? 'live' : 'hist'}`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  })
 }
 
 type PatrolMapDeviceKind = 'helmet' | 'drone'

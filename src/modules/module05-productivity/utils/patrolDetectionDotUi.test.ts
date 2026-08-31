@@ -3,7 +3,7 @@ import { PATROL_HEATMAP_DOT_HEX, resolveDetectionDotTier } from './patrolDetecti
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 
 describe('resolveDetectionDotTier', () => {
-  it('object tier → trắng', () => {
+  it('object tier → xanh lá', () => {
     expect(resolveDetectionDotTier({ tier: 'object', objectId: 'obj-1' })).toBe('object')
   })
 
@@ -31,7 +31,9 @@ describe('resolveDetectionDotTier', () => {
   it('màu chấm heatmap khớp PATROL_TIER_TOKENS', () => {
     expect(PATROL_HEATMAP_DOT_HEX.person).toBe(PATROL_TIER_TOKENS.person.heatmapDotHex)
     expect(PATROL_HEATMAP_DOT_HEX.identity).toBe(PATROL_TIER_TOKENS.identity.heatmapDotHex)
+    expect(PATROL_HEATMAP_DOT_HEX.object).toBe(PATROL_TIER_TOKENS.object.heatmapDotHex)
     expect(PATROL_HEATMAP_DOT_HEX.person).toBe('#38bdf8')
     expect(PATROL_HEATMAP_DOT_HEX.identity).toBe('#a78bfa')
+    expect(PATROL_HEATMAP_DOT_HEX.object).toBe('#4ade80')
   })
 })
