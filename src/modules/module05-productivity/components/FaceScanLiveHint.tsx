@@ -2,6 +2,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Loader2,
   ScanFace,
   ZoomIn,
@@ -32,6 +33,8 @@ function HintIcon({ direction, tone }: { direction: LiveScanDirection; tone: Liv
       return <ArrowRight className={cls} aria-hidden />
     case 'down':
       return <ArrowDown className={cn(cls, tone === 'active' && 'animate-bounce')} aria-hidden />
+    case 'up':
+      return <ArrowUp className={cn(cls, tone === 'active' && 'animate-bounce')} aria-hidden />
     case 'closer':
       return <ZoomIn className={cls} aria-hidden />
     case 'farther':

@@ -142,7 +142,7 @@ def _hr_scan_face_count(pers_id: str) -> int:
 
 
 def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
-    """Thống kê quét mặt — nguồn sự thật là JPG gallery (4 góc), không phải COUNT person_faces."""
+    """Thống kê quét mặt — nguồn sự thật là JPG gallery (5 góc), không phải COUNT person_faces."""
     from ..patrol_identity_store import patrol_gallery_worker_id
     from ..worker_identity.gallery import get_enrollment_status
 
@@ -206,7 +206,7 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
 
 
 def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
-    """Trạng thái quét mặt cho trang enroll — 4 góc tối thiểu."""
+    """Trạng thái quét mặt cho trang enroll — 5 góc tối thiểu."""
     pid = resolve_alias(pers_id)
     person = get_person(pid)
     captured, complete, poses = scan_enrollment_progress(pid)

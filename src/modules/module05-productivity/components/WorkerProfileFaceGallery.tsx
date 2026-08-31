@@ -86,7 +86,7 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
             <ScanFace className="w-3 h-3 text-violet-400" />
-            Gallery mặt · 4 góc
+            Gallery mặt · 5 góc
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {person.status === 'draft'
@@ -96,11 +96,11 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
         </div>
         <span className={cn(
           'shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold tabular-nums border',
-          capturedCount >= 4
+          capturedCount >= 5
             ? 'text-green-400 border-green-400/30 bg-green-400/10'
             : 'text-violet-400 border-violet-400/30 bg-violet-400/10',
         )}>
-          {capturedCount}/4
+          {capturedCount}/5
         </span>
       </div>
 
@@ -109,7 +109,7 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
           <Loader2 className="w-5 h-5 animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {poses.map(pose => (
             <div
               key={pose.slot}

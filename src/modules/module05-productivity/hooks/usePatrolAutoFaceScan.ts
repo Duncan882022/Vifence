@@ -14,6 +14,7 @@ import {
   type LiveScanHint,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanGuide'
+import { FACE_SCAN_POSE_COUNT } from '../utils/patrolFaceScanPoses'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { faceScanMainInstruction } from '../utils/patrolFaceScanPoses'
 import {
@@ -99,7 +100,7 @@ export function usePatrolAutoFaceScan(
   }, [])
 
   const capturedCount = enrollment?.faces_captured ?? 0
-  const required = enrollment?.faces_required ?? 4
+  const required = enrollment?.faces_required ?? FACE_SCAN_POSE_COUNT
   const complete = enrollment?.complete ?? false
   const holdProgressClamped = Math.max(0, Math.min(1, holdProgress))
   const approachProgressClamped = Math.max(0, Math.min(0.88, approachProgress))

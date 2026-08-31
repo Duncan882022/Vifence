@@ -300,14 +300,14 @@ export function PatrolFaceScannerPanel({
   const displayName = person?.full_name ?? person?.display_name
   const defaultSubtitle = subtitle ?? (
     isSession
-      ? 'Quét 4 góc mặt — tự động hoặc thủ công.'
+      ? 'Quét 5 góc mặt — tự động hoặc thủ công.'
       : `Quét ${facesRequired} góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}).`
   )
 
   const manualAiBlocked = captureMode === 'manual' && autoScan.modelStatus !== 'ready'
 
   const mainInstruction = complete
-    ? (isSession ? 'Đủ 4 góc — nhấn Tiếp tục để nhập thông tin.' : 'Hoàn thành — hồ sơ sẵn sàng nhận diện.')
+    ? (isSession ? 'Đủ 5 góc — nhấn Tiếp tục để nhập thông tin.' : 'Hoàn thành — hồ sơ sẵn sàng nhận diện.')
     : manualAiBlocked
       ? manualScanBlockedInstruction(autoScan.modelStatus)
       : captureMode === 'auto'
@@ -322,7 +322,7 @@ export function PatrolFaceScannerPanel({
         : 'Hoặc dùng chế độ Tự động (giữ yên theo hướng dẫn).')
       : captureMode === 'auto'
         ? autoScan.subGuidance
-        : `Bước ${autoScan.activeSlot}/4 · ${faceScanPoseLabel(autoScan.activeSlot)}`
+        : `Bước ${autoScan.activeSlot}/${facesRequired} · ${faceScanPoseLabel(autoScan.activeSlot)}`
 
   const showError = panelError ?? autoScan.error
   const busy = autoScan.capturing || startingOver
@@ -537,7 +537,7 @@ export function PatrolFaceScannerPanel({
 
       {/* Compact pose progress */}
       <div className="max-w-md mx-auto rounded-xl border border-white/10 bg-white/[0.03] p-3">
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-5 gap-1.5">
           {poses.map(pose => {
             const active = pose.slot === autoScan.activeSlot && !complete && !pose.captured
             return (
