@@ -321,7 +321,7 @@ export function PatrolFaceScannerPanel({
   const headerInstruction = complete
     ? mainInstruction
     : captureMode === 'auto' && !manualAiBlocked
-      ? autoScan.guidance
+      ? autoScan.liveHint.text
       : mainInstruction
 
   const headerSubline = complete
