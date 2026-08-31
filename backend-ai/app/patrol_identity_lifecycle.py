@@ -317,6 +317,8 @@ def observe(
                 state.tier = TIER_PERSON
                 if fallback_wid:
                     state.worker_id = fallback_wid
+                elif state.worker_id and not is_patrol_gallery_id(state.worker_id):
+                    state.worker_id = ""
                 state.worker_name = "Người"
                 state.tier_since = ts
                 state.tier_history[TIER_PERSON] = ts
