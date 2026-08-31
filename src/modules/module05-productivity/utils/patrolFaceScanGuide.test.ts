@@ -72,15 +72,9 @@ describe('patrolFaceScanGuide', () => {
   })
 
   it('exposes 4 gallery step labels', () => {
-    expect(guidanceForSlot(1)).toContain('Chính diện')
-    expect(guidanceForSlot(2)).toContain('Quay trái')
-    expect(guidanceForSlot(3)).toContain('Quay phải')
-    expect(guidanceForSlot(4)).toContain('Cúi xuống')
-    expect(FACE_SCAN_POSE_LABELS).toEqual([
-      'Chính diện',
-      'Quay trái',
-      'Quay phải',
-      'Cúi xuống',
-    ])
+    expect(guidanceForSlot(1)).toContain('TRÊN')
+    expect(guidanceForSlot(2)).toContain('TRÁI')
+    expect(guidanceForSlot(3)).toContain('PHẢI')
+    expect(guidanceForSlot(4)).toContain('DƯỚI')
   })
 })

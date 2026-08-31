@@ -143,7 +143,7 @@ export function usePatrolAutoFaceScan(
     setGuidance(
       progress >= 1
         ? 'Đang quét…'
-        : `Giữ yên góc ${guidanceForSlot(slot).split(' — ')[1] ?? 'gallery'}…`,
+        : 'Giữ yên trong khung tròn — hệ thống tự chụp',
     )
     if (elapsed >= holdMs) {
       await runCapture(slot)

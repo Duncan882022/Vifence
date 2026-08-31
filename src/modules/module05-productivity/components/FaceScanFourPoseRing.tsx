@@ -1,66 +1,42 @@
 import { cn } from '@/utils/cn'
 import {
+  FACE_SCAN_POSE_COUNT,
   FACE_SCAN_RING_INDEX_BY_SLOT,
+  FACE_SCAN_RING_QUADRANT_LABELS,
+  FACE_SCAN_RING_ROTATION_BY_INDEX,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanPoses'
 
-/** Số vạch radial — giống Face ID (~72 tick). */
-const DASH_COUNT = 72
-const DASHES_PER_QUADRANT = DASH_COUNT / 4
-
 const CX = 50
 const CY = 50
-const R_INNER = 40.5
-const R_OUTER = 47.5
-
-/** Góc phần tư 0→3: trên · phải · dưới · trái → slot gallery 1 · 3 · 4 · 2 */
-const QUADRANT_SLOTS: ScanPoseSlot[] = [1, 3, 4, 2]
+const R = 44
+const STROKE = 10
+const QUARTER = 25
 
 interface FaceScanFourPoseRingProps {
   activeSlot: ScanPoseSlot
   capturedBySlot: boolean[]
   holdProgress: number
   complete: boolean
-  className?: string
 }
 
-function quadrantForDashIndex(index: number): number {
-  return Math.floor(index / DASHES_PER_QUADRANT) % 4
+function segmentDash(filled: number): string {
+  const p = Math.max(0, Math.min(1, filled))
+  const lit = p * QUARTER
+  return `${lit.toFixed(1)} ${100 - lit}`
 }
 
-function slotForDashIndex(index: number): ScanPoseSlot {
-  return QUADRANT_SLOTS[quadrantForDashIndex(index)]
+function slotForRingIndex(ringIdx: number): ScanPoseSlot {
+  const found = Object.entries(FACE_SCAN_RING_INDEX_BY_SLOT).find(([, v]) => v === ringIdx)
+  return Number(found?.[0] ?? 1) as ScanPoseSlot
 }
 
-function dashAngleRad(index: number): number {
-  const deg = (index / DASH_COUNT) * 360 - 90
-  return (deg * Math.PI) / 180
-}
-
-function dashStyle(
-  index: number,
-  activeSlot: ScanPoseSlot,
-  capturedBySlot: boolean[],
-  holdProgress: number,
-  complete: boolean,
-): { stroke: string; opacity: number } {
-  const slot = slotForDashIndex(index)
-  const captured = capturedBySlot[slot - 1] || complete
-  const active = slot === activeSlot && !complete && !captured
-
-  if (complete || captured) {
-    return { stroke: '#4ade80', opacity: 0.95 }
-  }
-
-  if (active) {
-    const posInQuad = index % DASHES_PER_QUADRANT
-    const lit = Math.floor(Math.max(0.08, holdProgress) * DASHES_PER_QUADRANT)
-    if (posInQuad < lit) return { stroke: '#4ade80', opacity: 1 }
-    if (posInQuad === lit) return { stroke: '#4ade80', opacity: 0.65 }
-    return { stroke: '#ffffff', opacity: 0.28 }
-  }
-
-  return { stroke: '#ffffff', opacity: 0.2 }
+function ringLabelPosition(ringIdx: number): { left: string; top: string } {
+  const rotation = FACE_SCAN_RING_ROTATION_BY_INDEX[ringIdx]
+  const rad = ((rotation - 90) * Math.PI) / 180
+  const lx = CX + Math.cos(rad) * (R + 13)
+  const ly = CY + Math.sin(rad) * (R + 13)
+  return { left: `${lx}%`, top: `${ly}%` }
 }
 
 export function FaceScanFourPoseRing({
@@ -68,58 +44,103 @@ export function FaceScanFourPoseRing({
   capturedBySlot,
   holdProgress,
   complete,
-  className,
 }: FaceScanFourPoseRingProps) {
-  return (
-    <svg
-      className={cn('absolute inset-0 w-full h-full pointer-events-none', className)}
-      viewBox="0 0 100 100"
-      aria-hidden
-    >
-      {Array.from({ length: DASH_COUNT }, (_, i) => {
-        const rad = dashAngleRad(i)
-        const x1 = CX + R_INNER * Math.cos(rad)
-        const y1 = CY + R_INNER * Math.sin(rad)
-        const x2 = CX + R_OUTER * Math.cos(rad)
-        const y2 = CY + R_OUTER * Math.sin(rad)
-        const { stroke, opacity } = dashStyle(i, activeSlot, capturedBySlot, holdProgress, complete)
-        const slot = slotForDashIndex(i)
-        const isActiveQuadrant = slot === activeSlot && !complete && !capturedBySlot[slot - 1]
+  const activeRingIdx = FACE_SCAN_RING_INDEX_BY_SLOT[activeSlot]
+  const activeDot = ringLabelPosition(activeRingIdx)
 
+  return (
+    <div className="relative w-[76%] max-w-[320px] aspect-square shrink-0 overflow-visible">
+      <div
+        className="absolute inset-[10%] rounded-full z-[1] pointer-events-none"
+        style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.52)' }}
+        aria-hidden
+      />
+      <svg
+        className={cn(
+          'absolute inset-0 w-full h-full z-[40] pointer-events-none overflow-visible',
+          complete && 'animate-pulse',
+        )}
+        viewBox="0 0 100 100"
+        aria-hidden
+      >
+        <circle
+          cx={CX}
+          cy={CY}
+          r={R}
+          fill="none"
+          stroke="rgba(255,255,255,0.22)"
+          strokeWidth={STROKE}
+        />
+        {Array.from({ length: FACE_SCAN_POSE_COUNT }, (_, ringIdx) => {
+          const slotNum = slotForRingIndex(ringIdx)
+          const captured = capturedBySlot[slotNum - 1] || complete
+          const active = slotNum === activeSlot && !complete && !captured
+          const fill = captured ? 1 : active ? Math.max(holdProgress, 0.06) : 0
+          const rotation = FACE_SCAN_RING_ROTATION_BY_INDEX[ringIdx]
+          const color = captured || complete ? '#22c55e' : active ? '#0ea5e9' : 'rgba(255,255,255,0.45)'
+
+          return (
+            <circle
+              key={ringIdx}
+              cx={CX}
+              cy={CY}
+              r={R}
+              fill="none"
+              stroke={color}
+              strokeWidth={captured ? STROKE + 2 : STROKE}
+              strokeLinecap="round"
+              pathLength={100}
+              strokeDasharray={segmentDash(fill)}
+              transform={`rotate(${rotation} ${CX} ${CY})`}
+              style={{
+                filter: captured
+                  ? 'drop-shadow(0 0 10px rgba(34,197,94,0.95))'
+                  : active
+                    ? 'drop-shadow(0 0 8px rgba(14,165,233,0.9))'
+                    : undefined,
+                transition: 'stroke 0.2s ease, stroke-dasharray 0.12s ease',
+              }}
+            />
+          )
+        })}
+      </svg>
+
+      {FACE_SCAN_RING_QUADRANT_LABELS.map((label, ringIdx) => {
+        const pos = ringLabelPosition(ringIdx)
+        const slotNum = slotForRingIndex(ringIdx)
+        const slotDone = capturedBySlot[slotNum - 1] || complete
+        const isActive = slotNum === activeSlot && !complete
         return (
-          <line
-            key={i}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke={stroke}
-            strokeWidth={isActiveQuadrant ? 1.35 : 1.05}
-            strokeLinecap="round"
-            opacity={opacity}
-            style={{
-              filter: stroke === '#4ade80'
-                ? 'drop-shadow(0 0 2px rgba(74,222,128,0.85))'
-                : undefined,
-              transition: 'stroke 0.15s ease, opacity 0.15s ease',
-            }}
-          />
+          <span
+            key={label}
+            className={cn(
+              'absolute z-[45] text-[9px] font-bold tracking-wider pointer-events-none -translate-x-1/2 -translate-y-1/2',
+              slotDone && 'text-green-400',
+              isActive && !slotDone && 'text-white',
+              !slotDone && !isActive && 'text-white/45',
+            )}
+            style={{ left: pos.left, top: pos.top }}
+          >
+            {label}
+          </span>
         )
       })}
-      {/* Vòng mờ phía trong — căn mặt */}
-      <circle
-        cx={CX}
-        cy={CY}
-        r={R_INNER - 0.5}
-        fill="none"
-        stroke={complete ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.08)'}
-        strokeWidth={0.4}
-      />
-    </svg>
-  )
-}
 
-/** Góc phần tư đang active — dùng highlight vùng (tuỳ chọn). */
-export function activeRingQuadrantIndex(slot: ScanPoseSlot): number {
-  return FACE_SCAN_RING_INDEX_BY_SLOT[slot]
+      {!complete && !capturedBySlot[activeSlot - 1] && (
+        <span
+          className="absolute z-[46] w-3 h-3 rounded-full bg-sky-400 -translate-x-1/2 -translate-y-1/2 shadow-[0_0_12px_rgba(56,189,248,0.95)] ring-2 ring-sky-300/80 animate-pulse pointer-events-none"
+          style={{ left: activeDot.left, top: activeDot.top }}
+          aria-hidden
+        />
+      )}
+
+      <div
+        className={cn(
+          'absolute inset-[20%] rounded-full z-[20] pointer-events-none border-2',
+          complete ? 'border-green-400/70' : 'border-white/30',
+        )}
+        aria-hidden
+      />
+    </div>
+  )
 }
