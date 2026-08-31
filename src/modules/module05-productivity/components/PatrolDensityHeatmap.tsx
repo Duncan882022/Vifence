@@ -419,7 +419,7 @@ export function PatrolDensityHeatmap({
 
   const personCount = dayStats.personCount
   const identifiedCount = dayStats.identityCount
-  const unassignedCount = dayStats.unassignedObservations
+  const objectCount = dayStats.objectCount
 
   useEffect(() => {
     if (!expanded) return
@@ -473,7 +473,7 @@ export function PatrolDensityHeatmap({
           compactChrome={viewport.compactChrome}
         />
         <HeatmapSiteStatsOverlay
-          objectCount={unassignedCount}
+          objectCount={objectCount}
           personCount={personCount}
           identityCount={identifiedCount}
           compactChrome={viewport.compactChrome}

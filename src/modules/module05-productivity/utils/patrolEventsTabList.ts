@@ -32,6 +32,23 @@ export function listPatrolEventsForTab(
   return dedupePatrolEventsByMasterEntity(matched)
 }
 
+export interface PatrolTabCounts {
+  all: number
+  object: number
+  person: number
+  identity: number
+}
+
+/** Một nguồn đếm cho tab badge, phân trang, KPI Tier 1 và overlay heatmap. */
+export function computePatrolTabCounts(events: PatrolEvent[]): PatrolTabCounts {
+  return {
+    all: listPatrolEventsForTab(events, 'all').length,
+    object: listPatrolEventsForTab(events, 'object').length,
+    person: listPatrolEventsForTab(events, 'person').length,
+    identity: listPatrolEventsForTab(events, 'identity').length,
+  }
+}
+
 /** @deprecated Dùng {@link listPatrolEventsForTab}(events, tab).length */
 export function countUniquePatrolTabEntities(
   events: PatrolEvent[],
