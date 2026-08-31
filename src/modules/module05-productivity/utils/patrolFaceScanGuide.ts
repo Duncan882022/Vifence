@@ -230,6 +230,7 @@ export type LiveScanDirection =
   | 'left'
   | 'right'
   | 'down'
+  | 'up'
   | 'hold'
   | 'closer'
   | 'farther'
