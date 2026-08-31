@@ -29,7 +29,16 @@ interface PatrolEventsPanelProps {
 
 type PatrolFilterTab = 'all' | 'object' | 'person' | 'identity'
 
-const FILTER_TABS: { key: PatrolFilterTab; label: string; icon: LucideIcon; color: string; inactiveColor: string }[] = [
+const FILTER_TABS: {
+  key: PatrolFilterTab
+  label: string
+  icon: LucideIcon
+  color: string
+  inactiveColor: string
+  activeBorder: string
+  activeText: string
+  activeBadge: string
+}[] = [
   { key: 'all', ...PATROL_EVENTS_TAB_META.all },
   { key: 'object', ...PATROL_EVENTS_TAB_META.object },
   { key: 'person', ...PATROL_EVENTS_TAB_META.person },
@@ -281,7 +290,9 @@ export function PatrolEventsPanel({
               onClick={() => setFilterTab(t.key)}
               className={cn(
                 'inline-flex items-center gap-1 px-2.5 sm:px-3 py-2 text-[9px] sm:text-[10px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px snap-start shrink-0',
-                active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
+                active
+                  ? cn(t.activeBorder, t.activeText)
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
             >
               <TabIcon
@@ -291,7 +302,7 @@ export function PatrolEventsPanel({
               {t.label}
               <span className={cn(
                 'ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold tabular-nums',
-                active ? 'bg-primary/20 text-primary' : 'bg-[#1a2235] text-muted-foreground',
+                active ? t.activeBadge : 'bg-[#1a2235] text-muted-foreground',
               )}>
                 {count}
               </span>

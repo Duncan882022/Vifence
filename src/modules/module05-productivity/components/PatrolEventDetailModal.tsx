@@ -405,9 +405,11 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                 {modalTitle}
               </p>
               {stage !== 'profile' && (
-                <p className="text-[9px] text-muted-foreground mt-0.5 truncate">
-                  {summary.stageMeta.label}
-                  {summary.cardDisplay.subtitle !== '—' ? ` · ${summary.cardDisplay.subtitle}` : ''}
+                <p className="text-[9px] mt-0.5 truncate">
+                  <span className={cn('font-medium', meta.color)}>{summary.stageMeta.label}</span>
+                  {summary.cardDisplay.subtitle !== '—' ? (
+                    <span className="text-muted-foreground">{` · ${summary.cardDisplay.subtitle}`}</span>
+                  ) : null}
                 </p>
               )}
             </div>
