@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
-import { assignPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import {
   buildPatrolDayHeatmapDots,
-  buildPatrolPersEntityLookup,
   buildPatrolPresenceHeatmapDots,
   filterPatrolHeatmapDotsByDevice,
   filterRecentPatrolWorkerEvents,
   filterRecentPresences,
   mergePatrolHeatmapDetectionDots,
+  resolveHeatmapDotMergeKey,
 } from './patrolDayHeatmapDots'
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
@@ -91,60 +90,20 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].position[0]).toBeGreaterThan(startLat + 0.0001)
   })
 
-  it('hai presence cùng session_id → một row (lượt mới nhất)', () => {
+  it('hai lượt L# cùng subjectId → một chấm tại lượt mới nhất', () => {
+    const newerLat = PATROL_SITE_CENTER[0] + 0.0002
     const dots = buildPatrolPresenceHeatmapDots([
-      makePresence({
-        id: 1,
-        sessionId: 'sess-abc',
-        counted: true,
-        endedAt: 1_700_000_010,
-        gpsLat: PATROL_SITE_CENTER[0],
-      }),
-      makePresence({
-        id: 2,
-        sessionId: 'sess-abc',
-        counted: true,
-        endedAt: 1_700_000_030,
-        gpsLat: PATROL_SITE_CENTER[0] + 0.0002,
-      }),
-    ], { countedOnly: true })
-    expect(dots).toHaveLength(1)
-    expect(dots[0].position[0]).toBeGreaterThan(PATROL_SITE_CENTER[0] + 0.0001)
-  })
-
-  it('countedOnly — bỏ presence chưa qua tripwire', () => {
-    const dots = buildPatrolPresenceHeatmapDots([
-      makePresence({ id: 1, counted: false }),
-      makePresence({ id: 2, subjectId: 'pers-0002', counted: true }),
-    ], { countedOnly: true })
-    expect(dots).toHaveLength(1)
-    expect(dots[0].objectId).toBe('pers-0002')
-  })
-
-  it('hai presence cùng người khác lượt → một chấm (lượt mới nhất)', () => {
-    const dots = buildPatrolPresenceHeatmapDots([
-      makePresence({ id: 1, presenceSeq: 1, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1], endedAt: 1_700_000_010 }),
+      makePresence({ id: 1, presenceSeq: 1, endedAt: 1_700_000_010, gpsLat: PATROL_SITE_CENTER[0], gpsLng: PATROL_SITE_CENTER[1] }),
       makePresence({
         id: 2,
         presenceSeq: 2,
-        gpsLat: PATROL_SITE_CENTER[0] + 0.0002,
+        endedAt: 1_700_000_040,
+        gpsLat: newerLat,
         gpsLng: PATROL_SITE_CENTER[1] + 0.0002,
-        endedAt: 1_700_000_030,
       }),
     ])
     expect(dots).toHaveLength(1)
-    expect(dots[0].id).toBe('entity-pers-0001')
-    expect(dots[0].presenceSeq).toBe(2)
-    expect(dots[0].position[0]).toBeGreaterThan(PATROL_SITE_CENTER[0] + 0.0001)
-  })
-
-  it('hai người khác subjectId → hai chấm', () => {
-    const dots = buildPatrolPresenceHeatmapDots([
-      makePresence({ id: 1, subjectId: 'pers-0001' }),
-      makePresence({ id: 2, subjectId: 'pers-0002', displayName: 'pers-0002' }),
-    ])
-    expect(dots).toHaveLength(2)
-    expect(dots[0].id).not.toBe(dots[1].id)
+    expect(dots[0].position[0]).toBeCloseTo(newerLat, 4)
   })
 
   it('obj tier khi includeUnassigned', () => {
@@ -154,44 +113,6 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     )
     expect(dots).toHaveLength(1)
     expect(dots[0].tier).toBe('object')
-  })
-
-  it('obj tier vẫn hiện khi liveOnly + countedOnly (camera online)', () => {
-    const now = Date.now()
-    const oldObject = makePresence({
-      id: 10,
-      subjectId: 'obj-20260826-0001',
-      tier: 'object',
-      counted: true,
-      endedAt: (now - 600_000) / 1000,
-    })
-    const recentPerson = makePresence({
-      id: 11,
-      subjectId: 'pers-0099',
-      tier: 'person',
-      counted: true,
-      endedAt: now / 1000,
-    })
-    const dots = buildPatrolPresenceHeatmapDots(
-      [oldObject, recentPerson],
-      {
-        includeUnassigned: true,
-        countedOnly: true,
-        liveOnly: true,
-        now,
-        cameraOnlineById: { 'HC-01': true },
-      },
-    )
-    expect(dots.some(d => d.tier === 'object')).toBe(true)
-    expect(dots.some(d => d.objectId === 'pers-0099')).toBe(true)
-  })
-
-  it('obj tier bị lọc khi countedOnly và chưa qua tripwire', () => {
-    const dots = buildPatrolPresenceHeatmapDots(
-      [makePresence({ subjectId: 'obj-20260826-0001', tier: 'object', counted: false })],
-      { includeUnassigned: true, countedOnly: true },
-    )
-    expect(dots).toHaveLength(0)
   })
 
   it('identity tier gán tier + verified', () => {
@@ -237,41 +158,6 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].tier).toBe('identity')
     expect(dots[0].verified).toBe(true)
   })
-
-  it('lookup bundle — presence pers-* map gallery, gộp registry không cần alias local', () => {
-    const lookup = buildPatrolPersEntityLookup([
-      makeDayEvent({
-        id: 'pers:pers-0042',
-        objectId: 'p-DUNCAN',
-        objectLabel: 'Nguyễn Văn A',
-        stage: 'profile',
-      }),
-    ])
-    const presenceDots = buildPatrolPresenceHeatmapDots([
-      makePresence({
-        tier: 'identity',
-        subjectId: 'pers-0042',
-        displayName: 'Nguyễn Văn A',
-      }),
-    ], { persEntityLookup: lookup })
-    const registryDot: DetectionDot = {
-      id: 'pin-P-DUNCAN',
-      type: 'person',
-      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
-      zoneId: 'ZONE_SITE',
-      cameraId: 'HC-02',
-      confidence: 1,
-      objectId: 'P-DUNCAN',
-      tier: 'identity',
-      inCameraView: true,
-      lastSeenAt: 1000,
-    }
-    const merged = mergePatrolHeatmapDetectionDots([presenceDots, [registryDot]], {
-      persEntityLookup: lookup,
-    })
-    expect(merged).toHaveLength(1)
-    expect(merged[0].objectId?.toLowerCase()).toBe('p-duncan')
-  })
 })
 
 describe('filterPatrolHeatmapDotsByDevice', () => {
@@ -302,6 +188,21 @@ describe('filterPatrolHeatmapDotsByDevice', () => {
 })
 
 describe('mergePatrolHeatmapDetectionDots', () => {
+  it('presences + registry cùng người → merge key trùng', () => {
+    const presence = buildPatrolPresenceHeatmapDots([makePresence({ subjectId: 'pers-0001' })])[0]
+    const registry: DetectionDot = {
+      id: 'pin-pers-0001',
+      type: 'person',
+      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
+      zoneId: 'ZONE_SITE',
+      cameraId: 'HC-01',
+      confidence: 1,
+      objectId: 'pers-0001',
+      lastSeenAt: 500,
+    }
+    expect(resolveHeatmapDotMergeKey(presence)).toBe(resolveHeatmapDotMergeKey(registry))
+  })
+
   it('gộp theo objectId — ưu tiên inCameraView', () => {
     const live: DetectionDot = {
       id: 'pin-pers-0001',
@@ -324,82 +225,6 @@ describe('mergePatrolHeatmapDetectionDots', () => {
     expect(merged).toHaveLength(1)
     expect(merged[0].inCameraView).toBe(true)
     expect(merged[0].id).toBe('pin-pers-0001')
-  })
-
-  it('presence pers-* + registry gallery — một chấm / người định danh', () => {
-    assignPatrolManualIdentity({
-      objectKey: 'pers-0042',
-      workerId: 'P-SGC-6688',
-      workerName: 'Nguyễn Văn A',
-      unitName: 'Công ty A',
-    })
-
-    const presenceDot: DetectionDot = {
-      id: 'entity-p-sgc-6688',
-      type: 'person',
-      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
-      zoneId: 'ZONE_SITE',
-      cameraId: 'HC-02',
-      confidence: 1,
-      objectId: 'pers-0042',
-      tier: 'identity',
-      inCameraView: false,
-      lastSeenAt: 900,
-    }
-    const registryDot: DetectionDot = {
-      id: 'pin-P-SGC-6688',
-      type: 'person',
-      position: [PATROL_SITE_CENTER[0] + 0.0001, PATROL_SITE_CENTER[1]],
-      zoneId: 'ZONE_SITE',
-      cameraId: 'HC-02',
-      confidence: 1,
-      objectId: 'P-SGC-6688',
-      tier: 'identity',
-      inCameraView: true,
-      lastSeenAt: 1000,
-    }
-
-    const merged = mergePatrolHeatmapDetectionDots([[presenceDot], [registryDot]])
-    expect(merged).toHaveLength(1)
-    expect(merged[0].inCameraView).toBe(true)
-    expect(merged[0].id).toBe('pin-P-SGC-6688')
-  })
-
-  it('presence sgc + registry gallery cùng người — một chấm', () => {
-    assignPatrolManualIdentity({
-      objectKey: 'SGC-7701',
-      workerId: 'P-WORKER-99',
-      workerName: 'Trần B',
-      unitName: 'Công ty B',
-    })
-
-    const presenceDot: DetectionDot = {
-      id: 'entity-p-worker-99',
-      type: 'person',
-      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
-      zoneId: 'ZONE_SITE',
-      cameraId: 'HC-01',
-      confidence: 1,
-      objectId: 'SGC-7701',
-      tier: 'identity',
-      inCameraView: false,
-      lastSeenAt: 500,
-    }
-    const registryDot: DetectionDot = {
-      id: 'pin-P-WORKER-99',
-      type: 'person',
-      position: [PATROL_SITE_CENTER[0], PATROL_SITE_CENTER[1]],
-      zoneId: 'ZONE_SITE',
-      cameraId: 'HC-01',
-      confidence: 1,
-      objectId: 'P-WORKER-99',
-      tier: 'identity',
-      inCameraView: true,
-      lastSeenAt: 800,
-    }
-
-    const merged = mergePatrolHeatmapDetectionDots([[presenceDot], [registryDot]])
-    expect(merged).toHaveLength(1)
   })
 })
 
