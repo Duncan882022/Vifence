@@ -73,9 +73,43 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
     return payload
 
 
+def _gallery_face_sign_path(worker_id: str, slot: int) -> str:
+    return f"gallery-face/{worker_id.strip()}/{int(slot)}"
+
+
+def _enrollment_poses_with_urls(
+    person: dict[str, Any],
+    poses: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Gắn URL ảnh JPG gallery vào từng góc — dùng popup hồ sơ / quét bổ sung."""
+    from urllib.parse import quote
+
+    from ..patrol_identity_store import patrol_gallery_worker_id
+
+    if person.get("status") != identity.STATUS_IDENTIFIED:
+        return [{**p, "url": None} for p in poses]
+    code = str(person.get("employee_code") or "").strip()
+    if not code:
+        return [{**p, "url": None} for p in poses]
+    wid = patrol_gallery_worker_id(code)
+    out: list[dict[str, Any]] = []
+    for pose in poses:
+        entry = dict(pose)
+        slot = int(pose.get("slot") or 0)
+        entry["url"] = None
+        if pose.get("captured") and slot >= 1:
+            signed = sign_snapshot_path(_gallery_face_sign_path(wid, slot))
+            entry["url"] = (
+                f"/patrol/gallery/face?worker_id={quote(wid, safe='')}"
+                f"&slot={slot}&token={signed['token']}&exp={signed['exp']}"
+            )
+        out.append(entry)
+    return out
+
+
 @router.get("/persons")
 def list_persons(status: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
-    """Danh sách Người (`status=person`) hoặc Định danh (`status=identified`)."""
+    """Danh sách Người (`person`), bản nháp (`draft`) hoặc xác minh (`identified`)."""
     rows = identity.list_persons(status)
     return {
         "ok": True,
@@ -169,12 +203,47 @@ def delete_person(pers_id: str, user: RequirePatrolAdmin = None) -> dict[str, An
     return {"ok": True}
 
 
+@router.post("/persons/{pers_id}/verify")
+def verify_draft_person(
+    pers_id: str,
+    payload: PersonUpdatePayload,
+    user: RequirePatrolHr = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Xác minh hồ sơ bản nháp (camera) → identified + gallery."""
+    full_name = (payload.full_name or "").strip()
+    employee_code = (payload.employee_code or "").strip()
+    contractor = (payload.contractor or "").strip()
+    if not full_name or not employee_code:
+        return {"ok": False, "error": "missing_fields"}
+    if identity.get_person(pers_id) is None:
+        return {"ok": False, "error": "not_found"}
+    try:
+        row = identity.verify_draft_profile(
+            pers_id,
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+            identified_by=user.username,
+        )
+    except KeyError:
+        return {"ok": False, "error": "not_found"}
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_draft":
+            return {"ok": False, "error": "not_draft"}
+        return {"ok": False, "error": code}
+    audit("person_verify", actor=user.username, subject_id=pers_id)
+    return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
+
+
 @router.get("/persons/{pers_id}/enrollment")
 def person_enrollment(pers_id: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     row = identity.get_person(pers_id)
     if row is None:
         return {"ok": False, "error": "not_found"}
-    return {"ok": True, "enrollment": identity.get_scan_enrollment(pers_id)}
+    enrollment = identity.get_scan_enrollment(pers_id)
+    enrollment["poses"] = _enrollment_poses_with_urls(row, enrollment.get("poses") or [])
+    return {"ok": True, "enrollment": enrollment}
 
 
 @router.get("/day/events")
@@ -623,10 +692,6 @@ def settings_patrol_auth_disabled() -> bool:
     return settings.patrol_auth_disabled
 
 
-def _gallery_face_sign_path(worker_id: str, slot: int) -> str:
-    return f"gallery-face/{worker_id.strip()}/{int(slot)}"
-
-
 @router.get("/gallery/{worker_id}/faces")
 def gallery_worker_faces(worker_id: str, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Trạng thái quét mặt gallery + URL ảnh đã ký cho popup định danh."""
@@ -639,18 +704,13 @@ def gallery_worker_faces(worker_id: str, _user: RequirePatrolRead = None) -> dic
         return {"ok": False, "error": "missing_worker_id"}
 
     enrollment = get_enrollment_status(wid)
-    poses_out: list[dict[str, Any]] = []
-    for pose in enrollment.get("poses") or []:
-        slot = int(pose.get("slot") or 0)
-        entry = dict(pose)
-        entry["url"] = None
-        if pose.get("captured") and slot >= 1:
-            signed = sign_snapshot_path(_gallery_face_sign_path(wid, slot))
-            entry["url"] = (
-                f"/patrol/gallery/face?worker_id={quote(wid, safe='')}"
-                f"&slot={slot}&token={signed['token']}&exp={signed['exp']}"
-            )
-        poses_out.append(entry)
+    poses_out = _enrollment_poses_with_urls(
+        {
+            "status": identity.STATUS_IDENTIFIED,
+            "employee_code": enrollment.get("employee_code") or wid,
+        },
+        list(enrollment.get("poses") or []),
+    )
 
     return {
         "ok": True,

@@ -24,7 +24,7 @@ export function Module05Routes() {
           <>
             <Header
               title="Hồ Sơ Công Nhân"
-              subtitle="Import Excel · xem · sửa · xóa hồ sơ công nhân"
+              subtitle="Bản nháp camera · xác minh · import Excel · quản lý hồ sơ"
             />
             <Suspense fallback={<RouteFallback />}>
               <WorkerProfileManagementPage />

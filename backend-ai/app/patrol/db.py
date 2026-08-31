@@ -48,11 +48,19 @@ CREATE TABLE IF NOT EXISTS persons (
   identified_at REAL,
   identified_by TEXT,
   created_at    REAL NOT NULL,
-  CHECK (status IN ('person', 'identified')),
+  CHECK (status IN ('person', 'draft', 'identified')),
   -- Bất biến nghiệp vụ thành ràng buộc lưu trữ: đã định danh thì phải có mã,
   -- có mã thì phải là đã định danh. Không trông vào code nhớ kiểm.
   CHECK ((status = 'identified') = (iden_code IS NOT NULL))
 );
+
+-- sgc-* ổn định trên ROI → một pers-* bản nháp — tránh pers-0001/0002/0003 trùng người.
+CREATE TABLE IF NOT EXISTS person_sgc_map (
+  sgc_id     TEXT PRIMARY KEY,
+  pers_id    TEXT NOT NULL REFERENCES persons(pers_id) ON DELETE CASCADE,
+  created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_person_sgc_map_pers ON person_sgc_map(pers_id);
 
 -- Một người nhiều khuôn mặt (nhiều góc, nhiều nguồn) — 1:N thật.
 CREATE TABLE IF NOT EXISTS person_faces (
@@ -176,12 +184,19 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE appearances ADD COLUMN {name} {typedef}")
         conn.execute("PRAGMA user_version=2")
         conn.commit()
-    from .migrate import migrate_to_v3, migrate_to_v4, migrate_to_v5, migrate_to_v6
+    from .migrate import (
+        migrate_to_v3,
+        migrate_to_v4,
+        migrate_to_v5,
+        migrate_to_v6,
+        migrate_to_v7,
+    )
 
     migrate_to_v3(conn)
     migrate_to_v4(conn)
     migrate_to_v5(conn)
     migrate_to_v6(conn)
+    migrate_to_v7(conn)
 
 
 def _connect() -> sqlite3.Connection:

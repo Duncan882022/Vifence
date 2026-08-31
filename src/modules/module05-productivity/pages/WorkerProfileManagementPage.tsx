@@ -9,9 +9,10 @@ import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import {
   deletePatrolWorkerProfile,
-  fetchPatrolWorkerProfiles,
+  fetchPatrolWorkerProfilesForManagement,
   importPatrolWorkerProfiles,
   pingPatrolProfileBackend,
+  verifyPatrolDraftProfile,
   type PatrolImportRow,
   type PatrolImportResult,
   type PatrolWorkerPerson,
@@ -66,6 +67,7 @@ export function WorkerProfileManagementPage() {
   const [loading, setLoading] = useState(true)
   const [backendOk, setBackendOk] = useState<boolean | null>(null)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'identified'>('all')
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<PatrolImportResult | null>(null)
@@ -84,7 +86,7 @@ export function WorkerProfileManagementPage() {
         setProfiles([])
         return
       }
-      const items = await fetchPatrolWorkerProfiles('identified')
+      const items = await fetchPatrolWorkerProfilesForManagement()
       setProfiles(items)
     } catch {
       setBackendOk(false)
@@ -100,20 +102,25 @@ export function WorkerProfileManagementPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return profiles
-    return profiles.filter(p =>
-      (p.full_name ?? '').toLowerCase().includes(q)
-      || (p.employee_code ?? '').toLowerCase().includes(q)
-      || (p.contractor ?? '').toLowerCase().includes(q)
-      || p.pers_id.toLowerCase().includes(q),
-    )
-  }, [profiles, search])
+    return profiles.filter(p => {
+      if (statusFilter === 'draft' && p.status !== 'draft') return false
+      if (statusFilter === 'identified' && p.status !== 'identified') return false
+      if (!q) return true
+      return (p.full_name ?? '').toLowerCase().includes(q)
+        || (p.employee_code ?? '').toLowerCase().includes(q)
+        || (p.contractor ?? '').toLowerCase().includes(q)
+        || p.pers_id.toLowerCase().includes(q)
+        || (p.display_name ?? '').toLowerCase().includes(q)
+    })
+  }, [profiles, search, statusFilter])
 
   const stats = useMemo(() => {
     const total = profiles.length
+    const draft = profiles.filter(p => p.status === 'draft').length
+    const verified = profiles.filter(p => p.status === 'identified').length
     const withFace = profiles.filter(p => (p.face_count ?? 0) > 0).length
     const complete = profiles.filter(p => p.face_enrollment_complete).length
-    return { total, withFace, complete }
+    return { total, draft, verified, withFace, complete }
   }, [profiles])
 
   const handleImport = async () => {
@@ -190,11 +197,12 @@ export function WorkerProfileManagementPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {[
-            { label: 'Hồ sơ', value: stats.total, icon: Users, color: 'text-sky-400' },
+            { label: 'Tổng hồ sơ', value: stats.total, icon: Users, color: 'text-sky-400' },
+            { label: 'Bản nháp', value: stats.draft, icon: ScanFace, color: 'text-amber-400' },
+            { label: 'Đã xác minh', value: stats.verified, icon: UserCheck, color: 'text-green-400' },
             { label: 'Có vector', value: stats.withFace, icon: ScanFace, color: 'text-violet-400' },
-            { label: 'Đủ 4 góc', value: stats.complete, icon: UserCheck, color: 'text-green-400' },
           ].map(k => {
             const Icon = k.icon
             return (
@@ -223,12 +231,33 @@ export function WorkerProfileManagementPage() {
                 className="w-full pl-8 pr-3 py-2 text-[11px] rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-primary/50"
               />
             </div>
-            {backendOk === false && (
-              <p className="text-[10px] text-amber-400">Backend tuần tra chưa sẵn sàng — kiểm tra URL backend.</p>
-            )}
             {rowError && (
               <p className="text-[10px] text-red-400">{rowError}</p>
             )}
+            {backendOk === false && (
+              <p className="text-[10px] text-amber-400">Backend tuần tra chưa sẵn sàng — kiểm tra URL backend.</p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                ['all', 'Tất cả'],
+                ['draft', 'Bản nháp'],
+                ['identified', 'Đã xác minh'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setStatusFilter(key)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors',
+                    statusFilter === key
+                      ? 'border-sky-400/40 bg-sky-400/10 text-sky-400'
+                      : 'border-[#1e2433] text-muted-foreground hover:bg-[#1a2235]',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="max-h-[min(60dvh,520px)] overflow-y-auto">
@@ -238,7 +267,9 @@ export function WorkerProfileManagementPage() {
               </div>
             ) : filtered.length === 0 ? (
               <p className="text-[11px] text-muted-foreground text-center py-16">
-                Chưa có hồ sơ — tải mẫu Excel và import bên phải.
+                {statusFilter === 'draft'
+                  ? 'Chưa có hồ sơ bản nháp — camera sẽ tạo khi nhận diện đủ điều kiện.'
+                  : 'Chưa có hồ sơ — tải mẫu Excel và import bên phải.'}
               </p>
             ) : (
               <table className="w-full text-[11px]">
@@ -255,7 +286,16 @@ export function WorkerProfileManagementPage() {
                   {filtered.map(p => (
                     <tr key={p.pers_id} className="border-b border-[#1e2433]/60 hover:bg-[#0c1019]">
                       <td className="px-3 py-2.5">
-                        <p className="font-medium text-foreground truncate max-w-[160px]">{p.full_name ?? p.display_name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="font-medium text-foreground truncate max-w-[140px]">
+                            {p.full_name ?? p.display_name}
+                          </p>
+                          {p.status === 'draft' && (
+                            <span className="shrink-0 px-1 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-400/10 text-amber-400 border border-amber-400/30">
+                              Nháp
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[9px] text-muted-foreground font-mono sm:hidden">{p.employee_code}</p>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-[10px] hidden sm:table-cell">{p.employee_code ?? '—'}</td>

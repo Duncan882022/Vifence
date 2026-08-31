@@ -2,7 +2,7 @@ import { fetchPatrol, patrolBackendBase } from '@/services/patrolApiClient'
 
 export interface PatrolWorkerPerson {
   pers_id: string
-  status: 'person' | 'identified'
+  status: 'person' | 'draft' | 'identified'
   iden_code: string | null
   display_name: string
   full_name: string | null
@@ -20,6 +20,7 @@ export interface PatrolScanPose {
   slot: number
   label: string
   captured: boolean
+  url?: string | null
 }
 
 export interface PatrolScanEnrollment {
@@ -76,11 +77,48 @@ export async function pingPatrolProfileBackend(): Promise<boolean> {
 }
 
 export async function fetchPatrolWorkerProfiles(
-  status?: 'person' | 'identified',
+  status?: 'person' | 'draft' | 'identified',
 ): Promise<PatrolWorkerPerson[]> {
   const q = status ? `?status=${encodeURIComponent(status)}` : ''
   const data = await patrolJson<{ ok: boolean; items: PatrolWorkerPerson[] }>(`/patrol/persons${q}`)
   return data.items ?? []
+}
+
+export async function fetchPatrolWorkerProfilesForManagement(): Promise<PatrolWorkerPerson[]> {
+  const [draft, identified] = await Promise.all([
+    fetchPatrolWorkerProfiles('draft'),
+    fetchPatrolWorkerProfiles('identified'),
+  ])
+  return [...draft, ...identified].sort((a, b) => (b.last_seen ?? 0) - (a.last_seen ?? 0))
+}
+
+export async function verifyPatrolDraftProfile(
+  persId: string,
+  profile: PatrolImportRow,
+): Promise<PatrolWorkerPerson> {
+  const data = await patrolJson<{ ok: boolean; error?: string; person?: PatrolWorkerPerson }>(
+    `/patrol/persons/${encodeURIComponent(persId)}/verify`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: profile.full_name,
+        employee_code: profile.employee_code,
+        contractor: profile.contractor ?? '',
+      }),
+    },
+  )
+  if (!data.ok || !data.person) {
+    const err = data.error === 'duplicate_employee_code'
+      ? 'Mã nhân viên đã thuộc hồ sơ khác.'
+      : data.error === 'not_draft'
+        ? 'Hồ sơ này không ở trạng thái bản nháp.'
+        : data.error === 'missing_fields'
+          ? 'Nhập đủ họ tên và mã nhân viên.'
+          : (data.error ?? 'Xác minh thất bại.')
+    throw new Error(err)
+  }
+  return data.person
 }
 
 export async function lookupPatrolWorkerByCode(
