@@ -153,27 +153,34 @@ export function WorkerFaceScanPage() {
 
   if (!adminMode) {
     return (
-      <PageLayout scrollable>
-        <div className="max-w-2xl mx-auto w-full space-y-4 pb-8">
-          <div className="text-center space-y-2 pt-2 sm:pt-4">
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-400/10 border border-violet-400/25 flex items-center justify-center">
-              <ScanFace className="w-7 h-7 text-violet-400" />
-            </div>
-            <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
-            <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Bước 1: Căn đúng 4 góc gallery (Chính diện · Quay trái · Quay phải · Cúi xuống) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
-            </p>
-          </div>
+      <PageLayout scrollable className={selfStep === 'scan' ? 'bg-black' : undefined}>
+        <div className={cn(
+          'mx-auto w-full pb-8',
+          selfStep === 'scan' ? 'max-w-[420px]' : 'max-w-2xl space-y-4',
+        )}>
+          {selfStep !== 'scan' && (
+            <>
+              <div className="text-center space-y-2 pt-2 sm:pt-4">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-400/10 border border-violet-400/25 flex items-center justify-center">
+                  <ScanFace className="w-7 h-7 text-violet-400" />
+                </div>
+                <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
+                <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
+                  Bước 1: Căn đúng 4 góc gallery (Chính diện · Quay trái · Quay phải · Cúi xuống) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
+                </p>
+              </div>
 
-          <div className="flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-wider">
-            <StepPill active={selfStep === 'scan'} done={selfStep !== 'scan'} n={1} label="Quét mặt" />
-            <span className="text-muted-foreground/40">→</span>
-            <StepPill active={selfStep === 'profile'} done={selfStep === 'done'} n={2} label="Thông tin" />
-            <span className="text-muted-foreground/40">→</span>
-            <StepPill active={selfStep === 'done'} done={false} n={3} label="Hoàn tất" />
-          </div>
+              <div className="flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-wider">
+                <StepPill active={selfStep === 'scan'} done={selfStep !== 'scan'} n={1} label="Quét mặt" />
+                <span className="text-muted-foreground/40">→</span>
+                <StepPill active={selfStep === 'profile'} done={selfStep === 'done'} n={2} label="Thông tin" />
+                <span className="text-muted-foreground/40">→</span>
+                <StepPill active={selfStep === 'done'} done={false} n={3} label="Hoàn tất" />
+              </div>
+            </>
+          )}
 
-          {error && (
+          {error && selfStep !== 'scan' && (
             <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-200 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
@@ -182,33 +189,32 @@ export function WorkerFaceScanPage() {
 
           {selfStep === 'scan' && (
             sessionBooting || !sessionId ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-                <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+              <div className="flex flex-col items-center gap-3 py-24 text-white/50 bg-black min-h-[80dvh]">
+                <Loader2 className="w-8 h-8 animate-spin text-white/40" />
                 <span className="text-xs">Đang chuẩn bị phiên quét…</span>
               </div>
             ) : (
-              <Panel title="Bước 1 — Quét mặt" className="overflow-visible">
-                <div className="p-3 sm:p-4">
-                  <PatrolFaceScannerPanel
-                    sessionId={sessionId}
-                    initialEnrollment={sessionEnrollment ?? undefined}
-                    onEnrollmentChange={e => setScanComplete(e.complete)}
-                    onScanComplete={() => {
-                      setScanComplete(true)
-                      setSelfStep('profile')
-                    }}
-                  />
+              <>
+                <PatrolFaceScannerPanel
+                  sessionId={sessionId}
+                  initialEnrollment={sessionEnrollment ?? undefined}
+                  onEnrollmentChange={e => setScanComplete(e.complete)}
+                  onScanComplete={() => {
+                    setScanComplete(true)
+                    setSelfStep('profile')
+                  }}
+                />
+                {scanComplete && (
                   <button
                     type="button"
-                    disabled={!scanComplete}
                     onClick={() => setSelfStep('profile')}
-                    className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-500/90 disabled:opacity-40 disabled:pointer-events-none"
+                    className="mx-5 mt-2 w-[calc(100%-2.5rem)] inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full text-[1.0625rem] font-normal bg-[#1c1c1e] text-white hover:bg-[#2c2c2e]"
                   >
                     Tiếp tục nhập thông tin
                     <ArrowRight className="w-4 h-4" />
                   </button>
-                </div>
-              </Panel>
+                )}
+              </>
             )
           )}
 
@@ -426,16 +432,13 @@ export function WorkerFaceScanPage() {
       )}
 
       {adminStep === 'scan' && person && (
-        <Panel title={person.full_name ?? person.display_name} className="overflow-visible shrink-0">
-          <div className="p-3 sm:p-4 border-b border-[#1e2433] text-[10px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-            <span>Mã: <strong className="text-foreground font-mono">{person.employee_code}</strong></span>
-            {person.contractor && <span>Đơn vị: <strong className="text-foreground">{person.contractor}</strong></span>}
-            <span className="font-mono text-[9px]">{person.pers_id}</span>
+        <div className="rounded-xl overflow-hidden border border-[#1e2433] bg-black shrink-0">
+          <div className="px-4 py-2 border-b border-white/10 text-[10px] text-white/55 flex flex-wrap gap-x-4 gap-y-1">
+            <span>{person.full_name ?? person.display_name}</span>
+            <span className="font-mono">{person.employee_code}</span>
           </div>
-          <div className="p-3 sm:p-4">
-            <PatrolFaceScannerPanel person={person} />
-          </div>
-        </Panel>
+          <PatrolFaceScannerPanel person={person} />
+        </div>
       )}
     </PageLayout>
   )

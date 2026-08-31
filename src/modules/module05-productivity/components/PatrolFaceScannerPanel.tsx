@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
-  Camera,
   CheckCircle,
-  Hand,
+  ChevronDown,
   Loader2,
-  RefreshCw,
   ScanFace,
-  Zap,
+  Settings2,
+  X,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { captureFaceEnrollmentFrameBase64 } from '../utils/patrolFaceCapture'
@@ -32,6 +31,7 @@ import {
 import {
   defaultFaceScanPoses,
   FACE_SCAN_POSE_COUNT,
+  FACE_SCAN_POSE_LABELS,
 } from '../utils/patrolFaceScanPoses'
 
 export type FaceScanCaptureMode = 'auto' | 'manual'
@@ -45,11 +45,13 @@ interface PatrolFaceScannerPanelProps {
   onScanComplete?: (enrollment: PatrolScanEnrollment) => void
 }
 
+const APPLE_PRIMARY_INSTRUCTION =
+  'Từ từ xoay đầu để hoàn thành vòng tròn.'
+
 export function PatrolFaceScannerPanel({
   person,
   sessionId,
   initialEnrollment,
-  subtitle,
   onEnrollmentChange,
   onScanComplete,
 }: PatrolFaceScannerPanelProps) {
@@ -63,10 +65,10 @@ export function PatrolFaceScannerPanel({
   const [enrollment, setEnrollment] = useState<PatrolScanEnrollment | null>(initialEnrollment ?? null)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [captureMode, setCaptureMode] = useState<FaceScanCaptureMode>('auto')
-  const [manualHint, setManualHint] = useState<string>('')
+  const [manualHint, setManualHint] = useState('')
+  const [accessibilityOpen, setAccessibilityOpen] = useState(false)
 
   const handleEnrollment = useCallback((next: PatrolScanEnrollment) => {
     setEnrollment(next)
@@ -92,13 +94,12 @@ export function PatrolFaceScannerPanel({
 
   const refreshStatus = useCallback(async () => {
     if (!subjectKey) return
-    setLoading(true)
     setPanelError(null)
     try {
       const online = await pingPatrolProfileBackend()
       setBackendOnline(online)
       if (!online) {
-        setPanelError('Không kết nối backend tuần tra. Kiểm tra URL backend AI.')
+        setPanelError('Không kết nối backend tuần tra.')
         return
       }
       const status = isSession
@@ -108,8 +109,6 @@ export function PatrolFaceScannerPanel({
     } catch (err) {
       setBackendOnline(false)
       setPanelError(err instanceof Error ? err.message : 'Không tải được trạng thái quét.')
-    } finally {
-      setLoading(false)
     }
   }, [subjectKey, isSession, sessionId, person, handleEnrollment])
 
@@ -194,214 +193,235 @@ export function PatrolFaceScannerPanel({
     }
   }
 
+  const handleStartOver = () => {
+    window.location.reload()
+  }
+
   const poses = enrollment?.poses ?? defaultFaceScanPoses()
   const facesRequired = enrollment?.faces_required ?? FACE_SCAN_POSE_COUNT
   const capturedCount = enrollment?.faces_captured ?? 0
   const complete = enrollment?.complete ?? false
   const capturedBySlot = poses.map(p => p.captured)
-  const displayName = person?.full_name ?? person?.display_name
-  const defaultSubtitle = subtitle ?? (
-    isSession
-      ? 'eKYC 4 góc gallery — Chính diện · Quay trái · Quay phải · Cúi xuống.'
-      : `Quét ${facesRequired} góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}).`
-  )
+  const activeSlot = autoScan.activeSlot as ScanPoseSlot
 
-  const instruction = complete
-    ? '✓ Hoàn tất — vòng tròn xanh đủ 4 góc.'
+  const poseHint = complete
+    ? 'Hoàn tất quét mặt.'
     : captureMode === 'auto'
       ? autoScan.guidance
-      : manualHint || guidanceForSlot(autoScan.activeSlot)
+      : manualHint || guidanceForSlot(activeSlot)
 
   const showError = panelError ?? autoScan.error
   const busy = autoScan.capturing
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground/80">
-            Quét khuôn mặt eKYC
-          </h2>
-          <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">{defaultSubtitle}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void refreshStatus()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 shrink-0 self-start"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Làm mới
-        </button>
-      </div>
-
-      {!complete && (
-        <div className="flex rounded-lg border border-[#1e2433] bg-[#0b0f1a] p-1 gap-1">
-          <button
-            type="button"
-            onClick={() => setCaptureMode('auto')}
-            className={cn(
-              'flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-semibold transition-colors',
-              captureMode === 'auto'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40'
-                : 'text-muted-foreground hover:text-foreground',
+    <div className="flex flex-col bg-black text-white min-h-[min(100dvh-8rem,720px)] -mx-1 sm:-mx-2">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 pt-4 pb-6">
+        <div className="relative w-full max-w-[min(100vw-2rem,340px)] aspect-square rounded-[2.75rem] bg-black overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
+          <div className="absolute inset-[7.5%] rounded-full overflow-hidden bg-[#0a0a0a]">
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className={cn(
+                'absolute inset-0 w-full h-full object-cover scale-x-[-1]',
+                !cameraReady && 'opacity-0',
+              )}
+            />
+            {!cameraReady && !cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-white/40" />
+              </div>
             )}
-          >
-            <Zap className="w-3.5 h-3.5" />
-            Tự động
-          </button>
-          <button
-            type="button"
-            onClick={() => setCaptureMode('manual')}
-            className={cn(
-              'flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-md text-[11px] font-semibold transition-colors',
-              captureMode === 'manual'
-                ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Hand className="w-3.5 h-3.5" />
-            Thủ công
-          </button>
-        </div>
-      )}
+            <div
+              className="pointer-events-none absolute top-1/2 left-[10%] right-[10%] h-px -translate-y-1/2 bg-sky-400/35 shadow-[0_0_14px_rgba(56,189,248,0.55)]"
+              aria-hidden
+            />
+          </div>
 
-      {(autoScan.successFlash || complete) && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-green-500/25 bg-green-500/10 text-green-400 text-xs">
-          <CheckCircle className="w-4 h-4 shrink-0" />
-          <span>
-            {complete
-              ? isSession
-                ? `Đủ ${facesRequired} góc — nhấn Tiếp tục để nhập thông tin.`
-                : 'Hoàn thành — hồ sơ sẵn sàng nhận diện trên Module 05.'
-              : autoScan.successFlash}
-          </span>
-        </div>
-      )}
-
-      {showError && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-red-500/25 bg-red-500/10 text-red-400 text-xs">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="flex-1">{showError}</span>
-          {autoScan.error && captureMode === 'auto' && (
-            <button type="button" onClick={autoScan.retry} className="text-[10px] underline shrink-0">
-              Thử lại
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="relative aspect-square max-h-[min(72vh,520px)] mx-auto rounded-xl overflow-hidden border border-[#1e2433] bg-black w-full">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
-        />
-
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <FaceScanFourPoseRing
-            activeSlot={autoScan.activeSlot as ScanPoseSlot}
+            activeSlot={activeSlot}
             capturedBySlot={capturedBySlot}
             holdProgress={captureMode === 'auto' ? autoScan.holdProgress : 0}
             complete={complete}
           />
+
           {complete && (
-            <CheckCircle className="absolute w-14 h-14 text-green-400 drop-shadow-[0_0_14px_rgba(74,222,128,1)] z-50" />
+            <div className="absolute inset-[7.5%] rounded-full flex items-center justify-center bg-black/25 pointer-events-none">
+              <CheckCircle className="w-16 h-16 text-green-400 drop-shadow-[0_0_18px_rgba(74,222,128,0.9)]" />
+            </div>
           )}
-        </div>
 
-        <div className="absolute inset-x-0 bottom-0 p-4 pt-16 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none z-20">
-          <p className={cn(
-            'text-center font-bold leading-snug text-sm sm:text-base',
-            complete ? 'text-green-400' : 'text-white',
-          )}>
-            {instruction}
-          </p>
-          {!complete && (
-            <p className="text-center text-[10px] text-white/55 mt-1.5">
-              {guidanceForSlot(autoScan.activeSlot as ScanPoseSlot)}
-            </p>
+          {busy && (
+            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/50 text-[10px] text-white/80">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Đang lưu…
+            </div>
           )}
-        </div>
 
-        <div className="absolute left-3 top-3 flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/60 border border-white/10 text-[10px] z-20">
-          <Camera className="w-3 h-3 text-sky-400" />
-          <span className={complete ? 'text-green-400' : cameraReady ? 'text-sky-300' : 'text-amber-400'}>
-            {cameraReady
-              ? captureMode === 'auto'
-                ? autoScan.scanMode === 'fallback' ? 'Chờ AI' : 'Tự quét + AI'
-                : 'Thủ công'
-              : 'Đang mở camera…'}
-          </span>
-        </div>
-
-        <div className="absolute right-3 top-3 px-2 py-1 rounded-md bg-black/60 border border-white/10 text-[10px] font-bold tabular-nums z-20">
-          <span className={complete ? 'text-green-400' : 'text-sky-300'}>
+          <div className="absolute top-4 left-4 px-2.5 py-1 rounded-full bg-black/50 text-[10px] font-semibold tabular-nums text-white/75">
             {capturedCount}/{facesRequired}
-          </span>
+          </div>
         </div>
 
-        {busy && (
-          <div className="absolute right-3 top-10 flex items-center gap-1 px-2 py-1 rounded-md bg-sky-500/20 text-[10px] text-sky-300 z-20">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Đang lưu…
+        <p className="mt-10 text-center text-[1.0625rem] font-normal leading-snug text-white px-3 max-w-[20rem]">
+          {complete ? 'Hoàn tất quét mặt.' : APPLE_PRIMARY_INSTRUCTION}
+        </p>
+        {!complete && (
+          <p className={cn(
+            'mt-3 text-center text-[0.8125rem] leading-relaxed px-4 max-w-[22rem]',
+            autoScan.poseMatched ? 'text-green-400/90' : 'text-white/50',
+          )}>
+            {poseHint}
+          </p>
+        )}
+
+        {(autoScan.successFlash && !complete) && (
+          <p className="mt-2 text-center text-xs text-green-400">{autoScan.successFlash}</p>
+        )}
+
+        {showError && (
+          <div className="mt-4 flex items-start gap-2 px-4 py-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs max-w-sm">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="flex-1">{showError}</span>
           </div>
         )}
 
         {cameraError && (
-          <div className="absolute inset-x-3 bottom-28 p-2 rounded-lg bg-red-500/15 border border-red-500/30 text-[10px] text-red-300 z-20">
-            {cameraError}
-          </div>
+          <p className="mt-4 text-center text-xs text-red-300/90 px-4">{cameraError}</p>
         )}
       </div>
 
-      {captureMode === 'manual' && !complete && (
+      <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-3 shrink-0">
         <button
           type="button"
-          onClick={() => void handleManualCapture()}
-          disabled={busy || !cameraReady || backendOnline === false}
-          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-violet-500 text-white hover:bg-violet-500/90 disabled:opacity-50"
+          onClick={() => setAccessibilityOpen(true)}
+          className="w-full py-[0.9rem] rounded-full bg-[#1c1c1e] text-[1.0625rem] font-normal text-white hover:bg-[#2c2c2e] transition-colors"
         >
-          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ScanFace className="w-5 h-5" />}
-          Chụp góc: {poses.find(p => p.slot === autoScan.activeSlot)?.label ?? 'này'}
+          Tùy chọn trợ năng
         </button>
-      )}
-
-      <div className="rounded-xl border border-[#1e2433] bg-[#0b0f1a] p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">4 góc gallery</span>
-          <span className={cn('text-[10px] font-bold tabular-nums', complete ? 'text-green-400' : 'text-sky-400')}>
-            {capturedCount}/{facesRequired}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {poses.map(pose => {
-            const active = pose.slot === autoScan.activeSlot && !complete && !pose.captured
-            return (
-              <div
-                key={pose.slot}
-                className={cn(
-                  'flex items-center gap-2 px-2.5 py-2 rounded-lg border text-[10px]',
-                  pose.captured && 'border-green-500/30 bg-green-500/10',
-                  active && 'border-sky-400/40 bg-sky-400/10',
-                  !pose.captured && !active && 'border-[#1e2433]',
-                )}
-              >
-                {pose.captured
-                  ? <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                  : <ScanFace className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-sky-400' : 'text-muted-foreground')} />}
-                <span className={cn('font-medium truncate', pose.captured && 'text-green-400')}>{pose.label}</span>
-              </div>
-            )
-          })}
-        </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
-          {captureMode === 'auto'
-            ? 'Tự động: căn đúng từng góc gallery — vòng xanh lần lượt Chính diện → Trái → Phải → Cúi.'
-            : 'Thủ công: căn đúng góc đang sáng rồi bấm Chụp — hệ thống từ chối nếu sai góc.'}
-        </p>
+        <button
+          type="button"
+          onClick={handleStartOver}
+          disabled={complete}
+          className="w-full py-[0.9rem] rounded-full bg-[#1c1c1e] text-[1.0625rem] font-normal text-white hover:bg-[#2c2c2e] transition-colors disabled:opacity-40"
+        >
+          Quét lại
+        </button>
       </div>
+
+      {accessibilityOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 p-4">
+          <div
+            className="w-full max-w-md rounded-2xl bg-[#1c1c1e] border border-white/10 shadow-2xl overflow-hidden"
+            role="dialog"
+            aria-label="Tùy chọn trợ năng quét mặt"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <span className="text-sm font-semibold flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-white/70" />
+                Tùy chọn trợ năng
+              </span>
+              <button
+                type="button"
+                onClick={() => setAccessibilityOpen(false)}
+                className="p-1.5 rounded-full hover:bg-white/10"
+                aria-label="Đóng"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4 max-h-[min(70vh,480px)] overflow-y-auto">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-white/45 mb-2">Chế độ quét</p>
+                <div className="flex rounded-xl bg-black/40 p-1 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCaptureMode('auto')}
+                    className={cn(
+                      'flex-1 py-2 rounded-lg text-xs font-semibold transition-colors',
+                      captureMode === 'auto' ? 'bg-white/15 text-white' : 'text-white/50',
+                    )}
+                  >
+                    Tự động
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCaptureMode('manual')}
+                    className={cn(
+                      'flex-1 py-2 rounded-lg text-xs font-semibold transition-colors',
+                      captureMode === 'manual' ? 'bg-white/15 text-white' : 'text-white/50',
+                    )}
+                  >
+                    Thủ công
+                  </button>
+                </div>
+              </div>
+
+              {captureMode === 'manual' && !complete && (
+                <button
+                  type="button"
+                  onClick={() => void handleManualCapture()}
+                  disabled={busy || !cameraReady || backendOnline === false}
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold bg-green-500 text-black disabled:opacity-40"
+                >
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanFace className="w-4 h-4" />}
+                  Chụp: {poses.find(p => p.slot === activeSlot)?.label ?? 'góc hiện tại'}
+                </button>
+              )}
+
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-white/45 mb-2">
+                  4 góc gallery · {capturedCount}/{facesRequired}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {poses.map(pose => {
+                    const active = pose.slot === activeSlot && !complete && !pose.captured
+                    return (
+                      <div
+                        key={pose.slot}
+                        className={cn(
+                          'flex items-center gap-2 px-2.5 py-2 rounded-xl border text-[10px]',
+                          pose.captured && 'border-green-500/30 bg-green-500/10',
+                          active && 'border-sky-400/40 bg-sky-400/10',
+                          !pose.captured && !active && 'border-white/10 bg-black/30',
+                        )}
+                      >
+                        {pose.captured
+                          ? <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                          : <ScanFace className={cn('w-3.5 h-3.5 shrink-0', active ? 'text-sky-400' : 'text-white/40')} />}
+                        <span className={cn('font-medium truncate', pose.captured && 'text-green-400')}>
+                          {pose.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-white/40 mt-2 leading-relaxed">
+                  {FACE_SCAN_POSE_LABELS.join(' · ')}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void refreshStatus()}
+                className="w-full py-2.5 rounded-xl text-xs font-semibold border border-white/15 text-white/80 hover:bg-white/5"
+              >
+                Làm mới trạng thái
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAccessibilityOpen(false)}
+              className="w-full py-3.5 border-t border-white/10 text-sm text-sky-400 font-medium flex items-center justify-center gap-1"
+            >
+              Đóng
+              <ChevronDown className="w-4 h-4 sm:hidden" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
