@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
+  Camera,
   CheckCircle,
   Hand,
   Loader2,
@@ -36,6 +37,13 @@ import {
   FACE_SCAN_POSE_COUNT,
   faceScanPoseLabel,
 } from '../utils/patrolFaceScanPoses'
+import {
+  attachFaceScanStreamToVideo,
+  faceScanCameraErrorMessage,
+  openFaceScanCameraStream,
+  shouldPromptFaceScanCameraOnTap,
+  type FaceScanCameraErrorCode,
+} from '../utils/patrolFaceScanCamera'
 
 export type FaceScanCaptureMode = 'auto' | 'manual'
 
@@ -67,6 +75,8 @@ export function PatrolFaceScannerPanel({
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [enrollment, setEnrollment] = useState<PatrolScanEnrollment | null>(initialEnrollment ?? null)
   const [cameraReady, setCameraReady] = useState(false)
+  const [cameraStarting, setCameraStarting] = useState(false)
+  const [cameraAwaitingTap, setCameraAwaitingTap] = useState(shouldPromptFaceScanCameraOnTap)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
@@ -122,22 +132,24 @@ export function PatrolFaceScannerPanel({
   }, [subjectKey, isSession, sessionId, person, handleEnrollment])
 
   const startCamera = useCallback(async () => {
+    setCameraStarting(true)
     setCameraError(null)
-    setCameraReady(false)
+    setCameraAwaitingTap(false)
     try {
       streamRef.current?.getTracks().forEach(track => track.stop())
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 720 } },
-        audio: false,
-      })
+      const stream = await openFaceScanCameraStream()
       streamRef.current = stream
       const video = videoRef.current
       if (!video) return
-      video.srcObject = stream
-      await video.play()
+      await attachFaceScanStreamToVideo(video, stream)
       setCameraReady(true)
-    } catch {
-      setCameraError('Không mở được camera. Cho phép quyền camera trên trình duyệt.')
+    } catch (err) {
+      setCameraReady(false)
+      const code = (err as { code?: FaceScanCameraErrorCode }).code ?? 'failed'
+      setCameraError(faceScanCameraErrorMessage(code))
+      setCameraAwaitingTap(true)
+    } finally {
+      setCameraStarting(false)
     }
   }, [])
 
@@ -147,11 +159,19 @@ export function PatrolFaceScannerPanel({
 
   useEffect(() => {
     void refreshStatus()
+  }, [refreshStatus, subjectKey])
+
+  useEffect(() => {
+    if (shouldPromptFaceScanCameraOnTap()) {
+      return () => {
+        streamRef.current?.getTracks().forEach(track => track.stop())
+      }
+    }
     void startCamera()
     return () => {
       streamRef.current?.getTracks().forEach(track => track.stop())
     }
-  }, [refreshStatus, startCamera, subjectKey])
+  }, [startCamera])
 
   useEffect(() => {
     if (captureMode !== 'manual' || !cameraReady || !enrollment) return
@@ -317,8 +337,32 @@ export function PatrolFaceScannerPanel({
           ref={videoRef}
           playsInline
           muted
+          autoPlay
           className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
         />
+
+        {(cameraAwaitingTap || cameraStarting) && !cameraReady && (
+          <div className="absolute inset-0 z-[25] flex flex-col items-center justify-center gap-3 px-6 bg-black/55">
+            <button
+              type="button"
+              onClick={() => void startCamera()}
+              disabled={cameraStarting}
+              className="inline-flex flex-col items-center gap-2 px-6 py-5 rounded-2xl bg-white/12 border border-white/20 text-white hover:bg-white/18 disabled:opacity-60"
+            >
+              {cameraStarting
+                ? <Loader2 className="w-10 h-10 animate-spin text-sky-300" />
+                : <Camera className="w-10 h-10 text-sky-300" />}
+              <span className="text-sm font-semibold">
+                {cameraStarting ? 'Đang mở camera…' : 'Bật camera'}
+              </span>
+            </button>
+            {cameraAwaitingTap && !cameraStarting && (
+              <p className="text-[11px] text-white/60 text-center max-w-[240px] leading-relaxed">
+                iPhone/Safari cần bạn bấm nút này để cấp quyền camera.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <FaceScanProgressRing
@@ -334,9 +378,19 @@ export function PatrolFaceScannerPanel({
           )}
         </div>
 
-        {cameraError && (
-          <div className="absolute inset-x-4 bottom-4 p-2 rounded-lg bg-red-500/15 border border-red-500/30 text-[10px] text-red-300 z-20 text-center">
-            {cameraError}
+        {cameraError && !cameraAwaitingTap && (
+          <div className="absolute inset-x-4 bottom-4 z-[30] space-y-2">
+            <div className="p-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-[10px] text-red-300 text-center leading-relaxed">
+              {cameraError}
+            </div>
+            <button
+              type="button"
+              onClick={() => void startCamera()}
+              disabled={cameraStarting}
+              className="w-full py-2 rounded-lg text-[11px] font-semibold bg-white/10 text-white border border-white/15"
+            >
+              Thử lại camera
+            </button>
           </div>
         )}
 
