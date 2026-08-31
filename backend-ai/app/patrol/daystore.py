@@ -108,6 +108,24 @@ def _fmt_obj(date: str, seq: int) -> str:
     return f"obj-{date.replace('-', '')}-{seq:04d}"
 
 
+def _ensure_obj_counter(conn, date: str) -> None:
+    """Sau restore DB — counter obj:* không được thấp hơn obj_id đã có."""
+    row = conn.execute(
+        "SELECT MAX(CAST(substr(obj_id, -4) AS INTEGER)) FROM daily_objects"
+        " WHERE event_date = ?",
+        (date,),
+    ).fetchone()
+    max_seq = int(row[0] or 0) if row else 0
+    if max_seq <= 0:
+        return
+    name = f"obj:{date}"
+    conn.execute(
+        "INSERT INTO counters(name, value) VALUES(?, ?)"
+        " ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value)",
+        (name, max_seq),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Đối tượng — chỉ sống trong ngày
 
@@ -139,6 +157,7 @@ def touch_object(
 
     with db.tx() as conn:
         if not obj_id:
+            _ensure_obj_counter(conn, date)
             seq = db.next_counter(conn, f"obj:{date}")
             obj_id = _fmt_obj(date, seq)
             conn.execute(
