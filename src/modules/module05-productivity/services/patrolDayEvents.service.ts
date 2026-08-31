@@ -77,10 +77,15 @@ export interface PatrolDayPresence {
 
 export interface PatrolDayStats {
   date: string
+  /** Thẻ có snapshot — đồng bộ tab Tất cả. */
   workersStandard: number
   personCount: number
   identityCount: number
+  /** Thẻ tab Đối tượng — đồng bộ overlay heatmap. */
+  objectCount: number
+  /** Lượt gặp qualified (tripwire) — khác đơn vị entity tab. */
   encountersStandard: number
+  /** Lượt obj-* qualified — chỉ dùng nội bộ / audit, không hiển thị KPI chính. */
   unassignedObservations: number
 }
 
@@ -250,6 +255,7 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     workersStandard: Number(statsRow.workers_standard ?? 0),
     personCount: Number(statsRow.person_count ?? 0),
     identityCount: Number(statsRow.identity_count ?? 0),
+    objectCount: 0,
     encountersStandard: Number(statsRow.encounters_standard ?? 0),
     unassignedObservations: Number(statsRow.unassigned_observations ?? 0),
   }

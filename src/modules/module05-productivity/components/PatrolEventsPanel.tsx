@@ -11,12 +11,13 @@ import {
   PATROL_EVENTS_TAB_META,
   resolvePatrolEventDisplayMeta,
 } from '../utils/patrolWorkforceEventLabels'
-import { listPatrolEventsForTab } from '../utils/patrolEventsTabList'
+import { listPatrolEventsForTab, type PatrolTabCounts } from '../utils/patrolEventsTabList'
 import { resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
 
 interface PatrolEventsPanelProps {
   events: PatrolEvent[]
+  tabCounts?: PatrolTabCounts
   viewDate: string
   onViewDateChange: (date: string) => void
   maxViewDate: string
@@ -174,6 +175,7 @@ function PatrolEventCard({
 
 export function PatrolEventsPanel({
   events,
+  tabCounts: tabCountsProp,
   viewDate,
   onViewDateChange,
   maxViewDate,
@@ -203,12 +205,12 @@ export function PatrolEventsPanel({
     [events, filterTab, searchQuery],
   )
 
-  const tabCounts = useMemo(() => ({
+  const tabCounts = useMemo(() => tabCountsProp ?? {
     all: listPatrolEventsForTab(events, 'all').length,
     object: listPatrolEventsForTab(events, 'object').length,
     person: listPatrolEventsForTab(events, 'person').length,
     identity: listPatrolEventsForTab(events, 'identity').length,
-  }), [events])
+  }, [events, tabCountsProp])
 
   useEffect(() => {
     setVisibleCount(INITIAL_COUNT)

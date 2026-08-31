@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { countUniquePatrolTabEntities, listPatrolEventsForTab } from './patrolEventsTabList'
+import { countUniquePatrolTabEntities, computePatrolTabCounts, listPatrolEventsForTab } from './patrolEventsTabList'
 
 function makeEvent(over: Partial<PatrolEvent>): PatrolEvent {
   return {
@@ -68,5 +68,20 @@ describe('listPatrolEventsForTab', () => {
     const list = listPatrolEventsForTab([older, newer], 'all')
     expect(list).toHaveLength(1)
     expect(list[0]?.violationLabel).toBe('mới')
+  })
+
+  it('computePatrolTabCounts khớp listPatrolEventsForTab từng tab', () => {
+    const events = [
+      makeEvent({ id: 'pers:pers-0001', objectId: 'pers-0001' }),
+      makeEvent({
+        id: 'pers:pers-0002',
+        objectId: 'pers-0002',
+        stage: 'profile',
+      }),
+    ]
+    const counts = computePatrolTabCounts(events)
+    expect(counts.all).toBe(listPatrolEventsForTab(events, 'all').length)
+    expect(counts.person).toBe(listPatrolEventsForTab(events, 'person').length)
+    expect(counts.identity).toBe(listPatrolEventsForTab(events, 'identity').length)
   })
 })

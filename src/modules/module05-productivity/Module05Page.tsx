@@ -59,6 +59,8 @@ import { ensurePatrolAuth } from '@/services/patrolApiClient'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
 import { buildPatrolHelmetOnlineById } from './utils/patrolStreamOnline'
+import { derivePatrolDisplayStats } from './utils/patrolDisplayStats'
+import { computePatrolTabCounts } from './utils/patrolEventsTabList'
 
 function PatrolWorkersKpiDetail({
   personCount,
@@ -131,9 +133,9 @@ function PatrolKPIs({
     ? `${stats.encountersStandard} lượt gặp qualified`
     : 'Chưa ghi nhận lượt gặp'
 
-  const unassignedDetail = stats.unassignedObservations > 0
-    ? 'Chưa gán pers/iden — không tính vào chuẩn'
-    : 'Không có quan sát chưa gán'
+  const unassignedDetail = stats.objectCount > 0
+    ? 'Thẻ chưa định danh — đồng bộ tab Đối tượng'
+    : 'Không có đối tượng'
 
   const kpis = [
     {
@@ -173,9 +175,9 @@ function PatrolKPIs({
       iconColor: 'text-emerald-400',
     },
     {
-      label: 'Quan sát chưa gán',
-      value: stats.unassignedObservations,
-      unit: 'lượt',
+      label: 'Đối tượng',
+      value: stats.objectCount,
+      unit: 'thẻ',
       detail: unassignedDetail,
       change: 0,
       changeType: 'neutral' as const,
@@ -275,6 +277,14 @@ export function Module05Page() {
     () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),
     [dayBundle.events, flycamFlightModes],
   )
+  const displayStats = useMemo(
+    () => derivePatrolDisplayStats(patrolEventsLive, dayBundle.stats),
+    [patrolEventsLive, dayBundle.stats],
+  )
+  const tabCounts = useMemo(
+    () => computePatrolTabCounts(patrolEventsLive),
+    [patrolEventsLive],
+  )
   const patrolMapCameraIds = useMemo(
     () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
     [],
@@ -293,7 +303,7 @@ export function Module05Page() {
     () => dayBundle.bundle?.presences ?? [],
     [dayBundle.bundle],
   )
-  const dayStats = { stats: dayBundle.stats, loading: dayBundle.loading, reachable: dayBundle.reachable }
+  const dayStats = { stats: displayStats, loading: dayBundle.loading, reachable: dayBundle.reachable }
   const dr03FlightLabel = patrolFlightModeLabel(flycamFlightModes['DR-03'] ?? 'aerial')
 
   const detailEvent = useMemo(
@@ -482,6 +492,7 @@ export function Module05Page() {
             >
               <PatrolEventsPanel
                 events={patrolEventsLive}
+                tabCounts={tabCounts}
                 viewDate={patrolViewDate}
                 onViewDateChange={setPatrolViewDate}
                 maxViewDate={patrolToday}

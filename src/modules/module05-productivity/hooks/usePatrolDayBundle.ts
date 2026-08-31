@@ -59,6 +59,7 @@ const EMPTY_STATS: PatrolDayStats = {
   workersStandard: 0,
   personCount: 0,
   identityCount: 0,
+  objectCount: 0,
   encountersStandard: 0,
   unassignedObservations: 0,
 }
