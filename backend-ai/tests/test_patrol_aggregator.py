@@ -544,7 +544,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (row1,),
         )
-        self.assertEqual(snap["snapshot_path"], "2026-08-30/pers-0007-1000.jpg")
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/pers-0007-1025.jpg")
 
     def test_coalesce_merges_duplicate_rows(self) -> None:
         from app.patrol import daystore, db
@@ -600,6 +600,93 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         self.assertEqual(merged, 1)
         rows = daystore.list_day_presences("2026-08-30")
         self.assertEqual(len(rows), 1)
+
+
+class AggregatorSnapshotFlushTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def test_flush_extends_appearance_still_writes_object_snapshot(self) -> None:
+        """Gộp appearance không được chặn chụp — Đối tượng phải có JPG trên thẻ."""
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.flush import flush_session
+        from app.patrol.aggregator.session_store import get_or_create
+        from app.patrol.aggregator.types import ObservationInput
+
+        ts = 7_000.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        bbox = (100.0, 80.0, 220.0, 400.0)
+        session = get_or_create("HC-02", "ptk-obj", ts=ts)
+        row_id = daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date=db.today_vn(ts),
+            subject_id="obj-20260830-0099",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-obj",
+            session_id="sess-obj",
+            started_at=ts - 5,
+            ended_at=ts - 1,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="2026-08-30/old.jpg",
+        )
+        daystore.touch_object(
+            "obj-20260830-0099",
+            camera_id="HC-02",
+            snapshot_path="2026-08-30/old.jpg",
+            snapshot_score=0.5,
+            now=ts - 1,
+            skip_appearance=True,
+        )
+        session.subject_id = "obj-20260830-0099"
+        session.appearance_row_id = row_id
+        session.committed = True
+        session.last_flush_at = ts - 1
+        session.dirty = True
+
+        obs = ObservationInput(
+            camera_id="HC-02",
+            track_id="ptk-obj",
+            ts=ts + 12,
+            person_bbox=bbox,
+            frame=frame,
+            confidence=0.85,
+        )
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-08-30/obj-new.jpg",
+        ) as write_mock:
+            flush_session(session, obs)
+
+        write_mock.assert_called()
+        obj = daystore.list_objects(db.today_vn(ts))[0]
+        self.assertEqual(obj["snapshot_path"], "2026-08-30/obj-new.jpg")
+        snap = db.query_one(
+            "SELECT snapshot_path FROM appearances WHERE id = ?",
+            (row_id,),
+        )
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/obj-new.jpg")
 
 
 if __name__ == "__main__":

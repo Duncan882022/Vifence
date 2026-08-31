@@ -95,11 +95,8 @@ def _should_refresh_person_snapshot(
     if is_identified:
         if snapshot_score < floor:
             return interval_ok, False
-        if old_score < floor:
-            return True, True
-        if snapshot_score >= old_score:
-            return True, True
-        return interval_ok, True
+        # Định danh: luôn dùng khung mặt mới nhất đủ rõ — đồng bộ thẻ ↔ popup.
+        return True, True
 
     keep_new = snapshot_score >= old_score
     if keep_new:
@@ -728,24 +725,33 @@ def upsert_track_appearance(
                 row_id = int(extend["id"])
 
         if row_id is not None:
+            set_parts = [
+                "ended_at = ?",
+                "gps_lat_end = ?",
+                "gps_lng_end = ?",
+                "event_payload_json = ?",
+                "interactions_json = ?",
+                "session_id = ?",
+                "track_id = ?",
+                "counted = MAX(counted, ?)",
+            ]
+            params: list[Any] = [
+                ended_at,
+                gps_lat,
+                gps_lng,
+                payload_json,
+                interactions_json,
+                session_id,
+                track_id,
+                counted_int,
+            ]
+            if snapshot_path:
+                set_parts.append("snapshot_path = ?")
+                params.append(snapshot_path)
+            params.append(row_id)
             conn.execute(
-                "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-                " event_payload_json = ?, interactions_json = ?, session_id = ?,"
-                " track_id = ?, counted = MAX(counted, ?),"
-                " snapshot_path = COALESCE(snapshot_path, ?)"
-                " WHERE id = ?",
-                (
-                    ended_at,
-                    gps_lat,
-                    gps_lng,
-                    payload_json,
-                    interactions_json,
-                    session_id,
-                    track_id,
-                    counted_int,
-                    snapshot_path,
-                    row_id,
-                ),
+                f"UPDATE appearances SET {', '.join(set_parts)} WHERE id = ?",
+                tuple(params),
             )
             return row_id
 
