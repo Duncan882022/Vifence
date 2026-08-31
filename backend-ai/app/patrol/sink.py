@@ -256,6 +256,10 @@ def resolve_snapshot_path(relative: str) -> Path | None:
     rel = (relative or "").strip().lstrip("/")
     if not rel or ".." in rel:
         return None
+    if rel.startswith("draft-face/"):
+        from .draft_face_images import resolve_draft_face_path
+
+        return resolve_draft_face_path(rel)
     full = (SNAPSHOT_DIR / rel).resolve()
     try:
         full.relative_to(SNAPSHOT_DIR.resolve())

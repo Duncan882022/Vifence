@@ -263,6 +263,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     obs.face_embedding,
                     quality=obs.face_quality,
                     camera_id=obs.camera_id,
+                    frame=obs.frame,
+                    person_bbox=obs.person_bbox,
                 )
             except Exception:  # noqa: BLE001
                 logger.debug("add_face_angle skip", exc_info=True)
@@ -288,6 +290,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                             obs.face_embedding,
                             quality=obs.face_quality,
                             camera_id=obs.camera_id,
+                            frame=obs.frame,
+                            person_bbox=obs.person_bbox,
                         )
                     except Exception:  # noqa: BLE001
                         logger.debug("add_face_angle draft skip", exc_info=True)
@@ -302,6 +306,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     quality=quality,
                     camera_id=obs.camera_id,
                     now=obs.ts,
+                    frame=obs.frame,
+                    person_bbox=obs.person_bbox,
                 )
                 if wid and is_sgc_worker_id(wid):
                     from ..sink import _bind_tk_profile

@@ -4,6 +4,7 @@ import { Check, Loader2, ScanFace } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
   fetchPatrolScanEnrollment,
+  type PatrolDraftFace,
   type PatrolScanEnrollment,
   type PatrolScanPose,
   type PatrolWorkerPerson,
@@ -39,42 +40,64 @@ function mergeProfileFacePoses(
   }))
 }
 
+function absolutizeDraftFaceUrl(url: string | null | undefined): string | null {
+  return absolutizeGalleryFaceUrl(url)
+}
+
 export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProfileFaceGalleryProps) {
   const [poses, setPoses] = useState<ProfileFacePose[]>([])
+  const [draftFaces, setDraftFaces] = useState<PatrolDraftFace[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const isDraft = person.status === 'draft'
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const enrollment = await fetchPatrolScanEnrollment(person.pers_id)
-      const galleryUrls = new Map<number, string | null>()
-      for (const p of enrollment.poses ?? []) {
-        if (p.url) galleryUrls.set(p.slot, p.url)
-      }
-      const code = (person.employee_code ?? '').trim()
-      if (person.status === 'identified' && code && galleryUrls.size === 0) {
-        const galleryId = patrolGalleryWorkerIdFromEmployeeCode(code)
-        const galleryPoses = await fetchPatrolGalleryFaces(galleryId)
-        for (const p of galleryPoses) {
-          if (p.captured && p.url) galleryUrls.set(p.slot, p.url)
+      if (isDraft && enrollment.draft_faces?.length) {
+        setDraftFaces(
+          enrollment.draft_faces.map(face => ({
+            ...face,
+            url: absolutizeDraftFaceUrl(face.url),
+          })),
+        )
+        setPoses([])
+      } else {
+        setDraftFaces([])
+        const galleryUrls = new Map<number, string | null>()
+        for (const p of enrollment.poses ?? []) {
+          if (p.url) galleryUrls.set(p.slot, p.url)
         }
+        const code = (person.employee_code ?? '').trim()
+        if (person.status === 'identified' && code && galleryUrls.size === 0) {
+          const galleryId = patrolGalleryWorkerIdFromEmployeeCode(code)
+          const galleryPoses = await fetchPatrolGalleryFaces(galleryId)
+          for (const p of galleryPoses) {
+            if (p.captured && p.url) galleryUrls.set(p.slot, p.url)
+          }
+        }
+        setPoses(mergeProfileFacePoses(enrollment, galleryUrls))
       }
-      setPoses(mergeProfileFacePoses(enrollment, galleryUrls))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được gallery mặt.')
       setPoses(defaultFaceScanPoses().map(p => ({ ...p, url: null })))
+      setDraftFaces([])
     } finally {
       setLoading(false)
     }
-  }, [person.employee_code, person.pers_id, person.status])
+  }, [isDraft, person.employee_code, person.pers_id, person.status])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const capturedCount = poses.filter(p => p.captured).length
+  const capturedCount = isDraft && draftFaces.length > 0
+    ? draftFaces.length
+    : poses.filter(p => p.captured).length
+  const showDraftGrid = isDraft && draftFaces.length > 0
   const canSupplementScan = person.status === 'identified' && Boolean(person.employee_code?.trim())
   const scanHref = canSupplementScan
     ? `/module05/quet-mat?code=${encodeURIComponent(person.employee_code!.trim())}`
@@ -86,12 +109,14 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
             <ScanFace className="w-3 h-3 text-violet-400" />
-            Gallery mặt · 5 góc
+            {showDraftGrid ? 'Ảnh mặt · camera tuần tra' : 'Gallery mặt · 5 góc'}
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {person.status === 'draft'
-              ? 'Vector từ camera — ảnh JPG sau khi xác minh / quét mặt.'
-              : 'Ảnh đã quét — dùng để bổ sung góc còn thiếu.'}
+            {showDraftGrid
+              ? 'Crop mặt tự động từ bodycam / flycam — dùng xem trước khi xác minh.'
+              : person.status === 'draft'
+                ? 'Chưa có ảnh crop — vector embedding đang được thu từ camera.'
+                : 'Ảnh đã quét — dùng để bổ sung góc còn thiếu.'}
           </p>
         </div>
         <span className={cn(
@@ -100,13 +125,43 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
             ? 'text-green-400 border-green-400/30 bg-green-400/10'
             : 'text-violet-400 border-violet-400/30 bg-violet-400/10',
         )}>
-          {capturedCount}/5
+          {showDraftGrid ? `${capturedCount} góc` : `${capturedCount}/5`}
         </span>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-8 text-muted-foreground">
           <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      ) : showDraftGrid ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {draftFaces.map(face => (
+            <div
+              key={face.id}
+              className="rounded-md border border-green-500/25 bg-green-500/5 overflow-hidden"
+            >
+              <div className={cn('relative bg-black', compact ? 'aspect-square' : 'aspect-[3/4]')}>
+                {face.url ? (
+                  <img
+                    src={face.url}
+                    alt={face.camera_id ?? 'Góc mặt'}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                    <ScanFace className="w-5 h-5 opacity-40" />
+                    <span className="text-[8px] uppercase tracking-wide opacity-70">Vector</span>
+                  </div>
+                )}
+                <span className="absolute top-1 right-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500/90 text-white">
+                  <Check className="w-2.5 h-2.5" />
+                </span>
+              </div>
+              <p className="px-1.5 py-1 text-[9px] font-medium truncate text-center text-green-400">
+                {face.camera_id ?? 'Camera'}
+              </p>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
@@ -165,7 +220,7 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
             <ScanFace className="w-3 h-3" />
             Bổ sung góc mặt
           </Link>
-        ) : person.status === 'draft' ? (
+        ) : person.status === 'draft' && !showDraftGrid ? (
           <span className="text-[10px] text-amber-300/80">
             Xác minh hồ sơ trước — sau đó quét bổ sung tại Quét mặt.
           </span>

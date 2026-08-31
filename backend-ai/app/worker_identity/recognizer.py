@@ -450,11 +450,11 @@ def identify_person(
     return match
 
 
-def extract_person_face_embedding(
+def extract_patrol_face_crop_bgr(
     frame: np.ndarray,
-    person_bbox: list[float] | None,
+    person_bbox: list[float],
 ) -> np.ndarray | None:
-    """Embedding mặt trong bbox người — dùng dedup patrol (không cần khớp gallery)."""
+    """Crop mặt BGR trong bbox người — lưu JPG cho hồ sơ bản nháp tuần tra."""
     if not person_bbox or len(person_bbox) < 4:
         return None
     crop = _crop_person(frame, person_bbox)
@@ -464,6 +464,17 @@ def extract_person_face_embedding(
     face = _best_face_in_crop(crop)
     if face is None and crop_h < 420:
         face = _best_face_in_crop(crop, score_threshold=0.55, selfie_mode=True)
+    return face
+
+
+def extract_person_face_embedding(
+    frame: np.ndarray,
+    person_bbox: list[float] | None,
+) -> np.ndarray | None:
+    """Embedding mặt trong bbox người — dùng dedup patrol (không cần khớp gallery)."""
+    if not person_bbox or len(person_bbox) < 4:
+        return None
+    face = extract_patrol_face_crop_bgr(frame, person_bbox)
     if face is None:
         return None
     return _face_embedding(face)

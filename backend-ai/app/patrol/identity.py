@@ -185,6 +185,20 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
                     })
             return captured, complete, poses
 
+    if person and person.get("status") == STATUS_DRAFT:
+        patrol_faces = _draft_patrol_face_count(pid)
+        hr_faces = _hr_scan_face_count(pid)
+        captured = max(patrol_faces, hr_faces)
+        poses = [
+            {
+                "slot": slot,
+                "label": SCAN_POSE_LABELS[slot - 1],
+                "captured": captured >= slot,
+            }
+            for slot in range(1, SCAN_FACES_REQUIRED + 1)
+        ]
+        return captured, captured >= SCAN_FACES_REQUIRED, poses
+
     captured = _hr_scan_face_count(pid)
     poses = [
         {
@@ -207,7 +221,7 @@ def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
         " WHERE pers_id = ? ORDER BY created_at ASC",
         (pid,),
     )
-    return {
+    payload: dict[str, Any] = {
         "pers_id": pid,
         "full_name": person.get("full_name") if person else None,
         "employee_code": person.get("employee_code") if person else None,
@@ -219,6 +233,9 @@ def get_scan_enrollment(pers_id: str) -> dict[str, Any]:
         "poses": poses,
         "face_records": len(rows),
     }
+    if person and person.get("status") == STATUS_DRAFT:
+        payload["draft_faces"] = _draft_faces_for_person(pid)
+    return payload
 
 
 def display_name(person: dict[str, Any] | None) -> str:
@@ -519,6 +536,72 @@ def verify_draft_profile(
     )
 
 
+def _draft_patrol_face_count(pers_id: str) -> int:
+    """Số góc mặt có ảnh JPG từ camera tuần tra (HC-/DR-)."""
+    pid = resolve_alias(pers_id)
+    row = db.query_one(
+        "SELECT COUNT(*) AS c FROM person_faces"
+        " WHERE pers_id = ? AND image_path IS NOT NULL AND image_path != ''",
+        (pid,),
+    )
+    return int(row["c"]) if row else 0
+
+
+def _draft_faces_for_person(pers_id: str) -> list[dict[str, Any]]:
+    pid = resolve_alias(pers_id)
+    rows = db.query(
+        "SELECT id, quality, camera_id, image_path, created_at FROM person_faces"
+        " WHERE pers_id = ? AND image_path IS NOT NULL AND image_path != ''"
+        " ORDER BY created_at ASC",
+        (pid,),
+    )
+    return [
+        {
+            "id": int(r["id"]),
+            "quality": float(r["quality"] or 0),
+            "camera_id": r["camera_id"],
+            "path": str(r["image_path"]),
+            "created_at": float(r["created_at"] or 0),
+        }
+        for r in rows
+    ]
+
+
+def _maybe_save_patrol_face_crop(
+    pers_id: str,
+    *,
+    camera_id: str | None,
+    frame: Any,
+    person_bbox: Sequence[float] | None,
+    ts: float,
+) -> str | None:
+    if frame is None or not person_bbox or len(person_bbox) < 4:
+        return None
+    if not camera_id:
+        return None
+    from .camera_scope import is_patrol_metrics_camera
+
+    if not is_patrol_metrics_camera(camera_id):
+        return None
+    try:
+        from ..worker_identity.recognizer import extract_patrol_face_crop_bgr
+        from .draft_face_images import save_draft_face_crop
+
+        if not isinstance(frame, np.ndarray):
+            frame_arr = np.asarray(frame)
+        else:
+            frame_arr = frame
+        if frame_arr.ndim != 3:
+            return None
+        crop = extract_patrol_face_crop_bgr(frame_arr, [float(v) for v in person_bbox[:4]])
+        if crop is None:
+            return None
+        return save_draft_face_crop(pers_id, crop, ts=ts)
+    except Exception:  # noqa: BLE001
+        logger.debug("patrol face crop save skip", exc_info=True)
+        return None
+
+
 def touch_person(pers_id: str, now: float | None = None) -> None:
     ts = now or time.time()
     pid = resolve_alias(pers_id)
@@ -537,6 +620,8 @@ def add_face_angle(
     quality: float = 0.0,
     camera_id: str | None = None,
     now: float | None = None,
+    frame: Any = None,
+    person_bbox: Sequence[float] | None = None,
 ) -> bool:
     """Bổ sung một góc mặt cho người đã biết. Trả True nếu có lưu thêm.
 
@@ -565,7 +650,20 @@ def add_face_angle(
         if vec.size == probe.size and float(np.dot(probe, vec)) > FACE_ANGLE_DEDUPE_SIM:
             return False
 
-    add_face(pid, embedding, quality=quality, camera_id=camera_id)
+    image_path = _maybe_save_patrol_face_crop(
+        pid,
+        camera_id=camera_id,
+        frame=frame,
+        person_bbox=person_bbox,
+        ts=ts,
+    )
+    add_face(
+        pid,
+        embedding,
+        quality=quality,
+        camera_id=camera_id,
+        image_path=image_path,
+    )
     with db.tx() as c:
         c.execute("UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid))
     return True
@@ -577,6 +675,8 @@ def observe_face(
     quality: float = 0.0,
     camera_id: str | None = None,
     now: float | None = None,
+    frame: Any = None,
+    person_bbox: Sequence[float] | None = None,
 ) -> tuple[str, bool]:
     """Thấy một khuôn mặt của track **chưa biết là ai** → `(pers_id, vừa tạo)`.
 
@@ -592,13 +692,33 @@ def observe_face(
                 "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid)
             )
         add_face_angle(
-            pid, embedding, quality=quality, camera_id=camera_id, now=ts
+            pid,
+            embedding,
+            quality=quality,
+            camera_id=camera_id,
+            now=ts,
+            frame=frame,
+            person_bbox=person_bbox,
         )
         return pid, False
 
     with db.tx() as c:
         pers_id = allocate_tk_profile(origin="camera", now=ts, conn=c)
-        add_face(pers_id, embedding, quality=quality, camera_id=camera_id, conn=c)
+        image_path = _maybe_save_patrol_face_crop(
+            pers_id,
+            camera_id=camera_id,
+            frame=frame,
+            person_bbox=person_bbox,
+            ts=ts,
+        )
+        add_face(
+            pers_id,
+            embedding,
+            quality=quality,
+            camera_id=camera_id,
+            image_path=image_path,
+            conn=c,
+        )
     return pers_id, True
 
 

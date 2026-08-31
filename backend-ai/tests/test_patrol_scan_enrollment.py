@@ -37,7 +37,13 @@ class ScanEnrollmentProgressTest(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_identified_uses_gallery_poses_not_patrol_vectors(self) -> None:
-        pers_id = identity.create_person(origin="hr_create", now=1_000.0)
+        pers_id = identity.import_identity(
+            full_name="Duncan",
+            employee_code="SGC001",
+            contractor="SGC",
+            source="hr_create",
+            now=1_000.0,
+        )["pers_id"]
         identity.identify(
             pers_id,
             full_name="Duncan",

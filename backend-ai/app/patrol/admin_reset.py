@@ -17,6 +17,7 @@ def purge_patrol_all(*, keep_counters: bool = True) -> dict[str, Any]:
     from ..worker_identity.recognizer import reload_gallery
     from . import db, identity
     from .enroll_images import SESSION_IMAGES_ROOT
+    from .draft_face_images import DRAFT_FACE_ROOT
     from .person_analyzer import reset_all_hc_patrol_state
     from .sink import SNAPSHOT_DIR
 
@@ -48,6 +49,14 @@ def purge_patrol_all(*, keep_counters: bool = True) -> dict[str, Any]:
                 enroll_removed += len(list(child.glob("*.jpg")))
                 shutil.rmtree(child, ignore_errors=True)
     stats["enroll_sessions_removed"] = enroll_removed
+
+    draft_faces_removed = 0
+    if DRAFT_FACE_ROOT.is_dir():
+        for child in DRAFT_FACE_ROOT.iterdir():
+            if child.is_dir():
+                draft_faces_removed += len(list(child.glob("*.jpg")))
+                shutil.rmtree(child, ignore_errors=True)
+    stats["draft_faces_removed"] = draft_faces_removed
 
     events_removed = 0
     events_root = _DATA / "events"
