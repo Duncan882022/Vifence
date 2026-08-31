@@ -5,14 +5,17 @@ import {
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
 import {
+  createPatrolEnrollSession,
   deletePatrolWorkerProfile,
   fetchPatrolWorkerProfile,
   updatePatrolWorkerProfile,
   verifyPatrolDraftProfile,
+  type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { WorkerProfileFaceGallery } from './WorkerProfileFaceGallery'
-import { FACE_SCAN_POSE_COUNT } from '../utils/patrolFaceScanPoses'
+import { PatrolFaceScannerPanel } from './PatrolFaceScannerPanel'
+import { FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
@@ -44,6 +47,10 @@ export function WorkerProfileDetailModal({
   const [employeeCode, setEmployeeCode] = useState('')
   const [contractor, setContractor] = useState('')
 
+  const [verifySessionId, setVerifySessionId] = useState<string | null>(null)
+  const [verifyEnrollment, setVerifyEnrollment] = useState<PatrolScanEnrollment | null>(null)
+  const [verifySessionLoading, setVerifySessionLoading] = useState(false)
+
   const load = useCallback(async () => {
     if (!persId) return
     setLoading(true)
@@ -68,11 +75,46 @@ export function WorkerProfileDetailModal({
     else setPerson(null)
   }, [persId, initialMode, load])
 
+  useEffect(() => {
+    if (mode !== 'verify' || !persId) {
+      setVerifySessionId(null)
+      setVerifyEnrollment(null)
+      return
+    }
+    let cancelled = false
+    setVerifySessionLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const { sessionId, enrollment } = await createPatrolEnrollSession()
+        if (!cancelled) {
+          setVerifySessionId(sessionId)
+          setVerifyEnrollment(enrollment)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Không tạo phiên quét mặt.')
+        }
+      } finally {
+        if (!cancelled) setVerifySessionLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [mode, persId])
+
   if (!persId) return null
+
+  const verifyScanReady = verifyEnrollment?.complete === true
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!persId) return
+    if (mode === 'verify' && (!verifySessionId || !verifyScanReady)) {
+      setError(`Quét đủ ${FACE_SCAN_POSE_REQUIRED} góc mặt bắt buộc trước khi xác minh.`)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -82,10 +124,12 @@ export function WorkerProfileDetailModal({
         contractor: contractor.trim(),
       }
       const updated = mode === 'verify'
-        ? await verifyPatrolDraftProfile(persId, payload)
+        ? await verifyPatrolDraftProfile(persId, payload, verifySessionId!)
         : await updatePatrolWorkerProfile(persId, payload)
       setPerson(updated)
       setMode('view')
+      setVerifySessionId(null)
+      setVerifyEnrollment(null)
       onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lưu thất bại.')
@@ -145,7 +189,7 @@ export function WorkerProfileDetailModal({
             <>
               {person.status === 'draft' && (
                 <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[10px] text-amber-300">
-                  Hồ sơ bản nháp — tạo tự động từ camera. Nhập họ tên + mã NV thật rồi xác minh.
+                  Hồ sơ bản nháp — tạo tự động từ camera. Quét 3 góc mặt rồi xác minh với mã NV thật.
                 </div>
               )}
               <div className="space-y-3">
@@ -169,12 +213,12 @@ export function WorkerProfileDetailModal({
                     <p className="font-mono text-muted-foreground mt-0.5">{person.pers_id}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Vector mặt</p>
+                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Vector HR</p>
                     <p className={cn(
                       'mt-0.5 font-semibold tabular-nums',
                       person.face_enrollment_complete ? 'text-green-400' : 'text-violet-400',
                     )}>
-                      {person.face_count ?? 0}/{FACE_SCAN_POSE_COUNT}
+                      {person.face_count ?? 0}/{FACE_SCAN_POSE_REQUIRED}
                       {person.face_enrollment_complete && ' ✓'}
                     </p>
                   </div>
@@ -247,10 +291,23 @@ export function WorkerProfileDetailModal({
           ) : person && (mode === 'edit' || mode === 'verify') ? (
             <form onSubmit={e => void handleSave(e)} className="space-y-3">
               {mode === 'verify' && (
-                <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
-                  Mã tạm hiện tại: <span className="font-mono">{person.employee_code ?? person.pers_id}</span>
-                  — thay bằng mã nhân viên chính thức.
-                </p>
+                <>
+                  <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
+                    Bước 1: Quét {FACE_SCAN_POSE_REQUIRED} góc (chính diện, trái, phải) · Bước 2: Nhập mã NV chính thức.
+                  </p>
+                  {verifySessionLoading ? (
+                    <div className="flex justify-center py-8 text-muted-foreground">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </div>
+                  ) : verifySessionId ? (
+                    <PatrolFaceScannerPanel
+                      sessionId={verifySessionId}
+                      initialEnrollment={verifyEnrollment ?? undefined}
+                      subtitle="Vector cho nhận diện — chỉ chính diện lưu JPG avatar"
+                      onEnrollmentChange={setVerifyEnrollment}
+                    />
+                  ) : null}
+                </>
               )}
               <label className="block space-y-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Họ tên *</span>
@@ -278,7 +335,7 @@ export function WorkerProfileDetailModal({
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
                 />
               </label>
-              {person && <WorkerProfileFaceGallery person={person} compact />}
+              {person && mode === 'edit' && <WorkerProfileFaceGallery person={person} compact />}
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -289,7 +346,7 @@ export function WorkerProfileDetailModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || (mode === 'verify' && !verifyScanReady)}
                   className="flex-[2] inline-flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (mode === 'verify' ? 'Xác minh hồ sơ' : 'Lưu thay đổi')}

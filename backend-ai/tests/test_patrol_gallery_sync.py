@@ -66,7 +66,7 @@ class GallerySyncTests(unittest.TestCase):
     def test_sync_identified_person_binds_without_snapshot_jpg(self) -> None:
         row = identity.import_identity(
             full_name="Duncan",
-            employee_code="SGC-6688",
+            employee_code="NV-6688",
             contractor="SGC",
             source="self_enroll",
         )
@@ -79,19 +79,19 @@ class GallerySyncTests(unittest.TestCase):
 
         out = sync_person_to_gallery(pers_id)
         self.assertTrue(out["ok"])
-        self.assertEqual(out["gallery_worker_id"], "p-SGC-6688")
+        self.assertEqual(out["gallery_worker_id"], "p-NV-6688")
         self.assertFalse(out["face_enrolled"])
 
         from app.worker_identity.gallery import get_enrollment_status
 
-        enrollment = get_enrollment_status("p-SGC-6688")
+        enrollment = get_enrollment_status("p-NV-6688")
         self.assertEqual(enrollment["poses_captured"], 0)
 
-    def test_promote_enroll_session_writes_five_selfie_jpgs(self) -> None:
+    def test_promote_enroll_session_writes_front_jpg_only(self) -> None:
         session_id = identity.create_enroll_session()
         img = np.zeros((240, 240, 3), dtype=np.uint8)
         cv2.rectangle(img, (80, 60), (160, 180), (200, 180, 160), -1)
-        for slot in (1, 2, 3, 4, 5):
+        for slot in (1, 2, 3):
             emb = np.random.randn(512).astype(np.float32)
             emb /= np.linalg.norm(emb)
             identity.add_enroll_session_face(session_id, emb.tolist(), pose_slot=slot)
@@ -99,29 +99,29 @@ class GallerySyncTests(unittest.TestCase):
 
         out = promote_enroll_session_to_gallery(
             session_id,
-            gallery_worker_id="p-SGC-6688",
+            gallery_worker_id="p-NV-6688",
             worker_name="Duncan",
-            employee_code="SGC-6688",
+            employee_code="NV-6688",
             contractor_name="SGC",
         )
-        self.assertEqual(out["poses_enrolled"], 5)
+        self.assertEqual(out["poses_enrolled"], 1)
 
         from app.worker_identity.gallery import get_enrollment_status
 
-        enrollment = get_enrollment_status("p-SGC-6688")
-        self.assertTrue(enrollment["complete"])
-        self.assertEqual(enrollment["poses_captured"], 5)
+        enrollment = get_enrollment_status("p-NV-6688")
+        self.assertFalse(enrollment["complete"])
+        self.assertEqual(enrollment["poses_captured"], 1)
 
     def test_sync_all_identified_on_startup(self) -> None:
         row1 = identity.import_identity(
             full_name="Alice",
-            employee_code="SGC-1001",
+            employee_code="NV-1001",
             contractor="SGC",
             source="self_enroll",
         )
         row2 = identity.import_identity(
             full_name="Bob",
-            employee_code="SGC-1002",
+            employee_code="NV-1002",
             contractor="SGC",
             source="self_enroll",
         )
@@ -140,7 +140,7 @@ class GallerySyncTests(unittest.TestCase):
     def test_gallery_stats_ignore_person_faces_vector_count(self) -> None:
         row = identity.import_identity(
             full_name="Duncan",
-            employee_code="SGC-6688",
+            employee_code="NV-6688",
             contractor="SGC",
             source="self_enroll",
         )
@@ -151,7 +151,7 @@ class GallerySyncTests(unittest.TestCase):
             identity.add_face_angle(pers_id, vec.tolist(), quality=1.0, camera_id="HC-02")
 
         self.assertEqual(identity.face_count(pers_id), 3)
-        stats = identity.gallery_enrollment_stats("SGC-6688")
+        stats = identity.gallery_enrollment_stats("NV-6688")
         self.assertEqual(stats["face_count"], 0)
         self.assertFalse(stats["complete"])
 

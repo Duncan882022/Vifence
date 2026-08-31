@@ -30,6 +30,7 @@ from .schemas import (
     PersonUpdatePayload,
     PurgeDayPayload,
     SnapshotSignPayload,
+    VerifyDraftPayload,
 )
 from .snapshot_sign import sign_snapshot_path, verify_snapshot_token
 
@@ -114,7 +115,7 @@ def _enrollment_poses_with_urls(
         entry = dict(pose)
         slot = int(pose.get("slot") or 0)
         entry["url"] = None
-        if pose.get("captured") and slot >= 1:
+        if pose.get("captured") and slot == 1:
             signed = sign_snapshot_path(_gallery_face_sign_path(wid, slot))
             entry["url"] = (
                 f"/patrol/gallery/face?worker_id={quote(wid, safe='')}"
@@ -223,10 +224,10 @@ def delete_person(pers_id: str, user: RequirePatrolAdmin = None) -> dict[str, An
 @router.post("/persons/{pers_id}/verify")
 def verify_draft_person(
     pers_id: str,
-    payload: PersonUpdatePayload,
+    payload: VerifyDraftPayload,
     user: RequirePatrolHr = None,  # noqa: ARG001
 ) -> dict[str, Any]:
-    """Xác minh hồ sơ bản nháp (camera) → identified + gallery."""
+    """Xác minh hồ sơ bản nháp — bắt buộc quét ≥3 góc HR + gán tên."""
     full_name = (payload.full_name or "").strip()
     employee_code = (payload.employee_code or "").strip()
     contractor = (payload.contractor or "").strip()
@@ -241,6 +242,7 @@ def verify_draft_person(
             employee_code=employee_code,
             contractor=contractor,
             identified_by=user.username,
+            enroll_session_id=payload.enroll_session_id,
         )
     except KeyError:
         return {"ok": False, "error": "not_found"}
@@ -248,6 +250,8 @@ def verify_draft_person(
         code = str(exc)
         if code == "not_draft":
             return {"ok": False, "error": "not_draft"}
+        if code == "incomplete_enrollment":
+            return {"ok": False, "error": "incomplete_enrollment"}
         return {"ok": False, "error": code}
     audit("person_verify", actor=user.username, subject_id=pers_id)
     return {"ok": True, "person": _person_payload(row, with_face_stats=True)}
@@ -478,10 +482,10 @@ def scan_enroll_session_face(
     frame = _decode_face_b64(payload.image_b64)
     slot = payload.pose_slot
     added = identity.add_enroll_session_face(session_id, emb, pose_slot=slot)
-    if added and frame is not None:
+    if added and frame is not None and int(slot or 0) == 1:
         from .enroll_images import save_enroll_session_face_image
 
-        save_enroll_session_face_image(session_id, slot, frame)
+        save_enroll_session_face_image(session_id, 1, frame)
     enrollment = identity.get_enroll_session_enrollment(session_id)
     if enrollment is None:
         return {"ok": False, "error": "session_not_found"}
@@ -552,7 +556,7 @@ def scan_person_face(
     added = identity.add_face_angle(
         pers_id, emb, quality=1.0, camera_id="SCAN", now=time.time()
     )
-    if added and frame is not None:
+    if added and frame is not None and int(payload.pose_slot or 0) == 1:
         person = identity.get_person(pers_id)
         code = str(person.get("employee_code") or "").strip() if person else ""
         name = str(person.get("full_name") or "").strip() if person else ""
@@ -561,15 +565,13 @@ def scan_person_face(
             from ..patrol_identity_store import patrol_gallery_worker_id
             from .enroll_images import enroll_person_scan_image
 
-            enrollment = identity.get_scan_enrollment(pers_id)
-            slot = int(payload.pose_slot or len(enrollment.get("poses") or []) or 1)
             enroll_person_scan_image(
                 patrol_gallery_worker_id(code),
                 worker_name=name,
                 employee_code=code,
                 image_bgr=frame,
                 contractor_name=contractor or None,
-                pose_slot=slot,
+                pose_slot=1,
             )
             from .gallery_sync import sync_person_to_gallery
 

@@ -1,6 +1,7 @@
 import { cn } from '@/utils/cn'
 import {
   FACE_SCAN_POSE_COUNT,
+  FACE_SCAN_POSE_REQUIRED,
   FACE_SCAN_RING_INDEX_BY_SLOT,
   FACE_SCAN_RING_QUADRANT_LABELS,
   type ScanPoseSlot,
@@ -45,7 +46,7 @@ export function FaceScanProgressRing({
   complete,
   scanLine = true,
 }: FaceScanProgressRingProps) {
-  const required = facesRequired || FACE_SCAN_POSE_COUNT
+  const required = facesRequired || FACE_SCAN_POSE_REQUIRED
   const ticksPerPose = TICK_COUNT / required
   const savedTicks = Math.round(capturedCount * ticksPerPose)
   const currentSlotTicks = Math.round(ticksPerPose)

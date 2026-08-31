@@ -105,7 +105,12 @@ export async function fetchPatrolWorkerProfilesForManagement(): Promise<PatrolWo
 export async function verifyPatrolDraftProfile(
   persId: string,
   profile: PatrolImportRow,
+  enrollSessionId: string,
 ): Promise<PatrolWorkerPerson> {
+  const sessionId = enrollSessionId.trim()
+  if (!sessionId) {
+    throw new Error('Chưa quét đủ 3 góc mặt — hoàn thành bước quét trước khi xác minh.')
+  }
   const data = await patrolJson<{ ok: boolean; error?: string; person?: PatrolWorkerPerson }>(
     `/patrol/persons/${encodeURIComponent(persId)}/verify`,
     {
@@ -115,6 +120,7 @@ export async function verifyPatrolDraftProfile(
         full_name: profile.full_name,
         employee_code: profile.employee_code,
         contractor: profile.contractor ?? '',
+        enroll_session_id: sessionId,
       }),
     },
   )
@@ -125,7 +131,9 @@ export async function verifyPatrolDraftProfile(
         ? 'Hồ sơ này không ở trạng thái bản nháp.'
         : data.error === 'missing_fields'
           ? 'Nhập đủ họ tên và mã nhân viên.'
-          : (data.error ?? 'Xác minh thất bại.')
+          : data.error === 'incomplete_enrollment'
+            ? 'Chưa đủ 3 góc mặt bắt buộc — hoàn thành quét trước.'
+            : (data.error ?? 'Xác minh thất bại.')
     throw new Error(err)
   }
   return data.person
@@ -352,7 +360,7 @@ export async function completePatrolEnrollSession(
     const err = data.error === 'missing_fields'
       ? 'Nhập đủ họ tên và mã nhân viên.'
       : data.error === 'incomplete_enrollment'
-        ? 'Chưa đủ 5 góc mặt — quay lại bước quét.'
+        ? 'Chưa đủ 3 góc mặt — quay lại bước quét.'
         : data.error === 'session_not_found'
           ? 'Phiên quét đã hết hạn — tải lại trang.'
           : (data.error ?? 'Lưu hồ sơ thất bại.')

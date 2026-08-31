@@ -1,5 +1,5 @@
 /**
- * Hướng dẫn quét mặt eKYC — 5 góc gallery: chính diện, trái, phải, cúi, ngửa.
+ * Hướng dẫn quét mặt eKYC — 3 góc bắt buộc + cúi tuỳ chọn.
  */
 
 import {
@@ -186,10 +186,6 @@ export function poseApproachProgress(metrics: FaceScanMetrics, slot: ScanPoseSlo
       raw = (cy - 0.44) / Math.max(0.01, PITCH_DOWN_Y - 0.44)
       break
     }
-    case 5: {
-      raw = (PITCH_UP_Y + 0.04 - cy) / Math.max(0.01, PITCH_UP_Y + 0.04 - 0.32)
-      break
-    }
   }
 
   if (!faceLooseInFrame(metrics)) raw *= 0.35
@@ -211,8 +207,6 @@ export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): bool
       return poseHint === 'right' || cx >= 0.5 + YAW_TURN_NEAR
     case 4:
       return poseHint === 'down' || cy >= PITCH_DOWN_Y - 0.06
-    case 5:
-      return looksLikeUpPose(metrics)
     default:
       return false
   }
@@ -220,9 +214,8 @@ export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): bool
 
 export function faceReadyForAutoSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
   if (!faceLooseInFrame(metrics)) return false
-  const threshold = slot === 5 ? AUTO_POSE_MATCH_THRESHOLD_UP : AUTO_POSE_MATCH_THRESHOLD
   return faceNearSlot(metrics, slot)
-    || poseApproachProgress(metrics, slot) >= threshold
+    || poseApproachProgress(metrics, slot) >= AUTO_POSE_MATCH_THRESHOLD
 }
 
 export type AutoScanPhase =
@@ -272,8 +265,6 @@ function slotLiveDirection(slot: ScanPoseSlot): LiveScanDirection {
       return 'right'
     case 4:
       return 'down'
-    case 5:
-      return 'up'
     default:
       return 'front'
   }
@@ -394,8 +385,6 @@ export function faceReadyForSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): 
       return metrics.poseHint === 'right'
     case 4:
       return metrics.poseHint === 'down'
-    case 5:
-      return looksLikeUpPose(metrics)
     default:
       return false
   }
@@ -423,9 +412,8 @@ export function guidanceForHint(hint: HeadPoseHint, slot: ScanPoseSlot): string 
     case 'right':
       return slot === 3 ? 'Giữ yên — đang quét Quay phải…' : `Quay sang phải thêm — cần ${target}`
     case 'up':
-      if (slot === 5) return 'Giữ yên — đang quét Ngửa lên…'
       if (slot === 1) return 'Hạ cằm về — nhìn thẳng Chính diện'
-      return `Ngửa cằm nhẹ — cần ${target}`
+      return `Cúi cằm nhẹ — cần ${target}`
     case 'down':
       return slot === 4 ? 'Giữ yên — đang quét Cúi xuống…' : `Cúi cằm thêm — cần ${target}`
     default:

@@ -16,12 +16,11 @@ import { FACE_SCAN_POSE_COUNT } from './patrolFaceScanPoses'
 
 describe('patrolFaceScanGuide', () => {
   it('maps head pose to 4 enrollment slots', () => {
-    expect(FACE_SCAN_POSE_COUNT).toBe(5)
+    expect(FACE_SCAN_POSE_COUNT).toBe(4)
     expect(poseHintMatchesSlot('front', 1)).toBe(true)
     expect(poseHintMatchesSlot('left', 2)).toBe(true)
     expect(poseHintMatchesSlot('right', 3)).toBe(true)
     expect(poseHintMatchesSlot('down', 4)).toBe(true)
-    expect(poseHintMatchesSlot('up', 5)).toBe(true)
     expect(faceReadyForSlot({
       hasFace: true,
       poseHint: 'front',
@@ -50,22 +49,6 @@ describe('patrolFaceScanGuide', () => {
       centerX: 0.5,
       centerY: 0.62,
     }, 4)).toBe(true)
-    expect(faceReadyForSlot({
-      hasFace: true,
-      poseHint: 'up',
-      fillScore: 0.5,
-      centerX: 0.5,
-      centerY: 0.42,
-      faceAspect: 1.15,
-    }, 5)).toBe(true)
-    expect(faceReadyForAutoSlot({
-      hasFace: true,
-      poseHint: 'front',
-      fillScore: 0.5,
-      centerX: 0.5,
-      centerY: 0.44,
-      faceAspect: 1.2,
-    }, 5)).toBe(true)
   })
 
   it('rejects wrong pose for slot', () => {
@@ -182,11 +165,10 @@ describe('patrolFaceScanGuide', () => {
     }, 1, 'ready')).toBe(false)
   })
 
-  it('exposes 5 gallery step labels', () => {
+  it('exposes 4 gallery step labels', () => {
     expect(guidanceForSlot(1)).toContain('Nhìn thẳng')
     expect(guidanceForSlot(2)).toContain('trái')
     expect(guidanceForSlot(3)).toContain('phải')
     expect(guidanceForSlot(4)).toContain('Cúi')
-    expect(guidanceForSlot(5)).toContain('Ngửa')
   })
 })

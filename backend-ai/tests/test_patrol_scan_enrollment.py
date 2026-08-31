@@ -6,7 +6,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -36,47 +35,33 @@ class ScanEnrollmentProgressTest(unittest.TestCase):
         db.close()
         self._tmpdir.cleanup()
 
-    def test_identified_uses_gallery_poses_not_patrol_vectors(self) -> None:
+    def test_identified_uses_hr_vectors_not_patrol_bodycam(self) -> None:
         pers_id = identity.import_identity(
             full_name="Duncan",
-            employee_code="SGC001",
+            employee_code="NV001",
             contractor="SGC",
             source="hr_create",
             now=1_000.0,
         )["pers_id"]
-        identity.identify(
-            pers_id,
-            full_name="Duncan",
-            employee_code="SGC001",
-            contractor="SGC",
-            identified_by="test",
-            now=1_000.0,
-        )
-        for i in range(7):
-            identity.add_face(
+        for i in range(3):
+            identity.add_face_angle(
                 pers_id,
                 _vec(0.1 + i),
+                quality=1.0,
+                camera_id="SCAN",
+                now=1_000.0 + i,
+            )
+        for i in range(4):
+            identity.add_face(
+                pers_id,
+                _vec(0.5 + i),
                 quality=0.9,
                 camera_id="HC-02",
             )
         self.assertEqual(identity.face_count(pers_id), 7)
 
-        with patch(
-            "app.worker_identity.gallery.get_enrollment_status",
-            return_value={
-                "poses_captured": 4,
-                "complete": True,
-                "poses": [
-                    {"slot": 1, "label": "Chính diện", "captured": True},
-                    {"slot": 2, "label": "Quay trái", "captured": True},
-                    {"slot": 3, "label": "Quay phải", "captured": True},
-                    {"slot": 4, "label": "Cúi xuống", "captured": True},
-                ],
-            },
-        ):
-            enrollment = identity.get_scan_enrollment(pers_id)
-
-        self.assertEqual(enrollment["faces_captured"], 4)
+        enrollment = identity.get_scan_enrollment(pers_id)
+        self.assertEqual(enrollment["faces_captured"], 3)
         self.assertTrue(enrollment["complete"])
         self.assertEqual(enrollment["face_records"], 7)
 

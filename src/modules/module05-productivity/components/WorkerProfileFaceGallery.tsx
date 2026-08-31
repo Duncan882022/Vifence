@@ -11,7 +11,7 @@ import {
 } from '../services/patrolWorkerProfile.service'
 import { fetchPatrolGalleryFaces, absolutizeGalleryFaceUrl } from '../services/patrolGalleryFaces.service'
 import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
-import { defaultFaceScanPoses } from '../utils/patrolFaceScanPoses'
+import { defaultFaceScanPoses, FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 
 export interface ProfileFacePose {
   slot: number
@@ -109,7 +109,7 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
             <ScanFace className="w-3 h-3 text-violet-400" />
-            {showDraftGrid ? 'Ảnh mặt · camera tuần tra' : 'Gallery mặt · 5 góc'}
+            {showDraftGrid ? 'Ảnh mặt · camera tuần tra' : 'Gallery mặt · quét HR'}
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {showDraftGrid
@@ -121,11 +121,11 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
         </div>
         <span className={cn(
           'shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold tabular-nums border',
-          capturedCount >= 5
+          capturedCount >= FACE_SCAN_POSE_REQUIRED
             ? 'text-green-400 border-green-400/30 bg-green-400/10'
             : 'text-violet-400 border-violet-400/30 bg-violet-400/10',
         )}>
-          {showDraftGrid ? `${capturedCount} góc` : `${capturedCount}/5`}
+          {showDraftGrid ? `${capturedCount} góc` : `${capturedCount}/${FACE_SCAN_POSE_REQUIRED}`}
         </span>
       </div>
 
