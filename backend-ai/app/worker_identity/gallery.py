@@ -17,8 +17,9 @@ logger = logging.getLogger("worker_identity.gallery")
 
 _BASE = Path(__file__).resolve().parent.parent.parent / "data" / "worker_gallery"
 _REGISTRY: list[tuple[WorkerProfile, np.ndarray]] = []
-ENROLLMENT_POSE_COUNT = 5
-POSE_LABELS = ("Chính diện", "Quay trái", "Quay phải", "Cúi xuống", "Ngửa lên")
+ENROLLMENT_POSE_COUNT = 4
+ENROLLMENT_POSE_REQUIRED = 3
+POSE_LABELS = ("Chính diện", "Quay trái", "Quay phải", "Cúi xuống")
 
 
 def gallery_dir() -> Path:
@@ -205,9 +206,9 @@ def get_enrollment_status(worker_id: str) -> dict:
         "worker_name": row.get("worker_name") if row else None,
         "employee_code": row.get("employee_code") if row else None,
         "contractor_name": row.get("contractor_name") if row else None,
-        "poses_required": ENROLLMENT_POSE_COUNT,
+        "poses_required": ENROLLMENT_POSE_REQUIRED,
         "poses_captured": captured,
-        "complete": captured >= ENROLLMENT_POSE_COUNT,
+        "complete": captured >= ENROLLMENT_POSE_REQUIRED,
         "poses": poses,
     }
 
@@ -231,9 +232,10 @@ def enroll_face(
 
     filename = face_filename(worker_id, pose_slot)
     image_path = faces_dir / filename
-    ok = cv2.imwrite(str(image_path), image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-    if not ok:
-        raise RuntimeError("Không ghi được ảnh khuôn mặt")
+    if pose_slot == 1:
+        ok = cv2.imwrite(str(image_path), image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        if not ok:
+            raise RuntimeError("Không ghi được ảnh khuôn mặt")
 
     rows = registry_rows()
     row = next((r for r in rows if str(r.get("worker_id")) == worker_id), None)
@@ -255,7 +257,7 @@ def enroll_face(
     if cccd:
         row["cccd"] = re.sub(r"\D", "", cccd.strip())[:20]
 
-    images = [face_filename(worker_id, slot) for slot in range(1, ENROLLMENT_POSE_COUNT + 1)]
+    images = [face_filename(worker_id, 1)]
     row["face_images"] = images
     row["face_image"] = images[0]
     _write_registry(rows)

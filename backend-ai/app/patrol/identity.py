@@ -99,10 +99,16 @@ def list_persons(status: str | None = None) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-from ..worker_identity.gallery import ENROLLMENT_POSE_COUNT, POSE_LABELS
+from ..worker_identity.gallery import (
+    ENROLLMENT_POSE_COUNT,
+    ENROLLMENT_POSE_REQUIRED,
+    POSE_LABELS,
+)
 
-SCAN_FACES_REQUIRED = ENROLLMENT_POSE_COUNT
+SCAN_FACES_REQUIRED = ENROLLMENT_POSE_REQUIRED
+SCAN_POSE_SLOTS = ENROLLMENT_POSE_COUNT
 SCAN_POSE_LABELS = POSE_LABELS
+HR_ENROLL_CAMERA_IDS = ("SCAN", "SELF_ENROLL", "VERIFY")
 
 
 def find_by_employee_code(employee_code: str) -> dict[str, Any] | None:
@@ -121,28 +127,46 @@ def face_count(pers_id: str) -> int:
     return int(row["c"]) if row else 0
 
 
-def _hr_scan_face_count(pers_id: str) -> int:
-    """Vector từ quét selfie/HR — không tính embedding patrol bodycam."""
+def _hr_enroll_vector_count(pers_id: str) -> int:
+    """Vector từ quét HR / verify / self-enroll — không tính bodycam."""
     pid = resolve_alias(pers_id)
+    placeholders = ",".join("?" for _ in HR_ENROLL_CAMERA_IDS)
     row = db.query_one(
-        "SELECT COUNT(*) AS c FROM person_faces"
-        " WHERE pers_id = ? AND camera_id IN ('SCAN', 'SELF_ENROLL')",
-        (pid,),
+        f"SELECT COUNT(*) AS c FROM person_faces"
+        f" WHERE pers_id = ? AND camera_id IN ({placeholders})",
+        (pid, *HR_ENROLL_CAMERA_IDS),
     )
-    raw = int(row["c"]) if row else 0
-    return min(raw, SCAN_FACES_REQUIRED)
+    return int(row["c"]) if row else 0
+
+
+def _build_scan_poses(captured: int) -> list[dict[str, Any]]:
+    poses: list[dict[str, Any]] = []
+    for slot in range(1, SCAN_POSE_SLOTS + 1):
+        if slot <= SCAN_FACES_REQUIRED:
+            slot_captured = captured >= slot
+        else:
+            slot_captured = captured >= slot
+        poses.append({
+            "slot": slot,
+            "label": SCAN_POSE_LABELS[slot - 1],
+            "captured": slot_captured,
+            "optional": slot > SCAN_FACES_REQUIRED,
+        })
+    return poses
+
+
+def _hr_scan_face_count(pers_id: str) -> int:
+    """Tiến độ quét HR — tối đa số slot hiển thị."""
+    return min(_hr_enroll_vector_count(pers_id), SCAN_POSE_SLOTS)
 
 
 def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
-    """Thống kê quét mặt — nguồn sự thật là JPG gallery (5 góc), không phải COUNT person_faces."""
+    """Thống kê quét mặt — vector HR trong SQLite; JPG gallery chỉ slot chính diện."""
     from ..patrol_identity_store import patrol_gallery_worker_id
     from ..worker_identity.gallery import get_enrollment_status
 
     code = (employee_code or "").strip()
-    empty_poses = [
-        {"slot": slot, "label": SCAN_POSE_LABELS[slot - 1], "captured": False}
-        for slot in range(1, SCAN_FACES_REQUIRED + 1)
-    ]
+    empty_poses = _build_scan_poses(0)
     if not code:
         return {
             "gallery_worker_id": None,
@@ -153,14 +177,18 @@ def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
         }
 
     wid = patrol_gallery_worker_id(code)
-    enrollment = get_enrollment_status(wid)
-    captured = int(enrollment.get("poses_captured") or 0)
-    poses = list(enrollment.get("poses") or empty_poses)
+    person = find_by_employee_code(code)
+    captured = _hr_enroll_vector_count(str(person["pers_id"])) if person else 0
+    gallery = get_enrollment_status(wid)
+    front_jpg = bool(gallery.get("poses") and gallery["poses"][0].get("captured"))
+    poses = _build_scan_poses(captured)
+    if front_jpg and poses:
+        poses[0]["gallery_jpg"] = True
     return {
         "gallery_worker_id": wid,
         "poses_captured": captured,
         "face_count": captured,
-        "complete": bool(enrollment.get("complete")),
+        "complete": captured >= SCAN_FACES_REQUIRED,
         "poses": poses,
     }
 
@@ -177,37 +205,18 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
             complete = bool(stats["complete"])
             poses = list(stats["poses"])
             if not poses:
-                for slot in range(1, SCAN_FACES_REQUIRED + 1):
-                    poses.append({
-                        "slot": slot,
-                        "label": SCAN_POSE_LABELS[slot - 1],
-                        "captured": captured >= slot,
-                    })
+                poses = _build_scan_poses(captured)
             return captured, complete, poses
 
     if person and person.get("status") == STATUS_DRAFT:
         patrol_faces = _draft_patrol_face_count(pid)
         hr_faces = _hr_scan_face_count(pid)
         captured = max(patrol_faces, hr_faces)
-        poses = [
-            {
-                "slot": slot,
-                "label": SCAN_POSE_LABELS[slot - 1],
-                "captured": captured >= slot,
-            }
-            for slot in range(1, SCAN_FACES_REQUIRED + 1)
-        ]
-        return captured, captured >= SCAN_FACES_REQUIRED, poses
+        complete = hr_faces >= SCAN_FACES_REQUIRED
+        return captured, complete, _build_scan_poses(captured)
 
     captured = _hr_scan_face_count(pid)
-    poses = [
-        {
-            "slot": slot,
-            "label": SCAN_POSE_LABELS[slot - 1],
-            "captured": captured >= slot,
-        }
-        for slot in range(1, SCAN_FACES_REQUIRED + 1)
-    ]
+    poses = _build_scan_poses(captured)
     return captured, captured >= SCAN_FACES_REQUIRED, poses
 
 
@@ -517,22 +526,167 @@ def verify_draft_profile(
     employee_code: str,
     contractor: str = "",
     identified_by: str = "",
+    enroll_session_id: str | None = None,
+    face_embedding: Sequence[float] | None = None,
+    face_frame: Any = None,
     now: float | None = None,
 ) -> dict[str, Any]:
-    """Bản nháp → xác minh (identified) — giữ vector mặt đã thu từ camera."""
+    """Bản nháp → xác minh — upload ảnh chính diện (verify) hoặc phiên quét 3 góc."""
     pid = resolve_alias(pers_id)
     row = get_person(pid)
     if row is None:
         raise KeyError("not_found")
     if row.get("status") != STATUS_DRAFT:
         raise ValueError("not_draft")
-    return identify(
+
+    ts = now or time.time()
+    sid = (enroll_session_id or "").strip()
+    has_session = False
+    if sid:
+        enrollment = get_enroll_session_enrollment(sid)
+        if enrollment is None or not enrollment.get("complete"):
+            raise ValueError("incomplete_enrollment")
+        has_session = True
+
+    has_manual_face = face_embedding is not None
+    if not has_session and not has_manual_face:
+        raise ValueError("incomplete_enrollment")
+
+    result = identify(
         pid,
         full_name=full_name,
         employee_code=employee_code,
         contractor=contractor,
         identified_by=identified_by or "verify_draft",
+        now=ts,
+    )
+    verified_id = str(result["pers_id"])
+
+    if has_session:
+        _apply_enroll_session_vectors(
+            verified_id,
+            sid,
+            camera_id="VERIFY",
+            now=ts,
+        )
+        _promote_enroll_session_front_jpg(
+            sid,
+            gallery_worker_id=_gallery_id_for_employee(employee_code),
+            worker_name=full_name,
+            employee_code=employee_code,
+            contractor_name=contractor or None,
+        )
+        with db.tx() as c:
+            c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (sid,))
+
+    if has_manual_face:
+        _apply_verify_front_image(
+            verified_id,
+            face_embedding,
+            face_frame,
+            full_name=full_name,
+            employee_code=employee_code,
+            contractor=contractor,
+            now=ts,
+        )
+
+    _sync_gallery_after_identify(verified_id)
+    final = get_person(verified_id)
+    assert final is not None
+    return final
+
+
+def _apply_verify_front_image(
+    pers_id: str,
+    embedding: Sequence[float],
+    frame_bgr: Any,
+    *,
+    full_name: str,
+    employee_code: str,
+    contractor: str,
+    now: float,
+) -> None:
+    """Ảnh chính diện upload tay — vector VERIFY + JPG avatar gallery."""
+    add_face_angle(
+        pers_id,
+        embedding,
+        quality=1.0,
+        camera_id="VERIFY",
         now=now,
+    )
+    if frame_bgr is None:
+        return
+    try:
+        import numpy as np
+        from .enroll_images import enroll_person_scan_image
+
+        if not isinstance(frame_bgr, np.ndarray):
+            return
+        enroll_person_scan_image(
+            _gallery_id_for_employee(employee_code),
+            worker_name=full_name.strip(),
+            employee_code=employee_code.strip(),
+            image_bgr=frame_bgr,
+            contractor_name=(contractor or "").strip() or None,
+            pose_slot=1,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("verify front jpg skip", exc_info=True)
+
+
+def _gallery_id_for_employee(employee_code: str) -> str:
+    from ..patrol_identity_store import patrol_gallery_worker_id
+
+    return patrol_gallery_worker_id(employee_code.strip())
+
+
+def _apply_enroll_session_vectors(
+    pers_id: str,
+    session_id: str,
+    *,
+    camera_id: str,
+    now: float | None = None,
+) -> int:
+    """Gắn vector phiên quét vào hồ sơ — mỗi slot một góc."""
+    sid = session_id.strip()
+    rows = db.query(
+        "SELECT embedding, dim FROM enroll_session_faces"
+        " WHERE session_id = ? ORDER BY slot ASC",
+        (sid,),
+    )
+    ts = now or time.time()
+    added = 0
+    for fr in rows:
+        vec = _from_blob(fr["embedding"], int(fr["dim"]))
+        if add_face_angle(
+            pers_id,
+            vec.tolist(),
+            quality=1.0,
+            camera_id=camera_id,
+            now=ts,
+        ):
+            added += 1
+    return added
+
+
+def _promote_enroll_session_front_jpg(
+    session_id: str,
+    *,
+    gallery_worker_id: str,
+    worker_name: str,
+    employee_code: str,
+    contractor_name: str | None = None,
+) -> None:
+    """Chỉ ghi JPG chính diện (slot 1) vào gallery — các góc khác chỉ vector."""
+    from .enroll_images import list_enroll_session_face_images, promote_enroll_session_front_jpg
+
+    promote_enroll_session_front_jpg(
+        session_id,
+        gallery_worker_id=gallery_worker_id,
+        worker_name=worker_name,
+        employee_code=employee_code,
+        contractor_name=contractor_name,
+        images=list_enroll_session_face_images(session_id),
     )
 
 
@@ -1057,13 +1211,7 @@ def get_enroll_session_enrollment(session_id: str) -> dict[str, Any] | None:
     )
     captured_slots = {int(r["slot"]) for r in rows}
     count = len(captured_slots)
-    poses: list[dict[str, Any]] = []
-    for slot in range(1, SCAN_FACES_REQUIRED + 1):
-        poses.append({
-            "slot": slot,
-            "label": SCAN_POSE_LABELS[slot - 1],
-            "captured": slot in captured_slots,
-        })
+    poses = _build_scan_poses(count)
     return {
         "session_id": session_id.strip(),
         "faces_captured": count,
@@ -1101,7 +1249,7 @@ def add_enroll_session_face(
             return False
 
     slot = int(pose_slot or (len(rows) + 1))
-    if slot < 1 or slot > SCAN_FACES_REQUIRED:
+    if slot < 1 or slot > SCAN_POSE_SLOTS:
         return False
 
     blob, dim = _to_blob(probe)
@@ -1156,31 +1304,26 @@ def complete_enroll_session(
         now=now,
     )
     pers_id = str(row["pers_id"])
-    ts = now or time.time()
-    for fr in face_rows:
-        vec = _from_blob(fr["embedding"], int(fr["dim"]))
-        add_face_angle(
-            pers_id,
-            vec.tolist(),
-            quality=1.0,
-            camera_id="SELF_ENROLL",
-            now=ts,
-        )
-
-    with db.tx() as c:
-        c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (sid,))
-
-    result = get_person(pers_id)
-    assert result is not None
-    from .enroll_images import promote_enroll_session_to_gallery
+    _apply_enroll_session_vectors(
+        pers_id,
+        sid,
+        camera_id="SELF_ENROLL",
+        now=now,
+    )
     from ..patrol_identity_store import patrol_gallery_worker_id
 
-    promote_enroll_session_to_gallery(
+    _promote_enroll_session_front_jpg(
         sid,
         gallery_worker_id=patrol_gallery_worker_id(employee_code),
         worker_name=full_name,
         employee_code=employee_code,
         contractor_name=contractor or None,
     )
+
+    with db.tx() as c:
+        c.execute("DELETE FROM enroll_sessions WHERE session_id = ?", (sid,))
+
+    result = get_person(pers_id)
+    assert result is not None
     _sync_gallery_after_identify(pers_id)
     return result

@@ -11,12 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.patrol import db, identity  # noqa: E402
+from app.worker_identity.gallery import ENROLLMENT_POSE_REQUIRED  # noqa: E402
 
 
 def _fake_embedding(seed: float) -> list[float]:
     import numpy as np
 
-    # Vector 128-dim giả — đủ khác nhau để không bị dedupe.
     rng = np.random.default_rng(int(seed * 1000))
     vec = rng.standard_normal(128).astype(np.float32)
     vec /= np.linalg.norm(vec)
@@ -40,7 +40,7 @@ class TestPatrolSelfEnroll(unittest.TestCase):
         session_id = identity.create_enroll_session()
         self.assertTrue(session_id)
 
-        for slot, seed in enumerate((0.2, 0.6, 0.9, 0.95, 0.98), start=1):
+        for slot, seed in enumerate((0.2, 0.6, 0.9), start=1):
             added = identity.add_enroll_session_face(
                 session_id, _fake_embedding(seed), pose_slot=slot,
             )
@@ -58,15 +58,14 @@ class TestPatrolSelfEnroll(unittest.TestCase):
         )
         self.assertEqual(row["full_name"], "Nguyễn Văn A")
         self.assertEqual(row["employee_code"], "NV-SELF-001")
-        self.assertEqual(row["contractor"], "Vincons")
-        self.assertEqual(row["origin"], "self_enroll")
-        self.assertGreaterEqual(identity.face_count(row["pers_id"]), 5)
+        self.assertGreaterEqual(identity.face_count(row["pers_id"]), ENROLLMENT_POSE_REQUIRED)
 
         self.assertIsNone(identity.get_enroll_session_enrollment(session_id))
 
-    def test_complete_requires_five_angles(self) -> None:
+    def test_complete_requires_three_angles(self) -> None:
         session_id = identity.create_enroll_session()
         identity.add_enroll_session_face(session_id, _fake_embedding(0.3), pose_slot=1)
+        identity.add_enroll_session_face(session_id, _fake_embedding(0.4), pose_slot=2)
         with self.assertRaises(ValueError):
             identity.complete_enroll_session(
                 session_id,

@@ -36,6 +36,7 @@ import {
   defaultFaceScanPoses,
   faceScanMainInstruction,
   FACE_SCAN_POSE_COUNT,
+  FACE_SCAN_POSE_REQUIRED,
   faceScanPoseLabel,
 } from '../utils/patrolFaceScanPoses'
 import {
@@ -294,14 +295,14 @@ export function PatrolFaceScannerPanel({
   }
 
   const poses = enrollment?.poses ?? defaultFaceScanPoses()
-  const facesRequired = enrollment?.faces_required ?? FACE_SCAN_POSE_COUNT
+  const facesRequired = enrollment?.faces_required ?? FACE_SCAN_POSE_REQUIRED
   const capturedCount = enrollment?.faces_captured ?? 0
   const complete = enrollment?.complete ?? false
   const displayName = person?.full_name ?? person?.display_name
   const manualAiBlocked = captureMode === 'manual' && autoScan.modelStatus !== 'ready'
 
   const mainInstruction = complete
-    ? (isSession ? 'Đủ 5 góc — nhấn Tiếp tục để nhập thông tin.' : 'Hoàn thành — hồ sơ sẵn sàng nhận diện.')
+    ? (isSession ? `Đủ ${FACE_SCAN_POSE_REQUIRED} góc — nhấn Tiếp tục để nhập thông tin.` : 'Hoàn thành — hồ sơ sẵn sàng nhận diện.')
     : manualAiBlocked
       ? manualScanBlockedInstruction(autoScan.modelStatus)
       : captureMode === 'auto'

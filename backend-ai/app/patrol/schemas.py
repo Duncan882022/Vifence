@@ -13,6 +13,11 @@ class PersonUpdatePayload(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class VerifyDraftPayload(PersonUpdatePayload):
+    enroll_session_id: str | None = Field(default=None, max_length=64)
+    face_image_b64: str | None = Field(default=None, max_length=5_000_000)
+
+
 class PersonCreatePayload(BaseModel):
     full_name: str = Field(min_length=1, max_length=200)
     employee_code: str = Field(min_length=1, max_length=64)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  AlertCircle, CheckCircle2, Loader2, Pencil, Trash2, X,
+  AlertCircle, CheckCircle2, Loader2, Pencil, ScanFace, Trash2, Upload, X,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
@@ -12,7 +13,7 @@ import {
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { WorkerProfileFaceGallery } from './WorkerProfileFaceGallery'
-import { FACE_SCAN_POSE_COUNT } from '../utils/patrolFaceScanPoses'
+import { FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
@@ -24,6 +25,23 @@ interface WorkerProfileDetailModalProps {
 function tsLabel(ts: number | null | undefined): string {
   if (!ts) return '—'
   return formatTime(new Date(ts * 1000))
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const data = reader.result
+      if (typeof data !== 'string') {
+        reject(new Error('Không đọc được ảnh.'))
+        return
+      }
+      const comma = data.indexOf(',')
+      resolve(comma >= 0 ? data.slice(comma + 1) : data)
+    }
+    reader.onerror = () => reject(new Error('Không đọc được ảnh.'))
+    reader.readAsDataURL(file)
+  })
 }
 
 export function WorkerProfileDetailModal({
@@ -43,6 +61,10 @@ export function WorkerProfileDetailModal({
   const [fullName, setFullName] = useState('')
   const [employeeCode, setEmployeeCode] = useState('')
   const [contractor, setContractor] = useState('')
+
+  const [verifyFaceB64, setVerifyFaceB64] = useState<string | null>(null)
+  const [verifyFacePreview, setVerifyFacePreview] = useState<string | null>(null)
+  const [verifyFaceLoading, setVerifyFaceLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!persId) return
@@ -64,15 +86,47 @@ export function WorkerProfileDetailModal({
   useEffect(() => {
     setMode(initialMode)
     setConfirmDelete(false)
+    setVerifyFaceB64(null)
+    setVerifyFacePreview(null)
     if (persId) void load()
     else setPerson(null)
   }, [persId, initialMode, load])
 
   if (!persId) return null
 
+  const verifyReady = Boolean(verifyFaceB64?.trim())
+  const supplementScanHref = employeeCode.trim()
+    ? `/module05/quet-mat?code=${encodeURIComponent(employeeCode.trim())}`
+    : null
+
+  const handleVerifyFaceFile = async (file: File | null) => {
+    if (!file) {
+      setVerifyFaceB64(null)
+      setVerifyFacePreview(null)
+      return
+    }
+    setVerifyFaceLoading(true)
+    setError(null)
+    try {
+      const b64 = await fileToBase64(file)
+      setVerifyFaceB64(b64)
+      setVerifyFacePreview(URL.createObjectURL(file))
+    } catch (err) {
+      setVerifyFaceB64(null)
+      setVerifyFacePreview(null)
+      setError(err instanceof Error ? err.message : 'Không đọc được ảnh.')
+    } finally {
+      setVerifyFaceLoading(false)
+    }
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!persId) return
+    if (mode === 'verify' && !verifyReady) {
+      setError('Tải ảnh chính diện trước khi xác minh.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -82,10 +136,15 @@ export function WorkerProfileDetailModal({
         contractor: contractor.trim(),
       }
       const updated = mode === 'verify'
-        ? await verifyPatrolDraftProfile(persId, payload)
+        ? await verifyPatrolDraftProfile(persId, {
+            ...payload,
+            image_b64: verifyFaceB64!,
+          })
         : await updatePatrolWorkerProfile(persId, payload)
       setPerson(updated)
       setMode('view')
+      setVerifyFaceB64(null)
+      setVerifyFacePreview(null)
       onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lưu thất bại.')
@@ -145,7 +204,7 @@ export function WorkerProfileDetailModal({
             <>
               {person.status === 'draft' && (
                 <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[10px] text-amber-300">
-                  Hồ sơ bản nháp — tạo tự động từ camera. Nhập họ tên + mã NV thật rồi xác minh.
+                  Hồ sơ bản nháp — tạo tự động từ camera. Tải ảnh chính diện và nhập mã NV thật để xác minh.
                 </div>
               )}
               <div className="space-y-3">
@@ -169,12 +228,12 @@ export function WorkerProfileDetailModal({
                     <p className="font-mono text-muted-foreground mt-0.5">{person.pers_id}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Vector mặt</p>
+                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Vector HR</p>
                     <p className={cn(
                       'mt-0.5 font-semibold tabular-nums',
                       person.face_enrollment_complete ? 'text-green-400' : 'text-violet-400',
                     )}>
-                      {person.face_count ?? 0}/{FACE_SCAN_POSE_COUNT}
+                      {person.face_count ?? 0}/{FACE_SCAN_POSE_REQUIRED}
                       {person.face_enrollment_complete && ' ✓'}
                     </p>
                   </div>
@@ -247,10 +306,55 @@ export function WorkerProfileDetailModal({
           ) : person && (mode === 'edit' || mode === 'verify') ? (
             <form onSubmit={e => void handleSave(e)} className="space-y-3">
               {mode === 'verify' && (
-                <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
-                  Mã tạm hiện tại: <span className="font-mono">{person.employee_code ?? person.pers_id}</span>
-                  — thay bằng mã nhân viên chính thức.
-                </p>
+                <>
+                  <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
+                    Bước 1: Tải ảnh chính diện · Bước 2: Nhập mã NV chính thức.
+                    Cần thêm góc trái/phải? Sau xác minh mở Quét mặt theo mã NV.
+                  </p>
+                  <label className="block space-y-1.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Ảnh chính diện *
+                    </span>
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        'shrink-0 w-20 h-20 rounded-lg border border-dashed border-[#1e2433] bg-[#0a0e17] overflow-hidden flex items-center justify-center',
+                        verifyFacePreview && 'border-violet-400/40',
+                      )}>
+                        {verifyFaceLoading ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        ) : verifyFacePreview ? (
+                          <img
+                            src={verifyFacePreview}
+                            alt="Ảnh xác minh"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Upload className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-1.5">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={e => void handleVerifyFaceFile(e.target.files?.[0] ?? null)}
+                          className="block w-full text-[10px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-violet-500 file:text-white"
+                        />
+                        <p className="text-[9px] text-muted-foreground leading-relaxed">
+                          Ảnh rõ mặt, ánh sáng đủ — dùng làm avatar và vector nhận diện.
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                  {supplementScanHref && (
+                    <Link
+                      to={supplementScanHref}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-violet-400 hover:text-violet-300"
+                    >
+                      <ScanFace className="w-3.5 h-3.5" />
+                      Quét thêm góc tại Quét mặt (mã {employeeCode.trim()})
+                    </Link>
+                  )}
+                </>
               )}
               <label className="block space-y-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Họ tên *</span>
@@ -278,7 +382,7 @@ export function WorkerProfileDetailModal({
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
                 />
               </label>
-              {person && <WorkerProfileFaceGallery person={person} compact />}
+              {person && mode === 'edit' && <WorkerProfileFaceGallery person={person} compact />}
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -289,7 +393,7 @@ export function WorkerProfileDetailModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || (mode === 'verify' && !verifyReady)}
                   className="flex-[2] inline-flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (mode === 'verify' ? 'Xác minh hồ sơ' : 'Lưu thay đổi')}

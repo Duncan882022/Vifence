@@ -14,7 +14,7 @@ import {
   type LiveScanHint,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanGuide'
-import { FACE_SCAN_POSE_COUNT } from '../utils/patrolFaceScanPoses'
+import { FACE_SCAN_POSE_COUNT, FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { faceScanMainInstruction } from '../utils/patrolFaceScanPoses'
 import {
@@ -100,7 +100,7 @@ export function usePatrolAutoFaceScan(
   }, [])
 
   const capturedCount = enrollment?.faces_captured ?? 0
-  const required = enrollment?.faces_required ?? FACE_SCAN_POSE_COUNT
+  const required = enrollment?.faces_required ?? FACE_SCAN_POSE_REQUIRED
   const complete = enrollment?.complete ?? false
   const holdProgressClamped = Math.max(0, Math.min(1, holdProgress))
   const approachProgressClamped = Math.max(0, Math.min(0.88, approachProgress))
@@ -141,7 +141,9 @@ export function usePatrolAutoFaceScan(
     setSuccessFlash(null)
     poseReadyRef.current = false
     if (enrollment) {
-      const pending = enrollment.poses.find(p => !p.captured)
+      const pending = enrollment.poses.find(
+        p => !p.captured && p.slot <= FACE_SCAN_POSE_REQUIRED,
+      )
       const slot = (pending?.slot ?? 1) as ScanPoseSlot
       setActiveSlot(slot)
       setSubGuidance(enrollment.complete ? `Hoàn thành! Đủ ${required} góc mặt.` : guidanceForSlot(slot))
@@ -150,7 +152,9 @@ export function usePatrolAutoFaceScan(
 
   useEffect(() => {
     if (!enrollment) return
-    const pending = enrollment.poses.find(p => !p.captured)
+    const pending = enrollment.poses.find(
+      p => !p.captured && p.slot <= FACE_SCAN_POSE_REQUIRED,
+    )
     const slot = (pending?.slot ?? 1) as ScanPoseSlot
     setActiveSlot(slot)
     setSubGuidance(enrollment.complete ? `Hoàn thành! Đủ ${required} góc mặt.` : guidanceForSlot(slot))

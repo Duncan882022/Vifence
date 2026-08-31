@@ -1,4 +1,4 @@
-"""Ảnh selfie phiên quét mặt — nguồn duy nhất cho worker_gallery/faces/."""
+"""Ảnh selfie phiên quét mặt — JPG chỉ slot chính diện; vector lưu SQLite."""
 
 from __future__ import annotations
 
@@ -28,7 +28,10 @@ def save_enroll_session_face_image(
     pose_slot: int,
     image_bgr: np.ndarray,
 ) -> Path | None:
+    """Chỉ lưu JPG phiên cho slot 1 (chính diện) — các góc khác chỉ vector."""
     slot = int(pose_slot)
+    if slot != 1:
+        return None
     if slot < 1 or slot > ENROLLMENT_POSE_COUNT:
         return None
     root = session_images_dir(session_id)
@@ -45,10 +48,9 @@ def list_enroll_session_face_images(session_id: str) -> list[tuple[int, Path]]:
     if not root.is_dir():
         return []
     out: list[tuple[int, Path]] = []
-    for slot in range(1, ENROLLMENT_POSE_COUNT + 1):
-        path = root / f"{slot}.jpg"
-        if path.is_file():
-            out.append((slot, path))
+    path = root / "1.jpg"
+    if path.is_file():
+        out.append((1, path))
     return out
 
 
@@ -56,6 +58,48 @@ def clear_enroll_session_images(session_id: str) -> None:
     root = session_images_dir(session_id)
     if root.is_dir():
         shutil.rmtree(root, ignore_errors=True)
+
+
+def promote_enroll_session_front_jpg(
+    session_id: str,
+    *,
+    gallery_worker_id: str,
+    worker_name: str,
+    employee_code: str,
+    contractor_name: str | None = None,
+    images: list[tuple[int, Path]] | None = None,
+) -> dict[str, Any]:
+    """Ghi JPG chính diện vào worker_gallery — vector đã gắn qua SQLite."""
+    from ..worker_identity.recognizer import reload_gallery
+
+    wid = gallery_worker_id.strip()
+    imgs = images if images is not None else list_enroll_session_face_images(session_id)
+    enrolled = 0
+    for slot, path in imgs:
+        if slot != 1:
+            continue
+        frame = cv2.imread(str(path))
+        if frame is None or not isinstance(frame, np.ndarray):
+            continue
+        enroll_face(
+            wid,
+            worker_name.strip(),
+            employee_code.strip(),
+            frame,
+            contractor_name=contractor_name,
+            pose_slot=1,
+        )
+        enrolled += 1
+    clear_enroll_session_images(session_id)
+    if enrolled:
+        reload_gallery()
+    logger.info(
+        "[enroll_images] promote session=%s gallery=%s front_jpg=%d",
+        session_id[:8],
+        wid,
+        enrolled,
+    )
+    return {"gallery_worker_id": wid, "poses_enrolled": enrolled}
 
 
 def promote_enroll_session_to_gallery(
@@ -66,35 +110,14 @@ def promote_enroll_session_to_gallery(
     employee_code: str,
     contractor_name: str | None = None,
 ) -> dict[str, Any]:
-    """Ghi 5 góc selfie phiên quét vào worker_gallery — không dùng snapshot patrol."""
-    from ..worker_identity.recognizer import reload_gallery
-
-    wid = gallery_worker_id.strip()
-    images = list_enroll_session_face_images(session_id)
-    enrolled = 0
-    for slot, path in images:
-        frame = cv2.imread(str(path))
-        if frame is None or not isinstance(frame, np.ndarray):
-            continue
-        enroll_face(
-            wid,
-            worker_name.strip(),
-            employee_code.strip(),
-            frame,
-            contractor_name=contractor_name,
-            pose_slot=slot,
-        )
-        enrolled += 1
-    clear_enroll_session_images(session_id)
-    if enrolled:
-        reload_gallery()
-    logger.info(
-        "[enroll_images] promote session=%s gallery=%s poses=%d",
-        session_id[:8],
-        wid,
-        enrolled,
+    """Alias — chỉ promote JPG chính diện."""
+    return promote_enroll_session_front_jpg(
+        session_id,
+        gallery_worker_id=gallery_worker_id,
+        worker_name=worker_name,
+        employee_code=employee_code,
+        contractor_name=contractor_name,
     )
-    return {"gallery_worker_id": wid, "poses_enrolled": enrolled}
 
 
 def enroll_person_scan_image(
@@ -106,26 +129,25 @@ def enroll_person_scan_image(
     contractor_name: str | None = None,
     pose_slot: int,
 ) -> bool:
-    """Quét thêm góc cho hồ sơ đã có — ghi thẳng gallery JPG."""
+    """Quét bổ sung — chỉ slot 1 ghi gallery JPG."""
+    if int(pose_slot) != 1:
+        return False
     from ..worker_identity.recognizer import reload_gallery
 
-    slot = int(pose_slot)
-    if slot < 1 or slot > ENROLLMENT_POSE_COUNT:
-        return False
     enroll_face(
         gallery_worker_id.strip(),
         worker_name.strip(),
         employee_code.strip(),
         image_bgr,
         contractor_name=contractor_name,
-        pose_slot=slot,
+        pose_slot=1,
     )
     reload_gallery()
     return True
 
 
 def remove_gallery_worker_faces(gallery_worker_id: str) -> int:
-    """Xóa mọi JPG gallery của một worker."""
+    """Xóa JPG gallery của một worker (chỉ file chính diện + legacy pose files)."""
     wid = gallery_worker_id.strip()
     if not wid:
         return 0
