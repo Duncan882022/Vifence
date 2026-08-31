@@ -187,6 +187,8 @@ def patrol_tier_label(worker_id: str | None) -> str:
                 return "person"
         except Exception:
             pass
+        return "person"
+    if wid.lower().startswith("iden-"):
         try:
             from .patrol_identity_store import lookup_gallery_worker
 
@@ -195,8 +197,6 @@ def patrol_tier_label(worker_id: str | None) -> str:
         except Exception:
             pass
         return "object"
-    if wid.lower().startswith("iden-"):
-        return "identity"
     if resolve_patrol_gallery_id_for_worker(wid) or is_patrol_gallery_id(wid):
         return "identity"
     if is_patrol_iden_id(wid):

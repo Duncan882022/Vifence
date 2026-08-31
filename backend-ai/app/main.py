@@ -284,6 +284,13 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Không mở được patrol DB: %s", exc)
     try:
+        from .patrol_identity_store import repair_patrol_identity_bindings
+
+        repair_out = repair_patrol_identity_bindings()
+        logger.info("Patrol identity bindings repair: %s", repair_out)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Patrol identity bindings repair bỏ qua: %s", exc)
+    try:
         from .patrol.gallery_sync import sync_all_identified_to_gallery
 
         sync_out = sync_all_identified_to_gallery()

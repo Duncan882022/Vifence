@@ -81,15 +81,31 @@ class PatrolEntitySgcCanonicalTests(unittest.TestCase):
                 "pers-0001": "p-SGC-6688",
             },
         }
+        identified = {
+            "pers_id": "pers-0001",
+            "status": "identified",
+            "full_name": "Duncan",
+            "employee_code": "SGC-6688",
+        }
         with patch("app.patrol_identity_store._load", return_value=bindings):
-            self.assertEqual(patrol_tier_label("p-SGC-6688"), "identity")
-            self.assertEqual(patrol_tier_label("pers-0001"), "identity")
-            self.assertEqual(resolve_patrol_gallery_id_for_worker("pers-0001"), "p-SGC-6688")
+            with patch("app.patrol.identity.get_person", return_value=identified):
+                self.assertEqual(patrol_tier_label("p-SGC-6688"), "identity")
+                self.assertEqual(patrol_tier_label("pers-0001"), "identity")
+                self.assertEqual(
+                    resolve_patrol_gallery_id_for_worker("pers-0001"),
+                    "p-SGC-6688",
+                )
+        anonymous = {"pers_id": "pers-0001", "status": "person"}
+        with patch("app.patrol_identity_store._load", return_value=bindings):
+            with patch("app.patrol.identity.get_person", return_value=anonymous):
+                self.assertEqual(patrol_tier_label("pers-0001"), "person")
+                self.assertIsNone(resolve_patrol_gallery_id_for_worker("pers-0001"))
 
     def test_patrol_tier_label_sgc_is_person(self) -> None:
         self.assertEqual(patrol_tier_label("sgc-00000042"), "person")
 
-    def test_patrol_tier_label_iden_is_identity(self) -> None:
+    @patch("app.patrol_identity_store.lookup_gallery_worker", return_value="p-IDEN3")
+    def test_patrol_tier_label_iden_is_identity(self, _lookup: object) -> None:
         self.assertEqual(patrol_tier_label("iden-0003"), "identity")
 
 

@@ -52,10 +52,49 @@ class PatrolIdentityBindingsTests(unittest.TestCase):
         rows = {r["gallery_worker_id"]: r for r in patrol_identity_store.list_patrol_identity_bindings()}
         self.assertNotIn("pers-0001", rows["p-NV01"]["aliases"])
         self.assertIn("pers-0001", rows["p-SGC-6688"]["aliases"])
+
+    @patch("app.patrol_identity_store._is_verified_patrol_alias", return_value=True)
+    def test_lookup_requires_verified_pers_alias(self, _verified: object) -> None:
+        patrol_identity_store.bind_patrol_identity(
+            gallery_worker_id="p-SGC-6688",
+            worker_name="Duncan",
+            employee_code="SGC-6688",
+            contractor_name="SGC",
+            alias_keys=["pers-0001"],
+        )
         self.assertEqual(
             patrol_identity_store.lookup_gallery_worker("pers-0001"),
             "p-SGC-6688",
         )
+
+    def test_stale_pers_alias_not_resolved_without_sqlite_profile(self) -> None:
+        patrol_identity_store.bind_patrol_identity(
+            gallery_worker_id="p-SGC-6688",
+            worker_name="Duncan",
+            employee_code="SGC-6688",
+            contractor_name="SGC",
+            alias_keys=["pers-0001"],
+        )
+        self.assertIsNone(patrol_identity_store.lookup_gallery_worker("pers-0001"))
+        self.assertIsNone(patrol_identity_store.lookup_patrol_identity("pers-0001"))
+
+    @patch("app.patrol_identity_store._is_verified_patrol_alias", return_value=False)
+    def test_prune_stale_pers_aliases(self, _verified: object) -> None:
+        patrol_identity_store.bind_patrol_identity(
+            gallery_worker_id="p-SGC-6688",
+            worker_name="Duncan",
+            employee_code="SGC-6688",
+            contractor_name="SGC",
+            alias_keys=["pers-0001", "p-SGC-6688"],
+        )
+        out = patrol_identity_store.prune_stale_pers_aliases()
+        self.assertEqual(out["pruned_count"], 1)
+        self.assertIn("pers-0001", out["pruned_aliases"])
+        self.assertIsNone(patrol_identity_store.lookup_gallery_worker("pers-0001"))
+        rows = patrol_identity_store.list_patrol_identity_bindings()
+        duncan = next(r for r in rows if r["gallery_worker_id"] == "p-SGC-6688")
+        self.assertNotIn("pers-0001", duncan["aliases"])
+        self.assertIn("p-SGC-6688", duncan["aliases"])
 
 
 if __name__ == "__main__":
