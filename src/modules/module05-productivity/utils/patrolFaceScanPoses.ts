@@ -38,14 +38,24 @@ export function defaultFaceScanPoses(): Array<{ slot: number; label: string; cap
 export function guidanceForSlot(slot: ScanPoseSlot): string {
   switch (slot) {
     case 1:
-      return 'Bước 1 — Nhìn thẳng vào camera (TRÊN)'
+      return 'Nhìn thẳng vào camera'
     case 2:
-      return 'Bước 2 — Quay chậm sang TRÁI'
+      return 'Quay đầu chậm sang trái'
     case 3:
-      return 'Bước 3 — Quay chậm sang PHẢI'
+      return 'Quay đầu chậm sang phải'
     case 4:
-      return 'Bước 4 — Cúi đầu xuống (DƯỚI)'
+      return 'Cúi cằm nhẹ xuống'
     default:
-      return 'Đưa mặt vào khung tròn'
+      return 'Quay đầu chậm để hoàn thành vòng tròn'
   }
+}
+
+export function faceScanMainInstruction(
+  slot: ScanPoseSlot,
+  complete: boolean,
+  mode: 'auto' | 'manual',
+): string {
+  if (complete) return 'Hoàn tất quét khuôn mặt'
+  if (mode === 'auto') return 'Quay đầu chậm để hoàn thành vòng tròn'
+  return guidanceForSlot(slot)
 }

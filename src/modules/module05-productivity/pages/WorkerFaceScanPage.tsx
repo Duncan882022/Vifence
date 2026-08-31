@@ -204,10 +204,19 @@ export function WorkerFaceScanPage() {
                   <PatrolFaceScannerPanel
                     sessionId={sessionId}
                     initialEnrollment={sessionEnrollment ?? undefined}
-                    onEnrollmentChange={e => setScanComplete(e.complete)}
+                    onEnrollmentChange={e => {
+                      setSessionEnrollment(e)
+                      setScanComplete(e.complete)
+                    }}
                     onScanComplete={() => {
                       setScanComplete(true)
                       setEnrollStep('profile')
+                    }}
+                    onStartOver={async () => {
+                      const { sessionId: sid, enrollment } = await createPatrolEnrollSession()
+                      setSessionId(sid)
+                      setSessionEnrollment(enrollment)
+                      setScanComplete(false)
                     }}
                   />
                   <button

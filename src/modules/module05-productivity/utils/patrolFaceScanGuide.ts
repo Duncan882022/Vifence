@@ -38,14 +38,14 @@ export interface FaceScanMetrics {
 const FACE_SCORE_MIN = 0.32
 const DETECT_WIDTH = 480
 const YAW_SIDE = 0.08
-const YAW_TURN = 0.14
-const FILL_MIN = 0.12
+const YAW_TURN = 0.11
+const FILL_MIN = 0.10
 const FILL_MAX = 0.72
 const CENTER_X_MIN = 0.2
 const CENTER_X_MAX = 0.8
 const CENTER_Y_MIN = 0.18
 const CENTER_Y_MAX = 0.82
-const PITCH_DOWN_Y = 0.56
+const PITCH_DOWN_Y = 0.54
 
 type BlazeFaceModel = {
   estimateFaces: (
@@ -131,6 +131,14 @@ export function faceLooseInFrame(metrics: FaceScanMetrics): boolean {
   if (!metrics.hasFace) return false
   if (metrics.poseHint === 'too_far' || metrics.poseHint === 'too_close') return false
   return faceInOval(metrics.centerX, metrics.centerY, metrics.fillScore * FILL_MAX)
+}
+
+export function faceReadyForManualCapture(
+  metrics: FaceScanMetrics,
+  modelAvailable: boolean,
+): boolean {
+  if (!modelAvailable) return true
+  return faceLooseInFrame(metrics)
 }
 
 export function faceReadyForSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
