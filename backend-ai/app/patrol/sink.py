@@ -137,7 +137,7 @@ def _resolve_snapshot_tier(
         candidates.append(explicit)
     if _snapshot_tier_rank(inferred) > 0:
         candidates.append(inferred)
-    if subject_id.startswith("pers-"):
+    if identity.get_person(subject_id):
         candidates.append(_snapshot_tier(subject_id))
 
     if candidates:
@@ -199,7 +199,7 @@ def _write_snapshot(
         else:
             cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
 
-        person = identity.get_person(subject_id) if subject_id.startswith("pers-") else None
+        person = identity.get_person(subject_id)
         wid = (worker_id or "").strip()
         if resolved_tier == "object":
             badge_worker_id = None
@@ -256,6 +256,10 @@ def resolve_snapshot_path(relative: str) -> Path | None:
     rel = (relative or "").strip().lstrip("/")
     if not rel or ".." in rel:
         return None
+    if rel.startswith("draft-face/"):
+        from .draft_face_images import resolve_draft_face_path
+
+        return resolve_draft_face_path(rel)
     full = (SNAPSHOT_DIR / rel).resolve()
     try:
         full.relative_to(SNAPSHOT_DIR.resolve())
@@ -263,7 +267,7 @@ def resolve_snapshot_path(relative: str) -> Path | None:
         return None
     return full if full.is_file() else None
 
-_sgc_to_person: dict[str, str] = {}
+_tk_to_profile: dict[str, str] = {}
 _lock = threading.Lock()
 
 
@@ -330,25 +334,28 @@ def _resolve_observation_gps(
     return resolve_patrol_observation_gps(camera_id, at_ts=at_ts)
 
 
-def _bind_sgc_to_person(sgc_id: str, pers_id: str) -> None:
-    sgc = (sgc_id or "").strip().lower()
+def _bind_tk_profile(tk_id: str, pers_id: str) -> None:
+    from ..patrol_ids import normalize_track_id
+
+    tk = normalize_track_id(tk_id)
     pid = identity.resolve_alias((pers_id or "").strip())
-    if not sgc or not pid.startswith("pers-"):
+    if not tk or not pid:
         return
     with _lock:
-        _sgc_to_person[sgc] = pid
-    identity._bind_sgc_pers_map(sgc, pid)
+        _tk_to_profile[tk] = pid
 
 
-def _ensure_pers_for_sgc(sgc_id: str, *, now: float) -> str:
-    sgc = (sgc_id or "").strip().lower()
+def _ensure_profile_for_tk(tk_id: str, *, now: float) -> str:
+    from ..patrol_ids import normalize_track_id
+
+    tk = normalize_track_id(tk_id)
     with _lock:
-        existing = _sgc_to_person.get(sgc)
+        existing = _tk_to_profile.get(tk)
     if existing:
         return identity.resolve_alias(existing)
-    pers_id = identity.ensure_draft_for_sgc(sgc, now=now)
+    pers_id = identity.ensure_draft_for_tk(tk, now=now)
     with _lock:
-        _sgc_to_person[sgc] = pers_id
+        _tk_to_profile[tk] = pers_id
     return pers_id
 
 
@@ -358,7 +365,7 @@ def _pers_id_for_lifecycle(
     *,
     now: float,
 ) -> str | None:
-    """Map tier/worker_id từ ROI lifecycle → pers-* cho thẻ sự kiện."""
+    """Map tier/worker_id từ ROI lifecycle → pers_id (tk-* hoặc gallery) cho thẻ sự kiện."""
     tier = (lifecycle_tier or "").strip()
     wid = (lifecycle_worker_id or "").strip()
     if not tier or not wid:
@@ -367,8 +374,6 @@ def _pers_id_for_lifecycle(
     from ..patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON
     from ..patrol_entity import (
         is_patrol_gallery_id,
-        is_patrol_iden_id,
-        is_patrol_pers_id,
         resolve_patrol_gallery_id_for_worker,
     )
     from ..person_identity_registry import is_sgc_worker_id
@@ -376,12 +381,8 @@ def _pers_id_for_lifecycle(
     if tier not in (TIER_PERSON, TIER_IDENTITY):
         return None
 
-    if is_patrol_pers_id(wid):
-        return identity.resolve_alias(wid) if identity.get_person(wid) else None
-
-    if is_patrol_iden_id(wid):
-        row = db.query_one("SELECT pers_id FROM persons WHERE iden_code = ?", (wid,))
-        return str(row["pers_id"]) if row else None
+    if identity.get_person(wid):
+        return identity.resolve_alias(wid)
 
     gallery = wid if is_patrol_gallery_id(wid) else resolve_patrol_gallery_id_for_worker(wid)
     if gallery:
@@ -389,14 +390,25 @@ def _pers_id_for_lifecycle(
 
         row = lookup_patrol_identity(gallery)
         if row:
+            found = identity.get_person(gallery)
+            if found:
+                return str(found["pers_id"])
             emp = str(row.get("employee_code") or "").strip()
             if emp:
                 found = identity.find_by_employee_code(emp)
                 if found:
                     return str(found["pers_id"])
+            return identity.ensure_identified_for_gallery(
+                gallery,
+                full_name=str(row.get("worker_name") or gallery).strip(),
+                employee_code=emp,
+                contractor=str(row.get("contractor_name") or "").strip(),
+                identified_by="lifecycle",
+                now=now,
+            )
 
     if is_sgc_worker_id(wid):
-        return _ensure_pers_for_sgc(wid, now=now)
+        return _ensure_profile_for_tk(wid, now=now)
 
     return None
 
@@ -459,7 +471,7 @@ def reset(camera_id: str | None = None) -> None:
     with _lock:
         if camera_id is None:
             _track_watch.clear()
-            _sgc_to_person.clear()
+            _tk_to_profile.clear()
             return
         prefix = f"{camera_id}|"
         for k in [k for k in _track_watch if k.startswith(prefix)]:

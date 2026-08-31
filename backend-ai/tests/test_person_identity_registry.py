@@ -98,7 +98,7 @@ class PersonIdentityRegistryFrameSplitTests(unittest.TestCase):
         self.assertTrue(_conflicts_frame_faces("w-trung", emb_b, frame))
         self.assertFalse(_conflicts_frame_faces("w-trung", emb_a, frame))
 
-    def test_gallery_verified_second_person_gets_new_sgc(self) -> None:
+    def test_gallery_verified_second_person_gets_new_tk(self) -> None:
         emb_a = _test_face_emb(1)
         emb_b = _test_face_emb(9)
         gallery_id = "w-trung"
@@ -147,7 +147,7 @@ class PersonIdentityRegistryFrameSplitTests(unittest.TestCase):
         self.assertEqual(w1, gallery_id)
         self.assertEqual(n1, "Trung")
         self.assertNotEqual(w2, gallery_id)
-        self.assertTrue(str(w2).startswith("sgc-0"))
+        self.assertTrue(str(w2).startswith("tk-0"))
 
     def test_two_gallery_workers_same_frame_stay_distinct(self) -> None:
         emb_a = _test_face_emb(1)

@@ -2,7 +2,7 @@
  * Module 05 — gán định danh patrol qua BE (gallery enroll + DB bindings).
  */
 import { fetchPatrol, patrolBackendBase } from '@/services/patrolApiClient'
-import { expandPatrolIdentityAliasKeys } from '../services/patrolSgcObjectLink.service'
+import { expandPatrolIdentityAliasKeys } from '../services/patrolTkObjectLink.service'
 
 const TUNNEL_HEADERS: Record<string, string> = {
   'ngrok-skip-browser-warning': 'true',

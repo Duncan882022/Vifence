@@ -65,13 +65,13 @@ class PatrolApiTests(unittest.TestCase):
         b, _ = identity.observe_face(_vec(2), quality=0.8)
         identity.identify(b, full_name="Nguyễn A", employee_code="NV001")
 
-        people = self.client.get("/patrol/persons?status=person").json()
+        people = self.client.get("/patrol/persons?status=draft").json()
         ids = self.client.get("/patrol/persons?status=identified").json()
 
         self.assertEqual([r["pers_id"] for r in people["items"]], [a])
         self.assertEqual([r["pers_id"] for r in ids["items"]], [b])
         self.assertEqual(ids["items"][0]["display_name"], "Nguyễn A")
-        self.assertTrue(ids["items"][0]["iden_code"].startswith("iden-"))
+        self.assertEqual(ids["items"][0]["employee_code"], "NV001")
 
     def test_identify_endpoint_promotes(self) -> None:
         pers_id, _ = identity.observe_face(_vec(3), quality=0.8)
@@ -97,7 +97,7 @@ class PatrolApiTests(unittest.TestCase):
         date = db.today_vn(1_000.0)
 
         before = self.client.get(f"/patrol/day/events?date={date}").json()
-        self.assertEqual(before["items"][0]["status"], "person")
+        self.assertEqual(before["items"][0]["status"], identity.STATUS_DRAFT)
 
         self.client.post(
             f"/patrol/persons/{pers_id}/identify",

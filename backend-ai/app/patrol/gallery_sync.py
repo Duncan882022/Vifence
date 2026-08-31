@@ -38,7 +38,6 @@ def sync_person_to_gallery(pers_id: str) -> dict[str, Any]:
     gallery_worker_id = patrol_gallery_worker_id(employee_code)
     aliases = sorted({
         pid,
-        str(person.get("iden_code") or "").strip(),
         gallery_worker_id,
         employee_code,
     })

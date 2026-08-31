@@ -233,7 +233,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 1_000.0
-        pers_id = identity.create_person(origin="sgc", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-promote", ts=ts)
         session.subject_id = obj_id
@@ -260,7 +260,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             result = process_identity(session, obs)
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertTrue(result.startswith("pers-"))
+        self.assertTrue(result.startswith("tk-"))
         self.assertEqual(session.subject_id, result)
         self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
 
@@ -271,7 +271,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 2_000.0
-        pers_id = identity.create_person(origin="sgc", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-first", ts=ts)
         session.subject_id = obj_id
@@ -299,7 +299,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             result = process_identity(session, obs)
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertTrue(result.startswith("pers-"))
+        self.assertTrue(result.startswith("tk-"))
         self.assertTrue(session.identity_resolved)
         self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
 
@@ -311,16 +311,15 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 3_000.0
-        duncan = identity.create_person(origin="self_enroll", now=ts)
-        identity.identify(
-            duncan,
+        duncan = identity.ensure_identified_for_gallery(
+            "p-SGC-6688",
             full_name="Duncan",
-            employee_code="SGC-6688",
+            employee_code="NV6688",
             contractor="SGC",
             identified_by="test",
             now=ts,
         )
-        stray = identity.create_person(origin="sgc", now=ts)
+        stray = identity.ensure_draft_for_tk("tk-0000099", now=ts)
         daystore.touch_person_event(stray, camera_id="HC-01", now=ts, face_eligible=True)
 
         session = get_or_create("HC-01", "ptk-duncan", ts=ts)
@@ -419,7 +418,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             return_value=(True, ts),
         ), patch(
             "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="pers-0001",
+            return_value="tk-0000001",
         ), patch(
             "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
             return_value=PersonIdentity(
@@ -433,7 +432,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         ):
             from app.patrol import identity
 
-            identity.create_person(origin="sgc", now=ts)
+            identity.ensure_draft_for_tk("tk-0000001", now=ts)
             for i in range(30):
                 ingest_observation(
                     camera_id="HC-01",
@@ -479,14 +478,14 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             ),
         ), patch(
             "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="pers-0001",
+            return_value="tk-0000001",
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=(None, 0.0),
         ):
             from app.patrol import identity
 
-            identity.create_person(origin="sgc", now=ts)
+            identity.ensure_draft_for_tk("tk-0000001", now=ts)
             for i in range(5):
                 ingest_observation(
                     camera_id="HC-01",
@@ -523,14 +522,15 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
     def test_link_subject_session_shares_appearance_row(self) -> None:
         from app.patrol.aggregator.session_store import get_or_create, link_subject_session
 
+        tk_id = "tk-0000007"
         s1 = get_or_create("HC-02", "ptk0001", ts=1000.0)
-        s1.subject_id = "pers-0007"
+        s1.subject_id = tk_id
         s1.appearance_row_id = 42
         s1.session_id = "sess-shared"
         s1.committed = True
 
         s2 = get_or_create("HC-02", "ptk0002", ts=1020.0)
-        s2.subject_id = "pers-0007"
+        s2.subject_id = tk_id
         link_subject_session(s2)
 
         self.assertEqual(s2.appearance_row_id, 42)
@@ -543,7 +543,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         row1 = daystore.upsert_track_appearance(
             appearance_id=None,
             event_date="2026-08-30",
-            subject_id="pers-0007",
+            subject_id="tk-0000007",
             camera_id="HC-02",
             zone_id=None,
             track_id="ptk0001",
@@ -554,12 +554,12 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             gps_lng=106.92,
             payload_json="{}",
             interactions_json="[]",
-            snapshot_path="2026-08-30/pers-0007-1000.jpg",
+            snapshot_path="2026-08-30/tk-0000007-1000.jpg",
         )
         row2 = daystore.upsert_track_appearance(
             appearance_id=None,
             event_date="2026-08-30",
-            subject_id="pers-0007",
+            subject_id="tk-0000007",
             camera_id="HC-02",
             zone_id=None,
             track_id="ptk0002",
@@ -570,7 +570,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             gps_lng=106.92,
             payload_json="{}",
             interactions_json="[]",
-            snapshot_path="2026-08-30/pers-0007-1025.jpg",
+            snapshot_path="2026-08-30/tk-0000007-1025.jpg",
         )
         self.assertEqual(row1, row2)
         rows = daystore.list_day_presences("2026-08-30")
@@ -579,7 +579,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (row1,),
         )
-        self.assertEqual(snap["snapshot_path"], "2026-08-30/pers-0007-1025.jpg")
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/tk-0000007-1025.jpg")
 
     def test_coalesce_merges_duplicate_rows(self) -> None:
         from app.patrol import daystore, db
@@ -587,7 +587,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         daystore.upsert_track_appearance(
             appearance_id=None,
             event_date="2026-08-30",
-            subject_id="pers-0007",
+            subject_id="tk-0000007",
             camera_id="HC-02",
             zone_id=None,
             track_id="ptk-a",
@@ -610,7 +610,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
                 " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     "2026-08-30",
-                    "pers-0007",
+                    "tk-0000007",
                     "HC-02",
                     1022.0,
                     1025.0,
@@ -630,7 +630,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
                 ),
             )
         merged = daystore.coalesce_subject_appearances(
-            "pers-0007", "2026-08-30", camera_id="HC-02",
+            "tk-0000007", "2026-08-30", camera_id="HC-02",
         )
         self.assertEqual(merged, 1)
         rows = daystore.list_day_presences("2026-08-30")

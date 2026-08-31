@@ -41,15 +41,20 @@ describe('ba tầng nhận diện HC-02', () => {
   })
 
   it('đủ mặt để nhận diện nhưng chưa có trong thư viện → Người', () => {
-    const event = makeEvent({ objectId: 'OBJ-0008', trackWorkerId: 'sgc-12' })
+    const event = makeEvent({ objectId: 'OBJ-0008', trackWorkerId: 'tk-12' })
     expect(resolvePatrolPersonStage(event)).toBe('person')
     expect(
       patrolWorkforceEventTitle(event.type, event.objectId, event.objectLabel, event.trackWorkerId),
     ).toBe('Người')
   })
 
-  it('mã sgc nằm ở objectId cũng là Người', () => {
-    const event = makeEvent({ objectId: 'sgc-12' })
+  it('mã tk nằm ở objectId cũng là Người', () => {
+    const event = makeEvent({ objectId: 'tk-12' })
+    expect(resolvePatrolPersonStage(event)).toBe('person')
+  })
+
+  it('legacy sgc-* vẫn là Người', () => {
+    const event = makeEvent({ objectId: 'OBJ-0008', trackWorkerId: 'sgc-12' })
     expect(resolvePatrolPersonStage(event)).toBe('person')
   })
 
@@ -89,19 +94,17 @@ describe('ba tầng nhận diện HC-02', () => {
 })
 
 describe('gộp bản ghi theo người, không theo mã track', () => {
-  it('một người đã định danh chỉ ra một dòng dù mang nhiều mã sgc', () => {
-    // Người bị che rồi hiện lại được cấp sgc mới; cả hai lần đều đã khớp thư
-    // viện nên phải gộp về cùng một mã hồ sơ.
+  it('một người đã định danh chỉ ra một dòng dù mang nhiều mã tk', () => {
     const first = makeEvent({
       id: 'e-1',
       objectId: 'p-102',
-      trackWorkerId: 'sgc-12',
+      trackWorkerId: 'tk-12',
       lockedAt: '2026-08-25T10:00:00Z',
     })
     const second = makeEvent({
       id: 'e-2',
       objectId: 'p-102',
-      trackWorkerId: 'sgc-77',
+      trackWorkerId: 'tk-77',
       lockedAt: '2026-08-25T10:05:00Z',
     })
 
@@ -112,12 +115,19 @@ describe('gộp bản ghi theo người, không theo mã track', () => {
     expect(merged[0].id).toBe('e-2')
   })
 
-  it('mã hồ sơ thắng sgc để bảng sự kiện khớp bản đồ nhiệt', () => {
-    const withSgc = makeEvent({ objectId: 'p-102', trackWorkerId: 'sgc-12' })
-    expect(patrolEventMasterEntityKey(withSgc)).toBe('P-102')
+  it('mã hồ sơ thắng tk để bảng sự kiện khớp bản đồ nhiệt', () => {
+    const withTk = makeEvent({ objectId: 'p-102', trackWorkerId: 'tk-12' })
+    expect(patrolEventMasterEntityKey(withTk)).toBe('P-102')
   })
 
-  it('chưa có hồ sơ thì vẫn gộp theo sgc', () => {
+  it('chưa có hồ sơ thì vẫn gộp theo tk', () => {
+    const a = makeEvent({ id: 'e-1', objectId: 'OBJ-0008', trackWorkerId: 'tk-12' })
+    const b = makeEvent({ id: 'e-2', objectId: 'OBJ-0009', trackWorkerId: 'tk-12' })
+    expect(patrolEventMasterEntityKey(a)).toBe('TK-12')
+    expect(dedupePatrolEventsByMasterEntity([a, b])).toHaveLength(1)
+  })
+
+  it('legacy sgc-* vẫn gộp theo mã', () => {
     const a = makeEvent({ id: 'e-1', objectId: 'OBJ-0008', trackWorkerId: 'sgc-12' })
     const b = makeEvent({ id: 'e-2', objectId: 'OBJ-0009', trackWorkerId: 'sgc-12' })
     expect(patrolEventMasterEntityKey(a)).toBe('SGC-12')
@@ -143,11 +153,11 @@ describe('resolvePatrolAppearanceSubjectId — popup lịch sử', () => {
     expect(resolvePatrolAppearanceSubjectId(event)).toBe('pers-0042')
   })
 
-  it('giữ obj-* cho thẻ Đối tượng — không fallback sgc', () => {
+  it('giữ obj-* cho thẻ Đối tượng — không fallback tk', () => {
     const event = makeEvent({
       id: 'obj:OBJ-0007',
       objectId: 'OBJ-0007',
-      trackWorkerId: 'sgc-12',
+      trackWorkerId: 'tk-12',
       stage: 'object',
     })
     expect(resolvePatrolAppearanceSubjectId(event)).toBe('OBJ-0007')
@@ -157,10 +167,10 @@ describe('resolvePatrolAppearanceSubjectId — popup lịch sử', () => {
     const event = makeEvent({
       id: 'live-ev-99',
       objectId: 'p-DUNCAN',
-      trackWorkerId: 'sgc-12',
+      trackWorkerId: 'tk-12',
       stage: 'profile',
     })
     expect(resolvePatrolAppearanceSubjectId(event)).toBe('p-DUNCAN')
-    expect(resolvePatrolAppearanceSubjectId(event)).not.toBe('sgc-12')
+    expect(resolvePatrolAppearanceSubjectId(event)).not.toBe('tk-12')
   })
 })

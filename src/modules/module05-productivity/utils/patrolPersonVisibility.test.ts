@@ -130,20 +130,20 @@ describe('ẩn ROI trùng tầng thấp', () => {
     ...extra,
   })
 
-  it('ẩn Đối tượng khi chồng Người đã có sgc — kể cả khác track_id', () => {
+  it('ẩn Đối tượng khi chồng Người đã có tk — kể cả khác track_id', () => {
     const input = [
-      personDet([100, 100, 220, 480], { worker_id: 'sgc-00000107', track_id: 'trk-a', tier: 'person' }),
+      personDet([100, 100, 220, 480], { worker_id: 'tk-00000107', track_id: 'trk-a', tier: 'person' }),
       personDet([130, 180, 200, 360], { track_id: 'trk-b', tier: 'object', confidence: 0.77 }),
     ]
     const out = suppressPatrolObjectOverlappingIdentified(input)
     expect(out).toHaveLength(1)
-    expect(out[0].worker_id).toBe('sgc-00000107')
+    expect(out[0].worker_id).toBe('tk-00000107')
   })
 
   it('giữ hai người khác mã dù bbox chồng nhau', () => {
     const input = [
-      personDet([100, 100, 220, 480], { worker_id: 'sgc-00000107', tier: 'person' }),
-      personDet([110, 105, 210, 470], { worker_id: 'sgc-00000109', tier: 'person' }),
+      personDet([100, 100, 220, 480], { worker_id: 'tk-00000107', tier: 'person' }),
+      personDet([110, 105, 210, 470], { worker_id: 'tk-00000109', tier: 'person' }),
     ]
     const out = suppressPatrolObjectOverlappingIdentified(input)
     expect(out).toHaveLength(2)

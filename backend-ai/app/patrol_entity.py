@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .person_identity_registry import is_sgc_worker_id
+from .patrol_ids import is_tk_worker_id, normalize_track_id
 
 
 def is_patrol_pers_id(worker_id: str | None) -> bool:
@@ -210,7 +211,7 @@ def patrol_tier_label(worker_id: str | None) -> str:
         return "identity"
     if is_patrol_iden_id(wid):
         return "identity"
-    if is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
+    if is_tk_worker_id(wid) or is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
         return "person"
     return "object"
 
@@ -225,10 +226,10 @@ def format_patrol_person_snapshot_label(
     wname = (worker_name or "").strip()
     if is_patrol_gallery_id(wid):
         return resolve_patrol_worker_display_name(wid, wname)
-    if is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
+    if is_tk_worker_id(wid) or is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
         return "Người"
     oid = (object_id or "").strip()
-    if oid.lower().startswith("pers-"):
+    if oid and not oid.upper().startswith("OBJ-"):
         try:
             from .patrol import identity as patrol_identity
 
@@ -253,7 +254,7 @@ def is_technical_patrol_worker_label(label: str | None) -> bool:
     if not s or s.lower() == "unknown":
         return True
     sl = s.lower()
-    return sl.startswith(("sgc-", "p-", "pers-", "iden-", "obj-", "ptk"))
+    return sl.startswith(("tk-", "sgc-", "p-", "pers-", "iden-", "obj-", "ptk"))
 
 
 def resolve_patrol_worker_display_name(

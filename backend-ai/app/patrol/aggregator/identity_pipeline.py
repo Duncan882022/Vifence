@@ -64,13 +64,13 @@ def _ensure_pers_for_worker(
     tier: str | None,
     now: float,
 ) -> str | None:
-    """Map gallery/sgc/pers → pers-*; tạo hồ sơ SQLite nếu gallery đã biết."""
+    """Map gallery/tk → pers_id (tk-* hoặc gallery); tạo hồ sơ SQLite nếu cần."""
     wid = (worker_id or "").strip()
     if not wid:
         return None
 
     from ...patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON
-    from ..sink import _ensure_pers_for_sgc, _pers_id_for_lifecycle
+    from ..sink import _ensure_profile_for_tk, _pers_id_for_lifecycle
 
     resolved_tier = (tier or "").strip() or TIER_PERSON
     if resolved_tier not in (TIER_PERSON, TIER_IDENTITY):
@@ -83,7 +83,7 @@ def _ensure_pers_for_worker(
     from ...person_identity_registry import is_sgc_worker_id
 
     if is_sgc_worker_id(wid):
-        return _ensure_pers_for_sgc(wid, now=now)
+        return _ensure_profile_for_tk(wid, now=now)
 
     from ...patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
     from ...patrol_identity_store import lookup_patrol_identity
@@ -96,16 +96,14 @@ def _ensure_pers_for_worker(
     if not row:
         return None
 
-    pers_id = identity.create_person(origin="gallery", now=now)
-    identity.identify(
-        pers_id,
+    return identity.ensure_identified_for_gallery(
+        gallery,
         full_name=str(row.get("worker_name") or gallery).strip(),
-        employee_code=str(row.get("employee_code") or "").strip() or None,
-        contractor=str(row.get("contractor_name") or "").strip() or None,
+        employee_code=str(row.get("employee_code") or "").strip(),
+        contractor=str(row.get("contractor_name") or "").strip(),
         identified_by="gallery_match",
         now=now,
     )
-    return pers_id
 
 
 def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bool:
@@ -113,7 +111,9 @@ def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bo
     if obs.face_eligible:
         return True
     current = (session.subject_id or "").strip()
-    if current.startswith("pers-"):
+    from ...patrol_ids import is_person_subject_id
+
+    if is_person_subject_id(current):
         return True
     if session.best_faces:
         return True
@@ -174,7 +174,9 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
 def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) -> None:
     """pers-* tạm (sgc) → hồ sơ gallery/identified đã có — gộp thẻ ngày."""
     current = (session.subject_id or "").strip()
-    if not current.startswith("pers-"):
+    from ...patrol_ids import is_person_subject_id
+
+    if not is_person_subject_id(current):
         return
     wid = (obs.lifecycle_worker_id or "").strip()
     if not wid:
@@ -245,12 +247,14 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
         return session.subject_id
 
     if session.identity_resolved and session.subject_id:
+        from ...patrol_ids import is_person_subject_id
+
         _maybe_promote_object_subject(session, obs)
         _maybe_upgrade_pers_subject(session, obs)
         if (
             obs.face_eligible
             and obs.face_embedding is not None
-            and session.subject_id.startswith("pers-")
+            and is_person_subject_id(session.subject_id)
             and not session.committed
         ):
             try:
@@ -259,6 +263,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     obs.face_embedding,
                     quality=obs.face_quality,
                     camera_id=obs.camera_id,
+                    frame=obs.frame,
+                    person_bbox=obs.person_bbox,
                 )
             except Exception:  # noqa: BLE001
                 logger.debug("add_face_angle skip", exc_info=True)
@@ -284,6 +290,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                             obs.face_embedding,
                             quality=obs.face_quality,
                             camera_id=obs.camera_id,
+                            frame=obs.frame,
+                            person_bbox=obs.person_bbox,
                         )
                     except Exception:  # noqa: BLE001
                         logger.debug("add_face_angle draft skip", exc_info=True)
@@ -298,11 +306,13 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     quality=quality,
                     camera_id=obs.camera_id,
                     now=obs.ts,
+                    frame=obs.frame,
+                    person_bbox=obs.person_bbox,
                 )
                 if wid and is_sgc_worker_id(wid):
-                    from ..sink import _bind_sgc_to_person
+                    from ..sink import _bind_tk_profile
 
-                    _bind_sgc_to_person(wid, pers_id)
+                    _bind_tk_profile(wid, pers_id)
                 _assign_pers_subject(session, pers_id, now=obs.ts)
                 session.identity = PersonIdentity(
                     person_id=pers_id,

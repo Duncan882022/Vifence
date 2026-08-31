@@ -1,7 +1,7 @@
 import type { DetectionDot } from '../data/patrolDetectionData'
 import { PATROL_TIER_TOKENS, type PatrolTier } from './patrolTierTokens'
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
-import { isPatrolObjectId, isPatrolPersId, isPatrolSgcWorkerId } from './patrolWorkforceEventLabels'
+import { isPatrolObjectId, isPatrolPersId, isPatrolTrackWorkerId } from './patrolWorkforceEventLabels'
 
 /** Flymap — một màu, không phân đối tượng / người / định danh. */
 export const PATROL_FLYMAP_DOT_HEX = '#38bdf8'
@@ -25,6 +25,6 @@ export function resolveDetectionDotTier(
   const oid = dot.objectId?.trim() ?? ''
   if (isPatrolObjectId(oid) || /^obj-/i.test(oid)) return 'object'
   if (isPatrolGalleryWorkerId(oid)) return 'identity'
-  if (isPatrolPersId(oid) || isPatrolSgcWorkerId(oid)) return 'person'
+  if (isPatrolPersId(oid) || isPatrolTrackWorkerId(oid)) return 'person'
   return 'person'
 }

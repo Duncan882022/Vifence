@@ -60,7 +60,7 @@ export interface PatrolEvent {
   snapshotUrl?: string
   /** face_quality×2 + confidence từ daily_events — lọc tab Người/Đối tượng. */
   snapshotScore?: number
-  /** Mã ẩn danh sgc-* khi objectId đã promote sang OBJ-* */
+  /** Mã ẩn danh tk-* khi objectId đã promote sang OBJ-* */
   trackWorkerId?: string
   /**
    * Tầng do server quyết: `object` | `person` | `profile`.

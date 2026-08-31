@@ -49,7 +49,6 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
     payload = {
         "pers_id": row["pers_id"],
         "status": row["status"],
-        "iden_code": row.get("iden_code"),
         "display_name": identity.display_name(row),
         "full_name": row.get("full_name"),
         "employee_code": row.get("employee_code"),
@@ -75,6 +74,24 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
 
 def _gallery_face_sign_path(worker_id: str, slot: int) -> str:
     return f"gallery-face/{worker_id.strip()}/{int(slot)}"
+
+
+def _draft_faces_with_urls(draft_faces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from urllib.parse import quote
+
+    out: list[dict[str, Any]] = []
+    for face in draft_faces:
+        entry = dict(face)
+        path = str(face.get("path") or "").strip()
+        entry["url"] = None
+        if path:
+            signed = sign_snapshot_path(path)
+            entry["url"] = (
+                f"/patrol/snapshot?path={quote(path, safe='')}"
+                f"&token={signed['token']}&exp={signed['exp']}"
+            )
+        out.append(entry)
+    return out
 
 
 def _enrollment_poses_with_urls(
@@ -243,6 +260,8 @@ def person_enrollment(pers_id: str, _user: RequirePatrolRead = None) -> dict[str
         return {"ok": False, "error": "not_found"}
     enrollment = identity.get_scan_enrollment(pers_id)
     enrollment["poses"] = _enrollment_poses_with_urls(row, enrollment.get("poses") or [])
+    if enrollment.get("draft_faces"):
+        enrollment["draft_faces"] = _draft_faces_with_urls(enrollment["draft_faces"])
     return {"ok": True, "enrollment": enrollment}
 
 
@@ -255,7 +274,6 @@ def day_events(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "event_date": r["event_date"],
             "pers_id": r["pers_id"],
             "status": r["status"],
-            "iden_code": r.get("iden_code"),
             "display_name": identity.display_name(r),
             "full_name": r.get("full_name"),
             "employee_code": r.get("employee_code"),
@@ -322,7 +340,6 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "event_date": r["event_date"],
             "pers_id": r["pers_id"],
             "status": r["status"],
-            "iden_code": r.get("iden_code"),
             "display_name": identity.display_name(r),
             "full_name": r.get("full_name"),
             "employee_code": r.get("employee_code"),

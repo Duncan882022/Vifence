@@ -5,7 +5,7 @@
  */
 import { rekeyHeatmapPerson } from '@/services/patrolHeatmapPersonRegistry'
 import { isVerifiedWorkerLabel } from '../utils/workforceHeatmapUi'
-import { expandPatrolIdentityAliasKeys } from './patrolSgcObjectLink.service'
+import { expandPatrolIdentityAliasKeys } from './patrolTkObjectLink.service'
 import {
   assignPatrolIdentityOnBackend,
   fetchPatrolIdentityBindings,
@@ -81,10 +81,10 @@ export function getPatrolManualIdentity(objectKey: string): PatrolManualIdentity
   return findPatrolIdentityByWorkerId(key)
 }
 
-/** Chỉ áp dụng định danh đã gán trực tiếp lên sgc — không kéo từ OBJ dùng chung. */
-export function getPatrolManualIdentityForSgc(sgcKey: string): PatrolManualIdentity | null {
-  const key = normalizePatrolIdentityKey(sgcKey)
-  if (!key || !/^sgc-/i.test(key)) return null
+/** Chỉ áp dụng định danh đã gán trực tiếp lên tk — không kéo từ OBJ dùng chung. */
+export function getPatrolManualIdentityForTk(tkKey: string): PatrolManualIdentity | null {
+  const key = normalizePatrolIdentityKey(tkKey)
+  if (!key || !/^(tk-|sgc-)/i.test(key)) return null
   const workerId = resolveWorkerIdForObject(key)
   if (!workerId) return null
   const identity = readStore().byWorkerId[workerId]
@@ -94,6 +94,9 @@ export function getPatrolManualIdentityForSgc(sgcKey: string): PatrolManualIdent
   )
   return hasDirectAlias ? identity : null
 }
+
+/** @deprecated Use getPatrolManualIdentityForTk */
+export const getPatrolManualIdentityForSgc = getPatrolManualIdentityForTk
 
 function hasDirectPatrolManualAlias(identity: PatrolManualIdentity, key: string): boolean {
   const norm = normalizePatrolIdentityKey(key).toLowerCase()
@@ -124,15 +127,15 @@ export function getPatrolManualIdentityForPatrolEvent(event: {
     const direct = getPatrolManualIdentityForDirectAlias(dayObj)
     if (direct) return direct
     const track = event.trackWorkerId?.trim() ?? ''
-    if (track && /^sgc-/i.test(track)) {
-      return getPatrolManualIdentityForSgc(track)
+    if (track && /^(tk-|sgc-)/i.test(track)) {
+      return getPatrolManualIdentityForTk(track)
     }
     return null
   }
 
   const track = event.trackWorkerId?.trim() ?? ''
-  if (track && /^sgc-/i.test(track)) {
-    return getPatrolManualIdentityForSgc(track)
+  if (track && /^(tk-|sgc-)/i.test(track)) {
+    return getPatrolManualIdentityForTk(track)
   }
 
   for (const key of [event.objectId?.trim(), track].filter(Boolean) as string[]) {
@@ -257,7 +260,7 @@ export async function assignPatrolManualIdentityWithBackend(input: {
  * khớp hoàn toàn, kể cả việc xoá.
  *
  * Trước đây hàm này chỉ thêm, không bao giờ xoá. Sau khi xoá dữ liệu trên
- * server, bộ đếm `sgc-*` bắt đầu lại từ 1 và alias cũ còn kẹt trong trình duyệt
+ * server, bộ đếm `tk-*` bắt đầu lại từ 1 và alias cũ còn kẹt trong trình duyệt
  * dán tên của người cũ lên **đối tượng hoàn toàn khác** vừa được cấp lại đúng
  * mã đó — thẻ nhảy sang tab Định danh với một cái tên chẳng liên quan.
  */
@@ -330,7 +333,7 @@ export function suggestPatrolWorkerId(
     return normalizePatrolWorkerId(fallbackWorkerId)
   }
   const key = normalizePatrolIdentityKey(objectKey)
-  if (/^sgc-/i.test(key)) return normalizePatrolWorkerId(key)
+  if (/^(tk-|sgc-)/i.test(key)) return normalizePatrolWorkerId(key)
   return ''
 }
 
@@ -340,7 +343,7 @@ export function needsPatrolManualIdentity(objectKey: string, fallbackLabel: stri
   if (isVerifiedWorkerLabel(fallbackLabel)) return false
   const t = fallbackLabel.trim().toLowerCase()
   if (t.includes('người chưa xác định') || t.includes('chưa xác định')) return true
-  if (t.startsWith('sgc-') || t.startsWith('obj-') || t.startsWith('trk-')) return true
+  if (t.startsWith('tk-') || t.startsWith('sgc-') || t.startsWith('obj-') || t.startsWith('trk-')) return true
   if (t === 'person' || t === 'unknown') return true
   return !isVerifiedWorkerLabel(fallbackLabel)
 }

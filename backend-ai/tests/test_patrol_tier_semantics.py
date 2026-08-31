@@ -1,4 +1,4 @@
-"""Ba tầng — pers/iden/sgc semantics và nhãn snapshot."""
+"""Ba tầng — tk/p/gallery semantics và nhãn snapshot."""
 
 from __future__ import annotations
 
@@ -22,13 +22,16 @@ from app.patrol_identity_lifecycle import (  # noqa: E402
 
 
 class PatrolTierSemanticsTests(unittest.TestCase):
-    def test_pers_maps_to_person_tier(self) -> None:
-        self.assertEqual(patrol_tier_label("pers-0007"), "person")
-        self.assertEqual(tier_for_worker_id("pers-0007"), TIER_PERSON)
+    def test_tk_maps_to_person_tier(self) -> None:
+        self.assertEqual(patrol_tier_label("tk-0000007"), "person")
+        self.assertEqual(tier_for_worker_id("tk-0000007"), TIER_PERSON)
 
-    def test_iden_maps_to_identity_tier(self) -> None:
-        self.assertEqual(patrol_tier_label("iden-0003"), "identity")
-        self.assertEqual(tier_for_worker_id("iden-0003"), TIER_IDENTITY)
+    def test_gallery_maps_to_identity_tier(self) -> None:
+        from unittest.mock import patch
+
+        with patch("app.patrol_entity.is_patrol_gallery_id", return_value=True):
+            self.assertEqual(patrol_tier_label("p-DUNCAN"), "identity")
+            self.assertEqual(tier_for_worker_id("p-DUNCAN"), TIER_IDENTITY)
 
     def test_sgc_maps_to_person_tier(self) -> None:
         self.assertEqual(patrol_tier_label("sgc-00000007"), "person")
@@ -44,7 +47,7 @@ class PatrolTierSemanticsTests(unittest.TestCase):
             "Người",
         )
         self.assertEqual(
-            format_patrol_person_snapshot_label("pers-0007", "pers-0007"),
+            format_patrol_person_snapshot_label("tk-0000007", "tk-0000007"),
             "Người",
         )
 
@@ -60,7 +63,7 @@ class PatrolTierSemanticsTests(unittest.TestCase):
         db.DB_FILE = Path(tmp.name) / "patrol.db"
         db.get_conn()
         pers_id, _ = identity.observe_face([0.4] * 128, quality=0.9)
-        identity.identify(pers_id, full_name="Duncan", employee_code="SGC-6688")
+        identity.identify(pers_id, full_name="Duncan", employee_code="NV6688")
         self.assertEqual(
             format_patrol_person_snapshot_label(None, None, pers_id),
             "Duncan",

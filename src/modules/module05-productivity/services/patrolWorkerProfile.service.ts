@@ -23,6 +23,15 @@ export interface PatrolScanPose {
   url?: string | null
 }
 
+export interface PatrolDraftFace {
+  id: number
+  quality: number
+  camera_id?: string | null
+  path?: string
+  url?: string | null
+  created_at?: number
+}
+
 export interface PatrolScanEnrollment {
   pers_id?: string
   session_id?: string
@@ -35,6 +44,7 @@ export interface PatrolScanEnrollment {
   complete: boolean
   poses: PatrolScanPose[]
   face_records: number
+  draft_faces?: PatrolDraftFace[]
 }
 
 export interface PatrolImportRow {

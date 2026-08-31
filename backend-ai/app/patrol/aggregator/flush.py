@@ -30,7 +30,9 @@ def _card_has_snapshot(subject_id: str, ts: float) -> bool:
     from .. import identity
 
     date = db.today_vn(ts)
-    if subject_id.startswith("pers-"):
+    from ...patrol_ids import is_person_subject_id
+
+    if is_person_subject_id(subject_id):
         pid = identity.resolve_alias(subject_id)
         row = db.query_one(
             "SELECT snapshot_path FROM daily_events WHERE event_date = ? AND pers_id = ?",
@@ -155,7 +157,9 @@ def flush_session(
         path, shot_score = _write_snapshot(session, obs)
 
     skip_appearance = True
-    if subject_id.startswith("pers-"):
+    from ...patrol_ids import is_person_subject_id
+
+    if is_person_subject_id(subject_id):
         daystore.touch_person_event(
             subject_id,
             camera_id=session.camera_id,

@@ -1,4 +1,4 @@
-"""Hồ sơ bản nháp — sgc-* → một pers draft, xác minh → identified."""
+"""Hồ sơ bản nháp — sgc-* → tk-* draft, xác minh → identified."""
 
 from __future__ import annotations
 
@@ -35,10 +35,11 @@ class PatrolDraftProfileTests(unittest.TestCase):
         p1 = identity.ensure_draft_for_sgc(sgc)
         p2 = identity.ensure_draft_for_sgc(sgc)
         self.assertEqual(p1, p2)
+        self.assertEqual(p1, "tk-0000042")
         row = identity.get_person(p1)
         assert row is not None
         self.assertEqual(row["status"], identity.STATUS_DRAFT)
-        self.assertEqual(row["employee_code"], sgc)
+        self.assertEqual(row["employee_code"], "tk-0000042")
 
     def test_verify_draft_promotes_to_identified(self) -> None:
         sgc = "sgc-00000099"
@@ -52,7 +53,7 @@ class PatrolDraftProfileTests(unittest.TestCase):
         self.assertEqual(verified["status"], identity.STATUS_IDENTIFIED)
         self.assertEqual(verified["full_name"], "An")
         self.assertEqual(verified["employee_code"], "NV001")
-        self.assertTrue(str(verified.get("iden_code") or "").startswith("iden-"))
+        self.assertNotIn("iden_code", verified)
 
 
 if __name__ == "__main__":

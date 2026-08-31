@@ -28,7 +28,7 @@ describe('gateVmsPatrolPersonDetections', () => {
           bbox: [400, 200, 520, 560],
           subject_bbox: [400, 200, 520, 560],
           confidence: 0.72,
-          worker_id: 'sgc-00000430',
+          worker_id: 'tk-00000430',
           worker_name: 'Duncan',
           track_id: 'ptk0001',
           tier: 'identity',
@@ -44,7 +44,7 @@ describe('gateVmsPatrolPersonDetections', () => {
       'HC-01',
     )
     expect(result).toHaveLength(1)
-    expect(result[0]?.worker_id).toBe('sgc-00000430')
+    expect(result[0]?.worker_id).toBe('tk-00000430')
     expect(result[0]?.worker_name).toBe('Duncan')
   })
 

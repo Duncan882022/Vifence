@@ -20,7 +20,7 @@ import {
 } from './patrolIdentityEntity'
 import { higherPatrolTier } from './patrolTierTokens'
 import {
-  getPatrolManualIdentityForSgc,
+  getPatrolManualIdentityForTk,
   isPatrolManuallyIdentified,
 } from '../services/patrolManualIdentity.service'
 import {
@@ -151,7 +151,7 @@ function resolvePresenceHeatmapTier(
     objectLabel: displayName,
   })
   const manualIdentity = isPatrolManuallyIdentified(subjectId)
-    || Boolean(getPatrolManualIdentityForSgc(subjectId))
+    || Boolean(getPatrolManualIdentityForTk(subjectId))
 
   if (profileKey || manualIdentity || presence.tier === 'identity') {
     return { tier: 'identity', verified: helmetLike }

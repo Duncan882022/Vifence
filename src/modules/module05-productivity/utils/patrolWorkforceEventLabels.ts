@@ -5,7 +5,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIdentityForSgc } from '../services/patrolManualIdentity.service'
+import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIdentityForTk } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
@@ -104,8 +104,19 @@ export function resolvePatrolEventDisplayMeta(event: PatrolEvent): {
   }
 }
 
-export function isPatrolSgcWorkerId(id?: string | null): boolean {
-  return Boolean(id && /^sgc-/i.test(id.trim()))
+/** Mã track ẩn danh tk-* (primary). */
+export function isPatrolTkWorkerId(id?: string | null): boolean {
+  return Boolean(id && /^tk-/i.test(id.trim()))
+}
+
+/** Legacy sgc-* (lowercase) — vẫn đọc được; không khớp mã nhân sự SGC-* hoa. */
+export function isPatrolAnonymousTrackId(id?: string | null): boolean {
+  return Boolean(id && /^sgc-/.test(id.trim()))
+}
+
+/** tk-* hoặc legacy sgc-* — thay cho isPatrolSgcWorkerId cũ. */
+export function isPatrolTrackWorkerId(id?: string | null): boolean {
+  return isPatrolTkWorkerId(id) || isPatrolAnonymousTrackId(id)
 }
 
 export function isPatrolObjectId(id?: string | null): boolean {
@@ -123,7 +134,7 @@ export function isPatrolIdenId(id?: string | null): boolean {
 /**
  * Phân loại giai đoạn nhận diện của một sự kiện PERSON_DETECTED:
  * - profile: khớp thư viện mặt hoặc đã gán Tên + Đơn vị thủ công → ROI hiện tên
- * - person:  đã đủ mặt để nhận diện (có mã sgc) nhưng chưa có trong thư viện
+ * - person:  đã đủ mặt để nhận diện (có mã tk) nhưng chưa có trong thư viện
  * - object:  quay lưng / không thấy mặt, chỉ đủ đầu + 1/3 thân trên
  */
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
@@ -133,8 +144,8 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
   /** Thăng tầng lên Định danh — ưu tiên hơn `stage: object` từ SQLite obj card. */
   const promoteProfile = (): boolean => {
     if (resolvePatrolProfileEntityKey(event)) return true
-    if (trackWorkerId && getPatrolManualIdentityForSgc(trackWorkerId)) return true
-    if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolSgcWorkerId(trackWorkerId)) return true
+    if (trackWorkerId && getPatrolManualIdentityForTk(trackWorkerId)) return true
+    if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolTrackWorkerId(trackWorkerId)) return true
     if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return true
     if (isPatrolIdenId(objectId)) return true
     return false
@@ -148,8 +159,8 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
 
   // Chỉ suy lại khi server chưa gửi stage (legacy / live feed).
   if (isPatrolPersId(objectId)) return 'person'
-  if (isPatrolSgcWorkerId(objectId)) return 'person'
-  if (isPatrolSgcWorkerId(trackWorkerId)) return 'person'
+  if (isPatrolTrackWorkerId(objectId)) return 'person'
+  if (isPatrolTrackWorkerId(trackWorkerId)) return 'person'
 
   return 'object'
 }
@@ -170,7 +181,7 @@ export function patrolWorkforceEventTitle(
       if (isVerifiedWorkerLabel(objectLabel ?? '')) return objectLabel!.trim()
       return 'Định danh'
     }
-    if (isPatrolSgcWorkerId(objectId) || isPatrolSgcWorkerId(trackWorkerId)) return 'Người'
+    if (isPatrolTrackWorkerId(objectId) || isPatrolTrackWorkerId(trackWorkerId)) return 'Người'
     if (isPatrolPersId(objectId) || isPatrolPersId(trackWorkerId)) return 'Người'
     return 'Đối tượng'
   }
@@ -183,7 +194,7 @@ export function isPatrolTechnicalSubjectId(id?: string | null): boolean {
   return /^(pers-|iden-|obj-|ptk)/i.test(s)
 }
 
-/** Dòng phụ — chỉ hiện mã SGC khi đã định danh; ẩn pers/iden/obj. */
+/** Dòng phụ — chỉ hiện mã tk khi đã định danh; ẩn pers/iden/obj. */
 export function patrolWorkforceEventSubjectId(
   objectId?: string | null,
   trackWorkerId?: string | null,
@@ -198,14 +209,14 @@ export function patrolWorkforceEventSubjectId(
       : oid && !isPatrolPersId(oid) && !isPatrolIdenId(oid) && !isPatrolObjectId(oid)
         ? oid
         : ''
-    if (code && isPatrolSgcWorkerId(code)) return code.toUpperCase()
+    if (code && isPatrolTrackWorkerId(code)) return code.toUpperCase()
     if (code && !isPatrolTechnicalSubjectId(code)) return code
     return '—'
   }
 
   if (stage === 'person') {
-    if (isPatrolSgcWorkerId(track)) return track.toUpperCase()
-    if (isPatrolSgcWorkerId(oid)) return oid.toUpperCase()
+    if (isPatrolTrackWorkerId(track)) return track.toUpperCase()
+    if (isPatrolTrackWorkerId(oid)) return oid.toUpperCase()
     return '—'
   }
 
@@ -216,9 +227,9 @@ export function patrolWorkforceEventSubjectId(
 export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent {
   if (event.type !== 'PERSON_DETECTED') return event
 
-  const trackWorkerId = isPatrolSgcWorkerId(event.trackWorkerId)
+  const trackWorkerId = isPatrolTrackWorkerId(event.trackWorkerId)
     ? event.trackWorkerId
-    : isPatrolSgcWorkerId(event.objectId)
+    : isPatrolTrackWorkerId(event.objectId)
       ? event.objectId
       : undefined
   const stage = resolvePatrolPersonStage(event)
@@ -238,7 +249,7 @@ export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent
   }
 }
 
-/** Khóa master dedup — pers day card > profile worker > sgc > OBJ. */
+/** Khóa master dedup — pers day card > profile worker > tk > OBJ. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   const fromDayCard = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
   if (fromDayCard) return fromDayCard.toLowerCase()
@@ -259,7 +270,7 @@ export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const track = event.trackWorkerId?.trim() ?? ''
   if (isPatrolPersId(track) || isPatrolObjectId(track)) return track
 
-  // Không fallback sgc/gallery — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
+  // Không fallback tk/gallery — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
   return objectId || track || event.id
 }
 
@@ -283,7 +294,7 @@ export function dedupePatrolEventsByMasterEntity(events: PatrolEvent[]): PatrolE
 
 export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'
 
-/** Mọi khóa alias có thể tra lịch sử (sgc + OBJ). */
+/** Mọi khóa alias có thể tra lịch sử (tk + OBJ). */
 export function patrolEventIdentityKeys(event: PatrolEvent): string[] {
   const keys = new Set<string>()
   if (event.objectId?.trim()) keys.add(event.objectId.trim())
