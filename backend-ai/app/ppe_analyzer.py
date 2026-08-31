@@ -1148,6 +1148,9 @@ def _dedupe_person_boxes(
     iou_threshold: float = 0.35,
     containment_threshold: float = 0.45,
     camera_id: str = "",
+    frame_w: int = 0,
+    frame_h: int = 0,
+    min_center_distance: float = 0.055,
 ) -> list[_PersonPpe]:
     """Một người — một bbox: loại box nhỏ lồng/trùng box lớn hơn."""
     if camera_id.startswith("HC-"):
@@ -1160,15 +1163,32 @@ def _dedupe_person_boxes(
         x1, y1, x2, y2 = p.person_box
         return max(0.0, x2 - x1) * max(0.0, y2 - y1)
 
+    def _center_dist(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+        if frame_w <= 0 or frame_h <= 0:
+            return 0.0
+        acx = (a[0] + a[2]) / 2.0
+        acy = (a[1] + a[3]) / 2.0
+        bcx = (b[0] + b[2]) / 2.0
+        bcy = (b[1] + b[3]) / 2.0
+        dx = (acx - bcx) / float(frame_w)
+        dy = (acy - bcy) / float(frame_h)
+        return (dx * dx + dy * dy) ** 0.5
+
     ranked = sorted(persons, key=lambda p: (_area(p), p.person_conf), reverse=True)
     kept: list[_PersonPpe] = []
     for candidate in ranked:
         box = candidate.person_box
-        if any(
-            _iou(box, kept_person.person_box) >= iou_threshold
-            or _bbox_containment(box, kept_person.person_box) >= containment_threshold
-            for kept_person in kept
-        ):
+        dominated = False
+        for kept_person in kept:
+            if _center_dist(box, kept_person.person_box) >= min_center_distance:
+                continue
+            if (
+                _iou(box, kept_person.person_box) >= iou_threshold
+                or _bbox_containment(box, kept_person.person_box) >= containment_threshold
+            ):
+                dominated = True
+                break
+        if dominated:
             continue
         kept.append(candidate)
     return kept

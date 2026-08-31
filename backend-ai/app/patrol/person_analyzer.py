@@ -453,6 +453,8 @@ def _build_patrol_bodycam_result(
     persons = _dedupe_person_boxes(
         [_PersonPpe(person_box=box, person_conf=conf) for box, conf in anchored],
         camera_id=camera_id,
+        frame_w=w,
+        frame_h=h,
     )
 
     detections = _build_patrol_person_detections(
@@ -747,6 +749,8 @@ def _build_patrol_flycam_proximity_result(
     persons = _dedupe_person_boxes(
         [_PersonPpe(person_box=box, person_conf=conf) for box, conf in anchored],
         camera_id=camera_id,
+        frame_w=w,
+        frame_h=h,
     )
 
     detections = _build_patrol_person_detections(

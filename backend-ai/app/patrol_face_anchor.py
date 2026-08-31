@@ -81,18 +81,39 @@ def _bbox_iou(
     return inter / union if union > 0 else 0.0
 
 
+def _bbox_center_distance_norm(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> float:
+    acx = (a[0] + a[2]) / 2.0
+    acy = (a[1] + a[3]) / 2.0
+    bcx = (b[0] + b[2]) / 2.0
+    bcy = (b[1] + b[3]) / 2.0
+    dx = (acx - bcx) / max(float(frame_w), 1.0)
+    dy = (acy - bcy) / max(float(frame_h), 1.0)
+    return (dx * dx + dy * dy) ** 0.5
+
+
 def _person_box_from_face(
     face: _FrameFace,
     frame_w: int,
     frame_h: int,
+    *,
+    narrow: bool = False,
 ) -> tuple[float, float, float, float]:
     fx1, fy1, fx2, fy2 = face.box
     fw = max(fx2 - fx1, 1.0)
     fh = max(fy2 - fy1, 1.0)
     cx = (fx1 + fx2) / 2.0
     cy = (fy1 + fy2) / 2.0
-    pw = max(fw * 2.6, frame_w * 0.18)
-    ph = max(fh * 3.4, frame_h * 0.24)
+    if narrow:
+        pw = max(fw * 1.85, frame_w * 0.11)
+        ph = max(fh * 3.0, frame_h * 0.20)
+    else:
+        pw = max(fw * 2.6, frame_w * 0.18)
+        ph = max(fh * 3.4, frame_h * 0.24)
     raw = (
         cx - pw * 0.5,
         cy - ph * 0.38,
@@ -140,8 +161,11 @@ def _boxes_overlap(
 def _dedupe_anchor_boxes(
     boxes: list[tuple[tuple[float, float, float, float], float]],
     *,
+    frame_w: int = 0,
+    frame_h: int = 0,
     iou_threshold: float = 0.34,
     containment_threshold: float = 0.46,
+    min_center_distance: float = 0.055,
 ) -> list[tuple[tuple[float, float, float, float], float]]:
     if len(boxes) <= 1:
         return boxes
@@ -152,15 +176,20 @@ def _dedupe_anchor_boxes(
     )
     kept: list[tuple[tuple[float, float, float, float], float]] = []
     for candidate_box, candidate_conf in ranked:
-        if any(
-            _boxes_overlap(
+        dominated = False
+        for kept_box, _ in kept:
+            if frame_w > 0 and frame_h > 0:
+                if _bbox_center_distance_norm(candidate_box, kept_box, frame_w, frame_h) >= min_center_distance:
+                    continue
+            if _boxes_overlap(
                 candidate_box,
                 kept_box,
                 iou_threshold=iou_threshold,
                 containment_threshold=containment_threshold,
-            )
-            for kept_box, _ in kept
-        ):
+            ):
+                dominated = True
+                break
+        if dominated:
             continue
         kept.append((candidate_box, candidate_conf))
     return kept
@@ -248,7 +277,7 @@ def anchor_patrol_person_boxes_to_faces(
 
         if len(matching) > 1:
             for _idx, face in matching:
-                synth_box = _person_box_from_face(face, w, h)
+                synth_box = _person_box_from_face(face, w, h, narrow=True)
                 if legs_only_person_box(synth_box, w, h):
                     continue
                 matched_yolo.append((synth_box, _synth_conf_from_face(face)))
@@ -295,9 +324,17 @@ def anchor_patrol_person_boxes_to_faces(
         existing_boxes.append(box)
 
     if matched_yolo or synth_boxes or back_turn:
-        return _dedupe_anchor_boxes(matched_yolo + synth_boxes + back_turn)
+        return _dedupe_anchor_boxes(
+            matched_yolo + synth_boxes + back_turn,
+            frame_w=w,
+            frame_h=h,
+        )
 
-    return _dedupe_anchor_boxes([
-        (_person_box_from_face(face, w, h), _synth_conf_from_face(face))
-        for face in faces
-    ])
+    return _dedupe_anchor_boxes(
+        [
+            (_person_box_from_face(face, w, h), _synth_conf_from_face(face))
+            for face in faces
+        ],
+        frame_w=w,
+        frame_h=h,
+    )

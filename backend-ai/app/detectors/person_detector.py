@@ -46,7 +46,7 @@ class PersonDetector:
             verbose=False,
             imgsz=1024,
             max_det=300,
-            iou=0.65,
+            iou=0.50,
         )
         if not results or results[0].boxes is None:
             return []
