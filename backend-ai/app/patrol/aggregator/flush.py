@@ -49,14 +49,11 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         return None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
-    from .types import IdentityType
 
     score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
     tier = (obs.lifecycle_tier or "").strip() or None
     worker_id = (obs.lifecycle_worker_id or "").strip() or None
-    if session.identity.identity_type == IdentityType.KNOWN and worker_id:
-        tier = "identity"
-    elif session.identity.identity_type == IdentityType.ANONYMOUS and worker_id:
+    if not tier and worker_id:
         inferred = tier_for_worker_id(worker_id)
         if inferred != "object":
             tier = inferred
