@@ -60,9 +60,15 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
         "identified_at": row.get("identified_at"),
     }
     if with_face_stats:
-        captured, complete, _poses = identity.scan_enrollment_progress(str(row["pers_id"]))
-        payload["face_count"] = captured
-        payload["face_enrollment_complete"] = complete
+        code = str(row.get("employee_code") or "").strip()
+        if code and row.get("status") == identity.STATUS_IDENTIFIED:
+            stats = identity.gallery_enrollment_stats(code)
+            payload["face_count"] = stats["face_count"]
+            payload["face_enrollment_complete"] = stats["complete"]
+        else:
+            captured, complete, _poses = identity.scan_enrollment_progress(str(row["pers_id"]))
+            payload["face_count"] = captured
+            payload["face_enrollment_complete"] = complete
         payload["face_vector_count"] = identity.face_count(str(row["pers_id"]))
     return payload
 

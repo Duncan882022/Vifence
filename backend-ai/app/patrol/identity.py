@@ -138,6 +138,38 @@ def _hr_scan_face_count(pers_id: str) -> int:
     return min(raw, SCAN_FACES_REQUIRED)
 
 
+def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
+    """Thống kê quét mặt — nguồn sự thật là JPG gallery (3 góc), không phải COUNT person_faces."""
+    from ..patrol_identity_store import patrol_gallery_worker_id
+    from ..worker_identity.gallery import get_enrollment_status
+
+    code = (employee_code or "").strip()
+    empty_poses = [
+        {"slot": slot, "label": SCAN_POSE_LABELS[slot - 1], "captured": False}
+        for slot in range(1, SCAN_FACES_REQUIRED + 1)
+    ]
+    if not code:
+        return {
+            "gallery_worker_id": None,
+            "poses_captured": 0,
+            "face_count": 0,
+            "complete": False,
+            "poses": empty_poses,
+        }
+
+    wid = patrol_gallery_worker_id(code)
+    enrollment = get_enrollment_status(wid)
+    captured = int(enrollment.get("poses_captured") or 0)
+    poses = list(enrollment.get("poses") or empty_poses)
+    return {
+        "gallery_worker_id": wid,
+        "poses_captured": captured,
+        "face_count": captured,
+        "complete": bool(enrollment.get("complete")),
+        "poses": poses,
+    }
+
+
 def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, Any]]]:
     """Tiến độ quét mặt UI (x/3) — gallery JPG khi đã định danh, không đếm vector patrol."""
     pid = resolve_alias(pers_id)
@@ -145,25 +177,10 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
     if person and person.get("status") == STATUS_IDENTIFIED:
         code = str(person.get("employee_code") or "").strip()
         if code:
-            from ..patrol_identity_store import patrol_gallery_worker_id
-            from ..worker_identity.gallery import get_enrollment_status
-
-            enrollment = get_enrollment_status(patrol_gallery_worker_id(code))
-            captured = int(enrollment.get("poses_captured") or 0)
-            complete = bool(enrollment.get("complete"))
-            poses: list[dict[str, Any]] = []
-            for pose in enrollment.get("poses") or []:
-                slot = int(pose.get("slot") or 0)
-                label = (
-                    SCAN_POSE_LABELS[slot - 1]
-                    if 1 <= slot <= len(SCAN_POSE_LABELS)
-                    else str(pose.get("label") or "")
-                )
-                poses.append({
-                    "slot": slot,
-                    "label": label,
-                    "captured": bool(pose.get("captured")),
-                })
+            stats = gallery_enrollment_stats(code)
+            captured = int(stats["poses_captured"])
+            complete = bool(stats["complete"])
+            poses = list(stats["poses"])
             if not poses:
                 for slot in range(1, SCAN_FACES_REQUIRED + 1):
                     poses.append({
