@@ -38,7 +38,7 @@ export function Module05Routes() {
           <>
             <Header
               title="Quét Mặt Công Nhân"
-              subtitle="Quét 4 góc eKYC · công nhân tự đăng ký hoặc HR tra mã đã import"
+              subtitle="Tra mã bổ sung vector · hoặc tạo hồ sơ mới + quét 4 góc eKYC"
             />
             <Suspense fallback={<RouteFallback />}>
               <WorkerFaceScanPage />

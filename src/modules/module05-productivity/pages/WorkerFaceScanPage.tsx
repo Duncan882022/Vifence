@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle, ArrowLeft, ArrowRight, CheckCircle, IdCard, Loader2, ScanFace, Search, User,
+  AlertCircle, ArrowLeft, ArrowRight, CheckCircle, IdCard, Loader2, Plus, ScanFace, Search, User,
 } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -15,8 +15,9 @@ import {
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 
-type SelfStep = 'scan' | 'profile' | 'done'
+type EnrollStep = 'scan' | 'profile' | 'done'
 type AdminStep = 'lookup' | 'scan'
+type AdminView = 'lookup' | 'create'
 
 export function WorkerFaceScanPage() {
   const [params] = useSearchParams()
@@ -25,7 +26,8 @@ export function WorkerFaceScanPage() {
   const forceSelfEnroll = Boolean(presetCode.trim())
   const adminMode = hasPatrolRole('hr') && !forceSelfEnroll
 
-  const [selfStep, setSelfStep] = useState<SelfStep>('scan')
+  const [adminView, setAdminView] = useState<AdminView>('lookup')
+  const [enrollStep, setEnrollStep] = useState<EnrollStep>('scan')
   const [adminStep, setAdminStep] = useState<AdminStep>('lookup')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionEnrollment, setSessionEnrollment] = useState<PatrolScanEnrollment | null>(null)
@@ -44,8 +46,35 @@ export function WorkerFaceScanPage() {
   const [scanComplete, setScanComplete] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
 
+  const enrollMode = !adminMode || adminView === 'create'
+
+  function resetEnrollSession() {
+    setSessionId(null)
+    setSessionEnrollment(null)
+    setEnrollStep('scan')
+    setScanComplete(false)
+    setSavedPerson(null)
+    setProfileName('')
+    setProfileCode(presetCode)
+    setProfileContractor('')
+    setConsentChecked(false)
+    setError(null)
+  }
+
+  function startAdminCreate() {
+    resetEnrollSession()
+    setAdminView('create')
+    setSessionBooting(true)
+  }
+
+  function backFromAdminCreate() {
+    resetEnrollSession()
+    setAdminView('lookup')
+    setSessionBooting(false)
+  }
+
   useEffect(() => {
-    if (adminMode) return
+    if (!enrollMode) return
     let cancelled = false
     void (async () => {
       setSessionBooting(true)
@@ -65,7 +94,7 @@ export function WorkerFaceScanPage() {
       }
     })()
     return () => { cancelled = true }
-  }, [adminMode])
+  }, [enrollMode])
 
   async function handleLookup() {
     const code = codeInput.trim()
@@ -82,7 +111,7 @@ export function WorkerFaceScanPage() {
     } catch (err) {
       setPerson(null)
       const msg = err instanceof Error ? err.message : 'Tra cứu thất bại.'
-      setError(`${msg} — hồ sơ phải được import trước tại menu Hồ sơ công nhân.`)
+      setError(`${msg} — hoặc dùng «Tạo hồ sơ mới» bên dưới nếu chưa có mã.`)
     } finally {
       setLoading(false)
     }
@@ -112,7 +141,7 @@ export function WorkerFaceScanPage() {
         consented_at: Math.floor(Date.now() / 1000),
       })
       setSavedPerson(saved)
-      setSelfStep('done')
+      setEnrollStep('done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lưu hồ sơ thất bại.')
     } finally {
@@ -120,26 +149,40 @@ export function WorkerFaceScanPage() {
     }
   }
 
-  if (!adminMode) {
+  if (enrollMode) {
+    const isAdminCreate = adminMode && adminView === 'create'
     return (
       <PageLayout scrollable>
         <div className="max-w-2xl mx-auto w-full space-y-4 pb-8">
+          {isAdminCreate && (
+            <button
+              type="button"
+              onClick={backFromAdminCreate}
+              className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground pt-2"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Quay lại tra cứu mã
+            </button>
+          )}
+
           <div className="text-center space-y-2 pt-2 sm:pt-4">
             <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-400/10 border border-violet-400/25 flex items-center justify-center">
               <ScanFace className="w-7 h-7 text-violet-400" />
             </div>
-            <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
+            <h1 className="text-lg font-bold">
+              {isAdminCreate ? 'Tạo hồ sơ mới + quét mặt' : 'Đăng ký khuôn mặt tuần tra'}
+            </h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
               Bước 1: Quét 4 góc mặt · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
             </p>
           </div>
 
           <div className="flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-wider">
-            <StepPill active={selfStep === 'scan'} done={selfStep !== 'scan'} n={1} label="Quét mặt" />
+            <StepPill active={enrollStep === 'scan'} done={enrollStep !== 'scan'} n={1} label="Quét mặt" />
             <span className="text-muted-foreground/40">→</span>
-            <StepPill active={selfStep === 'profile'} done={selfStep === 'done'} n={2} label="Thông tin" />
+            <StepPill active={enrollStep === 'profile'} done={enrollStep === 'done'} n={2} label="Thông tin" />
             <span className="text-muted-foreground/40">→</span>
-            <StepPill active={selfStep === 'done'} done={false} n={3} label="Hoàn tất" />
+            <StepPill active={enrollStep === 'done'} done={false} n={3} label="Hoàn tất" />
           </div>
 
           {error && (
@@ -149,7 +192,7 @@ export function WorkerFaceScanPage() {
             </div>
           )}
 
-          {selfStep === 'scan' && (
+          {enrollStep === 'scan' && (
             sessionBooting || !sessionId ? (
               <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
                 <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
@@ -164,13 +207,13 @@ export function WorkerFaceScanPage() {
                     onEnrollmentChange={e => setScanComplete(e.complete)}
                     onScanComplete={() => {
                       setScanComplete(true)
-                      setSelfStep('profile')
+                      setEnrollStep('profile')
                     }}
                   />
                   <button
                     type="button"
                     disabled={!scanComplete}
-                    onClick={() => setSelfStep('profile')}
+                    onClick={() => setEnrollStep('profile')}
                     className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-500/90 disabled:opacity-40 disabled:pointer-events-none"
                   >
                     Tiếp tục nhập thông tin
@@ -181,7 +224,7 @@ export function WorkerFaceScanPage() {
             )
           )}
 
-          {selfStep === 'profile' && sessionId && (
+          {enrollStep === 'profile' && sessionId && (
             <Panel title="Bước 2 — Thông tin công nhân" className="overflow-visible">
               <form onSubmit={e => void handleCompleteProfile(e)} className="p-4 space-y-3">
                 <p className="text-[10px] text-muted-foreground">
@@ -240,7 +283,7 @@ export function WorkerFaceScanPage() {
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => setSelfStep('scan')}
+                    onClick={() => setEnrollStep('scan')}
                     className="flex-1 py-2.5 rounded-lg text-xs font-semibold border border-[#1e2433] hover:bg-[#1a2235]"
                   >
                     Quay lại quét
@@ -258,7 +301,7 @@ export function WorkerFaceScanPage() {
             </Panel>
           )}
 
-          {selfStep === 'done' && savedPerson && (
+          {enrollStep === 'done' && savedPerson && (
             <Panel title="Hoàn tất" className="overflow-visible">
               <div className="p-6 text-center space-y-4">
                 <CheckCircle className="w-12 h-12 text-green-400 mx-auto" />
@@ -272,6 +315,14 @@ export function WorkerFaceScanPage() {
                 <p className="text-[11px] text-green-400/90">
                   Vector đã lưu — sẵn sàng nhận diện trên mũ tuần tra Module 05.
                 </p>
+                {isAdminCreate && (
+                  <Link
+                    to="/module05/ho-so"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold border border-[#1e2433] hover:bg-[#1a2235]"
+                  >
+                    Xem danh sách hồ sơ
+                  </Link>
+                )}
               </div>
             </Panel>
           )}
@@ -311,9 +362,9 @@ export function WorkerFaceScanPage() {
             <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-400/10 border border-violet-400/25 flex items-center justify-center">
               <ScanFace className="w-7 h-7 text-violet-400" />
             </div>
-            <h1 className="text-lg font-bold">Quét mặt bổ sung vector</h1>
+            <h1 className="text-lg font-bold">Quét mặt công nhân</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Tra cứu mã nhân viên đã import — chỉ quét mặt, không tạo/sửa hồ sơ tại đây.
+              Tra cứu mã đã có để bổ sung vector, hoặc tạo hồ sơ mới kèm quét 4 góc.
             </p>
           </div>
 
@@ -354,9 +405,26 @@ export function WorkerFaceScanPage() {
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-violet-500 text-white hover:bg-violet-500/90 disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Bắt đầu quét
+                Bổ sung vector — hồ sơ đã có
               </button>
             </form>
+          </Panel>
+
+          <Panel title="Tạo hồ sơ mới" className="overflow-visible">
+            <div className="p-4 space-y-3">
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Chưa có mã trong hệ thống? Tạo hồ sơ mới: quét 4 góc mặt rồi nhập họ tên, mã nhân viên và đơn vị.
+                Không cần import Excel trước.
+              </p>
+              <button
+                type="button"
+                onClick={startAdminCreate}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+              >
+                <Plus className="w-4 h-4" />
+                Tạo hồ sơ mới + quét mặt
+              </button>
+            </div>
           </Panel>
         </div>
       )}
