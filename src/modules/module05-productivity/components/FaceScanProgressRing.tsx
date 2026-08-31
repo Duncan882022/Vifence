@@ -1,5 +1,10 @@
 import { cn } from '@/utils/cn'
-import { FACE_SCAN_POSE_COUNT, type ScanPoseSlot } from '../utils/patrolFaceScanPoses'
+import {
+  FACE_SCAN_POSE_COUNT,
+  FACE_SCAN_RING_INDEX_BY_SLOT,
+  FACE_SCAN_RING_QUADRANT_LABELS,
+  type ScanPoseSlot,
+} from '../utils/patrolFaceScanPoses'
 import { computeFaceScanRingProgress } from '../utils/patrolFaceScanProgress'
 
 const CX = 50
@@ -114,6 +119,34 @@ export function FaceScanProgressRing({
           aria-hidden
         >
           <div className="absolute inset-x-[8%] h-px bg-sky-400/90 shadow-[0_0_8px_rgba(56,189,248,0.9)] animate-face-scan-line" />
+        </div>
+      )}
+
+      {/* Direction labels on ring — live guide like Face ID */}
+      {!complete && (
+        <div className="absolute inset-0 z-[38] pointer-events-none" aria-hidden>
+          {FACE_SCAN_RING_QUADRANT_LABELS.map((label, idx) => {
+            const activeIdx = FACE_SCAN_RING_INDEX_BY_SLOT[activeSlot]
+            const active = idx === activeIdx
+            const positions = [
+              'top-[6%] left-1/2 -translate-x-1/2',
+              'right-[5%] top-1/2 -translate-y-1/2',
+              'bottom-[6%] left-1/2 -translate-x-1/2',
+              'left-[5%] top-1/2 -translate-y-1/2',
+            ]
+            return (
+              <span
+                key={label}
+                className={cn(
+                  'absolute text-[8px] font-bold tracking-[0.18em] uppercase transition-colors duration-200',
+                  positions[idx],
+                  active ? 'text-sky-300' : 'text-white/20',
+                )}
+              >
+                {label}
+              </span>
+            )
+          })}
         </div>
       )}
 

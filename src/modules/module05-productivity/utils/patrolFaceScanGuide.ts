@@ -217,30 +217,91 @@ export function autoScanInstruction(
   phase: AutoScanPhase,
   holdProgress = 0,
 ): string {
-  if (phase === 'loading') return 'Đang tải AI nhận diện góc mặt…'
-  if (phase === 'capture') return 'Đang quét…'
+  return liveScanHint(metrics, slot, phase, holdProgress).text
+}
+
+export type LiveScanDirection =
+  | 'front'
+  | 'left'
+  | 'right'
+  | 'down'
+  | 'hold'
+  | 'closer'
+  | 'farther'
+  | 'center'
+  | 'loading'
+  | 'none'
+
+export type LiveScanTone = 'neutral' | 'active' | 'success' | 'warn'
+
+export interface LiveScanHint {
+  text: string
+  direction: LiveScanDirection
+  tone: LiveScanTone
+}
+
+/** Hint trực tiếp trên camera — ngắn, có hướng quay đầu. */
+export function liveScanHint(
+  metrics: FaceScanMetrics | null,
+  slot: ScanPoseSlot,
+  phase: AutoScanPhase,
+  holdProgress = 0,
+): LiveScanHint {
+  if (phase === 'loading') {
+    return { text: 'Đang tải AI…', direction: 'loading', tone: 'neutral' }
+  }
+  if (phase === 'capture') {
+    return { text: 'Đang quét…', direction: 'hold', tone: 'success' }
+  }
   if (phase === 'hold') {
     return holdProgress >= 1
-      ? 'Đang quét…'
-      : 'Giữ yên — vòng tròn đang được quét'
+      ? { text: 'Đang quét…', direction: 'hold', tone: 'success' }
+      : { text: 'Giữ yên', direction: 'hold', tone: 'active' }
   }
   if (phase === 'fallback') {
-    return `${guidanceForSlot(slot)} — giữ yên khi đủ góc`
+    const dir = slot === 2 ? 'left' : slot === 3 ? 'right' : slot === 4 ? 'down' : 'front'
+    return { text: guidanceForSlot(slot), direction: dir, tone: 'active' }
   }
 
-  if (!metrics?.hasFace) return 'Đưa mặt vào giữa khung tròn'
+  if (!metrics?.hasFace) {
+    return { text: 'Đưa mặt vào khung tròn', direction: 'center', tone: 'warn' }
+  }
 
-  if (metrics.poseHint === 'too_far') return 'Tiến lại gần camera một chút'
-  if (metrics.poseHint === 'too_close') return 'Lùi xa một chút'
+  if (metrics.poseHint === 'too_far') {
+    return { text: 'Tiến lại gần', direction: 'closer', tone: 'warn' }
+  }
+  if (metrics.poseHint === 'too_close') {
+    return { text: 'Lùi xa một chút', direction: 'farther', tone: 'warn' }
+  }
   if (metrics.poseHint === 'off_center') {
-    return `Căn mặt vào giữa khung — ${guidanceForSlot(slot)}`
+    return { text: 'Căn mặt vào giữa', direction: 'center', tone: 'warn' }
   }
 
   if (faceReadyForAutoSlot(metrics, slot)) {
-    return 'Giữ yên — vòng tròn đang được quét'
+    return { text: 'Giữ yên', direction: 'hold', tone: 'success' }
   }
 
-  return guidanceForHint(metrics.poseHint, slot)
+  switch (slot) {
+    case 1:
+      if (metrics.poseHint === 'left' || metrics.centerX < 0.46) {
+        return { text: 'Quay về giữa', direction: 'right', tone: 'active' }
+      }
+      if (metrics.poseHint === 'right' || metrics.centerX > 0.54) {
+        return { text: 'Quay về giữa', direction: 'left', tone: 'active' }
+      }
+      if (metrics.poseHint === 'down' || metrics.centerY > 0.52) {
+        return { text: 'Ngẩng lên nhẹ', direction: 'front', tone: 'active' }
+      }
+      return { text: 'Nhìn thẳng camera', direction: 'front', tone: 'active' }
+    case 2:
+      return { text: 'Quay sang trái', direction: 'left', tone: 'active' }
+    case 3:
+      return { text: 'Quay sang phải', direction: 'right', tone: 'active' }
+    case 4:
+      return { text: 'Cúi cằm xuống', direction: 'down', tone: 'active' }
+    default:
+      return { text: guidanceForSlot(slot), direction: 'none', tone: 'neutral' }
+  }
 }
 
 export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
@@ -273,8 +334,8 @@ export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
   if (n < 12) return false
   const mean = sum / n
   const variance = sumSq / n - mean * mean
-  const minVariance = isHandheldDevice() ? 55 : 160
-  return variance > minVariance && mean > 25 && mean < 245
+  const minVariance = isHandheldDevice() ? 28 : 160
+  return variance > minVariance && mean > 20 && mean < 248
 }
 
 export function basicFacePresentInVideo(video: HTMLVideoElement): boolean {

@@ -7,6 +7,7 @@ import {
   faceReadyForManualCapture,
   faceReadyForSlot,
   guidanceForSlot,
+  liveScanHint,
   manualScanBlockedInstruction,
   poseApproachProgress,
   poseHintMatchesSlot,
@@ -117,20 +118,20 @@ describe('patrolFaceScanGuide', () => {
 
   it('auto instruction tells user how to turn when pose insufficient', () => {
     expect(autoScanInstruction(null, 2, 'fallback')).toContain('trái')
-    expect(autoScanInstruction({
+    expect(liveScanHint({
       hasFace: true,
       poseHint: 'front',
       fillScore: 0.5,
       centerX: 0.5,
       centerY: 0.5,
-    }, 2, 'approach')).toContain('trái')
-    expect(autoScanInstruction({
+    }, 2, 'approach').direction).toBe('left')
+    expect(liveScanHint({
       hasFace: true,
       poseHint: 'left',
       fillScore: 0.5,
       centerX: 0.34,
       centerY: 0.5,
-    }, 2, 'approach')).toContain('Giữ yên')
+    }, 2, 'approach').text).toContain('Giữ yên')
   })
 
   it('blocks manual capture without AI', () => {

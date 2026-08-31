@@ -22,6 +22,7 @@ import {
 } from '../services/patrolWorkerProfile.service'
 import { usePatrolAutoFaceScan } from '../hooks/usePatrolAutoFaceScan'
 import { FaceScanProgressRing } from './FaceScanProgressRing'
+import { FaceScanLiveHint } from './FaceScanLiveHint'
 import {
   analyzeFaceScanFrame,
   faceNearSlot,
@@ -108,9 +109,10 @@ export function PatrolFaceScannerPanel({
     videoRef,
     submitScan,
     enrollment,
-    cameraReady && backendOnline === true && Boolean(subjectKey),
+    cameraReady && Boolean(subjectKey),
     handleEnrollment,
     captureMode,
+    backendOnline === true,
   )
 
   const refreshStatus = useCallback(async () => {
@@ -392,9 +394,15 @@ export function PatrolFaceScannerPanel({
             approachProgress={captureMode === 'auto' ? autoScan.approachProgress : 0}
             complete={complete}
             scanLine={!complete && (captureMode === 'auto'
-              ? autoScan.poseMatched || autoScan.approachProgress > 0.12 || autoScan.scanMode === 'fallback'
+              ? autoScan.faceDetected || autoScan.approachProgress > 0.05 || autoScan.scanMode === 'fallback'
               : manualNear || manualReady)}
           />
+          {captureMode === 'auto' && !complete && cameraReady && (
+            <FaceScanLiveHint
+              hint={autoScan.liveHint}
+              holdProgress={autoScan.holdProgress}
+            />
+          )}
           {complete && (
             <CheckCircle className="absolute w-16 h-16 text-green-400 drop-shadow-[0_0_16px_rgba(74,222,128,0.95)] z-50" />
           )}
@@ -432,22 +440,26 @@ export function PatrolFaceScannerPanel({
         )}>
           {mainInstruction}
         </p>
-        {subInstruction && (
+        {subInstruction && captureMode !== 'auto' && (
           <p className="text-sm text-white/55">{subInstruction}</p>
         )}
-        {!complete && (
+        {!complete && captureMode === 'auto' && (
+          <p className="text-xs text-white/45 tabular-nums">
+            {capturedCount}/{facesRequired} góc
+            {autoScan.faceDetected
+              ? autoScan.poseMatched
+                ? autoScan.holdProgress > 0
+                  ? ` · quét ${Math.round(autoScan.holdProgress * 100)}%`
+                  : ' · giữ yên…'
+                : ' · chỉnh góc…'
+              : ' · đưa mặt vào khung'}
+            {autoScan.scanMode === 'fallback' && ' · chế độ cơ bản'}
+            {backendOnline === false && ' · chờ backend'}
+          </p>
+        )}
+        {!complete && captureMode === 'manual' && (
           <p className="text-[10px] text-white/40 tabular-nums">
             {capturedCount}/{facesRequired} góc
-            {captureMode === 'auto' && (
-              <>
-                {autoScan.scanMode === 'fallback' ? ' · giữ yên' : ''}
-                {autoScan.holdProgress > 0
-                  ? ` · quét ${Math.round(autoScan.holdProgress * 100)}%`
-                  : autoScan.faceDetected
-                    ? autoScan.poseMatched ? ' · giữ yên…' : ' · chỉnh góc…'
-                    : ' · đưa mặt vào khung'}
-              </>
-            )}
           </p>
         )}
       </div>
