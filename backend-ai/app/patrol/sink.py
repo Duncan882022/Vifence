@@ -110,9 +110,9 @@ def _resolve_snapshot_tier(
     tier: str | None = None,
     worker_id: str | None = None,
 ) -> str:
-    """Tier khung/badge snapshot — lifecycle `object` không được chèn khi đã có mặt/gallery."""
+    """Tier khung/badge snapshot — đồng bộ tab sự kiện (Người = xanh, Định danh = tím)."""
     from ..patrol_entity import patrol_tier_label
-    from ..patrol_identity_lifecycle import tier_for_worker_id
+    from ..patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON, tier_for_worker_id
 
     wid = (worker_id or "").strip()
     explicit = (tier or "").strip()
@@ -122,6 +122,13 @@ def _resolve_snapshot_tier(
         if _snapshot_tier_rank(inferred) > 0:
             return inferred
         return "object"
+
+    # lifecycle_tier từ ROI live là nguồn sự thật — không thăng lên identity
+    # chỉ vì pers-* đã từng identify trong SQLite (tab Người ≠ khung tím).
+    if explicit == TIER_PERSON:
+        return TIER_PERSON
+    if explicit == TIER_IDENTITY:
+        return TIER_IDENTITY
 
     candidates: list[str] = []
     if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR and explicit != "object":

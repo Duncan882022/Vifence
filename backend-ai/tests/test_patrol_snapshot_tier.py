@@ -25,14 +25,14 @@ class PatrolSnapshotTierTests(unittest.TestCase):
         db.close()
         self._tmp.cleanup()
 
-    def test_resolve_prefers_lifecycle_over_sqlite_identity(self) -> None:
+    def test_resolve_respects_lifecycle_person_over_sqlite_identity(self) -> None:
         pers_id, _ = identity.observe_face([0.1] * 128, quality=0.9)
         identity.identify(pers_id, full_name="An", employee_code="NV01")
 
         self.assertEqual(sink._snapshot_tier(pers_id), "identity")
         self.assertEqual(
             sink._resolve_snapshot_tier(pers_id, tier=TIER_PERSON),
-            "identity",
+            TIER_PERSON,
         )
 
     def test_object_subject_always_slate_tier(self) -> None:
