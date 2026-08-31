@@ -17,6 +17,7 @@ import {
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { WorkerProfileDetailModal } from '../components/WorkerProfileDetailModal'
+import { FACE_SCAN_POSE_COUNT } from '../utils/patrolFaceScanPoses'
 
 const TEMPLATE_HEADERS = ['Họ tên', 'Mã nhân viên', 'Đơn vị'] as const
 
@@ -56,7 +57,7 @@ function FaceBadge({ count, complete }: { count: number; complete?: boolean }) {
           : 'bg-amber-400/10 text-amber-400 border-amber-400/30',
     )}>
       <ScanFace className="w-2.5 h-2.5" />
-      {count}/4
+      {count}/{FACE_SCAN_POSE_COUNT}
     </span>
   )
 }

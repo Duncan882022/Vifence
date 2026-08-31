@@ -12,6 +12,7 @@ import {
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { WorkerProfileFaceGallery } from './WorkerProfileFaceGallery'
+import { FACE_SCAN_POSE_COUNT } from '../utils/patrolFaceScanPoses'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
@@ -173,7 +174,7 @@ export function WorkerProfileDetailModal({
                       'mt-0.5 font-semibold tabular-nums',
                       person.face_enrollment_complete ? 'text-green-400' : 'text-violet-400',
                     )}>
-                      {person.face_count ?? 0}/4
+                      {person.face_count ?? 0}/{FACE_SCAN_POSE_COUNT}
                       {person.face_enrollment_complete && ' ✓'}
                     </p>
                   </div>

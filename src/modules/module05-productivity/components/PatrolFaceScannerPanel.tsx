@@ -321,13 +321,13 @@ export function PatrolFaceScannerPanel({
   const headerInstruction = complete
     ? mainInstruction
     : captureMode === 'auto' && !manualAiBlocked
-      ? autoScan.liveHint.text
+      ? autoScan.guidance
       : mainInstruction
 
   const headerSubline = complete
     ? null
     : captureMode === 'auto' && !manualAiBlocked
-      ? autoScan.guidance
+      ? `${capturedCount}/${facesRequired} góc · vòng xanh = đã lưu`
       : subInstruction
 
   const defaultSubtitle = subtitle ?? (
@@ -352,11 +352,6 @@ export function PatrolFaceScannerPanel({
           </p>
           {headerSubline && (
             <p className="text-[11px] text-muted-foreground">{headerSubline}</p>
-          )}
-          {captureMode === 'auto' && (
-            <p className="text-[10px] text-muted-foreground/80 tabular-nums">
-              {capturedCount}/{facesRequired} góc · vòng xanh = đã lưu
-            </p>
           )}
         </div>
       )}
@@ -429,7 +424,7 @@ export function PatrolFaceScannerPanel({
               ? autoScan.faceDetected || autoScan.approachProgress > 0.05 || autoScan.scanMode === 'fallback'
               : manualNear || manualReady)}
           />
-          {captureMode === 'manual' && !complete && cameraReady && (
+          {!complete && cameraReady && (
             <FaceScanLiveHint
               hint={autoScan.liveHint}
               holdProgress={autoScan.holdProgress}
