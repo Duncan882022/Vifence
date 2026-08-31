@@ -36,30 +36,46 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
   icon: LucideIcon
   color: string
   inactiveColor: string
+  /** Tab đang chọn — gạch dưới + chữ (không dùng primary chung). */
+  activeBorder: string
+  activeText: string
+  activeBadge: string
 }> = {
   all: {
     label: 'Tất cả',
     icon: LayoutGrid,
     color: 'text-primary',
     inactiveColor: 'text-muted-foreground',
+    activeBorder: 'border-primary',
+    activeText: 'text-primary',
+    activeBadge: 'bg-primary/20 text-primary',
   },
   object: {
     label: 'Đối tượng',
     icon: PATROL_PERSON_STAGE_META.object.icon,
     color: PATROL_PERSON_STAGE_META.object.color,
-    inactiveColor: 'text-slate-500',
+    inactiveColor: 'text-green-500/70',
+    activeBorder: 'border-green-400',
+    activeText: 'text-green-400',
+    activeBadge: 'bg-green-500/20 text-green-400',
   },
   person: {
     label: 'Người',
     icon: PATROL_PERSON_STAGE_META.person.icon,
     color: PATROL_PERSON_STAGE_META.person.color,
     inactiveColor: 'text-sky-500/70',
+    activeBorder: 'border-sky-400',
+    activeText: 'text-sky-400',
+    activeBadge: 'bg-sky-500/20 text-sky-400',
   },
   identity: {
     label: 'Định danh',
     icon: PATROL_PERSON_STAGE_META.profile.icon,
     color: PATROL_PERSON_STAGE_META.profile.color,
     inactiveColor: 'text-violet-500/70',
+    activeBorder: 'border-violet-400',
+    activeText: 'text-violet-400',
+    activeBadge: 'bg-violet-500/20 text-violet-400',
   },
 }
 
