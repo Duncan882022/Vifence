@@ -37,8 +37,9 @@ export interface FaceScanMetrics {
 
 const FACE_SCORE_MIN = 0.32
 const DETECT_WIDTH = 480
-const YAW_SIDE = 0.08
-const YAW_TURN = 0.11
+const YAW_SIDE = 0.09
+const YAW_TURN = 0.10
+const YAW_TURN_NEAR = 0.07
 const FILL_MIN = 0.10
 const FILL_MAX = 0.72
 const CENTER_X_MIN = 0.2
@@ -125,6 +126,67 @@ function classifyHeadPose(cx: number, cy: number): HeadPoseHint {
   if (Math.abs(dx) <= YAW_SIDE && cy <= PITCH_DOWN_Y - 0.04) return 'front'
   if (cy <= 0.4 && Math.abs(dx) <= YAW_SIDE) return 'up'
   return dx < 0 ? 'left' : 'right'
+}
+
+export function faceNearSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
+  if (!faceLooseInFrame(metrics)) return false
+  const { poseHint, centerX: cx, centerY: cy } = metrics
+  switch (slot) {
+    case 1:
+      return poseHint === 'front'
+        || (Math.abs(cx - 0.5) <= YAW_SIDE + 0.04 && cy <= PITCH_DOWN_Y)
+    case 2:
+      return poseHint === 'left' || cx <= 0.5 - YAW_TURN_NEAR
+    case 3:
+      return poseHint === 'right' || cx >= 0.5 + YAW_TURN_NEAR
+    case 4:
+      return poseHint === 'down' || cy >= PITCH_DOWN_Y - 0.05
+    default:
+      return false
+  }
+}
+
+export function faceReadyForAutoSlot(metrics: FaceScanMetrics, slot: ScanPoseSlot): boolean {
+  return faceNearSlot(metrics, slot)
+}
+
+export function basicFacePresentFromCanvas(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return false
+  const w = canvas.width
+  const h = canvas.height
+  const cx = w * 0.5
+  const cy = h * 0.5
+  const rx = w * 0.24
+  const ry = h * 0.3
+  let sum = 0
+  let sumSq = 0
+  let n = 0
+  const data = ctx.getImageData(0, 0, w, h).data
+  for (let y = Math.floor(cy - ry); y < cy + ry; y += 3) {
+    if (y < 0 || y >= h) continue
+    for (let x = Math.floor(cx - rx); x < cx + rx; x += 3) {
+      if (x < 0 || x >= w) continue
+      const dx = (x - cx) / rx
+      const dy = (y - cy) / ry
+      if (dx * dx + dy * dy > 1) continue
+      const i = (y * w + x) * 4
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+      sum += lum
+      sumSq += lum * lum
+      n++
+    }
+  }
+  if (n < 12) return false
+  const mean = sum / n
+  const variance = sumSq / n - mean * mean
+  return variance > 160 && mean > 35 && mean < 230
+}
+
+export function basicFacePresentInVideo(video: HTMLVideoElement): boolean {
+  const canvas = drawVideoSampleMirrored(video)
+  if (!canvas) return false
+  return basicFacePresentFromCanvas(canvas)
 }
 
 export function faceLooseInFrame(metrics: FaceScanMetrics): boolean {

@@ -23,6 +23,7 @@ import { usePatrolAutoFaceScan } from '../hooks/usePatrolAutoFaceScan'
 import { FaceScanProgressRing } from './FaceScanProgressRing'
 import {
   analyzeFaceScanFrame,
+  faceNearSlot,
   faceReadyForManualCapture,
   guidanceForHint,
   guidanceForSlot,
@@ -71,6 +72,8 @@ export function PatrolFaceScannerPanel({
   const [panelError, setPanelError] = useState<string | null>(null)
   const [captureMode, setCaptureMode] = useState<FaceScanCaptureMode>('auto')
   const [manualHint, setManualHint] = useState<string>('')
+  const [manualReady, setManualReady] = useState(false)
+  const [manualNear, setManualNear] = useState(false)
   const [startingOver, setStartingOver] = useState(false)
 
   const handleEnrollment = useCallback((next: PatrolScanEnrollment) => {
@@ -159,16 +162,30 @@ export function PatrolFaceScannerPanel({
         if (!video || cancelled) return
         const modelStatus = autoScan.modelStatus
         if (modelStatus !== 'ready') {
+          setManualReady(false)
+          setManualNear(false)
           setManualHint(manualScanBlockedInstruction(modelStatus))
           return
         }
         const metrics = await analyzeFaceScanFrame(video)
         if (cancelled) return
-        setManualHint(
-          metrics.hasFace
-            ? guidanceForHint(metrics.poseHint, autoScan.activeSlot)
-            : guidanceForSlot(autoScan.activeSlot),
-        )
+        const slot = autoScan.activeSlot as ScanPoseSlot
+        const ready = faceReadyForManualCapture(metrics, slot, modelStatus)
+        const near = faceNearSlot(metrics, slot)
+        setManualReady(ready)
+        setManualNear(near)
+        if (ready) {
+          setManualHint('Sẵn sàng chụp — giữ yên và bấm nút bên dưới')
+          if (panelError) setPanelError(null)
+        } else if (near) {
+          setManualHint(`Gần đúng góc ${faceScanPoseLabel(slot)} — chỉnh thêm một chút`)
+        } else {
+          setManualHint(
+            metrics.hasFace
+              ? guidanceForHint(metrics.poseHint, slot)
+              : guidanceForSlot(slot),
+          )
+        }
       })()
     }, 400)
     return () => {
@@ -176,6 +193,13 @@ export function PatrolFaceScannerPanel({
       window.clearInterval(poll)
     }
   }, [autoScan.activeSlot, autoScan.modelStatus, cameraReady, captureMode, enrollment])
+
+  useEffect(() => {
+    if (captureMode === 'auto') {
+      setManualReady(false)
+      setManualNear(false)
+    }
+  }, [captureMode])
 
   const handleManualCapture = async () => {
     const video = videoRef.current
@@ -256,8 +280,8 @@ export function PatrolFaceScannerPanel({
         ? 'Nút Chụp sẽ bật khi AI tải xong.'
         : 'Hoặc dùng chế độ Tự động (giữ yên theo hướng dẫn).')
       : captureMode === 'auto'
-        ? faceScanMainInstruction(autoScan.activeSlot, false, 'auto')
-        : `Góc tiếp theo: ${faceScanPoseLabel(autoScan.activeSlot)}`
+        ? autoScan.subGuidance
+        : `Bước ${autoScan.activeSlot}/4 · ${faceScanPoseLabel(autoScan.activeSlot)}`
 
   const showError = panelError ?? autoScan.error
   const busy = autoScan.capturing || startingOver
@@ -303,6 +327,7 @@ export function PatrolFaceScannerPanel({
             facesRequired={facesRequired}
             holdProgress={captureMode === 'auto' ? autoScan.holdProgress : 0}
             complete={complete}
+            scanLine={!complete && (captureMode === 'auto' ? autoScan.poseMatched || autoScan.scanMode === 'fallback' : manualNear || manualReady)}
           />
           {complete && (
             <CheckCircle className="absolute w-16 h-16 text-green-400 drop-shadow-[0_0_16px_rgba(74,222,128,0.95)] z-50" />
@@ -379,11 +404,22 @@ export function PatrolFaceScannerPanel({
               type="button"
               onClick={() => void handleManualCapture()}
               disabled={busy || !cameraReady || backendOnline === false || autoScan.modelStatus !== 'ready'}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-semibold bg-white/10 text-white hover:bg-white/15 disabled:opacity-40 border border-white/10"
+              className={cn(
+                'w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-40 border transition-colors',
+                manualReady
+                  ? 'bg-green-500/90 text-white border-green-400/50 hover:bg-green-500'
+                  : manualNear
+                    ? 'bg-amber-500/15 text-amber-100 border-amber-400/40 hover:bg-amber-500/25'
+                    : 'bg-white/10 text-white hover:bg-white/15 border-white/10',
+              )}
             >
               {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ScanFace className="w-5 h-5" />}
               {autoScan.modelStatus === 'ready'
-                ? `Chụp góc ${faceScanPoseLabel(autoScan.activeSlot)}`
+                ? manualReady
+                  ? `Chụp ${faceScanPoseLabel(autoScan.activeSlot)}`
+                  : manualNear
+                    ? `Chỉnh góc ${faceScanPoseLabel(autoScan.activeSlot)}`
+                    : `Chụp góc ${faceScanPoseLabel(autoScan.activeSlot)}`
                 : autoScan.modelStatus === 'loading'
                   ? 'Đang chờ AI…'
                   : 'AI không khả dụng'}

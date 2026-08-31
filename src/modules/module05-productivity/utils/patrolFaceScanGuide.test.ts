@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   faceLooseInFrame,
+  faceNearSlot,
+  faceReadyForAutoSlot,
   faceReadyForManualCapture,
   faceReadyForSlot,
   guidanceForSlot,
@@ -71,6 +73,30 @@ describe('patrolFaceScanGuide', () => {
       centerX: 0.5,
       centerY: 0.5,
     })).toBe(true)
+  })
+
+  it('near-slot is relaxed for auto flow', () => {
+    expect(faceReadyForAutoSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1)).toBe(true)
+    expect(faceNearSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.58,
+      centerY: 0.5,
+    }, 3)).toBe(true)
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.58,
+      centerY: 0.5,
+    }, 3)).toBe(false)
   })
 
   it('blocks manual capture without AI', () => {
