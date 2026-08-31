@@ -3,7 +3,6 @@ import { captureFaceEnrollmentFrameBase64 } from '../utils/patrolFaceCapture'
 import type { PatrolScanEnrollment } from '../services/patrolWorkerProfile.service'
 import {
   analyzeFaceScanFrame,
-  faceLooseInFrame,
   faceReadyForSlot,
   getPatrolFaceScanModelStatus,
   guidanceForHint,
@@ -14,14 +13,11 @@ import {
 import {
   computeFaceScanRingProgress,
   FACE_SCAN_AI_HOLD_MS,
-  FACE_SCAN_HOLD_CAPTURE_MS,
   FACE_SCAN_MODEL_LOAD_TIMEOUT_MS,
 } from '../utils/patrolFaceScanProgress'
 
 const TICK_MS = 200
 const CAPTURE_COOLDOWN_MS = 1400
-/** BlazeFace báo ready nhưng không detect — chuyển hold-capture sau ~1.2s. */
-const NO_FACE_FORCE_HOLD_TICKS = 6
 
 export type PatrolFaceScanSubmit = (
   imageB64: string,
@@ -57,7 +53,7 @@ export function usePatrolAutoFaceScan(
   const [holdProgress, setHoldProgress] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
-  const [scanMode, setScanMode] = useState<'ai' | 'fallback'>('fallback')
+  const [scanMode, setScanMode] = useState<'ai' | 'fallback'>('ai')
   const [error, setError] = useState<string | null>(null)
   const [successFlash, setSuccessFlash] = useState<string | null>(null)
 
@@ -66,8 +62,6 @@ export function usePatrolAutoFaceScan(
   const capturingRef = useRef(false)
   const analyzingRef = useRef(false)
   const modelLoadStartedRef = useRef(Date.now())
-  const noFaceStreakRef = useRef(0)
-  const forceHoldCaptureRef = useRef(true)
 
   const capturedCount = enrollment?.faces_captured ?? 0
   const required = enrollment?.faces_required ?? 4
@@ -102,10 +96,8 @@ export function usePatrolAutoFaceScan(
     const slot = (pending?.slot ?? 1) as ScanPoseSlot
     setActiveSlot(slot)
     setGuidance(enrollment.complete ? `Hoàn thành! Đủ ${required} góc mặt.` : guidanceForSlot(slot))
-    noFaceStreakRef.current = 0
-    forceHoldCaptureRef.current = true
     resetHold()
-  }, [enrollment?.pers_id, enrollment?.session_id, enrollment?.faces_captured, enrollment?.complete, resetHold])
+  }, [enrollment?.pers_id, enrollment?.session_id, enrollment?.faces_captured, enrollment?.complete, resetHold, required])
 
   const runCapture = useCallback(async (slot: ScanPoseSlot) => {
     const video = videoRef.current
@@ -128,8 +120,6 @@ export function usePatrolAutoFaceScan(
       onEnrollmentChange(result.enrollment)
       lastCaptureAtRef.current = Date.now()
       resetHold()
-      noFaceStreakRef.current = 0
-      forceHoldCaptureRef.current = true
 
       if (result.message === 'duplicate_angle') {
         setSuccessFlash('Góc này giống ảnh trước — quay thêm một chút.')
@@ -153,7 +143,7 @@ export function usePatrolAutoFaceScan(
     setGuidance(
       progress >= 1
         ? 'Đang quét…'
-        : 'Giữ yên trong khung tròn — hệ thống tự chụp',
+        : `Giữ yên góc ${guidanceForSlot(slot).split(' — ')[1] ?? 'gallery'}…`,
     )
     if (elapsed >= holdMs) {
       await runCapture(slot)
@@ -192,15 +182,18 @@ export function usePatrolAutoFaceScan(
           setModelStatus(status)
 
           const modelTimedOut = now - modelLoadStartedRef.current >= FACE_SCAN_MODEL_LOAD_TIMEOUT_MS
-          const useHoldCapture = forceHoldCaptureRef.current
-            || status === 'unavailable'
-            || status === 'loading' && modelTimedOut
-
-          if (useHoldCapture) {
+          if (status === 'unavailable' || (status === 'loading' && modelTimedOut)) {
             setScanMode('fallback')
-            setFaceDetected(true)
-            setPoseMatched(true)
-            await runHoldCapture(slot, now, FACE_SCAN_HOLD_CAPTURE_MS)
+            setFaceDetected(false)
+            setPoseMatched(false)
+            resetHold()
+            setGuidance('AI chưa sẵn sàng — chuyển sang Thủ công hoặc tải lại trang.')
+            return
+          }
+
+          if (status === 'loading') {
+            setScanMode('ai')
+            setGuidance('Đang tải AI nhận diện góc mặt…')
             return
           }
 
@@ -209,29 +202,16 @@ export function usePatrolAutoFaceScan(
           if (cancelled) return
 
           const hasFace = metrics.hasFace
-          const loose = faceLooseInFrame(metrics)
-          const matched = faceReadyForSlot(metrics, slot) || (slot === 1 && loose)
+          const matched = faceReadyForSlot(metrics, slot)
 
           setFaceDetected(hasFace)
           setPoseMatched(matched)
 
           if (!hasFace) {
-            noFaceStreakRef.current += 1
-            if (noFaceStreakRef.current >= NO_FACE_FORCE_HOLD_TICKS) {
-              forceHoldCaptureRef.current = true
-              setScanMode('fallback')
-              setFaceDetected(true)
-              setPoseMatched(true)
-              await runHoldCapture(slot, now, FACE_SCAN_HOLD_CAPTURE_MS)
-              return
-            }
             resetHold()
             setGuidance(guidanceForSlot(slot))
             return
           }
-
-          noFaceStreakRef.current = 0
-          forceHoldCaptureRef.current = false
 
           if (!matched) {
             resetHold()
@@ -266,9 +246,9 @@ export function usePatrolAutoFaceScan(
 
   const retry = useCallback(() => {
     setError(null)
-    noFaceStreakRef.current = 0
-    forceHoldCaptureRef.current = true
     resetHold()
+    modelLoadStartedRef.current = Date.now()
+    preloadPatrolFaceScanModels()
   }, [resetHold])
 
   return {

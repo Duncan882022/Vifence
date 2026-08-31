@@ -24,6 +24,7 @@ import { usePatrolAutoFaceScan } from '../hooks/usePatrolAutoFaceScan'
 import { FaceScanFourPoseRing } from './FaceScanFourPoseRing'
 import {
   analyzeFaceScanFrame,
+  faceReadyForSlot,
   guidanceForHint,
   guidanceForSlot,
   type ScanPoseSlot,
@@ -169,6 +170,16 @@ export function PatrolFaceScannerPanel({
   const handleManualCapture = async () => {
     const video = videoRef.current
     if (!video || !cameraReady || complete) return
+    const slot = autoScan.activeSlot as ScanPoseSlot
+    const metrics = await analyzeFaceScanFrame(video)
+    if (!faceReadyForSlot(metrics, slot)) {
+      setPanelError(
+        metrics.hasFace
+          ? guidanceForHint(metrics.poseHint, slot)
+          : guidanceForSlot(slot),
+      )
+      return
+    }
     const imageB64 = captureFaceEnrollmentFrameBase64(video)
     if (!imageB64) {
       setPanelError('Không quét được khung hình.')
@@ -176,7 +187,7 @@ export function PatrolFaceScannerPanel({
     }
     setPanelError(null)
     try {
-      const result = await submitScan(imageB64, autoScan.activeSlot)
+      const result = await submitScan(imageB64, slot)
       handleEnrollment(result.enrollment)
     } catch (err) {
       setPanelError(err instanceof Error ? err.message : 'Lưu vector thất bại.')
@@ -191,7 +202,7 @@ export function PatrolFaceScannerPanel({
   const displayName = person?.full_name ?? person?.display_name
   const defaultSubtitle = subtitle ?? (
     isSession
-      ? 'eKYC 4 góc (TRÊN · TRÁI · PHẢI · DƯỚI) — chọn Tự động hoặc Thủ công.'
+      ? 'eKYC 4 góc gallery — Chính diện · Quay trái · Quay phải · Cúi xuống.'
       : `Quét ${facesRequired} góc mặt cho ${displayName} (${person?.employee_code ?? person?.pers_id}).`
   )
 
@@ -319,7 +330,7 @@ export function PatrolFaceScannerPanel({
           <span className={complete ? 'text-green-400' : cameraReady ? 'text-sky-300' : 'text-amber-400'}>
             {cameraReady
               ? captureMode === 'auto'
-                ? autoScan.scanMode === 'fallback' ? 'Tự quét' : 'Tự quét + AI'
+                ? autoScan.scanMode === 'fallback' ? 'Chờ AI' : 'Tự quét + AI'
                 : 'Thủ công'
               : 'Đang mở camera…'}
           </span>
@@ -387,8 +398,8 @@ export function PatrolFaceScannerPanel({
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
           {captureMode === 'auto'
-            ? 'Tự động: giữ yên theo hướng dẫn — vòng TRÊN/TRÁI/PHẢI/DƯỚI lần lượt chuyển xanh.'
-            : 'Thủ công: căn mặt theo hướng dẫn rồi bấm Chụp từng góc.'}
+            ? 'Tự động: căn đúng từng góc gallery — vòng xanh lần lượt Chính diện → Trái → Phải → Cúi.'
+            : 'Thủ công: căn đúng góc đang sáng rồi bấm Chụp — hệ thống từ chối nếu sai góc.'}
         </p>
       </div>
     </div>

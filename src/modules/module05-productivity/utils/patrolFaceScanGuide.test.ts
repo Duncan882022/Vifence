@@ -5,12 +5,15 @@ import {
   guidanceForSlot,
   poseHintMatchesSlot,
 } from './patrolFaceScanGuide'
-import { FACE_SCAN_POSE_COUNT } from './patrolFaceScanPoses'
+import { FACE_SCAN_POSE_COUNT, FACE_SCAN_POSE_LABELS } from './patrolFaceScanPoses'
 
 describe('patrolFaceScanGuide', () => {
   it('maps head pose to 4 enrollment slots', () => {
     expect(FACE_SCAN_POSE_COUNT).toBe(4)
     expect(poseHintMatchesSlot('front', 1)).toBe(true)
+    expect(poseHintMatchesSlot('left', 2)).toBe(true)
+    expect(poseHintMatchesSlot('right', 3)).toBe(true)
+    expect(poseHintMatchesSlot('down', 4)).toBe(true)
     expect(faceReadyForSlot({
       hasFace: true,
       poseHint: 'front',
@@ -22,14 +25,14 @@ describe('patrolFaceScanGuide', () => {
       hasFace: true,
       poseHint: 'left',
       fillScore: 0.5,
-      centerX: 0.38,
+      centerX: 0.34,
       centerY: 0.5,
     }, 2)).toBe(true)
     expect(faceReadyForSlot({
       hasFace: true,
       poseHint: 'right',
       fillScore: 0.5,
-      centerX: 0.62,
+      centerX: 0.66,
       centerY: 0.5,
     }, 3)).toBe(true)
     expect(faceReadyForSlot({
@@ -37,11 +40,28 @@ describe('patrolFaceScanGuide', () => {
       poseHint: 'down',
       fillScore: 0.5,
       centerX: 0.5,
-      centerY: 0.65,
+      centerY: 0.62,
     }, 4)).toBe(true)
   })
 
-  it('loose in-frame accepts front face for slot 1', () => {
+  it('rejects wrong pose for slot', () => {
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.34,
+      centerY: 0.5,
+    }, 1)).toBe(false)
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 2)).toBe(false)
+  })
+
+  it('loose in-frame accepts centered face', () => {
     expect(faceLooseInFrame({
       hasFace: true,
       poseHint: 'front',
@@ -51,10 +71,16 @@ describe('patrolFaceScanGuide', () => {
     })).toBe(true)
   })
 
-  it('exposes 4 step labels', () => {
-    expect(guidanceForSlot(1)).toContain('Bước 1')
-    expect(guidanceForSlot(2)).toContain('TRÁI')
-    expect(guidanceForSlot(3)).toContain('PHẢI')
-    expect(guidanceForSlot(4)).toContain('DƯỚI')
+  it('exposes 4 gallery step labels', () => {
+    expect(guidanceForSlot(1)).toContain('Chính diện')
+    expect(guidanceForSlot(2)).toContain('Quay trái')
+    expect(guidanceForSlot(3)).toContain('Quay phải')
+    expect(guidanceForSlot(4)).toContain('Cúi xuống')
+    expect(FACE_SCAN_POSE_LABELS).toEqual([
+      'Chính diện',
+      'Quay trái',
+      'Quay phải',
+      'Cúi xuống',
+    ])
   })
 })

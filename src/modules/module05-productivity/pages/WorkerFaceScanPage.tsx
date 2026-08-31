@@ -161,7 +161,7 @@ export function WorkerFaceScanPage() {
             </div>
             <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Bước 1: Đưa mặt vào khung, làm theo hướng dẫn (tự quét 4 góc TRÊN·TRÁI·PHẢI·DƯỚI) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
+              Bước 1: Căn đúng 4 góc gallery (Chính diện · Quay trái · Quay phải · Cúi xuống) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
             </p>
           </div>
 
