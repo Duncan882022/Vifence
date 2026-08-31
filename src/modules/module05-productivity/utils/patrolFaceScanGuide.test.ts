@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   faceLooseInFrame,
+  faceNearSlot,
+  faceReadyForAutoSlot,
+  faceReadyForManualCapture,
   faceReadyForSlot,
   guidanceForSlot,
+  manualScanBlockedInstruction,
   poseHintMatchesSlot,
 } from './patrolFaceScanGuide'
 import { FACE_SCAN_POSE_COUNT } from './patrolFaceScanPoses'
@@ -71,10 +75,60 @@ describe('patrolFaceScanGuide', () => {
     })).toBe(true)
   })
 
+  it('near-slot is relaxed for auto flow', () => {
+    expect(faceReadyForAutoSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1)).toBe(true)
+    expect(faceNearSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.58,
+      centerY: 0.5,
+    }, 3)).toBe(true)
+    expect(faceReadyForSlot({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.58,
+      centerY: 0.5,
+    }, 3)).toBe(false)
+  })
+
+  it('blocks manual capture without AI', () => {
+    expect(manualScanBlockedInstruction('loading')).toContain('chờ')
+    expect(manualScanBlockedInstruction('unavailable')).toContain('Tự động')
+    expect(faceReadyForManualCapture({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1, 'unavailable')).toBe(false)
+    expect(faceReadyForManualCapture({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 1, 'ready')).toBe(true)
+    expect(faceReadyForManualCapture({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.34,
+      centerY: 0.5,
+    }, 1, 'ready')).toBe(false)
+  })
+
   it('exposes 4 gallery step labels', () => {
-    expect(guidanceForSlot(1)).toContain('TRÊN')
-    expect(guidanceForSlot(2)).toContain('TRÁI')
-    expect(guidanceForSlot(3)).toContain('PHẢI')
-    expect(guidanceForSlot(4)).toContain('DƯỚI')
+    expect(guidanceForSlot(1)).toContain('Nhìn thẳng')
+    expect(guidanceForSlot(2)).toContain('trái')
+    expect(guidanceForSlot(3)).toContain('phải')
+    expect(guidanceForSlot(4)).toContain('Cúi')
   })
 })

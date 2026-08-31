@@ -58,6 +58,15 @@ export default {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      animation: {
+        'face-scan-line': 'face-scan-line 2.4s ease-in-out infinite',
+      },
+      keyframes: {
+        'face-scan-line': {
+          '0%, 100%': { top: '12%', opacity: '0.35' },
+          '50%': { top: '78%', opacity: '1' },
+        },
+      },
       spacing: {
         sidebar: '220px',
         header: '64px',

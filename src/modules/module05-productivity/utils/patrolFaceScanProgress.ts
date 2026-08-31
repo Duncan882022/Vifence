@@ -18,8 +18,10 @@ export function computeFaceScanRingProgress(
   return Math.min(1, (safeCaptured + safeHold) / required)
 }
 
-export const FACE_SCAN_MODEL_LOAD_TIMEOUT_MS = 4000
+export const FACE_SCAN_MODEL_LOAD_TIMEOUT_MS = 8000
 /** Giữ yên trong khung rồi tự chụp — eKYC fallback (backend xác thực mặt). */
-export const FACE_SCAN_HOLD_CAPTURE_MS = 1200
-/** Khi BlazeFace thấy mặt — chụp nhanh hơn. */
-export const FACE_SCAN_AI_HOLD_MS = 700
+export const FACE_SCAN_HOLD_CAPTURE_MS = 1000
+/** Khi BlazeFace thấy mặt — chụp nhanh hơn (Face ID feel). */
+export const FACE_SCAN_AI_HOLD_MS = 550
+/** Số tick liên tiếp lệch góc trước khi reset hold — tránh giật. */
+export const FACE_SCAN_HOLD_MISMATCH_TICKS = 3
