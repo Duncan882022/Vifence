@@ -128,6 +128,8 @@ def _resolve_snapshot_tier(
     if explicit == TIER_PERSON:
         return TIER_PERSON
     if explicit == TIER_IDENTITY:
+        if wid and not patrol_tier_label(wid) == TIER_IDENTITY:
+            return TIER_PERSON
         return TIER_IDENTITY
 
     candidates: list[str] = []
