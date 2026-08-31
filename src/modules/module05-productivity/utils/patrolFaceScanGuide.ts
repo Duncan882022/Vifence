@@ -38,7 +38,7 @@ export interface FaceScanMetrics {
   centerX: number
   centerY: number
   /** fh/fw — ngửa lên thường làm bbox cao hơn (BlazeFace). */
-  faceAspect: number
+  faceAspect?: number
 }
 
 const FACE_SCORE_MIN = 0.28
