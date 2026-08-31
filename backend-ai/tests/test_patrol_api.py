@@ -88,21 +88,22 @@ class PatrolApiTests(unittest.TestCase):
         pers_id, _ = identity.observe_face(_vec(4), quality=0.8)
         res = self.client.post(
             f"/patrol/persons/{pers_id}/identify", json={"full_name": "Thiếu mã"}
-        ).json()
-        self.assertFalse(res["ok"])
+        )
+        self.assertEqual(res.status_code, 422)
 
     def test_day_events_reflect_identity_change(self) -> None:
         pers_id, _ = identity.observe_face(_vec(5), quality=0.8)
         _touch_person_card(pers_id, camera_id="HC-01")
+        date = db.today_vn(1_000.0)
 
-        before = self.client.get("/patrol/day/events").json()
+        before = self.client.get(f"/patrol/day/events?date={date}").json()
         self.assertEqual(before["items"][0]["status"], "person")
 
         self.client.post(
             f"/patrol/persons/{pers_id}/identify",
             json={"full_name": "Lê C", "employee_code": "NV003"},
         )
-        after = self.client.get("/patrol/day/events").json()
+        after = self.client.get(f"/patrol/day/events?date={date}").json()
         self.assertEqual(after["items"][0]["status"], "identified")
         self.assertEqual(after["items"][0]["display_name"], "Lê C")
 
@@ -110,8 +111,11 @@ class PatrolApiTests(unittest.TestCase):
         pers_id, _ = identity.observe_face(_vec(6), quality=0.8)
         _touch_person_card(pers_id, camera_id="HC-01")
         _touch_person_card(pers_id, camera_id="DR-03")
+        date = db.today_vn(1_000.0)
 
-        res = self.client.get(f"/patrol/day/appearances?subject_id={pers_id}").json()
+        res = self.client.get(
+            f"/patrol/day/appearances?subject_id={pers_id}&date={date}",
+        ).json()
         self.assertTrue(res["ok"])
         self.assertEqual(sorted(res["by_camera"]), ["DR-03", "HC-01"])
 
@@ -127,15 +131,20 @@ class PatrolApiTests(unittest.TestCase):
             snapshot_path="obj.jpg",
             snapshot_score=0.6,
         )
+        date = db.today_vn(1_000.0)
 
-        stats = self.client.get("/patrol/day/stats").json()
+        stats = self.client.get(f"/patrol/day/stats?date={date}").json()
         self.assertTrue(stats["ok"])
         self.assertEqual(stats["workers_standard"], 1)
         self.assertEqual(stats["encounters_standard"], 1)
         self.assertEqual(stats["unassigned_observations"], 1)
         self.assertEqual(stats["object_card_count"], 1)
+        self.assertEqual(
+            stats["workers_standard"],
+            stats["person_count"] + stats["identity_count"],
+        )
 
-        pres = self.client.get("/patrol/day/presences").json()
+        pres = self.client.get(f"/patrol/day/presences?date={date}").json()
         self.assertTrue(pres["ok"])
         self.assertEqual(len(pres["items"]), 2)
         gps_items = [i for i in pres["items"] if i.get("gps_lat")]
@@ -150,7 +159,8 @@ class PatrolApiTests(unittest.TestCase):
             snapshot_path="bundle.jpg",
             snapshot_score=1.35,
         )
-        bundle = self.client.get("/patrol/day/bundle").json()
+        date = db.today_vn(3_000.0)
+        bundle = self.client.get(f"/patrol/day/bundle?date={date}").json()
         self.assertTrue(bundle["ok"])
         self.assertEqual(len(bundle["events"]), 1)
         self.assertEqual(bundle["events"][0]["snapshot_path"], "bundle.jpg")

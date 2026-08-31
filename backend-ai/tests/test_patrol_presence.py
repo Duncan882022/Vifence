@@ -117,6 +117,10 @@ class PresenceDbTest(unittest.TestCase):
         self.assertEqual(stats["encounters_standard"], 0)
         self.assertEqual(stats["workers_standard"], 0)
         self.assertEqual(stats["object_card_count"], 1)
+        self.assertEqual(
+            stats["workers_standard"],
+            stats["person_count"] + stats["identity_count"],
+        )
 
     def test_list_day_presences_includes_gps(self) -> None:
         pers_id, _ = identity.observe_face(_vec(104), quality=0.8)
