@@ -44,6 +44,16 @@ describe('resolvePatrolRoiDisplayLabel', () => {
     expect(label).toBe('—')
   })
 
+  it('peak group — hiện số thứ tự và cỡ nhóm', () => {
+    const label = resolvePatrolRoiDisplayLabel(track({
+      tier: 'object',
+      peakGroup: true,
+      peakGroupIndex: 3,
+      peakGroupSize: 12,
+    }))
+    expect(label).toBe('#3 · Nhóm 12')
+  })
+
   it('person tier — vẫn hiện mã tk', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
       tier: 'person',

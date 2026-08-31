@@ -35,6 +35,10 @@ export interface MobileAiDetection {
   tier?: 'object' | 'person' | 'identity'
   /** px/giây theo hệ toạ độ frame AI — mồi vận tốc cho ROI khỏi trễ một nhịp. */
   velocity?: [number, number]
+  /** Peak time — gom nhóm 1 obj; ROI vẫn đánh số từng người. */
+  peak_group?: boolean
+  peak_group_index?: number
+  peak_group_size?: number
 }
 
 export interface MobileAiViolationEvent {

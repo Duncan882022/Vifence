@@ -36,6 +36,9 @@ export function gateVmsPatrolPersonDetections(
       track_id: d.track_id,
       tier: d.tier,
       velocity: d.velocity,
+      peak_group: d.peak_group,
+      peak_group_index: d.peak_group_index,
+      peak_group_size: d.peak_group_size,
       face_eligible: undefined as boolean | undefined,
     }))
     .filter(d => {

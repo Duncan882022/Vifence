@@ -72,6 +72,9 @@ export interface VmsOverlayDetection {
   tier?: 'object' | 'person' | 'identity'
   /** px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect. */
   velocity?: [number, number]
+  peak_group?: boolean
+  peak_group_index?: number
+  peak_group_size?: number
 }
 
 export interface VmsDetectionSnapshot {
@@ -200,6 +203,9 @@ function mapDetection(
     related_bbox: normalizeBbox(raw.related_bbox as number[] | undefined, frameWidth, frameHeight) ?? undefined,
     tier: normalizeTier(raw.tier),
     velocity: normalizeVelocity(raw.velocity as number[] | undefined),
+    peak_group: raw.peak_group === true,
+    peak_group_index: raw.peak_group_index != null ? Number(raw.peak_group_index) : undefined,
+    peak_group_size: raw.peak_group_size != null ? Number(raw.peak_group_size) : undefined,
   }
 }
 

@@ -169,8 +169,18 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   if (det.tier && TIER_RANK[det.tier] > TIER_RANK[track.tier]) {
     track.tier = det.tier
   }
-  track.label = track.workerName?.trim()
-    || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
+  if (det.peak_group) {
+    track.peakGroup = true
+    if (det.peak_group_index != null) track.peakGroupIndex = det.peak_group_index
+    if (det.peak_group_size != null) track.peakGroupSize = det.peak_group_size
+  }
+  const detLabel = det.label?.trim()
+  if (det.peak_group && detLabel?.startsWith('#')) {
+    track.label = detLabel
+  } else {
+    track.label = track.workerName?.trim()
+      || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
+  }
   // Suy giảm rồi mới lấy max, giống backend. Dùng thẳng `Math.max` thì con số
   // trên nhãn là **đỉnh của cả đời track** và không bao giờ hạ: người rời khung
   // rồi mà ROI vẫn khoe 93% của mấy giây trước, khiến một track đang yếu trông
@@ -307,6 +317,9 @@ export function advancePersonRoiTracks(
       anchorKey,
       tier: det.tier ?? 'object',
       kalman,
+      peakGroup: det.peak_group,
+      peakGroupIndex: det.peak_group_index,
+      peakGroupSize: det.peak_group_size,
     }
     applyIdentity(track, det)
     next.set(id, track)
@@ -368,6 +381,9 @@ export function predictPersonRoiTracks(
       workerName: track.workerName,
       tier: track.tier,
       displayOpacity,
+      peakGroup: track.peakGroup,
+      peakGroupIndex: track.peakGroupIndex,
+      peakGroupSize: track.peakGroupSize,
     })
   }
 

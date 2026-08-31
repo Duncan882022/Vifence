@@ -15,6 +15,11 @@ export function isTechnicalPatrolWorkerLabel(label?: string | null): boolean {
  * Nhãn ROI live — tier `identity` luôn ưu tiên tên người, không mã tk/p-*.
  */
 export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
+  if (track.peakGroup && track.peakGroupIndex) {
+    const sizeHint = track.peakGroupSize ? ` · Nhóm ${track.peakGroupSize}` : ''
+    return `#${track.peakGroupIndex}${sizeHint}`
+  }
+
   const wid = track.workerId?.trim() ?? ''
   const manual = getPatrolManualIdentity(wid) ?? getPatrolManualIdentityForTk(wid)
   if (manual?.workerName) return manual.workerName
