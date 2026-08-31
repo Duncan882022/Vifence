@@ -14,6 +14,7 @@ interface FaceScanProgressRingProps {
   capturedCount: number
   facesRequired: number
   holdProgress: number
+  approachProgress?: number
   complete: boolean
   scanLine?: boolean
 }
@@ -36,6 +37,7 @@ export function FaceScanProgressRing({
   capturedCount,
   facesRequired,
   holdProgress,
+  approachProgress = 0,
   complete,
   scanLine = true,
 }: FaceScanProgressRingProps) {
@@ -45,6 +47,7 @@ export function FaceScanProgressRing({
     required,
     holdProgress,
     complete,
+    approachProgress,
   )
   const litTicks = Math.round(ringProgress * TICK_COUNT)
 
@@ -79,7 +82,7 @@ export function FaceScanProgressRing({
                   ? '#4ade80'
                   : isActiveBand
                     ? '#4ade80'
-                    : holdProgress > 0
+                    : holdProgress > 0 || approachProgress > 0.08
                       ? '#86efac'
                       : '#ffffff')
                 : 'rgba(255,255,255,0.22)'}

@@ -3,11 +3,12 @@ import { captureFaceEnrollmentFrameBase64 } from '../utils/patrolFaceCapture'
 import type { PatrolScanEnrollment } from '../services/patrolWorkerProfile.service'
 import {
   analyzeFaceScanFrame,
+  autoScanInstruction,
   basicFacePresentInVideo,
   faceReadyForAutoSlot,
   getPatrolFaceScanModelStatus,
-  guidanceForHint,
   guidanceForSlot,
+  poseApproachProgress,
   preloadPatrolFaceScanModels,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanGuide'
@@ -34,6 +35,7 @@ export interface PatrolAutoFaceScanState {
   subGuidance: string
   ringProgress: number
   holdProgress: number
+  approachProgress: number
   faceDetected: boolean
   poseMatched: boolean
   capturing: boolean
@@ -56,6 +58,7 @@ export function usePatrolAutoFaceScan(
   const [faceDetected, setFaceDetected] = useState(false)
   const [poseMatched, setPoseMatched] = useState(false)
   const [holdProgress, setHoldProgress] = useState(0)
+  const [approachProgress, setApproachProgress] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [scanMode, setScanMode] = useState<'ai' | 'fallback'>('ai')
@@ -76,11 +79,13 @@ export function usePatrolAutoFaceScan(
   const required = enrollment?.faces_required ?? 4
   const complete = enrollment?.complete ?? false
   const holdProgressClamped = Math.max(0, Math.min(1, holdProgress))
+  const approachProgressClamped = Math.max(0, Math.min(0.88, approachProgress))
   const ringProgress = computeFaceScanRingProgress(
     capturedCount,
     required,
     holdProgressClamped,
     complete,
+    approachProgressClamped,
   )
   const guidance = complete
     ? `Hoàn thành! Đủ ${required} góc mặt.`
@@ -103,6 +108,7 @@ export function usePatrolAutoFaceScan(
     holdStartRef.current = 0
     mismatchStreakRef.current = 0
     setHoldProgress(0)
+    setApproachProgress(0)
   }, [])
 
   const resetScanAttempt = useCallback(() => {
@@ -178,8 +184,8 @@ export function usePatrolAutoFaceScan(
     setHoldProgress(progress)
     setSubGuidance(
       progress >= 1
-        ? 'Đang quét…'
-        : 'Giữ yên — vòng tròn đang được quét',
+        ? autoScanInstruction(null, slot, 'capture')
+        : autoScanInstruction(null, slot, 'hold', progress),
     )
     if (elapsed >= holdMs) {
       void runCapture(slot)
@@ -234,13 +240,13 @@ export function usePatrolAutoFaceScan(
             if (hasBasicFace) {
               mismatchStreakRef.current = 0
               poseReadyRef.current = true
-              if (holdStartRef.current === 0) {
-                setSubGuidance(`${guidanceForSlot(slot)} — giữ yên để quét`)
-              }
+              setApproachProgress(0.55)
+              setSubGuidance(autoScanInstruction(null, slot, 'fallback'))
             } else {
               bumpMismatch()
               poseReadyRef.current = false
-              setSubGuidance('Đưa mặt vào giữa khung tròn')
+              setApproachProgress(0)
+              setSubGuidance(autoScanInstruction(null, slot, 'fallback'))
             }
             return
           }
@@ -248,7 +254,8 @@ export function usePatrolAutoFaceScan(
           if (status === 'loading') {
             setScanMode('ai')
             poseReadyRef.current = false
-            setSubGuidance('Đang tải AI nhận diện góc mặt…')
+            setApproachProgress(0)
+            setSubGuidance(autoScanInstruction(null, slot, 'loading'))
             resetHold()
             return
           }
@@ -260,26 +267,30 @@ export function usePatrolAutoFaceScan(
 
           const hasFace = metrics.hasFace
           const matched = faceReadyForAutoSlot(metrics, slot)
+          const approach = hasFace ? poseApproachProgress(metrics, slot) : 0
 
           setFaceDetected(hasFace)
           setPoseMatched(matched)
+          setApproachProgress(matched ? 0 : approach)
 
           if (!hasFace) {
             bumpMismatch()
             poseReadyRef.current = false
-            setSubGuidance(guidanceForSlot(slot))
+            setSubGuidance(autoScanInstruction(metrics, slot, 'no_face'))
             return
           }
 
           if (!matched) {
             bumpMismatch()
             poseReadyRef.current = false
-            setSubGuidance(guidanceForHint(metrics.poseHint, slot))
+            setSubGuidance(autoScanInstruction(metrics, slot, 'approach'))
             return
           }
 
           mismatchStreakRef.current = 0
           poseReadyRef.current = true
+          setApproachProgress(0)
+          setSubGuidance(autoScanInstruction(metrics, slot, 'hold'))
         } finally {
           analyzingRef.current = false
         }
@@ -329,6 +340,7 @@ export function usePatrolAutoFaceScan(
     subGuidance,
     ringProgress,
     holdProgress: holdProgressClamped,
+    approachProgress: approachProgressClamped,
     faceDetected,
     poseMatched,
     capturing,

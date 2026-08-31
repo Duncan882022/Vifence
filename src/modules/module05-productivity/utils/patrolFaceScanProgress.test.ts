@@ -11,6 +11,15 @@ describe('patrolFaceScanProgress', () => {
     expect(computeFaceScanRingProgress(0, 4, 1, false)).toBeCloseTo(0.25)
   })
 
+  it('adds approach progress while turning head', () => {
+    expect(computeFaceScanRingProgress(0, 4, 0, false, 0.5)).toBeCloseTo(0.125)
+    expect(computeFaceScanRingProgress(1, 4, 0, false, 0.4)).toBeCloseTo(0.35)
+  })
+
+  it('prefers hold over approach when both present', () => {
+    expect(computeFaceScanRingProgress(0, 4, 0.6, false, 0.8)).toBeCloseTo(0.15)
+  })
+
   it('caps at 1 before complete', () => {
     expect(computeFaceScanRingProgress(4, 4, 0.8, false)).toBe(1)
   })

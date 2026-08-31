@@ -389,8 +389,11 @@ export function PatrolFaceScannerPanel({
             capturedCount={capturedCount}
             facesRequired={facesRequired}
             holdProgress={captureMode === 'auto' ? autoScan.holdProgress : 0}
+            approachProgress={captureMode === 'auto' ? autoScan.approachProgress : 0}
             complete={complete}
-            scanLine={!complete && (captureMode === 'auto' ? autoScan.poseMatched || autoScan.scanMode === 'fallback' : manualNear || manualReady)}
+            scanLine={!complete && (captureMode === 'auto'
+              ? autoScan.poseMatched || autoScan.approachProgress > 0.12 || autoScan.scanMode === 'fallback'
+              : manualNear || manualReady)}
           />
           {complete && (
             <CheckCircle className="absolute w-16 h-16 text-green-400 drop-shadow-[0_0_16px_rgba(74,222,128,0.95)] z-50" />

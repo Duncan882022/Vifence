@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  autoScanInstruction,
   faceLooseInFrame,
   faceNearSlot,
   faceReadyForAutoSlot,
@@ -7,6 +8,7 @@ import {
   faceReadyForSlot,
   guidanceForSlot,
   manualScanBlockedInstruction,
+  poseApproachProgress,
   poseHintMatchesSlot,
 } from './patrolFaceScanGuide'
 import { FACE_SCAN_POSE_COUNT } from './patrolFaceScanPoses'
@@ -97,6 +99,38 @@ describe('patrolFaceScanGuide', () => {
       centerX: 0.58,
       centerY: 0.5,
     }, 3)).toBe(false)
+    expect(poseApproachProgress({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.42,
+      centerY: 0.5,
+    }, 2)).toBeGreaterThan(0.3)
+    expect(faceReadyForAutoSlot({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.38,
+      centerY: 0.5,
+    }, 2)).toBe(true)
+  })
+
+  it('auto instruction tells user how to turn when pose insufficient', () => {
+    expect(autoScanInstruction(null, 2, 'fallback')).toContain('trái')
+    expect(autoScanInstruction({
+      hasFace: true,
+      poseHint: 'front',
+      fillScore: 0.5,
+      centerX: 0.5,
+      centerY: 0.5,
+    }, 2, 'approach')).toContain('trái')
+    expect(autoScanInstruction({
+      hasFace: true,
+      poseHint: 'left',
+      fillScore: 0.5,
+      centerX: 0.34,
+      centerY: 0.5,
+    }, 2, 'approach')).toContain('Giữ yên')
   })
 
   it('blocks manual capture without AI', () => {
