@@ -7,14 +7,11 @@ import { cn } from '@/utils/cn'
 import { formatEventDateTime } from '@/utils/format'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { getPatrolEventLocationLabel } from '../utils/patrolEventsUi'
-import { isPatrolPersonLifecycleEvent } from '../utils/patrolEventsFeed'
 import {
   PATROL_EVENTS_TAB_META,
-  countUniquePatrolTabEntities,
-  dedupePatrolEventsByMasterEntity,
   resolvePatrolEventDisplayMeta,
-  resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
+import { listPatrolEventsForTab } from '../utils/patrolEventsTabList'
 import { resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
 
@@ -41,25 +38,8 @@ const FILTER_TABS: { key: PatrolFilterTab; label: string; icon: LucideIcon; colo
 /** Icon meta card — tên / giờ / địa điểm: cùng xám, cùng kích cỡ. */
 const EVENT_CARD_META_ICON = 'w-2.5 h-2.5 shrink-0 text-muted-foreground/45'
 
-function isPersonEvent(event: PatrolEvent): boolean {
-  return event.type === 'PERSON_DETECTED'
-}
-
 function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
-  const feed = dedupePatrolEventsByMasterEntity(
-    events.filter(isPatrolPersonLifecycleEvent),
-  )
-  switch (tab) {
-    case 'object':
-      return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'object')
-    case 'person':
-      return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'person')
-    case 'identity':
-      return feed.filter(e => isPersonEvent(e) && resolvePatrolPersonStage(e) === 'profile')
-    case 'all':
-    default:
-      return feed
-  }
+  return listPatrolEventsForTab(events, tab)
 }
 
 function eventSearchHaystack(event: PatrolEvent): string {
@@ -223,15 +203,12 @@ export function PatrolEventsPanel({
     [events, filterTab, searchQuery],
   )
 
-  const tabCounts = useMemo(() => {
-    const feed = events.filter(isPatrolPersonLifecycleEvent)
-    return {
-      all: countUniquePatrolTabEntities(feed, 'all'),
-      object: countUniquePatrolTabEntities(feed, 'object'),
-      person: countUniquePatrolTabEntities(feed, 'person'),
-      identity: countUniquePatrolTabEntities(feed, 'identity'),
-    }
-  }, [events])
+  const tabCounts = useMemo(() => ({
+    all: listPatrolEventsForTab(events, 'all').length,
+    object: listPatrolEventsForTab(events, 'object').length,
+    person: listPatrolEventsForTab(events, 'person').length,
+    identity: listPatrolEventsForTab(events, 'identity').length,
+  }), [events])
 
   useEffect(() => {
     setVisibleCount(INITIAL_COUNT)
@@ -335,7 +312,7 @@ export function PatrolEventsPanel({
       </div>
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-1.5 sm:p-2">
-        {events.filter(isPatrolPersonLifecycleEvent).length === 0 ? (
+        {listPatrolEventsForTab(events, 'all').length === 0 ? (
           <p className="text-[10px] text-muted-foreground text-center py-8 px-3">
             {viewingToday
               ? 'Chưa có sự kiện hôm nay — chọn ngày khác phía trên hoặc đang chờ backend'

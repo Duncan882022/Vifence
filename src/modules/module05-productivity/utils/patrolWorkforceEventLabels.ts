@@ -267,35 +267,6 @@ export function dedupePatrolEventsByMasterEntity(events: PatrolEvent[]): PatrolE
 
 export type PatrolEventsTabKey = 'all' | 'object' | 'person' | 'identity'
 
-function hasPatrolSnapshot(event: PatrolEvent): boolean {
-  return Boolean(event.snapshotUrl?.trim())
-}
-
-function matchesPatrolEventsTab(event: PatrolEvent, tab: PatrolEventsTabKey): boolean {
-  if (!hasPatrolSnapshot(event)) return false
-  if (tab === 'all') {
-    return event.type === 'PERSON_DETECTED' || event.type === 'IDENTITY_VERIFIED'
-  }
-  if (tab === 'identity') {
-    return event.type === 'PERSON_DETECTED' && resolvePatrolPersonStage(event) === 'profile'
-  }
-  if (event.type !== 'PERSON_DETECTED') return false
-  return resolvePatrolPersonStage(event) === tab
-}
-
-/** Đếm unique entity theo tab — không đếm raw event rows. */
-export function countUniquePatrolTabEntities(
-  events: PatrolEvent[],
-  tab: PatrolEventsTabKey,
-): number {
-  const keys = new Set<string>()
-  for (const event of events) {
-    if (!matchesPatrolEventsTab(event, tab)) continue
-    keys.add(patrolEventMasterEntityKey(event))
-  }
-  return keys.size
-}
-
 /** Mọi khóa alias có thể tra lịch sử (sgc + OBJ). */
 export function patrolEventIdentityKeys(event: PatrolEvent): string[] {
   const keys = new Set<string>()

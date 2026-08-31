@@ -5,6 +5,8 @@
 import type { PatrolEvent } from '../data/patrolTypes'
 import {
   countUniquePatrolTabEntities,
+} from './patrolEventsTabList'
+import {
   isPatrolIdenId,
   isPatrolPersId,
   isPatrolSgcWorkerId,
