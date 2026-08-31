@@ -57,7 +57,6 @@ const PITCH_DOWN_Y = 0.54
 /** cy thấp hơn = mặt lên trên khung (ngửa cằm). Nới so v0.39 — BlazeFace ít dịch bbox. */
 const PITCH_UP_Y = 0.46
 const PITCH_UP_ASPECT = 1.12
-const AUTO_POSE_MATCH_THRESHOLD_UP = 0.55
 
 type BlazeFaceModel = {
   estimateFaces: (
@@ -132,15 +131,6 @@ function faceInOval(cx: number, cy: number, fw: number): boolean {
   if (cx < CENTER_X_MIN || cx > CENTER_X_MAX) return false
   if (cy < CENTER_Y_MIN || cy > CENTER_Y_MAX) return false
   return fw >= FILL_MIN * 0.7
-}
-
-function looksLikeUpPose(metrics: FaceScanMetrics): boolean {
-  const { centerX: cx, centerY: cy, faceAspect = 1 } = metrics
-  if (Math.abs(cx - 0.5) > YAW_SIDE + 0.10) return false
-  if (metrics.poseHint === 'up') return true
-  if (cy <= PITCH_UP_Y + 0.02) return true
-  if (faceAspect >= PITCH_UP_ASPECT && cy <= 0.50) return true
-  return false
 }
 
 function classifyHeadPose(cx: number, cy: number, faceAspect = 1): HeadPoseHint {

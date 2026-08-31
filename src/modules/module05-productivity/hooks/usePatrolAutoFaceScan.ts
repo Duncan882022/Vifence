@@ -14,7 +14,7 @@ import {
   type LiveScanHint,
   type ScanPoseSlot,
 } from '../utils/patrolFaceScanGuide'
-import { FACE_SCAN_POSE_COUNT, FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
+import { FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 import { isHandheldDevice } from '@/modules/module02-training/services/deviceCamera.service'
 import { faceScanMainInstruction } from '../utils/patrolFaceScanPoses'
 import {

@@ -122,7 +122,6 @@ export function CameraVideoFeed({
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const remoteStream = isHls || Boolean(whepUrl)
   const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
     whepUrl,
     hlsSrc: src,

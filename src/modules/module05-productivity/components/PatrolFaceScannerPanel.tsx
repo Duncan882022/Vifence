@@ -35,7 +35,6 @@ import {
 import {
   defaultFaceScanPoses,
   faceScanMainInstruction,
-  FACE_SCAN_POSE_COUNT,
   FACE_SCAN_POSE_REQUIRED,
   faceScanPoseLabel,
 } from '../utils/patrolFaceScanPoses'

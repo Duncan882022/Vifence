@@ -1,6 +1,5 @@
 import { cn } from '@/utils/cn'
 import {
-  FACE_SCAN_POSE_COUNT,
   FACE_SCAN_POSE_REQUIRED,
   FACE_SCAN_RING_INDEX_BY_SLOT,
   FACE_SCAN_RING_QUADRANT_LABELS,
