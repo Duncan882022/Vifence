@@ -111,7 +111,9 @@ def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bo
     if obs.face_eligible:
         return True
     current = (session.subject_id or "").strip()
-    if current.startswith("pers-"):
+    from ...patrol_ids import is_person_subject_id
+
+    if is_person_subject_id(current):
         return True
     if session.best_faces:
         return True
@@ -172,7 +174,9 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
 def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) -> None:
     """pers-* tạm (sgc) → hồ sơ gallery/identified đã có — gộp thẻ ngày."""
     current = (session.subject_id or "").strip()
-    if not current.startswith("pers-"):
+    from ...patrol_ids import is_person_subject_id
+
+    if not is_person_subject_id(current):
         return
     wid = (obs.lifecycle_worker_id or "").strip()
     if not wid:
@@ -243,12 +247,14 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
         return session.subject_id
 
     if session.identity_resolved and session.subject_id:
+        from ...patrol_ids import is_person_subject_id
+
         _maybe_promote_object_subject(session, obs)
         _maybe_upgrade_pers_subject(session, obs)
         if (
             obs.face_eligible
             and obs.face_embedding is not None
-            and session.subject_id.startswith("pers-")
+            and is_person_subject_id(session.subject_id)
             and not session.committed
         ):
             try:

@@ -89,7 +89,7 @@ class PatrolSinkTests(unittest.TestCase):
             face_quality=0.9,
             now=t0 + 100.0,
         )
-        self.assertTrue(str(pers).startswith("pers-"))
+        self.assertTrue(str(pers).startswith("tk-"))
 
         date = db.today_vn(t0)
         self.assertEqual(daystore.list_objects(date), [])
@@ -119,7 +119,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-01", track_id="ptk0003:person", now=t0 + 50.0,
         )
-        self.assertTrue(str(again).startswith("pers-"))
+        self.assertTrue(str(again).startswith("tk-"))
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
 
     def test_same_person_two_cameras_one_card(self) -> None:
@@ -323,7 +323,7 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01", track_id="ptk0002:person",
             person_bbox=back_box, now=t0 + _OBJECT_CONFIRM,
         )
-        self.assertTrue(str(pers).startswith("pers-"))
+        self.assertTrue(str(pers).startswith("tk-"))
         self.assertTrue(str(obj).startswith("obj-"))
         self.assertNotEqual(pers, obj)
         self.assertEqual(len(daystore.list_person_events(db.today_vn(t0))), 1)
@@ -400,7 +400,7 @@ class PatrolSinkTests(unittest.TestCase):
                 lifecycle_worker_id="p-DUNCAN",
                 worker_name="Duncan",
             )
-        self.assertTrue(str(pers).startswith("pers-"))
+        self.assertEqual(str(pers), "p-DUNCAN")
         person = identity.get_person(str(pers))
         self.assertIsNotNone(person)
         assert person is not None

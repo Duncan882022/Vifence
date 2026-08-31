@@ -66,11 +66,11 @@ class PatrolDbTestCase(unittest.TestCase):
 
 
 class IdentityTests(PatrolDbTestCase):
-    def test_new_face_gets_pers_code(self) -> None:
+    def test_new_face_gets_tk_code(self) -> None:
         pers_id, created = identity.observe_face(_vec(1), quality=0.8)
         self.assertTrue(created)
-        self.assertTrue(pers_id.startswith("pers-"))
-        self.assertEqual(identity.get_person(pers_id)["status"], "person")
+        self.assertTrue(pers_id.startswith("tk-"))
+        self.assertEqual(identity.get_person(pers_id)["status"], identity.STATUS_DRAFT)
 
     def test_same_face_reuses_code(self) -> None:
         first, _ = identity.observe_face(_vec(2), quality=0.8)
@@ -90,18 +90,18 @@ class IdentityTests(PatrolDbTestCase):
         b, _ = identity.observe_face(_vec(4), quality=0.8)
         self.assertNotEqual(a, b)
 
-    def test_identify_promotes_and_issues_iden_code(self) -> None:
+    def test_identify_promotes_to_identified(self) -> None:
         pers_id, _ = identity.observe_face(_vec(5), quality=0.9)
         row = identity.identify(
             pers_id, full_name="Nguyễn Văn A", employee_code="NV001"
         )
-        self.assertEqual(row["status"], "identified")
-        self.assertTrue(str(row["iden_code"]).startswith("iden-"))
+        self.assertEqual(row["status"], identity.STATUS_IDENTIFIED)
+        self.assertEqual(row["employee_code"], "NV001")
         self.assertEqual(row["full_name"], "Nguyễn Văn A")
         # Mã người giữ nguyên — định danh là trạng thái, không phải thực thể mới.
         self.assertEqual(row["pers_id"], pers_id)
 
-    def test_identified_row_must_have_iden_code(self) -> None:
+    def test_identified_row_must_have_employee_code(self) -> None:
         """Ràng buộc CHECK chặn trạng thái nửa vời ngay ở tầng lưu trữ."""
         pers_id, _ = identity.observe_face(_vec(6), quality=0.8)
         with self.assertRaises(Exception):
@@ -185,7 +185,7 @@ class DailyEventTests(PatrolDbTestCase):
         _touch_person_card(pers_id, camera_id="HC-01", now=500.0)
         date = db.today_vn(500.0)
 
-        self.assertEqual(daystore.list_person_events(date)[0]["status"], "person")
+        self.assertEqual(daystore.list_person_events(date)[0]["status"], identity.STATUS_DRAFT)
         identity.identify(pers_id, full_name="Phạm D", employee_code="NV020")
         # Thẻ cũ đổi theo — tầng suy từ persons lúc truy vấn, không chụp lại.
         card = daystore.list_person_events(date)[0]
@@ -396,13 +396,19 @@ class DailyEventTests(PatrolDbTestCase):
             {"20250828/pers-0001-1000.jpg", "20250828/pers-0001-5000.jpg"},
         )
 
-    def test_no_card_without_eligible_snapshot(self) -> None:
+    def test_draft_card_created_before_eligible_snapshot(self) -> None:
+        """Thẻ draft có thể tạo trước khi có ảnh đủ điểm — snapshot gán sau."""
         pers_id, _ = identity.observe_face(_vec(34), quality=0.8)
         daystore.touch_person_event(pers_id, camera_id="HC-01", now=1_000.0)
-        self.assertEqual(daystore.list_person_events(db.today_vn(1_000.0)), [])
+        cards = daystore.list_person_events(db.today_vn(1_000.0))
+        self.assertEqual(len(cards), 1)
+        self.assertIsNone(cards[0]["snapshot_path"])
 
         _touch_person_card(pers_id, camera_id="HC-01", now=1_010.0, snapshot_path="face.jpg")
-        self.assertEqual(len(daystore.list_person_events(db.today_vn(1_000.0))), 1)
+        self.assertEqual(
+            daystore.list_person_events(db.today_vn(1_000.0))[0]["snapshot_path"],
+            "face.jpg",
+        )
 
     def test_new_encounter_splits_within_gap(self) -> None:
         """Track mới (seen_since) → dòng lịch sử mới dù cách <45s."""
@@ -541,10 +547,10 @@ class AppearanceSubjectResolveTests(PatrolDbTestCase):
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
 
         fake_row = {
-            "aliases": [str(pers_id), str(obj_id), "sgc-12"],
+            "aliases": [str(pers_id), str(obj_id), "tk-12"],
         }
         with patch("app.patrol_identity_store.lookup_patrol_identity", return_value=fake_row):
-            self.assertEqual(_resolve_appearance_subject_id("p-DUNCAN"), str(pers_id))
+            self.assertEqual(_resolve_appearance_subject_id("p-DUNCAN"), "p-DUNCAN")
             self.assertEqual(_resolve_appearance_subject_id(str(obj_id)), str(obj_id))
             self.assertEqual(_resolve_appearance_subject_id(str(pers_id)), str(pers_id))
 
