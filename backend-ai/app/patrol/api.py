@@ -545,6 +545,18 @@ def repair_appearances(
     return out
 
 
+@router.post("/admin/reset-all")
+def admin_reset_all(
+    user: RequirePatrolAdmin = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Xóa sạch dữ liệu tuần tra — gallery, SQLite, bindings, snapshot."""
+    from .admin_reset import purge_patrol_all
+
+    stats = purge_patrol_all(keep_counters=True)
+    audit("patrol_reset_all", actor=user.username, meta=stats)
+    return stats
+
+
 @router.post("/persons/sync-gallery")
 def sync_gallery_persons(_user: RequirePatrolAdmin = None) -> dict:  # noqa: ARG001
     """Backfill gallery live từ mọi hồ sơ đã định danh (admin)."""
