@@ -59,10 +59,9 @@ import { ensurePatrolAuth } from '@/services/patrolApiClient'
 import type { WorkforceSnapshot } from './types/workforceHeatmap'
 import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
 import { buildPatrolHelmetOnlineById } from './utils/patrolStreamOnline'
-import { computePatrolZoneCoverage } from './utils/patrolZoneCoverage'
+import { computePatrolZoneCoverage, type PatrolZoneCoverageResult } from './utils/patrolZoneCoverage'
 import { usePatrolFlymapMetrics } from './hooks/usePatrolFlymapMetrics'
 import { derivePatrolDisplayStats } from './utils/patrolDisplayStats'
-import { computePatrolTabCounts } from './utils/patrolEventsTabList'
 
 function PatrolWorkersKpiDetail({
   personCount,
@@ -96,25 +95,19 @@ function PatrolWorkersKpiDetail({
 
 function PatrolKPIs({
   live,
-  workforce,
   stats,
-  cameraOnlineById,
+  zoneCoverage,
   flymapPersonCount,
   flymapLoading,
   dr03Online,
 }: {
   live: PatrolHelmetLiveMetrics
-  workforce: WorkforceSnapshot
   stats: PatrolDayStats
-  cameraOnlineById: Record<string, boolean>
+  zoneCoverage: PatrolZoneCoverageResult
   flymapPersonCount: number
   flymapLoading: boolean
   dr03Online: boolean
 }) {
-  const zoneCoverage = computePatrolZoneCoverage({
-    cameraOnlineById,
-    workforce,
-  })
   const { visitedZones, totalZones, coveragePercent } = zoneCoverage
 
   const anyCameraOnline = live.perCamera.some(row => row.stream_online)
@@ -298,13 +291,9 @@ export function Module05Page() {
     () => filterPatrolEventsByFlycamAltitude(dayBundle.events, flycamFlightModes),
     [dayBundle.events, flycamFlightModes],
   )
-  const displayStats = useMemo(
+  const { stats: patrolDisplayStats, tabCounts } = useMemo(
     () => derivePatrolDisplayStats(patrolEventsLive, dayBundle.stats),
     [patrolEventsLive, dayBundle.stats],
-  )
-  const tabCounts = useMemo(
-    () => computePatrolTabCounts(patrolEventsLive),
-    [patrolEventsLive],
   )
   const patrolMapCameraIds = useMemo(
     () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
@@ -339,7 +328,7 @@ export function Module05Page() {
     () => dayBundle.bundle?.presences ?? [],
     [dayBundle.bundle],
   )
-  const dayStats = { stats: displayStats, loading: dayBundle.loading, reachable: dayBundle.reachable }
+  const dayStats = { stats: patrolDisplayStats, loading: dayBundle.loading, reachable: dayBundle.reachable }
   const dr03FlightLabel = patrolFlightModeLabel(flycamFlightModes['DR-03'] ?? 'aerial')
 
   const detailEvent = useMemo(
@@ -424,9 +413,8 @@ export function Module05Page() {
               <Tier1 className="grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                 <PatrolKPIs
                   live={liveMetrics}
-                  workforce={workforceSnap}
                   stats={dayStats.stats}
-                  cameraOnlineById={helmetOnlineById}
+                  zoneCoverage={zoneCoverage}
                   flymapPersonCount={flymapPersonCount}
                   flymapLoading={flymapLoading}
                   dr03Online={dr03Online}

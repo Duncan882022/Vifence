@@ -124,6 +124,8 @@ class PatrolApiTests(unittest.TestCase):
         daystore.touch_object(
             None, camera_id="HC-02", now=2_000.0,
             gps_lat=10.7725, gps_lng=106.6595,
+            snapshot_path="obj.jpg",
+            snapshot_score=0.6,
         )
 
         stats = self.client.get("/patrol/day/stats").json()
@@ -131,6 +133,7 @@ class PatrolApiTests(unittest.TestCase):
         self.assertEqual(stats["workers_standard"], 1)
         self.assertEqual(stats["encounters_standard"], 1)
         self.assertEqual(stats["unassigned_observations"], 1)
+        self.assertEqual(stats["object_card_count"], 1)
 
         pres = self.client.get("/patrol/day/presences").json()
         self.assertTrue(pres["ok"])

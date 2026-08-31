@@ -18,7 +18,6 @@ import {
 import { getPatrolDefaultPlaybackDate } from '../services/patrolPlayback.service'
 
 const POLL_MS_LIVE = 3000
-const POLL_MS_HISTORICAL = 8000
 
 const EMPTY_STATS: PatrolDayStats = {
   date: '',
@@ -131,19 +130,23 @@ export function usePatrolDayBundle(date?: string): PatrolDayBundleState {
     }
   }, [date])
 
+  const isLiveDay = !date || date === getPatrolDefaultPlaybackDate()
+
   useEffect(() => {
     mounted.current = true
     setLoading(true)
     void refresh()
-    const pollMs = date && date !== getPatrolDefaultPlaybackDate()
-      ? POLL_MS_HISTORICAL
-      : POLL_MS_LIVE
-    const id = window.setInterval(() => { void refresh() }, pollMs)
+    if (!isLiveDay) {
+      return () => {
+        mounted.current = false
+      }
+    }
+    const id = window.setInterval(() => { void refresh() }, POLL_MS_LIVE)
     return () => {
       mounted.current = false
       window.clearInterval(id)
     }
-  }, [refresh, date])
+  }, [refresh, isLiveDay])
 
   const events = useMemo(
     () => (bundle ? bundleToEvents(bundle) : []),

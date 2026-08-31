@@ -29,7 +29,7 @@ import {
   subscribePatrolManualIdentity,
 } from '../services/patrolManualIdentity.service'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { buildHelmetDetectCountsById } from '../utils/patrolHelmetDetectCounts'
+import { buildHelmetDetectCountsFromPresences } from '../utils/patrolHelmetDetectCounts'
 import {
   buildPatrolDayHeatmapDots,
   buildPatrolPersEntityLookup,
@@ -265,8 +265,8 @@ export function PatrolDensityHeatmap({
   const hc02Live = useHc02LiveDetectionDots()
 
   const helmetDetectCountsById = useMemo(
-    () => buildHelmetDetectCountsById(patrolEvents, PATROL_MAP_CAMERA_IDS),
-    [patrolEvents],
+    () => buildHelmetDetectCountsFromPresences(presences, PATROL_MAP_CAMERA_IDS),
+    [presences],
   )
 
   // Kể cả drone: nó cũng phát hiện người và đóng góp chấm lên bản đồ.

@@ -847,11 +847,21 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
         " AND subject_id LIKE 'obj-%'",
         (d,),
     )
+    obj_card_row = db.query_one(
+        "SELECT COUNT(*) AS c FROM daily_objects"
+        " WHERE event_date = ?"
+        " AND snapshot_path IS NOT NULL AND snapshot_path != ''"
+        " AND COALESCE(snapshot_score, 0) < ?",
+        (d, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+    )
+    person_n = int(person_row["c"] if person_row else 0)
+    identity_n = int(identity_row["c"] if identity_row else 0)
     return {
         "date": d,
         "workers_standard": int(workers["c"] if workers else 0),
-        "person_count": int(person_row["c"] if person_row else 0),
-        "identity_count": int(identity_row["c"] if identity_row else 0),
+        "person_count": person_n,
+        "identity_count": identity_n,
+        "object_card_count": int(obj_card_row["c"] if obj_card_row else 0),
         "encounters_standard": int(enc_row["c"] if enc_row else 0),
         "unassigned_observations": int(obj_row["c"] if obj_row else 0),
     }

@@ -257,7 +257,7 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     workersStandard: Number(statsRow.workers_standard ?? 0),
     personCount: Number(statsRow.person_count ?? 0),
     identityCount: Number(statsRow.identity_count ?? 0),
-    objectCount: 0,
+    objectCount: Number(statsRow.object_card_count ?? 0),
     objectEncounterCount: Number(statsRow.unassigned_observations ?? 0),
     encountersStandard: Number(statsRow.encounters_standard ?? 0),
     unassignedObservations: Number(statsRow.unassigned_observations ?? 0),

@@ -1,26 +1,32 @@
 /**
- * Thống kê hiển thị Module 05 — KPI Tier1.
+ * Thống kê hiển thị Module 05 — KPI Tier1 từ SQLite; tab badge từ listing.
  *
- * - Nhân sự: đếm thẳng từ SQLite (person + identity), không dedupe tab.
- * - Lượt gặp Đối tượng: unassigned_observations (appearances obj-*).
- * - Tab badge / listing: computePatrolTabCounts(events) riêng.
+ * KPI headcount / lượt gặp: chỉ `day_stats` backend.
+ * Tab badge: `computePatrolTabCounts` — dedupe cho listing, không ảnh hưởng KPI.
  */
 import type { PatrolDayStats } from '../services/patrolDayEvents.service'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { computePatrolTabCounts } from './patrolEventsTabList'
+import { computePatrolTabCounts, type PatrolTabCounts } from './patrolEventsTabList'
+
+export interface PatrolDisplayBundle {
+  stats: PatrolDayStats
+  tabCounts: PatrolTabCounts
+}
 
 export function derivePatrolDisplayStats(
   events: PatrolEvent[],
   backendStats: PatrolDayStats,
-): PatrolDayStats {
-  const tabs = computePatrolTabCounts(events)
-  const workersStandard = backendStats.personCount + backendStats.identityCount
+): PatrolDisplayBundle {
+  const tabCounts = computePatrolTabCounts(events)
+  const headcount = backendStats.personCount + backendStats.identityCount
+
   return {
-    ...backendStats,
-    workersStandard: workersStandard > 0 ? workersStandard : tabs.all,
-    personCount: backendStats.personCount,
-    identityCount: backendStats.identityCount,
-    objectCount: tabs.object,
-    objectEncounterCount: backendStats.unassignedObservations,
+    stats: {
+      ...backendStats,
+      workersStandard: headcount,
+      objectCount: backendStats.objectCount,
+      objectEncounterCount: backendStats.unassignedObservations,
+    },
+    tabCounts,
   }
 }
