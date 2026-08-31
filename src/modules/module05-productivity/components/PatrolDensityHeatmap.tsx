@@ -21,7 +21,10 @@ import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
 import type { PatrolDayPresence, PatrolDayStats } from '../services/patrolDayEvents.service'
 import type { PatrolFlightMode } from '../utils/patrolFlightMode'
 import { buildPatrolLiveZonesFromWorkforce } from '../utils/patrolLiveZones'
+import type { TrainingCamera } from '@/modules/module02-training/data/trainingCameras'
+import { PatrolFlymapView } from './PatrolFlymapView'
 import { PatrolGeoHeatmap } from './PatrolGeoHeatmap'
+import { PatrolHeatmapSectionControls } from './PatrolHeatmapSectionControls'
 import { WorkforceObjectSheet } from './WorkforceObjectSheet'
 import {
   subscribePatrolManualIdentity,
@@ -159,6 +162,9 @@ function HeatmapLayerControls({
 export function PatrolDensityHeatmap({
   expanded = false,
   onCloseExpand,
+  showFlymap = false,
+  onFlymapToggle,
+  droneCamera,
   patrolEvents = [],
   viewDate: _viewDate,
   presences,
@@ -170,6 +176,10 @@ export function PatrolDensityHeatmap({
   /** Phóng to tại chỗ — giữ nguyên map instance, ROI và layer state. */
   expanded?: boolean
   onCloseExpand?: () => void
+  /** Thay heatmap site bằng flymap DR-* (mật độ tầm cao). */
+  showFlymap?: boolean
+  onFlymapToggle?: () => void
+  droneCamera?: TrainingCamera | null
   /** Feed sự kiện deduped — tooltip mũ + KPI detect (tránh fetch thêm). */
   patrolEvents?: PatrolEvent[]
   /** Ngày lịch VN đồng bộ với tab Sự kiện / playback. */
@@ -433,7 +443,28 @@ export function PatrolDensityHeatmap({
     }
   }, [expanded, onCloseExpand])
 
-  const mapBody = (
+  const primaryDroneId = droneCamera?.id ?? PATROL_DRONE_IDS[0]
+  const droneFlightMode = flycamFlightModes[primaryDroneId] ?? 'aerial'
+  const primaryDroneOnline = Boolean(primaryDroneId && helmetOnlineById[primaryDroneId])
+
+  const mapBody = showFlymap ? (
+    droneCamera ? (
+      <PatrolFlymapView
+        droneCamera={droneCamera}
+        flightMode={droneFlightMode}
+        streamOnline={primaryDroneOnline}
+        expanded={expanded}
+      />
+    ) : (
+      <div className={cn(
+        'flex items-center justify-center text-[11px] text-muted-foreground',
+        expanded ? viewport.modalMapClass : viewport.embeddedMapClass,
+      )}
+      >
+        Chưa có cấu hình flycam (DR-*).
+      </div>
+    )
+  ) : (
     <>
       <div className={cn(
         'min-w-0 relative',
@@ -484,6 +515,8 @@ export function PatrolDensityHeatmap({
     </>
   )
 
+  const sectionTitle = showFlymap ? 'Flymap' : 'Heatmap'
+
   return (
     <>
       {expanded && createPortal(
@@ -511,15 +544,24 @@ export function PatrolDensityHeatmap({
       >
         {expanded && (
           <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-[#1e2433] shrink-0">
-            <span className="text-[11px] font-bold tracking-widest text-foreground uppercase">Heatmap</span>
-            <button
-              type="button"
-              onClick={() => onCloseExpand?.()}
-              className="p-2 sm:p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
-              aria-label="Đóng"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <span className="text-[11px] font-bold tracking-widest text-foreground uppercase">{sectionTitle}</span>
+            {onFlymapToggle ? (
+              <PatrolHeatmapSectionControls
+                flymapActive={showFlymap}
+                onFlymapToggle={onFlymapToggle}
+                expanded
+                onCloseExpand={onCloseExpand}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => onCloseExpand?.()}
+                className="p-2 sm:p-1.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                aria-label="Đóng"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
         {mapBody}
