@@ -8,9 +8,24 @@ export const FACE_SCAN_POSE_LABELS = [
   'Cúi xuống',
 ] as const
 
-export const FACE_SCAN_RING_QUADRANTS = ['TRÊN', 'TRÁI', 'PHẢI', 'DƯỚI'] as const
-
 export type ScanPoseSlot = 1 | 2 | 3 | 4
+
+/** Nhãn la bàn theo ringIdx 0→3: trên · phải · dưới · trái (khớp screenshot eKYC). */
+export const FACE_SCAN_RING_QUADRANT_LABELS = ['TRÊN', 'PHẢI', 'DƯỚI', 'TRÁI'] as const
+
+/** Vị trí cung trên vòng: 0=trên, 1=phải, 2=dưới, 3=trái — khớp gallery slot 1–4. */
+export const FACE_SCAN_RING_INDEX_BY_SLOT: Record<ScanPoseSlot, number> = {
+  1: 0,
+  2: 3,
+  3: 1,
+  4: 2,
+}
+
+export const FACE_SCAN_RING_ROTATION_BY_INDEX = [-90, 0, 90, 180] as const
+
+export function faceScanPoseLabel(slot: ScanPoseSlot): string {
+  return FACE_SCAN_POSE_LABELS[slot - 1]
+}
 
 export function defaultFaceScanPoses(): Array<{ slot: number; label: string; captured: boolean }> {
   return FACE_SCAN_POSE_LABELS.map((label, i) => ({
@@ -23,7 +38,7 @@ export function defaultFaceScanPoses(): Array<{ slot: number; label: string; cap
 export function guidanceForSlot(slot: ScanPoseSlot): string {
   switch (slot) {
     case 1:
-      return 'Bước 1 — Chính diện: nhìn thẳng vào camera (TRÊN)'
+      return 'Bước 1 — Nhìn thẳng vào camera (TRÊN)'
     case 2:
       return 'Bước 2 — Quay chậm sang TRÁI'
     case 3:

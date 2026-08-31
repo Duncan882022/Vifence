@@ -10,7 +10,6 @@ import { PatrolFaceScannerPanel } from '../components/PatrolFaceScannerPanel'
 import {
   completePatrolEnrollSession,
   createPatrolEnrollSession,
-  createPatrolWorkerProfile,
   lookupPatrolWorkerByCode,
   type PatrolScanEnrollment,
   type PatrolWorkerPerson,
@@ -22,19 +21,17 @@ type AdminStep = 'lookup' | 'scan'
 export function WorkerFaceScanPage() {
   const [params] = useSearchParams()
   const presetCode = params.get('code') ?? ''
-  /** Link ?code= — công nhân tự đăng ký: quét mặt trước, không dùng màn HR tra cứu. */
+  /** Link ?code= — công nhân tự đăng ký: quét mặt trước, nhập thông tin sau. */
   const forceSelfEnroll = Boolean(presetCode.trim())
   const adminMode = hasPatrolRole('hr') && !forceSelfEnroll
 
   const [selfStep, setSelfStep] = useState<SelfStep>('scan')
-  const [adminStep, setAdminStep] = useState<AdminStep>(presetCode ? 'lookup' : 'lookup')
+  const [adminStep, setAdminStep] = useState<AdminStep>('lookup')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionEnrollment, setSessionEnrollment] = useState<PatrolScanEnrollment | null>(null)
   const [sessionBooting, setSessionBooting] = useState(!adminMode)
 
   const [codeInput, setCodeInput] = useState(presetCode)
-  const [nameInput, setNameInput] = useState('')
-  const [contractorInput, setContractorInput] = useState('')
   const [profileName, setProfileName] = useState('')
   const [profileCode, setProfileCode] = useState(presetCode)
   const [profileContractor, setProfileContractor] = useState('')
@@ -42,17 +39,13 @@ export function WorkerFaceScanPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [person, setPerson] = useState<PatrolWorkerPerson | null>(null)
-  const [creating, setCreating] = useState(false)
   const [submittingProfile, setSubmittingProfile] = useState(false)
   const [savedPerson, setSavedPerson] = useState<PatrolWorkerPerson | null>(null)
   const [scanComplete, setScanComplete] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
 
   useEffect(() => {
-    if (adminMode) {
-      if (presetCode) void handleLookup(presetCode)
-      return
-    }
+    if (adminMode) return
     let cancelled = false
     void (async () => {
       setSessionBooting(true)
@@ -72,10 +65,10 @@ export function WorkerFaceScanPage() {
       }
     })()
     return () => { cancelled = true }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [adminMode])
 
-  async function handleLookup(codeOverride?: string) {
-    const code = (codeOverride ?? codeInput).trim()
+  async function handleLookup() {
+    const code = codeInput.trim()
     if (!code) {
       setError('Nhập mã nhân viên.')
       return
@@ -88,34 +81,10 @@ export function WorkerFaceScanPage() {
       setAdminStep('scan')
     } catch (err) {
       setPerson(null)
-      setError(err instanceof Error ? err.message : 'Tra cứu thất bại.')
+      const msg = err instanceof Error ? err.message : 'Tra cứu thất bại.'
+      setError(`${msg} — hồ sơ phải được import trước tại menu Hồ sơ công nhân.`)
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function handleCreateAndScan(e: React.FormEvent) {
-    e.preventDefault()
-    const code = codeInput.trim()
-    const name = nameInput.trim()
-    if (!code || !name) {
-      setError('Nhập mã nhân viên và họ tên để tạo hồ sơ mới.')
-      return
-    }
-    setCreating(true)
-    setError(null)
-    try {
-      const created = await createPatrolWorkerProfile({
-        full_name: name,
-        employee_code: code,
-        contractor: contractorInput.trim(),
-      })
-      setPerson(created)
-      setAdminStep('scan')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Tạo hồ sơ thất bại.')
-    } finally {
-      setCreating(false)
     }
   }
 
@@ -161,7 +130,7 @@ export function WorkerFaceScanPage() {
             </div>
             <h1 className="text-lg font-bold">Đăng ký khuôn mặt tuần tra</h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
-              Bước 1: Đưa mặt vào khung, làm theo hướng dẫn (tự quét 4 góc TRÊN·TRÁI·PHẢI·DƯỚI) · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
+              Bước 1: Quét 4 góc mặt · Bước 2: Nhập họ tên, mã nhân viên và đơn vị.
             </p>
           </div>
 
@@ -315,11 +284,11 @@ export function WorkerFaceScanPage() {
     <PageLayout scrollable>
       <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
         <Link
-          to="/module05/ho-so"
+          to="/module05"
           className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Quản lý hồ sơ
+          Về Module 05
         </Link>
         {adminStep === 'scan' && person && (
           <button
@@ -342,13 +311,13 @@ export function WorkerFaceScanPage() {
             <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-400/10 border border-violet-400/25 flex items-center justify-center">
               <ScanFace className="w-7 h-7 text-violet-400" />
             </div>
-            <h1 className="text-lg font-bold">Quét mặt công nhân (HR)</h1>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Tra cứu theo mã đã import Excel, rồi đưa mặt vào khung — hệ thống tự quét bổ sung vector.
+            <h1 className="text-lg font-bold">Quét mặt bổ sung vector</h1>
+            <p className="text-[11px] text-muted-foreground leading-relaxed px-2">
+              Tra cứu mã nhân viên đã import — chỉ quét mặt, không tạo/sửa hồ sơ tại đây.
             </p>
           </div>
 
-          <Panel title="Tra cứu hồ sơ" className="overflow-visible">
+          <Panel title="Tra cứu mã nhân viên" className="overflow-visible">
             <form
               onSubmit={e => {
                 e.preventDefault()
@@ -372,7 +341,7 @@ export function WorkerFaceScanPage() {
                 </div>
               </label>
 
-              {error && !creating && (
+              {error && (
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-200 text-xs">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{error}</span>
@@ -385,40 +354,7 @@ export function WorkerFaceScanPage() {
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-violet-500 text-white hover:bg-violet-500/90 disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Tìm hồ sơ
-              </button>
-            </form>
-          </Panel>
-
-          <Panel title="Chưa có trong danh sách?" className="overflow-visible">
-            <form onSubmit={e => void handleCreateAndScan(e)} className="p-4 space-y-3">
-              <p className="text-[10px] text-muted-foreground">Tạo nhanh hồ sơ rồi quét mặt ngay (không cần Excel).</p>
-              <input
-                value={codeInput}
-                onChange={e => setCodeInput(e.target.value)}
-                placeholder="Mã nhân viên *"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] font-mono"
-                required
-              />
-              <input
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                placeholder="Họ tên *"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17]"
-                required
-              />
-              <input
-                value={contractorInput}
-                onChange={e => setContractorInput(e.target.value)}
-                placeholder="Đơn vị (tuỳ chọn)"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17]"
-              />
-              <button
-                type="submit"
-                disabled={creating || !codeInput.trim() || !nameInput.trim()}
-                className="w-full py-2 rounded-lg text-[11px] font-semibold border border-violet-400/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
-              >
-                {creating ? 'Đang tạo…' : 'Tạo hồ sơ & quét mặt'}
+                Bắt đầu quét
               </button>
             </form>
           </Panel>

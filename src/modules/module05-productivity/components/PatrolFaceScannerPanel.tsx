@@ -24,6 +24,7 @@ import { usePatrolAutoFaceScan } from '../hooks/usePatrolAutoFaceScan'
 import { FaceScanFourPoseRing } from './FaceScanFourPoseRing'
 import {
   analyzeFaceScanFrame,
+  faceReadyForSlot,
   guidanceForHint,
   guidanceForSlot,
   type ScanPoseSlot,
@@ -169,6 +170,16 @@ export function PatrolFaceScannerPanel({
   const handleManualCapture = async () => {
     const video = videoRef.current
     if (!video || !cameraReady || complete) return
+    const slot = autoScan.activeSlot as ScanPoseSlot
+    const metrics = await analyzeFaceScanFrame(video)
+    if (!faceReadyForSlot(metrics, slot)) {
+      setPanelError(
+        metrics.hasFace
+          ? guidanceForHint(metrics.poseHint, slot)
+          : guidanceForSlot(slot),
+      )
+      return
+    }
     const imageB64 = captureFaceEnrollmentFrameBase64(video)
     if (!imageB64) {
       setPanelError('Không quét được khung hình.')
@@ -176,7 +187,7 @@ export function PatrolFaceScannerPanel({
     }
     setPanelError(null)
     try {
-      const result = await submitScan(imageB64, autoScan.activeSlot)
+      const result = await submitScan(imageB64, slot)
       handleEnrollment(result.enrollment)
     } catch (err) {
       setPanelError(err instanceof Error ? err.message : 'Lưu vector thất bại.')
