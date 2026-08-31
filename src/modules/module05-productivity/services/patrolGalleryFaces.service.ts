@@ -18,7 +18,7 @@ export interface PatrolGalleryFacesResponse {
   complete?: boolean
 }
 
-function absolutizeGalleryFaceUrl(relative: string | null | undefined): string | null {
+export function absolutizeGalleryFaceUrl(relative: string | null | undefined): string | null {
   const raw = relative?.trim()
   if (!raw) return null
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw

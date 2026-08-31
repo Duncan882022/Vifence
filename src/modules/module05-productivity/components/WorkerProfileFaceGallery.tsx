@@ -8,7 +8,7 @@ import {
   type PatrolScanPose,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
-import { fetchPatrolGalleryFaces } from '../services/patrolGalleryFaces.service'
+import { fetchPatrolGalleryFaces, absolutizeGalleryFaceUrl } from '../services/patrolGalleryFaces.service'
 import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
 import { defaultFaceScanPoses } from '../utils/patrolFaceScanPoses'
 
@@ -35,7 +35,7 @@ function mergeProfileFacePoses(
     slot: pose.slot,
     label: pose.label,
     captured: pose.captured,
-    url: pose.url ?? galleryUrls.get(pose.slot) ?? null,
+    url: absolutizeGalleryFaceUrl(pose.url ?? galleryUrls.get(pose.slot) ?? null),
   }))
 }
 
