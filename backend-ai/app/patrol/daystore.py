@@ -342,6 +342,38 @@ def _object_primary_camera(event_date: str, obj_id: str) -> str | None:
     return cam or None
 
 
+def _object_primary_gps(event_date: str, obj_id: str) -> tuple[float | None, float | None]:
+    row = db.query_one(
+        "SELECT gps_lat, gps_lng FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY started_at ASC LIMIT 1",
+        (event_date, obj_id),
+    )
+    if row is None:
+        return None, None
+    try:
+        lat = float(row["gps_lat"]) if row["gps_lat"] is not None else None
+        lng = float(row["gps_lng"]) if row["gps_lng"] is not None else None
+    except (TypeError, ValueError):
+        return None, None
+    return lat, lng
+
+
+def _objects_same_site(
+    event_date: str,
+    obj_a: str,
+    obj_b: str,
+) -> bool:
+    """Cùng GPS (≤15m) hoặc chưa có GPS — chỉ gộp khi cùng camera."""
+    from .presence import haversine_m
+
+    lat_a, lng_a = _object_primary_gps(event_date, obj_a)
+    lat_b, lng_b = _object_primary_gps(event_date, obj_b)
+    if lat_a is None or lng_a is None or lat_b is None or lng_b is None:
+        return True
+    return haversine_m(lat_a, lng_a, lat_b, lng_b) <= 15.0
+
+
 def find_parallel_object_card(
     event_date: str,
     camera_id: str,
@@ -447,6 +479,8 @@ def coalesce_parallel_object_cards(date: str | None = None) -> int:
                 continue
             cam_b = _object_primary_camera(d, bid)
             if cam_a and cam_b and cam_a != cam_b:
+                continue
+            if not _objects_same_site(d, aid, bid):
                 continue
             keep, drop = (aid, bid) if aid < bid else (bid, aid)
             if merge_object_cards(keep, drop, event_date=d):

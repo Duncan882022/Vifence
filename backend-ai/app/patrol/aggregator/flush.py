@@ -117,8 +117,9 @@ def flush_session(
             session.camera_id,
             session.started_at,
             now,
+            bbox=obs.person_bbox,
         )
-        if not parallel:
+        if not parallel and obs.person_bbox is None:
             parallel = daystore.find_parallel_object_card(
                 event_date,
                 session.camera_id,
