@@ -9,7 +9,6 @@ import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIde
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
-  isPatrolGalleryWorkerId,
   resolvePatrolCanonicalEntityKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
