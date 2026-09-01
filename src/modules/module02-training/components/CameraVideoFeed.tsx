@@ -168,7 +168,7 @@ export function CameraVideoFeed({
     const vw = video?.videoWidth ?? 0
     const vh = video?.videoHeight ?? 0
     if (vw > 0 && vh > 0) {
-      return resolveOverlayAnalyzeFrameSize(video, vw, vh)
+      return { width: vw, height: vh }
     }
     return { width: 0, height: 0 }
   }, [

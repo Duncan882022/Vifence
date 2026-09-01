@@ -143,6 +143,24 @@ describe('resolveOverlayAnalyzeFrameSize', () => {
   it('fallback video intrinsic khi snapshot aspect lệch', () => {
     const video = mockVideo(720, 1280, 320, 240)
     const size = resolveOverlayAnalyzeFrameSize(video, 1920, 1080)
-    expect(size).toEqual({ width: 720, height: 1280 })
+    expect(size).toEqual({ width: 1920, height: 1080 })
+  })
+
+  it('mapBackendBboxToOverlay — snapshot ngang, video dọc (HC-02 mobile)', () => {
+    const video = mockVideo(720, 1280, 320, 240)
+    const mapped = mapBackendBboxToOverlay(
+      [0.35, 0.25, 0.65, 0.75],
+      1920,
+      1080,
+      video,
+      'contain',
+      'center',
+    )
+    expect(mapped.w).toBeGreaterThan(1)
+    expect(mapped.h).toBeGreaterThan(1)
+    expect(mapped.x).toBeGreaterThan(0)
+    expect(mapped.y).toBeGreaterThan(0)
+    expect(mapped.x + mapped.w).toBeLessThanOrEqual(100.5)
+    expect(mapped.y + mapped.h).toBeLessThanOrEqual(100.5)
   })
 })

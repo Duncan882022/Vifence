@@ -67,6 +67,20 @@ export function usePatrolLocalFrameAnalyze(
     const engine = getPatrolPersonRoiEngine(cameraId)
     engine.clear()
 
+    const syncVideoFrameSize = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        setFrameSize(prev =>
+          prev.width === video.videoWidth && prev.height === video.videoHeight
+            ? prev
+            : { width: video.videoWidth, height: video.videoHeight },
+        )
+      }
+    }
+    video.addEventListener('loadedmetadata', syncVideoFrameSize)
+    video.addEventListener('loadeddata', syncVideoFrameSize)
+    syncVideoFrameSize()
+    const metaPoll = window.setInterval(syncVideoFrameSize, 280)
+
     const client = createMobileAiAnalyzeClient(video, {
       cameraId,
       backendUrl,
@@ -93,6 +107,9 @@ export function usePatrolLocalFrameAnalyze(
     })
 
     return () => {
+      window.clearInterval(metaPoll)
+      video.removeEventListener('loadedmetadata', syncVideoFrameSize)
+      video.removeEventListener('loadeddata', syncVideoFrameSize)
       client.stop()
       engine.clear()
       setFrameSize({ width: 0, height: 0 })

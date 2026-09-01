@@ -198,12 +198,27 @@ export function mapBackendBboxToOverlay(
   fit: 'cover' | 'contain' = 'cover',
   objectPosition: 'center' | 'bottom' = 'center',
 ): { x: number; y: number; w: number; h: number } {
-  const intrinsicFallback = { width: frameWidth, height: frameHeight }
-  const pixelBbox = bboxToPixelSpace(bbox, frameWidth, frameHeight)
-  const [x1, y1, x2, y2] = pixelBbox
+  const analyzeW = frameWidth > 0 ? frameWidth : (video.videoWidth || 0)
+  const analyzeH = frameHeight > 0 ? frameHeight : (video.videoHeight || 0)
+  const displayW = video.videoWidth || analyzeW
+  const displayH = video.videoHeight || analyzeH
+  const intrinsicFallback = { width: displayW, height: displayH }
+
+  let [x1, y1, x2, y2] = bboxToPixelSpace(bbox, analyzeW, analyzeH)
+  // Snapshot VMS / JPEG analyze có thể khác aspect `<video>` (HC-02 dọc trên mobile).
+  if (analyzeW > 0 && analyzeH > 0 && displayW > 0 && displayH > 0
+    && (analyzeW !== displayW || analyzeH !== displayH)) {
+    const sx = displayW / analyzeW
+    const sy = displayH / analyzeH
+    x1 *= sx
+    y1 *= sy
+    x2 *= sx
+    y2 *= sy
+  }
+
   const visible = getVisibleVideoSourceRect(video, fit, objectPosition, intrinsicFallback)
-  const scaleX = frameWidth > 0 ? visible.width / frameWidth : 1
-  const scaleY = frameHeight > 0 ? visible.height / frameHeight : 1
+  const scaleX = displayW > 0 ? visible.width / displayW : 1
+  const scaleY = displayH > 0 ? visible.height / displayH : 1
   return mapVideoRectToOverlay(
     {
       x: visible.x + x1 * scaleX,
@@ -219,9 +234,9 @@ export function mapBackendBboxToOverlay(
 }
 
 /**
- * Kích thước khung analyze (VMS snapshot / JPEG local) khớp video đang phát.
- * Nếu metadata snapshot lệch aspect so với `<video>`, ưu tiên intrinsic video
- * để tránh bbox nhảy khi backend và player dùng pipeline khác nhau.
+ * Kích thước khung analyze (VMS snapshot / JPEG local).
+ * Luôn giữ metadata analyze cho không gian bbox; `mapBackendBboxToOverlay`
+ * tự scale sang intrinsic `<video>` khi aspect khác (bodycam dọc trên mobile).
  */
 export function resolveOverlayAnalyzeFrameSize(
   video: HTMLVideoElement | null | undefined,
@@ -232,14 +247,6 @@ export function resolveOverlayAnalyzeFrameSize(
   const vh = video?.videoHeight ?? 0
 
   if (analyzeWidth > 0 && analyzeHeight > 0) {
-    if (vw > 0 && vh > 0) {
-      const analyzeAspect = analyzeWidth / analyzeHeight
-      const videoAspect = vw / vh
-      const relDelta = Math.abs(analyzeAspect - videoAspect) / Math.max(analyzeAspect, videoAspect)
-      if (relDelta > 0.12) {
-        return { width: vw, height: vh }
-      }
-    }
     return { width: analyzeWidth, height: analyzeHeight }
   }
 

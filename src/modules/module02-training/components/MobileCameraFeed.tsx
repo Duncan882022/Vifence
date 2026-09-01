@@ -40,6 +40,7 @@ import { watchDeviceGps } from '../services/deviceGps.service'
 import { getLastDeviceHeading, watchDeviceHeading } from '../services/deviceHeading.service'
 import { useCameraAiEnabledModels } from '../hooks/useCameraAiConfig'
 import { useCameraBboxVisible } from './CameraBboxToggle'
+import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlayLayoutTick'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetectionFeed'
@@ -106,7 +107,7 @@ export function MobileCameraFeed({
   const [backendUrl, setBackendUrl] = useState(() => getMobileAiBackendUrl())
   const [detections, setDetections] = useState<MobileAiDetection[]>([])
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 })
-  const [layoutTick, setLayoutTick] = useState(0)
+  const roiLayoutTick = useOverlayLayoutTick(videoRef)
   const facingRef = useRef<CameraFacing>('environment')
   const [facing, setFacing] = useState<CameraFacing>('environment')
   const deviceIndexRef = useRef(0)
@@ -151,7 +152,7 @@ export function MobileCameraFeed({
     vmsFeed.snapshot?.metrics,
   ])
 
-  /** ROI cần frame size — VMS snapshot ưu tiên, rồi local JPEG analyze. */
+  /** ROI cần frame size — VMS snapshot ưu tiên, rồi local JPEG analyze, rồi intrinsic video (iOS). */
   const overlayFrameSize = useMemo(() => {
     const video = videoRef.current
     if (vmsPatrolRoiActive && vmsFeed.snapshot && vmsFeed.snapshot.width > 0 && vmsFeed.snapshot.height > 0) {
@@ -163,8 +164,13 @@ export function MobileCameraFeed({
     if (frameSize.width > 0 && frameSize.height > 0) {
       return resolveOverlayAnalyzeFrameSize(video, frameSize.width, frameSize.height)
     }
+    const vw = video?.videoWidth ?? 0
+    const vh = video?.videoHeight ?? 0
+    if (vw > 0 && vh > 0) {
+      return { width: vw, height: vh }
+    }
     return resolveOverlayAnalyzeFrameSize(video, 0, 0)
-  }, [vmsPatrolRoiActive, vmsFeed.snapshot, localRoiFrameSize, frameSize, layoutTick, status])
+  }, [vmsPatrolRoiActive, vmsFeed.snapshot, localRoiFrameSize, frameSize, roiLayoutTick, status])
   const overlayDetections = useMemo(() => {
     const mapped = detections
     return cameraId === 'HC-02' ? tagHc02PersonDetections(mapped) : mapped
@@ -539,21 +545,15 @@ export function MobileCameraFeed({
   useEffect(() => {
     const video = videoRef.current
     if (!video || status !== 'live') return
-    const bump = () => {
-      setLayoutTick(t => t + 1)
+    const keepPlaying = () => {
       if (video.paused) void video.play().catch(() => {})
     }
-    const observer = new ResizeObserver(bump)
-    observer.observe(video)
-    video.addEventListener('loadedmetadata', bump)
-    video.addEventListener('resize', bump)
-    document.addEventListener('visibilitychange', bump)
-    bump()
+    video.addEventListener('loadedmetadata', keepPlaying)
+    document.addEventListener('visibilitychange', keepPlaying)
+    keepPlaying()
     return () => {
-      observer.disconnect()
-      video.removeEventListener('loadedmetadata', bump)
-      video.removeEventListener('resize', bump)
-      document.removeEventListener('visibilitychange', bump)
+      video.removeEventListener('loadedmetadata', keepPlaying)
+      document.removeEventListener('visibilitychange', keepPlaying)
     }
   }, [status])
 
@@ -609,7 +609,7 @@ export function MobileCameraFeed({
           frameWidth={overlayFrameSize.width}
           frameHeight={overlayFrameSize.height}
           videoRef={videoRef}
-          layoutTick={layoutTick}
+          layoutTick={roiLayoutTick}
           compact={compact}
           modelId={overlayModelId}
           videoFit={videoFit}

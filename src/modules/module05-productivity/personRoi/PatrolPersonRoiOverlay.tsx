@@ -153,7 +153,12 @@ export function PatrolPersonRoiOverlay({
   const layoutTick = useOverlayLayoutTick(videoRef)
   const overlayFrameSize = useMemo(() => {
     const video = videoRef.current
-    return resolveOverlayAnalyzeFrameSize(video, frameWidth, frameHeight)
+    const resolved = resolveOverlayAnalyzeFrameSize(video, frameWidth, frameHeight)
+    if (resolved.width > 0 && resolved.height > 0) return resolved
+    const vw = video?.videoWidth ?? 0
+    const vh = video?.videoHeight ?? 0
+    if (vw > 0 && vh > 0) return { width: vw, height: vh }
+    return resolved
   }, [frameWidth, frameHeight, videoRef, layoutTick])
 
   if (tracks.length === 0 || overlayFrameSize.width <= 0 || overlayFrameSize.height <= 0) {
