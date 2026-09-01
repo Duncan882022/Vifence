@@ -689,5 +689,57 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         self.assertEqual(snap["snapshot_path"], "2026-08-30/obj-new.jpg")
 
 
+class ObjectFacePromoteTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def test_stale_identity_resolved_still_promotes_object_with_face(self) -> None:
+        """obj đã chốt + identity_resolved nhầm — thấy mặt sau vẫn lên Người."""
+        import numpy as np
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.identity_pipeline import process_identity
+        from app.patrol.aggregator.session_store import get_or_create
+        from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
+
+        ts = 8_000.0
+        obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
+        session = get_or_create("HC-01", "ptk-face", ts=ts + 10)
+        session.subject_id = obj_id
+        session.committed = True
+        session.identity_resolved = True
+        session.identity = PersonIdentity(identity_type=IdentityType.UNKNOWN)
+
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 3 else 0.0) for i in range(128))
+        obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-face",
+            ts=ts + 12,
+            face_embedding=emb,
+            face_quality=0.88,
+            face_eligible=True,
+            confidence=0.85,
+        )
+        process_identity(session, obs)
+        self.assertTrue(str(session.subject_id).startswith("pers-"))
+        self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
+
+
 if __name__ == "__main__":
     unittest.main()

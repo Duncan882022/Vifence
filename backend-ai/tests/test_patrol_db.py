@@ -536,6 +536,18 @@ class ObjectTests(PatrolDbTestCase):
         self.assertEqual(merged, 1)
         self.assertEqual(len(daystore.list_objects(date)), 1)
 
+    def test_promote_objects_with_face_snapshot_repair(self) -> None:
+        oid = daystore.touch_object(
+            None,
+            camera_id="HC-01",
+            now=1_000.0,
+            snapshot_score=1.2,
+        )
+        date = db.today_vn(1_000.0)
+        self.assertEqual(daystore.promote_objects_with_face_snapshot(date), 1)
+        self.assertEqual(daystore.list_objects(date), [])
+        self.assertEqual(len(daystore.list_person_events(date)), 1)
+
     def test_purge_removes_yesterday_objects_only(self) -> None:
         yesterday = 1_700_000_000.0
         today = yesterday + 86_400 * 2
