@@ -1,8 +1,9 @@
 # ARCHITECTURAL TECHNICAL SPECIFICATION & IMPLEMENTATION GUIDE
 ## REALTIME WORKFORCE HEATMAP & EVENT SYSTEM (SMART HELMET CAM)
 
-> **Module 05 (Hiệu quả công việc) — nguồn sự thật tạm thời.**  
-> UI/FE Module 05 làm theo tài liệu này cho đến khi backend Population/Identity/Event engines sẵn sàng.
+> **Module 05 (Hiệu quả công việc).**  
+> UI/FE Module 05 làm theo tài liệu này cho đến khi backend Population/Identity/Event engines sẵn sàng.  
+> **Cập nhật 2026-09-01:** Heatmap site phải chuyển **một nguồn presences** — xem [`HEATMAP_SINGLE_SOURCE_SPEC.md`](./HEATMAP_SINGLE_SOURCE_SPEC.md). Kiến trúc fallback registry/events trên map **không còn hợp lệ**.
 
 ---
 
