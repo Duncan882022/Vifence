@@ -23,8 +23,10 @@ export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
 export function useSyncedVmsDetections(
   feed: VmsDetectionFeed,
   clock: VideoClockSource | null,
+  options?: { fallbackLagMs?: number },
 ): SyncedVmsDetectionFeed {
   const bufferRef = useRef(new OverlayTimeBuffer())
+  const fallbackLagMs = options?.fallbackLagMs
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
     timeAligned: boolean
@@ -47,7 +49,7 @@ export function useSyncedVmsDetections(
 
     const tick = () => {
       const displayMs = clock?.getDisplayWallclockMs() ?? null
-      const next = bufferRef.current.resolve(displayMs)
+      const next = bufferRef.current.resolve(displayMs, { fallbackLagMs })
 
       setResolved(prev => {
         if (
@@ -68,7 +70,7 @@ export function useSyncedVmsDetections(
     tick()
     const timer = window.setInterval(tick, RESOLVE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [feed.active, clock])
+  }, [feed.active, clock, fallbackLagMs])
 
   return useMemo(
     () => ({

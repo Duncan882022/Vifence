@@ -14,6 +14,18 @@ from .types import ObservationInput
 logger = logging.getLogger("patrol.aggregator.engine")
 
 
+def _maybe_update_best_observation(session, obs: ObservationInput) -> None:
+    """Giữ frame score cao nhất — không drop frame cũ khi chưa có frame tốt hơn."""
+    if obs.frame is None or obs.person_bbox is None:
+        return
+    from ..sink import snapshot_score
+
+    score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
+    if session.best_observation is None or score >= session.best_observation_score:
+        session.best_observation = obs
+        session.best_observation_score = score
+
+
 def ingest_observation(**kwargs) -> str | None:
     """Điểm vào thay ``record_observation`` khi ``PATROL_USE_AGGREGATOR=1``."""
     obs = ObservationInput(
@@ -45,6 +57,7 @@ def ingest_observation(**kwargs) -> str | None:
         face_embedding=obs.face_embedding,
     )
     session.touch(obs.ts, obs.person_bbox)
+    _maybe_update_best_observation(session, obs)
 
     if session.committed and not obs.density_only:
         process_identity(session, obs)

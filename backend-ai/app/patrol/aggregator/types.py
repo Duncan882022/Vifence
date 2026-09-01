@@ -73,6 +73,9 @@ class TrackSession:
     subject_id: str | None = None  # pers-* hoặc obj-* sau promote
 
     best_faces: list[BestFaceFrame] = field(default_factory=list)
+    # Frame tốt nhất đã thấy — monotonic score; finalize luôn flush cái này.
+    best_observation: ObservationInput | None = None
+    best_observation_score: float = 0.0
     interactions: list[InteractionRecord] = field(default_factory=list)
 
     appearance_row_id: int | None = None

@@ -10,7 +10,13 @@ export function isPatrolMetricsCameraId(cameraId: string): boolean {
   return isPatrolHelmetCameraId(cameraId) || cameraId.startsWith('DR-')
 }
 
-/** Camera vẽ ROI người tuần tra (bodycam + flycam). */
+/**
+ * Buffer đồng bộ ROI live với video HLS (~5s trễ).
+ * Bật/tắt hiển thị: nút bbox trên toolbar (`getCameraBboxVisible`).
+ */
+export const PATROL_LIVE_ROI_DELAY_MS = 5000
+
+/** Camera vẽ ROI người tuần tra (bodycam + flycam) — khi bbox toggle bật. */
 export function isPatrolPersonRoiCameraId(cameraId: string): boolean {
   return isPatrolMetricsCameraId(cameraId)
 }
