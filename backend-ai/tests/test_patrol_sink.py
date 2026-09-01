@@ -13,6 +13,7 @@ from app.patrol import daystore, db, identity, sink
 # Đồng bộ config.py — sink chờ đủ giây trước khi ghi thẻ lần đầu.
 _OBJECT_CONFIRM = 3.0
 _FACE_CONFIRM = 1.5
+_PERSON_BOX = [85.0, 62.0, 225.0, 425.0]
 
 
 def _vec(seed: int, dim: int = 128) -> list[float]:
@@ -80,10 +81,11 @@ class PatrolSinkTests(unittest.TestCase):
     def test_face_promotes_object_and_keeps_history(self) -> None:
         """Quãng quan sát lúc còn là Đối tượng không được mất khi thăng tầng."""
         t0 = 1_000.0
-        sink.record_observation(camera_id="HC-01", track_id="ptk0002:person", now=t0)
+        sink.record_observation(camera_id="HC-01", track_id="ptk0002:person", person_bbox=_PERSON_BOX, now=t0)
         pers = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0002:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(1),
             face_eligible=True,
             face_quality=0.9,
@@ -103,6 +105,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0003:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(2),
             face_eligible=True,
             face_quality=0.9,
@@ -111,13 +114,14 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0003:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(2),
             face_eligible=True,
             face_quality=0.9,
             now=t0 + _FACE_CONFIRM,
         )
         again = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0003:person", now=t0 + 50.0,
+            camera_id="HC-01", track_id="ptk0003:person", person_bbox=_PERSON_BOX, now=t0 + 50.0,
         )
         self.assertTrue(str(again).startswith("pers-"))
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
@@ -128,6 +132,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -136,6 +141,7 @@ class PatrolSinkTests(unittest.TestCase):
         a = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -144,6 +150,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0009:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -152,6 +159,7 @@ class PatrolSinkTests(unittest.TestCase):
         b = sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0009:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -169,6 +177,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -177,6 +186,7 @@ class PatrolSinkTests(unittest.TestCase):
         pers = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -185,6 +195,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0044:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -193,6 +204,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0044:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -201,6 +213,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0044:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -217,6 +230,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -225,6 +239,7 @@ class PatrolSinkTests(unittest.TestCase):
         pers = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -236,6 +251,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -244,6 +260,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,

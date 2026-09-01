@@ -140,8 +140,12 @@ def _hr_scan_face_count(pers_id: str) -> int:
     return min(raw, SCAN_FACES_REQUIRED)
 
 
-def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
-    """Thống kê quét mặt — nguồn sự thật là JPG gallery (4 góc), không phải COUNT person_faces."""
+def gallery_enrollment_stats(
+    employee_code: str | None,
+    *,
+    pers_id: str | None = None,
+) -> dict[str, Any]:
+    """Thống kê quét mặt — JPG gallery là nguồn chính; vector SCAN/SELF_ENROLL là dự phòng."""
     from ..patrol_identity_store import patrol_gallery_worker_id
     from ..worker_identity.gallery import get_enrollment_status
 
@@ -161,13 +165,21 @@ def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
 
     wid = patrol_gallery_worker_id(code)
     enrollment = get_enrollment_status(wid)
-    captured = int(enrollment.get("poses_captured") or 0)
+    gallery_captured = int(enrollment.get("poses_captured") or 0)
+    gallery_complete = bool(enrollment.get("complete"))
     poses = list(enrollment.get("poses") or empty_poses)
+    hr_count = _hr_scan_face_count(pers_id) if pers_id else 0
+    captured = max(gallery_captured, hr_count)
+    complete = gallery_complete or hr_count >= SCAN_FACES_REQUIRED
+    if complete and not gallery_complete and hr_count >= SCAN_FACES_REQUIRED:
+        for pose in poses:
+            pose["captured"] = True
+        captured = SCAN_FACES_REQUIRED
     return {
         "gallery_worker_id": wid,
         "poses_captured": captured,
         "face_count": captured,
-        "complete": bool(enrollment.get("complete")),
+        "complete": complete,
         "poses": poses,
     }
 
@@ -179,7 +191,7 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
     if person and person.get("status") == STATUS_IDENTIFIED:
         code = str(person.get("employee_code") or "").strip()
         if code:
-            stats = gallery_enrollment_stats(code)
+            stats = gallery_enrollment_stats(code, pers_id=pid)
             captured = int(stats["poses_captured"])
             complete = bool(stats["complete"])
             poses = list(stats["poses"])

@@ -10,6 +10,7 @@ from .types import TrackSession
 
 _lock = threading.RLock()
 _sessions: dict[str, TrackSession] = {}
+PARALLEL_BBOX_IOU_MIN = 0.08
 
 
 def _new_session_id(camera_id: str, track_id: str) -> str:
@@ -100,6 +101,21 @@ def _bbox_iou(
     return inter / union if union > 0 else 0.0
 
 
+def _bbox_parallel_track_proximity(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> bool:
+    """Hai track ByteTrack cùng một người — gần nhau theo cả X lẫn Y, không chỉ cùng hàng."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    acx, acy = (ax1 + ax2) / 2.0, (ay1 + ay2) / 2.0
+    bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+    aw, ah = max(ax2 - ax1, 1.0), max(ay2 - ay1, 1.0)
+    bw, bh = max(bx2 - bx1, 1.0), max(by2 - by1, 1.0)
+    min_w, min_h = min(aw, bw), min(ah, bh)
+    return abs(acx - bcx) <= min_w * 0.55 and abs(acy - bcy) <= min_h * 0.55
+
+
 def borrow_parallel_object_subject(
     camera_id: str,
     started_at: float,
@@ -124,7 +140,8 @@ def borrow_parallel_object_subject(
             if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
                 continue
             if bbox is not None and other.bbox is not None:
-                if _bbox_iou(bbox, other.bbox) < 0.12:
+                iou = _bbox_iou(bbox, other.bbox)
+                if iou < PARALLEL_BBOX_IOU_MIN and not _bbox_parallel_track_proximity(bbox, other.bbox):
                     continue
             if other.last_seen_at >= best_last:
                 best_last = other.last_seen_at

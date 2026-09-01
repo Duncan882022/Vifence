@@ -13,6 +13,44 @@ MAX_BEST_FRAMES = 3
 MIN_QUALITY_FOR_SEARCH = 0.55
 
 
+def _frame_size(obs: ObservationInput) -> tuple[int, int]:
+    if obs.frame is not None:
+        h, w = obs.frame.shape[:2]
+        return int(w), int(h)
+    # Không suy frame từ bbox — tỉ lệ diện tích sẽ luôn ~1/9 và lọc nền không chạy.
+    return 1280, 720
+
+
+def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
+    """Chặn FP cây/kệ — chỉ thăng Người khi bbox giống người thật."""
+    if obs.person_bbox is None:
+        return False
+    if float(obs.face_quality or 0.0) < MIN_QUALITY_FOR_SEARCH:
+        return False
+    frame_w, frame_h = _frame_size(obs)
+    box = obs.person_bbox
+    from ...patrol_person_visibility import (
+        background_clutter_person_box,
+        patrol_person_meets_detection_gate,
+        vertical_structure_fp_box,
+    )
+
+    if background_clutter_person_box(box, frame_w, frame_h):
+        pw = max(float(box[2]) - float(box[0]), 1.0)
+        ph = max(float(box[3]) - float(box[1]), 1.0)
+        # Chậu cây / kệ ngang — không chặn người đứng (aspect cao) gần mép khung.
+        if ph / pw < 1.35:
+            return False
+    if vertical_structure_fp_box(box, frame_w, frame_h):
+        return False
+    return patrol_person_meets_detection_gate(
+        box,
+        frame_w,
+        frame_h,
+        face_eligible=True,
+    )
+
+
 def _map_worker_to_identity(
     worker_id: str | None,
     confidence: float,
@@ -153,6 +191,9 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
             return True
 
     if not obs.face_eligible or emb is None:
+        return False
+
+    if not _human_face_promotion_allowed(obs):
         return False
 
     try:
@@ -309,7 +350,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
     if not session.identity_resolved:
         picked = _pick_search_embedding(session)
-        if picked is not None:
+        if picked is not None and _human_face_promotion_allowed(obs):
             emb, quality = picked
             try:
                 pers_id, created = identity.observe_face(
