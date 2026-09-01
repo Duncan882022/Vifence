@@ -590,7 +590,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
               {appearancesLoading && !hasAppearanceHistory ? (
                 <p className="text-[9px] text-muted-foreground/70">Đang tải…</p>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {appearanceSegments.map(segment => {
                     const rowKey = appearanceRowKey(segment)
                     const historyKey = snapshotSelectionKey(rowKey, 'history')
@@ -625,8 +625,10 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             selectSnapshot(selectionKey, url)
                           }}
                           className={cn(
-                            'relative shrink-0 overflow-hidden rounded border bg-black transition-colors',
-                            hasDualSnapshots ? 'w-8 h-7' : 'w-9 h-7',
+                            'relative shrink-0 self-stretch overflow-hidden rounded-md border bg-black transition-colors',
+                            hasDualSnapshots
+                              ? 'w-[88px] min-h-[72px] aspect-[4/3]'
+                              : 'w-[112px] min-h-[84px] aspect-[4/3]',
                             picked
                               ? 'border-sky-400/60 ring-1 ring-sky-400/40'
                               : 'border-[#1e2433]/90 hover:border-sky-400/40',
@@ -644,8 +646,13 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             />
                           ) : (
                             <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
-                              <ImageOff className="w-3 h-3" aria-hidden />
+                              <ImageOff className="w-4 h-4" aria-hidden />
                             </div>
+                          )}
+                          {hasDualSnapshots && (
+                            <span className="absolute bottom-0 inset-x-0 text-center text-[6px] font-semibold text-white/90 bg-black/60 py-0.5">
+                              {label}
+                            </span>
                           )}
                         </button>
                       )
@@ -661,8 +668,8 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             : 'border-[#1e2433] bg-[#0a0e17]',
                         )}
                       >
-                        <div className="flex items-center gap-1.5 min-w-0 px-2 py-1">
-                          <div className="flex shrink-0 items-center gap-0.5">
+                        <div className="flex items-stretch gap-2.5 px-2 py-2">
+                          <div className={cn('flex shrink-0 gap-1.5 self-stretch', hasDualSnapshots ? 'flex-row' : '')}>
                             {renderThumb(historyThumb || latestThumb, historyKey, 'Đầu')}
                             {hasDualSnapshots && renderThumb(latestThumb, latestKey, 'Mới')}
                           </div>
@@ -673,44 +680,58 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               const key = historyThumb ? historyKey : latestKey
                               selectSnapshot(key, fallback)
                             }}
-                            className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden text-left"
+                            className="min-w-0 flex-1 space-y-1 py-0.5 text-left"
                           >
-                            <span className="text-[9px] tabular-nums font-semibold text-foreground shrink-0">
-                              {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
-                            </span>
-                            {segment.presenceSeq != null && segment.presenceSeq > 0 && (
-                              <span className="text-[8px] text-sky-400/90 font-semibold shrink-0">
-                                #{segment.presenceSeq}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] tabular-nums font-semibold text-foreground">
+                                {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
                               </span>
-                            )}
-                            {segment.trackId && (
-                              <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[72px] shrink" title={segment.trackId}>
-                                {segment.trackId}
-                              </span>
-                            )}
-                            {segment.sessionId && (
-                              <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[88px] shrink hidden sm:inline" title={segment.sessionId}>
-                                {segment.sessionId}
-                              </span>
-                            )}
-                            {segment.counted && (
-                              <span className="text-[7px] px-1 py-0 rounded bg-green-400/15 text-green-400 font-semibold shrink-0">
-                                Đã đếm
-                              </span>
-                            )}
+                              {segment.presenceSeq != null && segment.presenceSeq > 0 && (
+                                <span className="text-[8px] text-sky-400/90 font-semibold">
+                                  Lượt #{segment.presenceSeq}
+                                </span>
+                              )}
+                              {segment.trackId && (
+                                <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[100px]" title={segment.trackId}>
+                                  {segment.trackId}
+                                </span>
+                              )}
+                              {segment.sessionId && (
+                                <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[140px]" title={segment.sessionId}>
+                                  {segment.sessionId}
+                                </span>
+                              )}
+                              {segment.counted && (
+                                <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold">
+                                  Đã đếm
+                                </span>
+                              )}
+                            </div>
                             {segment.interactions && segment.interactions.length > 0 && (
-                              <span className="text-[7px] px-1 py-0 rounded bg-amber-400/10 text-amber-300/90 font-mono truncate shrink hidden md:inline">
-                                {segment.interactions.map(i => `${i.action}·${i.object_id}`).join(' ')}
-                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {segment.interactions.map((item, idx) => (
+                                  <span
+                                    key={`${item.object_id}-${item.timestamp}-${idx}`}
+                                    className="text-[8px] px-1 py-0.5 rounded bg-amber-400/10 text-amber-300/90 font-mono"
+                                  >
+                                    {item.action} · {item.object_id}
+                                  </span>
+                                ))}
+                              </div>
                             )}
-                            <span className="text-[8px] text-foreground/80 truncate shrink min-w-0" title={camLabel}>
-                              <Camera className="inline w-2.5 h-2.5 text-cyan-400/80 mr-0.5 -mt-px" aria-hidden />
-                              {camLabel}
-                            </span>
-                            <span className="text-[8px] text-muted-foreground font-mono truncate shrink-0 max-w-[108px]" title={`${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`}>
-                              <MapPin className="inline w-2.5 h-2.5 text-emerald-400/80 mr-0.5 -mt-px" aria-hidden />
-                              {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
-                            </span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
+                              <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
+                            </div>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <MapPin className="w-3 h-3 text-emerald-400/80 shrink-0" aria-hidden />
+                              <span className="text-[9px] text-muted-foreground font-mono truncate">
+                                {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
+                                {(segment.gpsLat == null && segment.gpsLatEnd == null) && (
+                                  <span className="text-muted-foreground/60"> · mặc định</span>
+                                )}
+                              </span>
+                            </div>
                           </button>
                         </div>
                         {rowPreviewUrl && (
