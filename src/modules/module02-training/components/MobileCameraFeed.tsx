@@ -44,12 +44,13 @@ import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlay
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
 import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { useVmsDetectionFeed } from '@/modules/module03-safety/hooks/useVmsDetectionFeed'
+import { useSyncedVmsDetections } from '@/modules/module03-safety/hooks/useSyncedVmsDetections'
 import { isVmsLiveCamera } from '@/modules/module03-safety/services/vmsDetections.service'
 import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hooks/usePatrolLocalFrameAnalyze'
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
-import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId, isPatrolMetricsCameraId, PATROL_LIVE_ROI_DELAY_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -129,7 +130,17 @@ export function MobileCameraFeed({
   const vmsPatrolRoiActive = Boolean(
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
-  const vmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
+  const mobileVideoClock = useMemo(() => ({
+    getDisplayWallclockMs: () => {
+      const video = videoRef.current
+      if (!video || video.readyState < 2) return null
+      return Date.now() - PATROL_LIVE_ROI_DELAY_MS
+    },
+  }), [roiLayoutTick, status])
+  const rawVmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
+  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, vmsPatrolRoiActive ? mobileVideoClock : null, {
+    fallbackLagMs: isPatrolMetricsCameraId(cameraId) ? PATROL_LIVE_ROI_DELAY_MS : undefined,
+  })
   /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
   const patrolLocalRoiEnabled = Boolean(
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && (!isVmsLiveCamera(cameraId) || isLocalPublisher),

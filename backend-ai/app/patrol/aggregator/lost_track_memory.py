@@ -155,8 +155,9 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None =
         from .session_store import _new_session_id
 
         session.session_id = _new_session_id(session.camera_id, session.track_id)
-    # Track đã finalize = đã rời khung — lượt mới dù reclaim cùng pers trong gap ngắn.
+    # Đã rời khung — lượt xuất hiện mới dù reclaim cùng obj trong gap ngắn.
     session.appearance_row_id = None
+    session.luot_snapshot_captured = False
     session.dirty = True
 
 

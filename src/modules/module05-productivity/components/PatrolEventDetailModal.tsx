@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import {
   Building2,
   Camera,
-  Clock,
   Hash,
   History,
   ImageOff,
@@ -14,10 +13,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { formatEventDateTime } from '@/utils/format'
 import { formatVnDate } from '@/utils/vnDateTime'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { formatPatrolTime } from '../data/patrolTypes'
 import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
 import {
   fetchPatrolSubjectAppearances,
@@ -161,19 +158,12 @@ function resolveAppearanceCameraLabel(segment: PatrolAppearanceSegment): string 
   )
 }
 
-function formatEventTimeRange(event: PatrolEvent): string {
-  return formatEventDateTime(event.lockedAt)
-}
-
-function resolveEventDurationSeconds(event: PatrolEvent): number | null {
-  if (event.durationSeconds != null && event.durationSeconds > 0) {
-    return event.durationSeconds
-  }
-  const started = Date.parse(event.startedAt)
-  const ended = event.endedAt ? Date.parse(event.endedAt) : Date.parse(event.lockedAt)
-  if (!Number.isFinite(started) || !Number.isFinite(ended)) return null
-  const seconds = Math.max(0, Math.round((ended - started) / 1000))
-  return seconds > 0 ? seconds : null
+function resolveObjectEventCode(event: PatrolEvent): string {
+  const fromCard = event.id.match(/^obj:(.+)$/i)?.[1]?.trim()
+  if (fromCard) return fromCard
+  const oid = event.objectId?.trim()
+  if (oid) return oid
+  return event.id
 }
 
 function resolveEventDisplayName(
@@ -299,7 +289,6 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     const objectDisplay = resolveEventObjectDisplay(event)
     const appearanceCameraIds = [...new Set(appearanceSegments.map(s => s.cameraId))]
     const cameraLabel = resolvePrimaryCameraLabel(event, appearanceCameraIds)
-    const duration = resolveEventDurationSeconds(event)
 
     const infoRows: PatrolInfoRow[] = []
     const displayName = resolveEventDisplayName(event, objectDisplay)
@@ -344,7 +333,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       infoRows.push({
         icon: Hash,
         label: 'Mã',
-        value: event.objectId || event.id,
+        value: resolveObjectEventCode(event),
         iconClassName: 'text-stone-400',
       })
     }
@@ -364,8 +353,6 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       stage,
       stageMeta,
       cardDisplay,
-      timeRange: formatEventTimeRange(event),
-      duration,
       infoPrimary,
       infoSecondary,
     }
@@ -388,8 +375,8 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         return resolveRowSnapshotUrl(segment, event, idx === 0)
       }
     }
-    if (appearanceSegments.length === 0) {
-      return event?.snapshotUrl
+    if (appearanceSegments.length > 0 && event) {
+      return resolveRowSnapshotUrl(appearanceSegments[0], event, true)
     }
     return event?.snapshotUrl
   }, [appearanceSegments, event, faceGalleryOpen, selectedAppearanceKey])
@@ -403,14 +390,12 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     ? summary.cardDisplay.title
     : event.violationLabel
   const hasAppearanceHistory = appearanceSegments.length > 0
-  const isProfileStage = stage === 'profile'
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
-  const showTimeSection = !hasAppearanceHistory
-  const historySectionTitle = isProfileStage ? 'Lần gặp trong ngày' : 'Lịch sử xuất hiện'
-  const showTrackMeta = !isProfileStage
+  const historySectionTitle = 'Lịch sử xuất hiện'
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
     || Boolean(activeSnapshotUrl)
+  const objectInfoOnly = stage === 'object'
 
   return createPortal(
     <div
@@ -520,47 +505,43 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {(summary.infoPrimary.length > 0 || summary.infoSecondary.length > 0) && (
-            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5">
+            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5 shrink-0">
               <div className="flex items-center gap-1.5">
                 <Info className="w-3.5 h-3.5 text-violet-400 shrink-0" aria-hidden />
                 <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
                   Thông tin
                 </span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                <div className="space-y-3">
+              {objectInfoOnly ? (
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                   {summary.infoPrimary.map(row => (
                     <PatrolDetailRow key={row.label} {...row} />
                   ))}
+                  {summary.infoSecondary.map(row => (
+                    <PatrolDetailRow key={row.label} {...row} />
+                  ))}
                 </div>
-                {summary.infoSecondary.length > 0 && (
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                   <div className="space-y-3">
-                    {summary.infoSecondary.map(row => (
+                    {summary.infoPrimary.map(row => (
                       <PatrolDetailRow key={row.label} {...row} />
                     ))}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {showTimeSection && (
-            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-1">
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
-                <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Thời gian</span>
-              </div>
-              <p className="text-[11px] text-foreground font-medium tabular-nums">{summary.timeRange}</p>
-              {summary.duration != null && (
-                <p className="text-[9px] text-muted-foreground">
-                  Tổng thời lượng quan sát: {formatPatrolTime(summary.duration)}
-                </p>
+                  {summary.infoSecondary.length > 0 && (
+                    <div className="space-y-3">
+                      {summary.infoSecondary.map(row => (
+                        <PatrolDetailRow key={row.label} {...row} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
 
           {showAppearanceHistory && (
-            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2">
+            <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2 shrink-0">
               <div className="flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
                 <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
@@ -570,7 +551,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
               {appearancesLoading && !hasAppearanceHistory ? (
                 <p className="text-[9px] text-muted-foreground/70">Đang tải…</p>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 max-h-[min(42vh,320px)] overflow-y-auto overscroll-y-contain pr-0.5">
                   {appearanceSegments.map((segment, segmentIndex) => {
                     const rowKey = appearanceRowKey(segment)
                     const thumbUrl = resolveRowSnapshotUrl(segment, event, segmentIndex === 0)
@@ -627,52 +608,35 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                           onClick={selectRow}
                           className="min-w-0 flex-1 space-y-1 py-0.5 text-left"
                         >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] tabular-nums font-semibold text-foreground">
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            <span className="text-[10px] tabular-nums font-semibold text-foreground shrink-0">
                               {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
                             </span>
                             {segment.presenceSeq != null && segment.presenceSeq > 0 && (
-                              <span className="text-[8px] text-sky-400/90 font-semibold">
-                                {isProfileStage && appearanceSegments.length === 1
-                                  ? 'Hôm nay'
-                                  : `Lượt #${segment.presenceSeq}`}
+                              <span className="text-[8px] text-sky-400/90 font-semibold shrink-0">
+                                {`Lượt #${segment.presenceSeq}`}
                               </span>
                             )}
-                            {showTrackMeta && segment.trackId && (
-                              <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[100px]" title={segment.trackId}>
+                            {segment.trackId && (
+                              <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[88px]" title={segment.trackId}>
                                 {segment.trackId}
                               </span>
                             )}
-                            {showTrackMeta && segment.sessionId && (
-                              <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[140px]" title={segment.sessionId}>
+                            {segment.sessionId && (
+                              <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[120px]" title={segment.sessionId}>
                                 {segment.sessionId}
                               </span>
                             )}
                             {segment.counted && (
-                              <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold shrink-0 ml-auto">
                                 Đã đếm
                               </span>
                             )}
                           </div>
-                          {showTrackMeta && segment.interactions && segment.interactions.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {segment.interactions.map((item, idx) => (
-                                <span
-                                  key={`${item.object_id}-${item.timestamp}-${idx}`}
-                                  className="text-[8px] px-1 py-0.5 rounded bg-amber-400/10 text-amber-300/90 font-mono"
-                                >
-                                  {item.action} · {item.object_id}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {!isProfileStage && (
                           <div className="flex items-center gap-1 min-w-0">
                             <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
                             <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
                           </div>
-                          )}
-                          {!isProfileStage && (
                           <div className="flex items-center gap-1 min-w-0">
                             <MapPin className="w-3 h-3 text-emerald-400/80 shrink-0" aria-hidden />
                             <span className="text-[9px] text-muted-foreground font-mono truncate">
@@ -682,7 +646,6 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               )}
                             </span>
                           </div>
-                          )}
                         </button>
                         </div>
                       </div>
