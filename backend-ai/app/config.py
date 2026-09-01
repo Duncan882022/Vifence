@@ -200,7 +200,7 @@ class Settings(BaseSettings):
     # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí (sink dùng trực tiếp).
     patrol_person_confirm_seconds: float = 0.15
     # Dwell legacy — giữ tương thích env cũ; sink ưu tiên patrol_person_confirm_seconds.
-    patrol_face_object_confirm_seconds: float = 1.0
+    patrol_face_object_confirm_seconds: float = 2.0
     # Presence tuần tra — gộp/tách lượt gặp (GPS + thời gian).
     patrol_presence_t_max_sec: float = 600.0
     patrol_presence_d_merge_m: float = 50.0

@@ -812,5 +812,74 @@ class ObjectFacePromoteTests(unittest.TestCase):
         self.assertEqual(len(daystore.list_objects(db.today_vn(ts))), 1)
 
 
+class BestObservationFinalizeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def test_finalize_uses_best_observation_not_last_frame(self) -> None:
+        """Mất track sớm — chốt frame score cao nhất, không frame cuối (có thể mờ)."""
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol.aggregator.engine import ingest_observation
+        from app.patrol.aggregator.engine import finalize_track
+        from app.patrol.aggregator.session_store import get_or_create
+
+        ts = 10_000.0
+        good_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        bad_frame = np.ones((480, 640, 3), dtype=np.uint8) * 128
+        bbox = (100.0, 80.0, 220.0, 400.0)
+
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            side_effect=lambda *a, **k: f"2026-08-30/score-{k.get('score', 0):.2f}.jpg",
+        ):
+            ingest_observation(
+                camera_id="HC-02",
+                track_id="ptk-best",
+                now=ts,
+                person_bbox=bbox,
+                frame=good_frame,
+                confidence=0.9,
+                face_quality=0.0,
+            )
+            ingest_observation(
+                camera_id="HC-02",
+                track_id="ptk-best",
+                now=ts + 0.4,
+                person_bbox=bbox,
+                frame=bad_frame,
+                confidence=0.2,
+                face_quality=0.0,
+            )
+            session = get_or_create("HC-02", "ptk-best", ts=ts + 0.4)
+            self.assertIsNotNone(session.best_observation)
+            self.assertAlmostEqual(session.best_observation_score, 0.9, places=2)
+            finalize_track("HC-02", "ptk-best", now=ts + 0.5)
+
+        from app.patrol import daystore, db
+
+        objs = daystore.list_objects(db.today_vn(ts))
+        self.assertEqual(len(objs), 1)
+        snap = objs[0]["snapshot_path"] or ""
+        self.assertIn("score-0.90", snap)
+        self.assertNotIn("score-0.20", snap)
+
+
 if __name__ == "__main__":
     unittest.main()
