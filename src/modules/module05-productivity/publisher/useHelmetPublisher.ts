@@ -38,6 +38,7 @@ import {
   type WhipPublisher,
 } from '@/services/webrtc/whipClient'
 import { getHelmetWhipUrl } from '../data/helmetIngest'
+import { buildPublisherIceServers } from './publisherIce'
 import { canReuseOpenCamera } from './cameraReuse'
 import { createDefaultPublisherGps, type HelmetGpsState } from './publisherGpsDefaults'
 
@@ -293,6 +294,7 @@ export function useHelmetPublisher({
         endpoint,
         stream,
         maxBitrateBps,
+        iceServers: buildPublisherIceServers(),
         onStateChange: (next, message) => {
           // State của publisher đã bị thay thế — bỏ qua, tránh phát lại nhầm.
           if (session !== sessionRef.current) return
