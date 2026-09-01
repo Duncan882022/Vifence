@@ -315,6 +315,52 @@ def patrol_gps_payload(camera_id: str) -> dict[str, Any]:
     return {"gps_lat": lat, "gps_lng": lng, "heading": heading}
 
 
+def format_vn_datetime(ts: float | None = None) -> str:
+    """DD/MM/YYYY HH:mm:ss theo múi giờ Việt Nam."""
+    from datetime import datetime
+
+    from .patrol.db import VN_TZ
+
+    dt = datetime.fromtimestamp(ts or time.time(), tz=VN_TZ)
+    return dt.strftime("%d/%m/%Y %H:%M:%S")
+
+
+def format_vn_iso_timestamp(ts: float | None = None) -> str:
+    """ISO local +07:00 — đồng bộ workforce server_time."""
+    from datetime import datetime
+
+    from .patrol.db import VN_TZ
+
+    dt = datetime.fromtimestamp(ts or time.time(), tz=VN_TZ)
+    return dt.isoformat(timespec="seconds")
+
+
+def build_patrol_stream_meta(ts: float | None = None) -> dict[str, Any]:
+    """Metadata thời gian stream — gắn live/bundle + WS push."""
+    now = float(ts or time.time())
+    return {
+        "timestamp": now,
+        "datetime_vn": format_vn_datetime(now),
+        "server_time": format_vn_iso_timestamp(now),
+    }
+
+
+def build_patrol_gps_bundle(camera_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """GPS theo camera — lat/lng/heading + thời điểm cập nhật."""
+    out: dict[str, dict[str, Any]] = {}
+    for cam_id in camera_ids:
+        entry = _patrol_gps.get(cam_id) or {}
+        payload = patrol_gps_payload(cam_id)
+        updated_at = entry.get("updated_at")
+        updated_ts = float(updated_at) if updated_at is not None else None
+        out[cam_id] = {
+            **payload,
+            "updated_at": updated_ts,
+            "datetime_vn": format_vn_datetime(updated_ts) if updated_ts else None,
+        }
+    return out
+
+
 def clear_patrol_mobile_metrics() -> int:
     """Xóa toàn bộ mobile metrics trong RAM — dùng khi reset test data."""
     count = len(_patrol_mobile_metrics)
@@ -531,6 +577,7 @@ def build_patrol_aggregate_metrics_payload(
             store=store,
             vms_workers=vms_workers,
         )
+        gps = patrol_gps_payload(cam_id)
         per_camera.append(
             {
                 "camera_id": cam_id,
@@ -538,8 +585,9 @@ def build_patrol_aggregate_metrics_payload(
                 "person_count": payload["person_count"],
                 "identified_workers": payload["identified_workers"],
                 "person_events_today": payload["person_events_today"],
-                "gps_lat": payload.get("gps_lat"),
-                "gps_lng": payload.get("gps_lng"),
+                "gps_lat": gps.get("gps_lat"),
+                "gps_lng": gps.get("gps_lng"),
+                "heading": gps.get("heading"),
             },
         )
         total_person_events += int(payload["person_events_today"])
@@ -788,7 +836,7 @@ def build_patrol_live_bundle_payload(
     store,
     vms_workers: dict,
 ) -> dict[str, Any]:
-    """Metrics + workforce + stream_online trong một response."""
+    """Metrics + workforce + stream_online + thời gian/GPS trong một response."""
     metrics = build_patrol_aggregate_metrics_payload(
         camera_ids,
         store=store,
@@ -796,9 +844,15 @@ def build_patrol_live_bundle_payload(
     )
     metrics = apply_vms_stream_online(metrics, vms_workers)
     workforce = merge_workforce_snapshots(camera_ids)
+    valid_ids = [cam_id for cam_id in camera_ids if is_patrol_metrics_camera_id(cam_id)]
+    stream = build_patrol_stream_meta()
+    gps = build_patrol_gps_bundle(valid_ids)
+    server_time = stream["server_time"] or workforce.get("server_time")
     return {
         "ok": True,
         "metrics": metrics,
         "workforce": workforce,
-        "server_time": workforce.get("server_time"),
+        "stream": stream,
+        "gps": gps,
+        "server_time": server_time,
     }

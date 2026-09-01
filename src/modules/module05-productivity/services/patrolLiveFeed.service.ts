@@ -4,7 +4,11 @@
 import { getPatrolAccessToken } from '@/services/patrolApiClient'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
-import type { PatrolHelmetAggregateMetricsResponse } from '../services/patrolLiveEvents.service'
+import type {
+  PatrolHelmetAggregateMetricsResponse,
+  PatrolGpsBundleEntry,
+  PatrolStreamMeta,
+} from '../services/patrolLiveEvents.service'
 import { fetchPatrolLiveBundle } from '../services/patrolLiveBundle.service'
 import type { WorkforceSnapshot } from '../types/workforceHeatmap'
 import { EMPTY_WORKFORCE_SNAPSHOT } from '../services/workforceState.service'
@@ -14,6 +18,8 @@ export type PatrolLiveTransport = 'websocket' | 'polling'
 export interface PatrolLiveFeedPayload {
   metrics: PatrolHelmetAggregateMetricsResponse
   workforce: WorkforceSnapshot
+  stream: PatrolStreamMeta | null
+  gps: Record<string, PatrolGpsBundleEntry>
 }
 
 export interface PatrolLiveFeedOptions {
@@ -52,6 +58,40 @@ export function buildPatrolLiveWsUrl(backendUrl: string, cameraIds: readonly str
   return url.toString()
 }
 
+function normalizeGpsEntry(raw: Record<string, unknown>): PatrolGpsBundleEntry {
+  const updatedAt = raw.updated_at
+  return {
+    gps_lat: raw.gps_lat as number | null | undefined ?? null,
+    gps_lng: raw.gps_lng as number | null | undefined ?? null,
+    heading: raw.heading as number | null | undefined ?? null,
+    updated_at: typeof updatedAt === 'number' && Number.isFinite(updatedAt) ? updatedAt : null,
+    datetime_vn: typeof raw.datetime_vn === 'string' ? raw.datetime_vn : null,
+  }
+}
+
+function normalizeStream(raw: Record<string, unknown> | undefined): PatrolStreamMeta | null {
+  if (!raw || typeof raw.datetime_vn !== 'string') return null
+  const ts = Number(raw.timestamp)
+  return {
+    timestamp: Number.isFinite(ts) ? ts : Date.now() / 1000,
+    datetime_vn: raw.datetime_vn,
+    server_time: typeof raw.server_time === 'string'
+      ? raw.server_time
+      : new Date().toISOString(),
+  }
+}
+
+function normalizeGps(
+  raw: Record<string, unknown> | undefined,
+): Record<string, PatrolGpsBundleEntry> {
+  if (!raw) return {}
+  return Object.fromEntries(
+    Object.entries(raw).map(([cameraId, entry]) => [
+      cameraId,
+      normalizeGpsEntry(entry as Record<string, unknown>),
+    ]),
+  )
+}
 function normalizeWorkforce(raw: Record<string, unknown> | undefined): WorkforceSnapshot {
   if (!raw) return EMPTY_WORKFORCE_SNAPSHOT
   return {
@@ -81,6 +121,9 @@ function normalizeMetrics(
         person_events_today: Math.max(0, Number(r.person_events_today ?? 0)),
         gps_lat: r.gps_lat as number | null | undefined,
         gps_lng: r.gps_lng as number | null | undefined,
+        heading: r.heading != null && Number.isFinite(Number(r.heading))
+          ? Number(r.heading)
+          : null,
       }
     })
     : []
@@ -106,6 +149,8 @@ function parseLiveBundleMessage(data: Record<string, unknown>): PatrolLiveFeedPa
   return {
     metrics,
     workforce: normalizeWorkforce(data.workforce as Record<string, unknown> | undefined),
+    stream: normalizeStream(data.stream as Record<string, unknown> | undefined),
+    gps: normalizeGps(data.gps as Record<string, unknown> | undefined),
   }
 }
 
