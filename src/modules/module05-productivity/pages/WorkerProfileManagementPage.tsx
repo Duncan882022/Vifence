@@ -73,7 +73,7 @@ export function WorkerProfileManagementPage() {
   const [importResult, setImportResult] = useState<PatrolImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [detailPersId, setDetailPersId] = useState<string | null>(null)
-  const [detailMode, setDetailMode] = useState<'view' | 'edit'>('view')
+  const [detailMode, setDetailMode] = useState<'view' | 'edit' | 'verify'>('view')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [rowError, setRowError] = useState<string | null>(null)
 
@@ -149,7 +149,7 @@ export function WorkerProfileManagementPage() {
     }
   }
 
-  const openDetail = (persId: string, mode: 'view' | 'edit' = 'view') => {
+  const openDetail = (persId: string, mode: 'view' | 'edit' | 'verify' = 'view') => {
     setDetailMode(mode)
     setDetailPersId(persId)
     setRowError(null)
@@ -315,8 +315,11 @@ export function WorkerProfileManagementPage() {
                           </button>
                           <button
                             type="button"
-                            title="Sửa hồ sơ"
-                            onClick={() => openDetail(p.pers_id, 'edit')}
+                            title={p.status === 'draft' ? 'Xác minh hồ sơ' : 'Sửa hồ sơ'}
+                            onClick={() => openDetail(
+                              p.pers_id,
+                              p.status === 'draft' ? 'verify' : 'edit',
+                            )}
                             className="p-1.5 rounded text-muted-foreground hover:text-sky-400 hover:bg-sky-400/10"
                           >
                             <Pencil className="w-3.5 h-3.5" />

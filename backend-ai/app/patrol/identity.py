@@ -681,6 +681,12 @@ def _apply_verify_front_image(
         quality=1.0,
         camera_id="VERIFY",
         now=now,
+        frame=frame_bgr,
+        person_bbox=(
+            [0.0, 0.0, float(frame_bgr.shape[1]), float(frame_bgr.shape[0])]
+            if frame_bgr is not None and hasattr(frame_bgr, "shape") and len(frame_bgr.shape) >= 2
+            else None
+        ),
     )
     if frame_bgr is None:
         return
@@ -759,11 +765,10 @@ def _promote_enroll_session_front_jpg(
 
 
 def _draft_patrol_face_count(pers_id: str) -> int:
-    """Số góc mặt có ảnh JPG từ camera tuần tra (HC-/DR-)."""
+    """Số vector mặt đã lưu cho hồ sơ bản nháp."""
     pid = resolve_alias(pers_id)
     row = db.query_one(
-        "SELECT COUNT(*) AS c FROM person_faces"
-        " WHERE pers_id = ? AND image_path IS NOT NULL AND image_path != ''",
+        "SELECT COUNT(*) AS c FROM person_faces WHERE pers_id = ?",
         (pid,),
     )
     return int(row["c"]) if row else 0
@@ -773,8 +778,7 @@ def _draft_faces_for_person(pers_id: str) -> list[dict[str, Any]]:
     pid = resolve_alias(pers_id)
     rows = db.query(
         "SELECT id, quality, camera_id, image_path, created_at FROM person_faces"
-        " WHERE pers_id = ? AND image_path IS NOT NULL AND image_path != ''"
-        " ORDER BY created_at ASC",
+        " WHERE pers_id = ? ORDER BY created_at ASC",
         (pid,),
     )
     return [
@@ -782,7 +786,7 @@ def _draft_faces_for_person(pers_id: str) -> list[dict[str, Any]]:
             "id": int(r["id"]),
             "quality": float(r["quality"] or 0),
             "camera_id": r["camera_id"],
-            "path": str(r["image_path"]),
+            "path": str(r["image_path"]).strip() if r["image_path"] else None,
             "created_at": float(r["created_at"] or 0),
         }
         for r in rows
@@ -797,13 +801,16 @@ def _maybe_save_patrol_face_crop(
     person_bbox: Sequence[float] | None,
     ts: float,
 ) -> str | None:
-    if frame is None or not person_bbox or len(person_bbox) < 4:
+    if frame is None:
         return None
     if not camera_id:
         return None
     from .camera_scope import is_patrol_metrics_camera
 
-    if not is_patrol_metrics_camera(camera_id):
+    manual_selfie = camera_id in {"SCAN", "VERIFY"}
+    if not manual_selfie and (not person_bbox or len(person_bbox) < 4):
+        return None
+    if not manual_selfie and not is_patrol_metrics_camera(camera_id):
         return None
     try:
         from ..worker_identity.recognizer import extract_patrol_face_crop_bgr
@@ -815,7 +822,18 @@ def _maybe_save_patrol_face_crop(
             frame_arr = frame
         if frame_arr.ndim != 3:
             return None
-        crop = extract_patrol_face_crop_bgr(frame_arr, [float(v) for v in person_bbox[:4]])
+        crop = None
+        if person_bbox and len(person_bbox) >= 4:
+            crop = extract_patrol_face_crop_bgr(
+                frame_arr,
+                [float(v) for v in person_bbox[:4]],
+            )
+        if crop is None and manual_selfie:
+            h, w = frame_arr.shape[:2]
+            crop = extract_patrol_face_crop_bgr(
+                frame_arr,
+                [0.0, 0.0, float(w), float(h)],
+            )
         if crop is None:
             return None
         return save_draft_face_crop(pers_id, crop, ts=ts)

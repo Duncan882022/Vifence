@@ -57,9 +57,10 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
     setError(null)
     try {
       const enrollment = await fetchPatrolScanEnrollment(person.pers_id)
-      if (isDraft && enrollment.draft_faces?.length) {
+      if (isDraft) {
+        const draftList = enrollment.draft_faces ?? []
         setDraftFaces(
-          enrollment.draft_faces.map(face => ({
+          draftList.map(face => ({
             ...face,
             url: absolutizeDraftFaceUrl(face.url),
           })),
@@ -98,6 +99,7 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
     ? draftFaces.length
     : poses.filter(p => p.captured).length
   const showDraftGrid = isDraft && draftFaces.length > 0
+  const draftImageCount = draftFaces.filter(f => Boolean(f.url)).length
   const canSupplementScan = person.status === 'identified' && Boolean(person.employee_code?.trim())
   const scanHref = canSupplementScan
     ? `/module05/quet-mat?code=${encodeURIComponent(person.employee_code!.trim())}`
@@ -113,9 +115,11 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {showDraftGrid
-              ? 'Crop mặt tự động từ bodycam / flycam — dùng xem trước khi xác minh.'
+              ? draftImageCount > 0
+                ? 'Crop mặt từ camera / upload — xem trước khi xác minh.'
+                : 'Đã lưu vector nhận diện — chưa có ảnh JPG. Tải ảnh thủ công khi xác minh.'
               : person.status === 'draft'
-                ? 'Chưa có ảnh crop — vector embedding đang được thu từ camera.'
+                ? 'Chưa có ảnh — camera sẽ tự lưu khi nhận diện, hoặc tải ảnh khi xác minh.'
                 : 'Ảnh đã quét — dùng để bổ sung góc còn thiếu.'}
           </p>
         </div>
@@ -138,7 +142,12 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
           {draftFaces.map(face => (
             <div
               key={face.id}
-              className="rounded-md border border-green-500/25 bg-green-500/5 overflow-hidden"
+              className={cn(
+                'rounded-md border overflow-hidden',
+                face.url
+                  ? 'border-green-500/25 bg-green-500/5'
+                  : 'border-violet-500/25 bg-violet-500/5',
+              )}
             >
               <div className={cn('relative bg-black', compact ? 'aspect-square' : 'aspect-[3/4]')}>
                 {face.url ? (
@@ -153,16 +162,26 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
                     <span className="text-[8px] uppercase tracking-wide opacity-70">Vector</span>
                   </div>
                 )}
-                <span className="absolute top-1 right-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500/90 text-white">
+                <span className={cn(
+                  'absolute top-1 right-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-white',
+                  face.url ? 'bg-green-500/90' : 'bg-violet-500/90',
+                )}>
                   <Check className="w-2.5 h-2.5" />
                 </span>
               </div>
-              <p className="px-1.5 py-1 text-[9px] font-medium truncate text-center text-green-400">
+              <p className={cn(
+                'px-1.5 py-1 text-[9px] font-medium truncate text-center',
+                face.url ? 'text-green-400' : 'text-violet-400',
+              )}>
                 {face.camera_id ?? 'Camera'}
               </p>
             </div>
           ))}
         </div>
+      ) : isDraft ? (
+        <p className="text-[10px] text-muted-foreground/80 text-center py-6">
+          Chưa có vector mặt — đợi camera tuần tra hoặc tải ảnh khi xác minh.
+        </p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {poses.map(pose => (
@@ -222,7 +241,7 @@ export function WorkerProfileFaceGallery({ person, compact = false }: WorkerProf
           </Link>
         ) : person.status === 'draft' && !showDraftGrid ? (
           <span className="text-[10px] text-amber-300/80">
-            Xác minh hồ sơ trước — sau đó quét bổ sung tại Quét mặt.
+            Chưa có ảnh — bấm Xác minh để tải ảnh chính diện thủ công.
           </span>
         ) : null}
         <button
