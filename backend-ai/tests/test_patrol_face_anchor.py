@@ -224,6 +224,22 @@ class TestPatrolFaceAnchor(unittest.TestCase):
             )
         self.assertEqual(len(out), 1)
 
+    def test_unmatched_plausible_yolo_kept_when_faces_present(self):
+        """Đám đông: YOLO thấy người không khớp mặt — vẫn giữ bbox (silhouette_keep)."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        person_a = (280.0, 120.0, 620.0, 680.0)
+        person_b = (820.0, 260.0, 980.0, 520.0)
+        face_a = _FrameFace(box=(380.0, 180.0, 520.0, 360.0), score=0.9)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[face_a]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(person_a, 0.72), (person_b, 0.46)],
+                camera_id="HC-02",
+            )
+        boxes = [box for box, _ in out]
+        self.assertIn(person_b, boxes)
+        self.assertGreaterEqual(len(out), 2)
+
     def test_legs_yolo_with_false_face_inside_skipped(self):
         """YOLO chân có mặt giả bên trong — không tạo bbox thứ hai."""
         frame = np.zeros((1280, 720, 3), dtype=np.uint8)

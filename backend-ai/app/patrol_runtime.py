@@ -531,6 +531,7 @@ def build_patrol_aggregate_metrics_payload(
             store=store,
             vms_workers=vms_workers,
         )
+        gps = patrol_gps_payload(cam_id)
         per_camera.append(
             {
                 "camera_id": cam_id,
@@ -538,8 +539,9 @@ def build_patrol_aggregate_metrics_payload(
                 "person_count": payload["person_count"],
                 "identified_workers": payload["identified_workers"],
                 "person_events_today": payload["person_events_today"],
-                "gps_lat": payload.get("gps_lat"),
-                "gps_lng": payload.get("gps_lng"),
+                "gps_lat": gps.get("gps_lat"),
+                "gps_lng": gps.get("gps_lng"),
+                "heading": gps.get("heading"),
             },
         )
         total_person_events += int(payload["person_events_today"])

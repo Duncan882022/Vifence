@@ -39,7 +39,7 @@ export function resolvePatrolCameraStreamTelemetry(
 
   let lat = readCoord(metrics?.gps_lat)
   let lng = readCoord(metrics?.gps_lng)
-  let heading = readCoord(helmet?.heading)
+  let heading = readCoord(helmet?.heading) ?? readCoord(metrics?.heading)
 
   if (lat == null) lat = readCoord(helmet?.lat)
   if (lng == null) lng = readCoord(helmet?.lon)

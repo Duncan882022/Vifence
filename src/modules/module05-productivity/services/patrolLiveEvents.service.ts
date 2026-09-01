@@ -67,6 +67,7 @@ export interface PatrolHelmetCameraMetricsSlice {
   peak_time_active?: boolean
   gps_lat?: number | null
   gps_lng?: number | null
+  heading?: number | null
 }
 
 export interface PatrolHelmetAggregateMetricsResponse {
@@ -102,6 +103,7 @@ function normalizeCameraSlice(row: Record<string, unknown>): PatrolHelmetCameraM
     peak_time_active: Boolean(row.peak_time_active),
     gps_lat: row.gps_lat as number | null | undefined,
     gps_lng: row.gps_lng as number | null | undefined,
+    heading: row.heading as number | null | undefined,
   }
 }
 
