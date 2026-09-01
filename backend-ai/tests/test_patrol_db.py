@@ -72,6 +72,25 @@ class IdentityTests(PatrolDbTestCase):
         self.assertTrue(pers_id.startswith("tk-"))
         self.assertEqual(identity.get_person(pers_id)["status"], identity.STATUS_DRAFT)
 
+    def test_preferred_tk_reuses_registry_code(self) -> None:
+        """ROI tk registry — không cấp tk mới khi observe_face có preferred_tk."""
+        pers_id, created = identity.observe_face(
+            _vec(55),
+            quality=0.8,
+            preferred_tk="tk-0000042",
+        )
+        self.assertTrue(created)
+        self.assertEqual(pers_id, "tk-0000042")
+        again, created2 = identity.observe_face(
+            _nudge(_vec(55), 0.85),
+            quality=0.8,
+            preferred_tk="tk-0000042",
+        )
+        self.assertFalse(created2)
+        self.assertEqual(again, "tk-0000042")
+        bound = identity.lookup_bound_profile_for_tk("tk-0000042")
+        self.assertEqual(bound, "tk-0000042")
+
     def test_same_face_reuses_code(self) -> None:
         first, _ = identity.observe_face(_vec(2), quality=0.8)
         again, created = identity.observe_face(_nudge(_vec(2), 0.80), quality=0.8)

@@ -19,7 +19,7 @@ from typing import Any, Iterator
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_FILE = DATA_DIR / "patrol.db"
 
-_SCHEMA_VERSION = 8
+_SCHEMA_VERSION = 9
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -128,6 +128,15 @@ CREATE INDEX IF NOT EXISTS ix_appearances_subject
 
 -- Bộ đếm cấp mã. Không bao giờ lùi, kể cả sau khi xoá dữ liệu: mã cũ còn nằm
 -- trong ảnh chụp và báo cáo đã xuất.
+-- tk registry (ROI) → pers_id SQLite — survive restart, tránh observe_face cấp tk mới.
+CREATE TABLE IF NOT EXISTS track_profile_bindings (
+  tk_id    TEXT PRIMARY KEY,
+  pers_id  TEXT NOT NULL REFERENCES persons(pers_id) ON DELETE CASCADE,
+  bound_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_track_profile_bindings_pers
+  ON track_profile_bindings(pers_id);
+
 CREATE TABLE IF NOT EXISTS counters (
   name  TEXT PRIMARY KEY,
   value INTEGER NOT NULL
@@ -186,6 +195,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         migrate_to_v6,
         migrate_to_v7,
         migrate_to_v8,
+        migrate_to_v9,
     )
 
     migrate_to_v3(conn)
@@ -194,6 +204,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     migrate_to_v6(conn)
     migrate_to_v7(conn)
     migrate_to_v8(conn)
+    migrate_to_v9(conn)
 
 
 def _connect() -> sqlite3.Connection:
@@ -353,6 +364,7 @@ def reset_all(keep_counters: bool = True) -> dict[str, int]:
         conn.execute("DELETE FROM daily_events")
         conn.execute("DELETE FROM daily_objects")
         conn.execute("DELETE FROM person_aliases")
+        conn.execute("DELETE FROM track_profile_bindings")
         conn.execute("DELETE FROM person_faces")
         conn.execute("DELETE FROM enroll_session_faces")
         conn.execute("DELETE FROM enroll_sessions")

@@ -153,7 +153,16 @@ def flush_session(
     if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
         session.counted = True
 
-    payload = build_event_payload(session)
+    worker_id = (obs.lifecycle_worker_id or "").strip() or None
+    tier_at = (obs.lifecycle_tier or "").strip() or None
+    if not tier_at and worker_id:
+        from ...patrol_identity_lifecycle import tier_for_worker_id
+
+        inferred = tier_for_worker_id(worker_id)
+        if inferred != "object":
+            tier_at = inferred
+
+    payload = build_event_payload(session, tier_at_observation=tier_at)
     payload_json = json.dumps(payload, ensure_ascii=False)
     interactions_json = json.dumps(
         [i.to_dict() for i in session.interactions],

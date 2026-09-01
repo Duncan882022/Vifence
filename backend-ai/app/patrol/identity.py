@@ -448,6 +448,40 @@ def lookup_profile_by_tk(tk_id: str) -> str | None:
     return None
 
 
+def bind_tk_profile(tk_id: str, pers_id: str, *, now: float | None = None) -> None:
+    """Gắn tk registry → pers_id — RAM + SQLite."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    tk = normalize_track_id(tk_id)
+    pid = resolve_alias((pers_id or "").strip())
+    if not tk or not pid or not is_anonymous_track_id(tk):
+        return
+    ts = now or time.time()
+    with db.tx() as c:
+        c.execute(
+            "INSERT INTO track_profile_bindings(tk_id, pers_id, bound_at)"
+            " VALUES(?,?,?)"
+            " ON CONFLICT(tk_id) DO UPDATE SET"
+            " pers_id = excluded.pers_id, bound_at = excluded.bound_at",
+            (tk, pid, ts),
+        )
+
+
+def lookup_bound_profile_for_tk(tk_id: str) -> str | None:
+    """Tra pers_id đã gắn tk — binding table, persons draft, hoặc alias."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    tk = normalize_track_id(tk_id)
+    if not tk or not is_anonymous_track_id(tk):
+        return None
+    row = db.query_one(
+        "SELECT pers_id FROM track_profile_bindings WHERE tk_id = ?", (tk,)
+    )
+    if row is not None:
+        return resolve_alias(str(row["pers_id"]))
+    return lookup_profile_by_tk(tk)
+
+
 def ensure_draft_for_tk(tk_id: str, *, now: float | None = None) -> str:
     """Đủ điều kiện nhận diện (tk-*) → hồ sơ bản nháp, pers_id = tk normalized."""
     from ..patrol_ids import is_anonymous_track_id, normalize_track_id
@@ -865,11 +899,15 @@ def observe_face(
     now: float | None = None,
     frame: Any = None,
     person_bbox: Sequence[float] | None = None,
+    preferred_tk: str | None = None,
 ) -> tuple[str, bool]:
     """Thấy một khuôn mặt của track **chưa biết là ai** → `(pers_id, vừa tạo)`.
 
     Chỉ gọi khi một track lần đầu bắt được mặt. Track đã có chủ thì dùng
     `add_face_angle` — xem ghi chú ở `sink.record_observation`.
+
+    `preferred_tk` — tk registry trên ROI: dùng `ensure_draft_for_tk` thay vì
+    cấp tk mới qua `allocate_tk_profile`.
     """
     ts = now or time.time()
     matched, _sim = match_face(embedding)
@@ -888,7 +926,28 @@ def observe_face(
             frame=frame,
             person_bbox=person_bbox,
         )
+        pref = (preferred_tk or "").strip()
+        if pref:
+            bind_tk_profile(pref, pid, now=ts)
         return pid, False
+
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    pref = normalize_track_id((preferred_tk or "").strip())
+    if pref and is_anonymous_track_id(pref):
+        had = lookup_profile_by_tk(pref)
+        pers_id = ensure_draft_for_tk(pref, now=ts)
+        bind_tk_profile(pref, pers_id, now=ts)
+        add_face_angle(
+            pers_id,
+            embedding,
+            quality=quality,
+            camera_id=camera_id,
+            now=ts,
+            frame=frame,
+            person_bbox=person_bbox,
+        )
+        return pers_id, had is None
 
     with db.tx() as c:
         pers_id = allocate_tk_profile(origin="camera", now=ts, conn=c)

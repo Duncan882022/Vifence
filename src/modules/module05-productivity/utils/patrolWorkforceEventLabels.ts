@@ -9,6 +9,7 @@ import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIde
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
+  isPatrolGalleryWorkerId,
   resolvePatrolCanonicalEntityKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
@@ -254,7 +255,7 @@ export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   return resolvePatrolCanonicalEntityKey(event)
 }
 
-/** Subject id tra lịch sử xuất hiện (popup) — chỉ pers-* / obj-* trong SQLite. */
+/** Subject id tra lịch sử xuất hiện (popup) — tk-* / pers-* / obj-* trong SQLite. */
 export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const fromDayCardPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
   if (fromDayCardPers) return fromDayCardPers
@@ -264,11 +265,14 @@ export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
 
   const objectId = event.objectId?.trim() ?? ''
   if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId
+  if (isPatrolTrackWorkerId(objectId)) return objectId
+  if (isPatrolGalleryWorkerId(objectId)) return objectId
 
   const track = event.trackWorkerId?.trim() ?? ''
   if (isPatrolPersId(track) || isPatrolObjectId(track)) return track
+  if (isPatrolTrackWorkerId(track) && !resolvePatrolProfileEntityKey(event)) return track
 
-  // Không fallback tk/gallery — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
+  // Không fallback gallery → tk — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
   return objectId || track || event.id
 }
 

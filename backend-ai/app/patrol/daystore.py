@@ -697,6 +697,42 @@ def _appearance_row_payload(row: Any) -> dict[str, Any]:
     return item
 
 
+def _tier_from_payload(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        import json
+
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            tier = str(parsed.get("tier_at_observation") or "").strip()
+            if tier in ("object", "person", "identity"):
+                return tier
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
+def _same_coalesce_visit(a: Any, b: Any) -> bool:
+    """Chỉ gộp appearance cùng track/session — tránh trộn hai lượt gặp."""
+    ta = str(a["track_id"] or "").strip()
+    tb = str(b["track_id"] or "").strip()
+    sa = str(a["session_id"] or "").strip()
+    sb = str(b["session_id"] or "").strip()
+    if ta and tb and ta == tb:
+        return True
+    if sa and sb and sa == sb:
+        return True
+    if not ta and not tb and not sa and not sb:
+        return True
+    # Split-track duplicate sau merge pers — hai track_id khác nhau nhưng liền kề.
+    if ta and tb and ta != tb:
+        gap = float(b["started_at"]) - float(a["ended_at"])
+        if 0 <= gap <= 5.0:
+            return True
+    return False
+
+
 def _dedupe_aggregator_appearance_rows(rows: list[Any]) -> list[Any]:
     """Bỏ dòng legacy (_touch_appearance) trùng session aggregator (track_id)."""
     track_rows = [r for r in rows if str(r["track_id"] or "").strip()]
@@ -724,14 +760,26 @@ def _dedupe_aggregator_appearance_rows(rows: list[Any]) -> list[Any]:
 
 
 def _resolve_appearance_subject_id(subject_id: str) -> str:
-    """Map gallery/sgc alias → pers-* lưu trong appearances.
+    """Map gallery/sgc/tk alias → pers_id lưu trong appearances.
 
     Không map sang obj-* — OBJ là quan sát chưa định danh, gộp nhầm sẽ trộn
     snapshot Unknown với người đã gán gallery (vd. Duncan).
     """
     sid = identity.resolve_alias((subject_id or "").strip())
-    if sid.startswith("pers-") or sid.startswith("obj-"):
+    if sid.startswith("obj-"):
         return sid
+
+    from ..patrol_ids import is_anonymous_track_id
+
+    if sid.startswith("tk-") or sid.startswith("pers-"):
+        return sid
+
+    if is_anonymous_track_id(sid):
+        from ..sink import lookup_bound_pers_for_tk
+
+        bound = lookup_bound_pers_for_tk(sid)
+        return bound or sid
+
     try:
         from ..patrol_identity_store import lookup_patrol_identity
 
@@ -794,7 +842,12 @@ def list_day_presences(date: str | None = None) -> list[dict[str, Any]]:
     for r in rows:
         item = _appearance_row_payload(r)
         sid = str(r["subject_id"])
-        if sid.startswith("obj-"):
+        tier_from_payload = _tier_from_payload(
+            str(r["event_payload_json"]) if r["event_payload_json"] else None
+        )
+        if tier_from_payload:
+            item["tier"] = tier_from_payload
+        elif sid.startswith("obj-"):
             item["tier"] = "object"
         elif r["person_status"] in (identity.STATUS_IDENTIFIED,):
             item["tier"] = "identity"
@@ -839,6 +892,9 @@ def coalesce_subject_appearances(
         keep = rows[0]
         for nxt in rows[1:]:
             if str(nxt["camera_id"] or "") != str(keep["camera_id"] or ""):
+                keep = nxt
+                continue
+            if not _same_coalesce_visit(keep, nxt):
                 keep = nxt
                 continue
             if not should_extend_presence(

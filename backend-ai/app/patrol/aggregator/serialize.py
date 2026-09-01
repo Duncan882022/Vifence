@@ -12,9 +12,13 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
-def build_event_payload(session: TrackSession) -> dict[str, Any]:
+def build_event_payload(
+    session: TrackSession,
+    *,
+    tier_at_observation: str | None = None,
+) -> dict[str, Any]:
     event_id = f"evt-{session.camera_id}-{session.track_id}-{int(session.started_at)}"
-    return {
+    payload: dict[str, Any] = {
         "event_id": event_id,
         "track_id": session.track_id,
         "session_id": session.session_id or "",
@@ -27,3 +31,7 @@ def build_event_payload(session: TrackSession) -> dict[str, Any]:
             "duration_seconds": int(round(session.duration_seconds)),
         },
     }
+    tier = (tier_at_observation or "").strip()
+    if tier:
+        payload["tier_at_observation"] = tier
+    return payload

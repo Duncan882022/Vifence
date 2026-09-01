@@ -897,6 +897,7 @@ def observe_person_face(
         now=ts,
         gps_lat=gps_lat,
         gps_lng=gps_lng,
+        skip_appearance=True,
     )
     return pers_id
 

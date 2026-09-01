@@ -206,11 +206,15 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
         return False
 
     try:
+        from ...person_identity_registry import is_sgc_worker_id
+
+        pref_tk = wid if is_sgc_worker_id(wid) else None
         pers_id, _ = identity.observe_face(
             emb,
             quality=max(quality, MIN_QUALITY_FOR_SEARCH),
             camera_id=obs.camera_id,
             now=obs.ts,
+            preferred_tk=pref_tk,
         )
     except Exception:  # noqa: BLE001
         logger.exception("aggregator observe_face promote obj failed")
@@ -394,6 +398,9 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
         if picked is not None and _human_face_promotion_allowed(obs):
             emb, quality = picked
             try:
+                from ...person_identity_registry import is_sgc_worker_id
+
+                pref_tk = wid if is_sgc_worker_id(wid) else None
                 pers_id, created = identity.observe_face(
                     emb,
                     quality=quality,
@@ -401,6 +408,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     now=obs.ts,
                     frame=obs.frame,
                     person_bbox=obs.person_bbox,
+                    preferred_tk=pref_tk,
                 )
                 if wid and is_sgc_worker_id(wid):
                     from ..sink import _bind_tk_profile
