@@ -47,8 +47,6 @@ export interface PatrolAppearanceSegment {
   presenceSeq?: number
   sourceCameras?: string[]
   snapshotUrl?: string
-  /** Ảnh card (mới nhất) khi khác snapshot lịch sử — cùng một lượt gặp. */
-  latestSnapshotUrl?: string
   trackId?: string
   sessionId?: string
   counted?: boolean
