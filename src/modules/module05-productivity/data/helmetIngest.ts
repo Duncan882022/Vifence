@@ -13,6 +13,8 @@
 export type HelmetIngestKind =
   /** Bodycam IP tự publish RTSP — backend/MediaMTX pull. */
   | 'rtsp'
+  /** App native (Larix/OBS) push RTMP — giống flycam, không cần tab trình duyệt. */
+  | 'rtmp'
   /** Trình duyệt publish WebRTC (WHIP) — điện thoại hoặc bodycam WebRTC. */
   | 'whip'
   /** Luồng cũ: chụp JPEG gửi POST /analyze/frame. Chỉ dùng khi chưa có MediaMTX. */
@@ -131,15 +133,16 @@ function whipPublishers(): Set<string> {
   return new Set(raw.split(',').map(s => s.trim()).filter(Boolean))
 }
 
-/** HC-02 ingest — `VITE_HELMET_HC02_INGEST=whip|legacy-mobile`. */
+/** HC-02 ingest — `VITE_HELMET_HC02_INGEST=rtmp|whip|legacy-mobile`. */
 function hc02IngestKind(): HelmetIngestKind {
   const explicit = readEnv('VITE_HELMET_HC02_INGEST')
   if (explicit === 'legacy-mobile') return 'legacy-mobile'
   if (explicit === 'whip') {
     return isHelmetWebrtcAvailable() ? 'whip' : 'legacy-mobile'
   }
-  // Production default: WHIP khi MediaMTX sẵn sàng.
-  return isHelmetWebrtcAvailable() ? 'whip' : 'legacy-mobile'
+  if (explicit === 'rtmp') return 'rtmp'
+  // Mặc định: RTMP native (Larix/OBS) — ổn định như flycam, không phụ thuộc tab trình duyệt.
+  return 'rtmp'
 }
 
 /**
@@ -149,7 +152,7 @@ function hc02IngestKind(): HelmetIngestKind {
 export function getHelmetIngest(helmetId: string): HelmetIngestConfig {
   const path = readEnv(`VITE_${helmetId.replace('-', '')}_PATH`) ?? defaultHelmetPath(helmetId)
 
-  if (helmetId === 'HC-02' && whipPublishers().has('HC-02')) {
+  if (helmetId === 'HC-02') {
     return {
       helmetId,
       kind: hc02IngestKind(),
@@ -171,6 +174,22 @@ export function getHelmetIngest(helmetId: string): HelmetIngestConfig {
     path,
     rtspUrl: RTSP_SOURCES[helmetId],
   }
+}
+
+/**
+ * RTMP publish URL — app Larix/OBS trên iPhone (giống flycam DR-03).
+ * Browser không dùng URL này; CMS xem qua WHEP/HLS sau MediaMTX.
+ */
+export function getHelmetRtmpUrl(helmetId: string): string | undefined {
+  const suffix = helmetId.replace(/-/g, '')
+  const fromEnv = readEnv(`VITE_${suffix}_RTMP_URL`)
+  if (fromEnv) return fromEnv
+
+  const host = readEnv('VITE_MEDIAMTX_RTMP_HOST') ?? readEnv('VITE_MEDIAMTX_HOST')
+  if (!host) return undefined
+
+  const port = readEnv('VITE_MEDIAMTX_RTMP_PORT') ?? '1935'
+  return `rtmp://${host}:${port}/${getHelmetIngest(helmetId).path}`
 }
 
 /** Endpoint WHIP để thiết bị publish (MediaMTX: `/<path>/whip`). */
@@ -202,23 +221,34 @@ export function isLegacyMobileHelmet(helmetId: string): boolean {
   return getHelmetIngest(helmetId).kind === 'legacy-mobile'
 }
 
-/** Mũ đầu tiên publish qua trình duyệt — trang /phat-song dùng tự động, không cần query. */
-export function getBrowserPublishHelmetId(): string {
+/** Mũ dùng trang /phat-song — video WHIP hoặc chỉ GPS khi ingest RTMP. */
+export function getTelemetryHelmetId(): string {
   for (const id of PATROL_HELMET_IDS) {
-    if (isBrowserPublishHelmet(id) && getHelmetIngest(id).kind === 'whip') {
-      return id
-    }
-  }
-  for (const id of PATROL_HELMET_IDS) {
-    if (isBrowserPublishHelmet(id)) return id
+    if (isHelmetTelemetryPage(id)) return id
   }
   return 'HC-02'
 }
 
-/** Helmet publish từ trình duyệt — dùng cho trang phát sóng. */
+/** @deprecated Dùng getTelemetryHelmetId — giữ alias cho import cũ. */
+export function getBrowserPublishHelmetId(): string {
+  return getTelemetryHelmetId()
+}
+
+/** Video publish từ trình duyệt (WHIP / legacy-mobile). */
 export function isBrowserPublishHelmet(helmetId: string): boolean {
   const kind = getHelmetIngest(helmetId).kind
   return kind === 'whip' || kind === 'legacy-mobile'
+}
+
+/** Ingest RTMP native — video không qua trình duyệt. */
+export function isHelmetRtmpIngest(helmetId: string): boolean {
+  return getHelmetIngest(helmetId).kind === 'rtmp'
+}
+
+/** Trang /phat-song: WHIP video, legacy-mobile, hoặc GPS-only (RTMP). */
+export function isHelmetTelemetryPage(helmetId: string): boolean {
+  const kind = getHelmetIngest(helmetId).kind
+  return kind === 'whip' || kind === 'legacy-mobile' || kind === 'rtmp'
 }
 
 /** Mũ còn phải chạy luồng cũ — CMS phải giữ các nhánh xử lý riêng cho chúng. */

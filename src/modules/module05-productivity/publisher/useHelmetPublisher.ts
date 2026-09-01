@@ -64,6 +64,8 @@ interface UseHelmetPublisherOptions {
   maxBitrateBps?: number
   /** Chờ JWT patrol sẵn sàng trước khi mở kênh telemetry. */
   patrolAuthReady?: boolean
+  /** Video qua app RTMP — trang chỉ gửi GPS, không WHIP/camera. */
+  telemetryOnly?: boolean
 }
 
 /** Chu kỳ đọc heading để gửi kèm telemetry. */
@@ -85,6 +87,7 @@ export function useHelmetPublisher({
   videoRef,
   maxBitrateBps,
   patrolAuthReady = true,
+  telemetryOnly = false,
 }: UseHelmetPublisherOptions) {
   const publisherRef = useRef<WhipPublisher | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -229,6 +232,16 @@ export function useHelmetPublisher({
     stallStrikesRef.current = 0
     statsRef.current = EMPTY_WHIP_STATS
 
+    if (telemetryOnly) {
+      setStatus('live')
+      setConnection('connected')
+      setErrorMessage(undefined)
+      if (startedAtRef.current === 0) startedAtRef.current = Date.now()
+      void acquireWakeLock()
+      void requestDeviceHeadingPermission()
+      return
+    }
+
     const endpoint = getHelmetWhipUrl(helmetId)
     if (!endpoint) {
       setStatus('error')
@@ -347,7 +360,7 @@ export function useHelmetPublisher({
         scheduleReconnect(RECONNECT_DELAY_MS)
       }
     }
-  }, [helmetId, maxBitrateBps, stopPublisherOnly, videoRef, acquireWakeLock, scheduleReconnect])
+  }, [helmetId, maxBitrateBps, stopPublisherOnly, videoRef, acquireWakeLock, scheduleReconnect, telemetryOnly])
 
   startRef.current = start
 
@@ -363,6 +376,7 @@ export function useHelmetPublisher({
   }, [teardown])
 
   const flipCamera = useCallback(async () => {
+    if (telemetryOnly) return
     const next: CameraFacing = facingRef.current === 'environment' ? 'user' : 'environment'
 
     // Còn publisher thì chỉ thay track — không đàm phán lại SDP, không gián đoạn.
@@ -395,7 +409,7 @@ export function useHelmetPublisher({
     }
 
     await start(next)
-  }, [helmetId, start, videoRef])
+  }, [helmetId, start, videoRef, telemetryOnly])
 
   /**
    * Telemetry — kênh riêng nên vị trí vẫn về trung tâm khi video rớt sóng.
@@ -500,7 +514,7 @@ export function useHelmetPublisher({
    * CMS thì đen — nên phải tự phát lại khi bitrate đứng ở 0.
    */
   useEffect(() => {
-    if (status !== 'live') return
+    if (telemetryOnly || status !== 'live') return
 
     const timer = window.setInterval(() => {
       const track = streamRef.current?.getVideoTracks()[0]
@@ -522,13 +536,14 @@ export function useHelmetPublisher({
     }, STALL_CHECK_MS)
 
     return () => window.clearInterval(timer)
-  }, [status, scheduleReconnect])
+  }, [status, scheduleReconnect, telemetryOnly])
 
   /**
    * Màn hình khoá rồi mở lại → xin lại wake lock. iOS/Android thường huỷ luôn
    * phiên WebRTC lúc nền, nên quay lại mà publisher đã chết thì phải phát lại.
    */
   useEffect(() => {
+    if (telemetryOnly) return
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return
       if (status !== 'live' && status !== 'starting') return

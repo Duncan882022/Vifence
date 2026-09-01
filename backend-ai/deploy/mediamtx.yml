@@ -101,9 +101,8 @@ paths:
     runOnInit: /opt/vifence/rtsp-relay.sh rtsp://157.66.100.182:8554/866926048126915 rtsp://127.0.0.1:8554/hc-01 8
     runOnInitRestart: yes
 
-  # HC-02 — điện thoại publish qua WHIP tại /hc-02/whip.
-  # Khi có bodycam thật, đổi thành `source: rtsp://…` y như hc-01.
-  # Phía CMS không cần sửa gì.
+  # HC-02 — iPhone/app push RTMP (rtmp://<vps>:1935/hc-02) hoặc WHIP /hc-02/whip.
+  # RTMP khuyến nghị: ổn định như flycam, không phụ thuộc tab trình duyệt.
   hc-02:
     source: publisher
 
