@@ -1,489 +1,1578 @@
-# Module 05 — Test cases (theo code hiện tại)
+# Module 05 — Test cases theo module
 
-> **Nguồn sự thật:** code trong `src/modules/module05-productivity/`  
-> **Không** dùng tab spec cũ (Nhân lực / Mật độ / Hệ thống) — các tab đó **không tồn tại** trong UI.  
+> **Route gốc:** `/module05` · `/module05/ho-so` · `/module05/quet-mat`  
+> **Code:** `src/modules/module05-productivity/`  
+> **Quy ước:** P0 = blocker · P1 = core · P2 = UX/polish  
 > **Cập nhật:** 2026-09-01
 
 ---
 
 ## Mục lục
 
-1. [Kiến trúc dữ liệu hiện tại](#1-kiến-trúc-dữ-liệu-hiện-tại)
-2. [Điều kiện tiên quyết & dữ liệu test](#2-điều-kiện-tiên-quyết--dữ-liệu-test)
-3. [Test tự động](#3-test-tự-động)
-4. [Test cases — Điều hướng & layout](#4-test-cases--điều-hướng--layout)
-5. [Test cases — Tuần tra `/module05`](#5-test-cases--tuần-tra-module05)
-6. [Test cases — Hồ sơ `/module05/ho-so`](#6-test-cases--hồ-sơ-module05ho-so)
-7. [Test cases — Quét mặt `/module05/quet-mat`](#7-test-cases--quét-mặt-module05quet-mat)
-8. [Test cases — Tích hợp & edge cases](#8-test-cases--tích-hợp--edge-cases)
-9. [Ma trận ưu tiên & checklist release](#9-ma-trận-ưu-tiên--checklist-release)
+| # | Module | Route / vị trí |
+|---|--------|----------------|
+| 1 | [KPI](#module-1--kpi) | `/module05` — Panel **Tổng Quan** |
+| 2 | [Live](#module-2--live) | `/module05` — Camera mode **Live** |
+| 3 | [Playback](#module-3--playback) | `/module05` — Camera mode **Playback** |
+| 4 | [Heatmap](#module-4--heatmap) | `/module05` — Panel **HEATMAP / FLYMAP** |
+| 5 | [Sự kiện](#module-5--sự-kiện) | `/module05` — Panel **SỰ KIỆN** |
+| 6 | [Hồ sơ](#module-6--hồ-sơ) | `/module05/ho-so` |
+| 7 | [Scan](#module-7--scan) | `/module05/quet-mat` |
 
-**Quy ước cột:** P = Priority (P0/P1/P2) · TC = Test Case ID
+**Phụ lục:** [Điều kiện chung](#phụ-lục--điều-kiện-chung) · [Test tự động](#phụ-lục--test-tự-động) · [Checklist release](#phụ-lục--checklist-release)
+
+**Format mỗi TC:**
+
+```
+ID | Tên | P | Tiên quyết | Các bước | Kết quả mong đợi
+```
 
 ---
 
-## 1. Kiến trúc dữ liệu hiện tại
+## Module 1 — KPI
 
-Hiểu pipeline trước khi test — tránh kỳ vọng sai từ spec cũ.
+**Vị trí UI:** Panel **Tổng Quan** (Tier1) trên `/module05`  
+**Component:** `PatrolKPIs` · `Module05Page.tsx`  
+**Nguồn dữ liệu:**
 
-### 1.1. Luồng trang Tuần tra
+| KPI | Service / hook |
+|-----|----------------|
+| Khu vực tuần tra | `computePatrolZoneCoverage()` + `usePatrolLivePoll` workforce |
+| Nhân sự | `derivePatrolDisplayStats()` ← `dayBundle.stats` |
+| Lượt gặp · ĐT | `dayBundle.stats.objectEncounterCount` / `unassignedObservations` |
+| Mật độ flymap | `usePatrolFlymapMetrics()` → `GET /patrol/{cameraId}/metrics` |
 
-```
-Module05Page
-├── usePatrolDayBundle(patrolViewDate)     → GET /patrol/day/bundle?date=
-│   └── bundleToEvents()                   → card id pers:xxx / obj:xxx, type PERSON_DETECTED
-├── usePatrolLivePoll()                    → WS /ws/patrol/live → fallback GET /patrol/live/bundle
-├── filterPatrolEventsByFlycamAltitude()   → lọc sự kiện DR-03 theo flight_mode
-├── derivePatrolDisplayStats()             → KPI Tier1 (backend stats)
-└── computePatrolTabCounts()               → badge tab Sự kiện (listing, có thể ≠ KPI)
-```
-
-### 1.2. Tab Sự kiện (4 tab — code thực tế)
-
-| Tab key | Label UI | Điều kiện hiển thị card |
-|---------|----------|--------------------------|
-| `all` | Tất cả | `PERSON_DETECTED` hoặc `IDENTITY_VERIFIED` + snapshot + score gate |
-| `object` | Đối tượng | `stage === 'object'` |
-| `person` | Người | `stage === 'person'` |
-| `identity` | Định danh | `stage === 'profile'` |
-
-Logic: `listPatrolEventsForTab()` → `matchesPatrolEventsTab()` + `dedupePatrolEventsByMasterEntity()`.
-
-**Không hiển thị trên panel:**
-
-- Card **không có** `snapshotUrl` (non-empty)
-- Thời gian invalid / tương lai / >90 ngày (`isValidPatrolEventTime`)
-- Object score ≥ `1.05` (`PATROL_OBJECT_FACE_SNAPSHOT_SCORE`) — nhầm tầng mặt
-- `POPULATION_OBSERVED`, `POPULATION_CHANGE`, `HIGH_DENSITY` — không qua day bundle cards
-- DR-03 **aerial**: chỉ `stage === 'object'` (và loại density nếu có)
-
-### 1.3. Heatmap (code thực tế)
-
-| Thành phần | Hành vi |
-|------------|---------|
-| Toggle **Mật độ** | Bật/tắt **chấm detection** (`showDetections`), không phải canvas KDE |
-| Canvas KDE (`PatrolDensityCanvasLayer`) | **`showDensity={false}`** — tắt cố định từ parent |
-| Tab thời gian Live/5p/15p/1h/Ca | **Không có UI** — helper `heatmapWindowMs()` tồn tại nhưng không wire |
-| Flymap | Clone map drone; chấm một màu; **không** mở `WorkforceObjectSheet` |
-
-### 1.4. Ngày lịch VN
-
-- `getPatrolDefaultPlaybackDate()` = `formatVnDate()` — cắt **0h VN**, không ca/kíp
-- `PATROL_PLAYBACK_RETAIN_DAYS = 7`
-- **Không** rollover 06:00 (Module 02/03)
+**Lưu ý:** KPI **Nhân sự** lấy từ backend stats; badge tab **Sự kiện** lấy từ listing — **có thể lệch**, không coi là bug.
 
 ---
 
-## 2. Điều kiện tiên quyết & dữ liệu test
+### TC-KPI-001 — Hiển thị 4 thẻ KPI
 
-### 2.1. Môi trường
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Mở `/module05`, panel Tổng Quan mở |
+| **Các bước** | 1. Quan sát Tier1 |
+| **Kết quả** | 4 thẻ: **Khu vực tuần tra** · **Nhân sự** · **Lượt gặp · ĐT** · **Mật độ flymap**; mỗi thẻ có icon + value + unit + detail |
+
+---
+
+### TC-KPI-002 — Khu vực: có thiết bị đã phủ khu
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | ≥1 zone visited; cam online hoặc GPS trong polygon |
+| **Các bước** | 1. Xem thẻ **Khu vực tuần tra** |
+| **Kết quả** | Value = `{visited}/{total}` khu vực; detail = «{X}% khu có thiết bị tuần tra active» |
+
+---
+
+### TC-KPI-003 — Khu vực: online chưa xác nhận phủ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Cam online; `visitedZones = 0` |
+| **Các bước** | 1. Xem detail thẻ Khu vực |
+| **Kết quả** | «Thiết bị online — chờ xác nhận phủ khu» |
+
+---
+
+### TC-KPI-004 — Khu vực: mọi thiết bị offline
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | HC-01, HC-02, DR-03 đều offline |
+| **Các bước** | 1. Xem detail thẻ Khu vực |
+| **Kết quả** | «Chưa có thiết bị tuần tra online» |
+
+---
+
+### TC-KPI-005 — Nhân sự: có dữ liệu ngày
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | `personCount + identityCount > 0` trong day bundle |
+| **Các bước** | 1. Xem thẻ **Nhân sự** |
+| **Kết quả** | Value = tổng headcount; detail hiện icon UserX (personCount) + UserCheck (identityCount) |
+
+---
+
+### TC-KPI-006 — Nhân sự: chờ phát hiện (cam online)
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Headcount = 0; ≥1 cam online + có stream |
+| **Các bước** | 1. Xem detail thẻ Nhân sự |
+| **Kết quả** | «Đang tuần tra — chờ phát hiện» |
+
+---
+
+### TC-KPI-007 — Nhân sự: không có dữ liệu hôm nay
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Headcount = 0; không cam online |
+| **Các bước** | 1. Xem detail thẻ Nhân sự |
+| **Kết quả** | «Chưa có dữ liệu hôm nay» |
+
+---
+
+### TC-KPI-008 — Lượt gặp · ĐT: peak time
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | `peak_time_active` trên metrics cam |
+| **Các bước** | 1. Xem detail thẻ **Lượt gặp · ĐT** |
+| **Kết quả** | «Peak time — mặt rõ định danh; còn lại gom 1 nhóm ĐT» |
+
+---
+
+### TC-KPI-009 — Lượt gặp · ĐT: có silhouette
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | `objectEncounterCount > 0`; không peak time |
+| **Các bước** | 1. Xem detail |
+| **Kết quả** | «Silhouette chưa gán danh tính — không tính Nhân sự»; value = số lượt |
+
+---
+
+### TC-KPI-010 — Lượt gặp · ĐT: chưa ghi nhận
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | `objectEncounterCount = 0` |
+| **Các bước** | 1. Xem detail |
+| **Kết quả** | «Chưa ghi nhận lượt gặp Đối tượng» |
+
+---
+
+### TC-KPI-011 — Mật độ flymap: DR-03 online
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 stream online |
+| **Các bước** | 1. Xem thẻ **Mật độ flymap** |
+| **Kết quả** | Value = số người/khung; unit «người/khung»; detail «YOLO tầm cao — không cộng Nhân sự» |
+
+---
+
+### TC-KPI-012 — Mật độ flymap: DR-03 offline
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 offline |
+| **Các bước** | 1. Xem thẻ Mật độ flymap |
+| **Kết quả** | Value = «—»; detail «Flycam chưa online» |
+
+---
+
+### TC-KPI-013 — Mật độ flymap: đang tải
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | DR-03 online; API metrics chưa trả |
+| **Các bước** | 1. Quan sát ngay sau load |
+| **Kết quả** | Detail «Đang tải mật độ…» (transient) |
+
+---
+
+### TC-KPI-014 — Thu gọn panel Tổng Quan
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Desktop |
+| **Các bước** | 1. Click collapse **Tổng Quan** |
+| **Kết quả** | KPI ẩn; panel header còn; toggle mở lại hiện 4 thẻ |
+
+---
+
+### TC-KPI-015 — KPI không đồng bộ badge tab Sự kiện
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có dữ liệu ngày; tab Sự kiện có card |
+| **Các bước** | 1. So sánh headcount KPI **Nhân sự** vs tổng tab **Người + Định danh** |
+| **Kết quả** | Có thể khác nhau (stats backend vs listing có snapshot) — **pass** nếu đúng thiết kế |
+
+---
+
+## Module 2 — Live
+
+**Vị trí UI:** Panel **Camera** · toggle **Live** trên `/module05`  
+**Component:** `PatrolCameraPanel` → `CameraGridPanel`  
+**Hooks:** `usePatrolVisionStreams` · `usePatrolLivePoll` · `buildPatrolCamerasLive`  
+**API:** `WS /ws/patrol/live` → fallback `GET /patrol/live/bundle` (~2.5s)
+
+---
+
+### TC-LIVE-001 — Mặc định mode Live
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Mở `/module05` lần đầu |
+| **Các bước** | 1. Xem panel Camera |
+| **Kết quả** | Toggle **Live** active; grid camera hiển thị |
+
+---
+
+### TC-LIVE-002 — Grid đủ 3 thiết bị
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Không legacy mobile-only grid |
+| **Các bước** | 1. Xem grid Live |
+| **Kết quả** | HC-01 (Helmet 01), HC-02 (Helmet 02), DR-03 (Drone 03) |
+
+---
+
+### TC-LIVE-003 — Camera mặc định chọn HC-02
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Fresh load |
+| **Các bước** | 1. Quan sát tile highlight |
+| **Kết quả** | HC-02 selected (`selectedCamId = 'HC-02'`) |
+
+---
+
+### TC-LIVE-004 — Filter tab Bodycam
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Live mode |
+| **Các bước** | 1. Click tab **Bodycam** |
+| **Kết quả** | Chỉ HC-01, HC-02; DR-03 ẩn |
+
+---
+
+### TC-LIVE-005 — Filter tab Flycam
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Live mode |
+| **Các bước** | 1. Click tab **Flycam** |
+| **Kết quả** | Chỉ DR-03 |
+
+---
+
+### TC-LIVE-006 — Badge LIVE khi stream online
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Cam có luồng WHEP/HLS active |
+| **Các bước** | 1. Quan sát tile online |
+| **Kết quả** | Badge LIVE + pulse dot |
+
+---
+
+### TC-LIVE-007 — Tile offline
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Cam không stream |
+| **Các bước** | 1. Quan sát tile offline |
+| **Kết quả** | Trạng thái offline; `streamWhenOffline` retry (không crash) |
+
+---
+
+### TC-LIVE-008 — Badge chế độ bay DR-03
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 online |
+| **Các bước** | 1. Xem góc tile DR-03 |
+| **Kết quả** | **Tầm cao** hoặc **Tầm thấp** (`patrolFlightModeShortLabel`) |
+
+---
+
+### TC-LIVE-009 — Chọn camera cập nhật selection
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Live mode |
+| **Các bước** | 1. Click tile HC-01 |
+| **Kết quả** | HC-01 highlight; `selectedCamId` đổi; stream focus tile đó |
+
+---
+
+### TC-LIVE-010 — Đếm luồng khi panel Camera thu gọn
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Live mode; tier Camera collapsed |
+| **Các bước** | 1. Thu gọn panel Camera |
+| **Kết quả** | Header hiện «**X** luồng» khớp số stream active |
+
+---
+
+### TC-LIVE-011 — WebSocket live bundle
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Backend WS hoạt động |
+| **Các bước** | 1. Mở DevTools WS 2. Quan sát KPI/heatmap ~3s |
+| **Kết quả** | Nhận `live_bundle`; metrics + workforce cập nhật |
+
+---
+
+### TC-LIVE-012 — Fallback HTTP khi WS lỗi
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Block WS hoặc server không hỗ trợ WS |
+| **Các bước** | 1. Reload trang 2. Quan sát network |
+| **Kết quả** | Poll `GET /patrol/live/bundle`; UI vẫn cập nhật |
+
+---
+
+### TC-LIVE-013 — HC-02 online qua frames bridge
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Backend báo HC-02 offline; mobile bridge gửi frames |
+| **Các bước** | 1. Xem trạng thái HC-02 |
+| **Kết quả** | Coi online (`resolvePatrolCameraOnlineState` + framesLive) |
+
+---
+
+### TC-LIVE-014 — Auth & identity sync on mount
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Fresh load |
+| **Các bước** | 1. Quan sát network tab |
+| **Kết quả** | Gọi `ensurePatrolAuth()` + `syncPatrolIdentityBindingsFromBackend()` |
+
+---
+
+### TC-LIVE-015 — Legacy mobile helmet permission gate
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | `hasLegacyMobileHelmet()` + handheld device |
+| **Các bước** | 1. Mở `/module05` trên mobile |
+| **Kết quả** | `PatrolDevicePermissionGate` hiện xin quyền camera/mic |
+
+---
+
+### TC-LIVE-016 — Person ROI overlay trên tile
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | HC-* live + AI detection |
+| **Các bước** | 1. Quan sát overlay bbox trên video |
+| **Kết quả** | Label tier khớp token Module 05 (Đối tượng/Người/Định danh) |
+
+---
+
+### TC-LIVE-017 — DR-03 proximity: ROI như helmet
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | DR-03 `flight_mode = proximity` |
+| **Các bước** | 1. Xem overlay DR-03 |
+| **Kết quả** | Person ROI hiển thị (gate `patrolPersonMeetsDrFlycamDisplayGate`) |
+
+---
+
+### TC-LIVE-018 — Expand tier Camera fullscreen
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Desktop |
+| **Các bước** | 1. Expand panel Camera |
+| **Kết quả** | Grid chiếm full tier; toggle Live/Playback vẫn hoạt động |
+
+---
+
+## Module 3 — Playback
+
+**Vị trí UI:** Panel **Camera** · toggle **Playback** trên `/module05`  
+**Component:** `PatrolPlaybackPanel`  
+**Service:** `patrolPlayback.service.ts` · `createPatrolPlaybackFetchers()`  
+**MediaMTX:** `GET /list` · `GET /get?path=&start=&duration=30`
+
+**Quy tắc ngày:** ngày lịch VN cắt **0h**; retain **7 ngày**; **không** ca/kíp 06:00.
+
+---
+
+### TC-PB-001 — Chuyển sang mode Playback
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Đang ở Live |
+| **Các bước** | 1. Click toggle **Playback** |
+| **Kết quả** | Timeline + date picker + vùng video playback hiện |
+
+---
+
+### TC-PB-002 — Date mặc định = hôm nay VN
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Fresh load `/module05` |
+| **Các bước** | 1. Mở Playback |
+| **Kết quả** | Date = `getPatrolDefaultPlaybackDate()` (= `formatVnDate()`) |
+
+---
+
+### TC-PB-003 — Giới hạn 7 ngày gần nhất
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Playback mở |
+| **Các bước** | 1. Thử chọn ngày >7 ngày trước |
+| **Kết quả** | Min date = hôm nay − 6; không chọn được ngoài range |
+
+---
+
+### TC-PB-004 — Đồng bộ date với panel Sự kiện
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Cả Playback và Sự kiện visible |
+| **Các bước** | 1. Đổi ngày ở Sự kiện 2. Xem Playback |
+| **Kết quả** | `patrolViewDate` shared; Playback load băng đúng ngày |
+
+---
+
+### TC-PB-005 — Click card sự kiện sync ngày playback
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Card sự kiện ngày quá khứ |
+| **Các bước** | 1. Click card sự kiện |
+| **Kết quả** | `patrolViewDate` = `getPatrolEventViewDate(ev)`; playback timeline đúng ngày |
+
+---
+
+### TC-PB-006 — Sự kiện sau 0h VN thuộc ngày mới
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Event `lockedAt = 2026-08-28T17:30:00.000Z` (00:30 VN 29/08) |
+| **Các bước** | 1. Chọn ngày 28/08 playback 2. Chọn ngày 29/08 |
+| **Kết quả** | Ngày 28: không marker event; ngày 29: có marker |
+
+---
+
+### TC-PB-007 — Phát băng continuous MediaMTX
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | MediaMTX có segment cho cam + ngày |
+| **Các bước** | 1. Chọn HC-02 + ngày có băng 2. Play clip |
+| **Kết quả** | Video phát; URL qua playback base configured |
+
+---
+
+### TC-PB-008 — Marker sự kiện 30 giây
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có event trong ngày cho camera đang chọn |
+| **Các bước** | 1. Xem timeline 2. Click marker event |
+| **Kết quả** | Clip `PATROL_EVENT_CLIP_SEC = 30` giây quanh `lockedAt` |
+
+---
+
+### TC-PB-009 — MediaMTX 404 — không crash
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Ngày/camera không có băng |
+| **Các bước** | 1. Chọn ngày không recording |
+| **Kết quả** | Timeline trống; không error toast crash |
+
+---
+
+### TC-PB-010 — URL playback không lộ IP nội bộ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | MediaMTX trả URL nội bộ trong JSON |
+| **Các bước** | 1. Play clip 2. Inspect video src |
+| **Kết quả** | URL dựng qua `getMediaMtxPlaybackBase()`; không IP raw MediaMTX |
+
+---
+
+### TC-PB-011 — Filter Bodycam/Flycam trên playback
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Playback mode |
+| **Các bước** | 1. Tab **Flycam** 2. Chọn DR-03 |
+| **Kết quả** | Timeline events lọc theo camera DR-03 |
+
+---
+
+### TC-PB-012 — Không rollover 06:00 Module 02
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Biết behavior Module 02 |
+| **Các bước** | 1. Kiểm tra bounds ngày playback |
+| **Kết quả** | Ngày bắt đầu 00:00 VN (`vnDayBounds`), không 06:00 |
+
+---
+
+## Module 4 — Heatmap
+
+**Vị trí UI:** Panel **HEATMAP** / **FLYMAP** trên `/module05`  
+**Component:** `PatrolDensityHeatmap` · `PatrolGeoHeatmap` · `WorkforceObjectSheet`  
+**Controls:** `PatrolHeatmapSectionControls` · `HeatmapLayerControls`
+
+**Lưu ý code:**
+
+- Toggle **Mật độ** = bật/tắt **chấm detection** (`showDetections`)
+- Canvas KDE (`PatrolDensityCanvasLayer`) = **`showDensity={false}`** (tắt)
+- **Không có** tab thời gian Live/5p/15p/1h/Ca trên UI
+
+---
+
+### TC-MAP-001 — Panel mặc định HEATMAP
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Mở `/module05` |
+| **Các bước** | 1. Xem panel map |
+| **Kết quả** | Title **HEATMAP**; bản đồ Leaflet satellite hiện |
+
+---
+
+### TC-MAP-002 — Layer Khu vực
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Heatmap mode |
+| **Các bước** | 1. Toggle **Khu vực** off/on |
+| **Kết quả** | Polygon site boundary ẩn/hiện |
+
+---
+
+### TC-MAP-003 — Layer Mật độ (detection dots)
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có presences/events trong ngày |
+| **Các bước** | 1. Toggle **Mật độ** off 2. Toggle on |
+| **Kết quả** | Chấm detection ẩn/hiện trên map (không phải canvas KDE) |
+
+---
+
+### TC-MAP-004 — Layer Mũ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | HC-* online |
+| **Các bước** | 1. Toggle **Mũ** |
+| **Kết quả** | Marker mũ + route HC-* ẩn/hiện |
+
+---
+
+### TC-MAP-005 — Layer Flycam trên heatmap site
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 proximity hoặc có GPS |
+| **Các bước** | 1. Toggle **Flycam** |
+| **Kết quả** | Marker/route drone trên map site ẩn/hiện |
+
+---
+
+### TC-MAP-006 — Stats overlay ĐT / Người / Định danh
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Heatmap mode; có dayStats |
+| **Các bước** | 1. Xem góc map |
+| **Kết quả** | Overlay đếm 3 tier từ `dayStats` |
+
+---
+
+### TC-MAP-007 — Click chấm → Object sheet
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Heatmap mode; có detection dot |
+| **Các bước** | 1. Click chấm trên map |
+| **Kết quả** | `WorkforceObjectSheet` bottom sheet mở (Unknown/Verified info) |
+
+---
+
+### TC-MAP-008 — Manual identity trong sheet
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Dot unknown; có quyền gán |
+| **Các bước** | 1. Mở sheet 2. Gán worker |
+| **Kết quả** | `PatrolManualIdentityPanel` hoạt động; label cập nhật sau sync |
+
+---
+
+### TC-MAP-009 — Phóng to heatmap
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Desktop |
+| **Các bước** | 1. Click Maximize 2. Nhấn Escape |
+| **Kết quả** | Fullscreen portal; Escape/backdrop đóng; state layer giữ nguyên |
+
+---
+
+### TC-MAP-010 — Follow GPS HC-02
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | HC-02 online + live GPS |
+| **Các bước** | 1. Quan sát map heatmap |
+| **Kết quả** | Map pan theo GPS HC-02 (`followLiveGps`) |
+
+---
+
+### TC-MAP-011 — DR-03 aerial: chấm không hiện heatmap site
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 `flight_mode = aerial` |
+| **Các bước** | 1. Xem heatmap site (không flymap) |
+| **Kết quả** | Chấm DR aerial bị lọc (`filterPatrolHeatmapDotsExcludeAerialFlycam`) |
+
+---
+
+### TC-MAP-012 — DR-03 proximity: chấm hiện heatmap site
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 proximity + có presence |
+| **Các bước** | 1. Xem heatmap site |
+| **Kết quả** | Chấm DR hiện như HC-* |
+
+---
+
+### TC-MAP-013 — Bật Flymap
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Heatmap mode |
+| **Các bước** | 1. Click nút **Flymap** header |
+| **Kết quả** | Panel title → **FLYMAP**; layer: Khu vực · Mật độ · Drone |
+
+---
+
+### TC-MAP-014 — Flymap: chấm một màu
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Flymap active; có detection |
+| **Các bước** | 1. Quan sát chấm |
+| **Kết quả** | Màu uniform `PATROL_FLYMAP_DOT_HEX` |
+
+---
+
+### TC-MAP-015 — Flymap: stats Phát hiện
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Flymap active |
+| **Các bước** | 1. Xem overlay stats |
+| **Kết quả** | «Phát hiện: {N}» = số chấm filtered |
+
+---
+
+### TC-MAP-016 — Flymap: không mở object sheet
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Flymap active |
+| **Các bước** | 1. Click chấm trên flymap |
+| **Kết quả** | **Không** mở `WorkforceObjectSheet` (`onDetectionClick` undefined) |
+
+---
+
+### TC-MAP-017 — Flymap: follow GPS drone
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 online + GPS |
+| **Các bước** | 1. Quan sát flymap |
+| **Kết quả** | Map follow DR-03 live GPS |
+
+---
+
+### TC-MAP-018 — Flymap: route chỉ drone
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Flymap; DR di chuyển |
+| **Các bước** | 1. Bật layer Drone/route |
+| **Kết quả** | Route chỉ `PATROL_DRONE_IDS`; không vẽ route HC-* |
+
+---
+
+### TC-MAP-019 — Dedupe chấm cùng entity
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Nhiều nguồn cùng objectId |
+| **Các bước** | 1. Quan sát map |
+| **Kết quả** | 1 chấm/entity; ưu tiên `inCameraView` (`mergePatrolHeatmapDots`) |
+
+---
+
+## Module 5 — Sự kiện
+
+**Vị trí UI:** Panel **SỰ KIỆN** trên `/module05`  
+**Component:** `PatrolEventsPanel` · `PatrolEventDetailModal`  
+**Nguồn:** `usePatrolDayBundle(viewDate)` → `GET /patrol/day/bundle?date=` (poll 3s hôm nay)  
+**Pipeline:** `bundleToEvents()` → `filterPatrolEventsByFlycamAltitude()` → panel
+
+**Tab (4):** Tất cả · Đối tượng · Người · Định danh  
+**Logic:** `listPatrolEventsForTab()` + dedupe entity + **bắt buộc snapshotUrl**
+
+---
+
+### TC-EVT-001 — Hiển thị 4 tab filter
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Panel Sự kiện mở |
+| **Các bước** | 1. Quan sát tab bar |
+| **Kết quả** | **Tất cả · Đối tượng · Người · Định danh** + badge count mỗi tab |
+
+---
+
+### TC-EVT-002 — Badge count khớp số card
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Có dữ liệu ngày |
+| **Các bước** | 1. So sánh badge tab vs số card visible (không search) |
+| **Kết quả** | Badge = `listPatrolEventsForTab(events, tab).length` |
+
+---
+
+### TC-EVT-003 — Date picker compact
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Panel Sự kiện |
+| **Các bước** | 1. Dùng prev/next và calendar overlay |
+| **Kết quả** | Đổi `viewDate`; min/max 7 ngày VN |
+
+---
+
+### TC-EVT-004 — Hint «Đang xem ngày trước»
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | `viewDate !== hôm nay`; viewport sm+ |
+| **Các bước** | 1. Chọn ngày quá khứ |
+| **Kết quả** | Hint «Đang xem ngày trước» hiện |
+
+---
+
+### TC-EVT-005 — Header flycam label
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | DR-03 configured |
+| **Các bước** | 1. Xem header panel Sự kiện (parent) |
+| **Kết quả** | **Tầm thấp · AI** (proximity) hoặc **Tầm cao · Mật độ** (aerial) |
+
+---
+
+### TC-EVT-006 — Card tab Đối tượng
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | `obj:*` + snapshot + score < 1.05 |
+| **Các bước** | 1. Tab **Đối tượng** |
+| **Kết quả** | Card hiện; badge xanh lá «Đối tượng» |
+
+---
+
+### TC-EVT-007 — Card tab Người
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | `pers:*` stage person + snapshot score ≥ 1.05 |
+| **Các bước** | 1. Tab **Người** |
+| **Kết quả** | Card hiện; badge sky «Người» |
+
+---
+
+### TC-EVT-008 — Card tab Định danh
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | `pers:*` stage profile / identified |
+| **Các bước** | 1. Tab **Định danh** |
+| **Kết quả** | Card hiện tên + badge violet «Định danh» |
+
+---
+
+### TC-EVT-009 — Ẩn card không snapshot
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Person trong bundle không `snapshotUrl` |
+| **Các bước** | 1. Tab **Tất cả** |
+| **Kết quả** | Card **không** hiện; không đếm badge |
+
+---
+
+### TC-EVT-010 — Ẩn object score ≥ 1.05
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Object mis-tiered (face score cao) |
+| **Các bước** | 1. Kiểm tra tab Đối tượng |
+| **Kết quả** | Object bị lọc (`filterPatrolDayObjectsForDisplay` + score gate) |
+
+---
+
+### TC-EVT-011 — Dedupe cùng entity
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | 2 record cùng persId, `lockedAt` khác |
+| **Các bước** | 1. Tab **Tất cả** |
+| **Kết quả** | 1 card; giữ bản `lockedAt` mới hơn |
+
+---
+
+### TC-EVT-012 — Card id format
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có card |
+| **Các bước** | 1. Inspect event id |
+| **Kết quả** | `pers:{persId}` hoặc `obj:{objId}`; type = `PERSON_DETECTED` (day aggregate) |
+
+---
+
+### TC-EVT-013 — DR-03 aerial lọc person/profile
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | DR-03 aerial; có person event từ drone |
+| **Các bước** | 1. Tab **Người** / **Định danh** |
+| **Kết quả** | Event person/profile từ DR **ẩn**; chỉ object stage |
+
+---
+
+### TC-EVT-014 — DR-03 proximity hiện đủ stage
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | DR-03 proximity |
+| **Các bước** | 1. Duyệt 4 tab |
+| **Kết quả** | Events DR lọc như HC-* (person + profile + object) |
+
+---
+
+### TC-EVT-015 — Tìm kiếm debounce 300ms
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | ≥1 card |
+| **Các bước** | 1. Gõ tên / mã NV / pers_id vào search |
+| **Kết quả** | List lọc sau 300ms; placeholder «Tìm tên, mã NV, pers_id…» |
+
+---
+
+### TC-EVT-016 — Search không khớp
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có card |
+| **Các bước** | 1. Gõ chuỗi vô nghĩa |
+| **Kết quả** | «Không có kết quả khớp tìm kiếm» |
+
+---
+
+### TC-EVT-017 — Tab rỗng (có data tab khác)
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Tab hiện tại 0 item; tab all > 0 |
+| **Các bước** | 1. Chọn tab không có item |
+| **Kết quả** | «Chưa có sự kiện loại này» |
+
+---
+
+### TC-EVT-018 — Empty hôm nay
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Hôm nay; bundle rỗng / không card pass filter |
+| **Các bước** | 1. Tab **Tất cả** ngày hôm nay |
+| **Kết quả** | «Chưa có sự kiện hôm nay — chọn ngày khác phía trên hoặc đang chờ backend» |
+
+---
+
+### TC-EVT-019 — Empty ngày quá khứ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Ngày quá khứ không data |
+| **Các bước** | 1. Chọn ngày cũ |
+| **Kết quả** | «Không có sự kiện ngày này — chọn ngày khác phía trên» |
+
+---
+
+### TC-EVT-020 — Infinite scroll 6 + 4
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | >6 cards trong tab |
+| **Các bước** | 1. Load tab 2. Scroll xuống |
+| **Kết quả** | Ban đầu 6; mỗi lần +4; footer «Hiển thị X/Y» |
+
+---
+
+### TC-EVT-021 — Click card highlight + sync date
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Card ngày quá khứ |
+| **Các bước** | 1. Click card body |
+| **Kết quả** | Card highlight; playback date sync (nếu khác ngày) |
+
+---
+
+### TC-EVT-022 — Click snapshot mở modal
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Card có snapshot |
+| **Các bước** | 1. Click thumbnail snapshot |
+| **Kết quả** | `PatrolEventDetailModal` mở |
+
+---
+
+### TC-EVT-023 — Modal: lịch sử xuất hiện
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Modal mở; có appearances |
+| **Các bước** | 1. Xem section lịch sử |
+| **Kết quả** | `GET /patrol/day/appearances?subject_id=&date={viewDate}` |
+
+---
+
+### TC-EVT-024 — Modal: gallery faces
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Card profile có worker id |
+| **Các bước** | 1. Mở modal |
+| **Kết quả** | Gallery faces load (`fetchPatrolGalleryFaces`) |
+
+---
+
+### TC-EVT-025 — Modal đóng
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Modal đang mở |
+| **Các bước** | 1. Click X / backdrop |
+| **Kết quả** | Modal đóng; selection list giữ nguyên |
+
+---
+
+### TC-EVT-026 — Manual identify từ card
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Card person chưa định danh |
+| **Các bước** | 1. Modal/sheet → gán identity |
+| **Kết quả** | `POST /patrol/persons/{id}/identify`; card cập nhật sau reload |
+
+---
+
+## Module 6 — Hồ sơ
+
+**Route:** `/module05/ho-so`  
+**Component:** `WorkerProfileManagementPage` · `WorkerProfileDetailModal`  
+**Service:** `patrolWorkerProfile.service.ts`
+
+---
+
+### TC-HOSO-001 — Load trang & 4 stat cards
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Backend OK |
+| **Các bước** | 1. Mở `/module05/ho-so` |
+| **Kết quả** | Stat: **Tổng hồ sơ · Bản nháp · Đã xác minh · Có vector** |
+
+---
+
+### TC-HOSO-002 — Backend không sẵn sàng
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | `pingPatrolProfileBackend()` fail |
+| **Các bước** | 1. Mở trang |
+| **Kết quả** | Banner «Backend tuần tra chưa sẵn sàng — kiểm tra URL backend»; list rỗng |
+
+---
+
+### TC-HOSO-003 — Làm mới danh sách
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Trang đã load |
+| **Các bước** | 1. Click **Làm mới** |
+| **Kết quả** | `GET /patrol/persons` reload; spinner rồi list cập nhật |
+
+---
+
+### TC-HOSO-004 — Tìm kiếm hồ sơ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | ≥2 hồ sơ |
+| **Các bước** | 1. Gõ tên / mã NV / đơn vị / pers_id |
+| **Kết quả** | Table lọc client-side khớp query |
+
+---
+
+### TC-HOSO-005 — Filter Bản nháp
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có draft + identified |
+| **Các bước** | 1. Click **Bản nháp** |
+| **Kết quả** | Chỉ `status === 'draft'`; badge **Nháp** trên row |
+
+---
+
+### TC-HOSO-006 — Filter Đã xác minh
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có identified |
+| **Các bước** | 1. Click **Đã xác minh** |
+| **Kết quả** | Chỉ `status === 'identified'` |
+
+---
+
+### TC-HOSO-007 — Face badge vector
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Hồ sơ có face_count |
+| **Các bước** | 1. Xem cột Vector |
+| **Kết quả** | `{count}/3`; xanh khi `face_enrollment_complete` |
+
+---
+
+### TC-HOSO-008 — Tải file mẫu Excel
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Panel import |
+| **Các bước** | 1. Click **Tải file mẫu** |
+| **Kết quả** | Download `patrol_workers_template.xlsx`; cột: Họ tên, Mã nhân viên, Đơn vị |
+
+---
+
+### TC-HOSO-009 — Import Excel hợp lệ
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | File ≥1 dòng hợp lệ |
+| **Các bước** | 1. Chọn file 2. **Import hồ sơ** |
+| **Kết quả** | `POST /patrol/persons/import`; hiện success/failed; list refresh |
+
+---
+
+### TC-HOSO-010 — Import thiếu Họ tên / Mã NV
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | File có dòng thiếu field |
+| **Các bước** | 1. Import |
+| **Kết quả** | «X dòng thiếu Họ tên hoặc Mã nhân viên»; không import |
+
+---
+
+### TC-HOSO-011 — Import file rỗng
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Excel không có dòng data |
+| **Các bước** | 1. Import |
+| **Kết quả** | «File Excel không có dòng hợp lệ» |
+
+---
+
+### TC-HOSO-012 — Xem chi tiết hồ sơ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có hồ sơ |
+| **Các bước** | 1. Click **Eye** |
+| **Kết quả** | `WorkerProfileDetailModal` view mode; gallery faces |
+
+---
+
+### TC-HOSO-013 — Sửa hồ sơ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Có hồ sơ |
+| **Các bước** | 1. Click **Pencil** 2. Sửa + lưu |
+| **Kết quả** | `PATCH /patrol/persons/{persId}` thành công |
+
+---
+
+### TC-HOSO-014 — Xóa hồ sơ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Hồ sơ test |
+| **Các bước** | 1. Click **Trash** 2. Confirm |
+| **Kết quả** | `DELETE /patrol/persons/{persId}`; vector xóa; row biến mất |
+
+---
+
+### TC-HOSO-015 — Link quét mặt từ hồ sơ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Hồ sơ có employee_code |
+| **Các bước** | 1. Mở modal/link quét mặt |
+| **Kết quả** | Navigate `/module05/quet-mat?code={employee_code}` |
+
+---
+
+### TC-HOSO-016 — Verify draft profile
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Draft đủ vector |
+| **Các bước** | 1. Modal verify |
+| **Kết quả** | `POST /patrol/persons/{id}/verify`; status → identified |
+
+---
+
+### TC-HOSO-017 — Empty list draft
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Không có draft |
+| **Các bước** | 1. Filter **Bản nháp** |
+| **Kết quả** | «Chưa có hồ sơ bản nháp — camera sẽ tạo khi nhận diện đủ điều kiện» |
+
+---
+
+### TC-HOSO-018 — Link về Module 05
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | Trang hồ sơ |
+| **Các bước** | 1. Click **Về Module 05** |
+| **Kết quả** | Navigate `/module05` |
+
+---
+
+## Module 7 — Scan
+
+**Route:** `/module05/quet-mat`  
+**Component:** `WorkerFaceScanPage` · `PatrolFaceScannerPanel`  
+**Poses:** 3 bắt buộc (Chính diện · Quay trái · Quay phải) + 1 tuỳ chọn (Cúi xuống)
+
+---
+
+### TC-SCAN-001 — Admin mode (HR, không ?code=)
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | User `hasPatrolRole('hr')`; URL không có `?code=` |
+| **Các bước** | 1. Mở `/module05/quet-mat` |
+| **Kết quả** | UI tra cứu mã NV + nút **Tạo hồ sơ mới + quét mặt** |
+
+---
+
+### TC-SCAN-002 — Self-enroll qua ?code=
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | URL `/module05/quet-mat?code=NV001` |
+| **Các bước** | 1. Mở link (kể cả user HR) |
+| **Kết quả** | Wizard self-enroll; **không** hiện tra cứu admin |
+
+---
+
+### TC-SCAN-003 — Self-enroll không role HR
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | User không HR; không `?code=` |
+| **Các bước** | 1. Mở `/module05/quet-mat` |
+| **Kết quả** | Wizard: Quét mặt → Thông tin → Hoàn tất |
+
+---
+
+### TC-SCAN-004 — Admin tra cứu mã hợp lệ
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Admin mode; mã tồn tại |
+| **Các bước** | 1. Nhập mã 2. **Tra cứu** |
+| **Kết quả** | `GET /patrol/persons/lookup`; chuyển **Bổ sung vector — hồ sơ đã có** |
+
+---
+
+### TC-SCAN-005 — Admin tra cứu mã không tồn tại
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Admin mode |
+| **Các bước** | 1. Nhập mã sai → Tra cứu |
+| **Kết quả** | Lỗi + gợi ý dùng **Tạo hồ sơ mới** |
+
+---
+
+### TC-SCAN-006 — Bổ sung vector hồ sơ có sẵn
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Sau tra cứu thành công |
+| **Các bước** | 1. Quét từng pose 2. Hoàn tất |
+| **Kết quả** | `POST /patrol/persons/{persId}/scan` mỗi góc; face_count tăng |
+
+---
+
+### TC-SCAN-007 — Tạo hồ sơ mới (admin)
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Admin mode |
+| **Các bước** | 1. Click **Tạo hồ sơ mới + quét mặt** |
+| **Kết quả** | Chuyển enroll wizard (giống self-enroll) |
+
+---
+
+### TC-SCAN-008 — Tạo enroll session
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Enroll mode (self-enroll hoặc admin-create) |
+| **Các bước** | 1. Vào bước quét |
+| **Kết quả** | `POST /patrol/enroll/session` → sessionId |
+
+---
+
+### TC-SCAN-009 — Quét 3 pose bắt buộc
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Session active; camera OK |
+| **Các bước** | 1. Quét Chính diện 2. Quay trái 3. Quay phải |
+| **Kết quả** | Mỗi pose `POST /patrol/enroll/{id}/scan`; progress 3/3 |
+
+---
+
+### TC-SCAN-010 — Pose 4 tuỳ chọn
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | 3 pose xong |
+| **Các bước** | 1. Quét **Cúi xuống** (optional) |
+| **Kết quả** | Pose 4 lưu; không bắt buộc để qua bước profile |
+
+---
+
+### TC-SCAN-011 — Hướng dẫn ring la bàn
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Đang quét |
+| **Các bước** | 1. Quan sát UI hướng dẫn |
+| **Kết quả** | Nhãn **TRÊN · PHẢI · DƯỚI · TRÁI**; text theo slot |
+
+---
+
+### TC-SCAN-012 — Form profile pre-fill ?code=
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | URL `?code=NV001`; đã quét xong |
+| **Các bước** | 1. Bước **Thông tin** |
+| **Kết quả** | Mã NV pre-fill; Họ tên + Đơn vị nhập tay |
+
+---
+
+### TC-SCAN-013 — Submit không consent
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Bước profile |
+| **Các bước** | 1. Không tick consent 2. Submit |
+| **Kết quả** | **Blocked**; không gọi complete |
+
+---
+
+### TC-SCAN-014 — Submit có consent
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | 3 pose + form đầy đủ |
+| **Các bước** | 1. Tick consent 2. Submit |
+| **Kết quả** | `POST /patrol/enroll/{id}/complete` + `consented_at`; bước **Hoàn tất** |
+
+---
+
+### TC-SCAN-015 — Hoàn tất admin-create
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Admin tạo mới xong |
+| **Các bước** | 1. Xem màn done |
+| **Kết quả** | Link về `/module05/ho-so` |
+
+---
+
+### TC-SCAN-016 — Camera HTTP bị chặn
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Mở trang qua HTTP |
+| **Các bước** | 1. Thử bật camera |
+| **Kết quả** | «Camera chỉ hoạt động trên HTTPS…» |
+
+---
+
+### TC-SCAN-017 — Từ chối quyền camera
+
+| | |
+|---|---|
+| **P** | P0 |
+| **Tiên quyết** | Browser deny permission |
+| **Các bước** | 1. Bật camera |
+| **Kết quả** | Hướng dẫn iPhone/Safari cấp quyền |
+
+---
+
+### TC-SCAN-018 — Trình duyệt không hỗ trợ
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Browser không có getUserMedia |
+| **Các bước** | 1. Mở trang |
+| **Kết quả** | «Trình duyệt không hỗ trợ…» |
+
+---
+
+### TC-SCAN-019 — Manual capture gate
+
+| | |
+|---|---|
+| **P** | P1 |
+| **Tiên quyết** | Manual capture mode |
+| **Các bước** | 1. Thử chụp khi face chưa ready |
+| **Kết quả** | Nút capture disabled (`faceReadyForManualCapture`) |
+
+---
+
+### TC-SCAN-020 — Legacy /scanner redirect
+
+| | |
+|---|---|
+| **P** | P2 |
+| **Tiên quyết** | — |
+| **Các bước** | 1. Truy cập `/scanner` |
+| **Kết quả** | Redirect `/module05/quet-mat` |
+
+---
+
+## Phụ lục — Điều kiện chung
 
 | Hạng mục | Yêu cầu |
 |----------|---------|
-| Backend patrol | `GET /patrol/health` OK; day bundle trả persons/objects |
-| MediaMTX playback | `VITE_MEDIAMTX_PLAYBACK_URL` cấu hình |
-| Auth | `ensurePatrolAuth()` thành công |
-| HTTPS | Bắt buộc cho `/module05/quet-mat` |
-| Viewport | Desktop ≥1280px; mobile <1024px; tablet landscape |
+| Backend | `GET /patrol/health` · day bundle · live bundle |
+| MediaMTX | Playback URL configured |
+| Auth | Patrol token valid |
+| HTTPS | Scan module |
+| Sidebar | 220px; không overlap |
+| Ngày | UTC+7; cắt 0h VN; không ca 06:00 |
 
-### 2.2. Bộ dữ liệu gợi ý
+**Out of scope (không test — chưa có UI):**
 
-| Dataset | Mục đích |
-|---------|----------|
-| `pers-A` identified + snapshot score ≥1.05 | Tab **Định danh** |
-| `pers-B` person stage + snapshot | Tab **Người** |
-| `obj-C` object stage + snapshot score <1.05 | Tab **Đối tượng** |
-| `obj-D` object score ≥1.05 | **Ẩn** khỏi mọi tab |
-| Person **không** snapshotUrl | **Ẩn** khỏi mọi tab |
-| Sự kiện `lockedAt` UTC sau 0h VN | Test ngày 29 vs 28 |
-| Hồ sơ draft + identified | Trang hồ sơ |
-| DR-03 aerial vs proximity | Flycam filter |
+- Tab heatmap thời gian Live/5p/15p/1h/Ca
+- Tab sự kiện Nhân lực/Mật độ/Hệ thống
+- Canvas KDE density splat
+- Feed `POPULATION_OBSERVED` trên panel Sự kiện
 
 ---
 
-## 3. Test tự động
+## Phụ lục — Test tự động
 
-| Lệnh | Phạm vi | Kết quả mong đợi |
-|------|---------|------------------|
-| `npm test -- --run src/modules/module05-productivity` | 38 file unit | **199/199 PASS** |
-| `pytest backend-ai/tests/test_patrol_*.py` | Backend patrol | PASS khi BE sẵn sàng |
+```bash
+npm test -- --run src/modules/module05-productivity   # 199 tests
+pytest backend-ai/tests/test_patrol_*.py              # backend
+```
 
-**File unit test quan trọng → mirror manual:**
-
-| File | Scenario |
-|------|----------|
-| `patrolPlayback.service.test.ts` | Ngày VN từ UTC; MediaMTX 404; URL playback base |
-| `patrolEventsTabList.test.ts` | Dedupe entity; no snapshot excluded; tab count = list length |
-| `patrolEventsFeed.test.ts` | Score gate object vs person |
-| `patrolFlycamEventFilter.test.ts` | Aerial vs proximity DR-03 |
-| `patrolDayObjectFilter.test.ts` | Object score ≥1.05 hidden |
-| `patrolZoneCoverage.test.ts` | KPI khu vực online/GPS |
-| `patrolStreamOnline.test.ts` | HC-02 framesLive override offline |
-| `patrolFaceScanGuide.test.ts` | Pose readiness, manual capture |
+| Module | Unit test mirror |
+|--------|------------------|
+| KPI | `patrolZoneCoverage.test.ts` · `patrolDisplayStats.test.ts` |
+| Live | `patrolStreamOnline.test.ts` · `patrolLiveFeed.service.test.ts` |
+| Playback | `patrolPlayback.service.test.ts` |
+| Heatmap | `patrolDayHeatmapDots.test.ts` · `patrolFlycamEventFilter.test.ts` |
+| Sự kiện | `patrolEventsTabList.test.ts` · `patrolEventsFeed.test.ts` |
+| Hồ sơ | `patrolGalleryFaces.service.test.ts` |
+| Scan | `patrolFaceScanGuide.test.ts` · `patrolFaceScanCamera.test.ts` |
 
 ---
 
-## 4. Test cases — Điều hướng & layout
+## Phụ lục — Checklist release
 
-### TC-M05-NAV-01 — Sidebar & routes
+| Module | Smoke (P0) |
+|--------|------------|
+| KPI | 4 thẻ load; flymap — khi DR offline |
+| Live | HC-02 live badge; filter Bodycam/Flycam |
+| Playback | Date hôm nay VN; sync từ Sự kiện; 404 không crash |
+| Heatmap | Toggle layer; click dot → sheet; Flymap không sheet |
+| Sự kiện | 4 tab count đúng; snapshot required; aerial DR filter |
+| Hồ sơ | Import 1 dòng; search; face badge |
+| Scan | `?code=` 3 pose + consent |
 
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P2 | NAV-01-1 | Sidebar → **Hiệu quả công việc** | Submenu: Tuần tra, Hồ sơ công nhân, Quét mặt |
-| P2 | NAV-01-2 | Click **Tuần tra** | URL `/module05`; title «Hiệu Quả Công Việc» |
-| P2 | NAV-01-3 | Click **Hồ sơ công nhân** | URL `/module05/ho-so` |
-| P2 | NAV-01-4 | Click **Quét mặt** | URL `/module05/quet-mat` |
-| P2 | NAV-01-5 | Truy cập `/scanner` | Redirect → `/module05/quet-mat` |
-
-### TC-M05-LAY-01 — Layout Tuần tra
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P2 | LAY-01-1 | Mở `/module05` desktop | Panel **Tổng Quan** → **Camera** → **HEATMAP** + **SỰ KIỆN** |
-| P2 | LAY-01-2 | Sidebar | Width 220px; nội dung không đè sidebar |
-| P2 | LAY-01-3 | Thu gọn **Tổng Quan** / **Camera** | `TierCollapseButton` toggle; collapsed camera hiện «X luồng» |
-| P2 | LAY-01-4 | Viewport <1024px | Stack dọc; heatmap + sự kiện `min-h-[42dvh]` |
-| P2 | LAY-01-5 | Mount page | Sidebar auto collapse (`setSidebarCollapsed(true)`) |
+- [ ] Vitest 199/199 pass
+- [ ] P0 manual staging
+- [ ] Playback 7 ngày có băng
+- [ ] Quanh 0h VN: TC-PB-006 / TC-EVT date
+- [ ] Mobile: heatmap + sự kiện scroll OK
 
 ---
 
-## 5. Test cases — Tuần tra `/module05`
-
-### TC-M05-KPI-01 — Tier1 KPI
-
-**Nguồn:** `PatrolKPIs` trong `Module05Page.tsx` · `derivePatrolDisplayStats()` · `computePatrolZoneCoverage()` · `usePatrolFlymapMetrics()`
-
-| P | TC | Điều kiện | Kết quả mong đợi |
-|---|-----|-----------|------------------|
-| P1 | KPI-01-1 | Có zone visited | **Khu vực tuần tra** = `visited/total`; detail «X% khu có thiết bị tuần tra active» |
-| P1 | KPI-01-2 | Cam online, chưa visited | Detail «Thiết bị online — chờ xác nhận phủ khu» |
-| P1 | KPI-01-3 | Mọi cam offline | Detail «Chưa có thiết bị tuần tra online» |
-| P1 | KPI-01-4 | `personCount + identityCount > 0` | **Nhân sự** = tổng; detail icon UserX (person) + UserCheck (identity) |
-| P1 | KPI-01-5 | Headcount = 0, cam online, có stream | «Đang tuần tra — chờ phát hiện» |
-| P1 | KPI-01-6 | Headcount = 0, không cam online | «Chưa có dữ liệu hôm nay» |
-| P1 | KPI-01-7 | `peak_time_active` trên cam | **Lượt gặp · ĐT** detail «Peak time — mặt rõ định danh…» |
-| P1 | KPI-01-8 | `objectEncounterCount > 0` | Detail «Silhouette chưa gán danh tính — không tính Nhân sự» |
-| P1 | KPI-01-9 | DR-03 online | **Mật độ flymap** = số; unit «người/khung»; detail «YOLO tầm cao — không cộng Nhân sự» |
-| P1 | KPI-01-10 | DR-03 offline | Value «—»; detail «Flycam chưa online» |
-| P1 | KPI-01-11 | So sánh KPI vs tab badge | KPI headcount **có thể ≠** tab counts (nguồn khác nhau) — **không báo bug** nếu lệch có chủ đích |
-
-### TC-M05-CAM-01 — Camera Live
-
-**Component:** `PatrolCameraPanel` → `CameraGridPanel` · filter `Bodycam` \| `Flycam`
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P1 | CAM-01-1 | Mặc định Live | HC-01, HC-02 (Bodycam); DR-03 (Flycam) |
-| P1 | CAM-01-2 | Default selected | **HC-02** highlight |
-| P1 | CAM-01-3 | Filter **Bodycam** | Chỉ HC-01, HC-02 |
-| P1 | CAM-01-4 | Filter **Flycam** | Chỉ DR-03 |
-| P1 | CAM-01-5 | Stream online | Badge LIVE + pulse dot |
-| P1 | CAM-01-6 | DR-03 tile | Badge **Tầm cao** hoặc **Tầm thấp** (`patrolFlightModeShortLabel`) |
-| P2 | CAM-01-7 | Tier collapsed + Live | Header «X luồng» khớp số tile active |
-| P2 | CAM-01-8 | Legacy mobile helmet + handheld | Grid ưu tiên mũ legacy; `PatrolDevicePermissionGate` hiện |
-
-### TC-M05-CAM-02 — Camera Playback
-
-**Service:** `createPatrolPlaybackFetchers()` · `PatrolPlaybackPanel`
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P0 | CAM-02-1 | Toggle **Playback** | Timeline + date picker; video area hiện |
-| P0 | CAM-02-2 | Date mặc định | = `getPatrolDefaultPlaybackDate()` (hôm nay VN) |
-| P0 | CAM-02-3 | Date picker | Min = today−6; max = hôm nay (7 ngày) |
-| P0 | CAM-02-4 | Đổi `patrolViewDate` ở Sự kiện | Playback date **đồng bộ** |
-| P0 | CAM-02-5 | Có băng MediaMTX | Clip continuous + marker sự kiện 30s (`PATROL_EVENT_CLIP_SEC`) |
-| P0 | CAM-02-6 | MediaMTX 404 | Timeline trống; **không** crash |
-| P1 | CAM-02-7 | URL video | Qua playback base configured; không lộ IP MediaMTX nội bộ |
-
-### TC-M05-DATE-01 — Ngày lịch VN
-
-**Functions:** `getPatrolEventViewDate()` · `isoDayKey()` · `formatVnDate()`
-
-| P | TC | Input | Thao tác | Kết quả mong đợi |
-|---|-----|-------|----------|------------------|
-| P0 | DATE-01-1 | `lockedAt = 2026-08-28T17:30:00.000Z` (00:30 VN 29/08) | Chọn ngày 28/08 | **Không** có card |
-| P0 | DATE-01-2 | Cùng event | Chọn ngày 29/08 | **Có** card |
-| P0 | DATE-01-3 | Event ngày 27 | Click card | `patrolViewDate` → `2026-08-27`; playback theo |
-| P0 | DATE-01-4 | Sau 0h VN | Mở app | Default vẫn **ngày mới**; data 23:50 hôm qua thuộc ngày hôm qua |
-| P0 | DATE-01-5 | — | Không có logic 06:00 rollover | Playback không bắt đầu 06:00 như Module 02 |
-
-### TC-M05-EVT-01 — Panel Sự kiện — cấu trúc
-
-**Component:** `PatrolEventsPanel.tsx`
-
-| P | TC | Kiểm tra | Kết quả mong đợi |
-|---|-----|----------|------------------|
-| P0 | EVT-01-1 | 4 tab | **Tất cả · Đối tượng · Người · Định danh** |
-| P0 | EVT-01-2 | Badge count | = `listPatrolEventsForTab().length` từng tab |
-| P0 | EVT-01-3 | Date picker compact | Prev/next + native date input overlay |
-| P1 | EVT-01-4 | `viewDate !== maxViewDate` | Hint «Đang xem ngày trước» (sm+) |
-| P1 | EVT-01-5 | Header panel (parent) | DR-03 label: **Tầm thấp · AI** hoặc **Tầm cao · Mật độ** |
-| P2 | EVT-01-6 | Compact date picker | **Không** có nút «Hôm nay» (chỉ full mode) |
-
-### TC-M05-EVT-02 — Lọc & hiển thị card
-
-| P | TC | Dữ liệu | Kết quả mong đợi |
-|---|-----|---------|------------------|
-| P0 | EVT-02-1 | `pers:` + snapshot + stage person | Tab **Người** + **Tất cả** |
-| P0 | EVT-02-2 | `obj:` + snapshot score <1.05 | Tab **Đối tượng** |
-| P0 | EVT-02-3 | stage profile / identified | Tab **Định danh** |
-| P0 | EVT-02-4 | Không `snapshotUrl` | **Ẩn** mọi tab (kể cả Tất cả empty check dùng tab all length) |
-| P0 | EVT-02-5 | Object score ≥1.05 | **Ẩn** — mis-tiered face on object |
-| P0 | EVT-02-6 | 2 card cùng entity, `lockedAt` khác | Chỉ **1** card — bản `lockedAt` mới hơn |
-| P1 | EVT-02-7 | Card hiển thị | Badge stage + subject + giờ + địa điểm + snapshot thumbnail |
-| P1 | EVT-02-8 | Card `id` format | `pers:{persId}` hoặc `obj:{objId}` |
-| P1 | EVT-02-9 | `type` backend | `PERSON_DETECTED` (aggregated day card — **đúng**, không phải raw frame log) |
-
-### TC-M05-EVT-03 — Tìm kiếm & phân trang
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P1 | EVT-03-1 | Gõ tên nhân viên | Debounce 300ms; lọc client-side |
-| P1 | EVT-03-2 | Gõ `pers_id` / mã NV | Match haystack `eventSearchHaystack()` |
-| P1 | EVT-03-3 | Query không khớp | «Không có kết quả khớp tìm kiếm» |
-| P1 | EVT-03-4 | Tab không có item | «Chưa có sự kiện loại này» |
-| P1 | EVT-03-5 | >6 cards | Ban đầu 6; scroll → +4 (`IntersectionObserver`) |
-| P1 | EVT-03-6 | Footer pagination | «Hiển thị X/Y» hoặc «— N đối tượng|người|định danh|mục —» |
-
-### TC-M05-EVT-04 — Empty states
-
-| P | TC | Điều kiện | Message |
-|---|-----|-----------|---------|
-| P1 | EVT-04-1 | Hôm nay, bundle rỗng | «Chưa có sự kiện hôm nay — chọn ngày khác phía trên hoặc đang chờ backend» |
-| P1 | EVT-04-2 | Ngày quá khứ, rỗng | «Không có sự kiện ngày này — chọn ngày khác phía trên» |
-
-### TC-M05-EVT-05 — Tương tác card
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P0 | EVT-05-1 | Click card body | Highlight; `onSelect` → sync `patrolViewDate` |
-| P0 | EVT-05-2 | Click snapshot | `PatrolEventDetailModal` mở |
-| P1 | EVT-05-3 | Enter trên card | Tương đương click (keyboard) |
-
-### TC-M05-EVT-06 — Modal chi tiết
-
-**Component:** `PatrolEventDetailModal.tsx`
-
-| P | TC | Kiểm tra | Kết quả mong đợi |
-|---|-----|----------|------------------|
-| P1 | EVT-06-1 | Thông tin cơ bản | Stage badge, subject, camera, zone, thời gian |
-| P1 | EVT-06-2 | Lịch sử xuất hiện | `GET /patrol/day/appearances?subject_id=&date=` theo `viewDate` |
-| P1 | EVT-06-3 | Gallery faces | Load `fetchPatrolGalleryFaces()` khi có worker id |
-| P1 | EVT-06-4 | GPS thiếu | Fallback `PATROL_SITE_CENTER` hoặc label phù hợp |
-| P1 | EVT-06-5 | Đóng modal | Portal đóng; list selection giữ nguyên |
-
-### TC-M05-MAP-01 — Heatmap (chế độ thường)
-
-**Component:** `PatrolDensityHeatmap` + `PatrolGeoHeatmap`
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P1 | MAP-01-1 | Layer **Khu vực** | Polygon site boundary toggle |
-| P1 | MAP-01-2 | Layer **Mật độ** | Toggle **chấm detection** (không phải canvas KDE) |
-| P1 | MAP-01-3 | Layer **Mũ** | Marker + route HC-* |
-| P1 | MAP-01-4 | Layer **Flycam** | Marker/route DR-03 trên map site |
-| P1 | MAP-01-5 | Stats overlay | Đối tượng / Người / Định danh từ `dayStats` |
-| P1 | MAP-01-6 | Click chấm | `WorkforceObjectSheet` bottom sheet |
-| P1 | MAP-01-7 | Manual identity | Panel gán worker trong sheet (nếu có quyền) |
-| P2 | MAP-01-8 | Phóng to heatmap | Fullscreen portal; Escape / backdrop đóng |
-| P2 | MAP-01-9 | HC-02 online + GPS | Map follow live GPS HC-02 |
-| P1 | MAP-01-10 | DR-03 aerial dots | Chấm DR **không** hiện trên heatmap site (`filterPatrolHeatmapDotsExcludeAerialFlycam`) |
-
-### TC-M05-MAP-02 — Flymap
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P1 | MAP-02-1 | Bật **Flymap** (header) | Panel title **FLYMAP**; layer: Khu vực · Mật độ · Drone |
-| P1 | MAP-02-2 | Chấm flymap | Màu uniform `PATROL_FLYMAP_DOT_HEX` |
-| P1 | MAP-02-3 | Stats | «Phát hiện: N» |
-| P1 | MAP-02-4 | Click chấm | **Không** mở object sheet |
-| P1 | MAP-02-5 | Follow GPS | DR-03 live GPS khi online |
-| P1 | MAP-02-6 | Route | Chỉ drone devices |
-
-### TC-M05-FLY-01 — Flycam flight mode
-
-**Functions:** `filterPatrolEventsByFlycamAltitude()` · `patrolEventMatchesFlycamAltitude()`
-
-| P | TC | Mode DR-03 | Kết quả mong đợi |
-|---|-----|------------|------------------|
-| P0 | FLY-01-1 | **proximity** | Sự kiện person + profile + identity hiện như HC-* |
-| P0 | FLY-01-2 | **aerial** (default) | Feed chỉ **object** stage (+ POPULATION/HIGH_DENSITY nếu có) |
-| P1 | FLY-01-3 | aerial | KPI flymap có số; **không** tăng KPI Nhân sự |
-| P1 | FLY-01-4 | proximity | Header sự kiện «Tầm thấp · AI» |
-| P1 | FLY-01-5 | aerial | Header «Tầm cao · Mật độ» |
-
-### TC-M05-LIVE-01 — Live poll
-
-| P | TC | Kiểm tra | Kết quả mong đợi |
-|---|-----|----------|------------------|
-| P1 | LIVE-01-1 | WS connected | Metrics + workforce ~2.5s (`PATROL_LIVE_POLL_MS`) |
-| P1 | LIVE-01-2 | WS fail | Fallback `GET /patrol/live/bundle` |
-| P1 | LIVE-01-3 | Day bundle | Poll 3s khi xem **hôm nay** |
-| P1 | LIVE-01-4 | Mount page | `ensurePatrolAuth()` + `syncPatrolIdentityBindingsFromBackend()` |
-| P1 | LIVE-01-5 | HC-02 frames live | Online override khi backend báo offline (`patrolStreamOnline`) |
-
----
-
-## 6. Test cases — Hồ sơ `/module05/ho-so`
-
-**Page:** `WorkerProfileManagementPage.tsx` · **Service:** `patrolWorkerProfile.service.ts`
-
-### TC-M05-PRO-01 — Thống kê & danh sách
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P1 | PRO-01-1 | Mở trang | 4 stat: Tổng hồ sơ · Bản nháp · Đã xác minh · Có vector |
-| P1 | PRO-01-2 | Backend down | «Backend tuần tra chưa sẵn sàng — kiểm tra URL backend» |
-| P1 | PRO-01-3 | **Làm mới** | Gọi `pingPatrolProfileBackend()` + reload list |
-| P1 | PRO-01-4 | Search | Lọc: tên, mã NV, đơn vị, pers_id, display_name |
-| P1 | PRO-01-5 | Filter **Bản nháp** | Chỉ `status === 'draft'` |
-| P1 | PRO-01-6 | Filter **Đã xác minh** | Chỉ `status === 'identified'` |
-| P1 | PRO-01-7 | Badge **Nháp** | Hiện trên row draft |
-| P1 | PRO-01-8 | Face badge | `{face_count}/3`; xanh khi `face_enrollment_complete` |
-| P2 | PRO-01-9 | Link **Về Module 05** | Navigate `/module05` |
-
-### TC-M05-PRO-02 — Import Excel
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P0 | PRO-02-1 | **Tải file mẫu** | Download `patrol_workers_template.xlsx` (Họ tên, Mã NV, Đơn vị) |
-| P0 | PRO-02-2 | Import file hợp lệ | `POST /patrol/persons/import`; hiện success/failed count |
-| P0 | PRO-02-3 | Dòng thiếu Họ tên hoặc Mã | «X dòng thiếu Họ tên hoặc Mã nhân viên» — không import |
-| P0 | PRO-02-4 | File rỗng | «File Excel không có dòng hợp lệ» |
-| P1 | PRO-02-5 | Accept file types | `.xlsx,.xls,.csv` |
-
-### TC-M05-PRO-03 — CRUD & modal
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P1 | PRO-03-1 | **Xem** (Eye) | `WorkerProfileDetailModal` mode view |
-| P1 | PRO-03-2 | **Sửa** (Pencil) | Modal edit; `PATCH /patrol/persons/{id}` |
-| P1 | PRO-03-3 | **Xóa** (Trash) | Confirm dialog; xóa vector; `DELETE /patrol/persons/{id}` |
-| P1 | PRO-03-4 | Gallery trong modal | `WorkerProfileFaceGallery` hiện poses |
-| P1 | PRO-03-5 | Link quét mặt | `/module05/quet-mat?code={employee_code}` |
-| P1 | PRO-03-6 | Verify draft | `POST /patrol/persons/{id}/verify` khi đủ điều kiện |
-
----
-
-## 7. Test cases — Quét mặt `/module05/quet-mat`
-
-**Page:** `WorkerFaceScanPage.tsx` · **Panel:** `PatrolFaceScannerPanel.tsx`  
-**Poses:** 3 bắt buộc (Chính diện, Quay trái, Quay phải) + 1 tuỳ chọn (Cúi xuống)
-
-### TC-M05-FACE-01 — Phân nhánh mode
-
-| P | TC | Điều kiện | Kết quả mong đợi |
-|---|-----|-----------|------------------|
-| P0 | FACE-01-1 | `hasPatrolRole('hr')` && không `?code=` | **Admin mode**: tra cứu mã + tạo mới |
-| P0 | FACE-01-2 | URL `?code=NV001` | **Self-enroll** dù user là HR |
-| P0 | FACE-01-3 | Không role HR, không `?code=` | Self-enroll wizard (quét → profile → done) |
-
-### TC-M05-FACE-02 — Admin tra cứu
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P0 | FACE-02-1 | Nhập mã hợp lệ → Tra cứu | `GET /patrol/persons/lookup`; chuyển bước scan bổ sung vector |
-| P0 | FACE-02-2 | Mã không tồn tại | Lỗi + gợi ý «Tạo hồ sơ mới» |
-| P0 | FACE-02-3 | Scan bổ sung | `POST /patrol/persons/{id}/scan` từng pose |
-| P1 | FACE-02-4 | **Tạo hồ sơ mới + quét mặt** | Chuyển enroll wizard (giống self-enroll) |
-
-### TC-M05-FACE-03 — Self-enroll / tạo mới
-
-| P | TC | Bước | Kết quả mong đợi |
-|---|-----|------|------------------|
-| P0 | FACE-03-1 | Mount enroll mode | `POST /patrol/enroll/session` tạo session |
-| P0 | FACE-03-2 | Quét 3 pose | `POST /patrol/enroll/{id}/scan` |
-| P0 | FACE-03-3 | Form profile | Họ tên*, Mã NV*, Đơn vị — pre-fill từ `?code=` |
-| P0 | FACE-03-4 | Submit không consent | **Blocked** — checkbox bắt buộc |
-| P0 | FACE-03-5 | Submit có consent | `POST /patrol/enroll/{id}/complete` + `consented_at` |
-| P1 | FACE-03-6 | Hoàn tất admin-create | Link về `/module05/ho-so` |
-| P1 | FACE-03-7 | Pose 4 (Cúi xuống) | Tuỳ chọn; progress tính 3 required |
-
-### TC-M05-FACE-04 — Camera & UX
-
-| P | TC | Điều kiện | Kết quả mong đợi |
-|---|-----|-----------|------------------|
-| P0 | FACE-04-1 | HTTP (không HTTPS) | «Camera chỉ hoạt động trên HTTPS…» |
-| P0 | FACE-04-2 | Deny camera permission | Hướng dẫn iPhone/Safari |
-| P0 | FACE-04-3 | Unsupported browser | «Trình duyệt không hỗ trợ…» |
-| P1 | FACE-04-4 | Ring hướng dẫn | TRÊN · PHẢI · DƯỚI · TRÁI |
-| P1 | FACE-04-5 | Manual capture mode | `faceReadyForManualCapture()` gate |
-
----
-
-## 8. Test cases — Tích hợp & edge cases
-
-### TC-M05-ID-01 — Identity & dedupe
-
-| P | TC | Kiểm tra | Kết quả mong đợi |
-|---|-----|----------|------------------|
-| P1 | ID-01-1 | Manual identity bind | Card + heatmap label cập nhật sau `syncPatrolIdentityBindingsFromBackend` |
-| P1 | ID-01-2 | Gallery worker SGC-* | Tab **Định danh**; badge violet |
-| P1 | ID-01-3 | Track ID (tk-*) | Hiển thị stage **Người**, không phải định danh HR |
-| P1 | ID-01-4 | Heatmap dedupe | Cùng entity → 1 chấm; ưu tiên `inCameraView` |
-| P1 | ID-01-5 | `POST /patrol/persons/{id}/identify` | Gán danh tính từ day card (modal/sheet) |
-
-### TC-M05-ZONE-01 — Phủ khu vực
-
-| P | TC | Điều kiện | Kết quả mong đợi |
-|---|-----|-----------|------------------|
-| P1 | ZONE-01-1 | Cam online trong polygon | Zone counted visited |
-| P1 | ZONE-01-2 | Cam online, GPS ngoài polygon | Chưa visited (chờ GPS vào zone) |
-| P1 | ZONE-01-3 | Mọi cam offline | KPI 0/N visited |
-
-### TC-M05-ROI-01 — Module 03 overlay
-
-| P | TC | Kiểm tra | Kết quả mong đợi |
-|---|-----|----------|------------------|
-| P2 | ROI-01-1 | Live camera HC-* | Person ROI label tier khớp Module 05 tokens |
-| P2 | ROI-01-2 | DR proximity | ROI gate `patrolPersonMeetsDrFlycamDisplayGate` |
-
-### TC-M05-OUT-01 — Phạm vi **ngoài** code hiện tại
-
-Các mục sau **không test** vì chưa implement — không báo bug:
-
-| Mục | Trạng thái code |
-|-----|-----------------|
-| Tab heatmap Live / 5p / 15p / 1h / Ca | Không có UI |
-| Tab sự kiện Nhân lực / Mật độ / Hệ thống | Không có UI |
-| Canvas KDE density splat | `showDensity={false}` |
-| Feed live `POPULATION_OBSERVED` | Không qua day bundle listing |
-| Shared `EventList` component | Module 05 dùng `PatrolEventsPanel` riêng |
-
----
-
-## 9. Ma trận ưu tiên & checklist release
-
-### 9.1. Ưu tiên
-
-| P | Nhóm TC | Lý do |
-|---|---------|-------|
-| **P0** | DATE-01, CAM-02, EVT-02, FLY-01 | Ngày VN + nguồn card + flycam filter |
-| **P0** | PRO-02, FACE-01~04 | Enroll nhân sự production |
-| **P1** | KPI-01, MAP-01/02, LIVE-01, EVT-01~06 | Giám sát vận hành |
-| **P2** | NAV, LAY, ROI | UX & polish |
-
-### 9.2. Smoke test (15 phút)
-
-1. `/module05` — 4 KPI load; date = hôm nay VN  
-2. Tab **Đối tượng / Người / Định danh** — count = số card  
-3. Toggle **Playback** — timeline + date sync  
-4. Toggle **Flymap** — title FLYMAP; không object sheet  
-5. Click heatmap dot (normal) — `WorkforceObjectSheet`  
-6. `/module05/ho-so` — search + import 1 dòng  
-7. `/module05/quet-mat?code=TEST` — 3 pose + consent  
-
-### 9.3. Checklist release
-
-- [ ] Vitest Module 05: 199/199 pass
-- [ ] P0 manual trên staging + backend thật
-- [ ] Playback 7 ngày — ≥1 camera có băng
-- [ ] DATE-01-1/2 verified quanh 0h VN
-- [ ] FLY-01-1/2 aerial vs proximity
-- [ ] Import Excel không duplicate mã NV
-- [ ] Mobile: heatmap + sự kiện scroll, không overlap sidebar
-
----
-
-*Tài liệu bám sát code tại commit branch `cursor/module05-test-scenarios-dd1d`.*
+*Tổng: **7 module · 120 test cases** · bám code `module05-productivity`*
