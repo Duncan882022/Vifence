@@ -79,6 +79,8 @@ class TrackSession:
     interactions: list[InteractionRecord] = field(default_factory=list)
 
     appearance_row_id: int | None = None
+    # Một lượt trong khung = một JPG — không chụp lại mỗi flush/track frame.
+    luot_snapshot_captured: bool = False
     last_flush_at: float = 0.0
     dirty: bool = False
     committed: bool = False

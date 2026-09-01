@@ -715,8 +715,8 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         db.close()
         self._tmp.cleanup()
 
-    def test_flush_extends_appearance_still_writes_object_snapshot(self) -> None:
-        """Gộp appearance không được chặn chụp — Đối tượng phải có JPG trên thẻ."""
+    def test_flush_extend_skips_snapshot_when_luot_has_image(self) -> None:
+        """Trong khung bám track — không chụp lại JPG khi lượt đã có ảnh."""
         import numpy as np
         from unittest.mock import patch
 
@@ -755,6 +755,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         )
         session.subject_id = "obj-20260830-0099"
         session.appearance_row_id = row_id
+        session.luot_snapshot_captured = True
         session.committed = True
         session.last_flush_at = ts - 1
         session.dirty = True
@@ -773,14 +774,66 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         ) as write_mock:
             flush_session(session, obs)
 
-        write_mock.assert_called()
+        write_mock.assert_not_called()
         obj = daystore.list_objects(db.today_vn(ts))[0]
-        self.assertEqual(obj["snapshot_path"], "2026-08-30/obj-new.jpg")
+        self.assertEqual(obj["snapshot_path"], "2026-08-30/old.jpg")
         snap = db.query_one(
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (row_id,),
         )
         self.assertEqual(snap["snapshot_path"], "2026-08-30/old.jpg")
+
+    def test_flush_captures_snapshot_only_once_per_luot(self) -> None:
+        """Lần flush đầu chụp JPG; các flush extend trong cùng track không chụp thêm."""
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol import db
+        from app.patrol.aggregator.flush import flush_session
+        from app.patrol.aggregator.session_store import get_or_create
+        from app.patrol.aggregator.types import ObservationInput
+
+        ts = 8_000.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        bbox = (100.0, 80.0, 220.0, 400.0)
+        session = get_or_create("HC-02", "ptk-once", ts=ts)
+        session.subject_id = "obj-20260830-0100"
+        obs1 = ObservationInput(
+            camera_id="HC-02",
+            track_id="ptk-once",
+            ts=ts,
+            person_bbox=bbox,
+            frame=frame,
+            confidence=0.9,
+        )
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-08-30/first.jpg",
+        ) as write_mock:
+            flush_session(session, obs1)
+        self.assertEqual(write_mock.call_count, 1)
+        self.assertTrue(session.luot_snapshot_captured)
+
+        obs2 = ObservationInput(
+            camera_id="HC-02",
+            track_id="ptk-once",
+            ts=ts + 15,
+            person_bbox=bbox,
+            frame=frame,
+            confidence=0.95,
+        )
+        session.dirty = True
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-08-30/second.jpg",
+        ) as write_mock2:
+            flush_session(session, obs2)
+        write_mock2.assert_not_called()
+        snap = db.query_one(
+            "SELECT snapshot_path FROM appearances WHERE id = ?",
+            (session.appearance_row_id,),
+        )
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/first.jpg")
 
 
 class ObjectFacePromoteTests(unittest.TestCase):

@@ -167,6 +167,7 @@ def link_subject_session(session: TrackSession) -> None:
             if other.appearance_row_id is None:
                 continue
             session.appearance_row_id = other.appearance_row_id
+            session.luot_snapshot_captured = other.luot_snapshot_captured
             session.session_id = other.session_id
             if other.committed:
                 session.committed = True

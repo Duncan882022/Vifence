@@ -46,6 +46,25 @@ def _card_has_snapshot(subject_id: str, ts: float) -> bool:
     return bool(row and (row["snapshot_path"] or "").strip())
 
 
+def _appearance_row_has_snapshot(row_id: int) -> bool:
+    row = db.query_one(
+        "SELECT snapshot_path FROM appearances WHERE id = ?",
+        (row_id,),
+    )
+    return bool(row and str(row["snapshot_path"] or "").strip())
+
+
+def _luot_needs_snapshot(session: TrackSession) -> bool:
+    """Trong khung bám track — chỉ chụp một lần cho mỗi lượt xuất hiện."""
+    if session.luot_snapshot_captured:
+        return False
+    rid = session.appearance_row_id
+    if rid is not None and _appearance_row_has_snapshot(rid):
+        session.luot_snapshot_captured = True
+        return False
+    return True
+
+
 def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str | None, float]:
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
         return None, 0.0
@@ -171,8 +190,15 @@ def flush_session(
 
     path, shot_score = (None, 0.0)
 
-    if subject_id and obs.frame is not None and obs.person_bbox is not None:
+    if (
+        subject_id
+        and obs.frame is not None
+        and obs.person_bbox is not None
+        and _luot_needs_snapshot(session)
+    ):
         path, shot_score = _write_snapshot(session, obs)
+        if path:
+            session.luot_snapshot_captured = True
 
     skip_appearance = True
     from ...patrol_ids import is_person_subject_id
