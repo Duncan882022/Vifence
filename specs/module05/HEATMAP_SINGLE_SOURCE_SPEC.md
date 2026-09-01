@@ -1,8 +1,8 @@
 # Module 05 — Heatmap: Một nguồn sự thật (Presences)
 
 > **Trạng thái:** Yêu cầu refactor — thay thế kiến trúc 3 nguồn hiện tại  
-> **Liên quan:** Peak time — lượt gặp gom 1 `obj-*`, hiện diện đếm đủ (PR #220), KPI ngày  
-> **Cập nhật:** 2026-09-01 (rev.2 — tách Lượt gặp vs Hiện diện)
+> **Liên quan:** Peak time (PR #220 — cần chỉnh count), KPI Nhân sự / Lượt gặp  
+> **Cập nhật:** 2026-09-01 (rev.3 — map dots = KPI; peak gom snapshot, không gom lượt gặm)
 
 ---
 
@@ -19,35 +19,73 @@ Heatmap site (`PatrolDensityHeatmap`) đang ghép chấm theo **3 nguồn fallba
 ### Hậu quả
 
 - Cùng một màn hình: **map ≠ KPI ≠ tab sự kiện** tùy thời điểm poll.
-- Chấm “live” từ registry **không** đi qua dwell / tripwire / peak gom nhóm → dễ lệch sổ cái.
+- Chấm “live” từ registry **không** đi qua dwell / tripwire / peak → dễ lệch sổ cái.
 - Người vận hành không trả lời được: *“Chấm này đã tính lượt gặp chưa?”*
-- Peak time: **lượt gặp** đã gom 1 `obj-*` trên BE, nhưng registry vẫn pin từng track → map lệch cả hai chiều (encounter lẫn hiện diện).
 
-**Kết luận nghiệp vụ:** Ba nguồn là nợ kỹ thuật (tránh map trống), **không** phải yêu cầu sản phẩm. Cần bỏ.
-
----
-
-## 1.1. Peak time — hai chiều đếm (KHÔNG gom cả hai)
-
-Giờ cao điểm (≥30 silhouette/khung, exit ≤25) có **hai sổ khác nhau**:
-
-| Chiều | Nghiệp vụ | Giờ đông | Nguồn |
-|--------|-----------|----------|--------|
-| **Lượt gặp / sự kiện** | Đếm encounter đã qua tripwire (`counted=1`) | Chưa định danh → **gom 1 `obj-*`** / camera / phiên peak (lock sự kiện) | `record_peak_crowd_frame`, `day_stats.unassigned_observations` |
-| **Hiện diện (present)** | Có bao nhiêu người đang trong khung / site | **Đếm đủ N** — không gom thành 1 | `metrics.display_person_count`, `metrics.person_count`, peak `person_count` cộng dồn phiên |
-
-**Quy tắc vàng:** Gom nhóm peak chỉ áp **ledger lượt gặp**. **Present count luôn = số người thực tế** (silhouette đủ gate hiển thị).
-
-Ví dụ 35 người chưa rõ mặt:
-- Lượt gặp đối tượng trong ngày: **+1** (một `obj-*` nhóm)
-- Hiện diện live trên camera: **35** (`display_person_count`)
-- ROI video: **35 bbox** với `#1…#35` (cùng `worker_id` nhóm)
-
-**Sai lầm cần tránh trong tài liệu / implement:** Coi “peak = 1” cho mọi thứ — đặc biệt present count, KPI mật độ, overlay “N người trong khung”.
+**Kết luận:** Ba nguồn là nợ kỹ thuật. Cần bỏ — chỉ còn presences.
 
 ---
 
-## 2. Nguyên tắc đúng
+## 1.1. Mô hình đếm chuẩn (map = KPI)
+
+**Ba loại chấm trên map = ba chỉ số KPI — cùng một sổ presences/appearances, không tách nguồn.**
+
+| Chấm map | Màu | KPI tương ứng | Ý nghĩa |
+|----------|-----|---------------|---------|
+| **Định danh** | violet | `identity_count` | Gallery / NV đã verify — phần **Nhân sự** |
+| **Người** | sky | `person_count` | `pers-*` / tk draft — phần **Nhân sự** (chưa định danh) |
+| **Đối tượng** | green | `unassigned_observations` | **Lượt gặp · ĐT** — mỗi chấm = **một lần gặp** (`counted=1`), không phải số thẻ/card |
+
+```
+Presences / appearances (counted)
+        ↓
+┌───────────────────────────────────────┐
+│  Chấm map  ≡  Overlay góc map  ≡  KPI │
+├─────────────┬─────────────┬───────────┤
+│ Định danh   │ Người       │ Đối tượng │
+│ (violet)    │ (sky)       │ (green)   │
+├─────────────┼─────────────┼───────────┤
+│ identity    │ person      │ lượt gặm  │
+│ _count      │ _count      │ (obj enc.)│
+└─────────────┴─────────────┴───────────┘
+     └──── Nhân sự KPI ────┘
+```
+
+**Quy tắc vàng:** Số chấm xanh **Đối tượng** = **số lần gặp** (`unassigned_observations`), không phải số entity `obj-*` duy nhất hay số thẻ `object_card_count`.
+
+> **Lưu ý implement hiện tại:** Overlay map đang bind `objectCount` ← `object_card_count` — **lệch nghiệp vụ**. Phải bind **lượt gặm** (`unassigned_observations`) cho hàng Đối tượng; builder chấm xanh cũng phải theo **encounter**, không gom 1 chấm/entity khi peak.
+
+---
+
+## 1.2. Peak time — gom snapshot, KHÔNG gom lượt gặm
+
+Giờ cao đông (≥30 silhouette/khung, exit ≤25):
+
+1. **Tách bình thường:** Ai đủ mặt → **Định danh** hoặc **Người** — chấm + KPI như giờ thường.
+2. **Phần còn lại (Đối tượng):**
+   - **Thẻ / snapshot sự kiện:** **1 ảnh nhóm** (“Nhóm N”) — gom hiển thị, không 30 thẻ riêng.
+   - **Đếm lượt gặm:** **đúng số người** chưa định danh trong nhóm — **N lượt**, **N chấm xanh** trên map, KPI **Lượt gặp · ĐT += N**.
+3. **ROI video:** vẫn **N bbox** `#1…#N` (cùng tag nhóm trên detection).
+
+Ví dụ 40 silhouette, 5 định danh + 3 người + 32 đối tượng:
+
+| Hạng mục | Giá trị |
+|----------|---------|
+| Chấm violet | 5 |
+| Chấm sky | 3 |
+| Chấm green | **32** (= lượt gặm ĐT) |
+| KPI Nhân sự | 8 |
+| KPI Lượt gặp · ĐT | **32** |
+| Thẻ snapshot nhóm | **1** (ảnh “Nhóm 32”) |
+| ROI | 40 bbox, 32 cái `#1…#32` thuộc nhóm |
+
+**Sai (PR #220 hiện tại / rev.2 spec):** Gom cả lượt gặm thành 1 `obj-*` → KPI + map chỉ +1. **Không đúng nghiệp vụ.**
+
+**Đúng:** Chỉ **snapshot/thẻ UI** gom; **ledger lượt gặm** ghi **N dòng** (hoặc N counted appearances).
+
+---
+
+## 2. Nguyên tắc refactor heatmap
 
 ### 2.1. Một sổ cái
 
@@ -56,36 +94,33 @@ Camera + AI + GPS
        ↓
   Event Aggregator (dwell, identity, peak crowd, tripwire)
        ↓
-  SQLite: appearances / daily presences          metrics live (person_count)
-       ↓                                              ↓
-  ┌─────────────┬─────────────┬─────────────┐   Hiện diện N (present)
-  │  Heatmap    │  Tab sự kiện │  KPI ngày   │   — KHÔNG gom peak
-  │  (GPS dot)  │  (thẻ)       │  day_stats  │
+  SQLite: appearances / presences
+       ↓
+  ┌─────────────┬─────────────┬─────────────┐
+  │  Heatmap    │  Tab sự kiện │  KPI Tier1   │
+  │  (chấm GPS) │  (thẻ)       │  day_stats  │
   └─────────────┴─────────────┴─────────────┘
-        Cùng subject_id · cùng counted · cùng tier (lượt gặp)
+           Cùng counted · cùng tier · map ≡ KPI
 ```
 
-- **Presences** = nguồn sự thật duy nhất cho **chấm lượt gặp trên bản đồ** (entity đã ghi sổ).
-- **Hiện diện live (present)** = `display_person_count` / mobile metrics — **đếm đủ**, tách khỏi số chấm encounter.
-- Tab sự kiện = **view** ledger lượt gặp (không feed riêng cho map).
-- Registry sessionStorage **không** quyết định vị trí / số chấm heatmap.
+- **Presences** = nguồn duy nhất cho **chấm map**.
+- Tab sự kiện = view cùng ledger (peak: thẻ nhóm 1 snapshot, count vẫn N).
+- Registry sessionStorage **không** feed map.
 
-### 2.2. “Live” trên map (định nghĩa lại)
+### 2.2. “Live” trên map
 
 | Không phải live | Là live (1 nguồn) |
 |-----------------|-------------------|
-| Pin từng frame video (registry) | Presence có `ended_at` trong cửa sổ gần (mặc định **120s**) |
-| Chấm trước khi BE ghi sổ | Chấm **sau** aggregator commit — **đúng nghiệp vụ** |
-| ROI bbox trên video | ROI vẫn realtime riêng (`PatrolPersonRoiOverlay`) — **không** thay heatmap dot |
+| Pin registry / detection frame | Presence `ended_at` trong **120s** + cam online |
+| Chấm trước khi BE ghi sổ | Sau aggregator commit |
+| ROI bbox video | `PatrolPersonRoiOverlay` — riêng, realtime |
 
-**Trade-off đã chấp nhận:** Map trễ vài giây so với video; **data chuẩn**, đối soát được với KPI.
+**Trade-off:** Map trễ vài giây; **data khớp KPI**.
 
-**Trade-off không chấp nhận:** Map nhanh nhưng khác số liệu báo cáo.
+### 2.3. Rule 09 / 10
 
-### 2.3. Liên kết Rule 09 / Rule 10 (spec heatmap gốc)
-
-- **Rule 09:** Event Feed ≠ Raw Detection Log → events không được là nguồn map độc lập.
-- **Rule 10:** Heatmap ≠ raw detection density → dots = **entity đã ghi presence**, không pin detection.
+- Event Feed ≠ raw detection log.
+- Heatmap dot = **entity/lượt gặm đã ghi sổ**, không pin YOLO.
 
 ---
 
@@ -93,69 +128,61 @@ Camera + AI + GPS
 
 ### 3.1. API
 
-- **Chính:** `GET /patrol/day/presences?date=YYYY-MM-DD`
-- **Bundle ngày:** `GET /patrol/day/bundle` (đã có presences — ưu tiên tái dùng)
+- `GET /patrol/day/presences?date=…`
+- `GET /patrol/day/bundle` (ưu tiên tái dùng)
 
-### 3.2. Filter (giữ logic hiện có trong `buildPatrolPresenceHeatmapDots`)
+### 3.2. Filter
 
 | Option | Nghiệp vụ |
 |--------|-----------|
-| `countedOnly: true` | Chỉ lượt qua tripwire polygon site — **đồng bộ KPI** |
-| `includeUnassigned: true` | Hiển thị `obj-*` (Đối tượng) — peak crowd = **1 entity encounter** trên map, không phải present count |
-| `liveOnly` + cam online | `ended_at` trong `PATROL_LIVE_RECENT_MS` (120s) → opacity cao |
-| `collapsePresencesBySession` | Gộp duplicate aggregator — 1 chấm / entity |
+| `countedOnly: true` | Chỉ qua tripwire — khớp KPI |
+| `includeUnassigned: true` | Tier `object` — **mỗi lượt gặm một chấm** (peak: N chấm, không gom 1) |
+| `liveOnly` + cam online | `ended_at` trong 120s |
+| Gom theo entity | Chỉ áp **Người / Định danh** (1 chấm / pers / iden). **Đối tượng: không gom entity lúc peak** — gom theo `presence_seq` / encounter |
 
-### 3.3. Màu tầng (token chung — không đổi)
+### 3.3. Màu tầng
 
-| Tier | Màu | Ý nghĩa |
-|------|-----|---------|
-| `object` | green-400 | Chưa định danh / `obj-*` (peak: 1 chấm = 1 lượt gặp nhóm, **không** = N người hiện diện) |
-| `person` | sky-400 | `tk-*`, pers draft |
-| `identity` | violet-400 | Gallery / NV đã verify |
+| Tier | Màu | = KPI |
+|------|-----|-------|
+| `object` | green-400 | Lượt gặm · ĐT |
+| `person` | sky-400 | Nhân sự (pers) |
+| `identity` | violet-400 | Nhân sự (iden) |
 
-`peak_group_index` / `peak_group_size` dùng **ROI video** (#1…#N, “Nhóm M”) — **không** quyết định present count.
-
-### 3.5. Present vs chấm map (peak)
-
-| Hiển thị | Nguồn | Giờ đông 35 người |
-|----------|--------|-------------------|
-| KPI / overlay **hiện diện** | `display_person_count`, live bundle | **35** |
-| Chấm map **lượt gặp** | presences `obj-*` counted | **1 chấm xanh** (1 entity nhóm) + chấm riêng người đã định danh |
-| Tab sự kiện / `unassigned_observations` | appearances counted | **+1 lượt** nhóm (không +35) |
-| ROI video | detections | **35 bbox** `#1…#35` |
+`peak_group_index` / `peak_group_size`: chỉ **ROI + label detection** — không thay đổi số chấm/KPI.
 
 ### 3.4. GPS
 
-- Ưu tiên `gps_lat_end` / `gps_lng_end` trên presence.
-- Fallback vị trí mũ trong ca (`helmetPositionsById`) khi thiếu GPS fix.
-- Flymap DR-*: giữ filter riêng (`filterPatrolPresencesForHeatmap`) — không ảnh hưởng site heatmap.
+- `gps_lat_end` / `gps_lng_end` trên presence; fallback vị trí mũ.
 
 ---
 
-## 4. Phạm vi refactor FE
+## 4. Phạm vi refactor
 
-### 4.1. Sửa
+### 4.1. FE
 
 | File | Việc |
 |------|------|
-| `PatrolDensityHeatmap.tsx` | `filteredDots` **chỉ** từ `buildPatrolPresenceHeatmapDots(scopedPresences, …)` |
-| `patrolDayHeatmapDots.ts` | Giữ builder; **không** gọi từ heatmap map body |
-| `patrolHeatmapPersonRegistry.ts` | Ngừng dùng cho map dots; (tuỳ chọn) xóa hoặc chỉ heat grid sample nội bộ |
-| `patrolPersonEventsBridge.ts` | Bỏ `syncPatrolPersonEventsToHeatmap` cho map |
-| Poll live | Tăng tần suất poll presences/bundle khi `anyCameraOnline` (đề xuất **2–3s**) |
+| `PatrolDensityHeatmap.tsx` | Chấm **chỉ** từ presences; overlay **Đối tượng** ← `unassignedObservations`, không `object_card_count` |
+| `patrolDayHeatmapDots.ts` | Object tier: 1 chấm / lượt gặm (`presence_seq`), không collapse 1 entity peak |
+| `patrolHeatmapPersonRegistry.ts` | Bỏ khỏi map |
+| `Module05Page.tsx` | Sửa copy peak: “snapshot nhóm, lượt gặm đếm đủ N” |
 
-### 4.2. Không sửa (giữ)
+### 4.2. BE (peak — sửa PR #220)
 
-- `PatrolPersonRoiOverlay` — bbox live trên video.
-- KPI overlay góc map (`dayStats` từ API) — vẫn từ `day_stats`, đã cùng BE.
-- Peak time BE (`record_peak_crowd_frame`) — gom **lượt gặp** 1 `obj-*`; metrics vẫn `display_person_count` = N.
+| Hiện tại (sai) | Cần |
+|----------------|-----|
+| `record_peak_crowd_frame` → 1 `obj-*`, +1 appearance | Ghi **N counted appearances** (hoặc N track encounter) cho N silhouette chưa định danh |
+| 1 snapshot gắn 1 obj | 1 **snapshot nhóm** dùng chung cho thẻ UI; ledger vẫn N lượt |
+| KPI `unassigned_observations` +1 | KPI **+N** |
 
-### 4.3. Xóa fallback (bắt buộc)
+Giữ: tách định danh/người ra pipeline bình thường; ROI `#1…#N`; hysteresis 30/25.
+
+### 4.3. Xóa fallback map (bắt buộc)
 
 ```tsx
-// ❌ BỎ — PatrolDensityHeatmap.tsx
-mergePatrolHeatmapDetectionDots([registryDots], …)
-buildPatrolDayHeatmapDots(scopedEvents, …)
+// ❌ BỎ
+getHeatmapPersonDots()
+buildPatrolDayHeatmapDots() // cho map site
 
 // ✅ CHỈ
 buildPatrolPresenceHeatmapDots(scopedPresences, { countedOnly: true, includeUnassigned: true, … })
@@ -163,64 +190,51 @@ buildPatrolPresenceHeatmapDots(scopedPresences, { countedOnly: true, includeUnas
 
 ---
 
-## 5. Phạm vi BE (xác nhận — ít thay đổi)
+## 5. Tiêu chí nghiệm thu
 
-- Aggregator + `daystore.touch_*` + tripwire: **đã đủ** làm sổ cái.
-- Peak crowd: 1 **encounter** `obj-*` / camera / phiên peak — **đã có** (PR #220). Present count **không** gom.
-- Xác nhận mobile/live bundle trả `display_person_count` = số silhouette đủ gate khi peak active.
-- (Tuỳ chọn phase 2) Push/SSE khi upsert appearance để giảm trễ live **không** thêm nguồn thứ hai.
+### 5.1. Map ≡ KPI
 
----
+- [ ] Số chấm violet = `identity_count`
+- [ ] Số chấm sky = `person_count`
+- [ ] Số chấm green = `unassigned_observations` (lượt gặm)
+- [ ] Overlay góc map khớp ba số trên
 
-## 6. Tiêu chí nghiệm thu
+### 5.2. Peak (40 người: 5 iden + 3 pers + 32 obj)
 
-### 6.1. Nhất quán
+- [ ] Chấm: 5 + 3 + **32**
+- [ ] KPI Nhân sự = 8; Lượt gặp · ĐT = **32**
+- [ ] Tab sự kiện: **1 thẻ snapshot nhóm** cho phần 32 (UI), count ledger **32**
+- [ ] ROI: 40 bbox, `#1…#32` trên nhóm
 
-- [ ] Số chấm xanh `object` trên map ≤ `day_stats.unassigned_observations` (encounter counted, cùng ngày).
-- [ ] Click / hover chấm → cùng `subject_id` với popup lịch sử xuất hiện.
-- [ ] Peak ≥30 người, 35 silhouette:
-  - [ ] **Present:** `display_person_count` = **35** (không = 1)
-  - [ ] **Lượt gặp:** `unassigned_observations` +1 cho nhóm (không +35)
-  - [ ] **Map encounter:** 1 chấm xanh entity nhóm (+ chấm riêng người đã định danh)
-  - [ ] **ROI video:** `#1…#35`
+### 5.3. Một nguồn
 
-### 6.2. Không còn 3 nguồn
+- [ ] Không registry / events fallback trên map
+- [ ] Click chấm → cùng `subject_id` / `presence_seq` với popup lịch sử
 
-- [ ] Không gọi `getHeatmapPersonDots()` trong `PatrolDensityHeatmap`.
-- [ ] Không gọi `buildPatrolDayHeatmapDots()` cho map site.
-- [ ] `sessionStorage vifence_patrol_heatmap_persons_v2` không ảnh hưởng vị trí chấm map.
+### 5.4. Test
 
-### 6.3. Live (chấp nhận trễ)
-
-- [ ] Cam online + người trong site: chấm xuất hiện trong **≤30s** sau khi BE ghi presence (poll 3s + dwell).
-- [ ] Cam offline: chấm mờ / không `inCameraView` — không pin registry giả.
-
-### 6.4. Test
-
-- [ ] Cập nhật `patrolDayHeatmapDots.test.ts` — không test registry merge cho map.
-- [ ] Test integration: presences mock → `PatrolDensityHeatmap` filteredDots length khớp entity unique.
+- [ ] `test_patrol_peak_time.py`: N members → `unassigned_observations` +N (sau sửa BE)
+- [ ] `patrolDayHeatmapDots.test.ts`: object peak → N green dots
 
 ---
 
-## 7. Phase 2 (không chặn phase 1)
+## 6. Phase 2
 
 | Hạng mục | Mục đích |
 |----------|----------|
-| Poll presences 2s khi live | Giảm trễ cảm nhận |
-| SSE/WebSocket `presence_upsert` | Chấm gần realtime vẫn 1 nguồn |
-| Popup chấm nhóm peak | “Nhóm · N người” (`peak_group_size`) — present N tách khỏi 1 encounter |
-| Overlay hiện diện trên map | Bind `display_person_count` live, không suy từ số chấm encounter |
+| Poll presences 2–3s khi live | Giảm trễ |
+| SSE `presence_upsert` | Live vẫn 1 nguồn |
 
 ---
 
-## 8. Tài liệu liên quan
+## 7. Tài liệu liên quan
 
-- `specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md` — Rule 09, 10 (giữ nguyên triết lý)
-- `specs/module05/HELMET_UNIFIED_PIPELINE.md` — GPS/detections vào backend trước heatmap
-- Peak time: `backend-ai/app/patrol/peak_time.py`
+- `specs/module05/REALTIME_WORKFORCE_HEATMAP_SPECIFICATION.md`
+- `specs/module05/EVENT_AGGREGATOR_FEASIBILITY.md`
+- `backend-ai/app/patrol/peak_time.py`
 
 ---
 
-## 9. Ghi chú cho Ban TGĐ (one-liner)
+## 8. Ghi chú Ban TGĐ
 
-> **Lượt gặp trên bản đồ = sổ chính thức (giờ đông gom 1 đối tượng). Hiện diện = đếm đủ số người trong khung — hai con số khác nhau, cùng đúng nghiệp vụ.**
+> **Chấm bản đồ = số liệu báo cáo. Giờ đông: ảnh sự kiện gom một nhóm, nhưng lượt gặp vẫn đếm đủ từng người chưa nhận diện.**
