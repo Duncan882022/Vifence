@@ -119,20 +119,38 @@ function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAp
   })
 }
 
-/** Gắn ảnh card (mới nhất) vào lượt gặp duy nhất khi khác ảnh lịch sử (đầu phiên). */
+/** Gắn ảnh card vào lượt gặp khi thiếu snapshot hoặc cần ảnh mới nhất. */
 function enrichAppearanceSegmentsWithCardSnapshot(
   segments: PatrolAppearanceSegment[],
   event: PatrolEvent,
 ): PatrolAppearanceSegment[] {
-  if (segments.length !== 1) return segments
   const cardSnap = event.snapshotUrl?.trim()
-  const histSnap = segments[0]?.snapshotUrl?.trim()
-  if (!cardSnap || cardSnap === histSnap) return segments
-  return [{ ...segments[0], latestSnapshotUrl: cardSnap }]
+  if (!cardSnap || segments.length === 0) return segments
+
+  const attachCard = (segment: PatrolAppearanceSegment): PatrolAppearanceSegment => {
+    const histSnap = segment.snapshotUrl?.trim()
+    if (!histSnap) return { ...segment, snapshotUrl: cardSnap }
+    if (cardSnap === histSnap) return segment
+    return { ...segment, latestSnapshotUrl: cardSnap }
+  }
+
+  if (segments.length === 1) return [attachCard(segments[0])]
+
+  // Lượt mới nhất (đầu list desc) hay thiếu ảnh dù thẻ sự kiện đã có.
+  return [attachCard(segments[0]), ...segments.slice(1)]
 }
 
 function snapshotSelectionKey(rowKey: string, variant: 'history' | 'latest'): string {
-  return `${rowKey}:${variant}`
+  return `${rowKey}::${variant}`
+}
+
+function parseSnapshotSelectionKey(selectionKey: string): { rowKey: string; variant: 'history' | 'latest' } | null {
+  const sep = selectionKey.lastIndexOf('::')
+  if (sep <= 0) return null
+  const rowKey = selectionKey.slice(0, sep)
+  const variant = selectionKey.slice(sep + 2)
+  if (variant !== 'history' && variant !== 'latest') return null
+  return { rowKey, variant }
 }
 
 function resolveSnapshotFromSelection(
@@ -141,7 +159,9 @@ function resolveSnapshotFromSelection(
   event: PatrolEvent | null,
 ): string | undefined {
   if (!selectionKey) return undefined
-  const [rowKey, variant] = selectionKey.split(':') as [string, 'history' | 'latest' | undefined]
+  const parsed = parseSnapshotSelectionKey(selectionKey)
+  if (!parsed) return undefined
+  const { rowKey, variant } = parsed
   const segment = segments.find(s => appearanceRowKey(s) === rowKey)
   if (!segment) return undefined
   if (variant === 'latest') {
@@ -416,7 +436,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
-    || Boolean(activeSnapshotUrl && (!hasAppearanceHistory || selectedAppearanceKey))
+    || Boolean(activeSnapshotUrl && !hasAppearanceHistory)
 
   return createPortal(
     <div
@@ -578,7 +598,10 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                     const historyThumb = segment.snapshotUrl?.trim()
                     const latestThumb = segment.latestSnapshotUrl?.trim()
                     const hasDualSnapshots = Boolean(historyThumb && latestThumb && historyThumb !== latestThumb)
-                    const rowSelected = selectedAppearanceKey?.startsWith(`${rowKey}:`) ?? false
+                    const rowSelected = selectedAppearanceKey?.startsWith(`${rowKey}::`) ?? false
+                    const rowPreviewUrl = rowSelected
+                      ? resolveSnapshotFromSelection(appearanceSegments, selectedAppearanceKey, event)
+                      : undefined
                     const gps = resolveAppearanceGps(segment)
                     const camLabel = resolveAppearanceCameraLabel(segment)
 
@@ -602,8 +625,10 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             selectSnapshot(selectionKey, url)
                           }}
                           className={cn(
-                            'relative shrink-0 overflow-hidden rounded-md border bg-black transition-colors',
-                            hasDualSnapshots ? 'w-[52px] h-[52px]' : 'w-[72px] h-[52px]',
+                            'relative shrink-0 self-stretch overflow-hidden rounded-md border bg-black transition-colors',
+                            hasDualSnapshots
+                              ? 'w-[88px] min-h-[72px] aspect-[4/3]'
+                              : 'w-[112px] min-h-[84px] aspect-[4/3]',
                             picked
                               ? 'border-sky-400/60 ring-1 ring-sky-400/40'
                               : 'border-[#1e2433]/90 hover:border-sky-400/40',
@@ -637,13 +662,14 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                       <div
                         key={rowKey}
                         className={cn(
-                          'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',
+                          'w-full rounded-lg border text-left transition-colors',
                           rowSelected
                             ? 'border-sky-400/50 bg-sky-500/10 ring-1 ring-sky-400/30'
                             : 'border-[#1e2433] bg-[#0a0e17]',
                         )}
                       >
-                        <div className={cn('flex shrink-0 gap-1', hasDualSnapshots ? 'flex-col sm:flex-row' : '')}>
+                        <div className="flex items-stretch gap-2.5 px-2 py-2">
+                        <div className={cn('flex shrink-0 gap-1.5 self-stretch', hasDualSnapshots ? 'flex-col sm:flex-row' : '')}>
                           {renderThumb(historyThumb || latestThumb, historyKey, 'Đầu')}
                           {hasDualSnapshots && renderThumb(latestThumb, latestKey, 'Mới')}
                         </div>
@@ -707,6 +733,17 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             </span>
                           </div>
                         </button>
+                        </div>
+                        {rowPreviewUrl && (
+                          <div className="px-2 pb-2 pt-0">
+                            <PatrolEventSnapshot
+                              key={`${rowKey}:${selectedAppearanceKey}:${rowPreviewUrl}`}
+                              event={event}
+                              snapshotUrl={rowPreviewUrl}
+                              variant="detail"
+                            />
+                          </div>
+                        )}
                       </div>
                     )
                   })}
