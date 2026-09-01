@@ -132,6 +132,7 @@ class AggregatorReIdTest(unittest.TestCase):
         apply_reclaim(s2, reclaimed, now=140.0)
         self.assertEqual(s2.session_id, "sess-merge-1")
         self.assertEqual(s2.subject_id, "pers-0001")
+        self.assertIsNone(s2.appearance_row_id)
         reset()
 
 
@@ -537,7 +538,8 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         self.assertEqual(s2.session_id, "sess-shared")
         self.assertTrue(s2.committed)
 
-    def test_upsert_coalesces_second_track_same_subject(self) -> None:
+    def test_upsert_separate_rows_for_different_sessions(self) -> None:
+        """Hai session khác nhau — mỗi lần đi qua một lượt, không gộp theo GPS/gap."""
         from app.patrol import daystore, db
 
         row1 = daystore.upsert_track_appearance(
@@ -572,9 +574,9 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             interactions_json="[]",
             snapshot_path="2026-08-30/tk-0000007-1025.jpg",
         )
-        self.assertEqual(row1, row2)
+        self.assertNotEqual(row1, row2)
         rows = daystore.list_day_presences("2026-08-30")
-        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(rows), 2)
         snap = db.query_one(
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (row1,),

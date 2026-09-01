@@ -983,18 +983,6 @@ def upsert_track_appearance(
     counted_int = 1 if counted else 0
     with db.tx() as conn:
         row_id = appearance_id
-        if row_id is None:
-            extend = conn.execute(
-                "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end"
-                " FROM appearances"
-                " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
-                " ORDER BY ended_at DESC LIMIT 1",
-                (event_date, subject_id, camera_id),
-            ).fetchone()
-            if extend is not None and should_extend_presence(
-                extend, ended_at, gps_lat, gps_lng, camera_id=camera_id,
-            ):
-                row_id = int(extend["id"])
 
         if row_id is not None:
             set_parts = [

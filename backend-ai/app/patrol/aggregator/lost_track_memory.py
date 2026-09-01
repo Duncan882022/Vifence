@@ -148,15 +148,15 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None =
         session.zone_id = slot.zone_id
     if same_encounter:
         session.session_id = slot.session_id
-        session.appearance_row_id = slot.appearance_row_id
     else:
         # Phiên stream mới — không kế thừa trạng thái flush/appearance đã chốt.
         session.committed = False
         session.last_flush_at = 0.0
-        session.appearance_row_id = None
         from .session_store import _new_session_id
 
         session.session_id = _new_session_id(session.camera_id, session.track_id)
+    # Track đã finalize = đã rời khung — lượt mới dù reclaim cùng pers trong gap ngắn.
+    session.appearance_row_id = None
     session.dirty = True
 
 
