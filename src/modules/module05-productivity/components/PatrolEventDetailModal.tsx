@@ -402,9 +402,12 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     ? summary.cardDisplay.title
     : event.violationLabel
   const hasAppearanceHistory = appearanceSegments.length > 0
+  const isProfileStage = stage === 'profile'
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
+  const historySectionTitle = isProfileStage ? 'Lần gặp trong ngày' : 'Lịch sử xuất hiện'
+  const showTrackMeta = !isProfileStage
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
     || Boolean(activeSnapshotUrl && !hasAppearanceHistory)
 
@@ -433,7 +436,13 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
               <p id="patrol-event-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
                 {modalTitle}
               </p>
-              {stage !== 'profile' && (
+              {stage === 'profile' ? (
+                summary.cardDisplay.subtitle !== '—' ? (
+                  <p className="text-[9px] mt-0.5 truncate text-muted-foreground">
+                    {summary.cardDisplay.subtitle}
+                  </p>
+                ) : null
+              ) : (
                 <p className="text-[9px] mt-0.5 truncate">
                   <span className={cn('font-medium', meta.color)}>{summary.stageMeta.label}</span>
                   {summary.cardDisplay.subtitle !== '—' ? (
@@ -554,7 +563,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
               <div className="flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
                 <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
-                  Lịch sử xuất hiện
+                  {historySectionTitle}
                 </span>
               </div>
               {appearancesLoading && !hasAppearanceHistory ? (
@@ -625,15 +634,17 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             </span>
                             {segment.presenceSeq != null && segment.presenceSeq > 0 && (
                               <span className="text-[8px] text-sky-400/90 font-semibold">
-                                Lượt #{segment.presenceSeq}
+                                {isProfileStage && appearanceSegments.length === 1
+                                  ? 'Hôm nay'
+                                  : `Lượt #${segment.presenceSeq}`}
                               </span>
                             )}
-                            {segment.trackId && (
+                            {showTrackMeta && segment.trackId && (
                               <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[100px]">
                                 {segment.trackId}
                               </span>
                             )}
-                            {segment.sessionId && (
+                            {showTrackMeta && segment.sessionId && (
                               <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[120px]" title={segment.sessionId}>
                                 {segment.sessionId}
                               </span>
@@ -644,7 +655,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               </span>
                             )}
                           </div>
-                          {segment.interactions && segment.interactions.length > 0 && (
+                          {showTrackMeta && segment.interactions && segment.interactions.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {segment.interactions.map((item, idx) => (
                                 <span
@@ -656,10 +667,13 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               ))}
                             </div>
                           )}
+                          {!isProfileStage && (
                           <div className="flex items-center gap-1 min-w-0">
                             <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
                             <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
                           </div>
+                          )}
+                          {!isProfileStage && (
                           <div className="flex items-center gap-1 min-w-0">
                             <MapPin className="w-3 h-3 text-emerald-400/80 shrink-0" aria-hidden />
                             <span className="text-[9px] text-muted-foreground font-mono truncate">
@@ -669,6 +683,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               )}
                             </span>
                           </div>
+                          )}
                         </button>
                         </div>
                         {rowPreviewUrl && (
