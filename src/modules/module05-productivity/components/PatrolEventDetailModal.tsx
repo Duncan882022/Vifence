@@ -119,58 +119,27 @@ function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAp
   })
 }
 
-/** Gắn ảnh card vào lượt gặp khi thiếu snapshot hoặc cần ảnh mới nhất. */
-function enrichAppearanceSegmentsWithCardSnapshot(
+/** Lượt mới nhất (đầu list desc) thiếu ảnh — lấy từ thẻ sự kiện. Backend giữ nguyên. */
+function fillMissingNewestAppearanceSnapshot(
   segments: PatrolAppearanceSegment[],
   event: PatrolEvent,
 ): PatrolAppearanceSegment[] {
   const cardSnap = event.snapshotUrl?.trim()
   if (!cardSnap || segments.length === 0) return segments
-
-  const attachCard = (segment: PatrolAppearanceSegment): PatrolAppearanceSegment => {
-    const histSnap = segment.snapshotUrl?.trim()
-    if (!histSnap) return { ...segment, snapshotUrl: cardSnap }
-    if (cardSnap === histSnap) return segment
-    return { ...segment, latestSnapshotUrl: cardSnap }
-  }
-
-  if (segments.length === 1) return [attachCard(segments[0])]
-
-  // Lượt mới nhất (đầu list desc) hay thiếu ảnh dù thẻ sự kiện đã có.
-  return [attachCard(segments[0]), ...segments.slice(1)]
+  const [newest, ...rest] = segments
+  if (newest.snapshotUrl?.trim()) return segments
+  return [{ ...newest, snapshotUrl: cardSnap }, ...rest]
 }
 
-function snapshotSelectionKey(rowKey: string, variant: 'history' | 'latest'): string {
-  return `${rowKey}::${variant}`
-}
-
-function parseSnapshotSelectionKey(selectionKey: string): { rowKey: string; variant: 'history' | 'latest' } | null {
-  const sep = selectionKey.lastIndexOf('::')
-  if (sep <= 0) return null
-  const rowKey = selectionKey.slice(0, sep)
-  const variant = selectionKey.slice(sep + 2)
-  if (variant !== 'history' && variant !== 'latest') return null
-  return { rowKey, variant }
-}
-
-function resolveSnapshotFromSelection(
-  segments: PatrolAppearanceSegment[],
-  selectionKey: string | null,
-  event: PatrolEvent | null,
+/** Một ảnh / dòng — lượt mới nhất đồng bộ ảnh thẻ sự kiện. */
+function resolveRowSnapshotUrl(
+  segment: PatrolAppearanceSegment,
+  event: PatrolEvent,
+  isNewestSegment: boolean,
 ): string | undefined {
-  if (!selectionKey) return undefined
-  const parsed = parseSnapshotSelectionKey(selectionKey)
-  if (!parsed) return undefined
-  const { rowKey, variant } = parsed
-  const segment = segments.find(s => appearanceRowKey(s) === rowKey)
-  if (!segment) return undefined
-  if (variant === 'latest') {
-    return segment.latestSnapshotUrl?.trim() || event?.snapshotUrl?.trim() || undefined
-  }
-  return segment.snapshotUrl?.trim()
-    || segment.latestSnapshotUrl?.trim()
-    || event?.snapshotUrl?.trim()
-    || undefined
+  const card = event.snapshotUrl?.trim()
+  if (isNewestSegment && card) return card
+  return segment.snapshotUrl?.trim() || card || undefined
 }
 
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } {
@@ -279,7 +248,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     void fetchPatrolSubjectAppearances(subjectId, appearanceDate).then(segments => {
       if (cancelled) return
       const sorted = dedupeAppearanceSegments(
-        enrichAppearanceSegmentsWithCardSnapshot(
+        fillMissingNewestAppearanceSnapshot(
           [...segments].sort((a, b) => b.startedAt - a.startedAt),
           event,
         ),
@@ -411,12 +380,13 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   const activeSnapshotUrl = useMemo(() => {
     if (faceGalleryOpen) return undefined
-    const fromSelection = resolveSnapshotFromSelection(
-      appearanceSegments,
-      selectedAppearanceKey,
-      event,
-    )
-    if (fromSelection) return fromSelection
+    if (selectedAppearanceKey && event) {
+      const idx = appearanceSegments.findIndex(s => appearanceRowKey(s) === selectedAppearanceKey)
+      const segment = appearanceSegments[idx]
+      if (segment) {
+        return resolveRowSnapshotUrl(segment, event, idx === 0)
+      }
+    }
     if (appearanceSegments.length === 0) {
       return event?.snapshotUrl
     }
@@ -432,9 +402,12 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     ? summary.cardDisplay.title
     : event.violationLabel
   const hasAppearanceHistory = appearanceSegments.length > 0
+  const isProfileStage = stage === 'profile'
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
+  const historySectionTitle = isProfileStage ? 'Lần gặp trong ngày' : 'Lịch sử xuất hiện'
+  const showTrackMeta = !isProfileStage
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
     || Boolean(activeSnapshotUrl && !hasAppearanceHistory)
 
@@ -463,7 +436,13 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
               <p id="patrol-event-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
                 {modalTitle}
               </p>
-              {stage !== 'profile' && (
+              {stage === 'profile' ? (
+                summary.cardDisplay.subtitle !== '—' ? (
+                  <p className="text-[9px] mt-0.5 truncate text-muted-foreground">
+                    {summary.cardDisplay.subtitle}
+                  </p>
+                ) : null
+              ) : (
                 <p className="text-[9px] mt-0.5 truncate">
                   <span className={cn('font-medium', meta.color)}>{summary.stageMeta.label}</span>
                   {summary.cardDisplay.subtitle !== '—' ? (
@@ -584,78 +563,26 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
               <div className="flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden />
                 <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
-                  Lịch sử xuất hiện
+                  {historySectionTitle}
                 </span>
               </div>
               {appearancesLoading && !hasAppearanceHistory ? (
                 <p className="text-[9px] text-muted-foreground/70">Đang tải…</p>
               ) : (
                 <div className="space-y-1.5">
-                  {appearanceSegments.map(segment => {
+                  {appearanceSegments.map((segment, segmentIndex) => {
                     const rowKey = appearanceRowKey(segment)
-                    const historyKey = snapshotSelectionKey(rowKey, 'history')
-                    const latestKey = snapshotSelectionKey(rowKey, 'latest')
-                    const historyThumb = segment.snapshotUrl?.trim()
-                    const latestThumb = segment.latestSnapshotUrl?.trim()
-                    const hasDualSnapshots = Boolean(historyThumb && latestThumb && historyThumb !== latestThumb)
-                    const rowSelected = selectedAppearanceKey?.startsWith(`${rowKey}::`) ?? false
-                    const rowPreviewUrl = rowSelected
-                      ? resolveSnapshotFromSelection(appearanceSegments, selectedAppearanceKey, event)
-                      : undefined
+                    const isNewestSegment = segmentIndex === 0
+                    const thumbUrl = resolveRowSnapshotUrl(segment, event, isNewestSegment)
+                    const rowSelected = selectedAppearanceKey === rowKey
+                    const rowPreviewUrl = rowSelected ? thumbUrl : undefined
                     const gps = resolveAppearanceGps(segment)
                     const camLabel = resolveAppearanceCameraLabel(segment)
 
-                    const selectSnapshot = (selectionKey: string, url?: string) => {
-                      if (url) preloadPatrolEventSnapshot(url)
-                      setSelectedAppearanceKey(prev => (prev === selectionKey ? null : selectionKey))
+                    const selectRow = () => {
+                      if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
+                      setSelectedAppearanceKey(prev => (prev === rowKey ? null : rowKey))
                       setFaceGalleryOpen(false)
-                    }
-
-                    const renderThumb = (
-                      url: string | undefined,
-                      selectionKey: string,
-                      label: string,
-                    ) => {
-                      const picked = selectedAppearanceKey === selectionKey
-                      return (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            selectSnapshot(selectionKey, url)
-                          }}
-                          className={cn(
-                            'relative shrink-0 self-stretch overflow-hidden rounded-md border bg-black transition-colors',
-                            hasDualSnapshots
-                              ? 'w-[88px] min-h-[72px] aspect-[4/3]'
-                              : 'w-[112px] min-h-[84px] aspect-[4/3]',
-                            picked
-                              ? 'border-sky-400/60 ring-1 ring-sky-400/40'
-                              : 'border-[#1e2433]/90 hover:border-sky-400/40',
-                          )}
-                          title={label}
-                          aria-label={label}
-                        >
-                          {url ? (
-                            <img
-                              src={url}
-                              alt=""
-                              className="absolute inset-0 h-full w-full object-cover"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
-                              <ImageOff className="w-4 h-4" aria-hidden />
-                            </div>
-                          )}
-                          {hasDualSnapshots && (
-                            <span className="absolute bottom-0 inset-x-0 text-center text-[6px] font-semibold text-white/90 bg-black/60 py-0.5">
-                              {label}
-                            </span>
-                          )}
-                        </button>
-                      )
                     }
 
                     return (
@@ -669,75 +596,100 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                         )}
                       >
                         <div className="flex items-stretch gap-2.5 px-2 py-2">
-                          <div className={cn('flex shrink-0 gap-1.5 self-stretch', hasDualSnapshots ? 'flex-row' : '')}>
-                            {renderThumb(historyThumb || latestThumb, historyKey, 'Đầu')}
-                            {hasDualSnapshots && renderThumb(latestThumb, latestKey, 'Mới')}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const fallback = historyThumb || latestThumb
-                              const key = historyThumb ? historyKey : latestKey
-                              selectSnapshot(key, fallback)
-                            }}
-                            className="min-w-0 flex-1 space-y-1 py-0.5 text-left"
-                          >
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[10px] tabular-nums font-semibold text-foreground">
-                                {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
-                              </span>
-                              {segment.presenceSeq != null && segment.presenceSeq > 0 && (
-                                <span className="text-[8px] text-sky-400/90 font-semibold">
-                                  Lượt #{segment.presenceSeq}
-                                </span>
-                              )}
-                              {segment.trackId && (
-                                <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[100px]" title={segment.trackId}>
-                                  {segment.trackId}
-                                </span>
-                              )}
-                              {segment.sessionId && (
-                                <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[140px]" title={segment.sessionId}>
-                                  {segment.sessionId}
-                                </span>
-                              )}
-                              {segment.counted && (
-                                <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold">
-                                  Đã đếm
-                                </span>
-                              )}
+                        <button
+                          type="button"
+                          onClick={selectRow}
+                          className={cn(
+                            'relative shrink-0 self-stretch overflow-hidden rounded-md border bg-black transition-colors',
+                            'w-[112px] min-h-[84px] aspect-[4/3]',
+                            rowSelected
+                              ? 'border-sky-400/60 ring-1 ring-sky-400/40'
+                              : 'border-[#1e2433]/90 hover:border-sky-400/40',
+                          )}
+                          title="Xem ảnh evidence"
+                          aria-label="Xem ảnh evidence"
+                        >
+                          {thumbUrl ? (
+                            <img
+                              src={thumbUrl}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
+                              <ImageOff className="w-4 h-4" aria-hidden />
                             </div>
-                            {segment.interactions && segment.interactions.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {segment.interactions.map((item, idx) => (
-                                  <span
-                                    key={`${item.object_id}-${item.timestamp}-${idx}`}
-                                    className="text-[8px] px-1 py-0.5 rounded bg-amber-400/10 text-amber-300/90 font-mono"
-                                  >
-                                    {item.action} · {item.object_id}
-                                  </span>
-                                ))}
-                              </div>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={selectRow}
+                          className="min-w-0 flex-1 space-y-1 py-0.5 text-left"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] tabular-nums font-semibold text-foreground">
+                              {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
+                            </span>
+                            {segment.presenceSeq != null && segment.presenceSeq > 0 && (
+                              <span className="text-[8px] text-sky-400/90 font-semibold">
+                                {isProfileStage && appearanceSegments.length === 1
+                                  ? 'Hôm nay'
+                                  : `Lượt #${segment.presenceSeq}`}
+                              </span>
                             )}
-                            <div className="flex items-center gap-1 min-w-0">
-                              <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
-                              <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
-                            </div>
-                            <div className="flex items-center gap-1 min-w-0">
-                              <MapPin className="w-3 h-3 text-emerald-400/80 shrink-0" aria-hidden />
-                              <span className="text-[9px] text-muted-foreground font-mono truncate">
-                                {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
-                                {(segment.gpsLat == null && segment.gpsLatEnd == null) && (
-                                  <span className="text-muted-foreground/60"> · mặc định</span>
-                                )}
+                            {showTrackMeta && segment.trackId && (
+                              <span className="text-[8px] text-violet-400/90 font-mono truncate max-w-[100px]">
+                                {segment.trackId}
                               </span>
+                            )}
+                            {showTrackMeta && segment.sessionId && (
+                              <span className="text-[8px] text-emerald-400/90 font-mono truncate max-w-[120px]" title={segment.sessionId}>
+                                {segment.sessionId}
+                              </span>
+                            )}
+                            {segment.counted && (
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold">
+                                Đã đếm
+                              </span>
+                            )}
+                          </div>
+                          {showTrackMeta && segment.interactions && segment.interactions.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {segment.interactions.map((item, idx) => (
+                                <span
+                                  key={`${item.object_id}-${item.timestamp}-${idx}`}
+                                  className="text-[8px] px-1 py-0.5 rounded bg-amber-400/10 text-amber-300/90 font-mono"
+                                >
+                                  {item.action} · {item.object_id}
+                                </span>
+                              ))}
                             </div>
-                          </button>
+                          )}
+                          {!isProfileStage && (
+                          <div className="flex items-center gap-1 min-w-0">
+                            <Camera className="w-3 h-3 text-cyan-400/80 shrink-0" aria-hidden />
+                            <span className="text-[9px] text-foreground/90 truncate">{camLabel}</span>
+                          </div>
+                          )}
+                          {!isProfileStage && (
+                          <div className="flex items-center gap-1 min-w-0">
+                            <MapPin className="w-3 h-3 text-emerald-400/80 shrink-0" aria-hidden />
+                            <span className="text-[9px] text-muted-foreground font-mono truncate">
+                              {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
+                              {(segment.gpsLat == null && segment.gpsLatEnd == null) && (
+                                <span className="text-muted-foreground/60"> · mặc định</span>
+                              )}
+                            </span>
+                          </div>
+                          )}
+                        </button>
                         </div>
                         {rowPreviewUrl && (
                           <div className="px-2 pb-2 pt-0">
                             <PatrolEventSnapshot
-                              key={`${rowKey}:${selectedAppearanceKey}:${rowPreviewUrl}`}
+                              key={`${rowKey}:${rowPreviewUrl}`}
                               event={event}
                               snapshotUrl={rowPreviewUrl}
                               variant="detail"
