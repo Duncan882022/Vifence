@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Plus, Loader2, Trash2, Pencil, X, Upload, FileDown, Download, Image as ImageIcon } from 'lucide-react'
 import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
@@ -36,6 +36,60 @@ const INITIAL_FORM: FormState = {
   faceFrontUrlPreview: null,
   faceLeftUrlPreview: null,
   faceRightUrlPreview: null,
+}
+
+interface FacePhotoSlotProps {
+  label: string
+  displayUrl: string | null
+  onPick: (file: File | null) => void
+}
+
+function FacePhotoSlot({ label, displayUrl, onPick }: FacePhotoSlotProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <div className="relative flex flex-col">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => {
+          onPick(e.target.files?.[0] ?? null)
+          e.target.value = ''
+        }}
+      />
+      {displayUrl ? (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="relative h-28 w-full overflow-hidden rounded-lg border border-[#1e2433] bg-black group"
+          title={`Đổi ảnh ${label}`}
+        >
+          <img src={displayUrl} alt={label} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-white">
+              <Upload className="w-3.5 h-3.5" />
+              Đổi ảnh
+            </span>
+          </div>
+          <span className="absolute bottom-1 left-1 right-1 text-center text-[8px] font-medium text-white/90 bg-black/55 rounded py-0.5">
+            {label}
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex h-28 w-full flex-col items-center justify-center rounded-lg border border-dashed border-[#1e2433] bg-[#0b0f1a] text-muted-foreground/50 transition-colors hover:border-primary/40 hover:bg-[#1a2235] hover:text-muted-foreground"
+        >
+          <ImageIcon className="mb-1 h-5 w-5" />
+          <span className="text-[9px] font-medium uppercase tracking-wider">{label}</span>
+          <span className="mt-0.5 text-[8px] text-muted-foreground/60">Chọn ảnh</span>
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function WorkerManagementPage() {
@@ -412,48 +466,26 @@ export function WorkerManagementPage() {
                 Ảnh khuôn mặt (Tuỳ chọn)
               </span>
               <div className="grid grid-cols-3 gap-2">
-                {[
+                {([
                   { key: 'faceLeft', label: 'Mặt trái' },
                   { key: 'faceFront', label: 'Chính diện' },
-                  { key: 'faceRight', label: 'Mặt phải' }
-                ].map((item) => {
+                  { key: 'faceRight', label: 'Mặt phải' },
+                ] as const).map((item) => {
                   const fileKey = `${item.key}File` as keyof FormState
                   const previewKey = `${item.key}UrlPreview` as keyof FormState
-                  
                   const file = form[fileKey] as File | null
                   const previewUrl = form[previewKey] as string | null
                   const displayUrl = file ? URL.createObjectURL(file) : previewUrl
 
                   return (
-                    <label
+                    <FacePhotoSlot
                       key={item.key}
-                      className="relative flex flex-col items-center justify-center h-24 border border-dashed border-[#1e2433] rounded-lg bg-[#0b0f1a] hover:bg-[#1a2235] transition-colors cursor-pointer overflow-hidden group"
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0] || null
-                          if (f) {
-                            setForm(prev => ({ ...prev, [fileKey]: f }))
-                          }
-                        }}
-                      />
-                      {displayUrl ? (
-                        <div className="absolute inset-0">
-                          <img src={displayUrl} alt={item.label} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Upload className="w-4 h-4 text-white" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-                          <ImageIcon className="w-5 h-5 mb-1" />
-                          <span className="text-[9px] font-medium uppercase tracking-wider">{item.label}</span>
-                        </div>
-                      )}
-                    </label>
+                      label={item.label}
+                      displayUrl={displayUrl}
+                      onPick={(picked) => {
+                        setForm(prev => ({ ...prev, [fileKey]: picked }))
+                      }}
+                    />
                   )
                 })}
               </div>

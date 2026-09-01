@@ -332,26 +332,56 @@ export function WorkerProfileManagementPage() {
               Tải file mẫu (.xlsx)
             </button>
 
-            <label className="block">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Chọn file</span>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={e => {
-                  setImportFile(e.target.files?.[0] ?? null)
-                  setImportResult(null)
-                  setImportError(null)
-                }}
-                className="block w-full text-[10px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-primary file:text-primary-foreground"
-              />
-            </label>
-
-            {importFile && (
-              <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                <FileSpreadsheet className="w-3 h-3" />
-                {importFile.name}
-              </p>
-            )}
+            <div className="space-y-2">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">File Excel</span>
+              {importFile ? (
+                <div className="flex items-center gap-2 rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5">
+                  <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
+                  <span className="flex-1 min-w-0 text-[10px] font-medium truncate">{importFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFile(null)
+                      setImportResult(null)
+                      setImportError(null)
+                    }}
+                    className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    aria-label="Bỏ file"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <label className="shrink-0 cursor-pointer inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold border border-[#1e2433] hover:bg-[#1a2235]">
+                    <Upload className="w-3 h-3" />
+                    Đổi file
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="sr-only"
+                      onChange={e => {
+                        setImportFile(e.target.files?.[0] ?? null)
+                        setImportResult(null)
+                        setImportError(null)
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-2 h-24 rounded-lg border border-dashed border-[#1e2433] bg-[#0a0e17] hover:bg-[#0c1019] hover:border-primary/40 cursor-pointer transition-colors">
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-[10px] font-semibold text-muted-foreground">Chọn file Excel</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="sr-only"
+                    onChange={e => {
+                      setImportFile(e.target.files?.[0] ?? null)
+                      setImportResult(null)
+                      setImportError(null)
+                    }}
+                  />
+                </label>
+              )}
+            </div>
 
             {importError && (
               <p className="text-[10px] text-red-400">{importError}</p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertCircle, CheckCircle, Loader2, Pencil, ScanFace, Trash2, X,
@@ -13,6 +13,12 @@ import {
   type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
+import {
+  fetchPatrolGalleryFaces,
+  resolveFrontGalleryFaceUrl,
+  type PatrolGalleryFacePose,
+} from '../services/patrolGalleryFaces.service'
+import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
@@ -26,6 +32,74 @@ function tsLabel(ts: number | null | undefined): string {
   return formatTime(new Date(ts * 1000))
 }
 
+function ProfileFaceGrid({
+  poses,
+  compact = false,
+}: {
+  poses: PatrolGalleryFacePose[]
+  compact?: boolean
+}) {
+  const captured = poses.filter(p => p.captured && p.url)
+  const capturedCount = captured.length
+  const complete = poses.length > 0 && capturedCount >= poses.length
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+          Khuôn mặt đã quét
+        </span>
+        <span className={cn(
+          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border tabular-nums',
+          complete
+            ? 'bg-green-400/10 text-green-400 border-green-400/30'
+            : capturedCount > 0
+              ? 'bg-violet-400/10 text-violet-400 border-violet-400/30'
+              : 'bg-amber-400/10 text-amber-400 border-amber-400/30',
+        )}>
+          <ScanFace className="w-2.5 h-2.5" />
+          {capturedCount}/{poses.length || 4}
+        </span>
+      </div>
+      <div className={cn(
+        'grid gap-1.5',
+        compact ? 'grid-cols-4' : 'grid-cols-2 sm:grid-cols-4',
+      )}>
+        {(poses.length > 0 ? poses : [1, 2, 3, 4].map(slot => ({
+          slot,
+          label: `Góc ${slot}`,
+          captured: false,
+          filename: '',
+          url: null,
+        }))).map(pose => (
+          <div
+            key={pose.slot}
+            className="relative aspect-square rounded-lg overflow-hidden border border-[#1e2433] bg-[#0a0e17]"
+          >
+            {pose.url ? (
+              <img
+                src={pose.url}
+                alt={pose.label}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/40 p-1">
+                <ScanFace className="w-4 h-4 mb-0.5" />
+                <span className="text-[7px] text-center leading-tight">{pose.label}</span>
+              </div>
+            )}
+            {pose.captured && (
+              <span className="absolute top-0.5 right-0.5 rounded-full bg-black/55 p-0.5">
+                <CheckCircle className="w-3 h-3 text-green-400" />
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function WorkerProfileDetailModal({
   persId,
   initialMode = 'view',
@@ -35,6 +109,7 @@ export function WorkerProfileDetailModal({
   const [mode, setMode] = useState<'view' | 'edit'>(initialMode)
   const [person, setPerson] = useState<PatrolWorkerPerson | null>(null)
   const [enrollment, setEnrollment] = useState<PatrolScanEnrollment | null>(null)
+  const [facePoses, setFacePoses] = useState<PatrolGalleryFacePose[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -44,6 +119,11 @@ export function WorkerProfileDetailModal({
   const [fullName, setFullName] = useState('')
   const [employeeCode, setEmployeeCode] = useState('')
   const [contractor, setContractor] = useState('')
+
+  const frontFaceUrl = useMemo(
+    () => resolveFrontGalleryFaceUrl(facePoses),
+    [facePoses],
+  )
 
   const load = useCallback(async () => {
     if (!persId) return
@@ -59,6 +139,16 @@ export function WorkerProfileDetailModal({
       setFullName(p.full_name ?? '')
       setEmployeeCode(p.employee_code ?? '')
       setContractor(p.contractor ?? '')
+
+      const wid = p.employee_code?.trim()
+        ? patrolGalleryWorkerIdFromEmployeeCode(p.employee_code)
+        : null
+      if (wid) {
+        const poses = await fetchPatrolGalleryFaces(wid).catch(() => [])
+        setFacePoses(poses)
+      } else {
+        setFacePoses([])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được hồ sơ.')
     } finally {
@@ -73,6 +163,7 @@ export function WorkerProfileDetailModal({
     else {
       setPerson(null)
       setEnrollment(null)
+      setFacePoses([])
     }
   }, [persId, initialMode, load])
 
@@ -115,6 +206,20 @@ export function WorkerProfileDetailModal({
     }
   }
 
+  const scanHref = person?.employee_code
+    ? `/module05/quet-mat?code=${encodeURIComponent(person.employee_code)}`
+    : '/module05/quet-mat'
+
+  const displayPoses = facePoses.length > 0
+    ? facePoses
+    : (enrollment?.poses ?? []).map(p => ({
+      slot: p.slot,
+      label: p.label,
+      captured: p.captured,
+      filename: '',
+      url: null as string | null,
+    }))
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <button
@@ -148,60 +253,28 @@ export function WorkerProfileDetailModal({
             </div>
           ) : person && mode === 'view' ? (
             <>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Họ tên</p>
-                  <p className="text-sm font-semibold mt-0.5">{person.full_name ?? person.display_name}</p>
+              <div className="flex items-start gap-3 rounded-lg border border-[#1e2433] bg-[#0a0e17] p-3">
+                <div className="w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-[#1e2433] bg-[#070a12] flex items-center justify-center">
+                  {frontFaceUrl ? (
+                    <img src={frontFaceUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <ScanFace className="w-6 h-6 text-violet-400/50" />
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Mã NV</p>
-                    <p className="text-sm font-mono mt-0.5">{person.employee_code ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Đơn vị</p>
-                    <p className="text-sm mt-0.5">{person.contractor ?? '—'}</p>
-                  </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm font-semibold leading-snug">{person.full_name ?? person.display_name}</p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {[person.employee_code, person.contractor].filter(Boolean).join(' · ') || '—'}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground/70 font-mono truncate">{person.pers_id}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-[10px]">
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Mã nội bộ</p>
-                    <p className="font-mono text-muted-foreground mt-0.5">{person.pers_id}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Vector mặt</p>
-                    <p className={cn(
-                      'mt-0.5 font-semibold tabular-nums',
-                      person.face_enrollment_complete ? 'text-green-400' : 'text-violet-400',
-                    )}>
-                      {person.face_count ?? 0}/4
-                      {person.face_enrollment_complete && ' ✓'}
-                    </p>
-                  </div>
-                </div>
-                {enrollment && (
-                  <div className="rounded-lg border border-[#1e2433] p-3 space-y-1.5">
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Góc đã quét</p>
-                    {enrollment.poses.map(pose => (
-                      <div key={pose.slot} className="flex items-center justify-between text-[11px]">
-                        <span>{pose.label}</span>
-                        {pose.captured
-                          ? <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-                          : <span className="text-muted-foreground text-[9px]">Chưa quét</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-3 text-[10px] text-muted-foreground">
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider block">Lần đầu thấy</span>
-                    {tsLabel(person.first_seen)}
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider block">Lần cuối</span>
-                    {tsLabel(person.last_seen)}
-                  </div>
-                </div>
+              </div>
+
+              <ProfileFaceGrid poses={displayPoses} />
+
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground border-t border-[#1e2433]/80 pt-3">
+                <span>Lần đầu: <strong className="text-foreground/90">{tsLabel(person.first_seen)}</strong></span>
+                <span>Lần cuối: <strong className="text-foreground/90">{tsLabel(person.last_seen)}</strong></span>
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1">
@@ -214,7 +287,7 @@ export function WorkerProfileDetailModal({
                   Sửa
                 </button>
                 <Link
-                  to={`/module05/quet-mat?code=${encodeURIComponent(person.employee_code ?? '')}`}
+                  to={scanHref}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white hover:bg-violet-500/90"
                   onClick={onClose}
                 >
@@ -253,34 +326,49 @@ export function WorkerProfileDetailModal({
               </div>
             </>
           ) : person && mode === 'edit' ? (
-            <form onSubmit={e => void handleSave(e)} className="space-y-3">
-              <label className="block space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Họ tên *</span>
-                <input
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Mã nhân viên *</span>
-                <input
-                  value={employeeCode}
-                  onChange={e => setEmployeeCode(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none font-mono focus:border-violet-400/50"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Đơn vị</span>
-                <input
-                  value={contractor}
-                  onChange={e => setContractor(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
-                />
-              </label>
-              <div className="flex gap-2 pt-2">
+            <form onSubmit={e => void handleSave(e)} className="space-y-4">
+              <div className="space-y-3">
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Họ tên *</span>
+                  <input
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Mã nhân viên *</span>
+                  <input
+                    value={employeeCode}
+                    onChange={e => setEmployeeCode(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none font-mono focus:border-violet-400/50"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Đơn vị</span>
+                  <input
+                    value={contractor}
+                    onChange={e => setContractor(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-lg border border-[#1e2433] bg-[#0a0e17] p-3 space-y-2">
+                <ProfileFaceGrid poses={displayPoses} compact />
+                <Link
+                  to={scanHref}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-violet-400 hover:text-violet-300"
+                >
+                  <ScanFace className="w-3.5 h-3.5" />
+                  Quét mặt để cập nhật ảnh
+                </Link>
+              </div>
+
+              <div className="flex gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setMode('view')}
