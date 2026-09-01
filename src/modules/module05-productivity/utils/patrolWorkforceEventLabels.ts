@@ -104,17 +104,17 @@ export function resolvePatrolEventDisplayMeta(event: PatrolEvent): {
   }
 }
 
-/** Mã track ẩn danh tk-* (primary). */
+/** tk-* — mã người chưa định danh (primary). */
 export function isPatrolTkWorkerId(id?: string | null): boolean {
   return Boolean(id && /^tk-/i.test(id.trim()))
 }
 
-/** Legacy sgc-* (lowercase) — vẫn đọc được; không khớp mã nhân sự SGC-* hoa. */
+/** Legacy sgc-* — normalize khi đọc bundle cũ. */
 export function isPatrolAnonymousTrackId(id?: string | null): boolean {
-  return Boolean(id && /^sgc-/.test(id.trim()))
+  return Boolean(id && /^sgc-/i.test(id.trim()))
 }
 
-/** tk-* hoặc legacy sgc-* — thay cho isPatrolSgcWorkerId cũ. */
+/** tk-* hoặc legacy sgc-*. */
 export function isPatrolTrackWorkerId(id?: string | null): boolean {
   return isPatrolTkWorkerId(id) || isPatrolAnonymousTrackId(id)
 }
@@ -123,12 +123,10 @@ export function isPatrolObjectId(id?: string | null): boolean {
   return Boolean(id && /^obj-/i.test(id.trim()))
 }
 
+/** Draft person id — tk-* (pers-* chỉ còn trong bundle cũ). */
 export function isPatrolPersId(id?: string | null): boolean {
-  return Boolean(id && /^pers-/i.test(id.trim()))
-}
-
-export function isPatrolIdenId(id?: string | null): boolean {
-  return Boolean(id && /^iden-/i.test(id.trim()))
+  const s = id?.trim() ?? ''
+  return isPatrolTkWorkerId(s) || Boolean(s && /^pers-/i.test(s))
 }
 
 /**
@@ -146,7 +144,7 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
     if (resolvePatrolProfileEntityKey(event)) return true
     if (trackWorkerId && getPatrolManualIdentityForTk(trackWorkerId)) return true
     if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolTrackWorkerId(trackWorkerId)) return true
-    if (isPatrolIdenId(objectId)) return true
+    if (objectId && isPatrolGalleryWorkerId(objectId)) return true
     return false
   }
 
@@ -190,7 +188,7 @@ export function patrolWorkforceEventTitle(
 export function isPatrolTechnicalSubjectId(id?: string | null): boolean {
   const s = id?.trim() ?? ''
   if (!s) return false
-  return /^(pers-|iden-|obj-|ptk)/i.test(s)
+  return /^(obj-|ptk)/i.test(s) || isPatrolTrackWorkerId(s)
 }
 
 /** Dòng phụ — chỉ hiện mã tk khi đã định danh; ẩn pers/iden/obj. */
@@ -203,9 +201,9 @@ export function patrolWorkforceEventSubjectId(
   const track = trackWorkerId?.trim() ?? ''
 
   if (stage === 'profile') {
-    const code = track && !isPatrolPersId(track) && !isPatrolIdenId(track)
+    const code = track && !isPatrolObjectId(track) && !isPatrolTrackWorkerId(track)
       ? track
-      : oid && !isPatrolPersId(oid) && !isPatrolIdenId(oid) && !isPatrolObjectId(oid)
+      : oid && !isPatrolObjectId(oid) && !isPatrolTrackWorkerId(oid)
         ? oid
         : ''
     if (code && isPatrolTrackWorkerId(code)) return code.toUpperCase()
@@ -248,14 +246,14 @@ export function formatPatrolPersonDetectedEvent(event: PatrolEvent): PatrolEvent
   }
 }
 
-/** Khóa master dedup — pers day card > profile worker > tk > OBJ. */
+/** Khóa master dedup — tk day card > profile worker > OBJ. */
 export function patrolEventMasterEntityKey(event: PatrolEvent): string {
   const fromDayCard = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
   if (fromDayCard) return fromDayCard.toLowerCase()
   return resolvePatrolCanonicalEntityKey(event)
 }
 
-/** Subject id tra lịch sử xuất hiện (popup) — tk-* / pers-* / obj-* trong SQLite. */
+/** Subject id tra lịch sử xuất hiện — tk-* / obj-* / p-* trong SQLite. */
 export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const fromDayCardPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
   if (fromDayCardPers) return fromDayCardPers

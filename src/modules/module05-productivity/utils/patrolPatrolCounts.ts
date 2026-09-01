@@ -4,7 +4,6 @@
  */
 import type { PatrolEvent } from '../data/patrolTypes'
 import {
-  isPatrolIdenId,
   isPatrolPersId,
   isPatrolTrackWorkerId,
   resolvePatrolPersonStage,
@@ -16,7 +15,6 @@ export function isPatrolHeatmapEligibleId(rawId?: string | null): boolean {
   const id = rawId?.trim() ?? ''
   if (!id) return false
   if (isPatrolPersId(id)) return true
-  if (isPatrolIdenId(id)) return true
   if (isPatrolTrackWorkerId(id)) return true
   if (isPatrolGalleryWorkerId(id)) return true
   if (isPatrolManuallyIdentified(id)) return true

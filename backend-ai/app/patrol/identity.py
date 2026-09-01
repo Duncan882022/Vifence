@@ -506,13 +506,6 @@ def ensure_draft_for_tk(tk_id: str, *, now: float | None = None) -> str:
     return tk
 
 
-def ensure_draft_for_sgc(sgc_id: str, *, now: float | None = None) -> str:
-    """Alias legacy sgc-* → ensure_draft_for_tk."""
-    from ..patrol_ids import normalize_track_id
-
-    return ensure_draft_for_tk(normalize_track_id(sgc_id), now=now)
-
-
 def ensure_identified_for_gallery(
     gallery_id: str,
     *,

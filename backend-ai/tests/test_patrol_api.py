@@ -233,7 +233,7 @@ class PatrolApiTests(unittest.TestCase):
         self.assertEqual(status["enrollment"]["faces_captured"], 0)
 
     def test_verify_draft_rejects_without_face_or_session(self) -> None:
-        pers_id = identity.ensure_draft_for_sgc("sgc-00000200")
+        pers_id = identity.ensure_draft_for_tk("tk-0000200")
         res = self.client.post(
             f"/patrol/persons/{pers_id}/verify",
             json={"full_name": "Test", "employee_code": "NV-200", "contractor": "SGC"},
@@ -244,7 +244,7 @@ class PatrolApiTests(unittest.TestCase):
     def test_verify_draft_manual_upload(self) -> None:
         from unittest.mock import patch
 
-        pers_id = identity.ensure_draft_for_sgc("sgc-00000201")
+        pers_id = identity.ensure_draft_for_tk("tk-0000201")
         with patch("app.patrol.api._embed_face_b64", return_value=_vec(201)):
             res = self.client.post(
                 f"/patrol/persons/{pers_id}/verify",
@@ -261,7 +261,7 @@ class PatrolApiTests(unittest.TestCase):
         self.assertGreaterEqual(res["person"]["face_count"], 1)
 
     def test_verify_draft_enroll_session_path(self) -> None:
-        pers_id = identity.ensure_draft_for_sgc("sgc-00000202")
+        pers_id = identity.ensure_draft_for_tk("tk-0000202")
         session_id = identity.create_enroll_session()
         for slot, seed in enumerate((202.1, 202.2, 202.3), start=1):
             identity.add_enroll_session_face(session_id, _vec(int(seed * 10)), pose_slot=slot)

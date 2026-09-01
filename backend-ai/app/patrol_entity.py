@@ -3,23 +3,15 @@
 from __future__ import annotations
 
 from .person_identity_registry import is_sgc_worker_id
-from .patrol_ids import is_tk_worker_id, normalize_track_id
-
-
-def is_patrol_pers_id(worker_id: str | None) -> bool:
-    return (worker_id or "").strip().lower().startswith("pers-")
-
-
-def is_patrol_iden_id(worker_id: str | None) -> bool:
-    return (worker_id or "").strip().lower().startswith("iden-")
+from .patrol_ids import is_anonymous_track_id, is_tk_worker_id, normalize_track_id
 
 
 def is_patrol_gallery_id(worker_id: str | None) -> bool:
     wid = (worker_id or "").strip()
-    if not wid or wid == "unknown" or is_sgc_worker_id(wid):
+    if not wid or wid == "unknown" or is_anonymous_track_id(wid):
         return False
     wl = wid.lower()
-    if wl.startswith(("pers-", "iden-")):
+    if wl.startswith("obj-"):
         return False
     try:
         from .patrol_identity_store import lookup_patrol_identity
@@ -38,34 +30,30 @@ def is_patrol_gallery_id(worker_id: str | None) -> bool:
     return False
 
 
-def _resolve_patrol_sgc_canonical(
+def _resolve_patrol_tk_canonical(
     worker_id: str | None,
     object_id: str | None,
 ) -> str | None:
-    """Một sgc-* = một người — dùng làm khóa dedup dù gán nhiều tên/OBJ."""
-    wid = (worker_id or "").strip()
-    oid = (object_id or "").strip()
-    if is_sgc_worker_id(wid):
-        return wid.lower()
-    if is_sgc_worker_id(oid):
-        return oid.lower()
+    """Một tk-* = một người — khóa dedup khi cùng track ẩn danh."""
+    for raw in (worker_id, object_id):
+        tk = normalize_track_id(raw)
+        if tk and is_anonymous_track_id(tk):
+            return tk.lower()
     try:
         from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
     except Exception:
         return None
-    for alias in (wid, oid):
+    for alias in (worker_id, object_id):
         if not alias:
             continue
-        if alias.lower().startswith("sgc-"):
-            return alias.lower()
         gallery = lookup_gallery_worker(alias)
         if not gallery:
             continue
         row = lookup_patrol_identity(gallery) or {}
         for key in row.get("aliases") or []:
-            key_s = str(key).strip()
-            if is_sgc_worker_id(key_s):
-                return key_s.lower()
+            tk = normalize_track_id(str(key))
+            if tk and is_anonymous_track_id(tk):
+                return tk.lower()
     return None
 
 
@@ -78,10 +66,10 @@ def resolve_patrol_dedup_stable_id(
     frame_w: int = 0,
     frame_h: int = 0,
 ) -> str:
-    """Stable id cho dedup_key — sgc canonical > gallery > OBJ > slot > track."""
-    sgc = _resolve_patrol_sgc_canonical(worker_id, object_id)
-    if sgc:
-        return sgc
+    """Stable id cho dedup_key — tk canonical > gallery > OBJ > slot > track."""
+    tk_key = _resolve_patrol_tk_canonical(worker_id, object_id)
+    if tk_key:
+        return tk_key
     wid = (worker_id or "").strip()
     if wid and wid not in ("unknown", ""):
         return wid
@@ -109,15 +97,16 @@ def resolve_patrol_master_id(
     object_id: str | None,
     track_id: str | None,
 ) -> str:
-    """Master id cho appearance log — sgc canonical > gallery > OBJ > track."""
-    sgc = _resolve_patrol_sgc_canonical(worker_id, object_id)
-    if sgc:
-        return sgc
+    """Master id cho appearance log — tk canonical > gallery > OBJ > track."""
+    tk_key = _resolve_patrol_tk_canonical(worker_id, object_id)
+    if tk_key:
+        return tk_key
     wid = (worker_id or "").strip()
     if is_patrol_gallery_id(wid):
         return wid
-    if is_sgc_worker_id(wid):
-        return wid.lower()
+    tk = normalize_track_id(wid)
+    if tk and is_anonymous_track_id(tk):
+        return tk.lower()
     oid = (object_id or "").strip()
     if oid.upper().startswith("OBJ-"):
         return oid.upper()
@@ -141,28 +130,12 @@ def is_patrol_track_technical_id(worker_id: str | None) -> bool:
 
 
 def resolve_patrol_gallery_id_for_worker(worker_id: str | None) -> str | None:
-    """pers/iden/sgc/alias → mã gallery p-* khi đã bind hoặc đã định danh SQLite."""
+    """tk/p-/alias → mã gallery p-* khi đã bind và còn hồ sơ HR."""
     wid = (worker_id or "").strip()
     if not wid or wid == "unknown" or is_patrol_track_technical_id(wid):
         return None
     if wid.lower().startswith("p-") and is_patrol_gallery_id(wid):
         return wid
-    if wid.lower().startswith(("pers-", "iden-")):
-        try:
-            from .patrol import identity as patrol_identity
-            from .patrol_identity_store import lookup_gallery_worker, patrol_gallery_worker_id
-
-            person = patrol_identity.get_person(wid)
-            if person and person.get("status") == patrol_identity.STATUS_IDENTIFIED:
-                emp = str(person.get("employee_code") or "").strip()
-                if emp:
-                    return patrol_gallery_worker_id(emp)
-            gallery = lookup_gallery_worker(wid)
-            if gallery:
-                return gallery
-        except Exception:
-            pass
-        return None
     try:
         from .patrol_identity_store import lookup_gallery_worker
 
@@ -176,42 +149,20 @@ def resolve_patrol_gallery_id_for_worker(worker_id: str | None) -> str | None:
 
 def patrol_tier_label(worker_id: str | None) -> str:
     """
-    Phân tier patrol person (chỉ áp dụng cho detection behavior=person):
-    - identity: gallery / profile đã xác minh (p-*, pers identified, iden-*)
-    - person: đã phân biệt A≠B (sgc-* hoặc pers-* chưa gallery)
-    - object: chưa đủ tiêu chí nhận diện
+    Phân tier patrol person (behavior=person):
+    - identity: gallery p-* đã xác minh HR
+    - person: tk-* (draft / re-id)
+    - object: chưa đủ tiêu chí
     """
     wid = (worker_id or "").strip()
     if not wid or wid == "unknown" or is_patrol_track_technical_id(wid):
-        return "object"
-    if wid.lower().startswith("pers-"):
-        try:
-            from .patrol import identity as patrol_identity
-
-            person = patrol_identity.get_person(wid)
-            if person:
-                if person.get("status") == patrol_identity.STATUS_IDENTIFIED:
-                    return "identity"
-                return "person"
-        except Exception:
-            pass
-        return "person"
-    if wid.lower().startswith("iden-"):
-        try:
-            from .patrol_identity_store import lookup_gallery_worker
-
-            if lookup_gallery_worker(wid):
-                return "identity"
-        except Exception:
-            pass
         return "object"
     if wid.lower().startswith("p-"):
         return "identity" if is_patrol_gallery_id(wid) else "person"
     if resolve_patrol_gallery_id_for_worker(wid) or is_patrol_gallery_id(wid):
         return "identity"
-    if is_patrol_iden_id(wid):
-        return "identity"
-    if is_tk_worker_id(wid) or is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
+    tk = normalize_track_id(wid)
+    if tk and is_anonymous_track_id(tk):
         return "person"
     return "object"
 
@@ -226,7 +177,8 @@ def format_patrol_person_snapshot_label(
     wname = (worker_name or "").strip()
     if is_patrol_gallery_id(wid):
         return resolve_patrol_worker_display_name(wid, wname)
-    if is_tk_worker_id(wid) or is_sgc_worker_id(wid) or is_patrol_pers_id(wid):
+    tk = normalize_track_id(wid)
+    if tk and is_anonymous_track_id(tk):
         return "Người"
     oid = (object_id or "").strip()
     if oid and not oid.upper().startswith("OBJ-"):
@@ -254,7 +206,7 @@ def is_technical_patrol_worker_label(label: str | None) -> bool:
     if not s or s.lower() == "unknown":
         return True
     sl = s.lower()
-    return sl.startswith(("tk-", "sgc-", "p-", "pers-", "iden-", "obj-", "ptk"))
+    return sl.startswith(("tk-", "sgc-", "p-", "obj-", "ptk"))
 
 
 def resolve_patrol_worker_display_name(
@@ -285,36 +237,23 @@ def resolve_patrol_worker_display_name(
         except Exception:
             pass
 
-        if wid.lower().startswith("p-") and not is_patrol_gallery_id(wid):
-            return "Người"
-
-        if wid.lower().startswith("pers-"):
+        if wname and not is_technical_patrol_worker_label(wname) and wname != wid:
             try:
                 from .patrol import identity as patrol_identity
 
-                person = patrol_identity.get_person(wid)
-                if person and person.get("status") == patrol_identity.STATUS_IDENTIFIED:
-                    name = patrol_identity.display_name(person)
-                    if name and not is_technical_patrol_worker_label(name):
-                        return name
-                if person:
-                    return "Người"
+                hr = patrol_identity.hr_profile_for_gallery(wid)
+                if hr and str(hr.get("full_name") or "").strip() == wname:
+                    return wname
             except Exception:
                 pass
 
-        if is_patrol_gallery_id(wid) or is_sgc_worker_id(wid):
+        if wid.lower().startswith("p-") and not is_patrol_gallery_id(wid):
             return "Người"
 
-    if wname and not is_technical_patrol_worker_label(wname) and wname != wid:
-        try:
-            from .patrol import identity as patrol_identity
+        if is_patrol_gallery_id(wid) or is_anonymous_track_id(wid):
+            return "Người"
 
-            hr = patrol_identity.hr_profile_for_gallery(wid)
-            if hr and str(hr.get("full_name") or "").strip() == wname:
-                return wname
-        except Exception:
-            pass
+    if wid and is_tk_worker_id(wid):
+        return "Người"
 
-    if wname and wname != wid and not is_technical_patrol_worker_label(wname):
-        return wname
     return wid or "Đối tượng"

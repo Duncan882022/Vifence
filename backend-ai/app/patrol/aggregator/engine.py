@@ -80,6 +80,18 @@ def ingest_observation(**kwargs) -> str | None:
             flush_session(session, obs)
         return session.subject_id
 
+    if session.committed and obs.density_only:
+        from ..daystore import TOUCH_MIN_INTERVAL_SEC
+
+        due = (
+            session.dirty
+            or session.last_flush_at <= 0
+            or (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC
+        )
+        if due:
+            flush_session(session, obs)
+        return session.subject_id
+
     process_identity(session, obs)
     process_behavior(session, obs)
     flush_session(session, obs)

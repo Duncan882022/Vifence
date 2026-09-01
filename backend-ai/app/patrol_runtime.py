@@ -590,7 +590,7 @@ def build_patrol_aggregate_events_payload(
 
 
 def assign_patrol_identity(payload: dict) -> dict[str, Any]:
-    """Enroll khuôn mặt gallery + bind sgc/OBJ → gallery worker (DB file)."""
+    """Enroll gallery + bind tk/obj → gallery worker (chỉ khi có hồ sơ HR)."""
     import base64
 
     import cv2
@@ -598,7 +598,6 @@ def assign_patrol_identity(payload: dict) -> dict[str, Any]:
 
     from .patrol_identity_store import (
         bind_patrol_identity,
-        list_patrol_identity_bindings,
         patrol_gallery_worker_id,
     )
     from .person_identity_registry import bind_patrol_track_identity
@@ -676,7 +675,6 @@ def assign_patrol_identity(payload: dict) -> dict[str, Any]:
         "face_enrolled": face_enrolled,
         "enrollment": enrollment,
         "binding": row,
-        "bindings_count": len(list_patrol_identity_bindings()),
     }
 
 
