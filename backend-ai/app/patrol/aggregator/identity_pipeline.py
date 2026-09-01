@@ -137,10 +137,64 @@ def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> 
     session.dirty = True
 
 
+def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationInput) -> bool:
+    """Đối tượng đã thấy mặt (face_eligible) → thẻ Người pers-*."""
+    if not (session.subject_id or "").startswith("obj-"):
+        return False
+
+    emb = obs.face_embedding
+    quality = float(obs.face_quality or 0.0)
+    if emb is None and session.best_faces:
+        best = session.best_faces[0]
+        if best.embedding is not None and best.quality >= MIN_QUALITY_FOR_SEARCH:
+            emb = best.embedding
+            quality = max(quality, float(best.quality))
+
+    wid = (obs.lifecycle_worker_id or session.identity.person_id or "").strip()
+    from ...person_identity_registry import is_sgc_worker_id
+
+    if is_sgc_worker_id(wid):
+        pers_id = _ensure_pers_for_worker(
+            wid,
+            tier=obs.lifecycle_tier or "person",
+            now=obs.ts,
+        )
+        if pers_id:
+            _assign_pers_subject(session, pers_id, now=obs.ts)
+            session.identity_resolved = True
+            return True
+
+    if not obs.face_eligible or emb is None:
+        return False
+
+    try:
+        pers_id, _ = identity.observe_face(
+            emb,
+            quality=max(quality, MIN_QUALITY_FOR_SEARCH),
+            camera_id=obs.camera_id,
+            now=obs.ts,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("aggregator observe_face promote obj failed")
+        return False
+
+    _assign_pers_subject(session, pers_id, now=obs.ts)
+    session.identity = PersonIdentity(
+        person_id=pers_id,
+        identity_type=IdentityType.KNOWN,
+        confidence=min(0.99, max(quality, MIN_QUALITY_FOR_SEARCH)),
+    )
+    session.identity_resolved = True
+    return True
+
+
 def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) -> None:
     if not (session.subject_id or "").startswith("obj-"):
         return
     if not _may_assign_pers_subject(session, obs):
+        return
+
+    if _promote_object_with_face_evidence(session, obs):
         return
 
     candidates: list[tuple[str | None, str | None]] = [
@@ -168,6 +222,7 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
         pers_id = _ensure_pers_for_worker(worker_id, tier=resolved_tier or None, now=obs.ts)
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
+            session.identity_resolved = True
             return
 
 
@@ -339,9 +394,9 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
             )
             if pers_id:
                 _assign_pers_subject(session, pers_id, now=obs.ts)
+                session.identity_resolved = True
             else:
                 session.dirty = True
-            session.identity_resolved = True
         else:
             session.dirty = True
 

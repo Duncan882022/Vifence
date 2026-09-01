@@ -85,10 +85,61 @@ def all_sessions() -> list[TrackSession]:
         return list(_sessions.values())
 
 
+def _bbox_iou(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+    ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
+    area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def borrow_parallel_object_subject(
+    camera_id: str,
+    started_at: float,
+    now_ts: float,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> str | None:
+    """Track mới cùng camera + bbox chồng (cùng người) → dùng lại obj-*."""
+    from .. import daystore
+
+    prefix = f"{camera_id}|"
+    with _lock:
+        best: str | None = None
+        best_last = 0.0
+        for key, other in _sessions.items():
+            if not key.startswith(prefix):
+                continue
+            oid = (other.subject_id or "").strip()
+            if not oid.startswith("obj-"):
+                continue
+            if abs(other.started_at - started_at) > daystore.PARALLEL_OBJ_START_MAX_SEC:
+                continue
+            if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
+                continue
+            if bbox is not None and other.bbox is not None:
+                if _bbox_iou(bbox, other.bbox) < 0.12:
+                    continue
+            if other.last_seen_at >= best_last:
+                best_last = other.last_seen_at
+                best = oid
+        return best
+
+
 def link_subject_session(session: TrackSession) -> None:
-    """Cùng pers-* + camera — gộp appearance (YOLO tách 2 track một người)."""
+    """Cùng tk-* / pers-* / obj-* + camera — gộp appearance (YOLO tách 2 track một người)."""
     subject_id = (session.subject_id or "").strip()
     if not subject_id:
+        return
+    from ...patrol_ids import is_person_subject_id
+
+    if not (subject_id.startswith("obj-") or is_person_subject_id(subject_id)):
         return
     with _lock:
         for other in _sessions.values():

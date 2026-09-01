@@ -659,6 +659,27 @@ def repair_appearances(
     return out
 
 
+@router.post("/admin/coalesce-object-cards")
+def coalesce_object_cards_admin(
+    date: str | None = None,
+    user: RequirePatrolAdmin = None,  # noqa: ARG001
+) -> dict[str, Any]:
+    """Gộp thẻ obj trùng lượt (2 ByteTrack song song) — vd. 0071 + 0072."""
+    merged = daystore.coalesce_parallel_object_cards(date)
+    promoted = daystore.promote_objects_with_face_snapshot(date)
+    audit(
+        "object_cards_coalesce",
+        actor=user.username,
+        meta={"date": date, "merged": merged, "promoted": promoted},
+    )
+    return {
+        "ok": True,
+        "merged": merged,
+        "promoted": promoted,
+        "date": date or db.today_vn(),
+    }
+
+
 @router.post("/admin/reset-all")
 def admin_reset_all(
     user: RequirePatrolAdmin = None,  # noqa: ARG001
