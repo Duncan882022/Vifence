@@ -472,12 +472,12 @@ def _match_patrol_gallery_from_embedding(
     gallery_id = str(profile.worker_id or "").strip()
     if not gallery_id:
         return None
-    row = lookup_patrol_identity(gallery_id)
-    name = str(
-        (row.get("worker_name") if row else None)
-        or profile.worker_name
-        or gallery_id
-    ).strip()
+    from .patrol import identity as patrol_identity
+
+    hr = patrol_identity.hr_profile_for_gallery(gallery_id)
+    if hr is None:
+        return None
+    name = patrol_identity.display_name(hr)
     if _conflicts_frame_faces(gallery_id, face_emb, frame_face_assignments):
         return None
     return gallery_id, name, float(score)

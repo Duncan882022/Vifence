@@ -135,7 +135,6 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
     if (resolvePatrolProfileEntityKey(event)) return true
     if (trackWorkerId && getPatrolManualIdentityForSgc(trackWorkerId)) return true
     if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolSgcWorkerId(trackWorkerId)) return true
-    if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return true
     if (isPatrolIdenId(objectId)) return true
     return false
   }

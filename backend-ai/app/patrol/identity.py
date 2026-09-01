@@ -140,6 +140,32 @@ def _hr_scan_face_count(pers_id: str) -> int:
     return min(raw, SCAN_FACES_REQUIRED)
 
 
+def hr_profile_for_gallery(gallery_worker_id: str) -> dict[str, Any] | None:
+    """Hồ sơ HR đã import — gallery/binding không được tự tạo Định danh nếu thiếu bản ghi này."""
+    from ..patrol_identity_store import lookup_patrol_identity
+
+    row = lookup_patrol_identity((gallery_worker_id or "").strip())
+    if not row:
+        return None
+    code = str(row.get("employee_code") or "").strip()
+    if not code:
+        return None
+    person = find_by_employee_code(code)
+    if person and person.get("status") == STATUS_IDENTIFIED:
+        return person
+    return None
+
+
+def hr_profile_for_employee_code(employee_code: str) -> dict[str, Any] | None:
+    code = (employee_code or "").strip()
+    if not code:
+        return None
+    person = find_by_employee_code(code)
+    if person and person.get("status") == STATUS_IDENTIFIED:
+        return person
+    return None
+
+
 def gallery_enrollment_stats(
     employee_code: str | None,
     *,

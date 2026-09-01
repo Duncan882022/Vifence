@@ -134,16 +134,11 @@ def _ensure_pers_for_worker(
     if not row:
         return None
 
-    pers_id = identity.create_person(origin="gallery", now=now)
-    identity.identify(
-        pers_id,
-        full_name=str(row.get("worker_name") or gallery).strip(),
-        employee_code=str(row.get("employee_code") or "").strip() or None,
-        contractor=str(row.get("contractor_name") or "").strip() or None,
-        identified_by="gallery_match",
-        now=now,
-    )
-    return pers_id
+    hr = identity.hr_profile_for_gallery(gallery)
+    if hr:
+        return str(hr["pers_id"])
+
+    return None
 
 
 def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> None:

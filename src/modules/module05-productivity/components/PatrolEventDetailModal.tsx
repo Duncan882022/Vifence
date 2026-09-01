@@ -356,6 +356,10 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   const activeSnapshotUrl = useMemo(() => {
     if (faceGalleryOpen) return undefined
+    if (appearanceSegments.length === 1) {
+      const only = appearanceSegments[0]?.snapshotUrl?.trim()
+      if (only) return only
+    }
     if (heroFromHistory && selectedAppearanceKey) {
       const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
       if (selected) {
@@ -377,7 +381,11 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
-  const showHeroPanel = Boolean(faceGalleryOpen && selectedFaceUrl) || Boolean(activeSnapshotUrl)
+  const singleHistorySnapshot = appearanceSegments.length === 1
+    ? appearanceSegments[0]?.snapshotUrl?.trim()
+    : ''
+  const showHeroPanel = Boolean(faceGalleryOpen && selectedFaceUrl)
+    || Boolean(activeSnapshotUrl && !singleHistorySnapshot)
 
   return createPortal(
     <div
