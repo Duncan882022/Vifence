@@ -341,21 +341,39 @@ def _bind_tk_profile(tk_id: str, pers_id: str) -> None:
     pid = identity.resolve_alias((pers_id or "").strip())
     if not tk or not pid:
         return
+    identity.bind_tk_profile(tk, pid)
     with _lock:
         _tk_to_profile[tk] = pid
+
+
+def lookup_bound_pers_for_tk(tk_id: str) -> str | None:
+    """Tra pers_id cho tk — cache RAM rồi SQLite."""
+    from ..patrol_ids import normalize_track_id
+
+    tk = normalize_track_id(tk_id)
+    if not tk:
+        return None
+    with _lock:
+        cached = _tk_to_profile.get(tk)
+    if cached:
+        return identity.resolve_alias(cached)
+    found = identity.lookup_bound_profile_for_tk(tk)
+    if found:
+        with _lock:
+            _tk_to_profile[tk] = found
+    return found
 
 
 def _ensure_profile_for_tk(tk_id: str, *, now: float) -> str:
     from ..patrol_ids import normalize_track_id
 
     tk = normalize_track_id(tk_id)
-    with _lock:
-        existing = _tk_to_profile.get(tk)
+    existing = lookup_bound_pers_for_tk(tk)
     if existing:
-        return identity.resolve_alias(existing)
+        identity.touch_person(existing, now=now)
+        return existing
     pers_id = identity.ensure_draft_for_tk(tk, now=now)
-    with _lock:
-        _tk_to_profile[tk] = pers_id
+    _bind_tk_profile(tk, pers_id)
     return pers_id
 
 

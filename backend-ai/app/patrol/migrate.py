@@ -222,3 +222,27 @@ def migrate_to_v8(conn: sqlite3.Connection) -> None:
 
     conn.execute("PRAGMA user_version=8")
     conn.commit()
+
+
+def migrate_to_v9(conn: sqlite3.Connection) -> None:
+    """Gắn tk registry → pers_id bền — tránh cấp tk mới mỗi lần observe_face."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 9:
+        return
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS track_profile_bindings (
+          tk_id    TEXT PRIMARY KEY,
+          pers_id  TEXT NOT NULL REFERENCES persons(pers_id) ON DELETE CASCADE,
+          bound_at REAL NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_track_profile_bindings_pers"
+        " ON track_profile_bindings(pers_id)"
+    )
+
+    conn.execute("PRAGMA user_version=9")
+    conn.commit()
