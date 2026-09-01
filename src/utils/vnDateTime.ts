@@ -47,6 +47,12 @@ export function formatVnIsoTimestamp(date = new Date()): string {
   return `${y}-${m}-${d}T${h}:${min}:${s}`
 }
 
+/** DD/MM/YYYY HH:mm:ss — overlay OSD tile camera (HC-02 / flycam). */
+export function formatVnDisplayTimestamp(date = new Date()): string {
+  const { y, m, d, h, min, s } = vnParts(date)
+  return `${d}/${m}/${y} ${h}:${min}:${s}`
+}
+
 /** ISO local timestamp từ unix seconds — giờ VN. */
 export function formatVnIsoFromUnix(unixSeconds: number): string {
   return formatVnIsoTimestamp(new Date(unixSeconds * 1000))
