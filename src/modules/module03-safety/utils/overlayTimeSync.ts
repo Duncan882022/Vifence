@@ -25,10 +25,15 @@ export interface OverlayTimeSource {
 
 export interface OverlaySyncResult {
   snapshot: VmsDetectionSnapshot | null
-  /** Đã khớp theo thời gian hay đang dùng snapshot mới nhất. */
+  /** Đã khớp theo thời gian hay đang dùng snapshot mới nhất / lag fallback. */
   matched: boolean
   /** Độ lệch giữa snapshot chọn được và khung hình (ms) — dùng để chẩn đoán. */
   driftMs: number | null
+}
+
+export interface OverlayResolveOptions {
+  /** Khi không khớp PDT — lấy snapshot ~N ms trước (patrol HLS). */
+  fallbackLagMs?: number
 }
 
 function snapshotWallclockMs(snapshot: VmsDetectionSnapshot): number | null {
@@ -73,12 +78,14 @@ export class OverlayTimeBuffer {
 
   /**
    * Chọn snapshot khớp khung hình đang hiển thị.
-   * Không có mốc thời gian hoặc lệch quá lớn → trả snapshot mới nhất.
+   * Không có mốc thời gian hoặc lệch quá lớn → fallback lag hoặc snapshot mới nhất.
    */
-  resolve(displayWallclockMs: number | null): OverlaySyncResult {
+  resolve(displayWallclockMs: number | null, opts?: OverlayResolveOptions): OverlaySyncResult {
     const latest = this.latest()
     if (latest === null) return { snapshot: null, matched: false, driftMs: null }
     if (displayWallclockMs === null || this.snapshots.length === 1) {
+      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs)
+      if (lagged) return lagged
       return { snapshot: latest, matched: false, driftMs: null }
     }
 
@@ -102,9 +109,32 @@ export class OverlayTimeBuffer {
     }
 
     if (!Number.isFinite(bestDrift) || bestDrift > MAX_MATCH_DRIFT_MS) {
+      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs)
+      if (lagged) return lagged
       return { snapshot: latest, matched: false, driftMs: null }
     }
 
+    return { snapshot: best, matched: true, driftMs: Math.round(bestDrift) }
+  }
+
+  /** Patrol HLS — snapshot ~fallbackLagMs trước thay vì bbox mới nhất (đuổi theo). */
+  private resolveFallbackLag(fallbackLagMs?: number): OverlaySyncResult | null {
+    if (fallbackLagMs == null || fallbackLagMs <= 0 || this.snapshots.length === 0) {
+      return null
+    }
+    const target = Date.now() - fallbackLagMs
+    let best: VmsDetectionSnapshot | null = null
+    let bestDrift = Number.POSITIVE_INFINITY
+    for (const candidate of this.snapshots) {
+      const wallclock = snapshotWallclockMs(candidate)
+      if (wallclock === null) continue
+      const drift = Math.abs(wallclock - target)
+      if (drift < bestDrift) {
+        bestDrift = drift
+        best = candidate
+      }
+    }
+    if (best === null) return null
     return { snapshot: best, matched: true, driftMs: Math.round(bestDrift) }
   }
 }

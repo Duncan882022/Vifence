@@ -55,15 +55,16 @@ Xem [`HEATMAP_SINGLE_SOURCE_SPEC.md`](./HEATMAP_SINGLE_SOURCE_SPEC.md) rev.3.
 - BE xử lý frame → trả detection **sau** video đã phát → ROI trên tile **đuổi theo**, gây hiểu nhầm.
 - ROI không chính xác = người xem tin sai tier/vị trí.
 
-### 5.2. Quyết định tạm thời
+### 5.2. Quyết định
 
 | Chế độ | Mặc định | Ghi chú |
 |--------|----------|---------|
-| **ROI live trên tile** | **TẮT** | `PATROL_LIVE_ROI_ENABLED = false` (FE) |
-| **Sự kiện / map / tab** | Bật | Nguồn sự thật sau BE xử lý xong |
-| **ROI live (phase 2)** | Buffer **5 s** | Video + bbox cùng timeline — không đuổi theo |
+| **ROI live trên tile** | **BẬT** (nút bbox toolbar) | `getCameraBboxVisible` — user tắt/bật |
+| **Đồng bộ thời gian** | Buffer **5 s** | `PATROL_LIVE_ROI_DELAY_MS` + `useSyncedVmsDetections` |
+| **Publisher local** | Không delay | `usePatrolLocalFrameAnalyze` — bbox cùng khung JPEG |
+| **Sự kiện / map / tab** | Luôn bật | Nguồn sự thật sau BE xử lý |
 
-Khi bật lại ROI live: phải sync playback clock với detection timestamp (delay cố định ~5 s), không vẽ bbox “realtime” từ poll HTTP.
+ROI có ý nghĩa khi **khớp khung video** (PDT hoặc fallback lag 5 s) — không vẽ bbox “đuổi theo” snapshot mới nhất.
 
 ---
 
@@ -83,8 +84,9 @@ Khi bật lại ROI live: phải sync playback clock với detection timestamp (
 
 | File | Việc |
 |------|------|
-| `patrolHelmetScope.ts` | `PATROL_LIVE_ROI_ENABLED = false`, `PATROL_LIVE_ROI_DELAY_MS = 5000` |
-| `CameraVideoFeed.tsx`, `MobileCameraFeed.tsx` | Tôn trọng flag |
+| `patrolHelmetScope.ts` | `PATROL_LIVE_ROI_DELAY_MS = 5000`; ROI theo bbox toggle |
+| `CameraVideoFeed.tsx` | `useSyncedVmsDetections` + ingest từ snapshot đã sync |
+| `overlayTimeSync.ts` | Fallback lag ~5 s khi không khớp PDT |
 
 ---
 
@@ -93,7 +95,7 @@ Khi bật lại ROI live: phải sync playback clock với detection timestamp (
 - [ ] Người lướt ~1 s vẫn có 1 lượt gặm + snapshot (finalize + best_obs)
 - [ ] Người đứng 2 s — snapshot = frame score cao nhất trong cửa sổ
 - [ ] Không có track nào finalize mà mất snapshot vì “chưa đủ đẹp”
-- [ ] Tile camera **không** vẽ ROI khi `PATROL_LIVE_ROI_ENABLED=false`
+- [ ] Tile camera vẽ ROI khi bbox toggle bật; bbox khớp người (lag ≤5 s)
 - [ ] Map/KPI vẫn cập nhật sau chốt
 
 ---

@@ -11,17 +11,14 @@ export function isPatrolMetricsCameraId(cameraId: string): boolean {
 }
 
 /**
- * ROI live trên tile camera — tắt mặc định.
- * BE xử lý trước → bbox HTTP đuổi theo video gây hiểu nhầm.
- * Bật lại khi có buffer sync `PATROL_LIVE_ROI_DELAY_MS`.
+ * Buffer đồng bộ ROI live với video HLS (~5s trễ).
+ * Bật/tắt hiển thị: nút bbox trên toolbar (`getCameraBboxVisible`).
  */
-export const PATROL_LIVE_ROI_ENABLED = false
-/** Phase 2 — playback + detection cùng timeline (ms). */
 export const PATROL_LIVE_ROI_DELAY_MS = 5000
 
-/** Camera vẽ ROI người tuần tra (bodycam + flycam). */
+/** Camera vẽ ROI người tuần tra (bodycam + flycam) — khi bbox toggle bật. */
 export function isPatrolPersonRoiCameraId(cameraId: string): boolean {
-  return PATROL_LIVE_ROI_ENABLED && isPatrolMetricsCameraId(cameraId)
+  return isPatrolMetricsCameraId(cameraId)
 }
 
 /**

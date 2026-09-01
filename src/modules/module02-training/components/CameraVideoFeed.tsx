@@ -30,7 +30,11 @@ import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRo
 import { resolveEffectivePatrolFlightMode, readPatrolFlightModeFromMetrics } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
-import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import {
+  isPatrolPersonRoiCameraId,
+  isPatrolMetricsCameraId,
+  PATROL_LIVE_ROI_DELAY_MS,
+} from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
@@ -152,12 +156,14 @@ export function CameraVideoFeed({
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
   )
   // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
-  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock)
+  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock, {
+    fallbackLagMs: isPatrolMetricsCameraId(cameraId) ? PATROL_LIVE_ROI_DELAY_MS : undefined,
+  })
 
   const patrolRoiFrameSize = useMemo(() => {
     const video = videoRef.current
-    const snapW = rawVmsFeed.snapshot?.width ?? 0
-    const snapH = rawVmsFeed.snapshot?.height ?? 0
+    const snapW = vmsFeed.snapshot?.width ?? 0
+    const snapH = vmsFeed.snapshot?.height ?? 0
     if (snapW > 0 && snapH > 0) {
       return resolveOverlayAnalyzeFrameSize(video, snapW, snapH)
     }
@@ -168,32 +174,32 @@ export function CameraVideoFeed({
     }
     return { width: 0, height: 0 }
   }, [
-    rawVmsFeed.snapshot?.width,
-    rawVmsFeed.snapshot?.height,
-    rawVmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.width,
+    vmsFeed.snapshot?.height,
+    vmsFeed.snapshot?.updated_at,
     framesReady,
     videoClock,
     roiLayoutTick,
   ])
 
   useEffect(() => {
-    if (!runPatrolHeatmapAnalyze || !rawVmsFeed.snapshot) return
-    const fromMetrics = readPatrolFlightModeFromMetrics(rawVmsFeed.snapshot.metrics)
+    if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return
+    const fromMetrics = readPatrolFlightModeFromMetrics(vmsFeed.snapshot.metrics)
     if (cameraId.startsWith('DR-') && fromMetrics) {
       setPatrolFlightMode(cameraId, fromMetrics)
     }
-    const flightMode = resolveEffectivePatrolFlightMode(cameraId, rawVmsFeed.snapshot.metrics)
+    const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
-      gateVmsPatrolPersonDetections(rawVmsFeed.snapshot, cameraId, flightMode),
+      gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
     )
   }, [
     runPatrolHeatmapAnalyze,
     cameraId,
-    rawVmsFeed.snapshot?.updated_at,
-    rawVmsFeed.snapshot?.width,
-    rawVmsFeed.snapshot?.height,
-    rawVmsFeed.snapshot?.metrics,
+    vmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.width,
+    vmsFeed.snapshot?.height,
+    vmsFeed.snapshot?.metrics,
   ])
 
   useEffect(() => {
