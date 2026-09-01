@@ -1,15 +1,18 @@
 /**
- * Trang phát sóng cho người đeo mũ — tách hẳn khỏi CMS.
+ * Trang phát sóng / GPS cho người đeo mũ.
  *
- * Điện thoại chỉ làm nhiệm vụ quay và đẩy WHIP lên MediaMTX. Theo dõi tuần tra
- * mở Module 05 trên thiết bị khác (laptop/tablet).
+ * HC-02 mặc định: video qua app RTMP (Larix) giống flycam — không cần tab này
+ * cho hình. Trang chỉ gửi GPS (tùy chọn). Theo dõi tuần tra mở Module 05 trên
+ * thiết bị khác.
  */
 import { memo, useRef } from 'react'
 import {
   Camera,
   Compass,
+  Copy,
   Gauge,
   MapPin,
+  Radio,
   SwitchCamera,
   Timer,
   Wifi,
@@ -19,9 +22,12 @@ import { cn } from '@/utils/cn'
 import { PATROL_BODYCAM_LABELS } from '../data/patrolCameras'
 import { formatPublisherGpsLabel } from './publisherGpsDefaults'
 import {
-  getBrowserPublishHelmetId,
+  getHelmetRtmpUrl,
   getHelmetWhipUrl,
+  getTelemetryHelmetId,
   isBrowserPublishHelmet,
+  isHelmetRtmpIngest,
+  isHelmetTelemetryPage,
 } from '../data/helmetIngest'
 import { useHelmetPublisher } from './useHelmetPublisher'
 import { usePublisherPatrolAuth } from './usePublisherPatrolAuth'
@@ -117,18 +123,24 @@ const StatRow = memo(function StatRow({
 
 export function HelmetPublisherPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const helmetId = getBrowserPublishHelmetId()
+  const helmetId = getTelemetryHelmetId()
+  const rtmpIngest = isHelmetRtmpIngest(helmetId)
+  const rtmpUrl = getHelmetRtmpUrl(helmetId)
 
   const patrolAuth = usePublisherPatrolAuth()
   const { state, start, stop, flipCamera } = useHelmetPublisher({
     helmetId,
     videoRef,
     patrolAuthReady: patrolAuth === 'ready',
+    telemetryOnly: rtmpIngest,
   })
 
   const label = PATROL_BODYCAM_LABELS[helmetId] ?? helmetId
   const publishesFromBrowser = isBrowserPublishHelmet(helmetId)
-  const configured = publishesFromBrowser && Boolean(getHelmetWhipUrl(helmetId))
+  const onTelemetryPage = isHelmetTelemetryPage(helmetId)
+  const configured = rtmpIngest
+    ? Boolean(rtmpUrl)
+    : publishesFromBrowser && Boolean(getHelmetWhipUrl(helmetId))
   const isBroadcasting = state.status === 'live' || state.status === 'starting'
   const limitation = qualityLabel(state.stats.qualityLimitation)
 
@@ -147,20 +159,51 @@ export function HelmetPublisherPage() {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#64748b] mb-0.5">
               Vifence · Tuần tra
             </p>
-            <h1 className="text-[17px] font-bold leading-tight">Phát sóng</h1>
+            <h1 className="text-[17px] font-bold leading-tight">
+              {rtmpIngest ? 'GPS tuần tra' : 'Phát sóng'}
+            </h1>
             <p className="text-[11px] text-[#94a3b8] mt-0.5">
-              Camera thiết bị này → {label}
+              {rtmpIngest
+                ? `Video RTMP → ${label} · trang này chỉ gửi vị trí`
+                : `Camera thiết bị này → ${label}`}
             </p>
           </div>
         </header>
 
+        {rtmpIngest && rtmpUrl && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-3 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-200/90">
+              <Radio className="w-4 h-4 shrink-0" aria-hidden />
+              <span className="text-[11px] font-semibold">Video — app Larix / OBS (RTMP)</span>
+            </div>
+            <p className="text-[10px] leading-relaxed text-[#94a3b8]">
+              Mở app phát sóng trên iPhone, dán URL bên dưới. Không cần giữ trang
+              trình duyệt này mở — luồng ổn định như flycam.
+            </p>
+            <div className="flex items-center gap-2 rounded-lg border border-[#1f2937] bg-[#0a0f16] px-2.5 py-2">
+              <code className="flex-1 text-[10px] text-emerald-100/90 break-all leading-snug">
+                {rtmpUrl}
+              </code>
+              <button
+                type="button"
+                aria-label="Sao chép URL RTMP"
+                onClick={() => { void navigator.clipboard?.writeText(rtmpUrl) }}
+                className="shrink-0 rounded-md p-1.5 text-[#94a3b8] hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            </div>
+          </div>
+        )}
+
         {state.status === 'live' && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn('grid gap-2', rtmpIngest ? 'grid-cols-1' : 'grid-cols-2')}>
             <KpiTile
               icon={Timer}
               label="Thời lượng"
               value={formatDuration(state.elapsedSec)}
             />
+            {!rtmpIngest && (
             <KpiTile
               icon={Gauge}
               label="Băng thông"
@@ -168,9 +211,11 @@ export function HelmetPublisherPage() {
               sub={limitation ?? undefined}
               tone={limitation ? 'warn' : state.stats.bitrateKbps >= 800 ? 'good' : 'normal'}
             />
+            )}
           </div>
         )}
 
+        {!rtmpIngest && (
         <div className="relative aspect-[3/4] max-h-[40dvh] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black shadow-lg shadow-black/40">
           <video
             ref={videoRef}
@@ -213,8 +258,11 @@ export function HelmetPublisherPage() {
             </>
           )}
         </div>
+        )}
 
         <div className="rounded-xl border border-[#1f2937] bg-[#0d1117] px-3 py-1 divide-y divide-[#1f2937]">
+          {!rtmpIngest && (
+            <>
           <StatRow label="Kết nối WebRTC" value={connectionLabel(state.connection)} />
           <StatRow
             label="Gói mất (packets lost)"
@@ -226,6 +274,8 @@ export function HelmetPublisherPage() {
             value={limitation ?? 'Không'}
             tone={limitation ? 'warn' : 'good'}
           />
+            </>
+          )}
           <StatRow
             label="Vị trí GPS"
             value={gpsText}
@@ -261,7 +311,7 @@ export function HelmetPublisherPage() {
           <Compass className="w-3.5 h-3.5 shrink-0 opacity-60" aria-hidden />
         </div>
 
-        {!publishesFromBrowser && (
+        {!onTelemetryPage && (
           <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[11px] leading-relaxed text-sky-200/90">
             {label} là bodycam phần cứng, tự phát RTSP liên tục — không cần trang này.
             Xem trực tiếp trong Module 05 trên thiết bị khác.
@@ -270,8 +320,10 @@ export function HelmetPublisherPage() {
 
         {patrolAuth === 'failed' && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
-            Chưa kết nối kênh vị trí — video vẫn phát được nhưng bản đồ CMS có thể
-            không cập nhật GPS. Liên hệ quản trị nếu lỗi kéo dài.
+            {rtmpIngest
+              ? 'Chưa kết nối kênh vị trí — bản đồ CMS có thể không cập nhật GPS.'
+              : 'Chưa kết nối kênh vị trí — video vẫn phát được nhưng bản đồ CMS có thể không cập nhật GPS.'}
+            {' '}Liên hệ quản trị nếu lỗi kéo dài.
           </p>
         )}
 
@@ -293,7 +345,7 @@ export function HelmetPublisherPage() {
             onClick={stop}
             className="w-full rounded-xl border border-red-500/40 bg-red-500/15 py-3.5 text-[14px] font-semibold text-red-200 transition-colors hover:bg-red-500/25 active:scale-[0.99]"
           >
-            Dừng phát sóng
+            {rtmpIngest ? 'Dừng gửi GPS' : 'Dừng phát sóng'}
           </button>
         ) : (
           <button
@@ -307,7 +359,9 @@ export function HelmetPublisherPage() {
                 : 'cursor-not-allowed border-[#1f2937] bg-[#0d1117] text-[#475569]',
             )}
           >
-            {configured ? 'Bắt đầu phát sóng' : 'Chưa sẵn sàng phát sóng'}
+            {configured
+              ? (rtmpIngest ? 'Bắt đầu gửi GPS' : 'Bắt đầu phát sóng')
+              : 'Chưa sẵn sàng'}
           </button>
         )}
       </div>
