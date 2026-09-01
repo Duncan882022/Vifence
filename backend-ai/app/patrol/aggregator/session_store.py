@@ -85,10 +85,40 @@ def all_sessions() -> list[TrackSession]:
         return list(_sessions.values())
 
 
+def borrow_parallel_object_subject(
+    camera_id: str,
+    started_at: float,
+    now_ts: float,
+) -> str | None:
+    """Track mới cùng camera trong lượt song song → dùng lại obj-* đang active."""
+    from .. import daystore
+
+    prefix = f"{camera_id}|"
+    with _lock:
+        best: str | None = None
+        best_last = 0.0
+        for key, other in _sessions.items():
+            if not key.startswith(prefix):
+                continue
+            oid = (other.subject_id or "").strip()
+            if not oid.startswith("obj-"):
+                continue
+            if abs(other.started_at - started_at) > daystore.PARALLEL_OBJ_START_MAX_SEC:
+                continue
+            if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
+                continue
+            if other.last_seen_at >= best_last:
+                best_last = other.last_seen_at
+                best = oid
+        return best
+
+
 def link_subject_session(session: TrackSession) -> None:
-    """Cùng pers-* + camera — gộp appearance (YOLO tách 2 track một người)."""
+    """Cùng pers-* / obj-* + camera — gộp appearance (YOLO tách 2 track một người)."""
     subject_id = (session.subject_id or "").strip()
     if not subject_id:
+        return
+    if not (subject_id.startswith("pers-") or subject_id.startswith("obj-")):
         return
     with _lock:
         for other in _sessions.values():

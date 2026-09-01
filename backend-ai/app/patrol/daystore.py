@@ -29,6 +29,10 @@ PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
 TOUCH_MIN_INTERVAL_SEC = 10.0
+# Hai ByteTrack song song (ptk0001 + ptk0004) trên cùng camera → một thẻ obj-*.
+PARALLEL_OBJ_START_MAX_SEC = 30.0
+PARALLEL_OBJ_OVERLAP_MIN_RATIO = 0.75
+PARALLEL_OBJ_ACTIVE_SEC = 90.0
 
 
 def _person_snapshot_score_floor() -> float:
@@ -312,6 +316,149 @@ def touch_person_event(
                 snapshot_path=appearance_snapshot,
                 new_encounter=seen_since is not None,
             )
+
+
+def _object_cards_overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Hai thẻ obj cùng lượt (track song song) — overlap thời gian + start gần nhau."""
+    first_a, last_a = float(a["first_seen"]), float(a["last_seen"])
+    first_b, last_b = float(b["first_seen"]), float(b["last_seen"])
+    if abs(first_a - first_b) > PARALLEL_OBJ_START_MAX_SEC:
+        return False
+    overlap = max(0.0, min(last_a, last_b) - max(first_a, first_b))
+    min_dur = min(max(last_a - first_a, 1.0), max(last_b - first_b, 1.0))
+    return overlap / min_dur >= PARALLEL_OBJ_OVERLAP_MIN_RATIO
+
+
+def _object_primary_camera(event_date: str, obj_id: str) -> str | None:
+    row = db.query_one(
+        "SELECT camera_id FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY started_at ASC LIMIT 1",
+        (event_date, obj_id),
+    )
+    if row is None:
+        return None
+    cam = str(row["camera_id"] or "").strip()
+    return cam or None
+
+
+def find_parallel_object_card(
+    event_date: str,
+    camera_id: str,
+    started_at: float,
+    now_ts: float,
+) -> str | None:
+    """Thẻ obj đang active cùng camera — tránh cấp obj mới khi ByteTrack tách đôi."""
+    cam = (camera_id or "").strip()
+    if not cam:
+        return None
+    rows = db.query(
+        "SELECT o.obj_id, o.first_seen, o.last_seen"
+        " FROM daily_objects o"
+        " WHERE o.event_date = ?"
+        " ORDER BY o.first_seen ASC",
+        (event_date,),
+    )
+    best: str | None = None
+    best_last = 0.0
+    probe = {"first_seen": started_at, "last_seen": now_ts}
+    for row in rows:
+        oid = str(row["obj_id"])
+        if _object_primary_camera(event_date, oid) != cam:
+            continue
+        if not _object_cards_overlap(dict(row), probe):
+            continue
+        last_seen = float(row["last_seen"])
+        if now_ts - last_seen > PARALLEL_OBJ_ACTIVE_SEC:
+            continue
+        if last_seen >= best_last:
+            best_last = last_seen
+            best = oid
+    return best
+
+
+def merge_object_cards(
+    keep_obj_id: str,
+    drop_obj_id: str,
+    *,
+    now: float | None = None,
+    event_date: str | None = None,
+) -> bool:
+    """Gộp hai thẻ Đối tượng trùng một người (track song song) → giữ keep."""
+    keep = (keep_obj_id or "").strip()
+    drop = (drop_obj_id or "").strip()
+    if not keep or not drop or keep == drop:
+        return False
+    ts = now or time.time()
+    date = event_date or db.today_vn(ts)
+    with db.tx() as conn:
+        keep_row = conn.execute(
+            "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
+            (date, keep),
+        ).fetchone()
+        drop_row = conn.execute(
+            "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
+            (date, drop),
+        ).fetchone()
+        if keep_row is None or drop_row is None:
+            return False
+        better = float(drop_row["snapshot_score"]) > float(keep_row["snapshot_score"])
+        conn.execute(
+            "UPDATE daily_objects SET first_seen = ?, last_seen = ?,"
+            " snapshot_path = ?, snapshot_score = ?"
+            " WHERE event_date = ? AND obj_id = ?",
+            (
+                min(float(keep_row["first_seen"]), float(drop_row["first_seen"])),
+                max(float(keep_row["last_seen"]), float(drop_row["last_seen"]), ts),
+                drop_row["snapshot_path"] if better else keep_row["snapshot_path"],
+                max(float(keep_row["snapshot_score"]), float(drop_row["snapshot_score"])),
+                date,
+                keep,
+            ),
+        )
+        conn.execute(
+            "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
+            (keep, date, drop),
+        )
+        conn.execute(
+            "DELETE FROM daily_objects WHERE event_date = ? AND obj_id = ?",
+            (date, drop),
+        )
+    coalesce_subject_appearances(keep, date)
+    return True
+
+
+def coalesce_parallel_object_cards(date: str | None = None) -> int:
+    """Gộp thẻ obj trùng lượt (2 track cùng camera/GPS) — repair sau deploy."""
+    d = date or db.today_vn()
+    objs = list_objects(d)
+    merged = 0
+    removed: set[str] = set()
+    for i, a in enumerate(objs):
+        aid = str(a["obj_id"])
+        if aid in removed:
+            continue
+        cam_a = _object_primary_camera(d, aid)
+        for b in objs[i + 1 :]:
+            bid = str(b["obj_id"])
+            if bid in removed:
+                continue
+            if not _object_cards_overlap(a, b):
+                continue
+            cam_b = _object_primary_camera(d, bid)
+            if cam_a and cam_b and cam_a != cam_b:
+                continue
+            keep, drop = (aid, bid) if aid < bid else (bid, aid)
+            if merge_object_cards(keep, drop, event_date=d):
+                merged += 1
+                removed.add(drop)
+                if drop == aid:
+                    break
+                a = db.query_one(
+                    "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
+                    (d, aid),
+                ) or a
+    return merged
 
 
 def promote_object(

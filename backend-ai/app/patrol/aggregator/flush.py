@@ -110,17 +110,37 @@ def flush_session(
         if not ok and not finalize:
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
-        obj_id = daystore.touch_object(
-            None,
-            camera_id=session.camera_id,
-            zone_id=session.zone_id,
-            now=now,
-            seen_since=session.started_at if session.last_flush_at <= 0 else None,
-            gps_lat=gps_lat,
-            gps_lng=gps_lng,
-            skip_appearance=True,
+        from .session_store import borrow_parallel_object_subject, link_subject_session
+
+        event_date = db.today_vn(now)
+        parallel = borrow_parallel_object_subject(
+            session.camera_id,
+            session.started_at,
+            now,
         )
-        session.subject_id = obj_id
+        if not parallel:
+            parallel = daystore.find_parallel_object_card(
+                event_date,
+                session.camera_id,
+                session.started_at,
+                now,
+            )
+        if parallel:
+            session.subject_id = parallel
+            link_subject_session(session)
+        else:
+            obj_id = daystore.touch_object(
+                None,
+                camera_id=session.camera_id,
+                zone_id=session.zone_id,
+                now=now,
+                seen_since=session.started_at if session.last_flush_at <= 0 else None,
+                gps_lat=gps_lat,
+                gps_lng=gps_lng,
+                skip_appearance=True,
+            )
+            session.subject_id = obj_id
+            link_subject_session(session)
 
     subject_id = session.subject_id
     if not subject_id:
