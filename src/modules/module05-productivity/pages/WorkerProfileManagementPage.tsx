@@ -52,7 +52,7 @@ function FaceBadge({ count, complete }: { count: number; complete?: boolean }) {
       complete
         ? 'bg-green-400/10 text-green-400 border-green-400/30'
         : count > 0
-          ? 'bg-violet-400/10 text-violet-400 border-violet-400/30'
+          ? 'bg-fuchsia-400/10 text-fuchsia-400 border-fuchsia-400/30'
           : 'bg-amber-400/10 text-amber-400 border-amber-400/30',
     )}>
       <ScanFace className="w-2.5 h-2.5" />
