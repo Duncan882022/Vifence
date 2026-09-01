@@ -31,22 +31,15 @@ import {
 import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsFromPresences } from '../utils/patrolHelmetDetectCounts'
 import {
-  buildPatrolDayHeatmapDots,
   buildPatrolPersEntityLookup,
   buildPatrolPresenceHeatmapDots,
   filterPatrolHeatmapDotsByDevice,
-  mergePatrolHeatmapDetectionDots,
 } from '../utils/patrolDayHeatmapDots'
 import { PATROL_FLYMAP_DOT_HEX, PATROL_HEATMAP_DOT_HEX } from '../utils/patrolDetectionDotUi'
 import {
   filterPatrolHeatmapDotsExcludeAerialFlycam,
   filterPatrolPresencesForHeatmap,
 } from '../utils/patrolFlycamEventFilter'
-import {
-  getHeatmapPersonDots,
-  subscribeHeatmapPersonRegistry,
-  syncPatrolPersonEventsToHeatmap,
-} from '@/services/patrolHeatmapPersonRegistry'
 import { clearPatrolHeatmapLiveTracks } from '../utils/patrolHeatmapLiveSync'
 import type { PatrolTier } from '../utils/patrolTierTokens'
 import type { ObjectState, WorkforceSnapshot } from '../types/workforceHeatmap'
@@ -247,7 +240,6 @@ export function PatrolDensityHeatmap({
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
-  const [registryRevision, setRegistryRevision] = useState(0)
 
   const hc02Helmet = workforce.helmets['HC-02']
 
@@ -274,14 +266,6 @@ export function PatrolDensityHeatmap({
   useEffect(() => {
     return subscribePatrolManualIdentity(() => setIdentityRevision(t => t + 1))
   }, [])
-
-  useEffect(() => subscribeHeatmapPersonRegistry(() => {
-    setRegistryRevision(t => t + 1)
-  }), [])
-
-  useEffect(() => {
-    syncPatrolPersonEventsToHeatmap(patrolEvents)
-  }, [patrolEvents])
 
   const hc01Online = Boolean(helmetOnlineById['HC-01'])
   const hc02Online = Boolean(helmetOnlineById['HC-02'])
@@ -432,16 +416,12 @@ export function PatrolDensityHeatmap({
     if (!layers.density) return []
 
     void identityRevision
-    void registryRevision
 
     const eventCatalog = patrolEventsAll ?? patrolEvents
     const persEntityLookup = buildPatrolPersEntityLookup(eventCatalog)
     const scopedPresences = showFlymap
       ? presences.filter(p => isPatrolDroneCameraId(p.cameraId || p.sourceCameras[0] || ''))
       : filterPatrolPresencesForHeatmap(presences, flycamFlightModes)
-    const scopedEvents = showFlymap
-      ? eventCatalog.filter(e => isPatrolDroneCameraId(e.cameraId))
-      : patrolEvents
     const liveOnlyOnline = showFlymap ? droneOnline : anyCameraOnline
 
     const presenceOpts = {
@@ -454,47 +434,15 @@ export function PatrolDensityHeatmap({
       persEntityLookup,
     } as const
 
-    let presenceDots = buildPatrolPresenceHeatmapDots(scopedPresences, {
+    let merged = buildPatrolPresenceHeatmapDots(scopedPresences, {
       ...presenceOpts,
       liveOnly: liveOnlyOnline,
     })
-    if (liveOnlyOnline && presenceDots.length === 0) {
-      presenceDots = buildPatrolPresenceHeatmapDots(scopedPresences, {
+    if (liveOnlyOnline && merged.length === 0) {
+      merged = buildPatrolPresenceHeatmapDots(scopedPresences, {
         ...presenceOpts,
         liveOnly: false,
       })
-    }
-
-    const registryDots = getHeatmapPersonDots()
-      .filter(dot => !showFlymap || isPatrolDroneCameraId(dot.cameraId))
-      .map(dot => {
-        const camOnline = Boolean(helmetOnlineById[dot.cameraId])
-        const inCameraView = camOnline && Boolean(dot.inCameraView)
-        return {
-          ...dot,
-          inCameraView,
-          opacity: inCameraView
-            ? DETECTION_DOT_OPACITY_IN_VIEW
-            : DETECTION_DOT_OPACITY_OUT_OF_VIEW,
-        }
-      })
-
-    let merged = scopedPresences.length > 0
-      ? presenceDots
-      : mergePatrolHeatmapDetectionDots([registryDots], { persEntityLookup })
-
-    if (merged.length === 0 && scopedEvents.length > 0) {
-      let eventDots = buildPatrolDayHeatmapDots(scopedEvents, {
-        liveOnly: liveOnlyOnline,
-        cameraOnlineById: helmetOnlineById,
-      })
-      if (liveOnlyOnline && eventDots.length === 0) {
-        eventDots = buildPatrolDayHeatmapDots(scopedEvents, {
-          liveOnly: false,
-          cameraOnlineById: helmetOnlineById,
-        })
-      }
-      merged = eventDots
     }
 
     if (!showFlymap) {
@@ -525,7 +473,6 @@ export function PatrolDensityHeatmap({
     droneOnline,
     helmetOnlineById,
     identityRevision,
-    registryRevision,
     mergedCameraPositions,
     helmetHeadingById,
     layers.helmet,
@@ -542,7 +489,7 @@ export function PatrolDensityHeatmap({
 
   const personCount = dayStats.personCount
   const identifiedCount = dayStats.identityCount
-  const objectCount = dayStats.objectCount
+  const objectEncounterCount = dayStats.unassignedObservations
 
   useEffect(() => {
     if (!expanded) return
@@ -614,7 +561,7 @@ export function PatrolDensityHeatmap({
           />
         ) : (
           <HeatmapSiteStatsOverlay
-            objectCount={objectCount}
+            objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}
             compactChrome={viewport.compactChrome}

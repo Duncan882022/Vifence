@@ -115,6 +115,35 @@ describe('buildPatrolPresenceHeatmapDots', () => {
     expect(dots[0].tier).toBe('object')
   })
 
+  it('object peak — N presences → N chấm xanh (không gom entity)', () => {
+    const dots = buildPatrolPresenceHeatmapDots([
+      makePresence({
+        id: 101,
+        subjectId: 'obj-20260826-0001',
+        tier: 'object',
+        presenceSeq: 1,
+        counted: true,
+      }),
+      makePresence({
+        id: 102,
+        subjectId: 'obj-20260826-0002',
+        tier: 'object',
+        presenceSeq: 1,
+        counted: true,
+      }),
+      makePresence({
+        id: 103,
+        subjectId: 'obj-20260826-0003',
+        tier: 'object',
+        presenceSeq: 1,
+        counted: true,
+      }),
+    ], { includeUnassigned: true, countedOnly: true })
+    expect(dots).toHaveLength(3)
+    expect(dots.every(d => d.tier === 'object')).toBe(true)
+    expect(new Set(dots.map(d => d.id)).size).toBe(3)
+  })
+
   it('identity tier gán tier + verified', () => {
     const dots = buildPatrolPresenceHeatmapDots([
       makePresence({ tier: 'identity', subjectId: 'p-102' }),

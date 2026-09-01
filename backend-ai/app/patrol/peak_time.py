@@ -1,4 +1,4 @@
-"""Peak time — đám đông trong khung: định danh rõ → pers; còn lại gom 1 obj nhóm."""
+"""Peak time — đám đông trong khung: định danh rõ → pers; còn lại lượt gặm N + 1 thẻ nhóm."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def peak_identity_allowed(
 
 
 def _ensure_crowd_object_id(camera_id: str, ts: float) -> str:
-    """Một obj-* cố định cho cả phiên peak trên camera — lock sự kiện duy nhất."""
+    """Một obj-* cố định cho thẻ snapshot nhóm — không ghi lượt gặm ledger."""
     cam = (camera_id or "").strip()
     with _lock:
         state = _crowd_sessions.get(cam)
@@ -91,6 +91,7 @@ def _ensure_crowd_object_id(camera_id: str, ts: float) -> str:
         camera_id=cam,
         now=ts,
         seen_since=ts,
+        skip_appearance=True,
     )
     with _lock:
         _crowd_sessions[cam] = _CrowdSession(object_id=obj_id, locked=True, last_touch_at=ts)
@@ -103,7 +104,7 @@ def record_peak_crowd_frame(
     frame: Any,
     now: float | None = None,
 ) -> str | None:
-    """Upsert một lượt gặp nhóm — không tạo obj-* riêng từng track."""
+    """Cập nhật snapshot nhóm UI — lượt gặm từng silhouette qua density encounter."""
     if not members:
         return None
     ts = now or time.time()
@@ -143,6 +144,7 @@ def record_peak_crowd_frame(
         seen_since=None,
         gps_lat=gps_lat,
         gps_lng=gps_lng,
+        skip_appearance=True,
     )
     return obj_id
 

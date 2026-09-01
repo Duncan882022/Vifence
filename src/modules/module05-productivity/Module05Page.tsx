@@ -138,7 +138,7 @@ function PatrolKPIs({
       : 'Chưa có thiết bị tuần tra online'
 
   const objectEncounterDetail = peakTimeActive
-    ? 'Peak time — mặt rõ định danh; còn lại gom 1 nhóm ĐT'
+    ? 'Peak time — snapshot nhóm 1 thẻ; lượt gặm đếm đủ từng ĐT'
     : objectEncounters > 0
       ? 'Silhouette chưa gán danh tính — không tính Nhân sự'
       : 'Chưa ghi nhận lượt gặp Đối tượng'

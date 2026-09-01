@@ -226,15 +226,14 @@ def _assign_patrol_person_identity(
                     confidence=float(person_det.confidence or 0.0),
                 ),
             )
-        else:
-            _record_patrol_density_encounter(
-                person_det,
-                camera_id=camera_id,
-                track_id=track_id,
-                frame=frame,
-                person_bbox=person_bbox,
-                confidence=float(person_det.confidence or 0.0),
-            )
+        _record_patrol_density_encounter(
+            person_det,
+            camera_id=camera_id,
+            track_id=track_id,
+            frame=frame,
+            person_bbox=person_bbox,
+            confidence=float(person_det.confidence or 0.0),
+        )
         return
 
     frame_faces = _hc_frame_face_assignments.setdefault(camera_id, {})

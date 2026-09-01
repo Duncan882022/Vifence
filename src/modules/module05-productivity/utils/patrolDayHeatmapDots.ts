@@ -1,6 +1,6 @@
 /**
- * Chấm bản đồ tuần tra — 1 chấm / định danh (entity), gộp nhiều lượt L# cùng người.
- * Ba tầng: Đối tượng (obj-*) · Người · Định danh — cần includeUnassigned cho obj.
+ * Chấm bản đồ tuần tra — presences only; map ≡ KPI.
+ * Người/Định danh: 1 chấm/entity. Đối tượng: 1 chấm/lượt gặm (presence_seq).
  */
 import type { DetectionDot } from '../data/patrolDetectionData'
 import type { PatrolEvent } from '../data/patrolTypes'
@@ -240,7 +240,7 @@ function shouldReplacePresenceDot(prev: DetectionDot, next: DetectionDot): boole
   return higherPatrolTier(nextTier, prevTier) !== prevTier
 }
 
-/** Một chấm / định danh (entity) — gộp nhiều lượt L# cùng người, GPS lượt mới nhất. */
+/** Một chấm / định danh (entity) hoặc một chấm / lượt gặm (object) — GPS lượt mới nhất. */
 export function buildPatrolPresenceHeatmapDots(
   presences: PatrolDayPresence[],
   opts?: {
@@ -266,6 +266,7 @@ export function buildPatrolPresenceHeatmapDots(
   })
 
   const byEntity = new Map<string, DetectionDot>()
+  const objectDots: DetectionDot[] = []
 
   for (const presence of scoped) {
     const lastSeen = presence.endedAt * 1000
@@ -284,9 +285,13 @@ export function buildPatrolPresenceHeatmapDots(
       opts?.flightModeByCamera?.[primaryCam],
     )
     const entityKey = resolvePresenceEntityKey(presence, opts?.persEntityLookup)
+    const isObjectEncounter = tier === 'object'
+    const dotKey = isObjectEncounter
+      ? `encounter-${presence.id}`
+      : `entity-${entityKey}`
 
     const dot: DetectionDot = {
-      id: `entity-${entityKey}`,
+      id: dotKey,
       type: 'person',
       position: [lat, lng],
       zoneId: presence.zoneId || 'ZONE_SITE',
@@ -294,7 +299,7 @@ export function buildPatrolPresenceHeatmapDots(
       confidence: 1,
       label: `${presence.displayName} · L#${presence.presenceSeq}`,
       lastSeenAt: lastSeen,
-      objectId: entityKey,
+      objectId: isObjectEncounter ? presence.subjectId : entityKey,
       tier,
       verified,
       inCameraView,
@@ -305,12 +310,17 @@ export function buildPatrolPresenceHeatmapDots(
       presenceSeq: presence.presenceSeq,
     }
 
+    if (isObjectEncounter) {
+      objectDots.push(dot)
+      continue
+    }
+
     const prev = byEntity.get(entityKey)
     if (prev && !shouldReplacePresenceDot(prev, dot)) continue
     byEntity.set(entityKey, dot)
   }
 
-  return [...byEntity.values()]
+  return [...byEntity.values(), ...objectDots]
 }
 
 export interface PatrolHeatmapDeviceLayers {
