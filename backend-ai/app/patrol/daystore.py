@@ -723,13 +723,13 @@ def _same_coalesce_visit(a: Any, b: Any) -> bool:
         return True
     if sa and sb and sa == sb:
         return True
-    if not ta and not tb and not sa and not sb:
-        return True
-    # Split-track duplicate sau merge pers — hai track_id khác nhau nhưng liền kề.
-    if ta and tb and ta != tb:
+    # ByteTrack re-id: cùng session, track id đổi giữa chừng (≤5s).
+    if sa and sb and sa == sb and ta and tb and ta != tb:
         gap = float(b["started_at"]) - float(a["ended_at"])
-        if 0 <= gap <= 5.0:
-            return True
+        return 0 <= gap <= 5.0
+    if not ta and not tb and not sa and not sb:
+        gap = float(b["started_at"]) - float(a["ended_at"])
+        return 0 <= gap <= 2.0
     return False
 
 

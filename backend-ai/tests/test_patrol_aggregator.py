@@ -581,7 +581,8 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         )
         self.assertEqual(snap["snapshot_path"], "2026-08-30/tk-0000007-1000.jpg")
 
-    def test_coalesce_merges_duplicate_rows(self) -> None:
+    def test_coalesce_merges_same_session_split_track(self) -> None:
+        """Cùng session, track id đổi (ByteTrack re-id) — gộp 1 lượt."""
         from app.patrol import daystore, db
 
         daystore.upsert_track_appearance(
@@ -591,7 +592,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             camera_id="HC-02",
             zone_id=None,
             track_id="ptk-a",
-            session_id="sess-a",
+            session_id="sess-shared",
             started_at=1000.0,
             ended_at=1020.0,
             gps_lat=20.93,
@@ -623,7 +624,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
                     '["HC-02"]',
                     "snap-b.jpg",
                     "ptk-b",
-                    "sess-b",
+                    "sess-shared",
                     0,
                     "{}",
                     "[]",
@@ -635,6 +636,62 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         self.assertEqual(merged, 1)
         rows = daystore.list_day_presences("2026-08-30")
         self.assertEqual(len(rows), 1)
+
+    def test_coalesce_keeps_separate_sessions(self) -> None:
+        """Hai session khác nhau — không gộp dù cùng camera/GPS."""
+        from app.patrol import daystore, db
+
+        daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="tk-0000008",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-a",
+            session_id="sess-a",
+            started_at=1000.0,
+            ended_at=1020.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="snap-a.jpg",
+        )
+        with db.tx() as conn:
+            conn.execute(
+                "INSERT INTO appearances"
+                "(event_date, subject_id, camera_id, started_at, ended_at,"
+                " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified,"
+                " presence_seq, source_cameras, snapshot_path, track_id,"
+                " session_id, counted, event_payload_json, interactions_json)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "2026-08-30",
+                    "tk-0000008",
+                    "HC-02",
+                    1022.0,
+                    1025.0,
+                    20.93,
+                    106.92,
+                    20.93,
+                    106.92,
+                    1,
+                    2,
+                    '["HC-02"]',
+                    "snap-b.jpg",
+                    "ptk-b",
+                    "sess-b",
+                    0,
+                    "{}",
+                    "[]",
+                ),
+            )
+        merged = daystore.coalesce_subject_appearances(
+            "tk-0000008", "2026-08-30", camera_id="HC-02",
+        )
+        self.assertEqual(merged, 0)
+        rows = daystore.list_day_presences("2026-08-30")
+        self.assertEqual(len(rows), 2)
 
 
 class AggregatorSnapshotFlushTest(unittest.TestCase):
