@@ -10,9 +10,18 @@ export function isPatrolMetricsCameraId(cameraId: string): boolean {
   return isPatrolHelmetCameraId(cameraId) || cameraId.startsWith('DR-')
 }
 
+/**
+ * ROI live trên tile camera — tắt mặc định.
+ * BE xử lý trước → bbox HTTP đuổi theo video gây hiểu nhầm.
+ * Bật lại khi có buffer sync `PATROL_LIVE_ROI_DELAY_MS`.
+ */
+export const PATROL_LIVE_ROI_ENABLED = false
+/** Phase 2 — playback + detection cùng timeline (ms). */
+export const PATROL_LIVE_ROI_DELAY_MS = 5000
+
 /** Camera vẽ ROI người tuần tra (bodycam + flycam). */
 export function isPatrolPersonRoiCameraId(cameraId: string): boolean {
-  return isPatrolMetricsCameraId(cameraId)
+  return PATROL_LIVE_ROI_ENABLED && isPatrolMetricsCameraId(cameraId)
 }
 
 /**

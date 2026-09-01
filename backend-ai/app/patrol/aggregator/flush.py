@@ -243,14 +243,18 @@ def flush_session(
 
 def finalize_session(session: TrackSession) -> None:
     """Đóng session khi ByteTrack mất track."""
-    dummy = ObservationInput(
+    fallback = ObservationInput(
         camera_id=session.camera_id,
         track_id=session.track_id,
         ts=session.last_seen_at,
         zone_id=session.zone_id,
     )
+    obs = session.best_observation if (
+        session.best_observation is not None
+        and session.best_observation.frame is not None
+    ) else fallback
     session.dirty = True
-    flush_session(session, dummy, finalize=True)
+    flush_session(session, obs, finalize=True)
     logger.debug(
         "finalized track %s subject %s duration %.1fs interactions %d",
         session.track_id,
