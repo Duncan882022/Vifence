@@ -207,13 +207,17 @@ class PersonIdentityRegistryFrameSplitTests(unittest.TestCase):
             "app.person_identity_registry._match_patrol_gallery_from_embedding",
             return_value=(gallery_id, "Duncan", 0.91),
         ):
-            wid, name = resolve_patrol_person_identity(
-                det,
-                "HC-01",
-                "p43:person:03",
-                person_bbox=[100.0, 80.0, 900.0, 700.0],
-                face_emb=emb,
-            )
+            with patch(
+                "app.patrol.identity.hr_profile_for_gallery",
+                return_value={"full_name": "Duncan", "status": "identified"},
+            ):
+                wid, name = resolve_patrol_person_identity(
+                    det,
+                    "HC-01",
+                    "p43:person:03",
+                    person_bbox=[100.0, 80.0, 900.0, 700.0],
+                    face_emb=emb,
+                )
         self.assertEqual(wid, gallery_id)
         self.assertEqual(name, "Duncan")
         self.assertEqual(det.worker_id, gallery_id)

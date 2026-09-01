@@ -1,4 +1,4 @@
-"""Module 05 — gán định danh patrol (sgc/OBJ → gallery worker) lưu DB file."""
+"""Module 05 — alias tk-* / obj-* → gallery worker p-* (chỉ khi có hồ sơ HR)."""
 
 from __future__ import annotations
 
@@ -52,50 +52,57 @@ def patrol_gallery_worker_id(employee_code: str) -> str:
 
 
 def normalize_alias_key(key: str) -> str:
-    k = key.strip()
+    """Chuẩn hoá alias — legacy sgc-* → tk-*."""
+    from .patrol_ids import normalize_track_id
+
+    k = (key or "").strip()
     if not k:
         return k
-    if k.lower().startswith("sgc-"):
-        return k.lower()
-    return k
+    normalized = normalize_track_id(k)
+    return normalized or k
 
 
-def _is_verified_patrol_alias(alias: str) -> bool:
-    """pers-/iden-* chỉ hợp lệ khi SQLite có hồ sơ status=identified."""
+def _resolve_alias_to_gallery_raw(alias: str) -> str | None:
+    """Map alias → gallery id từ file binding, không kiểm tra HR."""
     key = normalize_alias_key(alias)
     if not key:
-        return False
-    kl = key.lower()
-    if not kl.startswith(("pers-", "iden-")):
-        return True
-    try:
-        from .patrol import db, identity as patrol_identity
+        return None
+    wid = (_load().get("alias_to_gallery") or {}).get(key)
+    return str(wid).strip() if wid else None
 
-        if kl.startswith("pers-"):
-            person = patrol_identity.get_person(key)
-            return (
-                person is not None
-                and person.get("status") == patrol_identity.STATUS_IDENTIFIED
-            )
-        row = db.query_one(
-            "SELECT status FROM persons WHERE employee_code = ? OR pers_id = ?",
-            (key, key),
-        )
-        return (
-            row is not None
-            and row["status"] == patrol_identity.STATUS_IDENTIFIED
-        )
+
+def _get_binding_row(gallery_id: str) -> dict[str, Any] | None:
+    wid = (gallery_id or "").strip()
+    if not wid:
+        return None
+    row = (_load().get("by_gallery_worker") or {}).get(wid)
+    return row if isinstance(row, dict) else None
+
+
+def _gallery_binding_has_hr(gallery_id: str) -> bool:
+    """Gallery binding chỉ hợp lệ khi SQLite còn hồ sơ HR status=identified."""
+    row = _get_binding_row(gallery_id)
+    if not row:
+        return False
+    code = str(row.get("employee_code") or "").strip()
+    if not code:
+        return False
+    try:
+        from .patrol import identity as patrol_identity
+
+        return patrol_identity.hr_profile_for_employee_code(code) is not None
     except Exception:  # noqa: BLE001
         return False
 
 
 def lookup_gallery_worker(alias: str) -> str | None:
     key = normalize_alias_key(alias)
-    if not key or not _is_verified_patrol_alias(key):
+    if not key:
         return None
-    state = _load()
-    wid = (state.get("alias_to_gallery") or {}).get(key)
-    return str(wid).strip() if wid else None
+    wid = _resolve_alias_to_gallery_raw(key)
+    if not wid or not _gallery_binding_has_hr(wid):
+        return None
+    return wid
 
 
 def lookup_patrol_identity(alias: str) -> dict[str, Any] | None:
@@ -129,36 +136,36 @@ def list_patrol_identity_bindings() -> list[dict[str, Any]]:
     return rows
 
 
-def prune_stale_pers_aliases() -> dict[str, Any]:
-    """Gỡ pers-/iden-* alias không còn khớp hồ sơ identified trong SQLite."""
-    removed: list[str] = []
+def prune_stale_gallery_bindings() -> dict[str, Any]:
+    """Gỡ gallery worker / alias khi không còn hồ sơ HR identified."""
+    removed_workers: list[str] = []
+    removed_aliases: list[str] = []
     with _lock:
         state = _load()
-        alias_map = state.setdefault("alias_to_gallery", {})
         by_gallery = state.setdefault("by_gallery_worker", {})
-        for alias in list(alias_map.keys()):
-            kl = alias.lower()
-            if not kl.startswith(("pers-", "iden-")):
+        alias_map = state.setdefault("alias_to_gallery", {})
+        for wid in list(by_gallery.keys()):
+            if _gallery_binding_has_hr(wid):
                 continue
-            if _is_verified_patrol_alias(alias):
-                continue
-            owner = alias_map.pop(alias, None)
-            removed.append(alias)
-            if owner and owner in by_gallery:
-                row = by_gallery[owner]
-                if isinstance(row, dict):
-                    row["aliases"] = [
-                        a for a in (row.get("aliases") or []) if a != alias
-                    ]
-                    by_gallery[owner] = row
-        if removed:
+            row = by_gallery.pop(wid, {})
+            removed_workers.append(wid)
+            aliases = row.get("aliases") or [] if isinstance(row, dict) else []
+            for alias in aliases:
+                if alias_map.get(alias) == wid:
+                    alias_map.pop(alias, None)
+                    removed_aliases.append(alias)
+        if removed_workers:
             _save(state)
-    return {"pruned_aliases": removed, "pruned_count": len(removed)}
+    return {
+        "pruned_gallery_workers": removed_workers,
+        "pruned_aliases": removed_aliases,
+        "pruned_count": len(removed_workers),
+    }
 
 
 def repair_patrol_identity_bindings() -> dict[str, Any]:
-    """Đồng bộ aliases[] từ alias_to_gallery — gỡ alias ma còn trong row cũ."""
-    prune_out = prune_stale_pers_aliases()
+    """Đồng bộ aliases[] từ alias_to_gallery — gỡ binding không còn HR."""
+    gallery_out = prune_stale_gallery_bindings()
     with _lock:
         state = _load()
         by_gallery = state.setdefault("by_gallery_worker", {})
@@ -179,7 +186,7 @@ def repair_patrol_identity_bindings() -> dict[str, Any]:
     return {
         "repaired": repaired,
         "workers": len(by_gallery),
-        **prune_out,
+        **gallery_out,
     }
 
 
@@ -207,7 +214,6 @@ def bind_patrol_identity(
         prev = by_gallery.get(wid) if isinstance(by_gallery.get(wid), dict) else {}
         merged_aliases = sorted(set([*(prev.get("aliases") or []), *aliases, wid]))
 
-        # Alias thuộc về đúng một gallery worker — gỡ khỏi hồ sơ cũ (An/NV01…).
         for alias in merged_aliases:
             for other_wid, other_row in list(by_gallery.items()):
                 if other_wid == wid or not isinstance(other_row, dict):

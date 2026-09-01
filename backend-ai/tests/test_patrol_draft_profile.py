@@ -1,4 +1,4 @@
-"""Hồ sơ bản nháp — sgc-* → tk-* draft, xác minh → identified."""
+"""Hồ sơ bản nháp — tk-* draft, xác minh → identified."""
 
 from __future__ import annotations
 
@@ -56,10 +56,12 @@ class PatrolDraftProfileTests(unittest.TestCase):
         db.DATA_DIR = self._old_data
         self._tmpdir.cleanup()
 
-    def test_sgc_maps_to_single_draft_profile(self) -> None:
-        sgc = "sgc-00000042"
-        p1 = identity.ensure_draft_for_sgc(sgc)
-        p2 = identity.ensure_draft_for_sgc(sgc)
+    def test_tk_draft_profile_is_stable(self) -> None:
+        from app.patrol_ids import normalize_track_id
+
+        tk = normalize_track_id("sgc-00000042")
+        p1 = identity.ensure_draft_for_tk(tk)
+        p2 = identity.ensure_draft_for_tk(tk)
         self.assertEqual(p1, p2)
         self.assertEqual(p1, "tk-0000042")
         row = identity.get_person(p1)
@@ -68,8 +70,7 @@ class PatrolDraftProfileTests(unittest.TestCase):
         self.assertEqual(row["employee_code"], "tk-0000042")
 
     def test_verify_draft_requires_face_or_session(self) -> None:
-        sgc = "sgc-00000099"
-        pers_id = identity.ensure_draft_for_sgc(sgc)
+        pers_id = identity.ensure_draft_for_tk("tk-0000099")
         with self.assertRaises(ValueError):
             identity.verify_draft_profile(
                 pers_id,
@@ -79,8 +80,7 @@ class PatrolDraftProfileTests(unittest.TestCase):
             )
 
     def test_verify_draft_manual_front_image(self) -> None:
-        sgc = "sgc-00000101"
-        pers_id = identity.ensure_draft_for_sgc(sgc)
+        pers_id = identity.ensure_draft_for_tk("tk-0000101")
         verified = identity.verify_draft_profile(
             pers_id,
             full_name="Bình",
@@ -99,8 +99,7 @@ class PatrolDraftProfileTests(unittest.TestCase):
         )
 
     def test_verify_draft_promotes_via_enroll_session(self) -> None:
-        sgc = "sgc-00000100"
-        pers_id = identity.ensure_draft_for_sgc(sgc)
+        pers_id = identity.ensure_draft_for_tk("tk-0000100")
         session_id = _session_with_required_poses()
         verified = identity.verify_draft_profile(
             pers_id,
