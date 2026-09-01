@@ -13,7 +13,7 @@ import {
   cameraToolbarBtn,
   cameraToolbarIconSize,
 } from './cameraToolbarStyles'
-import { isPatrolDroneCameraId, isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
+import { isPatrolDroneCameraId } from '@/modules/module05-productivity/data/patrolDrones'
 import { usePatrolDroneFlightMode } from '@/modules/module05-productivity/hooks/usePatrolFlycamFlightModes'
 import { PatrolStreamTelemetryOverlay } from '@/modules/module05-productivity/components/PatrolStreamTelemetryOverlay'
 import { usePatrolCameraStreamTelemetry } from '@/modules/module05-productivity/hooks/usePatrolCameraStreamTelemetry'
@@ -124,8 +124,6 @@ export function CameraToolbar({
   compact,
   showFacingToggle,
 }: CameraToolbarProps) {
-  const droneRoiLocked = isPatrolDroneRoiMandatory(cameraId)
-
   return (
     <div className={cn(
       'absolute z-[8] pointer-events-auto',
@@ -157,14 +155,12 @@ export function CameraToolbar({
           compact={compact}
           className={cameraToolbarBtn(compact)}
         />
-        {!droneRoiLocked && (
-          <CameraBboxToggle
-            cameraId={cameraId}
-            compact={compact}
-            className={cameraToolbarBtn(compact)}
-            activeClassName={cameraToolbarBtn(compact, true)}
-          />
-        )}
+        <CameraBboxToggle
+          cameraId={cameraId}
+          compact={compact}
+          className={cameraToolbarBtn(compact)}
+          activeClassName={cameraToolbarBtn(compact, true)}
+        />
       </div>
     </div>
   )

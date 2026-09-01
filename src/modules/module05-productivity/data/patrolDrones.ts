@@ -34,11 +34,6 @@ export function patrolDroneMapAccent(
   return fallbackColor
 }
 
-/** DR-* — ROI người luôn bật trên tile; không tắt qua bbox toggle. */
-export function isPatrolDroneRoiMandatory(cameraId: string): boolean {
-  return isPatrolDroneCameraId(cameraId)
-}
-
 function readEnv(key: string): string | undefined {
   const raw = import.meta.env[key as keyof ImportMetaEnv]
   return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
