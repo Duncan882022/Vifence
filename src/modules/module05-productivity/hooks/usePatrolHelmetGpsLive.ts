@@ -1,7 +1,7 @@
 /**
- * HC-02 live map dots — GPS bridge + registry, không poll metrics trùng page.
+ * GPS live HC-02 cho pin bản đồ — không dùng registry chấm (presences là nguồn map dots).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { watchDeviceGps } from '@/modules/module02-training/services/deviceGps.service'
 import {
   getPatrolHelmetGps,
@@ -10,15 +10,9 @@ import {
   subscribePatrolHelmetGps,
 } from '@/services/patrolHelmetGpsBridge'
 import {
-  getHeatmapPersonCount,
-  getHeatmapPersonDots,
-  subscribeHeatmapPersonRegistry,
-} from '@/services/patrolHeatmapPersonRegistry'
-import {
   getPatrolMobileLiveSnapshot,
   subscribePatrolMobileLiveSnapshot,
 } from '@/services/patrolMobileMetricsBridge'
-import type { DetectionDot } from '../data/patrolDetectionData'
 import { PATROL_HELMET_02_FALLBACK } from '../data/patrolSiteMap'
 import { resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 
@@ -32,25 +26,18 @@ function isValidGps(lat: unknown, lng: unknown): lat is number {
     && !(lat === 0 && lng === 0)
 }
 
-export interface Hc02LiveMapState {
+export interface PatrolHelmetGpsLiveState {
   hasLiveGps: boolean
-  usingDefaultGps: boolean
   hasMapPosition: boolean
   lat: number | null
   lng: number | null
-  personCount: number
-  historicalDotCount: number
-  dots: DetectionDot[]
-  waitingGpsForDots: boolean
 }
 
-export function useHc02LiveDetectionDots(): Hc02LiveMapState {
+export function usePatrolHelmetGpsLive(cameraId: string = HC02): PatrolHelmetGpsLiveState {
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
-  const [personCount, setPersonCount] = useState(0)
-  const [registryTick, setRegistryTick] = useState(0)
   const [streamOnline, setStreamOnline] = useState(
-    () => Boolean(getPatrolMobileLiveSnapshot(HC02)?.streamOnline),
+    () => Boolean(getPatrolMobileLiveSnapshot(cameraId)?.streamOnline),
   )
 
   const applyGps = (nextLat: number, nextLng: number) => {
@@ -60,36 +47,29 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
     setLng(nextLng)
   }
 
-  useEffect(() => subscribeHeatmapPersonRegistry(() => {
-    setRegistryTick(t => t + 1)
-  }), [])
-
   useEffect(() => {
     const applyMobileSnap = (snap: ReturnType<typeof getPatrolMobileLiveSnapshot>) => {
-      if (!snap || snap.cameraId !== HC02) return
+      if (!snap || snap.cameraId !== cameraId) return
       const online = Boolean(snap.streamOnline)
       setStreamOnline(online)
       if (!online) {
-        setPersonCount(0)
         setLat(null)
         setLng(null)
-        return
       }
-      setPersonCount(Math.max(0, Math.floor(snap.personCount)))
     }
 
-    applyMobileSnap(getPatrolMobileLiveSnapshot(HC02))
+    applyMobileSnap(getPatrolMobileLiveSnapshot(cameraId))
     return subscribePatrolMobileLiveSnapshot(snap => {
-      if (!snap || snap.cameraId !== HC02) return
+      if (!snap || snap.cameraId !== cameraId) return
       applyMobileSnap(snap)
     })
-  }, [])
+  }, [cameraId])
 
   useEffect(() => {
-    if (!streamOnline) return
+    if (!streamOnline || cameraId !== HC02) return
     return watchDeviceGps(reading => {
       setPatrolHelmetGps({
-        cameraId: HC02,
+        cameraId,
         lat: reading.lat,
         lng: reading.lng,
         accuracyM: reading.accuracyM,
@@ -97,59 +77,41 @@ export function useHc02LiveDetectionDots(): Hc02LiveMapState {
       })
       applyGps(reading.lat, reading.lng)
     })
-  }, [streamOnline])
+  }, [streamOnline, cameraId])
 
   useEffect(() => {
     if (!streamOnline) return
-    const fresh = getPatrolHelmetGps(HC02)
-    const known = fresh ?? getPatrolHelmetGpsLastKnown(HC02)
+    const fresh = getPatrolHelmetGps(cameraId)
+    const known = fresh ?? getPatrolHelmetGpsLastKnown(cameraId)
     if (known) applyGps(known.lat, known.lng)
 
     return subscribePatrolHelmetGps(snap => {
-      if (snap.cameraId !== HC02) return
+      if (snap.cameraId !== cameraId) return
       applyGps(snap.lat, snap.lng)
     })
-  }, [streamOnline])
+  }, [streamOnline, cameraId])
 
   useEffect(() => {
     if (!streamOnline) return
     const t = window.setInterval(() => {
       if (!isValidGps(lat, lng)) {
-        const known = getPatrolHelmetGpsLastKnown(HC02)
+        const known = getPatrolHelmetGpsLastKnown(cameraId)
         if (known) applyGps(known.lat, known.lng)
       }
     }, 1000)
     return () => window.clearInterval(t)
-  }, [lat, lng, streamOnline])
+  }, [lat, lng, streamOnline, cameraId])
 
   const hasLiveGps = streamOnline && isValidGps(lat, lng)
-  const usingDefaultGps = !hasLiveGps
   const hasMapPosition = streamOnline || isValidGps(lat, lng)
   const [effectiveLat, effectiveLng] = streamOnline
     ? resolvePatrolHelmetMapPosition(lat, lng, PATROL_HELMET_02_FALLBACK)
     : PATROL_HELMET_02_FALLBACK
 
-  const dots = useMemo(() => {
-    if (!streamOnline) return []
-    void registryTick
-    return getHeatmapPersonDots(HC02)
-  }, [registryTick, streamOnline])
-
-  const historicalDotCount = useMemo(() => {
-    if (!streamOnline) return 0
-    void registryTick
-    return getHeatmapPersonCount(HC02)
-  }, [registryTick, streamOnline])
-
   return {
     hasLiveGps,
-    usingDefaultGps,
     hasMapPosition,
     lat: effectiveLat,
     lng: effectiveLng,
-    personCount,
-    historicalDotCount,
-    dots,
-    waitingGpsForDots: personCount > 0 && historicalDotCount === 0,
   }
 }

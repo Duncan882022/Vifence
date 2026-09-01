@@ -323,9 +323,25 @@ def anchor_patrol_person_boxes_to_faces(
         back_turn.append((box, conf))
         existing_boxes.append(box)
 
-    if matched_yolo or synth_boxes or back_turn:
+    # Silhouette YOLO không khớp mặt / quay lưng — vẫn giữ nếu đủ conf (đám đông).
+    silhouette_keep: list[tuple[tuple[float, float, float, float], float]] = []
+    for box, conf in person_boxes:
+        if any(_boxes_overlap(box, other) for other in existing_boxes):
+            continue
+        if conf < BACK_TURN_MIN_CONF:
+            continue
+        if background_clutter_person_box(box, w, h):
+            continue
+        if legs_only_person_box(box, w, h):
+            continue
+        if not plausible_person_silhouette(box, w, h):
+            continue
+        silhouette_keep.append((box, conf))
+        existing_boxes.append(box)
+
+    if matched_yolo or synth_boxes or back_turn or silhouette_keep:
         return _dedupe_anchor_boxes(
-            matched_yolo + synth_boxes + back_turn,
+            matched_yolo + synth_boxes + back_turn + silhouette_keep,
             frame_w=w,
             frame_h=h,
         )

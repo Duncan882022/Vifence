@@ -15,7 +15,7 @@ import {
 } from '../data/patrolDetectionData'
 import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
-import { useHc02LiveDetectionDots } from '../hooks/useHc02LiveDetectionDots'
+import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
 import { usePatrolHeatmapViewport } from '../hooks/usePatrolHeatmapViewport'
 import type { PatrolDayPresence, PatrolDayStats } from '../services/patrolDayEvents.service'
@@ -254,7 +254,7 @@ export function PatrolDensityHeatmap({
   )
 
   const { cameraPositions, routeHistory } = usePatrolLiveMapState()
-  const hc02Live = useHc02LiveDetectionDots()
+  const hc02Gps = usePatrolHelmetGpsLive('HC-02')
 
   const helmetDetectCountsById = useMemo(
     () => buildHelmetDetectCountsFromPresences(presences, PATROL_MAP_CAMERA_IDS),
@@ -286,8 +286,8 @@ export function PatrolDensityHeatmap({
     const hc02Default = hc02Pin?.position ?? PATROL_HELMET_02_FALLBACK
     if (hc02Online) {
       const hc02Wf = workforce.helmets['HC-02']
-      const hc02Lat = hc02Wf?.lat ?? hc02Live.lat
-      const hc02Lng = hc02Wf?.lon ?? hc02Live.lng
+      const hc02Lat = hc02Wf?.lat ?? hc02Gps.lat
+      const hc02Lng = hc02Wf?.lon ?? hc02Gps.lng
       next['HC-02'] = resolvePatrolHelmetMapPosition(hc02Lat, hc02Lng, hc02Default)
     } else {
       next['HC-02'] = hc02Default
@@ -310,8 +310,8 @@ export function PatrolDensityHeatmap({
     helmetOnlineById,
     hc02Online,
     workforce.helmets,
-    hc02Live.lat,
-    hc02Live.lng,
+    hc02Gps.lat,
+    hc02Gps.lng,
   ])
 
   const mergedRouteHistory = useMemo(() => {
@@ -335,8 +335,8 @@ export function PatrolDensityHeatmap({
 
     let next: typeof routeHistory = { ...routeHistory }
 
-    if (hc02Online && hc02Live.lat != null && hc02Live.lng != null) {
-      const pos = resolvePatrolHelmetMapPosition(hc02Live.lat, hc02Live.lng, PATROL_HELMET_02_FALLBACK)
+    if (hc02Online && hc02Gps.lat != null && hc02Gps.lng != null) {
+      const pos = resolvePatrolHelmetMapPosition(hc02Gps.lat, hc02Gps.lng, PATROL_HELMET_02_FALLBACK)
       next = appendPos(next, 'HC-02', pos)
     } else {
       const { 'HC-02': _drop, ...rest } = next
@@ -373,8 +373,8 @@ export function PatrolDensityHeatmap({
     return helmetRoutes
   }, [
     routeHistory,
-    hc02Live.lat,
-    hc02Live.lng,
+    hc02Gps.lat,
+    hc02Gps.lng,
     hc02Online,
     workforce.helmets,
     helmetOnlineById,
@@ -526,9 +526,9 @@ export function PatrolDensityHeatmap({
           liveDetectionDots={filteredDots}
           followLiveGps={showFlymap
             ? (primaryDroneOnline && droneHasLiveGps)
-            : (hc02Online && hc02Live.hasLiveGps)}
-          liveGpsLat={showFlymap ? (primaryDroneWf?.lat ?? null) : (hc02Online ? hc02Live.lat : null)}
-          liveGpsLng={showFlymap ? (primaryDroneWf?.lon ?? null) : (hc02Online ? hc02Live.lng : null)}
+            : (hc02Online && hc02Gps.hasLiveGps)}
+          liveGpsLat={showFlymap ? (primaryDroneWf?.lat ?? null) : (hc02Online ? hc02Gps.lat : null)}
+          liveGpsLng={showFlymap ? (primaryDroneWf?.lon ?? null) : (hc02Online ? hc02Gps.lng : null)}
           showDensity={false}
           showZoneStatLabels={false}
           showRoute={showFlymap ? layers.flycam : layers.helmet}
@@ -540,7 +540,7 @@ export function PatrolDensityHeatmap({
           helmetDetectCountsById={helmetDetectCountsById}
           onDetectionClick={showFlymap ? undefined : onDetectionClick}
           requireLiveGpsForHc02={false}
-          hasHc02LiveGps={hc02Live.hasMapPosition}
+          hasHc02LiveGps={hc02Gps.hasMapPosition}
           mapZoom={viewport.mapZoom}
           compactControls={viewport.compactChrome}
           uniformDotColor={showFlymap ? PATROL_FLYMAP_DOT_HEX : undefined}

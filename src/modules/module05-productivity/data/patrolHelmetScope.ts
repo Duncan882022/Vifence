@@ -12,7 +12,9 @@ export function isPatrolMetricsCameraId(cameraId: string): boolean {
 
 /**
  * Buffer đồng bộ ROI live với video HLS (~5s trễ).
- * Bật/tắt hiển thị: nút bbox trên toolbar (`getCameraBboxVisible`).
+ * Áp dụng mọi camera tuần tra: HC-01, HC-02, DR-* — cho backend/AI kịp xử lý,
+ * bbox/ROI bám khung đang phát thay vì snapshot mới nhất.
+ * Bật/tắt hiển thị ROI: nút bbox trên toolbar (`getCameraBboxVisible`).
  */
 export const PATROL_LIVE_ROI_DELAY_MS = 5000
 
