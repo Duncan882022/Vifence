@@ -279,7 +279,9 @@ def person_enrollment(pers_id: str, _user: RequirePatrolRead = None) -> dict[str
         return {"ok": False, "error": "not_found"}
     enrollment = identity.get_scan_enrollment(pers_id)
     enrollment["poses"] = _enrollment_poses_with_urls(row, enrollment.get("poses") or [])
-    if enrollment.get("draft_faces"):
+    if row.get("status") == identity.STATUS_DRAFT:
+        enrollment["draft_faces"] = _draft_faces_with_urls(enrollment.get("draft_faces") or [])
+    elif enrollment.get("draft_faces"):
         enrollment["draft_faces"] = _draft_faces_with_urls(enrollment["draft_faces"])
     return {"ok": True, "enrollment": enrollment}
 
@@ -581,8 +583,16 @@ def scan_person_face(
         )
     slot = max(1, min(slot, identity.SCAN_FACES_REQUIRED))
 
+    frame_h = int(frame.shape[0]) if frame is not None and hasattr(frame, "shape") else 0
+    frame_w = int(frame.shape[1]) if frame is not None and hasattr(frame, "shape") else 0
     added = identity.add_face_angle(
-        pers_id, emb, quality=1.0, camera_id="SCAN", now=time.time()
+        pers_id,
+        emb,
+        quality=1.0,
+        camera_id="SCAN",
+        now=time.time(),
+        frame=frame,
+        person_bbox=[0.0, 0.0, float(frame_w), float(frame_h)] if frame_w > 0 and frame_h > 0 else None,
     )
     if frame is not None:
         person = identity.get_person(pers_id)
