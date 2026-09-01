@@ -35,7 +35,6 @@ import {
   isPatrolMetricsCameraId,
   PATROL_LIVE_ROI_DELAY_MS,
 } from '@/modules/module05-productivity/data/patrolHelmetScope'
-import { isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   getCameraFeedPosterUrl,
@@ -80,11 +79,10 @@ export function CameraVideoFeed({
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
-  const droneRoiLocked = isPatrolDroneRoiMandatory(cameraId)
   const [liveRoiVisible] = useCameraLiveRoiVisible(cameraId)
   const { isDesktop } = useShellLayout()
   const { enabledModels } = useCameraAiEnabledModels(cameraId)
-  const overlayActive = Boolean(aiOverlay && (bboxVisible || droneRoiLocked))
+  const overlayActive = Boolean(aiOverlay && bboxVisible)
   const runPatrolAnalyze = Boolean(
     playing && aiOverlay && (isPatrolHelmetAiCamera(cameraId) || isPatrolFlycamAiCamera(cameraId)) && isVmsLiveCamera(cameraId),
   )
@@ -115,7 +113,7 @@ export function CameraVideoFeed({
   )
   const showPatrolPersonRoi = Boolean(
     runPatrolHeatmapAnalyze
-    && (overlayActive || droneRoiLocked)
+    && overlayActive
     && isPatrolPersonRoiCameraId(cameraId),
   )
   const showPpeOverlay = Boolean(
