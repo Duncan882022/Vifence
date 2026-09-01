@@ -390,22 +390,14 @@ def _pers_id_for_lifecycle(
 
         row = lookup_patrol_identity(gallery)
         if row:
-            found = identity.get_person(gallery)
-            if found:
-                return str(found["pers_id"])
             emp = str(row.get("employee_code") or "").strip()
             if emp:
                 found = identity.find_by_employee_code(emp)
                 if found:
                     return str(found["pers_id"])
-            return identity.ensure_identified_for_gallery(
-                gallery,
-                full_name=str(row.get("worker_name") or gallery).strip(),
-                employee_code=emp,
-                contractor=str(row.get("contractor_name") or "").strip(),
-                identified_by="lifecycle",
-                now=now,
-            )
+            hr = identity.hr_profile_for_gallery(gallery)
+            if hr:
+                return str(hr["pers_id"])
 
     if is_sgc_worker_id(wid):
         return _ensure_profile_for_tk(wid, now=now)

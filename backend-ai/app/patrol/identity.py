@@ -160,8 +160,38 @@ def _hr_scan_face_count(pers_id: str) -> int:
     return min(_hr_enroll_vector_count(pers_id), SCAN_POSE_SLOTS)
 
 
-def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
-    """Thống kê quét mặt — vector HR trong SQLite; JPG gallery chỉ slot chính diện."""
+def hr_profile_for_gallery(gallery_worker_id: str) -> dict[str, Any] | None:
+    """Hồ sơ HR đã import — gallery/binding không được tự tạo Định danh nếu thiếu bản ghi này."""
+    from ..patrol_identity_store import lookup_patrol_identity
+
+    row = lookup_patrol_identity((gallery_worker_id or "").strip())
+    if not row:
+        return None
+    code = str(row.get("employee_code") or "").strip()
+    if not code:
+        return None
+    person = find_by_employee_code(code)
+    if person and person.get("status") == STATUS_IDENTIFIED:
+        return person
+    return None
+
+
+def hr_profile_for_employee_code(employee_code: str) -> dict[str, Any] | None:
+    code = (employee_code or "").strip()
+    if not code:
+        return None
+    person = find_by_employee_code(code)
+    if person and person.get("status") == STATUS_IDENTIFIED:
+        return person
+    return None
+
+
+def gallery_enrollment_stats(
+    employee_code: str | None,
+    *,
+    pers_id: str | None = None,
+) -> dict[str, Any]:
+    """Thống kê quét mặt — JPG gallery là nguồn chính; vector SCAN/SELF_ENROLL là dự phòng."""
     from ..patrol_identity_store import patrol_gallery_worker_id
     from ..worker_identity.gallery import get_enrollment_status
 
@@ -177,18 +207,22 @@ def gallery_enrollment_stats(employee_code: str | None) -> dict[str, Any]:
         }
 
     wid = patrol_gallery_worker_id(code)
-    person = find_by_employee_code(code)
-    captured = _hr_enroll_vector_count(str(person["pers_id"])) if person else 0
-    gallery = get_enrollment_status(wid)
-    front_jpg = bool(gallery.get("poses") and gallery["poses"][0].get("captured"))
-    poses = _build_scan_poses(captured)
-    if front_jpg and poses:
-        poses[0]["gallery_jpg"] = True
+    enrollment = get_enrollment_status(wid)
+    gallery_captured = int(enrollment.get("poses_captured") or 0)
+    gallery_complete = bool(enrollment.get("complete"))
+    poses = list(enrollment.get("poses") or empty_poses)
+    hr_count = _hr_scan_face_count(pers_id) if pers_id else 0
+    captured = max(gallery_captured, hr_count)
+    complete = gallery_complete or hr_count >= SCAN_FACES_REQUIRED
+    if complete and not gallery_complete and hr_count >= SCAN_FACES_REQUIRED:
+        for pose in poses:
+            pose["captured"] = True
+        captured = SCAN_FACES_REQUIRED
     return {
         "gallery_worker_id": wid,
         "poses_captured": captured,
         "face_count": captured,
-        "complete": captured >= SCAN_FACES_REQUIRED,
+        "complete": complete,
         "poses": poses,
     }
 
@@ -200,7 +234,7 @@ def scan_enrollment_progress(pers_id: str) -> tuple[int, bool, list[dict[str, An
     if person and person.get("status") == STATUS_IDENTIFIED:
         code = str(person.get("employee_code") or "").strip()
         if code:
-            stats = gallery_enrollment_stats(code)
+            stats = gallery_enrollment_stats(code, pers_id=pid)
             captured = int(stats["poses_captured"])
             complete = bool(stats["complete"])
             poses = list(stats["poses"])

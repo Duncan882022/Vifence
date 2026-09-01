@@ -151,7 +151,7 @@ class GallerySyncTests(unittest.TestCase):
             identity.add_face_angle(pers_id, vec.tolist(), quality=1.0, camera_id="HC-02")
 
         self.assertEqual(identity.face_count(pers_id), 3)
-        stats = identity.gallery_enrollment_stats("NV-6688")
+        stats = identity.gallery_enrollment_stats("SGC-6688", pers_id=pers_id)
         self.assertEqual(stats["face_count"], 0)
         self.assertFalse(stats["complete"])
 
@@ -159,6 +159,32 @@ class GallerySyncTests(unittest.TestCase):
         self.assertEqual(enrollment["faces_captured"], 0)
         self.assertFalse(enrollment["complete"])
         self.assertFalse(any(p["captured"] for p in enrollment["poses"]))
+
+    def test_hr_scan_vectors_mark_profile_complete_without_gallery_jpg(self) -> None:
+        row = identity.import_identity(
+            full_name="Duncan",
+            employee_code="NV-7700",
+            contractor="SGC",
+            source="self_enroll",
+        )
+        pers_id = str(row["pers_id"])
+        for seed in range(4):
+            vec = np.random.default_rng(700 + seed).standard_normal(512).astype(np.float32)
+            vec /= np.linalg.norm(vec)
+            identity.add_face_angle(
+                pers_id,
+                vec.tolist(),
+                quality=1.0,
+                camera_id="SCAN",
+            )
+
+        stats = identity.gallery_enrollment_stats("NV-7700", pers_id=pers_id)
+        self.assertTrue(stats["complete"])
+        self.assertEqual(stats["face_count"], 3)
+
+        enrollment = identity.get_scan_enrollment(pers_id)
+        self.assertTrue(enrollment["complete"])
+        self.assertEqual(enrollment["faces_captured"], 3)
 
 
 if __name__ == "__main__":

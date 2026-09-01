@@ -9,7 +9,6 @@ import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIde
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
-  isPatrolGalleryWorkerId,
   resolvePatrolCanonicalEntityKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
@@ -146,7 +145,6 @@ export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage 
     if (resolvePatrolProfileEntityKey(event)) return true
     if (trackWorkerId && getPatrolManualIdentityForTk(trackWorkerId)) return true
     if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolTrackWorkerId(trackWorkerId)) return true
-    if (isPatrolGalleryWorkerId(objectId) || isPatrolGalleryWorkerId(trackWorkerId)) return true
     if (isPatrolIdenId(objectId)) return true
     return false
   }

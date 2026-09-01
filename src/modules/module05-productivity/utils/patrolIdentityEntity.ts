@@ -109,10 +109,6 @@ export function resolvePatrolProfileEntityKey(event: {
     const manual = getPatrolManualIdentity(key)
     if (manual) return manual.workerId.toUpperCase()
   }
-  const oid = event.objectId?.trim() ?? ''
-  const track = event.trackWorkerId?.trim() ?? ''
-  if (isPatrolGalleryWorkerId(oid)) return oid.toUpperCase()
-  if (isPatrolGalleryWorkerId(track)) return track.toUpperCase()
   const label = event.objectLabel?.trim() ?? ''
   if (
     isVerifiedWorkerLabel(label)

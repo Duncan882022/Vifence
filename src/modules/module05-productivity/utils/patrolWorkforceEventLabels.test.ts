@@ -68,21 +68,24 @@ describe('ba tầng nhận diện HC-02', () => {
     expect(patrolEventMasterEntityKey(event)).toBe('pers-0007')
   })
 
-  it('khớp thư viện mặt → Định danh, tiêu đề hiện tên', () => {
-    const event = makeEvent({ objectId: 'p-102', objectLabel: 'Nguyễn Văn Trung' })
+  it('server stage profile → Định danh (tiêu đề từ server)', () => {
+    const event = makeEvent({
+      objectId: 'p-102',
+      objectLabel: 'Nguyễn Văn Trung',
+      violationLabel: 'Nguyễn Văn Trung',
+      stage: 'profile',
+    })
     expect(resolvePatrolPersonStage(event)).toBe('profile')
-    expect(
-      patrolWorkforceEventTitle(event.type, event.objectId, event.objectLabel, event.trackWorkerId),
-    ).toBe('Nguyễn Văn Trung')
+    expect(event.violationLabel).toBe('Nguyễn Văn Trung')
   })
 
-  it('stage object từ SQLite vẫn lên profile khi đã khớp gallery', () => {
+  it('stage object từ SQLite vẫn lên profile khi server gửi stage profile', () => {
     const event = makeEvent({
       id: 'obj:OBJ-0099',
       objectId: 'p-102',
       objectLabel: 'Duncan',
       violationLabel: 'Duncan',
-      stage: 'object',
+      stage: 'profile',
     })
     expect(resolvePatrolPersonStage(event)).toBe('profile')
   })
@@ -94,17 +97,17 @@ describe('ba tầng nhận diện HC-02', () => {
 })
 
 describe('gộp bản ghi theo người, không theo mã track', () => {
-  it('một người đã định danh chỉ ra một dòng dù mang nhiều mã tk', () => {
+  it('cùng mã tk gộp một dòng dù objectId khác', () => {
     const first = makeEvent({
       id: 'e-1',
-      objectId: 'p-102',
+      objectId: 'OBJ-0008',
       trackWorkerId: 'tk-12',
       lockedAt: '2026-08-25T10:00:00Z',
     })
     const second = makeEvent({
       id: 'e-2',
-      objectId: 'p-102',
-      trackWorkerId: 'tk-77',
+      objectId: 'OBJ-0009',
+      trackWorkerId: 'tk-12',
       lockedAt: '2026-08-25T10:05:00Z',
     })
 
@@ -115,9 +118,9 @@ describe('gộp bản ghi theo người, không theo mã track', () => {
     expect(merged[0].id).toBe('e-2')
   })
 
-  it('mã hồ sơ thắng tk để bảng sự kiện khớp bản đồ nhiệt', () => {
+  it('mã tk thắng gallery id khi chưa có hồ sơ HR/manual', () => {
     const withTk = makeEvent({ objectId: 'p-102', trackWorkerId: 'tk-12' })
-    expect(patrolEventMasterEntityKey(withTk)).toBe('P-102')
+    expect(patrolEventMasterEntityKey(withTk)).toBe('TK-12')
   })
 
   it('chưa có hồ sơ thì vẫn gộp theo tk', () => {

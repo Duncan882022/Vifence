@@ -962,7 +962,7 @@ def upsert_track_appearance(
                 counted_int,
             ]
             if snapshot_path:
-                set_parts.append("snapshot_path = ?")
+                set_parts.append("snapshot_path = COALESCE(snapshot_path, ?)")
                 params.append(snapshot_path)
             params.append(row_id)
             conn.execute(

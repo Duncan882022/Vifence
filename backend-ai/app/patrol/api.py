@@ -62,7 +62,10 @@ def _person_payload(row: dict[str, Any], *, with_face_stats: bool = False) -> di
     if with_face_stats:
         code = str(row.get("employee_code") or "").strip()
         if code and row.get("status") == identity.STATUS_IDENTIFIED:
-            stats = identity.gallery_enrollment_stats(code)
+            stats = identity.gallery_enrollment_stats(
+                code,
+                pers_id=str(row["pers_id"]),
+            )
             payload["face_count"] = stats["face_count"]
             payload["face_enrollment_complete"] = stats["complete"]
         else:
@@ -565,10 +568,23 @@ def scan_person_face(
         return {"ok": False, "error": "no_face_detected"}
 
     frame = _decode_face_b64(payload.image_b64)
+    enrollment_before = identity.get_scan_enrollment(pers_id)
+    slot = int(payload.pose_slot or 0)
+    if slot < 1 or slot > identity.SCAN_FACES_REQUIRED:
+        slot = next(
+            (
+                int(pose["slot"])
+                for pose in (enrollment_before.get("poses") or [])
+                if not pose.get("captured")
+            ),
+            min(int(enrollment_before.get("faces_captured") or 0) + 1, identity.SCAN_FACES_REQUIRED),
+        )
+    slot = max(1, min(slot, identity.SCAN_FACES_REQUIRED))
+
     added = identity.add_face_angle(
         pers_id, emb, quality=1.0, camera_id="SCAN", now=time.time()
     )
-    if added and frame is not None and int(payload.pose_slot or 0) == 1:
+    if frame is not None:
         person = identity.get_person(pers_id)
         code = str(person.get("employee_code") or "").strip() if person else ""
         name = str(person.get("full_name") or "").strip() if person else ""

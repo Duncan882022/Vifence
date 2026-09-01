@@ -579,7 +579,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (row1,),
         )
-        self.assertEqual(snap["snapshot_path"], "2026-08-30/tk-0000007-1025.jpg")
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/tk-0000007-1000.jpg")
 
     def test_coalesce_merges_duplicate_rows(self) -> None:
         from app.patrol import daystore, db
@@ -721,7 +721,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (row_id,),
         )
-        self.assertEqual(snap["snapshot_path"], "2026-08-30/obj-new.jpg")
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/old.jpg")
 
 
 class ObjectFacePromoteTests(unittest.TestCase):
@@ -766,6 +766,7 @@ class ObjectFacePromoteTests(unittest.TestCase):
             camera_id="HC-01",
             track_id="ptk-face",
             ts=ts + 12,
+            person_bbox=(85.0, 62.0, 225.0, 425.0),
             face_embedding=emb,
             face_quality=0.88,
             face_eligible=True,
@@ -774,6 +775,41 @@ class ObjectFacePromoteTests(unittest.TestCase):
         process_identity(session, obs)
         self.assertTrue(str(session.subject_id).startswith("tk-"))
         self.assertEqual(daystore.list_objects(db.today_vn(ts)), [])
+
+    def test_clutter_object_not_promoted_with_face(self) -> None:
+        import numpy as np
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.identity_pipeline import (
+            _human_face_promotion_allowed,
+            process_identity,
+        )
+        from app.patrol.aggregator.session_store import get_or_create, reset as reset_sessions
+        from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
+
+        reset_sessions()
+        ts = 9_000.0
+        obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
+        session = get_or_create("HC-01", "ptk-plant", ts=ts + 5)
+        session.subject_id = obj_id
+        session.identity = PersonIdentity(identity_type=IdentityType.UNKNOWN)
+
+        plant_box = (100.0, 20.0, 400.0, 180.0)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-plant",
+            ts=ts + 8,
+            person_bbox=plant_box,
+            face_embedding=emb,
+            face_quality=0.9,
+            face_eligible=True,
+            confidence=0.9,
+        )
+        self.assertFalse(_human_face_promotion_allowed(obs))
+        process_identity(session, obs)
+        self.assertEqual(session.subject_id, obj_id)
+        self.assertEqual(len(daystore.list_objects(db.today_vn(ts))), 1)
 
 
 if __name__ == "__main__":

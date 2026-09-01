@@ -261,15 +261,13 @@ def resolve_patrol_worker_display_name(
     worker_id: str | None,
     worker_name: str | None = None,
 ) -> str:
-    """Tên hiển thị ROI — ưu tiên binding/SQLite, không trả mã khi đã định danh."""
+    """Tên hiển thị ROI — chỉ tên từ hồ sơ HR import, không từ binding gallery ảo."""
     wid = (worker_id or "").strip()
     wname = (worker_name or "").strip()
 
-    if wname and not is_technical_patrol_worker_label(wname) and wname != wid:
-        return wname
-
     if wid:
         try:
+            from .patrol import identity as patrol_identity
             from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
 
             for key in (wid, lookup_gallery_worker(wid) or ""):
@@ -277,9 +275,13 @@ def resolve_patrol_worker_display_name(
                     continue
                 row = lookup_patrol_identity(key)
                 if row:
-                    name = str(row.get("worker_name") or "").strip()
-                    if name and not is_technical_patrol_worker_label(name):
-                        return name
+                    code = str(row.get("employee_code") or "").strip()
+                    if code:
+                        person = patrol_identity.hr_profile_for_employee_code(code)
+                        if person:
+                            name = str(person.get("full_name") or "").strip()
+                            if name and not is_technical_patrol_worker_label(name):
+                                return name
         except Exception:
             pass
 
@@ -295,9 +297,24 @@ def resolve_patrol_worker_display_name(
                     name = patrol_identity.display_name(person)
                     if name and not is_technical_patrol_worker_label(name):
                         return name
+                if person:
+                    return "Người"
             except Exception:
                 pass
 
-    if wname and wname != wid:
+        if is_patrol_gallery_id(wid) or is_sgc_worker_id(wid):
+            return "Người"
+
+    if wname and not is_technical_patrol_worker_label(wname) and wname != wid:
+        try:
+            from .patrol import identity as patrol_identity
+
+            hr = patrol_identity.hr_profile_for_gallery(wid)
+            if hr and str(hr.get("full_name") or "").strip() == wname:
+                return wname
+        except Exception:
+            pass
+
+    if wname and wname != wid and not is_technical_patrol_worker_label(wname):
         return wname
     return wid or "Đối tượng"

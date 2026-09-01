@@ -13,6 +13,7 @@ from app.patrol import daystore, db, identity, sink
 # Đồng bộ config.py — sink chờ đủ giây trước khi ghi thẻ lần đầu.
 _OBJECT_CONFIRM = 3.0
 _FACE_CONFIRM = 1.5
+_PERSON_BOX = [85.0, 62.0, 225.0, 425.0]
 
 
 def _vec(seed: int, dim: int = 128) -> list[float]:
@@ -80,10 +81,11 @@ class PatrolSinkTests(unittest.TestCase):
     def test_face_promotes_object_and_keeps_history(self) -> None:
         """Quãng quan sát lúc còn là Đối tượng không được mất khi thăng tầng."""
         t0 = 1_000.0
-        sink.record_observation(camera_id="HC-01", track_id="ptk0002:person", now=t0)
+        sink.record_observation(camera_id="HC-01", track_id="ptk0002:person", person_bbox=_PERSON_BOX, now=t0)
         pers = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0002:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(1),
             face_eligible=True,
             face_quality=0.9,
@@ -103,6 +105,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0003:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(2),
             face_eligible=True,
             face_quality=0.9,
@@ -111,13 +114,14 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0003:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(2),
             face_eligible=True,
             face_quality=0.9,
             now=t0 + _FACE_CONFIRM,
         )
         again = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0003:person", now=t0 + 50.0,
+            camera_id="HC-01", track_id="ptk0003:person", person_bbox=_PERSON_BOX, now=t0 + 50.0,
         )
         self.assertTrue(str(again).startswith("tk-"))
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
@@ -128,6 +132,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -136,6 +141,7 @@ class PatrolSinkTests(unittest.TestCase):
         a = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -144,6 +150,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0009:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -152,6 +159,7 @@ class PatrolSinkTests(unittest.TestCase):
         b = sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0009:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(5),
             face_eligible=True,
             face_quality=0.9,
@@ -169,6 +177,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -177,6 +186,7 @@ class PatrolSinkTests(unittest.TestCase):
         pers = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -185,6 +195,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0044:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -193,6 +204,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0044:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -201,6 +213,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0044:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(7),
             face_eligible=True,
             face_quality=0.9,
@@ -217,6 +230,7 @@ class PatrolSinkTests(unittest.TestCase):
         sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -225,6 +239,7 @@ class PatrolSinkTests(unittest.TestCase):
         pers = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -236,6 +251,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -244,6 +260,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-02",
             track_id="ptk0001:person",
+            person_bbox=_PERSON_BOX,
             face_embedding=_vec(9),
             face_eligible=True,
             face_quality=0.9,
@@ -358,9 +375,15 @@ class PatrolSinkTests(unittest.TestCase):
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
 
     def test_gallery_match_promotes_day_event_to_identified(self) -> None:
-        """Gallery p-DUNCAN → thẻ sự kiện tab Định danh, không còn Người."""
+        """Gallery p-DUNCAN + hồ sơ HR import → thẻ tab Định danh."""
         from unittest.mock import patch
 
+        identity.import_identity(
+            full_name="Duncan",
+            employee_code="DUNCAN",
+            contractor="SGC",
+            source="hr_import",
+        )
         bindings = {
             "version": 1,
             "by_gallery_worker": {
@@ -409,6 +432,46 @@ class PatrolSinkTests(unittest.TestCase):
         cards = daystore.list_person_events(db.today_vn(t0))
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["status"], identity.STATUS_IDENTIFIED)
+
+    def test_gallery_binding_without_hr_stays_person(self) -> None:
+        """Khớp gallery không có hồ sơ HR — không tạo Định danh ảo."""
+        from unittest.mock import patch
+
+        bindings = {
+            "version": 1,
+            "by_gallery_worker": {
+                "p-AN": {
+                    "gallery_worker_id": "p-AN",
+                    "worker_name": "An",
+                    "employee_code": "AN",
+                    "contractor_name": "SGC",
+                    "aliases": ["p-AN"],
+                },
+            },
+            "alias_to_gallery": {"p-AN": "p-AN"},
+        }
+        t0 = 2_000.0
+        with patch("app.patrol_identity_store._load", return_value=bindings):
+            pers = sink.record_observation(
+                camera_id="HC-01",
+                track_id="ptk0020:person",
+                person_bbox=_PERSON_BOX,
+                face_embedding=_vec(20),
+                face_quality=0.9,
+                face_eligible=True,
+                now=t0 + _FACE_CONFIRM,
+                lifecycle_tier="identity",
+                lifecycle_worker_id="p-AN",
+                worker_name="An",
+            )
+        from app.patrol_ids import is_person_subject_id
+
+        self.assertTrue(is_person_subject_id(str(pers)))
+        person = identity.get_person(str(pers))
+        self.assertIsNotNone(person)
+        assert person is not None
+        self.assertEqual(person["status"], identity.STATUS_PERSON)
+        self.assertNotEqual(person.get("full_name"), "An")
 
 
 if __name__ == "__main__":
