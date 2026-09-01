@@ -1,25 +1,122 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import {
-  AlertCircle, CheckCircle2, Loader2, Pencil, ScanFace, Trash2, Upload, X,
+  AlertCircle,
+  Building2,
+  CheckCircle,
+  Clock,
+  Hash,
+  Info,
+  Loader2,
+  Pencil,
+  ScanFace,
+  Trash2,
+  User,
+  X,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
 import {
   deletePatrolWorkerProfile,
+  fetchPatrolScanEnrollment,
   fetchPatrolWorkerProfile,
   updatePatrolWorkerProfile,
-  verifyPatrolDraftProfile,
+  type PatrolScanEnrollment,
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
-import { WorkerProfileFaceGallery } from './WorkerProfileFaceGallery'
-import { FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
+import {
+  fetchPatrolGalleryFaces,
+  listCapturedGalleryFacePoses,
+  resolveFrontGalleryFaceUrl,
+  type PatrolGalleryFacePose,
+} from '../services/patrolGalleryFaces.service'
+import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
+import { defaultFaceScanPoses } from '../utils/patrolFaceScanPoses'
 
 interface WorkerProfileDetailModalProps {
   persId: string | null
-  initialMode?: 'view' | 'edit' | 'verify'
+  initialMode?: 'view' | 'edit'
   onClose: () => void
   onChanged: () => void
+}
+
+interface ProfileDetailRowProps {
+  icon: LucideIcon
+  label: string
+  value: string
+  iconClassName?: string
+  mono?: boolean
+}
+
+function ProfileDetailRow({
+  icon: Icon,
+  label,
+  value,
+  iconClassName,
+  mono,
+}: ProfileDetailRowProps) {
+  return (
+    <div className="flex items-start gap-2.5 min-w-0">
+      <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 border border-[#1e2433] bg-[#0a0e17]">
+        <Icon className={cn('w-3.5 h-3.5', iconClassName)} aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className="text-[8px] uppercase tracking-wide text-muted-foreground/70">{label}</p>
+        <p className={cn(
+          'text-[11px] text-foreground font-medium mt-0.5 leading-snug break-all',
+          mono && 'font-mono',
+        )}>
+          {value}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function ProfileSection({
+  icon: Icon,
+  title,
+  iconClassName,
+  children,
+}: {
+  icon: LucideIcon
+  title: string
+  iconClassName?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5 space-y-2.5">
+      <div className="flex items-center gap-1.5">
+        <Icon className={cn('w-3.5 h-3.5 shrink-0', iconClassName)} aria-hidden />
+        <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
+          {title}
+        </span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function FaceEnrollmentBadge({ captured, total, complete }: {
+  captured: number
+  total: number
+  complete?: boolean
+}) {
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border tabular-nums',
+      complete
+        ? 'bg-green-400/10 text-green-400 border-green-400/30'
+        : captured > 0
+          ? 'bg-fuchsia-400/10 text-fuchsia-400 border-fuchsia-400/30'
+          : 'bg-amber-400/10 text-amber-400 border-amber-400/30',
+    )}>
+      <ScanFace className="w-2.5 h-2.5" />
+      {captured}/{total}
+    </span>
+  )
 }
 
 function tsLabel(ts: number | null | undefined): string {
@@ -27,22 +124,7 @@ function tsLabel(ts: number | null | undefined): string {
   return formatTime(new Date(ts * 1000))
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const data = reader.result
-      if (typeof data !== 'string') {
-        reject(new Error('Không đọc được ảnh.'))
-        return
-      }
-      const comma = data.indexOf(',')
-      resolve(comma >= 0 ? data.slice(comma + 1) : data)
-    }
-    reader.onerror = () => reject(new Error('Không đọc được ảnh.'))
-    reader.readAsDataURL(file)
-  })
-}
+const INPUT_CLASS = 'w-full px-3 py-2 text-[11px] rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-fuchsia-400/50 focus:ring-1 focus:ring-fuchsia-400/20'
 
 export function WorkerProfileDetailModal({
   persId,
@@ -50,8 +132,12 @@ export function WorkerProfileDetailModal({
   onClose,
   onChanged,
 }: WorkerProfileDetailModalProps) {
-  const [mode, setMode] = useState<'view' | 'edit' | 'verify'>(initialMode)
+  const [mode, setMode] = useState<'view' | 'edit'>(initialMode)
   const [person, setPerson] = useState<PatrolWorkerPerson | null>(null)
+  const [enrollment, setEnrollment] = useState<PatrolScanEnrollment | null>(null)
+  const [facePoses, setFacePoses] = useState<PatrolGalleryFacePose[]>([])
+  const [selectedFaceSlot, setSelectedFaceSlot] = useState<number | null>(null)
+  const [faceGalleryOpen, setFaceGalleryOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -62,20 +148,72 @@ export function WorkerProfileDetailModal({
   const [employeeCode, setEmployeeCode] = useState('')
   const [contractor, setContractor] = useState('')
 
-  const [verifyFaceB64, setVerifyFaceB64] = useState<string | null>(null)
-  const [verifyFacePreview, setVerifyFacePreview] = useState<string | null>(null)
-  const [verifyFaceLoading, setVerifyFaceLoading] = useState(false)
+  const capturedFacePoses = useMemo(
+    () => listCapturedGalleryFacePoses(facePoses),
+    [facePoses],
+  )
+
+  const frontFaceUrl = useMemo(
+    () => resolveFrontGalleryFaceUrl(facePoses),
+    [facePoses],
+  )
+
+  const selectedFaceUrl = useMemo(() => {
+    if (selectedFaceSlot != null) {
+      return capturedFacePoses.find(p => p.slot === selectedFaceSlot)?.url ?? null
+    }
+    return frontFaceUrl
+  }, [capturedFacePoses, frontFaceUrl, selectedFaceSlot])
+
+  const displayPoses = useMemo(() => {
+    if (facePoses.length > 0) return facePoses
+    if (enrollment?.poses?.length) {
+      return enrollment.poses.map(p => ({
+        slot: p.slot,
+        label: p.label,
+        captured: p.captured,
+        filename: '',
+        url: null as string | null,
+      }))
+    }
+    return defaultFaceScanPoses().map(p => ({
+      ...p,
+      filename: '',
+      url: null as string | null,
+    }))
+  }, [enrollment?.poses, facePoses])
+
+  const facesCaptured = capturedFacePoses.length
+  const facesRequired = displayPoses.length || 4
+  const facesComplete = person?.face_enrollment_complete ?? (facesCaptured >= facesRequired)
 
   const load = useCallback(async () => {
     if (!persId) return
     setLoading(true)
     setError(null)
     try {
-      const p = await fetchPatrolWorkerProfile(persId)
+      const [p, e] = await Promise.all([
+        fetchPatrolWorkerProfile(persId),
+        fetchPatrolScanEnrollment(persId).catch(() => null),
+      ])
       setPerson(p)
+      setEnrollment(e)
       setFullName(p.full_name ?? '')
       setEmployeeCode(p.employee_code ?? '')
       setContractor(p.contractor ?? '')
+
+      const wid = p.employee_code?.trim()
+        ? patrolGalleryWorkerIdFromEmployeeCode(p.employee_code)
+        : null
+      if (wid) {
+        const poses = await fetchPatrolGalleryFaces(wid).catch(() => [])
+        setFacePoses(poses)
+        const captured = listCapturedGalleryFacePoses(poses)
+        if (captured[0]) setSelectedFaceSlot(captured[0].slot)
+      } else {
+        setFacePoses([])
+        setSelectedFaceSlot(null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được hồ sơ.')
     } finally {
@@ -86,75 +224,42 @@ export function WorkerProfileDetailModal({
   useEffect(() => {
     setMode(initialMode)
     setConfirmDelete(false)
-    setVerifyFaceB64(null)
-    setVerifyFacePreview(null)
+    setFaceGalleryOpen(false)
     if (persId) void load()
-    else setPerson(null)
+    else {
+      setPerson(null)
+      setEnrollment(null)
+      setFacePoses([])
+      setSelectedFaceSlot(null)
+    }
   }, [persId, initialMode, load])
 
   useEffect(() => {
-    if (person?.status === 'draft' && mode === 'edit') {
-      setMode('verify')
+    if (!persId) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handler)
+      document.body.style.overflow = ''
     }
-  }, [person?.status, mode])
+  }, [persId, onClose])
 
   if (!persId) return null
-
-  const verifyReady = Boolean(verifyFaceB64?.trim())
-  const supplementScanHref = employeeCode.trim()
-    ? `/module05/quet-mat?code=${encodeURIComponent(employeeCode.trim())}`
-    : null
-
-  const handleVerifyFaceFile = async (file: File | null) => {
-    if (!file) {
-      setVerifyFaceB64(null)
-      setVerifyFacePreview(null)
-      return
-    }
-    setVerifyFaceLoading(true)
-    setError(null)
-    try {
-      const b64 = await fileToBase64(file)
-      setVerifyFaceB64(b64)
-      setVerifyFacePreview(URL.createObjectURL(file))
-    } catch (err) {
-      setVerifyFaceB64(null)
-      setVerifyFacePreview(null)
-      setError(err instanceof Error ? err.message : 'Không đọc được ảnh.')
-    } finally {
-      setVerifyFaceLoading(false)
-    }
-  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!persId) return
-    if (mode === 'verify' && !verifyReady) {
-      setError('Tải ảnh chính diện trước khi xác minh.')
-      return
-    }
-    if (person?.status === 'draft' && !verifyReady) {
-      setError('Tải ảnh chính diện trước khi xác minh.')
-      return
-    }
     setSaving(true)
     setError(null)
     try {
-      const payload = {
+      const updated = await updatePatrolWorkerProfile(persId, {
         full_name: fullName.trim(),
         employee_code: employeeCode.trim(),
         contractor: contractor.trim(),
-      }
-      const updated = mode === 'verify' || person?.status === 'draft'
-        ? await verifyPatrolDraftProfile(persId, {
-            ...payload,
-            image_b64: verifyFaceB64!,
-          })
-        : await updatePatrolWorkerProfile(persId, payload)
+      })
       setPerson(updated)
       setMode('view')
-      setVerifyFaceB64(null)
-      setVerifyFacePreview(null)
       onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lưu thất bại.')
@@ -179,109 +284,200 @@ export function WorkerProfileDetailModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        aria-label="Đóng"
-        onClick={onClose}
-      />
+  const scanHref = person?.employee_code
+    ? `/module05/quet-mat?code=${encodeURIComponent(person.employee_code)}`
+    : '/module05/quet-mat'
+
+  const modalTitle = person
+    ? (person.full_name ?? person.display_name)
+    : (mode === 'edit' ? 'Sửa hồ sơ' : 'Chi tiết hồ sơ')
+
+  const modalSubtitle = person
+    ? [person.employee_code, person.contractor].filter(Boolean).join(' · ') || person.pers_id
+    : ''
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-[2px] p-0 sm:p-4"
+      onClick={onClose}
+      role="presentation"
+    >
       <div
+        className="relative flex flex-col w-full sm:max-w-md max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60"
+        onClick={e => e.stopPropagation()}
         role="dialog"
-        aria-modal
-        className="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border border-[#1e2433] bg-[#0b0f1a] shadow-2xl"
+        aria-modal="true"
+        aria-labelledby="worker-profile-detail-title"
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-[#1e2433] bg-[#0b0f1a]/95 backdrop-blur-sm">
-          <h3 className="text-sm font-bold">
-            {mode === 'verify' ? 'Xác minh hồ sơ' : mode === 'edit' ? 'Sửa hồ sơ' : 'Chi tiết hồ sơ'}
-          </h3>
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-3 border-b border-[#1e2433] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border bg-fuchsia-400/10 border-fuchsia-400/30">
+              <User className="w-3.5 h-3.5 text-fuchsia-400" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p id="worker-profile-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
+                {mode === 'edit' ? 'Sửa hồ sơ' : modalTitle}
+              </p>
+              {mode === 'view' && modalSubtitle && (
+                <p className="text-[9px] mt-0.5 truncate text-muted-foreground">{modalSubtitle}</p>
+              )}
+              {mode === 'edit' && person && (
+                <p className="text-[9px] mt-0.5 truncate">
+                  <span className="font-medium text-fuchsia-400">Định danh</span>
+                  <span className="text-muted-foreground">{` · ${person.pers_id}`}</span>
+                </p>
+              )}
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5"
+            className="p-1.5 rounded-lg hover:bg-[#1e2433] text-muted-foreground hover:text-foreground shrink-0"
+            aria-label="Đóng"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        {faceGalleryOpen && selectedFaceUrl && mode === 'view' && (
+          <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17] space-y-2">
+            <div className="relative aspect-[4/3] max-h-[36dvh] rounded-lg overflow-hidden border border-[#1e2433] bg-black">
+              <img
+                src={selectedFaceUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-contain"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-3 sm:p-4 space-y-3">
           {loading ? (
             <div className="flex justify-center py-12 text-muted-foreground">
-              <Loader2 className="w-6 h-6 animate-spin" />
+              <Loader2 className="w-6 h-6 animate-spin text-fuchsia-400" />
             </div>
           ) : person && mode === 'view' ? (
             <>
-              {person.status === 'draft' && (
-                <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-[10px] text-amber-300">
-                  Hồ sơ bản nháp — tạo tự động từ camera. Tải ảnh chính diện và nhập mã NV thật để xác minh.
+              <ProfileSection icon={Info} title="Thông tin" iconClassName="text-violet-400">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                  <ProfileDetailRow
+                    icon={User}
+                    label="Họ tên"
+                    value={person.full_name ?? person.display_name}
+                    iconClassName="text-fuchsia-400"
+                  />
+                  <ProfileDetailRow
+                    icon={Hash}
+                    label="Mã nhân viên"
+                    value={person.employee_code ?? '—'}
+                    iconClassName="text-sky-400"
+                    mono
+                  />
+                  <ProfileDetailRow
+                    icon={Building2}
+                    label="Đơn vị"
+                    value={person.contractor ?? '—'}
+                    iconClassName="text-amber-400/90"
+                  />
+                  <ProfileDetailRow
+                    icon={Hash}
+                    label="Mã nội bộ"
+                    value={person.pers_id}
+                    iconClassName="text-stone-400"
+                    mono
+                  />
                 </div>
-              )}
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Họ tên</p>
-                  <p className="text-sm font-semibold mt-0.5">{person.full_name ?? person.display_name}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Mã NV</p>
-                    <p className="text-sm font-mono mt-0.5">{person.employee_code ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Đơn vị</p>
-                    <p className="text-sm mt-0.5">{person.contractor ?? '—'}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-[10px]">
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Mã nội bộ</p>
-                    <p className="font-mono text-muted-foreground mt-0.5">{person.pers_id}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Vector HR</p>
-                    <p className={cn(
-                      'mt-0.5 font-semibold tabular-nums',
-                      person.face_enrollment_complete ? 'text-green-400' : 'text-violet-400',
-                    )}>
-                      {person.face_count ?? 0}/{FACE_SCAN_POSE_REQUIRED}
-                      {person.face_enrollment_complete && ' ✓'}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-[10px] text-muted-foreground">
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider block">Lần đầu thấy</span>
-                    {tsLabel(person.first_seen)}
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider block">Lần cuối</span>
-                    {tsLabel(person.last_seen)}
-                  </div>
-                </div>
-              </div>
+              </ProfileSection>
 
-              <WorkerProfileFaceGallery person={person} />
+              <ProfileSection icon={ScanFace} title="Khuôn mặt" iconClassName="text-fuchsia-400">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[9px] text-muted-foreground leading-relaxed">
+                    Bấm ảnh để xem phóng to · quét lại tại trang Quét mặt
+                  </p>
+                  <FaceEnrollmentBadge
+                    captured={facesCaptured}
+                    total={facesRequired}
+                    complete={facesComplete}
+                  />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-0.5">
+                  {displayPoses.map(pose => {
+                    const hasUrl = Boolean(pose.url)
+                    const selected = selectedFaceSlot === pose.slot
+                    return (
+                      <button
+                        key={pose.slot}
+                        type="button"
+                        disabled={!hasUrl}
+                        onClick={() => {
+                          if (!hasUrl) return
+                          setSelectedFaceSlot(pose.slot)
+                          setFaceGalleryOpen(true)
+                        }}
+                        className={cn(
+                          'shrink-0 flex flex-col items-center gap-1 rounded-md border p-1 transition-colors',
+                          !hasUrl && 'opacity-50 cursor-default',
+                          selected && faceGalleryOpen
+                            ? 'border-fuchsia-400/60 bg-fuchsia-500/10 ring-1 ring-fuchsia-400/30'
+                            : 'border-[#1e2433] bg-[#0a0e17] hover:border-fuchsia-400/40',
+                        )}
+                      >
+                        <div className="relative w-14 h-14 rounded overflow-hidden bg-black">
+                          {hasUrl ? (
+                            <img src={pose.url!} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/35">
+                              <ScanFace className="w-4 h-4" />
+                            </div>
+                          )}
+                          {pose.captured && (
+                            <span className="absolute top-0.5 right-0.5 rounded-full bg-black/55 p-0.5">
+                              <CheckCircle className="w-2.5 h-2.5 text-green-400" />
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[8px] text-muted-foreground max-w-[56px] truncate text-center">
+                          {pose.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </ProfileSection>
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                {person.status === 'draft' ? (
-                  <button
-                    type="button"
-                    onClick={() => setMode('verify')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Xác minh
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setMode('edit')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold border border-[#1e2433] hover:bg-[#1a2235]"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                    Sửa
-                  </button>
-                )}
+              <ProfileSection icon={Clock} title="Thời gian" iconClassName="text-sky-400">
+                <div className="grid grid-cols-2 gap-3 text-[11px]">
+                  <div>
+                    <p className="text-[8px] uppercase tracking-wide text-muted-foreground/70">Lần đầu thấy</p>
+                    <p className="font-medium tabular-nums mt-0.5">{tsLabel(person.first_seen)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] uppercase tracking-wide text-muted-foreground/70">Lần cuối</p>
+                    <p className="font-medium tabular-nums mt-0.5">{tsLabel(person.last_seen)}</p>
+                  </div>
+                </div>
+              </ProfileSection>
+
+              <div className="flex flex-wrap gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFaceGalleryOpen(false)
+                    setMode('edit')
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold border border-[#1e2433] hover:bg-[#1a2235]"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Sửa
+                </button>
+                <Link
+                  to={scanHref}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold bg-fuchsia-500/90 text-white hover:bg-fuchsia-500"
+                  onClick={onClose}
+                >
+                  <ScanFace className="w-3.5 h-3.5" />
+                  Quét mặt
+                </Link>
                 {!confirmDelete ? (
                   <button
                     type="button"
@@ -313,94 +509,79 @@ export function WorkerProfileDetailModal({
                 )}
               </div>
             </>
-          ) : person && (mode === 'edit' || mode === 'verify') ? (
+          ) : person && mode === 'edit' ? (
             <form onSubmit={e => void handleSave(e)} className="space-y-3">
-              {person.status === 'draft' && (
-                <WorkerProfileFaceGallery person={person} compact />
-              )}
-              {(mode === 'verify' || person.status === 'draft') && (
-                <>
-                  <p className="text-[10px] text-amber-300/90 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2">
-                    {mode === 'verify'
-                      ? 'Bước 1: Tải ảnh chính diện · Bước 2: Nhập mã NV chính thức.'
-                      : 'Tải ảnh chính diện thủ công nếu camera chưa có crop.'}
-                    {' '}Cần thêm góc trái/phải? Sau xác minh mở Quét mặt theo mã NV.
-                  </p>
-                  <label className="block space-y-1.5">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Ảnh chính diện *
-                    </span>
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        'shrink-0 w-20 h-20 rounded-lg border border-dashed border-[#1e2433] bg-[#0a0e17] overflow-hidden flex items-center justify-center',
-                        verifyFacePreview && 'border-violet-400/40',
-                      )}>
-                        {verifyFaceLoading ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        ) : verifyFacePreview ? (
-                          <img
-                            src={verifyFacePreview}
-                            alt="Ảnh xác minh"
-                            className="w-full h-full object-cover"
-                          />
+              <ProfileSection icon={Info} title="Thông tin" iconClassName="text-violet-400">
+                <div className="space-y-2.5">
+                  <label className="block space-y-1">
+                    <span className="text-[8px] uppercase tracking-wide text-muted-foreground/70">Họ tên *</span>
+                    <input
+                      value={fullName}
+                      onChange={e => setFullName(e.target.value)}
+                      required
+                      className={INPUT_CLASS}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[8px] uppercase tracking-wide text-muted-foreground/70">Mã nhân viên *</span>
+                    <input
+                      value={employeeCode}
+                      onChange={e => setEmployeeCode(e.target.value)}
+                      required
+                      className={cn(INPUT_CLASS, 'font-mono')}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[8px] uppercase tracking-wide text-muted-foreground/70">Đơn vị</span>
+                    <input
+                      value={contractor}
+                      onChange={e => setContractor(e.target.value)}
+                      className={INPUT_CLASS}
+                    />
+                  </label>
+                </div>
+              </ProfileSection>
+
+              <ProfileSection icon={ScanFace} title="Khuôn mặt" iconClassName="text-fuchsia-400">
+                <div className="flex items-center justify-between gap-2">
+                  <FaceEnrollmentBadge
+                    captured={facesCaptured}
+                    total={facesRequired}
+                    complete={facesComplete}
+                  />
+                  <Link
+                    to={scanHref}
+                    onClick={onClose}
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-fuchsia-400 hover:text-fuchsia-300"
+                  >
+                    <ScanFace className="w-3 h-3" />
+                    Quét mặt
+                  </Link>
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-0.5">
+                  {displayPoses.map(pose => (
+                    <div
+                      key={pose.slot}
+                      className="shrink-0 flex flex-col items-center gap-1 rounded-md border border-[#1e2433] bg-[#0a0e17] p-1"
+                    >
+                      <div className="relative w-12 h-12 rounded overflow-hidden bg-black">
+                        {pose.url ? (
+                          <img src={pose.url} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <Upload className="w-5 h-5 text-muted-foreground" />
+                          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/35">
+                            <ScanFace className="w-3.5 h-3.5" />
+                          </div>
                         )}
                       </div>
-                      <div className="flex-1 space-y-1.5">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={e => void handleVerifyFaceFile(e.target.files?.[0] ?? null)}
-                          className="block w-full text-[10px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-violet-500 file:text-white"
-                        />
-                        <p className="text-[9px] text-muted-foreground leading-relaxed">
-                          Ảnh rõ mặt, ánh sáng đủ — dùng làm avatar và vector nhận diện.
-                        </p>
-                      </div>
+                      <span className="text-[7px] text-muted-foreground max-w-[48px] truncate text-center">
+                        {pose.label}
+                      </span>
                     </div>
-                  </label>
-                  {supplementScanHref && (
-                    <Link
-                      to={supplementScanHref}
-                      className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-violet-400 hover:text-violet-300"
-                    >
-                      <ScanFace className="w-3.5 h-3.5" />
-                      Quét thêm góc tại Quét mặt (mã {employeeCode.trim()})
-                    </Link>
-                  )}
-                </>
-              )}
-              <label className="block space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Họ tên *</span>
-                <input
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Mã nhân viên *</span>
-                <input
-                  value={employeeCode}
-                  onChange={e => setEmployeeCode(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none font-mono focus:border-violet-400/50"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Đơn vị</span>
-                <input
-                  value={contractor}
-                  onChange={e => setContractor(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-violet-400/50"
-                />
-              </label>
-              {person && mode === 'edit' && person.status !== 'draft' && (
-                <WorkerProfileFaceGallery person={person} compact />
-              )}
-              <div className="flex gap-2 pt-2">
+                  ))}
+                </div>
+              </ProfileSection>
+
+              <div className="flex gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setMode('view')}
@@ -410,10 +591,10 @@ export function WorkerProfileDetailModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || ((mode === 'verify' || person.status === 'draft') && !verifyReady)}
-                  className="flex-[2] inline-flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-semibold bg-violet-500 text-white disabled:opacity-50"
+                  disabled={saving}
+                  className="flex-[2] inline-flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-semibold bg-fuchsia-500/90 text-white hover:bg-fuchsia-500 disabled:opacity-50"
                 >
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : ((mode === 'verify' || person.status === 'draft') ? 'Xác minh hồ sơ' : 'Lưu thay đổi')}
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Lưu thay đổi'}
                 </button>
               </div>
             </form>
@@ -427,6 +608,7 @@ export function WorkerProfileDetailModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
