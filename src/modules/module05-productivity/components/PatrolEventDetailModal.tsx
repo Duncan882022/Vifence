@@ -119,6 +119,40 @@ function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAp
   })
 }
 
+/** Gắn ảnh card (mới nhất) vào lượt gặp duy nhất khi khác ảnh lịch sử (đầu phiên). */
+function enrichAppearanceSegmentsWithCardSnapshot(
+  segments: PatrolAppearanceSegment[],
+  event: PatrolEvent,
+): PatrolAppearanceSegment[] {
+  if (segments.length !== 1) return segments
+  const cardSnap = event.snapshotUrl?.trim()
+  const histSnap = segments[0]?.snapshotUrl?.trim()
+  if (!cardSnap || cardSnap === histSnap) return segments
+  return [{ ...segments[0], latestSnapshotUrl: cardSnap }]
+}
+
+function snapshotSelectionKey(rowKey: string, variant: 'history' | 'latest'): string {
+  return `${rowKey}:${variant}`
+}
+
+function resolveSnapshotFromSelection(
+  segments: PatrolAppearanceSegment[],
+  selectionKey: string | null,
+  event: PatrolEvent | null,
+): string | undefined {
+  if (!selectionKey) return undefined
+  const [rowKey, variant] = selectionKey.split(':') as [string, 'history' | 'latest' | undefined]
+  const segment = segments.find(s => appearanceRowKey(s) === rowKey)
+  if (!segment) return undefined
+  if (variant === 'latest') {
+    return segment.latestSnapshotUrl?.trim() || event?.snapshotUrl?.trim() || undefined
+  }
+  return segment.snapshotUrl?.trim()
+    || segment.latestSnapshotUrl?.trim()
+    || event?.snapshotUrl?.trim()
+    || undefined
+}
+
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } {
   const lat = segment.gpsLat ?? segment.gpsLatEnd ?? null
   const lng = segment.gpsLng ?? segment.gpsLngEnd ?? null
@@ -187,7 +221,6 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const [facePoses, setFacePoses] = useState<PatrolGalleryFacePose[]>([])
   const [faceGalleryOpen, setFaceGalleryOpen] = useState(false)
   const [selectedFaceSlot, setSelectedFaceSlot] = useState<number | null>(null)
-  const [heroFromHistory, setHeroFromHistory] = useState(false)
 
   useEffect(() => {
     if (!event) return
@@ -202,7 +235,6 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   useEffect(() => {
     setSelectedAppearanceKey(null)
-    setHeroFromHistory(false)
     setFaceGalleryOpen(false)
     setSelectedFaceSlot(null)
     setFacePoses([])
@@ -227,7 +259,10 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     void fetchPatrolSubjectAppearances(subjectId, appearanceDate).then(segments => {
       if (cancelled) return
       const sorted = dedupeAppearanceSegments(
-        [...segments].sort((a, b) => b.startedAt - a.startedAt),
+        enrichAppearanceSegmentsWithCardSnapshot(
+          [...segments].sort((a, b) => b.startedAt - a.startedAt),
+          event,
+        ),
       )
       setAppearanceSegments(sorted)
       setAppearancesLoading(false)
@@ -263,7 +298,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   const handleFaceAvatarClick = useCallback(() => {
     setFaceGalleryOpen(open => !open)
-    setHeroFromHistory(false)
+    setSelectedAppearanceKey(null)
   }, [])
 
   const summary = useMemo(() => {
@@ -356,18 +391,17 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   const activeSnapshotUrl = useMemo(() => {
     if (faceGalleryOpen) return undefined
-    if (appearanceSegments.length === 1) {
-      const only = appearanceSegments[0]?.snapshotUrl?.trim()
-      if (only) return only
+    const fromSelection = resolveSnapshotFromSelection(
+      appearanceSegments,
+      selectedAppearanceKey,
+      event,
+    )
+    if (fromSelection) return fromSelection
+    if (appearanceSegments.length === 0) {
+      return event?.snapshotUrl
     }
-    if (heroFromHistory && selectedAppearanceKey) {
-      const selected = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
-      if (selected) {
-        return selected.snapshotUrl?.trim() || undefined
-      }
-    }
-    return event?.snapshotUrl
-  }, [appearanceSegments, event?.snapshotUrl, faceGalleryOpen, heroFromHistory, selectedAppearanceKey])
+    return undefined
+  }, [appearanceSegments, event, faceGalleryOpen, selectedAppearanceKey])
 
   if (!event || !summary) return null
 
@@ -381,11 +415,8 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const showTimeSection = !hasAppearanceHistory
-  const singleHistorySnapshot = appearanceSegments.length === 1
-    ? appearanceSegments[0]?.snapshotUrl?.trim()
-    : ''
-  const showHeroPanel = Boolean(faceGalleryOpen && selectedFaceUrl)
-    || Boolean(activeSnapshotUrl && !singleHistorySnapshot)
+  const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
+    || Boolean(activeSnapshotUrl && (!hasAppearanceHistory || selectedAppearanceKey))
 
   return createPortal(
     <div
@@ -396,7 +427,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       <div
         className={cn(
           'relative flex flex-col w-full max-h-[96dvh] sm:max-h-[92vh] rounded-t-2xl sm:rounded-xl border border-[#2a3855] bg-[#0a0e17] shadow-2xl shadow-black/60',
-          showHeroPanel ? 'sm:max-w-xl lg:max-w-2xl' : 'sm:max-w-md',
+          showSnapshotHero ? 'sm:max-w-xl lg:max-w-2xl' : 'sm:max-w-md',
         )}
         onClick={e => e.stopPropagation()}
         role="dialog"
@@ -476,7 +507,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
             </div>
           )}
 
-          {!faceGalleryOpen && activeSnapshotUrl && (
+          {!faceGalleryOpen && showSnapshotHero && activeSnapshotUrl && (
             <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-2 border-b border-[#1e2433]/70 bg-[#0a0e17]">
               <PatrolEventSnapshot
                 key={`${event.id}:${selectedAppearanceKey ?? 'event'}:${activeSnapshotUrl}`}
@@ -542,32 +573,47 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                 <div className="space-y-1.5">
                   {appearanceSegments.map(segment => {
                     const rowKey = appearanceRowKey(segment)
-                    const selected = selectedAppearanceKey === rowKey
+                    const historyKey = snapshotSelectionKey(rowKey, 'history')
+                    const latestKey = snapshotSelectionKey(rowKey, 'latest')
+                    const historyThumb = segment.snapshotUrl?.trim()
+                    const latestThumb = segment.latestSnapshotUrl?.trim()
+                    const hasDualSnapshots = Boolean(historyThumb && latestThumb && historyThumb !== latestThumb)
+                    const rowSelected = selectedAppearanceKey?.startsWith(`${rowKey}:`) ?? false
                     const gps = resolveAppearanceGps(segment)
                     const camLabel = resolveAppearanceCameraLabel(segment)
-                    const thumbUrl = segment.snapshotUrl?.trim()
-                    return (
-                      <button
-                        key={rowKey}
-                        type="button"
-                        onClick={() => {
-                          if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
-                          setSelectedAppearanceKey(rowKey)
-                          setFaceGalleryOpen(false)
-                          setHeroFromHistory(true)
-                        }}
-                        className={cn(
-                          'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',
-                          selected
-                            ? 'border-sky-400/50 bg-sky-500/10 ring-1 ring-sky-400/30'
-                            : 'border-[#1e2433] bg-[#0a0e17] hover:border-[#2a3855] hover:bg-[#0d121c]',
-                        )}
-                      >
-                        <div className="relative w-[72px] h-[52px] shrink-0 overflow-hidden rounded-md border border-[#1e2433]/90 bg-black">
-                          {thumbUrl ? (
+
+                    const selectSnapshot = (selectionKey: string, url?: string) => {
+                      if (url) preloadPatrolEventSnapshot(url)
+                      setSelectedAppearanceKey(prev => (prev === selectionKey ? null : selectionKey))
+                      setFaceGalleryOpen(false)
+                    }
+
+                    const renderThumb = (
+                      url: string | undefined,
+                      selectionKey: string,
+                      label: string,
+                    ) => {
+                      const picked = selectedAppearanceKey === selectionKey
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            selectSnapshot(selectionKey, url)
+                          }}
+                          className={cn(
+                            'relative shrink-0 overflow-hidden rounded-md border bg-black transition-colors',
+                            hasDualSnapshots ? 'w-[52px] h-[52px]' : 'w-[72px] h-[52px]',
+                            picked
+                              ? 'border-sky-400/60 ring-1 ring-sky-400/40'
+                              : 'border-[#1e2433]/90 hover:border-sky-400/40',
+                          )}
+                          title={label}
+                          aria-label={label}
+                        >
+                          {url ? (
                             <img
-                              key={rowKey}
-                              src={thumbUrl}
+                              src={url}
                               alt=""
                               className="absolute inset-0 h-full w-full object-cover"
                               loading="lazy"
@@ -578,8 +624,38 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               <ImageOff className="w-4 h-4" aria-hidden />
                             </div>
                           )}
+                          {hasDualSnapshots && (
+                            <span className="absolute bottom-0 inset-x-0 text-center text-[6px] font-semibold text-white/90 bg-black/60 py-0.5">
+                              {label}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    }
+
+                    return (
+                      <div
+                        key={rowKey}
+                        className={cn(
+                          'w-full flex items-stretch gap-2.5 rounded-lg border px-2 py-2 text-left transition-colors',
+                          rowSelected
+                            ? 'border-sky-400/50 bg-sky-500/10 ring-1 ring-sky-400/30'
+                            : 'border-[#1e2433] bg-[#0a0e17]',
+                        )}
+                      >
+                        <div className={cn('flex shrink-0 gap-1', hasDualSnapshots ? 'flex-col sm:flex-row' : '')}>
+                          {renderThumb(historyThumb || latestThumb, historyKey, 'Đầu')}
+                          {hasDualSnapshots && renderThumb(latestThumb, latestKey, 'Mới')}
                         </div>
-                        <div className="min-w-0 flex-1 space-y-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fallback = historyThumb || latestThumb
+                            const key = historyThumb ? historyKey : latestKey
+                            selectSnapshot(key, fallback)
+                          }}
+                          className="min-w-0 flex-1 space-y-1 py-0.5 text-left"
+                        >
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] tabular-nums font-semibold text-foreground">
                               {formatAppearanceTimeRange(segment.startedAt, segment.endedAt)}
@@ -630,8 +706,8 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                               )}
                             </span>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+                      </div>
                     )
                   })}
                 </div>
