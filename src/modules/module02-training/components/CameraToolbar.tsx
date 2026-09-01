@@ -15,6 +15,9 @@ import {
 } from './cameraToolbarStyles'
 import { isPatrolDroneCameraId, isPatrolDroneRoiMandatory } from '@/modules/module05-productivity/data/patrolDrones'
 import { usePatrolDroneFlightMode } from '@/modules/module05-productivity/hooks/usePatrolFlycamFlightModes'
+import { PatrolStreamTelemetryOverlay } from '@/modules/module05-productivity/components/PatrolStreamTelemetryOverlay'
+import { usePatrolCameraStreamTelemetry } from '@/modules/module05-productivity/hooks/usePatrolCameraStreamTelemetry'
+import { shouldShowPatrolStreamTelemetry } from '@/modules/module05-productivity/utils/patrolStreamTelemetry'
 import {
   patrolFlightModeLabel,
   patrolFlightModeShortLabel,
@@ -172,9 +175,22 @@ interface CameraChromeProps {
   compact?: boolean
 }
 
+function PatrolCameraTelemetryLayer({ cam, compact }: CameraChromeProps) {
+  const streamOnline = cam.status === 'online' || Boolean(cam.framesLive)
+  const telemetry = usePatrolCameraStreamTelemetry(cam.id, streamOnline)
+  return (
+    <PatrolStreamTelemetryOverlay
+      telemetry={telemetry}
+      compact={compact}
+      showHeading={cam.streamType === 'flycam'}
+    />
+  )
+}
+
 /** LIVE + toolbar + thông tin cam — dùng chung mọi luồng. */
 export function CameraChrome({ cam, compact }: CameraChromeProps) {
   const isOffline = cam.status === 'offline' && !cam.framesLive
+  const showTelemetry = !isOffline && shouldShowPatrolStreamTelemetry(cam)
   const flightMode = usePatrolDroneFlightMode(cam.id)
   const aerialLive = isPatrolDroneCameraId(cam.id)
     && !isOffline
@@ -200,6 +216,7 @@ export function CameraChrome({ cam, compact }: CameraChromeProps) {
         compact={compact}
         showFacingToggle={cam.streamType === 'mobile'}
       />
+      {showTelemetry && <PatrolCameraTelemetryLayer cam={cam} compact={compact} />}
       <CameraInfoBar cam={cam} compact={compact} />
     </>
   )

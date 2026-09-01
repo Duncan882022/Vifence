@@ -50,6 +50,7 @@ import { PatrolEventsPanel } from './components/PatrolEventsPanel'
 import { PatrolEventDetailModal } from './components/PatrolEventDetailModal'
 import type { PatrolHelmetLiveMetrics } from './hooks/patrolHelmetLiveMetricsState'
 import { usePatrolLivePoll } from './hooks/usePatrolLivePoll'
+import { setPatrolStreamTelemetryBundle } from '@/services/patrolStreamTelemetryBridge'
 import { usePatrolFlycamFlightModes } from './hooks/usePatrolFlycamFlightModes'
 import { filterPatrolEventsByFlycamAltitude } from './utils/patrolFlycamEventFilter'
 import { patrolFlightModeLabel } from './utils/patrolFlightMode'
@@ -253,6 +254,18 @@ export function Module05Page() {
     patrolStreamMetricsIds,
     [...DEFAULT_PATROL_CAMERA_IDS],
   )
+
+  useEffect(() => {
+    const raw = workforceSnap.server_time?.trim()
+    const parsed = raw ? Date.parse(raw) : Number.NaN
+    setPatrolStreamTelemetryBundle({
+      serverTimeMs: Number.isFinite(parsed) ? parsed : null,
+      metricsByCamera: Object.fromEntries(
+        liveMetrics.perCamera.map(row => [row.camera_id, row]),
+      ),
+      helmets: workforceSnap.helmets,
+    })
+  }, [liveMetrics.perCamera, workforceSnap])
 
   const [framesLiveTick, setFramesLiveTick] = useState(0)
 

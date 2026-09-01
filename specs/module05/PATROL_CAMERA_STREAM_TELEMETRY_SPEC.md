@@ -1,6 +1,6 @@
 # Module 05 — Overlay thời gian + GPS trên luồng camera (HC-02 & Drone)
 
-> **Rev.1** — Chỉ tài liệu / prompt triển khai. **Không** đổi schema `live/bundle`.
+> **Rev.1** — Overlay FE trên `CameraChrome` (HC-02 / DR-*). **Không** đổi schema `live/bundle`.
 
 ---
 
