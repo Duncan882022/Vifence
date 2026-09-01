@@ -141,8 +141,8 @@ function hc02IngestKind(): HelmetIngestKind {
     return isHelmetWebrtcAvailable() ? 'whip' : 'legacy-mobile'
   }
   if (explicit === 'rtmp') return 'rtmp'
-  // Mặc định: RTMP native (Larix/OBS) — ổn định như flycam, không phụ thuộc tab trình duyệt.
-  return 'rtmp'
+  // Mặc định: WHIP browser — video + GPS một tab, không lưu nguồn trên máy.
+  return isHelmetWebrtcAvailable() ? 'whip' : 'legacy-mobile'
 }
 
 /**
