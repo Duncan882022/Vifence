@@ -315,6 +315,7 @@ def resolve_patrol_worker_display_name(
         except Exception:
             pass
 
-    if wname and wname != wid and not is_technical_patrol_worker_label(wname):
-        return wname
+    if wid and is_tk_worker_id(wid):
+        return "Người"
+
     return wid or "Đối tượng"

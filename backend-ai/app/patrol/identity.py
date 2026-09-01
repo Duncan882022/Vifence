@@ -162,9 +162,14 @@ def _hr_scan_face_count(pers_id: str) -> int:
 
 def hr_profile_for_gallery(gallery_worker_id: str) -> dict[str, Any] | None:
     """Hồ sơ HR đã import — gallery/binding không được tự tạo Định danh nếu thiếu bản ghi này."""
-    from ..patrol_identity_store import lookup_patrol_identity
+    from ..patrol_identity_store import _get_binding_row, _resolve_alias_to_gallery_raw
 
-    row = lookup_patrol_identity((gallery_worker_id or "").strip())
+    gid = (gallery_worker_id or "").strip()
+    row = _get_binding_row(gid)
+    if row is None:
+        resolved = _resolve_alias_to_gallery_raw(gid)
+        if resolved:
+            row = _get_binding_row(resolved)
     if not row:
         return None
     code = str(row.get("employee_code") or "").strip()

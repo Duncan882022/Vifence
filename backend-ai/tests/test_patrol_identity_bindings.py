@@ -53,8 +53,18 @@ class PatrolIdentityBindingsTests(unittest.TestCase):
         self.assertNotIn("pers-0001", rows["p-NV01"]["aliases"])
         self.assertIn("pers-0001", rows["p-SGC-6688"]["aliases"])
 
+    @patch("app.patrol.identity.hr_profile_for_employee_code")
     @patch("app.patrol_identity_store._is_verified_patrol_alias", return_value=True)
-    def test_lookup_requires_verified_pers_alias(self, _verified: object) -> None:
+    def test_lookup_requires_verified_pers_alias(
+        self,
+        _verified: object,
+        mock_hr: object,
+    ) -> None:
+        mock_hr.return_value = {
+            "full_name": "Duncan",
+            "status": "identified",
+            "employee_code": "SGC-6688",
+        }
         patrol_identity_store.bind_patrol_identity(
             gallery_worker_id="p-SGC-6688",
             worker_name="Duncan",
@@ -95,6 +105,70 @@ class PatrolIdentityBindingsTests(unittest.TestCase):
         duncan = next(r for r in rows if r["gallery_worker_id"] == "p-SGC-6688")
         self.assertNotIn("pers-0001", duncan["aliases"])
         self.assertIn("p-SGC-6688", duncan["aliases"])
+
+
+class StaleGalleryBindingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._root = Path(self._tmpdir.name)
+        self._bindings = self._root / "patrol_identity_bindings.json"
+        self._patches = [
+            patch("app.patrol_identity_store.BINDINGS_FILE", self._bindings),
+            patch("app.patrol_identity_store.DATA_DIR", self._root),
+        ]
+        for p in self._patches:
+            p.start()
+        patrol_identity_store._state = None
+
+    def tearDown(self) -> None:
+        for p in reversed(self._patches):
+            p.stop()
+        patrol_identity_store._state = None
+        self._tmpdir.cleanup()
+
+    def test_tk_alias_without_hr_profile_not_resolved(self) -> None:
+        patrol_identity_store.bind_patrol_identity(
+            gallery_worker_id="p-NV001",
+            worker_name="Nguyễn Văn A",
+            employee_code="NV001",
+            contractor_name="",
+            alias_keys=["NV001", "p-NV001", "tk-0000001"],
+        )
+        self.assertIsNone(patrol_identity_store.lookup_gallery_worker("tk-0000001"))
+        self.assertIsNone(patrol_identity_store.lookup_patrol_identity("p-NV001"))
+
+    @patch("app.patrol.identity.hr_profile_for_employee_code")
+    def test_tk_alias_resolves_only_with_hr_profile(self, mock_hr: object) -> None:
+        patrol_identity_store.bind_patrol_identity(
+            gallery_worker_id="p-NV001",
+            worker_name="Nguyễn Văn A",
+            employee_code="NV001",
+            contractor_name="",
+            alias_keys=["tk-0000001"],
+        )
+        mock_hr.return_value = {
+            "full_name": "Nguyễn Văn A",
+            "status": "identified",
+            "employee_code": "NV001",
+        }
+        self.assertEqual(
+            patrol_identity_store.lookup_gallery_worker("tk-0000001"),
+            "p-NV001",
+        )
+
+    def test_prune_stale_gallery_bindings(self) -> None:
+        patrol_identity_store.bind_patrol_identity(
+            gallery_worker_id="p-NV001",
+            worker_name="Nguyễn Văn A",
+            employee_code="NV001",
+            contractor_name="",
+            alias_keys=["tk-0000001", "p-NV001"],
+        )
+        out = patrol_identity_store.prune_stale_gallery_bindings()
+        self.assertEqual(out["pruned_count"], 1)
+        self.assertIn("p-NV001", out["pruned_gallery_workers"])
+        self.assertIsNone(patrol_identity_store.lookup_gallery_worker("tk-0000001"))
+        self.assertEqual(patrol_identity_store.list_patrol_identity_bindings(), [])
 
 
 if __name__ == "__main__":

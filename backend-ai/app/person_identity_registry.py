@@ -499,8 +499,9 @@ def _apply_patrol_gallery_to_detection(
 
 
 def _gallery_from_patrol_binding(worker_id: str) -> tuple[str, str] | None:
-    """sgc/OBJ đã gán gallery → trả (gallery_id, worker_name)."""
-    from .patrol_identity_store import lookup_gallery_worker, lookup_patrol_identity
+    """sgc/OBJ đã gán gallery → trả (gallery_id, worker_name) nếu còn hồ sơ HR."""
+    from .patrol import identity as patrol_identity
+    from .patrol_identity_store import lookup_gallery_worker
 
     wid = (worker_id or "").strip()
     if not wid:
@@ -508,8 +509,12 @@ def _gallery_from_patrol_binding(worker_id: str) -> tuple[str, str] | None:
     gallery_id = lookup_gallery_worker(wid)
     if not gallery_id:
         return None
-    row = lookup_patrol_identity(gallery_id) or {}
-    name = str(row.get("worker_name") or gallery_id).strip()
+    hr = patrol_identity.hr_profile_for_gallery(gallery_id)
+    if hr is None:
+        return None
+    name = patrol_identity.display_name(hr)
+    if not name:
+        return None
     return gallery_id, name
 
 

@@ -60,6 +60,39 @@ def normalize_alias_key(key: str) -> str:
     return k
 
 
+def _resolve_alias_to_gallery_raw(alias: str) -> str | None:
+    """Map alias → gallery id từ file binding, không kiểm tra HR."""
+    key = normalize_alias_key(alias)
+    if not key:
+        return None
+    wid = (_load().get("alias_to_gallery") or {}).get(key)
+    return str(wid).strip() if wid else None
+
+
+def _get_binding_row(gallery_id: str) -> dict[str, Any] | None:
+    wid = (gallery_id or "").strip()
+    if not wid:
+        return None
+    row = (_load().get("by_gallery_worker") or {}).get(wid)
+    return row if isinstance(row, dict) else None
+
+
+def _gallery_binding_has_hr(gallery_id: str) -> bool:
+    """Gallery binding chỉ hợp lệ khi SQLite còn hồ sơ HR status=identified."""
+    row = _get_binding_row(gallery_id)
+    if not row:
+        return False
+    code = str(row.get("employee_code") or "").strip()
+    if not code:
+        return False
+    try:
+        from .patrol import identity as patrol_identity
+
+        return patrol_identity.hr_profile_for_employee_code(code) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _is_verified_patrol_alias(alias: str) -> bool:
     """pers-/iden-* chỉ hợp lệ khi SQLite có hồ sơ status=identified."""
     key = normalize_alias_key(alias)
@@ -93,9 +126,10 @@ def lookup_gallery_worker(alias: str) -> str | None:
     key = normalize_alias_key(alias)
     if not key or not _is_verified_patrol_alias(key):
         return None
-    state = _load()
-    wid = (state.get("alias_to_gallery") or {}).get(key)
-    return str(wid).strip() if wid else None
+    wid = _resolve_alias_to_gallery_raw(key)
+    if not wid or not _gallery_binding_has_hr(wid):
+        return None
+    return wid
 
 
 def lookup_patrol_identity(alias: str) -> dict[str, Any] | None:
@@ -129,6 +163,33 @@ def list_patrol_identity_bindings() -> list[dict[str, Any]]:
     return rows
 
 
+def prune_stale_gallery_bindings() -> dict[str, Any]:
+    """Gỡ gallery worker / alias khi không còn hồ sơ HR identified."""
+    removed_workers: list[str] = []
+    removed_aliases: list[str] = []
+    with _lock:
+        state = _load()
+        by_gallery = state.setdefault("by_gallery_worker", {})
+        alias_map = state.setdefault("alias_to_gallery", {})
+        for wid in list(by_gallery.keys()):
+            if _gallery_binding_has_hr(wid):
+                continue
+            row = by_gallery.pop(wid, {})
+            removed_workers.append(wid)
+            aliases = row.get("aliases") or [] if isinstance(row, dict) else []
+            for alias in aliases:
+                if alias_map.get(alias) == wid:
+                    alias_map.pop(alias, None)
+                    removed_aliases.append(alias)
+        if removed_workers:
+            _save(state)
+    return {
+        "pruned_gallery_workers": removed_workers,
+        "pruned_aliases": removed_aliases,
+        "pruned_count": len(removed_workers),
+    }
+
+
 def prune_stale_pers_aliases() -> dict[str, Any]:
     """Gỡ pers-/iden-* alias không còn khớp hồ sơ identified trong SQLite."""
     removed: list[str] = []
@@ -158,6 +219,7 @@ def prune_stale_pers_aliases() -> dict[str, Any]:
 
 def repair_patrol_identity_bindings() -> dict[str, Any]:
     """Đồng bộ aliases[] từ alias_to_gallery — gỡ alias ma còn trong row cũ."""
+    gallery_out = prune_stale_gallery_bindings()
     prune_out = prune_stale_pers_aliases()
     with _lock:
         state = _load()
@@ -179,6 +241,7 @@ def repair_patrol_identity_bindings() -> dict[str, Any]:
     return {
         "repaired": repaired,
         "workers": len(by_gallery),
+        **gallery_out,
         **prune_out,
     }
 

@@ -344,6 +344,12 @@ def purge_day(date: str | None = None) -> dict[str, Any]:
 
     identity._invalidate_face_index()
     sink.reset()
+    try:
+        from ..patrol_identity_store import prune_stale_gallery_bindings
+
+        removed["stale_gallery_bindings"] = prune_stale_gallery_bindings()
+    except Exception:  # noqa: BLE001
+        removed["stale_gallery_bindings"] = {"pruned_count": 0}
     removed["date"] = d
     return removed
 

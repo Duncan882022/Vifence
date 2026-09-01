@@ -37,16 +37,17 @@ class PatrolEntitySgcCanonicalTests(unittest.TestCase):
             },
         }
         with patch("app.patrol_identity_store._load", return_value=bindings):
-            sgc_key = resolve_patrol_dedup_stable_id(
-                "sgc-00000005",
-                "OBJ-CDE0C9",
-                "p01:person",
-            )
-            gallery_key = resolve_patrol_dedup_stable_id(
-                "p-DUNCAN",
-                "OBJ-BE1346",
-                "p02:person",
-            )
+            with patch("app.patrol_identity_store._gallery_binding_has_hr", return_value=True):
+                sgc_key = resolve_patrol_dedup_stable_id(
+                    "sgc-00000005",
+                    "OBJ-CDE0C9",
+                    "p01:person",
+                )
+                gallery_key = resolve_patrol_dedup_stable_id(
+                    "p-DUNCAN",
+                    "OBJ-BE1346",
+                    "p02:person",
+                )
         self.assertEqual(sgc_key, "sgc-00000005")
         self.assertEqual(gallery_key, "sgc-00000005")
         self.assertEqual(sgc_key, gallery_key)
@@ -88,18 +89,20 @@ class PatrolEntitySgcCanonicalTests(unittest.TestCase):
             "employee_code": "SGC-6688",
         }
         with patch("app.patrol_identity_store._load", return_value=bindings):
-            with patch("app.patrol.identity.get_person", return_value=identified):
-                self.assertEqual(patrol_tier_label("p-SGC-6688"), "identity")
-                self.assertEqual(patrol_tier_label("pers-0001"), "identity")
-                self.assertEqual(
-                    resolve_patrol_gallery_id_for_worker("pers-0001"),
-                    "p-SGC-6688",
-                )
+            with patch("app.patrol_identity_store._gallery_binding_has_hr", return_value=True):
+                with patch("app.patrol.identity.get_person", return_value=identified):
+                    self.assertEqual(patrol_tier_label("p-SGC-6688"), "identity")
+                    self.assertEqual(patrol_tier_label("pers-0001"), "identity")
+                    self.assertEqual(
+                        resolve_patrol_gallery_id_for_worker("pers-0001"),
+                        "p-SGC-6688",
+                    )
         anonymous = {"pers_id": "pers-0001", "status": "person"}
         with patch("app.patrol_identity_store._load", return_value=bindings):
-            with patch("app.patrol.identity.get_person", return_value=anonymous):
-                self.assertEqual(patrol_tier_label("pers-0001"), "person")
-                self.assertIsNone(resolve_patrol_gallery_id_for_worker("pers-0001"))
+            with patch("app.patrol_identity_store._gallery_binding_has_hr", return_value=False):
+                with patch("app.patrol.identity.get_person", return_value=anonymous):
+                    self.assertEqual(patrol_tier_label("pers-0001"), "person")
+                    self.assertIsNone(resolve_patrol_gallery_id_for_worker("pers-0001"))
 
     def test_patrol_tier_label_sgc_is_person(self) -> None:
         self.assertEqual(patrol_tier_label("sgc-00000042"), "person")
