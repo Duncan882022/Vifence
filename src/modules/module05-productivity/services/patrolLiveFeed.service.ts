@@ -2,6 +2,7 @@
  * Transport live Module 05 — WebSocket push live/bundle, fallback HTTP poll.
  */
 import { getPatrolAccessToken } from '@/services/patrolApiClient'
+import { setPatrolRuntimeFromPayload } from '@/services/patrolRuntimeBridge'
 import { getMobileAiBackendUrl } from '@/modules/module02-training/services/mobileAiBackend.service'
 import { getVmsBackendUrl } from '@/modules/module03-safety/services/vmsDetections.service'
 import type { PatrolHelmetAggregateMetricsResponse } from '../services/patrolLiveEvents.service'
@@ -96,6 +97,9 @@ function normalizeMetrics(
 }
 
 function parseLiveBundleMessage(data: Record<string, unknown>): PatrolLiveFeedPayload | null {
+  if (data.runtime && typeof data.runtime === 'object') {
+    setPatrolRuntimeFromPayload(data.runtime as Record<string, unknown>)
+  }
   const type = String(data.type ?? '')
   if (type === 'heartbeat') return null
   if (type !== 'live_bundle' && !data.metrics) return null

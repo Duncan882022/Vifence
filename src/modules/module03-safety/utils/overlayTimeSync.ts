@@ -36,6 +36,8 @@ export interface OverlaySyncResult {
 export interface OverlayResolveOptions {
   /** Khi không khớp PDT — lấy snapshot ~N ms trước (patrol HLS). */
   fallbackLagMs?: number
+  /** Hiệu chỉnh lệch đồng hồ client ↔ server (ms). */
+  clientServerSkewMs?: number
 }
 
 function snapshotWallclockMs(snapshot: VmsDetectionSnapshot): number | null {
@@ -85,11 +87,17 @@ export class OverlayTimeBuffer {
   resolve(displayWallclockMs: number | null, opts?: OverlayResolveOptions): OverlaySyncResult {
     const latest = this.latest()
     if (latest === null) return { snapshot: null, matched: false, driftMs: null }
+
+    const skewMs = opts?.clientServerSkewMs ?? 0
+    const lagMs = opts?.fallbackLagMs
+
     if (displayWallclockMs === null || this.snapshots.length === 1) {
-      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs, displayWallclockMs)
+      const lagged = this.resolveFallbackLag(lagMs, displayWallclockMs, skewMs)
       if (lagged) return lagged
       return { snapshot: latest, matched: false, driftMs: null }
     }
+
+    const adjustedDisplayMs = displayWallclockMs + skewMs
 
     let best = latest
     let bestDrift = Number.POSITIVE_INFINITY
@@ -100,26 +108,26 @@ export class OverlayTimeBuffer {
       const wallclock = snapshotWallclockMs(candidate)
       if (wallclock === null) continue
       // AI mới hơn khung đang phát → bbox chạy trước video (HC-01 / DR-03 HLS).
-      if (wallclock > displayWallclockMs + 250) continue
+      if (wallclock > adjustedDisplayMs + 250) continue
 
-      const drift = Math.abs(wallclock - displayWallclockMs)
+      const drift = Math.abs(wallclock - adjustedDisplayMs)
       if (drift < bestDrift) {
         bestDrift = drift
         best = candidate
-      } else if (wallclock < displayWallclockMs) {
+      } else if (wallclock < adjustedDisplayMs) {
         // Đi xa dần về quá khứ — không thể tốt hơn nữa.
         break
       }
     }
 
     if (!Number.isFinite(bestDrift)) {
-      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs, displayWallclockMs)
+      const lagged = this.resolveFallbackLag(lagMs, displayWallclockMs, skewMs)
       if (lagged) return lagged
       return { snapshot: latest, matched: false, driftMs: null }
     }
 
-    if (bestDrift > this.maxMatchDriftMs(opts?.fallbackLagMs)) {
-      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs, displayWallclockMs)
+    if (bestDrift > this.maxMatchDriftMs(lagMs)) {
+      const lagged = this.resolveFallbackLag(lagMs, displayWallclockMs, skewMs)
       if (lagged) return lagged
       return { snapshot: latest, matched: false, driftMs: null }
     }
@@ -131,11 +139,14 @@ export class OverlayTimeBuffer {
   private resolveFallbackLag(
     fallbackLagMs?: number,
     displayWallclockMs?: number | null,
+    skewMs = 0,
   ): OverlaySyncResult | null {
     if (fallbackLagMs == null || fallbackLagMs <= 0 || this.snapshots.length === 0) {
       return null
     }
-    const anchor = displayWallclockMs ?? Date.now()
+    const anchor = displayWallclockMs != null
+      ? displayWallclockMs + skewMs
+      : Date.now() - skewMs
     const target = anchor - fallbackLagMs
     let best: VmsDetectionSnapshot | null = null
     let bestDrift = Number.POSITIVE_INFINITY

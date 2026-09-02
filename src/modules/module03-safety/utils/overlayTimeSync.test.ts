@@ -17,7 +17,19 @@ function snap(updatedAtSec: number): VmsDetectionSnapshot {
 }
 
 describe('OverlayTimeBuffer fallback lag', () => {
-  it('uses snapshot ~5s ago instead of latest when PDT missing', () => {
+  it('WHEP (no PDT, không fallbackLag): snapshot mới nhất', () => {
+    const buffer = new OverlayTimeBuffer()
+    const nowSec = Math.floor(Date.now() / 1000)
+    buffer.push(snap(nowSec - 12))
+    buffer.push(snap(nowSec - 5))
+    buffer.push(snap(nowSec))
+
+    const result = buffer.resolve(null)
+    expect(result.snapshot?.updated_at).toBe(nowSec)
+    expect(result.matched).toBe(false)
+  })
+
+  it('HLS chưa có PDT: buffer ~5s khi có fallbackLagMs', () => {
     const buffer = new OverlayTimeBuffer()
     const nowSec = Math.floor(Date.now() / 1000)
     buffer.push(snap(nowSec - 12))

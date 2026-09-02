@@ -6,6 +6,7 @@ và WS dùng chung, tránh lệch bbox pixel vs object-fit trên FE.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Mapping
 
 from .detector import (
@@ -67,6 +68,15 @@ def build_detections_ws_payload(
         payload["frame_wallclock_ms"] = float(overlay["frame_wallclock_ms"])
     if overlay.get("frame_age_sec") is not None:
         payload["frame_age_sec"] = overlay["frame_age_sec"]
+    emit_ms = int(time.time() * 1000)
+    payload["server_emit_ms"] = emit_ms
+    if is_module05_patrol_camera(camera_id):
+        from .config import settings
+
+        payload["overlay_lag_hint_ms"] = max(
+            0,
+            int(round(float(settings.patrol_live_roi_delay_seconds) * 1000.0)),
+        )
     if revision is not None:
         payload["revision"] = revision
 

@@ -207,16 +207,29 @@ def flush_session(
         ):
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
+        from .session_store import (
+            borrow_overlapping_person_subject,
+            link_subject_session,
+            resolve_parallel_object_subject,
+        )
 
         event_date = db.today_vn(now)
-        parallel = resolve_parallel_object_subject(
+        person_parallel = borrow_overlapping_person_subject(
+            session.camera_id,
+            now,
+            bbox=obs.person_bbox,
+        )
+        parallel = None if person_parallel else resolve_parallel_object_subject(
             session.camera_id,
             session.started_at,
             now,
             event_date,
             bbox=obs.person_bbox,
         )
-        if parallel:
+        if person_parallel:
+            session.subject_id = person_parallel
+            link_subject_session(session)
+        elif parallel:
             session.subject_id = parallel
             link_subject_session(session)
         else:

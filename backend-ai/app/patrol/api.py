@@ -18,6 +18,12 @@ from fastapi.responses import FileResponse, Response
 from ..auth import RequirePatrolAdmin, RequirePatrolHr, RequirePatrolRead
 from ..rate_limit import rate_limit
 from . import daystore, db, identity
+from .bundle_enrich import (
+    gps_lookup_from_presences,
+    resolve_track_worker_id,
+    tk_bindings_for_pers_ids,
+)
+from .runtime_config import patrol_runtime_payload
 from .audit import audit
 from .schemas import (
     EnrollCompletePayload,
@@ -319,6 +325,12 @@ def day_objects(date: str | None = None, _user: RequirePatrolRead = None) -> dic
     }
 
 
+@router.get("/runtime")
+def patrol_runtime(_user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    """Config runtime — ROI lag, server clock (đồng bộ FE)."""
+    return {"ok": True, **patrol_runtime_payload()}
+
+
 @router.get("/day/stats")
 def day_stats(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
@@ -358,6 +370,9 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
         events = daystore.list_person_events(d)
         objects = daystore.list_objects(d)
         presences = daystore.list_day_presences(d)
+    pers_ids = [str(r["pers_id"]) for r in events]
+    tk_map = tk_bindings_for_pers_ids(pers_ids)
+    gps_map = gps_lookup_from_presences(presences)
     event_items = [
         {
             "event_date": r["event_date"],
@@ -371,17 +386,32 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "last_seen": r["last_seen"],
             "snapshot_path": r.get("snapshot_path"),
             "snapshot_score": float(r.get("snapshot_score") or 0),
+            "track_worker_id": resolve_track_worker_id(str(r["pers_id"]), tk_map),
+            "gps_lat": gps_map.get(str(r["pers_id"]), (None, None))[0],
+            "gps_lng": gps_map.get(str(r["pers_id"]), (None, None))[1],
         }
         for r in events
     ]
+    object_items = []
+    for row in objects:
+        oid = str(row.get("obj_id") or "")
+        lat, lng = gps_map.get(oid, (None, None))
+        object_items.append({**row, "gps_lat": lat, "gps_lng": lng})
     return {
         "ok": True,
         "date": d,
         "stats": stats,
         "events": event_items,
-        "objects": objects,
+        "objects": object_items,
         "presences": presences,
+        "runtime": patrol_runtime_payload(),
+        "subject_aliases": _subject_aliases_map(),
     }
+
+
+def _subject_aliases_map() -> dict[str, str]:
+    rows = db.query("SELECT old_pers_id, pers_id FROM person_aliases")
+    return {str(r["old_pers_id"]): str(r["pers_id"]) for r in rows}
 
 
 def _run_import_job(job_id: str, items: list[dict[str, Any]], actor: str) -> None:

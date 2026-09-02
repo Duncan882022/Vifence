@@ -9,6 +9,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { VideoClockSource } from '@/modules/module02-training/hooks/useHlsVideoSource'
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 import { OverlayTimeBuffer } from '../utils/overlayTimeSync'
+import {
+  getPatrolClientServerSkewMs,
+  getPatrolLiveRoiDelayMs,
+  updatePatrolClientServerSkew,
+} from '@/services/patrolRuntimeBridge'
 
 /** Nhịp đối chiếu snapshot ↔ đồng hồ video. */
 const RESOLVE_INTERVAL_MS = 33
@@ -23,10 +28,11 @@ export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
 export function useSyncedVmsDetections(
   feed: VmsDetectionFeed,
   clock: VideoClockSource | null,
-  options?: { fallbackLagMs?: number },
+  options?: { fallbackLagMs?: number; useRuntimeLagHint?: boolean },
 ): SyncedVmsDetectionFeed {
   const bufferRef = useRef(new OverlayTimeBuffer())
-  const fallbackLagMs = options?.fallbackLagMs
+  const configuredLagMs = options?.fallbackLagMs
+  const useRuntimeLagHint = options?.useRuntimeLagHint ?? false
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
     timeAligned: boolean
@@ -41,7 +47,10 @@ export function useSyncedVmsDetections(
   }, [feed.active])
 
   useEffect(() => {
-    if (feed.snapshot) bufferRef.current.push(feed.snapshot)
+    if (feed.snapshot) {
+      bufferRef.current.push(feed.snapshot)
+      updatePatrolClientServerSkew(feed.snapshot.server_emit_ms)
+    }
   }, [feed.snapshot])
 
   useEffect(() => {
@@ -49,7 +58,18 @@ export function useSyncedVmsDetections(
 
     const tick = () => {
       const displayMs = clock?.getDisplayWallclockMs() ?? null
-      const next = bufferRef.current.resolve(displayMs, { fallbackLagMs })
+      const hintLag = feed.snapshot?.overlay_lag_hint_ms
+      const fallbackLagMs = configuredLagMs ?? (
+        useRuntimeLagHint && hintLag != null && hintLag > 0
+          ? hintLag
+          : useRuntimeLagHint
+            ? getPatrolLiveRoiDelayMs()
+            : undefined
+      )
+      const next = bufferRef.current.resolve(displayMs, {
+        fallbackLagMs,
+        clientServerSkewMs: getPatrolClientServerSkewMs(),
+      })
 
       setResolved(prev => {
         if (
@@ -70,7 +90,7 @@ export function useSyncedVmsDetections(
     tick()
     const timer = window.setInterval(tick, RESOLVE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [feed.active, clock, fallbackLagMs])
+  }, [feed.active, feed.snapshot?.overlay_lag_hint_ms, clock, configuredLagMs, useRuntimeLagHint])
 
   return useMemo(
     () => ({

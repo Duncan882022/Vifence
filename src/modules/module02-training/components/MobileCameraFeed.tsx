@@ -131,11 +131,12 @@ export function MobileCameraFeed({
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
   const rawVmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
-  /** Video local realtime — AI VMS trễ ~5s: luôn dùng lag fallback, không PDT giả. */
+  /** VMS HLS ~5s lag + runtime hint từ BE — WHEP dùng snapshot mới nhất. */
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, null, {
     fallbackLagMs: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId)
       ? PATROL_LIVE_ROI_DELAY_MS
       : undefined,
+    useRuntimeLagHint: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId),
   })
   /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
   const patrolLocalRoiEnabled = Boolean(

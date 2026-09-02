@@ -89,6 +89,10 @@ export interface VmsDetectionSnapshot {
    * Khớp với EXT-X-PROGRAM-DATE-TIME của HLS để vẽ bbox đúng khung hình đang phát.
    */
   frame_wallclock_ms?: number
+  /** Wallclock (ms) lúc backend gửi payload — hiệu chỉnh skew client/server. */
+  server_emit_ms?: number
+  /** Gợi ý lag pipeline từ config BE (ms) — thay hằng số FE cứng. */
+  overlay_lag_hint_ms?: number
   vms_ready: boolean
   /** Live RTSP còn frame mới — false khi mũ tắt / mất tín hiệu. */
   stream_online?: boolean
@@ -217,6 +221,8 @@ interface RawVmsDetectionPayload {
   updated_at?: number
   source_pts_sec?: number
   frame_wallclock_ms?: number
+  server_emit_ms?: number
+  overlay_lag_hint_ms?: number
   vms_ready?: boolean
   stream_online?: boolean
   frame_age_sec?: number | null
@@ -249,6 +255,10 @@ export function normalizeVmsDetectionSnapshot(
     source_pts_sec: data.source_pts_sec != null ? Number(data.source_pts_sec) : undefined,
     frame_wallclock_ms: data.frame_wallclock_ms != null
       ? Number(data.frame_wallclock_ms)
+      : undefined,
+    server_emit_ms: data.server_emit_ms != null ? Number(data.server_emit_ms) : undefined,
+    overlay_lag_hint_ms: data.overlay_lag_hint_ms != null
+      ? Number(data.overlay_lag_hint_ms)
       : undefined,
     vms_ready: Boolean(data.vms_ready),
     stream_online: data.stream_online,

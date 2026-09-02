@@ -15,6 +15,11 @@ import {
   buildPatrolSubjectCameraLookup,
   resolvePatrolSubjectCameraRef,
 } from '../utils/patrolEventsUi'
+import {
+  buildPatrolSubjectGpsLookup,
+  resolvePatrolEventGps,
+} from '../utils/patrolBundleGps'
+import { isPatrolTrackWorkerId } from '../utils/patrolWorkforceEventLabels'
 import { getPatrolDefaultPlaybackDate } from '../services/patrolPlayback.service'
 
 const POLL_MS_LIVE = 3000
@@ -36,10 +41,18 @@ function isoFrom(sec: number): string {
 
 function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
   const cameraBySubject = buildPatrolSubjectCameraLookup(bundle.presences)
+  const gpsBySubject = buildPatrolSubjectGpsLookup(bundle.presences)
   const displayObjects = filterPatrolDayObjectsForDisplay(bundle.objects, bundle.persons)
   const personEvents: PatrolEvent[] = bundle.persons.map(row => {
     const identified = row.status === 'identified'
     const camera = resolvePatrolSubjectCameraRef(cameraBySubject, row.persId)
+    const trackWorkerId = row.trackWorkerId?.trim()
+      || (isPatrolTrackWorkerId(row.persId) ? row.persId : undefined)
+    const gps = resolvePatrolEventGps(
+      row.persId,
+      { lat: row.gpsLat, lng: row.gpsLng },
+      gpsBySubject,
+    )
     return {
       id: `pers:${row.persId}`,
       type: 'PERSON_DETECTED',
@@ -60,15 +73,21 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       durationSeconds: null,
       status: 'LOCKED',
       confidence: 1,
-      gps: { lat: 0, lng: 0 },
+      gps,
       snapshotUrl: row.snapshotUrl,
       snapshotScore: row.snapshotScore,
       stage: identified ? 'profile' : 'person',
       employeeCode: row.employeeCode,
+      trackWorkerId,
     } as PatrolEvent
   })
   const objectEvents: PatrolEvent[] = displayObjects.map(row => {
     const camera = resolvePatrolSubjectCameraRef(cameraBySubject, row.objId)
+    const gps = resolvePatrolEventGps(
+      row.objId,
+      { lat: row.gpsLat, lng: row.gpsLng },
+      gpsBySubject,
+    )
     return {
       id: `obj:${row.objId}`,
       type: 'PERSON_DETECTED',
@@ -85,7 +104,7 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       durationSeconds: null,
       status: 'LOCKED',
       confidence: 1,
-      gps: { lat: 0, lng: 0 },
+      gps,
       snapshotUrl: row.snapshotUrl,
       snapshotScore: row.snapshotScore,
       stage: 'object',

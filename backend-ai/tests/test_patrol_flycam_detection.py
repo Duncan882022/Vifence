@@ -14,8 +14,8 @@ from app.patrol.person_analyzer import (  # noqa: E402
     _filter_persons,
     _is_patrol_flycam,
     _plausible_flycam_aerial,
-    _plausible_person_box,
 )
+from app.ppe_analyzer import _plausible_person_box  # noqa: E402
 
 
 class TestPatrolFlycamDetection(unittest.TestCase):

@@ -796,9 +796,12 @@ def build_patrol_live_bundle_payload(
     )
     metrics = apply_vms_stream_online(metrics, vms_workers)
     workforce = merge_workforce_snapshots(camera_ids)
+    from .patrol.runtime_config import patrol_runtime_payload
+
     return {
         "ok": True,
         "metrics": metrics,
         "workforce": workforce,
         "server_time": workforce.get("server_time"),
+        "runtime": patrol_runtime_payload(),
     }

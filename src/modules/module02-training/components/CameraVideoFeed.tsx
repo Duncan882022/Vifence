@@ -33,8 +33,8 @@ import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import {
   isPatrolPersonRoiCameraId,
   isPatrolMetricsCameraId,
-  PATROL_LIVE_ROI_DELAY_MS,
 } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { getPatrolLiveRoiDelayMs } from '@/services/patrolRuntimeBridge'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   getCameraFeedPosterUrl,
@@ -124,7 +124,7 @@ export function CameraVideoFeed({
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
+  const { clock: videoClock, mode: videoTransportMode } = useLowLatencyVideoSource(videoRef, {
     whepUrl,
     hlsSrc: src,
     hlsFallbackSrc,
@@ -153,9 +153,13 @@ export function CameraVideoFeed({
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
   )
-  // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
+  // WHEP (~300ms): snapshot mới nhất. HLS: buffer lag từ BE config.
+  const patrolRoiFallbackLagMs = isPatrolMetricsCameraId(cameraId) && videoTransportMode === 'hls'
+    ? getPatrolLiveRoiDelayMs()
+    : undefined
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock, {
-    fallbackLagMs: isPatrolMetricsCameraId(cameraId) ? PATROL_LIVE_ROI_DELAY_MS : undefined,
+    fallbackLagMs: patrolRoiFallbackLagMs,
+    useRuntimeLagHint: isPatrolMetricsCameraId(cameraId),
   })
 
   const patrolRoiFrameSize = useMemo(() => {

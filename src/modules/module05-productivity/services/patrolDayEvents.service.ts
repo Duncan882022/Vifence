@@ -7,6 +7,7 @@
  * nhìn ra hai con số khác nhau.
  */
 import { fetchPatrol, patrolBackendBase, signPatrolSnapshot } from '@/services/patrolApiClient'
+import { setPatrolRuntimeFromPayload } from '@/services/patrolRuntimeBridge'
 
 export type PatrolPersonStatus = 'person' | 'identified'
 
@@ -23,6 +24,9 @@ export interface PatrolDayPerson {
   snapshotUrl?: string
   /** face_quality×2 + confidence — tab Người cần ≥ ngưỡng mặt rõ. */
   snapshotScore?: number
+  trackWorkerId?: string | null
+  gpsLat?: number | null
+  gpsLng?: number | null
 }
 
 export interface PatrolDayObject {
@@ -32,6 +36,8 @@ export interface PatrolDayObject {
   snapshotUrl?: string
   /** face_quality×2 + confidence — mặt rõ thì không thuộc tab Đối tượng. */
   snapshotScore?: number
+  gpsLat?: number | null
+  gpsLng?: number | null
 }
 
 export interface PatrolAppearanceSegment {
@@ -202,8 +208,19 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     events: Record<string, unknown>[]
     objects: Record<string, unknown>[]
     presences: Record<string, unknown>[]
+    runtime?: Record<string, unknown>
+    subject_aliases?: Record<string, string>
   }>(`/patrol/day/bundle${query}`)
   if (!data?.ok) return null
+
+  if (data.runtime && typeof data.runtime === 'object') {
+    setPatrolRuntimeFromPayload({
+      ...(data.runtime as Record<string, unknown>),
+      subject_aliases: data.subject_aliases,
+    })
+  } else if (data.subject_aliases) {
+    setPatrolRuntimeFromPayload({ subject_aliases: data.subject_aliases })
+  }
 
   const persons = await Promise.all((data.events ?? []).map(async row => ({
     persId: String(row.pers_id ?? ''),
@@ -217,6 +234,9 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     lastSeen: Number(row.last_seen ?? 0),
     snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
     snapshotScore: Number(row.snapshot_score ?? 0),
+    trackWorkerId: row.track_worker_id ? String(row.track_worker_id) : null,
+    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
+    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
   })))
 
   const objects = await Promise.all((data.objects ?? []).map(async row => ({
@@ -225,6 +245,8 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     lastSeen: Number(row.last_seen ?? 0),
     snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
     snapshotScore: Number(row.snapshot_score ?? 0),
+    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
+    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
   })))
 
   const presences = (data.presences ?? []).map(row => ({

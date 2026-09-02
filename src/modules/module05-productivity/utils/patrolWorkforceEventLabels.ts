@@ -5,7 +5,8 @@
 import type { LucideIcon } from 'lucide-react'
 import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolTypes'
-import { getPatrolManualIdentity, isPatrolManuallyIdentified, getPatrolManualIdentityForTk } from '../services/patrolManualIdentity.service'
+import { resolvePatrolSubjectAlias } from '@/services/patrolRuntimeBridge'
+import { getPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 import {
@@ -36,10 +37,11 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
   icon: LucideIcon
   color: string
   inactiveColor: string
-  /** Tab đang chọn — gạch dưới + chữ (không dùng primary chung). */
   activeBorder: string
   activeText: string
   activeBadge: string
+  /** Giải thích badge tab — khác KPI Tier1. */
+  countTooltip: string
 }> = {
   all: {
     label: 'Tất cả',
@@ -49,6 +51,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     activeBorder: 'border-primary',
     activeText: 'text-primary',
     activeBadge: 'bg-primary/20 text-primary',
+    countTooltip: 'Thẻ có snapshot evidence trong ngày',
   },
   object: {
     label: 'Đối tượng',
@@ -58,6 +61,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     activeBorder: 'border-green-400',
     activeText: 'text-green-400',
     activeBadge: 'bg-green-500/20 text-green-400',
+    countTooltip: 'Số thẻ Đối tượng (snapshot) — KPI «Lượt gặm · ĐT» đếm lượt gặm',
   },
   person: {
     label: 'Người',
@@ -67,6 +71,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     activeBorder: 'border-sky-400',
     activeText: 'text-sky-400',
     activeBadge: 'bg-sky-500/20 text-sky-400',
+    countTooltip: 'Thẻ Người có mặt đủ rõ (snapshot ≥ ngưỡng)',
   },
   identity: {
     label: 'Định danh',
@@ -76,6 +81,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     activeBorder: 'border-violet-400',
     activeText: 'text-violet-400',
     activeBadge: 'bg-violet-500/20 text-violet-400',
+    countTooltip: 'Thẻ đã identify trong gallery / HR',
   },
 }
 
@@ -109,9 +115,9 @@ export function isPatrolTkWorkerId(id?: string | null): boolean {
   return Boolean(id && /^tk-/i.test(id.trim()))
 }
 
-/** Legacy sgc-* — normalize khi đọc bundle cũ. */
+/** Legacy sgc-* (chữ thường) — không nhầm mã nhân sự SGC-6688. */
 export function isPatrolAnonymousTrackId(id?: string | null): boolean {
-  return Boolean(id && /^sgc-/i.test(id.trim()))
+  return Boolean(id && /^sgc-/.test(id.trim()))
 }
 
 /** tk-* hoặc legacy sgc-*. */
@@ -136,25 +142,14 @@ export function isPatrolPersId(id?: string | null): boolean {
  * - object:  quay lưng / không thấy mặt, chỉ đủ đầu + 1/3 thân trên
  */
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
-  const objectId = event.objectId?.trim() ?? ''
-  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
-
-  /** Thăng tầng lên Định danh — ưu tiên hơn `stage: object` từ SQLite obj card. */
-  const promoteProfile = (): boolean => {
-    if (resolvePatrolProfileEntityKey(event)) return true
-    if (trackWorkerId && getPatrolManualIdentityForTk(trackWorkerId)) return true
-    if (objectId && isPatrolManuallyIdentified(objectId) && !isPatrolTrackWorkerId(trackWorkerId)) return true
-    if (objectId && isPatrolGalleryWorkerId(objectId)) return true
-    return false
-  }
-
-  if (promoteProfile()) return 'profile'
-
   if (event.stage === 'profile') return 'profile'
   if (event.stage === 'person') return 'person'
   if (event.stage === 'object') return 'object'
 
-  // Chỉ suy lại khi server chưa gửi stage (legacy / live feed).
+  const objectId = event.objectId?.trim() ?? ''
+  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
+
+  if (isPatrolGalleryWorkerId(objectId)) return 'profile'
   if (isPatrolPersId(objectId)) return 'person'
   if (isPatrolTrackWorkerId(objectId)) return 'person'
   if (isPatrolTrackWorkerId(trackWorkerId)) return 'person'
@@ -256,18 +251,22 @@ export function patrolEventMasterEntityKey(event: PatrolEvent): string {
 /** Subject id tra lịch sử xuất hiện — tk-* / obj-* / p-* trong SQLite. */
 export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const fromDayCardPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
-  if (fromDayCardPers) return fromDayCardPers
+  if (fromDayCardPers) return resolvePatrolSubjectAlias(fromDayCardPers)
 
   const fromDayCardObj = event.id.match(/^obj:(.+)$/i)?.[1]?.trim()
-  if (fromDayCardObj) return fromDayCardObj
+  if (fromDayCardObj) return resolvePatrolSubjectAlias(fromDayCardObj)
 
   const objectId = event.objectId?.trim() ?? ''
-  if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId
+  if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) {
+    return resolvePatrolSubjectAlias(objectId)
+  }
   if (isPatrolTrackWorkerId(objectId)) return objectId
   if (isPatrolGalleryWorkerId(objectId)) return objectId
 
   const track = event.trackWorkerId?.trim() ?? ''
-  if (isPatrolPersId(track) || isPatrolObjectId(track)) return track
+  if (isPatrolPersId(track) || isPatrolObjectId(track)) {
+    return resolvePatrolSubjectAlias(track)
+  }
   if (isPatrolTrackWorkerId(track) && !resolvePatrolProfileEntityKey(event)) return track
 
   // Không fallback gallery → tk — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
