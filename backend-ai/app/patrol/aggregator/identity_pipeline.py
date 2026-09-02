@@ -141,18 +141,35 @@ def _ensure_pers_for_worker(
     return None
 
 
-def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bool:
-    """Chỉ gán pers-* khi có mặt hoặc session đã thăng từ face trước đó."""
+def _has_face_promotion_evidence(session: TrackSession, obs: ObservationInput) -> bool:
+    """Có embedding mặt đã lưu — khung hiện tại hoặc best_faces trong session."""
     if obs.face_eligible:
         return True
+    if not session.best_faces:
+        return False
+    best = session.best_faces[0]
+    return best.embedding is not None and best.quality >= MIN_QUALITY_FOR_SEARCH
+
+
+def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bool:
+    """Chỉ gán pers-* khi có mặt hoặc session đã thăng từ face trước đó."""
     current = (session.subject_id or "").strip()
     from ...patrol_ids import is_person_subject_id
 
     if is_person_subject_id(current):
         return True
-    if session.best_faces:
+    return _has_face_promotion_evidence(session, obs)
+
+
+def _may_promote_to_person(session: TrackSession, obs: ObservationInput) -> bool:
+    """obj-* → tk/pers: bắt buộc bằng chứng mặt + bbox người thật."""
+    if not _may_assign_pers_subject(session, obs):
+        return False
+    if obs.face_eligible:
+        if obs.face_embedding is not None:
+            return _human_face_promotion_allowed(obs)
         return True
-    return False
+    return bool(session.best_faces)
 
 
 def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> None:
@@ -189,6 +206,13 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
     from ...person_identity_registry import is_sgc_worker_id
 
     if is_sgc_worker_id(wid):
+        if not _may_promote_to_person(session, obs):
+            return False
+        if emb is None:
+            picked = _pick_search_embedding(session)
+            if picked is None:
+                return False
+            emb, quality = picked
         pers_id = _ensure_pers_for_worker(
             wid,
             tier=obs.lifecycle_tier or "person",
@@ -233,7 +257,7 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
 def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) -> None:
     if not (session.subject_id or "").startswith("obj-"):
         return
-    if not _may_assign_pers_subject(session, obs):
+    if not _may_promote_to_person(session, obs):
         return
 
     if _promote_object_with_face_evidence(session, obs):
@@ -254,13 +278,15 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
     for tier, worker_id in candidates:
         if not worker_id:
             continue
-        from ...patrol_identity_lifecycle import TIER_OBJECT, tier_for_worker_id
+        from ...patrol_identity_lifecycle import TIER_OBJECT, TIER_PERSON, tier_for_worker_id
 
         resolved_tier = (tier or "").strip()
         if not resolved_tier or resolved_tier == TIER_OBJECT:
             inferred = tier_for_worker_id(worker_id)
             if inferred != TIER_OBJECT:
                 resolved_tier = inferred
+        if resolved_tier not in (TIER_PERSON, "identity"):
+            continue
         pers_id = _ensure_pers_for_worker(worker_id, tier=resolved_tier or None, now=obs.ts)
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
@@ -374,7 +400,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
     # sgc-* đã ổn định trên ROI → một hồ sơ bản nháp, không tạo pers-* rời.
     if not session.identity_resolved and wid and is_sgc_worker_id(wid):
-        if _may_assign_pers_subject(session, obs):
+        if _may_promote_to_person(session, obs):
             pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
             if pers_id:
                 _assign_pers_subject(session, pers_id, now=obs.ts)
@@ -431,16 +457,29 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                 logger.exception("aggregator observe_face failed")
 
     if obs.lifecycle_worker_id and not session.identity_resolved:
-        if _may_assign_pers_subject(session, obs):
-            session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
-            pers_id = _ensure_pers_for_worker(
-                obs.lifecycle_worker_id,
-                tier=obs.lifecycle_tier,
-                now=obs.ts,
-            )
-            if pers_id:
-                _assign_pers_subject(session, pers_id, now=obs.ts)
-                session.identity_resolved = True
+        from ...patrol_identity_lifecycle import TIER_OBJECT, TIER_PERSON
+
+        lifecycle_tier = (obs.lifecycle_tier or "").strip()
+        if lifecycle_tier == TIER_OBJECT:
+            lifecycle_tier = ""
+        if _may_promote_to_person(session, obs) and lifecycle_tier in (TIER_PERSON, "identity", ""):
+            inferred = lifecycle_tier
+            if not inferred or inferred == TIER_OBJECT:
+                from ...patrol_identity_lifecycle import tier_for_worker_id
+
+                inferred = tier_for_worker_id(obs.lifecycle_worker_id)
+            if inferred in (TIER_PERSON, "identity"):
+                session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
+                pers_id = _ensure_pers_for_worker(
+                    obs.lifecycle_worker_id,
+                    tier=inferred,
+                    now=obs.ts,
+                )
+                if pers_id:
+                    _assign_pers_subject(session, pers_id, now=obs.ts)
+                    session.identity_resolved = True
+                else:
+                    session.dirty = True
             else:
                 session.dirty = True
         else:
@@ -449,6 +488,39 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
     _maybe_promote_object_subject(session, obs)
     _maybe_upgrade_pers_subject(session, obs)
     return session.subject_id
+
+
+def try_promote_object_after_snapshot(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    snapshot_path: str | None,
+    snapshot_score: float,
+) -> None:
+    """obj có JPG mặt đủ điểm nhưng chưa lên Người — repair trước khi ghi thẻ."""
+    sid = (session.subject_id or "").strip()
+    if not sid.startswith("obj-"):
+        return
+    if not (snapshot_path or "").strip():
+        return
+    if float(snapshot_score or 0) < daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE:
+        return
+    if not obs.face_eligible:
+        return
+
+    _maybe_promote_object_subject(session, obs)
+    if not (session.subject_id or "").startswith("obj-"):
+        return
+
+    pers_id = identity.allocate_tk_profile(origin="face_snapshot_repair", now=obs.ts)
+    _assign_pers_subject(session, pers_id, now=obs.ts)
+    session.identity_resolved = True
+    logger.info(
+        "aggregator snapshot repair promote %s -> %s track %s",
+        sid,
+        pers_id,
+        session.track_id,
+    )
 
 
 def ensure_object_subject(session: TrackSession, obj_id: str) -> None:
