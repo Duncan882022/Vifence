@@ -401,26 +401,51 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
     wid = (obs.lifecycle_worker_id or "").strip()
     from ...person_identity_registry import is_sgc_worker_id
 
-    # sgc-* đã ổn định trên ROI → một hồ sơ bản nháp, không tạo pers-* rời.
+    # tk-* trên ROI: khớp mặt trước — tránh tk-01/tk-02 cùng người thành 2 draft.
     if not session.identity_resolved and wid and is_sgc_worker_id(wid):
         if _may_promote_to_person(session, obs):
-            pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
-            if pers_id:
-                _assign_pers_subject(session, pers_id, now=obs.ts)
-                session.identity = _map_worker_to_identity(wid, obs.confidence)
-                session.identity_resolved = True
-                if obs.face_eligible and obs.face_embedding is not None:
-                    try:
-                        identity.add_face_angle(
+            emb = obs.face_embedding
+            quality = float(obs.face_quality or 0.0)
+            if emb is None:
+                picked = _pick_search_embedding(session)
+                if picked is not None:
+                    emb, quality = picked
+            if emb is not None and _human_face_promotion_allowed(obs):
+                try:
+                    pers_id, created = identity.observe_face(
+                        emb,
+                        quality=max(quality, MIN_QUALITY_FOR_SEARCH),
+                        camera_id=obs.camera_id,
+                        now=obs.ts,
+                        frame=obs.frame,
+                        person_bbox=obs.person_bbox,
+                        preferred_tk=wid,
+                    )
+                    from ..sink import _bind_tk_profile
+
+                    _bind_tk_profile(wid, pers_id)
+                    _assign_pers_subject(session, pers_id, now=obs.ts)
+                    session.identity = PersonIdentity(
+                        person_id=pers_id,
+                        identity_type=IdentityType.KNOWN,
+                        confidence=min(0.99, max(quality, MIN_QUALITY_FOR_SEARCH)),
+                    )
+                    session.identity_resolved = True
+                    if created:
+                        logger.info(
+                            "aggregator tk observe new pers %s track %s wid %s",
                             pers_id,
-                            obs.face_embedding,
-                            quality=obs.face_quality,
-                            camera_id=obs.camera_id,
-                            frame=obs.frame,
-                            person_bbox=obs.person_bbox,
+                            session.track_id,
+                            wid,
                         )
-                    except Exception:  # noqa: BLE001
-                        logger.debug("add_face_angle draft skip", exc_info=True)
+                except Exception:  # noqa: BLE001
+                    logger.exception("aggregator observe_face tk failed")
+            else:
+                pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
+                if pers_id:
+                    _assign_pers_subject(session, pers_id, now=obs.ts)
+                    session.identity = _map_worker_to_identity(wid, obs.confidence)
+                    session.identity_resolved = True
 
     if not session.identity_resolved:
         picked = _pick_search_embedding(session)
@@ -472,12 +497,46 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
 
                 inferred = tier_for_worker_id(obs.lifecycle_worker_id)
             if inferred in (TIER_PERSON, "identity"):
-                session.identity = _map_worker_to_identity(obs.lifecycle_worker_id, obs.confidence)
-                pers_id = _ensure_pers_for_worker(
-                    obs.lifecycle_worker_id,
-                    tier=inferred,
-                    now=obs.ts,
-                )
+                from ...person_identity_registry import is_sgc_worker_id
+
+                lwid = (obs.lifecycle_worker_id or "").strip()
+                emb = obs.face_embedding
+                quality = float(obs.face_quality or 0.0)
+                if emb is None:
+                    picked = _pick_search_embedding(session)
+                    if picked is not None:
+                        emb, quality = picked
+
+                pers_id: str | None = None
+                if (
+                    lwid
+                    and is_sgc_worker_id(lwid)
+                    and emb is not None
+                    and _human_face_promotion_allowed(obs)
+                ):
+                    try:
+                        pers_id, _ = identity.observe_face(
+                            emb,
+                            quality=max(quality, MIN_QUALITY_FOR_SEARCH),
+                            camera_id=obs.camera_id,
+                            now=obs.ts,
+                            frame=obs.frame,
+                            person_bbox=obs.person_bbox,
+                            preferred_tk=lwid,
+                        )
+                        from ..sink import _bind_tk_profile
+
+                        _bind_tk_profile(lwid, pers_id)
+                    except Exception:  # noqa: BLE001
+                        logger.exception("aggregator observe_face lifecycle tk failed")
+
+                if not pers_id:
+                    session.identity = _map_worker_to_identity(lwid, obs.confidence)
+                    pers_id = _ensure_pers_for_worker(
+                        lwid,
+                        tier=inferred,
+                        now=obs.ts,
+                    )
                 if pers_id:
                     _assign_pers_subject(session, pers_id, now=obs.ts)
                     session.identity_resolved = True

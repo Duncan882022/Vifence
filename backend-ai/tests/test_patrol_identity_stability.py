@@ -187,6 +187,52 @@ class TrackIdentityStabilityTests(unittest.TestCase):
         self.assertEqual(pid_a, pid_b)
         self.assertEqual(len(identity.list_persons()), 1)
 
+    def test_process_identity_two_tk_tracks_one_person(self) -> None:
+        """Aggregator: tk-01/tk-02 song song — process_identity phải gom một pers."""
+        from app.patrol.aggregator.identity_pipeline import process_identity
+        from app.patrol.aggregator.session_store import get_or_create, reset as reset_sessions
+        from app.patrol.aggregator.types import ObservationInput
+
+        reset_sessions()
+        base = _vec(7)
+        emb_a = _angle(base, 0.93, seed=701)
+        emb_b = _angle(base, 0.90, seed=702)
+        box = (85.0, 62.0, 225.0, 425.0)
+
+        s1 = get_or_create("DR-03", "bt-1", ts=2_000.0)
+        obs1 = ObservationInput(
+            camera_id="DR-03",
+            track_id="bt-1",
+            ts=2_000.0,
+            person_bbox=box,
+            face_embedding=emb_a,
+            face_quality=0.88,
+            face_eligible=True,
+            confidence=0.85,
+            lifecycle_worker_id="tk-0000001",
+            lifecycle_tier="person",
+        )
+        pid1 = process_identity(s1, obs1)
+
+        s2 = get_or_create("DR-03", "bt-2", ts=2_005.0)
+        obs2 = ObservationInput(
+            camera_id="DR-03",
+            track_id="bt-2",
+            ts=2_005.0,
+            person_bbox=box,
+            face_embedding=emb_b,
+            face_quality=0.86,
+            face_eligible=True,
+            confidence=0.84,
+            lifecycle_worker_id="tk-0000002",
+            lifecycle_tier="person",
+        )
+        pid2 = process_identity(s2, obs2)
+
+        self.assertIsNotNone(pid1)
+        self.assertEqual(pid1, pid2)
+        self.assertEqual(len(identity.list_persons()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
