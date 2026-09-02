@@ -94,6 +94,16 @@ describe('ba tầng nhận diện HC-02', () => {
     expect(resolvePatrolPersonStage(makeEvent({ stage: 'person', objectId: 'pers-1' }))).toBe('person')
     expect(resolvePatrolPersonStage(makeEvent({ stage: 'object', objectId: 'OBJ-1' }))).toBe('object')
   })
+
+  it('stage object từ server thắng trackWorkerId — không nhảy tab Người', () => {
+    const event = makeEvent({
+      id: 'obj:OBJ-0007',
+      objectId: 'OBJ-0007',
+      trackWorkerId: 'tk-12',
+      stage: 'object',
+    })
+    expect(resolvePatrolPersonStage(event)).toBe('object')
+  })
 })
 
 describe('gộp bản ghi theo người, không theo mã track', () => {

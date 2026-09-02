@@ -38,6 +38,7 @@ const FILTER_TABS: {
   activeBorder: string
   activeText: string
   activeBadge: string
+  countTooltip: string
 }[] = [
   { key: 'all', ...PATROL_EVENTS_TAB_META.all },
   { key: 'object', ...PATROL_EVENTS_TAB_META.object },
@@ -287,6 +288,7 @@ export function PatrolEventsPanel({
             <button
               key={t.key}
               type="button"
+              title={t.countTooltip}
               onClick={() => setFilterTab(t.key)}
               className={cn(
                 'inline-flex items-center gap-1 px-2.5 sm:px-3 py-2 text-[9px] sm:text-[10px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px snap-start shrink-0',

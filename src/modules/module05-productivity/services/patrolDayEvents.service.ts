@@ -23,6 +23,9 @@ export interface PatrolDayPerson {
   snapshotUrl?: string
   /** face_quality×2 + confidence — tab Người cần ≥ ngưỡng mặt rõ. */
   snapshotScore?: number
+  trackWorkerId?: string | null
+  gpsLat?: number | null
+  gpsLng?: number | null
 }
 
 export interface PatrolDayObject {
@@ -32,6 +35,8 @@ export interface PatrolDayObject {
   snapshotUrl?: string
   /** face_quality×2 + confidence — mặt rõ thì không thuộc tab Đối tượng. */
   snapshotScore?: number
+  gpsLat?: number | null
+  gpsLng?: number | null
 }
 
 export interface PatrolAppearanceSegment {
@@ -217,6 +222,9 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     lastSeen: Number(row.last_seen ?? 0),
     snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
     snapshotScore: Number(row.snapshot_score ?? 0),
+    trackWorkerId: row.track_worker_id ? String(row.track_worker_id) : null,
+    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
+    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
   })))
 
   const objects = await Promise.all((data.objects ?? []).map(async row => ({
@@ -225,6 +233,8 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     lastSeen: Number(row.last_seen ?? 0),
     snapshotUrl: await snapshotUrl(row.snapshot_path as string | null, Number(row.last_seen ?? 0)),
     snapshotScore: Number(row.snapshot_score ?? 0),
+    gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
+    gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
   })))
 
   const presences = (data.presences ?? []).map(row => ({

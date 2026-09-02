@@ -83,9 +83,15 @@ export class OverlayTimeBuffer {
   resolve(displayWallclockMs: number | null, opts?: OverlayResolveOptions): OverlaySyncResult {
     const latest = this.latest()
     if (latest === null) return { snapshot: null, matched: false, driftMs: null }
-    if (displayWallclockMs === null || this.snapshots.length === 1) {
-      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs)
-      if (lagged) return lagged
+    // WHEP / không có PDT — snapshot mới nhất (~300ms), không buffer HLS.
+    if (displayWallclockMs === null) {
+      if (opts?.fallbackLagMs != null && opts.fallbackLagMs > 0) {
+        const lagged = this.resolveFallbackLag(opts.fallbackLagMs)
+        if (lagged) return lagged
+      }
+      return { snapshot: latest, matched: false, driftMs: null }
+    }
+    if (this.snapshots.length === 1) {
       return { snapshot: latest, matched: false, driftMs: null }
     }
 
@@ -109,8 +115,10 @@ export class OverlayTimeBuffer {
     }
 
     if (!Number.isFinite(bestDrift) || bestDrift > MAX_MATCH_DRIFT_MS) {
-      const lagged = this.resolveFallbackLag(opts?.fallbackLagMs)
-      if (lagged) return lagged
+      if (opts?.fallbackLagMs != null && opts.fallbackLagMs > 0) {
+        const lagged = this.resolveFallbackLag(opts.fallbackLagMs)
+        if (lagged) return lagged
+      }
       return { snapshot: latest, matched: false, driftMs: null }
     }
 

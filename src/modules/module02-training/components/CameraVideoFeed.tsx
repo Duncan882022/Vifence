@@ -124,7 +124,7 @@ export function CameraVideoFeed({
   const showAtgtOverlay = Boolean(overlayActive && atgtAnalysis && !overlayDisabled)
   const showAnySafetyOverlay = showCraneOverlay || showPpeOverlay || showPatrolPersonRoi || showPcccOverlay || showWahOverlay || showAtgtOverlay
   const isHls = isHlsStreamUrl(src)
-  const { clock: videoClock } = useLowLatencyVideoSource(videoRef, {
+  const { clock: videoClock, mode: videoTransportMode } = useLowLatencyVideoSource(videoRef, {
     whepUrl,
     hlsSrc: src,
     hlsFallbackSrc,
@@ -153,9 +153,12 @@ export function CameraVideoFeed({
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
   )
-  // Khớp bbox với khung hình đang phát — HLS trễ vài giây so với lúc AI chạy.
+  // WHEP (~300ms): snapshot mới nhất. HLS: buffer ~5s khớp PDT / lag fallback.
+  const patrolRoiFallbackLagMs = isPatrolMetricsCameraId(cameraId) && videoTransportMode === 'hls'
+    ? PATROL_LIVE_ROI_DELAY_MS
+    : undefined
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock, {
-    fallbackLagMs: isPatrolMetricsCameraId(cameraId) ? PATROL_LIVE_ROI_DELAY_MS : undefined,
+    fallbackLagMs: patrolRoiFallbackLagMs,
   })
 
   const patrolRoiFrameSize = useMemo(() => {

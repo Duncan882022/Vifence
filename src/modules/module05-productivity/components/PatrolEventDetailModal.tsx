@@ -28,6 +28,7 @@ import {
   type PatrolGalleryFacePose,
 } from '../services/patrolGalleryFaces.service'
 import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
+import { appearanceObservationStageLabel } from '../utils/patrolAppearanceTier'
 import { resolveEventGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import {
   resolvePatrolAppearanceSubjectId,
@@ -558,6 +559,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                     const rowSelected = selectedAppearanceKey === rowKey
                     const gps = resolveAppearanceGps(segment)
                     const camLabel = resolveAppearanceCameraLabel(segment)
+                    const observationTierLabel = appearanceObservationStageLabel(segment)
 
                     const selectRow = () => {
                       if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
@@ -630,6 +632,11 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                             {segment.counted && (
                               <span className="text-[8px] px-1 py-0.5 rounded bg-green-400/15 text-green-400 font-semibold shrink-0 ml-auto">
                                 Đã đếm
+                              </span>
+                            )}
+                            {observationTierLabel && (
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-[#1a2235] text-muted-foreground font-semibold shrink-0">
+                                {observationTierLabel}
                               </span>
                             )}
                           </div>
