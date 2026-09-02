@@ -115,9 +115,9 @@ export function isPatrolTkWorkerId(id?: string | null): boolean {
   return Boolean(id && /^tk-/i.test(id.trim()))
 }
 
-/** Legacy sgc-* — normalize khi đọc bundle cũ. */
+/** Legacy sgc-* (chữ thường) — không nhầm mã nhân sự SGC-6688. */
 export function isPatrolAnonymousTrackId(id?: string | null): boolean {
-  return Boolean(id && /^sgc-/i.test(id.trim()))
+  return Boolean(id && /^sgc-/.test(id.trim()))
 }
 
 /** tk-* hoặc legacy sgc-*. */
