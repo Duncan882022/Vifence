@@ -118,6 +118,87 @@ def upper_body_third_with_head_visible(
     return True
 
 
+def signboard_like_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Biển hiệu/bảng quảng cáo — YOLO hay gán person trên tấm phẳng ngang phía trên."""
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    bw_ratio = pw / max(float(frame_w), 1.0)
+    bh_ratio = ph / max(float(frame_h), 1.0)
+    area_ratio = (pw * ph) / max(float(frame_w * frame_h), 1.0)
+    cy = (y1 + y2) / 2.0
+    y1_ratio = y1 / max(float(frame_h), 1.0)
+    y2_ratio = y2 / max(float(frame_h), 1.0)
+
+    if aspect < 0.78 and y1_ratio < 0.38 and bh_ratio < 0.42:
+        if bw_ratio >= 0.14 and area_ratio >= 0.035:
+            return True
+        if bw_ratio >= 0.20 and bh_ratio >= 0.05:
+            return True
+    if aspect < 0.52 and cy < frame_h * 0.36 and bw_ratio >= 0.22:
+        return True
+    if (
+        aspect < 0.95
+        and y2_ratio < 0.42
+        and bw_ratio >= 0.18
+        and area_ratio >= 0.05
+        and cy < frame_h * 0.28
+    ):
+        return True
+    return False
+
+
+def patrol_bbox_rejects_static_fp(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """True khi bbox giống vật tĩnh hay bị YOLO nhầm person (giàn, kệ, biển)."""
+    if vertical_structure_fp_box(person_box, frame_w, frame_h):
+        return True
+    if signboard_like_fp_box(person_box, frame_w, frame_h):
+        return True
+    if background_clutter_person_box(person_box, frame_w, frame_h):
+        pw = max(float(person_box[2]) - float(person_box[0]), 1.0)
+        ph = max(float(person_box[3]) - float(person_box[1]), 1.0)
+        # Người đứng aspect ~1.0 — chỉ loại khối ngang/nền phía sau.
+        if ph / pw < 0.85:
+            return True
+    return False
+
+
+def patrol_object_commit_allowed(
+    person_box: tuple[float, float, float, float] | None,
+    frame_w: int,
+    frame_h: int,
+    *,
+    face_eligible: bool = False,
+    flycam: bool = False,
+    proximity_flycam: bool = False,
+) -> bool:
+    """Gate ghi thẻ Đối tượng — chặn biển hiệu/vật tĩnh; cho phép silhouette hợp lệ."""
+    if person_box is None or frame_w <= 0 or frame_h <= 0:
+        return False
+    if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    if face_eligible:
+        return True
+    if patrol_person_meets_detection_gate(person_box, frame_w, frame_h):
+        return True
+    return patrol_person_meets_display_gate(
+        person_box,
+        frame_w,
+        frame_h,
+        flycam=flycam,
+        proximity_flycam=proximity_flycam,
+    )
+
+
 def vertical_structure_fp_box(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -223,6 +304,41 @@ def patrol_person_overlay_bbox(
     return clipped
 
 
+def patrol_snapshot_draw_bbox(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    max_area_ratio: float = 0.38,
+    max_height_ratio: float = 0.55,
+) -> tuple[float, float, float, float]:
+    """BBox vẽ lên JPG snapshot — không để YOLO crowd phủ 60–80% khung."""
+    box = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
+    x1, y1, x2, y2 = box
+    fw, fh = max(float(frame_w), 1.0), max(float(frame_h), 1.0)
+    pw, ph = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+    area_ratio = (pw * ph) / (fw * fh)
+    bh_ratio = ph / fh
+
+    if area_ratio <= max_area_ratio and bh_ratio <= max_height_ratio:
+        return box
+
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+    target_h = min(ph, fh * max_height_ratio)
+    target_w = min(pw, fw * 0.42)
+    if area_ratio > max_area_ratio:
+        side = (max_area_ratio * fw * fh) ** 0.5
+        target_h = min(target_h, side)
+        target_w = min(target_w, side * 0.75)
+
+    nx1 = cx - target_w / 2.0
+    nx2 = cx + target_w / 2.0
+    ny1 = cy - target_h * 0.45
+    ny2 = cy + target_h * 0.55
+    return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+
+
 def patrol_person_meets_display_gate(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -244,6 +360,8 @@ def patrol_person_meets_display_gate(
     if frame_w <= 0 or frame_h <= 0:
         return False
     if vertical_structure_fp_box(person_box, frame_w, frame_h):
+        return False
+    if signboard_like_fp_box(person_box, frame_w, frame_h):
         return False
     if flycam:
         if not plausible_person_silhouette(person_box, frame_w, frame_h, flycam=True):
@@ -299,11 +417,11 @@ def wide_crowd_rider_box(
     bh_ratio = ph / max(float(frame_h), 1.0)
     bw_ratio = pw / max(float(frame_w), 1.0)
     aspect = ph / pw
-    if bh_ratio < 0.035 or bh_ratio > 0.58:
+    if bh_ratio < 0.035 or bh_ratio > 0.65:
         return False
-    if bw_ratio < 0.022 or bw_ratio > 0.40:
+    if bw_ratio < 0.018 or bw_ratio > 0.42:
         return False
-    if aspect < 0.80 or aspect > 4.8:
+    if aspect < 0.65 or aspect > 4.8:
         return False
     cy = (y1 + y2) / 2.0
     if cy < frame_h * 0.06 or cy > frame_h * 0.82:
@@ -322,6 +440,8 @@ def patrol_person_meets_detection_gate(
 ) -> bool:
     """Gate ghi sự kiện — cần đầu + thân (≥30%) hoặc mặt rõ; loại chân/tay."""
     if legs_only_person_box(person_box, frame_w, frame_h):
+        return False
+    if signboard_like_fp_box(person_box, frame_w, frame_h):
         return False
     if not plausible_person_silhouette(person_box, frame_w, frame_h):
         return False

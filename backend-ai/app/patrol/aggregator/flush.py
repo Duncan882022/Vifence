@@ -6,7 +6,12 @@ import json
 import logging
 
 from .. import daystore, db
-from ..sink import _gate_observation_commit, _resolve_observation_gps, snapshot_score
+from ..sink import (
+    _gate_observation_commit,
+    _resolve_observation_gps,
+    snapshot_score,
+    track_accumulation_window_seconds,
+)
 from .serialize import build_event_payload
 from .tripwire import site_entry_counted
 from .types import ObservationInput, TrackSession
@@ -14,6 +19,38 @@ from .types import ObservationInput, TrackSession
 logger = logging.getLogger("patrol.aggregator.flush")
 
 FLUSH_MIN_INTERVAL_SEC = 10.0
+APPEARANCE_WRITE_MIN_INTERVAL_SEC = 2.0
+
+
+def _frame_size_from_obs(obs: ObservationInput) -> tuple[int, int]:
+    if obs.frame is not None:
+        h, w = obs.frame.shape[:2]
+        return int(w), int(h)
+    return 1280, 720
+
+
+def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
+    """Chặn ghi thẻ Đối tượng cho biển hiệu / vật tĩnh YOLO nhầm."""
+    if obs.person_bbox is None:
+        return False
+    from ...patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
+    from ...patrol_person_visibility import patrol_object_commit_allowed
+
+    frame_w, frame_h = _frame_size_from_obs(obs)
+    flycam = is_patrol_flycam_aerial(obs.camera_id)
+    proximity = (
+        not is_patrol_helmet_like(obs.camera_id)
+        and not flycam
+        and obs.camera_id.startswith("DR-")
+    )
+    return patrol_object_commit_allowed(
+        obs.person_bbox,
+        frame_w,
+        frame_h,
+        face_eligible=bool(obs.face_eligible or has_face),
+        flycam=flycam,
+        proximity_flycam=proximity,
+    )
 
 
 def _needs_flush(session: TrackSession, *, finalize: bool) -> bool:
@@ -54,8 +91,26 @@ def _appearance_row_has_snapshot(row_id: int) -> bool:
     return bool(row and str(row["snapshot_path"] or "").strip())
 
 
-def _luot_needs_snapshot(session: TrackSession) -> bool:
-    """Trong khung bám track — chỉ chụp một lần cho mỗi lượt xuất hiện."""
+def _within_accumulation_window(session: TrackSession, now: float) -> bool:
+    if session.started_at <= 0:
+        return False
+    return (now - session.started_at) <= track_accumulation_window_seconds()
+
+
+def _snapshot_observation(session: TrackSession, obs: ObservationInput) -> ObservationInput:
+    """Trong cửa sổ tích lũy — chốt frame score cao nhất, không frame cuối."""
+    if not _within_accumulation_window(session, obs.ts):
+        return obs
+    best = session.best_observation
+    if best is not None and best.frame is not None and best.person_bbox is not None:
+        return best
+    return obs
+
+
+def _luot_needs_snapshot(session: TrackSession, *, now: float) -> bool:
+    """Một JPG/lượt — trong cửa sổ 2s vẫn thay nếu có frame đẹp hơn."""
+    if _within_accumulation_window(session, now):
+        return True
     if session.luot_snapshot_captured:
         return False
     rid = session.appearance_row_id
@@ -70,38 +125,52 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         return None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
+    from ...patrol_person_visibility import patrol_snapshot_draw_bbox
 
-    score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
-    tier = (obs.lifecycle_tier or "").strip() or None
-    worker_id = (obs.lifecycle_worker_id or "").strip() or None
+    shot_obs = _snapshot_observation(session, obs)
+    frame_w, frame_h = _frame_size_from_obs(shot_obs)
+    draw_bbox = patrol_snapshot_draw_bbox(
+        tuple(shot_obs.person_bbox),
+        frame_w,
+        frame_h,
+    )
+
+    score = snapshot_score(
+        face_quality=shot_obs.face_quality,
+        confidence=shot_obs.confidence,
+    )
+    tier = (shot_obs.lifecycle_tier or "").strip() or None
+    worker_id = (shot_obs.lifecycle_worker_id or "").strip() or None
     if not tier and worker_id:
         inferred = tier_for_worker_id(worker_id)
         if inferred != "object":
             tier = inferred
-    force = not _card_has_snapshot(session.subject_id, obs.ts)
+    force = not _card_has_snapshot(session.subject_id, shot_obs.ts)
     path = sink._maybe_write_snapshot(  # noqa: SLF001
         session.subject_id,
-        obs.frame,
-        obs.person_bbox,
+        shot_obs.frame,
+        draw_bbox,
         score=score,
         tier=tier,
         worker_id=worker_id,
-        worker_name=obs.worker_name,
-        capture_ts=obs.ts,
-        face_eligible=obs.face_eligible,
+        worker_name=shot_obs.worker_name,
+        capture_ts=shot_obs.ts,
+        face_eligible=shot_obs.face_eligible,
         force=force,
+        luot_key=sink.CARD_SNAPSHOT_LUOT,
     )
     if path is None and force:
         path = sink._write_snapshot(  # noqa: SLF001
             session.subject_id,
-            obs.frame,
-            obs.person_bbox,
+            shot_obs.frame,
+            draw_bbox,
             score=score,
             tier=tier,
             worker_id=worker_id,
-            worker_name=obs.worker_name,
-            capture_ts=obs.ts,
-            face_eligible=obs.face_eligible,
+            worker_name=shot_obs.worker_name,
+            capture_ts=shot_obs.ts,
+            face_eligible=shot_obs.face_eligible,
+            luot_key=sink.CARD_SNAPSHOT_LUOT,
         )
     return path, score if path else 0.0
 
@@ -113,6 +182,8 @@ def flush_session(
     finalize: bool = False,
 ) -> None:
     """INSERT/UPDATE aggregated appearance + card ngoài (throttled)."""
+    from .session_store import link_subject_session, resolve_parallel_object_subject
+
     if not _needs_flush(session, finalize=finalize):
         return
     now = obs.ts
@@ -130,23 +201,21 @@ def flush_session(
         ok, _anchor = _gate_observation_commit(key, has_face=has_face, now=now)
         if not ok and not finalize:
             return
+        if (
+            obs.person_bbox is not None
+            and not _object_commit_allowed(obs, has_face=has_face)
+        ):
+            return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
-        from .session_store import borrow_parallel_object_subject, link_subject_session
 
         event_date = db.today_vn(now)
-        parallel = borrow_parallel_object_subject(
+        parallel = resolve_parallel_object_subject(
             session.camera_id,
             session.started_at,
             now,
+            event_date,
             bbox=obs.person_bbox,
         )
-        if not parallel and obs.person_bbox is None:
-            parallel = daystore.find_parallel_object_card(
-                event_date,
-                session.camera_id,
-                session.started_at,
-                now,
-            )
         if parallel:
             session.subject_id = parallel
             link_subject_session(session)
@@ -194,17 +263,18 @@ def flush_session(
         subject_id
         and obs.frame is not None
         and obs.person_bbox is not None
-        and _luot_needs_snapshot(session)
+        and _luot_needs_snapshot(session, now=now)
     ):
-        path, shot_score = _write_snapshot(session, obs)
+        shot_obs = _snapshot_observation(session, obs)
+        path, shot_score = _write_snapshot(session, shot_obs)
         if path:
-            session.luot_snapshot_captured = True
+            session.luot_snapshot_captured = not _within_accumulation_window(session, now)
 
     from .identity_pipeline import try_promote_object_after_snapshot
 
     try_promote_object_after_snapshot(
         session,
-        obs,
+        _snapshot_observation(session, obs),
         snapshot_path=path,
         snapshot_score=shot_score,
     )
@@ -241,6 +311,50 @@ def flush_session(
             skip_appearance=skip_appearance,
         )
 
+    link_subject_session(session)
+
+    if session.appearance_row_id is None:
+        extend_id = daystore.find_extendable_track_appearance_row(
+            db.today_vn(now),
+            subject_id,
+            session.camera_id,
+            session.last_seen_at,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+        )
+        if extend_id is not None:
+            session.appearance_row_id = extend_id
+        else:
+            overlap_id = daystore.find_overlapping_appearance_row(
+                db.today_vn(now),
+                subject_id,
+                session.camera_id,
+                session.started_at,
+                session.last_seen_at,
+                session_id=session.session_id,
+                track_id=session.track_id,
+            )
+            if overlap_id is not None:
+                session.appearance_row_id = overlap_id
+
+    if (
+        session.committed
+        and session.appearance_row_id is not None
+        and not finalize
+        and session.last_flush_at > 0
+        and (now - session.last_flush_at) < APPEARANCE_WRITE_MIN_INTERVAL_SEC
+    ):
+        win = track_accumulation_window_seconds()
+        at_win_end = (
+            session.started_at > 0
+            and (now - session.started_at) >= win
+            and (session.last_flush_at - session.started_at) < win
+            and session.best_observation is not None
+        )
+        if not at_win_end:
+            session.dirty = False
+            return
+
     row_id = daystore.upsert_track_appearance(
         appearance_id=session.appearance_row_id,
         event_date=db.today_vn(now),
@@ -263,6 +377,19 @@ def flush_session(
     session.last_flush_at = now
     session.committed = True
     session.dirty = False
+
+    if subject_id.startswith("obj-"):
+        daystore.coalesce_subject_appearances(
+            subject_id,
+            db.today_vn(now),
+            camera_id=session.camera_id,
+        )
+    elif subject_id.startswith("tk-") or subject_id.startswith("pers-"):
+        daystore.coalesce_subject_appearances(
+            subject_id,
+            db.today_vn(now),
+            camera_id=session.camera_id,
+        )
 
 
 def finalize_session(session: TrackSession) -> None:

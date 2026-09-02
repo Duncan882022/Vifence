@@ -561,6 +561,17 @@ class ObjectTests(PatrolDbTestCase):
         self.assertEqual(merged, 1)
         self.assertEqual(len(daystore.list_objects(date)), 1)
 
+    def test_coalesce_parallel_skips_different_encounters(self) -> None:
+        """Hai người cách nhau >8s — không gộp thẻ dù cùng camera."""
+        a = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
+        daystore.touch_object(a, camera_id="HC-01", now=1_020.0)
+        b = daystore.touch_object(None, camera_id="HC-01", now=1_012.0)
+        daystore.touch_object(b, camera_id="HC-01", now=1_032.0)
+        date = db.today_vn(1_000.0)
+        merged = daystore.coalesce_parallel_object_cards(date)
+        self.assertEqual(merged, 0)
+        self.assertEqual(len(daystore.list_objects(date)), 2)
+
     def test_promote_objects_with_face_snapshot_repair(self) -> None:
         oid = daystore.touch_object(
             None,

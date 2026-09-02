@@ -354,6 +354,7 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
         conn.execute("BEGIN IMMEDIATE")
         stats = daystore.day_stats(d)
         daystore.promote_objects_with_face_snapshot(d)
+        daystore.coalesce_parallel_object_cards(d)
         events = daystore.list_person_events(d)
         objects = daystore.list_objects(d)
         presences = daystore.list_day_presences(d)

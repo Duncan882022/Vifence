@@ -42,8 +42,15 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
         db.close()
         self._tmp.cleanup()
 
-    def _ingest(self, *, track_id: str, now: float, worker: str = "sgc-9001") -> None:
-        ingest_observation(
+    def _ingest(
+        self,
+        *,
+        track_id: str,
+        now: float,
+        worker: str = "sgc-9001",
+        with_face: bool = False,
+    ) -> None:
+        kwargs: dict = dict(
             camera_id="HC-02",
             track_id=track_id,
             now=now,
@@ -51,6 +58,14 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
             lifecycle_worker_id=worker,
             confidence=0.9,
         )
+        if with_face:
+            kwargs.update(
+                person_bbox=(100.0, 100.0, 200.0, 400.0),
+                face_eligible=True,
+                face_embedding=tuple(0.1 for _ in range(128)),
+                face_quality=0.9,
+            )
+        ingest_observation(**kwargs)
 
     def test_finalize_track_does_not_stretch_last_seen_to_drop_time(self) -> None:
         session = get_or_create("HC-02", "ptk0001:person", ts=1000.0)
@@ -65,7 +80,7 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
         from app.patrol.person_analyzer import assign_patrol_track_ids
 
         t0 = 5_000.0
-        identity.create_person(origin="sgc", now=t0)
+        identity.ensure_draft_for_tk("tk-0000001", now=t0)
 
         with patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
@@ -79,7 +94,7 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
             ),
         ), patch(
             "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="pers-0001",
+            return_value="tk-0000001",
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=(None, 0.0),
@@ -104,32 +119,32 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
         from app.patrol import db, identity
 
         t0 = 5_000.0
-        identity.create_person(origin="sgc", now=t0)
+        identity.ensure_draft_for_tk("tk-0000001", now=t0)
 
         with patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
             return_value=(True, t0),
         ), patch(
-            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
-            return_value=PersonIdentity(
-                person_id="sgc-9001",
-                identity_type=IdentityType.ANONYMOUS,
-                confidence=0.9,
-            ),
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="pers-0001",
-        ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=(None, 0.0),
         ):
-            self._ingest(track_id="ptk0001:person", now=t0)
+            self._ingest(
+                track_id="ptk0001:person",
+                now=t0,
+                worker="tk-0000001",
+                with_face=True,
+            )
             on_patrol_stream_offline("HC-02", at_ts=t0 + 5.0)
-            self._ingest(track_id="ptk0001:person", now=t0 + 120.0)
+            self._ingest(
+                track_id="ptk0001:person",
+                now=t0 + 120.0,
+                worker="tk-0000001",
+                with_face=True,
+            )
 
         row = db.query_one(
             "SELECT last_seen FROM daily_events WHERE pers_id = ?",
-            ("pers-0001",),
+            ("tk-0000001",),
         )
         self.assertIsNotNone(row)
         self.assertAlmostEqual(float(row["last_seen"]), t0 + 120.0, places=3)

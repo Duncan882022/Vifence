@@ -1,8 +1,9 @@
 """Cầu nối luồng AI → SQLite tuần tra.
 
 Luồng phân tích gọi `record_observation` mỗi khi phát hiện một người trong
-khung. **Chưa ghi thẻ ngay** — phải bám track đủ vài giây (`patrol_object_confirm_seconds`
-cho Đối tượng / `patrol_person_confirm_seconds` khi `face_eligible`) rồi mới chốt SQLite.
+khung. **Ghi thẻ sớm** sau `patrol_object_min_commit_seconds` (Đối tượng) hoặc
+`patrol_person_confirm_seconds` (có mặt). `patrol_object_confirm_seconds` là cửa sổ
+chọn frame đẹp nhất / thăng tier — không chặn xe hay người chạy qua; mất track → finalize ngay.
 Chỉ thăng Người khi analyzer đã đánh dấu `face_eligible`; sink không tự recover embedding.
 Sau đó quyết định Đối tượng (chưa thấy mặt) hay Người/Định danh (có khuôn mặt),
 rồi ghi thẻ sự kiện và lịch sử xuất hiện.
@@ -24,8 +25,28 @@ from . import daystore, db, identity
 
 SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
 
+# Một JPG / thẻ sự kiện (obj/tk/pers) — ghi đè khi có frame đẹp hơn.
+# Không dùng session.started_at: mỗi re-track ByteTrack sẽ tạo file mới.
+CARD_SNAPSHOT_LUOT = 0
+
 _SNAPSHOT_WRITE_LOCK = threading.Lock()
 _last_snapshot_write: dict[str, tuple[float, float]] = {}
+
+
+def _snapshot_cache_key(subject_id: str, luot_key: int | None) -> str:
+    if luot_key == CARD_SNAPSHOT_LUOT:
+        return subject_id
+    if luot_key is not None:
+        return f"{subject_id}|{luot_key}"
+    return subject_id
+
+
+def _snapshot_filename(subject_id: str, luot_key: int | None, ts: float) -> str:
+    if luot_key == CARD_SNAPSHOT_LUOT:
+        return f"{subject_id}.jpg"
+    if luot_key is not None:
+        return f"{subject_id}-{int(luot_key)}.jpg"
+    return f"{subject_id}-{int(ts * 1000)}.jpg"
 
 
 def _maybe_write_snapshot(
@@ -40,16 +61,18 @@ def _maybe_write_snapshot(
     capture_ts: float | None = None,
     face_eligible: bool = False,
     force: bool = False,
+    luot_key: int | None = None,
 ) -> str | None:
-    """Ghi file JPG — tối đa mỗi TOUCH_MIN_INTERVAL_SEC, trừ khi ảnh rõ hơn."""
+    """Ghi file JPG — một file/thẻ (CARD_SNAPSHOT_LUOT), ghi đè khi score cao hơn."""
     ts = float(capture_ts if capture_ts is not None else time.time())
+    cache_key = _snapshot_cache_key(subject_id, luot_key)
     with _SNAPSHOT_WRITE_LOCK:
-        last = _last_snapshot_write.get(subject_id)
+        last = _last_snapshot_write.get(cache_key)
         if not force and last is not None:
             last_ts, last_score = last
             if score <= last_score and (ts - last_ts) < daystore.TOUCH_MIN_INTERVAL_SEC:
                 return None
-        _last_snapshot_write[subject_id] = (ts, max(score, last[1] if last else 0.0))
+        _last_snapshot_write[cache_key] = (ts, max(score, last[1] if last else 0.0))
     return _write_snapshot(
         subject_id,
         frame,
@@ -60,6 +83,7 @@ def _maybe_write_snapshot(
         capture_ts=ts,
         score=score,
         face_eligible=face_eligible,
+        luot_key=luot_key,
     )
 
 
@@ -159,6 +183,7 @@ def _write_snapshot(
     capture_ts: float | None = None,
     score: float = 0.0,
     face_eligible: bool = False,
+    luot_key: int | None = None,
 ) -> str | None:
     """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
@@ -172,12 +197,10 @@ def _write_snapshot(
             return None
         h, w = frame.shape[:2]
         x1, y1, x2, y2 = (int(v) for v in bbox[:4])
-        pad_x = int((x2 - x1) * 0.04)
-        pad_y = int((y2 - y1) * 0.04)
-        bx1 = max(0, x1 - pad_x)
-        by1 = max(0, y1 - pad_y)
-        bx2 = min(w, x2 + pad_x)
-        by2 = min(h, y2 + pad_y)
+        bx1 = max(0, x1)
+        by1 = max(0, y1)
+        bx2 = min(w, x2)
+        by2 = min(h, y2)
         if bx2 - bx1 < 16 or by2 - by1 < 16:
             return None
 
@@ -242,10 +265,9 @@ def _write_snapshot(
         date = db.today_vn(ts)
         folder = SNAPSHOT_DIR / date
         folder.mkdir(parents=True, exist_ok=True)
-        # Mỗi lần chụp một file — lịch sử popup đổi ảnh theo lượt xuất hiện.
-        stamp = int(ts * 1000)
-        name = f"{subject_id}-{stamp}.jpg"
-        cv2.imwrite(str(folder / name), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        name = _snapshot_filename(subject_id, luot_key, ts)
+        out_path = folder / name
+        cv2.imwrite(str(out_path), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         return f"{date}/{name}"
     except Exception:  # noqa: BLE001
         return None
@@ -291,11 +313,21 @@ def _track_is_committed(key: str) -> bool:
         return watch is not None and watch.confirmed
 
 
-def _required_confirm_seconds(*, has_face: bool) -> float:
+def _required_min_commit_seconds(*, has_face: bool) -> float:
     from ..config import settings
 
     if has_face:
         return float(settings.patrol_person_confirm_seconds)
+    return float(settings.patrol_object_min_commit_seconds)
+
+
+def track_accumulation_window_seconds() -> float:
+    """Cửa sổ giữ frame tốt nhất / thăng tier trên một track."""
+    from ..config import settings
+
+    window = float(getattr(settings, "patrol_track_accumulation_max_seconds", 0) or 0)
+    if window > 0:
+        return window
     return float(settings.patrol_object_confirm_seconds)
 
 
@@ -305,7 +337,7 @@ def _gate_observation_commit(
     has_face: bool,
     now: float,
 ) -> tuple[bool, float]:
-    """Chỉ cho ghi SQLite sau khi bám track đủ giây. Trả (ok, mốc first_seen)."""
+    """Cho ghi SQLite sau min-commit ngắn; finalize luôn qua. Trả (ok, mốc first_seen)."""
     if _track_is_committed(key):
         return True, now
 
@@ -317,7 +349,7 @@ def _gate_observation_commit(
         elif watch.confirmed:
             return True, now
 
-        if now - watch.first_seen < _required_confirm_seconds(has_face=has_face):
+        if now - watch.first_seen < _required_min_commit_seconds(has_face=has_face):
             return False, now
 
         watch.confirmed = True

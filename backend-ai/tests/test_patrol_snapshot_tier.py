@@ -43,12 +43,12 @@ class PatrolSnapshotTierTests(unittest.TestCase):
 
     def test_stale_object_lifecycle_upgrades_with_gallery_worker(self) -> None:
         pers_id, _ = identity.observe_face([0.2] * 128, quality=0.9)
-        identity.identify(pers_id, full_name="Duncan", employee_code="SGC-6688")
+        identity.identify(pers_id, full_name="Duncan", employee_code="NV6688")
         self.assertEqual(
             sink._resolve_snapshot_tier(
                 pers_id,
                 tier=TIER_OBJECT,
-                worker_id="p-SGC-6688",
+                worker_id="p-NV6688",
             ),
             "identity",
         )
@@ -63,7 +63,7 @@ class PatrolSnapshotTierTests(unittest.TestCase):
 
     def test_evidence_gate_downgrades_identified_profile_to_object(self) -> None:
         pers_id, _ = identity.observe_face([0.4] * 128, quality=0.9)
-        identity.identify(pers_id, full_name="Duncan", employee_code="SGC-6688")
+        identity.identify(pers_id, full_name="Duncan", employee_code="NV6688")
         self.assertEqual(sink._resolve_snapshot_tier(pers_id, tier="identity"), "identity")
         self.assertFalse(
             sink._snapshot_meets_person_evidence_gate(

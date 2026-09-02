@@ -341,6 +341,11 @@ def _find_reusable_worker_id(
                 rival_spatial = max((row[2] for row in others), default=0.0)
                 reuse_ok = best_spatial - rival_spatial >= _REUSE_SPATIAL_MARGIN
 
+            if not reuse_ok and best_sim >= max(same_floor, 0.78):
+                reuse_ok = True
+            if not reuse_ok and best_sim >= same_floor and rival < same_floor:
+                reuse_ok = True
+
             if reuse_ok and not _conflicts_frame_faces(
                 best_wid, face_emb, frame_face_assignments,
             ):

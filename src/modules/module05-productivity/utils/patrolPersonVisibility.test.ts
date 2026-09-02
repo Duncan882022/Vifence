@@ -79,6 +79,13 @@ describe('gate hiển thị ROI', () => {
       if (event) expect(display).toBe(true)
     }
   })
+
+  it('biển hiệu ngang phía trên bị loại ở cả hai gate', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.15, FRAME_H * 0.05, FRAME_W * 0.85, FRAME_H * 0.28]
+    const { display, event } = gates(bbox)
+    expect(display).toBe(false)
+    expect(event).toBe(false)
+  })
 })
 
 describe('gate hiển thị flycam', () => {
@@ -155,6 +162,15 @@ describe('ẩn ROI trùng tầng thấp', () => {
       personDet([120, 140, 190, 420], { tier: 'object', track_id: 'ptk0002:person', confidence: 0.72 }),
     ]
     const out = suppressPatrolObjectOverlappingIdentified(input)
+    expect(out).toHaveLength(2)
+  })
+
+  it('giữ hai object cùng tầng khi tâm bbox cách xa dù chạm mép', () => {
+    const input = [
+      personDet([100, 120, 200, 480], { tier: 'object', track_id: 'ptk-a', confidence: 0.8 }),
+      personDet([520, 130, 620, 470], { tier: 'object', track_id: 'ptk-b', confidence: 0.75 }),
+    ]
+    const out = suppressPatrolObjectOverlappingIdentified(input, 1280, 720)
     expect(out).toHaveLength(2)
   })
 

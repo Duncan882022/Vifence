@@ -116,7 +116,7 @@ def record_peak_crowd_frame(
     best = max(members, key=lambda m: float(m.confidence))
 
     from . import daystore
-    from .sink import _maybe_write_snapshot, _resolve_observation_gps, snapshot_score
+    from .sink import CARD_SNAPSHOT_LUOT, _maybe_write_snapshot, _resolve_observation_gps, snapshot_score
 
     shot_score = snapshot_score(face_quality=0.0, confidence=float(best.confidence))
     path = _maybe_write_snapshot(
@@ -126,6 +126,7 @@ def record_peak_crowd_frame(
         score=shot_score,
         tier="object",
         worker_name=f"Nhóm {len(members)}",
+        luot_key=CARD_SNAPSHOT_LUOT,
     )
     gps_lat, gps_lng = _resolve_observation_gps(cam, at_ts=ts)
 
