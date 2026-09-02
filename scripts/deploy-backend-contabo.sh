@@ -129,6 +129,20 @@ apt-get install -y -qq \
   curl rsync
 REMOTE_PACKAGES
 
+echo "→ Pre-deploy audit patrol snapshots (Module 05)…"
+if [[ -x "${ROOT}/backend-ai/.venv/bin/python" ]]; then
+  mkdir -p "${ROOT}/backend-ai/.tmp"
+  TMPDIR="${ROOT}/backend-ai/.tmp" \
+  EVENT_TEST_MODE=true \
+  PATROL_DRONE_ALTITUDE_OVERRIDES=DR-03:3 \
+    "${ROOT}/backend-ai/.venv/bin/python" "${ROOT}/backend-ai/scripts/audit_patrol_snapshots.py" || {
+    echo "✗ Patrol snapshot audit FAIL — sửa backend trước khi rsync."
+    exit 1
+  }
+else
+  echo "⚠ Bỏ qua patrol snapshot audit — chưa có backend-ai/.venv"
+fi
+
 echo "→ Pre-deploy audit (13 nhóm ATLĐ)…"
 if [[ "${SKIP_PRE_DEPLOY_AUDIT:-}" == "1" ]]; then
   echo "⚠ Bỏ qua audit (SKIP_PRE_DEPLOY_AUDIT=1)"

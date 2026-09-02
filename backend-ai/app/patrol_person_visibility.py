@@ -304,6 +304,41 @@ def patrol_person_overlay_bbox(
     return clipped
 
 
+def patrol_snapshot_draw_bbox(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    max_area_ratio: float = 0.38,
+    max_height_ratio: float = 0.55,
+) -> tuple[float, float, float, float]:
+    """BBox vẽ lên JPG snapshot — không để YOLO crowd phủ 60–80% khung."""
+    box = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
+    x1, y1, x2, y2 = box
+    fw, fh = max(float(frame_w), 1.0), max(float(frame_h), 1.0)
+    pw, ph = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+    area_ratio = (pw * ph) / (fw * fh)
+    bh_ratio = ph / fh
+
+    if area_ratio <= max_area_ratio and bh_ratio <= max_height_ratio:
+        return box
+
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+    target_h = min(ph, fh * max_height_ratio)
+    target_w = min(pw, fw * 0.42)
+    if area_ratio > max_area_ratio:
+        side = (max_area_ratio * fw * fh) ** 0.5
+        target_h = min(target_h, side)
+        target_w = min(target_w, side * 0.75)
+
+    nx1 = cx - target_w / 2.0
+    nx2 = cx + target_w / 2.0
+    ny1 = cy - target_h * 0.45
+    ny2 = cy + target_h * 0.55
+    return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+
+
 def patrol_person_meets_display_gate(
     person_box: tuple[float, float, float, float],
     frame_w: int,

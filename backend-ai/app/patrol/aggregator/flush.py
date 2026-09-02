@@ -125,46 +125,57 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         return None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
-    from ...patrol_person_visibility import patrol_person_overlay_bbox
+    from ...patrol_person_visibility import patrol_snapshot_draw_bbox
 
-    frame_w, frame_h = _frame_size_from_obs(obs)
-    draw_bbox = patrol_person_overlay_bbox(
-        tuple(obs.person_bbox),
+    shot_obs = _snapshot_observation(session, obs)
+    frame_w, frame_h = _frame_size_from_obs(shot_obs)
+    draw_bbox = patrol_snapshot_draw_bbox(
+        tuple(shot_obs.person_bbox),
         frame_w,
         frame_h,
     )
 
-    score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
-    tier = (obs.lifecycle_tier or "").strip() or None
-    worker_id = (obs.lifecycle_worker_id or "").strip() or None
+    score = snapshot_score(
+        face_quality=shot_obs.face_quality,
+        confidence=shot_obs.confidence,
+    )
+    tier = (shot_obs.lifecycle_tier or "").strip() or None
+    worker_id = (shot_obs.lifecycle_worker_id or "").strip() or None
     if not tier and worker_id:
         inferred = tier_for_worker_id(worker_id)
         if inferred != "object":
             tier = inferred
-    force = not _card_has_snapshot(session.subject_id, obs.ts)
+    force = not _card_has_snapshot(session.subject_id, shot_obs.ts)
+    luot_key = (
+        int(session.started_at * 1000)
+        if session.started_at > 0
+        else int(shot_obs.ts * 1000)
+    )
     path = sink._maybe_write_snapshot(  # noqa: SLF001
         session.subject_id,
-        obs.frame,
+        shot_obs.frame,
         draw_bbox,
         score=score,
         tier=tier,
         worker_id=worker_id,
-        worker_name=obs.worker_name,
-        capture_ts=obs.ts,
-        face_eligible=obs.face_eligible,
+        worker_name=shot_obs.worker_name,
+        capture_ts=shot_obs.ts,
+        face_eligible=shot_obs.face_eligible,
         force=force,
+        luot_key=luot_key,
     )
     if path is None and force:
         path = sink._write_snapshot(  # noqa: SLF001
             session.subject_id,
-            obs.frame,
+            shot_obs.frame,
             draw_bbox,
             score=score,
             tier=tier,
             worker_id=worker_id,
-            worker_name=obs.worker_name,
-            capture_ts=obs.ts,
-            face_eligible=obs.face_eligible,
+            worker_name=shot_obs.worker_name,
+            capture_ts=shot_obs.ts,
+            face_eligible=shot_obs.face_eligible,
+            luot_key=luot_key,
         )
     return path, score if path else 0.0
 
@@ -308,17 +319,28 @@ def flush_session(
     link_subject_session(session)
 
     if session.appearance_row_id is None:
-        overlap_id = daystore.find_overlapping_appearance_row(
+        extend_id = daystore.find_extendable_track_appearance_row(
             db.today_vn(now),
             subject_id,
             session.camera_id,
-            session.started_at,
             session.last_seen_at,
-            session_id=session.session_id,
-            track_id=session.track_id,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
         )
-        if overlap_id is not None:
-            session.appearance_row_id = overlap_id
+        if extend_id is not None:
+            session.appearance_row_id = extend_id
+        else:
+            overlap_id = daystore.find_overlapping_appearance_row(
+                db.today_vn(now),
+                subject_id,
+                session.camera_id,
+                session.started_at,
+                session.last_seen_at,
+                session_id=session.session_id,
+                track_id=session.track_id,
+            )
+            if overlap_id is not None:
+                session.appearance_row_id = overlap_id
 
     if (
         session.committed
@@ -362,6 +384,12 @@ def flush_session(
     session.dirty = False
 
     if subject_id.startswith("obj-"):
+        daystore.coalesce_subject_appearances(
+            subject_id,
+            db.today_vn(now),
+            camera_id=session.camera_id,
+        )
+    elif subject_id.startswith("tk-") or subject_id.startswith("pers-"):
         daystore.coalesce_subject_appearances(
             subject_id,
             db.today_vn(now),

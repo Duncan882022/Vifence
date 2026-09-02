@@ -788,6 +788,17 @@ def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     if not ta and not tb and not sa and not sb:
         gap = float(b["started_at"]) - float(a["ended_at"])
         return 0 <= gap <= 2.0
+    sid = (subject_id or "").strip()
+    if sid.startswith("obj-"):
+        gap = float(b["started_at"]) - float(a["ended_at"])
+        if not (0 <= gap <= 45.0):
+            return False
+        first_a, last_a = float(a["started_at"]), float(a["ended_at"])
+        first_b, last_b = float(b["started_at"]), float(b["ended_at"])
+        # Song song (2 ByteTrack cùng lúc) — không gộp.
+        if max(first_a, first_b) < min(last_a, last_b):
+            return False
+        return True
     return False
 
 

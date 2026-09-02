@@ -41,16 +41,18 @@ def _maybe_write_snapshot(
     capture_ts: float | None = None,
     face_eligible: bool = False,
     force: bool = False,
+    luot_key: int | None = None,
 ) -> str | None:
-    """Ghi file JPG — tối đa mỗi TOUCH_MIN_INTERVAL_SEC, trừ khi ảnh rõ hơn."""
+    """Ghi file JPG — một file/lượt (luot_key), ghi đè khi score cao hơn."""
     ts = float(capture_ts if capture_ts is not None else time.time())
+    cache_key = f"{subject_id}|{luot_key}" if luot_key is not None else subject_id
     with _SNAPSHOT_WRITE_LOCK:
-        last = _last_snapshot_write.get(subject_id)
+        last = _last_snapshot_write.get(cache_key)
         if not force and last is not None:
             last_ts, last_score = last
             if score <= last_score and (ts - last_ts) < daystore.TOUCH_MIN_INTERVAL_SEC:
                 return None
-        _last_snapshot_write[subject_id] = (ts, max(score, last[1] if last else 0.0))
+        _last_snapshot_write[cache_key] = (ts, max(score, last[1] if last else 0.0))
     return _write_snapshot(
         subject_id,
         frame,
@@ -61,6 +63,7 @@ def _maybe_write_snapshot(
         capture_ts=ts,
         score=score,
         face_eligible=face_eligible,
+        luot_key=luot_key,
     )
 
 
@@ -160,6 +163,7 @@ def _write_snapshot(
     capture_ts: float | None = None,
     score: float = 0.0,
     face_eligible: bool = False,
+    luot_key: int | None = None,
 ) -> str | None:
     """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
@@ -241,10 +245,10 @@ def _write_snapshot(
         date = db.today_vn(ts)
         folder = SNAPSHOT_DIR / date
         folder.mkdir(parents=True, exist_ok=True)
-        # Mỗi lần chụp một file — lịch sử popup đổi ảnh theo lượt xuất hiện.
-        stamp = int(ts * 1000)
+        stamp = int(luot_key if luot_key is not None else ts * 1000)
         name = f"{subject_id}-{stamp}.jpg"
-        cv2.imwrite(str(folder / name), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        out_path = folder / name
+        cv2.imwrite(str(out_path), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         return f"{date}/{name}"
     except Exception:  # noqa: BLE001
         return None
