@@ -192,13 +192,12 @@ def resolve_parallel_object_subject(
 
 
 def link_subject_session(session: TrackSession) -> None:
-    """Cùng tk-* / pers-* / obj-* + camera — gộp appearance (YOLO tách 2 track một người)."""
-    subject_id = (session.subject_id or "").strip()
-    if not subject_id:
-        return
-    from ...patrol_ids import is_person_subject_id
+    """Cùng obj-* + camera — gộp appearance (2 ByteTrack một đối tượng).
 
-    if not (subject_id.startswith("obj-") or is_person_subject_id(subject_id)):
+    pers/tk giữ session riêng — tránh trộn pkt khác nhau trong một lượt lịch sử.
+    """
+    subject_id = (session.subject_id or "").strip()
+    if not subject_id or not subject_id.startswith("obj-"):
         return
     with _lock:
         canonical: TrackSession | None = None

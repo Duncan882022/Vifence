@@ -363,6 +363,9 @@ def find_overlapping_appearance_row(
             if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
                 return int(row["id"])
             continue
+        # Chỉ obj-* song song (2 ByteTrack cùng thẻ) — pers/tk giữ session riêng.
+        if not sid.startswith("obj-"):
+            continue
         row_start = float(row_dict["started_at"])
         if abs(started_at - row_start) > PARALLEL_OBJ_START_MAX_SEC:
             continue
@@ -776,12 +779,12 @@ def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     sb = str(b["session_id"] or "").strip()
     if ta and tb and ta == tb:
         return True
-    if sa and sb and sa == sb:
-        return True
     # ByteTrack re-id: cùng session, track id đổi giữa chừng (≤5s).
-    if sa and sb and sa == sb and ta and tb and ta != tb:
-        gap = float(b["started_at"]) - float(a["ended_at"])
-        return 0 <= gap <= 5.0
+    if sa and sb and sa == sb:
+        if ta and tb and ta != tb:
+            gap = float(b["started_at"]) - float(a["ended_at"])
+            return 0 <= gap <= 5.0
+        return True
     if not ta and not tb and not sa and not sb:
         gap = float(b["started_at"]) - float(a["ended_at"])
         return 0 <= gap <= 2.0

@@ -19,6 +19,7 @@ from .types import ObservationInput, TrackSession
 logger = logging.getLogger("patrol.aggregator.flush")
 
 FLUSH_MIN_INTERVAL_SEC = 10.0
+APPEARANCE_WRITE_MIN_INTERVAL_SEC = 2.0
 
 
 def _frame_size_from_obs(obs: ObservationInput) -> tuple[int, int]:
@@ -318,6 +319,24 @@ def flush_session(
         )
         if overlap_id is not None:
             session.appearance_row_id = overlap_id
+
+    if (
+        session.committed
+        and session.appearance_row_id is not None
+        and not finalize
+        and session.last_flush_at > 0
+        and (now - session.last_flush_at) < APPEARANCE_WRITE_MIN_INTERVAL_SEC
+    ):
+        win = track_accumulation_window_seconds()
+        at_win_end = (
+            session.started_at > 0
+            and (now - session.started_at) >= win
+            and (session.last_flush_at - session.started_at) < win
+            and session.best_observation is not None
+        )
+        if not at_win_end:
+            session.dirty = False
+            return
 
     row_id = daystore.upsert_track_appearance(
         appearance_id=session.appearance_row_id,

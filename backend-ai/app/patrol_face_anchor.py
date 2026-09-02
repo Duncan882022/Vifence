@@ -295,7 +295,7 @@ def anchor_patrol_person_boxes_to_faces(
     camera_id: str,
 ) -> list[tuple[tuple[float, float, float, float], float]]:
     """Ưu tiên mặt YuNet — mỗi mặt một bbox; YOLO chỉ bổ sung quay lưng (đầu+30% thân)."""
-    if not camera_id.startswith("HC-"):
+    if not (camera_id.startswith("HC-") or camera_id.startswith("DR-")):
         return person_boxes
 
     faces = _list_frame_faces(frame)
