@@ -1645,11 +1645,16 @@ def _filter_persons(
     h, w = frame.shape[:2]
     from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
 
+    from .patrol_flight_mode import PatrolFlightMode, resolve_patrol_flight_mode
+
     helmet_like = is_patrol_helmet_like(camera_id)
-    bodycam = helmet_like
+    proximity_flycam = (
+        camera_id.startswith("DR-")
+        and resolve_patrol_flight_mode(camera_id) == PatrolFlightMode.PROXIMITY
+    )
+    bodycam = helmet_like and not proximity_flycam
     flycam = _is_patrol_flycam(camera_id) and not helmet_like
     aerial_flycam = flycam and is_patrol_flycam_aerial(camera_id)
-    proximity_flycam = False
     identity_strict = (
         (strict or camera_id in ("A-04", "HC-01"))
         and not bodycam
@@ -1676,32 +1681,10 @@ def _filter_persons(
             strict=identity_strict,
             bodycam=helmet_like,
             flycam=aerial_flycam,
-            proximity_flycam=False,
+            proximity_flycam=proximity_flycam,
             for_display=for_display,
         ):
             continue
-        # Patrol HC-* / DR-* — gate trong `_plausible_person_box(for_display=True)`.
-        # Không thêm lớp corroborate da/thân trên kiểu PPE (làm mất người ngồi/quay lưng).
-        if bodycam and frame is not None and not _is_helmet_bodycam(camera_id):
-            from .patrol_person_visibility import (
-                background_clutter_person_box,
-                wide_crowd_rider_box,
-            )
-
-            conf = float(p.confidence)
-            face_dom = _face_dominant_person_box(box, w, h)
-            if background_clutter_person_box(box, w, h) and not _person_upper_body_signal(frame, box):
-                continue
-            corroborate_below = (
-                _PERSON_CONF_DISPLAY_CORROBORATE if for_display else 0.62
-            )
-            if (
-                conf < corroborate_below
-                and not face_dom
-                and not wide_crowd_rider_box(box, w, h)
-                and not _person_upper_body_signal(frame, box)
-            ):
-                continue
         out.append(_PersonPpe(box, p.confidence))
     return out
 

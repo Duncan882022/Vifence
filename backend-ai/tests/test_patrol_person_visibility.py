@@ -12,8 +12,11 @@ sys.path.insert(0, str(ROOT))
 from app.patrol_person_visibility import (
     legs_only_person_box,
     mid_frame_torso_sliver,
+    patrol_object_commit_allowed,
     patrol_person_meets_detection_gate,
+    patrol_person_meets_display_gate,
     resolve_patrol_person_snapshot_bbox,
+    signboard_like_fp_box,
     upper_body_third_with_head_visible,
     _is_edge_sliver_person_box,
 )  # noqa: E402
@@ -98,6 +101,26 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         upper_h = ph * 0.38
         self.assertGreaterEqual(upper_h, fh * 0.10)
         self.assertTrue(upper_body_third_with_head_visible(bbox, fw, fh))
+
+    def test_upper_billboard_sign_rejected(self):
+        fw, fh = 1280, 720
+        sign = (fw * 0.15, fh * 0.05, fw * 0.85, fh * 0.28)
+        self.assertTrue(signboard_like_fp_box(sign, fw, fh))
+        self.assertFalse(patrol_person_meets_display_gate(sign, fw, fh))
+        self.assertFalse(patrol_person_meets_detection_gate(sign, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(sign, fw, fh))
+
+    def test_side_sign_upper_frame_rejected(self):
+        fw, fh = 1280, 720
+        sign = (fw * 0.55, fh * 0.08, fw * 0.92, fh * 0.32)
+        self.assertTrue(signboard_like_fp_box(sign, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(sign, fw, fh))
+
+    def test_standing_person_not_sign_fp(self):
+        fw, fh = 1280, 720
+        person = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
+        self.assertFalse(signboard_like_fp_box(person, fw, fh))
+        self.assertTrue(patrol_object_commit_allowed(person, fw, fh))
 
 
 if __name__ == "__main__":

@@ -363,6 +363,49 @@ def match_face(embedding: Sequence[float]) -> tuple[str | None, float]:
     return best_id, best_sim
 
 
+def match_face_for_observe(embedding: Sequence[float]) -> tuple[str | None, float]:
+    """Khớp mặt khi ghi track — nới margin khi điểm cao (2 tk cùng người trong đám)."""
+    matched, best_sim = match_face(embedding)
+    if matched:
+        return matched, best_sim
+
+    from ..worker_identity import face_thresholds
+
+    index = _load_face_index()
+    if not index:
+        return None, best_sim
+
+    probe = np.asarray(embedding, dtype=np.float32).ravel()
+    norm = float(np.linalg.norm(probe))
+    if norm <= 0:
+        return None, 0.0
+    probe = probe / norm
+
+    best_by_person: dict[str, float] = {}
+    for pers_id, vec in index:
+        if vec.size != probe.size:
+            continue
+        sim = float(np.dot(probe, vec))
+        if sim > best_by_person.get(pers_id, -1.0):
+            best_by_person[pers_id] = sim
+
+    if not best_by_person:
+        return None, best_sim
+
+    ranked = sorted(best_by_person.items(), key=lambda kv: kv[1], reverse=True)
+    best_id, best_sim = ranked[0]
+    rival = ranked[1][1] if len(ranked) > 1 else -1.0
+    floor = face_thresholds.reuse_min_similarity()
+
+    if best_sim < MATCH_MIN_SIMILARITY:
+        return None, best_sim
+    if best_sim >= max(floor, 0.78):
+        return best_id, best_sim
+    if best_sim >= floor and rival < floor:
+        return best_id, best_sim
+    return None, best_sim
+
+
 def add_face(
     pers_id: str,
     embedding: Sequence[float],
@@ -921,7 +964,7 @@ def observe_face(
     cấp tk mới qua `allocate_tk_profile`.
     """
     ts = now or time.time()
-    matched, _sim = match_face(embedding)
+    matched, _sim = match_face_for_observe(embedding)
     if matched:
         pid = resolve_alias(matched)
         with db.tx() as c:
@@ -947,6 +990,20 @@ def observe_face(
     pref = normalize_track_id((preferred_tk or "").strip())
     if pref and is_anonymous_track_id(pref):
         had = lookup_profile_by_tk(pref)
+        bound = lookup_bound_profile_for_tk(pref)
+        if bound:
+            pid = resolve_alias(bound)
+            bind_tk_profile(pref, pid, now=ts)
+            add_face_angle(
+                pid,
+                embedding,
+                quality=quality,
+                camera_id=camera_id,
+                now=ts,
+                frame=frame,
+                person_bbox=person_bbox,
+            )
+            return pid, False
         pers_id = ensure_draft_for_tk(pref, now=ts)
         bind_tk_profile(pref, pers_id, now=ts)
         add_face_angle(

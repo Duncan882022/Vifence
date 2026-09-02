@@ -191,10 +191,12 @@ class Settings(BaseSettings):
     patrol_face_detect_min_score_bodycam: float = 0.62
     # Khẩu trang che miệng/mũi — không đủ tiêu chí cấp sgc / pers-*.
     patrol_face_reject_mask: bool = True
-    # Tab Đối tượng — chốt sau N giây nếu còn trong khung; mất track → finalize sớm hơn.
+    # Tab Đối tượng — cửa sổ tích lũy frame đẹp + thăng tier (không chặn ghi thẻ).
     patrol_object_confirm_seconds: float = 2.0
     # Trần tích lũy frame tốt nhất trên một track (≈6 frame @320ms).
     patrol_track_accumulation_max_seconds: float = 2.0
+    # Ghi thẻ Đối tượng lần đầu — ~1–2 frame @320ms; xe/người chạy qua vẫn kịp.
+    patrol_object_min_commit_seconds: float = 0.35
     # Phase 2 — ROI live sync với buffer (giây).
     patrol_live_roi_delay_seconds: float = 5.0
     # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí (sink dùng trực tiếp).

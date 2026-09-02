@@ -26,6 +26,28 @@ def _maybe_update_best_observation(session, obs: ObservationInput) -> None:
         session.best_observation_score = score
 
 
+def _flush_due(session, obs: ObservationInput) -> bool:
+    """Chốt DB có kiểm soát — không ghi mỗi frame trong cửa sổ 2s."""
+    from ..daystore import TOUCH_MIN_INTERVAL_SEC
+    from ..sink import track_accumulation_window_seconds
+
+    if session.dirty and session.last_flush_at <= 0:
+        return True
+    if session.last_flush_at > 0 and (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC:
+        return True
+    win = track_accumulation_window_seconds()
+    if (
+        session.committed
+        and session.started_at > 0
+        and session.last_flush_at > 0
+        and session.best_observation is not None
+        and (obs.ts - session.started_at) >= win
+        and (session.last_flush_at - session.started_at) < win
+    ):
+        return True
+    return False
+
+
 def ingest_observation(**kwargs) -> str | None:
     """Điểm vào thay ``record_observation`` khi ``PATROL_USE_AGGREGATOR=1``."""
     obs = ObservationInput(
@@ -71,23 +93,13 @@ def ingest_observation(**kwargs) -> str | None:
                 session.dirty = True
         from ..daystore import TOUCH_MIN_INTERVAL_SEC
 
-        due = (
-            session.dirty
-            or session.last_flush_at <= 0
-            or (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC
-        )
+        due = _flush_due(session, obs)
         if due:
             flush_session(session, obs)
         return session.subject_id
 
     if session.committed and obs.density_only:
-        from ..daystore import TOUCH_MIN_INTERVAL_SEC
-
-        due = (
-            session.dirty
-            or session.last_flush_at <= 0
-            or (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC
-        )
+        due = _flush_due(session, obs)
         if due:
             flush_session(session, obs)
         return session.subject_id

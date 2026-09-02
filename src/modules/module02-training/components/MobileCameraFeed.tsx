@@ -50,7 +50,7 @@ import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hook
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
-import { isPatrolPersonRoiCameraId, isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId, isPatrolMetricsCameraId, PATROL_LIVE_ROI_DELAY_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -131,7 +131,11 @@ export function MobileCameraFeed({
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
   const rawVmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
+  /** VMS HLS ~5s lag + runtime hint từ BE — WHEP dùng snapshot mới nhất. */
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, null, {
+    fallbackLagMs: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId)
+      ? PATROL_LIVE_ROI_DELAY_MS
+      : undefined,
     useRuntimeLagHint: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId),
   })
   /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
@@ -289,7 +293,7 @@ export function MobileCameraFeed({
             faceEligible: d.face_eligible,
           })
         }
-        const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible))
+        const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible), frameW, frameH)
         const now = Date.now()
         const isPatrolPerson = isPatrolCam && (cameraId.startsWith('HC-') || cameraId.startsWith('DR-'))
         /** Patrol ROI overlay đọc engine local — không giữ ghost bbox từ round-trip cũ. */

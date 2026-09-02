@@ -66,5 +66,5 @@ export function gateVmsPatrolPersonDetections(
       })
     })
 
-  return suppressPatrolObjectOverlappingIdentified(mapped)
+  return suppressPatrolObjectOverlappingIdentified(mapped, frameW, frameH)
 }

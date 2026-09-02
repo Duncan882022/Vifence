@@ -523,15 +523,15 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
     def test_link_subject_session_shares_appearance_row(self) -> None:
         from app.patrol.aggregator.session_store import get_or_create, link_subject_session
 
-        tk_id = "tk-0000007"
+        obj_id = "obj-20260830-0099"
         s1 = get_or_create("HC-02", "ptk0001", ts=1000.0)
-        s1.subject_id = tk_id
+        s1.subject_id = obj_id
         s1.appearance_row_id = 42
         s1.session_id = "sess-shared"
         s1.committed = True
 
         s2 = get_or_create("HC-02", "ptk0002", ts=1020.0)
-        s2.subject_id = tk_id
+        s2.subject_id = obj_id
         link_subject_session(s2)
 
         self.assertEqual(s2.appearance_row_id, 42)
@@ -639,6 +639,59 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         rows = daystore.list_day_presences("2026-08-30")
         self.assertEqual(len(rows), 1)
 
+    def test_coalesce_skips_same_session_different_track_large_gap(self) -> None:
+        """Cùng session nhưng track khác, gap >5s — không gộp (2 pkt / 2 lượt)."""
+        from app.patrol import daystore, db
+
+        daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="tk-0000009",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-a",
+            session_id="sess-shared",
+            started_at=1000.0,
+            ended_at=1010.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+        )
+        with db.tx() as conn:
+            conn.execute(
+                "INSERT INTO appearances"
+                "(event_date, subject_id, camera_id, started_at, ended_at,"
+                " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified,"
+                " presence_seq, source_cameras, track_id, session_id, counted,"
+                " event_payload_json, interactions_json)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "2026-08-30",
+                    "tk-0000009",
+                    "HC-02",
+                    1020.0,
+                    1030.0,
+                    20.93,
+                    106.92,
+                    20.93,
+                    106.92,
+                    1,
+                    2,
+                    '["HC-02"]',
+                    "ptk-b",
+                    "sess-shared",
+                    0,
+                    "{}",
+                    "[]",
+                ),
+            )
+        merged = daystore.coalesce_subject_appearances(
+            "tk-0000009", "2026-08-30", camera_id="HC-02",
+        )
+        self.assertEqual(merged, 0)
+        self.assertEqual(len(daystore.list_day_presences("2026-08-30")), 2)
+
     def test_coalesce_keeps_separate_sessions(self) -> None:
         """Hai session khác nhau — không gộp dù cùng camera/GPS."""
         from app.patrol import daystore, db
@@ -690,6 +743,49 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
             )
         merged = daystore.coalesce_subject_appearances(
             "tk-0000008", "2026-08-30", camera_id="HC-02",
+        )
+        self.assertEqual(merged, 0)
+        rows = daystore.list_day_presences("2026-08-30")
+        self.assertEqual(len(rows), 2)
+
+    def test_coalesce_parallel_obj_tracks_same_card(self) -> None:
+        """Hai ByteTrack khác track/session — giữ hai dòng lịch sử (không gộp nhầm người)."""
+        from app.patrol import daystore, db
+
+        daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="obj-20260830-0012",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-a",
+            session_id="sess-a",
+            started_at=1000.0,
+            ended_at=1030.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="snap-a.jpg",
+        )
+        daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="obj-20260830-0012",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-b",
+            session_id="sess-b",
+            started_at=1005.0,
+            ended_at=1028.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="snap-b.jpg",
+        )
+        merged = daystore.coalesce_subject_appearances(
+            "obj-20260830-0012", "2026-08-30", camera_id="HC-02",
         )
         self.assertEqual(merged, 0)
         rows = daystore.list_day_presences("2026-08-30")
@@ -784,7 +880,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         self.assertEqual(snap["snapshot_path"], "2026-08-30/old.jpg")
 
     def test_flush_captures_snapshot_only_once_per_luot(self) -> None:
-        """Lần flush đầu chụp JPG; các flush extend trong cùng track không chụp thêm."""
+        """Trong cửa sổ 2s có thể thay JPG; sau đó khóa một ảnh/lượt."""
         import numpy as np
         from unittest.mock import patch
 
@@ -812,7 +908,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         ) as write_mock:
             flush_session(session, obs1)
         self.assertEqual(write_mock.call_count, 1)
-        self.assertTrue(session.luot_snapshot_captured)
+        self.assertFalse(session.luot_snapshot_captured)
 
         obs2 = ObservationInput(
             camera_id="HC-02",
@@ -991,6 +1087,49 @@ class BestObservationFinalizeTests(unittest.TestCase):
         snap = objs[0]["snapshot_path"] or ""
         self.assertIn("score-0.90", snap)
         self.assertNotIn("score-0.20", snap)
+
+    def test_fast_passing_object_commits_before_accumulation_window(self) -> None:
+        """Xe/người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol.sink import track_accumulation_window_seconds
+
+        ts = 20_000.0
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        bbox = (400.0, 280.0, 520.0, 520.0)
+        window = track_accumulation_window_seconds()
+
+        with patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=("2026-08-30/pass.jpg", 0.88),
+        ):
+            oid = ingest_observation(
+                camera_id="DR-03",
+                track_id="ptk-pass",
+                now=ts,
+                person_bbox=bbox,
+                frame=frame,
+                confidence=0.88,
+            )
+            self.assertIsNone(oid)
+            oid = ingest_observation(
+                camera_id="DR-03",
+                track_id="ptk-pass",
+                now=ts + 0.36,
+                person_bbox=bbox,
+                frame=frame,
+                confidence=0.88,
+            )
+            self.assertTrue(str(oid or "").startswith("obj-"))
+            finalize_track("DR-03", "ptk-pass", now=ts + 0.9)
+
+        from app.patrol import daystore, db
+
+        objs = daystore.list_objects(db.today_vn(ts))
+        self.assertEqual(len(objs), 1)
+        self.assertLess(ts + 0.36 - ts, window)
 
 
 if __name__ == "__main__":
