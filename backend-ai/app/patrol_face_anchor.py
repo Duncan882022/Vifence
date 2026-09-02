@@ -11,6 +11,7 @@ from .patrol_person_visibility import (
     background_clutter_person_box,
     legs_only_person_box,
     plausible_person_silhouette,
+    signboard_like_fp_box,
     upper_body_third_with_head_visible,
 )
 
@@ -222,6 +223,8 @@ def _yolo_plausible_without_face(
 
     if vertical_structure_fp_box(box, frame_w, frame_h):
         return False
+    if signboard_like_fp_box(box, frame_w, frame_h):
+        return False
     if background_clutter_person_box(box, frame_w, frame_h):
         return False
     if legs_only_person_box(box, frame_w, frame_h):
@@ -331,6 +334,8 @@ def anchor_patrol_person_boxes_to_faces(
         if conf < BACK_TURN_MIN_CONF:
             continue
         if background_clutter_person_box(box, w, h):
+            continue
+        if signboard_like_fp_box(box, w, h):
             continue
         if legs_only_person_box(box, w, h):
             continue

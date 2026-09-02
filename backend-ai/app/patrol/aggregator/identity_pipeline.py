@@ -32,9 +32,12 @@ def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
     from ...patrol_person_visibility import (
         background_clutter_person_box,
         patrol_person_meets_detection_gate,
+        signboard_like_fp_box,
         vertical_structure_fp_box,
     )
 
+    if signboard_like_fp_box(box, frame_w, frame_h):
+        return False
     if background_clutter_person_box(box, frame_w, frame_h):
         pw = max(float(box[2]) - float(box[0]), 1.0)
         ph = max(float(box[3]) - float(box[1]), 1.0)

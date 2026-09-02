@@ -16,6 +16,37 @@ logger = logging.getLogger("patrol.aggregator.flush")
 FLUSH_MIN_INTERVAL_SEC = 10.0
 
 
+def _frame_size_from_obs(obs: ObservationInput) -> tuple[int, int]:
+    if obs.frame is not None:
+        h, w = obs.frame.shape[:2]
+        return int(w), int(h)
+    return 1280, 720
+
+
+def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
+    """Chặn ghi thẻ Đối tượng cho biển hiệu / vật tĩnh YOLO nhầm."""
+    if obs.person_bbox is None:
+        return False
+    from ...patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
+    from ...patrol_person_visibility import patrol_object_commit_allowed
+
+    frame_w, frame_h = _frame_size_from_obs(obs)
+    flycam = is_patrol_flycam_aerial(obs.camera_id)
+    proximity = (
+        not is_patrol_helmet_like(obs.camera_id)
+        and not flycam
+        and obs.camera_id.startswith("DR-")
+    )
+    return patrol_object_commit_allowed(
+        obs.person_bbox,
+        frame_w,
+        frame_h,
+        face_eligible=bool(obs.face_eligible or has_face),
+        flycam=flycam,
+        proximity_flycam=proximity,
+    )
+
+
 def _needs_flush(session: TrackSession, *, finalize: bool) -> bool:
     """Một lần chốt khi vào khung; chỉ ghi lại khi finalize hoặc thay đổi đáng kể."""
     if finalize:
@@ -129,6 +160,8 @@ def flush_session(
         has_face = bool(session.best_faces) or obs.face_eligible
         ok, _anchor = _gate_observation_commit(key, has_face=has_face, now=now)
         if not ok and not finalize:
+            return
+        if not _object_commit_allowed(obs, has_face=has_face):
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
         from .session_store import borrow_parallel_object_subject, link_subject_session

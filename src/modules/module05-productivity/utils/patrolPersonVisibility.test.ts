@@ -79,6 +79,13 @@ describe('gate hiển thị ROI', () => {
       if (event) expect(display).toBe(true)
     }
   })
+
+  it('biển hiệu ngang phía trên bị loại ở cả hai gate', () => {
+    const bbox: Bbox4 = [FRAME_W * 0.15, FRAME_H * 0.05, FRAME_W * 0.85, FRAME_H * 0.28]
+    const { display, event } = gates(bbox)
+    expect(display).toBe(false)
+    expect(event).toBe(false)
+  })
 })
 
 describe('gate hiển thị flycam', () => {

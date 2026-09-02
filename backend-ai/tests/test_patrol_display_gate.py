@@ -20,6 +20,7 @@ from app.patrol_person_visibility import (  # noqa: E402
     patrol_person_meets_detection_gate,
     patrol_person_meets_display_gate,
     plausible_person_silhouette,
+    signboard_like_fp_box,
 )
 from app.patrol.person_analyzer import _plausible_flycam_aerial  # noqa: E402
 
@@ -70,6 +71,13 @@ class TestBodycamDisplayGate(unittest.TestCase):
         """Than giàn giáo dọc — YOLO FP hay conf cao."""
         scaffold = _box(0.46, 0.18, 0.50, 0.62)
         self.assertFalse(patrol_person_meets_display_gate(scaffold, FW, FH))
+
+    def test_billboard_sign_rejected_by_both_gates(self):
+        """Biển hiệu ngang phía trên — YOLO hay nhầm person."""
+        sign = _box(0.15, 0.05, 0.85, 0.28)
+        self.assertTrue(signboard_like_fp_box(sign, FW, FH))
+        self.assertFalse(patrol_person_meets_display_gate(sign, FW, FH))
+        self.assertFalse(patrol_person_meets_detection_gate(sign, FW, FH))
 
     def test_small_distant_worker_passes_display_gate(self):
         """Người xa trên công trường — bbox nhỏ hơn ngưỡng silhouette cũ."""

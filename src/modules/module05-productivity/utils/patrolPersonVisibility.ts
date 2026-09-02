@@ -53,6 +53,35 @@ export function patrolPersonFaceDominantBbox(bbox: Bbox4, _frameW: number, frame
   return false
 }
 
+function signboardLikeFpBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  const bwRatio = pw / Math.max(frameW, 1)
+  const bhRatio = ph / Math.max(frameH, 1)
+  const areaRatio = (pw * ph) / Math.max(frameW * frameH, 1)
+  const cy = (y1 + y2) / 2
+  const y1Ratio = y1 / Math.max(frameH, 1)
+  const y2Ratio = y2 / Math.max(frameH, 1)
+
+  if (aspect < 0.78 && y1Ratio < 0.38 && bhRatio < 0.42) {
+    if (bwRatio >= 0.14 && areaRatio >= 0.035) return true
+    if (bwRatio >= 0.20 && bhRatio >= 0.05) return true
+  }
+  if (aspect < 0.52 && cy < frameH * 0.36 && bwRatio >= 0.22) return true
+  if (
+    aspect < 0.95
+    && y2Ratio < 0.42
+    && bwRatio >= 0.18
+    && areaRatio >= 0.05
+    && cy < frameH * 0.28
+  ) {
+    return true
+  }
+  return false
+}
+
 function verticalStructureFpBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
   const [x1, y1, x2, y2] = bbox
   const pw = Math.max(x2 - x1, 1)
@@ -227,6 +256,7 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
   const { bbox, frameW, frameH, flycam = false, proximityFlycam = false } = input
   if (frameW <= 0 || frameH <= 0) return false
   if (verticalStructureFpBox(bbox, frameW, frameH)) return false
+  if (signboardLikeFpBox(bbox, frameW, frameH)) return false
   if (flycam) {
     return plausiblePersonSilhouette(bbox, frameW, frameH, true)
   }
@@ -256,6 +286,7 @@ export function patrolPersonMeetsDrFlycamDisplayGate(
 export function patrolPersonMeetsDetectionGate(input: PatrolPersonDetectionGateInput): boolean {
   const { bbox, frameW, frameH, workerId, faceEligible } = input
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
+  if (signboardLikeFpBox(bbox, frameW, frameH)) return false
   if (!plausiblePersonSilhouette(bbox, frameW, frameH)) return false
   const wid = workerId?.trim() ?? ''
   if (wid && wid !== 'unknown' && isPatrolGalleryWorkerId(wid)) return true
