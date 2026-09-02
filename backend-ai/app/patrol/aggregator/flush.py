@@ -144,6 +144,8 @@ def flush_session(
     finalize: bool = False,
 ) -> None:
     """INSERT/UPDATE aggregated appearance + card ngoài (throttled)."""
+    from .session_store import link_subject_session, resolve_parallel_object_subject
+
     if not _needs_flush(session, finalize=finalize):
         return
     now = obs.ts
@@ -161,25 +163,21 @@ def flush_session(
         ok, _anchor = _gate_observation_commit(key, has_face=has_face, now=now)
         if not ok and not finalize:
             return
-        if not _object_commit_allowed(obs, has_face=has_face):
+        if (
+            obs.person_bbox is not None
+            and not _object_commit_allowed(obs, has_face=has_face)
+        ):
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
-        from .session_store import borrow_parallel_object_subject, link_subject_session
 
         event_date = db.today_vn(now)
-        parallel = borrow_parallel_object_subject(
+        parallel = resolve_parallel_object_subject(
             session.camera_id,
             session.started_at,
             now,
+            event_date,
             bbox=obs.person_bbox,
         )
-        if not parallel and obs.person_bbox is None:
-            parallel = daystore.find_parallel_object_card(
-                event_date,
-                session.camera_id,
-                session.started_at,
-                now,
-            )
         if parallel:
             session.subject_id = parallel
             link_subject_session(session)
@@ -274,6 +272,19 @@ def flush_session(
             skip_appearance=skip_appearance,
         )
 
+    link_subject_session(session)
+
+    if session.appearance_row_id is None:
+        overlap_id = daystore.find_overlapping_appearance_row(
+            db.today_vn(now),
+            subject_id,
+            session.camera_id,
+            session.started_at,
+            session.last_seen_at,
+        )
+        if overlap_id is not None:
+            session.appearance_row_id = overlap_id
+
     row_id = daystore.upsert_track_appearance(
         appearance_id=session.appearance_row_id,
         event_date=db.today_vn(now),
@@ -296,6 +307,15 @@ def flush_session(
     session.last_flush_at = now
     session.committed = True
     session.dirty = False
+
+    if subject_id.startswith("obj-"):
+        daystore.coalesce_subject_appearances(
+            subject_id,
+            db.today_vn(now),
+            camera_id=session.camera_id,
+        )
+        if finalize:
+            daystore.coalesce_parallel_object_cards(db.today_vn(now))
 
 
 def finalize_session(session: TrackSession) -> None:

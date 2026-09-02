@@ -318,6 +318,40 @@ def touch_person_event(
             )
 
 
+def _appearance_time_overlap_ratio(a: dict[str, Any], b: dict[str, Any]) -> float:
+    """Tỷ lệ overlap thời gian giữa hai appearance segment."""
+    first_a, last_a = float(a["started_at"]), float(a["ended_at"])
+    first_b, last_b = float(b["started_at"]), float(b["ended_at"])
+    overlap = max(0.0, min(last_a, last_b) - max(first_a, first_b))
+    min_dur = min(max(last_a - first_a, 1.0), max(last_b - first_b, 1.0))
+    return overlap / min_dur
+
+
+def find_overlapping_appearance_row(
+    event_date: str,
+    subject_id: str,
+    camera_id: str,
+    started_at: float,
+    ended_at: float,
+) -> int | None:
+    """Track song song cùng obj + camera — UPDATE row cũ thay vì INSERT thêm."""
+    cam = (camera_id or "").strip()
+    sid = (subject_id or "").strip()
+    if not cam or not sid:
+        return None
+    probe = {"started_at": started_at, "ended_at": ended_at}
+    rows = db.query(
+        "SELECT id, started_at, ended_at FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
+        " ORDER BY ended_at DESC",
+        (event_date, sid, cam),
+    )
+    for row in rows:
+        if _appearance_time_overlap_ratio(dict(row), probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
+            return int(row["id"])
+    return None
+
+
 def _object_cards_overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
     """Hai thẻ obj cùng lượt (track song song) — overlap thời gian + start gần nhau."""
     first_a, last_a = float(a["first_seen"]), float(a["last_seen"])
@@ -713,7 +747,7 @@ def _tier_from_payload(raw: str | None) -> str | None:
     return None
 
 
-def _same_coalesce_visit(a: Any, b: Any) -> bool:
+def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     """Chỉ gộp appearance cùng track/session — tránh trộn hai lượt gặp."""
     ta = str(a["track_id"] or "").strip()
     tb = str(b["track_id"] or "").strip()
@@ -730,6 +764,13 @@ def _same_coalesce_visit(a: Any, b: Any) -> bool:
     if not ta and not tb and not sa and not sb:
         gap = float(b["started_at"]) - float(a["ended_at"])
         return 0 <= gap <= 2.0
+    sid = (subject_id or "").strip()
+    if sid.startswith("obj-"):
+        cam_a = str(a["camera_id"] or "").strip()
+        cam_b = str(b["camera_id"] or "").strip()
+        if cam_a and cam_a == cam_b and ta != tb and sa != sb:
+            if _appearance_time_overlap_ratio(dict(a), dict(b)) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
+                return True
     return False
 
 
@@ -894,7 +935,7 @@ def coalesce_subject_appearances(
             if str(nxt["camera_id"] or "") != str(keep["camera_id"] or ""):
                 keep = nxt
                 continue
-            if not _same_coalesce_visit(keep, nxt):
+            if not _same_coalesce_visit(keep, nxt, subject_id=subject_id):
                 keep = nxt
                 continue
             if not should_extend_presence(

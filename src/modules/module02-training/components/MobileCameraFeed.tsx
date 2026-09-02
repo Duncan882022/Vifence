@@ -130,16 +130,12 @@ export function MobileCameraFeed({
   const vmsPatrolRoiActive = Boolean(
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
-  const mobileVideoClock = useMemo(() => ({
-    getDisplayWallclockMs: () => {
-      const video = videoRef.current
-      if (!video || video.readyState < 2) return null
-      return Date.now() - PATROL_LIVE_ROI_DELAY_MS
-    },
-  }), [roiLayoutTick, status])
   const rawVmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
-  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, vmsPatrolRoiActive ? mobileVideoClock : null, {
-    fallbackLagMs: isPatrolMetricsCameraId(cameraId) ? PATROL_LIVE_ROI_DELAY_MS : undefined,
+  /** Video local realtime — AI VMS trễ ~5s: luôn dùng lag fallback, không PDT giả. */
+  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, null, {
+    fallbackLagMs: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId)
+      ? PATROL_LIVE_ROI_DELAY_MS
+      : undefined,
   })
   /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
   const patrolLocalRoiEnabled = Boolean(

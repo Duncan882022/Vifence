@@ -28,4 +28,15 @@ describe('OverlayTimeBuffer fallback lag', () => {
     expect(result.matched).toBe(true)
     expect(result.snapshot?.updated_at).toBe(nowSec - 5)
   })
+
+  it('patrol HLS — bỏ snapshot AI mới hơn khung đang phát', () => {
+    const buffer = new OverlayTimeBuffer()
+    const displayMs = 1_700_000_000_000
+    buffer.push(snap(Math.floor((displayMs - 5000) / 1000)))
+    buffer.push(snap(Math.floor((displayMs + 5000) / 1000)))
+
+    const result = buffer.resolve(displayMs, { fallbackLagMs: 5000 })
+    expect(result.matched).toBe(true)
+    expect(result.snapshot?.frame_wallclock_ms).toBe(displayMs - 5000)
+  })
 })

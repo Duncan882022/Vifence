@@ -95,42 +95,39 @@ def try_reclaim(
     embedding: tuple[float, ...] | None,
     now: float,
 ) -> _LostSlot | None:
-    """Track mới — thử gộp session cũ qua embedding hoặc IoU (cross-camera)."""
+    """Track mới — thử gộp session cũ qua embedding hoặc IoU (ưu tiên cùng camera)."""
     global _slots
-    del camera_id  # Re-ID không giới hạn cùng camera
+    cam = (camera_id or "").strip()
     with _lock:
         _prune(now)
         if not _slots:
             return None
 
-        best: _LostSlot | None = None
-        best_score = REID_MIN_COSINE
-        kept: list[_LostSlot] = []
-
-        for slot in _slots:
-            if embedding is not None and slot.embedding is not None:
-                sim = _cosine(embedding, slot.embedding)
-                if sim >= best_score:
-                    if best is not None:
-                        kept.append(best)
-                    best = slot
-                    best_score = sim
-                    continue
-            if bbox is not None and slot.bbox is not None:
-                iou = _bbox_iou(bbox, slot.bbox)
-                if iou >= REID_IOU_MIN and (best is None or best_score < REID_MIN_COSINE):
-                    if best is not None:
-                        kept.append(best)
-                    best = slot
-                    best_score = REID_IOU_MIN
-                    continue
-            kept.append(slot)
-
-        if best is not None:
-            _slots = [s for s in kept if s is not best]
+        def _pick_best(candidates: list[_LostSlot]) -> _LostSlot | None:
+            best: _LostSlot | None = None
+            best_score = REID_MIN_COSINE
+            for slot in candidates:
+                if embedding is not None and slot.embedding is not None:
+                    sim = _cosine(embedding, slot.embedding)
+                    if sim >= best_score:
+                        best = slot
+                        best_score = sim
+                        continue
+                if bbox is not None and slot.bbox is not None:
+                    iou = _bbox_iou(bbox, slot.bbox)
+                    if iou >= REID_IOU_MIN and (best is None or best_score < REID_MIN_COSINE):
+                        best = slot
+                        best_score = REID_IOU_MIN
             return best
-        _slots = kept
-        return None
+
+        same_cam = [s for s in _slots if s.camera_id == cam] if cam else []
+        best = _pick_best(same_cam)
+        if best is None and cam:
+            best = _pick_best([s for s in _slots if s.camera_id != cam])
+        if best is None:
+            return None
+        _slots = [s for s in _slots if s is not best]
+        return best
 
 
 def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None = None) -> None:
@@ -155,9 +152,12 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None =
         from .session_store import _new_session_id
 
         session.session_id = _new_session_id(session.camera_id, session.track_id)
-    # Đã rời khung — lượt xuất hiện mới dù reclaim cùng obj trong gap ngắn.
-    session.appearance_row_id = None
-    session.luot_snapshot_captured = False
+    if same_encounter and slot.appearance_row_id is not None:
+        session.appearance_row_id = slot.appearance_row_id
+        session.luot_snapshot_captured = True
+    else:
+        session.appearance_row_id = None
+        session.luot_snapshot_captured = False
     session.dirty = True
 
 

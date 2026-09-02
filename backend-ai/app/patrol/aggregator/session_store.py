@@ -104,6 +104,8 @@ def _bbox_iou(
 def _bbox_parallel_track_proximity(
     a: tuple[float, float, float, float],
     b: tuple[float, float, float, float],
+    *,
+    scale: float = 0.55,
 ) -> bool:
     """Hai track ByteTrack cùng một người — gần nhau theo cả X lẫn Y, không chỉ cùng hàng."""
     ax1, ay1, ax2, ay2 = a
@@ -113,7 +115,44 @@ def _bbox_parallel_track_proximity(
     aw, ah = max(ax2 - ax1, 1.0), max(ay2 - ay1, 1.0)
     bw, bh = max(bx2 - bx1, 1.0), max(by2 - by1, 1.0)
     min_w, min_h = min(aw, bw), min(ah, bh)
-    return abs(acx - bcx) <= min_w * 0.55 and abs(acy - bcy) <= min_h * 0.55
+    return abs(acx - bcx) <= min_w * scale and abs(acy - bcy) <= min_h * scale
+
+
+def _borrow_parallel_object_subject_locked(
+    camera_id: str,
+    started_at: float,
+    now_ts: float,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> str | None:
+    """Phải gọi khi đã giữ ``_lock``."""
+    from .. import daystore
+
+    prefix = f"{camera_id}|"
+    best: str | None = None
+    best_last = 0.0
+    for key, other in _sessions.items():
+        if not key.startswith(prefix):
+            continue
+        oid = (other.subject_id or "").strip()
+        if not oid.startswith("obj-"):
+            continue
+        start_delta = abs(other.started_at - started_at)
+        if start_delta > daystore.PARALLEL_OBJ_START_MAX_SEC:
+            continue
+        if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
+            continue
+        if bbox is not None and other.bbox is not None:
+            iou = _bbox_iou(bbox, other.bbox)
+            prox_scale = 1.05 if start_delta <= 15.0 else 0.55
+            if iou < PARALLEL_BBOX_IOU_MIN and not _bbox_parallel_track_proximity(
+                bbox, other.bbox, scale=prox_scale,
+            ):
+                if start_delta > 15.0 or iou < 0.02:
+                    continue
+        if other.last_seen_at >= best_last:
+            best_last = other.last_seen_at
+            best = oid
+    return best
 
 
 def borrow_parallel_object_subject(
@@ -123,30 +162,31 @@ def borrow_parallel_object_subject(
     bbox: tuple[float, float, float, float] | None = None,
 ) -> str | None:
     """Track mới cùng camera + bbox chồng (cùng người) → dùng lại obj-*."""
+    with _lock:
+        return _borrow_parallel_object_subject_locked(
+            camera_id, started_at, now_ts, bbox=bbox,
+        )
+
+
+def resolve_parallel_object_subject(
+    camera_id: str,
+    started_at: float,
+    now_ts: float,
+    event_date: str,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> str | None:
+    """RAM borrow rồi DB fallback — tránh obj-03/obj-05 khi ByteTrack tách đôi."""
     from .. import daystore
 
-    prefix = f"{camera_id}|"
     with _lock:
-        best: str | None = None
-        best_last = 0.0
-        for key, other in _sessions.items():
-            if not key.startswith(prefix):
-                continue
-            oid = (other.subject_id or "").strip()
-            if not oid.startswith("obj-"):
-                continue
-            if abs(other.started_at - started_at) > daystore.PARALLEL_OBJ_START_MAX_SEC:
-                continue
-            if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
-                continue
-            if bbox is not None and other.bbox is not None:
-                iou = _bbox_iou(bbox, other.bbox)
-                if iou < PARALLEL_BBOX_IOU_MIN and not _bbox_parallel_track_proximity(bbox, other.bbox):
-                    continue
-            if other.last_seen_at >= best_last:
-                best_last = other.last_seen_at
-                best = oid
-        return best
+        parallel = _borrow_parallel_object_subject_locked(
+            camera_id, started_at, now_ts, bbox=bbox,
+        )
+    if parallel:
+        return parallel
+    return daystore.find_parallel_object_card(
+        event_date, camera_id, started_at, now_ts,
+    )
 
 
 def link_subject_session(session: TrackSession) -> None:
@@ -159,20 +199,35 @@ def link_subject_session(session: TrackSession) -> None:
     if not (subject_id.startswith("obj-") or is_person_subject_id(subject_id)):
         return
     with _lock:
+        canonical: TrackSession | None = None
         for other in _sessions.values():
-            if other is session or other.camera_id != session.camera_id:
+            if other.camera_id != session.camera_id:
                 continue
             if (other.subject_id or "").strip() != subject_id:
                 continue
-            if other.appearance_row_id is None:
-                continue
-            session.appearance_row_id = other.appearance_row_id
-            session.luot_snapshot_captured = other.luot_snapshot_captured
-            session.session_id = other.session_id
-            if other.committed:
-                session.committed = True
-                session.last_flush_at = max(session.last_flush_at, other.last_flush_at)
+            if other.appearance_row_id is not None:
+                canonical = other
+                break
+        if canonical is None:
             return
+        session.appearance_row_id = canonical.appearance_row_id
+        session.luot_snapshot_captured = canonical.luot_snapshot_captured
+        session.session_id = canonical.session_id
+        if canonical.committed:
+            session.committed = True
+            session.last_flush_at = max(session.last_flush_at, canonical.last_flush_at)
+        for other in _sessions.values():
+            if other.camera_id != session.camera_id:
+                continue
+            if (other.subject_id or "").strip() != subject_id:
+                continue
+            if other.appearance_row_id is None and canonical.appearance_row_id is not None:
+                other.appearance_row_id = canonical.appearance_row_id
+                other.luot_snapshot_captured = canonical.luot_snapshot_captured
+                other.session_id = canonical.session_id
+                if canonical.committed:
+                    other.committed = True
+                    other.last_flush_at = max(other.last_flush_at, canonical.last_flush_at)
 
 
 def session_keys_for_camera(camera_id: str) -> list[str]:
