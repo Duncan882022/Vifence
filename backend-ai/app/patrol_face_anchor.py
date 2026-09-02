@@ -159,6 +159,47 @@ def _boxes_overlap(
     )
 
 
+def _same_person_anchor_box(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    min_center_distance: float = 0.045,
+) -> bool:
+    """True khi hai bbox có thể cùng một người — chỉ gộp khi gần nhau, không chỉ chạm mép."""
+    if frame_w > 0 and frame_h > 0:
+        if _bbox_center_distance_norm(a, b, frame_w, frame_h) >= min_center_distance:
+            return False
+    return _boxes_overlap(a, b)
+
+
+def _anchor_box_redundant_with(
+    candidate: tuple[float, float, float, float],
+    existing: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Bỏ bbox YOLO lồng / crowd box khi đã có synth hẹp; vẫn giữ hai người sát nhau."""
+    if _bbox_containment(candidate, existing) >= 0.72 or _bbox_containment(existing, candidate) >= 0.72:
+        return True
+    cand_area = _box_area_ratio(candidate, frame_w, frame_h)
+    exist_area = _box_area_ratio(existing, frame_w, frame_h)
+    if cand_area >= exist_area:
+        larger, smaller, large_area, small_area = candidate, existing, cand_area, exist_area
+    else:
+        larger, smaller, large_area, small_area = existing, candidate, exist_area, cand_area
+    if large_area >= 0.28 and small_area <= large_area * 0.62:
+        if _boxes_overlap(
+            larger,
+            smaller,
+            iou_threshold=0.12,
+            containment_threshold=0.38,
+        ):
+            return True
+    return _same_person_anchor_box(candidate, existing, frame_w, frame_h)
+
+
 def _dedupe_anchor_boxes(
     boxes: list[tuple[tuple[float, float, float, float], float]],
     *,
@@ -231,6 +272,10 @@ def _yolo_plausible_without_face(
         return False
     if not plausible_person_silhouette(box, frame_w, frame_h):
         return False
+    from .patrol_person_visibility import patrol_person_meets_display_gate
+
+    if patrol_person_meets_display_gate(box, frame_w, frame_h):
+        return True
     return upper_body_third_with_head_visible(box, frame_w, frame_h)
 
 
@@ -310,7 +355,10 @@ def anchor_patrol_person_boxes_to_faces(
             continue
         if _synth_duplicate_of_matched(face, synth_box, matched_yolo):
             continue
-        if any(_boxes_overlap(synth_box, other) for other in [box for box, _ in matched_yolo]):
+        if any(
+            _same_person_anchor_box(synth_box, other, w, h)
+            for other in [box for box, _ in matched_yolo]
+        ):
             continue
         synth_boxes.append((synth_box, _synth_conf_from_face(face)))
 
@@ -321,7 +369,7 @@ def anchor_patrol_person_boxes_to_faces(
             continue
         if conf < BACK_TURN_MIN_CONF or not _yolo_plausible_without_face(box, w, h):
             continue
-        if any(_boxes_overlap(box, other) for other in existing_boxes):
+        if any(_anchor_box_redundant_with(box, other, w, h) for other in existing_boxes):
             continue
         back_turn.append((box, conf))
         existing_boxes.append(box)
@@ -329,7 +377,10 @@ def anchor_patrol_person_boxes_to_faces(
     # Silhouette YOLO không khớp mặt / quay lưng — vẫn giữ nếu đủ conf (đám đông).
     silhouette_keep: list[tuple[tuple[float, float, float, float], float]] = []
     for box, conf in person_boxes:
-        if any(_boxes_overlap(box, other) for other in existing_boxes):
+        if any(
+            _anchor_box_redundant_with(box, other, w, h)
+            for other in existing_boxes
+        ):
             continue
         if conf < BACK_TURN_MIN_CONF:
             continue

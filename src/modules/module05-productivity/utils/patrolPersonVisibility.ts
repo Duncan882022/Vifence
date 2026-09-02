@@ -103,9 +103,9 @@ function wideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: number): boolean
   const bwRatio = pw / Math.max(frameW, 1)
   const aspect = ph / pw
   const cy = (y1 + y2) / 2
-  if (bhRatio < 0.035 || bhRatio > 0.58) return false
-  if (bwRatio < 0.022 || bwRatio > 0.40) return false
-  if (aspect < 0.80 || aspect > 4.8) return false
+  if (bhRatio < 0.035 || bhRatio > 0.65) return false
+  if (bwRatio < 0.018 || bwRatio > 0.42) return false
+  if (aspect < 0.65 || aspect > 4.8) return false
   if (cy < frameH * 0.06 || cy > frameH * 0.82) return false
   return true
 }
@@ -173,9 +173,9 @@ export function patrolWideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: num
   const bhRatio = ph / Math.max(frameH, 1)
   const bwRatio = pw / Math.max(frameW, 1)
   const aspect = ph / pw
-  if (bhRatio < 0.035 || bhRatio > 0.58) return false
-  if (bwRatio < 0.022 || bwRatio > 0.40) return false
-  if (aspect < 0.80 || aspect > 4.8) return false
+  if (bhRatio < 0.035 || bhRatio > 0.65) return false
+  if (bwRatio < 0.018 || bwRatio > 0.42) return false
+  if (aspect < 0.65 || aspect > 4.8) return false
   const cy = (y1 + y2) / 2
   if (cy < frameH * 0.06 || cy > frameH * 0.82) return false
   return true
@@ -353,6 +353,18 @@ function patrolKnownWorkerId(workerId?: string | null): string {
   return wid
 }
 
+function patrolDetectionsSamePerson(a: Bbox4, b: Bbox4, frameW: number, frameH: number): boolean {
+  if (!patrolDetectionsOverlap(a, b)) return false
+  const acx = (a[0] + a[2]) / 2
+  const acy = (a[1] + a[3]) / 2
+  const bcx = (b[0] + b[2]) / 2
+  const bcy = (b[1] + b[3]) / 2
+  const dx = (acx - bcx) / Math.max(frameW, 1)
+  const dy = (acy - bcy) / Math.max(frameH, 1)
+  if (Math.sqrt(dx * dx + dy * dy) >= 0.045) return false
+  return true
+}
+
 /**
  * Một người chỉ một ROI — tầng cao thắng (Định danh > Người > Đối tượng).
  * Hai người đã có mã khác nhau vẫn giữ cả hai dù bbox chồng nhau.
@@ -366,6 +378,8 @@ export function suppressPatrolObjectOverlappingIdentified<T extends {
   tier?: PatrolTier | null
 }>(
   detections: T[],
+  frameW = 1280,
+  frameH = 720,
 ): T[] {
   const persons = detections.filter(d => d.behavior === 'person' && d.bbox?.length === 4)
   if (persons.length <= 1) return detections
@@ -387,7 +401,12 @@ export function suppressPatrolObjectOverlappingIdentified<T extends {
 
   for (const candidate of ranked) {
     const dominated = kept.some(keptDet => {
-      if (!patrolDetectionsOverlap(candidate.d.bbox as Bbox4, keptDet.d.bbox as Bbox4)) return false
+      if (!patrolDetectionsSamePerson(
+        candidate.d.bbox as Bbox4,
+        keptDet.d.bbox as Bbox4,
+        frameW,
+        frameH,
+      )) return false
       const candRank = PATROL_TIER_RANK[candidate.tier]
       const keptRank = PATROL_TIER_RANK[keptDet.tier]
       if (keptRank > candRank) return true

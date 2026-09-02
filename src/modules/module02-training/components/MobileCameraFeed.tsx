@@ -292,7 +292,7 @@ export function MobileCameraFeed({
             faceEligible: d.face_eligible,
           })
         }
-        const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible))
+        const gated = suppressPatrolObjectOverlappingIdentified(filtered.filter(patrolVisible), frameW, frameH)
         const now = Date.now()
         const isPatrolPerson = isPatrolCam && (cameraId.startsWith('HC-') || cameraId.startsWith('DR-'))
         /** Patrol ROI overlay đọc engine local — không giữ ghost bbox từ round-trip cũ. */

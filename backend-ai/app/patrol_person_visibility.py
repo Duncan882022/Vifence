@@ -382,11 +382,11 @@ def wide_crowd_rider_box(
     bh_ratio = ph / max(float(frame_h), 1.0)
     bw_ratio = pw / max(float(frame_w), 1.0)
     aspect = ph / pw
-    if bh_ratio < 0.035 or bh_ratio > 0.58:
+    if bh_ratio < 0.035 or bh_ratio > 0.65:
         return False
-    if bw_ratio < 0.022 or bw_ratio > 0.40:
+    if bw_ratio < 0.018 or bw_ratio > 0.42:
         return False
-    if aspect < 0.80 or aspect > 4.8:
+    if aspect < 0.65 or aspect > 4.8:
         return False
     cy = (y1 + y2) / 2.0
     if cy < frame_h * 0.06 or cy > frame_h * 0.82:

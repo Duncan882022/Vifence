@@ -165,6 +165,15 @@ describe('ẩn ROI trùng tầng thấp', () => {
     expect(out).toHaveLength(2)
   })
 
+  it('giữ hai object cùng tầng khi tâm bbox cách xa dù chạm mép', () => {
+    const input = [
+      personDet([100, 120, 200, 480], { tier: 'object', track_id: 'ptk-a', confidence: 0.8 }),
+      personDet([520, 130, 620, 470], { tier: 'object', track_id: 'ptk-b', confidence: 0.75 }),
+    ]
+    const out = suppressPatrolObjectOverlappingIdentified(input, 1280, 720)
+    expect(out).toHaveLength(2)
+  })
+
   it('chỉ giữ một hộp khi cùng tầng object trùng vùng', () => {
     const input = [
       personDet([100, 100, 220, 480], { tier: 'object', confidence: 0.55 }),

@@ -1680,28 +1680,6 @@ def _filter_persons(
             for_display=for_display,
         ):
             continue
-        # Patrol HC-* / DR-* — gate trong `_plausible_person_box(for_display=True)`.
-        # Không thêm lớp corroborate da/thân trên kiểu PPE (làm mất người ngồi/quay lưng).
-        if bodycam and frame is not None and not _is_helmet_bodycam(camera_id):
-            from .patrol_person_visibility import (
-                background_clutter_person_box,
-                wide_crowd_rider_box,
-            )
-
-            conf = float(p.confidence)
-            face_dom = _face_dominant_person_box(box, w, h)
-            if background_clutter_person_box(box, w, h) and not _person_upper_body_signal(frame, box):
-                continue
-            corroborate_below = (
-                _PERSON_CONF_DISPLAY_CORROBORATE if for_display else 0.62
-            )
-            if (
-                conf < corroborate_below
-                and not face_dom
-                and not wide_crowd_rider_box(box, w, h)
-                and not _person_upper_body_signal(frame, box)
-            ):
-                continue
         out.append(_PersonPpe(box, p.confidence))
     return out
 
