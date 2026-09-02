@@ -25,8 +25,28 @@ from . import daystore, db, identity
 
 SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
 
+# Một JPG / thẻ sự kiện (obj/tk/pers) — ghi đè khi có frame đẹp hơn.
+# Không dùng session.started_at: mỗi re-track ByteTrack sẽ tạo file mới.
+CARD_SNAPSHOT_LUOT = 0
+
 _SNAPSHOT_WRITE_LOCK = threading.Lock()
 _last_snapshot_write: dict[str, tuple[float, float]] = {}
+
+
+def _snapshot_cache_key(subject_id: str, luot_key: int | None) -> str:
+    if luot_key == CARD_SNAPSHOT_LUOT:
+        return subject_id
+    if luot_key is not None:
+        return f"{subject_id}|{luot_key}"
+    return subject_id
+
+
+def _snapshot_filename(subject_id: str, luot_key: int | None, ts: float) -> str:
+    if luot_key == CARD_SNAPSHOT_LUOT:
+        return f"{subject_id}.jpg"
+    if luot_key is not None:
+        return f"{subject_id}-{int(luot_key)}.jpg"
+    return f"{subject_id}-{int(ts * 1000)}.jpg"
 
 
 def _maybe_write_snapshot(
@@ -43,9 +63,9 @@ def _maybe_write_snapshot(
     force: bool = False,
     luot_key: int | None = None,
 ) -> str | None:
-    """Ghi file JPG — một file/lượt (luot_key), ghi đè khi score cao hơn."""
+    """Ghi file JPG — một file/thẻ (CARD_SNAPSHOT_LUOT), ghi đè khi score cao hơn."""
     ts = float(capture_ts if capture_ts is not None else time.time())
-    cache_key = f"{subject_id}|{luot_key}" if luot_key is not None else subject_id
+    cache_key = _snapshot_cache_key(subject_id, luot_key)
     with _SNAPSHOT_WRITE_LOCK:
         last = _last_snapshot_write.get(cache_key)
         if not force and last is not None:
@@ -245,8 +265,7 @@ def _write_snapshot(
         date = db.today_vn(ts)
         folder = SNAPSHOT_DIR / date
         folder.mkdir(parents=True, exist_ok=True)
-        stamp = int(luot_key if luot_key is not None else ts * 1000)
-        name = f"{subject_id}-{stamp}.jpg"
+        name = _snapshot_filename(subject_id, luot_key, ts)
         out_path = folder / name
         cv2.imwrite(str(out_path), out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         return f"{date}/{name}"

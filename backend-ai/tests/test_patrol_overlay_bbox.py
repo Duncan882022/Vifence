@@ -45,8 +45,8 @@ class PatrolOverlayBboxTests(unittest.TestCase):
         area = (out[2] - out[0]) * (out[3] - out[1]) / (self.FW * self.FH)
         self.assertLessEqual(area, 0.40)
 
-    def test_one_jpg_per_luot_key(self) -> None:
-        """Cùng luot_key — ghi đè, không tạo file mới."""
+    def test_one_jpg_per_card(self) -> None:
+        """Cùng thẻ obj — ghi đè 1 file, không spam timestamp."""
         with tempfile.TemporaryDirectory() as tmp:
             db.close()
             db.DATA_DIR = Path(tmp)
@@ -57,15 +57,23 @@ class PatrolOverlayBboxTests(unittest.TestCase):
 
             frame = np.zeros((480, 640, 3), dtype=np.uint8)
             bbox = (100.0, 80.0, 220.0, 400.0)
-            luot = 8_000_000
             p1 = sink._write_snapshot(  # noqa: SLF001
-                "obj-test", frame, bbox, luot_key=luot, capture_ts=1_000.0,
+                "obj-test",
+                frame,
+                bbox,
+                luot_key=sink.CARD_SNAPSHOT_LUOT,
+                capture_ts=1_000.0,
             )
             p2 = sink._write_snapshot(  # noqa: SLF001
-                "obj-test", frame, bbox, luot_key=luot, capture_ts=1_001.0,
+                "obj-test",
+                frame,
+                bbox,
+                luot_key=sink.CARD_SNAPSHOT_LUOT,
+                capture_ts=1_001.0,
             )
             self.assertEqual(p1, p2)
-            files = list(sink.SNAPSHOT_DIR.rglob("obj-test-*.jpg"))
+            self.assertTrue(p1.endswith("obj-test.jpg"))
+            files = list(sink.SNAPSHOT_DIR.rglob("obj-test*.jpg"))
             self.assertEqual(len(files), 1)
 
 

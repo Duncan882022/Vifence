@@ -107,27 +107,28 @@ def audit_jpg_one_file_per_luot() -> CaseResult:
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     bbox = (100.0, 80.0, 220.0, 400.0)
-    luot = 9_000_000
+    subject = "obj-20260902-0099"
     paths: list[str] = []
     for score in (0.5, 0.7, 0.9):
         p = sink._write_snapshot(  # noqa: SLF001
-            "obj-20260902-0099",
+            subject,
             frame,
             bbox,
             score=score,
-            luot_key=luot,
+            luot_key=sink.CARD_SNAPSHOT_LUOT,
             capture_ts=12_000.0 + score,
         )
         if p:
             paths.append(p)
 
     files = list(sink.SNAPSHOT_DIR.rglob("*.jpg"))
-    ok = len(files) == 1 and len(set(paths)) <= 1
+    card_file = sink.SNAPSHOT_DIR / "1970-01-01" / f"{subject}.jpg"
+    ok = len(files) == 1 and card_file.is_file() and len(set(paths)) <= 1
     tmp.cleanup()
     return CaseResult(
-        "jpg_one_file_per_luot",
+        "jpg_one_file_per_card",
         ok,
-        f"files={len(files)} paths={paths}",
+        f"files={len(files)} paths={paths} card={card_file.name}",
     )
 
 

@@ -146,11 +146,6 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         if inferred != "object":
             tier = inferred
     force = not _card_has_snapshot(session.subject_id, shot_obs.ts)
-    luot_key = (
-        int(session.started_at * 1000)
-        if session.started_at > 0
-        else int(shot_obs.ts * 1000)
-    )
     path = sink._maybe_write_snapshot(  # noqa: SLF001
         session.subject_id,
         shot_obs.frame,
@@ -162,7 +157,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         capture_ts=shot_obs.ts,
         face_eligible=shot_obs.face_eligible,
         force=force,
-        luot_key=luot_key,
+        luot_key=sink.CARD_SNAPSHOT_LUOT,
     )
     if path is None and force:
         path = sink._write_snapshot(  # noqa: SLF001
@@ -175,7 +170,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
             worker_name=shot_obs.worker_name,
             capture_ts=shot_obs.ts,
             face_eligible=shot_obs.face_eligible,
-            luot_key=luot_key,
+            luot_key=sink.CARD_SNAPSHOT_LUOT,
         )
     return path, score if path else 0.0
 
