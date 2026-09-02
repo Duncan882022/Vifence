@@ -1,8 +1,9 @@
 """Cầu nối luồng AI → SQLite tuần tra.
 
 Luồng phân tích gọi `record_observation` mỗi khi phát hiện một người trong
-khung. **Chưa ghi thẻ ngay** — phải bám track đủ vài giây (`patrol_object_confirm_seconds`
-cho Đối tượng / `patrol_person_confirm_seconds` khi `face_eligible`) rồi mới chốt SQLite.
+khung. **Ghi thẻ sớm** sau `patrol_object_min_commit_seconds` (Đối tượng) hoặc
+`patrol_person_confirm_seconds` (có mặt). `patrol_object_confirm_seconds` là cửa sổ
+chọn frame đẹp nhất / thăng tier — không chặn xe hay người chạy qua; mất track → finalize ngay.
 Chỉ thăng Người khi analyzer đã đánh dấu `face_eligible`; sink không tự recover embedding.
 Sau đó quyết định Đối tượng (chưa thấy mặt) hay Người/Định danh (có khuôn mặt),
 rồi ghi thẻ sự kiện và lịch sử xuất hiện.
@@ -291,11 +292,21 @@ def _track_is_committed(key: str) -> bool:
         return watch is not None and watch.confirmed
 
 
-def _required_confirm_seconds(*, has_face: bool) -> float:
+def _required_min_commit_seconds(*, has_face: bool) -> float:
     from ..config import settings
 
     if has_face:
         return float(settings.patrol_person_confirm_seconds)
+    return float(settings.patrol_object_min_commit_seconds)
+
+
+def track_accumulation_window_seconds() -> float:
+    """Cửa sổ giữ frame tốt nhất / thăng tier trên một track."""
+    from ..config import settings
+
+    window = float(getattr(settings, "patrol_track_accumulation_max_seconds", 0) or 0)
+    if window > 0:
+        return window
     return float(settings.patrol_object_confirm_seconds)
 
 
@@ -305,7 +316,7 @@ def _gate_observation_commit(
     has_face: bool,
     now: float,
 ) -> tuple[bool, float]:
-    """Chỉ cho ghi SQLite sau khi bám track đủ giây. Trả (ok, mốc first_seen)."""
+    """Cho ghi SQLite sau min-commit ngắn; finalize luôn qua. Trả (ok, mốc first_seen)."""
     if _track_is_committed(key):
         return True, now
 
@@ -317,7 +328,7 @@ def _gate_observation_commit(
         elif watch.confirmed:
             return True, now
 
-        if now - watch.first_seen < _required_confirm_seconds(has_face=has_face):
+        if now - watch.first_seen < _required_min_commit_seconds(has_face=has_face):
             return False, now
 
         watch.confirmed = True

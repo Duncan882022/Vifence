@@ -10,9 +10,9 @@ import numpy as np
 
 from app.patrol import daystore, db, identity, sink
 
-# Đồng bộ config.py — sink chờ đủ giây trước khi ghi thẻ lần đầu.
-_OBJECT_CONFIRM = 3.0
-_FACE_CONFIRM = 1.5
+# Đồng bộ config.py — min-commit ngắn; 2s là cửa sổ frame đẹp.
+_MIN_OBJECT_COMMIT = 0.35
+_FACE_CONFIRM = 0.15
 _PERSON_BOX = [85.0, 62.0, 225.0, 425.0]
 
 
@@ -49,7 +49,7 @@ class PatrolSinkTests(unittest.TestCase):
         oid = sink.record_observation(
             camera_id="HC-01",
             track_id="ptk0001:person",
-            now=t0 + _OBJECT_CONFIRM,
+            now=t0 + _MIN_OBJECT_COMMIT,
         )
         self.assertTrue(str(oid).startswith("obj-"))
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
@@ -70,10 +70,10 @@ class PatrolSinkTests(unittest.TestCase):
             camera_id="HC-01", track_id="ptk0001:person", now=t0,
         )
         a = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", now=t0 + _OBJECT_CONFIRM,
+            camera_id="HC-01", track_id="ptk0001:person", now=t0 + _MIN_OBJECT_COMMIT,
         )
         b = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", now=t0 + _OBJECT_CONFIRM + 7,
+            camera_id="HC-01", track_id="ptk0001:person", now=t0 + _MIN_OBJECT_COMMIT + 7,
         )
         self.assertEqual(a, b)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
@@ -280,7 +280,7 @@ class PatrolSinkTests(unittest.TestCase):
         )
         first = sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
-            person_bbox=box, now=t0 + _OBJECT_CONFIRM,
+            person_bbox=box, now=t0 + _MIN_OBJECT_COMMIT,
         )
         sink.forget_track("HC-01", "ptk0001:person", now=t0 + 4.0)
         sink.record_observation(
@@ -290,7 +290,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-01", track_id="ptk0008:person",
             person_bbox=[85.0, 62.0, 225.0, 425.0],
-            now=t0 + 5.0 + _OBJECT_CONFIRM,
+            now=t0 + 5.0 + _MIN_OBJECT_COMMIT,
         )
         self.assertEqual(again, first)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
@@ -304,14 +304,14 @@ class PatrolSinkTests(unittest.TestCase):
         )
         a = sink.record_observation(
             camera_id="HC-01", track_id="ptk0001:person",
-            person_bbox=left, now=t0 + _OBJECT_CONFIRM,
+            person_bbox=left, now=t0 + _MIN_OBJECT_COMMIT,
         )
         sink.record_observation(
             camera_id="HC-01", track_id="ptk0002:person", person_bbox=right, now=t0,
         )
         b = sink.record_observation(
             camera_id="HC-01", track_id="ptk0002:person",
-            person_bbox=right, now=t0 + _OBJECT_CONFIRM,
+            person_bbox=right, now=t0 + _MIN_OBJECT_COMMIT,
         )
         self.assertNotEqual(a, b)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 2)
@@ -338,7 +338,7 @@ class PatrolSinkTests(unittest.TestCase):
         )
         obj = sink.record_observation(
             camera_id="HC-01", track_id="ptk0002:person",
-            person_bbox=back_box, now=t0 + _OBJECT_CONFIRM,
+            person_bbox=back_box, now=t0 + _MIN_OBJECT_COMMIT,
         )
         self.assertTrue(str(pers).startswith("tk-"))
         self.assertTrue(str(obj).startswith("obj-"))
@@ -369,7 +369,7 @@ class PatrolSinkTests(unittest.TestCase):
         again = sink.record_observation(
             camera_id="HC-01", track_id="ptk0009:person",
             person_bbox=[82.0, 61.0, 218.0, 418.0],
-            now=t0 + 5.0 + _OBJECT_CONFIRM,
+            now=t0 + 5.0 + _MIN_OBJECT_COMMIT,
         )
         self.assertEqual(again, pers)
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])

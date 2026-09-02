@@ -827,7 +827,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         self.assertEqual(snap["snapshot_path"], "2026-08-30/old.jpg")
 
     def test_flush_captures_snapshot_only_once_per_luot(self) -> None:
-        """Lần flush đầu chụp JPG; các flush extend trong cùng track không chụp thêm."""
+        """Trong cửa sổ 2s có thể thay JPG; sau đó khóa một ảnh/lượt."""
         import numpy as np
         from unittest.mock import patch
 
@@ -855,7 +855,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         ) as write_mock:
             flush_session(session, obs1)
         self.assertEqual(write_mock.call_count, 1)
-        self.assertTrue(session.luot_snapshot_captured)
+        self.assertFalse(session.luot_snapshot_captured)
 
         obs2 = ObservationInput(
             camera_id="HC-02",
@@ -1034,6 +1034,49 @@ class BestObservationFinalizeTests(unittest.TestCase):
         snap = objs[0]["snapshot_path"] or ""
         self.assertIn("score-0.90", snap)
         self.assertNotIn("score-0.20", snap)
+
+    def test_fast_passing_object_commits_before_accumulation_window(self) -> None:
+        """Xe/người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol.sink import track_accumulation_window_seconds
+
+        ts = 20_000.0
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        bbox = (400.0, 280.0, 520.0, 520.0)
+        window = track_accumulation_window_seconds()
+
+        with patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=("2026-08-30/pass.jpg", 0.88),
+        ):
+            oid = ingest_observation(
+                camera_id="DR-03",
+                track_id="ptk-pass",
+                now=ts,
+                person_bbox=bbox,
+                frame=frame,
+                confidence=0.88,
+            )
+            self.assertIsNone(oid)
+            oid = ingest_observation(
+                camera_id="DR-03",
+                track_id="ptk-pass",
+                now=ts + 0.36,
+                person_bbox=bbox,
+                frame=frame,
+                confidence=0.88,
+            )
+            self.assertTrue(str(oid or "").startswith("obj-"))
+            finalize_track("DR-03", "ptk-pass", now=ts + 0.9)
+
+        from app.patrol import daystore, db
+
+        objs = daystore.list_objects(db.today_vn(ts))
+        self.assertEqual(len(objs), 1)
+        self.assertLess(ts + 0.36 - ts, window)
 
 
 if __name__ == "__main__":

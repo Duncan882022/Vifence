@@ -393,7 +393,7 @@ def _assign_patrol_person_display_only(
     frame: np.ndarray | None = None,
     person_box: tuple[float, float, float, float] | None = None,
 ) -> None:
-    """ROI-only — giữ nhãn cache; vẫn touch sink đến khi session committed (dwell gate)."""
+    """ROI-only — giữ nhãn cache; touch sink (min-commit ngắn, 2s = frame đẹp)."""
     if not track_id:
         return
     from ..patrol_identity_lifecycle import peek as peek_track_identity, tier_for_worker_id
@@ -609,8 +609,8 @@ def _build_patrol_person_detections(
     YOLO trả về không còn ảnh hưởng tới việc ai giữ track nào.
 
     Face/embed chạy trên mọi người đủ gate **hiển thị** (ngồi, quay lưng, đám
-    đông…) — sink tự dwell trước khi commit obj/pers. Gate hình học chặt chỉ
-    dùng cho KPI legacy, không chặn đường ghi sự kiện chính nữa.
+    đông…) — sink ghi thẻ sau min-commit ngắn; 2s là cửa sổ chọn frame đẹp /
+    thăng tier, không chặn xe chạy qua. Gate hình học chặt chỉ dùng cho KPI legacy.
     """
     reset_hc_patrol_face_assignments(camera_id)
     from .peak_time import (

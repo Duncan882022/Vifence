@@ -26,6 +26,14 @@ def _maybe_update_best_observation(session, obs: ObservationInput) -> None:
         session.best_observation_score = score
 
 
+def _within_accumulation(session, ts: float) -> bool:
+    from ..sink import track_accumulation_window_seconds
+
+    if session.started_at <= 0:
+        return False
+    return (ts - session.started_at) <= track_accumulation_window_seconds()
+
+
 def ingest_observation(**kwargs) -> str | None:
     """Điểm vào thay ``record_observation`` khi ``PATROL_USE_AGGREGATOR=1``."""
     obs = ObservationInput(
@@ -75,6 +83,11 @@ def ingest_observation(**kwargs) -> str | None:
             session.dirty
             or session.last_flush_at <= 0
             or (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC
+            or (
+                _within_accumulation(session, obs.ts)
+                and session.best_observation is not None
+                and session.best_observation.frame is not None
+            )
         )
         if due:
             flush_session(session, obs)
@@ -87,6 +100,11 @@ def ingest_observation(**kwargs) -> str | None:
             session.dirty
             or session.last_flush_at <= 0
             or (obs.ts - session.last_flush_at) >= TOUCH_MIN_INTERVAL_SEC
+            or (
+                _within_accumulation(session, obs.ts)
+                and session.best_observation is not None
+                and session.best_observation.frame is not None
+            )
         )
         if due:
             flush_session(session, obs)

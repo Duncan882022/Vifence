@@ -6,7 +6,12 @@ import json
 import logging
 
 from .. import daystore, db
-from ..sink import _gate_observation_commit, _resolve_observation_gps, snapshot_score
+from ..sink import (
+    _gate_observation_commit,
+    _resolve_observation_gps,
+    snapshot_score,
+    track_accumulation_window_seconds,
+)
 from .serialize import build_event_payload
 from .tripwire import site_entry_counted
 from .types import ObservationInput, TrackSession
@@ -85,8 +90,26 @@ def _appearance_row_has_snapshot(row_id: int) -> bool:
     return bool(row and str(row["snapshot_path"] or "").strip())
 
 
-def _luot_needs_snapshot(session: TrackSession) -> bool:
-    """Trong khung bám track — chỉ chụp một lần cho mỗi lượt xuất hiện."""
+def _within_accumulation_window(session: TrackSession, now: float) -> bool:
+    if session.started_at <= 0:
+        return False
+    return (now - session.started_at) <= track_accumulation_window_seconds()
+
+
+def _snapshot_observation(session: TrackSession, obs: ObservationInput) -> ObservationInput:
+    """Trong cửa sổ tích lũy — chốt frame score cao nhất, không frame cuối."""
+    if not _within_accumulation_window(session, obs.ts):
+        return obs
+    best = session.best_observation
+    if best is not None and best.frame is not None and best.person_bbox is not None:
+        return best
+    return obs
+
+
+def _luot_needs_snapshot(session: TrackSession, *, now: float) -> bool:
+    """Một JPG/lượt — trong cửa sổ 2s vẫn thay nếu có frame đẹp hơn."""
+    if _within_accumulation_window(session, now):
+        return True
     if session.luot_snapshot_captured:
         return False
     rid = session.appearance_row_id
@@ -225,17 +248,18 @@ def flush_session(
         subject_id
         and obs.frame is not None
         and obs.person_bbox is not None
-        and _luot_needs_snapshot(session)
+        and _luot_needs_snapshot(session, now=now)
     ):
-        path, shot_score = _write_snapshot(session, obs)
+        shot_obs = _snapshot_observation(session, obs)
+        path, shot_score = _write_snapshot(session, shot_obs)
         if path:
-            session.luot_snapshot_captured = True
+            session.luot_snapshot_captured = not _within_accumulation_window(session, now)
 
     from .identity_pipeline import try_promote_object_after_snapshot
 
     try_promote_object_after_snapshot(
         session,
-        obs,
+        _snapshot_observation(session, obs),
         snapshot_path=path,
         snapshot_score=shot_score,
     )
