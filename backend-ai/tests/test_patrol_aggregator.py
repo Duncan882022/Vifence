@@ -696,7 +696,7 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         self.assertEqual(len(rows), 2)
 
     def test_coalesce_parallel_obj_tracks_same_card(self) -> None:
-        """Hai ByteTrack song song cùng obj — gộp thành một lượt lịch sử."""
+        """Hai ByteTrack khác track/session — giữ hai dòng lịch sử (không gộp nhầm người)."""
         from app.patrol import daystore, db
 
         daystore.upsert_track_appearance(
@@ -734,9 +734,9 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         merged = daystore.coalesce_subject_appearances(
             "obj-20260830-0012", "2026-08-30", camera_id="HC-02",
         )
-        self.assertEqual(merged, 1)
+        self.assertEqual(merged, 0)
         rows = daystore.list_day_presences("2026-08-30")
-        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(rows), 2)
 
 
 class AggregatorSnapshotFlushTest(unittest.TestCase):

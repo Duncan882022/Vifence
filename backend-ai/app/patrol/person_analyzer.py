@@ -100,6 +100,17 @@ def assign_patrol_track_ids(
     )
 
 
+def _sink_overlay_bbox(
+    overlay_box: tuple[float, float, float, float] | None,
+    person_box: tuple[float, float, float, float] | None,
+) -> list[float] | None:
+    """BBox ghi sink/snapshot — trùng overlay live (patrol_person_overlay_bbox)."""
+    target = overlay_box if overlay_box is not None else person_box
+    if target is None:
+        return None
+    return [float(v) for v in target]
+
+
 def _record_patrol_density_encounter(
     person_det: PpeDetection,
     *,
@@ -150,6 +161,7 @@ def _assign_patrol_person_identity(
     frame_h: int,
     track_id: str | None,
     crowd_members: list | None = None,
+    overlay_box: tuple[float, float, float, float] | None = None,
 ) -> None:
     """HC-* / DR-* — gán sgc hoặc để trống (Đối tượng) lên detection trả về FE."""
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
@@ -158,6 +170,7 @@ def _assign_patrol_person_identity(
         return
 
     person_bbox = [float(v) for v in person_box]
+    sink_bbox = _sink_overlay_bbox(overlay_box, person_box)
 
     if _is_patrol_flycam(camera_id):
         from ..patrol_flight_mode import is_patrol_flycam_aerial
@@ -168,7 +181,7 @@ def _assign_patrol_person_identity(
                 camera_id=camera_id,
                 track_id=track_id,
                 frame=frame,
-                person_bbox=person_bbox,
+                person_bbox=sink_bbox or person_bbox,
                 confidence=float(person_det.confidence or 0.0),
             )
             return
@@ -230,7 +243,7 @@ def _assign_patrol_person_identity(
             camera_id=camera_id,
             track_id=track_id,
             frame=frame,
-            person_bbox=person_bbox,
+            person_bbox=sink_bbox or person_bbox,
             confidence=float(person_det.confidence or 0.0),
         )
         return
@@ -302,7 +315,7 @@ def _assign_patrol_person_identity(
             face_eligible=bool(person_det.face_eligible),
             confidence=float(person_det.confidence or 0.0),
             frame=frame,
-            person_bbox=person_bbox,
+            person_bbox=sink_bbox,
             lifecycle_tier=display_tier,
             lifecycle_worker_id=resolved.worker_id,
             worker_name=resolved.worker_name,
@@ -392,6 +405,7 @@ def _assign_patrol_person_display_only(
     track_id: str | None,
     frame: np.ndarray | None = None,
     person_box: tuple[float, float, float, float] | None = None,
+    overlay_box: tuple[float, float, float, float] | None = None,
 ) -> None:
     """ROI-only — giữ nhãn cache; touch sink (min-commit ngắn, 2s = frame đẹp)."""
     if not track_id:
@@ -442,7 +456,7 @@ def _assign_patrol_person_display_only(
             track_id=track_id,
             confidence=float(person_det.confidence or 0.0),
             frame=frame,
-            person_bbox=[float(v) for v in person_box] if person_box is not None else None,
+            person_bbox=_sink_overlay_bbox(overlay_box, person_box),
             lifecycle_tier=display_tier,
             lifecycle_worker_id=person_det.worker_id or None,
             worker_name=person_det.worker_name,
@@ -658,6 +672,7 @@ def _build_patrol_person_detections(
                 frame_h=frame_h,
                 track_id=track_id,
                 crowd_members=crowd_members if peak_active else None,
+                overlay_box=overlay_pb,
             )
         else:
             _assign_patrol_person_display_only(
@@ -666,6 +681,7 @@ def _build_patrol_person_detections(
                 track_id=track_id,
                 frame=frame,
                 person_box=pb,
+                overlay_box=overlay_pb,
             )
         _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)

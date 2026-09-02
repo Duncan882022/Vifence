@@ -124,6 +124,14 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         return None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
+    from ...patrol_person_visibility import patrol_person_overlay_bbox
+
+    frame_w, frame_h = _frame_size_from_obs(obs)
+    draw_bbox = patrol_person_overlay_bbox(
+        tuple(obs.person_bbox),
+        frame_w,
+        frame_h,
+    )
 
     score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
     tier = (obs.lifecycle_tier or "").strip() or None
@@ -136,7 +144,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
     path = sink._maybe_write_snapshot(  # noqa: SLF001
         session.subject_id,
         obs.frame,
-        obs.person_bbox,
+        draw_bbox,
         score=score,
         tier=tier,
         worker_id=worker_id,
@@ -149,7 +157,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         path = sink._write_snapshot(  # noqa: SLF001
             session.subject_id,
             obs.frame,
-            obs.person_bbox,
+            draw_bbox,
             score=score,
             tier=tier,
             worker_id=worker_id,
@@ -305,6 +313,8 @@ def flush_session(
             session.camera_id,
             session.started_at,
             session.last_seen_at,
+            session_id=session.session_id,
+            track_id=session.track_id,
         )
         if overlap_id is not None:
             session.appearance_row_id = overlap_id
@@ -338,8 +348,6 @@ def flush_session(
             db.today_vn(now),
             camera_id=session.camera_id,
         )
-        if finalize:
-            daystore.coalesce_parallel_object_cards(db.today_vn(now))
 
 
 def finalize_session(session: TrackSession) -> None:

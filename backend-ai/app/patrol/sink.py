@@ -173,12 +173,10 @@ def _write_snapshot(
             return None
         h, w = frame.shape[:2]
         x1, y1, x2, y2 = (int(v) for v in bbox[:4])
-        pad_x = int((x2 - x1) * 0.04)
-        pad_y = int((y2 - y1) * 0.04)
-        bx1 = max(0, x1 - pad_x)
-        by1 = max(0, y1 - pad_y)
-        bx2 = min(w, x2 + pad_x)
-        by2 = min(h, y2 + pad_y)
+        bx1 = max(0, x1)
+        by1 = max(0, y1)
+        bx2 = min(w, x2)
+        by2 = min(h, y2)
         if bx2 - bx1 < 16 or by2 - by1 < 16:
             return None
 

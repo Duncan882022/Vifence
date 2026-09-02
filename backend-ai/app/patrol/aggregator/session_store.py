@@ -10,7 +10,7 @@ from .types import TrackSession
 
 _lock = threading.RLock()
 _sessions: dict[str, TrackSession] = {}
-PARALLEL_BBOX_IOU_MIN = 0.08
+PARALLEL_BBOX_IOU_MIN = 0.22
 
 
 def _new_session_id(camera_id: str, track_id: str) -> str:
@@ -141,14 +141,14 @@ def _borrow_parallel_object_subject_locked(
             continue
         if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
             continue
-        if bbox is not None and other.bbox is not None:
-            iou = _bbox_iou(bbox, other.bbox)
-            prox_scale = 1.05 if start_delta <= 15.0 else 0.55
-            if iou < PARALLEL_BBOX_IOU_MIN and not _bbox_parallel_track_proximity(
-                bbox, other.bbox, scale=prox_scale,
-            ):
-                if start_delta > 15.0 or iou < 0.02:
-                    continue
+        if bbox is None or other.bbox is None:
+            continue
+        iou = _bbox_iou(bbox, other.bbox)
+        prox_scale = 0.55 if start_delta > 5.0 else 0.75
+        if iou < PARALLEL_BBOX_IOU_MIN and not _bbox_parallel_track_proximity(
+            bbox, other.bbox, scale=prox_scale,
+        ):
+            continue
         if other.last_seen_at >= best_last:
             best_last = other.last_seen_at
             best = oid
@@ -184,6 +184,8 @@ def resolve_parallel_object_subject(
         )
     if parallel:
         return parallel
+    if bbox is None:
+        return None
     return daystore.find_parallel_object_card(
         event_date, camera_id, started_at, now_ts,
     )

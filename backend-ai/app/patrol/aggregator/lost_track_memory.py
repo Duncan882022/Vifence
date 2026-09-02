@@ -115,7 +115,13 @@ def try_reclaim(
                         continue
                 if bbox is not None and slot.bbox is not None:
                     iou = _bbox_iou(bbox, slot.bbox)
-                    if iou >= REID_IOU_MIN and (best is None or best_score < REID_MIN_COSINE):
+                    if (slot.subject_id or "").startswith("obj-"):
+                        if embedding is not None and slot.embedding is not None:
+                            continue
+                        if iou >= 0.35 and (best is None or best_score < REID_MIN_COSINE):
+                            best = slot
+                            best_score = 0.35
+                    elif iou >= REID_IOU_MIN and (best is None or best_score < REID_MIN_COSINE):
                         best = slot
                         best_score = REID_IOU_MIN
             return best

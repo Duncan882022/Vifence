@@ -30,9 +30,9 @@ PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
 TOUCH_MIN_INTERVAL_SEC = 10.0
 # Hai ByteTrack song song (ptk0001 + ptk0004) trên cùng camera → một thẻ obj-*.
-PARALLEL_OBJ_START_MAX_SEC = 30.0
+PARALLEL_OBJ_START_MAX_SEC = 8.0
 PARALLEL_OBJ_OVERLAP_MIN_RATIO = 0.75
-PARALLEL_OBJ_ACTIVE_SEC = 90.0
+PARALLEL_OBJ_ACTIVE_SEC = 45.0
 
 
 def _person_snapshot_score_floor() -> float:
@@ -333,30 +333,51 @@ def find_overlapping_appearance_row(
     camera_id: str,
     started_at: float,
     ended_at: float,
+    *,
+    session_id: str | None = None,
+    track_id: str | None = None,
 ) -> int | None:
-    """Track song song cùng obj + camera — UPDATE row cũ thay vì INSERT thêm."""
+    """Track song song cùng obj + camera — UPDATE row cũ chỉ khi cùng session hoặc split ByteTrack."""
     cam = (camera_id or "").strip()
     sid = (subject_id or "").strip()
     if not cam or not sid:
         return None
     probe = {"started_at": started_at, "ended_at": ended_at}
+    sess = (session_id or "").strip()
+    tid = (track_id or "").strip()
     rows = db.query(
-        "SELECT id, started_at, ended_at FROM appearances"
+        "SELECT id, started_at, ended_at, track_id, session_id FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC",
         (event_date, sid, cam),
     )
     for row in rows:
-        if _appearance_time_overlap_ratio(dict(row), probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
+        row_dict = dict(row)
+        row_sess = str(row_dict.get("session_id") or "").strip()
+        row_tid = str(row_dict.get("track_id") or "").strip()
+        if sess and row_sess and sess == row_sess:
+            if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
+                return int(row["id"])
+            continue
+        if tid and row_tid and tid == row_tid:
+            if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
+                return int(row["id"])
+            continue
+        row_start = float(row_dict["started_at"])
+        if abs(started_at - row_start) > PARALLEL_OBJ_START_MAX_SEC:
+            continue
+        if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
             return int(row["id"])
     return None
 
 
 def _object_cards_overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    """Hai thẻ obj cùng lượt (track song song) — overlap thời gian + start gần nhau."""
+    """Hai thẻ obj cùng lượt (ByteTrack tách đôi) — start gần nhau + overlap đồng thời."""
     first_a, last_a = float(a["first_seen"]), float(a["last_seen"])
     first_b, last_b = float(b["first_seen"]), float(b["last_seen"])
     if abs(first_a - first_b) > PARALLEL_OBJ_START_MAX_SEC:
+        return False
+    if max(first_a, first_b) >= min(last_a, last_b):
         return False
     overlap = max(0.0, min(last_a, last_b) - max(first_a, first_b))
     min_dur = min(max(last_a - first_a, 1.0), max(last_b - first_b, 1.0))
@@ -764,13 +785,6 @@ def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     if not ta and not tb and not sa and not sb:
         gap = float(b["started_at"]) - float(a["ended_at"])
         return 0 <= gap <= 2.0
-    sid = (subject_id or "").strip()
-    if sid.startswith("obj-"):
-        cam_a = str(a["camera_id"] or "").strip()
-        cam_b = str(b["camera_id"] or "").strip()
-        if cam_a and cam_a == cam_b and ta != tb and sa != sb:
-            if _appearance_time_overlap_ratio(dict(a), dict(b)) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
-                return True
     return False
 
 
