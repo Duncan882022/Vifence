@@ -200,6 +200,16 @@ def flush_session(
         if path:
             session.luot_snapshot_captured = True
 
+    from .identity_pipeline import try_promote_object_after_snapshot
+
+    try_promote_object_after_snapshot(
+        session,
+        obs,
+        snapshot_path=path,
+        snapshot_score=shot_score,
+    )
+    subject_id = session.subject_id or subject_id
+
     skip_appearance = True
     from ...patrol_ids import is_person_subject_id
 

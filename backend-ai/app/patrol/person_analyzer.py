@@ -176,7 +176,6 @@ def _assign_patrol_person_identity(
 
     from ..patrol_identity_lifecycle import observe as observe_track_identity, peek as peek_track_lifecycle
     from ..person_identity_registry import (
-        borrow_cross_camera_patrol_worker,
         peek_patrol_track_identity,
         resolve_patrol_person_identity,
     )
@@ -254,19 +253,9 @@ def _assign_patrol_person_identity(
         if worker_id:
             frame_faces[worker_id] = face_emb
     else:
-        borrowed = borrow_cross_camera_patrol_worker(
-            camera_id,
-            person_bbox,
-            frame=frame,
-            frame_w=frame_w,
-            frame_h=frame_h,
-            face_emb=face_emb,
-        )
         cached = peek_track_lifecycle(camera_id, track_id)
         worker_id = peek_patrol_track_identity(camera_id, track_id)
-        if borrowed:
-            worker_id, worker_name = borrowed
-        elif cached and cached.worker_id:
+        if cached and cached.worker_id:
             worker_id = cached.worker_id or worker_id
             worker_name = cached.worker_name
         else:
@@ -417,24 +406,11 @@ def _assign_patrol_person_display_only(
         person_det.tier = cached.tier
     else:
         from ..patrol_entity import resolve_patrol_worker_display_name
-        from ..person_identity_registry import (
-            borrow_cross_camera_patrol_worker,
-            peek_patrol_track_identity,
-        )
+        from ..person_identity_registry import peek_patrol_track_identity
 
         worker_id = peek_patrol_track_identity(camera_id, track_id) or ""
         worker_name = ""
-        if person_box is not None and frame is not None:
-            borrowed = borrow_cross_camera_patrol_worker(
-                camera_id,
-                person_box,
-                frame=frame,
-                frame_w=int(frame.shape[1]),
-                frame_h=int(frame.shape[0]),
-            )
-            if borrowed:
-                worker_id, worker_name = borrowed
-        if worker_id and not worker_name:
+        if worker_id:
             worker_name = resolve_patrol_worker_display_name(worker_id, "")
         if worker_id:
             from ..patrol_identity_lifecycle import observe as observe_track_identity
