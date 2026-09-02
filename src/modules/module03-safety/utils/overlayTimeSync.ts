@@ -34,6 +34,8 @@ export interface OverlaySyncResult {
 export interface OverlayResolveOptions {
   /** Khi không khớp PDT — lấy snapshot ~N ms trước (patrol HLS). */
   fallbackLagMs?: number
+  /** Hiệu chỉnh lệch đồng hồ client ↔ server (ms). */
+  clientServerSkewMs?: number
 }
 
 function snapshotWallclockMs(snapshot: VmsDetectionSnapshot): number | null {
@@ -83,10 +85,13 @@ export class OverlayTimeBuffer {
   resolve(displayWallclockMs: number | null, opts?: OverlayResolveOptions): OverlaySyncResult {
     const latest = this.latest()
     if (latest === null) return { snapshot: null, matched: false, driftMs: null }
+    const skewMs = opts?.clientServerSkewMs ?? 0
+    const lagMs = opts?.fallbackLagMs
+
     // WHEP / không có PDT — snapshot mới nhất (~300ms), không buffer HLS.
     if (displayWallclockMs === null) {
-      if (opts?.fallbackLagMs != null && opts.fallbackLagMs > 0) {
-        const lagged = this.resolveFallbackLag(opts.fallbackLagMs)
+      if (lagMs != null && lagMs > 0) {
+        const lagged = this.resolveFallbackLag(lagMs, skewMs)
         if (lagged) return lagged
       }
       return { snapshot: latest, matched: false, driftMs: null }
@@ -94,6 +99,8 @@ export class OverlayTimeBuffer {
     if (this.snapshots.length === 1) {
       return { snapshot: latest, matched: false, driftMs: null }
     }
+
+    const adjustedDisplayMs = displayWallclockMs + skewMs
 
     let best = latest
     let bestDrift = Number.POSITIVE_INFINITY
@@ -104,19 +111,19 @@ export class OverlayTimeBuffer {
       const wallclock = snapshotWallclockMs(candidate)
       if (wallclock === null) continue
 
-      const drift = Math.abs(wallclock - displayWallclockMs)
+      const drift = Math.abs(wallclock - adjustedDisplayMs)
       if (drift < bestDrift) {
         bestDrift = drift
         best = candidate
-      } else if (wallclock < displayWallclockMs) {
+      } else if (wallclock < adjustedDisplayMs) {
         // Đi xa dần về quá khứ — không thể tốt hơn nữa.
         break
       }
     }
 
     if (!Number.isFinite(bestDrift) || bestDrift > MAX_MATCH_DRIFT_MS) {
-      if (opts?.fallbackLagMs != null && opts.fallbackLagMs > 0) {
-        const lagged = this.resolveFallbackLag(opts.fallbackLagMs)
+      if (lagMs != null && lagMs > 0) {
+        const lagged = this.resolveFallbackLag(lagMs, skewMs)
         if (lagged) return lagged
       }
       return { snapshot: latest, matched: false, driftMs: null }
@@ -126,11 +133,11 @@ export class OverlayTimeBuffer {
   }
 
   /** Patrol HLS — snapshot ~fallbackLagMs trước thay vì bbox mới nhất (đuổi theo). */
-  private resolveFallbackLag(fallbackLagMs?: number): OverlaySyncResult | null {
+  private resolveFallbackLag(fallbackLagMs?: number, skewMs = 0): OverlaySyncResult | null {
     if (fallbackLagMs == null || fallbackLagMs <= 0 || this.snapshots.length === 0) {
       return null
     }
-    const target = Date.now() - fallbackLagMs
+    const target = Date.now() - skewMs - fallbackLagMs
     let best: VmsDetectionSnapshot | null = null
     let bestDrift = Number.POSITIVE_INFINITY
     for (const candidate of this.snapshots) {

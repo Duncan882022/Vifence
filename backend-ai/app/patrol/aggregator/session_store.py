@@ -149,6 +149,37 @@ def borrow_parallel_object_subject(
         return best
 
 
+def borrow_overlapping_person_subject(
+    camera_id: str,
+    now_ts: float,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> str | None:
+    """Track mới overlap người đã có pers/tk — tránh tạo thêm obj-*."""
+    from .. import daystore
+    from ...patrol_ids import is_person_subject_id
+
+    prefix = f"{camera_id}|"
+    with _lock:
+        best: str | None = None
+        best_last = 0.0
+        for _key, other in _sessions.items():
+            if not _key.startswith(prefix):
+                continue
+            sid = (other.subject_id or "").strip()
+            if not sid or sid.startswith("obj-") or not is_person_subject_id(sid):
+                continue
+            if now_ts - other.last_seen_at > daystore.PARALLEL_OBJ_ACTIVE_SEC:
+                continue
+            if bbox is not None and other.bbox is not None:
+                iou = _bbox_iou(bbox, other.bbox)
+                if iou < PARALLEL_BBOX_IOU_MIN and not _bbox_parallel_track_proximity(bbox, other.bbox):
+                    continue
+            if other.last_seen_at >= best_last:
+                best_last = other.last_seen_at
+                best = sid
+        return best
+
+
 def link_subject_session(session: TrackSession) -> None:
     """Cùng tk-* / pers-* / obj-* + camera — gộp appearance (YOLO tách 2 track một người)."""
     subject_id = (session.subject_id or "").strip()

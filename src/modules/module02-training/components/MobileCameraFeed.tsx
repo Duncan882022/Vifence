@@ -50,7 +50,7 @@ import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hook
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
-import { isPatrolPersonRoiCameraId, isPatrolMetricsCameraId, PATROL_LIVE_ROI_DELAY_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId, isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -130,16 +130,9 @@ export function MobileCameraFeed({
   const vmsPatrolRoiActive = Boolean(
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
-  const mobileVideoClock = useMemo(() => ({
-    getDisplayWallclockMs: () => {
-      const video = videoRef.current
-      if (!video || video.readyState < 2) return null
-      return Date.now() - PATROL_LIVE_ROI_DELAY_MS
-    },
-  }), [roiLayoutTick, status])
   const rawVmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
-  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, vmsPatrolRoiActive ? mobileVideoClock : null, {
-    fallbackLagMs: isPatrolMetricsCameraId(cameraId) ? PATROL_LIVE_ROI_DELAY_MS : undefined,
+  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, null, {
+    useRuntimeLagHint: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId),
   })
   /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
   const patrolLocalRoiEnabled = Boolean(

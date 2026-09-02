@@ -33,8 +33,8 @@ import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import {
   isPatrolPersonRoiCameraId,
   isPatrolMetricsCameraId,
-  PATROL_LIVE_ROI_DELAY_MS,
 } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { getPatrolLiveRoiDelayMs } from '@/services/patrolRuntimeBridge'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   getCameraFeedPosterUrl,
@@ -153,12 +153,13 @@ export function CameraVideoFeed({
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
   )
-  // WHEP (~300ms): snapshot mới nhất. HLS: buffer ~5s khớp PDT / lag fallback.
+  // WHEP (~300ms): snapshot mới nhất. HLS: buffer lag từ BE config.
   const patrolRoiFallbackLagMs = isPatrolMetricsCameraId(cameraId) && videoTransportMode === 'hls'
-    ? PATROL_LIVE_ROI_DELAY_MS
+    ? getPatrolLiveRoiDelayMs()
     : undefined
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock, {
     fallbackLagMs: patrolRoiFallbackLagMs,
+    useRuntimeLagHint: isPatrolMetricsCameraId(cameraId),
   })
 
   const patrolRoiFrameSize = useMemo(() => {

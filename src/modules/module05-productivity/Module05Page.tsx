@@ -22,6 +22,7 @@ import {
   getPatrolCameraFramesLiveMap,
   subscribePatrolCameraFramesLive,
 } from '@/services/patrolCameraFrameBridge'
+import { fetchPatrolRuntimeConfig } from '@/services/patrolRuntimeBridge'
 import {
   type PatrolEvent,
 } from './data/patrolTypes'
@@ -272,6 +273,10 @@ export function Module05Page() {
   useEffect(() => {
     setSidebarCollapsed(true)
   }, [setSidebarCollapsed])
+
+  useEffect(() => {
+    void fetchPatrolRuntimeConfig()
+  }, [])
 
   useEffect(() => {
     return subscribePatrolCameraFramesLive(() => {

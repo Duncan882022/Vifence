@@ -7,6 +7,7 @@
  * nhìn ra hai con số khác nhau.
  */
 import { fetchPatrol, patrolBackendBase, signPatrolSnapshot } from '@/services/patrolApiClient'
+import { setPatrolRuntimeFromPayload } from '@/services/patrolRuntimeBridge'
 
 export type PatrolPersonStatus = 'person' | 'identified'
 
@@ -207,8 +208,19 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     events: Record<string, unknown>[]
     objects: Record<string, unknown>[]
     presences: Record<string, unknown>[]
+    runtime?: Record<string, unknown>
+    subject_aliases?: Record<string, string>
   }>(`/patrol/day/bundle${query}`)
   if (!data?.ok) return null
+
+  if (data.runtime && typeof data.runtime === 'object') {
+    setPatrolRuntimeFromPayload({
+      ...(data.runtime as Record<string, unknown>),
+      subject_aliases: data.subject_aliases,
+    })
+  } else if (data.subject_aliases) {
+    setPatrolRuntimeFromPayload({ subject_aliases: data.subject_aliases })
+  }
 
   const persons = await Promise.all((data.events ?? []).map(async row => ({
     persId: String(row.pers_id ?? ''),

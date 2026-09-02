@@ -5,6 +5,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolTypes'
+import { resolvePatrolSubjectAlias } from '@/services/patrolRuntimeBridge'
 import { getPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
@@ -250,18 +251,22 @@ export function patrolEventMasterEntityKey(event: PatrolEvent): string {
 /** Subject id tra lịch sử xuất hiện — tk-* / obj-* / p-* trong SQLite. */
 export function resolvePatrolAppearanceSubjectId(event: PatrolEvent): string {
   const fromDayCardPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim()
-  if (fromDayCardPers) return fromDayCardPers
+  if (fromDayCardPers) return resolvePatrolSubjectAlias(fromDayCardPers)
 
   const fromDayCardObj = event.id.match(/^obj:(.+)$/i)?.[1]?.trim()
-  if (fromDayCardObj) return fromDayCardObj
+  if (fromDayCardObj) return resolvePatrolSubjectAlias(fromDayCardObj)
 
   const objectId = event.objectId?.trim() ?? ''
-  if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) return objectId
+  if (isPatrolPersId(objectId) || isPatrolObjectId(objectId)) {
+    return resolvePatrolSubjectAlias(objectId)
+  }
   if (isPatrolTrackWorkerId(objectId)) return objectId
   if (isPatrolGalleryWorkerId(objectId)) return objectId
 
   const track = event.trackWorkerId?.trim() ?? ''
-  if (isPatrolPersId(track) || isPatrolObjectId(track)) return track
+  if (isPatrolPersId(track) || isPatrolObjectId(track)) {
+    return resolvePatrolSubjectAlias(track)
+  }
   if (isPatrolTrackWorkerId(track) && !resolvePatrolProfileEntityKey(event)) return track
 
   // Không fallback gallery → tk — tránh gộp lịch sử Unknown ↔ Duncan qua alias.
