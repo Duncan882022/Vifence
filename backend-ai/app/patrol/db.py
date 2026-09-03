@@ -385,6 +385,21 @@ def close() -> None:
         if _conn is not None:
             _conn.close()
             _conn = None
+    _invalidate_derived_caches()
+
+
+def _invalidate_derived_caches() -> None:
+    """Huỷ mọi bảng dựng sẵn suy ra từ kết nối vừa đóng.
+
+    Chỉ mục khuôn mặt sống ở cấp module. Giữ lại sau khi đổi CSDL thì khớp mặt
+    trả về pers_id của CSDL cũ, và lần ghi kế tiếp vỡ khoá ngoại.
+    """
+    try:
+        from . import identity
+
+        identity._invalidate_face_index()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def rows_to_dicts(rows: Iterator[sqlite3.Row]) -> list[dict[str, Any]]:
