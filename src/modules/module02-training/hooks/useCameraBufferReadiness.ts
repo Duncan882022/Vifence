@@ -10,6 +10,7 @@ import type { RefObject } from 'react'
 import {
   clearCameraBufferState,
   getOverlayBufferGate,
+  isCameraOverlayReady,
   reportCameraBufferState,
   subscribeOverlayBufferGate,
   type OverlayBufferGate,
@@ -79,4 +80,14 @@ export function useOverlayBufferGate(): OverlayBufferGate {
     [],
   )
   return useSyncExternalStore(subscribe, getOverlayBufferGate, getOverlayBufferGate)
+}
+
+/** Chỉ chờ đúng tile của mình — tile khác đệm chậm không kéo theo ROI ở đây. */
+export function useCameraOverlayReady(cameraId: string): boolean {
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeOverlayBufferGate(listener),
+    [],
+  )
+  const getSnapshot = useCallback(() => isCameraOverlayReady(cameraId), [cameraId])
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

@@ -50,7 +50,7 @@ import { usePatrolLocalFrameAnalyze } from '@/modules/module05-productivity/hook
 import { patrolPersonMeetsDetectionGate, patrolPersonMeetsDisplayGate, suppressPatrolObjectOverlappingIdentified } from '@/modules/module05-productivity/utils/patrolPersonVisibility'
 import { resolveEffectivePatrolFlightMode, resolvePatrolFlycamGateFlags } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
-import { isPatrolPersonRoiCameraId, isPatrolMetricsCameraId, PATROL_LIVE_ROI_DELAY_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { isPatrolPersonRoiCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { ingestHelmetImu } from '@/modules/module05-productivity/utils/positionEngine'
 
 /** Ngưỡng overlay HC-02 — person từ 0.22 (vàng nếu <0.42). Khớp BE _PERSON_CONF_BODYCAM. */
@@ -131,13 +131,12 @@ export function MobileCameraFeed({
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && isVmsLiveCamera(cameraId) && !isLocalPublisher,
   )
   const rawVmsFeed = useVmsDetectionFeed(cameraId, vmsPatrolRoiActive)
-  /** VMS HLS ~5s lag + runtime hint từ BE — WHEP dùng snapshot mới nhất. */
-  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, null, {
-    fallbackLagMs: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId)
-      ? PATROL_LIVE_ROI_DELAY_MS
-      : undefined,
-    useRuntimeLagHint: vmsPatrolRoiActive && isPatrolMetricsCameraId(cameraId),
-  })
+  /**
+   * Tile này luôn chiếu `MediaStream` (getUserMedia hoặc luồng mượn của trang
+   * Phát sóng) — độ trễ gần bằng 0, không có buffer HLS để bù. Lùi snapshot 5s
+   * ở đây là kéo bbox ra sau người đúng 5 giây; dùng snapshot mới nhất.
+   */
+  const vmsFeed = useSyncedVmsDetections(rawVmsFeed, null, { cameraId })
   /** Local analyze khi legacy-mobile hoặc mũ đang publish từ thiết bị này. */
   const patrolLocalRoiEnabled = Boolean(
     usePatrolPersonRoi && runAiAnalyze && status === 'live' && (!isVmsLiveCamera(cameraId) || isLocalPublisher),

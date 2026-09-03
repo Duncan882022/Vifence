@@ -134,6 +134,24 @@ export function isOverlayBufferGateOpen(): boolean {
 }
 
 /**
+ * Cửa chờ của riêng một camera.
+ *
+ * Cửa chung ở trên chặn cả lưới khi bất kỳ tile nào chưa đệm đủ. Trên điện thoại
+ * — nơi các tile phát lần lượt và một tile mạng yếu là chuyện thường — điều đó
+ * biến thành "cả lưới không có ROI nào". Overlay của một tile chỉ phụ thuộc vào
+ * độ trễ của chính tile đó, nên nó chỉ nên chờ chính nó.
+ *
+ * Camera chưa đăng ký (WHEP, MediaStream cục bộ, tile chưa gắn video) không có
+ * gì để chờ ⇒ sẵn sàng ngay.
+ */
+export function isCameraOverlayReady(cameraId: string): boolean {
+  if (!cameraId) return gate.open
+  const state = states.get(cameraId)
+  if (!state || !state.needsBuffer) return true
+  return state.primed
+}
+
+/**
  * Độ trễ đo được của một camera — dùng thay hằng số 5s khi playlist thiếu
  * PROGRAM-DATE-TIME, vì đây là con số thật của chính luồng đang xem.
  */
