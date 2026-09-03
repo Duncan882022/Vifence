@@ -130,16 +130,16 @@ def is_patrol_track_technical_id(worker_id: str | None) -> bool:
 
 
 def resolve_patrol_gallery_id_for_worker(worker_id: str | None) -> str | None:
-    """tk/p-/alias → mã gallery p-* khi đã bind và còn hồ sơ HR."""
+    """tk/p-/alias → mã gallery p-* khi đã bind (draft hoặc identified)."""
     wid = (worker_id or "").strip()
     if not wid or wid == "unknown" or is_patrol_track_technical_id(wid):
         return None
     if wid.lower().startswith("p-") and is_patrol_gallery_id(wid):
         return wid
     try:
-        from .patrol_identity_store import lookup_gallery_worker
+        from .patrol_identity_store import lookup_gallery_worker_raw
 
-        gallery = lookup_gallery_worker(wid)
+        gallery = lookup_gallery_worker_raw(wid)
         if gallery:
             return gallery
     except Exception:
@@ -255,5 +255,8 @@ def resolve_patrol_worker_display_name(
 
     if wid and is_tk_worker_id(wid):
         return "Người"
+
+    if wname and not is_technical_patrol_worker_label(wname) and wname != wid:
+        return wname
 
     return wid or "Đối tượng"

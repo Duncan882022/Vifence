@@ -436,15 +436,18 @@ def _pers_id_for_lifecycle(
 
     gallery = wid if is_patrol_gallery_id(wid) else resolve_patrol_gallery_id_for_worker(wid)
     if gallery:
-        from ..patrol_identity_store import lookup_patrol_identity
+        from ..patrol_identity_store import lookup_patrol_identity_any
 
-        row = lookup_patrol_identity(gallery)
+        row = lookup_patrol_identity_any(gallery)
         if row:
             emp = str(row.get("employee_code") or "").strip()
             if emp:
                 found = identity.find_by_employee_code(emp)
                 if found:
                     return str(found["pers_id"])
+            resolved = identity.pers_id_for_gallery_worker(gallery)
+            if resolved:
+                return resolved[0]
             hr = identity.hr_profile_for_gallery(gallery)
             if hr:
                 return str(hr["pers_id"])

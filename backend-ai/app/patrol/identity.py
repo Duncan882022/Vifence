@@ -162,9 +162,9 @@ def _hr_scan_face_count(pers_id: str) -> int:
 
 def hr_profile_for_gallery(gallery_worker_id: str) -> dict[str, Any] | None:
     """Hồ sơ HR đã import — gallery/binding không được tự tạo Định danh nếu thiếu bản ghi này."""
-    from ..patrol_identity_store import lookup_patrol_identity
+    from ..patrol_identity_store import lookup_patrol_binding_row
 
-    row = lookup_patrol_identity((gallery_worker_id or "").strip())
+    row = lookup_patrol_binding_row((gallery_worker_id or "").strip())
     if not row:
         return None
     code = str(row.get("employee_code") or "").strip()
@@ -174,6 +174,94 @@ def hr_profile_for_gallery(gallery_worker_id: str) -> dict[str, Any] | None:
     if person and person.get("status") == STATUS_IDENTIFIED:
         return person
     return None
+
+
+def pers_id_for_gallery_worker(gallery_worker_id: str) -> tuple[str, str] | None:
+    """Khớp gallery JPG → pers_id SQLite — draft tk-* hoặc identified p-*."""
+    from ..patrol_identity_store import lookup_patrol_binding_row
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    gid = (gallery_worker_id or "").strip()
+    if not gid:
+        return None
+
+    hr = hr_profile_for_gallery(gid)
+    if hr:
+        return str(hr["pers_id"]), display_name(hr)
+
+    row = lookup_patrol_binding_row(gid)
+    if row:
+        bind_name = str(row.get("worker_name") or "").strip()
+        emp = str(row.get("employee_code") or "").strip()
+        if emp:
+            found = find_by_employee_code(emp)
+            if found:
+                return str(found["pers_id"]), display_name(found)
+        for alias in row.get("aliases") or []:
+            tk = normalize_track_id(str(alias))
+            if not is_anonymous_track_id(tk):
+                continue
+            pid = lookup_profile_by_tk(tk)
+            if pid:
+                person = get_person(pid)
+                name = display_name(person) if person else bind_name or tk
+                return pid, name or tk
+        if bind_name:
+            person = get_person(gid)
+            if person:
+                return gid, display_name(person)
+            return gid, bind_name
+
+    person = get_person(gid)
+    if person:
+        return gid, display_name(person)
+
+    if row:
+        for alias in row.get("aliases") or []:
+            tk = normalize_track_id(str(alias))
+            if is_anonymous_track_id(tk):
+                pid = ensure_draft_for_tk(tk)
+                return pid, tk
+        name = str(row.get("worker_name") or gid).strip() or gid
+        return gid, name
+
+    return None
+
+
+def match_gallery_embedding_for_observe(
+    embedding: Sequence[float],
+    *,
+    camera_id: str | None = None,
+) -> tuple[str | None, float]:
+    """So gallery JPG — trả pers_id draft/identified nếu khớp góc mặt."""
+    import numpy as np
+
+    from ..worker_identity import face_thresholds
+    from ..worker_identity.gallery import load_gallery, match_embedding
+
+    load_gallery()
+    probe = np.asarray(embedding, dtype=np.float32).ravel()
+    norm = float(np.linalg.norm(probe))
+    if norm <= 0:
+        return None, 0.0
+    probe = probe / norm
+
+    cam = (camera_id or "HC-01").strip() or "HC-01"
+    matched = match_embedding(
+        probe,
+        min_confidence=face_thresholds.gallery_min_confidence(cam),
+        min_margin=face_thresholds.gallery_min_margin(cam),
+    )
+    if matched is None:
+        return None, 0.0
+    profile, score = matched
+    gid = str(profile.worker_id or "").strip()
+    if not gid:
+        return None, float(score)
+    resolved = pers_id_for_gallery_worker(gid)
+    if resolved is None:
+        return None, float(score)
+    return resolved[0], float(score)
 
 
 def hr_profile_for_employee_code(employee_code: str) -> dict[str, Any] | None:
@@ -967,6 +1055,30 @@ def observe_face(
     matched, _sim = match_face_for_observe(embedding)
     if matched:
         pid = resolve_alias(matched)
+        with db.tx() as c:
+            c.execute(
+                "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid)
+            )
+        add_face_angle(
+            pid,
+            embedding,
+            quality=quality,
+            camera_id=camera_id,
+            now=ts,
+            frame=frame,
+            person_bbox=person_bbox,
+        )
+        pref = (preferred_tk or "").strip()
+        if pref:
+            bind_tk_profile(pref, pid, now=ts)
+        return pid, False
+
+    gallery_pid, _gallery_sim = match_gallery_embedding_for_observe(
+        embedding,
+        camera_id=camera_id,
+    )
+    if gallery_pid:
+        pid = resolve_alias(gallery_pid)
         with db.tx() as c:
             c.execute(
                 "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid)
