@@ -125,13 +125,26 @@ class PatrolApiTests(unittest.TestCase):
             pers_id, camera_id="HC-01", now=1_000.0,
             gps_lat=10.7721, gps_lng=106.6592,
         )
-        daystore.touch_object(
+        obj_id = daystore.touch_object(
             None, camera_id="HC-02", now=2_000.0,
             gps_lat=10.7725, gps_lng=106.6595,
             snapshot_path="obj.jpg",
             snapshot_score=0.6,
         )
         date = db.today_vn(1_000.0)
+        daystore.record_sighting(
+            event_date=date,
+            subject_id=obj_id,
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk0001:person",
+            session_id="sess-HC-02-a",
+            started_at=2_000.0,
+            ended_at=2_010.0,
+            end_reason="exit_edge",
+            qualified=True,
+            now=2_010.0,
+        )
 
         stats = self.client.get(f"/patrol/day/stats?date={date}").json()
         self.assertTrue(stats["ok"])
