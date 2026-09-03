@@ -29,21 +29,25 @@ class PatrolOverlayBboxTests(unittest.TestCase):
         out = patrol_person_overlay_bbox(overflow, self.FW, self.FH)
         self.assertEqual(out, (0.0, 0.0, float(self.FW), float(self.FH)))
 
-    def test_expands_partial_back_turn_slice(self) -> None:
-        """YOLO quay lưng hay trả mảnh lưng–bụng — ROI phải kéo xuống gần full người."""
+    def test_keeps_partial_back_turn_slice_unchanged(self) -> None:
+        """Quay lưng — khoanh đúng phần thấy được, không đoán thêm chân."""
         upper_back = (420.0, 220.0, 620.0, 420.0)
         out = patrol_person_overlay_bbox(upper_back, self.FW, self.FH)
-        self.assertGreater(out[3] - out[1], upper_back[3] - upper_back[1] + 80.0)
+        self.assertEqual(out, upper_back)
 
-
-    def test_clips_crowd_box_for_snapshot(self) -> None:
-        """YOLO crowd 80% khung — snapshot phải thu ≤40%."""
+    def test_snapshot_bbox_matches_live_overlay(self) -> None:
+        """Ảnh sự kiện và ROI live phải khoanh y hệt nhau."""
         from app.patrol_person_visibility import patrol_snapshot_draw_bbox
 
-        crowd = (0.0, 80.0, 1280.0, 620.0)
-        out = patrol_snapshot_draw_bbox(crowd, self.FW, self.FH)
-        area = (out[2] - out[0]) * (out[3] - out[1]) / (self.FW * self.FH)
-        self.assertLessEqual(area, 0.40)
+        for box in [
+            (0.0, 80.0, 1280.0, 620.0),
+            (420.0, 220.0, 620.0, 420.0),
+            (100.0, 80.0, 220.0, 400.0),
+        ]:
+            self.assertEqual(
+                patrol_snapshot_draw_bbox(box, self.FW, self.FH),
+                patrol_person_overlay_bbox(box, self.FW, self.FH),
+            )
 
     def test_one_jpg_per_card(self) -> None:
         """Cùng thẻ obj — ghi đè 1 file, không spam timestamp."""

@@ -103,8 +103,14 @@ def record_peak_crowd_frame(
     members: list[PeakCrowdMember],
     frame: Any,
     now: float | None = None,
+    *,
+    bbox_scale: tuple[float, float] = (1.0, 1.0),
 ) -> str | None:
-    """Cập nhật snapshot nhóm UI — lượt gặm từng silhouette qua density encounter."""
+    """Cập nhật snapshot nhóm UI — lượt gặm từng silhouette qua density encounter.
+
+    `bbox_scale` đưa bbox từ khung phân tích về khung lưu ảnh khi hai khung khác
+    độ phân giải.
+    """
     if not members:
         return None
     ts = now or time.time()
@@ -118,11 +124,15 @@ def record_peak_crowd_frame(
     from . import daystore
     from .sink import CARD_SNAPSHOT_LUOT, _maybe_write_snapshot, _resolve_observation_gps, snapshot_score
 
+    sx, sy = bbox_scale
+    bx1, by1, bx2, by2 = best.person_bbox[:4]
+    shot_bbox = [bx1 * sx, by1 * sy, bx2 * sx, by2 * sy]
+
     shot_score = snapshot_score(face_quality=0.0, confidence=float(best.confidence))
     path = _maybe_write_snapshot(
         obj_id,
         frame,
-        best.person_bbox,
+        shot_bbox,
         score=shot_score,
         tier="object",
         worker_name=f"Nhóm {len(members)}",

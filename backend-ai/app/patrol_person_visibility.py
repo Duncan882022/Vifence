@@ -286,57 +286,30 @@ def patrol_person_overlay_bbox(
     frame_w: int,
     frame_h: int,
 ) -> tuple[float, float, float, float]:
-    """BBox vẽ ROI patrol — YOLO gốc, clip khung, mở rộng nếu chỉ thấy thân trên."""
-    clipped = _clip_box_to_frame(person_box, frame_w, frame_h)
-    x1, y1, x2, y2 = clipped
-    ph = max(y2 - y1, 1.0)
-    pw = max(x2 - x1, 1.0)
-    aspect = ph / pw
-    bh_ratio = ph / max(float(frame_h), 1.0)
+    """BBox vẽ ROI patrol — đúng khối YOLO tìm thấy, chỉ clip về trong khung.
 
-    # YOLO quay lưng / xa hay trả bbox cắt ngang lưng–bụng — mở xuống chân ước lượng.
-    if aspect < 2.05 and bh_ratio < 0.52:
-        target_h = max(ph * 2.6, frame_h * 0.38 if y1 < frame_h * 0.28 else ph * 2.2)
-        expanded_bottom = min(float(frame_h), y1 + target_h)
-        if expanded_bottom > y2 + ph * 0.12:
-            return _clip_box_to_frame((x1, y1, x2, expanded_bottom), frame_w, frame_h)
+    Không suy đoán phần cơ thể mà mô hình không thấy. Khung ROI là bằng chứng
+    người trực đối chiếu với ảnh: khoanh xuống vùng "chân ước lượng" khiến khung
+    trùm cả nền sàn, còn thu khung về tâm cho ảnh đám đông thì cắt mất chính
+    người đang được ghi. Cả hai đều làm ROI không còn khớp với thứ nhìn thấy.
 
-    return clipped
+    Người quay lưng hoặc bị che nửa dưới thì khung chỉ bao phần thấy được — đó
+    là mô tả trung thực, không phải thiếu sót.
+    """
+    return _clip_box_to_frame(person_box, frame_w, frame_h)
 
 
 def patrol_snapshot_draw_bbox(
     person_box: tuple[float, float, float, float],
     frame_w: int,
     frame_h: int,
-    *,
-    max_area_ratio: float = 0.38,
-    max_height_ratio: float = 0.55,
 ) -> tuple[float, float, float, float]:
-    """BBox vẽ lên JPG snapshot — không để YOLO crowd phủ 60–80% khung."""
-    box = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
-    x1, y1, x2, y2 = box
-    fw, fh = max(float(frame_w), 1.0), max(float(frame_h), 1.0)
-    pw, ph = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
-    area_ratio = (pw * ph) / (fw * fh)
-    bh_ratio = ph / fh
+    """BBox vẽ lên JPG snapshot — **cùng một khung** với ROI live.
 
-    if area_ratio <= max_area_ratio and bh_ratio <= max_height_ratio:
-        return box
-
-    cx = (x1 + x2) / 2.0
-    cy = (y1 + y2) / 2.0
-    target_h = min(ph, fh * max_height_ratio)
-    target_w = min(pw, fw * 0.42)
-    if area_ratio > max_area_ratio:
-        side = (max_area_ratio * fw * fh) ** 0.5
-        target_h = min(target_h, side)
-        target_w = min(target_w, side * 0.75)
-
-    nx1 = cx - target_w / 2.0
-    nx2 = cx + target_w / 2.0
-    ny1 = cy - target_h * 0.45
-    ny2 = cy + target_h * 0.55
-    return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+    Ảnh sự kiện và khung trên video phải khoanh y hệt nhau; lệch nhau thì người
+    trực không đối chiếu được thẻ với cảnh đang xem.
+    """
+    return patrol_person_overlay_bbox(person_box, frame_w, frame_h)
 
 
 def patrol_person_meets_display_gate(

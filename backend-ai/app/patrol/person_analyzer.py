@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
+from typing import NamedTuple
 
 import numpy as np
 
@@ -111,6 +113,46 @@ def _sink_overlay_bbox(
     return [float(v) for v in target]
 
 
+class SnapshotSource(NamedTuple):
+    """Khung hình dùng để lưu ảnh bằng chứng, kèm tỉ lệ so với khung phân tích.
+
+    Khung đưa vào YOLO có thể đã bị hạ độ phân giải cho kịp tốc độ, nhưng ảnh sự
+    kiện phải là khung gốc — nếu không, ROI trên thẻ và ROI trên video là hai
+    khung hình khác nhau và người trực không đối chiếu được.
+    """
+
+    frame: np.ndarray
+    scale_x: float
+    scale_y: float
+
+    def bbox(self, box: Sequence[float] | None) -> list[float] | None:
+        if box is None:
+            return None
+        if self.scale_x == 1.0 and self.scale_y == 1.0:
+            return [float(v) for v in box]
+        x1, y1, x2, y2 = box[:4]
+        return [
+            float(x1) * self.scale_x,
+            float(y1) * self.scale_y,
+            float(x2) * self.scale_x,
+            float(y2) * self.scale_y,
+        ]
+
+
+def resolve_snapshot_source(
+    analyze_frame: np.ndarray,
+    capture_frame: np.ndarray | None,
+) -> SnapshotSource:
+    """Chọn khung lưu ảnh — ưu tiên khung gốc chưa hạ độ phân giải."""
+    if capture_frame is None or capture_frame is analyze_frame:
+        return SnapshotSource(analyze_frame, 1.0, 1.0)
+    ah, aw = analyze_frame.shape[:2]
+    ch, cw = capture_frame.shape[:2]
+    if aw <= 0 or ah <= 0:
+        return SnapshotSource(analyze_frame, 1.0, 1.0)
+    return SnapshotSource(capture_frame, cw / aw, ch / ah)
+
+
 def _record_patrol_density_encounter(
     person_det: PpeDetection,
     *,
@@ -162,6 +204,7 @@ def _assign_patrol_person_identity(
     track_id: str | None,
     crowd_members: list | None = None,
     overlay_box: tuple[float, float, float, float] | None = None,
+    snapshot: SnapshotSource | None = None,
 ) -> None:
     """HC-* / DR-* — gán sgc hoặc để trống (Đối tượng) lên detection trả về FE."""
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
@@ -171,6 +214,7 @@ def _assign_patrol_person_identity(
 
     person_bbox = [float(v) for v in person_box]
     sink_bbox = _sink_overlay_bbox(overlay_box, person_box)
+    shot = snapshot or SnapshotSource(frame, 1.0, 1.0)
 
     if _is_patrol_flycam(camera_id):
         from ..patrol_flight_mode import is_patrol_flycam_aerial
@@ -180,8 +224,8 @@ def _assign_patrol_person_identity(
                 person_det,
                 camera_id=camera_id,
                 track_id=track_id,
-                frame=frame,
-                person_bbox=sink_bbox or person_bbox,
+                frame=shot.frame,
+                person_bbox=shot.bbox(sink_bbox or person_bbox) or person_bbox,
                 confidence=float(person_det.confidence or 0.0),
             )
             return
@@ -314,8 +358,8 @@ def _assign_patrol_person_identity(
             face_quality=float(_face_score or 0.0),
             face_eligible=bool(person_det.face_eligible),
             confidence=float(person_det.confidence or 0.0),
-            frame=frame,
-            person_bbox=sink_bbox,
+            frame=shot.frame,
+            person_bbox=shot.bbox(sink_bbox),
             lifecycle_tier=display_tier,
             lifecycle_worker_id=resolved.worker_id,
             worker_name=resolved.worker_name,
@@ -406,6 +450,7 @@ def _assign_patrol_person_display_only(
     frame: np.ndarray | None = None,
     person_box: tuple[float, float, float, float] | None = None,
     overlay_box: tuple[float, float, float, float] | None = None,
+    snapshot: SnapshotSource | None = None,
 ) -> None:
     """ROI-only — giữ nhãn cache; touch sink (min-commit ngắn, 2s = frame đẹp)."""
     if not track_id:
@@ -448,6 +493,10 @@ def _assign_patrol_person_display_only(
         display_tier = inferred
     person_det.tier = display_tier
 
+    shot = snapshot
+    if shot is None and frame is not None:
+        shot = SnapshotSource(frame, 1.0, 1.0)
+
     try:
         from .sink import record_observation
 
@@ -455,8 +504,12 @@ def _assign_patrol_person_display_only(
             camera_id=camera_id,
             track_id=track_id,
             confidence=float(person_det.confidence or 0.0),
-            frame=frame,
-            person_bbox=_sink_overlay_bbox(overlay_box, person_box),
+            frame=shot.frame if shot is not None else None,
+            person_bbox=(
+                shot.bbox(_sink_overlay_bbox(overlay_box, person_box))
+                if shot is not None
+                else _sink_overlay_bbox(overlay_box, person_box)
+            ),
             lifecycle_tier=display_tier,
             lifecycle_worker_id=person_det.worker_id or None,
             worker_name=person_det.worker_name,
@@ -469,6 +522,7 @@ def _build_patrol_bodycam_result(
     camera_id: str,
     *,
     source_pts_sec: float | None = None,
+    capture_frame: np.ndarray | None = None,
 ) -> dict:
     """Helmet bodycam path — person detection + patrol identity, zero PPE model inference.
 
@@ -511,6 +565,7 @@ def _build_patrol_bodycam_result(
         h,
         source_pts_sec=source_pts_sec,
         raw_yolo_boxes=[p.person_box for p in raw_persons],
+        capture_frame=capture_frame,
     )
 
     from .peak_time import is_peak_time
@@ -616,6 +671,7 @@ def _build_patrol_person_detections(
     *,
     source_pts_sec: float | None = None,
     raw_yolo_boxes: list[tuple[float, float, float, float]] | None = None,
+    capture_frame: np.ndarray | None = None,
 ) -> list[PpeDetection]:
     """Dựng detection người cho camera tuần tra — dùng chung bodycam và flycam.
 
@@ -645,6 +701,7 @@ def _build_patrol_person_detections(
 
     detections: list[PpeDetection] = []
     raw_boxes = list(raw_yolo_boxes or [])
+    shot = resolve_snapshot_source(frame, capture_frame)
     for person_index, person in enumerate(persons):
         pb = person.person_box
         from ..patrol_person_visibility import patrol_person_overlay_bbox
@@ -673,6 +730,7 @@ def _build_patrol_person_detections(
                 track_id=track_id,
                 crowd_members=crowd_members if peak_active else None,
                 overlay_box=overlay_pb,
+                snapshot=shot,
             )
         else:
             _assign_patrol_person_display_only(
@@ -682,6 +740,7 @@ def _build_patrol_person_detections(
                 frame=frame,
                 person_box=pb,
                 overlay_box=overlay_pb,
+                snapshot=shot,
             )
         _attach_track_velocity(person_det, camera_id, track_id)
         detections.append(person_det)
@@ -690,7 +749,8 @@ def _build_patrol_person_detections(
         obj_id = record_peak_crowd_frame(
             camera_id,
             crowd_members,
-            frame,
+            shot.frame,
+            bbox_scale=(shot.scale_x, shot.scale_y),
         )
         if obj_id:
             assign_peak_crowd_detection_fields(detections, crowd_members, obj_id)
@@ -743,6 +803,7 @@ def _build_patrol_flycam_aerial_result(
     camera_id: str,
     *,
     source_pts_sec: float | None = None,
+    capture_frame: np.ndarray | None = None,
 ) -> dict:
     """Flycam tầm cao — YOLO person + mật độ; không face-anchor / gallery."""
     detector = _get_person_detector()
@@ -761,7 +822,13 @@ def _build_patrol_flycam_aerial_result(
     )
 
     detections = _build_patrol_person_detections(
-        frame, camera_id, persons, w, h, source_pts_sec=source_pts_sec,
+        frame,
+        camera_id,
+        persons,
+        w,
+        h,
+        source_pts_sec=source_pts_sec,
+        capture_frame=capture_frame,
     )
     person_dets = [d for d in detections if d.behavior == "person"]
     track_ids = {d.track_id for d in person_dets if d.track_id}
@@ -794,6 +861,7 @@ def _build_patrol_flycam_proximity_result(
     camera_id: str,
     *,
     source_pts_sec: float | None = None,
+    capture_frame: np.ndarray | None = None,
 ) -> dict:
     """Flycam tầm thấp — AI như mũ: face-anchor, identity, gate rộng hơn."""
     detector = _get_person_detector()
@@ -832,6 +900,7 @@ def _build_patrol_flycam_proximity_result(
         h,
         source_pts_sec=source_pts_sec,
         raw_yolo_boxes=[p.person_box for p in raw_persons],
+        capture_frame=capture_frame,
     )
 
     return {

@@ -28,19 +28,30 @@ def analyze_patrol_frame(
     camera_id: str,
     *,
     source_pts_sec: float | None = None,
+    capture_frame: np.ndarray | None = None,
 ) -> dict:
-    """HC-* bodycam hoặc DR-* flycam — person-only, ghi sự kiện qua patrol/sink."""
+    """HC-* bodycam hoặc DR-* flycam — person-only, ghi sự kiện qua patrol/sink.
+
+    `frame` là khung đưa vào YOLO (có thể đã hạ độ phân giải cho kịp tốc độ),
+    `capture_frame` là khung gốc dùng làm ảnh bằng chứng.
+    """
     if _is_patrol_flycam(camera_id):
         if get_patrol_drone_altitude_m(camera_id) is None:
             _flycam_prescan_for_flight_mode(frame, camera_id)
         mode = resolve_patrol_flight_mode(camera_id)
         if mode == PatrolFlightMode.PROXIMITY:
             result = _build_patrol_bodycam_result(
-                frame, camera_id, source_pts_sec=source_pts_sec,
+                frame,
+                camera_id,
+                source_pts_sec=source_pts_sec,
+                capture_frame=capture_frame,
             )
         else:
             result = _build_patrol_flycam_aerial_result(
-                frame, camera_id, source_pts_sec=source_pts_sec,
+                frame,
+                camera_id,
+                source_pts_sec=source_pts_sec,
+                capture_frame=capture_frame,
             )
             from .drone_heatmap import ingest_drone_detections
 
@@ -70,7 +81,12 @@ def analyze_patrol_frame(
         metrics.update(patrol_flight_mode_payload(camera_id))
         result["metrics"] = metrics
         return result
-    return _build_patrol_bodycam_result(frame, camera_id, source_pts_sec=source_pts_sec)
+    return _build_patrol_bodycam_result(
+        frame,
+        camera_id,
+        source_pts_sec=source_pts_sec,
+        capture_frame=capture_frame,
+    )
 
 
 class PatrolEngine:
@@ -92,11 +108,11 @@ class PatrolEngine:
         capture_frame: np.ndarray | None = None,
         source_pts_sec: float | None = None,
     ) -> tuple[dict, list]:
-        _ = capture_frame
         result = analyze_patrol_frame(
             frame,
             camera_id,
             source_pts_sec=source_pts_sec,
+            capture_frame=capture_frame,
         )
         return result, []
 

@@ -80,17 +80,20 @@ def audit_dr03_multi_person() -> CaseResult:
 
 
 def audit_snapshot_roi_clamp() -> CaseResult:
-    from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+    from app.patrol_person_visibility import (
+        patrol_person_overlay_bbox,
+        patrol_snapshot_draw_bbox,
+    )
 
     fw, fh = 1290, 658
     crowd = (0.0, 80.0, 1280.0, 620.0)
     out = patrol_snapshot_draw_bbox(crowd, fw, fh)
-    ratio = _bbox_area_ratio(out, fw, fh)
-    ok = ratio <= 0.40
+    live = patrol_person_overlay_bbox(crowd, fw, fh)
+    ok = out == live
     return CaseResult(
-        "snapshot_roi_clamp",
+        "snapshot_roi_matches_live",
         ok,
-        f"crowd area={ratio:.2f} (max 0.40) out={tuple(round(v, 1) for v in out)}",
+        f"snapshot={tuple(round(v, 1) for v in out)} live={tuple(round(v, 1) for v in live)}",
     )
 
 
