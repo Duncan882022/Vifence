@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   PATROL_SITE_BOUNDARY_RING,
+  PATROL_SITE_PINCH_NORTH,
+  PATROL_SITE_PINCH_SOUTH,
+  PATROL_SITE_TIP_A,
+  PATROL_SITE_TIP_B,
   PATROL_SURVEY_PIN,
   isPointInSiteBoundary,
 } from '../data/patrolSiteGeometry'
@@ -16,9 +20,25 @@ import {
   buildPatrolZoneDividerLines,
 } from '../data/patrolSiteMap'
 
-describe('patrolSiteGeometry capsule', () => {
-  it('boundary là capsule — nhiều đỉnh + 2 đầu tròn', () => {
-    expect(PATROL_SITE_BOUNDARY_RING.length).toBeGreaterThan(40)
+function minDistToRing(lat: number, lng: number, ring: [number, number][]): number {
+  return Math.min(...ring.map(([la, ln]) => Math.hypot(la - lat, ln - lng)))
+}
+
+describe('patrolSiteGeometry curved corridor', () => {
+  it('boundary cong — nhiều đỉnh + 2 đầu bo tròn', () => {
+    expect(PATROL_SITE_BOUNDARY_RING.length).toBeGreaterThan(80)
+  })
+
+  it('4 điểm neo GPS khớp viền đỏ (≤250m)', () => {
+    const maxDeg = 0.0023
+    for (const [lat, lng] of [
+      PATROL_SITE_TIP_A,
+      PATROL_SITE_TIP_B,
+      PATROL_SITE_PINCH_SOUTH,
+      PATROL_SITE_PINCH_NORTH,
+    ]) {
+      expect(minDistToRing(lat, lng, PATROL_SITE_BOUNDARY_RING)).toBeLessThan(maxDeg)
+    }
   })
 
   it('ghim khảo sát nằm trong viền dự án và ZONE_3', () => {

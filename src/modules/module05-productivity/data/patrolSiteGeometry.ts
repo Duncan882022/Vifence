@@ -2,42 +2,53 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Dự án Cầu Sông Hốt — capsule 2 đầu tròn (khảo sát CT06 Quảng Yên).
- * Ghim tham chiếu zone 3: 20°55'42.4"N 106°52'25.0"E.
+ * Dự án Cầu Sông Hốt — hành lang CT06 cong theo khảo sát (4 điểm neo GPS).
  */
 
 const M_PER_DEG_LAT = 111_320
 
-/** Ghim khảo sát Bùi Xá — nằm trong ZONE_3. */
+/** Bo tròn A — đỉnh tây (Đình Trung Bản). */
+export const PATROL_SITE_TIP_A: [number, number] = [20.907474, 106.830878]
+
+/** Bo tròn B — đỉnh đông (Bệnh viện Sản Nhi). */
+export const PATROL_SITE_TIP_B: [number, number] = [20.962517, 106.945303]
+
+/** Điểm thắt dưới — mép nam (Đảo Hoàng Tân). */
+export const PATROL_SITE_PINCH_SOUTH: [number, number] = [20.928673, 106.893158]
+
+/** Điểm thắt trên — mép bắc. */
+export const PATROL_SITE_PINCH_NORTH: [number, number] = [20.953546, 106.879254]
+
+/** Ghim khảo sát Bùi Xá — DR-03 / ZONE_3. */
 export const PATROL_SURVEY_PIN: [number, number] = [20.928444, 106.873611]
 
-/** 4 góc điều khiển bilinear (TL→TR→BR→BL) — căn viền đỏ + neo ghim Bùi Xá vào ZONE_3. */
-export const PATROL_SITE_CORNERS: [number, number][] = [
-  [20.9462, 106.8395],
-  [20.9445, 106.9375],
-  [20.9165, 106.9365],
-  [20.9180, 106.8385],
+/** Lượn nam ghim Bùi Xá — mép nam cong vào trong theo ảnh khảo sát. */
+export const PATROL_SURVEY_SOUTH_BEND: [number, number] = [
+  parseFloat((PATROL_SURVEY_PIN[0] - 0.0018).toFixed(6)),
+  PATROL_SURVEY_PIN[1],
 ]
 
-const SITE_TOP = PATROL_SITE_CORNERS[0]
-const SITE_RIGHT = PATROL_SITE_CORNERS[1]
-const SITE_BOTTOM = PATROL_SITE_CORNERS[2]
-const SITE_LEFT = PATROL_SITE_CORNERS[3]
+/** Bbox bilinear legacy — zoom / fallback. */
+export const PATROL_SITE_CORNERS: [number, number][] = [
+  [
+    Math.max(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_NORTH[0]),
+    Math.min(PATROL_SITE_TIP_A[1], PATROL_SITE_PINCH_SOUTH[1]),
+  ],
+  [
+    Math.max(PATROL_SITE_TIP_B[0], PATROL_SITE_PINCH_NORTH[0]),
+    Math.max(PATROL_SITE_TIP_B[1], PATROL_SITE_PINCH_SOUTH[1]),
+  ],
+  [
+    Math.min(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_SOUTH[0]),
+    Math.max(PATROL_SITE_TIP_B[1], PATROL_SITE_PINCH_SOUTH[1]),
+  ],
+  [
+    Math.min(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_SOUTH[0]),
+    Math.min(PATROL_SITE_TIP_A[1], PATROL_SITE_PINCH_SOUTH[1]),
+  ],
+]
 
-function sitePoint(u: number, v: number): [number, number] {
-  const lat =
-    (1 - u) * (1 - v) * SITE_TOP[0] +
-    u * (1 - v) * SITE_RIGHT[0] +
-    u * v * SITE_BOTTOM[0] +
-    (1 - u) * v * SITE_LEFT[0]
-  const lng =
-    (1 - u) * (1 - v) * SITE_TOP[1] +
-    u * (1 - v) * SITE_RIGHT[1] +
-    u * v * SITE_BOTTOM[1] +
-    (1 - u) * v * SITE_LEFT[1]
-  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
-}
-
+const CAP_RADIUS_SCALE_WEST = 0.35
 function latLngToEnu(
   lat: number,
   lng: number,
@@ -62,6 +73,35 @@ function enuToLatLng(
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
+function lerpPt(a: [number, number], b: [number, number], t: number): [number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+}
+
+function subPt(a: [number, number], b: [number, number]): [number, number] {
+  return [a[0] - b[0], a[1] - b[1]]
+}
+
+function addPt(a: [number, number], b: [number, number]): [number, number] {
+  return [a[0] + b[0], a[1] + b[1]]
+}
+
+function scalePt(v: [number, number], s: number): [number, number] {
+  return [v[0] * s, v[1] * s]
+}
+
+function normalizePt(v: [number, number]): [number, number] {
+  const len = Math.hypot(v[0], v[1]) || 1
+  return [v[0] / len, v[1] / len]
+}
+
+function perpPt(v: [number, number]): [number, number] {
+  return [-v[1], v[0]]
+}
+
+function dotPt(a: [number, number], b: [number, number]): number {
+  return a[0] * b[0] + a[1] * b[1]
+}
+
 type LngLat = [number, number] // [lng, lat]
 
 function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
@@ -69,123 +109,240 @@ function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy:
 }
 
 function isInsideSiteRing(lat: number, lng: number, ring: [number, number][]): boolean {
-  const p: LngLat = [lng, lat]
-  const clipRing: LngLat[] = ring.map(([la, ln]) => [ln, la])
-  for (let i = 0; i < clipRing.length; i += 1) {
-    const a = clipRing[i]
-    const b = clipRing[(i + 1) % clipRing.length]
-    if (cross2d(a[0], a[1], b[0], b[1], p[0], p[1]) > 1e-11) return false
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [yi, xi] = ring[i]
+    const [yj, xj] = ring[j]
+    const intersects = (yi > lat) !== (yj > lat)
+      && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    if (intersects) inside = !inside
   }
-  return true
+  return inside
 }
 
-/**
- * Stadium / capsule — 2 nửa hình tròn ở 2 đầu + 2 cạnh thẳng song song.
- * Trục dọc CT06 (tây → đông); bán kính = max khoảng cách vuông góc tới trục.
- */
-export function buildStadiumCapsuleRing(
-  westCenter: [number, number],
-  eastCenter: [number, number],
-  envelopePoints: [number, number][],
-  arcSteps = 28,
+/** Catmull-Rom — mép nam/bắc cong qua điểm neo. */
+function catmullRomChain(
+  points: [number, number][],
+  samplesPerSeg = 22,
 ): [number, number][] {
-  const refLat = (westCenter[0] + eastCenter[0]) / 2
-  const refLng = (westCenter[1] + eastCenter[1]) / 2
+  const out: [number, number][] = []
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(0, i - 1)]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[Math.min(points.length - 1, i + 2)]
+    for (let s = 0; s < samplesPerSeg; s += 1) {
+      const t = s / samplesPerSeg
+      const t2 = t * t
+      const t3 = t2 * t
+      out.push([
+        0.5
+          * ((2 * p1[0])
+            + (-p0[0] + p2[0]) * t
+            + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
+            + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5
+          * ((2 * p1[1])
+            + (-p0[1] + p2[1]) * t
+            + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
+            + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ])
+    }
+  }
+  out.push(points[points.length - 1])
+  return out
+}
 
-  const [wx, wy] = latLngToEnu(westCenter[0], westCenter[1], refLat, refLng)
-  const [ex, ey] = latLngToEnu(eastCenter[0], eastCenter[1], refLat, refLng)
+/** Nửa hình tròn 2 đầu — cung đi qua đỉnh bo A/B. */
+function capArcThroughApex(
+  apex: [number, number],
+  south: [number, number],
+  north: [number, number],
+  steps = 26,
+): [number, number][] {
+  const mid = lerpPt(south, north, 0.5)
+  const inward = normalizePt(subPt(mid, apex))
+  const radius = Math.abs(dotPt(subPt(mid, apex), inward))
+  const center = addPt(apex, scalePt(inward, radius))
+  const angleSouth = Math.atan2(south[1] - center[1], south[0] - center[0])
+  const angleNorth = Math.atan2(north[1] - center[1], north[0] - center[0])
+  const angleApex = Math.atan2(apex[1] - center[1], apex[0] - center[0])
 
-  const axisLen = Math.hypot(ex - wx, ey - wy)
-  if (axisLen < 50) {
-    return envelopePoints.length >= 4
-      ? [...envelopePoints]
-      : [westCenter, eastCenter, westCenter]
+  let sweepShort = angleNorth - angleSouth
+  while (sweepShort <= 0) sweepShort += Math.PI * 2
+  const sweepLong = sweepShort - Math.PI * 2
+
+  function sweepContainsApex(sweep: number): boolean {
+    for (let k = 0; k <= 100; k += 1) {
+      const ang = angleSouth + sweep * (k / 100)
+      let delta = ang - angleApex
+      while (delta > Math.PI) delta -= Math.PI * 2
+      while (delta < -Math.PI) delta += Math.PI * 2
+      if (Math.abs(delta) < 0.05) return true
+    }
+    return false
   }
 
-  const ux = (ex - wx) / axisLen
-  const uy = (ey - wy) / axisLen
-  const px = -uy
-  const py = ux
-
-  let r = 0
-  for (const [lat, lng] of envelopePoints) {
-    const [x, y] = latLngToEnu(lat, lng, refLat, refLng)
-    const perp = Math.abs((x - wx) * px + (y - wy) * py)
-    if (perp > r) r = perp
-  }
-  if (r < 80) r = 800
-
-  const wcx = wx + ux * r
-  const wcy = wy + uy * r
-  const ecx = ex - ux * r
-  const ecy = ey - uy * r
-
-  const ringEnu: [number, number][] = []
-  const straightSteps = Math.max(10, Math.round(axisLen / 350))
-
-  for (let i = 0; i <= straightSteps; i += 1) {
-    const t = i / straightSteps
-    ringEnu.push([
-      wcx + (ecx - wcx) * t + px * r,
-      wcy + (ecy - wcy) * t + py * r,
+  const sweep = sweepContainsApex(sweepShort) ? sweepShort : sweepLong
+  const pts: [number, number][] = []
+  for (let i = 0; i <= steps; i += 1) {
+    const ang = angleSouth + (sweep * i) / steps
+    pts.push([
+      center[0] + radius * Math.cos(ang),
+      center[1] + radius * Math.sin(ang),
     ])
   }
+  return pts
+}
 
-  for (let i = 1; i <= arcSteps; i += 1) {
-    const angle = (Math.PI * i) / arcSteps
-    ringEnu.push([
-      ecx + r * Math.cos(angle) * px + r * Math.sin(angle) * ux,
-      ecy + r * Math.cos(angle) * py + r * Math.sin(angle) * uy,
-    ])
+interface ArcLengthTable {
+  curve: [number, number][]
+  cumulative: number[]
+  total: number
+}
+
+function buildArcLengthTable(curve: [number, number][]): ArcLengthTable {
+  const cumulative = [0]
+  for (let i = 1; i < curve.length; i += 1) {
+    cumulative.push(
+      cumulative[i - 1]
+        + Math.hypot(curve[i][0] - curve[i - 1][0], curve[i][1] - curve[i - 1][1]),
+    )
+  }
+  return { curve, cumulative, total: cumulative[cumulative.length - 1] ?? 0 }
+}
+
+function pointAtArcU(table: ArcLengthTable, u: number): [number, number] {
+  if (table.curve.length === 0) return [0, 0]
+  if (table.total <= 0) return table.curve[0]
+  const target = Math.max(0, Math.min(1, u)) * table.total
+  let i = 1
+  while (i < table.cumulative.length && table.cumulative[i] < target) i += 1
+  const i0 = Math.max(0, i - 1)
+  const span = table.cumulative[i] - table.cumulative[i0]
+  const frac = span > 0 ? (target - table.cumulative[i0]) / span : 0
+  const a = table.curve[i0]
+  const b = table.curve[Math.min(table.curve.length - 1, i)]
+  return [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac]
+}
+
+interface CurvedCorridorModel {
+  ring: [number, number][]
+  southTable: ArcLengthTable
+  northTable: ArcLengthTable
+  refLat: number
+  refLng: number
+}
+
+function buildCurvedCorridorModel(): CurvedCorridorModel {
+  const refLat = (PATROL_SITE_TIP_A[0] + PATROL_SITE_TIP_B[0]) / 2
+  const refLng = (PATROL_SITE_TIP_A[1] + PATROL_SITE_TIP_B[1]) / 2
+
+  const tipA = latLngToEnu(PATROL_SITE_TIP_A[0], PATROL_SITE_TIP_A[1], refLat, refLng)
+  const tipB = latLngToEnu(PATROL_SITE_TIP_B[0], PATROL_SITE_TIP_B[1], refLat, refLng)
+  const pinchS = latLngToEnu(PATROL_SITE_PINCH_SOUTH[0], PATROL_SITE_PINCH_SOUTH[1], refLat, refLng)
+  const pinchN = latLngToEnu(PATROL_SITE_PINCH_NORTH[0], PATROL_SITE_PINCH_NORTH[1], refLat, refLng)
+  const southBend = latLngToEnu(PATROL_SURVEY_SOUTH_BEND[0], PATROL_SURVEY_SOUTH_BEND[1], refLat, refLng)
+  const survey = latLngToEnu(PATROL_SURVEY_PIN[0], PATROL_SURVEY_PIN[1], refLat, refLng)
+
+  const midPinch = lerpPt(pinchS, pinchN, 0.5)
+
+  const spineControls: [number, number][] = [
+    tipA,
+    lerpPt(tipA, survey, 0.55),
+    lerpPt(survey, midPinch, 0.45),
+    lerpPt(midPinch, tipB, 0.55),
+    tipB,
+  ]
+  const spine = catmullRomChain(spineControls, 18)
+
+  const halfSouthKeys = [
+    { t: 0, half: 1200 },
+    { t: 0.43, half: Math.hypot(southBend[0] - survey[0], southBend[1] - survey[1]) },
+    { t: 0.56, half: 1230 },
+    { t: 1, half: 1150 },
+  ]
+  const halfNorthKeys = [
+    { t: 0, half: 1100 },
+    { t: 0.56, half: 1900 },
+    { t: 1, half: 1200 },
+  ]
+
+  function halfAt(keys: { t: number; half: number }[], t: number): number {
+    let half = keys[keys.length - 1].half
+    for (let k = 0; k < keys.length - 1; k += 1) {
+      const a = keys[k]
+      const b = keys[k + 1]
+      if (t >= a.t && t <= b.t) {
+        const f = (t - a.t) / Math.max(1e-6, b.t - a.t)
+        half = a.half + (b.half - a.half) * f
+        break
+      }
+    }
+    return half
   }
 
-  for (let i = straightSteps - 1; i >= 0; i -= 1) {
-    const t = i / straightSteps
-    ringEnu.push([
-      wcx + (ecx - wcx) * t - px * r,
-      wcy + (ecy - wcy) * t - py * r,
-    ])
+  const southEdge: [number, number][] = []
+  const northEdge: [number, number][] = []
+  const n = spine.length
+
+  for (let i = 0; i < n; i += 1) {
+    const t = i / Math.max(1, n - 1)
+    const halfS = halfAt(halfSouthKeys, t)
+    const halfN = halfAt(halfNorthKeys, t)
+
+    const prev = spine[Math.max(0, i - 1)]
+    const next = spine[Math.min(n - 1, i + 1)]
+    const tangent = normalizePt(subPt(next, prev))
+    const normal = perpPt(tangent)
+
+    southEdge.push(addPt(spine[i], scalePt(normal, -halfS)))
+    northEdge.push(addPt(spine[i], scalePt(normal, halfN)))
   }
 
-  for (let i = 1; i <= arcSteps - 1; i += 1) {
-    const angle = Math.PI + (Math.PI * i) / arcSteps
-    ringEnu.push([
-      wcx + r * Math.cos(angle) * px + r * Math.sin(angle) * ux,
-      wcy + r * Math.cos(angle) * py + r * Math.sin(angle) * uy,
-    ])
-  }
+  const westCap = capArcThroughApex(tipA, southEdge[0], northEdge[0], 24)
+  const eastCap = capArcThroughApex(tipB, northEdge[n - 1], southEdge[n - 1], 24)
 
-  let ring = ringEnu.map(([e, n]) => enuToLatLng(e, n, refLat, refLng))
-  const probe = envelopePoints[envelopePoints.length - 1] ?? westCenter
-  if (!isInsideSiteRing(probe[0], probe[1], ring)) {
+  const ringEnu: [number, number][] = [
+    ...westCap.slice(0, -1),
+    ...northEdge.slice(1, -1),
+    ...eastCap.slice(0, -1),
+    ...southEdge.slice(1).reverse(),
+  ]
+
+  let ring = ringEnu.map(([e, nIdx]) => enuToLatLng(e, nIdx, refLat, refLng))
+  if (!isInsideSiteRing(PATROL_SURVEY_PIN[0], PATROL_SURVEY_PIN[1], ring)) {
     ring = [...ring].reverse()
   }
-  return ring
+
+  return {
+    ring,
+    southTable: buildArcLengthTable(southEdge),
+    northTable: buildArcLengthTable(northEdge),
+    refLat,
+    refLng,
+  }
 }
 
-const CAPSULE_ENVELOPE: [number, number][] = [
-  ...PATROL_SITE_CORNERS,
-  sitePoint(0, 0),
-  sitePoint(0, 1),
-  sitePoint(1, 0),
-  sitePoint(1, 1),
-  sitePoint(0.5, 0),
-  sitePoint(0.5, 1),
-  PATROL_SURVEY_PIN,
-]
+const CORRIDOR_MODEL = buildCurvedCorridorModel()
 
 /**
- * Viền đỏ heatmap — capsule bầu 2 đầu (~56 đỉnh), ngược chiều kim đồng hồ.
+ * Viền đỏ heatmap — hành lang cong (~200 đỉnh), ngược chiều kim đồng hồ.
  */
-export const PATROL_SITE_BOUNDARY_RING: [number, number][] = buildStadiumCapsuleRing(
-  sitePoint(0, 0.5),
-  sitePoint(1, 0.5),
-  CAPSULE_ENVELOPE,
-)
+export const PATROL_SITE_BOUNDARY_RING: [number, number][] = CORRIDOR_MODEL.ring
 
-/** Export sitePoint for zone dividers / device anchors. */
+/** Nội suy điểm trong hành lang: u = tây→đông dọc CT06, v = nam→bắc. */
 export function patrolSitePoint(u: number, v: number): [number, number] {
-  return sitePoint(u, v)
+  const uClamped = Math.max(0, Math.min(1, u))
+  const vClamped = Math.max(0, Math.min(1, v))
+  const south = pointAtArcU(CORRIDOR_MODEL.southTable, uClamped)
+  const north = pointAtArcU(CORRIDOR_MODEL.northTable, uClamped)
+  return enuToLatLng(
+    south[0] + (north[0] - south[0]) * vClamped,
+    south[1] + (north[1] - south[1]) * vClamped,
+    CORRIDOR_MODEL.refLat,
+    CORRIDOR_MODEL.refLng,
+  )
 }
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
@@ -299,4 +456,33 @@ export function clampPointToSiteBoundary(lat: number, lng: number): [number, num
     }
   }
   return [parseFloat(cLat.toFixed(6)), parseFloat(cLng.toFixed(6))]
+}
+
+/** Legacy export — stadium builder retained for tests referencing arc math. */
+export function buildStadiumCapsuleRing(
+  westCenter: [number, number],
+  eastCenter: [number, number],
+  envelopePoints: [number, number][],
+  arcSteps = 28,
+): [number, number][] {
+  const refLat = (westCenter[0] + eastCenter[0]) / 2
+  const refLng = (westCenter[1] + eastCenter[1]) / 2
+  const tipAEnu = latLngToEnu(PATROL_SITE_TIP_A[0], PATROL_SITE_TIP_A[1], refLat, refLng)
+  const pinchSEnu = latLngToEnu(PATROL_SITE_PINCH_SOUTH[0], PATROL_SITE_PINCH_SOUTH[1], refLat, refLng)
+  const pinchNEnu = latLngToEnu(PATROL_SITE_PINCH_NORTH[0], PATROL_SITE_PINCH_NORTH[1], refLat, refLng)
+  void envelopePoints
+  void arcSteps
+  void westCenter
+  void eastCenter
+  const midPinch = lerpPt(pinchSEnu, pinchNEnu, 0.5)
+  const inwardA = normalizePt(subPt(midPinch, tipAEnu))
+  const perpA = perpPt(inwardA)
+  const radiusA = Math.max(400, dotPt(subPt(pinchSEnu, tipAEnu), inwardA) * CAP_RADIUS_SCALE_WEST)
+  const centerA = addPt(tipAEnu, scalePt(inwardA, radiusA))
+  const westSouth = addPt(centerA, scalePt(perpA, radiusA))
+  const westNorth = addPt(centerA, scalePt(perpA, -radiusA))
+  return [
+    enuToLatLng(westSouth[0], westSouth[1], refLat, refLng),
+    enuToLatLng(westNorth[0], westNorth[1], refLat, refLng),
+  ]
 }

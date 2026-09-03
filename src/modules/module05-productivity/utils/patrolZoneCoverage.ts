@@ -34,23 +34,18 @@ function devicesForZone(zoneId: string): string[] {
   return [...new Set([...fromHelmets, ...fromDrones])]
 }
 
-type LngLat = [number, number]
-
-function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
-  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-}
-
-/** Cùng half-plane test với patrolSiteGeometry — nhất quán viền zone. */
+/** Ray-casting — nhất quán với viền site cong. */
 function isPointInZonePolygon(lat: number, lng: number, polygon: [number, number][]): boolean {
   if (polygon.length < 3) return false
-  const p: LngLat = [lng, lat]
-  const ring: LngLat[] = polygon.map(([la, ln]) => [ln, la])
-  for (let i = 0; i < ring.length; i += 1) {
-    const a = ring[i]
-    const b = ring[(i + 1) % ring.length]
-    if (cross2d(a[0], a[1], b[0], b[1], p[0], p[1]) > 1e-11) return false
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i]
+    const [yj, xj] = polygon[j]
+    const intersects = (yi > lat) !== (yj > lat)
+      && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    if (intersects) inside = !inside
   }
-  return true
+  return inside
 }
 
 function devicePosition(
