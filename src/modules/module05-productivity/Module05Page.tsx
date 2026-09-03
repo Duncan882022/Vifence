@@ -545,6 +545,7 @@ export function Module05Page() {
             >
               <PatrolEventsPanel
                 events={patrolEventsLive}
+                presences={dayPresences}
                 tabCounts={tabCounts}
                 viewDate={patrolViewDate}
                 onViewDateChange={setPatrolViewDate}
