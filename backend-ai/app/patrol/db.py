@@ -19,7 +19,7 @@ from typing import Any, Iterator
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_FILE = DATA_DIR / "patrol.db"
 
-_SCHEMA_VERSION = 9
+_SCHEMA_VERSION = 10
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS person_aliases (
 
 -- Đối tượng: chưa thấy mặt nên không có gì để nhận lại vào hôm sau. Sống trong
 -- ngày rồi xoá.
+--
+-- `promoted_to` là mã Người mà thẻ này đã dồn sang khi bắt được mặt. Trước đây
+-- thăng hạng xoá luôn dòng, nên không còn dấu vết nào cho biết thẻ ấy từng tồn
+-- tại: mã obj-* nằm trong ảnh đã chụp và báo cáo đã xuất trỏ vào khoảng không,
+-- và không đối chiếu được số Đối tượng đầu ngày với số cuối ngày.
 CREATE TABLE IF NOT EXISTS daily_objects (
   event_date     TEXT NOT NULL,
   obj_id         TEXT NOT NULL,
@@ -88,6 +93,8 @@ CREATE TABLE IF NOT EXISTS daily_objects (
   last_seen      REAL NOT NULL,
   snapshot_path  TEXT,
   snapshot_score REAL NOT NULL DEFAULT 0,
+  promoted_to    TEXT,
+  promoted_at    REAL,
   PRIMARY KEY (event_date, obj_id)
 );
 
@@ -121,10 +128,46 @@ CREATE TABLE IF NOT EXISTS appearances (
   qualified       INTEGER NOT NULL DEFAULT 1,
   presence_seq    INTEGER NOT NULL DEFAULT 1,
   source_cameras  TEXT,
-  snapshot_path   TEXT
+  snapshot_path   TEXT,
+  end_reason      TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_appearances_subject
   ON appearances(event_date, subject_id);
+
+-- Sổ cái lượt gặp: một track kết thúc = đúng một dòng, ghi xong không sửa lại.
+--
+-- `daily_objects` và `appearances` đều bị viết đè suốt ngày — thăng hạng dồn
+-- thẻ, gộp lượt kéo dài dòng cũ, đổi tên chủ thể. Nên chúng trả lời được "bây
+-- giờ đang có gì" nhưng không trả lời được "hôm qua đã xảy ra gì", mà đó lại
+-- đúng là câu hỏi của một con số kiểm đếm.
+--
+-- `end_reason` là phần không suy ra được từ đâu khác: một lượt đóng vì người
+-- bước ra khỏi khung là lượt thật, còn đóng vì mất tín hiệu thì lần nối lại sẽ
+-- đếm thêm một lượt cho cùng một người. Thiếu cột này thì nguồn chập chờn và
+-- công trường đông người cho ra cùng một con số.
+--
+-- `qualified = 0` là track đã bám được nhưng chưa bao giờ đủ điều kiện lên thẻ.
+-- Giữ lại để biết hệ thống đang bỏ sót bao nhiêu phần so với những gì nó thấy.
+CREATE TABLE IF NOT EXISTS sightings (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_date    TEXT NOT NULL,
+  subject_id    TEXT NOT NULL DEFAULT '',
+  subject_kind  TEXT NOT NULL,
+  camera_id     TEXT NOT NULL,
+  zone_id       TEXT,
+  track_id      TEXT NOT NULL DEFAULT '',
+  session_id    TEXT NOT NULL,
+  started_at    REAL NOT NULL,
+  ended_at      REAL NOT NULL,
+  end_reason    TEXT NOT NULL DEFAULT 'lost',
+  qualified     INTEGER NOT NULL DEFAULT 1,
+  appearance_id INTEGER,
+  created_at    REAL NOT NULL,
+  CHECK (subject_kind IN ('object', 'person', 'identity', 'unqualified')),
+  UNIQUE (event_date, camera_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS ix_sightings_day
+  ON sightings(event_date, subject_kind);
 
 -- Bộ đếm cấp mã. Không bao giờ lùi, kể cả sau khi xoá dữ liệu: mã cũ còn nằm
 -- trong ảnh chụp và báo cáo đã xuất.
@@ -196,6 +239,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         migrate_to_v7,
         migrate_to_v8,
         migrate_to_v9,
+        migrate_to_v10,
     )
 
     migrate_to_v3(conn)
@@ -205,6 +249,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     migrate_to_v7(conn)
     migrate_to_v8(conn)
     migrate_to_v9(conn)
+    migrate_to_v10(conn)
 
 
 def _connect() -> sqlite3.Connection:
@@ -285,6 +330,11 @@ def purge_old_days(keep_date: str | None = None) -> int:
             "DELETE FROM appearances WHERE event_date < ? AND subject_id LIKE 'obj-%'",
             (today,),
         )
+        conn.execute(
+            "DELETE FROM sightings WHERE event_date < ? AND subject_kind IN"
+            " ('object', 'unqualified')",
+            (today,),
+        )
     return removed
 
 
@@ -303,6 +353,7 @@ def purge_day(date: str | None = None) -> dict[str, Any]:
         "daily_events": 0,
         "daily_objects": 0,
         "appearances": 0,
+        "sightings": 0,
         "orphan_persons": 0,
         "orphan_faces": 0,
     }
@@ -318,6 +369,10 @@ def purge_day(date: str | None = None) -> dict[str, Any]:
         )
         removed["appearances"] = int(
             conn.execute("DELETE FROM appearances WHERE event_date = ?", (d,)).rowcount
+            or 0
+        )
+        removed["sightings"] = int(
+            conn.execute("DELETE FROM sightings WHERE event_date = ?", (d,)).rowcount
             or 0
         )
 
@@ -361,6 +416,7 @@ def reset_all(keep_counters: bool = True) -> dict[str, int]:
             ).fetchone()["c"],
         }
         conn.execute("DELETE FROM appearances")
+        conn.execute("DELETE FROM sightings")
         conn.execute("DELETE FROM daily_events")
         conn.execute("DELETE FROM daily_objects")
         conn.execute("DELETE FROM person_aliases")
@@ -385,6 +441,21 @@ def close() -> None:
         if _conn is not None:
             _conn.close()
             _conn = None
+    _invalidate_derived_caches()
+
+
+def _invalidate_derived_caches() -> None:
+    """Huỷ mọi bảng dựng sẵn suy ra từ kết nối vừa đóng.
+
+    Chỉ mục khuôn mặt sống ở cấp module. Giữ lại sau khi đổi CSDL thì khớp mặt
+    trả về pers_id của CSDL cũ, và lần ghi kế tiếp vỡ khoá ngoại.
+    """
+    try:
+        from . import identity
+
+        identity._invalidate_face_index()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def rows_to_dicts(rows: Iterator[sqlite3.Row]) -> list[dict[str, Any]]:

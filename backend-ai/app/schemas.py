@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+_VN_TZ = timezone(timedelta(hours=7))
+
+
+def event_day_vn(ts: float) -> str:
+    """Ngày sự kiện theo giờ VN — cùng mốc cắt 0h với ``events._event_date``.
+
+    Máy chủ thường chạy UTC nên ``datetime.fromtimestamp`` không có tzinfo sẽ đẩy
+    sự kiện lúc 0h–7h sáng sang thẻ của ngày hôm trước, lệch với danh sách FE lọc
+    theo ngày lịch VN.
+    """
+    return datetime.fromtimestamp(ts, tz=_VN_TZ).strftime("%Y-%m-%d")
 
 
 class MobileFramePayload(BaseModel):
@@ -300,7 +312,7 @@ class ViolationEvent(BaseModel):
     ) -> "ViolationEvent":
         meta = SCENARIO_META[detection.behavior]
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],
@@ -338,7 +350,7 @@ class ViolationEvent(BaseModel):
                 "group": "BPTC",
             }
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],
@@ -371,7 +383,7 @@ class ViolationEvent(BaseModel):
             },
         )
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],
@@ -410,7 +422,7 @@ class ViolationEvent(BaseModel):
             },
         )
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         worker_id = detection.worker_id
         worker_name = detection.worker_name
         employee_code = detection.employee_code
@@ -454,7 +466,7 @@ class ViolationEvent(BaseModel):
     ) -> "ViolationEvent":
         meta = PERSON_SCENARIO_META["person"]
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         worker_id = detection.worker_id
         worker_name = detection.worker_name or worker_id or "Người chưa xác định"
         return cls(
@@ -487,7 +499,7 @@ class ViolationEvent(BaseModel):
     ) -> "ViolationEvent":
         meta = WAH_SCENARIO_META[detection.behavior]
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],
@@ -512,7 +524,7 @@ class ViolationEvent(BaseModel):
     ) -> "ViolationEvent":
         meta = ATGT_SCENARIO_META[detection.behavior]
         created = time.time()
-        day = event_date or datetime.fromtimestamp(created).strftime("%Y-%m-%d")
+        day = event_date or event_day_vn(created)
         return cls(
             behavior=detection.behavior,
             scenario_id=meta["scenario_id"],

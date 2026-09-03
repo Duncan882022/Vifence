@@ -246,3 +246,53 @@ def migrate_to_v9(conn: sqlite3.Connection) -> None:
 
     conn.execute("PRAGMA user_version=9")
     conn.commit()
+
+
+def migrate_to_v10(conn: sqlite3.Connection) -> None:
+    """Sổ cái lượt gặp + dấu vết thăng hạng của thẻ Đối tượng."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 10:
+        return
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sightings (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_date    TEXT NOT NULL,
+          subject_id    TEXT NOT NULL DEFAULT '',
+          subject_kind  TEXT NOT NULL,
+          camera_id     TEXT NOT NULL,
+          zone_id       TEXT,
+          track_id      TEXT NOT NULL DEFAULT '',
+          session_id    TEXT NOT NULL,
+          started_at    REAL NOT NULL,
+          ended_at      REAL NOT NULL,
+          end_reason    TEXT NOT NULL DEFAULT 'lost',
+          qualified     INTEGER NOT NULL DEFAULT 1,
+          appearance_id INTEGER,
+          created_at    REAL NOT NULL,
+          CHECK (subject_kind IN ('object', 'person', 'identity', 'unqualified')),
+          UNIQUE (event_date, camera_id, session_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_sightings_day"
+        " ON sightings(event_date, subject_kind)"
+    )
+
+    obj_cols = {
+        str(r[1]) for r in conn.execute("PRAGMA table_info(daily_objects)").fetchall()
+    }
+    for name, typedef in (("promoted_to", "TEXT"), ("promoted_at", "REAL")):
+        if name not in obj_cols:
+            conn.execute(f"ALTER TABLE daily_objects ADD COLUMN {name} {typedef}")
+
+    app_cols = {
+        str(r[1]) for r in conn.execute("PRAGMA table_info(appearances)").fetchall()
+    }
+    if "end_reason" not in app_cols:
+        conn.execute("ALTER TABLE appearances ADD COLUMN end_reason TEXT")
+
+    conn.execute("PRAGMA user_version=10")
+    conn.commit()

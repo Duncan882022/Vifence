@@ -65,15 +65,27 @@ class ScanEnrollmentProgressTest(unittest.TestCase):
         self.assertTrue(enrollment["complete"])
         self.assertEqual(enrollment["face_records"], 7)
 
-    def test_person_tier_counts_hr_scan_vectors_only(self) -> None:
+    def test_draft_completion_gated_by_hr_scan_vectors_only(self) -> None:
+        """Bản nháp: tiến độ hiện cả ảnh patrol, nhưng mốc hoàn tất thì không.
+
+        Grid ảnh của trang enroll đếm mọi crop đã lưu cho hồ sơ nháp, nên
+        `faces_captured` gồm cả vector bodycam. Chỉ vector quét HR mới được
+        tính vào điều kiện hoàn tất — nếu không, đi qua bodycam vài lần là hồ
+        sơ tự coi như đã quét đủ góc.
+        """
         pers_id, _ = identity.observe_face(_vec(2.0), quality=0.85, camera_id="HC-02")
         identity.add_face_angle(pers_id, _vec(2.1), quality=0.9, camera_id="HC-02")
         identity.add_face_angle(pers_id, _vec(2.2), quality=0.9, camera_id="SCAN")
         identity.add_face_angle(pers_id, _vec(2.3), quality=0.9, camera_id="SCAN")
 
         enrollment = identity.get_scan_enrollment(pers_id)
-        self.assertEqual(enrollment["faces_captured"], 2)
+        self.assertEqual(enrollment["faces_captured"], 4)
         self.assertFalse(enrollment["complete"])
+
+        # Thêm vector bodycam nữa vẫn không thể chạm mốc hoàn tất.
+        for i in range(identity.SCAN_FACES_REQUIRED + 1):
+            identity.add_face_angle(pers_id, _vec(3.0 + i), quality=0.9, camera_id="HC-02")
+        self.assertFalse(identity.get_scan_enrollment(pers_id)["complete"])
 
 
 if __name__ == "__main__":

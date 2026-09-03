@@ -14,6 +14,8 @@ import {
   getPatrolLiveRoiDelayMs,
   updatePatrolClientServerSkew,
 } from '@/services/patrolRuntimeBridge'
+import { useOverlayBufferGate } from '@/modules/module02-training/hooks/useCameraBufferReadiness'
+import { getCameraBufferedAheadMs } from '@/services/cameraBufferReadiness'
 
 /** Nhịp đối chiếu snapshot ↔ đồng hồ video. */
 const RESOLVE_INTERVAL_MS = 33
@@ -23,6 +25,8 @@ export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
   timeAligned: boolean
   /** Lệch giữa bbox và khung hình (ms) — hiện trên toolbar khi debug. */
   driftMs: number | null
+  /** Đang chờ các tile đệm đủ trước khi vẽ hộp đầu tiên. */
+  waitingForBuffer: boolean
 }
 
 export function useSyncedVmsDetections(
@@ -33,6 +37,7 @@ export function useSyncedVmsDetections(
   const bufferRef = useRef(new OverlayTimeBuffer())
   const configuredLagMs = options?.fallbackLagMs
   const useRuntimeLagHint = options?.useRuntimeLagHint ?? false
+  const gate = useOverlayBufferGate()
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
     timeAligned: boolean
@@ -46,6 +51,11 @@ export function useSyncedVmsDetections(
     setResolved({ snapshot: null, timeAligned: false, driftMs: null })
   }, [feed.active])
 
+  // Snapshot đổi vài lần mỗi giây; giữ trong ref để vòng resolve không bị dựng
+  // lại theo từng frame AI.
+  const snapshotRef = useRef(feed.snapshot)
+  snapshotRef.current = feed.snapshot
+
   useEffect(() => {
     if (feed.snapshot) {
       bufferRef.current.push(feed.snapshot)
@@ -57,15 +67,33 @@ export function useSyncedVmsDetections(
     if (!feed.active) return
 
     const tick = () => {
+      const snapshot = snapshotRef.current
+
+      // Backend đã chọn đúng khung hình rồi thì đừng chọn lại lần nữa: buffer FE
+      // sẽ lùi thêm một quãng lag nữa và bbox tụt lại phía sau người.
+      if (snapshot?.overlay_sync === 'aligned') {
+        const driftMs = snapshot.overlay_drift_ms ?? 0
+        setResolved(prev => (
+          prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
+            ? prev
+            : { snapshot, timeAligned: true, driftMs }
+        ))
+        return
+      }
+
       const displayMs = clock?.getDisplayWallclockMs() ?? null
-      const hintLag = feed.snapshot?.overlay_lag_hint_ms
-      const fallbackLagMs = configuredLagMs ?? (
-        useRuntimeLagHint && hintLag != null && hintLag > 0
-          ? hintLag
-          : useRuntimeLagHint
-            ? getPatrolLiveRoiDelayMs()
-            : undefined
-      )
+      const hintLag = snapshot?.overlay_lag_hint_ms
+      // Mức đệm đo được là độ trễ thật của chính luồng này — sát hơn hằng số
+      // cấu hình, nhất là khi mạng làm buffer co giãn.
+      const measuredLagMs = snapshot?.camera_id
+        ? getCameraBufferedAheadMs(snapshot.camera_id)
+        : null
+      const runtimeLagMs = useRuntimeLagHint
+        ? (hintLag != null && hintLag > 0 ? hintLag : getPatrolLiveRoiDelayMs())
+        : undefined
+      const fallbackLagMs = configuredLagMs
+        ?? (measuredLagMs != null && measuredLagMs > 0 ? measuredLagMs : runtimeLagMs)
+
       const next = bufferRef.current.resolve(displayMs, {
         fallbackLagMs,
         clientServerSkewMs: getPatrolClientServerSkewMs(),
@@ -90,15 +118,18 @@ export function useSyncedVmsDetections(
     tick()
     const timer = window.setInterval(tick, RESOLVE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [feed.active, feed.snapshot?.overlay_lag_hint_ms, clock, configuredLagMs, useRuntimeLagHint])
+  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint])
 
   return useMemo(
     () => ({
       ...feed,
-      snapshot: resolved.snapshot,
-      timeAligned: resolved.timeAligned,
-      driftMs: resolved.driftMs,
+      // Chưa đệm đủ thì độ trễ luồng chưa ổn định: hộp vẽ ra lúc này rơi lệch
+      // hẳn khỏi người rồi mới tự nhảy về chỗ đúng vài giây sau. Thà chưa vẽ.
+      snapshot: gate.open ? resolved.snapshot : null,
+      timeAligned: gate.open && resolved.timeAligned,
+      driftMs: gate.open ? resolved.driftMs : null,
+      waitingForBuffer: !gate.open,
     }),
-    [feed, resolved],
+    [feed, resolved, gate.open],
   )
 }

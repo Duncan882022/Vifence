@@ -18,6 +18,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.patrol_ids import is_anonymous_track_id  # noqa: E402
 from app.patrol.person_analyzer import (  # noqa: E402
     _assign_patrol_person_identity,
     assign_patrol_track_ids,
@@ -107,14 +108,14 @@ class PatrolAnalyzerIdentityTests(unittest.TestCase):
         det = _person_det()
         self._assign(det, (_face_emb(3), 0.88, True))
 
-        self.assertTrue(str(det.worker_id).startswith("sgc-"))
+        self.assertTrue(is_anonymous_track_id(det.worker_id), det.worker_id)
         self.assertTrue(det.face_eligible)
 
     def test_identified_person_keeps_id_after_turning_around(self) -> None:
         det_face = _person_det()
         self._assign(det_face, (_face_emb(3), 0.88, True))
         assigned = det_face.worker_id
-        self.assertTrue(str(assigned).startswith("sgc-"))
+        self.assertTrue(is_anonymous_track_id(assigned), assigned)
 
         det_back = _person_det()
         self._assign(det_back, (None, 0.0, False))

@@ -95,7 +95,12 @@ def try_reclaim(
     embedding: tuple[float, ...] | None,
     now: float,
 ) -> _LostSlot | None:
-    """Track mới — thử gộp session cũ qua embedding hoặc IoU (ưu tiên cùng camera)."""
+    """Track mới — nối lại session cũ qua embedding, hoặc IoU nếu đã biết là ai.
+
+    Thẻ `obj-*` không được nối lại bằng IoU: đối tượng chưa có tiêu chí định
+    danh nên chỗ trống vừa để lại có thể là người khác vừa bước vào, và nối
+    nhầm thì hai người thành một lượt. Đối tượng ra khỏi khung là hết lượt.
+    """
     global _slots
     cam = (camera_id or "").strip()
     with _lock:
@@ -113,15 +118,11 @@ def try_reclaim(
                         best = slot
                         best_score = sim
                         continue
+                if (slot.subject_id or "").startswith("obj-"):
+                    continue
                 if bbox is not None and slot.bbox is not None:
                     iou = _bbox_iou(bbox, slot.bbox)
-                    if (slot.subject_id or "").startswith("obj-"):
-                        if embedding is not None and slot.embedding is not None:
-                            continue
-                        if iou >= 0.35 and (best is None or best_score < REID_MIN_COSINE):
-                            best = slot
-                            best_score = 0.35
-                    elif iou >= REID_IOU_MIN and (best is None or best_score < REID_MIN_COSINE):
+                    if iou >= REID_IOU_MIN and (best is None or best_score < REID_MIN_COSINE):
                         best = slot
                         best_score = REID_IOU_MIN
             return best

@@ -187,6 +187,7 @@ def observe(
     wname = resolve_patrol_worker_display_name(wid, worker_name)
 
     global_hit = _global_identity_for_worker(wid, ts) if wid else None
+    global_tier = global_hit[0] if global_hit else None
     if global_hit:
         g_tier, g_name = global_hit
         if _TIER_RANK.get(g_tier, 0) > _TIER_RANK.get(observed_tier, 0):
@@ -237,8 +238,12 @@ def observe(
         if observed_rank > current_rank:
             # Thăng tầng — cần đủ số frame liên tiếp.
             need = _PROMOTE_HITS.get(observed_tier, 1)
-            # Mũ khác đã xác nhận cùng worker_id — không bắt HC-02 chờ lại từ đầu.
+            # Cùng worker_id đã được xác nhận ở tầng này nơi khác thì không bắt
+            # track mới chờ lại từ đầu — dù mũ kia còn sống (sibling) hay track
+            # đã hết hạn và chỉ còn lưu ở registry site-wide.
             if sibling_tier == observed_tier and sibling_rank == observed_rank:
+                need = 1
+            elif global_tier == observed_tier:
                 need = 1
             if state.pending_tier == observed_tier and state.pending_worker_id == wid:
                 state.pending_hits += 1

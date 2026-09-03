@@ -21,12 +21,15 @@ export interface DetectionsFeedOptions {
   cameraId: string
   backendUrl?: string
   onSnapshot: (snapshot: VmsDetectionSnapshot) => void
-  /** Xóa overlay frame cũ — gọi trước `onSnapshot` mỗi lần nhận detections. */
-  onBeforeSnapshot?: () => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
   onTransportChange?: (transport: DetectionsTransport) => void
   /** Nhịp poll khi phải fallback (ms). */
   pollIntervalMs?: number
+  /**
+   * Wallclock (ms) của khung hình đang chiếu. Có hàm này thì backend tự chọn
+   * overlay của đúng khung đó; không có thì backend trả bản mới nhất như trước.
+   */
+  getDisplayWallclockMs?: () => number | null
 }
 
 export interface DetectionsFeedHandle {
@@ -40,6 +43,13 @@ const WS_RETRY_BASE_MS = 1000
 const WS_RETRY_MAX_MS = 8000
 /** Số lần WS thất bại liên tiếp trước khi bỏ hẳn sang poll. */
 const WS_MAX_FAILURES = 3
+/**
+ * Nhịp báo mốc khung hình đang chiếu lên backend.
+ *
+ * Không cần báo mỗi frame: video chạy 1x nên backend cộng thêm thời gian trôi
+ * qua là ra mốc hiện tại. Một giây một lần đủ để bám kịp lúc buffer co giãn.
+ */
+const WS_CLOCK_SYNC_INTERVAL_MS = 1000
 
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/$/, '')
@@ -70,10 +80,10 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
     cameraId,
     backendUrl = getVmsBackendUrl(),
     onSnapshot,
-    onBeforeSnapshot,
     onStatusChange,
     onTransportChange,
     pollIntervalMs = 450,
+    getDisplayWallclockMs,
   } = options
 
   let stopped = false
@@ -81,6 +91,7 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
   let poller: { stop: () => void } | null = null
   let retryTimer = 0
   let staleTimer = 0
+  let clockTimer = 0
   let failures = 0
   let connectedOnce = false
 
@@ -93,9 +104,35 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
       backendUrl,
       intervalMs: pollIntervalMs,
       onSnapshot,
-      onBeforeSnapshot,
       onStatusChange,
+      getDisplayWallclockMs,
     })
+  }
+
+  const clearClockTimer = () => {
+    window.clearInterval(clockTimer)
+    clockTimer = 0
+  }
+
+  const startClockSync = (ws: WebSocket) => {
+    if (!getDisplayWallclockMs) return
+    clearClockTimer()
+
+    const push = () => {
+      if (stopped || ws.readyState !== WebSocket.OPEN) return
+      const atMs = getDisplayWallclockMs()
+      try {
+        ws.send(JSON.stringify({
+          type: 'sync',
+          at_ms: atMs != null && Number.isFinite(atMs) && atMs > 0 ? Math.round(atMs) : null,
+        }))
+      } catch {
+        // Kết nối đang đóng — onclose lo phần retry.
+      }
+    }
+
+    push()
+    clockTimer = window.setInterval(push, WS_CLOCK_SYNC_INTERVAL_MS)
   }
 
   const clearStaleTimer = () => {
@@ -149,6 +186,7 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
       onTransportChange?.('websocket')
       onStatusChange('connected')
       armStaleTimer()
+      startClockSync(ws)
     }
 
     ws.onmessage = event => {
@@ -168,10 +206,8 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
         if (type === 'heartbeat') return
         if (type !== 'detections') return
 
-        // Backend Module 05 gửi reset_state — xóa overlay frame trước (tránh box ma).
-        if (data.reset_state !== false) {
-          onBeforeSnapshot?.()
-        }
+        // Track lock được bỏ theo `overlay_epoch` trong payload, không theo từng
+        // frame: xoá mỗi frame là mất luôn phần làm mượt và hộp giật từng nhịp.
         onSnapshot(normalizeVmsDetectionSnapshot(data, cameraId))
         onStatusChange('connected')
       } catch {
@@ -185,6 +221,7 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
 
     ws.onclose = () => {
       clearStaleTimer()
+      clearClockTimer()
       socket = null
       if (stopped) return
       scheduleReconnect()
@@ -202,6 +239,7 @@ export function createDetectionsFeed(options: DetectionsFeedOptions): Detections
       stopped = true
       window.clearTimeout(retryTimer)
       clearStaleTimer()
+      clearClockTimer()
       if (socket) {
         socket.onclose = null
         socket.close()

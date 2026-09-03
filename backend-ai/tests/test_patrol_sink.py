@@ -270,8 +270,13 @@ class PatrolSinkTests(unittest.TestCase):
         row = identity.get_person(str(again))
         self.assertEqual(identity.display_name(row), "Nguyễn Văn A")
 
-    def test_track_split_reuses_object_by_bbox(self) -> None:
-        """ByteTrack mất id — cùng người đứng yên không đẻ thẻ Đối tượng mới."""
+    def test_track_split_counts_a_new_sighting(self) -> None:
+        """Track kết thúc rồi track mới xuất hiện cùng chỗ — hai lượt gặp.
+
+        Không có khuôn mặt thì không có gì chứng minh đây vẫn là người cũ: chỗ
+        vừa trống hoàn toàn có thể là người khác vừa bước vào. Đếm thành hai
+        lượt là đúng nghiệp vụ — lượt gặp không phải số người.
+        """
         t0 = 1_000.0
         box = [80.0, 60.0, 220.0, 420.0]
         sink.record_observation(
@@ -292,8 +297,8 @@ class PatrolSinkTests(unittest.TestCase):
             person_bbox=[85.0, 62.0, 225.0, 425.0],
             now=t0 + 5.0 + _MIN_OBJECT_COMMIT,
         )
-        self.assertEqual(again, first)
-        self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
+        self.assertNotEqual(again, first)
+        self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 2)
 
     def test_two_people_do_not_share_object_card(self) -> None:
         t0 = 1_000.0

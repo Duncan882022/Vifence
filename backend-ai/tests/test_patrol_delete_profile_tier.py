@@ -25,6 +25,7 @@ from app.patrol_identity_lifecycle import (  # noqa: E402
     revoke_gallery_worker,
     tier_for_worker_id,
 )
+from app.patrol_ids import normalize_track_id  # noqa: E402
 from app.patrol_identity_store import (  # noqa: E402
     BINDINGS_FILE,
     bind_patrol_identity,
@@ -90,29 +91,36 @@ class PatrolDeleteProfileTierTests(unittest.TestCase):
         self.assertEqual(resolve_patrol_worker_display_name(wid, ""), "Người")
 
     def test_purge_person_gallery_assets_downgrades_live_track(self) -> None:
+        # `sgc-*` là tiền tố nội bộ cho mã tạm, schema cấm dùng làm mã nhân sự.
+        code = "NV6688"
         row = identity.import_identity(
             full_name="Duncan",
-            employee_code="SGC-6688",
+            employee_code=code,
             contractor="SGC",
             source="self_enroll",
         )
         pers_id = str(row["pers_id"])
-        wid = patrol_gallery_worker_id("SGC-6688")
+        wid = patrol_gallery_worker_id(code)
         sgc = "sgc-00000042"
 
         bind_patrol_identity(
             gallery_worker_id=wid,
             worker_name="Duncan",
-            employee_code="SGC-6688",
+            employee_code=code,
             contractor_name="SGC",
             alias_keys=[wid, sgc, pers_id],
         )
         bind_patrol_track_identity("HC-02", "ptk-001", wid)
 
-        for _ in range(3):
-            observe("HC-02", "ptk-001", worker_id=wid, worker_name="Duncan")
+        # Quan sát cùng mốc thời gian bị khử trùng nên phải bước thời gian ra.
+        for i in range(3):
+            observe(
+                "HC-02", "ptk-001", worker_id=wid, worker_name="Duncan", now=float(i + 1),
+            )
         self.assertEqual(
-            observe("HC-02", "ptk-001", worker_id=wid, worker_name="Duncan").tier,
+            observe(
+                "HC-02", "ptk-001", worker_id=wid, worker_name="Duncan", now=4.0,
+            ).tier,
             TIER_IDENTITY,
         )
 
@@ -123,25 +131,36 @@ class PatrolDeleteProfileTierTests(unittest.TestCase):
                     return_value=True,
                 ):
                     identity._purge_person_gallery_assets(
-                        {"pers_id": pers_id, "employee_code": "SGC-6688"},
+                        {"pers_id": pers_id, "employee_code": code},
                     )
 
         self.assertFalse(is_patrol_gallery_id(wid))
-        self.assertEqual(peek_patrol_track_identity("HC-02", "ptk-001"), sgc)
+        # `sgc-*` là dạng cũ, registry trả về mã tk-* chuẩn hoá cùng số.
+        self.assertEqual(
+            peek_patrol_track_identity("HC-02", "ptk-001"), normalize_track_id(sgc),
+        )
 
         downgraded = observe(
             "HC-02",
             "ptk-001",
             worker_id=sgc,
             worker_name="Người",
+            now=5.0,
         )
         self.assertEqual(downgraded.tier, TIER_PERSON)
-        self.assertEqual(downgraded.worker_id, sgc)
+        self.assertEqual(downgraded.worker_id, normalize_track_id(sgc))
         self.assertEqual(downgraded.worker_name, "Người")
 
     def test_revoke_gallery_worker_clears_identity_state(self) -> None:
         wid = patrol_gallery_worker_id("NV01")
         sgc = "sgc-00000099"
+        # Binding không tự cấp tier Định danh — phải có hồ sơ HR identified.
+        identity.import_identity(
+            full_name="An",
+            employee_code="NV01",
+            contractor="SGC",
+            source="self_enroll",
+        )
         bind_patrol_identity(
             gallery_worker_id=wid,
             worker_name="An",
@@ -149,10 +168,10 @@ class PatrolDeleteProfileTierTests(unittest.TestCase):
             contractor_name="SGC",
             alias_keys=[wid, sgc],
         )
-        for _ in range(3):
-            observe("HC-01", "ptk-77", worker_id=wid, worker_name="An")
+        for i in range(3):
+            observe("HC-01", "ptk-77", worker_id=wid, worker_name="An", now=float(i + 1))
         self.assertEqual(
-            observe("HC-01", "ptk-77", worker_id=wid, worker_name="An").tier,
+            observe("HC-01", "ptk-77", worker_id=wid, worker_name="An", now=4.0).tier,
             TIER_IDENTITY,
         )
 
@@ -160,7 +179,7 @@ class PatrolDeleteProfileTierTests(unittest.TestCase):
         changed = revoke_gallery_worker(wid, [wid, sgc])
         self.assertGreaterEqual(changed, 1)
 
-        result = observe("HC-01", "ptk-77", worker_id=sgc, worker_name="Người")
+        result = observe("HC-01", "ptk-77", worker_id=sgc, worker_name="Người", now=5.0)
         self.assertEqual(result.tier, TIER_PERSON)
         self.assertEqual(result.worker_id, sgc)
 

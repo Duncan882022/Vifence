@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay } from '../utils/videoOverlayCoords'
+import { canProjectOverlayBox, mapBackendBboxToOverlay } from '../utils/videoOverlayCoords'
 import { formatRoiOverlayBadge, formatRoiOverlayCode } from '@/modules/module03-safety/utils/roiOverlayCode'
 import type { MobileAiDetection } from '../services/mobileAiBackend.service'
 import type { CameraAiModelId } from '../types/cameraAi.types'
@@ -105,9 +105,7 @@ const DetectionBox = memo(function DetectionBox({
     : resolveBehaviorStyle(modelId, det.behavior)
   const video = videoRef.current
 
-  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
-    return null
-  }
+  if (!canProjectOverlayBox(video, frameWidth, frameHeight)) return null
 
   if (isWeakPerson) {
     if (det.confidence < 0.35) return null

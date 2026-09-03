@@ -34,9 +34,13 @@ const backendStats: PatrolDayStats = {
   personCount: 88,
   identityCount: 77,
   objectCount: 3,
+  promotedObjectCount: 1,
   objectEncounterCount: 5,
   encountersStandard: 12,
   unassignedObservations: 5,
+  sightingsStreamOffline: 2,
+  sightingsTotal: 9,
+  sightingsUnqualified: 2,
 }
 
 describe('derivePatrolDisplayStats', () => {

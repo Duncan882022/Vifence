@@ -24,7 +24,7 @@ class PatrolEnrollmentEmbedTests(unittest.TestCase):
     def test_embed_enrollment_uses_full_frame_path(self) -> None:
         fake_vec = np.ones(128, dtype=np.float32)
         with patch(
-            "app.worker_identity.recognizer.embed_face_image",
+            "app.worker_identity.face_embedder.embed_face_image",
             return_value=fake_vec,
         ) as mock_embed:
             out = embed_enrollment_selfie(_fake_frame())

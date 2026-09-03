@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from patrol_gallery_stub import FakeGalleryMixin  # noqa: E402
+
 from app.patrol_identity_lifecycle import (  # noqa: E402
     TIER_IDENTITY,
     TIER_PERSON,
@@ -17,8 +19,11 @@ from app.patrol_identity_lifecycle import (  # noqa: E402
 )
 
 
-class TestSiblingTierLifecycle(unittest.TestCase):
+class TestSiblingTierLifecycle(FakeGalleryMixin, unittest.TestCase):
+    hr_profiles = {"p-SGC-6688": "Duncan"}
+
     def setUp(self) -> None:
+        super().setUp()
         reset()
 
     def tearDown(self) -> None:

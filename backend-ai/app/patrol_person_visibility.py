@@ -304,11 +304,63 @@ def patrol_person_overlay_bbox(
     return clipped
 
 
+def patrol_snapshot_bbox_needs_shrink(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    max_area_ratio: float = 0.38,
+    max_height_ratio: float = 0.55,
+) -> bool:
+    """True khi bbox quá lớn nên `patrol_snapshot_draw_bbox` sẽ phải thu nhỏ.
+
+    Tách riêng để đường ghi snapshot chỉ chạy dò mặt (tốn ~50ms) đúng lúc cần
+    bằng chứng vị trí đối tượng, không chạy cho mọi thẻ.
+    """
+    if frame_w <= 0 or frame_h <= 0:
+        return False
+    x1, y1, x2, y2 = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
+    fw, fh = max(float(frame_w), 1.0), max(float(frame_h), 1.0)
+    pw, ph = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+    return (pw * ph) / (fw * fh) > max_area_ratio or ph / fh > max_height_ratio
+
+
+def _face_anchored_draw_box(
+    face_box: tuple[float, float, float, float],
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> tuple[float, float, float, float] | None:
+    """Thu bbox quanh khuôn mặt đã dò được — đầu + thân trên, kẹp trong bbox người."""
+    fx1, fy1, fx2, fy2 = (float(v) for v in face_box)
+    px1, py1, px2, py2 = (float(v) for v in person_box)
+    face_w = fx2 - fx1
+    face_h = fy2 - fy1
+    if face_w < 8.0 or face_h < 8.0:
+        return None
+    # Mặt phải nằm trong bbox người, nếu không thì đó là mặt của người khác.
+    if min(fx2, px2) - max(fx1, px1) <= 0 or min(fy2, py2) - max(fy1, py1) <= 0:
+        return None
+
+    cx = (fx1 + fx2) / 2.0
+    half_w = face_w * 1.30
+    nx1 = max(px1, cx - half_w)
+    nx2 = min(px2, cx + half_w)
+    top = max(py1, fy1 - face_h * 0.35)
+    bottom = min(py2, top + face_h * 3.20)
+    if bottom - top < face_h * 1.60:
+        bottom = min(py2, top + face_h * 1.60)
+    if nx2 - nx1 < face_w * 0.80 or bottom - top < face_h:
+        return None
+    return _clip_box_to_frame((nx1, top, nx2, bottom), frame_w, frame_h)
+
+
 def patrol_snapshot_draw_bbox(
     person_box: tuple[float, float, float, float],
     frame_w: int,
     frame_h: int,
     *,
+    face_box: tuple[float, float, float, float] | None = None,
     max_area_ratio: float = 0.38,
     max_height_ratio: float = 0.55,
 ) -> tuple[float, float, float, float]:
@@ -323,8 +375,16 @@ def patrol_snapshot_draw_bbox(
     if area_ratio <= max_area_ratio and bh_ratio <= max_height_ratio:
         return box
 
+    # Có khuôn mặt thì thu quanh mặt — đó là bằng chứng duy nhất nói đối tượng
+    # đứng ở đâu trong bbox. Thu theo hình học chỉ là phỏng đoán: bbox bodycam
+    # cận cảnh thường mở lên quá đầu, nên cửa sổ neo mép trên rơi vào trần/nền
+    # và khung ROI không chồng lên người nào.
+    if face_box is not None:
+        anchored = _face_anchored_draw_box(face_box, box, frame_w, frame_h)
+        if anchored is not None:
+            return anchored
+
     cx = (x1 + x2) / 2.0
-    cy = (y1 + y2) / 2.0
     target_h = min(ph, fh * max_height_ratio)
     target_w = min(pw, fw * 0.42)
     if area_ratio > max_area_ratio:
@@ -332,11 +392,14 @@ def patrol_snapshot_draw_bbox(
         target_h = min(target_h, side)
         target_w = min(target_w, side * 0.75)
 
+    # Không dò được mặt — cắt bớt từ chân lên, giữ nguyên mép trên.
+    #
+    # Thu quanh tâm sẽ cắt đầu: người đứng gần bodycam luôn cao hơn 55% khung,
+    # nên mọi thẻ đều mất phần đầu — đúng cái phần chứng minh đây là người và
+    # là căn cứ để thăng tầng Người. Chân thì không mang thông tin ấy.
     nx1 = cx - target_w / 2.0
     nx2 = cx + target_w / 2.0
-    ny1 = cy - target_h * 0.45
-    ny2 = cy + target_h * 0.55
-    return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+    return _clip_box_to_frame((nx1, y1, nx2, y1 + target_h), frame_w, frame_h)
 
 
 def patrol_person_meets_display_gate(

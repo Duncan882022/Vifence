@@ -15,6 +15,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from ..patrol_tracker import END_REASON_STREAM_OFFLINE as SIGHTING_END_STREAM_OFFLINE
 from . import db, identity
 from .presence import (
     merge_source_cameras,
@@ -29,10 +30,9 @@ PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
 TOUCH_MIN_INTERVAL_SEC = 10.0
-# Hai ByteTrack song song (ptk0001 + ptk0004) trên cùng camera → một thẻ obj-*.
-PARALLEL_OBJ_START_MAX_SEC = 8.0
-PARALLEL_OBJ_OVERLAP_MIN_RATIO = 0.75
-PARALLEL_OBJ_ACTIVE_SEC = 45.0
+# Cùng session/track nhưng hai cửa sổ thời gian phải chồng ít nhất ngần này mới
+# coi là một lượt; rời nhau hơn thì người đã đi khỏi rồi quay lại.
+_SAME_PRESENCE_OVERLAP_MIN_RATIO = 0.75
 
 
 def _person_snapshot_score_floor() -> float:
@@ -102,7 +102,9 @@ def _should_refresh_person_snapshot(
         # Định danh: luôn dùng khung mặt mới nhất đủ rõ — đồng bộ thẻ ↔ popup.
         return True, True
 
-    keep_new = snapshot_score >= old_score
+    # Người (draft/tk): đứng trong khung — upsert last_seen, không ghi đè ảnh
+    # mỗi flush khi score ngang/bằng; chỉ thay khi rõ hơn.
+    keep_new = snapshot_score > old_score
     if keep_new:
         return True, True
     return interval_ok, False
@@ -219,9 +221,12 @@ def touch_object(
 
 
 def list_objects(date: str | None = None) -> list[dict[str, Any]]:
+    """Thẻ Đối tượng còn chưa gán được người — thẻ đã thăng hạng nằm ở tab Người."""
     d = date or db.today_vn()
     rows = db.query(
-        "SELECT * FROM daily_objects WHERE event_date = ? ORDER BY last_seen DESC", (d,)
+        "SELECT * FROM daily_objects WHERE event_date = ? AND promoted_to IS NULL"
+        " ORDER BY last_seen DESC",
+        (d,),
     )
     return [dict(r) for r in rows]
 
@@ -337,7 +342,12 @@ def find_overlapping_appearance_row(
     session_id: str | None = None,
     track_id: str | None = None,
 ) -> int | None:
-    """Track song song cùng obj + camera — UPDATE row cũ chỉ khi cùng session hoặc split ByteTrack."""
+    """Row của **chính** session/track này, khi lượt hiện tại vẫn là lượt cũ.
+
+    Chỉ khớp theo `session_id` hoặc `track_id` — không suy đoán theo thời gian.
+    Hai track khác nhau cùng chồng giờ trên một camera có thể là hai người, gộp
+    ở đây là mất một lượt gặp mà không cách nào phát hiện về sau.
+    """
     cam = (camera_id or "").strip()
     sid = (subject_id or "").strip()
     if not cam or not sid:
@@ -345,6 +355,8 @@ def find_overlapping_appearance_row(
     probe = {"started_at": started_at, "ended_at": ended_at}
     sess = (session_id or "").strip()
     tid = (track_id or "").strip()
+    if not sess and not tid:
+        return None
     rows = db.query(
         "SELECT id, started_at, ended_at, track_id, session_id FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
@@ -355,208 +367,15 @@ def find_overlapping_appearance_row(
         row_dict = dict(row)
         row_sess = str(row_dict.get("session_id") or "").strip()
         row_tid = str(row_dict.get("track_id") or "").strip()
-        if sess and row_sess and sess == row_sess:
-            if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
-                return int(row["id"])
+        same_session = bool(sess and row_sess and sess == row_sess)
+        same_track = bool(tid and row_tid and tid == row_tid)
+        if not same_session and not same_track:
             continue
-        if tid and row_tid and tid == row_tid:
-            if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
-                return int(row["id"])
-            continue
-        # Chỉ obj-* song song (2 ByteTrack cùng thẻ) — pers/tk giữ session riêng.
-        if not sid.startswith("obj-"):
-            continue
-        row_start = float(row_dict["started_at"])
-        if abs(started_at - row_start) > PARALLEL_OBJ_START_MAX_SEC:
-            continue
-        if _appearance_time_overlap_ratio(row_dict, probe) >= PARALLEL_OBJ_OVERLAP_MIN_RATIO:
+        # Cùng session nhưng cửa sổ thời gian rời nhau là lượt khác — người này
+        # đã đi khỏi rồi quay lại, phải mở dòng mới.
+        if _appearance_time_overlap_ratio(row_dict, probe) >= _SAME_PRESENCE_OVERLAP_MIN_RATIO:
             return int(row["id"])
     return None
-
-
-def _object_cards_overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    """Hai thẻ obj cùng lượt (ByteTrack tách đôi) — start gần nhau + overlap đồng thời."""
-    first_a, last_a = float(a["first_seen"]), float(a["last_seen"])
-    first_b, last_b = float(b["first_seen"]), float(b["last_seen"])
-    if abs(first_a - first_b) > PARALLEL_OBJ_START_MAX_SEC:
-        return False
-    if max(first_a, first_b) >= min(last_a, last_b):
-        return False
-    overlap = max(0.0, min(last_a, last_b) - max(first_a, first_b))
-    min_dur = min(max(last_a - first_a, 1.0), max(last_b - first_b, 1.0))
-    return overlap / min_dur >= PARALLEL_OBJ_OVERLAP_MIN_RATIO
-
-
-def _object_primary_camera(event_date: str, obj_id: str) -> str | None:
-    row = db.query_one(
-        "SELECT camera_id FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
-        " ORDER BY started_at ASC LIMIT 1",
-        (event_date, obj_id),
-    )
-    if row is None:
-        return None
-    cam = str(row["camera_id"] or "").strip()
-    return cam or None
-
-
-def _object_primary_gps(event_date: str, obj_id: str) -> tuple[float | None, float | None]:
-    row = db.query_one(
-        "SELECT gps_lat, gps_lng FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
-        " ORDER BY started_at ASC LIMIT 1",
-        (event_date, obj_id),
-    )
-    if row is None:
-        return None, None
-    try:
-        lat = float(row["gps_lat"]) if row["gps_lat"] is not None else None
-        lng = float(row["gps_lng"]) if row["gps_lng"] is not None else None
-    except (TypeError, ValueError):
-        return None, None
-    return lat, lng
-
-
-def _objects_same_site(
-    event_date: str,
-    obj_a: str,
-    obj_b: str,
-) -> bool:
-    """Cùng GPS (≤15m) hoặc chưa có GPS — chỉ gộp khi cùng camera."""
-    from .presence import haversine_m
-
-    lat_a, lng_a = _object_primary_gps(event_date, obj_a)
-    lat_b, lng_b = _object_primary_gps(event_date, obj_b)
-    if lat_a is None or lng_a is None or lat_b is None or lng_b is None:
-        return True
-    return haversine_m(lat_a, lng_a, lat_b, lng_b) <= 15.0
-
-
-def find_parallel_object_card(
-    event_date: str,
-    camera_id: str,
-    started_at: float,
-    now_ts: float,
-) -> str | None:
-    """Thẻ obj đang active cùng camera — tránh cấp obj mới khi ByteTrack tách đôi."""
-    cam = (camera_id or "").strip()
-    if not cam:
-        return None
-    rows = db.query(
-        "SELECT o.obj_id, o.first_seen, o.last_seen"
-        " FROM daily_objects o"
-        " WHERE o.event_date = ?"
-        " ORDER BY o.first_seen ASC",
-        (event_date,),
-    )
-    best: str | None = None
-    best_last = 0.0
-    probe = {"first_seen": started_at, "last_seen": now_ts}
-    for row in rows:
-        oid = str(row["obj_id"])
-        if _object_primary_camera(event_date, oid) != cam:
-            continue
-        if not _object_cards_overlap(dict(row), probe):
-            continue
-        last_seen = float(row["last_seen"])
-        if now_ts - last_seen > PARALLEL_OBJ_ACTIVE_SEC:
-            continue
-        if last_seen >= best_last:
-            best_last = last_seen
-            best = oid
-    return best
-
-
-def merge_object_cards(
-    keep_obj_id: str,
-    drop_obj_id: str,
-    *,
-    now: float | None = None,
-    event_date: str | None = None,
-) -> bool:
-    """Gộp hai thẻ Đối tượng trùng một người (track song song) → giữ keep."""
-    keep = (keep_obj_id or "").strip()
-    drop = (drop_obj_id or "").strip()
-    if not keep or not drop or keep == drop:
-        return False
-    ts = now or time.time()
-    date = event_date or db.today_vn(ts)
-    with db.tx() as conn:
-        keep_row = conn.execute(
-            "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
-            (date, keep),
-        ).fetchone()
-        drop_row = conn.execute(
-            "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
-            (date, drop),
-        ).fetchone()
-        if keep_row is None or drop_row is None:
-            return False
-        better = float(drop_row["snapshot_score"]) > float(keep_row["snapshot_score"])
-        conn.execute(
-            "UPDATE daily_objects SET first_seen = ?, last_seen = ?,"
-            " snapshot_path = ?, snapshot_score = ?"
-            " WHERE event_date = ? AND obj_id = ?",
-            (
-                min(float(keep_row["first_seen"]), float(drop_row["first_seen"])),
-                max(float(keep_row["last_seen"]), float(drop_row["last_seen"]), ts),
-                drop_row["snapshot_path"] if better else keep_row["snapshot_path"],
-                max(float(keep_row["snapshot_score"]), float(drop_row["snapshot_score"])),
-                date,
-                keep,
-            ),
-        )
-        conn.execute(
-            "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
-            (keep, date, drop),
-        )
-        conn.execute(
-            "DELETE FROM daily_objects WHERE event_date = ? AND obj_id = ?",
-            (date, drop),
-        )
-    coalesce_subject_appearances(keep, date)
-    return True
-
-
-def coalesce_parallel_object_cards(date: str | None = None) -> int:
-    """Gộp thẻ obj trùng lượt (2 track cùng camera/GPS) — repair sau deploy."""
-    d = date or db.today_vn()
-    objs = list_objects(d)
-    merged = 0
-    removed: set[str] = set()
-    for i, a in enumerate(objs):
-        aid = str(a["obj_id"])
-        if aid in removed:
-            continue
-        cam_a = _object_primary_camera(d, aid)
-        for b in objs[i + 1 :]:
-            bid = str(b["obj_id"])
-            if bid in removed:
-                continue
-            if not _object_cards_overlap(a, b):
-                continue
-            cam_b = _object_primary_camera(d, bid)
-            if cam_a and cam_b and cam_a != cam_b:
-                continue
-            if not _objects_same_site(d, aid, bid):
-                continue
-            keep, drop = (aid, bid) if aid < bid else (bid, aid)
-            if merge_object_cards(keep, drop, event_date=d):
-                merged += 1
-                removed.add(drop)
-                if drop == aid:
-                    break
-                a = db.query_one(
-                    "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
-                    (d, aid),
-                ) or a
-    return merged
-
-
-def promote_objects_with_face_snapshot(date: str | None = None) -> int:
-    """Repair: obj có snapshot_score ≥ ngưỡng — không cấp tk mới (cần embedding/gallery match)."""
-    _ = date
-    return 0
 
 
 def promote_object(
@@ -580,7 +399,7 @@ def promote_object(
             "SELECT * FROM daily_objects WHERE event_date = ? AND obj_id = ?",
             (date, obj_id),
         ).fetchone()
-        if obj is None:
+        if obj is None or obj["promoted_to"]:
             return
 
         existing = conn.execute(
@@ -623,9 +442,12 @@ def promote_object(
             "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
             (pid, date, obj_id),
         )
+        # Đánh dấu chứ không xoá: mã obj-* đã đi vào ảnh chụp và báo cáo xuất ra
+        # trước lúc thăng hạng, xoá dòng là những chỗ đó trỏ vào khoảng không.
         conn.execute(
-            "DELETE FROM daily_objects WHERE event_date = ? AND obj_id = ?",
-            (date, obj_id),
+            "UPDATE daily_objects SET promoted_to = ?, promoted_at = ?"
+            " WHERE event_date = ? AND obj_id = ?",
+            (pid, ts, date, obj_id),
         )
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
@@ -1036,11 +858,13 @@ def upsert_track_appearance(
     interactions_json: str,
     snapshot_path: str | None = None,
     counted: bool = False,
+    end_reason: str | None = None,
     finalize: bool = False,
 ) -> int:
     """Một appearance / track session — UPDATE in-place thay vì INSERT mỗi frame."""
     _ = finalize  # reserved — close semantics via ended_at
     counted_int = 1 if counted else 0
+    reason = (end_reason or "").strip() or None
     with db.tx() as conn:
         row_id = appearance_id
 
@@ -1065,6 +889,9 @@ def upsert_track_appearance(
                 track_id,
                 counted_int,
             ]
+            if reason:
+                set_parts.append("end_reason = ?")
+                params.append(reason)
             if snapshot_path:
                 set_parts.append("snapshot_path = COALESCE(snapshot_path, ?)")
                 params.append(snapshot_path)
@@ -1087,8 +914,8 @@ def upsert_track_appearance(
             "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
             " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified, presence_seq,"
             " source_cameras, snapshot_path, track_id, session_id, counted,"
-            " event_payload_json, interactions_json)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " event_payload_json, interactions_json, end_reason)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 event_date,
                 subject_id,
@@ -1109,15 +936,118 @@ def upsert_track_appearance(
                 counted_int,
                 payload_json,
                 interactions_json,
+                reason,
             ),
         )
         return int(cur.lastrowid)
 
 
-def day_stats(date: str | None = None) -> dict[str, Any]:
-    """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
+# ---------------------------------------------------------------------------
+# Sổ cái lượt gặp
+
+
+def subject_kind(subject_id: str) -> str:
+    """Phân loại chủ thể lúc chốt track — quyết định lượt này vào bảng nào."""
+    sid = (subject_id or "").strip()
+    if not sid:
+        return "unqualified"
+    if sid.startswith("obj-"):
+        return "object"
+    person = identity.get_person(identity.resolve_alias(sid))
+    if person and person.get("status") == identity.STATUS_IDENTIFIED:
+        return "identity"
+    return "person"
+
+
+def record_sighting(
+    *,
+    event_date: str,
+    subject_id: str,
+    camera_id: str,
+    zone_id: str | None,
+    track_id: str,
+    session_id: str,
+    started_at: float,
+    ended_at: float,
+    end_reason: str,
+    qualified: bool,
+    appearance_id: int | None = None,
+    now: float | None = None,
+) -> None:
+    """Ghi một lượt gặp đã chốt. Gọi lại cùng session thì nới `ended_at`.
+
+    Re-ID nối một session qua nhiều track ByteTrack, nên cùng `session_id` có
+    thể chốt nhiều lần. Đó vẫn là **một** lượt gặp — khoá duy nhất theo session
+    giữ đúng như vậy mà không cần phía gọi tự nhớ đã ghi hay chưa.
+    """
+    sess = (session_id or "").strip()
+    cam = (camera_id or "").strip()
+    if not sess or not cam:
+        return
+    ts = float(now if now is not None else time.time())
+    kind = subject_kind(subject_id) if qualified else "unqualified"
+    with db.tx() as conn:
+        conn.execute(
+            "INSERT INTO sightings"
+            "(event_date, subject_id, subject_kind, camera_id, zone_id, track_id,"
+            " session_id, started_at, ended_at, end_reason, qualified, appearance_id,"
+            " created_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            " ON CONFLICT(event_date, camera_id, session_id) DO UPDATE SET"
+            "   subject_id = excluded.subject_id,"
+            "   subject_kind = excluded.subject_kind,"
+            "   track_id = excluded.track_id,"
+            "   started_at = MIN(started_at, excluded.started_at),"
+            "   ended_at = MAX(ended_at, excluded.ended_at),"
+            "   end_reason = excluded.end_reason,"
+            "   qualified = MAX(qualified, excluded.qualified),"
+            "   appearance_id = COALESCE(excluded.appearance_id, appearance_id)",
+            (
+                event_date,
+                (subject_id or "").strip(),
+                kind,
+                cam,
+                zone_id,
+                (track_id or "").strip(),
+                sess,
+                float(started_at),
+                float(ended_at),
+                (end_reason or "").strip() or "lost",
+                1 if qualified else 0,
+                appearance_id,
+                ts,
+            ),
+        )
+
+
+def list_sightings(date: str | None = None) -> list[dict[str, Any]]:
     d = date or db.today_vn()
-    person_row = db.query_one(
+    rows = db.query(
+        "SELECT * FROM sightings WHERE event_date = ? ORDER BY started_at ASC", (d,)
+    )
+    return [dict(r) for r in rows]
+
+
+def _count(sql: str, params: tuple) -> int:
+    row = db.query_one(sql, params)
+    return int(row["c"]) if row else 0
+
+
+def day_stats(date: str | None = None) -> dict[str, Any]:
+    """KPI đếm chuẩn — Nhân sự (1:1) · Lượt gặp Đối tượng · số đo tự hiệu chỉnh.
+
+    Hai bộ đếm khác bản chất, không quy về nhau được. Người và Định danh có tiêu
+    chí trùng khớp (khuôn mặt) nên đếm **thẻ**: một người một thẻ mỗi ngày.
+    Đối tượng thì không có tiêu chí nào để nói hai lần nhìn thấy là một người,
+    nên đếm **lượt gặp**: một track từ lúc vào khung tới lúc ra là một lượt, và
+    con số này cố tình lớn hơn số người có mặt.
+
+    Kèm theo là phần để đọc con số đó cho đúng: bao nhiêu lượt đóng vì mất tín
+    hiệu (nguồn chập chờn thổi số lên), và bao nhiêu track thấy được nhưng không
+    chốt nổi thẻ (phần hệ thống đang bỏ sót).
+    """
+    d = date or db.today_vn()
+    person_n = _count(
         "SELECT COUNT(*) AS c FROM daily_events e"
         " JOIN persons p ON p.pers_id = e.pers_id"
         " WHERE e.event_date = ? AND p.status IN (?, ?)"
@@ -1125,7 +1055,7 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
         " AND e.snapshot_score >= ?",
         (d, identity.STATUS_PERSON, identity.STATUS_DRAFT, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
-    identity_row = db.query_one(
+    identity_n = _count(
         "SELECT COUNT(*) AS c FROM daily_events e"
         " JOIN persons p ON p.pers_id = e.pers_id"
         " WHERE e.event_date = ? AND p.status = ?"
@@ -1133,33 +1063,64 @@ def day_stats(date: str | None = None) -> dict[str, Any]:
         " AND e.snapshot_score >= ?",
         (d, identity.STATUS_IDENTIFIED, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
-    enc_row = db.query_one(
+    # Lượt gặp của Người/Định danh: mọi lần hiện diện đã ghi nhận.
+    #
+    # Trước đây có thêm `counted = 1`, tức đã qua tripwire GPS của công trường.
+    # Bodycam mất định vị trong nhà hoặc dưới gầm cầu là cả ngày hôm đó KPI bằng
+    # không trong khi tab sự kiện đầy thẻ — số liệu tự mâu thuẫn vì một lý do
+    # chẳng liên quan gì tới việc có gặp người hay không.
+    encounters = _count(
         "SELECT COUNT(*) AS c FROM appearances"
-        " WHERE event_date = ? AND qualified = 1 AND counted = 1"
-        " AND subject_id NOT LIKE 'obj-%'",
+        " WHERE event_date = ? AND qualified = 1 AND subject_id NOT LIKE 'obj-%'",
         (d,),
     )
-    obj_row = db.query_one(
-        "SELECT COUNT(*) AS c FROM appearances"
-        " WHERE event_date = ? AND qualified = 1 AND counted = 1"
-        " AND subject_id LIKE 'obj-%'",
-        (d,),
-    )
-    obj_card_row = db.query_one(
+    # Thẻ Đối tượng còn chưa gán được người.
+    #
+    # Trước đây còn chặn trên `snapshot_score < 1.05`, tạo một vùng chết: thẻ có
+    # ảnh mặt rõ nhưng chưa khớp gallery thì rơi khỏi bộ đếm Đối tượng, mà cũng
+    # chưa vào được bộ đếm Người vì chưa thăng hạng. Người đó biến mất khỏi mọi
+    # con số trong khi thẻ của họ vẫn nằm đó trong danh sách.
+    object_cards = _count(
         "SELECT COUNT(*) AS c FROM daily_objects"
-        " WHERE event_date = ?"
-        " AND snapshot_path IS NOT NULL AND snapshot_path != ''"
-        " AND COALESCE(snapshot_score, 0) < ?",
-        (d, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+        " WHERE event_date = ? AND promoted_to IS NULL"
+        " AND snapshot_path IS NOT NULL AND snapshot_path != ''",
+        (d,),
     )
-    person_n = int(person_row["c"] if person_row else 0)
-    identity_n = int(identity_row["c"] if identity_row else 0)
+    promoted_cards = _count(
+        "SELECT COUNT(*) AS c FROM daily_objects"
+        " WHERE event_date = ? AND promoted_to IS NOT NULL",
+        (d,),
+    )
+    object_sightings = _count(
+        "SELECT COUNT(*) AS c FROM sightings"
+        " WHERE event_date = ? AND qualified = 1 AND subject_kind = 'object'"
+        " AND end_reason != ?",
+        (d, SIGHTING_END_STREAM_OFFLINE),
+    )
+    stream_offline_sightings = _count(
+        "SELECT COUNT(*) AS c FROM sightings"
+        " WHERE event_date = ? AND qualified = 1 AND end_reason = ?",
+        (d, SIGHTING_END_STREAM_OFFLINE),
+    )
+    sightings_total = _count(
+        "SELECT COUNT(*) AS c FROM sightings WHERE event_date = ?", (d,)
+    )
+    sightings_unqualified = _count(
+        "SELECT COUNT(*) AS c FROM sightings WHERE event_date = ? AND qualified = 0",
+        (d,),
+    )
     return {
         "date": d,
         "workers_standard": person_n + identity_n,
         "person_count": person_n,
         "identity_count": identity_n,
-        "object_card_count": int(obj_card_row["c"] if obj_card_row else 0),
-        "encounters_standard": int(enc_row["c"] if enc_row else 0),
-        "unassigned_observations": int(obj_row["c"] if obj_row else 0),
+        "object_card_count": object_cards,
+        "promoted_object_count": promoted_cards,
+        "encounters_standard": encounters,
+        "object_sighting_count": object_sightings,
+        # Tên cũ của cùng con số — frontend đã phát hành đang đọc khoá này.
+        "unassigned_observations": object_sightings,
+        "sightings_stream_offline": stream_offline_sightings,
+        "sightings_total": sightings_total,
+        "sightings_unqualified": sightings_unqualified,
     }
