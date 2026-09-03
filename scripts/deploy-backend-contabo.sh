@@ -19,18 +19,54 @@ INFRA_REMOTE="${INFRA_REMOTE:-/opt/vifence/infra/contabo}"
 API_DOMAIN="${API_DOMAIN:-217.217.253.247.nip.io}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/vifence_contabo}"
 
+normalize_openssh_key_file() {
+  local key_file="$1"
+  python3 - "$key_file" <<'PY'
+import re
+import sys
+import textwrap
+from pathlib import Path
+
+path = Path(sys.argv[1])
+raw = path.read_text(encoding="utf-8").strip()
+if not raw or raw.count("\n") >= 2:
+    sys.exit(0)
+
+begin_match = re.search(r"-----BEGIN\s+[^-]+-----", raw)
+end_match = re.search(r"-----END\s+[^-]+-----", raw)
+if not begin_match or not end_match or end_match.start() <= begin_match.end():
+    sys.exit(0)
+
+begin = re.sub(r"\s+", " ", begin_match.group(0).strip())
+end = re.sub(r"\s+", " ", end_match.group(0).strip())
+body = re.sub(r"\s+", "", raw[begin_match.end() : end_match.start()])
+if not body:
+    sys.exit(0)
+
+path.write_text(
+    f"{begin}\n" + "\n".join(textwrap.wrap(body, 70)) + f"\n{end}\n",
+    encoding="utf-8",
+)
+PY
+}
+
 materialize_contabo_ssh_key() {
-  if [[ -f "$SSH_KEY" ]]; then
-    return 0
-  fi
   if [[ -z "${VIFENCE_CONTABO_SSH_PRIVATE_KEY:-}" ]]; then
-    return 1
+    [[ -f "$SSH_KEY" ]] || return 1
+    normalize_openssh_key_file "$SSH_KEY"
+    ssh-keygen -y -f "$SSH_KEY" >/dev/null 2>&1 || return 1
+    return 0
   fi
   mkdir -p "$(dirname "$SSH_KEY")"
   chmod 700 "$(dirname "$SSH_KEY")"
-  # Runtime secret — hỗ trợ PEM nhiều dòng hoặc \n escaped trong dashboard.
+  # Runtime secret — hỗ trợ PEM nhiều dòng, \n escaped, hoặc một dòng liền trong dashboard.
   printf '%b\n' "$VIFENCE_CONTABO_SSH_PRIVATE_KEY" > "$SSH_KEY"
   chmod 600 "$SSH_KEY"
+  normalize_openssh_key_file "$SSH_KEY"
+  ssh-keygen -y -f "$SSH_KEY" >/dev/null 2>&1 || {
+    echo "✗ SSH key không hợp lệ sau khi materialize (kiểm tra secret VIFENCE_CONTABO_SSH_PRIVATE_KEY)."
+    return 1
+  }
   export SSH_KEY
 }
 
