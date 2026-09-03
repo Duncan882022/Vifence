@@ -57,25 +57,45 @@ function bboxIou(a: Bbox, b: Bbox): number {
   return union > 0 ? inter / union : 0
 }
 
+/** Tỉ lệ diện tích nhỏ/lớn — chặn ghép người cận cảnh với người phía xa. */
+function sizeRatio(a: Bbox, b: Bbox): number {
+  const areaA = Math.max(1, (a[2] - a[0]) * (a[3] - a[1]))
+  const areaB = Math.max(1, (b[2] - b[0]) * (b[3] - b[1]))
+  return Math.min(areaA, areaB) / Math.max(areaA, areaB)
+}
+
 function centerRatio(a: Bbox, b: Bbox): number {
   const ax = (a[0] + a[2]) / 2
   const ay = (a[1] + a[3]) / 2
   const bx = (b[0] + b[2]) / 2
   const by = (b[1] + b[3]) / 2
   const scale = Math.max(
-    12,
+    8,
     (Math.max(a[2] - a[0], a[3] - a[1]) + Math.max(b[2] - b[0], b[3] - b[1])) / 2,
   )
   return Math.hypot(ax - bx, ay - by) / scale
 }
 
+/**
+ * Cùng cổng ghép với `_match_cost` của `patrol_tracker.py`.
+ *
+ * Điểm khác trước: nhánh khoảng cách tâm không còn đòi IoU tối thiểu. Với flycam
+ * tầm cao, hai hộp của cùng một người ở hai nhịp liên tiếp thường không chồng
+ * nhau chút nào, nên điều kiện IoU cũ khoá luôn nhánh này và mọi người trên DR-03
+ * bị cấp track mới mỗi frame. Bù lại, `matchSizeRatioMin` mới chặn kiểu ghép
+ * nhầm mà nhánh tâm dễ mắc nhất.
+ */
 function matchCost(trackBbox: Bbox, detBbox: Bbox, cfg: PatrolPersonRoiConfig): number | null {
+  if (sizeRatio(trackBbox, detBbox) < cfg.matchSizeRatioMin) return null
+
   const iou = bboxIou(trackBbox, detBbox)
-  const center = centerRatio(trackBbox, detBbox)
   if (iou >= cfg.matchIouMin) return 1 - iou
-  if (center <= cfg.matchCenterRatio && iou >= cfg.matchIouMin * 0.35) {
-    return 0.55 + center * 0.45
-  }
+
+  const ratio = centerRatio(trackBbox, detBbox)
+  if (ratio > cfg.matchCenterRatio) return null
+  // Chồng lấn một phần → tin hơn hẳn trường hợp chỉ gần nhau.
+  if (iou > 0) return 0.55 + 0.45 * (ratio / cfg.matchCenterRatio)
+  if (ratio <= cfg.matchCenterRatio * 0.6) return 0.80 + 0.20 * (ratio / cfg.matchCenterRatio)
   return null
 }
 
@@ -130,12 +150,19 @@ function greedyAssign(
   allowedStates: Set<PersonRoiTrackState>,
   excludeTrackIds: Set<string>,
 ): Map<string, number> {
+  const detAnchors = detections.map(personRoiAnchorKey)
   const pairs: MatchPair[] = []
   for (const track of tracks) {
     if (!allowedStates.has(track.state)) continue
     if (excludeTrackIds.has(track.id)) continue
     const tb = track.kalman.getBbox()
     detections.forEach((det, detIndex) => {
+      // Backend là nguồn sự thật về danh tính track. Hai bên đều mang id mà id
+      // khác nhau thì đây chắc chắn là hai người khác nhau — dù hộp có chồng
+      // nhau đến đâu. Cho phép ghép ở đây là để ROI (và mã `sgc-*` đi kèm) nhảy
+      // sang người bên cạnh mỗi khi đám đông chen nhau.
+      const detAnchor = detAnchors[detIndex]
+      if (track.anchorKey && detAnchor && track.anchorKey !== detAnchor) return
       const cost = matchCost(tb, det.bbox, cfg)
       if (cost != null) pairs.push({ trackId: track.id, detIndex, cost })
     })
@@ -256,15 +283,28 @@ export function advancePersonRoiTracks(
     states: PersonRoiTrackState[],
     offset = 0,
   ) => {
-    const assignment = greedyAssign(trackList, pool, cfg, new Set(states), new Set(next.keys()))
+    // Bỏ sẵn detection đã bị bước khoá-theo-id tiêu thụ. Trước đây chúng vẫn nằm
+    // trong bảng chi phí và có thể chiếm chỗ tốt nhất của một track khác, để rồi
+    // bị loại ở vòng dưới — track đó mất lượt ghép và tính là miss dù có
+    // detection hợp lệ ngay bên cạnh.
+    const candidates = pool
+      .map((det, index) => ({ det, globalIndex: offset + index }))
+      .filter(entry => !matchedDets.has(entry.globalIndex))
+    if (candidates.length === 0) return
+
+    const assignment = greedyAssign(
+      trackList,
+      candidates.map(entry => entry.det),
+      cfg,
+      new Set(states),
+      new Set(next.keys()),
+    )
     for (const [trackId, detIndex] of assignment) {
       const track = prevTracks.get(trackId)
-      const det = pool[detIndex]
-      if (!track || !det) continue
-      const globalIndex = offset + detIndex
-      if (matchedDets.has(globalIndex)) continue
-      matchedDets.add(globalIndex)
-      applyMeasurement(track, det)
+      const entry = candidates[detIndex]
+      if (!track || !entry) continue
+      matchedDets.add(entry.globalIndex)
+      applyMeasurement(track, entry.det)
       next.set(trackId, track)
     }
   }
@@ -351,6 +391,16 @@ export function predictPersonRoiTracks(
     if (track.missStreak > coastLimit) {
       continue
     }
+    // Conf thấp, backend chưa cấp id, và mới chỉ thấy đúng một lần: gần như luôn
+    // là một mảng nhiễu. Chờ thêm một nhịp rẻ hơn nhiều so với một cái hộp chớp
+    // lên rồi tắt giữa cảnh đông. Người rõ mặt (conf cao) vẫn vẽ ngay.
+    if (
+      !track.anchorKey
+      && track.hits < cfg.confirmHits
+      && track.confidence < cfg.highConfidenceMin
+    ) {
+      continue
+    }
 
     const isCoasting = track.missStreak > 0
     const predictCap = isCoasting
@@ -365,7 +415,7 @@ export function predictPersonRoiTracks(
     let displayOpacity = 1
     if (track.missStreak > 0) {
       displayOpacity = Math.max(0.35, 1 - track.missStreak / (coastLimit + 1))
-    } else if (track.state === 'tentative' && track.hits < cfg.confirmHits) {
+    } else if (track.state === 'tentative') {
       displayOpacity = 0.62
     }
 
