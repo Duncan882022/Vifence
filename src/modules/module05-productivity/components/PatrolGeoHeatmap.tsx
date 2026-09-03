@@ -19,6 +19,7 @@ import {
   PATROL_MAP_ACTIVE_HELMET_PINS,
   PATROL_SITE_BOUNDARY,
   PATROL_SITE_CENTER,
+  PATROL_SITE_DEFAULT_ZOOM,
   PATROL_SITE_FOCUS_BOUNDS,
   PATROL_SITE_MAX_ZOOM,
   PATROL_SITE_MIN_ZOOM,
@@ -465,14 +466,16 @@ function MapSiteOverlayClip({ enabled }: { enabled: boolean }) {
 /* ── Responsive map zoom ────────────────────────────────────── */
 function usePatrolMapZoom(): number {
   const [zoom, setZoom] = useState(() => {
-    if (typeof window === 'undefined') return 17
-    return window.innerWidth < 1024 ? 16 : 17
+    if (typeof window === 'undefined') return PATROL_SITE_DEFAULT_ZOOM
+    return window.innerWidth < 1024
+      ? PATROL_SITE_DEFAULT_ZOOM - 1
+      : PATROL_SITE_DEFAULT_ZOOM
   })
 
   useEffect(() => {
     const update = () => {
       const w = window.innerWidth
-      setZoom(w < 1024 ? 16 : 17)
+      setZoom(w < 1024 ? PATROL_SITE_DEFAULT_ZOOM - 1 : PATROL_SITE_DEFAULT_ZOOM)
     }
     update()
     window.addEventListener('resize', update)

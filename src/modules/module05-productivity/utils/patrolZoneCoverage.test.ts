@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { computePatrolZoneCoverage } from './patrolZoneCoverage'
-import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { PATROL_GPS_ZONES, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 
 describe('computePatrolZoneCoverage', () => {
   it('zone visited khi có cam gán tĩnh online (chưa GPS)', () => {
     const result = computePatrolZoneCoverage({
       cameraOnlineById: { 'HC-02': true, 'HC-01': false, 'DR-03': false },
     })
-    expect(result.totalZones).toBe(6)
-    expect(result.visitedByZoneId['ZONE_5']).toBe(true)
+    expect(result.totalZones).toBe(7)
+    expect(result.visitedByZoneId['ZONE_6']).toBe(true)
     expect(result.visitedZones).toBe(1)
   })
 
@@ -17,11 +17,12 @@ describe('computePatrolZoneCoverage', () => {
       cameraOnlineById: { 'HC-01': false, 'HC-02': false, 'DR-03': false },
     })
     expect(result.visitedZones).toBe(0)
-    expect(result.visitedByZoneId['ZONE_5']).toBe(false)
+    expect(result.visitedByZoneId['ZONE_6']).toBe(false)
   })
 
   it('GPS trong polygon xác nhận tuần tra', () => {
-    const [lat, lng] = PATROL_SITE_CENTER
+    const zone3 = PATROL_GPS_ZONES.find(z => z.zone_id === 'ZONE_3')!
+    const [lat, lng] = zone3.center
     const result = computePatrolZoneCoverage({
       cameraOnlineById: { 'DR-03': true },
       workforce: {

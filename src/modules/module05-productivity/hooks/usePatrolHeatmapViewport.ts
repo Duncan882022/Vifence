@@ -3,6 +3,10 @@
  */
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useTabletLandscape } from '@/hooks/useTabletLandscape'
+import {
+  PATROL_SITE_DEFAULT_ZOOM,
+  PATROL_SITE_DEFAULT_ZOOM_MOBILE,
+} from '../data/patrolSiteMap'
 
 export interface PatrolHeatmapViewport {
   isPhone: boolean
@@ -27,11 +31,9 @@ export function usePatrolHeatmapViewport(): PatrolHeatmapViewport {
   const isTabletLandscape = useTabletLandscape()
   const isCoarsePointer = useMediaQuery('(pointer: coarse)')
 
-  const mapZoom = isPhone
-    ? (isLandscapeMobile ? 17 : 16)
-    : isTablet || isTabletLandscape
-      ? (isLandscapeMobile || isTabletLandscape ? 17 : 16)
-      : 17
+  const mapZoom = isPhone || isTablet || isTabletLandscape
+    ? PATROL_SITE_DEFAULT_ZOOM_MOBILE
+    : PATROL_SITE_DEFAULT_ZOOM
 
   const embeddedMapClass = isPhone || isTablet || isTabletLandscape
     ? 'min-h-[220px] h-full w-full supports-[height:100dvh]:min-h-[min(220px,38dvh)]'

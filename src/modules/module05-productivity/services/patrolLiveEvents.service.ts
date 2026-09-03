@@ -23,9 +23,10 @@ const ZONE_LABELS: Record<string, string> = {
   ZONE_1: 'Khu Đình Trung Bản',
   ZONE_2: 'Khu Xóm Thành',
   ZONE_3: 'Khu Bùi Xá',
-  ZONE_4: 'Khu Đảo Hoàng Tân',
-  ZONE_5: 'Khu Hạ Long Xanh',
-  ZONE_6: 'Khu Bệnh viện Sản Nhi',
+  ZONE_4: 'Khu Hà An',
+  ZONE_5: 'Khu Đảo Hoàng Tân',
+  ZONE_6: 'Khu Hạ Long Xanh',
+  ZONE_7: 'Khu Bệnh viện Sản Nhi',
 }
 
 const TUNNEL_HEADERS: Record<string, string> = {

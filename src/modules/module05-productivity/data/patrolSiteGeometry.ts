@@ -2,11 +2,13 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Hành lang CT06 Quảng Yên — tuyến CT06 (Đình Trung Bản → Bệnh viện Sản Nhi).
+ * Hành lang CT06 Quảng Yên — capsule 2 đầu tròn dọc tuyến CT06.
  * Tham chiếu: 20°55'42.4"N 106°52'25.0"E (Bùi Xá).
  */
 
-/** 4 góc điều khiển bilinear (TL→TR→BR→BL) — chia 6 khu dọc theo CT06. */
+const M_PER_DEG_LAT = 111_320
+
+/** 4 góc điều khiển bilinear (TL→TR→BR→BL) — chia 7 khu dọc theo CT06. */
 export const PATROL_SITE_CORNERS: [number, number][] = [
   [20.9458, 106.8512],
   [20.9446, 106.9370],
@@ -14,24 +16,169 @@ export const PATROL_SITE_CORNERS: [number, number][] = [
   [20.9176, 106.8508],
 ]
 
+const SITE_TOP = PATROL_SITE_CORNERS[0]
+const SITE_RIGHT = PATROL_SITE_CORNERS[1]
+const SITE_BOTTOM = PATROL_SITE_CORNERS[2]
+const SITE_LEFT = PATROL_SITE_CORNERS[3]
+
+function sitePoint(u: number, v: number): [number, number] {
+  const lat =
+    (1 - u) * (1 - v) * SITE_TOP[0] +
+    u * (1 - v) * SITE_RIGHT[0] +
+    u * v * SITE_BOTTOM[0] +
+    (1 - u) * v * SITE_LEFT[0]
+  const lng =
+    (1 - u) * (1 - v) * SITE_TOP[1] +
+    u * (1 - v) * SITE_RIGHT[1] +
+    u * v * SITE_BOTTOM[1] +
+    (1 - u) * v * SITE_LEFT[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+function latLngToEnu(
+  lat: number,
+  lng: number,
+  refLat: number,
+  refLng: number,
+): [number, number] {
+  const cosLat = Math.cos((refLat * Math.PI) / 180)
+  const east = (lng - refLng) * M_PER_DEG_LAT * cosLat
+  const north = (lat - refLat) * M_PER_DEG_LAT
+  return [east, north]
+}
+
+function enuToLatLng(
+  east: number,
+  north: number,
+  refLat: number,
+  refLng: number,
+): [number, number] {
+  const cosLat = Math.cos((refLat * Math.PI) / 180)
+  const lat = refLat + north / M_PER_DEG_LAT
+  const lng = refLng + east / (M_PER_DEG_LAT * Math.max(cosLat, 1e-6))
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+type LngLat = [number, number] // [lng, lat]
+
+function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+}
+
+function isInsideSiteRing(lat: number, lng: number, ring: [number, number][]): boolean {
+  const p: LngLat = [lng, lat]
+  const clipRing: LngLat[] = ring.map(([la, ln]) => [ln, la])
+  for (let i = 0; i < clipRing.length; i += 1) {
+    const a = clipRing[i]
+    const b = clipRing[(i + 1) % clipRing.length]
+    if (cross2d(a[0], a[1], b[0], b[1], p[0], p[1]) > 1e-11) return false
+  }
+  return true
+}
+
 /**
- * Viền đỏ heatmap — capsule dọc CT06 (12 đỉnh, ngược chiều kim đồng hồ từ tây-nam).
- * Khớp vùng khoanh đỏ trên bản đồ khảo sát.
+ * Stadium / capsule — 2 nửa hình tròn ở 2 đầu + 2 cạnh thẳng song song.
+ * Trục dọc CT06 (tây → đông); bán kính = max khoảng cách vuông góc tới trục.
  */
-export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
-  [20.9176, 106.8508],
-  [20.9458, 106.8690],
-  [20.9457, 106.8860],
-  [20.9459, 106.9030],
-  [20.9456, 106.9200],
-  [20.9446, 106.9370],
-  [20.9172, 106.9358],
-  [20.9170, 106.9180],
-  [20.9169, 106.9045],
-  [20.9171, 106.8910],
-  [20.9169, 106.8775],
-  [20.9167, 106.8640],
+export function buildStadiumCapsuleRing(
+  westCenter: [number, number],
+  eastCenter: [number, number],
+  envelopePoints: [number, number][],
+  arcSteps = 28,
+): [number, number][] {
+  const refLat = (westCenter[0] + eastCenter[0]) / 2
+  const refLng = (westCenter[1] + eastCenter[1]) / 2
+
+  const [wx, wy] = latLngToEnu(westCenter[0], westCenter[1], refLat, refLng)
+  const [ex, ey] = latLngToEnu(eastCenter[0], eastCenter[1], refLat, refLng)
+
+  const axisLen = Math.hypot(ex - wx, ey - wy)
+  if (axisLen < 50) {
+    return envelopePoints.length >= 4
+      ? [...envelopePoints]
+      : [westCenter, eastCenter, westCenter]
+  }
+
+  const ux = (ex - wx) / axisLen
+  const uy = (ey - wy) / axisLen
+  const px = -uy
+  const py = ux
+
+  let r = 0
+  for (const [lat, lng] of envelopePoints) {
+    const [x, y] = latLngToEnu(lat, lng, refLat, refLng)
+    const perp = Math.abs((x - wx) * px + (y - wy) * py)
+    if (perp > r) r = perp
+  }
+  if (r < 80) r = 800
+
+  const wcx = wx + ux * r
+  const wcy = wy + uy * r
+  const ecx = ex - ux * r
+  const ecy = ey - uy * r
+
+  const ringEnu: [number, number][] = []
+  const straightSteps = Math.max(10, Math.round(axisLen / 350))
+
+  for (let i = 0; i <= straightSteps; i += 1) {
+    const t = i / straightSteps
+    ringEnu.push([
+      wcx + (ecx - wcx) * t + px * r,
+      wcy + (ecy - wcy) * t + py * r,
+    ])
+  }
+
+  for (let i = 1; i <= arcSteps; i += 1) {
+    const angle = (Math.PI * i) / arcSteps
+    ringEnu.push([
+      ecx + r * Math.cos(angle) * px + r * Math.sin(angle) * ux,
+      ecy + r * Math.cos(angle) * py + r * Math.sin(angle) * uy,
+    ])
+  }
+
+  for (let i = straightSteps - 1; i >= 0; i -= 1) {
+    const t = i / straightSteps
+    ringEnu.push([
+      wcx + (ecx - wcx) * t - px * r,
+      wcy + (ecy - wcy) * t - py * r,
+    ])
+  }
+
+  for (let i = 1; i <= arcSteps - 1; i += 1) {
+    const angle = Math.PI + (Math.PI * i) / arcSteps
+    ringEnu.push([
+      wcx + r * Math.cos(angle) * px + r * Math.sin(angle) * ux,
+      wcy + r * Math.cos(angle) * py + r * Math.sin(angle) * uy,
+    ])
+  }
+
+  let ring = ringEnu.map(([e, n]) => enuToLatLng(e, n, refLat, refLng))
+  const probe = envelopePoints[envelopePoints.length - 1] ?? westCenter
+  if (!isInsideSiteRing(probe[0], probe[1], ring)) {
+    ring = [...ring].reverse()
+  }
+  return ring
+}
+
+const CAPSULE_ENVELOPE: [number, number][] = [
+  ...PATROL_SITE_CORNERS,
+  sitePoint(0, 0),
+  sitePoint(0, 1),
+  sitePoint(1, 0),
+  sitePoint(1, 1),
+  sitePoint(0.5, 0),
+  sitePoint(0.5, 1),
+  [20.928444, 106.873611],
 ]
+
+/**
+ * Viền đỏ heatmap — capsule bầu 2 đầu (~56 đỉnh), ngược chiều kim đồng hồ.
+ */
+export const PATROL_SITE_BOUNDARY_RING: [number, number][] = buildStadiumCapsuleRing(
+  sitePoint(0, 0.5),
+  sitePoint(1, 0.5),
+  CAPSULE_ENVELOPE,
+)
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
 export const PATROL_SITE_BOUNDARY: [number, number][] = [
@@ -51,12 +198,6 @@ export const PATROL_SITE_CLIP_RING: [number, number][] = (() => {
     parseFloat((lng + (cLng - lng) * inset).toFixed(6)),
   ])
 })()
-
-type LngLat = [number, number] // [lng, lat]
-
-function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
-  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-}
 
 /** Inside = right of directed edge for this site ring winding. */
 function isInsideEdge(p: LngLat, a: LngLat, b: LngLat): boolean {
@@ -110,18 +251,6 @@ export function clipPolygonToSiteBoundary(polygon: [number, number][]): [number,
     parseFloat(lat.toFixed(6)),
     parseFloat(lng.toFixed(6)),
   ])
-}
-
-/** Same half-plane test as clip — consistent with zone/density bounds. */
-function isInsideSiteRing(lat: number, lng: number, ring: [number, number][]): boolean {
-  const p: LngLat = [lng, lat]
-  const clipRing: LngLat[] = ring.map(([la, ln]) => [ln, la])
-  for (let i = 0; i < clipRing.length; i += 1) {
-    const a = clipRing[i]
-    const b = clipRing[(i + 1) % clipRing.length]
-    if (cross2d(a[0], a[1], b[0], b[1], p[0], p[1]) > 1e-11) return false
-  }
-  return true
 }
 
 /** Ray-casting point-in-polygon for the site boundary. */

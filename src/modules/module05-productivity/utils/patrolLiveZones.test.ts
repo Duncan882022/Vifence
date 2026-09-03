@@ -29,7 +29,7 @@ describe('buildPatrolLiveZonesFromWorkforce', () => {
     expect(zone3?.coverage).toBe('VISITED')
     expect(zone3?.peopleCurrent).toBe(5)
     expect(zone3?.uniquePeople).toBe(7)
-    expect(zones.length).toBe(6)
+    expect(zones.length).toBe(7)
   })
 
   it('visitedByZoneId override — phủ khu theo thiết bị', () => {

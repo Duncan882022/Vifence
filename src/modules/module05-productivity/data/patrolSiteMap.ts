@@ -1,9 +1,8 @@
 /** Module 05 — Site Map: GPS zones, helmet pins, patrol trail.
  *  Coordinate system: [lat, lng] throughout (Leaflet convention).
  *
- *  Hành lang CT06 Quảng Yên — 6 khu dọc tuyến CT06
- *  Center: 20.931225°N, 106.893700°E (Bùi Xá)
- *  ROI: PATROL_SITE_BOUNDARY_RING in patrolSiteGeometry.ts
+ *  Hành lang CT06 Quảng Yên — capsule 2 đầu tròn, 7 khu bằng nhau
+ *  Center: 20.928444°N, 106.873611°E (Bùi Xá)
  */
 
 import {
@@ -80,11 +79,11 @@ export function patrolZoneInteriorPoint(
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
-/** HC-01 không GPS → neo tây (khu 1–2). */
-export const PATROL_HELMET_01_FALLBACK: [number, number] = sitePoint(0.14, 0.42)
+/** HC-01 không GPS → neo tây (khu 2). */
+export const PATROL_HELMET_01_FALLBACK: [number, number] = sitePoint(1 / 7 + 0.04, 0.42)
 
-/** HC-02 không GPS → neo đông (khu 5–6). */
-export const PATROL_HELMET_02_FALLBACK: [number, number] = sitePoint(0.86, 0.58)
+/** HC-02 không GPS → neo đông (khu 6). */
+export const PATROL_HELMET_02_FALLBACK: [number, number] = sitePoint(5 / 7 + 0.04, 0.58)
 
 /** DR-03 không GPS → neo giữa tuyến CT06. */
 export const PATROL_DRONE_03_FALLBACK: [number, number] = sitePoint(0.5, 0.35)
@@ -126,24 +125,36 @@ function buildGpsZone(
   }
 }
 
-/** Chia 6 khu dọc CT06 — ranh u tinh chỉnh để ghim Bùi Xá thuộc ZONE_3. */
-const ZONE_U_SPLITS = [0, 0.12, 0.22, 0.38, 0.55, 0.75, 1] as const
+/** 7 khu bằng nhau dọc CT06 (tây → đông). */
+const ZONE_COUNT = 7
+const ZONE_U_SPLITS = Array.from({ length: ZONE_COUNT + 1 }, (_, i) => i / ZONE_COUNT)
 
 export const PATROL_SITE_AREA_M2 = 19_000_000
 
+const ZONE_DEFS = [
+  { id: 'ZONE_1', name: 'Khu Đình Trung Bản', shortName: 'TĐB', color: '#ef4444' },
+  { id: 'ZONE_2', name: 'Khu Xóm Thành', shortName: 'XTh', color: '#eab308' },
+  { id: 'ZONE_3', name: 'Khu Bùi Xá', shortName: 'BX', color: '#22c55e' },
+  { id: 'ZONE_4', name: 'Khu Hà An', shortName: 'HAn', color: '#3b82f6' },
+  { id: 'ZONE_5', name: 'Khu Đảo Hoàng Tân', shortName: 'ĐHT', color: '#a855f7' },
+  { id: 'ZONE_6', name: 'Khu Hạ Long Xanh', shortName: 'HLX', color: '#06b6d4' },
+  { id: 'ZONE_7', name: 'Khu Bệnh viện Sản Nhi', shortName: 'BV', color: '#f59e0b' },
+] as const
+
 /**
- * 6 khu dọc CT06 (tây → đông):
- *  [1] Đình Trung Bản | [2] Xóm Thành | [3] Bùi Xá
- *  [4] Đảo Hoàng Tân | [5] Hạ Long Xanh | [6] Bệnh viện Sản Nhi
+ * 7 khu dọc CT06 (tây → đông), chia đều theo trục u.
  */
-export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
-  buildGpsZone('ZONE_1', 'Khu Đình Trung Bản', 'TĐB', siteCell(ZONE_U_SPLITS[0], ZONE_U_SPLITS[1], 0, 1), 2_900_000, 'primary', '#ef4444'),
-  buildGpsZone('ZONE_2', 'Khu Xóm Thành', 'XTh', siteCell(ZONE_U_SPLITS[1], ZONE_U_SPLITS[2], 0, 1), 2_600_000, 'primary', '#eab308'),
-  buildGpsZone('ZONE_3', 'Khu Bùi Xá', 'BX', siteCell(ZONE_U_SPLITS[2], ZONE_U_SPLITS[3], 0, 1), 3_400_000, 'primary', '#22c55e'),
-  buildGpsZone('ZONE_4', 'Khu Đảo Hoàng Tân', 'ĐHT', siteCell(ZONE_U_SPLITS[3], ZONE_U_SPLITS[4], 0, 1), 3_200_000, 'primary', '#3b82f6'),
-  buildGpsZone('ZONE_5', 'Khu Hạ Long Xanh', 'HLX', siteCell(ZONE_U_SPLITS[4], ZONE_U_SPLITS[5], 0, 1), 3_400_000, 'primary', '#a855f7'),
-  buildGpsZone('ZONE_6', 'Khu Bệnh viện Sản Nhi', 'BV', siteCell(ZONE_U_SPLITS[5], ZONE_U_SPLITS[6], 0, 1), 3_500_000, 'primary', '#06b6d4'),
-]
+export const PATROL_GPS_ZONES: PatrolGpsZone[] = ZONE_DEFS.map((def, idx) =>
+  buildGpsZone(
+    def.id,
+    def.name,
+    def.shortName,
+    siteCell(ZONE_U_SPLITS[idx], ZONE_U_SPLITS[idx + 1], 0, 1),
+    Math.round(PATROL_SITE_AREA_M2 / ZONE_COUNT),
+    'primary',
+    def.color,
+  ),
+)
 
 export const PATROL_SITE_ZONE_SEED: PatrolZone[] = PATROL_GPS_ZONES.map((zone, idx) => ({
   id: zone.zone_id,
@@ -174,7 +185,7 @@ export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
   zoneId: string
 }[] = [
   { helmetId: 'HC-01', zoneId: 'ZONE_2' },
-  { helmetId: 'HC-02', zoneId: 'ZONE_5' },
+  { helmetId: 'HC-02', zoneId: 'ZONE_6' },
 ] as const
 
 function buildHelmetPins(): PatrolHelmetPin[] {
@@ -309,9 +320,9 @@ export {
   clipPolygonToSiteBoundary,
 } from './patrolSiteGeometry'
 
-const SITE_PAD = 0.002
+const SITE_PAD = 0.006
 
-/** Giới hạn pan/zoom — trong phạm vi hành lang CT06 [SW, NE]. */
+/** Giới hạn pan/zoom — padding rộng hơn để nhìn toàn cảnh hành lang CT06. */
 export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
   [
     Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])) - SITE_PAD,
@@ -323,5 +334,9 @@ export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
   ],
 ]
 
-export const PATROL_SITE_MIN_ZOOM = 13
+/** Zoom mặc định — toàn cảnh hành lang (desktop / mobile). */
+export const PATROL_SITE_DEFAULT_ZOOM = 12
+export const PATROL_SITE_DEFAULT_ZOOM_MOBILE = 11
+
+export const PATROL_SITE_MIN_ZOOM = 11
 export const PATROL_SITE_MAX_ZOOM = 19
