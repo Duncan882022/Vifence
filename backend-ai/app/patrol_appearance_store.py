@@ -6,6 +6,7 @@ import json
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,8 +54,14 @@ def _segment_key(master_id: str, camera_id: str) -> str:
 
 
 def _today_iso(ts: float | None = None) -> str:
-    t = time.localtime(ts or time.time())
-    return time.strftime("%Y-%m-%d", t)
+    """Ngày lịch VN (cắt 0h) — khớp ``db.today_vn`` và filter ngày của FE.
+
+    Giờ local của máy chủ không phải lúc nào cũng là UTC+7 (container thường chạy
+    UTC): lấy theo local thì các lần xuất hiện từ 0h đến 7h sáng bị dồn sang ngày
+    hôm trước, lệch hẳn với thẻ sự kiện đọc từ SQLite.
+    """
+    vn = timezone(timedelta(hours=7))
+    return datetime.fromtimestamp(ts or time.time(), tz=vn).strftime("%Y-%m-%d")
 
 
 def touch_appearance(

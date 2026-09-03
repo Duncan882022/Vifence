@@ -9,7 +9,6 @@ import {
   isVmsLiveCamera,
   type VmsDetectionSnapshot,
 } from '../services/vmsDetections.service'
-import { clearVmsDetectionOverlayFrame } from '../utils/liveOverlaySync'
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 import { isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 
@@ -17,7 +16,19 @@ import { isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/pa
 const PATROL_VMS_DETECTIONS_POLL_MS = 280
 const DEFAULT_VMS_DETECTIONS_POLL_MS = 450
 
-export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDetectionFeed {
+export interface VmsDetectionFeedOptions {
+  /**
+   * Wallclock (ms) khung hình tile đang chiếu. Truyền vào thì backend chọn lại
+   * overlay của đúng khung đó, nên bbox bám người thay vì chạy trước video.
+   */
+  getDisplayWallclockMs?: () => number | null
+}
+
+export function useVmsDetectionFeed(
+  cameraId: string,
+  enabled: boolean,
+  options?: VmsDetectionFeedOptions,
+): VmsDetectionFeed {
   const feedRef = useRef<{ stop: () => void } | null>(null)
   const [status, setStatus] = useState<MobileAiConnectionStatus>('idle')
   const [statusMsg, setStatusMsg] = useState<string>()
@@ -25,6 +36,11 @@ export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDete
   const [transport, setTransport] = useState<DetectionsTransport>('polling')
 
   const active = enabled && isVmsLiveCamera(cameraId)
+
+  // Đồng hồ đổi identity mỗi lần render; giữ trong ref để không dựng lại
+  // WebSocket detections sau mỗi render của tile.
+  const clockRef = useRef(options?.getDisplayWallclockMs)
+  clockRef.current = options?.getDisplayWallclockMs
 
   useEffect(() => {
     if (!active) {
@@ -43,7 +59,7 @@ export function useVmsDetectionFeed(cameraId: string, enabled: boolean): VmsDete
       pollIntervalMs: isPatrolMetricsCameraId(cameraId)
         ? PATROL_VMS_DETECTIONS_POLL_MS
         : DEFAULT_VMS_DETECTIONS_POLL_MS,
-      onBeforeSnapshot: () => clearVmsDetectionOverlayFrame(cameraId),
+      getDisplayWallclockMs: () => clockRef.current?.() ?? null,
       onSnapshot: setSnapshot,
       onStatusChange: (next, msg) => {
         setStatus(next)

@@ -34,16 +34,6 @@ export function bumpVmsOverlaySceneEpoch(cameraId: string): void {
   lastPtsByCamera.delete(cameraId)
 }
 
-/**
- * Xóa state overlay PPE giữa các poll — **không** reset PatrolPersonRoiEngine:
- * engine patrol tự cập nhật qua ingest/Kalman; clear mỗi poll + ingest trễ (sync
- * buffer) làm tile drone/bodycam mất ROI dù backend vẫn trả detections.
- */
-export function clearVmsDetectionOverlayFrame(cameraId: string): void {
-  if (!cameraId) return
-  bumpVmsOverlaySceneEpoch(cameraId)
-}
-
 function detectSceneEpochBump(cameraId: string, pts: number): number {
   let epoch = sceneEpochByCamera.get(cameraId) ?? 0
   const prev = lastPtsByCamera.get(cameraId)
@@ -59,15 +49,24 @@ function detectSceneEpochBump(cameraId: string, pts: number): number {
   return epoch
 }
 
-/** Key ổn định theo cam + scene epoch — chỉ đổi khi loop/nhảy cảnh, không theo từng poll. */
+/**
+ * Key ổn định theo cam + scene epoch — chỉ đổi khi cảnh thật sự đổi.
+ *
+ * Đổi key là xoá sạch track lock, tức mất luôn phần làm mượt giữa hai lần AI
+ * chạy. Nếu đổi theo từng poll thì EMA không bao giờ tích được gì và hộp giật
+ * từng nhịp — đúng cảm giác "box nhảy" trên tile live.
+ *
+ * Ba nguồn hợp lệ để đổi cảnh: `overlay_epoch` của backend (luồng dựng lại),
+ * `source_pts_sec` nhảy/quay vòng (MP4 loop), và
+ * {@link bumpVmsOverlaySceneEpoch} khi chính thẻ video seek.
+ */
 export function buildVmsOverlaySyncKey(snapshot: VmsDetectionSnapshot | null | undefined): string {
   if (!snapshot?.camera_id) return ''
   const cam = snapshot.camera_id
+  const streamEpoch = snapshot.overlay_epoch ?? 0
   const pts = snapshot.source_pts_sec
   if (pts != null && Number.isFinite(pts)) {
-    const epoch = detectSceneEpochBump(cam, pts)
-    return `${cam}:${epoch}`
+    return `${cam}:${streamEpoch}:${detectSceneEpochBump(cam, pts)}`
   }
-  const epoch = sceneEpochByCamera.get(cam) ?? 0
-  return `${cam}:${epoch}`
+  return `${cam}:${streamEpoch}:${sceneEpochByCamera.get(cam) ?? 0}`
 }

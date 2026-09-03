@@ -17,6 +17,7 @@ import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlay
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
 import { isHlsStreamUrl, useStreamSignalPhase, useVideoFramesReady } from '../hooks/useHlsVideoSource'
+import { useCameraBufferReadiness } from '../hooks/useCameraBufferReadiness'
 import { setPatrolCameraFramesLive } from '@/services/patrolCameraFrameBridge'
 import { useLowLatencyVideoSource } from '../hooks/useLowLatencyVideoSource'
 import {
@@ -132,6 +133,12 @@ export function CameraVideoFeed({
   })
 
   const framesReady = useVideoFramesReady(videoRef, playing)
+  // WHEP giữ độ trễ ~300ms nên không bao giờ đệm tới ngưỡng — đừng bắt overlay
+  // của cả grid phải chờ nó.
+  useCameraBufferReadiness(videoRef, cameraId, {
+    playing: Boolean(playing && overlayActive),
+    needsBuffer: videoTransportMode === 'hls',
+  })
   const roiLayoutTick = useOverlayLayoutTick(videoRef)
   const remoteWaiting = Boolean(playing && (isHls || Boolean(whepUrl)))
   const signalPhase = useStreamSignalPhase(
@@ -152,6 +159,9 @@ export function CameraVideoFeed({
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
+    // Backend nhận mốc khung hình đang chiếu rồi trả về overlay của đúng khung
+    // đó — hộp bám người thay vì chạy trước video một quãng bằng buffer.
+    { getDisplayWallclockMs: () => videoClock.getDisplayWallclockMs() },
   )
   // WHEP (~300ms): snapshot mới nhất. HLS: buffer lag từ BE config.
   const patrolRoiFallbackLagMs = isPatrolMetricsCameraId(cameraId) && videoTransportMode === 'hls'

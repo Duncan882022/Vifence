@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { canProjectOverlayBox, mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import {
   MOBILE_AI_BACKEND_STORAGE_KEY,
   type MobileAiConnectionStatus,
@@ -114,9 +114,7 @@ function DetectionBox({
   const video = videoRef.current
   const [x1, y1, x2, y2] = detection.bbox
 
-  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
-    return null
-  }
+  if (!canProjectOverlayBox(video, frameWidth, frameHeight)) return null
 
   const box = mapBackendBboxToOverlay(
     [x1, y1, x2, y2],

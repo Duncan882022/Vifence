@@ -69,6 +69,40 @@ describe('videoRectToOverlayPercent', () => {
     expect(box.w).toBeCloseTo(10, 1)
     expect(box.h).toBeCloseTo(10, 1)
   })
+
+  it('khung dọc trong ô ngang — hộp lùi vào theo viền đen hai bên', () => {
+    // Nguồn 720×1280 trong ô 640×360: contain co về 202.5×360, viền mỗi bên 218.75px.
+    const box = videoRectToOverlayPercent(
+      { x: 0, y: 0, width: 720, height: 1280 },
+      720,
+      1280,
+      640,
+      360,
+      'contain',
+    )
+    expect(box.x).toBeCloseTo((218.75 / 640) * 100, 5)
+    expect(box.y).toBeCloseTo(0, 5)
+    expect(box.w).toBeCloseTo((202.5 / 640) * 100, 5)
+    expect(box.h).toBeCloseTo(100, 5)
+  })
+
+  /**
+   * Overlay JSMpeg trước đây chia toạ độ cho hằng số 720×480 thay vì đọc độ
+   * phân giải thật của luồng — camera nào khác tỉ lệ đó là hộp trôi khỏi người.
+   */
+  it('đoán sai độ phân giải nguồn là hộp trôi khỏi khung hình', () => {
+    const rect = { x: 960, y: 540, width: 192, height: 108 }
+    const correct = videoRectToOverlayPercent(rect, 1920, 1080, 640, 360, 'contain')
+    const legacyGuess = videoRectToOverlayPercent(rect, 720, 480, 640, 360, 'contain')
+
+    expect(correct.x).toBeCloseTo(50, 5)
+    expect(legacyGuess.x).toBeGreaterThan(100)
+  })
+
+  it('khung nguồn rỗng thì không vẽ gì', () => {
+    expect(videoRectToOverlayPercent({ x: 0, y: 0, width: 10, height: 10 }, 0, 0, 640, 360))
+      .toEqual({ x: 0, y: 0, w: 0, h: 0 })
+  })
 })
 
 describe('mapBackendBboxToOverlay', () => {

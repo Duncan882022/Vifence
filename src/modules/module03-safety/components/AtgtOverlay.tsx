@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, memo, useCallback, useMemo, type RefObject } from 'react'
 import { cn } from '@/utils/cn'
-import { mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
+import { canProjectOverlayBox, mapBackendBboxToOverlay, mapNormalizedPolygonToOverlay } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { useMobileAiBackendVersion } from '@/modules/module02-training/hooks/useMobileAiBackendVersion'
 import { isCameraAiModelEnabled } from '@/modules/module02-training/services/cameraAiConfig.service'
 import { useCameraLiveRoiVisible } from '@/modules/module02-training/hooks/useCameraLiveRoiVisible'
@@ -217,9 +217,7 @@ const DetectionBox = memo(function DetectionBox({
   const [x1, y1, x2, y2] = detection.bbox
   const layerZ = detection.behavior === 'speeding' ? 7 : 6
 
-  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
-    return null
-  }
+  if (!canProjectOverlayBox(video, frameWidth, frameHeight)) return null
 
   const box = mapBackendBboxToOverlay(
     [x1, y1, x2, y2],
