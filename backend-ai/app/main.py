@@ -27,6 +27,7 @@ from .auto_train.frame_collectors import (
 from .auto_train.scheduler import scheduler as auto_train_scheduler
 from . import machinery_detector
 from . import overlay_bus
+from .overlay_client_clock import DetectionsClientClock as _DetectionsClientClock
 from .websocket_server import build_detections_ws_payload
 from .patrol import db as patrol_db
 from .patrol.api import router as patrol_api_router
@@ -603,12 +604,18 @@ def vms_stream_playlist(camera_id: str):
 
 
 @app.get("/stream/{camera_id}/detections")
-def vms_stream_detections(camera_id: str):
-    """Detections + ROI zones mới nhất từ VMS AI — FE poll vẽ overlay (Option 2)."""
+def vms_stream_detections(camera_id: str, at_ms: float | None = None):
+    """Detections + ROI zones từ VMS AI — FE poll vẽ overlay (Option 2).
+
+    ``at_ms`` là wallclock (ms) của khung hình FE đang chiếu (từ
+    EXT-X-PROGRAM-DATE-TIME). Có tham số này thì backend tự tìm lại overlay của
+    đúng khung hình đó trong lịch sử và gửi về, nên hộp bám người thay vì chạy
+    trước video một quãng bằng độ trễ buffer.
+    """
     worker = _vms_workers.get(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} không có trong VMS workers")
-    payload = worker.get_latest_overlay()
+    payload = worker.get_overlay_at(at_ms)
     stream_online = bool(payload.get("stream_online", True))
     return build_detections_ws_payload(
         camera_id,
@@ -677,6 +684,16 @@ async def ws_stream_detections(websocket: WebSocket, camera_id: str):
 
     event = overlay_bus.subscribe(camera_id)
     last_revision = -1
+    clock = _DetectionsClientClock()
+
+    async def read_client_clock() -> None:
+        """Nhận mốc thời gian khung hình FE đang chiếu."""
+        while True:
+            message = await websocket.receive_json()
+            if isinstance(message, dict) and str(message.get("type")) == "sync":
+                clock.update(message.get("at_ms"))
+
+    reader = asyncio.create_task(read_client_clock())
 
     try:
         while True:
@@ -687,7 +704,7 @@ async def ws_stream_detections(websocket: WebSocket, camera_id: str):
 
             if revision != last_revision:
                 last_revision = revision
-                payload = worker.get_latest_overlay()
+                payload = worker.get_overlay_at(clock.display_wallclock_ms())
                 stream_online = bool(payload.get("stream_online", True))
                 await websocket.send_json(
                     build_detections_ws_payload(
@@ -713,6 +730,7 @@ async def ws_stream_detections(websocket: WebSocket, camera_id: str):
     except Exception as exc:  # noqa: BLE001
         logger.info("[ws detections %s] đóng: %s", camera_id, exc)
     finally:
+        reader.cancel()
         overlay_bus.unsubscribe(camera_id, event)
 
 

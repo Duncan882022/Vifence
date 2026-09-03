@@ -46,6 +46,12 @@ CLIP_PRE_SEC = 1.0
 CLIP_POST_SEC = 4.0
 # Ring buffer pts history (giây) — tìm source_pts khi clip
 PTS_HISTORY_SEC = 60.0
+# Lịch sử overlay (giây) — FE hỏi bbox của đúng khung hình nó đang chiếu.
+#
+# HLS đưa hình tới người xem chậm vài giây so với lúc AI chạy. Giữ lại một quãng
+# overlay đủ dài để trả về bbox của khung hình đó thay vì bbox mới nhất (vốn
+# chạy trước video). 12s phủ được cả buffer 5s lẫn mạng xấu mà vẫn nhẹ RAM.
+OVERLAY_HISTORY_SEC = 12.0
 # Live RTSP: không chạy AI trên frame đóng băng khi mất tín hiệu.
 LIVE_FRAME_STALE_SEC = 4.0
 # RTSP không timeout thì cap.read() treo vĩnh viễn khi mũ tắt sóng giữa chừng:
@@ -212,6 +218,9 @@ class CameraVmsWorker:
             "metrics": {},
             "updated_at": 0.0,
         }
+        self._overlay_history: deque[dict] = deque(
+            maxlen=max(32, int(OVERLAY_HISTORY_SEC * max(1.0, ai_fps))),
+        )
 
         self._hls_dir = HLS_DIR / camera_id
         self._clips_dir = CLIPS_DIR / camera_id
@@ -343,26 +352,95 @@ class CameraVmsWorker:
 
     def get_latest_overlay(self) -> dict:
         """Snapshot detections/zones mới nhất — FE poll để vẽ ROI (Option 2)."""
+        return self.get_overlay_at(None)
+
+    def get_overlay_at(self, at_ms: Optional[float]) -> dict:
+        """Overlay khớp khung hình FE đang chiếu tại ``at_ms`` (wallclock ms).
+
+        FE phát HLS chậm hơn AI vài giây. Trả bbox mới nhất thì hộp chạy trước
+        người trong hình; đây là chỗ backend tự chọn lại đúng khung hình FE đang
+        xem rồi gửi về, thay vì bắt FE tự đoán độ trễ.
+
+        ``at_ms=None`` (hoặc ngoài quãng lịch sử) → overlay mới nhất, và
+        ``overlay_sync`` báo rõ là chưa khớp được để FE biết đường hiển thị.
+        """
         stream_online = self.is_stream_live()
         frame_age_sec = self._frame_age_sec()
+
         with self._overlay_lock:
-            base = {
-                "camera_id": self.camera_id,
-                "width": int(self._latest_overlay.get("width") or 0),
-                "height": int(self._latest_overlay.get("height") or 0),
-                "updated_at": float(self._latest_overlay.get("updated_at") or 0.0),
-                "source_pts_sec": float(self._latest_overlay.get("source_pts_sec") or 0.0),
-                "frame_wallclock_ms": float(self._latest_overlay.get("frame_wallclock_ms") or 0.0),
-                "stream_online": stream_online,
-                "frame_age_sec": round(frame_age_sec, 2) if frame_age_sec >= 0 else None,
-                "detections": list(self._latest_overlay.get("detections") or []),
-                "roi_zones": list(self._latest_overlay.get("roi_zones") or []),
-                "metrics": dict(self._latest_overlay.get("metrics") or {}),
-            }
+            latest = dict(self._latest_overlay)
+            history = list(self._overlay_history)
+
+        chosen, sync_mode, drift_ms = self._select_overlay_entry(latest, history, at_ms)
+        span_ms = self._overlay_history_span_ms(history)
+
+        base = {
+            "camera_id": self.camera_id,
+            "width": int(chosen.get("width") or 0),
+            "height": int(chosen.get("height") or 0),
+            "updated_at": float(chosen.get("updated_at") or 0.0),
+            "source_pts_sec": float(chosen.get("source_pts_sec") or 0.0),
+            "frame_wallclock_ms": float(chosen.get("frame_wallclock_ms") or 0.0),
+            "stream_online": stream_online,
+            "frame_age_sec": round(frame_age_sec, 2) if frame_age_sec >= 0 else None,
+            "detections": list(chosen.get("detections") or []),
+            "roi_zones": list(chosen.get("roi_zones") or []),
+            "metrics": dict(chosen.get("metrics") or {}),
+            "overlay_sync": sync_mode,
+            "overlay_history_span_ms": span_ms,
+        }
+        if at_ms is not None:
+            base["requested_at_ms"] = float(at_ms)
+            base["overlay_drift_ms"] = drift_ms
         if not stream_online:
+            # Camera mất tín hiệu: giữ lại polygon ROI cũ là vẽ vùng của cảnh đã
+            # trôi qua lên khung hình đen — xoá cùng detections.
             base["detections"] = []
+            base["roi_zones"] = []
             base["metrics"] = {}
         return base
+
+    @staticmethod
+    def _overlay_history_span_ms(history: list[dict]) -> int:
+        stamps = [
+            float(entry.get("frame_wallclock_ms") or 0.0)
+            for entry in history
+            if float(entry.get("frame_wallclock_ms") or 0.0) > 0
+        ]
+        if len(stamps) < 2:
+            return 0
+        return int(round(max(stamps) - min(stamps)))
+
+    @staticmethod
+    def _select_overlay_entry(
+        latest: dict,
+        history: list[dict],
+        at_ms: Optional[float],
+    ) -> tuple[dict, str, Optional[int]]:
+        """Chọn bản overlay gần nhất **không muộn hơn** khung hình đang chiếu.
+
+        Lấy bản muộn hơn tức là vẽ tương lai lên khung hình quá khứ — đúng lỗi
+        "hộp chạy trước người". Nên khi không có bản nào đủ cũ thì thà báo chưa
+        khớp còn hơn gửi bừa.
+        """
+        if at_ms is None or not history:
+            return latest, "latest", None
+
+        best: Optional[dict] = None
+        best_stamp = 0.0
+        for entry in history:
+            stamp = float(entry.get("frame_wallclock_ms") or 0.0)
+            # Chặn cứng, không nới biên: một bản overlay muộn hơn khung hình dù
+            # chỉ một nhịp AI cũng đủ để hộp nhảy trước người đang đi.
+            if stamp <= 0 or stamp > at_ms:
+                continue
+            if stamp >= best_stamp:
+                best_stamp = stamp
+                best = entry
+
+        if best is None:
+            return latest, "latest", None
+        return best, "aligned", int(round(abs(at_ms - best_stamp)))
 
     def is_stream_live(self) -> bool:
         if self._using_fallback:
@@ -397,6 +475,7 @@ class CameraVmsWorker:
                 "metrics": {},
                 "updated_at": 0.0,
             }
+            self._overlay_history.clear()
 
     @staticmethod
     def _merge_roi_zones(existing: list[dict], incoming: list[dict]) -> list[dict]:
@@ -712,19 +791,21 @@ class CameraVmsWorker:
                     frame_w = int(capture_frame.shape[1])
                     frame_h = int(capture_frame.shape[0])
 
+                overlay_entry = {
+                    "width": frame_w,
+                    "height": frame_h,
+                    "detections": merged_detections,
+                    "roi_zones": merged_zones,
+                    "metrics": merged_metrics,
+                    "updated_at": time.time(),
+                    "source_pts_sec": round(source_pts_sec, 3),
+                    # Wallclock lúc nhận frame từ camera — khớp với
+                    # EXT-X-PROGRAM-DATE-TIME của HLS để FE đồng bộ bbox.
+                    "frame_wallclock_ms": round(frame_received_at * 1000.0),
+                }
                 with self._overlay_lock:
-                    self._latest_overlay = {
-                        "width": frame_w,
-                        "height": frame_h,
-                        "detections": merged_detections,
-                        "roi_zones": merged_zones,
-                        "metrics": merged_metrics,
-                        "updated_at": time.time(),
-                        "source_pts_sec": round(source_pts_sec, 3),
-                        # Wallclock lúc nhận frame từ camera — khớp với
-                        # EXT-X-PROGRAM-DATE-TIME của HLS để FE đồng bộ bbox.
-                        "frame_wallclock_ms": round(frame_received_at * 1000.0),
-                    }
+                    self._latest_overlay = overlay_entry
+                    self._overlay_history.append(overlay_entry)
 
                 # Đánh thức WebSocket subscribers — FE nhận bbox ngay, không chờ nhịp poll.
                 overlay_bus.notify(self.camera_id)

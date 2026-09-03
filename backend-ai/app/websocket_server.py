@@ -68,6 +68,16 @@ def build_detections_ws_payload(
         payload["frame_wallclock_ms"] = float(overlay["frame_wallclock_ms"])
     if overlay.get("frame_age_sec") is not None:
         payload["frame_age_sec"] = overlay["frame_age_sec"]
+
+    # Backend đã tự chọn khung hình khớp với thời điểm FE đang chiếu chưa —
+    # FE dựa vào đây để biết bbox đã đúng khung hay còn là bản mới nhất.
+    payload["overlay_sync"] = str(overlay.get("overlay_sync") or "latest")
+    payload["overlay_history_span_ms"] = int(overlay.get("overlay_history_span_ms") or 0)
+    if overlay.get("requested_at_ms") is not None:
+        payload["requested_at_ms"] = float(overlay["requested_at_ms"])
+    if overlay.get("overlay_drift_ms") is not None:
+        payload["overlay_drift_ms"] = int(overlay["overlay_drift_ms"])
+
     emit_ms = int(time.time() * 1000)
     payload["server_emit_ms"] = emit_ms
     if is_module05_patrol_camera(camera_id):
