@@ -99,6 +99,99 @@ def _pick_search_embedding(session: TrackSession) -> tuple[tuple[float, ...], fl
     return best.embedding, best.quality
 
 
+def _best_face_embedding(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> tuple[tuple[float, ...], float] | None:
+    """Embedding + quality tốt nhất — obs hiện tại hoặc best_faces session."""
+    emb = obs.face_embedding
+    quality = float(obs.face_quality or 0.0)
+    picked = _pick_search_embedding(session)
+    if picked is not None:
+        p_emb, p_q = picked
+        if emb is None or p_q > quality:
+            emb, quality = p_emb, p_q
+    if emb is None or quality < MIN_QUALITY_FOR_SEARCH:
+        return None
+    return emb, quality
+
+
+def _known_face_match(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> tuple[str | None, float]:
+    """Khớp SQLite draft/identified hoặc gallery JPG — tránh obj trùng tk."""
+    picked = _best_face_embedding(session, obs)
+    if picked is None:
+        return None, 0.0
+    emb, _quality = picked
+    matched, sim = identity.match_face_for_observe(emb)
+    if matched:
+        return identity.resolve_alias(matched), sim
+    gallery_pid, gsim = identity.match_gallery_embedding_for_observe(
+        emb,
+        camera_id=obs.camera_id,
+    )
+    if gallery_pid:
+        return identity.resolve_alias(gallery_pid), gsim
+    return None, 0.0
+
+
+def resolve_subject_from_face_match(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    now: float,
+) -> str | None:
+    """Gán pers-* từ khớp mặt có sẵn — gọi trước touch_object để không tạo obj-*."""
+    if session.subject_id:
+        from ...patrol_ids import is_person_subject_id
+
+        if is_person_subject_id(session.subject_id):
+            return session.subject_id
+
+    known, _sim = _known_face_match(session, obs)
+    if not known:
+        return None
+
+    picked = _best_face_embedding(session, obs)
+    if picked is None:
+        return known
+
+    emb, quality = picked
+    wid = (obs.lifecycle_worker_id or "").strip()
+    from ...person_identity_registry import is_sgc_worker_id
+
+    pref_tk = wid if is_sgc_worker_id(wid) else None
+    try:
+        pers_id, _created = identity.observe_face(
+            emb,
+            quality=max(quality, MIN_QUALITY_FOR_SEARCH),
+            camera_id=obs.camera_id,
+            now=now,
+            frame=obs.frame,
+            person_bbox=obs.person_bbox,
+            preferred_tk=pref_tk,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("resolve_subject_from_face_match observe_face failed")
+        return known
+
+    session.identity = PersonIdentity(
+        person_id=pers_id,
+        identity_type=IdentityType.KNOWN,
+        confidence=min(0.99, max(quality, MIN_QUALITY_FOR_SEARCH)),
+    )
+    session.identity_resolved = True
+    session.subject_id = pers_id
+    logger.info(
+        "aggregator face-match assign %s track %s (skip obj create)",
+        pers_id,
+        session.track_id,
+    )
+    return pers_id
+
+
 def _ensure_pers_for_worker(
     worker_id: str | None,
     *,
@@ -175,9 +268,11 @@ def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bo
 
 
 def _may_promote_to_person(session: TrackSession, obs: ObservationInput) -> bool:
-    """obj-* → tk/pers: bắt buộc bằng chứng mặt + bbox người thật."""
+    """obj-* → tk/pers: bằng chứng mặt + bbox người thật (nới khi đã khớp gallery/SQLite)."""
     if not _may_assign_pers_subject(session, obs):
         return False
+    if _known_face_match(session, obs)[0]:
+        return True
     if obs.face_eligible:
         if obs.face_embedding is not None:
             return _human_face_promotion_allowed(obs)
@@ -236,10 +331,13 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
             session.identity_resolved = True
             return True
 
-    if not obs.face_eligible or emb is None:
+    if emb is None:
         return False
 
-    if not _human_face_promotion_allowed(obs):
+    known, _sim = _known_face_match(session, obs)
+    if not known and not obs.face_eligible:
+        return False
+    if not known and not _human_face_promotion_allowed(obs):
         return False
 
     try:
@@ -458,8 +556,9 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     session.identity_resolved = True
 
     if not session.identity_resolved:
-        picked = _pick_search_embedding(session)
-        if picked is not None and _human_face_promotion_allowed(obs):
+        picked = _best_face_embedding(session, obs)
+        known, _sim = _known_face_match(session, obs) if picked else (None, 0.0)
+        if picked is not None and (known or _human_face_promotion_allowed(obs)):
             emb, quality = picked
             try:
                 from ...person_identity_registry import is_sgc_worker_id

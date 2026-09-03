@@ -233,18 +233,25 @@ def flush_session(
             session.subject_id = parallel
             link_subject_session(session)
         else:
-            obj_id = daystore.touch_object(
-                None,
-                camera_id=session.camera_id,
-                zone_id=session.zone_id,
-                now=now,
-                seen_since=session.started_at if session.last_flush_at <= 0 else None,
-                gps_lat=gps_lat,
-                gps_lng=gps_lng,
-                skip_appearance=True,
-            )
-            session.subject_id = obj_id
-            link_subject_session(session)
+            from .identity_pipeline import resolve_subject_from_face_match
+
+            face_pers = resolve_subject_from_face_match(session, obs, now=now)
+            if face_pers:
+                session.subject_id = face_pers
+                link_subject_session(session)
+            else:
+                obj_id = daystore.touch_object(
+                    None,
+                    camera_id=session.camera_id,
+                    zone_id=session.zone_id,
+                    now=now,
+                    seen_since=session.started_at if session.last_flush_at <= 0 else None,
+                    gps_lat=gps_lat,
+                    gps_lng=gps_lng,
+                    skip_appearance=True,
+                )
+                session.subject_id = obj_id
+                link_subject_session(session)
 
     subject_id = session.subject_id
     if not subject_id:
