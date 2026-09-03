@@ -189,6 +189,28 @@ export function bboxToPixelSpace(
   return [x1 * frameWidth, y1 * frameHeight, x2 * frameWidth, y2 * frameHeight]
 }
 
+/**
+ * Đủ dữ kiện để chiếu bbox chưa.
+ *
+ * Không đòi `videoWidth`: WHEP và Safari chỉ báo metadata này sau khi đã phát
+ * một lúc, trong khi khung analyze của backend đã đủ để `mapBackendBboxToOverlay`
+ * chiếu đúng. Bắt chờ metadata chỉ làm hộp xuất hiện muộn, và muộn không đều
+ * giữa các module.
+ */
+export function canProjectOverlayBox(
+  video: HTMLVideoElement | null | undefined,
+  frameWidth: number,
+  frameHeight: number,
+): video is HTMLVideoElement {
+  return Boolean(
+    video
+    && frameWidth > 0
+    && frameHeight > 0
+    && video.clientWidth > 0
+    && video.clientHeight > 0,
+  )
+}
+
 /** Bbox từ backend (pixel hoặc 0–1) → % overlay trên video đang hiển thị. */
 export function mapBackendBboxToOverlay(
   bbox: [number, number, number, number],
