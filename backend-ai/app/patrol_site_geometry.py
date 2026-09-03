@@ -1,5 +1,5 @@
 """
-Module 05 — site boundary geometry (Cầu Sông Hốt).
+Module 05 — site boundary geometry (Hành lang CT06 Quảng Yên).
 Mirrors src/modules/module05-productivity/data/patrolSiteGeometry.ts
 """
 from __future__ import annotations
@@ -7,16 +7,31 @@ from __future__ import annotations
 import math
 from typing import Sequence
 
-PATROL_SITE_CENTER: tuple[float, float] = (20.933094, 106.923950)
+PATROL_SITE_CENTER: tuple[float, float] = (20.928444, 106.873611)
 
 PATROL_SITE_CORNERS: list[tuple[float, float]] = [
-    (20.934409, 106.925451),
-    (20.932911, 106.926792),
-    (20.931753, 106.921778),
-    (20.933707, 106.921705),
+    (20.9458, 106.8512),
+    (20.9446, 106.9370),
+    (20.9169, 106.9358),
+    (20.9176, 106.8508),
 ]
 
-SITE_RING = PATROL_SITE_CORNERS
+PATROL_SITE_BOUNDARY_RING: list[tuple[float, float]] = [
+    (20.9176, 106.8508),
+    (20.9458, 106.8690),
+    (20.9457, 106.8860),
+    (20.9459, 106.9030),
+    (20.9456, 106.9200),
+    (20.9446, 106.9370),
+    (20.9172, 106.9358),
+    (20.9170, 106.9180),
+    (20.9169, 106.9045),
+    (20.9171, 106.8910),
+    (20.9169, 106.8775),
+    (20.9167, 106.8640),
+]
+
+SITE_RING = PATROL_SITE_BOUNDARY_RING
 
 
 def _cross(ax: float, ay: float, bx: float, by: float, cx: float, cy: float) -> float:

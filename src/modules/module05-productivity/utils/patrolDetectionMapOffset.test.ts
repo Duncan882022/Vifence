@@ -35,7 +35,7 @@ describe('patrolDetectionMapOffset', () => {
   })
 
   it('GPS xa mũ giữ nguyên', () => {
-    const farLat = HELMET[0] + 0.001
+    const farLat = HELMET[0] + 0.008
     const [lat, lng] = resolvePatrolDetectionMapPosition(
       farLat,
       HELMET[1],

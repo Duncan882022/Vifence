@@ -7,7 +7,7 @@ export function buildPatrolLiveZonesFromWorkforce(
   workforce: WorkforceSnapshot,
   visitedByZoneId?: Record<string, boolean>,
 ): PatrolZone[] {
-  const seed = PATROL_SITE_ZONE_SEED[0]
+  const seedById = new Map(PATROL_SITE_ZONE_SEED.map(z => [z.id, z]))
 
   return PATROL_GPS_ZONES.map(zoneDef => {
     const pop = workforce.zonePopulation[zoneDef.zone_id]
@@ -15,6 +15,7 @@ export function buildPatrolLiveZonesFromWorkforce(
     const peak = pop?.kpi.peak ?? 0
     const visited = visitedByZoneId?.[zoneDef.zone_id]
       ?? (observed > 0 || peak > 0)
+    const seed = seedById.get(zoneDef.zone_id)
 
     return {
       id: zoneDef.zone_id,

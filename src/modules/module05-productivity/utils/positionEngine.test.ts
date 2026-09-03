@@ -7,7 +7,7 @@ import {
   resetHelmetPositionEngine,
 } from './positionEngine'
 
-describe('GPS neo tâm Cầu Sông Hốt', () => {
+describe('GPS neo tâm CT06 Quảng Yên', () => {
   beforeEach(() => {
     resetHelmetPositionEngine()
   })

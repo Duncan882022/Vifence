@@ -2,24 +2,44 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Công trường Cầu Sông Hốt — center 20.933094, 106.923950
+ * Hành lang CT06 Quảng Yên — tuyến CT06 (Đình Trung Bản → Bệnh viện Sản Nhi).
+ * Tham chiếu: 20°55'42.4"N 106°52'25.0"E (Bùi Xá).
  */
 
-/** 4 góc ROI công trường (user survey) — đóng vòng tại điểm đầu. */
+/** 4 góc điều khiển bilinear (TL→TR→BR→BL) — chia 6 khu dọc theo CT06. */
 export const PATROL_SITE_CORNERS: [number, number][] = [
-  [20.934409, 106.925451],
-  [20.932911, 106.926792],
-  [20.931753, 106.921778],
-  [20.933707, 106.921705],
+  [20.9458, 106.8512],
+  [20.9446, 106.9370],
+  [20.9169, 106.9358],
+  [20.9176, 106.8508],
 ]
 
-/** Ranh giới công trường — polygon đỏ trên heatmap. */
+/**
+ * Viền đỏ heatmap — capsule dọc CT06 (12 đỉnh, ngược chiều kim đồng hồ từ tây-nam).
+ * Khớp vùng khoanh đỏ trên bản đồ khảo sát.
+ */
+export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
+  [20.9176, 106.8508],
+  [20.9458, 106.8690],
+  [20.9457, 106.8860],
+  [20.9459, 106.9030],
+  [20.9456, 106.9200],
+  [20.9446, 106.9370],
+  [20.9172, 106.9358],
+  [20.9170, 106.9180],
+  [20.9169, 106.9045],
+  [20.9171, 106.8910],
+  [20.9169, 106.8775],
+  [20.9167, 106.8640],
+]
+
+/** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
 export const PATROL_SITE_BOUNDARY: [number, number][] = [
-  ...PATROL_SITE_CORNERS,
-  PATROL_SITE_CORNERS[0],
+  ...PATROL_SITE_BOUNDARY_RING,
+  PATROL_SITE_BOUNDARY_RING[0],
 ]
 
-const SITE_RING = PATROL_SITE_CORNERS
+const SITE_RING = PATROL_SITE_BOUNDARY_RING
 
 /** ~3.5% inset toward centroid — clip heatmap/detection không vượt viền đỏ. */
 export const PATROL_SITE_CLIP_RING: [number, number][] = (() => {
@@ -104,7 +124,7 @@ function isInsideSiteRing(lat: number, lng: number, ring: [number, number][]): b
   return true
 }
 
-/** Ray-casting point-in-polygon for the site quad. */
+/** Ray-casting point-in-polygon for the site boundary. */
 export function isPointInSiteBoundary(lat: number, lng: number): boolean {
   return isInsideSiteRing(lat, lng, SITE_RING)
 }

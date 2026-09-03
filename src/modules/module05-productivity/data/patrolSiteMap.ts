@@ -1,22 +1,58 @@
 /** Module 05 — Site Map: GPS zones, helmet pins, patrol trail.
  *  Coordinate system: [lat, lng] throughout (Leaflet convention).
  *
- *  Công trường: Cầu Sông Hốt
- *  Center: 20.933094°N, 106.923950°E
- *  ROI: PATROL_SITE_CORNERS in patrolSiteGeometry.ts
+ *  Hành lang CT06 Quảng Yên — 6 khu dọc tuyến CT06
+ *  Center: 20.931225°N, 106.893700°E (Bùi Xá)
+ *  ROI: PATROL_SITE_BOUNDARY_RING in patrolSiteGeometry.ts
  */
 
 import {
   clipPolygonToSiteBoundary,
+  PATROL_SITE_BOUNDARY_RING,
   PATROL_SITE_CORNERS,
 } from './patrolSiteGeometry'
 import type { PatrolZone } from './patrolTypes'
 
-export const PATROL_SITE_NAME = 'Cầu Sông Hốt'
-export const PATROL_SITE_ZONE_ID = 'ZONE_SITE'
+export const PATROL_SITE_NAME = 'Hành lang CT06 Quảng Yên'
+/** Khu trung tâm (Bùi Xá) — fallback zone id. */
+export const PATROL_SITE_ZONE_ID = 'ZONE_3'
 
-/** Map centre — tọa độ mặc định công trường. */
-export const PATROL_SITE_CENTER: [number, number] = [20.933094, 106.923950]
+const SITE_TOP = PATROL_SITE_CORNERS[0]
+const SITE_RIGHT = PATROL_SITE_CORNERS[1]
+const SITE_BOTTOM = PATROL_SITE_CORNERS[2]
+const SITE_LEFT = PATROL_SITE_CORNERS[3]
+
+/** Bilinear point inside site quad — u: west→east, v: north→south. */
+function sitePoint(u: number, v: number): [number, number] {
+  const lat =
+    (1 - u) * (1 - v) * SITE_TOP[0] +
+    u * (1 - v) * SITE_RIGHT[0] +
+    u * v * SITE_BOTTOM[0] +
+    (1 - u) * v * SITE_LEFT[0]
+  const lng =
+    (1 - u) * (1 - v) * SITE_TOP[1] +
+    u * (1 - v) * SITE_RIGHT[1] +
+    u * v * SITE_BOTTOM[1] +
+    (1 - u) * v * SITE_LEFT[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
+
+/** Sub-quad cell — TL→TR→BR→BL, clipped to capsule boundary. */
+function siteCell(u0: number, u1: number, v0: number, v1: number): [number, number][] {
+  return [
+    sitePoint(u0, v0),
+    sitePoint(u1, v0),
+    sitePoint(u1, v1),
+    sitePoint(u0, v1),
+  ]
+}
+
+function cellCenter(u0: number, u1: number, v0: number, v1: number): [number, number] {
+  return sitePoint((u0 + u1) / 2, (v0 + v1) / 2)
+}
+
+/** Map centre — tham chiếu khảo sát Bùi Xá (20°55'42.4"N 106°52'25.0"E). */
+export const PATROL_SITE_CENTER: [number, number] = [20.928444, 106.873611]
 
 function polygonCenter(polygon: [number, number][]): [number, number] {
   if (polygon.length === 0) return PATROL_SITE_CENTER
@@ -50,26 +86,14 @@ export function patrolZoneInteriorPoint(
 
 const _SITE_POLY = [...PATROL_SITE_CORNERS] as [number, number][]
 
-/** HC-01 không GPS → neo tây-nam công trường. */
-export const PATROL_HELMET_01_FALLBACK: [number, number] = patrolZoneInteriorPoint(
-  _SITE_POLY,
-  0.18,
-  0.22,
-)
+/** HC-01 không GPS → neo tây (khu 1–2). */
+export const PATROL_HELMET_01_FALLBACK: [number, number] = sitePoint(0.14, 0.42)
 
-/** HC-02 không GPS → neo đông-bắc (~120m+ tách HC-01). */
-export const PATROL_HELMET_02_FALLBACK: [number, number] = patrolZoneInteriorPoint(
-  _SITE_POLY,
-  0.82,
-  0.78,
-)
+/** HC-02 không GPS → neo đông (khu 5–6). */
+export const PATROL_HELMET_02_FALLBACK: [number, number] = sitePoint(0.86, 0.58)
 
-/** DR-03 không GPS → neo phía bắc giữa công trường. */
-export const PATROL_DRONE_03_FALLBACK: [number, number] = patrolZoneInteriorPoint(
-  _SITE_POLY,
-  0.52,
-  0.12,
-)
+/** DR-03 không GPS → neo giữa tuyến CT06. */
+export const PATROL_DRONE_03_FALLBACK: [number, number] = sitePoint(0.5, 0.35)
 
 /* ── GPS Zone type ──────────────────────────────────────────── */
 export interface PatrolGpsZone {
@@ -108,40 +132,37 @@ function buildGpsZone(
   }
 }
 
+/** Chia 6 khu dọc CT06 — ranh u tinh chỉnh để ghim Bùi Xá thuộc ZONE_3. */
+const ZONE_U_SPLITS = [0, 0.12, 0.22, 0.38, 0.55, 0.75, 1] as const
+
+export const PATROL_SITE_AREA_M2 = 19_000_000
+
 /**
- * Chưa chia khu — một zone duy nhất = 4 góc survey công trường.
+ * 6 khu dọc CT06 (tây → đông):
+ *  [1] Đình Trung Bản | [2] Xóm Thành | [3] Bùi Xá
+ *  [4] Đảo Hoàng Tân | [5] Hạ Long Xanh | [6] Bệnh viện Sản Nhi
  */
-const SITE_ZONE_RAW = [...PATROL_SITE_CORNERS] as [number, number][]
-
-export const PATROL_SITE_AREA_M2 = 98_000
-
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
-  buildGpsZone(
-    PATROL_SITE_ZONE_ID,
-    PATROL_SITE_NAME,
-    PATROL_SITE_NAME,
-    SITE_ZONE_RAW,
-    PATROL_SITE_AREA_M2,
-    'primary',
-    '#ef4444',
-  ),
+  buildGpsZone('ZONE_1', 'Khu Đình Trung Bản', 'TĐB', siteCell(ZONE_U_SPLITS[0], ZONE_U_SPLITS[1], 0, 1), 2_900_000, 'primary', '#ef4444'),
+  buildGpsZone('ZONE_2', 'Khu Xóm Thành', 'XTh', siteCell(ZONE_U_SPLITS[1], ZONE_U_SPLITS[2], 0, 1), 2_600_000, 'primary', '#eab308'),
+  buildGpsZone('ZONE_3', 'Khu Bùi Xá', 'BX', siteCell(ZONE_U_SPLITS[2], ZONE_U_SPLITS[3], 0, 1), 3_400_000, 'primary', '#22c55e'),
+  buildGpsZone('ZONE_4', 'Khu Đảo Hoàng Tân', 'ĐHT', siteCell(ZONE_U_SPLITS[3], ZONE_U_SPLITS[4], 0, 1), 3_200_000, 'primary', '#3b82f6'),
+  buildGpsZone('ZONE_5', 'Khu Hạ Long Xanh', 'HLX', siteCell(ZONE_U_SPLITS[4], ZONE_U_SPLITS[5], 0, 1), 3_400_000, 'primary', '#a855f7'),
+  buildGpsZone('ZONE_6', 'Khu Bệnh viện Sản Nhi', 'BV', siteCell(ZONE_U_SPLITS[5], ZONE_U_SPLITS[6], 0, 1), 3_500_000, 'primary', '#06b6d4'),
 ]
 
-/** Chưa chia khu — một zone = công trường; seed cho bộ đếm zone live trên bản đồ. */
-export const PATROL_SITE_ZONE_SEED: PatrolZone[] = [
-  {
-    id: PATROL_SITE_ZONE_ID,
-    name: PATROL_SITE_NAME,
-    shortName: PATROL_SITE_NAME,
-    coverage: 'VISITED',
-    dwellSeconds: 624,
-    peopleCurrent: 42,
-    vehiclesCurrent: 8,
-    uniquePeople: 58,
-    uniqueVehicles: 11,
-    areaSqm: PATROL_SITE_AREA_M2,
-  },
-]
+export const PATROL_SITE_ZONE_SEED: PatrolZone[] = PATROL_GPS_ZONES.map((zone, idx) => ({
+  id: zone.zone_id,
+  name: zone.name,
+  shortName: zone.shortName,
+  coverage: idx < 2 ? 'VISITED' : 'NOT_VISITED',
+  dwellSeconds: 420 + idx * 45,
+  peopleCurrent: idx === 2 ? 42 : 12 + idx * 3,
+  vehiclesCurrent: idx === 2 ? 8 : 2 + idx,
+  uniquePeople: 28 + idx * 5,
+  uniqueVehicles: 4 + idx,
+  areaSqm: zone.area_m2,
+}))
 
 /* ── Helmet GPS pins ────────────────────────────────────────── */
 export interface PatrolHelmetPin {
@@ -153,25 +174,25 @@ export interface PatrolHelmetPin {
   position: [number, number]
 }
 
-/** Khu phụ trách — chỉ HC-01 + HC-02 (Cầu Sông Hốt). */
+/** Khu phụ trách — HC-01 tây, HC-02 đông. */
 export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
   helmetId: string
   zoneId: string
 }[] = [
-  { helmetId: 'HC-01', zoneId: PATROL_SITE_ZONE_ID },
-  { helmetId: 'HC-02', zoneId: PATROL_SITE_ZONE_ID },
+  { helmetId: 'HC-01', zoneId: 'ZONE_2' },
+  { helmetId: 'HC-02', zoneId: 'ZONE_5' },
 ] as const
 
 function buildHelmetPins(): PatrolHelmetPin[] {
-  const zone = PATROL_GPS_ZONES[0]
   return (PATROL_HELMET_ZONE_ASSIGNMENTS as readonly { helmetId: string; zoneId: string }[]).map(({ helmetId, zoneId }) => {
+    const zone = PATROL_GPS_ZONES.find(z => z.zone_id === zoneId)!
     const num = helmetId.replace('HC-', '')
     return {
       id: helmetId,
       label: `Helmet ${num}`,
       zoneId,
       color: zone.borderColor,
-      position: PATROL_SITE_CENTER,
+      position: zone.center,
     }
   })
 }
@@ -199,7 +220,7 @@ export const PATROL_MAP_ACTIVE_DRONE_PINS: PatrolDronePin[] = [
     id: 'DR-03',
     label: 'Drone 03',
     zoneId: PATROL_SITE_ZONE_ID,
-    color: PATROL_GPS_ZONES[0]?.borderColor ?? '#ef4444',
+    color: PATROL_GPS_ZONES.find(z => z.zone_id === PATROL_SITE_ZONE_ID)?.borderColor ?? '#22c55e',
     position: PATROL_SITE_CENTER,
   },
 ]
@@ -260,14 +281,14 @@ export const PATROL_HELMET_ZONE_TRAILS: Record<string, [number, number][]> =
   )
 
 export function getPatrolHelmetZoneName(helmetId: string): string {
-  void helmetId
-  return PATROL_SITE_NAME
+  const assignment = PATROL_HELMET_ZONE_ASSIGNMENTS.find(row => row.helmetId === helmetId)
+  const zone = PATROL_GPS_ZONES.find(z => z.zone_id === assignment?.zoneId)
+  return zone?.name ?? PATROL_SITE_NAME
 }
 
 export function buildPatrolGpsTrail(stepsPerSegment = 10): [number, number][] {
-  const zone = PATROL_GPS_ZONES[0]
-  const ring = zone.polygon.length >= 4 ? zone.polygon : [...PATROL_SITE_CORNERS]
-  const waypoints = [...ring.slice(0, 4), ring[0]]
+  const ring = PATROL_SITE_BOUNDARY_RING
+  const waypoints = [...ring, ring[0]]
   const trail: [number, number][] = []
   for (let i = 0; i < waypoints.length - 1; i += 1) {
     const [lat1, lng1] = waypoints[i]
@@ -287,25 +308,26 @@ export const PATROL_GPS_TRAIL = buildPatrolGpsTrail()
 
 export {
   PATROL_SITE_BOUNDARY,
+  PATROL_SITE_BOUNDARY_RING,
   PATROL_SITE_CLIP_RING,
   isPointInSiteBoundary,
   clampPointToSiteBoundary,
   clipPolygonToSiteBoundary,
 } from './patrolSiteGeometry'
 
-const SITE_PAD = 0.00085
+const SITE_PAD = 0.002
 
-/** Giới hạn pan/zoom — chỉ trong phạm vi công trường [SW, NE]. */
+/** Giới hạn pan/zoom — trong phạm vi hành lang CT06 [SW, NE]. */
 export const PATROL_SITE_FOCUS_BOUNDS: [[number, number], [number, number]] = [
   [
-    Math.min(...PATROL_SITE_CORNERS.map(p => p[0])) - SITE_PAD,
-    Math.min(...PATROL_SITE_CORNERS.map(p => p[1])) - SITE_PAD,
+    Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])) - SITE_PAD,
+    Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[1])) - SITE_PAD,
   ],
   [
-    Math.max(...PATROL_SITE_CORNERS.map(p => p[0])) + SITE_PAD,
-    Math.max(...PATROL_SITE_CORNERS.map(p => p[1])) + SITE_PAD,
+    Math.max(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])) + SITE_PAD,
+    Math.max(...PATROL_SITE_BOUNDARY_RING.map(p => p[1])) + SITE_PAD,
   ],
 ]
 
-export const PATROL_SITE_MIN_ZOOM = 15
+export const PATROL_SITE_MIN_ZOOM = 13
 export const PATROL_SITE_MAX_ZOOM = 19

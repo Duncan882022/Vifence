@@ -6,7 +6,7 @@ import {
   clampPointToSiteBoundary,
   clampPointToSiteInterior,
   isPointInSiteBoundary,
-  PATROL_SITE_CORNERS,
+  PATROL_SITE_BOUNDARY_RING,
 } from '../data/patrolSiteGeometry'
 import { PATROL_SITE_CENTER } from '../data/patrolSiteMap'
 import { isPatrolRelativeGpsCamera } from './patrolGpsConfig'
@@ -87,7 +87,7 @@ export function snapPointToSite(lat: number, lng: number): [number, number, bool
   let bestD = Infinity
   const px = lng
   const py = lat
-  const ring = PATROL_SITE_CORNERS
+  const ring = PATROL_SITE_BOUNDARY_RING
   for (let i = 0; i < ring.length; i += 1) {
     const [aLat, aLng] = ring[i]
     const [bLat, bLng] = ring[(i + 1) % ring.length]

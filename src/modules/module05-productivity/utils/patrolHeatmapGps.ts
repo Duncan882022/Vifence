@@ -1,5 +1,5 @@
 /**
- * GPS cho heatmap patrol — không có GPS thật → Cầu Sông Hốt (PATROL_SITE_CENTER).
+ * GPS cho heatmap patrol — không có GPS thật → CT06 Quảng Yên (PATROL_SITE_CENTER).
  */
 import {
   getPatrolHelmetGps,
@@ -67,7 +67,7 @@ export function resolvePatrolHelmetMapPosition(
   return fallback
 }
 
-/** Luôn trả tọa độ — không GPS → tâm Cầu Sông Hốt. */
+/** Luôn trả tọa độ — không GPS → tâm hành lang CT06. */
 export function resolvePatrolHeatmapGps(cameraId: string): { lat: number; lng: number } {
   if (isPatrolHelmetCameraId(cameraId)) {
     const snap = getPatrolHelmetGps(cameraId) ?? getPatrolHelmetGpsLastKnown(cameraId)
