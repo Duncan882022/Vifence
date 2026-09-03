@@ -352,6 +352,28 @@ def coerce_appearance_id_for_camera(
     return int(appearance_id)
 
 
+def coerce_appearance_id_for_encounter_gap(
+    appearance_id: int | None,
+    camera_id: str,
+    ts: float,
+) -> int | None:
+    """Bỏ row id cũ nếu đã ngắt >45s — buộc INSERT lượt gặp mới (cùng camera)."""
+    appearance_id = coerce_appearance_id_for_camera(appearance_id, camera_id)
+    if appearance_id is None:
+        return None
+    row = db.query_one(
+        "SELECT ended_at FROM appearances WHERE id = ?",
+        (int(appearance_id),),
+    )
+    if row is None:
+        return None
+    from .presence import GAP_FALLBACK_SEC
+
+    if ts - float(row["ended_at"]) > GAP_FALLBACK_SEC:
+        return None
+    return int(appearance_id)
+
+
 def find_overlapping_appearance_row(
     event_date: str,
     subject_id: str,

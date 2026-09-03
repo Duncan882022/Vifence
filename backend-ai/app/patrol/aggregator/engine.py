@@ -14,6 +14,25 @@ from .types import ObservationInput
 logger = logging.getLogger("patrol.aggregator.engine")
 
 
+def _maybe_split_encounter(session, ts: float) -> None:
+    """Sau khi rời khung >45s (tắt phát sóng, mất track) — lượt gặp mới trên cùng camera."""
+    if session.last_seen_at <= 0 or ts <= session.last_seen_at + 1e-6:
+        return
+    from ..presence import GAP_FALLBACK_SEC
+
+    if ts - session.last_seen_at <= GAP_FALLBACK_SEC:
+        return
+    session.appearance_row_id = None
+    session.luot_snapshot_captured = False
+    session.started_at = ts
+    session.committed = False
+    session.last_flush_at = 0.0
+    from .session_store import _new_session_id
+
+    session.session_id = _new_session_id(session.camera_id, session.track_id)
+    session.dirty = True
+
+
 def _maybe_update_best_observation(session, obs: ObservationInput) -> None:
     """Giữ frame score cao nhất — không drop frame cũ khi chưa có frame tốt hơn."""
     if obs.frame is None or obs.person_bbox is None:
@@ -78,6 +97,7 @@ def ingest_observation(**kwargs) -> str | None:
         bbox=obs.person_bbox,
         face_embedding=obs.face_embedding,
     )
+    _maybe_split_encounter(session, obs.ts)
     session.touch(obs.ts, obs.person_bbox)
     _maybe_update_best_observation(session, obs)
 
