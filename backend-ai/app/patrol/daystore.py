@@ -12,10 +12,11 @@ nên chẳng có gì để nhận lại hôm sau), còn Người và Định dan
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
-from . import db, identity
+from . import db, identity, identity_conflict
 from .presence import (
     merge_source_cameras,
     parse_source_cameras,
@@ -387,6 +388,37 @@ def _object_cards_overlap(a: dict[str, Any], b: dict[str, Any]) -> bool:
     return overlap / min_dur >= PARALLEL_OBJ_OVERLAP_MIN_RATIO
 
 
+def _object_last_bbox(event_date: str, obj_id: str) -> list[float] | None:
+    """Vị trí khung gần nhất của một thẻ obj — lấy từ payload lượt xuất hiện."""
+    row = db.query_one(
+        "SELECT event_payload_json FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY ended_at DESC LIMIT 1",
+        (event_date, obj_id),
+    )
+    if row is None:
+        return None
+    try:
+        payload = json.loads(str(row["event_payload_json"] or "") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return None
+    bbox = payload.get("bbox")
+    if isinstance(bbox, list) and len(bbox) >= 4:
+        try:
+            return [float(v) for v in bbox[:4]]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _object_cards_are_same_person(event_date: str, obj_a: str, obj_b: str) -> bool:
+    """Hai thẻ obj chồng thời gian — cùng người bị tách track hay hai người?"""
+    return identity_conflict.looks_like_split_track(
+        _object_last_bbox(event_date, obj_a),
+        _object_last_bbox(event_date, obj_b),
+    )
+
+
 def _object_primary_camera(event_date: str, obj_id: str) -> str | None:
     row = db.query_one(
         "SELECT camera_id FROM appearances"
@@ -437,8 +469,13 @@ def find_parallel_object_card(
     camera_id: str,
     started_at: float,
     now_ts: float,
+    bbox: tuple[float, float, float, float] | None = None,
 ) -> str | None:
-    """Thẻ obj đang active cùng camera — tránh cấp obj mới khi ByteTrack tách đôi."""
+    """Thẻ obj đang active cùng camera — tránh cấp obj mới khi ByteTrack tách đôi.
+
+    `bbox` là vị trí khung của track mới. Có bbox thì chỉ dùng lại thẻ khi hai
+    khung chồng nhau; nếu không, hai người đi cạnh nhau sẽ bị dồn vào một thẻ.
+    """
     cam = (camera_id or "").strip()
     if not cam:
         return None
@@ -460,6 +497,10 @@ def find_parallel_object_card(
             continue
         last_seen = float(row["last_seen"])
         if now_ts - last_seen > PARALLEL_OBJ_ACTIVE_SEC:
+            continue
+        if bbox is not None and not identity_conflict.looks_like_split_track(
+            [float(v) for v in bbox], _object_last_bbox(event_date, oid),
+        ):
             continue
         if last_seen >= best_last:
             best_last = last_seen
@@ -539,6 +580,8 @@ def coalesce_parallel_object_cards(date: str | None = None) -> int:
             if cam_a and cam_b and cam_a != cam_b:
                 continue
             if not _objects_same_site(d, aid, bid):
+                continue
+            if not _object_cards_are_same_person(d, aid, bid):
                 continue
             keep, drop = (aid, bid) if aid < bid else (bid, aid)
             if merge_object_cards(keep, drop, event_date=d):
@@ -855,7 +898,12 @@ def _resolve_appearance_subject_id(subject_id: str) -> str:
 
 
 def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]:
-    """Lịch sử xuất hiện cho popup — nhóm theo camera."""
+    """Lịch sử xuất hiện cho popup — một thẻ theo dõi **một** đối tượng.
+
+    Dữ liệu cũ có thể đã bị gộp nhầm hai người vào một mã. Lọc theo bất biến
+    "không thể ở hai chỗ cùng lúc" để thẻ chỉ hiện đúng một đối tượng, thay vì
+    bắt người trực tự đoán dòng nào là ai.
+    """
     d = date or db.today_vn()
     sid = _resolve_appearance_subject_id(subject_id)
     rows = db.query(
@@ -869,6 +917,7 @@ def list_appearances(subject_id: str, date: str | None = None) -> dict[str, Any]
         (d, sid),
     )
     rows = _dedupe_aggregator_appearance_rows(rows)
+    rows = identity_conflict.select_single_subject_rows(rows)
     by_camera: dict[str, list[dict[str, Any]]] = {}
     segments: list[dict[str, Any]] = []
     for r in rows:

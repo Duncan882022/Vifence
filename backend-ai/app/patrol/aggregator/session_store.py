@@ -187,7 +187,7 @@ def resolve_parallel_object_subject(
     if bbox is None:
         return None
     return daystore.find_parallel_object_card(
-        event_date, camera_id, started_at, now_ts,
+        event_date, camera_id, started_at, now_ts, bbox=bbox,
     )
 
 

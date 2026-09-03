@@ -31,6 +31,11 @@ def build_event_payload(
             "duration_seconds": int(round(session.duration_seconds)),
         },
     }
+    if session.bbox is not None:
+        # Vị trí khung cuối trong ảnh — căn cứ phân biệt "một người bị ByteTrack
+        # cắt làm hai track" (hai khung chồng nhau) với "hai người đi cạnh nhau"
+        # (hai khung rời nhau). Chỉ thời gian thì hai trường hợp giống hệt.
+        payload["bbox"] = [float(v) for v in session.bbox]
     tier = (tier_at_observation or "").strip()
     if tier:
         payload["tier_at_observation"] = tier

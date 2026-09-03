@@ -1175,8 +1175,10 @@ def identify(
     )
     if existing is not None:
         keep = str(existing["pers_id"])
-        merge_persons(keep, pid, now=ts)
-        pid = keep
+        # Gộp thất bại nghĩa là hai mã từng cùng có mặt trong một khung hình —
+        # giữ nguyên mã đang gán, đừng dời hồ sơ sang thẻ của người kia.
+        if merge_persons(keep, pid, now=ts):
+            pid = keep
 
     with db.tx() as c:
         row = c.execute("SELECT * FROM persons WHERE pers_id = ?", (pid,)).fetchone()
@@ -1291,13 +1293,43 @@ def _purge_person_gallery_assets(person: dict[str, Any]) -> None:
         logger.warning("gallery purge skipped for %s", person.get("pers_id"), exc_info=True)
 
 
-def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> None:
-    """Gộp hai mã của cùng một người. Mã bị bỏ vẫn tra ra được qua alias."""
+def _merge_blocked_by_conflict(keep: str, drop: str) -> bool:
+    """Hai mã có bằng chứng là hai người khác nhau thì không được gộp.
+
+    Gộp là thao tác một chiều: `appearances` bị viết lại và mã cũ chỉ còn là
+    alias, nên một lần gộp nhầm là trộn vĩnh viễn lịch sử của hai người. Rẻ hơn
+    nhiều nếu chặn ngay tại đây khi hai mã từng cùng có mặt trong một khung hình.
+    """
+    from . import identity_conflict
+
+    cols = "id, camera_id, track_id, started_at, ended_at"
+    rows_keep = db.query(
+        f"SELECT {cols} FROM appearances WHERE subject_id = ?", (keep,)
+    )
+    rows_drop = db.query(
+        f"SELECT {cols} FROM appearances WHERE subject_id = ?", (drop,)
+    )
+    return not identity_conflict.subjects_can_merge(rows_keep, rows_drop)
+
+
+def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> bool:
+    """Gộp hai mã của cùng một người. Mã bị bỏ vẫn tra ra được qua alias.
+
+    Trả `False` khi từ chối gộp vì hai mã chứng minh được là hai người.
+    """
     ts = now or time.time()
     keep = resolve_alias(keep_id)
     drop = resolve_alias(drop_id)
     if keep == drop:
-        return
+        return True
+
+    if _merge_blocked_by_conflict(keep, drop):
+        logger.warning(
+            "[patrol] từ chối gộp %s ← %s: hai mã cùng có mặt trong một khung hình",
+            keep,
+            drop,
+        )
+        return False
 
     with db.tx() as c:
         # Khuôn mặt dồn hết về một mối — càng nhiều góc càng nhận chắc.
@@ -1362,6 +1394,7 @@ def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> No
         (keep,),
     ):
         coalesce_subject_appearances(keep, str(row["event_date"]))
+    return True
 
 
 def import_identity(

@@ -694,7 +694,18 @@ def merge_persons(
     """Gộp hai mã của cùng một người — mã bị bỏ vẫn tra ra được."""
     keep = payload.keep.strip()
     drop = payload.drop.strip()
-    identity.merge_persons(keep, drop)
+    if not identity.merge_persons(keep, drop):
+        audit(
+            "persons_merge_rejected",
+            actor=user.username,
+            subject_id=keep,
+            meta={"drop": drop, "reason": "same_frame_conflict"},
+        )
+        return {
+            "ok": False,
+            "error": "same_frame_conflict",
+            "message": "Hai mã cùng xuất hiện trong một khung hình — không phải cùng một người.",
+        }
     row = identity.get_person(keep)
     audit("persons_merge", actor=user.username, subject_id=keep, meta={"drop": drop})
     return {"ok": True, "person": _person_payload(row) if row else None}

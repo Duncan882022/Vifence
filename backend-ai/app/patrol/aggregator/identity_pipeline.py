@@ -347,7 +347,16 @@ def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) ->
     if _rank(keep_row) < _rank(drop_row):
         return
 
-    identity.merge_persons(canonical, current, now=obs.ts)
+    if not identity.merge_persons(canonical, current, now=obs.ts):
+        # Hai mã cùng có mặt trong một khung hình — track này là người khác,
+        # giữ nguyên thẻ hiện tại thay vì kéo nó sang hồ sơ của người kia.
+        logger.info(
+            "aggregator giữ pers %s cho track %s — xung đột với %s",
+            current,
+            session.track_id,
+            canonical,
+        )
+        return
     session.subject_id = identity.resolve_alias(canonical)
     session.identity = PersonIdentity(
         person_id=session.subject_id,
