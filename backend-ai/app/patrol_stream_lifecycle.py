@@ -10,6 +10,17 @@ logger = logging.getLogger("patrol.stream_lifecycle")
 
 _lock = threading.RLock()
 _offline_finalized: dict[str, float] = {}
+# Thời điểm stream ngắt gần nhất — dùng tách lượt gặp sau khi bật phát lại.
+_stream_last_offline_at: dict[str, float] = {}
+
+
+def _split_encounter_state(session) -> None:
+    """Reset session cho lượt gặp mới (appearance INSERT, không UPDATE dòng cũ)."""
+    session.appearance_row_id = None
+    session.luot_snapshot_captured = False
+    session.committed = False
+    session.last_flush_at = 0.0
+    session.dirty = True
 
 
 def on_patrol_stream_offline(camera_id: str, *, at_ts: float) -> int:
@@ -30,6 +41,7 @@ def on_patrol_stream_offline(camera_id: str, *, at_ts: float) -> int:
         if prev is not None and abs(prev - ts) < 0.5:
             return 0
         _offline_finalized[cid] = ts
+        _stream_last_offline_at[cid] = ts
 
     from .patrol.aggregator.engine import finalize_orphan_sessions
     from .patrol.sink import forget_track
@@ -82,8 +94,57 @@ def reset_patrol_stream_lifecycle(camera_id: str | None = None) -> None:
     with _lock:
         if camera_id is None:
             _offline_finalized.clear()
+            _stream_last_offline_at.clear()
             return
         _offline_finalized.pop(camera_id.strip(), None)
+
+
+def consume_post_offline_encounter(camera_id: str, obs_ts: float) -> float | None:
+    """Trả mốc offline nếu obs đầu sau ngắt stream >45s — buộc lượt gặp mới."""
+    cid = (camera_id or "").strip()
+    if not cid:
+        return None
+    from .patrol.presence import GAP_FALLBACK_SEC
+
+    with _lock:
+        off = _stream_last_offline_at.get(cid)
+        if off is None:
+            return None
+        if obs_ts - float(off) <= GAP_FALLBACK_SEC:
+            return None
+        _stream_last_offline_at.pop(cid, None)
+        return float(off)
+
+
+def split_sessions_after_stream_resume(
+    camera_id: str,
+    *,
+    obs_ts: float,
+    current_session=None,
+) -> bool:
+    """Tách session sau bật phát lại — tránh UPDATE appearance cũ."""
+    if consume_post_offline_encounter(camera_id, obs_ts) is None:
+        return False
+    from .patrol.aggregator.session_store import session_keys_for_camera, get_session, _new_session_id
+
+    seen_current = False
+    for key in session_keys_for_camera(camera_id):
+        cam, track_id = key.split("|", 1)
+        sess = get_session(cam, track_id)
+        if sess is None:
+            continue
+        if current_session is not None and sess is current_session:
+            seen_current = True
+        _split_encounter_state(sess)
+        sess.started_at = obs_ts
+        sess.session_id = _new_session_id(sess.camera_id, sess.track_id)
+    if current_session is not None and not seen_current:
+        _split_encounter_state(current_session)
+        current_session.started_at = obs_ts
+        from .patrol.aggregator.session_store import _new_session_id as _new_sid
+
+        current_session.session_id = _new_sid(current_session.camera_id, current_session.track_id)
+    return True
 
 
 def mark_patrol_stream_online(camera_id: str) -> None:
