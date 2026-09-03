@@ -1,8 +1,13 @@
 import { advancePersonRoiTracks, predictPersonRoiTracks } from './personRoiTracker'
 import { BboxDisplaySmoother } from './bboxDisplaySmoother'
-import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
+import {
+  PATROL_PERSON_ROI_CONFIG,
+  resolvePatrolPersonRoiConfig,
+  type PatrolPersonRoiConfig,
+} from './patrolPersonRoi.config'
 import type { PersonRoiDetection, PersonRoiDisplay, PersonRoiTrack } from './types'
 import { isPatrolHeatmapEligibleId } from '../utils/patrolPatrolCounts'
+import { resolveEffectivePatrolFlightMode } from '../utils/patrolFlightMode'
 
 /**
  * Engine singleton per camera — overlay + heatmap dùng chung track state.
@@ -16,6 +21,17 @@ export class PatrolPersonRoiEngine {
   private displaySmoother = new BboxDisplaySmoother()
 
   constructor(readonly cameraId: string) {}
+
+  /**
+   * Profile ghép của camera này. DR-* đổi được giữa tầm cao và tầm thấp giữa
+   * phiên bay, nên đọc lại mỗi nhịp ingest thay vì chốt một lần lúc dựng engine.
+   */
+  private config(): PatrolPersonRoiConfig {
+    return resolvePatrolPersonRoiConfig(
+      this.cameraId,
+      resolveEffectivePatrolFlightMode(this.cameraId),
+    )
+  }
 
   private polishDisplay(raw: PersonRoiDisplay[], predicting: boolean): PersonRoiDisplay[] {
     const active = new Set<string>()
@@ -36,18 +52,40 @@ export class PatrolPersonRoiEngine {
 
   /** Gọi mỗi lần backend trả detections mới. */
   ingest(detections: PersonRoiDetection[], now = performance.now()): void {
+    const cfg = this.config()
     const dtMs = this.lastIngestAt > 0 ? Math.max(16, now - this.lastIngestAt) : 450
     this.lastIngestAt = now
-    this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now())
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0), false)
+    this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now(), cfg)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0, cfg), false)
     this.notify()
   }
 
   /** rAF — extrapolate bbox giữa các lần analyze. */
   predictDisplay(now = performance.now()): PersonRoiDisplay[] {
     const elapsed = this.lastIngestAt > 0 ? now - this.lastIngestAt : 0
+    const cfg = this.config()
+
+    /**
+     * Luồng detections đứt hẳn — WebSocket rớt, worker VMS chết, tile chuyển
+     * sang nền. `missStreak` chỉ tăng khi có nhịp ingest mới, nên không còn gì
+     * đếm và lứa hộp cuối cùng đứng nguyên trên video vô thời hạn. Đó chính là
+     * loại "ROI ảo" khó chịu nhất: nó trông y hệt một ROI thật.
+     *
+     * Bỏ luôn track chứ không chỉ ẩn: sau vài giây, vị trí đo cuối đã quá cũ để
+     * ghép lại: giữ chúng chỉ khiến nhịp ingest đầu tiên sau khi nối lại bám vào
+     * chỗ người đã đứng từ lâu.
+     */
+    if (this.lastIngestAt > 0 && elapsed > cfg.displayMaxStaleMs) {
+      if (this.tracks.size > 0 || this.displayCache.length > 0) {
+        this.tracks.clear()
+        this.displayCache = []
+        this.displaySmoother.clear()
+      }
+      return this.displayCache
+    }
+
     if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed), true)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true)
     return this.displayCache
   }
 
@@ -92,6 +130,18 @@ export function getPatrolPersonRoiEngine(cameraId: string): PatrolPersonRoiEngin
     engines.set(cameraId, engine)
   }
   return engine
+}
+
+/**
+ * Xoá track nhưng giữ nguyên instance engine.
+ *
+ * Khác `clearPatrolPersonRoiEngine`, hàm này không gỡ engine khỏi registry: các
+ * overlay đang mounted giữ tham chiếu tới đúng instance đó, gỡ đi là lần ingest
+ * sau dựng một engine mới mà không ai nghe. Dùng khi tile ngừng analyze nhưng
+ * vẫn còn trên màn hình.
+ */
+export function clearPatrolPersonRoiTracks(cameraId: string): void {
+  engines.get(cameraId)?.clear()
 }
 
 export function clearPatrolPersonRoiEngine(cameraId?: string): void {
