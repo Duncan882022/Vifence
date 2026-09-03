@@ -115,9 +115,46 @@ def _snapshot_observation(session: TrackSession, obs: ObservationInput) -> Obser
     return obs
 
 
-def _luot_needs_snapshot(session: TrackSession, *, now: float) -> bool:
+def _card_lacks_person_evidence(subject_id: str, ts: float) -> bool:
+    """Thẻ Người vẫn đang giữ tấm ảnh không có mặt của thẻ Đối tượng.
+
+    Trên bodycam người ta quay lưng vài giây rồi mới ngoảnh mặt lại, nên thăng
+    hạng Đối tượng → Người gần như luôn xảy ra **sau** cửa sổ tích lũy. Lúc đó
+    `promote_object` mang theo JPG chưa thấy mặt, mà quy tắc một JPG mỗi lượt thì
+    không chụp lại nữa: thẻ đứng mãi dưới `PERSON_LIST_MIN_SNAPSHOT_SCORE` nên
+    rơi khỏi tab Người, đồng thời `promoted_to` đã ẩn nó khỏi tab Đối tượng —
+    người có mặt mà không còn nằm trong bộ đếm nào.
+    """
+    from ...patrol_ids import is_person_subject_id
+
+    if not is_person_subject_id(subject_id):
+        return False
+
+    from .. import identity
+
+    row = db.query_one(
+        "SELECT snapshot_path, snapshot_score FROM daily_events"
+        " WHERE event_date = ? AND pers_id = ?",
+        (db.today_vn(ts), identity.resolve_alias(subject_id)),
+    )
+    if row is None:
+        return True
+    if not str(row["snapshot_path"] or "").strip():
+        return True
+    return float(row["snapshot_score"] or 0.0) < daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE
+
+
+def _luot_needs_snapshot(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    now: float,
+) -> bool:
     """Một JPG/lượt — trong cửa sổ 2s vẫn thay nếu có frame đẹp hơn."""
     if _within_accumulation_window(session, now):
+        return True
+    # Mở lại đúng một lần chụp khi đã thấy mặt mà thẻ còn giữ ảnh Đối tượng.
+    if obs.face_eligible and _card_lacks_person_evidence(session.subject_id or "", now):
         return True
     if session.luot_snapshot_captured:
         return False
@@ -264,16 +301,21 @@ def flush_session(
     )
 
     path, shot_score = (None, 0.0)
+    # Cổng thẻ Người phải xét đúng khung đã tạo ra tấm JPG. Trong cửa sổ tích lũy
+    # ảnh chốt là frame đẹp nhất, thường không phải frame hiện tại — lấy
+    # `obs.face_eligible` thì một tấm mặt rõ vẫn bị coi là ảnh không mặt.
+    shot_face_eligible = obs.face_eligible
 
     if (
         subject_id
         and obs.frame is not None
         and obs.person_bbox is not None
-        and _luot_needs_snapshot(session, now=now)
+        and _luot_needs_snapshot(session, obs, now=now)
     ):
         shot_obs = _snapshot_observation(session, obs)
         path, shot_score = _write_snapshot(session, shot_obs)
         if path:
+            shot_face_eligible = shot_obs.face_eligible
             session.luot_snapshot_captured = not _within_accumulation_window(session, now)
 
     from .identity_pipeline import try_promote_object_after_snapshot
@@ -296,7 +338,7 @@ def flush_session(
             zone_id=session.zone_id,
             snapshot_path=path,
             snapshot_score=shot_score,
-            face_eligible=obs.face_eligible,
+            face_eligible=shot_face_eligible,
             now=now,
             seen_since=session.started_at if session.last_flush_at <= 0 else None,
             gps_lat=gps_lat,
