@@ -19,14 +19,14 @@ import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 
 const ZONE_LABELS: Record<string, string> = {
-  ZONE_SITE: 'Hành lang CT06 Quảng Yên',
-  ZONE_1: 'Khu Đình Trung Bản',
-  ZONE_2: 'Khu Xóm Thành',
-  ZONE_3: 'Khu Bùi Xá',
-  ZONE_4: 'Khu Hà An',
-  ZONE_5: 'Khu Đảo Hoàng Tân',
-  ZONE_6: 'Khu Hạ Long Xanh',
-  ZONE_7: 'Khu Bệnh viện Sản Nhi',
+  ZONE_SITE: 'Cầu Sông Hốt',
+  ZONE_1: 'Khu 1 — Đình Trung Bản',
+  ZONE_2: 'Khu 2 — Xóm Thành',
+  ZONE_3: 'Khu 3 — Bùi Xá',
+  ZONE_4: 'Khu 4 — Hà An',
+  ZONE_5: 'Khu 5 — Đảo Hoàng Tân',
+  ZONE_6: 'Khu 6 — Hạ Long Xanh',
+  ZONE_7: 'Khu 7 — Bệnh viện Sản Nhi',
 }
 
 const TUNNEL_HEADERS: Record<string, string> = {

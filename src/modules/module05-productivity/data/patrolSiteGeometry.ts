@@ -2,18 +2,21 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Hành lang CT06 Quảng Yên — capsule 2 đầu tròn dọc tuyến CT06.
- * Tham chiếu: 20°55'42.4"N 106°52'25.0"E (Bùi Xá).
+ * Dự án Cầu Sông Hốt — capsule 2 đầu tròn (khảo sát CT06 Quảng Yên).
+ * Ghim tham chiếu zone 3: 20°55'42.4"N 106°52'25.0"E.
  */
 
 const M_PER_DEG_LAT = 111_320
 
-/** 4 góc điều khiển bilinear (TL→TR→BR→BL) — chia 7 khu dọc theo CT06. */
+/** Ghim khảo sát Bùi Xá — nằm trong ZONE_3. */
+export const PATROL_SURVEY_PIN: [number, number] = [20.928444, 106.873611]
+
+/** 4 góc điều khiển bilinear (TL→TR→BR→BL) — căn viền đỏ + neo ghim Bùi Xá vào ZONE_3. */
 export const PATROL_SITE_CORNERS: [number, number][] = [
-  [20.9458, 106.8512],
-  [20.9446, 106.9370],
-  [20.9169, 106.9358],
-  [20.9176, 106.8508],
+  [20.9462, 106.8395],
+  [20.9445, 106.9375],
+  [20.9165, 106.9365],
+  [20.9180, 106.8385],
 ]
 
 const SITE_TOP = PATROL_SITE_CORNERS[0]
@@ -168,7 +171,7 @@ const CAPSULE_ENVELOPE: [number, number][] = [
   sitePoint(1, 1),
   sitePoint(0.5, 0),
   sitePoint(0.5, 1),
-  [20.928444, 106.873611],
+  PATROL_SURVEY_PIN,
 ]
 
 /**
@@ -179,6 +182,11 @@ export const PATROL_SITE_BOUNDARY_RING: [number, number][] = buildStadiumCapsule
   sitePoint(1, 0.5),
   CAPSULE_ENVELOPE,
 )
+
+/** Export sitePoint for zone dividers / device anchors. */
+export function patrolSitePoint(u: number, v: number): [number, number] {
+  return sitePoint(u, v)
+}
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
 export const PATROL_SITE_BOUNDARY: [number, number][] = [

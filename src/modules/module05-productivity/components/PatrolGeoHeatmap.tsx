@@ -23,6 +23,7 @@ import {
   PATROL_SITE_FOCUS_BOUNDS,
   PATROL_SITE_MAX_ZOOM,
   PATROL_SITE_MIN_ZOOM,
+  PATROL_ZONE_DIVIDER_LINES,
   getPatrolHelmetZoneName,
   getPatrolMapDeviceBadgeNum,
 } from '../data/patrolSiteMap'
@@ -496,6 +497,8 @@ export interface PatrolGeoHeatmapProps {
   /* Layer 1 — Polygon */
   showSiteBoundary: boolean
   showZonePolygons: boolean
+  /** 6 đường nét đứt chia 7 khu bên trong viền dự án. */
+  showZoneDividers?: boolean
   /* Layer 2 — Detection dots */
   showDetections: boolean
   /** Live dots (HC-02 GPS) — thay mock PATROL_DETECTION_DOTS khi có. */
@@ -548,6 +551,7 @@ export function PatrolGeoHeatmap({
   countMode,
   showSiteBoundary,
   showZonePolygons,
+  showZoneDividers = false,
   showDetections,
   liveDetectionDots,
   followLiveGps = false,
@@ -774,16 +778,33 @@ export function PatrolGeoHeatmap({
                 pathOptions={{
                   color: '#ef4444',
                   weight: 3,
-                  dashArray: '10 6',
-                  opacity: 0.95,
+                  opacity: 0.98,
                   fillColor: '#ef4444',
-                  fillOpacity: 0.07,
+                  fillOpacity: 0.06,
                 }}
               />
             </Pane>
           )}
 
-          {/* ── LAYER 1B: Zone polygons (viền khu — tách khỏi mật độ) ── */}
+          {/* ── LAYER 1B: Zone dividers — nét đứt chia 7 khu ── */}
+          {showZoneDividers && (
+            <Pane name="patrol-zone-dividers" style={{ zIndex: 451 }}>
+              {PATROL_ZONE_DIVIDER_LINES.map((line, idx) => (
+                <Polyline
+                  key={`zone-div-${idx}`}
+                  positions={line}
+                  pathOptions={{
+                    color: '#f87171',
+                    weight: 2,
+                    opacity: 0.88,
+                    dashArray: '7 6',
+                  }}
+                />
+              ))}
+            </Pane>
+          )}
+
+          {/* ── LAYER 1C: Zone polygons (fill KPI — tùy chọn) ── */}
           {showZonePolygons && (
             <GeoJSON
               key={geoJsonKey}

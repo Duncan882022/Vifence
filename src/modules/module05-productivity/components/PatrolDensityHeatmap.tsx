@@ -520,6 +520,7 @@ export function PatrolDensityHeatmap({
           displayMode="count"
           countMode="current"
           showSiteBoundary={layers.polygon}
+          showZoneDividers={layers.polygon}
           showZonePolygons={false}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}

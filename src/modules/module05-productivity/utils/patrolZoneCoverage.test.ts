@@ -8,7 +8,7 @@ describe('computePatrolZoneCoverage', () => {
       cameraOnlineById: { 'HC-02': true, 'HC-01': false, 'DR-03': false },
     })
     expect(result.totalZones).toBe(7)
-    expect(result.visitedByZoneId['ZONE_6']).toBe(true)
+    expect(result.visitedByZoneId['ZONE_2']).toBe(true)
     expect(result.visitedZones).toBe(1)
   })
 
@@ -17,7 +17,7 @@ describe('computePatrolZoneCoverage', () => {
       cameraOnlineById: { 'HC-01': false, 'HC-02': false, 'DR-03': false },
     })
     expect(result.visitedZones).toBe(0)
-    expect(result.visitedByZoneId['ZONE_6']).toBe(false)
+    expect(result.visitedByZoneId['ZONE_2']).toBe(false)
   })
 
   it('GPS trong polygon xác nhận tuần tra', () => {
