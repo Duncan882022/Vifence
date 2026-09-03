@@ -148,7 +148,8 @@ function zoneInteractiveStyle(
 
   return {
     fillColor: '#ef4444',
-    fillOpacity: 0,
+    /* Leaflet không bắt click khi fillOpacity = 0 — giữ lớp vô hình mỏng. */
+    fillOpacity: 0.01,
     color: 'transparent',
     weight: 0,
     opacity: 0,
@@ -788,7 +789,10 @@ export function PatrolGeoHeatmap({
         .patrol-zone-interactive path.leaflet-interactive {
           cursor: pointer !important;
         }
-        .leaflet-pane { z-index: 400 !important; }
+        .leaflet-patrol-site-boundary-pane { z-index: 450 !important; }
+        .leaflet-patrol-zone-dividers-pane { z-index: 451 !important; }
+        .leaflet-patrol-zone-hit-pane { z-index: 455 !important; }
+        .leaflet-patrol-site-boundary-stroke-pane { z-index: 456 !important; }
         .leaflet-marker-pane { z-index: 620 !important; }
         .leaflet-tooltip-pane { z-index: 680 !important; }
         .leaflet-popup-pane { z-index: 700 !important; }
@@ -846,17 +850,28 @@ export function PatrolGeoHeatmap({
                   opacity: 0.98,
                   fillColor: '#ef4444',
                   fillOpacity: 0.06,
+                  interactive: !interactiveZones,
                 }}
-                eventHandlers={
-                  interactiveZones && onZoneSelect
-                    ? {
-                        click: (e) => {
-                          L.DomEvent.stopPropagation(e)
-                          onZoneSelect(null)
-                        },
-                      }
-                    : undefined
-                }
+              />
+            </Pane>
+          )}
+
+          {showSiteBoundary && interactiveZones && onZoneSelect && (
+            <Pane name="patrol-site-boundary-stroke" style={{ zIndex: 456 }}>
+              <Polyline
+                positions={PATROL_SITE_BOUNDARY}
+                pathOptions={{
+                  color: '#ef4444',
+                  weight: 14,
+                  opacity: 0.001,
+                  interactive: true,
+                }}
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e)
+                    onZoneSelect(null)
+                  },
+                }}
               />
             </Pane>
           )}
@@ -873,6 +888,7 @@ export function PatrolGeoHeatmap({
                     weight: 2,
                     opacity: 0.88,
                     dashArray: '7 6',
+                    interactive: !interactiveZones,
                   }}
                 />
               ))}
@@ -881,50 +897,53 @@ export function PatrolGeoHeatmap({
 
           {/* ── LAYER 1C: Zone polygons (fill KPI — tùy chọn) ── */}
           {zonePolygonsVisible && (
-            <GeoJSON
-              ref={geoJsonRef}
-              key={geoJsonKey}
-              data={featureCollection}
-              pathOptions={interactiveZones ? { className: 'patrol-zone-interactive' } : undefined}
-              style={
-                (interactiveZones
-                  ? (feature) => zoneInteractiveStyle(
-                    feature as Feature<GeoJsonPolygon, ZoneProperties>,
-                    selectedZoneId,
-                    hoveredZoneId,
-                  )
-                  : zoneTierStyle) as Parameters<typeof GeoJSON>[0]['style']
-              }
-              onEachFeature={(feature, lyr) => {
-                const zoneFeature = feature as Feature<GeoJsonPolygon, ZoneProperties>
-                const props = zoneFeature.properties
-                if (interactiveZones && onZoneSelect) {
-                  lyr.on({
-                    mouseover: (e) => {
-                      setHoveredZoneId(props.id)
-                      const layer = e.target as L.Path
-                      layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, props.id))
-                      layer.bringToFront()
-                    },
-                    mouseout: (e) => {
-                      setHoveredZoneId(null)
-                      const layer = e.target as L.Path
-                      layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, null))
-                    },
-                    click: (e) => {
-                      L.DomEvent.stopPropagation(e)
-                      onZoneSelect(selectedZoneId === props.id ? null : props.id)
-                    },
-                  })
-                  return
+            <Pane name="patrol-zone-hit" style={{ zIndex: 455 }}>
+              <GeoJSON
+                ref={geoJsonRef}
+                key={geoJsonKey}
+                data={featureCollection}
+                pathOptions={interactiveZones ? { className: 'patrol-zone-interactive' } : undefined}
+                style={
+                  (interactiveZones
+                    ? (feature) => zoneInteractiveStyle(
+                      feature as Feature<GeoJsonPolygon, ZoneProperties>,
+                      selectedZoneId,
+                      hoveredZoneId,
+                    )
+                    : zoneTierStyle) as Parameters<typeof GeoJSON>[0]['style']
                 }
-                lyr.bindTooltip(props.name, {
-                  permanent: false,
-                  sticky: true,
-                  className: 'patrol-zone-tip',
-                })
-              }}
-            />
+                onEachFeature={(feature, lyr) => {
+                  const zoneFeature = feature as Feature<GeoJsonPolygon, ZoneProperties>
+                  const props = zoneFeature.properties
+                  if (interactiveZones && onZoneSelect) {
+                    ;(lyr as L.Path).options.interactive = true
+                    lyr.on({
+                      mouseover: (e) => {
+                        setHoveredZoneId(props.id)
+                        const layer = e.target as L.Path
+                        layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, props.id))
+                        layer.bringToFront()
+                      },
+                      mouseout: (e) => {
+                        setHoveredZoneId(null)
+                        const layer = e.target as L.Path
+                        layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, null))
+                      },
+                      click: (e) => {
+                        L.DomEvent.stopPropagation(e)
+                        onZoneSelect(selectedZoneId === props.id ? null : props.id)
+                      },
+                    })
+                    return
+                  }
+                  lyr.bindTooltip(props.name, {
+                    permanent: false,
+                    sticky: true,
+                    className: 'patrol-zone-tip',
+                  })
+                }}
+              />
+            </Pane>
           )}
 
           {/* ── LAYER 2: Detection / Object Dots — nhỏ, FOV blink ── */}
