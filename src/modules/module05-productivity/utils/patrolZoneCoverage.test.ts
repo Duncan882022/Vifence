@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computePatrolZoneCoverage } from './patrolZoneCoverage'
-import { PATROL_GPS_ZONES, PATROL_SITE_CENTER } from '../data/patrolSiteMap'
+import { PATROL_GPS_ZONES } from '../data/patrolSiteMap'
 
 describe('computePatrolZoneCoverage', () => {
   it('zone visited khi có cam gán tĩnh online (chưa GPS)', () => {
