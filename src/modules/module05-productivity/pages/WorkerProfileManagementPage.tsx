@@ -9,7 +9,7 @@ import { PageLayout, Panel } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
 import {
   deletePatrolWorkerProfile,
-  fetchPatrolWorkerProfiles,
+  fetchPatrolWorkerProfilesForManagement,
   importPatrolWorkerProfiles,
   pingPatrolProfileBackend,
   type PatrolImportRow,
@@ -17,6 +17,7 @@ import {
   type PatrolWorkerPerson,
 } from '../services/patrolWorkerProfile.service'
 import { WorkerProfileDetailModal } from '../components/WorkerProfileDetailModal'
+import { FACE_SCAN_POSE_REQUIRED } from '../utils/patrolFaceScanPoses'
 
 const TEMPLATE_HEADERS = ['Họ tên', 'Mã nhân viên', 'Đơn vị'] as const
 
@@ -52,11 +53,11 @@ function FaceBadge({ count, complete }: { count: number; complete?: boolean }) {
       complete
         ? 'bg-green-400/10 text-green-400 border-green-400/30'
         : count > 0
-          ? 'bg-fuchsia-400/10 text-fuchsia-400 border-fuchsia-400/30'
+          ? 'bg-violet-400/10 text-violet-400 border-violet-400/30'
           : 'bg-amber-400/10 text-amber-400 border-amber-400/30',
     )}>
       <ScanFace className="w-2.5 h-2.5" />
-      {count}/4
+      {count}/{FACE_SCAN_POSE_REQUIRED}
     </span>
   )
 }
@@ -66,12 +67,13 @@ export function WorkerProfileManagementPage() {
   const [loading, setLoading] = useState(true)
   const [backendOk, setBackendOk] = useState<boolean | null>(null)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'identified'>('all')
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<PatrolImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [detailPersId, setDetailPersId] = useState<string | null>(null)
-  const [detailMode, setDetailMode] = useState<'view' | 'edit'>('view')
+  const [detailMode, setDetailMode] = useState<'view' | 'edit' | 'verify'>('view')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [rowError, setRowError] = useState<string | null>(null)
 
@@ -84,7 +86,7 @@ export function WorkerProfileManagementPage() {
         setProfiles([])
         return
       }
-      const items = await fetchPatrolWorkerProfiles('identified')
+      const items = await fetchPatrolWorkerProfilesForManagement()
       setProfiles(items)
     } catch {
       setBackendOk(false)
@@ -100,20 +102,25 @@ export function WorkerProfileManagementPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return profiles
-    return profiles.filter(p =>
-      (p.full_name ?? '').toLowerCase().includes(q)
-      || (p.employee_code ?? '').toLowerCase().includes(q)
-      || (p.contractor ?? '').toLowerCase().includes(q)
-      || p.pers_id.toLowerCase().includes(q),
-    )
-  }, [profiles, search])
+    return profiles.filter(p => {
+      if (statusFilter === 'draft' && p.status !== 'draft') return false
+      if (statusFilter === 'identified' && p.status !== 'identified') return false
+      if (!q) return true
+      return (p.full_name ?? '').toLowerCase().includes(q)
+        || (p.employee_code ?? '').toLowerCase().includes(q)
+        || (p.contractor ?? '').toLowerCase().includes(q)
+        || p.pers_id.toLowerCase().includes(q)
+        || (p.display_name ?? '').toLowerCase().includes(q)
+    })
+  }, [profiles, search, statusFilter])
 
   const stats = useMemo(() => {
     const total = profiles.length
+    const draft = profiles.filter(p => p.status === 'draft').length
+    const verified = profiles.filter(p => p.status === 'identified').length
     const withFace = profiles.filter(p => (p.face_count ?? 0) > 0).length
     const complete = profiles.filter(p => p.face_enrollment_complete).length
-    return { total, withFace, complete }
+    return { total, draft, verified, withFace, complete }
   }, [profiles])
 
   const handleImport = async () => {
@@ -142,7 +149,7 @@ export function WorkerProfileManagementPage() {
     }
   }
 
-  const openDetail = (persId: string, mode: 'view' | 'edit' = 'view') => {
+  const openDetail = (persId: string, mode: 'view' | 'edit' | 'verify' = 'view') => {
     setDetailMode(mode)
     setDetailPersId(persId)
     setRowError(null)
@@ -197,11 +204,12 @@ export function WorkerProfileManagementPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {[
-            { label: 'Hồ sơ', value: stats.total, icon: Users, color: 'text-sky-400' },
+            { label: 'Tổng hồ sơ', value: stats.total, icon: Users, color: 'text-sky-400' },
+            { label: 'Bản nháp', value: stats.draft, icon: ScanFace, color: 'text-amber-400' },
+            { label: 'Đã xác minh', value: stats.verified, icon: UserCheck, color: 'text-green-400' },
             { label: 'Có vector', value: stats.withFace, icon: ScanFace, color: 'text-violet-400' },
-            { label: 'Đủ 4 góc', value: stats.complete, icon: UserCheck, color: 'text-green-400' },
           ].map(k => {
             const Icon = k.icon
             return (
@@ -230,12 +238,33 @@ export function WorkerProfileManagementPage() {
                 className="w-full pl-8 pr-3 py-2 text-[11px] rounded-lg border border-[#1e2433] bg-[#0a0e17] outline-none focus:border-primary/50"
               />
             </div>
-            {backendOk === false && (
-              <p className="text-[10px] text-amber-400">Backend tuần tra chưa sẵn sàng — kiểm tra URL backend.</p>
-            )}
             {rowError && (
               <p className="text-[10px] text-red-400">{rowError}</p>
             )}
+            {backendOk === false && (
+              <p className="text-[10px] text-amber-400">Backend tuần tra chưa sẵn sàng — kiểm tra URL backend.</p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                ['all', 'Tất cả'],
+                ['draft', 'Bản nháp'],
+                ['identified', 'Đã xác minh'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setStatusFilter(key)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors',
+                    statusFilter === key
+                      ? 'border-sky-400/40 bg-sky-400/10 text-sky-400'
+                      : 'border-[#1e2433] text-muted-foreground hover:bg-[#1a2235]',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="max-h-[min(60dvh,520px)] overflow-y-auto">
@@ -245,7 +274,9 @@ export function WorkerProfileManagementPage() {
               </div>
             ) : filtered.length === 0 ? (
               <p className="text-[11px] text-muted-foreground text-center py-16">
-                Chưa có hồ sơ — tải mẫu Excel và import bên phải.
+                {statusFilter === 'draft'
+                  ? 'Chưa có hồ sơ bản nháp — camera sẽ tạo khi nhận diện đủ điều kiện.'
+                  : 'Chưa có hồ sơ — tải mẫu Excel và import bên phải.'}
               </p>
             ) : (
               <table className="w-full text-[11px]">
@@ -262,7 +293,16 @@ export function WorkerProfileManagementPage() {
                   {filtered.map(p => (
                     <tr key={p.pers_id} className="border-b border-[#1e2433]/60 hover:bg-[#0c1019]">
                       <td className="px-3 py-2.5">
-                        <p className="font-medium text-foreground truncate max-w-[160px]">{p.full_name ?? p.display_name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="font-medium text-foreground truncate max-w-[140px]">
+                            {p.full_name ?? p.display_name}
+                          </p>
+                          {p.status === 'draft' && (
+                            <span className="shrink-0 px-1 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-400/10 text-amber-400 border border-amber-400/30">
+                              Nháp
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[9px] text-muted-foreground font-mono sm:hidden">{p.employee_code}</p>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-[10px] hidden sm:table-cell">{p.employee_code ?? '—'}</td>
@@ -282,19 +322,15 @@ export function WorkerProfileManagementPage() {
                           </button>
                           <button
                             type="button"
-                            title="Sửa hồ sơ"
-                            onClick={() => openDetail(p.pers_id, 'edit')}
+                            title={p.status === 'draft' ? 'Xác minh hồ sơ' : 'Sửa hồ sơ'}
+                            onClick={() => openDetail(
+                              p.pers_id,
+                              p.status === 'draft' ? 'verify' : 'edit',
+                            )}
                             className="p-1.5 rounded text-muted-foreground hover:text-sky-400 hover:bg-sky-400/10"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <Link
-                            to={`/module05/quet-mat?code=${encodeURIComponent(p.employee_code ?? '')}`}
-                            title="Quét mặt"
-                            className="p-1.5 rounded text-violet-300 hover:bg-violet-500/10"
-                          >
-                            <ScanFace className="w-3.5 h-3.5" />
-                          </Link>
                           <button
                             type="button"
                             title="Xóa hồ sơ"
@@ -320,7 +356,7 @@ export function WorkerProfileManagementPage() {
           <div className="p-3 space-y-3">
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               Cột bắt buộc: <strong className="text-foreground">Họ tên</strong>, <strong className="text-foreground">Mã nhân viên</strong>.
-              Upsert theo mã — trùng mã sẽ cập nhật tên/đơn vị. Sau import, sang trang Quét mặt để lưu vector.
+              Upsert theo mã — trùng mã sẽ cập nhật tên/đơn vị. Vector mặt được quét riêng tại menu Quét mặt.
             </p>
 
             <button
@@ -332,56 +368,26 @@ export function WorkerProfileManagementPage() {
               Tải file mẫu (.xlsx)
             </button>
 
-            <div className="space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">File Excel</span>
-              {importFile ? (
-                <div className="flex items-center gap-2 rounded-lg border border-[#1e2433] bg-[#0c1019] px-3 py-2.5">
-                  <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
-                  <span className="flex-1 min-w-0 text-[10px] font-medium truncate">{importFile.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImportFile(null)
-                      setImportResult(null)
-                      setImportError(null)
-                    }}
-                    className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-white/5"
-                    aria-label="Bỏ file"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                  <label className="shrink-0 cursor-pointer inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold border border-[#1e2433] hover:bg-[#1a2235]">
-                    <Upload className="w-3 h-3" />
-                    Đổi file
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="sr-only"
-                      onChange={e => {
-                        setImportFile(e.target.files?.[0] ?? null)
-                        setImportResult(null)
-                        setImportError(null)
-                      }}
-                    />
-                  </label>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center gap-2 h-24 rounded-lg border border-dashed border-[#1e2433] bg-[#0a0e17] hover:bg-[#0c1019] hover:border-primary/40 cursor-pointer transition-colors">
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-[10px] font-semibold text-muted-foreground">Chọn file Excel</span>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    className="sr-only"
-                    onChange={e => {
-                      setImportFile(e.target.files?.[0] ?? null)
-                      setImportResult(null)
-                      setImportError(null)
-                    }}
-                  />
-                </label>
-              )}
-            </div>
+            <label className="block">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Chọn file</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={e => {
+                  setImportFile(e.target.files?.[0] ?? null)
+                  setImportResult(null)
+                  setImportError(null)
+                }}
+                className="block w-full text-[10px] file:mr-2 file:py-1.5 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-primary file:text-primary-foreground"
+              />
+            </label>
+
+            {importFile && (
+              <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                <FileSpreadsheet className="w-3 h-3" />
+                {importFile.name}
+              </p>
+            )}
 
             {importError && (
               <p className="text-[10px] text-red-400">{importError}</p>
