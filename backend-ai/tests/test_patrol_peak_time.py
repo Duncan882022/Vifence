@@ -107,7 +107,7 @@ class PatrolPeakTimeTest(unittest.TestCase):
             return_value=True,
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
+            return_value=(None, None, 0.0),
         ):
             for i in range(3):
                 ts = 2_000.0 + i * 10

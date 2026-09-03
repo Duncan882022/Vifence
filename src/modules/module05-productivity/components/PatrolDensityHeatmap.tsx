@@ -489,7 +489,9 @@ export function PatrolDensityHeatmap({
 
   const personCount = dayStats.personCount
   const identifiedCount = dayStats.identityCount
-  const objectEncounterCount = dayStats.unassignedObservations
+  // Ba dòng overlay đều đếm **thẻ**, khớp với ba tab của danh sách sự kiện.
+  // Trước đây dòng Đối tượng lấy số lượt gặp nên luôn lệch với tab Đối tượng.
+  const objectCardCount = dayStats.objectCount
 
   useEffect(() => {
     if (!expanded) return
@@ -561,7 +563,7 @@ export function PatrolDensityHeatmap({
           />
         ) : (
           <HeatmapSiteStatsOverlay
-            objectCount={objectEncounterCount}
+            objectCount={objectCardCount}
             personCount={personCount}
             identityCount={identifiedCount}
             compactChrome={viewport.compactChrome}

@@ -97,7 +97,7 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
             return_value="tk-0000001",
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
+            return_value=(None, None, 0.0),
         ):
             assign_patrol_track_ids(
                 "HC-02",
@@ -126,7 +126,7 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
             return_value=(True, t0),
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
+            return_value=(None, None, 0.0),
         ):
             self._ingest(
                 track_id="ptk0001:person",

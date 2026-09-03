@@ -366,7 +366,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             return_value=(True, ts),
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=("obj.jpg", 0.5),
+            return_value=("obj.jpg", "obj-luot.jpg", 0.5),
         ):
             ingest_observation(
                 camera_id="HC-01",
@@ -429,7 +429,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             ),
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
+            return_value=(None, None, 0.0),
         ):
             from app.patrol import identity
 
@@ -482,7 +482,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             return_value="tk-0000001",
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
+            return_value=(None, None, 0.0),
         ):
             from app.patrol import identity
 
@@ -880,14 +880,18 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         self.assertEqual(snap["snapshot_path"], "2026-08-30/old.jpg")
 
     def test_flush_captures_snapshot_only_once_per_luot(self) -> None:
-        """Trong cửa sổ 2s có thể thay JPG; sau đó khóa một ảnh/lượt."""
+        """Mỗi lượt ghi một ảnh thẻ + một ảnh lượt, rồi khóa lại."""
         import numpy as np
         from unittest.mock import patch
 
-        from app.patrol import db
+        from app.patrol import db, sink
         from app.patrol.aggregator.flush import flush_session
         from app.patrol.aggregator.session_store import get_or_create
         from app.patrol.aggregator.types import ObservationInput
+
+        def _fake_write(*_args, **kwargs):
+            kind = "card" if kwargs.get("luot_key") == sink.CARD_SNAPSHOT_LUOT else "luot"
+            return f"2026-08-30/first-{kind}.jpg"
 
         ts = 8_000.0
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -904,10 +908,12 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
         )
         with patch(
             "app.patrol.sink._write_snapshot",
-            return_value="2026-08-30/first.jpg",
+            side_effect=_fake_write,
         ) as write_mock:
             flush_session(session, obs1)
-        self.assertEqual(write_mock.call_count, 1)
+        luot_keys = {call.kwargs.get("luot_key") for call in write_mock.call_args_list}
+        self.assertEqual(len(luot_keys), 2)
+        self.assertIn(sink.CARD_SNAPSHOT_LUOT, luot_keys)
         self.assertFalse(session.luot_snapshot_captured)
 
         obs2 = ObservationInput(
@@ -929,7 +935,7 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
             "SELECT snapshot_path FROM appearances WHERE id = ?",
             (session.appearance_row_id,),
         )
-        self.assertEqual(snap["snapshot_path"], "2026-08-30/first.jpg")
+        self.assertEqual(snap["snapshot_path"], "2026-08-30/first-luot.jpg")
 
 
 class ObjectFacePromoteTests(unittest.TestCase):
@@ -1103,7 +1109,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
 
         with patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=("2026-08-30/pass.jpg", 0.88),
+            return_value=("2026-08-30/pass.jpg", "2026-08-30/pass-luot.jpg", 0.88),
         ):
             oid = ingest_observation(
                 camera_id="DR-03",

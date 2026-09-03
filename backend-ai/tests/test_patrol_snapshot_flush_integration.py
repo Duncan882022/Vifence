@@ -157,7 +157,7 @@ class PatrolSnapshotFlushIntegrationTests(unittest.TestCase):
         )
         with patch(
             "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
+            return_value=(None, None, 0.0),
         ):
             flush_session(session, obs)
         snap = db.query_one(
@@ -165,6 +165,77 @@ class PatrolSnapshotFlushIntegrationTests(unittest.TestCase):
             (row_id,),
         )
         self.assertAlmostEqual(float(snap["ended_at"]), ts + 1, places=2)
+
+    def test_card_and_luot_snapshots_are_separate_files(self) -> None:
+        """Thẻ giữ khung đẹp nhất, mỗi lượt giữ khung của chính nó."""
+        ts = 17_000.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        frame[100:400, 100:220] = (90, 90, 90)
+        bbox = (100.0, 80.0, 220.0, 400.0)
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ):
+            ingest_observation(
+                camera_id="HC-01",
+                track_id="ptk-split",
+                now=ts,
+                person_bbox=bbox,
+                frame=frame,
+                confidence=0.9,
+            )
+            finalize_track("HC-01", "ptk-split", now=ts + 0.4)
+
+        objs = daystore.list_objects(db.today_vn(ts))
+        self.assertEqual(len(objs), 1)
+        card_path = str(objs[0]["snapshot_path"] or "")
+        rows = db.query(
+            "SELECT snapshot_path FROM appearances WHERE event_date = ?",
+            (db.today_vn(ts),),
+        )
+        self.assertEqual(len(rows), 1)
+        luot_path = str(rows[0]["snapshot_path"] or "")
+
+        self.assertTrue(card_path)
+        self.assertTrue(luot_path)
+        self.assertNotEqual(card_path, luot_path)
+        for rel in (card_path, luot_path):
+            full = sink.resolve_snapshot_path(rel)
+            self.assertIsNotNone(full)
+            assert full is not None
+            self.assertTrue(full.is_file())
+
+    def test_two_luot_of_one_subject_get_distinct_images(self) -> None:
+        """Hai lượt khác nhau — hai file ảnh khác nhau, không dùng chung một tấm."""
+        ts = 18_000.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        bbox = (100.0, 80.0, 220.0, 400.0)
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ):
+            for index, track in enumerate(("ptk-l1", "ptk-l2")):
+                at = ts + index * 120.0
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id=track,
+                    now=at,
+                    person_bbox=bbox,
+                    frame=frame,
+                    confidence=0.9,
+                )
+                finalize_track("HC-01", track, now=at + 0.4)
+
+        rows = db.query(
+            "SELECT snapshot_path FROM appearances WHERE event_date = ?",
+            (db.today_vn(ts),),
+        )
+        paths = [str(r["snapshot_path"] or "") for r in rows]
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(all(paths))
+        self.assertEqual(len(set(paths)), 2)
 
     def test_finalize_always_persists_best_snapshot(self) -> None:
         """Finalize — luôn chốt best frame dù throttle đang khóa."""

@@ -29,6 +29,10 @@ import {
 } from '../services/patrolGalleryFaces.service'
 import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
 import { appearanceObservationStageLabel } from '../utils/patrolAppearanceTier'
+import {
+  fillMissingNewestAppearanceSnapshot,
+  resolveAppearanceSnapshotUrl,
+} from '../utils/patrolAppearanceSnapshot'
 import { resolveEventGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import {
   resolvePatrolAppearanceSubjectId,
@@ -115,30 +119,6 @@ function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAp
     seenKeys.add(key)
     return true
   })
-}
-
-/** Lượt mới nhất thiếu ảnh — lấy từ thẻ sự kiện. */
-function fillMissingNewestAppearanceSnapshot(
-  segments: PatrolAppearanceSegment[],
-  event: PatrolEvent,
-): PatrolAppearanceSegment[] {
-  const cardSnap = event.snapshotUrl?.trim()
-  if (!cardSnap || segments.length === 0) return segments
-  const [newest, ...rest] = segments
-  if (newest.snapshotUrl?.trim()) return segments
-  return [{ ...newest, snapshotUrl: cardSnap }, ...rest]
-}
-
-function resolveRowSnapshotUrl(
-  segment: PatrolAppearanceSegment,
-  event: PatrolEvent,
-  isNewestSegment: boolean,
-): string | undefined {
-  const appearance = segment.snapshotUrl?.trim()
-  if (appearance) return appearance
-  const card = event.snapshotUrl?.trim()
-  if (isNewestSegment && card) return card
-  return card || undefined
 }
 
 function resolveAppearanceGps(segment: PatrolAppearanceSegment): { lat: number; lng: number } {
@@ -242,7 +222,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       const sorted = dedupeAppearanceSegments(
         fillMissingNewestAppearanceSnapshot(
           [...segments].sort((a, b) => b.startedAt - a.startedAt),
-          event,
+          event.snapshotUrl,
         ),
       )
       setAppearanceSegments(sorted)
@@ -369,15 +349,13 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
 
   const activeSnapshotUrl = useMemo(() => {
     if (faceGalleryOpen) return undefined
-    if (selectedAppearanceKey && event) {
-      const idx = appearanceSegments.findIndex(s => appearanceRowKey(s) === selectedAppearanceKey)
-      const segment = appearanceSegments[idx]
-      if (segment) {
-        return resolveRowSnapshotUrl(segment, event, idx === 0)
-      }
+    if (selectedAppearanceKey) {
+      const segment = appearanceSegments.find(s => appearanceRowKey(s) === selectedAppearanceKey)
+      if (segment) return resolveAppearanceSnapshotUrl(segment) ?? event?.snapshotUrl
     }
-    if (appearanceSegments.length > 0 && event) {
-      return resolveRowSnapshotUrl(appearanceSegments[0], event, true)
+    if (appearanceSegments.length > 0) {
+      const newest = resolveAppearanceSnapshotUrl(appearanceSegments[0])
+      if (newest) return newest
     }
     return event?.snapshotUrl
   }, [appearanceSegments, event, faceGalleryOpen, selectedAppearanceKey])
@@ -394,6 +372,9 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
     && (appearancesLoading || hasAppearanceHistory)
   const historySectionTitle = 'Lịch sử xuất hiện'
+  // KPI Tier1 chỉ đếm lượt gặp của Đối tượng. Với Người và Định danh, đây là
+  // chỗ duy nhất tra được số lượt gặp trong ngày.
+  const encounterCount = appearanceSegments.length
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
     || Boolean(activeSnapshotUrl)
   const objectInfoOnly = stage === 'object'
@@ -548,14 +529,19 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                 <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">
                   {historySectionTitle}
                 </span>
+                {encounterCount > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-400/15 text-sky-400 font-semibold shrink-0 ml-auto tabular-nums">
+                    {`${encounterCount} lượt gặp`}
+                  </span>
+                )}
               </div>
               {appearancesLoading && !hasAppearanceHistory ? (
                 <p className="text-[9px] text-muted-foreground/70">Đang tải…</p>
               ) : (
                 <div className="space-y-1.5 max-h-[min(42vh,320px)] overflow-y-auto overscroll-y-contain pr-0.5">
-                  {appearanceSegments.map((segment, segmentIndex) => {
+                  {appearanceSegments.map(segment => {
                     const rowKey = appearanceRowKey(segment)
-                    const thumbUrl = resolveRowSnapshotUrl(segment, event, segmentIndex === 0)
+                    const thumbUrl = resolveAppearanceSnapshotUrl(segment)
                     const rowSelected = selectedAppearanceKey === rowKey
                     const gps = resolveAppearanceGps(segment)
                     const camLabel = resolveAppearanceCameraLabel(segment)

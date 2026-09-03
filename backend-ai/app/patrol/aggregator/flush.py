@@ -120,9 +120,26 @@ def _luot_needs_snapshot(session: TrackSession, *, now: float) -> bool:
     return True
 
 
-def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str | None, float]:
+def _luot_snapshot_key(session: TrackSession) -> int:
+    """Khoá file ảnh riêng cho từng lượt — mỗi session ByteTrack là một lượt."""
+    key = int(session.started_at)
+    from .. import sink
+
+    return key if key != sink.CARD_SNAPSHOT_LUOT else key + 1
+
+
+def _write_snapshot(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> tuple[str | None, str | None, float]:
+    """Ghi ảnh bằng chứng — trả (ảnh thẻ, ảnh lượt, điểm).
+
+    Thẻ giữ khung đẹp nhất trong ngày, còn mỗi lượt giữ khung của chính lượt đó.
+    Dùng chung một file thì mọi mốc thời gian trong lịch sử đều hiện cùng một
+    tấm ảnh, và người trực không phân biệt được lượt nào là lượt nào.
+    """
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
-        return None, 0.0
+        return None, None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
     from ...patrol_person_visibility import patrol_snapshot_draw_bbox
@@ -145,22 +162,9 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         inferred = tier_for_worker_id(worker_id)
         if inferred != "object":
             tier = inferred
-    force = not _card_has_snapshot(session.subject_id, shot_obs.ts)
-    path = sink._maybe_write_snapshot(  # noqa: SLF001
-        session.subject_id,
-        shot_obs.frame,
-        draw_bbox,
-        score=score,
-        tier=tier,
-        worker_id=worker_id,
-        worker_name=shot_obs.worker_name,
-        capture_ts=shot_obs.ts,
-        face_eligible=shot_obs.face_eligible,
-        force=force,
-        luot_key=sink.CARD_SNAPSHOT_LUOT,
-    )
-    if path is None and force:
-        path = sink._write_snapshot(  # noqa: SLF001
+
+    def _write(luot_key: int, *, force: bool) -> str | None:
+        path = sink._maybe_write_snapshot(  # noqa: SLF001
             session.subject_id,
             shot_obs.frame,
             draw_bbox,
@@ -170,9 +174,33 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
             worker_name=shot_obs.worker_name,
             capture_ts=shot_obs.ts,
             face_eligible=shot_obs.face_eligible,
-            luot_key=sink.CARD_SNAPSHOT_LUOT,
+            force=force,
+            luot_key=luot_key,
         )
-    return path, score if path else 0.0
+        if path is not None or not force:
+            return path
+        return sink._write_snapshot(  # noqa: SLF001
+            session.subject_id,
+            shot_obs.frame,
+            draw_bbox,
+            score=score,
+            tier=tier,
+            worker_id=worker_id,
+            worker_name=shot_obs.worker_name,
+            capture_ts=shot_obs.ts,
+            face_eligible=shot_obs.face_eligible,
+            luot_key=luot_key,
+        )
+
+    card_path = _write(
+        sink.CARD_SNAPSHOT_LUOT,
+        force=not _card_has_snapshot(session.subject_id, shot_obs.ts),
+    )
+    luot_path = _write(
+        _luot_snapshot_key(session),
+        force=not session.luot_snapshot_captured,
+    )
+    return card_path, luot_path, score if (card_path or luot_path) else 0.0
 
 
 def flush_session(
@@ -270,7 +298,7 @@ def flush_session(
         ensure_ascii=False,
     )
 
-    path, shot_score = (None, 0.0)
+    card_path, luot_path, shot_score = (None, None, 0.0)
 
     if (
         subject_id
@@ -279,8 +307,8 @@ def flush_session(
         and _luot_needs_snapshot(session, now=now)
     ):
         shot_obs = _snapshot_observation(session, obs)
-        path, shot_score = _write_snapshot(session, shot_obs)
-        if path:
+        card_path, luot_path, shot_score = _write_snapshot(session, shot_obs)
+        if card_path or luot_path:
             session.luot_snapshot_captured = not _within_accumulation_window(session, now)
 
     from .identity_pipeline import try_promote_object_after_snapshot
@@ -288,7 +316,7 @@ def flush_session(
     try_promote_object_after_snapshot(
         session,
         _snapshot_observation(session, obs),
-        snapshot_path=path,
+        snapshot_path=card_path,
         snapshot_score=shot_score,
     )
     subject_id = session.subject_id or subject_id
@@ -301,7 +329,7 @@ def flush_session(
             subject_id,
             camera_id=session.camera_id,
             zone_id=session.zone_id,
-            snapshot_path=path,
+            snapshot_path=card_path,
             snapshot_score=shot_score,
             face_eligible=obs.face_eligible,
             now=now,
@@ -315,7 +343,7 @@ def flush_session(
             subject_id,
             camera_id=session.camera_id,
             zone_id=session.zone_id,
-            snapshot_path=path,
+            snapshot_path=card_path,
             snapshot_score=shot_score,
             now=now,
             seen_since=session.started_at if session.last_flush_at <= 0 else None,
@@ -382,7 +410,7 @@ def flush_session(
         gps_lng=gps_lng,
         payload_json=payload_json,
         interactions_json=interactions_json,
-        snapshot_path=path,
+        snapshot_path=luot_path,
         counted=session.counted,
         finalize=finalize,
     )

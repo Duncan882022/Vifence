@@ -139,10 +139,12 @@ function PatrolKPIs({
       ? 'Thiết bị online — chờ xác nhận phủ khu'
       : 'Chưa có thiết bị tuần tra online'
 
+  // KPI này chỉ đếm lượt gặp của Đối tượng. Lượt gặp của Người và Định danh
+  // xem trong popup Lịch sử xuất hiện của từng thẻ.
   const objectEncounterDetail = peakTimeActive
     ? 'Peak time — snapshot nhóm 1 thẻ; lượt gặm đếm đủ từng ĐT'
     : objectEncounters > 0
-      ? 'Silhouette chưa gán danh tính — không tính Nhân sự'
+      ? 'Chỉ Đối tượng — lượt gặp Người / Định danh xem trong lịch sử thẻ'
       : 'Chưa ghi nhận lượt gặp Đối tượng'
 
   const flymapDetail = !dr03Online
