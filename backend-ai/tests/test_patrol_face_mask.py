@@ -15,14 +15,21 @@ sys.path.insert(0, str(ROOT))
 from app.worker_identity.recognizer import _assess_patrol_face_crop, _face_likely_masked  # noqa: E402
 
 
+# Da thật có R > G > B; đảo thứ tự là ra hồng tím và rơi ngoài dải hue của
+# heuristic, khiến nửa trên bị coi như không có da.
+_SKIN_UPPER_BGR = (120, 150, 200)
+_SKIN_LOWER_BGR = (115, 145, 195)
+_MASK_BGR = (250, 250, 250)
+
+
 def _synthetic_face(*, masked: bool) -> np.ndarray:
     """Mặt giả: trên da, dưới da hoặc khẩu trang trắng."""
     crop = np.zeros((80, 60, 3), dtype=np.uint8)
-    crop[8:32, 10:50] = (180, 160, 210)
+    crop[8:32, 10:50] = _SKIN_UPPER_BGR
     if masked:
-        crop[34:72, 8:52] = (250, 250, 250)
+        crop[34:72, 8:52] = _MASK_BGR
     else:
-        crop[34:72, 10:50] = (175, 155, 205)
+        crop[34:72, 10:50] = _SKIN_LOWER_BGR
     return crop
 
 
