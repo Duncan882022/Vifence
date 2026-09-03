@@ -360,13 +360,17 @@ def day_appearances(
 
 @router.get("/day/bundle")
 def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
-    """Gộp stats + events + objects + presences — một transaction đọc."""
+    """Gộp stats + events + objects + presences — một transaction chỉ đọc.
+
+    Không sửa dữ liệu ở đây. Trước đây endpoint này chạy promote + coalesce
+    xen giữa lúc tính KPI và lúc đọc danh sách, nên cùng một phản hồi mô tả hai
+    trạng thái khác nhau: số trên thẻ KPI không khớp số dòng ngay bên dưới.
+    Việc gộp/thăng thẻ nay chỉ chạy qua POST /admin/coalesce-object-cards.
+    """
     d = date or db.today_vn()
     with db.tx() as conn:
-        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("BEGIN")
         stats = daystore.day_stats(d)
-        daystore.promote_objects_with_face_snapshot(d)
-        daystore.coalesce_parallel_object_cards(d)
         events = daystore.list_person_events(d)
         objects = daystore.list_objects(d)
         presences = daystore.list_day_presences(d)

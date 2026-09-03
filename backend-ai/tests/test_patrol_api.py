@@ -166,6 +166,28 @@ class PatrolApiTests(unittest.TestCase):
         self.assertEqual(bundle["events"][0]["snapshot_path"], "bundle.jpg")
         self.assertAlmostEqual(bundle["events"][0]["snapshot_score"], 1.35)
 
+    def test_day_bundle_is_read_only(self) -> None:
+        """KPI và danh sách trong cùng phản hồi phải tả cùng một trạng thái.
+
+        Endpoint từng chạy promote + coalesce xen giữa lúc tính KPI và lúc đọc
+        danh sách, nên số trên thẻ KPI lệch số dòng ngay bên dưới nó.
+        """
+        pers_id, _ = identity.observe_face(_vec(11), quality=0.8)
+        _touch_person_card(pers_id, camera_id="HC-01", now=3_000.0)
+        daystore.touch_object(None, camera_id="HC-02", now=3_000.0)
+        date = db.today_vn(3_000.0)
+
+        def _snapshot() -> tuple[list, list]:
+            return (
+                daystore.list_person_events(date),
+                daystore.list_objects(date),
+            )
+
+        before = _snapshot()
+        bundle = self.client.get(f"/patrol/day/bundle?date={date}").json()
+        self.assertTrue(bundle["ok"])
+        self.assertEqual(_snapshot(), before, "GET /day/bundle không được sửa dữ liệu")
+
     def test_merge_endpoint_keeps_old_code_resolvable(self) -> None:
         a, _ = identity.observe_face(_vec(7), quality=0.8)
         b, _ = identity.observe_face(_vec(8), quality=0.8)
