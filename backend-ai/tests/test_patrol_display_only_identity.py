@@ -25,9 +25,9 @@ class PatrolDisplayOnlyIdentityTests(unittest.TestCase):
         seated = (520.0, 420.0, 680.0, 690.0)
         self.assertFalse(_patrol_person_passes_event_gate(seated, self.FW, self.FH))
 
-    @patch("app.ppe_analyzer._assign_patrol_person_identity")
-    @patch("app.ppe_analyzer._assign_patrol_person_display_only")
-    @patch("app.ppe_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
+    @patch("app.patrol.person_analyzer._assign_patrol_person_identity")
+    @patch("app.patrol.person_analyzer._assign_patrol_person_display_only")
+    @patch("app.patrol.person_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
     def test_build_runs_identity_for_seated_display_gate_person(
         self,
         _assign_tracks,
@@ -43,9 +43,9 @@ class PatrolDisplayOnlyIdentityTests(unittest.TestCase):
         mock_full_identity.assert_called_once()
         mock_display_only.assert_not_called()
 
-    @patch("app.ppe_analyzer._assign_patrol_person_identity")
-    @patch("app.ppe_analyzer._assign_patrol_person_display_only")
-    @patch("app.ppe_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
+    @patch("app.patrol.person_analyzer._assign_patrol_person_identity")
+    @patch("app.patrol.person_analyzer._assign_patrol_person_display_only")
+    @patch("app.patrol.person_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
     def test_build_skips_identity_for_limb_fragment(
         self,
         _assign_tracks,
@@ -60,9 +60,9 @@ class PatrolDisplayOnlyIdentityTests(unittest.TestCase):
         mock_display_only.assert_called_once()
         mock_full_identity.assert_not_called()
 
-    @patch("app.ppe_analyzer._assign_patrol_person_identity")
-    @patch("app.ppe_analyzer._assign_patrol_person_display_only")
-    @patch("app.ppe_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
+    @patch("app.patrol.person_analyzer._assign_patrol_person_identity")
+    @patch("app.patrol.person_analyzer._assign_patrol_person_display_only")
+    @patch("app.patrol.person_analyzer.assign_patrol_track_ids", return_value=["ptk0001:person"])
     def test_build_runs_full_identity_for_event_gate_person(
         self,
         _assign_tracks,

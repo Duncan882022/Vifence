@@ -1,6 +1,8 @@
 """Vòng đời Đối tượng → Người → Định danh: chỉ tiến, không lùi."""
 
+import re
 import unittest
+from unittest.mock import patch
 
 from app import patrol_identity_lifecycle as lifecycle
 from app.patrol_identity_lifecycle import (
@@ -19,9 +21,39 @@ TRACK = "ptk0001:person"
 # hơn cửa sổ đó để mỗi lần gọi được tính là một frame riêng.
 STEP = lifecycle._OBSERVE_DEDUPE_SEC * 2
 
+_FAKE_GALLERY_ID = re.compile(r"^p-\d+$", re.IGNORECASE)
+_FAKE_HR_PROFILES = {
+    "p-102": {"full_name": "Nguyễn Văn A", "employee_code": "SGC-0102"},
+    "p-777": {"full_name": "Trần Văn B", "employee_code": "SGC-0777"},
+}
 
-class TestTierPromotion(unittest.TestCase):
+
+class _FakeGalleryMixin:
+    """Tier "định danh" đòi mã p-* có thật trong gallery HR, và tên hiển thị chỉ
+    được cấp khi có hồ sơ HR đứng sau. Test dùng mã giả `p-102`/`p-777` nên phải
+    dựng cả hai thứ đó, nếu không tier rơi xuống "person" và tên rơi về "Người".
+    """
+
     def setUp(self):
+        super().setUp()
+        for target, kwargs in (
+            (
+                "app.patrol_entity.is_patrol_gallery_id",
+                {"side_effect": lambda wid: bool(_FAKE_GALLERY_ID.match((wid or "").strip()))},
+            ),
+            (
+                "app.patrol.identity.hr_profile_for_gallery",
+                {"side_effect": lambda wid: _FAKE_HR_PROFILES.get((wid or "").strip().lower())},
+            ),
+        ):
+            p = patch(target, **kwargs)
+            p.start()
+            self.addCleanup(p.stop)
+
+
+class TestTierPromotion(_FakeGalleryMixin, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
         reset()
 
     def test_starts_as_object_without_id(self):
@@ -54,8 +86,9 @@ class TestTierPromotion(unittest.TestCase):
         self.assertIsNotNone(second.transition)
 
 
-class TestNoDemotion(unittest.TestCase):
+class TestNoDemotion(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_person_never_falls_back_to_object(self):
@@ -84,8 +117,9 @@ class TestNoDemotion(unittest.TestCase):
         self.assertEqual(got.worker_name, "Nguyễn Văn A")
 
 
-class TestIdentitySwitch(unittest.TestCase):
+class TestIdentitySwitch(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_name_does_not_flip_on_single_bad_match(self):
@@ -111,8 +145,9 @@ class TestIdentitySwitch(unittest.TestCase):
         self.assertEqual(got.worker_name, "Trần Văn B")
 
 
-class TestDedupeAndIsolation(unittest.TestCase):
+class TestDedupeAndIsolation(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_same_frame_observed_twice_counts_once(self):

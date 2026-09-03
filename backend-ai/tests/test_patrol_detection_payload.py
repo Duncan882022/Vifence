@@ -18,7 +18,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app import ppe_analyzer  # noqa: E402
+from app.patrol import person_analyzer  # noqa: E402
 from app.patrol_identity_lifecycle import reset as reset_lifecycle  # noqa: E402
 from app.patrol_tracker import reset_patrol_trackers  # noqa: E402
 
@@ -46,7 +46,7 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
         self.detector = _FakeDetector()
         self.frame = np.zeros((540, 960, 3), dtype=np.uint8)
         self._patches = [
-            patch.object(ppe_analyzer, "_get_person_detector", return_value=self.detector),
+            patch.object(person_analyzer, "_get_person_detector", return_value=self.detector),
             # Mặt không đọc được từ frame đen — mọi người ở tầng Đối tượng, đủ để
             # kiểm hình dạng payload mà không phụ thuộc model nhận diện.
             patch(
@@ -63,7 +63,7 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
 
     def _flycam_frame(self, boxes: list[_FakeDetection]) -> list[dict]:
         self.detector.next_boxes = boxes
-        result = ppe_analyzer._build_patrol_flycam_aerial_result(self.frame, "DR-03")
+        result = person_analyzer._build_patrol_flycam_aerial_result(self.frame, "DR-03")
         return [d for d in result["detections"] if d["behavior"] == "person"]
 
     def test_flycam_person_carries_track_tier_and_velocity(self) -> None:
@@ -79,7 +79,7 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
     def test_flycam_metrics_split_display_and_countable(self) -> None:
         """Flycam: ROI (display) tách khỏi KPI khung (detection gate)."""
         self.detector.next_boxes = [_FakeDetection((470, 250, 490, 300), 0.24)]
-        result = ppe_analyzer._build_patrol_flycam_aerial_result(self.frame, "DR-03")
+        result = person_analyzer._build_patrol_flycam_aerial_result(self.frame, "DR-03")
         metrics = result["metrics"]
         self.assertIn("display_person_count", metrics)
         self.assertIn("person_count", metrics)
@@ -89,7 +89,7 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
 
     def test_bodycam_metrics_include_display_person_count(self) -> None:
         self.detector.next_boxes = [_FakeDetection((380, 80, 520, 420), 0.55)]
-        result = ppe_analyzer._build_patrol_bodycam_result(self.frame, "HC-01")
+        result = person_analyzer._build_patrol_bodycam_result(self.frame, "HC-01")
         metrics = result["metrics"]
         self.assertIn("display_person_count", metrics)
         self.assertGreaterEqual(metrics["display_person_count"], metrics["person_count"])
