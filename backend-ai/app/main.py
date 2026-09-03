@@ -687,11 +687,20 @@ async def ws_stream_detections(websocket: WebSocket, camera_id: str):
     clock = _DetectionsClientClock()
 
     async def read_client_clock() -> None:
-        """Nhận mốc thời gian khung hình FE đang chiếu."""
-        while True:
-            message = await websocket.receive_json()
-            if isinstance(message, dict) and str(message.get("type")) == "sync":
-                clock.update(message.get("at_ms"))
+        """Nhận mốc thời gian khung hình FE đang chiếu.
+
+        Chạy song song vòng push. FE ngắt kết nối thì task này kết thúc lặng lẽ;
+        vòng push nhận lỗi ở lần gửi kế và tự dọn.
+        """
+        try:
+            while True:
+                message = await websocket.receive_json()
+                if isinstance(message, dict) and str(message.get("type")) == "sync":
+                    clock.update(message.get("at_ms"))
+        except (WebSocketDisconnect, asyncio.CancelledError):
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[ws detections %s] đọc mốc FE lỗi: %s", camera_id, exc)
 
     reader = asyncio.create_task(read_client_clock())
 
