@@ -294,22 +294,28 @@ def flush_session(
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
         from .session_store import link_subject_session
 
-        # Một track = một lượt gặp = một thẻ Đối tượng. Không mượn thẻ của track
-        # đang chạy song song: đối tượng không có tiêu chí định danh nên mọi phép
-        # gộp ở đây đều là suy đoán từ bbox/thời gian, và suy đoán sai thì hai
-        # người thành một. Thà đếm dư lượt còn hơn dồn nhầm người.
-        obj_id = daystore.touch_object(
-            None,
-            camera_id=session.camera_id,
-            zone_id=session.zone_id,
-            now=now,
-            seen_since=session.started_at if session.last_flush_at <= 0 else None,
-            gps_lat=gps_lat,
-            gps_lng=gps_lng,
-            skip_appearance=True,
-        )
-        session.subject_id = obj_id
-        link_subject_session(session)
+        # Một track = một lượt gặp = một thẻ. Khớp mặt trước khi tạo obj-* mới
+        # để không sinh thẻ Đối tượng trùng tk-* đã có trong gallery/SQLite.
+        # Không mượn thẻ track song song — suy đoán bbox/thời gian dễ gộp nhầm hai người.
+        from .identity_pipeline import resolve_subject_from_face_match
+
+        face_pers = resolve_subject_from_face_match(session, obs, now=now)
+        if face_pers:
+            session.subject_id = face_pers
+            link_subject_session(session)
+        else:
+            obj_id = daystore.touch_object(
+                None,
+                camera_id=session.camera_id,
+                zone_id=session.zone_id,
+                now=now,
+                seen_since=session.started_at if session.last_flush_at <= 0 else None,
+                gps_lat=gps_lat,
+                gps_lng=gps_lng,
+                skip_appearance=True,
+            )
+            session.subject_id = obj_id
+            link_subject_session(session)
 
     subject_id = session.subject_id
     if not subject_id:

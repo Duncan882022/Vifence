@@ -9,8 +9,12 @@ from unittest.mock import patch
 
 import numpy as np
 
-from app.patrol import db, identity
-from app.patrol.aggregator.identity_pipeline import try_promote_object_after_snapshot
+from app.patrol import db, daystore, identity
+from app.patrol.aggregator.flush import flush_session
+from app.patrol.aggregator.identity_pipeline import (
+    resolve_subject_from_face_match,
+    try_promote_object_after_snapshot,
+)
 from app.patrol.aggregator.types import ObservationInput, TrackSession
 
 
@@ -44,6 +48,12 @@ class GalleryDraftMatchTests(unittest.TestCase):
         pid, created = identity.observe_face(emb, quality=0.88, camera_id="HC-01", now=2_000.0)
         self.assertFalse(created)
         self.assertEqual(pid, "tk-0000001")
+
+    def test_pers_id_for_gallery_worker_resolves_draft_tk_direct(self) -> None:
+        resolved = identity.pers_id_for_gallery_worker("tk-0000001")
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved[0], "tk-0000001")
 
     def test_pers_id_for_gallery_worker_resolves_draft_tk_alias(self) -> None:
         bindings = {
@@ -91,6 +101,63 @@ class GalleryDraftMatchTests(unittest.TestCase):
             snapshot_score=1.2,
         )
         self.assertEqual(session.subject_id, "tk-0000001")
+
+    def test_resolve_subject_from_face_match_returns_existing_tk(self) -> None:
+        emb = _nudge(_vec(1.0), 0.85)
+        session = TrackSession(
+            camera_id="DR-03",
+            track_id="ptk-match",
+            zone_id=None,
+            started_at=1_000.0,
+            last_seen_at=1_010.0,
+        )
+        obs = ObservationInput(
+            camera_id="DR-03",
+            track_id="ptk-match",
+            ts=1_010.0,
+            face_eligible=True,
+            face_embedding=emb,
+            face_quality=0.9,
+            confidence=0.88,
+            person_bbox=(100.0, 80.0, 220.0, 400.0),
+        )
+        pers = resolve_subject_from_face_match(session, obs, now=1_010.0)
+        self.assertEqual(pers, "tk-0000001")
+        self.assertEqual(session.subject_id, "tk-0000001")
+
+    def test_flush_skips_obj_when_face_matches_draft_tk(self) -> None:
+        emb = _nudge(_vec(1.0), 0.85)
+        session = TrackSession(
+            camera_id="DR-03",
+            track_id="ptk-flush",
+            zone_id=None,
+            started_at=1_000.0,
+            last_seen_at=1_010.0,
+        )
+        obs = ObservationInput(
+            camera_id="DR-03",
+            track_id="ptk-flush",
+            ts=1_010.0,
+            face_eligible=True,
+            face_embedding=emb,
+            face_quality=0.9,
+            confidence=0.88,
+            person_bbox=(100.0, 80.0, 220.0, 400.0),
+        )
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, 1_010.0),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            flush_session(session, obs)
+        self.assertEqual(session.subject_id, "tk-0000001")
+        objs = daystore.list_objects(db.today_vn(1_010.0))
+        self.assertEqual(len(objs), 0)
+        persons = daystore.list_person_events(db.today_vn(1_010.0))
+        self.assertEqual(len(persons), 1)
+        self.assertEqual(persons[0].get("pers_id"), "tk-0000001")
 
 
 def _nudge(base: list[float], scale: float) -> list[float]:

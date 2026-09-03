@@ -185,6 +185,14 @@ def pers_id_for_gallery_worker(gallery_worker_id: str) -> tuple[str, str] | None
     if not gid:
         return None
 
+    tk = normalize_track_id(gid)
+    if is_anonymous_track_id(tk):
+        pid = lookup_profile_by_tk(tk)
+        if pid:
+            person = get_person(pid)
+            name = display_name(person) if person else tk
+            return pid, name or tk
+
     hr = hr_profile_for_gallery(gid)
     if hr:
         return str(hr["pers_id"]), display_name(hr)
