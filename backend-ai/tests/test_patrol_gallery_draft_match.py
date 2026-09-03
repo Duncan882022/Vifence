@@ -277,6 +277,79 @@ class GalleryDraftMatchTests(unittest.TestCase):
         reset_sessions()
         reset_lost()
 
+    def test_stale_appearance_row_wrong_camera_inserts_history(self) -> None:
+        """appearance_row_id camera cũ — flush phải INSERT dòng mới, không UPDATE/skip."""
+        from unittest.mock import patch
+
+        from app.patrol.aggregator.flush import flush_session
+        from app.patrol.aggregator.types import ObservationInput, TrackSession
+
+        ts = 3_000.0
+        hc01_row = daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date=db.today_vn(ts),
+            subject_id="tk-0000001",
+            camera_id="HC-01",
+            zone_id=None,
+            track_id="ptk-hc01",
+            session_id="sess-hc01",
+            started_at=ts - 10,
+            ended_at=ts - 1,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="2026-09-03/hc01.jpg",
+        )
+        daystore.touch_person_event(
+            "tk-0000001",
+            camera_id="HC-01",
+            snapshot_path="2026-09-03/hc01.jpg",
+            now=ts - 1,
+            skip_appearance=True,
+        )
+
+        session = TrackSession(
+            camera_id="HC-02",
+            track_id="ptk-hc02",
+            zone_id=None,
+            subject_id="tk-0000001",
+            appearance_row_id=hc01_row,
+            committed=True,
+            last_flush_at=ts - 1,
+            dirty=True,
+            started_at=ts + 5,
+            last_seen_at=ts + 15,
+        )
+        obs = ObservationInput(
+            camera_id="HC-02",
+            track_id="ptk-hc02",
+            ts=ts + 15,
+            face_eligible=False,
+            confidence=0.9,
+            lifecycle_tier="person",
+            lifecycle_worker_id="sgc-0000001",
+            person_bbox=(100.0, 80.0, 220.0, 400.0),
+        )
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts + 15),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            flush_session(session, obs)
+
+        hist = daystore.list_appearances("tk-0000001", db.today_vn(ts))
+        self.assertEqual(len(hist["segments"]), 2)
+        self.assertIn("HC-01", hist["by_camera"])
+        self.assertIn("HC-02", hist["by_camera"])
+        hc02_rows = [
+            s for s in hist["segments"]
+            if str(s.get("camera_id") or "") == "HC-02"
+        ]
+        self.assertEqual(len(hc02_rows), 1)
+
 
 def _nudge(base: list[float], scale: float) -> list[float]:
     arr = np.asarray(base, dtype=np.float32) * scale

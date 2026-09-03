@@ -149,6 +149,46 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertAlmostEqual(float(row["last_seen"]), t0 + 120.0, places=3)
 
+    def test_same_camera_four_minute_gap_inserts_second_history(self) -> None:
+        """HC-02 tắt phát ~4 phút bật lại — cùng track/session RAM vẫn phải thêm dòng lịch sử."""
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.session_store import get_or_create
+
+        t0 = 8_000.0
+        gap_sec = 240.0
+        identity.ensure_draft_for_tk("tk-0000001", now=t0)
+        track_id = "ptk-resume:person"
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, t0),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            self._ingest(
+                track_id=track_id,
+                now=t0,
+                worker="tk-0000001",
+                with_face=True,
+            )
+            # Không gọi offline — mô phỏng session aggregator còn trong RAM.
+            self._ingest(
+                track_id=track_id,
+                now=t0 + gap_sec,
+                worker="tk-0000001",
+                with_face=True,
+            )
+
+        session = get_or_create("HC-02", track_id, ts=t0 + gap_sec)
+        self.assertIsNotNone(session.appearance_row_id)
+
+        hist = daystore.list_appearances("tk-0000001", db.today_vn(t0))
+        self.assertEqual(len(hist["segments"]), 2)
+        hc02 = [s for s in hist["segments"] if s.get("camera_id") == "HC-02"]
+        self.assertEqual(len(hc02), 2)
+        self.assertLess(float(hc02[0]["ended_at"]), float(hc02[1]["started_at"]))
+
 
 if __name__ == "__main__":
     unittest.main()

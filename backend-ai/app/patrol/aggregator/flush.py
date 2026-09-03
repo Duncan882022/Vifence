@@ -407,6 +407,12 @@ def flush_session(
 
     link_subject_session(session)
 
+    session.appearance_row_id = daystore.coerce_appearance_id_for_encounter_gap(
+        session.appearance_row_id,
+        session.camera_id,
+        now,
+    )
+
     if session.appearance_row_id is None:
         extend_id = daystore.find_extendable_track_appearance_row(
             db.today_vn(now),
