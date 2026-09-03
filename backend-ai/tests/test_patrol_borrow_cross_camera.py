@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -31,24 +32,25 @@ class TestBorrowCrossCameraPatrolWorker(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self._reg_file = Path(self._tmpdir.name) / "person_identity_registry.json"
-        self._reg_file.write_text(
-            json.dumps({
-                "next_seq": 5,
-                "tracks": {},
-                "track_meta": {
-                    "HC-01|ptk0001:person": {
-                        "worker_id": "sgc-00000430",
-                        "bbox": [600.0, 300.0, 720.0, 600.0],
-                        "face_emb": _query_emb(),
-                        "updated_at": __import__("time").time(),
-                    },
+        self._reg_file.write_text(json.dumps({"next_seq": 5}), encoding="utf-8")
+        # Registry cố ý vứt tracks/track_meta khi nạp từ đĩa: khoá track của
+        # phiên trước sẽ dán mã cũ lên người đầu tiên bước vào khung sau restart.
+        # Nên mũ "đã thấy trước" phải được mồi thẳng vào state trong RAM.
+        seeded = {
+            "next_seq": 5,
+            "tracks": {},
+            "track_meta": {
+                "HC-01|ptk0001:person": {
+                    "worker_id": "sgc-00000430",
+                    "bbox": [600.0, 300.0, 720.0, 600.0],
+                    "face_emb": _query_emb(),
+                    "updated_at": time.time(),
                 },
-            }),
-            encoding="utf-8",
-        )
+            },
+        }
         self._patches = [
             patch("app.person_identity_registry.REGISTRY_FILE", self._reg_file),
-            patch("app.person_identity_registry._state", None),
+            patch("app.person_identity_registry._state", seeded),
         ]
         for p in self._patches:
             p.start()
