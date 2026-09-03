@@ -102,7 +102,9 @@ def _should_refresh_person_snapshot(
         # Định danh: luôn dùng khung mặt mới nhất đủ rõ — đồng bộ thẻ ↔ popup.
         return True, True
 
-    keep_new = snapshot_score >= old_score
+    # Người (draft/tk): đứng trong khung — upsert last_seen, không ghi đè ảnh
+    # mỗi flush khi score ngang/bằng; chỉ thay khi rõ hơn.
+    keep_new = snapshot_score > old_score
     if keep_new:
         return True, True
     return interval_ok, False

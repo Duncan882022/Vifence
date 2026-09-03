@@ -153,9 +153,18 @@ def _luot_needs_snapshot(
     """Một JPG/lượt — trong cửa sổ 2s vẫn thay nếu có frame đẹp hơn."""
     if _within_accumulation_window(session, now):
         return True
-    # Mở lại đúng một lần chụp khi đã thấy mặt mà thẻ còn giữ ảnh Đối tượng.
-    if obs.face_eligible and _card_lacks_person_evidence(session.subject_id or "", now):
-        return True
+
+    from ...patrol_ids import is_person_subject_id
+
+    sid = session.subject_id or ""
+    if is_person_subject_id(sid):
+        # Mở lại đúng một lần chụp khi đã thấy mặt mà thẻ còn giữ ảnh Đối tượng.
+        if obs.face_eligible and _card_lacks_person_evidence(sid, now):
+            return True
+        # Thẻ đã có ảnh mặt đủ điểm — còn trong khung thì không chụp lại.
+        if not _card_lacks_person_evidence(sid, now):
+            return False
+
     if session.luot_snapshot_captured:
         return False
     rid = session.appearance_row_id
