@@ -93,6 +93,15 @@ export interface VmsDetectionSnapshot {
   server_emit_ms?: number
   /** Gợi ý lag pipeline từ config BE (ms) — thay hằng số FE cứng. */
   overlay_lag_hint_ms?: number
+  /**
+   * Backend đã chọn được overlay khớp khung hình FE đang chiếu (`aligned`) hay
+   * chỉ trả bản mới nhất (`latest`).
+   */
+  overlay_sync?: 'aligned' | 'latest'
+  /** Lệch giữa overlay backend chọn và mốc FE gửi lên (ms). */
+  overlay_drift_ms?: number
+  /** Quãng lịch sử overlay backend đang giữ (ms) — chẩn đoán khi lệch nhiều. */
+  overlay_history_span_ms?: number
   vms_ready: boolean
   /** Live RTSP còn frame mới — false khi mũ tắt / mất tín hiệu. */
   stream_online?: boolean
@@ -120,8 +129,19 @@ export function isVmsLiveCamera(cameraId: string): boolean {
   return resolveVmsCameraIds().has(cameraId) && Boolean(getVmsBackendUrl())
 }
 
-export function buildVmsDetectionsUrl(backendUrl: string, cameraId: string): string {
-  return `${normalizeBaseUrl(backendUrl)}/stream/${cameraId}/detections`
+/**
+ * `atMs` là wallclock khung hình đang chiếu. Gửi kèm thì backend tìm lại overlay
+ * của đúng khung đó thay vì trả bbox mới nhất (vốn chạy trước video một quãng
+ * bằng độ trễ buffer).
+ */
+export function buildVmsDetectionsUrl(
+  backendUrl: string,
+  cameraId: string,
+  atMs?: number | null,
+): string {
+  const base = `${normalizeBaseUrl(backendUrl)}/stream/${cameraId}/detections`
+  if (atMs == null || !Number.isFinite(atMs) || atMs <= 0) return base
+  return `${base}?at_ms=${Math.round(atMs)}`
 }
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -223,6 +243,9 @@ interface RawVmsDetectionPayload {
   frame_wallclock_ms?: number
   server_emit_ms?: number
   overlay_lag_hint_ms?: number
+  overlay_sync?: string
+  overlay_drift_ms?: number
+  overlay_history_span_ms?: number
   vms_ready?: boolean
   stream_online?: boolean
   frame_age_sec?: number | null
@@ -260,6 +283,11 @@ export function normalizeVmsDetectionSnapshot(
     overlay_lag_hint_ms: data.overlay_lag_hint_ms != null
       ? Number(data.overlay_lag_hint_ms)
       : undefined,
+    overlay_sync: data.overlay_sync === 'aligned' ? 'aligned' : undefined,
+    overlay_drift_ms: data.overlay_drift_ms != null ? Number(data.overlay_drift_ms) : undefined,
+    overlay_history_span_ms: data.overlay_history_span_ms != null
+      ? Number(data.overlay_history_span_ms)
+      : undefined,
     vms_ready: Boolean(data.vms_ready),
     stream_online: data.stream_online,
     frame_age_sec: data.frame_age_sec ?? null,
@@ -272,8 +300,9 @@ export function normalizeVmsDetectionSnapshot(
 export async function fetchVmsDetections(
   backendUrl: string,
   cameraId: string,
+  atMs?: number | null,
 ): Promise<VmsDetectionSnapshot> {
-  const res = await fetchWithTimeout(buildVmsDetectionsUrl(backendUrl, cameraId), {
+  const res = await fetchWithTimeout(buildVmsDetectionsUrl(backendUrl, cameraId, atMs), {
     method: 'GET',
     headers: TUNNEL_HEADERS,
     mode: 'cors',
@@ -291,6 +320,8 @@ export interface VmsDetectionPollerOptions {
   onSnapshot: (snapshot: VmsDetectionSnapshot) => void
   onBeforeSnapshot?: () => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
+  /** Wallclock khung hình đang chiếu — backend dùng để chọn đúng overlay. */
+  getDisplayWallclockMs?: () => number | null
 }
 
 export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { stop: () => void } {
@@ -301,6 +332,7 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
     onSnapshot,
     onBeforeSnapshot,
     onStatusChange,
+    getDisplayWallclockMs,
   } = options
 
   if (!normalizeBaseUrl(backendUrl)) {
@@ -331,7 +363,11 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
     if (!connectedOnce) onStatusChange('connecting')
     inFlight = true
     try {
-      const snapshot = await fetchVmsDetections(backendUrl, cameraId)
+      const snapshot = await fetchVmsDetections(
+        backendUrl,
+        cameraId,
+        getDisplayWallclockMs?.(),
+      )
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')
