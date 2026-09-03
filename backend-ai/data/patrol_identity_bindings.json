@@ -3,16 +3,15 @@
   "by_gallery_worker": {
     "p-NV-6688": {
       "gallery_worker_id": "p-NV-6688",
-      "worker_name": "Bình",
+      "worker_name": "Duncan",
       "employee_code": "NV-6688",
       "contractor_name": "SGC",
       "aliases": [
         "nv-6688",
         "p-NV-6688",
-        "p-nv-6688",
-        "tk-0000101"
+        "p-nv-6688"
       ],
-      "updated_at": 1788271634.0843585
+      "updated_at": 1788422475.5113425
     },
     "p-NV001": {
       "gallery_worker_id": "p-NV001",
@@ -22,146 +21,9 @@
       "aliases": [
         "nv001",
         "p-NV001",
-        "p-nv001",
-        "tk-0000002",
-        "tk-0000100"
+        "p-nv001"
       ],
-      "updated_at": 1788271679.1524045
-    },
-    "p-NV003": {
-      "gallery_worker_id": "p-NV003",
-      "worker_name": "Lê C",
-      "employee_code": "NV003",
-      "contractor_name": "",
-      "aliases": [
-        "nv003",
-        "p-NV003",
-        "p-nv003"
-      ],
-      "updated_at": 1788271633.0226119
-    },
-    "p-NV002": {
-      "gallery_worker_id": "p-NV002",
-      "worker_name": "Trần B",
-      "employee_code": "NV002",
-      "contractor_name": "",
-      "aliases": [
-        "nv002",
-        "p-NV002",
-        "p-nv002"
-      ],
-      "updated_at": 1788271633.5933058
-    },
-    "p-NV888": {
-      "gallery_worker_id": "p-NV888",
-      "worker_name": "Trần BC",
-      "employee_code": "NV888",
-      "contractor_name": "",
-      "aliases": [
-        "nv888",
-        "p-NV888",
-        "p-nv888"
-      ],
-      "updated_at": 1788271633.2871425
-    },
-    "p-NV-202": {
-      "gallery_worker_id": "p-NV-202",
-      "worker_name": "Session Test",
-      "employee_code": "NV-202",
-      "contractor_name": "SGC",
-      "aliases": [
-        "nv-202",
-        "p-NV-202",
-        "p-nv-202",
-        "tk-0000202"
-      ],
-      "updated_at": 1788271633.387412
-    },
-    "p-NV-201": {
-      "gallery_worker_id": "p-NV-201",
-      "worker_name": "Upload Test",
-      "employee_code": "NV-201",
-      "contractor_name": "SGC",
-      "aliases": [
-        "nv-201",
-        "p-NV-201",
-        "p-nv-201",
-        "tk-0000201"
-      ],
-      "updated_at": 1788271633.4210744
-    },
-    "p-NV6688": {
-      "gallery_worker_id": "p-NV6688",
-      "worker_name": "Duncan",
-      "employee_code": "NV6688",
-      "contractor_name": "",
-      "aliases": [
-        "nv6688",
-        "p-NV6688",
-        "p-nv6688",
-        "p-sgc-6688"
-      ],
-      "updated_at": 1788271634.9969068
-    },
-    "p-NV010": {
-      "gallery_worker_id": "p-NV010",
-      "worker_name": "Lê C",
-      "employee_code": "NV010",
-      "contractor_name": "",
-      "aliases": [
-        "nv010",
-        "p-NV010",
-        "p-nv010"
-      ],
-      "updated_at": 1788271633.6737494
-    },
-    "p-NV020": {
-      "gallery_worker_id": "p-NV020",
-      "worker_name": "Phạm D",
-      "employee_code": "NV020",
-      "contractor_name": "",
-      "aliases": [
-        "nv020",
-        "p-NV020",
-        "p-nv020"
-      ],
-      "updated_at": 1788271633.7338812
-    },
-    "p-NV27": {
-      "gallery_worker_id": "p-NV27",
-      "worker_name": "Bình",
-      "employee_code": "NV27",
-      "contractor_name": "",
-      "aliases": [
-        "nv27",
-        "p-NV27",
-        "p-nv27"
-      ],
-      "updated_at": 1788271633.755616
-    },
-    "p-NV26": {
-      "gallery_worker_id": "p-NV26",
-      "worker_name": "An",
-      "employee_code": "NV26",
-      "contractor_name": "",
-      "aliases": [
-        "nv26",
-        "p-NV26",
-        "p-nv26"
-      ],
-      "updated_at": 1788271633.7657013
-    },
-    "p-NV999": {
-      "gallery_worker_id": "p-NV999",
-      "worker_name": "Nguyễn Hồ Sơ",
-      "employee_code": "NV999",
-      "contractor_name": "Cty A",
-      "aliases": [
-        "nv999",
-        "p-NV999",
-        "p-nv999"
-      ],
-      "updated_at": 1788271633.92386
+      "updated_at": 1788422475.8571548
     },
     "p-NV-SELF-001": {
       "gallery_worker_id": "p-NV-SELF-001",
@@ -173,7 +35,7 @@
         "p-NV-SELF-001",
         "p-nv-self-001"
       ],
-      "updated_at": 1788271634.6885161
+      "updated_at": 1788422475.81046
     },
     "p-DUNCAN": {
       "gallery_worker_id": "p-DUNCAN",
@@ -185,7 +47,19 @@
         "p-DUNCAN",
         "p-duncan"
       ],
-      "updated_at": 1788271679.1397173
+      "updated_at": 1788422475.846374
+    },
+    "p-NV6688": {
+      "gallery_worker_id": "p-NV6688",
+      "worker_name": "Duncan",
+      "employee_code": "NV6688",
+      "contractor_name": "",
+      "aliases": [
+        "nv6688",
+        "p-NV6688",
+        "p-nv6688"
+      ],
+      "updated_at": 1788422476.0993736
     },
     "p-NV01": {
       "gallery_worker_id": "p-NV01",
@@ -198,62 +72,26 @@
         "p-nv01",
         "tk-0000001"
       ],
-      "updated_at": 1788271679.3284242
+      "updated_at": 1788422476.109019
     }
   },
   "alias_to_gallery": {
     "nv-6688": "p-NV-6688",
     "p-NV-6688": "p-NV-6688",
     "p-nv-6688": "p-NV-6688",
-    "tk-0000101": "p-NV-6688",
     "nv001": "p-NV001",
     "p-NV001": "p-NV001",
     "p-nv001": "p-NV001",
-    "tk-0000100": "p-NV001",
-    "nv003": "p-NV003",
-    "p-NV003": "p-NV003",
-    "p-nv003": "p-NV003",
-    "nv002": "p-NV002",
-    "p-NV002": "p-NV002",
-    "p-nv002": "p-NV002",
-    "tk-0000002": "p-NV001",
-    "nv888": "p-NV888",
-    "p-NV888": "p-NV888",
-    "p-nv888": "p-NV888",
-    "nv-202": "p-NV-202",
-    "p-NV-202": "p-NV-202",
-    "p-nv-202": "p-NV-202",
-    "tk-0000202": "p-NV-202",
-    "nv-201": "p-NV-201",
-    "p-NV-201": "p-NV-201",
-    "p-nv-201": "p-NV-201",
-    "tk-0000201": "p-NV-201",
-    "nv6688": "p-NV6688",
-    "p-NV6688": "p-NV6688",
-    "p-nv6688": "p-NV6688",
-    "p-sgc-6688": "p-NV6688",
-    "tk-0000001": "p-NV01",
-    "nv010": "p-NV010",
-    "p-NV010": "p-NV010",
-    "p-nv010": "p-NV010",
-    "nv020": "p-NV020",
-    "p-NV020": "p-NV020",
-    "p-nv020": "p-NV020",
-    "nv27": "p-NV27",
-    "p-NV27": "p-NV27",
-    "p-nv27": "p-NV27",
-    "nv26": "p-NV26",
-    "p-NV26": "p-NV26",
-    "p-nv26": "p-NV26",
-    "nv999": "p-NV999",
-    "p-NV999": "p-NV999",
-    "p-nv999": "p-NV999",
     "nv-self-001": "p-NV-SELF-001",
     "p-NV-SELF-001": "p-NV-SELF-001",
     "p-nv-self-001": "p-NV-SELF-001",
     "duncan": "p-DUNCAN",
     "p-DUNCAN": "p-DUNCAN",
     "p-duncan": "p-DUNCAN",
+    "tk-0000001": "p-NV01",
+    "nv6688": "p-NV6688",
+    "p-NV6688": "p-NV6688",
+    "p-nv6688": "p-NV6688",
     "nv01": "p-NV01",
     "p-NV01": "p-NV01",
     "p-nv01": "p-NV01"

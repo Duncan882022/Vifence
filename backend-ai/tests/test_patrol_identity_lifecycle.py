@@ -1,8 +1,8 @@
 """Vòng đời Đối tượng → Người → Định danh: chỉ tiến, không lùi."""
 
-import re
 import unittest
-from unittest.mock import patch
+
+from patrol_gallery_stub import FakeGalleryMixin
 
 from app import patrol_identity_lifecycle as lifecycle
 from app.patrol_identity_lifecycle import (
@@ -21,34 +21,9 @@ TRACK = "ptk0001:person"
 # hơn cửa sổ đó để mỗi lần gọi được tính là một frame riêng.
 STEP = lifecycle._OBSERVE_DEDUPE_SEC * 2
 
-_FAKE_GALLERY_ID = re.compile(r"^p-\d+$", re.IGNORECASE)
-_FAKE_HR_PROFILES = {
-    "p-102": {"full_name": "Nguyễn Văn A", "employee_code": "SGC-0102"},
-    "p-777": {"full_name": "Trần Văn B", "employee_code": "SGC-0777"},
-}
 
-
-class _FakeGalleryMixin:
-    """Tier "định danh" đòi mã p-* có thật trong gallery HR, và tên hiển thị chỉ
-    được cấp khi có hồ sơ HR đứng sau. Test dùng mã giả `p-102`/`p-777` nên phải
-    dựng cả hai thứ đó, nếu không tier rơi xuống "person" và tên rơi về "Người".
-    """
-
-    def setUp(self):
-        super().setUp()
-        for target, kwargs in (
-            (
-                "app.patrol_entity.is_patrol_gallery_id",
-                {"side_effect": lambda wid: bool(_FAKE_GALLERY_ID.match((wid or "").strip()))},
-            ),
-            (
-                "app.patrol.identity.hr_profile_for_gallery",
-                {"side_effect": lambda wid: _FAKE_HR_PROFILES.get((wid or "").strip().lower())},
-            ),
-        ):
-            p = patch(target, **kwargs)
-            p.start()
-            self.addCleanup(p.stop)
+class _FakeGalleryMixin(FakeGalleryMixin):
+    hr_profiles = {"p-102": "Nguyễn Văn A", "p-777": "Trần Văn B"}
 
 
 class TestTierPromotion(_FakeGalleryMixin, unittest.TestCase):
