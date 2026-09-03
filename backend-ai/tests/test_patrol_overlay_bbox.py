@@ -45,6 +45,24 @@ class PatrolOverlayBboxTests(unittest.TestCase):
         area = (out[2] - out[0]) * (out[3] - out[1]) / (self.FW * self.FH)
         self.assertLessEqual(area, 0.40)
 
+    def test_snapshot_shrink_keeps_head(self) -> None:
+        """Người gần bodycam cao hơn 55% khung — thu nhỏ không được cắt mất đầu."""
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        # Người ngồi choán 72% chiều cao khung — trước đây bị thu quanh tâm.
+        sitting = (264.0, 193.0, 711.0, 713.0)
+        out = patrol_snapshot_draw_bbox(sitting, self.FW, self.FH)
+        self.assertAlmostEqual(out[1], sitting[1], delta=1.0)
+        self.assertLess(out[3], sitting[3])
+
+    def test_snapshot_shrink_keeps_head_for_crowd_box(self) -> None:
+        """Cả bbox crowd bị thu mạnh cũng giữ mép trên."""
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        crowd = (0.0, 80.0, 1280.0, 620.0)
+        out = patrol_snapshot_draw_bbox(crowd, self.FW, self.FH)
+        self.assertAlmostEqual(out[1], crowd[1], delta=1.0)
+
     def test_one_jpg_per_card(self) -> None:
         """Cùng thẻ obj — ghi đè 1 file, không spam timestamp."""
         with tempfile.TemporaryDirectory() as tmp:

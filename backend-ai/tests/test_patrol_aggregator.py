@@ -1132,5 +1132,166 @@ class BestObservationFinalizeTests(unittest.TestCase):
         self.assertLess(ts + 0.36 - ts, window)
 
 
+class PromotedCardSnapshotRepairTests(unittest.TestCase):
+    """Thăng hạng sau cửa sổ tích lũy — thẻ Người phải bỏ được ảnh Đối tượng."""
+
+    def setUp(self) -> None:
+        from app.patrol import db, sink
+
+        self._tmp = tempfile.TemporaryDirectory()
+        db.close()
+        db.DATA_DIR = Path(self._tmp.name)
+        db.DB_FILE = Path(self._tmp.name) / "patrol.db"
+        sink.SNAPSHOT_DIR = db.DATA_DIR / "patrol_snapshots"
+        db.get_conn()
+        sink.reset()
+        reset()
+
+    def tearDown(self) -> None:
+        from app.patrol import db
+
+        reset()
+        db.close()
+        self._tmp.cleanup()
+
+    def _promoted_person_session(self, ts: float):
+        """obj thăng lên tk-* mang theo JPG không mặt (score < 1.05), lượt đã khoá."""
+        from app.patrol import daystore, identity
+        from app.patrol.aggregator.session_store import get_or_create
+
+        obj_id = daystore.touch_object(
+            None,
+            camera_id="HC-01",
+            snapshot_path="2026-09-03/obj-back.jpg",
+            snapshot_score=0.817,
+            now=ts,
+            skip_appearance=True,
+        )
+        pers_id = identity.ensure_draft_for_tk("tk-0000001", now=ts)
+        daystore.promote_object(obj_id, pers_id, now=ts + 3)
+
+        session = get_or_create("HC-01", "ptk-promote", ts=ts)
+        session.subject_id = pers_id
+        session.started_at = ts
+        session.last_seen_at = ts + 30
+        session.committed = True
+        session.luot_snapshot_captured = True
+        session.last_flush_at = ts + 3
+        session.dirty = True
+        return pers_id, session
+
+    def _card(self, ts: float, pers_id: str):
+        from app.patrol import db
+
+        return db.query_one(
+            "SELECT snapshot_path, snapshot_score FROM daily_events"
+            " WHERE event_date = ? AND pers_id = ?",
+            (db.today_vn(ts), pers_id),
+        )
+
+    def test_person_card_keeps_object_photo_before_fix_is_repaired(self) -> None:
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol import daystore
+        from app.patrol.aggregator.flush import flush_session
+        from app.patrol.aggregator.types import ObservationInput
+
+        ts = 30_000.0
+        pers_id, session = self._promoted_person_session(ts)
+
+        stale = self._card(ts, pers_id)
+        self.assertEqual(stale["snapshot_path"], "2026-09-03/obj-back.jpg")
+        self.assertLess(
+            float(stale["snapshot_score"]),
+            daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
+        )
+
+        # Người ngoảnh mặt lại ở giây thứ 30 — ngoài cửa sổ tích lũy 2s.
+        face_obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-promote",
+            ts=ts + 30,
+            person_bbox=(85.0, 62.0, 225.0, 425.0),
+            frame=np.zeros((480, 640, 3), dtype=np.uint8),
+            face_quality=0.9,
+            face_eligible=True,
+            confidence=0.9,
+        )
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000001.jpg",
+        ) as write_mock:
+            flush_session(session, face_obs)
+
+        write_mock.assert_called()
+        card = self._card(ts, pers_id)
+        self.assertEqual(card["snapshot_path"], "2026-09-03/tk-0000001.jpg")
+        self.assertGreaterEqual(
+            float(card["snapshot_score"]),
+            daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
+        )
+
+    def test_repaired_card_counts_as_person_in_day_stats(self) -> None:
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol import daystore, db
+        from app.patrol.aggregator.flush import flush_session
+        from app.patrol.aggregator.types import ObservationInput
+
+        ts = 31_000.0
+        _pers_id, session = self._promoted_person_session(ts)
+        self.assertEqual(daystore.day_stats(db.today_vn(ts))["person_count"], 0)
+
+        face_obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-promote",
+            ts=ts + 30,
+            person_bbox=(85.0, 62.0, 225.0, 425.0),
+            frame=np.zeros((480, 640, 3), dtype=np.uint8),
+            face_quality=0.9,
+            face_eligible=True,
+            confidence=0.9,
+        )
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000001.jpg",
+        ):
+            flush_session(session, face_obs)
+
+        self.assertEqual(daystore.day_stats(db.today_vn(ts))["person_count"], 1)
+
+    def test_locked_luot_still_skips_snapshot_without_face(self) -> None:
+        """Không có mặt thì vẫn giữ một JPG mỗi lượt — không mở lại cổng chụp."""
+        import numpy as np
+        from unittest.mock import patch
+
+        from app.patrol.aggregator.flush import flush_session
+        from app.patrol.aggregator.types import ObservationInput
+
+        ts = 32_000.0
+        pers_id, session = self._promoted_person_session(ts)
+
+        back_obs = ObservationInput(
+            camera_id="HC-01",
+            track_id="ptk-promote",
+            ts=ts + 30,
+            person_bbox=(85.0, 62.0, 225.0, 425.0),
+            frame=np.zeros((480, 640, 3), dtype=np.uint8),
+            face_eligible=False,
+            confidence=0.95,
+        )
+        with patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/should-not-write.jpg",
+        ) as write_mock:
+            flush_session(session, back_obs)
+
+        write_mock.assert_not_called()
+        card = self._card(ts, pers_id)
+        self.assertEqual(card["snapshot_path"], "2026-09-03/obj-back.jpg")
+
+
 if __name__ == "__main__":
     unittest.main()

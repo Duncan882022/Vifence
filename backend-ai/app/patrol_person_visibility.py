@@ -324,7 +324,6 @@ def patrol_snapshot_draw_bbox(
         return box
 
     cx = (x1 + x2) / 2.0
-    cy = (y1 + y2) / 2.0
     target_h = min(ph, fh * max_height_ratio)
     target_w = min(pw, fw * 0.42)
     if area_ratio > max_area_ratio:
@@ -332,11 +331,14 @@ def patrol_snapshot_draw_bbox(
         target_h = min(target_h, side)
         target_w = min(target_w, side * 0.75)
 
+    # Cắt bớt từ chân lên, giữ nguyên mép trên.
+    #
+    # Thu quanh tâm sẽ cắt đầu: người đứng gần bodycam luôn cao hơn 55% khung,
+    # nên mọi thẻ đều mất phần đầu — đúng cái phần chứng minh đây là người và
+    # là căn cứ để thăng tầng Người. Chân thì không mang thông tin ấy.
     nx1 = cx - target_w / 2.0
     nx2 = cx + target_w / 2.0
-    ny1 = cy - target_h * 0.45
-    ny2 = cy + target_h * 0.55
-    return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+    return _clip_box_to_frame((nx1, y1, nx2, y1 + target_h), frame_w, frame_h)
 
 
 def patrol_person_meets_display_gate(
