@@ -356,6 +356,8 @@ def coerce_appearance_id_for_encounter_gap(
     appearance_id: int | None,
     camera_id: str,
     ts: float,
+    *,
+    encounter_started_at: float | None = None,
 ) -> int | None:
     """Bỏ row id cũ nếu đã ngắt >45s — buộc INSERT lượt gặp mới (cùng camera)."""
     appearance_id = coerce_appearance_id_for_camera(appearance_id, camera_id)
@@ -369,7 +371,10 @@ def coerce_appearance_id_for_encounter_gap(
         return None
     from .presence import GAP_FALLBACK_SEC
 
-    if ts - float(row["ended_at"]) > GAP_FALLBACK_SEC:
+    ended = float(row["ended_at"])
+    if ts - ended > GAP_FALLBACK_SEC:
+        return None
+    if encounter_started_at is not None and encounter_started_at - ended > GAP_FALLBACK_SEC:
         return None
     return int(appearance_id)
 
@@ -412,6 +417,10 @@ def find_overlapping_appearance_row(
         same_session = bool(sess and row_sess and sess == row_sess)
         same_track = bool(tid and row_tid and tid == row_tid)
         if not same_session and not same_track:
+            continue
+        from .presence import GAP_FALLBACK_SEC
+
+        if float(started_at) - float(row_dict["ended_at"]) > GAP_FALLBACK_SEC:
             continue
         # Cùng session nhưng cửa sổ thời gian rời nhau là lượt khác — người này
         # đã đi khỏi rồi quay lại, phải mở dòng mới.
@@ -863,6 +872,7 @@ def find_extendable_track_appearance_row(
     camera_id: str,
     ts: float,
     *,
+    encounter_started_at: float | None = None,
     gps_lat: float | None = None,
     gps_lng: float | None = None,
 ) -> int | None:
@@ -875,6 +885,12 @@ def find_extendable_track_appearance_row(
         (event_date, subject_id, camera_id),
     )
     if row is None:
+        return None
+    from .presence import GAP_FALLBACK_SEC
+
+    ended = float(row["ended_at"])
+    ref = float(encounter_started_at) if encounter_started_at is not None else ts
+    if ref - ended > GAP_FALLBACK_SEC:
         return None
     if not should_extend_presence(
         row, ts, gps_lat, gps_lng, camera_id=camera_id,

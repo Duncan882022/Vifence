@@ -659,9 +659,24 @@ async def ws_helmet_telemetry(websocket: WebSocket, camera_id: str, token: str |
             )
             await websocket.send_json({"type": "ack", "camera_id": camera_id})
     except WebSocketDisconnect:
-        pass
+        try:
+            from app.patrol_runtime import get_patrol_gps_updated_at
+            from app.patrol_stream_lifecycle import on_patrol_stream_offline
+
+            at_ts = get_patrol_gps_updated_at(camera_id) or __import__("time").time()
+            on_patrol_stream_offline(camera_id, at_ts=at_ts)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[ws telemetry %s] offline finalize: %s", camera_id, exc)
     except Exception as exc:  # noqa: BLE001
         logger.info("[ws telemetry %s] đóng: %s", camera_id, exc)
+        try:
+            from app.patrol_runtime import get_patrol_gps_updated_at
+            from app.patrol_stream_lifecycle import on_patrol_stream_offline
+
+            at_ts = get_patrol_gps_updated_at(camera_id) or __import__("time").time()
+            on_patrol_stream_offline(camera_id, at_ts=at_ts)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @app.websocket("/ws/stream/{camera_id}/detections")

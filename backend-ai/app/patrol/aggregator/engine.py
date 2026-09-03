@@ -14,14 +14,7 @@ from .types import ObservationInput
 logger = logging.getLogger("patrol.aggregator.engine")
 
 
-def _maybe_split_encounter(session, ts: float) -> None:
-    """Sau khi rời khung >45s (tắt phát sóng, mất track) — lượt gặp mới trên cùng camera."""
-    if session.last_seen_at <= 0 or ts <= session.last_seen_at + 1e-6:
-        return
-    from ..presence import GAP_FALLBACK_SEC
-
-    if ts - session.last_seen_at <= GAP_FALLBACK_SEC:
-        return
+def _apply_encounter_split(session, ts: float) -> None:
     session.appearance_row_id = None
     session.luot_snapshot_captured = False
     session.started_at = ts
@@ -31,6 +24,25 @@ def _maybe_split_encounter(session, ts: float) -> None:
 
     session.session_id = _new_session_id(session.camera_id, session.track_id)
     session.dirty = True
+
+
+def _maybe_split_encounter(session, ts: float) -> None:
+    """Sau khi rời khung >45s (tắt phát sóng, mất track) — lượt gặp mới trên cùng camera."""
+    from ...patrol_stream_lifecycle import split_sessions_after_stream_resume
+
+    if split_sessions_after_stream_resume(
+        session.camera_id,
+        obs_ts=ts,
+        current_session=session,
+    ):
+        return
+    if session.last_seen_at <= 0 or ts <= session.last_seen_at + 1e-6:
+        return
+    from ..presence import GAP_FALLBACK_SEC
+
+    if ts - session.last_seen_at <= GAP_FALLBACK_SEC:
+        return
+    _apply_encounter_split(session, ts)
 
 
 def _maybe_update_best_observation(session, obs: ObservationInput) -> None:

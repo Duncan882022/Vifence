@@ -189,6 +189,40 @@ class PatrolStreamOfflineFinalizeTest(unittest.TestCase):
         self.assertEqual(len(hc02), 2)
         self.assertLess(float(hc02[0]["ended_at"]), float(hc02[1]["started_at"]))
 
+    def test_trickle_obs_then_offline_resume_inserts_second_history(self) -> None:
+        """Quan sát cách ≤45s liên tục — chỉ tách lượt sau on_patrol_stream_offline + bật lại."""
+        from app.patrol import daystore, db, identity
+        from app.patrol_stream_lifecycle import on_patrol_stream_offline
+
+        t0 = 9_000.0
+        identity.ensure_draft_for_tk("tk-0000001", now=t0)
+        track_id = "ptk-trickle:person"
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, t0),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            for i in range(5):
+                self._ingest(
+                    track_id=track_id,
+                    now=t0 + i * 40.0,
+                    worker="tk-0000001",
+                    with_face=True,
+                )
+            on_patrol_stream_offline("HC-02", at_ts=t0 + 160.0)
+            self._ingest(
+                track_id=track_id,
+                now=t0 + 400.0,
+                worker="tk-0000001",
+                with_face=True,
+            )
+
+        hist = daystore.list_appearances("tk-0000001", db.today_vn(t0))
+        self.assertEqual(len(hist["segments"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

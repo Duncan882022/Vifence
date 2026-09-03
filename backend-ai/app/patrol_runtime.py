@@ -275,6 +275,14 @@ def get_patrol_gps_last_known(
     return float(lat), float(lng)
 
 
+def get_patrol_gps_updated_at(camera_id: str) -> float | None:
+    entry = _patrol_gps.get(camera_id)
+    if not entry:
+        return None
+    ts = float(entry.get("updated_at") or 0)
+    return ts if ts > 0 else None
+
+
 def get_patrol_gps(camera_id: str) -> tuple[float | None, float | None]:
     entry = _patrol_gps.get(camera_id)
     if not entry:

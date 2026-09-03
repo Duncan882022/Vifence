@@ -411,6 +411,7 @@ def flush_session(
         session.appearance_row_id,
         session.camera_id,
         now,
+        encounter_started_at=session.started_at,
     )
 
     if session.appearance_row_id is None:
@@ -419,6 +420,7 @@ def flush_session(
             subject_id,
             session.camera_id,
             session.last_seen_at,
+            encounter_started_at=session.started_at,
             gps_lat=gps_lat,
             gps_lng=gps_lng,
         )
