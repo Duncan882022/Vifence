@@ -63,6 +63,107 @@ class PatrolOverlayBboxTests(unittest.TestCase):
         out = patrol_snapshot_draw_bbox(crowd, self.FW, self.FH)
         self.assertAlmostEqual(out[1], crowd[1], delta=1.0)
 
+
+class SnapshotDrawBboxFaceAnchorTests(unittest.TestCase):
+    """Thu nhỏ ROI phải neo vào mặt đã dò, không đoán theo hình học.
+
+    Số liệu lấy từ thẻ thật `tk-0000001` (HC-01, khung dọc 720×1280): YOLO trả
+    bbox mở lên quá đầu tới y=34 trong khi mặt nằm ở y 396–882, nên cửa sổ thu
+    theo hình học rơi lên trần nhà và ROI không chồng lên người.
+    """
+
+    FW, FH = 720, 1280
+    PERSON = (0.0, 34.0, 720.0, 1280.0)
+    FACE = (301.0, 396.0, 620.0, 882.0)
+
+    @staticmethod
+    def _contains(
+        outer: tuple[float, float, float, float],
+        inner: tuple[float, float, float, float],
+    ) -> bool:
+        return (
+            outer[0] <= inner[0]
+            and outer[1] <= inner[1]
+            and outer[2] >= inner[2]
+            and outer[3] >= inner[3]
+        )
+
+    @staticmethod
+    def _overlap_ratio(
+        box: tuple[float, float, float, float],
+        face: tuple[float, float, float, float],
+    ) -> float:
+        ix = max(0.0, min(box[2], face[2]) - max(box[0], face[0]))
+        iy = max(0.0, min(box[3], face[3]) - max(box[1], face[1]))
+        face_area = (face[2] - face[0]) * (face[3] - face[1])
+        return (ix * iy) / max(face_area, 1.0)
+
+    def test_geometric_shrink_misses_the_face(self) -> None:
+        """Ghi nhận lỗi: không có mặt thì cửa sổ hình học chỉ trùng một góc mặt."""
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        out = patrol_snapshot_draw_bbox(self.PERSON, self.FW, self.FH)
+        self.assertLess(self._overlap_ratio(out, self.FACE), 0.35)
+
+    def test_face_anchored_box_contains_the_face(self) -> None:
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        out = patrol_snapshot_draw_bbox(
+            self.PERSON, self.FW, self.FH, face_box=self.FACE,
+        )
+        self.assertTrue(
+            self._contains(out, self.FACE),
+            f"ROI {out} không bao được mặt {self.FACE}",
+        )
+
+    def test_face_anchored_box_drops_ceiling_above_head(self) -> None:
+        """Mép trên phải bám đầu, không giữ y=34 của bbox YOLO."""
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        out = patrol_snapshot_draw_bbox(
+            self.PERSON, self.FW, self.FH, face_box=self.FACE,
+        )
+        self.assertGreater(out[1], self.PERSON[1] + 100.0)
+        self.assertLess(out[1], self.FACE[1])
+
+    def test_crowd_box_anchors_on_front_face(self) -> None:
+        """Bbox crowd + mặt nhỏ — ROI siết quanh đầu/vai người phía trước."""
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        crowd = (0.0, 80.0, 1280.0, 620.0)
+        face = (880.0, 150.0, 940.0, 220.0)
+        out = patrol_snapshot_draw_bbox(crowd, 1280, 720, face_box=face)
+        self.assertTrue(self._contains(out, face), f"ROI {out} bỏ mặt {face}")
+        area = (out[2] - out[0]) * (out[3] - out[1]) / (1280 * 720)
+        self.assertLess(area, 0.10)
+
+    def test_face_outside_person_box_is_ignored(self) -> None:
+        """Mặt của người khác không được kéo ROI ra khỏi bbox đang vẽ."""
+        from app.patrol_person_visibility import patrol_snapshot_draw_bbox
+
+        crowd = (0.0, 80.0, 600.0, 620.0)
+        alien_face = (900.0, 150.0, 960.0, 220.0)
+        out = patrol_snapshot_draw_bbox(crowd, 1280, 720, face_box=alien_face)
+        expected = patrol_snapshot_draw_bbox(crowd, 1280, 720)
+        self.assertEqual(out, expected)
+
+    def test_needs_shrink_flag_matches_shrink_branch(self) -> None:
+        from app.patrol_person_visibility import (
+            patrol_snapshot_bbox_needs_shrink,
+            patrol_snapshot_draw_bbox,
+        )
+
+        self.assertTrue(
+            patrol_snapshot_bbox_needs_shrink(self.PERSON, self.FW, self.FH),
+        )
+        small = (300.0, 400.0, 420.0, 700.0)
+        self.assertFalse(patrol_snapshot_bbox_needs_shrink(small, self.FW, self.FH))
+        # Không cần thu thì mặt không được làm đổi ROI.
+        self.assertEqual(
+            patrol_snapshot_draw_bbox(small, self.FW, self.FH, face_box=self.FACE),
+            patrol_snapshot_draw_bbox(small, self.FW, self.FH),
+        )
+
     def test_one_jpg_per_card(self) -> None:
         """Cùng thẻ obj — ghi đè 1 file, không spam timestamp."""
         with tempfile.TemporaryDirectory() as tmp:

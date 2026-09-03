@@ -165,6 +165,31 @@ def _luot_needs_snapshot(
     return True
 
 
+def _snapshot_face_box(
+    obs: ObservationInput,
+    frame_w: int,
+    frame_h: int,
+) -> tuple[float, float, float, float] | None:
+    """Vị trí mặt trong frame — chỉ dò khi bbox to đến mức phải thu nhỏ ROI."""
+    from ...patrol_person_visibility import patrol_snapshot_bbox_needs_shrink
+
+    if obs.frame is None or obs.person_bbox is None:
+        return None
+    if not patrol_snapshot_bbox_needs_shrink(
+        tuple(obs.person_bbox), frame_w, frame_h,
+    ):
+        return None
+    try:
+        from ...worker_identity.recognizer import patrol_face_bbox_in_frame
+
+        return patrol_face_bbox_in_frame(
+            obs.frame, [float(v) for v in obs.person_bbox],
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("[patrol] snapshot ROI — không dò được mặt để neo bbox")
+        return None
+
+
 def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str | None, float]:
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
         return None, 0.0
@@ -178,6 +203,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         tuple(shot_obs.person_bbox),
         frame_w,
         frame_h,
+        face_box=_snapshot_face_box(shot_obs, frame_w, frame_h),
     )
 
     score = snapshot_score(
