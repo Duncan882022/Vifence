@@ -82,7 +82,7 @@ class PatrolSinkFaceGateTests(unittest.TestCase):
             face_eligible=True,
             now=t0 + _FACE_CONFIRM,
         )
-        identity.identify(str(pers), full_name="Duncan", employee_code="SGC-6688")
+        identity.identify(str(pers), full_name="Duncan", employee_code="NV6688")
         sink.forget_track("HC-01", "ptk0001:person", now=t0 + 2.0)
 
         sink.record_observation(
@@ -129,7 +129,7 @@ class PatrolSinkFaceGateTests(unittest.TestCase):
             frame=frame,
             now=t0 + _FACE_CONFIRM,
         )
-        identity.identify(str(pers), full_name="Duncan", employee_code="SGC-6688")
+        identity.identify(str(pers), full_name="Duncan", employee_code="NV6688")
         card = daystore.list_person_events(db.today_vn(t0))[0]
         first_path = card["snapshot_path"]
         self.assertTrue(first_path)
