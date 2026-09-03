@@ -62,9 +62,10 @@ def collapse_events_by_id(rows: list[ViolationEvent]) -> list[ViolationEvent]:
     return list(by_id.values())
 
 
-# Đủ thưa để file ngày không phình theo nhịp refresh, đủ dày để bbox trên thẻ
-# không lệch quá lâu so với ảnh đã lưu.
-REFRESH_PERSIST_MIN_INTERVAL_SEC = 20.0
+# Nhịp làm mới một sự kiện đang diễn ra: ảnh JPG, bbox trong RAM và dòng JSONL
+# đều đi theo mốc này để luôn tả cùng một khung hình. Đủ dày để thẻ sự kiện còn
+# cảm giác sống, đủ thưa để không encode JPEG và nối dòng theo từng nhịp detect.
+REFRESH_PERSIST_MIN_INTERVAL_SEC = 5.0
 # Số dòng thừa tích trong file ngày trước khi viết gọn lại.
 _COMPACT_APPEND_THRESHOLD = 400
 
@@ -250,41 +251,59 @@ class EventStore:
         *,
         frame_size: Optional[tuple[int, int]] = None,
     ) -> ViolationEvent:
-        """Giữ created_at/id — chỉ cập nhật ảnh + bbox/conf nếu tốt hơn."""
+        """Giữ created_at/id — ảnh, bbox và dòng JSONL luôn tả cùng một khung hình.
+
+        Ảnh sự kiện được backend vẽ sẵn bbox rồi mới ghi JPG, nên thay ảnh mà giữ
+        bbox cũ là để hai thứ nói về hai khung khác nhau: thẻ hiện khung mới còn
+        ROI playback và khung `drawbox` của clip lại trỏ vào chỗ người đã rời đi.
+        Vì vậy hình mới chỉ được ghi đè khi ta cũng nhận luôn bbox đi kèm.
+        """
         event_date = existing.event_date or _event_date(existing.created_at)
         snapshot_name = existing.snapshot_file or f"{event_date}/{existing.id}.jpg"
-        snapshot_path = SNAPSHOT_DIR / snapshot_name
-        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(snapshot_path), snapshot_image)
+
+        # PPE khoanh ROI theo người đang bám track nên khung mới luôn đáng tin;
+        # các nhóm còn lại chỉ đổi khi lần nhận dạng này chắc chắn hơn.
+        better_geometry = (
+            incoming.behavior in ("no_helmet", "no_vest", "no_shoes")
+            or incoming.confidence >= existing.confidence
+        )
+
+        now = time.time()
+        with self._lock:
+            last_written = self._refresh_persisted_at.get(existing.id, 0.0)
+            write_frame = (
+                better_geometry
+                and now - last_written >= REFRESH_PERSIST_MIN_INTERVAL_SEC
+            )
+            if write_frame:
+                self._refresh_persisted_at[existing.id] = now
+
+        if write_frame:
+            snapshot_path = SNAPSHOT_DIR / snapshot_name
+            snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(snapshot_path), snapshot_image)
 
         # Sự kiện nằm trong deque dùng chung với /events — sửa từng trường ngoài
         # lock thì người đọc bắt gặp bản ghi nửa cũ nửa mới.
         with self._lock:
             existing.snapshot_file = snapshot_name
-            existing.confirmed_at = time.time()
+            existing.confirmed_at = now
 
-            if incoming.behavior in ("no_helmet", "no_vest", "no_shoes"):
+            if write_frame:
                 existing.bbox = list(incoming.bbox)
-                if incoming.subject_bbox:
-                    existing.subject_bbox = list(incoming.subject_bbox)
                 if incoming.confidence >= existing.confidence:
                     existing.confidence = incoming.confidence
-            elif incoming.confidence >= existing.confidence:
-                existing.confidence = incoming.confidence
-                existing.bbox = list(incoming.bbox)
                 if incoming.subject_bbox:
                     existing.subject_bbox = list(incoming.subject_bbox)
                 if incoming.related_bbox:
                     existing.related_bbox = list(incoming.related_bbox)
-            elif incoming.subject_bbox:
-                existing.subject_bbox = list(incoming.subject_bbox)
 
-            if frame_size:
-                existing.frame_width, existing.frame_height = frame_size
-            else:
-                h, w = snapshot_image.shape[:2]
-                existing.frame_width = int(w)
-                existing.frame_height = int(h)
+                if frame_size:
+                    existing.frame_width, existing.frame_height = frame_size
+                else:
+                    h, w = snapshot_image.shape[:2]
+                    existing.frame_width = int(w)
+                    existing.frame_height = int(h)
 
             for field in (
                 "worker_id",
@@ -306,31 +325,19 @@ class EventStore:
                 existing.gps_lat = incoming.gps_lat
                 existing.gps_lng = incoming.gps_lng
 
-        self._persist_refresh(existing)
+        # Ghi ngay cùng nhịp với ảnh: đọc lại từ đĩa sau restart vẫn phải ra đúng
+        # bbox của khung hình đang nằm trong file JPG.
+        if write_frame:
+            self._append_to_disk(existing)
 
         logger.info(
-            "Refresh snapshot event=%s key=%s (giữ created_at=%.0f)",
+            "Refresh snapshot event=%s key=%s (giữ created_at=%.0f, thay ảnh=%s)",
             existing.id,
             existing.dedup_key,
             existing.created_at,
+            write_frame,
         )
         return existing
-
-    def _persist_refresh(self, event: ViolationEvent) -> None:
-        """Ghi lại trạng thái sau refresh xuống file ngày.
-
-        Ảnh JPG đã được thay nhưng dòng JSONL vẫn là bbox lần đầu; đọc lại từ đĩa
-        (sau restart hoặc khi lọc theo ngày) sẽ vẽ ROI lệch hẳn khỏi ảnh. Ghi thưa
-        theo :data:`REFRESH_PERSIST_MIN_INTERVAL_SEC` để file ngày không phình
-        theo từng nhịp detect.
-        """
-        now = time.time()
-        with self._lock:
-            last = self._refresh_persisted_at.get(event.id, 0.0)
-            if now - last < REFRESH_PERSIST_MIN_INTERVAL_SEC:
-                return
-            self._refresh_persisted_at[event.id] = now
-        self._append_to_disk(event)
 
     def _finalize_event(
         self,
