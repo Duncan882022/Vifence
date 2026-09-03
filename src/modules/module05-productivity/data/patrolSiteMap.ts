@@ -47,10 +47,6 @@ function siteCell(u0: number, u1: number, v0: number, v1: number): [number, numb
   ]
 }
 
-function cellCenter(u0: number, u1: number, v0: number, v1: number): [number, number] {
-  return sitePoint((u0 + u1) / 2, (v0 + v1) / 2)
-}
-
 /** Map centre — tham chiếu khảo sát Bùi Xá (20°55'42.4"N 106°52'25.0"E). */
 export const PATROL_SITE_CENTER: [number, number] = [20.928444, 106.873611]
 
@@ -83,8 +79,6 @@ export function patrolZoneInteriorPoint(
     (1 - u) * v * bl[1]
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
-
-const _SITE_POLY = [...PATROL_SITE_CORNERS] as [number, number][]
 
 /** HC-01 không GPS → neo tây (khu 1–2). */
 export const PATROL_HELMET_01_FALLBACK: [number, number] = sitePoint(0.14, 0.42)
