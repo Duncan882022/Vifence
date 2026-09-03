@@ -169,7 +169,7 @@ export function PatrolPersonRoiOverlay({
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[9]">
       {tracks.map(track => (
         <PersonRoiBox
-          key={`${track.trackId}-${layoutTick}`}
+          key={track.trackId}
           track={track}
           frameWidth={overlayFrameSize.width}
           frameHeight={overlayFrameSize.height}

@@ -27,7 +27,7 @@ import {
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
-import { PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { clearPatrolPersonRoiTracks, PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
 import { resolveEffectivePatrolFlightMode, readPatrolFlightModeFromMetrics } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
@@ -164,12 +164,14 @@ export function CameraVideoFeed({
     { getDisplayWallclockMs: () => videoClock.getDisplayWallclockMs() },
   )
   // WHEP (~300ms): snapshot mới nhất. HLS: buffer lag từ BE config.
-  const patrolRoiFallbackLagMs = isPatrolMetricsCameraId(cameraId) && videoTransportMode === 'hls'
-    ? getPatrolLiveRoiDelayMs()
-    : undefined
+  // Gợi ý lag runtime cũng chỉ dành cho HLS — áp lên WHEP là tự lùi bbox 5s
+  // trong khi video gần như tức thời.
+  const patrolRoiUsesBufferLag = isPatrolMetricsCameraId(cameraId) && videoTransportMode === 'hls'
+  const patrolRoiFallbackLagMs = patrolRoiUsesBufferLag ? getPatrolLiveRoiDelayMs() : undefined
   const vmsFeed = useSyncedVmsDetections(rawVmsFeed, videoClock, {
+    cameraId,
     fallbackLagMs: patrolRoiFallbackLagMs,
-    useRuntimeLagHint: isPatrolMetricsCameraId(cameraId),
+    useRuntimeLagHint: patrolRoiUsesBufferLag,
   })
 
   const patrolRoiFrameSize = useMemo(() => {
@@ -193,6 +195,16 @@ export function CameraVideoFeed({
     videoClock,
     roiLayoutTick,
   ])
+
+  /**
+   * Ngừng phân tích (đổi camera, tắt overlay, rời trang) mà không dọn thì lứa
+   * track cuối nằm lại trong engine: tile bật lại là ROI của mấy phút trước hiện
+   * ra trên khung hình mới.
+   */
+  useEffect(() => {
+    if (!runPatrolHeatmapAnalyze) return
+    return () => clearPatrolPersonRoiTracks(cameraId)
+  }, [runPatrolHeatmapAnalyze, cameraId])
 
   useEffect(() => {
     if (!runPatrolHeatmapAnalyze || !vmsFeed.snapshot) return

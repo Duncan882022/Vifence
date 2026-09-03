@@ -3,7 +3,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { advancePersonRoiTracks, predictPersonRoiTracks, resetPersonRoiTrackSeq } from './personRoiTracker'
-import { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
+import {
+  PATROL_PERSON_ROI_CONFIG,
+  PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  PATROL_PERSON_ROI_PROFILE_FLYCAM,
+  resolvePatrolPersonRoiConfig,
+} from './patrolPersonRoi.config'
 import type { Bbox, PersonRoiDetection, PersonRoiTrack } from './types'
 
 function person(bbox: Bbox, extra: Partial<PersonRoiDetection> = {}): PersonRoiDetection {
@@ -103,6 +108,90 @@ describe('khoá đối tượng theo track id backend', () => {
     const firstId = [...tracks.keys()][0]
     tracks = advance(tracks, [person([600, 120, 700, 420], { worker_id: 'tk-00000001' })], 1_180)
     expect([...tracks.keys()][0]).toBe(firstId)
+  })
+
+  it('người khác bước vào đúng chỗ đó không cướp được track đang khoá id khác', () => {
+    let tracks = advance(
+      empty(),
+      [person([100, 100, 200, 400], { track_id: 'p1', worker_id: 'tk-00000001' })],
+      1_000,
+    )
+    const idOfP1 = [...tracks.keys()][0]
+
+    // p1 rời khung, p2 bước vào gần như đúng vị trí cũ. Hộp chồng nhau gần hết
+    // nên IoU rất cao — nhưng backend nói đây là hai người.
+    tracks = advance(tracks, [person([104, 100, 204, 400], { track_id: 'p2' })], 1_180)
+
+    const p1 = tracks.get(idOfP1)!
+    expect(p1.anchorKey).toBe('trk:p1')
+    expect(p1.missStreak).toBe(1)
+
+    const p2 = [...tracks.values()].find(t => t.anchorKey === 'trk:p2')
+    expect(p2).toBeDefined()
+    expect(p2!.id).not.toBe(idOfP1)
+    // Danh tính của p1 không được đi theo sang người mới.
+    expect(p2!.workerId).toBeUndefined()
+  })
+
+  it('người cận cảnh không nuốt detection của người phía xa', () => {
+    // Track cao 300px, detection cao 40px cùng tâm — tỉ lệ diện tích ~1.8%.
+    let tracks = advance(empty(), [person([100, 100, 200, 400])], 1_000)
+    const nearId = [...tracks.keys()][0]
+
+    tracks = advance(tracks, [person([140, 230, 160, 270])], 1_180)
+
+    expect(tracks.get(nearId)?.missStreak).toBe(1)
+    expect(tracks.size).toBe(2)
+  })
+})
+
+describe('profile flycam', () => {
+  it('ghép được người 12px dù hai nhịp không chồng nhau chút nào', () => {
+    // Drone tự trôi: hộp nhích đúng một thân người ⇒ IoU bằng 0.
+    let tracks = advancePersonRoiTracks(
+      new Map(),
+      [person([400, 300, 412, 330])],
+      180,
+      1_000,
+      PATROL_PERSON_ROI_PROFILE_FLYCAM,
+    )
+    const firstId = [...tracks.keys()][0]
+
+    tracks = advancePersonRoiTracks(
+      tracks,
+      [person([414, 300, 426, 330])],
+      180,
+      1_180,
+      PATROL_PERSON_ROI_PROFILE_FLYCAM,
+    )
+
+    expect(tracks.size).toBe(1)
+    expect([...tracks.keys()][0]).toBe(firstId)
+  })
+
+  it('profile bodycam chặt hơn nên cùng cảnh đó lại tách track', () => {
+    let tracks = advancePersonRoiTracks(
+      new Map(),
+      [person([400, 300, 412, 330])],
+      180,
+      1_000,
+      PATROL_PERSON_ROI_PROFILE_BODYCAM,
+    )
+    tracks = advancePersonRoiTracks(
+      tracks,
+      [person([460, 300, 472, 330])],
+      180,
+      1_180,
+      PATROL_PERSON_ROI_PROFILE_BODYCAM,
+    )
+    expect(tracks.size).toBe(2)
+  })
+
+  it('DR-* tầm cao dùng profile flycam, tầm thấp dùng profile bodycam', () => {
+    expect(resolvePatrolPersonRoiConfig('DR-03', 'aerial')).toBe(PATROL_PERSON_ROI_PROFILE_FLYCAM)
+    expect(resolvePatrolPersonRoiConfig('DR-03', 'proximity')).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
+    expect(resolvePatrolPersonRoiConfig('HC-01', null)).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
+    expect(resolvePatrolPersonRoiConfig('HC-02', null)).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
   })
 })
 

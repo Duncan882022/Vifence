@@ -5,7 +5,12 @@ export type {
   PersonRoiTrack,
   PersonRoiTrackState,
 } from './types'
-export { PATROL_PERSON_ROI_CONFIG } from './patrolPersonRoi.config'
+export {
+  PATROL_PERSON_ROI_CONFIG,
+  PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  PATROL_PERSON_ROI_PROFILE_FLYCAM,
+  resolvePatrolPersonRoiConfig,
+} from './patrolPersonRoi.config'
 export { KalmanBox2D } from './kalmanBox2d'
 export {
   advancePersonRoiTracks,
@@ -15,6 +20,7 @@ export {
 } from './personRoiTracker'
 export {
   clearPatrolPersonRoiEngine,
+  clearPatrolPersonRoiTracks,
   getPatrolPersonRoiEngine,
   PatrolPersonRoiEngine,
 } from './patrolPersonRoiEngine'

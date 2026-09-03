@@ -15,8 +15,28 @@ export function useOverlayLayoutTick(videoRef: RefObject<HTMLVideoElement | null
     let observer: ResizeObserver | null = null
     let pollId = 0
     let cancelled = false
+    let lastGeometry = ''
 
-    const bump = () => setLayoutTick(v => v + 1)
+    /**
+     * Chỉ đổi số khi hình học thật sự khác.
+     *
+     * Vòng poll bên dưới chạy mỗi 280ms; đếm vô điều kiện thì overlay dùng tick
+     * này làm key sẽ dựng lại toàn bộ hộp ~4 lần mỗi giây — mất transition, mất
+     * tác dụng `memo`, và nhìn thấy rõ thành nháy khi có nhiều hộp.
+     */
+    const bump = () => {
+      const video = videoRef.current
+      if (!video) return
+      const geometry = [
+        video.videoWidth,
+        video.videoHeight,
+        Math.round(video.clientWidth),
+        Math.round(video.clientHeight),
+      ].join('x')
+      if (geometry === lastGeometry) return
+      lastGeometry = geometry
+      setLayoutTick(v => v + 1)
+    }
 
     const detach = () => {
       if (!attachedVideo) return

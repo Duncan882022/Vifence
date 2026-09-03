@@ -14,7 +14,7 @@ import {
   getPatrolLiveRoiDelayMs,
   updatePatrolClientServerSkew,
 } from '@/services/patrolRuntimeBridge'
-import { useOverlayBufferGate } from '@/modules/module02-training/hooks/useCameraBufferReadiness'
+import { useCameraOverlayReady } from '@/modules/module02-training/hooks/useCameraBufferReadiness'
 import { getCameraBufferedAheadMs } from '@/services/cameraBufferReadiness'
 
 /** Nhịp đối chiếu snapshot ↔ đồng hồ video. */
@@ -32,12 +32,12 @@ export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
 export function useSyncedVmsDetections(
   feed: VmsDetectionFeed,
   clock: VideoClockSource | null,
-  options?: { fallbackLagMs?: number; useRuntimeLagHint?: boolean },
+  options?: { cameraId?: string; fallbackLagMs?: number; useRuntimeLagHint?: boolean },
 ): SyncedVmsDetectionFeed {
   const bufferRef = useRef(new OverlayTimeBuffer())
   const configuredLagMs = options?.fallbackLagMs
   const useRuntimeLagHint = options?.useRuntimeLagHint ?? false
-  const gate = useOverlayBufferGate()
+  const bufferReady = useCameraOverlayReady(options?.cameraId ?? '')
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
     timeAligned: boolean
@@ -125,11 +125,11 @@ export function useSyncedVmsDetections(
       ...feed,
       // Chưa đệm đủ thì độ trễ luồng chưa ổn định: hộp vẽ ra lúc này rơi lệch
       // hẳn khỏi người rồi mới tự nhảy về chỗ đúng vài giây sau. Thà chưa vẽ.
-      snapshot: gate.open ? resolved.snapshot : null,
-      timeAligned: gate.open && resolved.timeAligned,
-      driftMs: gate.open ? resolved.driftMs : null,
-      waitingForBuffer: !gate.open,
+      snapshot: bufferReady ? resolved.snapshot : null,
+      timeAligned: bufferReady && resolved.timeAligned,
+      driftMs: bufferReady ? resolved.driftMs : null,
+      waitingForBuffer: !bufferReady,
     }),
-    [feed, resolved, gate.open],
+    [feed, resolved, bufferReady],
   )
 }

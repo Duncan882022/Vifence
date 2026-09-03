@@ -4,6 +4,7 @@ import {
   clearCameraBufferState,
   getCameraBufferedAheadMs,
   getOverlayBufferGate,
+  isCameraOverlayReady,
   isOverlayBufferGateOpen,
   OVERLAY_BUFFER_TARGET_MS,
   reportCameraBufferState,
@@ -125,5 +126,54 @@ describe('cameraBufferReadiness', () => {
     expect(listener).toHaveBeenCalledTimes(2)
 
     unsubscribe()
+  })
+
+  describe('cửa chờ riêng từng camera', () => {
+    it('tile đã đệm đủ vẽ được ngay, không chờ tile chậm cùng lưới', () => {
+      reportCameraBufferState('HC-01', {
+        bufferedAheadMs: OVERLAY_BUFFER_TARGET_MS,
+        needsBuffer: true,
+      })
+      reportCameraBufferState('DR-03', { bufferedAheadMs: 300, needsBuffer: true })
+
+      // Cửa chung vẫn đóng vì DR-03 chưa xong…
+      expect(isOverlayBufferGateOpen()).toBe(false)
+      // …nhưng HC-01 không có lý do gì phải chờ theo.
+      expect(isCameraOverlayReady('HC-01')).toBe(true)
+      expect(isCameraOverlayReady('DR-03')).toBe(false)
+    })
+
+    it('luồng không cần đệm và camera chưa đăng ký đều sẵn sàng ngay', () => {
+      reportCameraBufferState('HC-02', { bufferedAheadMs: 120, needsBuffer: false })
+      expect(isCameraOverlayReady('HC-02')).toBe(true)
+      expect(isCameraOverlayReady('DR-03')).toBe(true)
+    })
+
+    it('hết hạn chờ thì cho qua dù chưa đệm đủ', () => {
+      reportCameraBufferState('DR-03', { bufferedAheadMs: 200, needsBuffer: true })
+      expect(isCameraOverlayReady('DR-03')).toBe(false)
+
+      vi.advanceTimersByTime(BUFFER_WAIT_TIMEOUT_MS + 100)
+      reportCameraBufferState('DR-03', { bufferedAheadMs: 220, needsBuffer: true })
+      expect(isCameraOverlayReady('DR-03')).toBe(true)
+    })
+
+    it('mỗi lần một tile chuyển sang sẵn sàng đều báo cho listener', () => {
+      const listener = vi.fn()
+      const unsubscribe = subscribeOverlayBufferGate(listener)
+
+      reportCameraBufferState('HC-01', { bufferedAheadMs: 100, needsBuffer: true })
+      reportCameraBufferState('DR-03', { bufferedAheadMs: 100, needsBuffer: true })
+      const beforeReady = listener.mock.calls.length
+
+      reportCameraBufferState('HC-01', {
+        bufferedAheadMs: OVERLAY_BUFFER_TARGET_MS,
+        needsBuffer: true,
+      })
+      expect(listener.mock.calls.length).toBeGreaterThan(beforeReady)
+      expect(isCameraOverlayReady('HC-01')).toBe(true)
+
+      unsubscribe()
+    })
   })
 })
