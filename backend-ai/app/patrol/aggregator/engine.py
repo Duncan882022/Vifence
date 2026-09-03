@@ -110,7 +110,13 @@ def ingest_observation(**kwargs) -> str | None:
     return session.subject_id
 
 
-def finalize_track(camera_id: str, track_id: str, *, now: float | None = None) -> None:
+def finalize_track(
+    camera_id: str,
+    track_id: str,
+    *,
+    now: float | None = None,
+    end_reason: str | None = None,
+) -> None:
     from .lost_track_memory import stash_session
 
     session = pop_session(camera_id, track_id)
@@ -120,17 +126,21 @@ def finalize_track(camera_id: str, track_id: str, *, now: float | None = None) -
     # drop muộn khi cam tắt lâu rồi mới finalize lúc bật lại.
     if now is not None and session.last_seen_at <= 0:
         session.last_seen_at = float(now)
+    if end_reason:
+        session.end_reason = str(end_reason)
     finalize_session(session)
     emb = session.best_faces[0].embedding if session.best_faces else None
     stash_session(session, embedding=emb)
 
 
-def finalize_orphan_sessions(camera_id: str) -> int:
+def finalize_orphan_sessions(camera_id: str, *, end_reason: str | None = None) -> int:
     """Session aggregator còn trong RAM nhưng tracker đã drop."""
     from .session_store import pop_all_sessions
 
     closed = 0
     for session in pop_all_sessions(camera_id):
+        if end_reason:
+            session.end_reason = str(end_reason)
         finalize_session(session)
         closed += 1
     return closed

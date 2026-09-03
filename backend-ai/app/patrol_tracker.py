@@ -22,7 +22,7 @@ from .detector import MODULE05_BYTETRACK_MAX_AGE
 
 Bbox = tuple[float, float, float, float]
 
-# Track sống lâu hơn ngưỡng này mà không được đo lại thì bỏ hẳn.
+# Track bị che giữa khung sống lâu hơn ngưỡng này mà không được đo lại thì bỏ.
 #
 # Trên công trường đông, một người đi ngang qua ống kính che mất đồng nghiệp phía
 # sau 2–4 giây là chuyện thường. Bỏ track ngay ở mốc 2 giây nghĩa là mỗi lần bị
@@ -32,8 +32,30 @@ Bbox = tuple[float, float, float, float]
 _LOST_KEEP_SEC_BODYCAM = 8.0
 _LOST_KEEP_SEC_FLYCAM = 4.0
 
+# Track mất dấu ngay ở biên khung thì chờ ngần này — người đã bước ra ngoài.
+#
+# Cửa sổ dài của trường hợp bị che không dùng được ở đây. Ra khỏi khung là hết
+# một lượt gặp: giữ track thêm 8 giây nghĩa là người kế tiếp bước vào đúng mép
+# đó bị ghép vào lượt của người vừa đi, hai người thành một. Ngắn hơn nhịp
+# `max_age_frames` ở FPS thường gặp, nên trên thực tế số frame thử lại mới là
+# thứ quyết định — mốc thời gian chỉ chặn trường hợp FPS tụt bất thường.
+_EXIT_KEEP_SEC = 0.6
+
+# Bbox coi là chạm biên khi có cạnh nằm trong dải này (tỉ lệ cạnh khung hình).
+#
+# Người đi khỏi khung không biến mất tức thì: YOLO bám tới lúc còn khoảng nửa
+# thân trong hình, nên bbox cuối cùng luôn dính mép. Dải 2% đủ rộng để hứng sai
+# số làm tròn của detector mà chưa chạm tới người đứng sát rìa vẫn đang trong
+# khung.
+_EXIT_EDGE_MARGIN_RATIO = 0.02
+
 # Trần số track giữ đồng thời mỗi camera — chặn phình bộ nhớ khi cảnh đông.
 _MAX_TRACKS = 150
+
+# Lý do một track kết thúc — đi kèm lượt gặp để đọc số liệu về sau.
+END_REASON_EXIT_EDGE = "exit_edge"
+END_REASON_LOST = "lost"
+END_REASON_STREAM_OFFLINE = "stream_offline"
 
 
 def _bbox_iou(a: Bbox, b: Bbox) -> float:
@@ -78,6 +100,16 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return lo if v < lo else (hi if v > hi else v)
 
 
+def touches_frame_edge(bbox: Bbox, frame_w: float, frame_h: float) -> bool:
+    """Bbox có cạnh dính mép khung — dấu hiệu người đang ra/vào khỏi khung."""
+    if frame_w <= 0 or frame_h <= 0:
+        return False
+    mx = max(2.0, frame_w * _EXIT_EDGE_MARGIN_RATIO)
+    my = max(2.0, frame_h * _EXIT_EDGE_MARGIN_RATIO)
+    x1, y1, x2, y2 = bbox
+    return x1 <= mx or y1 <= my or x2 >= frame_w - mx or y2 >= frame_h - my
+
+
 @dataclass
 class TrackerProfile:
     """Tham số ghép — bodycam và flycam có động học rất khác nhau."""
@@ -86,7 +118,10 @@ class TrackerProfile:
     center_ratio_max: float
     size_ratio_min: float
     confirm_hits: int
+    # Cửa sổ chờ khi track mất dấu **giữa khung** — gần như luôn là bị che.
     lost_keep_sec: float
+    # Cửa sổ chờ khi lần đo cuối đã dính biên khung — người đi ra ngoài.
+    exit_keep_sec: float = _EXIT_KEEP_SEC
     # Ranh giới high/low conf của ByteTrack. Phải bám theo sàn conf của từng
     # camera: flycam nhận người từ 0.18 nên lấy chung mốc 0.34 của bodycam thì
     # gần như mọi detection đều rơi vào nhánh low.
@@ -108,7 +143,13 @@ class TrackerProfile:
     lost_strict_after_sec: float = 1.2
     lost_size_ratio_min: float = 0.45
     lost_center_ratio_max: float = 0.85
-    # ByteTrack max_age — bỏ track sau N frame không ghép được detection.
+    # Số frame thử ghép lại **tối thiểu** trước khi bỏ track.
+    #
+    # Trước đây đây là điều kiện bỏ track thứ hai, nối với cửa sổ thời gian bằng
+    # `or`: 5 frame ở nhịp 6 FPS là 0,8 giây, luôn tới trước mốc 8 giây, nên
+    # `lost_keep_sec` cùng toàn bộ phần siết cổng ghép theo tuổi mất dấu chưa
+    # bao giờ chạy. Giờ hai điều kiện nối bằng `and`: đếm frame là sàn số lần
+    # thử lại, còn cửa sổ thời gian mới là thứ quyết định khi nào hết lượt.
     max_age_frames: int = MODULE05_BYTETRACK_MAX_AGE
 
 
@@ -234,6 +275,8 @@ class PatrolTrack:
     last_measured_at: float = 0.0
     confidence: float = 0.0
     measured_bbox: Bbox = (0.0, 0.0, 0.0, 0.0)
+    # Lần đo cuối có dính biên khung không — quyết định cửa sổ chờ lúc mất dấu.
+    at_frame_edge: bool = False
 
     def bbox(self) -> Bbox:
         """Bbox đã làm mượt — dùng để hiển thị."""
@@ -280,6 +323,8 @@ class PatrolTracker:
     tracks: dict[str, PatrolTrack] = field(default_factory=dict)
     _seq: int = 0
     _last_update_at: float = 0.0
+    # Cỡ khung hình lần cập nhật gần nhất — dùng để biết bbox có dính biên.
+    frame_size: tuple[float, float] | None = None
     # Lịch sử dịch chuyển của khung hình: (thời điểm, dx, dy). Track mất dấu
     # vài nhịp phải cộng dồn cả quãng camera đã lia trong lúc đó.
     _ego_log: list[tuple[float, float, float]] = field(default_factory=list)
@@ -304,6 +349,22 @@ class PatrolTracker:
             dx += sx
             dy += sy
         return dx, dy
+
+    def _at_frame_edge(self, bbox: Bbox) -> bool:
+        if self.frame_size is None:
+            return False
+        return touches_frame_edge(bbox, self.frame_size[0], self.frame_size[1])
+
+    def _should_drop(self, track: PatrolTrack, now: float) -> bool:
+        """Đã thử lại đủ số frame **và** đã quá cửa sổ chờ của tình huống này."""
+        if track.miss_streak < self.profile.max_age_frames:
+            return False
+        keep = (
+            self.profile.exit_keep_sec
+            if track.at_frame_edge
+            else self.profile.lost_keep_sec
+        )
+        return (now - track.last_measured_at) >= keep
 
     def _next_id(self) -> str:
         self._seq += 1
@@ -376,6 +437,7 @@ class PatrolTracker:
         now: float,
         high_conf: float | None = None,
         camera_shift: tuple[float, float] = (0.0, 0.0),
+        frame_size: tuple[float, float] | None = None,
     ) -> list[str | None]:
         """Ghép detections của frame này vào track.
 
@@ -383,11 +445,16 @@ class PatrolTracker:
         Nó được cộng vào mốc ghép và trừ khỏi vận tốc đo được, để tracker phân
         biệt "người đi" với "camera lia".
 
+        `frame_size` (rộng, cao) cho biết bbox nào đang dính biên khung. Thiếu
+        nó thì mọi track mất dấu đều được coi là bị che, tức chờ lâu hơn.
+
         Trả về list track_id **cùng thứ tự với `detections`** (None khi không cấp
         được track, ví dụ đã chạm trần `_MAX_TRACKS`).
         """
         dt = 0.0 if self._last_update_at <= 0 else max(0.0, now - self._last_update_at)
         self._last_update_at = now
+        if frame_size is not None:
+            self.frame_size = (float(frame_size[0]), float(frame_size[1]))
         self.note_camera_shift(camera_shift[0], camera_shift[1], now=now)
 
         for track in self.tracks.values():
@@ -439,6 +506,7 @@ class PatrolTracker:
             track.last_measured_at = now
             track.confidence = max(track.confidence * 0.6, conf)
             track.measured_bbox = bbox
+            track.at_frame_edge = self._at_frame_edge(bbox)
             if track.state == "lost" or (
                 track.state == "tentative" and track.hits >= self.profile.confirm_hits
             ):
@@ -451,19 +519,17 @@ class PatrolTracker:
             track.miss_streak += 1
             if track.state == "confirmed":
                 track.state = "lost"
-            drop = (
-                track.miss_streak >= self.profile.max_age_frames
-                or now - track.last_measured_at > self.profile.lost_keep_sec
-            )
-            if drop:
-                dropped_id = track.track_id
-                self.tracks.pop(dropped_id, None)
-                try:
-                    from .patrol.sink import forget_track
+            if not self._should_drop(track, now):
+                continue
+            dropped_id = track.track_id
+            reason = END_REASON_EXIT_EDGE if track.at_frame_edge else END_REASON_LOST
+            self.tracks.pop(dropped_id, None)
+            try:
+                from .patrol.sink import forget_track
 
-                    forget_track(self.camera_id, dropped_id, now=now)
-                except Exception:  # noqa: BLE001
-                    pass
+                forget_track(self.camera_id, dropped_id, now=now, end_reason=reason)
+            except Exception:  # noqa: BLE001
+                pass
 
         for det_index, (bbox, conf) in enumerate(detections):
             if det_index in used_dets:
@@ -480,6 +546,7 @@ class PatrolTracker:
                 last_measured_at=now,
                 confidence=conf,
                 measured_bbox=bbox,
+                at_frame_edge=self._at_frame_edge(bbox),
             )
             result[det_index] = track_id
 

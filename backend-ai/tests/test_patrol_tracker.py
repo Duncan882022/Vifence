@@ -91,22 +91,25 @@ class TestTrackStability(unittest.TestCase):
         tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
         t = 0.0
         first = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
-        t += PROFILE_BODYCAM.lost_keep_sec + 0.5
-        tracker.update([], now=t)
+        for _ in range(PROFILE_BODYCAM.max_age_frames):
+            t += PROFILE_BODYCAM.lost_keep_sec / 2
+            tracker.update([], now=t)
         t += 0.2
         again = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
         self.assertNotEqual(first, again)
 
-    def test_track_survives_crowd_occlusion(self):
-        """Che ngắn (< max_age) giữ id; che dài thì ByteTrack max_age=5 bỏ track."""
+    def test_frame_count_alone_does_not_end_a_track(self):
+        """Đủ số frame thử lại nhưng chưa hết cửa sổ chờ thì vẫn là một người.
+
+        Ở nhịp 6 FPS, 5 frame trôi qua trong 0,8 giây — người bị đồng nghiệp che
+        mất chừng đó là chuyện thường. Bỏ track ở đây là mỗi lần bị che lại đẻ
+        thêm một lượt gặp cho đúng người vẫn đang đứng trong khung.
+        """
         tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
         t = 0.0
-        for _ in range(3):
-            t += 0.17
-            first = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
+        first = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
 
-        # Che 4 frame — vẫn cùng track.
-        for _ in range(4):
+        for _ in range(PROFILE_BODYCAM.max_age_frames + 3):
             t += 0.17
             tracker.update([], now=t)
 
@@ -114,13 +117,107 @@ class TestTrackStability(unittest.TestCase):
         again = tracker.update([(_box(620, 400, 120, 300), 0.7)], now=t)[0]
         self.assertEqual(first, again)
 
-        # Che 18 frame (~3s @ 6 FPS) — max_age=5 đã drop, cấp id mới.
+    def test_track_survives_crowd_occlusion(self):
+        """Che giữa khung tới sát cửa sổ chờ vẫn giữ id; quá thì cấp id mới."""
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        for _ in range(3):
+            t += 0.17
+            first = tracker.update([(_box(600, 400, 120, 300), 0.7)], now=t)[0]
+
+        # Che ~3 giây giữa khung — vẫn cùng track.
         for _ in range(18):
+            t += 0.17
+            tracker.update([], now=t)
+
+        t += 0.17
+        again = tracker.update([(_box(620, 400, 120, 300), 0.7)], now=t)[0]
+        self.assertEqual(first, again)
+
+        # Quá cửa sổ chờ — người này coi như đã đi, người sau là lượt mới.
+        for _ in range(int(PROFILE_BODYCAM.lost_keep_sec / 0.17) + 2):
             t += 0.17
             tracker.update([], now=t)
         t += 0.17
         after_long = tracker.update([(_box(620, 400, 120, 300), 0.7)], now=t)[0]
         self.assertNotEqual(first, after_long)
+
+
+class TestFrameExit(unittest.TestCase):
+    """Ra khỏi khung là hết một lượt gặp — không chờ hết cửa sổ che."""
+
+    FRAME = (1280.0, 720.0)
+
+    def test_person_leaving_frame_ends_track_within_exit_window(self):
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        first = None
+        # Đi dần ra mép phải cho tới khi bbox chạm biên.
+        for cx in (900.0, 1050.0, 1200.0, 1260.0):
+            t += 0.17
+            first = tracker.update(
+                [(_box(cx, 400, 120, 300), 0.7)],
+                now=t,
+                frame_size=self.FRAME,
+            )[0]
+        self.assertTrue(tracker.get(first).at_frame_edge)
+
+        for _ in range(PROFILE_BODYCAM.max_age_frames):
+            t += 0.17
+            tracker.update([], now=t, frame_size=self.FRAME)
+
+        self.assertEqual(len(tracker.tracks), 0)
+
+    def test_mid_frame_loss_keeps_the_longer_window(self):
+        """Cùng số frame mất dấu, nhưng ở giữa khung thì chưa được bỏ."""
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        first = tracker.update(
+            [(_box(640, 360, 120, 300), 0.7)],
+            now=t,
+            frame_size=self.FRAME,
+        )[0]
+        self.assertFalse(tracker.get(first).at_frame_edge)
+
+        for _ in range(PROFILE_BODYCAM.max_age_frames):
+            t += 0.17
+            tracker.update([], now=t, frame_size=self.FRAME)
+
+        self.assertIn(first, tracker.tracks)
+
+    def test_new_person_at_the_same_edge_is_a_new_track(self):
+        """Người kế tiếp bước vào đúng mép vừa có người đi ra là lượt gặp khác."""
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        leaving = None
+        for cx in (1150.0, 1240.0, 1265.0):
+            t += 0.17
+            leaving = tracker.update(
+                [(_box(cx, 400, 120, 300), 0.7)],
+                now=t,
+                frame_size=self.FRAME,
+            )[0]
+
+        for _ in range(PROFILE_BODYCAM.max_age_frames):
+            t += 0.17
+            tracker.update([], now=t, frame_size=self.FRAME)
+
+        t += 0.17
+        arriving = tracker.update(
+            [(_box(1265.0, 400, 120, 300), 0.7)],
+            now=t,
+            frame_size=self.FRAME,
+        )[0]
+        self.assertNotEqual(leaving, arriving)
+
+    def test_without_frame_size_every_loss_is_treated_as_occlusion(self):
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        first = tracker.update([(_box(1265.0, 400, 120, 300), 0.7)], now=t)[0]
+        for _ in range(PROFILE_BODYCAM.max_age_frames):
+            t += 0.17
+            tracker.update([], now=t)
+        self.assertIn(first, tracker.tracks)
 
     def test_long_lost_track_rejects_different_sized_person(self):
         """Giữ track lâu hơn chỉ an toàn khi cổng siết lại theo tuổi mất dấu."""

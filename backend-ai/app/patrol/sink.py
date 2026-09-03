@@ -498,10 +498,16 @@ def record_observation(
     )
 
 
-def forget_track(camera_id: str, track_id: str, *, now: float | None = None) -> None:
+def forget_track(
+    camera_id: str,
+    track_id: str,
+    *,
+    now: float | None = None,
+    end_reason: str | None = None,
+) -> None:
     from .aggregator.engine import finalize_track
 
-    finalize_track(camera_id, track_id, now=now)
+    finalize_track(camera_id, track_id, now=now, end_reason=end_reason)
     key = _key(camera_id, track_id)
     with _lock:
         _track_watch.pop(key, None)
