@@ -48,6 +48,12 @@ export const PATROL_SITE_CORNERS: [number, number][] = [
   ],
 ]
 
+/** Bán kính nửa hình tròn 2 đầu capsule (stadium) — mép phẳng nối spine tại attach point. */
+const END_CAP_RADIUS_M = 1360
+
+/** Độ lượn bắc trục CT06 so với đường thẳng tây–đông (m). */
+const SPINE_BOW_NORTH_M = 320
+
 const CAP_RADIUS_SCALE_WEST = 0.35
 function latLngToEnu(
   lat: number,
@@ -246,26 +252,37 @@ function buildCurvedCorridorModel(): CurvedCorridorModel {
   const survey = latLngToEnu(PATROL_SURVEY_PIN[0], PATROL_SURVEY_PIN[1], refLat, refLng)
 
   const midPinch = lerpPt(pinchS, pinchN, 0.5)
+  const inwardA = normalizePt(subPt(midPinch, tipA))
+  const inwardB = normalizePt(subPt(midPinch, tipB))
+  const attachA = addPt(tipA, scalePt(inwardA, END_CAP_RADIUS_M))
+  const attachB = addPt(tipB, scalePt(inwardB, END_CAP_RADIUS_M))
+  const bowMid = addPt(lerpPt(attachA, attachB, 0.5), [0, SPINE_BOW_NORTH_M])
+
+  const surveySouthHalf = Math.hypot(southBend[0] - survey[0], southBend[1] - survey[1])
+  const surveyBulgeExtraM = 300
+  const pinchArcT = 0.587
 
   const spineControls: [number, number][] = [
-    tipA,
-    lerpPt(tipA, survey, 0.55),
-    lerpPt(survey, midPinch, 0.45),
-    lerpPt(midPinch, tipB, 0.55),
-    tipB,
+    attachA,
+    lerpPt(attachA, survey, 0.5),
+    lerpPt(survey, bowMid, 0.35),
+    lerpPt(bowMid, attachB, 0.65),
+    attachB,
   ]
   const spine = catmullRomChain(spineControls, 18)
 
   const halfSouthKeys = [
-    { t: 0, half: 1200 },
-    { t: 0.43, half: Math.hypot(southBend[0] - survey[0], southBend[1] - survey[1]) },
-    { t: 0.56, half: 1230 },
-    { t: 1, half: 1150 },
+    { t: 0, half: END_CAP_RADIUS_M },
+    { t: 0.14, half: END_CAP_RADIUS_M * 0.84 },
+    { t: 0.36, half: surveySouthHalf + surveyBulgeExtraM },
+    { t: 0.425, half: surveySouthHalf + surveyBulgeExtraM * 0.55 },
+    { t: pinchArcT, half: 1430 },
+    { t: 1, half: END_CAP_RADIUS_M },
   ]
   const halfNorthKeys = [
-    { t: 0, half: 1100 },
-    { t: 0.56, half: 1900 },
-    { t: 1, half: 1200 },
+    { t: 0, half: END_CAP_RADIUS_M * 0.96 },
+    { t: pinchArcT, half: 1820 },
+    { t: 1, half: END_CAP_RADIUS_M * 0.96 },
   ]
 
   function halfAt(keys: { t: number; half: number }[], t: number): number {
@@ -300,8 +317,8 @@ function buildCurvedCorridorModel(): CurvedCorridorModel {
     northEdge.push(addPt(spine[i], scalePt(normal, halfN)))
   }
 
-  const westCap = capArcThroughApex(tipA, southEdge[0], northEdge[0], 24)
-  const eastCap = capArcThroughApex(tipB, northEdge[n - 1], southEdge[n - 1], 24)
+  const westCap = capArcThroughApex(tipA, southEdge[0], northEdge[0], 36)
+  const eastCap = capArcThroughApex(tipB, northEdge[n - 1], southEdge[n - 1], 36)
 
   const ringEnu: [number, number][] = [
     ...westCap.slice(0, -1),

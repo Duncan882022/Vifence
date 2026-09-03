@@ -10,6 +10,11 @@ from typing import Sequence
 
 M_PER_DEG_LAT = 111_320.0
 
+END_CAP_RADIUS_M = 1360.0
+SPINE_BOW_NORTH_M = 320.0
+SURVEY_BULGE_EXTRA_M = 300.0
+PINCH_ARC_T = 0.587
+
 PATROL_SITE_TIP_A: tuple[float, float] = (20.907474, 106.830878)
 PATROL_SITE_TIP_B: tuple[float, float] = (20.962517, 106.945303)
 PATROL_SITE_PINCH_SOUTH: tuple[float, float] = (20.928673, 106.893158)
@@ -240,34 +245,42 @@ def _build_curved_corridor_model() -> tuple[
 
     tip_a = _latlng_to_enu(*PATROL_SITE_TIP_A, ref_lat, ref_lng)
     tip_b = _latlng_to_enu(*PATROL_SITE_TIP_B, ref_lat, ref_lng)
+    pinch_s = _latlng_to_enu(*PATROL_SITE_PINCH_SOUTH, ref_lat, ref_lng)
+    pinch_n = _latlng_to_enu(*PATROL_SITE_PINCH_NORTH, ref_lat, ref_lng)
     south_bend = _latlng_to_enu(*PATROL_SURVEY_SOUTH_BEND, ref_lat, ref_lng)
     survey = _latlng_to_enu(*PATROL_SITE_CENTER, ref_lat, ref_lng)
-    mid_pinch = _lerp_pt(
-        _latlng_to_enu(*PATROL_SITE_PINCH_SOUTH, ref_lat, ref_lng),
-        _latlng_to_enu(*PATROL_SITE_PINCH_NORTH, ref_lat, ref_lng),
-        0.5,
-    )
+
+    mid_pinch = _lerp_pt(pinch_s, pinch_n, 0.5)
+    inward_a = _normalize(_sub(mid_pinch, tip_a))
+    inward_b = _normalize(_sub(mid_pinch, tip_b))
+    attach_a = _add(tip_a, _scale(inward_a, END_CAP_RADIUS_M))
+    attach_b = _add(tip_b, _scale(inward_b, END_CAP_RADIUS_M))
+    bow_mid = _add(_lerp_pt(attach_a, attach_b, 0.5), (0.0, SPINE_BOW_NORTH_M))
+
+    survey_south_half = math.hypot(south_bend[0] - survey[0], south_bend[1] - survey[1])
 
     spine = _catmull_rom_chain(
         [
-            tip_a,
-            _lerp_pt(tip_a, survey, 0.55),
-            _lerp_pt(survey, mid_pinch, 0.45),
-            _lerp_pt(mid_pinch, tip_b, 0.55),
-            tip_b,
+            attach_a,
+            _lerp_pt(attach_a, survey, 0.5),
+            _lerp_pt(survey, bow_mid, 0.35),
+            _lerp_pt(bow_mid, attach_b, 0.65),
+            attach_b,
         ]
     )
 
     half_south_keys = (
-        (0.0, 1200.0),
-        (0.43, math.hypot(south_bend[0] - survey[0], south_bend[1] - survey[1])),
-        (0.56, 1230.0),
-        (1.0, 1150.0),
+        (0.0, END_CAP_RADIUS_M),
+        (0.14, END_CAP_RADIUS_M * 0.84),
+        (0.36, survey_south_half + SURVEY_BULGE_EXTRA_M),
+        (0.425, survey_south_half + SURVEY_BULGE_EXTRA_M * 0.55),
+        (PINCH_ARC_T, 1430.0),
+        (1.0, END_CAP_RADIUS_M),
     )
     half_north_keys = (
-        (0.0, 1100.0),
-        (0.56, 1900.0),
-        (1.0, 1200.0),
+        (0.0, END_CAP_RADIUS_M * 0.96),
+        (PINCH_ARC_T, 1820.0),
+        (1.0, END_CAP_RADIUS_M * 0.96),
     )
 
     south_edge: list[tuple[float, float]] = []
@@ -285,8 +298,8 @@ def _build_curved_corridor_model() -> tuple[
         south_edge.append(_add(spine[i], _scale(normal, -half_s)))
         north_edge.append(_add(spine[i], _scale(normal, half_n)))
 
-    west_cap = _cap_arc_through_apex(tip_a, south_edge[0], north_edge[0])
-    east_cap = _cap_arc_through_apex(tip_b, north_edge[-1], south_edge[-1])
+    west_cap = _cap_arc_through_apex(tip_a, south_edge[0], north_edge[0], steps=36)
+    east_cap = _cap_arc_through_apex(tip_b, north_edge[-1], south_edge[-1], steps=36)
 
     ring_enu = [
         *west_cap[:-1],
