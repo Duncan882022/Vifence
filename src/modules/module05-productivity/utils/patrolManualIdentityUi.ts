@@ -152,12 +152,17 @@ export function resolvePatrolPersonCardDisplay(event: PatrolEvent): {
     }
   }
 
+  const objectCode = resolvePatrolTechnicalObjectId(event)
+    || ([event.objectId?.trim(), event.id.match(/^obj:(.+)$/i)?.[1]?.trim()]
+      .find(v => v && isPatrolObjectId(v))
+      ?? event.objectId?.trim()
+      ?? '')
   return {
-    subjectLabel: 'Unknown',
-    title: 'Unknown',
-    subtitle: isPatrolObjectId(event.objectId ?? '') ? 'Đang quan sát' : '—',
+    subjectLabel: objectCode || '—',
+    title: objectCode || 'Đối tượng',
+    subtitle: objectCode ? 'Đang quan sát' : '—',
     unit: null,
-    workerId: display.workerId,
+    workerId: objectCode || null,
     stage,
   }
 }

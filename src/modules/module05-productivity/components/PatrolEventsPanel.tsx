@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, Loader2, MapPin, Search } from 'lucide-react'
+import { Clock, History, Loader2, MapPin, Search } from 'lucide-react'
 import { PlaybackDatePicker } from '@/components/common/CameraPlayback/PlaybackDatePicker'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
@@ -12,11 +12,17 @@ import {
   resolvePatrolEventDisplayMeta,
 } from '../utils/patrolWorkforceEventLabels'
 import { listPatrolEventsForTab, type PatrolTabCounts } from '../utils/patrolEventsTabList'
+import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
+import {
+  buildPatrolSubjectAppearanceCountLookup,
+  resolvePatrolEventAppearanceHistoryCount,
+} from '../utils/patrolSubjectAppearanceCount'
 import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSnapshot'
 
 interface PatrolEventsPanelProps {
   events: PatrolEvent[]
+  presences?: PatrolDayPresence[]
   tabCounts?: PatrolTabCounts
   viewDate: string
   onViewDateChange: (date: string) => void
@@ -110,11 +116,13 @@ function PatrolStageBadge({ event }: { event: PatrolEvent }) {
 
 function PatrolEventCard({
   event,
+  appearanceHistoryCount,
   selected,
   onSelect,
   onDetailClick,
 }: {
   event: PatrolEvent
+  appearanceHistoryCount?: number
   selected?: boolean
   onSelect?: (event: PatrolEvent) => void
   onDetailClick?: (event: PatrolEvent) => void
@@ -176,6 +184,14 @@ function PatrolEventCard({
                 {eventPlace}
               </p>
             </div>
+            {appearanceHistoryCount != null && appearanceHistoryCount > 0 && (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <History className={EVENT_CARD_META_ICON} aria-hidden />
+                <p className="text-[8px] tabular-nums text-foreground/75 truncate">
+                  {`${appearanceHistoryCount} lượt`}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -185,6 +201,7 @@ function PatrolEventCard({
 
 export function PatrolEventsPanel({
   events,
+  presences = [],
   tabCounts: tabCountsProp,
   viewDate,
   onViewDateChange,
@@ -209,6 +226,11 @@ export function PatrolEventsPanel({
     }, 300)
     return () => window.clearTimeout(timer)
   }, [searchInput])
+
+  const appearanceCountLookup = useMemo(
+    () => buildPatrolSubjectAppearanceCountLookup(presences),
+    [presences],
+  )
 
   const activeItems = useMemo(
     () => filterBySearch(filterByTab(events, filterTab), searchQuery),
@@ -343,6 +365,7 @@ export function PatrolEventsPanel({
               <PatrolEventCard
                 key={event.id}
                 event={event}
+                appearanceHistoryCount={resolvePatrolEventAppearanceHistoryCount(event, appearanceCountLookup)}
                 selected={selectedId === event.id}
                 onSelect={onSelect}
                 onDetailClick={onDetailClick}
