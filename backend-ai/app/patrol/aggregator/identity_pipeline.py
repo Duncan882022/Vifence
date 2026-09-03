@@ -137,6 +137,24 @@ def _known_face_match(
     return None, 0.0
 
 
+def _existing_tk_profile_for_worker(worker_id: str | None) -> str | None:
+    """tk/sgc trên ROI → pers_id nếu hồ sơ đã có — không tạo draft mới."""
+    wid = (worker_id or "").strip()
+    if not wid:
+        return None
+    from ...person_identity_registry import is_sgc_worker_id
+
+    if not is_sgc_worker_id(wid):
+        return None
+    from ...patrol_ids import normalize_track_id
+
+    tk = normalize_track_id(wid)
+    found = identity.lookup_bound_profile_for_tk(tk) or identity.lookup_profile_by_tk(tk)
+    if not found:
+        return None
+    return identity.resolve_alias(found)
+
+
 def resolve_subject_from_face_match(
     session: TrackSession,
     obs: ObservationInput,
@@ -188,6 +206,38 @@ def resolve_subject_from_face_match(
         "aggregator face-match assign %s track %s (skip obj create)",
         pers_id,
         session.track_id,
+    )
+    return pers_id
+
+
+def resolve_subject_from_known_tk(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    now: float,
+) -> str | None:
+    """Gán pers-* từ tk ROI khi hồ sơ đã có — camera khác, chưa kịp khớp mặt."""
+    if session.subject_id:
+        from ...patrol_ids import is_person_subject_id
+
+        if is_person_subject_id(session.subject_id):
+            return session.subject_id
+
+    pers_id = _existing_tk_profile_for_worker(obs.lifecycle_worker_id)
+    if not pers_id:
+        return None
+
+    session.identity = _map_worker_to_identity(
+        (obs.lifecycle_worker_id or "").strip(),
+        obs.confidence,
+    )
+    session.identity_resolved = True
+    session.subject_id = pers_id
+    logger.info(
+        "aggregator tk-bind assign %s track %s cam %s (skip obj create)",
+        pers_id,
+        session.track_id,
+        obs.camera_id,
     )
     return pers_id
 
@@ -263,6 +313,8 @@ def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bo
     from ...patrol_ids import is_person_subject_id
 
     if is_person_subject_id(current):
+        return True
+    if _existing_tk_profile_for_worker(obs.lifecycle_worker_id):
         return True
     return _has_face_promotion_evidence(session, obs)
 

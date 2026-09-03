@@ -159,6 +159,57 @@ class GalleryDraftMatchTests(unittest.TestCase):
         self.assertEqual(len(persons), 1)
         self.assertEqual(persons[0].get("pers_id"), "tk-0000001")
 
+    def test_cross_camera_tk_bind_upserts_card_without_face(self) -> None:
+        """tk đã gặp HC-01 — xuất hiện HC-02 (ROI tk, chưa mặt) vẫn upsert thẻ Người."""
+        from unittest.mock import patch
+
+        from app.patrol.aggregator.identity_pipeline import resolve_subject_from_known_tk
+
+        daystore.touch_person_event(
+            "tk-0000001",
+            camera_id="HC-01",
+            snapshot_path="2026-09-03/tk-0000001.jpg",
+            snapshot_score=1.2,
+            face_eligible=True,
+            now=1_000.0,
+        )
+        session = TrackSession(
+            camera_id="HC-02",
+            track_id="ptk-hc02",
+            zone_id=None,
+            started_at=2_000.0,
+            last_seen_at=2_010.0,
+        )
+        obs = ObservationInput(
+            camera_id="HC-02",
+            track_id="ptk-hc02",
+            ts=2_010.0,
+            face_eligible=False,
+            confidence=0.9,
+            lifecycle_tier="person",
+            lifecycle_worker_id="sgc-0000001",
+            person_bbox=(100.0, 80.0, 220.0, 400.0),
+        )
+        pers = resolve_subject_from_known_tk(session, obs, now=2_010.0)
+        self.assertEqual(pers, "tk-0000001")
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, 2_010.0),
+        ), patch(
+            "app.patrol.aggregator.flush._write_snapshot",
+            return_value=(None, 0.0),
+        ):
+            flush_session(session, obs)
+        cards = daystore.list_person_events(db.today_vn(2_000.0))
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["pers_id"], "tk-0000001")
+        self.assertEqual(cards[0]["last_seen"], 2_010.0)
+        objs = daystore.list_objects(db.today_vn(2_000.0))
+        self.assertEqual(len(objs), 0)
+        hist = daystore.list_appearances("tk-0000001", db.today_vn(2_000.0))
+        self.assertIn("HC-01", hist["by_camera"])
+        self.assertIn("HC-02", hist["by_camera"])
+
 
 def _nudge(base: list[float], scale: float) -> list[float]:
     arr = np.asarray(base, dtype=np.float32) * scale
