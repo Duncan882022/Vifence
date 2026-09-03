@@ -453,6 +453,66 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         # ended_at = lần quan sát cuối, không kéo tới lúc finalize muộn.
         self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 14.5, places=3)
 
+    def test_standing_person_does_not_overwrite_card_snapshot(self) -> None:
+        """Còn trong khung — upsert last_seen, không ghi đè ảnh thẻ mỗi flush."""
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.engine import ingest_observation, finalize_track
+
+        ts = 5_500.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
+            return_value="tk-0000002",
+        ), patch(
+            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
+            return_value=PersonIdentity(
+                person_id="sgc-7003",
+                identity_type=IdentityType.ANONYMOUS,
+                confidence=0.9,
+            ),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000002.jpg",
+        ) as write_mock:
+            identity.ensure_draft_for_tk("tk-0000002", now=ts)
+            for i in range(40):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-stand-face",
+                    now=ts + i * 0.5,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="sgc-7003",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    frame=frame,
+                    person_bbox=(100.0, 80.0, 220.0, 400.0),
+                )
+
+        finalize_track("HC-01", "ptk-stand-face", now=ts + 25.0)
+        pers_id = identity.resolve_alias("tk-0000002")
+        card = db.query_one(
+            "SELECT snapshot_path, snapshot_score, last_seen FROM daily_events"
+            " WHERE event_date = ? AND pers_id = ?",
+            (db.today_vn(ts), pers_id),
+        )
+        self.assertEqual(card["snapshot_path"], "2026-09-03/tk-0000002.jpg")
+        self.assertGreaterEqual(
+            float(card["snapshot_score"]),
+            daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
+        )
+        self.assertGreater(float(card["last_seen"]), ts)
+        # Một lượt, một JPG — không chụp lại sau khi thẻ đã có ảnh mặt.
+        self.assertEqual(write_mock.call_count, 1)
+        self.assertEqual(len(daystore.list_day_presences(db.today_vn(ts))), 1)
+
     def test_dwell_gate_retries_until_committed(self) -> None:
         """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được."""
         from unittest.mock import patch
