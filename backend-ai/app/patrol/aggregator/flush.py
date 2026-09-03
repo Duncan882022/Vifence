@@ -297,9 +297,14 @@ def flush_session(
         # Một track = một lượt gặp = một thẻ. Khớp mặt trước khi tạo obj-* mới
         # để không sinh thẻ Đối tượng trùng tk-* đã có trong gallery/SQLite.
         # Không mượn thẻ track song song — suy đoán bbox/thời gian dễ gộp nhầm hai người.
-        from .identity_pipeline import resolve_subject_from_face_match
+        from .identity_pipeline import (
+            resolve_subject_from_face_match,
+            resolve_subject_from_known_tk,
+        )
 
         face_pers = resolve_subject_from_face_match(session, obs, now=now)
+        if not face_pers:
+            face_pers = resolve_subject_from_known_tk(session, obs, now=now)
         if face_pers:
             session.subject_id = face_pers
             link_subject_session(session)
