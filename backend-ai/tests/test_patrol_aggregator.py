@@ -84,6 +84,11 @@ class AggregatorReIdTest(unittest.TestCase):
         )
         self.assertIsNotNone(reclaimed)
         self.assertEqual(reclaimed.session_id, "sess-cross-1")
+        s2 = get_or_create("HC-02", "ptk-b", ts=140.0, face_embedding=emb)
+        apply_reclaim(s2, reclaimed, now=140.0)
+        self.assertEqual(s2.subject_id, "pers-0001")
+        self.assertNotEqual(s2.session_id, "sess-cross-1")
+        self.assertIsNone(s2.appearance_row_id)
         reset()
 
     def test_reclaim_after_long_gap_keeps_identity_not_appearance(self) -> None:

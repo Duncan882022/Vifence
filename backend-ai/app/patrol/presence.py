@@ -69,6 +69,11 @@ def should_extend_presence(
     if gap > t_max:
         return False
 
+    prev_cam = str(row["camera_id"] or "")
+    # Mỗi camera = một dòng lịch sử — không gộp HC-01 ↔ HC-02 dù cùng GPS.
+    if prev_cam and camera_id and prev_cam != camera_id:
+        return False
+
     last_lat, last_lng = _gps_pair(row)
     has_current = (
         gps_lat is not None

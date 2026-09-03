@@ -142,7 +142,8 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None =
     gap = ts - float(slot.last_seen)
     from ..presence import GAP_FALLBACK_SEC
 
-    same_encounter = gap <= GAP_FALLBACK_SEC
+    cross_camera = (session.camera_id or "").strip() != (slot.camera_id or "").strip()
+    same_encounter = gap <= GAP_FALLBACK_SEC and not cross_camera
     session.subject_id = slot.subject_id
     session.identity_resolved = slot.identity_resolved
     session.identity = slot.identity
