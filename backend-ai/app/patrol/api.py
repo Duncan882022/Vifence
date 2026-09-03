@@ -333,8 +333,15 @@ def patrol_runtime(_user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: 
 
 @router.get("/day/stats")
 def day_stats(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
-    """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
+    """KPI đếm chuẩn — Nhân sự · Lượt gặp Đối tượng · số đo tự hiệu chỉnh."""
     return {"ok": True, **daystore.day_stats(date)}
+
+
+@router.get("/day/sightings")
+def day_sightings(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    """Sổ cái lượt gặp trong ngày — dựng lại con số KPI từ từng dòng."""
+    d = date or db.today_vn()
+    return {"ok": True, "date": d, "items": daystore.list_sightings(d)}
 
 
 @router.get("/day/presences")
@@ -360,13 +367,16 @@ def day_appearances(
 
 @router.get("/day/bundle")
 def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
-    """Gộp stats + events + objects + presences — một transaction đọc."""
+    """Gộp stats + events + objects + presences — một transaction chỉ đọc.
+
+    Không sửa dữ liệu ở đây. Trước đây endpoint này chạy promote + coalesce
+    xen giữa lúc tính KPI và lúc đọc danh sách, nên cùng một phản hồi mô tả hai
+    trạng thái khác nhau: số trên thẻ KPI không khớp số dòng ngay bên dưới.
+    """
     d = date or db.today_vn()
     with db.tx() as conn:
-        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("BEGIN")
         stats = daystore.day_stats(d)
-        daystore.promote_objects_with_face_snapshot(d)
-        daystore.coalesce_parallel_object_cards(d)
         events = daystore.list_person_events(d)
         objects = daystore.list_objects(d)
         presences = daystore.list_day_presences(d)
@@ -715,27 +725,6 @@ def repair_appearances(
         out = {"ok": True, "days": repair_recent_appearance_history(max(1, min(days, 14)))}
     audit("appearance_repair", actor=user.username, meta={"date": date, "days": days})
     return out
-
-
-@router.post("/admin/coalesce-object-cards")
-def coalesce_object_cards_admin(
-    date: str | None = None,
-    user: RequirePatrolAdmin = None,  # noqa: ARG001
-) -> dict[str, Any]:
-    """Gộp thẻ obj trùng lượt (2 ByteTrack song song) — vd. 0071 + 0072."""
-    merged = daystore.coalesce_parallel_object_cards(date)
-    promoted = daystore.promote_objects_with_face_snapshot(date)
-    audit(
-        "object_cards_coalesce",
-        actor=user.username,
-        meta={"date": date, "merged": merged, "promoted": promoted},
-    )
-    return {
-        "ok": True,
-        "merged": merged,
-        "promoted": promoted,
-        "date": date or db.today_vn(),
-    }
 
 
 @router.post("/admin/reset-all")

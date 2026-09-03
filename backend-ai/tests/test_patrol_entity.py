@@ -102,14 +102,16 @@ class PatrolEntityTkCanonicalTests(unittest.TestCase):
                         )
         with patch("app.patrol_identity_store._load", return_value=bindings):
             with patch("app.patrol_identity_store._gallery_binding_has_hr", return_value=False):
-                with patch("app.patrol_identity_store.lookup_gallery_worker", return_value=None):
+                with patch(
+                    "app.patrol_identity_store.lookup_gallery_worker_raw", return_value=None,
+                ):
                     self.assertEqual(patrol_tier_label("tk-0000001"), "person")
                     self.assertIsNone(resolve_patrol_gallery_id_for_worker("tk-0000001"))
 
     def test_patrol_tier_label_tk_is_person(self) -> None:
         self.assertEqual(patrol_tier_label("tk-00000042"), "person")
 
-    @patch("app.patrol_identity_store.lookup_gallery_worker", return_value="p-IDEN3")
+    @patch("app.patrol_identity_store.lookup_gallery_worker_raw", return_value="p-IDEN3")
     def test_patrol_tier_label_gallery_alias_is_identity(self, _lookup: object) -> None:
         self.assertEqual(patrol_tier_label("tk-0000003"), "identity")
 

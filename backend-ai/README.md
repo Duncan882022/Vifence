@@ -48,6 +48,14 @@ cp .env.example .env             # sửa CAMERA_SOURCE nếu cần
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Chạy test thì cài thêm phần dành riêng cho test — để ngoài `requirements.txt`
+vì máy chủ cài thẳng từ file đó lúc deploy:
+
+```bash
+pip install -r requirements-dev.txt
+npm run test:backend             # = python3 -m pytest tests
+```
+
 Mở trình duyệt: **http://localhost:8000** — sẽ thấy webcam live + bbox detect
 theo thời gian thực, sự kiện đã xác nhận hiện ở sidebar bên phải.
 

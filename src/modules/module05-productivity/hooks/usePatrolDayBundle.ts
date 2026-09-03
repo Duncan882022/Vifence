@@ -30,9 +30,13 @@ const EMPTY_STATS: PatrolDayStats = {
   personCount: 0,
   identityCount: 0,
   objectCount: 0,
+  promotedObjectCount: 0,
   objectEncounterCount: 0,
   encountersStandard: 0,
   unassignedObservations: 0,
+  sightingsStreamOffline: 0,
+  sightingsTotal: 0,
+  sightingsUnqualified: 0,
 }
 
 function isoFrom(sec: number): string {

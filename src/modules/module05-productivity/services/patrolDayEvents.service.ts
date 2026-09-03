@@ -89,12 +89,26 @@ export interface PatrolDayStats {
   identityCount: number
   /** Thẻ tab Đối tượng — đồng bộ overlay heatmap (entity có snapshot). */
   objectCount: number
-  /** Lượt gặp obj-* qualified — KPI «Lượt gặp · Đối tượng». */
+  /** Thẻ Đối tượng đã bắt được mặt và chuyển sang tab Người. */
+  promotedObjectCount: number
+  /**
+   * Lượt gặp Đối tượng — một track từ lúc vào khung tới lúc ra là một lượt.
+   *
+   * Cố tình lớn hơn số người có mặt: Đối tượng không có tiêu chí trùng khớp
+   * nên hai lần nhìn thấy không cách nào biết là một người hay hai. Nhiều mũ
+   * cùng thấy một người cũng là nhiều lượt.
+   */
   objectEncounterCount?: number
   /** @deprecated Không hiển thị Tier1 — xem popup Lịch sử xuất hiện. */
   encountersStandard: number
   /** Backend alias — trùng objectEncounterCount. */
   unassignedObservations: number
+  /** Lượt đóng vì mất tín hiệu — nguồn chập chờn, không nói gì về công trường. */
+  sightingsStreamOffline: number
+  /** Mọi dòng sổ cái, gồm cả lượt chưa chốt được thẻ. */
+  sightingsTotal: number
+  /** Track bám được mà không chốt nổi thẻ — phần hệ thống đang bỏ sót. */
+  sightingsUnqualified: number
 }
 
 export interface PatrolDayBundle {
@@ -274,15 +288,22 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
   }))
 
   const statsRow = data.stats ?? {}
+  const objectSightings = Number(
+    statsRow.object_sighting_count ?? statsRow.unassigned_observations ?? 0,
+  )
   const stats: PatrolDayStats = {
     date: data.date,
     workersStandard: Number(statsRow.workers_standard ?? 0),
     personCount: Number(statsRow.person_count ?? 0),
     identityCount: Number(statsRow.identity_count ?? 0),
     objectCount: Number(statsRow.object_card_count ?? 0),
-    objectEncounterCount: Number(statsRow.unassigned_observations ?? 0),
+    promotedObjectCount: Number(statsRow.promoted_object_count ?? 0),
+    objectEncounterCount: objectSightings,
     encountersStandard: Number(statsRow.encounters_standard ?? 0),
-    unassignedObservations: Number(statsRow.unassigned_observations ?? 0),
+    unassignedObservations: objectSightings,
+    sightingsStreamOffline: Number(statsRow.sightings_stream_offline ?? 0),
+    sightingsTotal: Number(statsRow.sightings_total ?? 0),
+    sightingsUnqualified: Number(statsRow.sightings_unqualified ?? 0),
   }
 
   return {

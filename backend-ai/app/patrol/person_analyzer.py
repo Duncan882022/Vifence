@@ -80,23 +80,28 @@ def assign_patrol_track_ids(
     (cách cũ) khiến người vào sau cướp track của người kia tuỳ thứ tự YOLO trả về.
 
     Có `frame` thì ước lượng luôn dịch chuyển của cả khung hình, để tracker
-    phân biệt "người đi" với "người đeo lia mũ".
+    phân biệt "người đi" với "người đeo lia mũ", và biết cỡ khung để nhận ra
+    bbox nào đang dính biên — track dính biên rồi mất dấu là người đã đi ra.
     """
     if not _is_helmet_bodycam(camera_id) and not _is_patrol_flycam(camera_id):
         return [None] * len(person_boxes)
     from ..patrol_tracker import get_patrol_tracker
 
     shift = (0.0, 0.0)
+    frame_size: tuple[float, float] | None = None
     if frame is not None:
         from .egomotion import estimate_shift
 
         shift = estimate_shift(camera_id, frame)
+        h, w = frame.shape[:2]
+        frame_size = (float(w), float(h))
 
     tracker = get_patrol_tracker(camera_id)
     return tracker.update(
         [(tuple(float(v) for v in box), float(conf)) for box, conf in person_boxes],
         now=now if now is not None else time.time(),
         camera_shift=shift,
+        frame_size=frame_size,
     )
 
 

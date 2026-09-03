@@ -21,6 +21,14 @@ logger = logging.getLogger("patrol.aggregator.flush")
 FLUSH_MIN_INTERVAL_SEC = 10.0
 APPEARANCE_WRITE_MIN_INTERVAL_SEC = 2.0
 
+# Track chưa lên được thẻ mà ngắn hơn ngần này thì không ghi vào sổ cái.
+#
+# Sổ cái giữ cả lượt hỏng để đo phần hệ thống nhìn thấy nhưng không chốt được.
+# Nhưng một hộp nhấp nháy hai frame rồi biến mất là nhiễu của bộ phát hiện chứ
+# không phải người bị bỏ sót; đưa vào thì tỉ lệ chốt được trông như thảm hoạ
+# trong khi thực tế chẳng bỏ sót ai.
+UNQUALIFIED_SIGHTING_MIN_SEC = 1.0
+
 
 def _frame_size_from_obs(obs: ObservationInput) -> tuple[int, int]:
     if obs.frame is not None:
@@ -182,7 +190,7 @@ def flush_session(
     finalize: bool = False,
 ) -> None:
     """INSERT/UPDATE aggregated appearance + card ngoài (throttled)."""
-    from .session_store import link_subject_session, resolve_parallel_object_subject
+    from .session_store import link_subject_session
 
     if not _needs_flush(session, finalize=finalize):
         return
@@ -199,7 +207,12 @@ def flush_session(
     if session.subject_id is None:
         has_face = bool(session.best_faces) or obs.face_eligible
         ok, _anchor = _gate_observation_commit(key, has_face=has_face, now=now)
-        if not ok and not finalize:
+        if not ok:
+            # Trước đây finalize được miễn cổng dwell. Khi một track là một lượt
+            # gặp thì miễn ở đây nghĩa là mọi hộp nhấp nháy vài trăm mili giây
+            # của YOLO đều thành một thẻ và một lượt — bộ đếm phản ánh độ nhiễu
+            # của bộ phát hiện chứ không phản ánh công trường. Track quá ngắn
+            # vẫn vào sổ cái ở dạng chưa chốt được, không mất dấu vết.
             return
         if (
             obs.person_bbox is not None
@@ -207,44 +220,24 @@ def flush_session(
         ):
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
-        from .session_store import (
-            borrow_overlapping_person_subject,
-            link_subject_session,
-            resolve_parallel_object_subject,
-        )
+        from .session_store import link_subject_session
 
-        event_date = db.today_vn(now)
-        person_parallel = borrow_overlapping_person_subject(
-            session.camera_id,
-            now,
-            bbox=obs.person_bbox,
+        # Một track = một lượt gặp = một thẻ Đối tượng. Không mượn thẻ của track
+        # đang chạy song song: đối tượng không có tiêu chí định danh nên mọi phép
+        # gộp ở đây đều là suy đoán từ bbox/thời gian, và suy đoán sai thì hai
+        # người thành một. Thà đếm dư lượt còn hơn dồn nhầm người.
+        obj_id = daystore.touch_object(
+            None,
+            camera_id=session.camera_id,
+            zone_id=session.zone_id,
+            now=now,
+            seen_since=session.started_at if session.last_flush_at <= 0 else None,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            skip_appearance=True,
         )
-        parallel = None if person_parallel else resolve_parallel_object_subject(
-            session.camera_id,
-            session.started_at,
-            now,
-            event_date,
-            bbox=obs.person_bbox,
-        )
-        if person_parallel:
-            session.subject_id = person_parallel
-            link_subject_session(session)
-        elif parallel:
-            session.subject_id = parallel
-            link_subject_session(session)
-        else:
-            obj_id = daystore.touch_object(
-                None,
-                camera_id=session.camera_id,
-                zone_id=session.zone_id,
-                now=now,
-                seen_since=session.started_at if session.last_flush_at <= 0 else None,
-                gps_lat=gps_lat,
-                gps_lng=gps_lng,
-                skip_appearance=True,
-            )
-            session.subject_id = obj_id
-            link_subject_session(session)
+        session.subject_id = obj_id
+        link_subject_session(session)
 
     subject_id = session.subject_id
     if not subject_id:
@@ -384,6 +377,7 @@ def flush_session(
         interactions_json=interactions_json,
         snapshot_path=path,
         counted=session.counted,
+        end_reason=session.end_reason if finalize else None,
         finalize=finalize,
     )
     session.appearance_row_id = row_id
@@ -405,13 +399,42 @@ def flush_session(
         )
 
 
+def _record_sighting(session: TrackSession) -> None:
+    """Chốt một dòng sổ cái cho track vừa đóng."""
+    if not session.session_id:
+        return
+    qualified = bool(session.committed and session.subject_id)
+    if not qualified and session.duration_seconds < UNQUALIFIED_SIGHTING_MIN_SEC:
+        return
+    from ...patrol_tracker import END_REASON_LOST
+
+    daystore.record_sighting(
+        event_date=db.today_vn(session.started_at or session.last_seen_at),
+        subject_id=session.subject_id or "",
+        camera_id=session.camera_id,
+        zone_id=session.zone_id,
+        track_id=session.track_id,
+        session_id=session.session_id,
+        started_at=session.started_at or session.last_seen_at,
+        ended_at=session.last_seen_at,
+        end_reason=session.end_reason or END_REASON_LOST,
+        qualified=qualified,
+        appearance_id=session.appearance_row_id,
+        now=session.last_seen_at,
+    )
+
+
 def finalize_session(session: TrackSession) -> None:
     """Đóng session khi ByteTrack mất track."""
+    # Mang theo bbox cuối cùng: thiếu nó thì cổng chặn vật tĩnh không có gì để
+    # xét, và một cái cột giàn giáo bị YOLO gọi là người suốt buổi — bị chặn ở
+    # mọi lần ghi trước đó — lại lọt thành thẻ đúng lúc chốt track.
     fallback = ObservationInput(
         camera_id=session.camera_id,
         track_id=session.track_id,
         ts=session.last_seen_at,
         zone_id=session.zone_id,
+        person_bbox=session.bbox,
     )
     obs = session.best_observation if (
         session.best_observation is not None
@@ -419,6 +442,12 @@ def finalize_session(session: TrackSession) -> None:
     ) else fallback
     session.dirty = True
     flush_session(session, obs, finalize=True)
+    try:
+        _record_sighting(session)
+    except Exception:  # noqa: BLE001
+        # Sổ cái là số liệu, không phải đường ghi sự kiện. Hỏng ở đây không
+        # được kéo theo việc chốt track.
+        logger.exception("[patrol] không ghi được lượt gặp %s", session.session_id)
     logger.debug(
         "finalized track %s subject %s duration %.1fs interactions %d",
         session.track_id,

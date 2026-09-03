@@ -1,0 +1,10 @@
+# Phụ thuộc chỉ dùng để chạy test — KHÔNG gộp vào requirements.txt.
+#
+# Máy chủ Contabo cài thẳng từ requirements.txt lúc deploy, nên mọi thứ thêm vào
+# đó đều chạy trên production. Bộ test không có việc gì ở đó.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8.0
+httpx>=0.27  # fastapi.testclient

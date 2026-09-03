@@ -139,11 +139,17 @@ function PatrolKPIs({
       ? 'Thiết bị online — chờ xác nhận phủ khu'
       : 'Chưa có thiết bị tuần tra online'
 
+  // Không phải số người. Một người đi qua ba camera là ba lượt, đi ra rồi quay
+  // lại là hai lượt — Đối tượng chưa có định danh nên không gộp được lượt nào
+  // với lượt nào. Nhãn phải nói đúng như vậy, nếu không người đọc sẽ trừ nó
+  // với Nhân sự để ra "số người chưa nhận diện", mà phép trừ đó vô nghĩa.
   const objectEncounterDetail = peakTimeActive
-    ? 'Peak time — snapshot nhóm 1 thẻ; lượt gặm đếm đủ từng ĐT'
-    : objectEncounters > 0
-      ? 'Silhouette chưa gán danh tính — không tính Nhân sự'
-      : 'Chưa ghi nhận lượt gặp Đối tượng'
+    ? 'Peak time — mỗi lần vào khung một lượt, không gộp'
+    : stats.sightingsStreamOffline > 0
+      ? `Mỗi lần vào khung một lượt · ${stats.sightingsStreamOffline} lượt do mất tín hiệu`
+      : objectEncounters > 0
+        ? 'Mỗi lần vào khung một lượt — không phải số người'
+        : 'Chưa ghi nhận lượt gặp Đối tượng'
 
   const flymapDetail = !dr03Online
     ? 'Flycam chưa online'

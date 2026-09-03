@@ -106,14 +106,36 @@ class PresenceDbTest(unittest.TestCase):
         self.assertIn("HC-02", hist["segments"][0]["source_cameras"])
 
     def test_obj_unassigned_separate_kpi(self) -> None:
-        daystore.touch_object(
+        """Thẻ Đối tượng đếm riêng, và không cộng vào bộ đếm Nhân sự."""
+        date = db.today_vn(4_000.0)
+        obj_id = daystore.touch_object(
             None, camera_id="HC-01", now=4_000.0,
             gps_lat=10.772100, gps_lng=106.659200,
             snapshot_path="back.jpg",
             snapshot_score=0.5,
         )
-        stats = daystore.day_stats(db.today_vn(4_000.0))
+        # Lượt gặp chỉ được chốt khi track đóng lại — thẻ mở ra chưa phải một lượt.
+        stats = daystore.day_stats(date)
+        self.assertEqual(stats["object_card_count"], 1)
+        self.assertEqual(stats["object_sighting_count"], 0)
+
+        daystore.record_sighting(
+            event_date=date,
+            subject_id=obj_id,
+            camera_id="HC-01",
+            zone_id=None,
+            track_id="ptk0001:person",
+            session_id="sess-HC-01-a",
+            started_at=4_000.0,
+            ended_at=4_010.0,
+            end_reason="exit_edge",
+            qualified=True,
+            now=4_010.0,
+        )
+
+        stats = daystore.day_stats(date)
         self.assertEqual(stats["unassigned_observations"], 1)
+        self.assertEqual(stats["object_sighting_count"], 1)
         self.assertEqual(stats["encounters_standard"], 0)
         self.assertEqual(stats["workers_standard"], 0)
         self.assertEqual(stats["object_card_count"], 1)

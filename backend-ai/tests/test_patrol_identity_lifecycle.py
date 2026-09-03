@@ -2,6 +2,8 @@
 
 import unittest
 
+from patrol_gallery_stub import FakeGalleryMixin
+
 from app import patrol_identity_lifecycle as lifecycle
 from app.patrol_identity_lifecycle import (
     TIER_IDENTITY,
@@ -20,8 +22,13 @@ TRACK = "ptk0001:person"
 STEP = lifecycle._OBSERVE_DEDUPE_SEC * 2
 
 
-class TestTierPromotion(unittest.TestCase):
+class _FakeGalleryMixin(FakeGalleryMixin):
+    hr_profiles = {"p-102": "Nguyễn Văn A", "p-777": "Trần Văn B"}
+
+
+class TestTierPromotion(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_starts_as_object_without_id(self):
@@ -54,8 +61,9 @@ class TestTierPromotion(unittest.TestCase):
         self.assertIsNotNone(second.transition)
 
 
-class TestNoDemotion(unittest.TestCase):
+class TestNoDemotion(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_person_never_falls_back_to_object(self):
@@ -84,8 +92,9 @@ class TestNoDemotion(unittest.TestCase):
         self.assertEqual(got.worker_name, "Nguyễn Văn A")
 
 
-class TestIdentitySwitch(unittest.TestCase):
+class TestIdentitySwitch(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_name_does_not_flip_on_single_bad_match(self):
@@ -111,8 +120,9 @@ class TestIdentitySwitch(unittest.TestCase):
         self.assertEqual(got.worker_name, "Trần Văn B")
 
 
-class TestDedupeAndIsolation(unittest.TestCase):
+class TestDedupeAndIsolation(_FakeGalleryMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         reset()
 
     def test_same_frame_observed_twice_counts_once(self):

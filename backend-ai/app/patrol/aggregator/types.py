@@ -78,6 +78,11 @@ class TrackSession:
     best_observation_score: float = 0.0
     interactions: list[InteractionRecord] = field(default_factory=list)
 
+    # Vì sao track kết thúc — `exit_edge` / `lost` / `stream_offline`. Số lượt
+    # gặp chỉ đọc được khi biết lượt nào đóng vì người đi khỏi khung và lượt nào
+    # đóng vì mất tín hiệu: nguồn chập chờn đẻ ra lượt mới mỗi lần nối lại.
+    end_reason: str | None = None
+
     appearance_row_id: int | None = None
     # Một lượt trong khung = một JPG — không chụp lại mỗi flush/track frame.
     luot_snapshot_captured: bool = False
