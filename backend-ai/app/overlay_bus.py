@@ -62,7 +62,16 @@ def notify(camera_id: str) -> None:
 
 
 def subscribe(camera_id: str) -> asyncio.Event:
+    global _loop
     event = asyncio.Event()
+    # Có subscriber tức là đang chạy trong event loop. Tự ghi nhận loop ở đây để
+    # bus vẫn đánh thức được kể cả khi bind_event_loop chưa kịp gọi lúc startup —
+    # thiếu bước đó thì WS chỉ nhận overlay mới mỗi nhịp heartbeat 10 giây.
+    if _loop is None or _loop.is_closed():
+        try:
+            _loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
     with _lock:
         _subscribers.setdefault(camera_id, set()).add(event)
     return event
