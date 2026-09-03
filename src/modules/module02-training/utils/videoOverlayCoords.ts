@@ -216,16 +216,12 @@ export function mapBackendBboxToOverlay(
     y2 *= sy
   }
 
-  const visible = getVisibleVideoSourceRect(video, fit, objectPosition, intrinsicFallback)
-  const scaleX = displayW > 0 ? visible.width / displayW : 1
-  const scaleY = displayH > 0 ? visible.height / displayH : 1
+  // Bbox đã ở hệ toạ độ khung hình đầy đủ. `mapVideoRectToOverlay` tự cắt phần
+  // bị `object-cover` che qua offset âm, nên không được ép bbox vào vùng còn
+  // nhìn thấy trước: làm vậy là chiếu hai lần, hộp co dần về tâm và lệch càng
+  // nhiều khi vật ở gần mép.
   return mapVideoRectToOverlay(
-    {
-      x: visible.x + x1 * scaleX,
-      y: visible.y + y1 * scaleY,
-      width: (x2 - x1) * scaleX,
-      height: (y2 - y1) * scaleY,
-    },
+    { x: x1, y: y1, width: x2 - x1, height: y2 - y1 },
     video,
     fit,
     objectPosition,
