@@ -234,6 +234,8 @@ function pointAtArcU(table: ArcLengthTable, u: number): [number, number] {
 
 interface CurvedCorridorModel {
   ring: [number, number][]
+  westCapRing: [number, number][]
+  eastCapRing: [number, number][]
   southTable: ArcLengthTable
   northTable: ArcLengthTable
   refLat: number
@@ -320,6 +322,9 @@ function buildCurvedCorridorModel(): CurvedCorridorModel {
   const westCap = capArcThroughApex(tipA, southEdge[0], northEdge[0], 36)
   const eastCap = capArcThroughApex(tipB, northEdge[n - 1], southEdge[n - 1], 36)
 
+  const westCapRing = westCap.map(([e, nIdx]) => enuToLatLng(e, nIdx, refLat, refLng))
+  const eastCapRing = eastCap.map(([e, nIdx]) => enuToLatLng(e, nIdx, refLat, refLng))
+
   const ringEnu: [number, number][] = [
     ...westCap.slice(0, -1),
     ...northEdge.slice(1, -1),
@@ -334,6 +339,8 @@ function buildCurvedCorridorModel(): CurvedCorridorModel {
 
   return {
     ring,
+    westCapRing,
+    eastCapRing,
     southTable: buildArcLengthTable(southEdge),
     northTable: buildArcLengthTable(northEdge),
     refLat,
@@ -360,6 +367,60 @@ export function patrolSitePoint(u: number, v: number): [number, number] {
     CORRIDOR_MODEL.refLat,
     CORRIDOR_MODEL.refLng,
   )
+}
+
+/**
+ * Polygon khu đầu capsule — K1/K7 gồm cả nửa hình tròn bo tròn A/B.
+ * @param end 'west' = Khu 1, 'east' = Khu 7
+ * @param uDivider u của đường chia khu (1/7 hoặc 6/7)
+ */
+export function buildPatrolCapInclusiveZonePolygon(
+  end: 'west' | 'east',
+  uDivider: number,
+  edgeSamples = 16,
+): [number, number][] {
+  const cap = end === 'west' ? CORRIDOR_MODEL.westCapRing : CORRIDOR_MODEL.eastCapRing
+
+  const divider: [number, number][] = []
+  for (let i = 0; i <= edgeSamples; i += 1) {
+    divider.push(patrolSitePoint(uDivider, i / edgeSamples))
+  }
+
+  const northRun: [number, number][] = []
+  const southRun: [number, number][] = []
+
+  if (end === 'west') {
+    for (let i = 0; i <= edgeSamples; i += 1) {
+      const u = uDivider * (1 - i / edgeSamples)
+      northRun.push(patrolSitePoint(u, 1))
+    }
+    for (let i = 0; i <= edgeSamples; i += 1) {
+      const u = (uDivider * i) / edgeSamples
+      southRun.push(patrolSitePoint(u, 0))
+    }
+    const capWestToEast = [...cap].reverse()
+    return [
+      ...divider,
+      ...northRun.slice(1),
+      ...capWestToEast.slice(1),
+      ...southRun.slice(1),
+    ]
+  }
+
+  for (let i = 0; i <= edgeSamples; i += 1) {
+    const u = uDivider + (1 - uDivider) * (i / edgeSamples)
+    northRun.push(patrolSitePoint(u, 1))
+  }
+  for (let i = 0; i <= edgeSamples; i += 1) {
+    const u = uDivider + (1 - uDivider) * (i / edgeSamples)
+    southRun.push(patrolSitePoint(u, 0))
+  }
+  return [
+    ...divider,
+    ...northRun.slice(1),
+    ...cap.slice(1),
+    ...southRun.slice(1).reverse(),
+  ]
 }
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */

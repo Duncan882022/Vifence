@@ -5,6 +5,7 @@
  */
 
 import {
+  buildPatrolCapInclusiveZonePolygon,
   clipPolygonToSiteBoundary,
   isPointInSiteBoundary,
   PATROL_SITE_BOUNDARY_RING,
@@ -128,9 +129,21 @@ function buildGpsZone(
   }
 }
 
-/** 7 khu bằng nhau dọc CT06 (tây → đông). */
+/** 7 khu bằng nhau dọc CT06 (tây → đông). K1/K7 bao trọn cap bo tròn 2 đầu. */
 const ZONE_COUNT = 7
 const ZONE_U_SPLITS = Array.from({ length: ZONE_COUNT + 1 }, (_, i) => i / ZONE_COUNT)
+
+function buildZoneRawPolygon(zoneIndex: number): [number, number][] {
+  const u0 = ZONE_U_SPLITS[zoneIndex - 1]
+  const u1 = ZONE_U_SPLITS[zoneIndex]
+  if (zoneIndex === 1) {
+    return buildPatrolCapInclusiveZonePolygon('west', u1)
+  }
+  if (zoneIndex === ZONE_COUNT) {
+    return buildPatrolCapInclusiveZonePolygon('east', u0)
+  }
+  return siteCell(u0, u1, 0, 1)
+}
 
 export const PATROL_SITE_AREA_M2 = 19_000_000
 
@@ -149,7 +162,7 @@ export const PATROL_GPS_ZONES: PatrolGpsZone[] = ZONE_DEFS.map((def, idx) =>
     def.id,
     def.name,
     def.shortName,
-    siteCell(ZONE_U_SPLITS[idx], ZONE_U_SPLITS[idx + 1], 0, 1),
+    buildZoneRawPolygon(idx + 1),
     Math.round(PATROL_SITE_AREA_M2 / ZONE_COUNT),
     'primary',
     def.color,

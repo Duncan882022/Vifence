@@ -7,6 +7,7 @@ import {
   PATROL_SITE_TIP_B,
   PATROL_SURVEY_PIN,
   isPointInSiteBoundary,
+  patrolSitePoint,
 } from '../data/patrolSiteGeometry'
 import {
   PATROL_GPS_ZONES,
@@ -22,6 +23,18 @@ import {
 
 function minDistToRing(lat: number, lng: number, ring: [number, number][]): number {
   return Math.min(...ring.map(([la, ln]) => Math.hypot(la - lat, ln - lng)))
+}
+
+function isPointInPolygon(lat: number, lng: number, polygon: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i]
+    const [yj, xj] = polygon[j]
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
 }
 
 describe('patrolSiteGeometry curved corridor', () => {
@@ -65,6 +78,19 @@ describe('patrolSiteGeometry curved corridor', () => {
 
   it('7 khu bằng nhau', () => {
     expect(PATROL_GPS_ZONES).toHaveLength(7)
+  })
+
+  it('K1/K7 phủ hết cap bo tròn 2 đầu capsule', () => {
+    const zone1 = PATROL_GPS_ZONES.find(z => z.zone_id === 'ZONE_1')!
+    const zone7 = PATROL_GPS_ZONES.find(z => z.zone_id === 'ZONE_7')!
+    for (const v of [0, 0.5, 1]) {
+      expect(isPointInPolygon(...patrolSitePoint(0, v), zone1.polygon)).toBe(true)
+      expect(isPointInPolygon(...patrolSitePoint(1, v), zone7.polygon)).toBe(true)
+    }
+    expect(minDistToRing(PATROL_SITE_TIP_A[0], PATROL_SITE_TIP_A[1], zone1.polygon)).toBeLessThan(0.0005)
+    expect(minDistToRing(PATROL_SITE_TIP_B[0], PATROL_SITE_TIP_B[1], zone7.polygon)).toBeLessThan(0.0005)
+    expect(zone1.polygon.length).toBeGreaterThan(40)
+    expect(zone7.polygon.length).toBeGreaterThan(40)
   })
 
   it('pin thiết bị — HC-01 z1, HC-02 z2, DR-03 z3', () => {
