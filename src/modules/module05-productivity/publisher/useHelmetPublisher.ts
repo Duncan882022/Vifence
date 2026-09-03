@@ -57,6 +57,8 @@ export interface HelmetPublisherState {
   facing: CameraFacing
   /** Số giây đã phát — hiển thị thời lượng ca. */
   elapsedSec: number
+  /** Camera local đã có khung — giữ preview khi WebRTC reconnect. */
+  previewReady: boolean
 }
 
 interface UseHelmetPublisherOptions {
@@ -71,6 +73,8 @@ interface UseHelmetPublisherOptions {
 
 /** Chu kỳ đọc heading để gửi kèm telemetry. */
 const HEADING_SAMPLE_MS = 1000
+/** Chu kỳ cập nhật KPI bitrate lên UI — tránh re-render cả trang mỗi 2s. */
+const STATS_UI_INTERVAL_MS = 2000
 /** Tự thử phát lại sau khi WebRTC hỏng (ms). */
 const RECONNECT_DELAY_MS = 3000
 /**
@@ -105,6 +109,7 @@ export function useHelmetPublisher({
    */
   const sessionRef = useRef(0)
   const statsRef = useRef<WhipPublishStats>(EMPTY_WHIP_STATS)
+  const statsUiAtRef = useRef(0)
   const stallStrikesRef = useRef(0)
   const startRef = useRef<((facing?: CameraFacing) => Promise<void>) | null>(null)
 
@@ -121,6 +126,32 @@ export function useHelmetPublisher({
   const [telemetryConnected, setTelemetryConnected] = useState(false)
   const [facing, setFacing] = useState<CameraFacing>('environment')
   const [elapsedSec, setElapsedSec] = useState(0)
+  const [previewReady, setPreviewReady] = useState(false)
+
+  const attachPreview = useCallback(async (stream: MediaStream) => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.srcObject !== stream) video.srcObject = stream
+    video.muted = true
+    try {
+      await video.play()
+      setPreviewReady(true)
+    } catch {
+      // Safari đôi khi từ chối play() trước user gesture — vẫn coi là có stream.
+      if (stream.getVideoTracks()[0]?.readyState === 'live') {
+        setPreviewReady(true)
+      }
+    }
+  }, [videoRef])
+
+  const pushStatsToUi = useCallback((next: WhipPublishStats, force = false) => {
+    statsRef.current = next
+    const now = Date.now()
+    if (force || now - statsUiAtRef.current >= STATS_UI_INTERVAL_MS) {
+      statsUiAtRef.current = now
+      setStats(next)
+    }
+  }, [])
 
   const releaseWakeLock = useCallback(() => {
     void wakeLockRef.current?.release().catch(() => {})
@@ -215,6 +246,7 @@ export function useHelmetPublisher({
     clearHelmetLocalBroadcast(helmetId)
     const video = videoRef.current
     if (video) video.srcObject = null
+    setPreviewReady(false)
     releaseWakeLock()
   }, [stopPublisherOnly, releaseWakeLock, videoRef, helmetId])
 
@@ -232,6 +264,7 @@ export function useHelmetPublisher({
     const session = ++sessionRef.current
     stallStrikesRef.current = 0
     statsRef.current = EMPTY_WHIP_STATS
+    statsUiAtRef.current = 0
 
     if (telemetryOnly) {
       setStatus('live')
@@ -282,13 +315,7 @@ export function useHelmetPublisher({
       // Tile HC-02 trong CMS cùng tab dùng lại đúng luồng này thay vì tải HLS.
       // Phát lại giữ nguyên đối tượng stream nên tile không bị gắn lại nguồn.
       setHelmetLocalBroadcast({ helmetId, status: 'starting', stream })
-
-      const video = videoRef.current
-      if (video) {
-        if (video.srcObject !== stream) video.srcObject = stream
-        video.muted = true
-        await video.play().catch(() => {})
-      }
+      await attachPreview(stream)
 
       publisherRef.current = await startWhipPublisher({
         endpoint,
@@ -305,6 +332,7 @@ export function useHelmetPublisher({
             stallStrikesRef.current = 0
             setStatus('live')
             setErrorMessage(undefined)
+            pushStatsToUi(statsRef.current, true)
             setHelmetLocalBroadcast({
               helmetId,
               status: 'live',
@@ -328,8 +356,7 @@ export function useHelmetPublisher({
           }
         },
         onStats: next => {
-          statsRef.current = next
-          setStats(next)
+          pushStatsToUi(next)
         },
       })
 
@@ -362,7 +389,7 @@ export function useHelmetPublisher({
         scheduleReconnect(RECONNECT_DELAY_MS)
       }
     }
-  }, [helmetId, maxBitrateBps, stopPublisherOnly, videoRef, acquireWakeLock, scheduleReconnect, telemetryOnly])
+  }, [helmetId, maxBitrateBps, stopPublisherOnly, attachPreview, pushStatsToUi, acquireWakeLock, scheduleReconnect, telemetryOnly])
 
   startRef.current = start
 
@@ -373,9 +400,9 @@ export function useHelmetPublisher({
     teardown()
     setStatus('idle')
     setConnection('closed')
-    setStats(EMPTY_WHIP_STATS)
+    pushStatsToUi(EMPTY_WHIP_STATS, true)
     setElapsedSec(0)
-  }, [teardown])
+  }, [teardown, pushStatsToUi])
 
   const flipCamera = useCallback(async () => {
     if (telemetryOnly) return
@@ -397,11 +424,7 @@ export function useHelmetPublisher({
         streamRef.current = nextStream
         setHelmetLocalBroadcast({ helmetId, status: 'live', stream: nextStream })
 
-        const video = videoRef.current
-        if (video) {
-          video.srcObject = nextStream
-          void video.play().catch(() => {})
-        }
+        await attachPreview(nextStream)
         facingRef.current = next
         setFacing(next)
         return
@@ -411,7 +434,7 @@ export function useHelmetPublisher({
     }
 
     await start(next)
-  }, [helmetId, start, videoRef, telemetryOnly])
+  }, [helmetId, start, attachPreview, telemetryOnly])
 
   /**
    * Telemetry — kênh riêng nên vị trí vẫn về trung tâm khi video rớt sóng.
@@ -569,6 +592,37 @@ export function useHelmetPublisher({
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [status, acquireWakeLock, scheduleReconnect])
 
+  /** Mở camera sớm khi vào trang — preview mượt trước khi bấm phát sóng. */
+  useEffect(() => {
+    if (telemetryOnly) return
+    if (!getHelmetWhipUrl(helmetId) || !isDeviceCameraSupported()) return
+    if (streamRef.current) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const useFacing = facingRef.current
+        const videoConstraints = await buildMobileCaptureConstraints(helmetId, useFacing)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { ...videoConstraints, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        })
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+        streamRef.current = stream
+        await attachPreview(stream)
+      } catch {
+        // Chưa cấp quyền — người dùng bấm "Bắt đầu phát sóng" sẽ thử lại.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [helmetId, telemetryOnly, attachPreview])
+
   useEffect(() => teardown, [teardown])
 
   const state: HelmetPublisherState = {
@@ -581,6 +635,7 @@ export function useHelmetPublisher({
     telemetryConnected,
     facing,
     elapsedSec,
+    previewReady,
   }
 
   return { state, start, stop, flipCamera }

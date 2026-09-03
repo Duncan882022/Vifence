@@ -6,12 +6,10 @@
  */
 import { memo, useRef } from 'react'
 import {
-  Camera,
   Compass,
   Gauge,
   MapPin,
   Shield,
-  SwitchCamera,
   Timer,
   Wifi,
   WifiOff,
@@ -26,6 +24,7 @@ import {
   isHelmetRtmpIngest,
   isHelmetTelemetryPage,
 } from '../data/helmetIngest'
+import { PublisherVideoStage } from './PublisherVideoStage'
 import { useHelmetPublisher } from './useHelmetPublisher'
 import { usePublisherKeepAlive } from './usePublisherKeepAlive'
 import { usePublisherPwa } from './usePublisherPwa'
@@ -140,11 +139,12 @@ export function HelmetPublisherPage() {
   const onTelemetryPage = isHelmetTelemetryPage(helmetId)
   const configured = publishesFromBrowser && Boolean(getHelmetWhipUrl(helmetId))
   const isBroadcasting = state.status === 'live' || state.status === 'starting'
+  const showReconnectOverlay = state.status === 'starting'
+    && state.previewReady
+    && state.elapsedSec > 0
 
   usePublisherKeepAlive(isBroadcasting && publishesFromBrowser)
   const limitation = qualityLabel(state.stats.qualityLimitation)
-
-  const facingLabel = state.facing === 'environment' ? 'Camera sau' : 'Camera trước'
 
   const gpsText = state.gps
     ? formatPublisherGpsLabel(state.gps)
@@ -197,48 +197,15 @@ export function HelmetPublisherPage() {
         )}
 
         {publishesFromBrowser && (
-        <div className="relative aspect-[3/4] max-h-[40dvh] w-full overflow-hidden rounded-xl border border-[#1f2937] bg-black shadow-lg shadow-black/40">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className={cn(
-              'absolute inset-0 h-full w-full object-cover',
-              !isBroadcasting && 'opacity-0',
-            )}
+          <PublisherVideoStage
+            videoRef={videoRef}
+            previewReady={state.previewReady}
+            isLive={state.status === 'live'}
+            showReconnectOverlay={showReconnectOverlay}
+            elapsedSec={state.elapsedSec}
+            facing={state.facing}
+            onFlipCamera={() => { void flipCamera() }}
           />
-
-          {!isBroadcasting && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#64748b]">
-              <Camera className="w-10 h-10 opacity-40" aria-hidden />
-              <span className="text-[11px]">Xem trước camera</span>
-            </div>
-          )}
-
-          {state.status === 'live' && (
-            <>
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 backdrop-blur-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-[10px] font-bold tracking-wide text-white">LIVE</span>
-              </div>
-              <div className="absolute top-3 right-3 rounded-full bg-black/65 px-2 py-1 text-[10px] text-white/90 backdrop-blur-sm tabular-nums">
-                {formatDuration(state.elapsedSec)}
-              </div>
-              <button
-                type="button"
-                onClick={() => { void flipCamera() }}
-                aria-label="Đổi camera trước/sau"
-                className="absolute bottom-3 right-3 rounded-full bg-black/65 p-2.5 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/85 active:scale-95"
-              >
-                <SwitchCamera className="w-4 h-4" aria-hidden />
-              </button>
-              <div className="absolute bottom-3 left-3 rounded-full bg-black/65 px-2 py-1 text-[10px] text-white/80 backdrop-blur-sm">
-                {facingLabel}
-              </div>
-            </>
-          )}
-        </div>
         )}
 
         <div className="rounded-xl border border-[#1f2937] bg-[#0d1117] px-3 py-1 divide-y divide-[#1f2937]">
