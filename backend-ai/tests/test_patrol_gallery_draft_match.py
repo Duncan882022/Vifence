@@ -209,6 +209,73 @@ class GalleryDraftMatchTests(unittest.TestCase):
         hist = daystore.list_appearances("tk-0000001", db.today_vn(2_000.0))
         self.assertIn("HC-01", hist["by_camera"])
         self.assertIn("HC-02", hist["by_camera"])
+        self.assertEqual(len(hist["segments"]), 2)
+
+    def test_cross_camera_reclaim_inserts_second_appearance_via_flush(self) -> None:
+        """HC-01 chốt → HC-02 trong 45s: upsert thẻ, hai dòng lịch sử (không ghi đè)."""
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol.aggregator.lost_track_memory import reset as reset_lost
+        from app.patrol.aggregator.session_store import reset as reset_sessions
+
+        reset_sessions()
+        reset_lost()
+        identity.ensure_draft_for_tk("tk-0000001", now=1_000.0)
+        emb = tuple(0.015 * i for i in range(512))
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        ts = 5_000.0
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000001.jpg",
+        ):
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-hc01",
+                    now=ts + i * 0.5,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="sgc-0000001",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=(100.0, 80.0, 220.0, 400.0),
+                )
+            finalize_track("HC-01", "ptk-hc01", now=ts + 8.0)
+
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-02",
+                    track_id="ptk-hc02",
+                    now=ts + 20.0 + i * 0.5,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="sgc-0000001",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=(100.0, 80.0, 220.0, 400.0),
+                )
+            finalize_track("HC-02", "ptk-hc02", now=ts + 30.0)
+
+        cards = daystore.list_person_events(db.today_vn(ts))
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["pers_id"], "tk-0000001")
+        hist = daystore.list_appearances("tk-0000001", db.today_vn(ts))
+        self.assertEqual(len(hist["segments"]), 2)
+        self.assertIn("HC-01", hist["by_camera"])
+        self.assertIn("HC-02", hist["by_camera"])
+        reset_sessions()
+        reset_lost()
 
 
 def _nudge(base: list[float], scale: float) -> list[float]:

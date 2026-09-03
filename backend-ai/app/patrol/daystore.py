@@ -537,10 +537,10 @@ def _touch_appearance(
         snap = prev_snap or incoming
         conn.execute(
             "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-            " camera_id = ?, source_cameras = ?,"
+            " source_cameras = ?,"
             " snapshot_path = COALESCE(snapshot_path, ?),"
             " counted = MAX(counted, ?) WHERE id = ?",
-            (ts, lat_end, lng_end, camera_id, src, incoming, q, row["id"]),
+            (ts, lat_end, lng_end, src, incoming, q, row["id"]),
         )
         return
 

@@ -89,7 +89,8 @@ class PresenceDbTest(unittest.TestCase):
         self.assertEqual(stats["encounters_standard"], 2)
         self.assertEqual(stats["workers_standard"], 1)
 
-    def test_cross_camera_merge_with_gps(self) -> None:
+    def test_cross_camera_keeps_separate_appearance_rows_with_gps(self) -> None:
+        """Cùng GPS — mỗi camera vẫn một dòng lịch sử (upsert thẻ, không gộp popup)."""
         pers_id, _ = identity.observe_face(_vec(103), quality=0.8)
         lat, lng = 10.772100, 106.659200
         daystore.touch_person_event(
@@ -101,9 +102,12 @@ class PresenceDbTest(unittest.TestCase):
             gps_lat=lat, gps_lng=lng,
         )
         hist = daystore.list_appearances(pers_id, db.today_vn(3_000.0))
-        self.assertEqual(len(hist["segments"]), 1)
-        self.assertIn("HC-01", hist["segments"][0]["source_cameras"])
-        self.assertIn("HC-02", hist["segments"][0]["source_cameras"])
+        self.assertEqual(len(hist["segments"]), 2)
+        self.assertIn("HC-01", hist["by_camera"])
+        self.assertIn("HC-02", hist["by_camera"])
+        cards = daystore.list_person_events(db.today_vn(3_000.0))
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["pers_id"], pers_id)
 
     def test_obj_unassigned_separate_kpi(self) -> None:
         """Thẻ Đối tượng đếm riêng, và không cộng vào bộ đếm Nhân sự."""
