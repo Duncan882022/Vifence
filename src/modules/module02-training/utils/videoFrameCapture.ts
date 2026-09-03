@@ -1,5 +1,4 @@
 /** Canvas + cache dùng chung theo từng thẻ video — tránh tạo canvas mới mỗi lần AI chụp frame. */
-import { resolveCameraStreamType } from '@/modules/module02-training/data/trainingCameraFeeds'
 import type { VideoSourceRect } from './videoOverlayCoords'
 
 interface VideoCaptureState {
@@ -112,10 +111,8 @@ export function captureCameraAnalyzeFrame(
   cameraId: string,
   maxWidth = 640,
   quality = 0.72,
-  streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'mobile',
 ): string | null {
-  const isPatrolHelmet = resolveCameraStreamType(cameraId, streamType) === 'bodycam'
-    || cameraId.startsWith('HC-')
+  const isPatrolHelmet = cameraId.startsWith('HC-')
   return captureVideoFrameBase64(
     video,
     maxWidth,

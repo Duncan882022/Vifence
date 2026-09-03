@@ -63,7 +63,7 @@ describe('captureCameraAnalyzeFrame', () => {
     const video = mockVideo(1920, 1080, 400, 400)
     invalidateVideoFrameCapture(video)
 
-    const image = captureCameraAnalyzeFrame(video, 'A-03', 640, 0.72, 'fixed')
+    const image = captureCameraAnalyzeFrame(video, 'A-03', 640, 0.72)
 
     expect(image).toBe('QUJD')
     expect(drawCalls).toHaveLength(1)
@@ -78,7 +78,7 @@ describe('captureCameraAnalyzeFrame', () => {
     const video = mockVideo(1920, 1080, 400, 400)
     invalidateVideoFrameCapture(video)
 
-    captureCameraAnalyzeFrame(video, 'A-03', 640, 0.72, 'fixed')
+    captureCameraAnalyzeFrame(video, 'A-03', 640, 0.72)
 
     const [call] = drawCalls
     expect(call.dw).toBe(640)
@@ -90,7 +90,7 @@ describe('captureCameraAnalyzeFrame', () => {
     const video = mockVideo(720, 1280, 320, 240)
     invalidateVideoFrameCapture(video)
 
-    captureCameraAnalyzeFrame(video, 'HC-02', 640, 0.68, 'bodycam')
+    captureCameraAnalyzeFrame(video, 'HC-02', 640, 0.68)
 
     const [call] = drawCalls
     expect(call.sw).toBe(720)
@@ -99,7 +99,7 @@ describe('captureCameraAnalyzeFrame', () => {
 
   it('chưa có metadata video thì không chụp', () => {
     const video = mockVideo(0, 0, 320, 240)
-    expect(captureCameraAnalyzeFrame(video, 'A-03', 640, 0.72, 'fixed')).toBeNull()
+    expect(captureCameraAnalyzeFrame(video, 'A-03', 640, 0.72)).toBeNull()
     expect(drawCalls).toHaveLength(0)
   })
 })
