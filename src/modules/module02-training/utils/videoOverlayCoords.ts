@@ -140,37 +140,6 @@ export interface VideoSourceRect {
   height: number
 }
 
-/** Vùng pixel nguồn thực sự hiển thị trong thẻ video (object-cover/contain). */
-export function getVisibleVideoSourceRect(
-  video: HTMLVideoElement,
-  fit: 'cover' | 'contain' = 'cover',
-  objectPosition: 'center' | 'bottom' = 'center',
-  intrinsicFallback?: VideoIntrinsicFallback,
-): VideoSourceRect {
-  const { width: vw, height: vh } = resolveVideoIntrinsicSize(video, intrinsicFallback)
-  const cw = video.clientWidth
-  const ch = video.clientHeight
-  if (!vw || !vh || !cw || !ch) {
-    return { x: 0, y: 0, width: vw || 0, height: vh || 0 }
-  }
-  if (fit === 'contain') {
-    return { x: 0, y: 0, width: vw, height: vh }
-  }
-
-  const scale = Math.max(cw / vw, ch / vh)
-  const renderedW = vw * scale
-  const renderedH = vh * scale
-  const offsetX = (cw - renderedW) / 2
-  const offsetY = objectPosition === 'bottom'
-    ? ch - renderedH
-    : (ch - renderedH) / 2
-  const srcX = Math.max(0, -offsetX / scale)
-  const srcY = Math.max(0, -offsetY / scale)
-  const srcW = Math.min(vw - srcX, cw / scale)
-  const srcH = Math.min(vh - srcY, ch / scale)
-  return { x: srcX, y: srcY, width: srcW, height: srcH }
-}
-
 /** Bbox 0–1 (Module 05 WS) vs pixel — ngưỡng giống backend `detector.py`. */
 export function isNormalizedBbox(bbox: [number, number, number, number]): boolean {
   return Math.max(...bbox.map(v => Math.abs(v))) <= 1.5
@@ -211,7 +180,14 @@ export function canProjectOverlayBox(
   )
 }
 
-/** Bbox từ backend (pixel hoặc 0–1) → % overlay trên video đang hiển thị. */
+/**
+ * Bbox từ backend (pixel hoặc 0–1) → % overlay trên video đang hiển thị.
+ *
+ * Một hợp đồng duy nhất cho mọi nguồn: bbox luôn tính trên KHUNG HÌNH ĐẦY ĐỦ,
+ * không phải phần còn nhìn thấy sau khi `object-cover` cắt bớt. Luồng VMS phân
+ * tích khung gốc, còn luồng `/analyze/*` nhận ảnh do FE chụp trọn khung — cùng
+ * một overlay đọc cả hai nên hai bên buộc phải nói cùng một hệ toạ độ.
+ */
 export function mapBackendBboxToOverlay(
   bbox: [number, number, number, number],
   frameWidth: number,

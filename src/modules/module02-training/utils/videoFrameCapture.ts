@@ -1,13 +1,6 @@
 /** Canvas + cache dùng chung theo từng thẻ video — tránh tạo canvas mới mỗi lần AI chụp frame. */
-import {
-  getVideoObjectFitForCamera,
-  getVideoObjectPositionForCamera,
-  resolveCameraStreamType,
-} from '@/modules/module02-training/data/trainingCameraFeeds'
-import {
-  getVisibleVideoSourceRect,
-  type VideoSourceRect,
-} from './videoOverlayCoords'
+import { resolveCameraStreamType } from '@/modules/module02-training/data/trainingCameraFeeds'
+import type { VideoSourceRect } from './videoOverlayCoords'
 
 interface VideoCaptureState {
   canvas: HTMLCanvasElement
@@ -24,11 +17,6 @@ const analyzeIntervalScaleByVideo = new WeakMap<HTMLVideoElement, number>()
 const MIN_CAPTURE_GAP_MS = 64
 /** HC patrol — frame mới thường xuyên hơn để ROI bám video. */
 const PATROL_CAPTURE_GAP_MS = 40
-
-export interface VideoCaptureViewport {
-  fit: 'cover' | 'contain'
-  objectPosition: 'center' | 'bottom'
-}
 
 export function invalidateVideoFrameCapture(video: HTMLVideoElement): void {
   const state = captureStateByVideo.get(video)
@@ -49,25 +37,28 @@ export function scaledAnalyzeDelay(video: HTMLVideoElement, delayMs: number): nu
   return Math.round(delayMs * getVideoAnalyzeIntervalScale(video))
 }
 
-function resolveCaptureRegion(
-  video: HTMLVideoElement,
-  viewport?: VideoCaptureViewport,
-): VideoSourceRect {
+/**
+ * Luôn là khung hình đầy đủ.
+ *
+ * Trước đây chỗ này cắt theo vùng `object-cover` còn nhìn thấy. Làm vậy khiến
+ * ảnh gửi đi mang một hệ toạ độ riêng: backend đo polygon ROI 0–1 trên mảnh đã
+ * cắt trong khi FE vẽ chúng trên khung đầy đủ, và bbox trả về cũng khác hệ với
+ * bbox của luồng VMS dù hai nguồn đổ vào chung một overlay.
+ */
+function resolveCaptureRegion(video: HTMLVideoElement): VideoSourceRect {
   const w = video.videoWidth
   const h = video.videoHeight
   if (!w || !h) return { x: 0, y: 0, width: 0, height: 0 }
-  if (!viewport) return { x: 0, y: 0, width: w, height: h }
-  return getVisibleVideoSourceRect(video, viewport.fit, viewport.objectPosition)
+  return { x: 0, y: 0, width: w, height: h }
 }
 
 export function captureVideoFrameBase64(
   video: HTMLVideoElement,
   maxWidth = 480,
   quality = 0.52,
-  viewport?: VideoCaptureViewport,
   minCaptureGapMs = MIN_CAPTURE_GAP_MS,
 ): string | null {
-  const region = resolveCaptureRegion(video, viewport)
+  const region = resolveCaptureRegion(video)
   if (region.width <= 0 || region.height <= 0) return null
 
   const cacheKey = `${maxWidth}:${quality}:${Math.round(region.x)}:${Math.round(region.y)}:${Math.round(region.width)}:${Math.round(region.height)}`
@@ -123,10 +114,12 @@ export function captureCameraAnalyzeFrame(
   quality = 0.72,
   streamType: 'fixed' | 'bodycam' | 'flycam' | 'mobile' = 'mobile',
 ): string | null {
-  const isPatrolHelmet = cameraId.startsWith('HC-')
-  const resolvedType = resolveCameraStreamType(cameraId, streamType)
-  return captureVideoFrameBase64(video, maxWidth, quality, {
-    fit: getVideoObjectFitForCamera(cameraId, resolvedType),
-    objectPosition: getVideoObjectPositionForCamera(cameraId, resolvedType),
-  }, isPatrolHelmet ? PATROL_CAPTURE_GAP_MS : MIN_CAPTURE_GAP_MS)
+  const isPatrolHelmet = resolveCameraStreamType(cameraId, streamType) === 'bodycam'
+    || cameraId.startsWith('HC-')
+  return captureVideoFrameBase64(
+    video,
+    maxWidth,
+    quality,
+    isPatrolHelmet ? PATROL_CAPTURE_GAP_MS : MIN_CAPTURE_GAP_MS,
+  )
 }
