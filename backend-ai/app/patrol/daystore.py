@@ -332,6 +332,26 @@ def _appearance_time_overlap_ratio(a: dict[str, Any], b: dict[str, Any]) -> floa
     return overlap / min_dur
 
 
+def coerce_appearance_id_for_camera(
+    appearance_id: int | None,
+    camera_id: str,
+) -> int | None:
+    """Chỉ giữ row id khi thuộc đúng camera — tránh UPDATE nhầm dòng camera khác."""
+    if appearance_id is None:
+        return None
+    row = db.query_one(
+        "SELECT camera_id FROM appearances WHERE id = ?",
+        (int(appearance_id),),
+    )
+    if row is None:
+        return None
+    row_cam = str(row["camera_id"] or "").strip()
+    want = (camera_id or "").strip()
+    if not row_cam or row_cam != want:
+        return None
+    return int(appearance_id)
+
+
 def find_overlapping_appearance_row(
     event_date: str,
     subject_id: str,
@@ -512,9 +532,9 @@ def _touch_appearance(
     row = None if new_encounter else conn.execute(
         "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
         " source_cameras, snapshot_path FROM appearances"
-        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC LIMIT 1",
-        (date, subject_id),
+        (date, subject_id, camera_id),
     ).fetchone()
 
     lat_end = gps_lat
@@ -867,6 +887,15 @@ def upsert_track_appearance(
     reason = (end_reason or "").strip() or None
     with db.tx() as conn:
         row_id = appearance_id
+
+        if row_id is not None:
+            existing = conn.execute(
+                "SELECT camera_id FROM appearances WHERE id = ?",
+                (row_id,),
+            ).fetchone()
+            row_cam = str(existing["camera_id"] or "").strip() if existing else ""
+            if not existing or row_cam != (camera_id or "").strip():
+                row_id = None
 
         if row_id is not None:
             set_parts = [
