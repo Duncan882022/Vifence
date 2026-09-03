@@ -3,7 +3,6 @@ import logging
 import threading
 import time
 from collections import deque
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +13,14 @@ from .atgt_plate_reader import resolve_vehicle_plate
 from .crane_detection_catalog import CRANE_CATALOG_STYLES
 from .config import settings
 from .event_dedup import EventDedupRegistry, build_dedup_key, dedupe_events_by_key
-from .schemas import Detection, PpeDetection, RoadDetection, CraneProximityDetection, ViolationEvent
+from .schemas import (
+    CraneProximityDetection,
+    Detection,
+    PpeDetection,
+    RoadDetection,
+    ViolationEvent,
+    event_day_vn,
+)
 from .snapshot_compose import (
     compose_violation_snapshot,
     draw_atld_roi_box,
@@ -33,16 +39,34 @@ LEGACY_EVENTS_FILE = DATA_DIR / "events.jsonl"
 
 def _event_date(ts: Optional[float] = None) -> str:
     """Ngày sự kiện theo giờ VN — đồng bộ filter FE (?date= / getSafetyTodayDate)."""
-    from datetime import timezone, timedelta
-
-    vn = timezone(timedelta(hours=7))
-    return datetime.fromtimestamp(ts or time.time(), tz=vn).strftime("%Y-%m-%d")
+    return event_day_vn(ts or time.time())
 
 
 def _daily_events_file(date: str) -> Path:
     folder = EVENTS_DIR / date
     folder.mkdir(parents=True, exist_ok=True)
     return folder / "events.jsonl"
+
+
+def collapse_events_by_id(rows: list[ViolationEvent]) -> list[ViolationEvent]:
+    """Gom các dòng cùng ``id`` — giữ dòng ghi sau cùng.
+
+    JSONL chỉ ghi thêm: mỗi lần refresh snapshot là một dòng mới cho cùng sự kiện.
+    Dòng cuối là trạng thái đúng nhất (bbox, ảnh, danh tính đã bổ sung), nên đọc
+    lên phải lấy dòng cuối thay vì trả cả hai — nếu không chỉ huy thấy hai thẻ
+    trùng và thẻ hiển thị lại là thẻ cũ.
+    """
+    by_id: dict[str, ViolationEvent] = {}
+    for row in rows:
+        by_id[row.id] = row
+    return list(by_id.values())
+
+
+# Đủ thưa để file ngày không phình theo nhịp refresh, đủ dày để bbox trên thẻ
+# không lệch quá lâu so với ảnh đã lưu.
+REFRESH_PERSIST_MIN_INTERVAL_SEC = 20.0
+# Số dòng thừa tích trong file ngày trước khi viết gọn lại.
+_COMPACT_APPEND_THRESHOLD = 400
 
 
 def _daily_snapshot_dir(date: str) -> Path:
@@ -172,13 +196,17 @@ class EventStore:
         self._events: deque[ViolationEvent] = deque(maxlen=max_in_memory)
         self._lock = threading.Lock()
         self._dedup = EventDedupRegistry(settings.event_first_seen_window_effective)
+        # event_id → lần cuối ghi bản refresh xuống đĩa.
+        self._refresh_persisted_at: dict[str, float] = {}
+        # ngày → số dòng đã ghi thêm kể từ lần viết gọn gần nhất.
+        self._appends_since_compact: dict[str, int] = {}
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
         EVENTS_DIR.mkdir(parents=True, exist_ok=True)
         self._load_today_from_disk()
 
     def _load_today_from_disk(self) -> None:
         today = _event_date()
-        disk_events = self._read_events_file(_daily_events_file(today))
+        disk_events = collapse_events_by_id(self._read_events_file(_daily_events_file(today)))
         self._dedup.load_from_events(disk_events)
         for event in disk_events:
             with self._lock:
@@ -228,51 +256,57 @@ class EventStore:
         snapshot_path = SNAPSHOT_DIR / snapshot_name
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(snapshot_path), snapshot_image)
-        existing.snapshot_file = snapshot_name
-        existing.confirmed_at = time.time()
 
-        if incoming.behavior in ("no_helmet", "no_vest", "no_shoes"):
-            existing.bbox = list(incoming.bbox)
-            if incoming.subject_bbox:
-                existing.subject_bbox = list(incoming.subject_bbox)
-            if incoming.confidence >= existing.confidence:
+        # Sự kiện nằm trong deque dùng chung với /events — sửa từng trường ngoài
+        # lock thì người đọc bắt gặp bản ghi nửa cũ nửa mới.
+        with self._lock:
+            existing.snapshot_file = snapshot_name
+            existing.confirmed_at = time.time()
+
+            if incoming.behavior in ("no_helmet", "no_vest", "no_shoes"):
+                existing.bbox = list(incoming.bbox)
+                if incoming.subject_bbox:
+                    existing.subject_bbox = list(incoming.subject_bbox)
+                if incoming.confidence >= existing.confidence:
+                    existing.confidence = incoming.confidence
+            elif incoming.confidence >= existing.confidence:
                 existing.confidence = incoming.confidence
-        elif incoming.confidence >= existing.confidence:
-            existing.confidence = incoming.confidence
-            existing.bbox = list(incoming.bbox)
-            if incoming.subject_bbox:
+                existing.bbox = list(incoming.bbox)
+                if incoming.subject_bbox:
+                    existing.subject_bbox = list(incoming.subject_bbox)
+                if incoming.related_bbox:
+                    existing.related_bbox = list(incoming.related_bbox)
+            elif incoming.subject_bbox:
                 existing.subject_bbox = list(incoming.subject_bbox)
-            if incoming.related_bbox:
-                existing.related_bbox = list(incoming.related_bbox)
-        elif incoming.subject_bbox:
-            existing.subject_bbox = list(incoming.subject_bbox)
 
-        if frame_size:
-            existing.frame_width, existing.frame_height = frame_size
-        else:
-            h, w = snapshot_image.shape[:2]
-            existing.frame_width = int(w)
-            existing.frame_height = int(h)
+            if frame_size:
+                existing.frame_width, existing.frame_height = frame_size
+            else:
+                h, w = snapshot_image.shape[:2]
+                existing.frame_width = int(w)
+                existing.frame_height = int(h)
 
-        for field in (
-            "worker_id",
-            "worker_name",
-            "employee_code",
-            "contractor_name",
-            "face_match_confidence",
-            "face_match_source",
-            "vehicle_plate",
-            "vehicle_type",
-            "driver_name",
-            "gps_lat",
-            "gps_lng",
-        ):
-            new_val = getattr(incoming, field, None)
-            if new_val is not None and getattr(existing, field, None) in (None, "", 0, 0.0):
-                setattr(existing, field, new_val)
-        if incoming.gps_lat is not None and incoming.gps_lng is not None:
-            existing.gps_lat = incoming.gps_lat
-            existing.gps_lng = incoming.gps_lng
+            for field in (
+                "worker_id",
+                "worker_name",
+                "employee_code",
+                "contractor_name",
+                "face_match_confidence",
+                "face_match_source",
+                "vehicle_plate",
+                "vehicle_type",
+                "driver_name",
+                "gps_lat",
+                "gps_lng",
+            ):
+                new_val = getattr(incoming, field, None)
+                if new_val is not None and getattr(existing, field, None) in (None, "", 0, 0.0):
+                    setattr(existing, field, new_val)
+            if incoming.gps_lat is not None and incoming.gps_lng is not None:
+                existing.gps_lat = incoming.gps_lat
+                existing.gps_lng = incoming.gps_lng
+
+        self._persist_refresh(existing)
 
         logger.info(
             "Refresh snapshot event=%s key=%s (giữ created_at=%.0f)",
@@ -281,6 +315,22 @@ class EventStore:
             existing.created_at,
         )
         return existing
+
+    def _persist_refresh(self, event: ViolationEvent) -> None:
+        """Ghi lại trạng thái sau refresh xuống file ngày.
+
+        Ảnh JPG đã được thay nhưng dòng JSONL vẫn là bbox lần đầu; đọc lại từ đĩa
+        (sau restart hoặc khi lọc theo ngày) sẽ vẽ ROI lệch hẳn khỏi ảnh. Ghi thưa
+        theo :data:`REFRESH_PERSIST_MIN_INTERVAL_SEC` để file ngày không phình
+        theo từng nhịp detect.
+        """
+        now = time.time()
+        with self._lock:
+            last = self._refresh_persisted_at.get(event.id, 0.0)
+            if now - last < REFRESH_PERSIST_MIN_INTERVAL_SEC:
+                return
+            self._refresh_persisted_at[event.id] = now
+        self._append_to_disk(event)
 
     def _finalize_event(
         self,
@@ -1203,6 +1253,31 @@ class EventStore:
                 f.write(event.model_dump_json() + "\n")
         except OSError as exc:
             logger.warning("Không ghi được events theo ngày (%s): %s", day, exc)
+            return
+        with self._lock:
+            appended = self._appends_since_compact.get(day, 0) + 1
+            self._appends_since_compact[day] = appended
+        if appended >= _COMPACT_APPEND_THRESHOLD:
+            self._compact_daily_file(day)
+
+    def _compact_daily_file(self, day: str) -> None:
+        """Viết gọn file ngày — mỗi sự kiện còn đúng một dòng mới nhất."""
+        path = _daily_events_file(day)
+        rows = collapse_events_by_id(self._read_events_file(path))
+        if not rows:
+            return
+        tmp = path.with_suffix(".jsonl.tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                for row in rows:
+                    f.write(row.model_dump_json() + "\n")
+            tmp.replace(path)
+        except OSError as exc:
+            logger.warning("Không viết gọn được events ngày %s: %s", day, exc)
+            tmp.unlink(missing_ok=True)
+            return
+        with self._lock:
+            self._appends_since_compact[day] = 0
 
     def list_events(
         self,
@@ -1211,11 +1286,15 @@ class EventStore:
         camera_id: Optional[str] = None,
     ) -> list[ViolationEvent]:
         if date:
+            # Bản trong RAM là bản mới nhất (đã refresh ảnh/bbox) — ghi đè bản đọc
+            # từ đĩa thay vì nối thêm, nếu không mỗi sự kiện ra hai thẻ và thẻ
+            # hiển thị lại là thẻ cũ.
             rows = self._read_events_file(_daily_events_file(date))
             with self._lock:
                 for event in self._events:
                     if (event.event_date or _event_date(event.created_at)) == date:
                         rows.append(event)
+            rows = collapse_events_by_id(rows)
         else:
             with self._lock:
                 rows = list(self._events)
@@ -1237,7 +1316,8 @@ class EventStore:
             for day_dir in sorted(EVENTS_DIR.iterdir(), reverse=True):
                 if not day_dir.is_dir():
                     continue
-                for event in self._read_events_file(day_dir / "events.jsonl"):
+                # Duyệt ngược: dòng cuối của một id là trạng thái mới nhất.
+                for event in reversed(self._read_events_file(day_dir / "events.jsonl")):
                     if event.id == event_id:
                         return event
         return None
@@ -1265,6 +1345,8 @@ class EventStore:
         with self._lock:
             removed_memory = len(self._events)
             self._events.clear()
+            self._refresh_persisted_at.clear()
+            self._appends_since_compact.clear()
 
         if LEGACY_EVENTS_FILE.exists():
             LEGACY_EVENTS_FILE.unlink(missing_ok=True)
