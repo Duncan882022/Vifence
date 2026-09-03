@@ -182,7 +182,7 @@ def flush_session(
     finalize: bool = False,
 ) -> None:
     """INSERT/UPDATE aggregated appearance + card ngoài (throttled)."""
-    from .session_store import link_subject_session, resolve_parallel_object_subject
+    from .session_store import link_subject_session
 
     if not _needs_flush(session, finalize=finalize):
         return
@@ -207,44 +207,24 @@ def flush_session(
         ):
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
-        from .session_store import (
-            borrow_overlapping_person_subject,
-            link_subject_session,
-            resolve_parallel_object_subject,
-        )
+        from .session_store import link_subject_session
 
-        event_date = db.today_vn(now)
-        person_parallel = borrow_overlapping_person_subject(
-            session.camera_id,
-            now,
-            bbox=obs.person_bbox,
+        # Một track = một lượt gặp = một thẻ Đối tượng. Không mượn thẻ của track
+        # đang chạy song song: đối tượng không có tiêu chí định danh nên mọi phép
+        # gộp ở đây đều là suy đoán từ bbox/thời gian, và suy đoán sai thì hai
+        # người thành một. Thà đếm dư lượt còn hơn dồn nhầm người.
+        obj_id = daystore.touch_object(
+            None,
+            camera_id=session.camera_id,
+            zone_id=session.zone_id,
+            now=now,
+            seen_since=session.started_at if session.last_flush_at <= 0 else None,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            skip_appearance=True,
         )
-        parallel = None if person_parallel else resolve_parallel_object_subject(
-            session.camera_id,
-            session.started_at,
-            now,
-            event_date,
-            bbox=obs.person_bbox,
-        )
-        if person_parallel:
-            session.subject_id = person_parallel
-            link_subject_session(session)
-        elif parallel:
-            session.subject_id = parallel
-            link_subject_session(session)
-        else:
-            obj_id = daystore.touch_object(
-                None,
-                camera_id=session.camera_id,
-                zone_id=session.zone_id,
-                now=now,
-                seen_since=session.started_at if session.last_flush_at <= 0 else None,
-                gps_lat=gps_lat,
-                gps_lng=gps_lng,
-                skip_appearance=True,
-            )
-            session.subject_id = obj_id
-            link_subject_session(session)
+        session.subject_id = obj_id
+        link_subject_session(session)
 
     subject_id = session.subject_id
     if not subject_id:

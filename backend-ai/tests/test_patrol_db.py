@@ -505,84 +505,21 @@ class ObjectTests(PatrolDbTestCase):
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["first_seen"], 500.0)
 
-    def test_merge_object_cards_keeps_best_snapshot(self) -> None:
-        a = daystore.touch_object(None, camera_id="HC-01", now=1_000.0, snapshot_score=0.9)
-        b = daystore.touch_object(None, camera_id="HC-01", now=1_007.0, snapshot_score=0.5)
-        daystore.upsert_track_appearance(
-            appearance_id=None,
-            event_date=db.today_vn(1_000.0),
-            subject_id=a,
-            camera_id="HC-01",
-            zone_id=None,
-            track_id="ptk0001:person",
-            session_id="sess-a",
-            started_at=1_000.0,
-            ended_at=1_020.0,
-            gps_lat=20.93,
-            gps_lng=106.92,
-            payload_json="{}",
-            interactions_json="[]",
-        )
-        daystore.upsert_track_appearance(
-            appearance_id=None,
-            event_date=db.today_vn(1_007.0),
-            subject_id=b,
-            camera_id="HC-01",
-            zone_id=None,
-            track_id="ptk0004:person",
-            session_id="sess-b",
-            started_at=1_007.0,
-            ended_at=1_025.0,
-            gps_lat=20.93,
-            gps_lng=106.92,
-            payload_json="{}",
-            interactions_json="[]",
-        )
-        self.assertTrue(
-            daystore.merge_object_cards(
-                a, b, now=1_030.0, event_date=db.today_vn(1_000.0),
-            ),
-        )
-        date = db.today_vn(1_000.0)
-        objs = daystore.list_objects(date)
-        self.assertEqual(len(objs), 1)
-        self.assertEqual(objs[0]["obj_id"], a)
-        hist = daystore.list_appearances(a, date)
-        self.assertGreaterEqual(len(hist["segments"]), 1)
+    def test_parallel_tracks_stay_separate_cards(self) -> None:
+        """Hai track chồng giờ trên cùng camera vẫn là hai lượt gặp.
 
-    def test_coalesce_parallel_merges_overlapping_tracks(self) -> None:
+        Đối tượng không có tiêu chí định danh nên mọi phép gộp ở đây chỉ là suy
+        đoán từ thời gian; gộp nhầm là mất hẳn một lượt mà không cách nào phát
+        hiện về sau. Thà đếm dư còn hơn dồn nhầm hai người vào một thẻ.
+        """
         a = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
         daystore.touch_object(a, camera_id="HC-01", now=1_030.0)
         b = daystore.touch_object(None, camera_id="HC-01", now=1_008.0)
         daystore.touch_object(b, camera_id="HC-01", now=1_028.0)
+
         date = db.today_vn(1_000.0)
         self.assertEqual(len(daystore.list_objects(date)), 2)
-        merged = daystore.coalesce_parallel_object_cards(date)
-        self.assertEqual(merged, 1)
-        self.assertEqual(len(daystore.list_objects(date)), 1)
-
-    def test_coalesce_parallel_skips_different_encounters(self) -> None:
-        """Hai người cách nhau >8s — không gộp thẻ dù cùng camera."""
-        a = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
-        daystore.touch_object(a, camera_id="HC-01", now=1_020.0)
-        b = daystore.touch_object(None, camera_id="HC-01", now=1_012.0)
-        daystore.touch_object(b, camera_id="HC-01", now=1_032.0)
-        date = db.today_vn(1_000.0)
-        merged = daystore.coalesce_parallel_object_cards(date)
-        self.assertEqual(merged, 0)
-        self.assertEqual(len(daystore.list_objects(date)), 2)
-
-    def test_promote_objects_with_face_snapshot_repair(self) -> None:
-        oid = daystore.touch_object(
-            None,
-            camera_id="HC-01",
-            now=1_000.0,
-            snapshot_score=1.2,
-        )
-        date = db.today_vn(1_000.0)
-        self.assertEqual(daystore.promote_objects_with_face_snapshot(date), 1)
-        self.assertEqual(daystore.list_objects(date), [])
-        self.assertEqual(len(daystore.list_person_events(date)), 1)
+        self.assertNotEqual(a, b)
 
     def test_purge_removes_yesterday_objects_only(self) -> None:
         yesterday = 1_700_000_000.0
