@@ -96,7 +96,8 @@ describe('createDetectionsFeed — báo mốc khung hình lên backend', () => {
 
     displayMs += 1000
     vi.advanceTimersByTime(1000)
-    expect(socket.parsedSent().at(-1)).toEqual({ type: 'sync', at_ms: 1_700_000_001_000 })
+    const messages = socket.parsedSent()
+    expect(messages[messages.length - 1]).toEqual({ type: 'sync', at_ms: 1_700_000_001_000 })
 
     handle.stop()
   })

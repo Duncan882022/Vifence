@@ -102,6 +102,8 @@ export interface VmsDetectionSnapshot {
   overlay_drift_ms?: number
   /** Quãng lịch sử overlay backend đang giữ (ms) — chẩn đoán khi lệch nhiều. */
   overlay_history_span_ms?: number
+  /** Tăng khi luồng dựng lại — FE bỏ track cũ đúng lúc đó, không bỏ mỗi frame. */
+  overlay_epoch?: number
   vms_ready: boolean
   /** Live RTSP còn frame mới — false khi mũ tắt / mất tín hiệu. */
   stream_online?: boolean
@@ -246,6 +248,7 @@ interface RawVmsDetectionPayload {
   overlay_sync?: string
   overlay_drift_ms?: number
   overlay_history_span_ms?: number
+  overlay_epoch?: number
   vms_ready?: boolean
   stream_online?: boolean
   frame_age_sec?: number | null
@@ -288,6 +291,7 @@ export function normalizeVmsDetectionSnapshot(
     overlay_history_span_ms: data.overlay_history_span_ms != null
       ? Number(data.overlay_history_span_ms)
       : undefined,
+    overlay_epoch: data.overlay_epoch != null ? Number(data.overlay_epoch) : undefined,
     vms_ready: Boolean(data.vms_ready),
     stream_online: data.stream_online,
     frame_age_sec: data.frame_age_sec ?? null,
@@ -318,7 +322,6 @@ export interface VmsDetectionPollerOptions {
   backendUrl?: string
   intervalMs?: number
   onSnapshot: (snapshot: VmsDetectionSnapshot) => void
-  onBeforeSnapshot?: () => void
   onStatusChange: (status: MobileAiConnectionStatus, message?: string) => void
   /** Wallclock khung hình đang chiếu — backend dùng để chọn đúng overlay. */
   getDisplayWallclockMs?: () => number | null
@@ -330,7 +333,6 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
     backendUrl = getVmsBackendUrl(),
     intervalMs = 450,
     onSnapshot,
-    onBeforeSnapshot,
     onStatusChange,
     getDisplayWallclockMs,
   } = options
@@ -371,7 +373,6 @@ export function createVmsDetectionPoller(options: VmsDetectionPollerOptions): { 
       if (stopped) return
       connectedOnce = true
       onStatusChange('connected')
-      onBeforeSnapshot?.()
       onSnapshot(snapshot)
       schedule(intervalMs)
     } catch (err) {

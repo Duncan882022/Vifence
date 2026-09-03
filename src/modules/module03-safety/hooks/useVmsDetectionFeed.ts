@@ -9,7 +9,6 @@ import {
   isVmsLiveCamera,
   type VmsDetectionSnapshot,
 } from '../services/vmsDetections.service'
-import { clearVmsDetectionOverlayFrame } from '../utils/liveOverlaySync'
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 import { isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 
@@ -60,7 +59,6 @@ export function useVmsDetectionFeed(
       pollIntervalMs: isPatrolMetricsCameraId(cameraId)
         ? PATROL_VMS_DETECTIONS_POLL_MS
         : DEFAULT_VMS_DETECTIONS_POLL_MS,
-      onBeforeSnapshot: () => clearVmsDetectionOverlayFrame(cameraId),
       getDisplayWallclockMs: () => clockRef.current?.() ?? null,
       onSnapshot: setSnapshot,
       onStatusChange: (next, msg) => {

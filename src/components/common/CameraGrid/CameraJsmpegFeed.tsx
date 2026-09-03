@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import { videoRectToOverlayPercent } from '@/modules/module02-training/utils/videoOverlayCoords'
 
 interface Detection {
   bbox: [number, number, number, number]
   class: string
   confidence: number
 }
+
+/**
+ * Khung nguồn cuối cùng còn biết được, khi cả metadata lẫn canvas đều chưa nói
+ * gì. Server Vision cũ phát ở cỡ này; đoán sai còn hơn không vẽ được gì.
+ */
+const LEGACY_FRAME_WIDTH = 720
+const LEGACY_FRAME_HEIGHT = 480
 
 const CLASS_COLORS: Record<string, { stroke: string; fill: string }> = {
   person:  { stroke: '#4ade80', fill: 'rgba(74,222,128,0.1)' },
@@ -42,6 +50,8 @@ export function CameraJsmpegFeed({ wsUrl }: CameraJsmpegFeedProps) {
   const stallTimerRef = useRef<number>(0)
   const lastDetectionsRef = useRef<Detection[]>([])
   const lastDetectTimeRef = useRef<number>(0)
+  /** Khung nguồn bbox được tính trên đó — server gửi kèm thì tin server. */
+  const frameSizeRef = useRef<{ width: number; height: number } | null>(null)
 
   const [status, setStatus] = useState<'connecting' | 'playing' | 'error'>('connecting')
 
@@ -55,6 +65,7 @@ export function CameraJsmpegFeed({ wsUrl }: CameraJsmpegFeedProps) {
     stallTimerRef.current = 0
     lastDetectionsRef.current = []
     lastDetectTimeRef.current = 0
+    frameSizeRef.current = null
 
     let ws: WebSocket | null = null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,6 +142,12 @@ export function CameraJsmpegFeed({ wsUrl }: CameraJsmpegFeedProps) {
             if (msg.type === 'detections') {
               lastDetectionsRef.current = msg.detections || []
               lastDetectTimeRef.current = Date.now()
+              if (Number(msg.width) > 0 && Number(msg.height) > 0) {
+                frameSizeRef.current = {
+                  width: Number(msg.width),
+                  height: Number(msg.height),
+                }
+              }
             }
           } catch (e) {
             console.error('Lỗi phân tích JSON metadata:', e)
@@ -167,24 +184,50 @@ export function CameraJsmpegFeed({ wsUrl }: CameraJsmpegFeedProps) {
         const container = overlayCanvas.parentElement
         if (!container) return
 
-        overlayCanvas.width = container.clientWidth
-        overlayCanvas.height = container.clientHeight
-        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height)
+        const cssWidth = container.clientWidth
+        const cssHeight = container.clientHeight
+        const dpr = window.devicePixelRatio || 1
+        const pixelWidth = Math.round(cssWidth * dpr)
+        const pixelHeight = Math.round(cssHeight * dpr)
+        // Gán width/height là xoá canvas: chỉ đổi khi kích thước thật sự khác,
+        // nếu không mỗi khung hình lại dựng lại bộ đệm vẽ.
+        if (overlayCanvas.width !== pixelWidth || overlayCanvas.height !== pixelHeight) {
+          overlayCanvas.width = pixelWidth
+          overlayCanvas.height = pixelHeight
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.clearRect(0, 0, cssWidth, cssHeight)
 
         // Timeout 1.2s không có data YOLO → xóa overlay
         if (Date.now() - lastDetectTimeRef.current > 1200) {
           lastDetectionsRef.current = []
         }
 
-        if (lastDetectionsRef.current.length > 0) {
-          const scaleX = overlayCanvas.width / 720
-          const scaleY = overlayCanvas.height / 480
+        // Khung nguồn thật của luồng: JSMpeg đặt kích thước canvas theo đúng độ
+        // phân giải giải mã được. Trước đây chỗ này cứng 720×480 nên mọi camera
+        // khác tỉ lệ đó đều bị lệch hộp, càng lệch khi khung cao/rộng bất thường.
+        const decoded = canvasRef.current
+        const frame = frameSizeRef.current
+        const frameWidth = frame?.width || decoded?.width || LEGACY_FRAME_WIDTH
+        const frameHeight = frame?.height || decoded?.height || LEGACY_FRAME_HEIGHT
 
+        if (lastDetectionsRef.current.length > 0 && cssWidth > 0 && cssHeight > 0) {
           lastDetectionsRef.current.forEach((d) => {
             const [x1, y1, x2, y2] = d.bbox
-            const sx1 = x1 * scaleX, sy1 = y1 * scaleY
-            const sw = (x2 - x1) * scaleX
-            const sh = (y2 - y1) * scaleY
+            // Video hiển thị object-contain nên có viền đen hai bên; dùng chung
+            // phép chiếu với các overlay khác để hộp nằm đúng trong khung hình.
+            const rect = videoRectToOverlayPercent(
+              { x: x1, y: y1, width: x2 - x1, height: y2 - y1 },
+              frameWidth,
+              frameHeight,
+              cssWidth,
+              cssHeight,
+              'contain',
+            )
+            const sx1 = (rect.x / 100) * cssWidth
+            const sy1 = (rect.y / 100) * cssHeight
+            const sw = (rect.w / 100) * cssWidth
+            const sh = (rect.h / 100) * cssHeight
             const color = CLASS_COLORS[d.class] ?? { stroke: '#3b82f6', fill: 'rgba(59,130,246,0.1)' }
 
             ctx.globalAlpha = 1.0
@@ -227,7 +270,7 @@ export function CameraJsmpegFeed({ wsUrl }: CameraJsmpegFeedProps) {
     <div className="absolute inset-0">
       <canvas
         ref={canvasRef}
-        className={`w-full h-full object-fill transition-opacity duration-300 ${status === 'playing' ? 'opacity-100' : 'opacity-0'}`}
+        className={`w-full h-full object-contain transition-opacity duration-300 ${status === 'playing' ? 'opacity-100' : 'opacity-0'}`}
       />
       <canvas
         ref={overlayRef}

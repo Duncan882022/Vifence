@@ -221,6 +221,9 @@ class CameraVmsWorker:
         self._overlay_history: deque[dict] = deque(
             maxlen=max(32, int(OVERLAY_HISTORY_SEC * max(1.0, ai_fps))),
         )
+        # Tăng mỗi lần luồng dựng lại (reconnect / đổi sang fallback). FE bám số
+        # này để biết lúc nào phải bỏ track cũ, thay vì bỏ sau mỗi frame.
+        self._overlay_epoch = 0
 
         self._hls_dir = HLS_DIR / camera_id
         self._clips_dir = CLIPS_DIR / camera_id
@@ -370,6 +373,7 @@ class CameraVmsWorker:
         with self._overlay_lock:
             latest = dict(self._latest_overlay)
             history = list(self._overlay_history)
+            epoch = self._overlay_epoch
 
         chosen, sync_mode, drift_ms = self._select_overlay_entry(latest, history, at_ms)
         span_ms = self._overlay_history_span_ms(history)
@@ -388,6 +392,7 @@ class CameraVmsWorker:
             "metrics": dict(chosen.get("metrics") or {}),
             "overlay_sync": sync_mode,
             "overlay_history_span_ms": span_ms,
+            "overlay_epoch": epoch,
         }
         if at_ms is not None:
             base["requested_at_ms"] = float(at_ms)
@@ -476,6 +481,7 @@ class CameraVmsWorker:
                 "updated_at": 0.0,
             }
             self._overlay_history.clear()
+            self._overlay_epoch += 1
 
     @staticmethod
     def _merge_roi_zones(existing: list[dict], incoming: list[dict]) -> list[dict]:

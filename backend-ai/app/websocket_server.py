@@ -55,6 +55,9 @@ def build_detections_ws_payload(
         "width": width,
         "height": height,
         "updated_at": updated_at,
+        # Chỉ đổi khi luồng dựng lại. FE bỏ track cũ theo mốc này thay vì bỏ sau
+        # mỗi frame — giữ được làm mượt giữa hai lần AI chạy.
+        "overlay_epoch": int(overlay.get("overlay_epoch") or 0),
         "detections": detections,
         "vms_ready": stream_online and updated_at > 0,
         "stream_online": stream_online,

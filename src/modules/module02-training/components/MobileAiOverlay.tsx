@@ -105,7 +105,15 @@ const DetectionBox = memo(function DetectionBox({
     : resolveBehaviorStyle(modelId, det.behavior)
   const video = videoRef.current
 
-  if (!video?.videoWidth || !video.videoHeight || frameWidth <= 0 || frameHeight <= 0) {
+  // WHEP và Safari chưa báo videoWidth ngay sau khi gắn luồng. Khung analyze của
+  // backend đã đủ để chiếu bbox, nên chờ metadata chỉ làm hộp xuất hiện muộn.
+  if (
+    !video
+    || frameWidth <= 0
+    || frameHeight <= 0
+    || video.clientWidth <= 0
+    || video.clientHeight <= 0
+  ) {
     return null
   }
 
