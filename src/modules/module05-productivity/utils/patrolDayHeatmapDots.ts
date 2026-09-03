@@ -97,12 +97,18 @@ function isObjectTierPresence(presence: PatrolDayPresence): boolean {
   return presence.tier === 'object'
 }
 
-/** Đối tượng (obj-*) — không lọc live/count như người; đồng bộ KPI unassigned. */
+/**
+ * Đối tượng (obj-*) — không lọc live như người; đồng bộ KPI lượt gặp.
+ *
+ * Từng có thêm bộ lọc `counted === true`, tức chỉ vẽ lượt đã qua tripwire GPS,
+ * để khớp với KPI hồi đó cũng lọc như vậy. KPI đã bỏ điều kiện GPS — bodycam
+ * mất định vị trong nhà không có nghĩa là không gặp ai — nên giữ lại ở đây thì
+ * bản đồ hiển thị ít hơn con số ngay phía trên nó.
+ */
 function scopePresencesForHeatmap(
   presences: PatrolDayPresence[],
   opts: {
     liveOnly?: boolean
-    countedOnly?: boolean
     includeUnassigned?: boolean
     now: number
   },
@@ -120,10 +126,6 @@ function scopePresencesForHeatmap(
   }
 
   scoped = collapsePresencesBySession(scoped)
-
-  if (opts.countedOnly) {
-    scoped = scoped.filter(p => p.counted === true)
-  }
 
   if (!opts.includeUnassigned) {
     scoped = scoped.filter(p => tierEligibleStandard(p.tier))
@@ -253,14 +255,11 @@ export function buildPatrolPresenceHeatmapDots(
     flightModeByCamera?: Record<string, PatrolFlightMode | string | null | undefined>
     /** pers-* → gallery từ bundle — gộp presence với registry trước khi alias local sync. */
     persEntityLookup?: Record<string, string>
-    /** Chỉ hiển thị lượt đã qua tripwire (counted=1) — đồng bộ KPI encounters_standard. */
-    countedOnly?: boolean
   },
 ): DetectionDot[] {
   const now = opts?.now ?? Date.now()
   const scoped = scopePresencesForHeatmap(presences, {
     liveOnly: opts?.liveOnly,
-    countedOnly: opts?.countedOnly,
     includeUnassigned: opts?.includeUnassigned,
     now,
   })

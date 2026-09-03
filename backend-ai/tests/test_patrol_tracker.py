@@ -287,6 +287,46 @@ class TestFrameExit(unittest.TestCase):
         self.assertGreater(vx, 60.0)
 
 
+class TestTrackCapacity(unittest.TestCase):
+    """Chạm trần track thì nhường chỗ cho người đang trong khung."""
+
+    def test_new_detection_evicts_the_oldest_lost_track(self):
+        from app.patrol_tracker import _MAX_TRACKS
+
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        t = 0.0
+        crowd = [
+            (_box(20 + (i % 30) * 42, 60 + (i // 30) * 130, 18, 40), 0.7)
+            for i in range(_MAX_TRACKS)
+        ]
+        tracker.update(crowd, now=t)
+        self.assertEqual(len(tracker.tracks), _MAX_TRACKS)
+
+        t += 0.2
+        newcomer = tracker.update([(_box(640, 400, 200, 480), 0.9)], now=t)[0]
+
+        self.assertIsNotNone(newcomer)
+        self.assertLessEqual(len(tracker.tracks), _MAX_TRACKS)
+        self.assertIn(newcomer, tracker.tracks)
+
+    def test_capacity_never_evicts_someone_measured_this_frame(self):
+        from app.patrol_tracker import _MAX_TRACKS
+
+        tracker = PatrolTracker(camera_id="HC-01", profile=PROFILE_BODYCAM)
+        crowd = [
+            (_box(20 + (i % 30) * 42, 60 + (i // 30) * 130, 18, 40), 0.7)
+            for i in range(_MAX_TRACKS)
+        ]
+        assigned = tracker.update(crowd, now=0.0)
+        self.assertEqual(len([t for t in assigned if t]), _MAX_TRACKS)
+
+        # Cả đám vẫn đứng đó, thêm một người nữa bước vào: không ai bị đá ra vì
+        # tất cả đều vừa được đo ở chính frame này.
+        again = tracker.update(crowd + [(_box(640, 400, 200, 480), 0.9)], now=0.2)
+        self.assertEqual(again[:-1], assigned)
+        self.assertIsNone(again[-1])
+
+
 class TestTrackerRegistry(unittest.TestCase):
     def test_per_camera_isolation_and_reset(self):
         reset_patrol_trackers()

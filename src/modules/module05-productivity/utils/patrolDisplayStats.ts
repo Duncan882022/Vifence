@@ -25,7 +25,8 @@ export function derivePatrolDisplayStats(
       ...backendStats,
       workersStandard: headcount,
       objectCount: backendStats.objectCount,
-      objectEncounterCount: backendStats.unassignedObservations,
+      objectEncounterCount:
+        backendStats.objectEncounterCount ?? backendStats.unassignedObservations,
     },
     tabCounts,
   }

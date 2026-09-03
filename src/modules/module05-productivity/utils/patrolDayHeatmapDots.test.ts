@@ -138,7 +138,7 @@ describe('buildPatrolPresenceHeatmapDots', () => {
         presenceSeq: 1,
         counted: true,
       }),
-    ], { includeUnassigned: true, countedOnly: true })
+    ], { includeUnassigned: true })
     expect(dots).toHaveLength(3)
     expect(dots.every(d => d.tier === 'object')).toBe(true)
     expect(new Set(dots.map(d => d.id)).size).toBe(3)

@@ -366,6 +366,38 @@ class PatrolTracker:
         )
         return (now - track.last_measured_at) >= keep
 
+    def _close_track(self, track: PatrolTrack, *, now: float, reason: str) -> None:
+        self.tracks.pop(track.track_id, None)
+        try:
+            from .patrol.sink import forget_track
+
+            forget_track(self.camera_id, track.track_id, now=now, end_reason=reason)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _evict_stalest_track(self, now: float) -> bool:
+        """Nhường chỗ cho detection mới bằng track lâu nhất chưa được đo lại.
+
+        Giữ track qua lúc bị che khiến số track sống đồng thời tăng hẳn, nên
+        trần `_MAX_TRACKS` giờ mới thực sự chạm tới. Bỏ qua detection mới khi
+        chạm trần là bỏ rơi một người đang đứng trong khung để giữ chỗ cho một
+        người có thể đã đi từ lâu — đánh đổi sai chiều.
+
+        Track vừa đo ở frame này thì không đụng tới: nó đang bám một người có
+        thật ngay lúc đó.
+        """
+        stalest: PatrolTrack | None = None
+        for track in self.tracks.values():
+            if track.last_measured_at >= now:
+                continue
+            if stalest is None or track.last_measured_at < stalest.last_measured_at:
+                stalest = track
+        if stalest is None:
+            return False
+        reason = END_REASON_EXIT_EDGE if stalest.at_frame_edge else END_REASON_LOST
+        self._close_track(stalest, now=now, reason=reason)
+        return True
+
     def _next_id(self) -> str:
         self._seq += 1
         # Hậu tố ":person" giữ tương thích với các nhánh dedup/appearance đang
@@ -521,20 +553,13 @@ class PatrolTracker:
                 track.state = "lost"
             if not self._should_drop(track, now):
                 continue
-            dropped_id = track.track_id
             reason = END_REASON_EXIT_EDGE if track.at_frame_edge else END_REASON_LOST
-            self.tracks.pop(dropped_id, None)
-            try:
-                from .patrol.sink import forget_track
-
-                forget_track(self.camera_id, dropped_id, now=now, end_reason=reason)
-            except Exception:  # noqa: BLE001
-                pass
+            self._close_track(track, now=now, reason=reason)
 
         for det_index, (bbox, conf) in enumerate(detections):
             if det_index in used_dets:
                 continue
-            if len(self.tracks) >= _MAX_TRACKS:
+            if len(self.tracks) >= _MAX_TRACKS and not self._evict_stalest_track(now):
                 continue
             track_id = self._next_id()
             self.tracks[track_id] = PatrolTrack(

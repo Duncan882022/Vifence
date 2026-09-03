@@ -333,8 +333,15 @@ def patrol_runtime(_user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: 
 
 @router.get("/day/stats")
 def day_stats(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
-    """KPI đếm chuẩn — Người · Lượt gặp · Quan sát chưa gán."""
+    """KPI đếm chuẩn — Nhân sự · Lượt gặp Đối tượng · số đo tự hiệu chỉnh."""
     return {"ok": True, **daystore.day_stats(date)}
+
+
+@router.get("/day/sightings")
+def day_sightings(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
+    """Sổ cái lượt gặp trong ngày — dựng lại con số KPI từ từng dòng."""
+    d = date or db.today_vn()
+    return {"ok": True, "date": d, "items": daystore.list_sightings(d)}
 
 
 @router.get("/day/presences")
