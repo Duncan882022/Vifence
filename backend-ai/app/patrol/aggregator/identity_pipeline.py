@@ -127,15 +127,25 @@ def _ensure_pers_for_worker(
         return _ensure_profile_for_tk(wid, now=now)
 
     from ...patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
-    from ...patrol_identity_store import lookup_patrol_identity
+    from ...patrol_identity_store import lookup_patrol_identity_any
 
     gallery = wid if is_patrol_gallery_id(wid) else resolve_patrol_gallery_id_for_worker(wid)
     if not gallery:
         return None
 
-    row = lookup_patrol_identity(gallery)
+    row = lookup_patrol_identity_any(gallery)
     if not row:
         return None
+
+    emp = str(row.get("employee_code") or "").strip()
+    if emp:
+        found = identity.find_by_employee_code(emp)
+        if found:
+            return str(found["pers_id"])
+
+    resolved = identity.pers_id_for_gallery_worker(gallery)
+    if resolved:
+        return resolved[0]
 
     hr = identity.hr_profile_for_gallery(gallery)
     if hr:
@@ -574,13 +584,44 @@ def try_promote_object_after_snapshot(
     if not (session.subject_id or "").startswith("obj-"):
         return
 
-    pers_id = identity.allocate_tk_profile(origin="face_snapshot_repair", now=obs.ts)
-    _assign_pers_subject(session, pers_id, now=obs.ts)
-    session.identity_resolved = True
-    logger.info(
-        "aggregator snapshot repair promote %s -> %s track %s",
+    emb = obs.face_embedding
+    quality = float(obs.face_quality or 0.0)
+    if emb is None and session.best_faces:
+        best = session.best_faces[0]
+        if best.embedding is not None and best.quality >= MIN_QUALITY_FOR_SEARCH:
+            emb = best.embedding
+            quality = max(quality, float(best.quality))
+
+    if emb is not None:
+        wid = (obs.lifecycle_worker_id or session.identity.person_id or "").strip()
+        from ...person_identity_registry import is_sgc_worker_id
+
+        pref_tk = wid if is_sgc_worker_id(wid) else None
+        try:
+            pers_id, _created = identity.observe_face(
+                emb,
+                quality=max(quality, MIN_QUALITY_FOR_SEARCH),
+                camera_id=obs.camera_id,
+                now=obs.ts,
+                frame=obs.frame,
+                person_bbox=obs.person_bbox,
+                preferred_tk=pref_tk,
+            )
+            _assign_pers_subject(session, pers_id, now=obs.ts)
+            session.identity_resolved = True
+            logger.info(
+                "aggregator snapshot repair promote %s -> %s track %s",
+                sid,
+                pers_id,
+                session.track_id,
+            )
+            return
+        except Exception:  # noqa: BLE001
+            logger.exception("aggregator snapshot observe_face repair failed")
+
+    logger.warning(
+        "aggregator snapshot repair skip %s track %s — no embedding to match gallery",
         sid,
-        pers_id,
         session.track_id,
     )
 

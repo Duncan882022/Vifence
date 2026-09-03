@@ -482,10 +482,10 @@ def _match_patrol_gallery_from_embedding(
         return None
     from .patrol import identity as patrol_identity
 
-    hr = patrol_identity.hr_profile_for_gallery(gallery_id)
-    if hr is None:
+    resolved = patrol_identity.pers_id_for_gallery_worker(gallery_id)
+    if resolved is None:
         return None
-    name = patrol_identity.display_name(hr)
+    _pers_id, name = resolved
     if _conflicts_frame_faces(gallery_id, face_emb, frame_face_assignments):
         return None
     return gallery_id, name, float(score)
@@ -513,11 +513,13 @@ def _gallery_from_patrol_binding(worker_id: str) -> tuple[str, str] | None:
         return None
     gallery_id = lookup_gallery_worker(wid)
     if not gallery_id:
+        from .patrol_identity_store import lookup_gallery_worker_raw
+
+        gallery_id = lookup_gallery_worker_raw(wid) or wid
+    resolved = patrol_identity.pers_id_for_gallery_worker(gallery_id)
+    if resolved is None:
         return None
-    hr = patrol_identity.hr_profile_for_gallery(gallery_id)
-    if hr is None:
-        return None
-    name = patrol_identity.display_name(hr)
+    _pers_id, name = resolved
     if not name:
         return None
     return gallery_id, name

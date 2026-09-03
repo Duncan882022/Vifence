@@ -554,18 +554,9 @@ def coalesce_parallel_object_cards(date: str | None = None) -> int:
 
 
 def promote_objects_with_face_snapshot(date: str | None = None) -> int:
-    """Repair: obj có snapshot_score ≥ ngưỡng Người → thăng pers-* (không cần embedding)."""
-    d = date or db.today_vn()
-    promoted = 0
-    for row in list_objects(d):
-        score = float(row.get("snapshot_score") or 0)
-        if score < PERSON_LIST_MIN_SNAPSHOT_SCORE:
-            continue
-        oid = str(row["obj_id"])
-        pers_id = identity.allocate_tk_profile(origin="camera_promote", now=float(row["last_seen"]))
-        promote_object(oid, pers_id, now=float(row["last_seen"]))
-        promoted += 1
-    return promoted
+    """Repair: obj có snapshot_score ≥ ngưỡng — không cấp tk mới (cần embedding/gallery match)."""
+    _ = date
+    return 0
 
 
 def promote_object(

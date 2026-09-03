@@ -105,6 +105,32 @@ def lookup_gallery_worker(alias: str) -> str | None:
     return wid
 
 
+def lookup_gallery_worker_raw(alias: str) -> str | None:
+    """Map alias → gallery id — không yêu cầu HR identified (draft gallery OK)."""
+    key = normalize_alias_key(alias)
+    if not key:
+        return None
+    wid = _resolve_alias_to_gallery_raw(key)
+    return str(wid).strip() if wid else None
+
+
+def lookup_patrol_binding_row(gallery_worker_id: str) -> dict[str, Any] | None:
+    """Row binding gallery — kể cả draft chưa có HR identified."""
+    wid = (gallery_worker_id or "").strip()
+    if not wid:
+        return None
+    row = (_load().get("by_gallery_worker") or {}).get(wid)
+    return row if isinstance(row, dict) else None
+
+
+def lookup_patrol_identity_any(alias: str) -> dict[str, Any] | None:
+    """Binding gallery + metadata — draft hoặc identified."""
+    wid = lookup_gallery_worker_raw(alias)
+    if not wid:
+        return None
+    return lookup_patrol_binding_row(wid)
+
+
 def lookup_patrol_identity(alias: str) -> dict[str, Any] | None:
     wid = lookup_gallery_worker(alias)
     if not wid:
