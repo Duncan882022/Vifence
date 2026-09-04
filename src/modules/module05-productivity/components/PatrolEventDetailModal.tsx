@@ -19,6 +19,7 @@ import { PatrolEventSnapshot, preloadPatrolEventSnapshot } from './PatrolEventSn
 import {
   fetchPatrolSubjectAppearances,
   formatAppearanceTimeRange,
+  comparePatrolAppearanceSegments,
   type PatrolAppearanceSegment,
 } from '../services/patrolDayEvents.service'
 import {
@@ -112,7 +113,7 @@ function collapseObjectAppearanceHistory(
   stage: ReturnType<typeof resolvePatrolPersonStage>,
 ): PatrolAppearanceSegment[] {
   if (stage !== 'object' || segments.length <= 1) return segments
-  const [primary] = [...segments].sort((a, b) => b.startedAt - a.startedAt)
+  const [primary] = [...segments].sort(comparePatrolAppearanceSegments)
   return primary ? [primary] : segments
 }
 
@@ -251,7 +252,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       const sorted = collapseObjectAppearanceHistory(
         dedupeAppearanceSegments(
           fillMissingNewestAppearanceSnapshot(
-            [...segments].sort((a, b) => b.startedAt - a.startedAt),
+            [...segments].sort(comparePatrolAppearanceSegments),
             event,
           ),
         ),

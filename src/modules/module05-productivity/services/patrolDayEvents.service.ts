@@ -321,11 +321,29 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
   }
 }
 
-export function formatAppearanceTimeRange(startSec: number, _endSec?: number): string {
+export function comparePatrolAppearanceSegments(
+  a: PatrolAppearanceSegment,
+  b: PatrolAppearanceSegment,
+): number {
+  const seqA = a.presenceSeq ?? 0
+  const seqB = b.presenceSeq ?? 0
+  if (seqA !== seqB) return seqB - seqA
+  if (a.startedAt !== b.startedAt) return b.startedAt - a.startedAt
+  return (b.id ?? 0) - (a.id ?? 0)
+}
+
+export function formatAppearanceTimeRange(startSec: number, endSec?: number): string {
   const d = new Date(startSec * 1000)
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  if (endSec != null && endSec > startSec + 59) {
+    const end = new Date(endSec * 1000)
+    const eh = String(end.getHours()).padStart(2, '0')
+    const em = String(end.getMinutes()).padStart(2, '0')
+    return `${hh}:${mm}:${ss}–${eh}:${em}`
+  }
+  return `${hh}:${mm}:${ss}`
 }
 
 /** Gán tên cho một Người → Định danh. Ảnh kèm theo được lưu làm khuôn mặt. */

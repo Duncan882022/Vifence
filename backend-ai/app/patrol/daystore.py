@@ -736,6 +736,9 @@ def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     # ByteTrack re-id: cùng session, track id đổi giữa chừng (≤5s).
     if sa and sb and sa == sb:
         if ta and tb and ta != tb:
+            # INSERT đúp hoặc re-id trong cùng lượt stream — started_at trùng/chồng.
+            if abs(float(b["started_at"]) - float(a["started_at"])) <= 0.5:
+                return True
             gap = float(b["started_at"]) - float(a["ended_at"])
             return 0 <= gap <= 5.0
         return True
@@ -953,6 +956,7 @@ def coalesce_subject_appearances(
             ).fetchone()
             if keep is None:
                 break
+        _renumber_presence_seq(conn, event_date, subject_id)
     return merged
 
 
