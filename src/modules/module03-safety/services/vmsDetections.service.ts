@@ -70,6 +70,8 @@ export interface VmsOverlayDetection {
   related_bbox?: [number, number, number, number]
   /** Tầng định danh đã ổn định phía BE: object | person | identity. */
   tier?: 'object' | 'person' | 'identity'
+  /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
+  promoted_from_object?: boolean
   /** px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect. */
   velocity?: [number, number]
   peak_group?: boolean

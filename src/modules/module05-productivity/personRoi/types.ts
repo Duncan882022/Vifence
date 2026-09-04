@@ -50,6 +50,8 @@ export interface PersonRoiTrack {
   peakGroup?: boolean
   peakGroupIndex?: number
   peakGroupSize?: number
+  /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
+  promotedFromObject?: boolean
 }
 
 /** Output hiển thị overlay / heatmap. */
@@ -69,4 +71,6 @@ export interface PersonRoiDisplay {
   peakGroup?: boolean
   peakGroupIndex?: number
   peakGroupSize?: number
+  /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
+  promotedFromObject?: boolean
 }

@@ -251,6 +251,8 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     trackWorkerId: row.track_worker_id ? String(row.track_worker_id) : null,
     gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
     gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
+    promotedFrom: Array.isArray(row.promoted_from) ? row.promoted_from.map(String) : [],
+    promotedAt: row.promoted_at != null ? Number(row.promoted_at) : null,
   })))
 
   const objects = await Promise.all((data.objects ?? []).map(async row => ({

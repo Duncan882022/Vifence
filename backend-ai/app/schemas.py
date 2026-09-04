@@ -79,6 +79,9 @@ class PpeDetection(BaseModel):
     # object | person | identity — tầng đã ổn định của track (chỉ tiến không lùi).
     # FE hiển thị thẳng, không suy lại từ worker_id để hai bên không lệch nhãn.
     tier: Optional[str] = None
+    # Thẻ này vốn là `obj-*`, lên hạng khi bắt được mặt. FE đánh dấu trên nhãn
+    # ROI để người xem hiểu vì sao một thẻ Người còn giữ ảnh badge "Đối tượng".
+    promoted_from_object: Optional[bool] = None
     # px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect.
     velocity: Optional[list[float]] = None
     # Peak time — silhouette gom nhóm 1 obj-*; ROI vẫn đánh số từng người.

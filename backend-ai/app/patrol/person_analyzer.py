@@ -327,6 +327,11 @@ def _assign_patrol_person_identity(
     person_det.track_id = track_id
     person_det.tier = display_tier
     person_det.face_eligible = face_eligible and face_emb is not None
+    if resolved.worker_id:
+        from . import db
+        from .promoted_registry import was_promoted
+
+        person_det.promoted_from_object = was_promoted(resolved.worker_id, db.today_vn())
 
     # Ghi vào kho tuần tra (SQLite). Vector khuôn mặt chỉ tồn tại ở đúng chỗ
     # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được

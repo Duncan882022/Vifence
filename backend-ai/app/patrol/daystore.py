@@ -494,6 +494,10 @@ def promote_object(
             (pid, date, obj_id),
         )
         _renumber_presence_seq(conn, date, pid)
+        # Nhãn ROI trên camera cần biết ngay thẻ này vừa lên hạng.
+        from .promoted_registry import mark_promoted
+
+        mark_promoted(pid, date)
         # Đánh dấu chứ không xoá: mã obj-* đã đi vào ảnh chụp và báo cáo xuất ra
         # trước lúc thăng hạng, xoá dòng là những chỗ đó trỏ vào khoảng không.
         conn.execute(
@@ -519,12 +523,27 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
     rows = db.query(
         "SELECT e.event_date, e.pers_id, e.first_seen, e.last_seen,"
         "       e.snapshot_path, e.snapshot_score,"
-        "       p.status, p.full_name, p.employee_code, p.contractor"
+        "       p.status, p.full_name, p.employee_code, p.contractor,"
+        # Thẻ này vốn là Đối tượng nào — để giao diện đánh dấu "vừa thăng hạng".
+        # Không có mốc này thì người xem không phân biệt được thẻ Người mang ảnh
+        # badge "Đối tượng" là do thăng hạng giữa lượt hay do nhận dạng sai.
+        "       (SELECT GROUP_CONCAT(o.obj_id) FROM daily_objects o"
+        "         WHERE o.event_date = e.event_date AND o.promoted_to = e.pers_id)"
+        "        AS promoted_from,"
+        "       (SELECT MAX(o.promoted_at) FROM daily_objects o"
+        "         WHERE o.event_date = e.event_date AND o.promoted_to = e.pers_id)"
+        "        AS promoted_at"
         "  FROM daily_events e JOIN persons p ON p.pers_id = e.pers_id"
         " WHERE e.event_date = ? ORDER BY e.last_seen DESC",
         (d,),
     )
-    return [dict(r) for r in rows]
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = dict(r)
+        raw = str(item.pop("promoted_from", "") or "")
+        item["promoted_from"] = [s for s in raw.split(",") if s]
+        out.append(item)
+    return out
 
 
 # ---------------------------------------------------------------------------
