@@ -37,9 +37,21 @@ class SpeckBoxTests(unittest.TestCase):
                 self.assertFalse(patrol_person_meets_display_gate(box, FW, FH))
                 self.assertFalse(patrol_object_commit_allowed(box, FW, FH))
 
-    def test_distant_but_person_shaped_box_survives(self) -> None:
-        """Người thật ở xa vẫn cao gấp đôi bề rộng — không được loại."""
-        box = (700.0, 74.0, 700.0 + 12.0, 74.0 + 30.0)
+    def test_aspect_ratio_is_not_a_way_out(self) -> None:
+        """Rác trải từ tỉ lệ 0.95 đến 1.63 — hộp cao gấp rưỡi vẫn là vệt mờ.
+
+        Đây là các hộp còn lọt khi cổng còn dùng thêm điều kiện tỉ lệ < 1.35:
+        rác dồn vào đúng khe hở đó, nên cổng chỉ xét kích thước tuyệt đối.
+        """
+        for x, y, w, h in [(700, 100, 12, 20), (700, 100, 13, 21), (700, 100, 14, 32)]:
+            box = (float(x), float(y), float(x + w), float(y + h))
+            with self.subTest(box=box):
+                self.assertGreater((box[3] - box[1]) / (box[2] - box[0]), 1.35)
+                self.assertTrue(speck_person_box(box, FW, FH))
+
+    def test_box_at_the_floor_survives(self) -> None:
+        """Vừa đủ 7% chiều cao khung thì giữ — ngưỡng không được trôi lên."""
+        box = (700.0, 74.0, 700.0 + 20.0, 74.0 + FH * 0.071)
         self.assertFalse(speck_person_box(box, FW, FH))
 
     def test_close_person_survives(self) -> None:

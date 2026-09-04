@@ -199,8 +199,15 @@ describe('vệt vuông nhỏ không được vẽ ROI', () => {
       .toBe(false)
   })
 
-  it('giữ người ở xa nhưng đúng hình dáng người', () => {
-    const distant: Bbox4 = [700, 100, 700 + 16, 100 + 40]
+  it('tỉ lệ cao/rộng không phải cửa lách — rác trải tới tỉ lệ 1.6', () => {
+    const tall: Bbox4 = [700, 100, 700 + 14, 100 + 32]
+    expect(patrolPersonMeetsDisplayGate({ bbox: tall, frameW: FRAME_W, frameH: FRAME_H }))
+      .toBe(false)
+  })
+
+  it('giữ người ở xa khi đã đủ lớn để nhìn ra', () => {
+    // Rộng 52 px để tỉ lệ ~1.9 — hẹp hơn nữa thì luật cột dọc loại trước.
+    const distant: Bbox4 = [700, 100, 700 + 52, 100 + FRAME_H * 0.14]
     expect(patrolPersonMeetsDisplayGate({ bbox: distant, frameW: FRAME_W, frameH: FRAME_H }))
       .toBe(true)
   })

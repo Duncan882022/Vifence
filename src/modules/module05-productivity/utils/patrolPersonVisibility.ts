@@ -95,24 +95,20 @@ function verticalStructureFpBox(bbox: Bbox4, frameW: number, frameH: number): bo
 }
 
 const SPECK_BOX_MAX_HEIGHT_RATIO = 0.07
-const SPECK_BOX_MAX_ASPECT = 1.35
 
 /**
- * Vệt nhỏ hình vuông — không đủ để là bằng chứng về một con người.
+ * Hộp quá nhỏ để là bằng chứng về một con người.
  *
- * Người đứng, kể cả ở xa, vẫn cao gấp đôi bề rộng. Hộp chỉ cao 3–5% khung mà
- * gần vuông thì không mang hình dáng người: đo trên HC-01 thật, 9/11 hộp lọt
- * cổng ghi thẻ Đối tượng là loại này (~20×25 px, tỉ lệ 0.95–1.11), cắt ra chỉ
- * là vệt mờ không nhận ra được gì.
+ * Đo trên HC-01 thật: 9/11 hộp lọt cổng ghi thẻ cao 20–29 px trong khung cao
+ * 540, nằm nửa trên khung tức bên kia đường; cắt ra chỉ là vệt mờ. Chặn theo
+ * kích thước tuyệt đối chứ không theo tỉ lệ cao/rộng — rác trải từ tỉ lệ 0.95
+ * đến 1.63 nên mọi ngưỡng tỉ lệ đều để lại khe hở mà rác dồn vào đúng đó.
  *
  * Mirror `speck_person_box` bên backend.
  */
 function speckPersonBox(bbox: Bbox4, frameH: number): boolean {
-  const [, y1, x2, y2] = bbox
-  const pw = Math.max(x2 - bbox[0], 1)
-  const ph = Math.max(y2 - y1, 1)
-  if (ph / Math.max(frameH, 1) >= SPECK_BOX_MAX_HEIGHT_RATIO) return false
-  return ph / pw < SPECK_BOX_MAX_ASPECT
+  const ph = Math.max(bbox[3] - bbox[1], 1)
+  return ph / Math.max(frameH, 1) < SPECK_BOX_MAX_HEIGHT_RATIO
 }
 
 function wideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: number): boolean {

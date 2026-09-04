@@ -154,7 +154,6 @@ def signboard_like_fp_box(
 
 
 SPECK_BOX_MAX_HEIGHT_RATIO = 0.07
-SPECK_BOX_MAX_ASPECT = 1.35
 
 
 def speck_person_box(
@@ -162,27 +161,26 @@ def speck_person_box(
     frame_w: int,
     frame_h: int,
 ) -> bool:
-    """Vệt nhỏ hình vuông — không đủ để là bằng chứng về một con người.
+    """Hộp quá nhỏ để là bằng chứng về một con người.
 
-    Người đứng, kể cả ở xa, vẫn cao gấp đôi bề rộng. Một hộp chỉ cao 3–5% khung
-    mà lại gần vuông thì không mang hình dáng người: đo trên HC-01 thật, 9/11
-    hộp lọt cổng ghi thẻ Đối tượng là loại này (~20×25 px, tỉ lệ 0.95–1.11, nằm
-    ở nửa trên khung tức là bên kia đường), và cắt ra xem thì chỉ là vệt mờ
-    không nhận ra được gì. Chúng đẻ ra thẻ Đối tượng nhiều gấp bốn thẻ Người.
+    Đo trên HC-01 thật: 11 hộp lọt cổng ghi thẻ Đối tượng, 9 trong đó cao
+    20–29 px trong khung cao 540 và nằm ở nửa trên khung, tức là bên kia đường.
+    Cắt đúng những hộp đó ra xem thì chỉ là vệt mờ không nhận ra được gì. Chúng
+    đẻ ra 95 thẻ Đối tượng so với 23 thẻ Người.
 
-    Ngưỡng đặt thấp có chủ ý: người thật ở xa trên ảnh công trường mẫu cao 12%
-    khung, còn người đứng gần cao 56% — cách ngưỡng rất xa.
+    Chặn theo kích thước tuyệt đối, không theo tỉ lệ cao/rộng: đo lại trên 182
+    hộp thì rác trải từ tỉ lệ 0.95 đến 1.63, nên mọi ngưỡng tỉ lệ đều để lại
+    một khe hở mà rác dồn vào đúng đó (hộp 12×20 px tỉ lệ 1.6 vẫn là vệt mờ).
+
+    Ngưỡng 7% chiều cao khung cách xa người thật: người ở xa trên ảnh công
+    trường mẫu cao 12% khung, người đứng gần trên HC-01 cao 56%.
 
     Chỉ dùng cho góc mặt đất. Nhìn từ drone thì người thật vốn nhỏ và có thể
     rộng hơn cao (nhìn thẳng xuống đỉnh đầu), nên gate này sẽ xoá sạch ROI hợp
     lệ của luồng bay.
     """
-    x1, y1, x2, y2 = person_box
-    pw = max(float(x2) - float(x1), 1.0)
-    ph = max(float(y2) - float(y1), 1.0)
-    if ph / max(float(frame_h), 1.0) >= SPECK_BOX_MAX_HEIGHT_RATIO:
-        return False
-    return (ph / pw) < SPECK_BOX_MAX_ASPECT
+    ph = max(float(person_box[3]) - float(person_box[1]), 1.0)
+    return ph / max(float(frame_h), 1.0) < SPECK_BOX_MAX_HEIGHT_RATIO
 
 
 def patrol_bbox_rejects_static_fp(
