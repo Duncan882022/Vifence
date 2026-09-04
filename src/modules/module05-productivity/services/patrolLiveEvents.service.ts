@@ -19,14 +19,7 @@ import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 
 const ZONE_LABELS: Record<string, string> = {
-  ZONE_SITE: 'Cầu Sông Hốt',
-  ZONE_1: 'Khu 1 — Đình Trung Bản',
-  ZONE_2: 'Khu 2 — Xóm Thành',
-  ZONE_3: 'Khu 3 — Bùi Xá',
-  ZONE_4: 'Khu 4 — Hà An',
-  ZONE_5: 'Khu 5 — Đảo Hoàng Tân',
-  ZONE_6: 'Khu 6 — Hạ Long Xanh',
-  ZONE_7: 'Khu 7 — Bệnh viện Sản Nhi',
+  ZONE_1: 'Cầu Sông Hốt',
 }
 
 const TUNNEL_HEADERS: Record<string, string> = {

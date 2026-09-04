@@ -14,10 +14,9 @@ import {
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
 } from '../data/patrolDetectionData'
 import {
-  buildPatrolHeatmapStatsForZone,
   buildPatrolSiteHeatmapStats,
 } from '../utils/patrolZoneHeatmapStats'
-import { PATROL_GPS_ZONES, PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
+import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
@@ -63,14 +62,11 @@ function HeatmapSiteStatsOverlay({
   objectCount,
   personCount,
   identityCount,
-  scopeLabel,
   compactChrome,
 }: {
   objectCount: number
   personCount: number
   identityCount: number
-  /** null = toàn dự án; string = tên khu đang chọn. */
-  scopeLabel?: string | null
   compactChrome?: boolean
 }) {
   const rows: Array<{ value: number; label: string; tier: PatrolTier }> = [
@@ -89,15 +85,6 @@ function HeatmapSiteStatsOverlay({
       )}
     >
       <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[108px]">
-        <div
-          className={cn(
-            'px-2.5 py-1 text-[#94a3b8] border-b border-[#334155] truncate max-w-[160px]',
-            compactChrome ? 'text-[8px]' : 'text-[9px]',
-          )}
-          title={scopeLabel ?? 'Toàn dự án'}
-        >
-          {scopeLabel ?? 'Toàn dự án'}
-        </div>
         {rows.map((row, index) => (
           <div
             key={row.label}
@@ -255,7 +242,6 @@ export function PatrolDensityHeatmap({
     flycam: true,
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
 
   const hc02Helmet = workforce.helmets['HC-02']
@@ -418,27 +404,10 @@ export function PatrolDensityHeatmap({
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
-  useEffect(() => {
-    if (!layers.polygon) setSelectedZoneId(null)
-  }, [layers.polygon])
-
-  const heatmapScopedPresences = useMemo(
-    () => filterPatrolPresencesForHeatmap(presences, flycamFlightModes),
-    [presences, flycamFlightModes],
+  const heatmapStats = useMemo(
+    () => buildPatrolSiteHeatmapStats(dayStats),
+    [dayStats],
   )
-
-  const heatmapStats = useMemo(() => {
-    if (selectedZoneId) {
-      return buildPatrolHeatmapStatsForZone(heatmapScopedPresences, selectedZoneId)
-    }
-    return buildPatrolSiteHeatmapStats(dayStats)
-  }, [selectedZoneId, heatmapScopedPresences, dayStats])
-
-  const heatmapScopeLabel = useMemo(() => {
-    if (!selectedZoneId) return null
-    return PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)?.shortName
-      ?? selectedZoneId
-  }, [selectedZoneId])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -559,11 +528,8 @@ export function PatrolDensityHeatmap({
           displayMode="count"
           countMode="current"
           showSiteBoundary={layers.polygon}
-          showZoneDividers={layers.polygon}
+          showZoneDividers={false}
           showZonePolygons={false}
-          interactiveZones={!showFlymap && layers.polygon}
-          selectedZoneId={selectedZoneId}
-          onZoneSelect={setSelectedZoneId}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
           followLiveGps={showFlymap
@@ -606,7 +572,6 @@ export function PatrolDensityHeatmap({
             objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}
-            scopeLabel={heatmapScopeLabel}
             compactChrome={viewport.compactChrome}
           />
         )}

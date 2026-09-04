@@ -25,25 +25,26 @@ describe('buildPatrolLiveZonesFromWorkforce', () => {
         },
       },
     })
-    const zone3 = zones.find(z => z.id === PATROL_SITE_ZONE_ID)
-    expect(zone3?.coverage).toBe('VISITED')
-    expect(zone3?.peopleCurrent).toBe(5)
-    expect(zone3?.uniquePeople).toBe(7)
-    expect(zones.length).toBe(7)
+    const siteZone = zones.find(z => z.id === PATROL_SITE_ZONE_ID)
+    expect(siteZone?.coverage).toBe('VISITED')
+    expect(siteZone?.peopleCurrent).toBe(5)
+    expect(siteZone?.uniquePeople).toBe(7)
+    expect(zones.length).toBe(1)
   })
 
   it('visitedByZoneId override — phủ khu theo thiết bị', () => {
     const zones = buildPatrolLiveZonesFromWorkforce(
       EMPTY_WORKFORCE_SNAPSHOT,
-      { ZONE_2: true },
+      { ZONE_1: true },
     )
-    const zone2 = zones.find(z => z.id === 'ZONE_2')
-    expect(zone2?.coverage).toBe('VISITED')
+    const zone = zones.find(z => z.id === 'ZONE_1')
+    expect(zone?.coverage).toBe('VISITED')
   })
 
   it('chưa quan sát → NOT_VISITED', () => {
     const zones = buildPatrolLiveZonesFromWorkforce(EMPTY_WORKFORCE_SNAPSHOT)
     expect(zones.every(z => z.coverage === 'NOT_VISITED')).toBe(true)
     expect(zones.every(z => z.peopleCurrent === 0)).toBe(true)
+    expect(zones.length).toBe(1)
   })
 })
