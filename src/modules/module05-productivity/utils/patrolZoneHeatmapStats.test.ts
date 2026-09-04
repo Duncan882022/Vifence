@@ -1,66 +1,50 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildPatrolHeatmapStatsForZone,
-  buildPatrolSiteHeatmapStats,
   resolvePatrolPresenceZoneId,
 } from './patrolZoneHeatmapStats'
-import type { PatrolDayPresence, PatrolDayStats } from '../services/patrolDayEvents.service'
+import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
+import { PATROL_SITE_ZONE_ID } from '../data/patrolSiteMap'
 
 function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 'subjectId' | 'tier'>): PatrolDayPresence {
   return {
     id: 1,
+    subjectId: partial.subjectId,
+    tier: partial.tier,
     cameraId: 'HC-01',
-    zoneId: null,
-    startedAt: 0,
-    endedAt: 0,
-    gpsLat: null,
-    gpsLng: null,
-    presenceSeq: 1,
-    displayName: 'x',
     sourceCameras: ['HC-01'],
+    startedAt: 1,
+    endedAt: 2,
+    gpsLat: 20.954617,
+    gpsLng: 106.930071,
+    gpsLatEnd: null,
+    gpsLngEnd: null,
+    zoneId: partial.zoneId ?? PATROL_SITE_ZONE_ID,
+    presenceSeq: partial.presenceSeq ?? 1,
+    displayName: '',
+    counted: true,
     ...partial,
   }
 }
 
-describe('patrolZoneHeatmapStats', () => {
-  it('site stats đồng bộ dayStats', () => {
-    const stats: PatrolDayStats = {
-      date: '2026-03-03',
-      workersStandard: 0,
-      personCount: 12,
-      identityCount: 5,
-      objectCount: 0,
-      promotedObjectCount: 0,
-      encountersStandard: 0,
-      unassignedObservations: 20,
-      sightingsStreamOffline: 0,
-      sightingsTotal: 0,
-      sightingsUnqualified: 0,
-    }
-    expect(buildPatrolSiteHeatmapStats(stats)).toEqual({
-      objectCount: 20,
-      personCount: 12,
-      identityCount: 5,
-    })
+describe('patrolZoneHeatmapStats — single zone', () => {
+  it('resolvePatrolPresenceZoneId — mặc định ZONE_1', () => {
+    const p = presence({ subjectId: 'a', tier: 'person', zoneId: PATROL_SITE_ZONE_ID })
+    expect(resolvePatrolPresenceZoneId(p)).toBe(PATROL_SITE_ZONE_ID)
   })
 
-  it('lọc thống kê theo zoneId backend', () => {
+  it('buildPatrolHeatmapStatsForZone — đếm tier trong zone', () => {
     const presences = [
-      presence({ subjectId: 'obj-1', tier: 'object', zoneId: 'ZONE_1' }),
-      presence({ subjectId: 'obj-2', tier: 'object', zoneId: 'ZONE_2' }),
-      presence({ subjectId: 'pers-1', tier: 'person', zoneId: 'ZONE_1' }),
-      presence({ subjectId: 'pers-1', tier: 'person', zoneId: 'ZONE_1', presenceSeq: 2 }),
-      presence({ subjectId: 'iden-1', tier: 'identity', zoneId: 'ZONE_1' }),
+      presence({ subjectId: 'obj-1', tier: 'object' }),
+      presence({ subjectId: 'obj-2', tier: 'object' }),
+      presence({ subjectId: 'pers-1', tier: 'person' }),
+      presence({ subjectId: 'pers-1', tier: 'person', presenceSeq: 2 }),
+      presence({ subjectId: 'iden-1', tier: 'identity' }),
     ]
-    expect(buildPatrolHeatmapStatsForZone(presences, 'ZONE_1')).toEqual({
-      objectCount: 1,
+    expect(buildPatrolHeatmapStatsForZone(presences, PATROL_SITE_ZONE_ID)).toEqual({
+      objectCount: 2,
       personCount: 1,
       identityCount: 1,
     })
-  })
-
-  it('resolve zone từ zoneId', () => {
-    const p = presence({ subjectId: 'a', tier: 'person', zoneId: 'ZONE_3' })
-    expect(resolvePatrolPresenceZoneId(p)).toBe('ZONE_3')
   })
 })
