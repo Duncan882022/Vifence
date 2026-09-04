@@ -27,6 +27,10 @@ export interface PatrolDayPerson {
   trackWorkerId?: string | null
   gpsLat?: number | null
   gpsLng?: number | null
+  /** Các mã `obj-*` đã dồn vào thẻ này khi bắt được mặt. */
+  promotedFrom?: string[]
+  /** Thời điểm thăng hạng gần nhất (epoch giây). */
+  promotedAt?: number | null
 }
 
 export interface PatrolDayObject {

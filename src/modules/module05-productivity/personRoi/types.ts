@@ -29,6 +29,8 @@ export interface PersonRoiDetection {
   peak_group?: boolean
   peak_group_index?: number
   peak_group_size?: number
+  /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
+  promoted_from_object?: boolean
 }
 
 /** Track nội bộ — Kalman + lifecycle. */
