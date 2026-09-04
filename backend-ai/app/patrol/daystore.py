@@ -531,6 +531,49 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
 # Lịch sử xuất hiện
 
 
+def _luot_of(path: str | None) -> str | None:
+    """Khoá lượt nằm trong đuôi tên file `{subject}-{luot}.jpg`."""
+    if not path:
+        return None
+    name = path.rsplit("/", 1)[-1]
+    stem = name[:-4] if name.endswith(".jpg") else name
+    subject, sep, luot = stem.rpartition("-")
+    if not sep or not subject or not luot.isdigit():
+        return None
+    return luot
+
+
+def keep_snapshot_for_luot(prev: str | None, incoming: str | None) -> str | None:
+    """Ảnh đại diện cho một lượt gặp — đóng băng, trừ khi vừa thăng hạng.
+
+    Lịch sử cố ý giữ ảnh lúc bắt đầu lần gặp: thẻ ngoài đổi ảnh liên tục theo
+    khung mặt rõ hơn, còn dòng lịch sử phải đứng yên để người xem còn đối chiếu
+    được. Nhưng nếu Đối tượng thăng hạng **giữa lượt**, tấm đóng băng lại là
+    tấm `obj-*` mang badge "Đối tượng" — thẻ Người mở ra thấy dòng lịch sử ghi
+    "Đối tượng", và tấm ảnh ngoài thẻ không có trong danh sách lịch sử.
+
+    Cùng một lượt mà mã chủ thể đổi từ `obj-*` sang `tk-*`/`pers-*` thì đó là
+    cùng một khoảnh khắc chụp lại với badge đúng — lấy tấm mới. Mọi trường hợp
+    khác giữ nguyên tấm cũ.
+    """
+    prev = (prev or "").strip() or None
+    incoming = (incoming or "").strip() or None
+    if prev is None:
+        return incoming
+    if incoming is None:
+        return prev
+    prev_name = prev.rsplit("/", 1)[-1]
+    if not prev_name.startswith("obj-"):
+        return prev
+    new_name = incoming.rsplit("/", 1)[-1]
+    if new_name.startswith("obj-"):
+        return prev
+    prev_luot = _luot_of(prev)
+    if prev_luot is None or prev_luot != _luot_of(incoming):
+        return prev
+    return incoming
+
+
 def _renumber_presence_seq(conn, date: str, subject_id: str) -> None:
     """Đánh số lại lượt gặp theo thứ tự thời gian.
 
@@ -614,13 +657,12 @@ def _touch_appearance(
         # Lịch sử tích lũy — giữ ảnh lúc bắt đầu lần gặp; card ngoài vẫn upsert ảnh mới.
         prev_snap = str(row["snapshot_path"] or "").strip() or None
         incoming = (snapshot_path or "").strip() or None
-        snap = prev_snap or incoming
+        snap = keep_snapshot_for_luot(prev_snap, incoming)
         conn.execute(
             "UPDATE appearances SET ended_at = ?, gps_lat_end = ?, gps_lng_end = ?,"
-            " source_cameras = ?,"
-            " snapshot_path = COALESCE(snapshot_path, ?),"
+            " source_cameras = ?, snapshot_path = ?,"
             " counted = MAX(counted, ?) WHERE id = ?",
-            (ts, lat_end, lng_end, src, incoming, q, row["id"]),
+            (ts, lat_end, lng_end, src, snap, q, row["id"]),
         )
         return
 
@@ -989,8 +1031,16 @@ def upsert_track_appearance(
                 set_parts.append("end_reason = ?")
                 params.append(reason)
             if snapshot_path:
-                set_parts.append("snapshot_path = COALESCE(snapshot_path, ?)")
-                params.append(snapshot_path)
+                prev_row = conn.execute(
+                    "SELECT snapshot_path FROM appearances WHERE id = ?", (row_id,),
+                ).fetchone()
+                set_parts.append("snapshot_path = ?")
+                params.append(
+                    keep_snapshot_for_luot(
+                        prev_row["snapshot_path"] if prev_row else None,
+                        snapshot_path,
+                    ),
+                )
             params.append(row_id)
             conn.execute(
                 f"UPDATE appearances SET {', '.join(set_parts)} WHERE id = ?",
