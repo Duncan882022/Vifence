@@ -2,59 +2,63 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Dự án Cầu Sông Hốt — hành lang CT06 cong theo khảo sát (4 điểm neo GPS).
+ * Cầu Sông Hốt — một zone duy nhất, viền heatmap theo 4 điểm GPS khảo sát.
  */
 
 const M_PER_DEG_LAT = 111_320
 
-/** Bo tròn A — đỉnh tây (Đình Trung Bản). */
-export const PATROL_SITE_TIP_A: [number, number] = [20.907474, 106.830878]
+/** 4 điểm neo GPS — viền đỏ heatmap (theo thứ tự người dùng cung cấp). */
+export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
+  [20.955148, 106.924572],
+  [20.957172, 106.934593],
+  [20.953906, 106.93528],
+  [20.952243, 106.925838],
+]
 
-/** Bo tròn B — đỉnh đông (Bệnh viện Sản Nhi). */
-export const PATROL_SITE_TIP_B: [number, number] = [20.962517, 106.945303]
+/** Legacy aliases — góc polygon (giữ export cho code cũ). */
+export const PATROL_SITE_TIP_A: [number, number] = PATROL_SITE_BOUNDARY_RING[0]
+export const PATROL_SITE_TIP_B: [number, number] = PATROL_SITE_BOUNDARY_RING[1]
+export const PATROL_SITE_PINCH_SOUTH: [number, number] = PATROL_SITE_BOUNDARY_RING[3]
+export const PATROL_SITE_PINCH_NORTH: [number, number] = PATROL_SITE_BOUNDARY_RING[0]
 
-/** Điểm thắt dưới — mép nam (Đảo Hoàng Tân). */
-export const PATROL_SITE_PINCH_SOUTH: [number, number] = [20.928673, 106.893158]
+function polygonCentroid(polygon: [number, number][]): [number, number] {
+  if (polygon.length === 0) return [20.954617, 106.930071]
+  const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
+  const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
 
-/** Điểm thắt trên — mép bắc. */
-export const PATROL_SITE_PINCH_NORTH: [number, number] = [20.953546, 106.879254]
+/** Tâm zone / neo GPS mặc định. */
+export const PATROL_SITE_CENTER: [number, number] = polygonCentroid(PATROL_SITE_BOUNDARY_RING)
 
-/** Ghim khảo sát Bùi Xá — DR-03 / ZONE_3. */
-export const PATROL_SURVEY_PIN: [number, number] = [20.928444, 106.873611]
+/** Ghim khảo sát — trùng tâm polygon. */
+export const PATROL_SURVEY_PIN: [number, number] = [...PATROL_SITE_CENTER]
 
-/** Lượn nam ghim Bùi Xá — mép nam cong vào trong theo ảnh khảo sát. */
 export const PATROL_SURVEY_SOUTH_BEND: [number, number] = [
-  parseFloat((PATROL_SURVEY_PIN[0] - 0.0018).toFixed(6)),
+  parseFloat((PATROL_SURVEY_PIN[0] - 0.0004).toFixed(6)),
   PATROL_SURVEY_PIN[1],
 ]
 
-/** Bbox bilinear legacy — zoom / fallback. */
+/** Bbox legacy — zoom / fallback. */
 export const PATROL_SITE_CORNERS: [number, number][] = [
   [
-    Math.max(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_NORTH[0]),
-    Math.min(PATROL_SITE_TIP_A[1], PATROL_SITE_PINCH_SOUTH[1]),
+    Math.max(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])),
+    Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[1])),
   ],
   [
-    Math.max(PATROL_SITE_TIP_B[0], PATROL_SITE_PINCH_NORTH[0]),
-    Math.max(PATROL_SITE_TIP_B[1], PATROL_SITE_PINCH_SOUTH[1]),
+    Math.max(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])),
+    Math.max(...PATROL_SITE_BOUNDARY_RING.map(p => p[1])),
   ],
   [
-    Math.min(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_SOUTH[0]),
-    Math.max(PATROL_SITE_TIP_B[1], PATROL_SITE_PINCH_SOUTH[1]),
+    Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])),
+    Math.max(...PATROL_SITE_BOUNDARY_RING.map(p => p[1])),
   ],
   [
-    Math.min(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_SOUTH[0]),
-    Math.min(PATROL_SITE_TIP_A[1], PATROL_SITE_PINCH_SOUTH[1]),
+    Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[0])),
+    Math.min(...PATROL_SITE_BOUNDARY_RING.map(p => p[1])),
   ],
 ]
 
-/** Bán kính nửa hình tròn 2 đầu capsule (stadium) — mép phẳng nối spine tại attach point. */
-const END_CAP_RADIUS_M = 1360
-
-/** Độ lượn bắc trục CT06 so với đường thẳng tây–đông (m). */
-const SPINE_BOW_NORTH_M = 320
-
-const CAP_RADIUS_SCALE_WEST = 0.35
 function latLngToEnu(
   lat: number,
   lng: number,
@@ -67,360 +71,43 @@ function latLngToEnu(
   return [east, north]
 }
 
-function enuToLatLng(
-  east: number,
-  north: number,
-  refLat: number,
-  refLng: number,
-): [number, number] {
-  const cosLat = Math.cos((refLat * Math.PI) / 180)
-  const lat = refLat + north / M_PER_DEG_LAT
-  const lng = refLng + east / (M_PER_DEG_LAT * Math.max(cosLat, 1e-6))
-  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
-}
-
-function lerpPt(a: [number, number], b: [number, number], t: number): [number, number] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-}
-
-function subPt(a: [number, number], b: [number, number]): [number, number] {
-  return [a[0] - b[0], a[1] - b[1]]
-}
-
-function addPt(a: [number, number], b: [number, number]): [number, number] {
-  return [a[0] + b[0], a[1] + b[1]]
-}
-
-function scalePt(v: [number, number], s: number): [number, number] {
-  return [v[0] * s, v[1] * s]
-}
-
-function normalizePt(v: [number, number]): [number, number] {
-  const len = Math.hypot(v[0], v[1]) || 1
-  return [v[0] / len, v[1] / len]
-}
-
-function perpPt(v: [number, number]): [number, number] {
-  return [-v[1], v[0]]
-}
-
-function dotPt(a: [number, number], b: [number, number]): number {
-  return a[0] * b[0] + a[1] * b[1]
-}
-
-type LngLat = [number, number] // [lng, lat]
-
-function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
-  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-}
-
-function isInsideSiteRing(lat: number, lng: number, ring: [number, number][]): boolean {
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [yi, xi] = ring[i]
-    const [yj, xj] = ring[j]
-    const intersects = (yi > lat) !== (yj > lat)
-      && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
-    if (intersects) inside = !inside
+function polygonAreaSqm(polygon: [number, number][]): number {
+  if (polygon.length < 3) return 0
+  const refLat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
+  const refLng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
+  const enu = polygon.map(([lat, lng]) => latLngToEnu(lat, lng, refLat, refLng))
+  let area = 0
+  for (let i = 0; i < enu.length; i += 1) {
+    const [x1, y1] = enu[i]
+    const [x2, y2] = enu[(i + 1) % enu.length]
+    area += x1 * y2 - x2 * y1
   }
-  return inside
+  return Math.abs(area) / 2
 }
 
-/** Catmull-Rom — mép nam/bắc cong qua điểm neo. */
-function catmullRomChain(
-  points: [number, number][],
-  samplesPerSeg = 22,
-): [number, number][] {
-  const out: [number, number][] = []
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = points[Math.max(0, i - 1)]
-    const p1 = points[i]
-    const p2 = points[i + 1]
-    const p3 = points[Math.min(points.length - 1, i + 2)]
-    for (let s = 0; s < samplesPerSeg; s += 1) {
-      const t = s / samplesPerSeg
-      const t2 = t * t
-      const t3 = t2 * t
-      out.push([
-        0.5
-          * ((2 * p1[0])
-            + (-p0[0] + p2[0]) * t
-            + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
-            + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
-        0.5
-          * ((2 * p1[1])
-            + (-p0[1] + p2[1]) * t
-            + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
-            + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
-      ])
-    }
-  }
-  out.push(points[points.length - 1])
-  return out
-}
+export const PATROL_SITE_AREA_M2 = Math.round(polygonAreaSqm(PATROL_SITE_BOUNDARY_RING))
 
-/** Nửa hình tròn 2 đầu — cung đi qua đỉnh bo A/B. */
-function capArcThroughApex(
-  apex: [number, number],
-  south: [number, number],
-  north: [number, number],
-  steps = 26,
-): [number, number][] {
-  const mid = lerpPt(south, north, 0.5)
-  const inward = normalizePt(subPt(mid, apex))
-  const radius = Math.abs(dotPt(subPt(mid, apex), inward))
-  const center = addPt(apex, scalePt(inward, radius))
-  const angleSouth = Math.atan2(south[1] - center[1], south[0] - center[0])
-  const angleNorth = Math.atan2(north[1] - center[1], north[0] - center[0])
-  const angleApex = Math.atan2(apex[1] - center[1], apex[0] - center[0])
-
-  let sweepShort = angleNorth - angleSouth
-  while (sweepShort <= 0) sweepShort += Math.PI * 2
-  const sweepLong = sweepShort - Math.PI * 2
-
-  function sweepContainsApex(sweep: number): boolean {
-    for (let k = 0; k <= 100; k += 1) {
-      const ang = angleSouth + sweep * (k / 100)
-      let delta = ang - angleApex
-      while (delta > Math.PI) delta -= Math.PI * 2
-      while (delta < -Math.PI) delta += Math.PI * 2
-      if (Math.abs(delta) < 0.05) return true
-    }
-    return false
-  }
-
-  const sweep = sweepContainsApex(sweepShort) ? sweepShort : sweepLong
-  const pts: [number, number][] = []
-  for (let i = 0; i <= steps; i += 1) {
-    const ang = angleSouth + (sweep * i) / steps
-    pts.push([
-      center[0] + radius * Math.cos(ang),
-      center[1] + radius * Math.sin(ang),
-    ])
-  }
-  return pts
-}
-
-interface ArcLengthTable {
-  curve: [number, number][]
-  cumulative: number[]
-  total: number
-}
-
-function buildArcLengthTable(curve: [number, number][]): ArcLengthTable {
-  const cumulative = [0]
-  for (let i = 1; i < curve.length; i += 1) {
-    cumulative.push(
-      cumulative[i - 1]
-        + Math.hypot(curve[i][0] - curve[i - 1][0], curve[i][1] - curve[i - 1][1]),
-    )
-  }
-  return { curve, cumulative, total: cumulative[cumulative.length - 1] ?? 0 }
-}
-
-function pointAtArcU(table: ArcLengthTable, u: number): [number, number] {
-  if (table.curve.length === 0) return [0, 0]
-  if (table.total <= 0) return table.curve[0]
-  const target = Math.max(0, Math.min(1, u)) * table.total
-  let i = 1
-  while (i < table.cumulative.length && table.cumulative[i] < target) i += 1
-  const i0 = Math.max(0, i - 1)
-  const span = table.cumulative[i] - table.cumulative[i0]
-  const frac = span > 0 ? (target - table.cumulative[i0]) / span : 0
-  const a = table.curve[i0]
-  const b = table.curve[Math.min(table.curve.length - 1, i)]
-  return [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac]
-}
-
-interface CurvedCorridorModel {
-  ring: [number, number][]
-  westCapRing: [number, number][]
-  eastCapRing: [number, number][]
-  southTable: ArcLengthTable
-  northTable: ArcLengthTable
-  refLat: number
-  refLng: number
-}
-
-function buildCurvedCorridorModel(): CurvedCorridorModel {
-  const refLat = (PATROL_SITE_TIP_A[0] + PATROL_SITE_TIP_B[0]) / 2
-  const refLng = (PATROL_SITE_TIP_A[1] + PATROL_SITE_TIP_B[1]) / 2
-
-  const tipA = latLngToEnu(PATROL_SITE_TIP_A[0], PATROL_SITE_TIP_A[1], refLat, refLng)
-  const tipB = latLngToEnu(PATROL_SITE_TIP_B[0], PATROL_SITE_TIP_B[1], refLat, refLng)
-  const pinchS = latLngToEnu(PATROL_SITE_PINCH_SOUTH[0], PATROL_SITE_PINCH_SOUTH[1], refLat, refLng)
-  const pinchN = latLngToEnu(PATROL_SITE_PINCH_NORTH[0], PATROL_SITE_PINCH_NORTH[1], refLat, refLng)
-  const southBend = latLngToEnu(PATROL_SURVEY_SOUTH_BEND[0], PATROL_SURVEY_SOUTH_BEND[1], refLat, refLng)
-  const survey = latLngToEnu(PATROL_SURVEY_PIN[0], PATROL_SURVEY_PIN[1], refLat, refLng)
-
-  const midPinch = lerpPt(pinchS, pinchN, 0.5)
-  const inwardA = normalizePt(subPt(midPinch, tipA))
-  const inwardB = normalizePt(subPt(midPinch, tipB))
-  const attachA = addPt(tipA, scalePt(inwardA, END_CAP_RADIUS_M))
-  const attachB = addPt(tipB, scalePt(inwardB, END_CAP_RADIUS_M))
-  const bowMid = addPt(lerpPt(attachA, attachB, 0.5), [0, SPINE_BOW_NORTH_M])
-
-  const surveySouthHalf = Math.hypot(southBend[0] - survey[0], southBend[1] - survey[1])
-  const surveyBulgeExtraM = 300
-  const pinchArcT = 0.587
-
-  const spineControls: [number, number][] = [
-    attachA,
-    lerpPt(attachA, survey, 0.5),
-    lerpPt(survey, bowMid, 0.35),
-    lerpPt(bowMid, attachB, 0.65),
-    attachB,
-  ]
-  const spine = catmullRomChain(spineControls, 18)
-
-  const halfSouthKeys = [
-    { t: 0, half: END_CAP_RADIUS_M },
-    { t: 0.14, half: END_CAP_RADIUS_M * 0.84 },
-    { t: 0.36, half: surveySouthHalf + surveyBulgeExtraM },
-    { t: 0.425, half: surveySouthHalf + surveyBulgeExtraM * 0.55 },
-    { t: pinchArcT, half: 1430 },
-    { t: 1, half: END_CAP_RADIUS_M },
-  ]
-  const halfNorthKeys = [
-    { t: 0, half: END_CAP_RADIUS_M * 0.96 },
-    { t: pinchArcT, half: 1820 },
-    { t: 1, half: END_CAP_RADIUS_M * 0.96 },
-  ]
-
-  function halfAt(keys: { t: number; half: number }[], t: number): number {
-    let half = keys[keys.length - 1].half
-    for (let k = 0; k < keys.length - 1; k += 1) {
-      const a = keys[k]
-      const b = keys[k + 1]
-      if (t >= a.t && t <= b.t) {
-        const f = (t - a.t) / Math.max(1e-6, b.t - a.t)
-        half = a.half + (b.half - a.half) * f
-        break
-      }
-    }
-    return half
-  }
-
-  const southEdge: [number, number][] = []
-  const northEdge: [number, number][] = []
-  const n = spine.length
-
-  for (let i = 0; i < n; i += 1) {
-    const t = i / Math.max(1, n - 1)
-    const halfS = halfAt(halfSouthKeys, t)
-    const halfN = halfAt(halfNorthKeys, t)
-
-    const prev = spine[Math.max(0, i - 1)]
-    const next = spine[Math.min(n - 1, i + 1)]
-    const tangent = normalizePt(subPt(next, prev))
-    const normal = perpPt(tangent)
-
-    southEdge.push(addPt(spine[i], scalePt(normal, -halfS)))
-    northEdge.push(addPt(spine[i], scalePt(normal, halfN)))
-  }
-
-  const westCap = capArcThroughApex(tipA, southEdge[0], northEdge[0], 36)
-  const eastCap = capArcThroughApex(tipB, northEdge[n - 1], southEdge[n - 1], 36)
-
-  const westCapRing = westCap.map(([e, nIdx]) => enuToLatLng(e, nIdx, refLat, refLng))
-  const eastCapRing = eastCap.map(([e, nIdx]) => enuToLatLng(e, nIdx, refLat, refLng))
-
-  const ringEnu: [number, number][] = [
-    ...westCap.slice(0, -1),
-    ...northEdge.slice(1, -1),
-    ...eastCap.slice(0, -1),
-    ...southEdge.slice(1).reverse(),
-  ]
-
-  let ring = ringEnu.map(([e, nIdx]) => enuToLatLng(e, nIdx, refLat, refLng))
-  if (!isInsideSiteRing(PATROL_SURVEY_PIN[0], PATROL_SURVEY_PIN[1], ring)) {
-    ring = [...ring].reverse()
-  }
-
-  return {
-    ring,
-    westCapRing,
-    eastCapRing,
-    southTable: buildArcLengthTable(southEdge),
-    northTable: buildArcLengthTable(northEdge),
-    refLat,
-    refLng,
-  }
-}
-
-const CORRIDOR_MODEL = buildCurvedCorridorModel()
-
-/**
- * Viền đỏ heatmap — hành lang cong (~200 đỉnh), ngược chiều kim đồng hồ.
- */
-export const PATROL_SITE_BOUNDARY_RING: [number, number][] = CORRIDOR_MODEL.ring
-
-/** Nội suy điểm trong hành lang: u = tây→đông dọc CT06, v = nam→bắc. */
+/** Nội suy điểm trong quad: u = tây→đông, v = nam→bắc. */
 export function patrolSitePoint(u: number, v: number): [number, number] {
   const uClamped = Math.max(0, Math.min(1, u))
   const vClamped = Math.max(0, Math.min(1, v))
-  const south = pointAtArcU(CORRIDOR_MODEL.southTable, uClamped)
-  const north = pointAtArcU(CORRIDOR_MODEL.northTable, uClamped)
-  return enuToLatLng(
-    south[0] + (north[0] - south[0]) * vClamped,
-    south[1] + (north[1] - south[1]) * vClamped,
-    CORRIDOR_MODEL.refLat,
-    CORRIDOR_MODEL.refLng,
-  )
+  const [nw, ne, se, sw] = PATROL_SITE_BOUNDARY_RING
+  const southLat = sw[0] + (se[0] - sw[0]) * uClamped
+  const southLng = sw[1] + (se[1] - sw[1]) * uClamped
+  const northLat = nw[0] + (ne[0] - nw[0]) * uClamped
+  const northLng = nw[1] + (ne[1] - nw[1]) * uClamped
+  return [
+    parseFloat((southLat + (northLat - southLat) * vClamped).toFixed(6)),
+    parseFloat((southLng + (northLng - southLng) * vClamped).toFixed(6)),
+  ]
 }
 
-/**
- * Polygon khu đầu capsule — K1/K7 gồm cả nửa hình tròn bo tròn A/B.
- * @param end 'west' = Khu 1, 'east' = Khu 7
- * @param uDivider u của đường chia khu (1/7 hoặc 6/7)
- */
+/** @deprecated Một zone duy nhất — trả về toàn bộ viền site. */
 export function buildPatrolCapInclusiveZonePolygon(
-  end: 'west' | 'east',
-  uDivider: number,
-  edgeSamples = 16,
+  _end: 'west' | 'east',
+  _uDivider: number,
 ): [number, number][] {
-  const cap = end === 'west' ? CORRIDOR_MODEL.westCapRing : CORRIDOR_MODEL.eastCapRing
-
-  const divider: [number, number][] = []
-  for (let i = 0; i <= edgeSamples; i += 1) {
-    divider.push(patrolSitePoint(uDivider, i / edgeSamples))
-  }
-
-  const northRun: [number, number][] = []
-  const southRun: [number, number][] = []
-
-  if (end === 'west') {
-    for (let i = 0; i <= edgeSamples; i += 1) {
-      const u = uDivider * (1 - i / edgeSamples)
-      northRun.push(patrolSitePoint(u, 1))
-    }
-    for (let i = 0; i <= edgeSamples; i += 1) {
-      const u = (uDivider * i) / edgeSamples
-      southRun.push(patrolSitePoint(u, 0))
-    }
-    const capWestToEast = [...cap].reverse()
-    return [
-      ...divider,
-      ...northRun.slice(1),
-      ...capWestToEast.slice(1),
-      ...southRun.slice(1),
-    ]
-  }
-
-  for (let i = 0; i <= edgeSamples; i += 1) {
-    const u = uDivider + (1 - uDivider) * (i / edgeSamples)
-    northRun.push(patrolSitePoint(u, 1))
-  }
-  for (let i = 0; i <= edgeSamples; i += 1) {
-    const u = uDivider + (1 - uDivider) * (i / edgeSamples)
-    southRun.push(patrolSitePoint(u, 0))
-  }
-  return [
-    ...divider,
-    ...northRun.slice(1),
-    ...cap.slice(1),
-    ...southRun.slice(1).reverse(),
-  ]
+  return [...PATROL_SITE_BOUNDARY_RING]
 }
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
@@ -442,7 +129,24 @@ export const PATROL_SITE_CLIP_RING: [number, number][] = (() => {
   ])
 })()
 
-/** Inside = right of directed edge for this site ring winding. */
+type LngLat = [number, number]
+
+function isInsideSiteRing(lat: number, lng: number, ring: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [yi, xi] = ring[i]
+    const [yj, xj] = ring[j]
+    const intersects = (yi > lat) !== (yj > lat)
+      && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    if (intersects) inside = !inside
+  }
+  return inside
+}
+
+function cross2d(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+}
+
 function isInsideEdge(p: LngLat, a: LngLat, b: LngLat): boolean {
   return cross2d(a[0], a[1], b[0], b[1], p[0], p[1]) <= 1e-12
 }
@@ -474,7 +178,6 @@ function clipRingToEdge(subject: LngLat[], a: LngLat, b: LngLat): LngLat[] {
   return output
 }
 
-/** Clip a zone quad/polygon to the site boundary — density fill stays inside red line. */
 export function clipPolygonToSiteBoundary(polygon: [number, number][]): [number, number][] {
   if (polygon.length < 3) return polygon
 
@@ -496,12 +199,10 @@ export function clipPolygonToSiteBoundary(polygon: [number, number][]): [number,
   ])
 }
 
-/** Ray-casting point-in-polygon for the site boundary. */
 export function isPointInSiteBoundary(lat: number, lng: number): boolean {
   return isInsideSiteRing(lat, lng, SITE_RING)
 }
 
-/** Pull point inside inset clip ring (không dính sát viền đỏ). */
 export function clampPointToSiteInterior(lat: number, lng: number): [number, number] {
   if (isInsideSiteRing(lat, lng, PATROL_SITE_CLIP_RING)) {
     return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
@@ -519,7 +220,6 @@ export function clampPointToSiteInterior(lat: number, lng: number): [number, num
   return [parseFloat(cLat.toFixed(6)), parseFloat(cLng.toFixed(6))]
 }
 
-/** Pull an out-of-bounds point toward site centroid until inside (fallback). */
 export function clampPointToSiteBoundary(lat: number, lng: number): [number, number] {
   if (isPointInSiteBoundary(lat, lng)) {
     return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
@@ -536,31 +236,11 @@ export function clampPointToSiteBoundary(lat: number, lng: number): [number, num
   return [parseFloat(cLat.toFixed(6)), parseFloat(cLng.toFixed(6))]
 }
 
-/** Legacy export — stadium builder retained for tests referencing arc math. */
+/** Legacy export — giữ cho test cũ. */
 export function buildStadiumCapsuleRing(
-  westCenter: [number, number],
-  eastCenter: [number, number],
-  envelopePoints: [number, number][],
-  arcSteps = 28,
+  _westCenter: [number, number],
+  _eastCenter: [number, number],
+  _envelopePoints: [number, number][],
 ): [number, number][] {
-  const refLat = (westCenter[0] + eastCenter[0]) / 2
-  const refLng = (westCenter[1] + eastCenter[1]) / 2
-  const tipAEnu = latLngToEnu(PATROL_SITE_TIP_A[0], PATROL_SITE_TIP_A[1], refLat, refLng)
-  const pinchSEnu = latLngToEnu(PATROL_SITE_PINCH_SOUTH[0], PATROL_SITE_PINCH_SOUTH[1], refLat, refLng)
-  const pinchNEnu = latLngToEnu(PATROL_SITE_PINCH_NORTH[0], PATROL_SITE_PINCH_NORTH[1], refLat, refLng)
-  void envelopePoints
-  void arcSteps
-  void westCenter
-  void eastCenter
-  const midPinch = lerpPt(pinchSEnu, pinchNEnu, 0.5)
-  const inwardA = normalizePt(subPt(midPinch, tipAEnu))
-  const perpA = perpPt(inwardA)
-  const radiusA = Math.max(400, dotPt(subPt(pinchSEnu, tipAEnu), inwardA) * CAP_RADIUS_SCALE_WEST)
-  const centerA = addPt(tipAEnu, scalePt(inwardA, radiusA))
-  const westSouth = addPt(centerA, scalePt(perpA, radiusA))
-  const westNorth = addPt(centerA, scalePt(perpA, -radiusA))
-  return [
-    enuToLatLng(westSouth[0], westSouth[1], refLat, refLng),
-    enuToLatLng(westNorth[0], westNorth[1], refLat, refLng),
-  ]
+  return [...PATROL_SITE_BOUNDARY_RING]
 }

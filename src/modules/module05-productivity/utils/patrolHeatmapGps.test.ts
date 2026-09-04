@@ -18,7 +18,7 @@ describe('enforcePatrolHelmetPinSeparation', () => {
   })
 
   it('tách HC-02 khi GPS trùng HC-01', () => {
-    const base: [number, number] = [20.933, 106.924]
+    const base: [number, number] = [20.954617, 106.930071]
     const out = enforcePatrolHelmetPinSeparation({
       'HC-01': base,
       'HC-02': base,

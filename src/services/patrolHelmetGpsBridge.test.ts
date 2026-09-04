@@ -10,8 +10,8 @@ import {
 const NOW = Date.now()
 // Trong ranh giới công trường — ngoài ranh giới thì bị snap về mép và mọi toạ
 // độ thử nghiệm sẽ trùng nhau vì cùng một lý do, che mất thứ đang muốn đo.
-const HC01_POS = { lat: 20.933_2, lng: 106.923_8 }
-const HC02_POS = { lat: 20.933_0, lng: 106.924_1 }
+const HC01_POS = { lat: 20.954_6, lng: 106.929_5 }
+const HC02_POS = { lat: 20.954_4, lng: 106.930_2 }
 
 describe('GPS theo từng mũ', () => {
   beforeEach(() => {

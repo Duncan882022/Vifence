@@ -29,7 +29,7 @@ function resolvePresenceGps(presence: PatrolDayPresence): { lat: number | null; 
   return { lat: presence.gpsLat, lng: presence.gpsLng }
 }
 
-/** Gán presence vào ZONE_1…7 — ưu tiên zoneId backend, fallback GPS trong polygon. */
+/** Gán presence vào ZONE_SITE — ưu tiên zoneId backend, fallback GPS trong polygon. */
 export function resolvePatrolPresenceZoneId(presence: PatrolDayPresence): string | null {
   const zoneIds = new Set(PATROL_GPS_ZONES.map(z => z.zone_id))
   if (presence.zoneId && zoneIds.has(presence.zoneId)) {

@@ -46,21 +46,21 @@ describe('patrolZoneHeatmapStats', () => {
 
   it('lọc thống kê theo zoneId backend', () => {
     const presences = [
-      presence({ subjectId: 'obj-1', tier: 'object', zoneId: 'ZONE_1' }),
-      presence({ subjectId: 'obj-2', tier: 'object', zoneId: 'ZONE_2' }),
-      presence({ subjectId: 'pers-1', tier: 'person', zoneId: 'ZONE_1' }),
-      presence({ subjectId: 'pers-1', tier: 'person', zoneId: 'ZONE_1', presenceSeq: 2 }),
-      presence({ subjectId: 'iden-1', tier: 'identity', zoneId: 'ZONE_1' }),
+      presence({ subjectId: 'obj-1', tier: 'object', zoneId: 'ZONE_SITE' }),
+      presence({ subjectId: 'obj-2', tier: 'object', zoneId: 'ZONE_SITE' }),
+      presence({ subjectId: 'pers-1', tier: 'person', zoneId: 'ZONE_SITE' }),
+      presence({ subjectId: 'pers-1', tier: 'person', zoneId: 'ZONE_SITE', presenceSeq: 2 }),
+      presence({ subjectId: 'iden-1', tier: 'identity', zoneId: 'ZONE_SITE' }),
     ]
-    expect(buildPatrolHeatmapStatsForZone(presences, 'ZONE_1')).toEqual({
-      objectCount: 1,
+    expect(buildPatrolHeatmapStatsForZone(presences, 'ZONE_SITE')).toEqual({
+      objectCount: 2,
       personCount: 1,
       identityCount: 1,
     })
   })
 
   it('resolve zone từ zoneId', () => {
-    const p = presence({ subjectId: 'a', tier: 'person', zoneId: 'ZONE_3' })
-    expect(resolvePatrolPresenceZoneId(p)).toBe('ZONE_3')
+    const p = presence({ subjectId: 'a', tier: 'person', zoneId: 'ZONE_SITE' })
+    expect(resolvePatrolPresenceZoneId(p)).toBe('ZONE_SITE')
   })
 })
