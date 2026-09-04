@@ -1363,13 +1363,17 @@ def merge_persons(keep_id: str, drop_id: str, *, now: float | None = None) -> No
             (drop, keep, ts),
         )
     _invalidate_face_index()
-    from .daystore import coalesce_subject_appearances
+    from .daystore import coalesce_subject_appearances, renumber_presence_seq
 
     for row in db.query(
         "SELECT DISTINCT event_date FROM appearances WHERE subject_id = ?",
         (keep,),
     ):
-        coalesce_subject_appearances(keep, str(row["event_date"]))
+        date = str(row["event_date"])
+        coalesce_subject_appearances(keep, date)
+        # Hai người gộp lại thì hai chuỗi "lượt 1, 2, 3..." dồn vào một subject.
+        # Đánh số sau khi coalesce xong, không phải trước.
+        renumber_presence_seq(keep, date)
 
 
 def import_identity(

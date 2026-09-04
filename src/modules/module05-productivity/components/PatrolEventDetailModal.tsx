@@ -376,10 +376,19 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         return resolveRowSnapshotUrl(segment, event, idx === 0)
       }
     }
+    // Chưa chọn lượt nào → ảnh của **thẻ vừa bấm**, không phải ảnh lượt mới nhất.
+    // Hai chỗ này lấy từ hai bảng khác nhau: thẻ ngoài là `daily_events`/
+    // `daily_objects` (làm mới liên tục khi bắt được khung mặt rõ hơn), còn dòng
+    // lịch sử là `appearances` (đóng băng ảnh lúc bắt đầu lần gặp). Thẻ nào từng
+    // là Đối tượng rồi thăng hạng thì hai ảnh khác nhau hẳn — thẻ mang khuôn mặt,
+    // dòng lịch sử vẫn mang ảnh obj-* nguyên khối. Mở popup mà hiện ảnh lượt
+    // mới nhất thì người dùng không thấy lại tấm mình vừa bấm.
+    const card = event?.snapshotUrl?.trim()
+    if (card) return card
     if (appearanceSegments.length > 0 && event) {
       return resolveRowSnapshotUrl(appearanceSegments[0], event, true)
     }
-    return event?.snapshotUrl
+    return undefined
   }, [appearanceSegments, event, faceGalleryOpen, selectedAppearanceKey])
 
   if (!event || !summary) return null

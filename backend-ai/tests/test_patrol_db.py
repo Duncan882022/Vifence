@@ -174,6 +174,22 @@ class MergeTests(PatrolDbTestCase):
         self.assertEqual(cards[0]["first_seen"], 1000.0)
         self.assertEqual(cards[0]["last_seen"], 2000.0)
 
+    def test_merge_renumbers_presence_seq(self) -> None:
+        """Gộp hai người: hai chuỗi "lượt 1, 2..." dồn vào một, phải đánh số lại."""
+        a, _ = identity.observe_face(_vec(16), quality=0.8)
+        b, _ = identity.observe_face(_vec(17), quality=0.8)
+        # Hai camera khác nhau để lượt gặp không bị coalesce gộp thành một dòng.
+        daystore.touch_person_event(a, camera_id="HC-01", now=1_000.0,
+            snapshot_path="a.jpg", snapshot_score=1.2, face_eligible=True)
+        daystore.touch_person_event(b, camera_id="HC-02", now=9_000.0,
+            snapshot_path="b.jpg", snapshot_score=1.2, face_eligible=True)
+
+        date = db.today_vn(1_000.0)
+        identity.merge_persons(a, b)
+        segments = daystore.list_appearances(a, date)["segments"]
+        self.assertEqual(len(segments), 2)
+        self.assertEqual([int(s["presence_seq"]) for s in segments], [1, 2])
+
 
 class DailyEventTests(PatrolDbTestCase):
     def test_one_card_per_person_per_day(self) -> None:
@@ -504,6 +520,40 @@ class ObjectTests(PatrolDbTestCase):
         cards = daystore.list_person_events(date)
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["first_seen"], 500.0)
+
+    def test_promote_from_two_objects_renumbers_presence_seq(self) -> None:
+        """Thăng hạng từ hai Đối tượng: hai lượt gặp phải mang số khác nhau.
+
+        `presence_seq` đếm trong phạm vi một subject_id, nên mỗi obj tự đếm từ 1.
+        Dồn cả hai sang cùng một người mà không đánh số lại thì popup hiện "lượt 1"
+        hai lần. Đo trên máy thật: đúng hai subject bị trùng số là đúng hai subject
+        promote từ nhiều hơn một obj.
+        """
+        pers_id, _ = identity.observe_face(_vec(32), quality=0.8)
+        first = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
+        daystore.promote_object(first, pers_id, now=1_010.0)
+        second = daystore.touch_object(None, camera_id="HC-01", now=5_000.0)
+        daystore.promote_object(second, pers_id, now=5_010.0)
+
+        date = db.today_vn(1_000.0)
+        segments = daystore.list_appearances(pers_id, date)["segments"]
+        self.assertEqual(len(segments), 2)
+        seqs = sorted(int(s["presence_seq"]) for s in segments)
+        self.assertEqual(seqs, [1, 2])
+
+    def test_renumber_presence_seq_follows_time_order(self) -> None:
+        """Số lượt gặp chạy theo thời gian bắt đầu, không theo thứ tự ghi vào."""
+        pers_id, _ = identity.observe_face(_vec(33), quality=0.8)
+        late = daystore.touch_object(None, camera_id="HC-01", now=9_000.0)
+        daystore.promote_object(late, pers_id, now=9_010.0)
+        early = daystore.touch_object(None, camera_id="HC-01", now=1_000.0)
+        daystore.promote_object(early, pers_id, now=1_010.0)
+
+        date = db.today_vn(1_000.0)
+        # `list_appearances` trả về đã sắp theo `started_at ASC`.
+        segments = daystore.list_appearances(pers_id, date)["segments"]
+        self.assertEqual([int(s["presence_seq"]) for s in segments], [1, 2])
+        self.assertLess(float(segments[0]["started_at"]), float(segments[1]["started_at"]))
 
     def test_parallel_tracks_stay_separate_cards(self) -> None:
         """Hai track chồng giờ trên cùng camera vẫn là hai lượt gặp.

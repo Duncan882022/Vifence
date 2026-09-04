@@ -493,6 +493,7 @@ def promote_object(
             "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
             (pid, date, obj_id),
         )
+        _renumber_presence_seq(conn, date, pid)
         # Đánh dấu chứ không xoá: mã obj-* đã đi vào ảnh chụp và báo cáo xuất ra
         # trước lúc thăng hạng, xoá dòng là những chỗ đó trỏ vào khoảng không.
         conn.execute(
@@ -528,6 +529,34 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------------------
 # Lịch sử xuất hiện
+
+
+def _renumber_presence_seq(conn, date: str, subject_id: str) -> None:
+    """Đánh số lại lượt gặp theo thứ tự thời gian.
+
+    `presence_seq` đếm bằng `MAX(presence_seq)+1` **trong phạm vi một subject_id**.
+    Lúc dồn `obj-*` sang `pers-*` thì các dòng mang theo số cũ, mà mỗi obj đều tự
+    đếm từ 1 — người được thăng hạng từ hai obj khác nhau có hai lần gặp cùng mang
+    số "lượt 1". Đo trên máy thật: đúng hai subject bị trùng số là đúng hai subject
+    promote từ nhiều hơn một obj.
+    """
+    rows = conn.execute(
+        "SELECT id FROM appearances"
+        " WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY started_at ASC, id ASC",
+        (date, subject_id),
+    ).fetchall()
+    for seq, row in enumerate(rows, start=1):
+        conn.execute(
+            "UPDATE appearances SET presence_seq = ? WHERE id = ?",
+            (seq, int(row["id"])),
+        )
+
+
+def renumber_presence_seq(subject_id: str, date: str) -> None:
+    """`_renumber_presence_seq` cho lời gọi ngoài transaction (merge_persons)."""
+    with db.tx() as conn:
+        _renumber_presence_seq(conn, date, subject_id)
 
 
 def _next_presence_seq(conn, date: str, subject_id: str) -> int:
