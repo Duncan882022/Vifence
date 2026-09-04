@@ -108,27 +108,31 @@ def audit_jpg_one_file_per_luot() -> CaseResult:
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     bbox = (100.0, 80.0, 220.0, 400.0)
     subject = "obj-20260902-0099"
-    paths: list[str] = []
+
+    # Chụp lại nhiều lần trong **cùng một lượt** — phải ghi đè đúng một file.
+    luot1: list[str] = []
     for score in (0.5, 0.7, 0.9):
         p = sink._write_snapshot(  # noqa: SLF001
-            subject,
-            frame,
-            bbox,
-            score=score,
-            luot_key=sink.CARD_SNAPSHOT_LUOT,
-            capture_ts=12_000.0 + score,
+            subject, frame, bbox, score=score, luot_key=1, capture_ts=12_000.0 + score,
         )
         if p:
-            paths.append(p)
+            luot1.append(p)
+
+    # Lượt gặp thứ hai của cùng người — phải là file khác, nếu không popup hiện
+    # hai dòng lịch sử khác giờ mà cùng một tấm ảnh.
+    luot2 = sink._write_snapshot(  # noqa: SLF001
+        subject, frame, bbox, score=0.8, luot_key=2, capture_ts=13_000.0,
+    )
 
     files = list(sink.SNAPSHOT_DIR.rglob("*.jpg"))
-    card_file = sink.SNAPSHOT_DIR / "1970-01-01" / f"{subject}.jpg"
-    ok = len(files) == 1 and card_file.is_file() and len(set(paths)) <= 1
+    one_file_per_luot = len(set(luot1)) == 1
+    distinct_luot = bool(luot2) and luot2 not in luot1
+    ok = len(files) == 2 and one_file_per_luot and distinct_luot
     tmp.cleanup()
     return CaseResult(
-        "jpg_one_file_per_card",
+        "jpg_one_file_per_luot",
         ok,
-        f"files={len(files)} paths={paths} card={card_file.name}",
+        f"files={len(files)} luot1={sorted(set(luot1))} luot2={luot2}",
     )
 
 

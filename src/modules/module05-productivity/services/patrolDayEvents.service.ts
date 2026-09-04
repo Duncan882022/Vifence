@@ -27,6 +27,10 @@ export interface PatrolDayPerson {
   trackWorkerId?: string | null
   gpsLat?: number | null
   gpsLng?: number | null
+  /** Các mã `obj-*` đã dồn vào thẻ này khi bắt được mặt. */
+  promotedFrom?: string[]
+  /** Thời điểm thăng hạng gần nhất (epoch giây). */
+  promotedAt?: number | null
 }
 
 export interface PatrolDayObject {
@@ -251,6 +255,8 @@ export async function fetchPatrolDayBundle(date?: string): Promise<PatrolDayBund
     trackWorkerId: row.track_worker_id ? String(row.track_worker_id) : null,
     gpsLat: row.gps_lat != null ? Number(row.gps_lat) : null,
     gpsLng: row.gps_lng != null ? Number(row.gps_lng) : null,
+    promotedFrom: Array.isArray(row.promoted_from) ? row.promoted_from.map(String) : [],
+    promotedAt: row.promoted_at != null ? Number(row.promoted_at) : null,
   })))
 
   const objects = await Promise.all((data.objects ?? []).map(async row => ({

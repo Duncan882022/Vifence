@@ -153,6 +153,36 @@ def signboard_like_fp_box(
     return False
 
 
+SPECK_BOX_MAX_HEIGHT_RATIO = 0.07
+
+
+def speck_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Hộp quá nhỏ để là bằng chứng về một con người.
+
+    Đo trên HC-01 thật: 11 hộp lọt cổng ghi thẻ Đối tượng, 9 trong đó cao
+    20–29 px trong khung cao 540 và nằm ở nửa trên khung, tức là bên kia đường.
+    Cắt đúng những hộp đó ra xem thì chỉ là vệt mờ không nhận ra được gì. Chúng
+    đẻ ra 95 thẻ Đối tượng so với 23 thẻ Người.
+
+    Chặn theo kích thước tuyệt đối, không theo tỉ lệ cao/rộng: đo lại trên 182
+    hộp thì rác trải từ tỉ lệ 0.95 đến 1.63, nên mọi ngưỡng tỉ lệ đều để lại
+    một khe hở mà rác dồn vào đúng đó (hộp 12×20 px tỉ lệ 1.6 vẫn là vệt mờ).
+
+    Ngưỡng 7% chiều cao khung cách xa người thật: người ở xa trên ảnh công
+    trường mẫu cao 12% khung, người đứng gần trên HC-01 cao 56%.
+
+    Chỉ dùng cho góc mặt đất. Nhìn từ drone thì người thật vốn nhỏ và có thể
+    rộng hơn cao (nhìn thẳng xuống đỉnh đầu), nên gate này sẽ xoá sạch ROI hợp
+    lệ của luồng bay.
+    """
+    ph = max(float(person_box[3]) - float(person_box[1]), 1.0)
+    return ph / max(float(frame_h), 1.0) < SPECK_BOX_MAX_HEIGHT_RATIO
+
+
 def patrol_bbox_rejects_static_fp(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -185,6 +215,12 @@ def patrol_object_commit_allowed(
     if person_box is None or frame_w <= 0 or frame_h <= 0:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    if (
+        not flycam
+        and not proximity_flycam
+        and speck_person_box(person_box, frame_w, frame_h)
+    ):
         return False
     if face_eligible:
         return True
@@ -435,6 +471,9 @@ def patrol_person_meets_display_gate(
         ):
             return False
         return not limb_fragment_person_box(person_box, frame_w, frame_h)
+    # Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
+    if speck_person_box(person_box, frame_w, frame_h):
+        return False
     if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True
     if not plausible_person_silhouette(

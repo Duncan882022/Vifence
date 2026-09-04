@@ -202,6 +202,8 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
     if (det.peak_group_index != null) track.peakGroupIndex = det.peak_group_index
     if (det.peak_group_size != null) track.peakGroupSize = det.peak_group_size
   }
+  // Chỉ bật, không tắt: một payload thiếu cờ không được xoá dấu đã thăng hạng.
+  if (det.promoted_from_object) track.promotedFromObject = true
   const detLabel = det.label?.trim()
   if (det.peak_group && detLabel?.startsWith('#')) {
     track.label = detLabel
@@ -364,6 +366,7 @@ export function advancePersonRoiTracks(
       peakGroup: det.peak_group,
       peakGroupIndex: det.peak_group_index,
       peakGroupSize: det.peak_group_size,
+      promotedFromObject: det.promoted_from_object,
     }
     applyIdentity(track, det)
     next.set(id, track)
@@ -441,6 +444,7 @@ export function predictPersonRoiTracks(
       peakGroup: track.peakGroup,
       peakGroupIndex: track.peakGroupIndex,
       peakGroupSize: track.peakGroupSize,
+      promotedFromObject: track.promotedFromObject,
     })
   }
 

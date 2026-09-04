@@ -184,3 +184,39 @@ describe('ẩn ROI trùng tầng thấp', () => {
     expect(out[0].confidence).toBe(0.55)
   })
 })
+
+/**
+ * Đo trên HC-01 thật: 9/11 hộp lọt cổng ghi thẻ cao 20–29 px trong khung cao
+ * 540, tỉ lệ cao/rộng 0.95–1.11 — cắt ra chỉ là vệt mờ. Mirror
+ * `test_patrol_speck_box_gate.py` bên backend.
+ */
+describe('vệt vuông nhỏ không được vẽ ROI', () => {
+  // Cùng tỉ lệ như hộp đo được: cao 3.7% khung, gần vuông.
+  const speck: Bbox4 = [700, 100, 700 + 28, 100 + 27]
+
+  it('loại vệt vuông ở góc mặt đất', () => {
+    expect(patrolPersonMeetsDisplayGate({ bbox: speck, frameW: FRAME_W, frameH: FRAME_H }))
+      .toBe(false)
+  })
+
+  it('tỉ lệ cao/rộng không phải cửa lách — rác trải tới tỉ lệ 1.6', () => {
+    const tall: Bbox4 = [700, 100, 700 + 14, 100 + 32]
+    expect(patrolPersonMeetsDisplayGate({ bbox: tall, frameW: FRAME_W, frameH: FRAME_H }))
+      .toBe(false)
+  })
+
+  it('giữ người ở xa khi đã đủ lớn để nhìn ra', () => {
+    // Rộng 52 px để tỉ lệ ~1.9 — hẹp hơn nữa thì luật cột dọc loại trước.
+    const distant: Bbox4 = [700, 100, 700 + 52, 100 + FRAME_H * 0.14]
+    expect(patrolPersonMeetsDisplayGate({ bbox: distant, frameW: FRAME_W, frameH: FRAME_H }))
+      .toBe(true)
+  })
+
+  it('không áp cho luồng bay — từ drone người thật vốn nhỏ và bẹt', () => {
+    expect(
+      patrolPersonMeetsDisplayGate({
+        bbox: speck, frameW: FRAME_W, frameH: FRAME_H, flycam: true,
+      }),
+    ).toBe(true)
+  })
+})

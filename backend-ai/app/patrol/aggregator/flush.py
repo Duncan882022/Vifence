@@ -199,6 +199,20 @@ def _snapshot_face_box(
         return None
 
 
+def _session_luot_key(session: TrackSession) -> int:
+    """Khoá lượt gặp của session — cấp một lần, giữ nguyên suốt lượt.
+
+    Mọi lần chụp lại trong cùng một lượt (frame đẹp hơn trong cửa sổ tích lũy,
+    hoặc chụp lại sau khi thấy mặt) phải ghi đè **đúng file của lượt đó**, không
+    tạo file mới; nên khoá phải nằm trên session chứ không cấp mới mỗi lần ghi.
+    """
+    if session.luot_key is None:
+        from .session_store import next_luot_key
+
+        session.luot_key = next_luot_key()
+    return session.luot_key
+
+
 def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str | None, float]:
     if obs.frame is None or obs.person_bbox is None or not session.subject_id:
         return None, 0.0
@@ -225,6 +239,11 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         inferred = tier_for_worker_id(worker_id)
         if inferred != "object":
             tier = inferred
+    # Một file JPG cho **mỗi lượt gặp**, không phải mỗi thẻ. Thẻ ngày chỉ trỏ vào
+    # file của lượt đẹp nhất, nên tấm ảnh ngoài thẻ luôn là một trong các tấm
+    # trong "Lịch sử xuất hiện" — trước đây mọi lượt cùng ghi `{subject}.jpg`
+    # nên popup hiện N dòng khác giờ mà cùng một tấm ảnh cuối cùng.
+    luot_key = _session_luot_key(session)
     force = not _card_has_snapshot(session.subject_id, shot_obs.ts)
     path = sink._maybe_write_snapshot(  # noqa: SLF001
         session.subject_id,
@@ -237,7 +256,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         capture_ts=shot_obs.ts,
         face_eligible=shot_obs.face_eligible,
         force=force,
-        luot_key=sink.CARD_SNAPSHOT_LUOT,
+        luot_key=luot_key,
     )
     if path is None and force:
         path = sink._write_snapshot(  # noqa: SLF001
@@ -250,7 +269,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
             worker_name=shot_obs.worker_name,
             capture_ts=shot_obs.ts,
             face_eligible=shot_obs.face_eligible,
-            luot_key=sink.CARD_SNAPSHOT_LUOT,
+            luot_key=luot_key,
         )
     return path, score if path else 0.0
 

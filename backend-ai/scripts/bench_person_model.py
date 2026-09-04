@@ -22,6 +22,9 @@ import cv2  # noqa: E402
 
 MODELS = ("yolov8n.pt", "yolov8s.pt", "yolov8m.pt")
 CONF = 0.20
+# Khung vào đã bị hạ xuống 960 px (`VMS_AI_MAX_WIDTH`), nên imgsz=1024 là phóng
+# to ngược lên — tốn thời gian suy luận mà không thêm thông tin nào.
+IMGSZ_SWEEP = (1024, 960, 768, 640)
 
 
 def grab_frames(source: str, count: int):
@@ -92,6 +95,35 @@ def main() -> int:
             print(
                 f"    conf min={min(confs):.2f} median={statistics.median(confs):.2f}"
                 f" max={max(confs):.2f}"
+            )
+
+    print("\n=== Quét imgsz (chi phí suy luận vs số box giữ được) ===")
+    for name in ("yolov8n.pt", "yolov8s.pt"):
+        try:
+            model = YOLO(name)
+        except Exception as exc:  # noqa: BLE001
+            print(f"{name}: KHÔNG TẢI ĐƯỢC — {exc}")
+            continue
+        model.predict(frames[0], conf=CONF, verbose=False, imgsz=960, max_det=300, iou=0.50)
+        for imgsz in IMGSZ_SWEEP:
+            times: list[float] = []
+            confs: list[float] = []
+            for frame in frames:
+                t0 = time.perf_counter()
+                res = model.predict(
+                    frame, conf=CONF, verbose=False, imgsz=imgsz, max_det=300, iou=0.50,
+                )
+                times.append((time.perf_counter() - t0) * 1000.0)
+                if res and res[0].boxes is not None:
+                    for b in res[0].boxes:
+                        if int(b.cls[0]) == 0:
+                            confs.append(float(b.conf[0]))
+            hi = sum(1 for c in confs if c >= 0.50)
+            med = statistics.median(times)
+            print(
+                f"{name} imgsz={imgsz:>4}: {med:>5.0f} ms/khung"
+                f"  ({1000.0 / med:.2f} khung/giây)"
+                f"  box={len(confs):>3}  conf>=0.50: {hi}"
             )
     return 0
 

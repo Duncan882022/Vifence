@@ -86,6 +86,10 @@ class TrackSession:
     appearance_row_id: int | None = None
     # Một lượt trong khung = một JPG — không chụp lại mỗi flush/track frame.
     luot_snapshot_captured: bool = False
+    # Số thứ tự lượt gặp, cấp một lần khi lượt bắt đầu và đi vào tên file JPG.
+    # Thiếu nó thì mọi lượt của cùng một người ghi chung `{subject}.jpg`, và
+    # popup hiện N dòng lịch sử khác giờ nhưng cùng một tấm ảnh (tấm cuối cùng).
+    luot_key: int | None = None
     last_flush_at: float = 0.0
     dirty: bool = False
     committed: bool = False

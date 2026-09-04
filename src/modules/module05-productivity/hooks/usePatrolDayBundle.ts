@@ -92,6 +92,8 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
           : 'object',
       employeeCode: row.employeeCode,
       trackWorkerId,
+      promotedFrom: row.promotedFrom,
+      promotedAt: row.promotedAt,
     } as PatrolEvent
   })
   const objectEvents: PatrolEvent[] = displayObjects.map(row => {
