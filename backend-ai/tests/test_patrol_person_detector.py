@@ -37,6 +37,39 @@ class PatrolPersonDetectorTests(unittest.TestCase):
         self.assertIs(d1, d2)
         mock_det.load.assert_called_once()
 
+    def test_patrol_detector_defaults_to_yolov8n(self) -> None:
+        import app.patrol.person_analyzer as pa
+
+        pa._person_detector = None
+        with patch.object(pa, "PersonDetector") as ctor, patch.dict(
+            "os.environ", {}, clear=False
+        ):
+            import os
+
+            os.environ.pop("PATROL_PERSON_MODEL", None)
+            pa._get_person_detector()
+        self.assertEqual(ctor.call_args.kwargs["weights"], "yolov8n.pt")
+
+    def test_patrol_detector_weights_overridable(self) -> None:
+        """Đổi được sang model lớn hơn — cách duy nhất đo được để bớt nhầm xe thành người."""
+        import app.patrol.person_analyzer as pa
+
+        pa._person_detector = None
+        with patch.object(pa, "PersonDetector") as ctor, patch.dict(
+            "os.environ", {"PATROL_PERSON_MODEL": "yolov8s.pt"}
+        ):
+            pa._get_person_detector()
+        self.assertEqual(ctor.call_args.kwargs["weights"], "yolov8s.pt")
+
+    def test_person_detector_load_uses_configured_weights(self) -> None:
+        from app.detectors.person_detector import PersonDetector
+
+        det = PersonDetector(weights="yolov8s.pt")
+        with patch("app.detectors.person_detector.YOLO") as yolo:
+            det.load()
+        yolo.assert_called_once_with("yolov8s.pt")
+        self.assertTrue(det.ready)
+
     def test_analyze_patrol_frame_hc01_no_crash(self) -> None:
         from app.patrol_engine import analyze_patrol_frame
 

@@ -18,18 +18,19 @@ class PersonDetector:
     behavior = "person"
     name = "person-yolo"
 
-    def __init__(self, conf_threshold: float = 0.45):
+    def __init__(self, conf_threshold: float = 0.45, weights: str = "yolov8n.pt"):
         self.conf_threshold = conf_threshold
+        self.weights = weights
         self.ready = False
         self._model: YOLO | None = None
         self._error: str | None = None
 
     def load(self) -> None:
         try:
-            logger.info("[person] Đang tải YOLOv8n (COCO) cho Person Detection...")
-            self._model = YOLO("yolov8n.pt")
+            logger.info("[person] Đang tải %s (COCO) cho Person Detection...", self.weights)
+            self._model = YOLO(self.weights)
             self.ready = True
-            logger.info("[person] Model sẵn sàng.")
+            logger.info("[person] Model %s sẵn sàng.", self.weights)
         except Exception as exc:  # noqa: BLE001
             self._error = str(exc)
             self.ready = False
