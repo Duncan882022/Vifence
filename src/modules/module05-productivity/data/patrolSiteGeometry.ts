@@ -2,51 +2,53 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Dự án Cầu Sông Hốt — hành lang CT06 cong theo khảo sát (4 điểm neo GPS).
+ * Dự án Cầu Sông Hốt — một polygon khảo sát duy nhất (4 đỉnh GPS).
  */
 
 const M_PER_DEG_LAT = 111_320
 
-/** Bo tròn A — đỉnh tây (Đình Trung Bản). */
-export const PATROL_SITE_TIP_A: [number, number] = [20.907474, 106.830878]
+/** Cầu Sông Hốt — polygon công trường (lat, lng, theo thứ tự khảo sát). */
+export const PATROL_SITE_QUAD: [number, number][] = [
+  [20.955148, 106.924572],
+  [20.957172, 106.934593],
+  [20.953906, 106.935280],
+  [20.952243, 106.925838],
+]
 
-/** Bo tròn B — đỉnh đông (Bệnh viện Sản Nhi). */
-export const PATROL_SITE_TIP_B: [number, number] = [20.962517, 106.945303]
+function quadCentroid(quad: readonly [number, number][]): [number, number] {
+  const lat = quad.reduce((s, p) => s + p[0], 0) / quad.length
+  const lng = quad.reduce((s, p) => s + p[1], 0) / quad.length
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
 
-/** Điểm thắt dưới — mép nam (Đảo Hoàng Tân). */
-export const PATROL_SITE_PINCH_SOUTH: [number, number] = [20.928673, 106.893158]
+/** Tâm polygon — map centre / fallback GPS thiết bị. */
+export const PATROL_SURVEY_PIN: [number, number] = quadCentroid(PATROL_SITE_QUAD)
 
-/** Điểm thắt trên — mép bắc. */
-export const PATROL_SITE_PINCH_NORTH: [number, number] = [20.953546, 106.879254]
-
-/** Ghim khảo sát Bùi Xá — DR-03 / ZONE_3. */
-export const PATROL_SURVEY_PIN: [number, number] = [20.928444, 106.873611]
-
-/** Lượn nam ghim Bùi Xá — mép nam cong vào trong theo ảnh khảo sát. */
+/** Legacy corridor anchors — giữ export để test/stub cũ không gãy import. */
+export const PATROL_SITE_TIP_A: [number, number] = PATROL_SITE_QUAD[0]
+export const PATROL_SITE_TIP_B: [number, number] = PATROL_SITE_QUAD[1]
+export const PATROL_SITE_PINCH_SOUTH: [number, number] = PATROL_SITE_QUAD[3]
+export const PATROL_SITE_PINCH_NORTH: [number, number] = PATROL_SITE_QUAD[2]
 export const PATROL_SURVEY_SOUTH_BEND: [number, number] = [
-  parseFloat((PATROL_SURVEY_PIN[0] - 0.0018).toFixed(6)),
+  parseFloat((PATROL_SURVEY_PIN[0] - 0.0004).toFixed(6)),
   PATROL_SURVEY_PIN[1],
 ]
 
-/** Bbox bilinear legacy — zoom / fallback. */
-export const PATROL_SITE_CORNERS: [number, number][] = [
-  [
-    Math.max(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_NORTH[0]),
-    Math.min(PATROL_SITE_TIP_A[1], PATROL_SITE_PINCH_SOUTH[1]),
-  ],
-  [
-    Math.max(PATROL_SITE_TIP_B[0], PATROL_SITE_PINCH_NORTH[0]),
-    Math.max(PATROL_SITE_TIP_B[1], PATROL_SITE_PINCH_SOUTH[1]),
-  ],
-  [
-    Math.min(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_SOUTH[0]),
-    Math.max(PATROL_SITE_TIP_B[1], PATROL_SITE_PINCH_SOUTH[1]),
-  ],
-  [
-    Math.min(PATROL_SITE_TIP_A[0], PATROL_SITE_PINCH_SOUTH[0]),
-    Math.min(PATROL_SITE_TIP_A[1], PATROL_SITE_PINCH_SOUTH[1]),
-  ],
-]
+/** Bbox quad — zoom / fallback. */
+export const PATROL_SITE_CORNERS: [number, number][] = (() => {
+  const lats = PATROL_SITE_QUAD.map(p => p[0])
+  const lngs = PATROL_SITE_QUAD.map(p => p[1])
+  const minLat = Math.min(...lats)
+  const maxLat = Math.max(...lats)
+  const minLng = Math.min(...lngs)
+  const maxLng = Math.max(...lngs)
+  return [
+    [maxLat, minLng],
+    [maxLat, maxLng],
+    [minLat, maxLng],
+    [minLat, minLng],
+  ]
+})()
 
 /** Bán kính nửa hình tròn 2 đầu capsule (stadium) — mép phẳng nối spine tại attach point. */
 const END_CAP_RADIUS_M = 1360
@@ -350,23 +352,25 @@ function buildCurvedCorridorModel(): CurvedCorridorModel {
 
 const CORRIDOR_MODEL = buildCurvedCorridorModel()
 
-/**
- * Viền đỏ heatmap — hành lang cong (~200 đỉnh), ngược chiều kim đồng hồ.
- */
-export const PATROL_SITE_BOUNDARY_RING: [number, number][] = CORRIDOR_MODEL.ring
+/** Viền đỏ heatmap — polygon khảo sát Cầu Sông Hốt. */
+export const PATROL_SITE_BOUNDARY_RING: [number, number][] = PATROL_SITE_QUAD
 
-/** Nội suy điểm trong hành lang: u = tây→đông dọc CT06, v = nam→bắc. */
+/** Nội suy bilinear trong quad: u = tây→đông, v = nam→bắc. */
 export function patrolSitePoint(u: number, v: number): [number, number] {
   const uClamped = Math.max(0, Math.min(1, u))
   const vClamped = Math.max(0, Math.min(1, v))
-  const south = pointAtArcU(CORRIDOR_MODEL.southTable, uClamped)
-  const north = pointAtArcU(CORRIDOR_MODEL.northTable, uClamped)
-  return enuToLatLng(
-    south[0] + (north[0] - south[0]) * vClamped,
-    south[1] + (north[1] - south[1]) * vClamped,
-    CORRIDOR_MODEL.refLat,
-    CORRIDOR_MODEL.refLng,
-  )
+  const [p00, p10, p11, p01] = PATROL_SITE_QUAD
+  const lat =
+    (1 - uClamped) * (1 - vClamped) * p00[0]
+    + uClamped * (1 - vClamped) * p10[0]
+    + uClamped * vClamped * p11[0]
+    + (1 - uClamped) * vClamped * p01[0]
+  const lng =
+    (1 - uClamped) * (1 - vClamped) * p00[1]
+    + uClamped * (1 - vClamped) * p10[1]
+    + uClamped * vClamped * p11[1]
+    + (1 - uClamped) * vClamped * p01[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
 /**
@@ -375,52 +379,11 @@ export function patrolSitePoint(u: number, v: number): [number, number] {
  * @param uDivider u của đường chia khu (1/7 hoặc 6/7)
  */
 export function buildPatrolCapInclusiveZonePolygon(
-  end: 'west' | 'east',
-  uDivider: number,
-  edgeSamples = 16,
+  _end: 'west' | 'east',
+  _uDivider: number,
+  _edgeSamples = 16,
 ): [number, number][] {
-  const cap = end === 'west' ? CORRIDOR_MODEL.westCapRing : CORRIDOR_MODEL.eastCapRing
-
-  const divider: [number, number][] = []
-  for (let i = 0; i <= edgeSamples; i += 1) {
-    divider.push(patrolSitePoint(uDivider, i / edgeSamples))
-  }
-
-  const northRun: [number, number][] = []
-  const southRun: [number, number][] = []
-
-  if (end === 'west') {
-    for (let i = 0; i <= edgeSamples; i += 1) {
-      const u = uDivider * (1 - i / edgeSamples)
-      northRun.push(patrolSitePoint(u, 1))
-    }
-    for (let i = 0; i <= edgeSamples; i += 1) {
-      const u = (uDivider * i) / edgeSamples
-      southRun.push(patrolSitePoint(u, 0))
-    }
-    const capWestToEast = [...cap].reverse()
-    return [
-      ...divider,
-      ...northRun.slice(1),
-      ...capWestToEast.slice(1),
-      ...southRun.slice(1),
-    ]
-  }
-
-  for (let i = 0; i <= edgeSamples; i += 1) {
-    const u = uDivider + (1 - uDivider) * (i / edgeSamples)
-    northRun.push(patrolSitePoint(u, 1))
-  }
-  for (let i = 0; i <= edgeSamples; i += 1) {
-    const u = uDivider + (1 - uDivider) * (i / edgeSamples)
-    southRun.push(patrolSitePoint(u, 0))
-  }
-  return [
-    ...divider,
-    ...northRun.slice(1),
-    ...cap.slice(1),
-    ...southRun.slice(1).reverse(),
-  ]
+  return [...PATROL_SITE_QUAD]
 }
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
