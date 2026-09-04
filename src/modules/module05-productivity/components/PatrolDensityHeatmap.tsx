@@ -35,9 +35,11 @@ import {
 import type { PatrolEvent } from '../data/patrolTypes'
 import { buildHelmetDetectCountsFromPresences } from '../utils/patrolHelmetDetectCounts'
 import {
+  buildPatrolDayHeatmapDots,
   buildPatrolPersEntityLookup,
   buildPatrolPresenceHeatmapDots,
   filterPatrolHeatmapDotsByDevice,
+  mergePatrolHeatmapDetectionDots,
 } from '../utils/patrolDayHeatmapDots'
 import { PATROL_FLYMAP_DOT_HEX, PATROL_HEATMAP_DOT_HEX } from '../utils/patrolDetectionDotUi'
 import {
@@ -482,6 +484,13 @@ export function PatrolDensityHeatmap({
         liveOnly: false,
       })
     }
+
+    // Fallback sự kiện — khi presences chưa sync hoặc GPS thiếu, vẫn vẽ chấm từ thẻ.
+    const eventDots = buildPatrolDayHeatmapDots(eventCatalog, {
+      liveOnly: liveOnlyOnline,
+      cameraOnlineById: helmetOnlineById,
+    })
+    merged = mergePatrolHeatmapDetectionDots([merged, eventDots], { persEntityLookup })
 
     if (!showFlymap) {
       merged = filterPatrolHeatmapDotsExcludeAerialFlycam(merged, flycamFlightModes)

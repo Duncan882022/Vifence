@@ -317,15 +317,13 @@ describe('mồi vận tốc từ backend', () => {
 })
 
 describe('vòng đời track', () => {
-  it('miss một nhịp coast ngắn rồi mờ dần — không tắt đột ngột', () => {
+  it('miss một nhịp — ẩn ngay, không coast (tránh bóng ROI)', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
     tracks = advance(tracks, [], 1_180)
     expect([...tracks.values()][0].state).toBe('lost')
-    const coasting = predictPersonRoiTracks(tracks, 120)
-    expect(coasting).toHaveLength(1)
-    expect(coasting[0].displayOpacity).toBeLessThan(1)
+    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(0)
   })
 
   it('track mất dấu vẫn nằm trong bộ nhớ để nhận lại sau lúc bị che', () => {
@@ -333,7 +331,7 @@ describe('vòng đời track', () => {
     const firstId = [...tracks.keys()][0]
 
     tracks = advance(tracks, [], 1_180)
-    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(1)
+    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(0)
 
     tracks = advance(tracks, [person([120, 110, 220, 410], { track_id: 'p1' })], 1_360)
     expect([...tracks.keys()][0]).toBe(firstId)
@@ -361,10 +359,8 @@ describe('vòng đời track', () => {
     expect([...tracks.values()][0].state).toBe('confirmed')
   })
 
-  it('ẩn ROI sau hai nhịp miss liên tiếp — người rời khỏi cam', () => {
+  it('ẩn ROI ngay khi miss — người rời khỏi cam', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    tracks = advance(tracks, [], 300)
-    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
     tracks = advance(tracks, [], 300)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })

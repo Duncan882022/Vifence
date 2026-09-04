@@ -55,6 +55,10 @@ export class BboxDisplaySmoother {
     return out
   }
 
+  reset(trackId: string): void {
+    this.states.delete(trackId)
+  }
+
   prune(activeTrackIds: Set<string>): void {
     for (const id of this.states.keys()) {
       if (!activeTrackIds.has(id)) this.states.delete(id)

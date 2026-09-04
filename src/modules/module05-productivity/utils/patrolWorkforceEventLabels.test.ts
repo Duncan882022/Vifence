@@ -41,7 +41,11 @@ describe('ba tầng nhận diện HC-02', () => {
   })
 
   it('đủ mặt để nhận diện nhưng chưa có trong thư viện → Người', () => {
-    const event = makeEvent({ objectId: 'OBJ-0008', trackWorkerId: 'tk-12' })
+    const event = makeEvent({
+      objectId: 'OBJ-0008',
+      trackWorkerId: 'tk-12',
+      snapshotScore: 1.2,
+    })
     expect(resolvePatrolPersonStage(event)).toBe('person')
     expect(
       patrolWorkforceEventTitle(event.type, event.objectId, event.objectLabel, event.trackWorkerId),
@@ -101,6 +105,17 @@ describe('ba tầng nhận diện HC-02', () => {
       objectId: 'OBJ-0007',
       trackWorkerId: 'tk-12',
       stage: 'object',
+    })
+    expect(resolvePatrolPersonStage(event)).toBe('object')
+  })
+
+  it('mặt chưa đủ (snapshot < 1.05) — vẫn Đối tượng dù BE gửi stage person', () => {
+    const event = makeEvent({
+      id: 'pers:tk-12',
+      objectId: 'tk-12',
+      trackWorkerId: 'tk-12',
+      stage: 'person',
+      snapshotScore: 0.82,
     })
     expect(resolvePatrolPersonStage(event)).toBe('object')
   })
