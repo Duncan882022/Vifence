@@ -35,16 +35,18 @@ describe('patrolDetectionMapOffset', () => {
   })
 
   it('GPS xa mũ giữ nguyên', () => {
-    const farLat = HELMET[0] + 0.008
+    // Trong polygon công trường, xa mũ > ngưỡng collapse — không offset theo heading.
+    const farLat = HELMET[0] - 0.000817
+    const farLng = HELMET[1] - 0.002071
     const [lat, lng] = resolvePatrolDetectionMapPosition(
       farLat,
-      HELMET[1],
+      farLng,
       'pers-2',
       HELMET,
       90,
     )
     expect(lat).toBeCloseTo(farLat, 5)
-    expect(lng).toBeCloseTo(HELMET[1], 5)
+    expect(lng).toBeCloseTo(farLng, 5)
   })
 
   it('GPS trùng mũ → offset', () => {

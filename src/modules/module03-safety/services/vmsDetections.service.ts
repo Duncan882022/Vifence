@@ -77,6 +77,8 @@ export interface VmsOverlayDetection {
   peak_group?: boolean
   peak_group_index?: number
   peak_group_size?: number
+  /** Backend assess mặt — gate hiển thị tier Người trên ROI (đồng bộ tab Sự kiện). */
+  face_eligible?: boolean
 }
 
 export interface VmsDetectionSnapshot {
@@ -234,6 +236,7 @@ function mapDetection(
     peak_group: raw.peak_group === true,
     peak_group_index: raw.peak_group_index != null ? Number(raw.peak_group_index) : undefined,
     peak_group_size: raw.peak_group_size != null ? Number(raw.peak_group_size) : undefined,
+    face_eligible: raw.face_eligible === true,
   }
 }
 

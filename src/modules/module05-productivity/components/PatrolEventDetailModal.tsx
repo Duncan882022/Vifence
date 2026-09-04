@@ -107,6 +107,15 @@ function appearanceRowKey(segment: PatrolAppearanceSegment): string {
   return `${segment.cameraId}-${segment.startedAt}`
 }
 
+function collapseObjectAppearanceHistory(
+  segments: PatrolAppearanceSegment[],
+  stage: ReturnType<typeof resolvePatrolPersonStage>,
+): PatrolAppearanceSegment[] {
+  if (stage !== 'object' || segments.length <= 1) return segments
+  const [primary] = [...segments].sort((a, b) => b.startedAt - a.startedAt)
+  return primary ? [primary] : segments
+}
+
 function dedupeAppearanceSegments(segments: PatrolAppearanceSegment[]): PatrolAppearanceSegment[] {
   const seenKeys = new Set<string>()
   return segments.filter(segment => {
@@ -239,11 +248,14 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     setAppearancesLoading(true)
     void fetchPatrolSubjectAppearances(subjectId, appearanceDate).then(segments => {
       if (cancelled) return
-      const sorted = dedupeAppearanceSegments(
-        fillMissingNewestAppearanceSnapshot(
-          [...segments].sort((a, b) => b.startedAt - a.startedAt),
-          event,
+      const sorted = collapseObjectAppearanceHistory(
+        dedupeAppearanceSegments(
+          fillMissingNewestAppearanceSnapshot(
+            [...segments].sort((a, b) => b.startedAt - a.startedAt),
+            event,
+          ),
         ),
+        resolvePatrolPersonStage(event),
       )
       setAppearanceSegments(sorted)
       setAppearancesLoading(false)

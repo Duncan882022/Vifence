@@ -8,7 +8,12 @@ import {
   type PatrolDayBundle,
   type PatrolDayStats,
 } from '../services/patrolDayEvents.service'
-import { filterPatrolDayObjectsForDisplay } from '../utils/patrolDayObjectFilter'
+import {
+  dedupePatrolEventsStrictByEntity,
+  filterPatrolDayObjectsForDisplay,
+  filterPatrolObjectEventsWithLinkedPerson,
+  PATROL_OBJECT_FACE_SNAPSHOT_SCORE,
+} from '../utils/patrolDayObjectFilter'
 import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
 import { applyManualIdentityToPatrolEvents } from '../utils/patrolManualIdentityUi'
 import {
@@ -80,7 +85,11 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       gps,
       snapshotUrl: row.snapshotUrl,
       snapshotScore: row.snapshotScore,
-      stage: identified ? 'profile' : 'person',
+      stage: identified
+        ? 'profile'
+        : (row.snapshotScore ?? 0) >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE
+          ? 'person'
+          : 'object',
       employeeCode: row.employeeCode,
       trackWorkerId,
       promotedFrom: row.promotedFrom,
@@ -116,7 +125,11 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       stage: 'object',
     } as PatrolEvent
   })
-  return applyManualIdentityToPatrolEvents([...personEvents, ...objectEvents]).sort(
+  return dedupePatrolEventsStrictByEntity(
+    filterPatrolObjectEventsWithLinkedPerson(
+      applyManualIdentityToPatrolEvents([...personEvents, ...objectEvents]),
+    ),
+  ).sort(
     (a, b) => Date.parse(b.lockedAt) - Date.parse(a.lockedAt),
   )
 }
