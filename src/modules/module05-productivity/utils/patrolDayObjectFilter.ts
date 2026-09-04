@@ -46,7 +46,7 @@ export function filterPatrolObjectEventsWithLinkedPerson(
     const fromPers = event.id.match(/^pers:(.+)$/i)?.[1]?.trim().toLowerCase()
     if (fromPers) persIds.add(fromPers)
     const tk = event.trackWorkerId?.trim()
-    if (isPatrolTrackWorkerId(tk)) linkedTk.add(tk.toUpperCase())
+    if (tk && isPatrolTrackWorkerId(tk)) linkedTk.add(tk.toUpperCase())
     const oid = event.objectId?.trim()
     if (isPatrolTrackWorkerId(oid)) linkedTk.add(oid.toUpperCase())
   }
