@@ -82,6 +82,9 @@ export interface PatrolGpsZone {
 
 const SITE_ZONE_POLYGON: [number, number][] = [...PATROL_SITE_BOUNDARY_RING]
 
+/** Một zone duy nhất — tắt hover/chọn khu và bảng «Toàn dự án» trên heatmap. */
+export const PATROL_SINGLE_ZONE_MODE = true
+
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
   {
     zone_id: PATROL_SITE_ZONE_ID,

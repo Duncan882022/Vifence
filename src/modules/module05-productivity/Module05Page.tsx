@@ -60,6 +60,7 @@ import { syncPatrolIdentityBindingsFromBackend } from './services/patrolManualId
 import { ensurePatrolAuth } from '@/services/patrolApiClient'
 import { PATROL_PERSON_STAGE_META } from './utils/patrolWorkforceEventLabels'
 import { buildPatrolHelmetOnlineById } from './utils/patrolStreamOnline'
+import { PATROL_SINGLE_ZONE_MODE } from './data/patrolSiteMap'
 import { computePatrolZoneCoverage, type PatrolZoneCoverageResult } from './utils/patrolZoneCoverage'
 import { usePatrolFlymapMetrics } from './hooks/usePatrolFlymapMetrics'
 import { derivePatrolDisplayStats } from './utils/patrolDisplayStats'
@@ -158,17 +159,19 @@ function PatrolKPIs({
       : 'YOLO tầm cao — không cộng Nhân sự'
 
   const kpis = [
-    {
-      label: 'Khu vực tuần tra',
-      value: `${visitedZones}/${totalZones}`,
-      unit: 'khu vực',
-      detail: zoneDetail,
-      change: 0,
-      changeType: 'neutral' as const,
-      icon: MapPin,
-      iconBg: 'bg-green-400/10',
-      iconColor: 'text-green-400',
-    },
+    ...(!PATROL_SINGLE_ZONE_MODE
+      ? [{
+          label: 'Khu vực tuần tra',
+          value: `${visitedZones}/${totalZones}`,
+          unit: 'khu vực',
+          detail: zoneDetail,
+          change: 0,
+          changeType: 'neutral' as const,
+          icon: MapPin,
+          iconBg: 'bg-green-400/10',
+          iconColor: 'text-green-400',
+        }]
+      : []),
     {
       label: 'Nhân sự',
       value: headcount,

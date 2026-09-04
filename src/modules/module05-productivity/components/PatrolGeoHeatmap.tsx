@@ -26,6 +26,7 @@ import {
   PATROL_ZONE_DIVIDER_LINES,
   getPatrolHelmetZoneName,
   getPatrolMapDeviceBadgeNum,
+  PATROL_SINGLE_ZONE_MODE,
 } from '../data/patrolSiteMap'
 import {
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
@@ -618,21 +619,22 @@ export function PatrolGeoHeatmap({
   selectedZoneId = null,
   onZoneSelect,
 }: PatrolGeoHeatmapProps) {
+  const zoneInteractionEnabled = interactiveZones && !PATROL_SINGLE_ZONE_MODE
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
   const [openHelmetTipId, setOpenHelmetTipId] = useState<string | null>(null)
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
   const geoJsonRef = useRef<L.GeoJSON | null>(null)
 
-  const zoneStatLabelsVisible = showZoneStatLabels ?? showDensity
-  const zonePolygonsVisible = showZonePolygons || interactiveZones
+  const zoneStatLabelsVisible = (showZoneStatLabels ?? showDensity) && !PATROL_SINGLE_ZONE_MODE
+  const zonePolygonsVisible = showZonePolygons || zoneInteractionEnabled
 
   useEffect(() => {
     if (!zoneStatLabelsVisible) setExpandedZoneId(null)
   }, [zoneStatLabelsVisible])
 
   useEffect(() => {
-    if (!interactiveZones) setHoveredZoneId(null)
-  }, [interactiveZones])
+    if (!zoneInteractionEnabled) setHoveredZoneId(null)
+  }, [zoneInteractionEnabled])
 
   const toggleZoneExpand = (zoneId: string) => {
     setExpandedZoneId(prev => (prev === zoneId ? null : zoneId))
@@ -650,13 +652,13 @@ export function PatrolGeoHeatmap({
   }, [zones, layer, countMode, displayMode])
 
   useEffect(() => {
-    if (!geoJsonRef.current || !interactiveZones) return
+    if (!geoJsonRef.current || !zoneInteractionEnabled) return
     geoJsonRef.current.eachLayer(layer => {
       const path = layer as L.Path & { feature?: Feature<GeoJsonPolygon, ZoneProperties> }
       if (!path.feature) return
       path.setStyle(zoneInteractiveStyle(path.feature, selectedZoneId, hoveredZoneId))
     })
-  }, [interactiveZones, selectedZoneId, hoveredZoneId, geoJsonKey])
+  }, [zoneInteractionEnabled, selectedZoneId, hoveredZoneId, geoJsonKey])
 
   const zoneMap = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
 
@@ -815,7 +817,7 @@ export function PatrolGeoHeatmap({
             openId={openHelmetTipId}
             onDismiss={() => setOpenHelmetTipId(null)}
             onBackgroundClick={
-              interactiveZones && onZoneSelect
+              zoneInteractionEnabled && onZoneSelect
                 ? () => onZoneSelect(null)
                 : undefined
             }
@@ -850,13 +852,13 @@ export function PatrolGeoHeatmap({
                   opacity: 0.98,
                   fillColor: '#ef4444',
                   fillOpacity: 0.06,
-                  interactive: !interactiveZones,
+                  interactive: PATROL_SINGLE_ZONE_MODE ? false : !zoneInteractionEnabled,
                 }}
               />
             </Pane>
           )}
 
-          {showSiteBoundary && interactiveZones && onZoneSelect && (
+          {showSiteBoundary && zoneInteractionEnabled && onZoneSelect && (
             <Pane name="patrol-site-boundary-stroke" style={{ zIndex: 456 }}>
               <Polyline
                 positions={PATROL_SITE_BOUNDARY}
@@ -888,7 +890,7 @@ export function PatrolGeoHeatmap({
                     weight: 2,
                     opacity: 0.88,
                     dashArray: '7 6',
-                    interactive: !interactiveZones,
+                    interactive: !zoneInteractionEnabled,
                   }}
                 />
               ))}
@@ -902,9 +904,9 @@ export function PatrolGeoHeatmap({
                 ref={geoJsonRef}
                 key={geoJsonKey}
                 data={featureCollection}
-                pathOptions={interactiveZones ? { className: 'patrol-zone-interactive' } : undefined}
+                pathOptions={zoneInteractionEnabled ? { className: 'patrol-zone-interactive' } : undefined}
                 style={
-                  (interactiveZones
+                  (zoneInteractionEnabled
                     ? (feature) => zoneInteractiveStyle(
                       feature as Feature<GeoJsonPolygon, ZoneProperties>,
                       selectedZoneId,
@@ -915,7 +917,7 @@ export function PatrolGeoHeatmap({
                 onEachFeature={(feature, lyr) => {
                   const zoneFeature = feature as Feature<GeoJsonPolygon, ZoneProperties>
                   const props = zoneFeature.properties
-                  if (interactiveZones && onZoneSelect) {
+                  if (zoneInteractionEnabled && onZoneSelect) {
                     ;(lyr as L.Path).options.interactive = true
                     lyr.on({
                       mouseover: (e) => {

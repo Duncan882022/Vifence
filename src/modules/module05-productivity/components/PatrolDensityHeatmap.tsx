@@ -17,7 +17,7 @@ import {
   buildPatrolHeatmapStatsForZone,
   buildPatrolSiteHeatmapStats,
 } from '../utils/patrolZoneHeatmapStats'
-import { PATROL_GPS_ZONES, PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
+import { PATROL_GPS_ZONES, PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, PATROL_SINGLE_ZONE_MODE } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
@@ -561,9 +561,9 @@ export function PatrolDensityHeatmap({
           showSiteBoundary={layers.polygon}
           showZoneDividers={layers.polygon}
           showZonePolygons={false}
-          interactiveZones={!showFlymap && layers.polygon}
-          selectedZoneId={selectedZoneId}
-          onZoneSelect={setSelectedZoneId}
+          interactiveZones={!showFlymap && layers.polygon && !PATROL_SINGLE_ZONE_MODE}
+          selectedZoneId={PATROL_SINGLE_ZONE_MODE ? null : selectedZoneId}
+          onZoneSelect={PATROL_SINGLE_ZONE_MODE ? undefined : setSelectedZoneId}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
           followLiveGps={showFlymap
@@ -602,13 +602,15 @@ export function PatrolDensityHeatmap({
             compactChrome={viewport.compactChrome}
           />
         ) : (
-          <HeatmapSiteStatsOverlay
-            objectCount={objectEncounterCount}
-            personCount={personCount}
-            identityCount={identifiedCount}
-            scopeLabel={heatmapScopeLabel}
-            compactChrome={viewport.compactChrome}
-          />
+          !PATROL_SINGLE_ZONE_MODE && (
+            <HeatmapSiteStatsOverlay
+              objectCount={objectEncounterCount}
+              personCount={personCount}
+              identityCount={identifiedCount}
+              scopeLabel={heatmapScopeLabel}
+              compactChrome={viewport.compactChrome}
+            />
+          )
         )}
         {!showFlymap && (
           <WorkforceObjectSheet object={selectedObject} onClose={() => setSelectedObject(null)} />
