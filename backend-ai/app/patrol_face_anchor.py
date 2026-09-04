@@ -69,7 +69,28 @@ def _list_frame_faces(
         if x2 - x1 < 8 or y2 - y1 < 8:
             continue
         out.append(_FrameFace(box=(x1, y1, x2, y2), score=score))
-    return out
+    return _dedupe_frame_faces(out)
+
+
+def _dedupe_frame_faces(faces: list[_FrameFace]) -> list[_FrameFace]:
+    """Gộp các hộp mặt chồng nhau — YuNet hay trả hai hộp lệch nhau trên một mặt.
+
+    Hai hộp trên cùng một mặt bị đếm thành hai người: nhánh "một bbox YOLO chứa
+    nhiều mặt" tưởng là đám đông nên cắt bbox toàn thân thành hai mảnh đầu–vai,
+    và ROI của người đó co lại còn cái đầu.
+    """
+    if len(faces) <= 1:
+        return faces
+    kept: list[_FrameFace] = []
+    for face in sorted(faces, key=lambda f: f.score, reverse=True):
+        if any(
+            _bbox_iou(face.box, other.box) >= 0.30
+            or _bbox_containment(face.box, other.box) >= 0.45
+            for other in kept
+        ):
+            continue
+        kept.append(face)
+    return kept
 
 
 def _face_center_in_box(face: _FrameFace, person_box: tuple[float, float, float, float]) -> bool:

@@ -322,6 +322,41 @@ class TestFaceSeededPersonBox(unittest.TestCase):
             out = anchor_patrol_person_boxes_to_faces(frame, [], camera_id="DR-03")
         self.assertEqual(len(out), 1)
 
+    def test_double_detected_face_does_not_split_yolo_box(self):
+        """YuNet trả hai hộp lệch nhau trên một mặt — không được coi là đám đông.
+
+        Số liệu HC-01: hộp (306,92,331,128) và (318,93,349,131) là cùng một mặt,
+        nhưng nhánh nhiều-mặt cắt bbox YOLO 163×415 thành ROI 59×113 chỉ có đầu.
+        """
+        from app.patrol_face_anchor import _dedupe_frame_faces
+
+        dup = [
+            _FrameFace(box=(306.0, 92.0, 331.0, 128.0), score=0.46),
+            _FrameFace(box=(318.0, 93.0, 349.0, 131.0), score=0.43),
+        ]
+        self.assertEqual(len(_dedupe_frame_faces(dup)), 1)
+        self.assertAlmostEqual(_dedupe_frame_faces(dup)[0].score, 0.46)
+
+        frame = np.zeros((self.FH, self.FW, 3), dtype=np.uint8)
+        yolo = (288.0, 61.0, 451.0, 476.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=dup[:1]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame, [(yolo, 0.87)], camera_id="HC-01",
+            )
+        self.assertEqual(len(out), 1)
+        box, _conf = out[0]
+        self.assertGreater(box[3] - box[1], 300.0)
+
+    def test_two_distinct_faces_still_split(self):
+        """Hai người thật cạnh nhau — dedupe không được gộp mất một người."""
+        from app.patrol_face_anchor import _dedupe_frame_faces
+
+        distinct = [
+            _FrameFace(box=(420.0, 180.0, 500.0, 300.0), score=0.90),
+            _FrameFace(box=(580.0, 190.0, 660.0, 310.0), score=0.88),
+        ]
+        self.assertEqual(len(_dedupe_frame_faces(distinct)), 2)
+
     def test_weak_face_inside_yolo_box_still_read(self):
         """Cổng chặt chỉ dành cho mặt tự sinh người — bbox YOLO là bằng chứng riêng."""
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
