@@ -1,6 +1,7 @@
 import { KalmanBox2D } from './kalmanBox2d'
 import { suppressPatrolObjectOverlappingIdentified } from '../utils/patrolPersonVisibility'
 import { PATROL_PERSON_ROI_CONFIG, type PatrolPersonRoiConfig } from './patrolPersonRoi.config'
+import { resolvePatrolRoiDisplayTier } from './resolvePatrolRoiDisplayTier'
 import type {
   Bbox,
   PersonRoiDetection,
@@ -207,6 +208,9 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   } else {
     track.label = track.workerName?.trim()
       || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
+  }
+  if (det.face_eligible === true) {
+    track.faceEligible = true
   }
   // Suy giảm rồi mới lấy max, giống backend. Dùng thẳng `Math.max` thì con số
   // trên nhãn là **đỉnh của cả đời track** và không bao giờ hạ: người rời khung
@@ -429,7 +433,10 @@ export function predictPersonRoiTracks(
       locked: track.state === 'confirmed',
       workerId: track.workerId,
       workerName: track.workerName,
-      tier: track.tier,
+      tier: resolvePatrolRoiDisplayTier(track.tier, {
+        faceEligible: track.faceEligible,
+        workerId: track.workerId,
+      }),
       displayOpacity,
       peakGroup: track.peakGroup,
       peakGroupIndex: track.peakGroupIndex,

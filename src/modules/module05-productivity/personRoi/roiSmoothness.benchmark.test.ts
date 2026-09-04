@@ -1,6 +1,6 @@
 /**
- * Self-check ROI — mô phỏng nhịp analyze bodycam ~300ms, miss 1/3 frame.
- * Pass = uptime ≥92%, gap tối đa ≤120ms, nhảy bbox trung bình ≤8px (ưu tiên bám chuyển động).
+ * Self-check ROI — mô phỏng nhịp analyze bodycam ~300ms.
+ * displayCoastMaxMiss=0: miss frame ẩn ngay (không ghost). EMA glide=1: bám sát measurement.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -28,39 +28,47 @@ function person(bbox: [number, number, number, number], extra: Record<string, un
 }
 
 describe('ROI smoothness self-check', () => {
-  it('coast benchmark — miss frame vẫn giữ box', () => {
+  it('uptime benchmark — detection liên tục, rAF nội suy giữa nhịp analyze', () => {
     resetPersonRoiTrackSeq()
     let tracks = new Map<string, ReturnType<typeof advancePersonRoiTracks> extends Map<string, infer T> ? T : never>()
     let t = 0
     let visibleFrames = 0
     let totalFrames = 0
-    let maxGapMs = 0
-    let gapMs = 0
 
     while (t < DURATION_MS) {
       const isAnalyzeTick = t % ANALYZE_MS < RAF_MS
       if (isAnalyzeTick) {
         const x = 100 + (t / 1000) * 85
-        const hasDetection = Math.floor(t / ANALYZE_MS) % 3 !== 1
-        const dets = hasDetection ? [person([x, 100, x + 100, 400])] : []
-        tracks = advancePersonRoiTracks(tracks, dets, ANALYZE_MS, Date.now() + t)
+        tracks = advancePersonRoiTracks(
+          tracks,
+          [person([x, 100, x + 100, 400], { face_eligible: true, tier: 'person' })],
+          ANALYZE_MS,
+          Date.now() + t,
+        )
       }
 
       const displays = predictPersonRoiTracks(tracks, (t % ANALYZE_MS) || RAF_MS)
       totalFrames += 1
-      if (displays.length > 0) {
-        visibleFrames += 1
-        gapMs = 0
-      } else {
-        gapMs += RAF_MS
-        maxGapMs = Math.max(maxGapMs, gapMs)
-      }
+      if (displays.length > 0) visibleFrames += 1
       t += RAF_MS
     }
 
     const uptime = visibleFrames / totalFrames
     expect(uptime).toBeGreaterThanOrEqual(0.92)
-    expect(maxGapMs).toBeLessThanOrEqual(120)
+  })
+
+  it('miss frame — ẩn ngay, không coast ghost', () => {
+    resetPersonRoiTrackSeq()
+    let tracks = advancePersonRoiTracks(
+      new Map(),
+      [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', face_eligible: true })],
+      ANALYZE_MS,
+      1_000,
+    )
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
+
+    tracks = advancePersonRoiTracks(tracks, [], ANALYZE_MS, 1_300)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })
 
   it('EMA benchmark — nhảy bbox giữa các frame rAF', () => {
@@ -91,6 +99,6 @@ describe('ROI smoothness self-check', () => {
     const avgJump = jumps.length ? jumps.reduce((a, b) => a + b, 0) / jumps.length : 0
     expect(maxJump).toBeLessThanOrEqual(30)
     expect(avgJump).toBeLessThanOrEqual(8)
-    expect(PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha).toBeGreaterThan(0.3)
+    expect(PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha).toBeGreaterThanOrEqual(0.9)
   })
 })

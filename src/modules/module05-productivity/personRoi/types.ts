@@ -50,9 +50,9 @@ export interface PersonRoiTrack {
   peakGroup?: boolean
   peakGroupIndex?: number
   peakGroupSize?: number
+  /** Nhịp đo cuối — mặt đủ tiêu chí hiển thị tier Người trên ROI. */
+  faceEligible?: boolean
 }
-
-/** Output hiển thị overlay / heatmap. */
 export interface PersonRoiDisplay {
   trackId: string
   personId: string

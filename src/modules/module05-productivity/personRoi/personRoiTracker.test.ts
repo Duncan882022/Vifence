@@ -266,14 +266,34 @@ describe('tầng định danh từ backend', () => {
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
 
     tracks = advance(
-      tracks, [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person' })], 1_180,
+      tracks,
+      [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person', face_eligible: true })],
+      1_180,
     )
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
 
     tracks = advance(
-      tracks, [person([108, 104, 208, 404], { track_id: 'p1', tier: 'identity' })], 1_360,
+      tracks,
+      [person([108, 104, 208, 404], { track_id: 'p1', tier: 'identity', face_eligible: true })],
+      1_360,
     )
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
+  })
+
+  it('tier person từ BE nhưng chưa face_eligible — ROI vẫn Đối tượng', () => {
+    let tracks = advance(
+      empty(),
+      [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'tk-0000001' })],
+      1_000,
+    )
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
+
+    tracks = advance(
+      tracks,
+      [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person', worker_id: 'tk-0000001', face_eligible: true })],
+      1_180,
+    )
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
   })
 
   it('payload trễ nhịp không kéo nhãn tụt xuống', () => {
