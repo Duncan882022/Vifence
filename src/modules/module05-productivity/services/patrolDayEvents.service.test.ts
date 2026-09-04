@@ -8,8 +8,8 @@ import {
 function segment(partial: Partial<PatrolAppearanceSegment> & Pick<PatrolAppearanceSegment, 'startedAt'>): PatrolAppearanceSegment {
   return {
     cameraId: 'HC-02',
-    startedAt: partial.startedAt,
-    endedAt: partial.endedAt ?? partial.startedAt + 30,
+    zoneId: null,
+    endedAt: partial.startedAt + 30,
     ...partial,
   }
 }
