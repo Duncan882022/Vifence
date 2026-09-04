@@ -153,6 +153,38 @@ def signboard_like_fp_box(
     return False
 
 
+SPECK_BOX_MAX_HEIGHT_RATIO = 0.07
+SPECK_BOX_MAX_ASPECT = 1.35
+
+
+def speck_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Vệt nhỏ hình vuông — không đủ để là bằng chứng về một con người.
+
+    Người đứng, kể cả ở xa, vẫn cao gấp đôi bề rộng. Một hộp chỉ cao 3–5% khung
+    mà lại gần vuông thì không mang hình dáng người: đo trên HC-01 thật, 9/11
+    hộp lọt cổng ghi thẻ Đối tượng là loại này (~20×25 px, tỉ lệ 0.95–1.11, nằm
+    ở nửa trên khung tức là bên kia đường), và cắt ra xem thì chỉ là vệt mờ
+    không nhận ra được gì. Chúng đẻ ra thẻ Đối tượng nhiều gấp bốn thẻ Người.
+
+    Ngưỡng đặt thấp có chủ ý: người thật ở xa trên ảnh công trường mẫu cao 12%
+    khung, còn người đứng gần cao 56% — cách ngưỡng rất xa.
+
+    Chỉ dùng cho góc mặt đất. Nhìn từ drone thì người thật vốn nhỏ và có thể
+    rộng hơn cao (nhìn thẳng xuống đỉnh đầu), nên gate này sẽ xoá sạch ROI hợp
+    lệ của luồng bay.
+    """
+    x1, y1, x2, y2 = person_box
+    pw = max(float(x2) - float(x1), 1.0)
+    ph = max(float(y2) - float(y1), 1.0)
+    if ph / max(float(frame_h), 1.0) >= SPECK_BOX_MAX_HEIGHT_RATIO:
+        return False
+    return (ph / pw) < SPECK_BOX_MAX_ASPECT
+
+
 def patrol_bbox_rejects_static_fp(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -185,6 +217,12 @@ def patrol_object_commit_allowed(
     if person_box is None or frame_w <= 0 or frame_h <= 0:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    if (
+        not flycam
+        and not proximity_flycam
+        and speck_person_box(person_box, frame_w, frame_h)
+    ):
         return False
     if face_eligible:
         return True
@@ -435,6 +473,9 @@ def patrol_person_meets_display_gate(
         ):
             return False
         return not limb_fragment_person_box(person_box, frame_w, frame_h)
+    # Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
+    if speck_person_box(person_box, frame_w, frame_h):
+        return False
     if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True
     if not plausible_person_silhouette(

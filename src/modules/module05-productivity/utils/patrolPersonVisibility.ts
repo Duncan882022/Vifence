@@ -94,6 +94,27 @@ function verticalStructureFpBox(bbox: Bbox4, frameW: number, frameH: number): bo
   return false
 }
 
+const SPECK_BOX_MAX_HEIGHT_RATIO = 0.07
+const SPECK_BOX_MAX_ASPECT = 1.35
+
+/**
+ * Vệt nhỏ hình vuông — không đủ để là bằng chứng về một con người.
+ *
+ * Người đứng, kể cả ở xa, vẫn cao gấp đôi bề rộng. Hộp chỉ cao 3–5% khung mà
+ * gần vuông thì không mang hình dáng người: đo trên HC-01 thật, 9/11 hộp lọt
+ * cổng ghi thẻ Đối tượng là loại này (~20×25 px, tỉ lệ 0.95–1.11), cắt ra chỉ
+ * là vệt mờ không nhận ra được gì.
+ *
+ * Mirror `speck_person_box` bên backend.
+ */
+function speckPersonBox(bbox: Bbox4, frameH: number): boolean {
+  const [, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - bbox[0], 1)
+  const ph = Math.max(y2 - y1, 1)
+  if (ph / Math.max(frameH, 1) >= SPECK_BOX_MAX_HEIGHT_RATIO) return false
+  return ph / pw < SPECK_BOX_MAX_ASPECT
+}
+
 function wideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
   const [x1, y1, x2, y2] = bbox
@@ -265,6 +286,8 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
     if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
     return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
   }
+  // Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
+  if (speckPersonBox(bbox, frameH)) return false
   if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
   return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
