@@ -19,11 +19,27 @@ from .patrol_person_visibility import (
 # người đủ đầu + 1/3 thân trên mà YOLO chấm 0.30–0.38.
 BACK_TURN_MIN_CONF = 0.25
 
+# Một mặt nằm **trong** bbox YOLO thì bbox đó là bằng chứng độc lập, nên đọc mặt
+# ở ngưỡng thấp là an toàn. Nhưng một mặt **không** khớp bbox nào lại tự sinh ra
+# cả một người: lúc đó nó là bằng chứng duy nhất và phải chịu ngưỡng chặt hơn.
+#
+# Phân biệt bằng **điểm**, không bằng kích thước. Đo trên HC-01 (phố Hà Nội,
+# không có người trong khung) YuNet ở 0.38 trả mặt giả trên biển hiệu và mặt xe
+# máy với điểm 0.38–0.46; kích thước của chúng trải từ 14×14 tới 56×76 nên sàn
+# kích thước không tách được. Mặt người thật đo trên ảnh công trường chấm
+# 0.84–0.94 kể cả khi chỉ còn 19×23 px, nên sàn điểm 0.62 nằm giữa hai cụm.
+FACE_SEED_MIN_SCORE = 0.62
+
 
 @dataclass(frozen=True)
 class _FrameFace:
     box: tuple[float, float, float, float]
     score: float
+
+
+def _face_can_seed_person(face: _FrameFace) -> bool:
+    """Mặt này có đủ chắc để **một mình** tạo ra một người trên khung không."""
+    return face.score >= FACE_SEED_MIN_SCORE
 
 
 def _list_frame_faces(
@@ -97,6 +113,15 @@ def _bbox_center_distance_norm(
     return (dx * dx + dy * dy) ** 0.5
 
 
+# Sàn tuyệt đối cho box synth — chỉ để bbox không teo xuống dưới mức vẽ được.
+# Trước đây sàn là `frame_w * 0.18` / `frame_h * 0.24`, tức 173×130 px trên khung
+# 960×540. Sàn theo khung làm kích thước box **độc lập với mặt**: mặt 14 px và
+# mặt 66 px nhận cùng một box 173 px, nên mọi mặt nhỏ đều sinh ROI to gấp hàng
+# trăm lần vùng bằng chứng và trùm lên vỉa hè / xe máy quanh đó.
+_SYNTH_MIN_W_PX = 24.0
+_SYNTH_MIN_H_PX = 32.0
+
+
 def _person_box_from_face(
     face: _FrameFace,
     frame_w: int,
@@ -104,17 +129,18 @@ def _person_box_from_face(
     *,
     narrow: bool = False,
 ) -> tuple[float, float, float, float]:
+    """Box người suy ra từ mặt — tỉ lệ theo **mặt**, không theo kích thước khung."""
     fx1, fy1, fx2, fy2 = face.box
     fw = max(fx2 - fx1, 1.0)
     fh = max(fy2 - fy1, 1.0)
     cx = (fx1 + fx2) / 2.0
     cy = (fy1 + fy2) / 2.0
     if narrow:
-        pw = max(fw * 1.85, frame_w * 0.11)
-        ph = max(fh * 3.0, frame_h * 0.20)
+        pw = max(fw * 1.85, _SYNTH_MIN_W_PX)
+        ph = max(fh * 3.0, _SYNTH_MIN_H_PX)
     else:
-        pw = max(fw * 2.6, frame_w * 0.18)
-        ph = max(fh * 3.4, frame_h * 0.24)
+        pw = max(fw * 2.6, _SYNTH_MIN_W_PX)
+        ph = max(fh * 3.4, _SYNTH_MIN_H_PX)
     raw = (
         cx - pw * 0.5,
         cy - ph * 0.38,
@@ -350,6 +376,8 @@ def anchor_patrol_person_boxes_to_faces(
     for face_index, face in enumerate(faces):
         if face_index in covered_face_indices:
             continue
+        if not _face_can_seed_person(face):
+            continue
         synth_box = _person_box_from_face(face, w, h)
         if legs_only_person_box(synth_box, w, h):
             continue
@@ -406,6 +434,7 @@ def anchor_patrol_person_boxes_to_faces(
         [
             (_person_box_from_face(face, w, h), _synth_conf_from_face(face))
             for face in faces
+            if _face_can_seed_person(face)
         ],
         frame_w=w,
         frame_h=h,

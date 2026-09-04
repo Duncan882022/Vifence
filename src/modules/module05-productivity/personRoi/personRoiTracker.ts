@@ -36,7 +36,7 @@ export function normalizePersonRoiDetections(detections: PersonRoiDetection[]): 
       .filter(d => d.behavior === 'person' && (d.bbox?.length === 4 || d.subject_bbox?.length === 4))
       .map(d => ({
         ...d,
-        // BE gửi bbox đã mở rộng cho overlay; subject_bbox là YOLO gốc (sự kiện/debug).
+        // `bbox` là box hiển thị BE chốt; `subject_bbox` là YOLO gốc (sự kiện/debug).
         bbox: d.bbox?.length === 4
           ? d.bbox
           : (d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox!),

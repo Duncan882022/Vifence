@@ -654,7 +654,14 @@ def _build_patrol_person_detections(
         pb = person.person_box
         from ..patrol_person_visibility import patrol_person_overlay_bbox
 
-        raw_pb = _match_raw_yolo_person_box(pb, raw_boxes) or pb
+        # Mỗi box YOLO chỉ nhường ROI cho **một** detection. Không rút ra thì hai
+        # người sát nhau (hoặc một box synth + một box YOLO cùng vùng) cùng khớp
+        # một box gốc và vẽ hai ROI trùng khít lên một người.
+        raw_pb = _match_raw_yolo_person_box(pb, raw_boxes)
+        if raw_pb is not None:
+            raw_boxes = [b for b in raw_boxes if b != raw_pb]
+        else:
+            raw_pb = pb
         overlay_pb = patrol_person_overlay_bbox(raw_pb, frame_w, frame_h)
         person_det = PpeDetection(
             behavior="person",

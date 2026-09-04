@@ -273,6 +273,67 @@ class TestPatrolFaceAnchor(unittest.TestCase):
         self.assertEqual(len(out), 1)
 
 
+class TestFaceSeededPersonBox(unittest.TestCase):
+    """Mặt tự sinh ra người — số liệu lấy từ HC-01 thật, khung 960×540.
+
+    Trên phố Hà Nội **không có người trong khung**, YuNet ở ngưỡng 0.38 trả về
+    mặt giả 14–18 px trên biển hiệu và mặt xe máy (điểm 0.38–0.46). Mỗi mặt giả
+    sinh một box 173×130 (sàn `frame_w*0.18` / `frame_h*0.24`) rồi bị nới thành
+    173×297 — ba thẻ "Đối tượng" trùm lên dàn xe máy.
+    """
+
+    FW, FH = 960, 540
+
+    def test_synth_box_scales_with_face_not_frame(self):
+        from app.patrol_face_anchor import _person_box_from_face
+
+        small = _FrameFace(box=(470.0, 1.0, 484.0, 15.0), score=0.90)
+        box = _person_box_from_face(small, self.FW, self.FH)
+        self.assertLess(box[2] - box[0], 60.0)
+        self.assertLess(box[3] - box[1], 60.0)
+
+        big = _FrameFace(box=(400.0, 100.0, 480.0, 200.0), score=0.90)
+        big_box = _person_box_from_face(big, self.FW, self.FH)
+        self.assertGreater(big_box[2] - big_box[0], (box[2] - box[0]) * 2)
+
+    def test_low_score_face_alone_creates_no_person(self):
+        frame = np.zeros((self.FH, self.FW, 3), dtype=np.uint8)
+        fp_faces = [
+            _FrameFace(box=(470.0, 1.0, 484.0, 15.0), score=0.39),
+            _FrameFace(box=(377.0, 8.0, 393.0, 27.0), score=0.46),
+            _FrameFace(box=(481.0, 76.0, 537.0, 152.0), score=0.41),
+        ]
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=fp_faces):
+            out = anchor_patrol_person_boxes_to_faces(frame, [], camera_id="HC-01")
+        self.assertEqual(out, [])
+
+    def test_confident_face_alone_still_creates_person(self):
+        frame = np.zeros((self.FH, self.FW, 3), dtype=np.uint8)
+        real = _FrameFace(box=(440.0, 120.0, 500.0, 200.0), score=0.88)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[real]):
+            out = anchor_patrol_person_boxes_to_faces(frame, [], camera_id="HC-01")
+        self.assertEqual(len(out), 1)
+
+    def test_small_but_confident_face_alone_still_creates_person(self):
+        """Công nhân ở xa — mặt còn 19×23 px vẫn chấm 0.86, không được loại theo cỡ."""
+        frame = np.zeros((967, 1024, 3), dtype=np.uint8)
+        distant = _FrameFace(box=(830.0, 564.0, 849.0, 588.0), score=0.86)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[distant]):
+            out = anchor_patrol_person_boxes_to_faces(frame, [], camera_id="DR-03")
+        self.assertEqual(len(out), 1)
+
+    def test_weak_face_inside_yolo_box_still_read(self):
+        """Cổng chặt chỉ dành cho mặt tự sinh người — bbox YOLO là bằng chứng riêng."""
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        person = (280.0, 120.0, 620.0, 680.0)
+        weak = _FrameFace(box=(380.0, 180.0, 520.0, 360.0), score=0.42)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[weak]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame, [(person, 0.72)], camera_id="HC-01",
+            )
+        self.assertEqual(len(out), 1)
+
+
 class TestFabricRejectedByAppearance(unittest.TestCase):
     """Bạt/tường bị loại ở _filter_persons (chạy trước anchor) bằng màu sắc —
     hình học không tách được bạt treo với người quay lưng."""

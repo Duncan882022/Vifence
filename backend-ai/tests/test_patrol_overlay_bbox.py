@@ -29,11 +29,20 @@ class PatrolOverlayBboxTests(unittest.TestCase):
         out = patrol_person_overlay_bbox(overflow, self.FW, self.FH)
         self.assertEqual(out, (0.0, 0.0, float(self.FW), float(self.FH)))
 
-    def test_expands_partial_back_turn_slice(self) -> None:
-        """YOLO quay lưng hay trả mảnh lưng–bụng — ROI phải kéo xuống gần full người."""
+    def test_does_not_guess_feet_below_detected_box(self) -> None:
+        """Không nới xuống "chân ước lượng" — phần nới rơi vào vỉa hè/xe phía dưới.
+
+        Đo trên HC-01 thật: nhánh nới cũ chạm 100% số box, hệ số cao 2.27×.
+        """
         upper_back = (420.0, 220.0, 620.0, 420.0)
         out = patrol_person_overlay_bbox(upper_back, self.FW, self.FH)
-        self.assertGreater(out[3] - out[1], upper_back[3] - upper_back[1] + 80.0)
+        self.assertEqual(out, upper_back)
+
+    def test_small_distant_box_stays_small(self) -> None:
+        """Người xa: box 60×100 không được thành 60×260."""
+        distant = (300.0, 150.0, 360.0, 250.0)
+        out = patrol_person_overlay_bbox(distant, self.FW, self.FH)
+        self.assertEqual(out, distant)
 
 
     def test_clips_crowd_box_for_snapshot(self) -> None:
