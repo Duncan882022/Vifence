@@ -413,8 +413,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
     ? summary.cardDisplay.title
     : event.violationLabel
   const showAppearanceHistory = (stage === 'person' || stage === 'profile')
-    && appearanceSegments.length >= 2
-    && (appearancesLoading || appearanceSegments.length > 0)
+    && (appearancesLoading || appearanceSegments.length >= 1)
   const historySectionTitle = 'Lịch sử xuất hiện'
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
     || Boolean(activeSnapshotUrl)
