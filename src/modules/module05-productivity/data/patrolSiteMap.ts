@@ -5,6 +5,7 @@
  */
 
 import {
+  isPointInSiteBoundary,
   PATROL_SITE_BOUNDARY_RING,
   PATROL_SURVEY_PIN,
   PATROL_ZONE_1_QUAD,

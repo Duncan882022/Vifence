@@ -9,6 +9,8 @@ import { PATROL_SITE_ZONE_ID } from '../data/patrolSiteMap'
 function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 'subjectId' | 'tier'>): PatrolDayPresence {
   return {
     id: 1,
+    subjectId: partial.subjectId,
+    tier: partial.tier,
     cameraId: 'HC-01',
     sourceCameras: ['HC-01'],
     startedAt: 1,

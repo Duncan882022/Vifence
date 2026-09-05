@@ -17,7 +17,7 @@ import {
   buildPatrolHeatmapStatsForZone,
   buildPatrolSiteHeatmapStats,
 } from '../utils/patrolZoneHeatmapStats'
-import { PATROL_GPS_ZONES, PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
+import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
@@ -63,15 +63,11 @@ function HeatmapSiteStatsOverlay({
   objectCount,
   personCount,
   identityCount,
-  zoneLabel,
-  zoneColor,
   compactChrome,
 }: {
   objectCount: number
   personCount: number
   identityCount: number
-  zoneLabel?: string | null
-  zoneColor?: string | null
   compactChrome?: boolean
 }) {
   const rows: Array<{ value: number; label: string; tier: PatrolTier }> = [
@@ -89,22 +85,16 @@ function HeatmapSiteStatsOverlay({
         'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
       )}
     >
-      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[108px]">
-        {zoneLabel ? (
-          <div
-            className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1 text-[#e2e8f0] font-semibold border-b border-[#334155]',
-              compactChrome ? 'text-[9px]' : 'text-[10px]',
-            )}
-          >
-            <span
-              className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-              style={{ backgroundColor: zoneColor ?? '#ef4444' }}
-              aria-hidden
-            />
-            <span>{zoneLabel}</span>
-          </div>
-        ) : null}
+      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[120px]">
+        <div
+          className={cn(
+            'px-2.5 py-1.5 border-b border-[#334155] truncate',
+            'text-[#e2e8f0] font-semibold',
+            compactChrome ? 'text-[9px]' : 'text-[10px]',
+          )}
+        >
+          {PATROL_SITE_NAME}
+        </div>
         {rows.map((row, index) => (
           <div
             key={row.label}
@@ -172,7 +162,8 @@ function HeatmapLayerControls({
               type="button"
               onClick={() => onToggle(item.key)}
               className={cn(
-                'inline-flex items-center px-1.5 py-0.5 text-[8px] leading-none font-medium transition-colors',
+                'inline-flex items-center leading-none font-medium transition-colors',
+                compactChrome ? 'px-2 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
                 index > 0 && 'border-l border-[#334155]',
                 active ? 'text-[#e2e8f0]' : 'text-[#64748b] hover:text-[#94a3b8]',
               )}
@@ -264,6 +255,7 @@ export function PatrolDensityHeatmap({
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
 
   const hc02Helmet = workforce.helmets['HC-02']
 
@@ -429,19 +421,36 @@ export function PatrolDensityHeatmap({
       return next
     })
 
-  const heatmapStats = useMemo(() => {
-    if (selectedZoneId) {
-      return buildPatrolHeatmapStatsForZone(presences, selectedZoneId)
-    }
-    return buildPatrolSiteHeatmapStats(dayStats)
-  }, [selectedZoneId, presences, dayStats])
+  useEffect(() => {
+    if (!layers.polygon) setSelectedZoneId(null)
+  }, [layers.polygon])
 
-  const selectedZoneMeta = useMemo(() => {
-    if (!selectedZoneId) return null
-    const zone = PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)
-    if (!zone) return null
-    return { label: zone.name, color: zone.borderColor }
-  }, [selectedZoneId])
+  const heatmapStats = useMemo(
+    () => buildPatrolSiteHeatmapStats(dayStats),
+    [dayStats],
+  )
+
+
+  const statsPresences = useMemo(
+    () => filterPatrolPresencesForHeatmap(presences, flycamFlightModes),
+    [presences, flycamFlightModes],
+  )
+
+  const displayStats = useMemo(
+    () => (selectedZoneId
+      ? buildPatrolHeatmapStatsForZone(statsPresences, selectedZoneId)
+      : heatmapStats),
+    [selectedZoneId, statsPresences, heatmapStats],
+  )
+
+  useEffect(() => {
+    if (showFlymap) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedZoneId) setSelectedZoneId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showFlymap, selectedZoneId])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -528,9 +537,9 @@ export function PatrolDensityHeatmap({
     if (obj) setSelectedObject(obj)
   }
 
-  const personCount = heatmapStats.personCount
-  const identifiedCount = heatmapStats.identityCount
-  const objectEncounterCount = heatmapStats.objectCount
+  const personCount = displayStats.personCount
+  const identifiedCount = displayStats.identityCount
+  const objectEncounterCount = displayStats.objectCount
 
   useEffect(() => {
     if (!expanded) return
@@ -609,8 +618,6 @@ export function PatrolDensityHeatmap({
             objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}
-            zoneLabel={selectedZoneMeta?.label}
-            zoneColor={selectedZoneMeta?.color}
             compactChrome={viewport.compactChrome}
           />
         )}

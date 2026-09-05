@@ -7,37 +7,26 @@
 
 const M_PER_DEG_LAT = 111_320
 
-/** Bbox khảo sát gốc (PR #283) — shape ảnh được scale bên trong khung này. */
-const SURVEY_BBOX = {
-  minLat: 20.950538,
-  maxLat: 20.958527,
-  minLng: 106.924707,
-  maxLng: 106.939801,
-} as const
+/** Đỉnh nam chia khu — chung K1[2] và K2[3]. */
+export const PATROL_ZONE_K1_SOUTH_EAST: [number, number] = [20.951242, 106.931298]
 
-/** Map pixel ảnh khảo sát (1290×707) → lat/lng trong bbox gốc. */
-function surveyShapePoint(imgX: number, imgY: number): [number, number] {
-  const lngSpan = SURVEY_BBOX.maxLng - SURVEY_BBOX.minLng
-  const latSpan = SURVEY_BBOX.maxLat - SURVEY_BBOX.minLat
-  const lng = SURVEY_BBOX.minLng + (imgX / 1290) * lngSpan
-  const lat = SURVEY_BBOX.maxLat - (imgY / 707) * latSpan
-  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
-}
-
-/** Khu vực 1 — đỏ: cầu CT06 phía tây (shape ảnh, trong bbox khảo sát). */
+/** Khu vực 1 — đỏ (lat, lng). */
 export const PATROL_ZONE_1_QUAD: [number, number][] = [
-  surveyShapePoint(19, 130),
-  surveyShapePoint(488, 130),
-  surveyShapePoint(488, 511),
-  surveyShapePoint(19, 511),
+  [20.956611, 106.924918],
+  [20.956808, 106.931088],
+  PATROL_ZONE_K1_SOUTH_EAST,
+  [20.950849, 106.924707],
 ]
 
-/** Khu vực 2 — xanh: bờ đông + xưởng đóng tàu; chồng K1 tại ~106.930. */
+/**
+ * Khu vực 2 — xanh (lat, lng).
+ * Quad sát K1 — cạnh chia 0→3 trùng K1 cạnh 1→2 (như ảnh khảo sát).
+ */
 export const PATROL_ZONE_2_QUAD: [number, number][] = [
-  surveyShapePoint(490, 53),
-  surveyShapePoint(1085, 53),
-  surveyShapePoint(1085, 570),
-  surveyShapePoint(490, 570),
+  [20.956808, 106.931088],
+  [20.958527, 106.939064],
+  [20.952224, 106.939801],
+  PATROL_ZONE_K1_SOUTH_EAST,
 ]
 
 /** Viền ngoài gộp hai khu — clip detection / trail. */
@@ -46,7 +35,6 @@ export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
   PATROL_ZONE_1_QUAD[1],
   PATROL_ZONE_2_QUAD[1],
   PATROL_ZONE_2_QUAD[2],
-  PATROL_ZONE_2_QUAD[3],
   PATROL_ZONE_1_QUAD[2],
   PATROL_ZONE_1_QUAD[3],
 ]

@@ -4,6 +4,7 @@ import {
   PATROL_SURVEY_PIN,
   PATROL_ZONE_1_QUAD,
   PATROL_ZONE_2_QUAD,
+  PATROL_ZONE_K1_SOUTH_EAST,
   isPointInSiteBoundary,
   patrolSitePoint,
 } from '../data/patrolSiteGeometry'
@@ -34,11 +35,19 @@ function isPointInPolygon(lat: number, lng: number, polygon: [number, number][])
 }
 
 describe('patrolSiteGeometry — hai khu Cầu Sông Hốt', () => {
-  it('boundary ring gộp 7 đỉnh hai quad', () => {
-    expect(PATROL_SITE_BOUNDARY_RING).toHaveLength(7)
+  it('hai quad sát nhau — cạnh chia K1[1→2] = K2[0→3]', () => {
+    expect(PATROL_ZONE_1_QUAD).toHaveLength(4)
+    expect(PATROL_ZONE_2_QUAD).toHaveLength(4)
+    expect(PATROL_ZONE_1_QUAD[1]).toEqual(PATROL_ZONE_2_QUAD[0])
+    expect(PATROL_ZONE_1_QUAD[2]).toEqual(PATROL_ZONE_2_QUAD[3])
+    expect(PATROL_ZONE_1_QUAD[2]).toEqual(PATROL_ZONE_K1_SOUTH_EAST)
+  })
+
+  it('boundary ring 6 đỉnh — không khuyết giữa hai khu', () => {
+    expect(PATROL_SITE_BOUNDARY_RING).toHaveLength(6)
     expect(PATROL_SITE_BOUNDARY_RING[0]).toEqual(PATROL_ZONE_1_QUAD[0])
     expect(PATROL_SITE_BOUNDARY_RING[1]).toEqual(PATROL_ZONE_1_QUAD[1])
-    expect(PATROL_SITE_BOUNDARY_RING[2]).toEqual(PATROL_ZONE_2_QUAD[1])
+    expect(PATROL_SITE_BOUNDARY_RING[4]).toEqual(PATROL_ZONE_K1_SOUTH_EAST)
   })
 
   it('centroid nằm trong một trong hai khu', () => {

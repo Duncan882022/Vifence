@@ -123,7 +123,7 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   }
 }
 
-/** Fill khu khi hover / chọn — màu theo zone (đỏ KV1, xanh KV2). */
+/** Fill nhạt theo màu khu khi hover/chọn — lớp mỏng khi idle để Leaflet bắt click. */
 function zoneInteractiveStyle(
   feature?: Feature<GeoJsonPolygon, ZoneProperties>,
   selectedZoneId?: string | null,
@@ -131,17 +131,17 @@ function zoneInteractiveStyle(
 ) {
   if (!feature) return {}
   const zoneId = feature.properties.id
-  const { borderColor } = feature.properties
+  const { borderColor, tier } = feature.properties
   const selected = zoneId === selectedZoneId
-  const hovered = zoneId === hoveredZoneId
+  const hovered = zoneId === hoveredZoneId && !selected
 
   if (selected || hovered) {
     return {
       fillColor: borderColor,
-      fillOpacity: selected ? 0.24 : 0.14,
+      fillOpacity: selected ? 0.14 : 0.09,
       color: borderColor,
-      weight: selected ? 2.5 : 2,
-      opacity: selected ? 0.95 : 0.72,
+      weight: selected ? 2.5 : (tier === 'primary' ? 2.5 : 2),
+      opacity: selected ? 0.98 : 0.85,
       dashArray: undefined,
     }
   }
@@ -326,8 +326,9 @@ function DismissDeviceTooltipOnMapClick({
   onBackgroundClick?: () => void
 }) {
   useMapEvents({
-    click: () => {
+    click(e) {
       if (openId) onDismiss()
+      if (e.propagatedFrom) return
       onBackgroundClick?.()
     },
   })
@@ -575,7 +576,7 @@ export interface PatrolGeoHeatmapProps {
   routeDeviceIds?: string[]
   /** Chế độ bay flycam — accent pin/route tầm cao sky. */
   flightModeByCamera?: Record<string, PatrolFlightMode>
-  /** Click/hover khu — fill đỏ nhẹ + callback chọn khu. */
+  /** Click chọn khu — fill nhạt + stats overlay theo khu. */
   interactiveZones?: boolean
   selectedZoneId?: string | null
   onZoneSelect?: (zoneId: string | null) => void
