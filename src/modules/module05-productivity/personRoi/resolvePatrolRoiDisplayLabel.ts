@@ -59,7 +59,7 @@ export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
   }
 
   const objectCode = resolvePatrolRoiObjectCode(track)
-  if (objectCode && track.tier !== 'identity') {
+  if (objectCode) {
     return objectCode
   }
 

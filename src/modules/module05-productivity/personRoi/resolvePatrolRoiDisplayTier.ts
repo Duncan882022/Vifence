@@ -20,7 +20,7 @@ export function resolvePatrolRoiDisplayTier(
 
   const objectCode = resolvePatrolRoiObjectCode({
     promotedFrom: opts?.promotedFrom,
-    workerId: opts?.workerId,
+    workerId: opts?.workerId ?? undefined,
   })
   if (objectCode && tier === 'person') {
     return 'object'
