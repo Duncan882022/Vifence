@@ -123,7 +123,7 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   }
 }
 
-/** Fill nhẹ đỏ khi hover / chọn khu — viền zone ẩn (đã có nét đứt chia khu). */
+/** Fill khu khi hover / chọn — màu theo zone (đỏ KV1, xanh KV2). */
 function zoneInteractiveStyle(
   feature?: Feature<GeoJsonPolygon, ZoneProperties>,
   selectedZoneId?: string | null,
@@ -131,27 +131,28 @@ function zoneInteractiveStyle(
 ) {
   if (!feature) return {}
   const zoneId = feature.properties.id
+  const { borderColor } = feature.properties
   const selected = zoneId === selectedZoneId
   const hovered = zoneId === hoveredZoneId
 
   if (selected || hovered) {
     return {
-      fillColor: '#ef4444',
-      fillOpacity: selected ? 0.14 : 0.09,
-      color: selected ? '#f87171' : '#ef4444',
-      weight: selected ? 2 : 1.5,
-      opacity: selected ? 0.85 : 0.55,
+      fillColor: borderColor,
+      fillOpacity: selected ? 0.24 : 0.14,
+      color: borderColor,
+      weight: selected ? 2.5 : 2,
+      opacity: selected ? 0.95 : 0.72,
       dashArray: undefined,
     }
   }
 
   return {
-    fillColor: '#ef4444',
+    fillColor: borderColor,
     /* Leaflet không bắt click khi fillOpacity = 0 — giữ lớp vô hình mỏng. */
     fillOpacity: 0.01,
-    color: 'transparent',
-    weight: 0,
-    opacity: 0,
+    color: borderColor,
+    weight: 2,
+    opacity: 0.55,
   }
 }
 
