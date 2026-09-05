@@ -541,6 +541,27 @@ def _assign_patrol_person_display_only(
         display_tier = inferred
     person_det.tier = display_tier
 
+    # ROI live: FE chỉ lên màu Người khi có face_eligible. Nhánh display-only
+    # trước đây không gắn cờ này dù lifecycle đã thăng person/identity.
+    if tier_rank.get(display_tier, 0) >= tier_rank["person"]:
+        person_det.face_eligible = True
+    elif frame is not None and person_box is not None:
+        from ..worker_identity.recognizer import assess_patrol_face
+
+        _vec, _score, eligible = assess_patrol_face(
+            frame, [float(v) for v in person_box], camera_id=camera_id,
+        )
+        person_det.face_eligible = bool(eligible)
+    else:
+        person_det.face_eligible = False
+
+    if person_det.worker_id:
+        from . import db
+        from .promoted_registry import was_promoted
+
+        if was_promoted(person_det.worker_id, db.today_vn()):
+            person_det.promoted_from_object = True
+
     try:
         from .sink import record_observation
 
