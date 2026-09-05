@@ -61,6 +61,46 @@ def _gps_bucket(lat: float, lng: float) -> tuple[int, int]:
     return (round(float(lat) / GPS_BUCKET_EPS), round(float(lng) / GPS_BUCKET_EPS))
 
 
+def find_same_site_person_today(
+    date: str,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    *,
+    exclude_pers: str | None = None,
+) -> str | None:
+    """Cùng ô GPS trong ngày — lần vào lại sau khi rời khỏi camera (không giới hạn 120s)."""
+    if gps_lat is None or gps_lng is None:
+        return None
+    bucket = _gps_bucket(gps_lat, gps_lng)
+    exclude = identity.resolve_alias((exclude_pers or "").strip()) if exclude_pers else ""
+
+    rows = db.query(
+        "SELECT e.pers_id, e.snapshot_score, a.gps_lat, a.gps_lng"
+        " FROM daily_events e"
+        " INNER JOIN appearances a"
+        "  ON a.event_date = e.event_date AND a.subject_id = e.pers_id"
+        " WHERE e.event_date = ? AND a.qualified = 1"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?"
+        " AND a.gps_lat IS NOT NULL AND a.gps_lng IS NOT NULL"
+        " ORDER BY e.snapshot_score DESC, e.last_seen DESC",
+        (date, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+    )
+    best_id: str | None = None
+    best_score = -1.0
+    for row in rows:
+        sid = identity.resolve_alias(str(row["pers_id"]))
+        if exclude and sid == exclude:
+            continue
+        if _gps_bucket(float(row["gps_lat"]), float(row["gps_lng"])) != bucket:
+            continue
+        score = float(row["snapshot_score"] or 0)
+        if score > best_score:
+            best_score = score
+            best_id = sid
+    return best_id
+
+
 def find_nearby_person_pers_id(
     date: str,
     gps_lat: float | None,
