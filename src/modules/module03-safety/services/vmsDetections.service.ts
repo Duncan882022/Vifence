@@ -70,11 +70,15 @@ export interface VmsOverlayDetection {
   related_bbox?: [number, number, number, number]
   /** Tầng định danh đã ổn định phía BE: object | person | identity. */
   tier?: 'object' | 'person' | 'identity'
+  /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
+  promoted_from_object?: boolean
   /** px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect. */
   velocity?: [number, number]
   peak_group?: boolean
   peak_group_index?: number
   peak_group_size?: number
+  /** Backend assess mặt — gate hiển thị tier Người trên ROI (đồng bộ tab Sự kiện). */
+  face_eligible?: boolean
 }
 
 export interface VmsDetectionSnapshot {
@@ -232,6 +236,7 @@ function mapDetection(
     peak_group: raw.peak_group === true,
     peak_group_index: raw.peak_group_index != null ? Number(raw.peak_group_index) : undefined,
     peak_group_size: raw.peak_group_size != null ? Number(raw.peak_group_size) : undefined,
+    face_eligible: raw.face_eligible === true,
   }
 }
 

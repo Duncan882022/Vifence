@@ -1,6 +1,7 @@
 import { KalmanBox2D } from './kalmanBox2d'
 import { suppressPatrolObjectOverlappingIdentified } from '../utils/patrolPersonVisibility'
 import { PATROL_PERSON_ROI_CONFIG, type PatrolPersonRoiConfig } from './patrolPersonRoi.config'
+import { resolvePatrolRoiDisplayTier } from './resolvePatrolRoiDisplayTier'
 import type {
   Bbox,
   PersonRoiDetection,
@@ -201,12 +202,17 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
     if (det.peak_group_index != null) track.peakGroupIndex = det.peak_group_index
     if (det.peak_group_size != null) track.peakGroupSize = det.peak_group_size
   }
+  // Chỉ bật, không tắt: một payload thiếu cờ không được xoá dấu đã thăng hạng.
+  if (det.promoted_from_object) track.promotedFromObject = true
   const detLabel = det.label?.trim()
   if (det.peak_group && detLabel?.startsWith('#')) {
     track.label = detLabel
   } else {
     track.label = track.workerName?.trim()
       || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
+  }
+  if (det.face_eligible === true) {
+    track.faceEligible = true
   }
   // Suy giảm rồi mới lấy max, giống backend. Dùng thẳng `Math.max` thì con số
   // trên nhãn là **đỉnh của cả đời track** và không bao giờ hạ: người rời khung
@@ -360,6 +366,7 @@ export function advancePersonRoiTracks(
       peakGroup: det.peak_group,
       peakGroupIndex: det.peak_group_index,
       peakGroupSize: det.peak_group_size,
+      promotedFromObject: det.promoted_from_object,
     }
     applyIdentity(track, det)
     next.set(id, track)
@@ -429,11 +436,15 @@ export function predictPersonRoiTracks(
       locked: track.state === 'confirmed',
       workerId: track.workerId,
       workerName: track.workerName,
-      tier: track.tier,
+      tier: resolvePatrolRoiDisplayTier(track.tier, {
+        faceEligible: track.faceEligible,
+        workerId: track.workerId,
+      }),
       displayOpacity,
       peakGroup: track.peakGroup,
       peakGroupIndex: track.peakGroupIndex,
       peakGroupSize: track.peakGroupSize,
+      promotedFromObject: track.promotedFromObject,
     })
   }
 

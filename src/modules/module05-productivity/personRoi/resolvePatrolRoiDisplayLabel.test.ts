@@ -62,3 +62,44 @@ describe('resolvePatrolRoiDisplayLabel', () => {
     }))).toBe('tk-00000042')
   })
 })
+
+/**
+ * Thẻ Người mang ảnh badge "Đối tượng" là hệ quả của thăng hạng giữa lượt.
+ * Dấu này để người xem không nhầm sang lỗi nhận dạng.
+ */
+describe('dấu thăng hạng trên nhãn ROI', () => {
+  it('person tier — thêm mũi tên sau mã tk', () => {
+    expect(resolvePatrolRoiDisplayLabel(track({
+      tier: 'person',
+      workerId: 'tk-00000042',
+      workerName: 'tk-00000042',
+      promotedFromObject: true,
+    }))).toBe('tk-00000042 ↑')
+  })
+
+  it('identity tier — thêm mũi tên sau tên thật', () => {
+    expect(resolvePatrolRoiDisplayLabel(track({
+      tier: 'identity',
+      workerId: 'p-SGC-6688',
+      workerName: 'Duncan',
+      promotedFromObject: true,
+    }))).toBe('Duncan ↑')
+  })
+
+  it('không đánh dấu khi chưa resolve được tên — tránh nhãn "— ↑" vô nghĩa', () => {
+    expect(resolvePatrolRoiDisplayLabel(track({
+      tier: 'identity',
+      workerId: 'tk-00000042',
+      workerName: 'tk-00000042',
+      promotedFromObject: true,
+    }))).toBe('—')
+  })
+
+  it('không thăng hạng thì nhãn giữ nguyên', () => {
+    expect(resolvePatrolRoiDisplayLabel(track({
+      tier: 'person',
+      workerId: 'tk-00000042',
+      workerName: 'tk-00000042',
+    }))).toBe('tk-00000042')
+  })
+})

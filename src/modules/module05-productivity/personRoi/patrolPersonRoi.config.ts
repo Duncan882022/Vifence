@@ -67,9 +67,9 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   maxMissFrames: 5,
   /**
    * Số nhịp analyze miss vẫn vẽ ROI (chỉ mờ dần).
-   * 1 = cho phép miss 1 nhịp (che thoáng / jitter YOLO), ẩn từ nhịp thứ 2.
+   * 0 = ẩn ngay khi mất detection — tránh "bóng ROI" đứng yên sau khi người đi qua.
    */
-  displayCoastMaxMiss: 1,
+  displayCoastMaxMiss: 0,
   /**
    * Quá ngần này mà track không được đo lại thì thôi vẽ, kể cả chưa kịp tính là
    * miss.
@@ -110,9 +110,9 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   sizeGain: 0.62,
   /** Giữ lại bao nhiêu vận tốc cũ mỗi lần đo — thấp = phản ứng nhanh hơn */
   velocitySmoothing: 0.22,
-  /** EMA overlay — ingest snap (engine); glide giữa hai lần analyze */
+  /** EMA overlay — ingest snap (engine); glide = 1 để bbox bám kịp khi di chuyển */
   displayEmaAlpha: 1,
-  displayEmaGlideAlpha: 0.94,
+  displayEmaGlideAlpha: 1,
   /** Trần tốc độ theo số lần cạnh bbox mỗi giây */
   maxSpeedBoxPerSec: 7.5,
 }

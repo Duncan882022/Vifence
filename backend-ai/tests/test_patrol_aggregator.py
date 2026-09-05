@@ -704,6 +704,64 @@ class AggregatorSplitTrackCoalesceTest(unittest.TestCase):
         rows = daystore.list_day_presences("2026-08-30")
         self.assertEqual(len(rows), 1)
 
+    def test_coalesce_merges_duplicate_session_same_started_at(self) -> None:
+        """INSERT đúp cùng session + started_at trong một stream — gộp 1 lượt."""
+        from app.patrol import daystore, db
+
+        daystore.upsert_track_appearance(
+            appearance_id=None,
+            event_date="2026-08-30",
+            subject_id="tk-0000001",
+            camera_id="HC-02",
+            zone_id=None,
+            track_id="ptk-a",
+            session_id="sess-dup",
+            started_at=2000.0,
+            ended_at=2010.0,
+            gps_lat=20.93,
+            gps_lng=106.92,
+            payload_json="{}",
+            interactions_json="[]",
+            snapshot_path="snap-a.jpg",
+        )
+        with db.tx() as conn:
+            conn.execute(
+                "INSERT INTO appearances"
+                "(event_date, subject_id, camera_id, started_at, ended_at,"
+                " gps_lat, gps_lng, gps_lat_end, gps_lng_end, qualified,"
+                " presence_seq, source_cameras, snapshot_path, track_id,"
+                " session_id, counted, event_payload_json, interactions_json)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "2026-08-30",
+                    "tk-0000001",
+                    "HC-02",
+                    2000.0,
+                    2015.0,
+                    20.93,
+                    106.92,
+                    20.93,
+                    106.92,
+                    1,
+                    2,
+                    '["HC-02"]',
+                    "snap-b.jpg",
+                    "ptk-b",
+                    "sess-dup",
+                    0,
+                    "{}",
+                    "[]",
+                ),
+            )
+        merged = daystore.coalesce_subject_appearances(
+            "tk-0000001", "2026-08-30", camera_id="HC-02",
+        )
+        self.assertEqual(merged, 1)
+        rows = daystore.list_appearances("tk-0000001", "2026-08-30")["segments"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(int(rows[0]["presence_seq"]), 1)
+        self.assertEqual(float(rows[0]["ended_at"]), 2015.0)
+
     def test_coalesce_skips_same_session_different_track_large_gap(self) -> None:
         """Cùng session nhưng track khác, gap >5s — không gộp (2 pkt / 2 lượt)."""
         from app.patrol import daystore, db

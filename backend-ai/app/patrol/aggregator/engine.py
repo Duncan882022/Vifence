@@ -17,6 +17,8 @@ logger = logging.getLogger("patrol.aggregator.engine")
 def _apply_encounter_split(session, ts: float) -> None:
     session.appearance_row_id = None
     session.luot_snapshot_captured = False
+    # Lượt mới → file JPG mới. Giữ khoá cũ là lượt sau ghi đè ảnh lượt trước.
+    session.luot_key = None
     session.started_at = ts
     session.committed = False
     session.last_flush_at = 0.0

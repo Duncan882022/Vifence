@@ -309,6 +309,8 @@ def day_events(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "last_seen": r["last_seen"],
             "snapshot_path": r.get("snapshot_path"),
             "snapshot_score": float(r.get("snapshot_score") or 0),
+            "promoted_from": r.get("promoted_from") or [],
+            "promoted_at": r.get("promoted_at"),
         }
         for r in rows
     ]
@@ -399,6 +401,8 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "track_worker_id": resolve_track_worker_id(str(r["pers_id"]), tk_map),
             "gps_lat": gps_map.get(str(r["pers_id"]), (None, None))[0],
             "gps_lng": gps_map.get(str(r["pers_id"]), (None, None))[1],
+            "promoted_from": r.get("promoted_from") or [],
+            "promoted_at": r.get("promoted_at"),
         }
         for r in events
     ]

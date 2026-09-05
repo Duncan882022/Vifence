@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Clock, History, Loader2, MapPin, Search } from 'lucide-react'
+import { ArrowUp, Clock, History, Loader2, MapPin, Search } from 'lucide-react'
 import { PlaybackDatePicker } from '@/components/common/CameraPlayback/PlaybackDatePicker'
 import { TagTooltip } from '@/components/common/IconTooltip/IconTooltip'
 import { cn } from '@/utils/cn'
@@ -14,6 +14,7 @@ import {
 import { listPatrolEventsForTab, type PatrolTabCounts } from '../utils/patrolEventsTabList'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
+import { resolvePatrolPromotedMarker } from '../utils/patrolPromotedMarker'
 import {
   buildPatrolSubjectAppearanceCountLookup,
   resolvePatrolEventAppearanceHistoryCount,
@@ -114,6 +115,23 @@ function PatrolStageBadge({ event }: { event: PatrolEvent }) {
   )
 }
 
+function PatrolPromotedBadge({ event }: { event: PatrolEvent }) {
+  const marker = resolvePatrolPromotedMarker(event)
+  if (!marker) return null
+
+  return (
+    <TagTooltip content={marker.tooltip} className="shrink-0">
+      <span className={cn(
+        'inline-flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-semibold',
+        'border-amber-400/40 bg-amber-400/10 text-amber-300',
+      )}>
+        <ArrowUp className="w-2.5 h-2.5 shrink-0" aria-hidden />
+        {marker.label}
+      </span>
+    </TagTooltip>
+  )
+}
+
 function PatrolEventCard({
   event,
   appearanceHistoryCount,
@@ -161,8 +179,9 @@ function PatrolEventCard({
         />
 
         <div className="min-w-0 flex-1 flex flex-col justify-center gap-1.5 py-0.5">
-          <div className="flex items-center gap-1 min-w-0">
+          <div className="flex items-center gap-1 min-w-0 flex-wrap">
             <PatrolStageBadge event={event} />
+            <PatrolPromotedBadge event={event} />
           </div>
 
           <div className="space-y-1 min-w-0">

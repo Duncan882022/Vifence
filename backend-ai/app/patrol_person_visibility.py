@@ -153,6 +153,36 @@ def signboard_like_fp_box(
     return False
 
 
+SPECK_BOX_MAX_HEIGHT_RATIO = 0.07
+
+
+def speck_person_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Hộp quá nhỏ để là bằng chứng về một con người.
+
+    Đo trên HC-01 thật: 11 hộp lọt cổng ghi thẻ Đối tượng, 9 trong đó cao
+    20–29 px trong khung cao 540 và nằm ở nửa trên khung, tức là bên kia đường.
+    Cắt đúng những hộp đó ra xem thì chỉ là vệt mờ không nhận ra được gì. Chúng
+    đẻ ra 95 thẻ Đối tượng so với 23 thẻ Người.
+
+    Chặn theo kích thước tuyệt đối, không theo tỉ lệ cao/rộng: đo lại trên 182
+    hộp thì rác trải từ tỉ lệ 0.95 đến 1.63, nên mọi ngưỡng tỉ lệ đều để lại
+    một khe hở mà rác dồn vào đúng đó (hộp 12×20 px tỉ lệ 1.6 vẫn là vệt mờ).
+
+    Ngưỡng 7% chiều cao khung cách xa người thật: người ở xa trên ảnh công
+    trường mẫu cao 12% khung, người đứng gần trên HC-01 cao 56%.
+
+    Chỉ dùng cho góc mặt đất. Nhìn từ drone thì người thật vốn nhỏ và có thể
+    rộng hơn cao (nhìn thẳng xuống đỉnh đầu), nên gate này sẽ xoá sạch ROI hợp
+    lệ của luồng bay.
+    """
+    ph = max(float(person_box[3]) - float(person_box[1]), 1.0)
+    return ph / max(float(frame_h), 1.0) < SPECK_BOX_MAX_HEIGHT_RATIO
+
+
 def patrol_bbox_rejects_static_fp(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -172,6 +202,51 @@ def patrol_bbox_rejects_static_fp(
     return False
 
 
+MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.55
+
+
+def _face_center_belongs_to_person_box(
+    face_box: tuple[float, float, float, float],
+    person_box: tuple[float, float, float, float],
+    *,
+    max_horizontal_offset: float = 0.38,
+    min_vertical_ratio: float = 0.08,
+    max_vertical_ratio: float = 0.78,
+) -> bool:
+    """Mặt phải nằm gần trung tâm bbox — tránh neo ROI vào mặt người khác trong YOLO đám."""
+    fx1, fy1, fx2, fy2 = face_box
+    px1, py1, px2, py2 = person_box
+    fcx = (fx1 + fx2) / 2.0
+    fcy = (fy1 + fy2) / 2.0
+    pcx = (px1 + px2) / 2.0
+    pw = max(px2 - px1, 1.0)
+    ph = max(py2 - py1, 1.0)
+    if abs(fcx - pcx) > pw * max_horizontal_offset:
+        return False
+    fcy_ratio = (fcy - py1) / ph
+    return min_vertical_ratio <= fcy_ratio <= max_vertical_ratio
+
+
+def patrol_anonymous_identity_allowed(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    face_quality: float = 0.0,
+) -> bool:
+    """Chặn gán tk-* cho YOLO FP (xe, biển, giàn) dù YuNet trả pseudo-face."""
+    if face_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
+        return False
+    if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    return patrol_person_meets_detection_gate(
+        person_box,
+        frame_w,
+        frame_h,
+        face_eligible=True,
+    )
+
+
 def patrol_object_commit_allowed(
     person_box: tuple[float, float, float, float] | None,
     frame_w: int,
@@ -185,6 +260,12 @@ def patrol_object_commit_allowed(
     if person_box is None or frame_w <= 0 or frame_h <= 0:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    if (
+        not flycam
+        and not proximity_flycam
+        and speck_person_box(person_box, frame_w, frame_h)
+    ):
         return False
     if face_eligible:
         return True
@@ -338,6 +419,8 @@ def _face_anchored_draw_box(
     # Mặt phải nằm trong bbox người, nếu không thì đó là mặt của người khác.
     if min(fx2, px2) - max(fx1, px1) <= 0 or min(fy2, py2) - max(fy1, py1) <= 0:
         return None
+    if not _face_center_belongs_to_person_box(face_box, person_box):
+        return None
 
     cx = (fx1 + fx2) / 2.0
     half_w = face_w * 1.30
@@ -435,6 +518,9 @@ def patrol_person_meets_display_gate(
         ):
             return False
         return not limb_fragment_person_box(person_box, frame_w, frame_h)
+    # Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
+    if speck_person_box(person_box, frame_w, frame_h):
+        return False
     if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True
     if not plausible_person_silhouette(

@@ -17,6 +17,23 @@ def _new_session_id(camera_id: str, track_id: str) -> str:
     return f"sess-{camera_id}-{short}"
 
 
+_luot_counter = 0
+
+
+def next_luot_key() -> int:
+    """Số thứ tự lượt gặp toàn cục — đi vào tên file JPG của lượt đó.
+
+    Đơn điệu và không bao giờ cấp lại, kể cả khi Đối tượng thăng hạng thành
+    Người: `subject_id` đổi thì tên file lượt sau đổi theo, còn các lượt đã ghi
+    vẫn giữ file riêng của mình. Bắt đầu từ 1 vì `CARD_SNAPSHOT_LUOT = 0` dành
+    riêng cho tên file kiểu thẻ.
+    """
+    global _luot_counter
+    with _lock:
+        _luot_counter += 1
+        return _luot_counter
+
+
 def get_session(camera_id: str, track_id: str) -> TrackSession | None:
     key = f"{camera_id}|{track_id}"
     with _lock:
@@ -108,6 +125,8 @@ def link_subject_session(session: TrackSession) -> None:
         session.appearance_row_id = canonical.appearance_row_id
         session.luot_snapshot_captured = canonical.luot_snapshot_captured
         session.session_id = canonical.session_id
+        # Hai track ByteTrack cùng một lượt gặp → cùng một file JPG.
+        session.luot_key = canonical.luot_key
         if canonical.committed:
             session.committed = True
             session.last_flush_at = max(session.last_flush_at, canonical.last_flush_at)
@@ -120,6 +139,7 @@ def link_subject_session(session: TrackSession) -> None:
                 other.appearance_row_id = canonical.appearance_row_id
                 other.luot_snapshot_captured = canonical.luot_snapshot_captured
                 other.session_id = canonical.session_id
+                other.luot_key = canonical.luot_key
                 if canonical.committed:
                     other.committed = True
                     other.last_flush_at = max(other.last_flush_at, canonical.last_flush_at)

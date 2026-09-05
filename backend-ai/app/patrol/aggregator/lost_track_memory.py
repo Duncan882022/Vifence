@@ -31,6 +31,8 @@ class _LostSlot:
     counted: bool
     was_inside_site: bool | None
     zone_id: str | None = None
+    # Track bắt lại trong cùng lượt phải ghi tiếp đúng file JPG của lượt đó.
+    luot_key: int | None = None
 
 
 def _cosine(a: tuple[float, ...], b: tuple[float, ...]) -> float:
@@ -82,6 +84,7 @@ def stash_session(session: TrackSession, *, embedding: tuple[float, ...] | None)
         counted=session.counted,
         was_inside_site=session.was_inside_site,
         zone_id=session.zone_id,
+        luot_key=session.luot_key,
     )
     with _lock:
         _prune(session.last_seen_at)
@@ -163,9 +166,12 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None =
     if same_encounter and slot.appearance_row_id is not None:
         session.appearance_row_id = slot.appearance_row_id
         session.luot_snapshot_captured = True
+        session.luot_key = slot.luot_key
     else:
         session.appearance_row_id = None
         session.luot_snapshot_captured = False
+        # Lượt gặp khác → file JPG khác, không ghi đè ảnh của lượt trước.
+        session.luot_key = None
     session.dirty = True
 
 

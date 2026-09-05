@@ -38,9 +38,13 @@ export class PatrolPersonRoiEngine {
     const alpha = predicting
       ? PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha
       : PATROL_PERSON_ROI_CONFIG.displayEmaAlpha
-    const snapDiagonalRatio = predicting ? 0.10 : 0.04
+    const snapDiagonalRatio = predicting ? 0.14 : 0.06
     const polished = raw.map(track => {
       active.add(track.trackId)
+      // Track mất dấu — bỏ state smoother cũ để lần bám lại không kéo bbox từ vị trí cũ.
+      if (track.state === 'lost') {
+        this.displaySmoother.reset(track.trackId)
+      }
       return {
         ...track,
         bbox: this.displaySmoother.smooth(track.trackId, track.bbox, { alpha, snapDiagonalRatio }),

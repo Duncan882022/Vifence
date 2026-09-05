@@ -72,6 +72,16 @@ export interface PatrolEvent {
   stage?: 'object' | 'person' | 'profile'
   /** Mã nhân viên từ daily_events — load avatar gallery. */
   employeeCode?: string | null
+  /**
+   * Các mã `obj-*` đã dồn vào thẻ Người này khi bắt được mặt.
+   *
+   * Thẻ thăng hạng giữa lượt thì ảnh chụp trước đó vẫn mang badge "Đối tượng".
+   * Có mốc này thì người xem phân biệt được đó là hệ quả của thăng hạng, chứ
+   * không phải nhận dạng sai.
+   */
+  promotedFrom?: string[]
+  /** Thời điểm thăng hạng gần nhất (epoch giây). */
+  promotedAt?: number | null
 }
 
 export interface PatrolDashboard {
