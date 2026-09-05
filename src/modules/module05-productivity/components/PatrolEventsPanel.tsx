@@ -204,7 +204,7 @@ function PatrolEventCard({
                 {eventPlace}
               </p>
             </div>
-            {appearanceHistoryCount != null && appearanceHistoryCount >= 1
+            {appearanceHistoryCount != null && appearanceHistoryCount >= 2
               && resolvePatrolPersonStage(event) !== 'object' && (
               <div className="flex items-center gap-1.5 min-w-0">
                 <History className={EVENT_CARD_META_ICON} aria-hidden />

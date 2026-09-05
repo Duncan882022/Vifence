@@ -57,6 +57,7 @@ class PatrolRoiEventTierSyncTests(unittest.TestCase):
             "lifecycle_tier": "person",
             "lifecycle_worker_id": "sgc-00000539",
             "confidence": 0.5,
+            "person_bbox": (400, 200, 600, 700),
         }
         self.assertIsNone(sink.record_observation(now=t0, **common))
         subject = sink.record_observation(now=t0 + _FACE_CONFIRM, **common)

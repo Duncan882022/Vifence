@@ -451,3 +451,17 @@ def reset(camera_id: str | None = None) -> int:
         for k in keys:
             _states.pop(k, None)
         return len(keys)
+
+
+from app.patrol.tier_snapshot import build_tier_snapshot  # noqa: E402 — SSOT export
+
+__all__ = [
+    "TIER_OBJECT",
+    "TIER_PERSON",
+    "TIER_IDENTITY",
+    "TIER_LABEL_VI",
+    "build_tier_snapshot",
+    "observe",
+    "reset",
+    "tier_for_worker_id",
+]

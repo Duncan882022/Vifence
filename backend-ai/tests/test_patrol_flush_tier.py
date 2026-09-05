@@ -29,7 +29,8 @@ class ResolveTierAtObservationTests(unittest.TestCase):
             "person",
         )
 
-    def test_person_without_face_is_object(self) -> None:
+    def test_person_without_face_stays_person_tier(self) -> None:
+        """tk-* đã mở thẻ — monotonic, không hạ person→object khi quay lưng."""
         self.assertEqual(
             _resolve_tier_at_observation(
                 "tk-0000099",
@@ -37,7 +38,7 @@ class ResolveTierAtObservationTests(unittest.TestCase):
                 shot_face_eligible=False,
                 worker_id="tk-0000099",
             ),
-            "object",
+            "person",
         )
 
     def test_preserves_explicit_tier(self) -> None:

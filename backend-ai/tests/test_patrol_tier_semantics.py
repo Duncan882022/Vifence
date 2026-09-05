@@ -41,14 +41,14 @@ class PatrolTierSemanticsTests(unittest.TestCase):
         self.assertEqual(patrol_tier_label(""), "object")
         self.assertEqual(tier_for_worker_id(""), TIER_OBJECT)
 
-    def test_snapshot_label_hides_technical_codes(self) -> None:
+    def test_snapshot_label_shows_track_id(self) -> None:
         self.assertEqual(
             format_patrol_person_snapshot_label("sgc-00000007", "sgc-00000007"),
-            "Người",
+            "tk-0000007",
         )
         self.assertEqual(
             format_patrol_person_snapshot_label("tk-0000007", "tk-0000007"),
-            "Người",
+            "tk-0000007",
         )
 
     def test_snapshot_label_identified_pers_without_worker_id(self) -> None:
@@ -66,7 +66,7 @@ class PatrolTierSemanticsTests(unittest.TestCase):
         identity.identify(pers_id, full_name="Duncan", employee_code="NV6688")
         self.assertEqual(
             format_patrol_person_snapshot_label(None, None, pers_id),
-            "Duncan",
+            "NV6688 Duncan",
         )
         db.close()
         tmp.cleanup()
