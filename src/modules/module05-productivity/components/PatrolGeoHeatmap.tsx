@@ -115,12 +115,11 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   if (!feature) return {}
   const { visited, borderColor, tier } = feature.properties
   return {
-    fillColor: visited ? borderColor : '#334155',
-    fillOpacity: visited ? 0.18 : 0.07,
-    color: visited ? borderColor : '#475569',
-    weight: tier === 'primary' ? 2 : 1.5,
-    dashArray: '8 5',
-    opacity: visited ? 0.92 : 0.5,
+    fillColor: borderColor,
+    fillOpacity: visited ? 0.18 : 0.12,
+    color: borderColor,
+    weight: tier === 'primary' ? 2.5 : 2,
+    opacity: visited ? 0.95 : 0.82,
   }
 }
 

@@ -2,42 +2,68 @@
  * Site boundary geometry — shared by zones, detection, density clip rules.
  * Coordinate system: [lat, lng] (Leaflet convention).
  *
- * Dự án Cầu Sông Hốt — một polygon khảo sát duy nhất (4 đỉnh GPS).
+ * Dự án Cầu Sông Hốt — hai khu vực khảo sát (đỏ + xanh).
  */
 
 const M_PER_DEG_LAT = 111_320
 
-/** Cầu Sông Hốt — polygon công trường (lat, lng, theo thứ tự khảo sát). */
-export const PATROL_SITE_QUAD: [number, number][] = [
-  [20.955148, 106.924572],
-  [20.957172, 106.934593],
-  [20.953906, 106.935280],
-  [20.952243, 106.925838],
+/** Khu vực 1 — đỏ (lat, lng). */
+export const PATROL_ZONE_1_QUAD: [number, number][] = [
+  [20.956611, 106.924918],
+  [20.956808, 106.931088],
+  [20.951242, 106.931298],
+  [20.950849, 106.924707],
 ]
 
-function quadCentroid(quad: readonly [number, number][]): [number, number] {
-  const lat = quad.reduce((s, p) => s + p[0], 0) / quad.length
-  const lng = quad.reduce((s, p) => s + p[1], 0) / quad.length
+/** Khu vực 2 — xanh (lat, lng). Cạnh B–C chung với K1. */
+export const PATROL_ZONE_2_QUAD: [number, number][] = [
+  [20.956808, 106.931088],
+  [20.958527, 106.939064],
+  [20.952224, 106.939801],
+  [20.950538, 106.932420],
+]
+
+/** Viền ngoài gộp hai khu — clip detection / trail. */
+export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
+  PATROL_ZONE_1_QUAD[0],
+  PATROL_ZONE_1_QUAD[1],
+  PATROL_ZONE_2_QUAD[1],
+  PATROL_ZONE_2_QUAD[2],
+  PATROL_ZONE_2_QUAD[3],
+  PATROL_ZONE_1_QUAD[2],
+  PATROL_ZONE_1_QUAD[3],
+]
+
+/** @deprecated Dùng PATROL_ZONE_1_QUAD / PATROL_ZONE_2_QUAD. */
+export const PATROL_SITE_QUAD: [number, number][] = PATROL_SITE_BOUNDARY_RING
+
+function polygonCentroid(polygon: readonly [number, number][]): [number, number] {
+  const lat = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
+  const lng = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
-/** Tâm polygon — map centre / fallback GPS thiết bị. */
-export const PATROL_SURVEY_PIN: [number, number] = quadCentroid(PATROL_SITE_QUAD)
+/** Tâm toàn công trường — trung bình hai khu. */
+export const PATROL_SURVEY_PIN: [number, number] = polygonCentroid([
+  ...PATROL_ZONE_1_QUAD,
+  ...PATROL_ZONE_2_QUAD.slice(1),
+])
 
-/** Legacy corridor anchors — giữ export để test/stub cũ không gãy import. */
-export const PATROL_SITE_TIP_A: [number, number] = PATROL_SITE_QUAD[0]
-export const PATROL_SITE_TIP_B: [number, number] = PATROL_SITE_QUAD[1]
-export const PATROL_SITE_PINCH_SOUTH: [number, number] = PATROL_SITE_QUAD[3]
-export const PATROL_SITE_PINCH_NORTH: [number, number] = PATROL_SITE_QUAD[2]
+/** Legacy corridor anchors — giữ export để stub cũ không gãy import. */
+export const PATROL_SITE_TIP_A: [number, number] = PATROL_ZONE_1_QUAD[0]
+export const PATROL_SITE_TIP_B: [number, number] = PATROL_ZONE_2_QUAD[1]
+export const PATROL_SITE_PINCH_SOUTH: [number, number] = PATROL_ZONE_1_QUAD[3]
+export const PATROL_SITE_PINCH_NORTH: [number, number] = PATROL_ZONE_2_QUAD[1]
 export const PATROL_SURVEY_SOUTH_BEND: [number, number] = [
   parseFloat((PATROL_SURVEY_PIN[0] - 0.0004).toFixed(6)),
   PATROL_SURVEY_PIN[1],
 ]
 
-/** Bbox quad — zoom / fallback. */
+/** Bbox hai khu — zoom / fallback. */
 export const PATROL_SITE_CORNERS: [number, number][] = (() => {
-  const lats = PATROL_SITE_QUAD.map(p => p[0])
-  const lngs = PATROL_SITE_QUAD.map(p => p[1])
+  const all = [...PATROL_ZONE_1_QUAD, ...PATROL_ZONE_2_QUAD]
+  const lats = all.map(p => p[0])
+  const lngs = all.map(p => p[1])
   const minLat = Math.min(...lats)
   const maxLat = Math.max(...lats)
   const minLng = Math.min(...lngs)
@@ -352,25 +378,33 @@ function buildCurvedCorridorModel(): CurvedCorridorModel {
 
 const CORRIDOR_MODEL = buildCurvedCorridorModel()
 
-/** Viền đỏ heatmap — polygon khảo sát Cầu Sông Hốt. */
-export const PATROL_SITE_BOUNDARY_RING: [number, number][] = PATROL_SITE_QUAD
+function bilinearInQuad(
+  quad: readonly [number, number][],
+  u: number,
+  v: number,
+): [number, number] {
+  const [p00, p10, p11, p01] = quad
+  const lat =
+    (1 - u) * (1 - v) * p00[0]
+    + u * (1 - v) * p10[0]
+    + u * v * p11[0]
+    + (1 - u) * v * p01[0]
+  const lng =
+    (1 - u) * (1 - v) * p00[1]
+    + u * (1 - v) * p10[1]
+    + u * v * p11[1]
+    + (1 - u) * v * p01[1]
+  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+}
 
-/** Nội suy bilinear trong quad: u = tây→đông, v = nam→bắc. */
+/** Nội suy trong khu: u∈[0,½] → K1, u∈(½,1] → K2; v = nam→bắc. */
 export function patrolSitePoint(u: number, v: number): [number, number] {
   const uClamped = Math.max(0, Math.min(1, u))
   const vClamped = Math.max(0, Math.min(1, v))
-  const [p00, p10, p11, p01] = PATROL_SITE_QUAD
-  const lat =
-    (1 - uClamped) * (1 - vClamped) * p00[0]
-    + uClamped * (1 - vClamped) * p10[0]
-    + uClamped * vClamped * p11[0]
-    + (1 - uClamped) * vClamped * p01[0]
-  const lng =
-    (1 - uClamped) * (1 - vClamped) * p00[1]
-    + uClamped * (1 - vClamped) * p10[1]
-    + uClamped * vClamped * p11[1]
-    + (1 - uClamped) * vClamped * p01[1]
-  return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
+  if (uClamped <= 0.5) {
+    return bilinearInQuad(PATROL_ZONE_1_QUAD, uClamped * 2, vClamped)
+  }
+  return bilinearInQuad(PATROL_ZONE_2_QUAD, (uClamped - 0.5) * 2, vClamped)
 }
 
 /**
@@ -379,11 +413,11 @@ export function patrolSitePoint(u: number, v: number): [number, number] {
  * @param uDivider u của đường chia khu (1/7 hoặc 6/7)
  */
 export function buildPatrolCapInclusiveZonePolygon(
-  _end: 'west' | 'east',
+  end: 'west' | 'east',
   _uDivider: number,
   _edgeSamples = 16,
 ): [number, number][] {
-  return [...PATROL_SITE_QUAD]
+  return end === 'west' ? [...PATROL_ZONE_1_QUAD] : [...PATROL_ZONE_2_QUAD]
 }
 
 /** Ranh giới công trường — polygon đỏ trên heatmap (đóng vòng). */
@@ -461,7 +495,8 @@ export function clipPolygonToSiteBoundary(polygon: [number, number][]): [number,
 
 /** Ray-casting point-in-polygon for the site boundary. */
 export function isPointInSiteBoundary(lat: number, lng: number): boolean {
-  return isInsideSiteRing(lat, lng, SITE_RING)
+  return isInsideSiteRing(lat, lng, PATROL_ZONE_1_QUAD)
+    || isInsideSiteRing(lat, lng, PATROL_ZONE_2_QUAD)
 }
 
 /** Pull point inside inset clip ring (không dính sát viền đỏ). */

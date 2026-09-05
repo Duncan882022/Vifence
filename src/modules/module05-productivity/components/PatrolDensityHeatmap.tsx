@@ -527,9 +527,9 @@ export function PatrolDensityHeatmap({
           layer="combined"
           displayMode="count"
           countMode="current"
-          showSiteBoundary={layers.polygon}
+          showSiteBoundary={false}
           showZoneDividers={false}
-          showZonePolygons={false}
+          showZonePolygons={layers.polygon}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
           followLiveGps={showFlymap
