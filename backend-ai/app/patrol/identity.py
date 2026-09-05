@@ -502,6 +502,90 @@ def match_face_for_observe(embedding: Sequence[float]) -> tuple[str | None, floa
     return None, best_sim
 
 
+def _today_tk_candidates(*, now: float | None = None) -> set[str]:
+    """tk-* đã có thẻ hoặc mặt trong ngày lịch VN."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    ts = now or time.time()
+    event_date = db.today_vn(ts)
+    candidates: set[str] = set()
+    for row in db.query(
+        "SELECT pers_id FROM daily_events WHERE event_date = ?",
+        (event_date,),
+    ):
+        pid = resolve_alias(str(row["pers_id"]))
+        if is_anonymous_track_id(pid):
+            candidates.add(normalize_track_id(pid))
+    for row in db.query(
+        "SELECT DISTINCT p.pers_id FROM persons p"
+        " JOIN person_faces pf ON pf.pers_id = p.pers_id"
+        " WHERE p.status = ? AND p.pers_id LIKE 'tk-%'"
+        " AND pf.created_at >= ?",
+        (STATUS_DRAFT, ts - 86400.0),
+    ):
+        pid = resolve_alias(str(row["pers_id"]))
+        if is_anonymous_track_id(pid):
+            candidates.add(normalize_track_id(pid))
+    return candidates
+
+
+def find_duplicate_tk_today(
+    embedding: Sequence[float],
+    *,
+    exclude_tk: str | None = None,
+    now: float | None = None,
+) -> tuple[str | None, float]:
+    """Tìm tk-* trùng người trong ngày — trước khi cấp mã mới."""
+    from ..patrol_ids import normalize_track_id
+    from ..worker_identity import face_thresholds
+
+    candidates = _today_tk_candidates(now=now)
+    exclude = normalize_track_id(exclude_tk or "")
+    if exclude:
+        candidates.discard(exclude)
+    if not candidates:
+        return None, 0.0
+
+    index = _load_face_index()
+    if not index:
+        return None, 0.0
+
+    probe = np.asarray(embedding, dtype=np.float32).ravel()
+    norm = float(np.linalg.norm(probe))
+    if norm <= 0:
+        return None, 0.0
+    probe = probe / norm
+
+    best_by_person: dict[str, float] = {}
+    for pers_id, vec in index:
+        pid = normalize_track_id(resolve_alias(pers_id))
+        if pid not in candidates:
+            continue
+        if vec.size != probe.size:
+            continue
+        sim = float(np.dot(probe, vec))
+        if sim > best_by_person.get(pid, -1.0):
+            best_by_person[pid] = sim
+
+    if not best_by_person:
+        return None, 0.0
+
+    ranked = sorted(best_by_person.items(), key=lambda kv: kv[1], reverse=True)
+    best_id, best_sim = ranked[0]
+    rival = ranked[1][1] if len(ranked) > 1 else -1.0
+    floor = face_thresholds.reuse_min_similarity()
+
+    if best_sim < MATCH_MIN_SIMILARITY:
+        return None, best_sim
+    if best_sim >= max(floor, 0.78):
+        return best_id, best_sim
+    if best_sim >= floor and rival < floor:
+        return best_id, best_sim
+    if rival > -1.0 and (best_sim - rival) >= face_thresholds.reuse_min_margin():
+        return best_id, best_sim
+    return None, best_sim
+
+
 def add_face(
     pers_id: str,
     embedding: Sequence[float],
@@ -1151,6 +1235,23 @@ def observe_face(
                 person_bbox=person_bbox,
             )
             return pid, False
+        dup_tk, _dup_sim = find_duplicate_tk_today(embedding, exclude_tk=pref, now=ts)
+        if dup_tk:
+            from . import daystore
+
+            if dup_tk != pref:
+                daystore.merge_pers_event_cards(pref, dup_tk, now=ts)
+            bind_tk_profile(pref, dup_tk, now=ts)
+            add_face_angle(
+                dup_tk,
+                embedding,
+                quality=quality,
+                camera_id=camera_id,
+                now=ts,
+                frame=frame,
+                person_bbox=person_bbox,
+            )
+            return dup_tk, False
         pers_id = ensure_draft_for_tk(pref, now=ts)
         bind_tk_profile(pref, pers_id, now=ts)
         add_face_angle(
@@ -1163,6 +1264,25 @@ def observe_face(
             person_bbox=person_bbox,
         )
         return pers_id, had is None
+
+    dup_tk, _dup_sim = find_duplicate_tk_today(embedding, now=ts)
+    if dup_tk:
+        add_face_angle(
+            dup_tk,
+            embedding,
+            quality=quality,
+            camera_id=camera_id,
+            now=ts,
+            frame=frame,
+            person_bbox=person_bbox,
+        )
+        pref = normalize_track_id((preferred_tk or "").strip())
+        if pref and is_anonymous_track_id(pref) and pref != dup_tk:
+            from . import daystore
+
+            daystore.merge_pers_event_cards(pref, dup_tk, now=ts)
+            bind_tk_profile(pref, dup_tk, now=ts)
+        return dup_tk, False
 
     with db.tx() as c:
         pers_id = allocate_tk_profile(origin="camera", now=ts, conn=c)

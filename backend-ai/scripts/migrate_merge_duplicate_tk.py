@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 # Cụm trùng đã audit ngày 2026-09-05 — phần tử đầu = tk canonical (score cao nhất).
 CLUSTERS_2026_09_05: list[list[str]] = [
+    ["tk-0000002", "tk-0000003"],
     ["tk-0000025", "tk-0000023", "tk-0000024", "tk-0000026"],
     ["tk-0000042", "tk-0000041", "tk-0000043"],
     ["tk-0000057", "tk-0000055"],
