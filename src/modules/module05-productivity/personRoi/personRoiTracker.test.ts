@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { advancePersonRoiTracks, predictPersonRoiTracks, resetPersonRoiTrackSeq } from './personRoiTracker'
+import { PatrolPersonRoiEngine } from './patrolPersonRoiEngine'
 import {
   PATROL_PERSON_ROI_CONFIG,
   PATROL_PERSON_ROI_PROFILE_BODYCAM,
@@ -384,6 +385,32 @@ describe('mồi vận tốc từ backend', () => {
     const mid = predictPersonRoiTracks(tracks, 140, PATROL_PERSON_ROI_CONFIG)[0].bbox
     expect(mid[0]).toBeGreaterThan(115)
     expect(mid[0]).toBeLessThan(160)
+  })
+
+  it('HC-01 bodycam — display không tụt quá xa measurement khi người đi', () => {
+    const engine = new PatrolPersonRoiEngine('HC-01')
+    const analyzeMs = 280
+    let t = 0
+    let maxLag = 0
+
+    while (t < 2_000) {
+      if (t % analyzeMs < 17) {
+        const x = 100 + (t / 1000) * 120
+        engine.ingest(
+          [person([x, 100, x + 100, 400], { track_id: 'ptk0001:person', velocity: [120, 0] })],
+          t,
+        )
+        const measCx = x + 50
+        const displays = engine.predictDisplay(t)
+        if (displays[0]) {
+          const dispCx = (displays[0].bbox[0] + displays[0].bbox[2]) / 2
+          maxLag = Math.max(maxLag, measCx - dispCx)
+        }
+      }
+      t += 17
+    }
+
+    expect(maxLag).toBeLessThan(28)
   })
 })
 
