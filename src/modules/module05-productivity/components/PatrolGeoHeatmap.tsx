@@ -919,7 +919,7 @@ export function PatrolGeoHeatmap({
                       },
                       click: (e) => {
                         L.DomEvent.stop(e)
-                        onZoneSelect(props.id)
+                        onZoneSelect(selectedZoneId === props.id ? null : props.id)
                       },
                     })
                     return
