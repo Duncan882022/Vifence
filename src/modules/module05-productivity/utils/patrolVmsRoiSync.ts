@@ -56,6 +56,7 @@ export function gateVmsPatrolPersonDetections(
       peak_group_index: d.peak_group_index,
       peak_group_size: d.peak_group_size,
       face_eligible: d.face_eligible,
+      promoted_from_object: d.promoted_from_object,
     }))
     .filter(d => {
       if (d.behavior !== 'person') return false

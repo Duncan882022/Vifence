@@ -237,6 +237,7 @@ function mapDetection(
     peak_group_index: raw.peak_group_index != null ? Number(raw.peak_group_index) : undefined,
     peak_group_size: raw.peak_group_size != null ? Number(raw.peak_group_size) : undefined,
     face_eligible: raw.face_eligible === true,
+    promoted_from_object: raw.promoted_from_object === true,
   }
 }
 

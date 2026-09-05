@@ -125,6 +125,16 @@ def format_module05_detection(
             out["velocity"] = [round(vx, 2), round(vy, 2)]
     if row.get("subject_bbox") and len(row["subject_bbox"]) >= 4:
         out["subject_bbox"] = normalize_bbox(row["subject_bbox"], orig_w, orig_h)
+    if row.get("face_eligible") is True:
+        out["face_eligible"] = True
+    if row.get("promoted_from_object") is True:
+        out["promoted_from_object"] = True
+    if row.get("peak_group") is True:
+        out["peak_group"] = True
+        if row.get("peak_group_index") is not None:
+            out["peak_group_index"] = int(row["peak_group_index"])
+        if row.get("peak_group_size") is not None:
+            out["peak_group_size"] = int(row["peak_group_size"])
     return out
 
 

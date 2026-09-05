@@ -118,4 +118,27 @@ describe('gateVmsPatrolPersonDetections', () => {
     )
     expect(result[0]?.velocity).toEqual([128, 36])
   })
+
+  it('gate giữ face_eligible và promoted_from_object cho uptier ROI', () => {
+    const result = gateVmsPatrolPersonDetections(
+      snapshot([
+        {
+          behavior: 'person',
+          label: 'Duncan',
+          bbox: [400, 200, 520, 560],
+          subject_bbox: [400, 200, 520, 560],
+          confidence: 0.72,
+          worker_id: 'tk-00000430',
+          track_id: 'ptk0001',
+          tier: 'person',
+          face_eligible: true,
+          promoted_from_object: true,
+        },
+      ]),
+      'HC-01',
+    )
+    expect(result[0]?.face_eligible).toBe(true)
+    expect(result[0]?.promoted_from_object).toBe(true)
+    expect(result[0]?.tier).toBe('person')
+  })
 })
