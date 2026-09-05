@@ -157,17 +157,28 @@ def _fetch_appearances(base: str, token: str, subject_id: str, date: str) -> lis
     return list(data.get("segments") or [])
 
 
+def _segment_event_payload(seg: dict) -> dict:
+    """API trả event_payload_json (SQLite); legacy có thể dùng event_payload."""
+    raw = seg.get("event_payload_json")
+    if raw is None:
+        raw = seg.get("event_payload")
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
 def _history_tier_ok(segments: list[dict]) -> tuple[int, bool]:
     if not segments:
         return 0, True
     ok = True
     for seg in segments:
-        payload = seg.get("event_payload") or {}
-        if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except json.JSONDecodeError:
-                payload = {}
+        payload = _segment_event_payload(seg)
         tier = payload.get("tier_at_observation")
         if not tier:
             ok = False
