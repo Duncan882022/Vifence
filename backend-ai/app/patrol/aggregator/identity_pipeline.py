@@ -21,8 +21,16 @@ def _frame_size(obs: ObservationInput) -> tuple[int, int]:
     return 1280, 720
 
 
+def _observation_gps(obs: ObservationInput) -> tuple[float | None, float | None]:
+    from ...patrol_gps_sim import resolve_patrol_observation_gps
+
+    return resolve_patrol_observation_gps(obs.camera_id, at_ts=obs.ts)
+
+
 def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
     """Chặn FP cây/kệ — chỉ thăng Người khi bbox giống người thật."""
+    if not obs.face_eligible:
+        return False
     if obs.person_bbox is None:
         return False
     frame_w, frame_h = _frame_size(obs)
@@ -33,6 +41,7 @@ def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
         frame_w,
         frame_h,
         face_quality=float(obs.face_quality or 0.0),
+        face_eligible=bool(obs.face_eligible),
     )
 
 
@@ -163,6 +172,7 @@ def resolve_subject_from_face_match(
     from ...person_identity_registry import is_sgc_worker_id
 
     pref_tk = wid if is_sgc_worker_id(wid) else None
+    gps_lat, gps_lng = _observation_gps(obs)
     try:
         pers_id, _created = identity.observe_face(
             emb,
@@ -172,6 +182,8 @@ def resolve_subject_from_face_match(
             frame=obs.frame,
             person_bbox=obs.person_bbox,
             preferred_tk=pref_tk,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
         )
     except Exception:  # noqa: BLE001
         logger.exception("resolve_subject_from_face_match observe_face failed")
@@ -229,6 +241,8 @@ def _ensure_pers_for_worker(
     *,
     tier: str | None,
     now: float,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
 ) -> str | None:
     """Map gallery/tk → pers_id (tk-* hoặc gallery); tạo hồ sơ SQLite nếu cần."""
     wid = (worker_id or "").strip()
@@ -249,7 +263,9 @@ def _ensure_pers_for_worker(
     from ...person_identity_registry import is_sgc_worker_id
 
     if is_sgc_worker_id(wid):
-        return _ensure_profile_for_tk(wid, now=now)
+        return _ensure_profile_for_tk(
+            wid, now=now, gps_lat=gps_lat, gps_lng=gps_lng,
+        )
 
     from ...patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
     from ...patrol_identity_store import lookup_patrol_identity_any
@@ -318,6 +334,9 @@ def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> 
     obj_id = (session.subject_id or "").strip()
     if obj_id.startswith("obj-"):
         daystore.promote_object(obj_id, pers_id, now=now)
+        # Tách lịch sử: dòng Đối tượng (lưng) đã đóng — flush tiếp tạo dòng Người (mặt).
+        session.appearance_row_id = None
+        session.luot_snapshot_captured = False
         logger.info(
             "aggregator promote %s -> %s track %s",
             obj_id,
@@ -336,6 +355,9 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
     if not (session.subject_id or "").startswith("obj-"):
         return False
 
+    if not _may_promote_to_person(session, obs):
+        return False
+
     emb = obs.face_embedding
     quality = float(obs.face_quality or 0.0)
     if emb is None and session.best_faces:
@@ -343,60 +365,65 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
         if best.embedding is not None and best.quality >= MIN_QUALITY_FOR_SEARCH:
             emb = best.embedding
             quality = max(quality, float(best.quality))
+    if emb is None:
+        picked = _pick_search_embedding(session)
+        if picked is not None:
+            emb, quality = picked
 
     wid = (obs.lifecycle_worker_id or session.identity.person_id or "").strip()
     from ...person_identity_registry import is_sgc_worker_id
 
-    if is_sgc_worker_id(wid):
-        if not _may_promote_to_person(session, obs):
+    pref_tk = wid if is_sgc_worker_id(wid) else None
+    gps_lat, gps_lng = _observation_gps(obs)
+
+    if emb is not None:
+        known, _sim = _known_face_match(session, obs)
+        if not known and not obs.face_eligible and not _human_face_promotion_allowed(obs):
             return False
-        if emb is None:
-            picked = _pick_search_embedding(session)
-            if picked is None:
-                return False
-            emb, quality = picked
+        try:
+            pers_id, _ = identity.observe_face(
+                emb,
+                quality=max(quality, MIN_QUALITY_FOR_SEARCH),
+                camera_id=obs.camera_id,
+                now=obs.ts,
+                frame=obs.frame,
+                person_bbox=obs.person_bbox,
+                preferred_tk=pref_tk,
+                gps_lat=gps_lat,
+                gps_lng=gps_lng,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("aggregator observe_face promote obj failed")
+            return False
+
+        _assign_pers_subject(session, pers_id, now=obs.ts)
+        session.identity = PersonIdentity(
+            person_id=pers_id,
+            identity_type=IdentityType.KNOWN,
+            confidence=min(0.99, max(quality, MIN_QUALITY_FOR_SEARCH)),
+        )
+        session.identity_resolved = True
+        if pref_tk:
+            from ..sink import _bind_tk_profile
+
+            _bind_tk_profile(pref_tk, pers_id)
+        return True
+
+    # Không có embedding — chỉ gán nếu tk đã bind hồ sơ cũ (không cấp tk mới).
+    if pref_tk and _existing_tk_profile_for_worker(wid):
         pers_id = _ensure_pers_for_worker(
             wid,
             tier=obs.lifecycle_tier or "person",
             now=obs.ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
         )
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
             session.identity_resolved = True
             return True
 
-    if emb is None:
-        return False
-
-    known, _sim = _known_face_match(session, obs)
-    if not known and not obs.face_eligible:
-        return False
-    if not known and not _human_face_promotion_allowed(obs):
-        return False
-
-    try:
-        from ...person_identity_registry import is_sgc_worker_id
-
-        pref_tk = wid if is_sgc_worker_id(wid) else None
-        pers_id, _ = identity.observe_face(
-            emb,
-            quality=max(quality, MIN_QUALITY_FOR_SEARCH),
-            camera_id=obs.camera_id,
-            now=obs.ts,
-            preferred_tk=pref_tk,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("aggregator observe_face promote obj failed")
-        return False
-
-    _assign_pers_subject(session, pers_id, now=obs.ts)
-    session.identity = PersonIdentity(
-        person_id=pers_id,
-        identity_type=IdentityType.KNOWN,
-        confidence=min(0.99, max(quality, MIN_QUALITY_FOR_SEARCH)),
-    )
-    session.identity_resolved = True
-    return True
+    return False
 
 
 def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) -> None:
@@ -432,7 +459,13 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
                 resolved_tier = inferred
         if resolved_tier not in (TIER_PERSON, "identity"):
             continue
-        pers_id = _ensure_pers_for_worker(worker_id, tier=resolved_tier or None, now=obs.ts)
+        pers_id = _ensure_pers_for_worker(
+            worker_id,
+            tier=resolved_tier or None,
+            now=obs.ts,
+            gps_lat=_observation_gps(obs)[0],
+            gps_lng=_observation_gps(obs)[1],
+        )
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
             session.identity_resolved = True
@@ -462,7 +495,13 @@ def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) ->
         lookup_id = gallery
         tier = tier or "identity"
 
-    canonical = _ensure_pers_for_worker(lookup_id, tier=tier, now=obs.ts)
+    canonical = _ensure_pers_for_worker(
+        lookup_id,
+        tier=tier,
+        now=obs.ts,
+        gps_lat=_observation_gps(obs)[0],
+        gps_lng=_observation_gps(obs)[1],
+    )
     if not canonical or canonical == current:
         return
 
@@ -552,7 +591,9 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                 picked = _pick_search_embedding(session)
                 if picked is not None:
                     emb, quality = picked
-            if emb is not None and _human_face_promotion_allowed(obs):
+            known, _sim = _known_face_match(session, obs) if emb is not None else (None, 0.0)
+            if emb is not None and (known or _human_face_promotion_allowed(obs)):
+                gps_lat, gps_lng = _observation_gps(obs)
                 try:
                     pers_id, created = identity.observe_face(
                         emb,
@@ -562,6 +603,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                         frame=obs.frame,
                         person_bbox=obs.person_bbox,
                         preferred_tk=wid,
+                        gps_lat=gps_lat,
+                        gps_lng=gps_lng,
                     )
                     from ..sink import _bind_tk_profile
 
@@ -582,8 +625,12 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                         )
                 except Exception:  # noqa: BLE001
                     logger.exception("aggregator observe_face tk failed")
-            else:
-                pers_id = _ensure_pers_for_worker(wid, tier=obs.lifecycle_tier, now=obs.ts)
+            elif _existing_tk_profile_for_worker(wid) and _may_promote_to_person(session, obs):
+                gps_lat, gps_lng = _observation_gps(obs)
+                pers_id = _ensure_pers_for_worker(
+                    wid, tier=obs.lifecycle_tier, now=obs.ts,
+                    gps_lat=gps_lat, gps_lng=gps_lng,
+                )
                 if pers_id:
                     _assign_pers_subject(session, pers_id, now=obs.ts)
                     session.identity = _map_worker_to_identity(wid, obs.confidence)
@@ -598,6 +645,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                 from ...person_identity_registry import is_sgc_worker_id
 
                 pref_tk = wid if is_sgc_worker_id(wid) else None
+                gps_lat, gps_lng = _observation_gps(obs)
                 pers_id, created = identity.observe_face(
                     emb,
                     quality=quality,
@@ -606,6 +654,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     frame=obs.frame,
                     person_bbox=obs.person_bbox,
                     preferred_tk=pref_tk,
+                    gps_lat=gps_lat,
+                    gps_lng=gps_lng,
                 )
                 if wid and is_sgc_worker_id(wid):
                     from ..sink import _bind_tk_profile
@@ -657,6 +707,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                     and emb is not None
                     and _human_face_promotion_allowed(obs)
                 ):
+                    gps_lat, gps_lng = _observation_gps(obs)
                     try:
                         pers_id, _ = identity.observe_face(
                             emb,
@@ -666,6 +717,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                             frame=obs.frame,
                             person_bbox=obs.person_bbox,
                             preferred_tk=lwid,
+                            gps_lat=gps_lat,
+                            gps_lng=gps_lng,
                         )
                         from ..sink import _bind_tk_profile
 
@@ -679,6 +732,8 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                         lwid,
                         tier=inferred,
                         now=obs.ts,
+                        gps_lat=_observation_gps(obs)[0],
+                        gps_lng=_observation_gps(obs)[1],
                     )
                 if pers_id:
                     _assign_pers_subject(session, pers_id, now=obs.ts)
@@ -730,6 +785,7 @@ def try_promote_object_after_snapshot(
         from ...person_identity_registry import is_sgc_worker_id
 
         pref_tk = wid if is_sgc_worker_id(wid) else None
+        gps_lat, gps_lng = _observation_gps(obs)
         try:
             pers_id, _created = identity.observe_face(
                 emb,
@@ -739,6 +795,8 @@ def try_promote_object_after_snapshot(
                 frame=obs.frame,
                 person_bbox=obs.person_bbox,
                 preferred_tk=pref_tk,
+                gps_lat=gps_lat,
+                gps_lng=gps_lng,
             )
             _assign_pers_subject(session, pers_id, now=obs.ts)
             session.identity_resolved = True

@@ -13,6 +13,8 @@ import {
   getPatrolClientServerSkewMs,
   getPatrolLiveRoiDelayMs,
   updatePatrolClientServerSkew,
+  updatePatrolAiPipelineLag,
+  updatePatrolWhepDisplayLag,
 } from '@/services/patrolRuntimeBridge'
 import { useCameraOverlayReady } from '@/modules/module02-training/hooks/useCameraBufferReadiness'
 import { getCameraBufferedAheadMs } from '@/services/cameraBufferReadiness'
@@ -29,14 +31,25 @@ export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
   waitingForBuffer: boolean
 }
 
+const DEFAULT_MAX_ALIGNED_DRIFT_MS = 800
+
 export function useSyncedVmsDetections(
   feed: VmsDetectionFeed,
   clock: VideoClockSource | null,
-  options?: { cameraId?: string; fallbackLagMs?: number; useRuntimeLagHint?: boolean },
+  options?: {
+    cameraId?: string
+    fallbackLagMs?: number
+    useRuntimeLagHint?: boolean
+    maxAlignedDriftMs?: number
+    /** WHEP: giữ snapshot aligned dù drift cao — buffer FE gây trễ/giật hơn. */
+    trustAlignedSnapshot?: boolean
+  },
 ): SyncedVmsDetectionFeed {
   const bufferRef = useRef(new OverlayTimeBuffer())
   const configuredLagMs = options?.fallbackLagMs
   const useRuntimeLagHint = options?.useRuntimeLagHint ?? false
+  const maxAlignedDriftMs = options?.maxAlignedDriftMs ?? DEFAULT_MAX_ALIGNED_DRIFT_MS
+  const trustAlignedSnapshot = options?.trustAlignedSnapshot ?? false
   const bufferReady = useCameraOverlayReady(options?.cameraId ?? '')
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
@@ -60,6 +73,7 @@ export function useSyncedVmsDetections(
     if (feed.snapshot) {
       bufferRef.current.push(feed.snapshot)
       updatePatrolClientServerSkew(feed.snapshot.server_emit_ms)
+      updatePatrolAiPipelineLag(feed.snapshot.frame_wallclock_ms, feed.snapshot.server_emit_ms)
     }
   }, [feed.snapshot])
 
@@ -73,12 +87,18 @@ export function useSyncedVmsDetections(
       // sẽ lùi thêm một quãng lag nữa và bbox tụt lại phía sau người.
       if (snapshot?.overlay_sync === 'aligned') {
         const driftMs = snapshot.overlay_drift_ms ?? 0
-        setResolved(prev => (
-          prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
-            ? prev
-            : { snapshot, timeAligned: true, driftMs }
-        ))
-        return
+        if (trustAlignedSnapshot) {
+          updatePatrolWhepDisplayLag(snapshot.frame_wallclock_ms, snapshot.overlay_sync)
+        }
+        // WHEP: backend đã chọn khung — buffer FE chỉ làm trễ thêm.
+        if (trustAlignedSnapshot || driftMs <= maxAlignedDriftMs) {
+          setResolved(prev => (
+            prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
+              ? prev
+              : { snapshot, timeAligned: true, driftMs }
+          ))
+          return
+        }
       }
 
       const displayMs = clock?.getDisplayWallclockMs() ?? null
@@ -118,7 +138,7 @@ export function useSyncedVmsDetections(
     tick()
     const timer = window.setInterval(tick, RESOLVE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint])
+  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint, maxAlignedDriftMs, trustAlignedSnapshot])
 
   return useMemo(
     () => ({

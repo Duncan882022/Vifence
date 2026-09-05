@@ -27,13 +27,14 @@ import {
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
-import { clearPatrolPersonRoiTracks, PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { clearPatrolPersonRoiTracks, PatrolPersonRoiOverlay, setPatrolPersonRoiLowLatencyLive } from '@/modules/module05-productivity/personRoi'
 import { resolveEffectivePatrolFlightMode, readPatrolFlightModeFromMetrics } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import {
   isPatrolPersonRoiCameraId,
   isPatrolMetricsCameraId,
+  WHEP_MAX_ALIGNED_DRIFT_MS,
 } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { getPatrolLiveRoiDelayMs } from '@/services/patrolRuntimeBridge'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
@@ -156,6 +157,12 @@ export function CameraVideoFeed({
     return () => setPatrolCameraFramesLive(cameraId, false)
   }, [cameraId, framesReady])
 
+  useEffect(() => {
+    if (!isPatrolPersonRoiCameraId(cameraId)) return
+    setPatrolPersonRoiLowLatencyLive(cameraId, videoTransportMode === 'whep')
+    return () => setPatrolPersonRoiLowLatencyLive(cameraId, false)
+  }, [cameraId, videoTransportMode])
+
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
@@ -172,6 +179,8 @@ export function CameraVideoFeed({
     cameraId,
     fallbackLagMs: patrolRoiFallbackLagMs,
     useRuntimeLagHint: patrolRoiUsesBufferLag,
+    maxAlignedDriftMs: patrolRoiUsesBufferLag ? 800 : WHEP_MAX_ALIGNED_DRIFT_MS,
+    trustAlignedSnapshot: videoTransportMode === 'whep',
   })
 
   const patrolRoiFrameSize = useMemo(() => {
@@ -216,11 +225,13 @@ export function CameraVideoFeed({
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
       gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
+      vmsFeed.snapshot.frame_wallclock_ms,
     )
   }, [
     runPatrolHeatmapAnalyze,
     cameraId,
     vmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.frame_wallclock_ms,
     vmsFeed.snapshot?.width,
     vmsFeed.snapshot?.height,
     vmsFeed.snapshot?.metrics,

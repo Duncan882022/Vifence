@@ -6,16 +6,13 @@ import type {
   Bbox,
   PersonRoiDetection,
   PersonRoiDisplay,
-  PersonRoiTier,
   PersonRoiTrack,
   PersonRoiTrackState,
 } from './types'
 
-const TIER_RANK: Record<PersonRoiTier, number> = {
-  object: 0,
-  person: 1,
-  identity: 2,
-}
+import { PATROL_TIER_RANK } from '../utils/patrolTierTokens'
+
+const TIER_RANK = PATROL_TIER_RANK
 
 let trackSeq = 0
 
@@ -182,6 +179,15 @@ function greedyAssign(
   return assignment
 }
 
+function mergePromotedFrom(track: PersonRoiTrack, det: PersonRoiDetection): void {
+  if (det.promoted_from_object) track.promotedFromObject = true
+  const incoming = det.promoted_from?.map(id => id.trim()).filter(id => /^obj-/i.test(id)) ?? []
+  if (incoming.length === 0) return
+  const merged = new Set(track.promotedFrom ?? [])
+  for (const id of incoming) merged.add(id)
+  track.promotedFrom = [...merged]
+}
+
 function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   const anchor = personRoiAnchorKey(det)
   if (anchor) track.anchorKey = anchor
@@ -192,10 +198,20 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
       track.workerName = name
     }
   }
-  // Tầng do backend giữ (state machine chỉ tiến không lùi). FE chỉ chấp nhận
-  // giá trị cao hơn để một payload trễ nhịp không kéo nhãn tụt xuống.
-  if (det.tier && TIER_RANK[det.tier] > TIER_RANK[track.tier]) {
-    track.tier = det.tier
+  // Tầng do backend giữ (state machine chỉ tiến không lùi).
+  const snapTier = det.tier_snapshot?.tier
+  const incomingTier = snapTier ?? det.tier
+  if (incomingTier && TIER_RANK[incomingTier] > TIER_RANK[track.tier]) {
+    track.tier = incomingTier
+  }
+  if (det.tier_snapshot) {
+    track.tierSnapshot = det.tier_snapshot
+  } else if (incomingTier && track.tierSnapshot) {
+    track.tierSnapshot = {
+      ...track.tierSnapshot,
+      tier: track.tier,
+      confidence: Math.max(track.tierSnapshot.confidence, det.confidence),
+    }
   }
   if (det.peak_group) {
     track.peakGroup = true
@@ -203,7 +219,7 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
     if (det.peak_group_size != null) track.peakGroupSize = det.peak_group_size
   }
   // Chỉ bật, không tắt: một payload thiếu cờ không được xoá dấu đã thăng hạng.
-  if (det.promoted_from_object) track.promotedFromObject = true
+  mergePromotedFrom(track, det)
   const detLabel = det.label?.trim()
   if (det.peak_group && detLabel?.startsWith('#')) {
     track.label = detLabel
@@ -244,6 +260,10 @@ export function advancePersonRoiTracks(
   const applyMeasurement = (track: PersonRoiTrack, det: PersonRoiDetection) => {
     const anchorKey = personRoiAnchorKey(det) ?? track.anchorKey
     const gainOverride = anchorKey ? cfg.anchoredMinMeasureGain : undefined
+    // SORT: predict tới thời điểm đo rồi mới update — bám người đi ngang giữa poll.
+    if (dtMs > 16) {
+      track.kalman.predict(dtMs)
+    }
     track.kalman.update(det.bbox, dtMs, gainOverride)
     // Backend ước lượng vận tốc trên chuỗi frame liên tục với dt đều; FE chỉ có
     // nhịp snapshot tới nơi, vốn dao động theo mạng. Có số của backend thì dùng.
@@ -279,6 +299,8 @@ export function advancePersonRoiTracks(
     if (!key) continue
     const track = byAnchor.get(key)
     if (!track || next.has(track.id)) continue
+    // Backend track_id là nguồn sự thật — luôn cập nhật bbox khi id khớp.
+    // Siết size ratio ở đây khiến ROI đứng yên dù người đi chậm (rung/zoom đổi cỡ hộp).
     applyMeasurement(track, det)
     matchedDets.add(globalIndex)
     next.set(track.id, track)
@@ -367,6 +389,7 @@ export function advancePersonRoiTracks(
       peakGroupIndex: det.peak_group_index,
       peakGroupSize: det.peak_group_size,
       promotedFromObject: det.promoted_from_object,
+      promotedFrom: det.promoted_from?.filter(id => /^obj-/i.test(id.trim())),
     }
     applyIdentity(track, det)
     next.set(id, track)
@@ -439,12 +462,15 @@ export function predictPersonRoiTracks(
       tier: resolvePatrolRoiDisplayTier(track.tier, {
         faceEligible: track.faceEligible,
         workerId: track.workerId,
+        promotedFrom: track.promotedFrom,
+        tierSnapshot: track.tierSnapshot,
       }),
       displayOpacity,
       peakGroup: track.peakGroup,
       peakGroupIndex: track.peakGroupIndex,
       peakGroupSize: track.peakGroupSize,
       promotedFromObject: track.promotedFromObject,
+      promotedFrom: track.promotedFrom,
     })
   }
 

@@ -37,6 +37,73 @@ def _frame_size_from_obs(obs: ObservationInput) -> tuple[int, int]:
     return 1280, 720
 
 
+def _resolve_tier_at_observation(
+    subject_id: str,
+    *,
+    tier_at: str | None,
+    shot_face_eligible: bool,
+    worker_id: str | None,
+) -> str:
+    """Tier tại thời điểm gặm — ưu tiên lifecycle, không hạ person→object."""
+    known = (tier_at or "").strip()
+    if known in ("object", "person", "identity"):
+        return known
+
+    sid = (subject_id or "").strip()
+    if sid.startswith("obj-"):
+        return "object"
+
+    from ...patrol_ids import is_person_subject_id
+
+    if is_person_subject_id(sid):
+        if not shot_face_eligible:
+            return "object"
+        from .. import identity
+
+        person = identity.get_person(identity.resolve_alias(sid))
+        if person and person.get("status") == identity.STATUS_IDENTIFIED:
+            return "identity"
+        if worker_id:
+            from ...patrol_identity_lifecycle import tier_for_worker_id
+
+            inferred = tier_for_worker_id(worker_id)
+            if inferred == "identity":
+                return "identity"
+        return "person"
+
+    return "object"
+
+
+def _build_flush_tier_snapshot(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    subject_id: str,
+    tier: str,
+    shot_score: float,
+    shot_face_eligible: bool,
+) -> dict[str, Any]:
+    from ..tier_snapshot import build_tier_snapshot
+
+    snap = build_tier_snapshot(
+        tier=tier,
+        tier_since=session.started_at,
+        subject_id=subject_id,
+        worker_id=obs.lifecycle_worker_id,
+        worker_name=obs.worker_name,
+        face_eligible=shot_face_eligible,
+        confidence=float(obs.confidence or 0.0),
+        face_quality=float(obs.face_quality or 0.0),
+        bbox=list(obs.person_bbox) if obs.person_bbox else [],
+        track_id=session.track_id,
+        camera_id=session.camera_id,
+        tier_source="flush",
+    )
+    if shot_score > 0:
+        snap = snap.model_copy(update={"snapshot_score": shot_score})
+    return snap.to_payload_dict()
+
+
 def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
     """Chặn ghi thẻ Đối tượng cho biển hiệu / vật tĩnh YOLO nhầm."""
     if obs.person_bbox is None:
@@ -227,6 +294,10 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         frame_w,
         frame_h,
         face_box=_snapshot_face_box(shot_obs, frame_w, frame_h),
+        anchor_from_center=(
+            not shot_obs.face_eligible
+            and (shot_obs.lifecycle_tier or "").strip() == "object"
+        ),
     )
 
     score = snapshot_score(
@@ -305,11 +376,24 @@ def flush_session(
             # của bộ phát hiện chứ không phản ánh công trường. Track quá ngắn
             # vẫn vào sổ cái ở dạng chưa chốt được, không mất dấu vết.
             return
-        if (
-            obs.person_bbox is not None
-            and not _object_commit_allowed(obs, has_face=has_face)
-        ):
-            return
+        effective_bbox = obs.person_bbox if obs.person_bbox is not None else session.bbox
+        if not has_face and effective_bbox is not None:
+            gate_obs = obs
+            if obs.person_bbox is None and session.bbox is not None:
+                gate_obs = ObservationInput(
+                    camera_id=obs.camera_id,
+                    track_id=obs.track_id,
+                    ts=obs.ts,
+                    person_bbox=session.bbox,
+                    zone_id=obs.zone_id,
+                    face_eligible=obs.face_eligible,
+                    confidence=obs.confidence,
+                    frame=obs.frame,
+                    lifecycle_tier=obs.lifecycle_tier,
+                    lifecycle_worker_id=obs.lifecycle_worker_id,
+                )
+            if not _object_commit_allowed(gate_obs, has_face=has_face):
+                return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
         from .session_store import link_subject_session
 
@@ -358,8 +442,6 @@ def flush_session(
         if inferred != "object":
             tier_at = inferred
 
-    payload = build_event_payload(session, tier_at_observation=tier_at)
-    payload_json = json.dumps(payload, ensure_ascii=False)
     interactions_json = json.dumps(
         [i.to_dict() for i in session.interactions],
         ensure_ascii=False,
@@ -475,6 +557,27 @@ def flush_session(
         if not at_win_end:
             session.dirty = False
             return
+
+    tier_at = _resolve_tier_at_observation(
+        subject_id,
+        tier_at=tier_at,
+        shot_face_eligible=shot_face_eligible,
+        worker_id=worker_id,
+    )
+    tier_payload = _build_flush_tier_snapshot(
+        session,
+        obs,
+        subject_id=subject_id,
+        tier=tier_at,
+        shot_score=shot_score,
+        shot_face_eligible=shot_face_eligible,
+    )
+    payload = build_event_payload(
+        session,
+        tier_at_observation=tier_at,
+        tier_snapshot=tier_payload,
+    )
+    payload_json = json.dumps(payload, ensure_ascii=False)
 
     row_id = daystore.upsert_track_appearance(
         appearance_id=session.appearance_row_id,

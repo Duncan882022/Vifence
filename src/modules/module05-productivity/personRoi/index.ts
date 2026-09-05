@@ -23,6 +23,8 @@ export {
   clearPatrolPersonRoiTracks,
   getPatrolPersonRoiEngine,
   PatrolPersonRoiEngine,
+  setPatrolPersonRoiLocalPublisher,
+  setPatrolPersonRoiLowLatencyLive,
 } from './patrolPersonRoiEngine'
 export { usePatrolPersonRoiTracks } from './usePatrolPersonRoiTracks'
 export { PatrolPersonRoiOverlay } from './PatrolPersonRoiOverlay'

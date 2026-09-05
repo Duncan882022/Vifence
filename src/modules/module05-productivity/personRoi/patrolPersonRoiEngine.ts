@@ -19,8 +19,20 @@ export class PatrolPersonRoiEngine {
   private lastIngestAt = 0
   private displayCache: PersonRoiDisplay[] = []
   private displaySmoother = new BboxDisplaySmoother()
+  /** HC-02 publish từ chính máy — analyze JPEG trễ so với khung video. */
+  private localPublisher = false
+  /** WHEP/WebRTC live — ưu tiên bám người di chuyển. */
+  private lowLatencyLive = false
 
   constructor(readonly cameraId: string) {}
+
+  setLocalPublisherMode(enabled: boolean): void {
+    this.localPublisher = enabled
+  }
+
+  setLowLatencyLiveMode(enabled: boolean): void {
+    this.lowLatencyLive = enabled
+  }
 
   /**
    * Profile ghép của camera này. DR-* đổi được giữa tầm cao và tầm thấp giữa
@@ -30,14 +42,17 @@ export class PatrolPersonRoiEngine {
     return resolvePatrolPersonRoiConfig(
       this.cameraId,
       resolveEffectivePatrolFlightMode(this.cameraId),
+      { localPublisher: this.localPublisher, lowLatencyLive: this.lowLatencyLive },
     )
   }
 
-  private polishDisplay(raw: PersonRoiDisplay[], predicting: boolean): PersonRoiDisplay[] {
+  private polishDisplay(
+    raw: PersonRoiDisplay[],
+    predicting: boolean,
+    cfg: PatrolPersonRoiConfig,
+  ): PersonRoiDisplay[] {
     const active = new Set<string>()
-    const alpha = predicting
-      ? PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha
-      : PATROL_PERSON_ROI_CONFIG.displayEmaAlpha
+    const alpha = predicting ? cfg.displayEmaGlideAlpha : cfg.displayEmaAlpha
     const snapDiagonalRatio = predicting ? 0.14 : 0.06
     const polished = raw.map(track => {
       active.add(track.trackId)
@@ -60,7 +75,7 @@ export class PatrolPersonRoiEngine {
     const dtMs = this.lastIngestAt > 0 ? Math.max(16, now - this.lastIngestAt) : 450
     this.lastIngestAt = now
     this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now(), cfg)
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0, cfg), false)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0, cfg), false, cfg)
     this.notify()
   }
 
@@ -89,7 +104,7 @@ export class PatrolPersonRoiEngine {
     }
 
     if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true, cfg)
     return this.displayCache
   }
 
@@ -146,6 +161,14 @@ export function getPatrolPersonRoiEngine(cameraId: string): PatrolPersonRoiEngin
  */
 export function clearPatrolPersonRoiTracks(cameraId: string): void {
   engines.get(cameraId)?.clear()
+}
+
+export function setPatrolPersonRoiLocalPublisher(cameraId: string, enabled: boolean): void {
+  getPatrolPersonRoiEngine(cameraId).setLocalPublisherMode(enabled)
+}
+
+export function setPatrolPersonRoiLowLatencyLive(cameraId: string, enabled: boolean): void {
+  getPatrolPersonRoiEngine(cameraId).setLowLatencyLiveMode(enabled)
 }
 
 export function clearPatrolPersonRoiEngine(cameraId?: string): void {

@@ -253,6 +253,7 @@ export function PatrolDensityHeatmap({
     flycam: true,
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
 
@@ -414,7 +415,11 @@ export function PatrolDensityHeatmap({
   }, [droneOnline])
 
   const toggleLayer = (k: keyof typeof layers) =>
-    setLayers(prev => ({ ...prev, [k]: !prev[k] }))
+    setLayers(prev => {
+      const next = { ...prev, [k]: !prev[k] }
+      if (k === 'polygon' && !next.polygon) setSelectedZoneId(null)
+      return next
+    })
 
   useEffect(() => {
     if (!layers.polygon) setSelectedZoneId(null)
@@ -424,6 +429,7 @@ export function PatrolDensityHeatmap({
     () => buildPatrolSiteHeatmapStats(dayStats),
     [dayStats],
   )
+
 
   const statsPresences = useMemo(
     () => filterPatrolPresencesForHeatmap(presences, flycamFlightModes),
@@ -567,7 +573,7 @@ export function PatrolDensityHeatmap({
           showSiteBoundary={false}
           showZoneDividers={false}
           showZonePolygons={layers.polygon}
-          interactiveZones={layers.polygon}
+          interactiveZones={!showFlymap && layers.polygon}
           selectedZoneId={selectedZoneId}
           onZoneSelect={setSelectedZoneId}
           showDetections={layers.density}

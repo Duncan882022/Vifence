@@ -96,11 +96,11 @@ def snapshot_score(*, face_quality: float, confidence: float) -> float:
     return float(face_quality) * 2.0 + float(confidence)
 
 
-# BGR — đồng bộ PATROL_TIER_TOKENS heatmapDotHex trên FE (green / sky / violet).
+# BGR — đồng bộ patrolTierTokens FE (stone / orange / green), viền liền.
 PATROL_SNAPSHOT_TIER_COLORS_BGR: dict[str, tuple[int, int, int]] = {
-    "object": (128, 222, 74),    # green-400 #4ade80 — khung nét đứt trên snapshot
-    "person": (248, 189, 56),    # sky-400 #38bdf8
-    "identity": (250, 139, 167), # violet-400 #a78bfa
+    "object": (158, 162, 168),    # stone-400 #a8a29e
+    "person": (60, 146, 251),     # orange-400 #fb923c
+    "identity": (128, 222, 74),   # green-400 #4ade80
 }
 
 
@@ -184,6 +184,7 @@ def _write_snapshot(
     score: float = 0.0,
     face_eligible: bool = False,
     luot_key: int | None = None,
+    badge_confidence: float | None = None,
 ) -> str | None:
     """Full-frame JPG + khung ROI tuần tra — đồng bộ overlay live & popup."""
     try:
@@ -191,7 +192,7 @@ def _write_snapshot(
         import numpy as np
 
         from ..patrol_entity import resolve_patrol_worker_display_name
-        from ..snapshot_compose import draw_dashed_rectangle, draw_snapshot_roi_badge
+        from ..snapshot_compose import draw_snapshot_roi_badge
 
         if frame is None or not isinstance(frame, np.ndarray):
             return None
@@ -205,22 +206,36 @@ def _write_snapshot(
             return None
 
         out = frame.copy()
-        if _snapshot_meets_person_evidence_gate(
+        from ..patrol_ids import is_person_subject_id
+
+        explicit = (tier or "").strip()
+        person_tab_qualified = (
+            is_person_subject_id(subject_id)
+            and float(score) >= daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE
+        )
+        if (
+            explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR
+            and explicit != "object"
+        ):
+            resolved_tier = explicit
+        elif _snapshot_meets_person_evidence_gate(
             face_eligible=face_eligible,
             snapshot_score=score,
-        ):
+        ) or person_tab_qualified:
+            tier_hint = tier
+            if person_tab_qualified and explicit not in ("person", "identity"):
+                from ..patrol_identity_lifecycle import TIER_PERSON
+
+                tier_hint = TIER_PERSON
             resolved_tier = _resolve_snapshot_tier(
                 subject_id,
-                tier=tier,
+                tier=tier_hint,
                 worker_id=worker_id,
             )
         else:
             resolved_tier = "object"
-        color = PATROL_SNAPSHOT_TIER_COLORS_BGR[resolved_tier]
-        if resolved_tier == "object":
-            draw_dashed_rectangle(out, (bx1, by1), (bx2, by2), color, thickness=1)
-        else:
-            cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
+        color = PATROL_SNAPSHOT_TIER_COLORS_BGR.get(resolved_tier, PATROL_SNAPSHOT_TIER_COLORS_BGR["object"])
+        cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
 
         person = identity.get_person(subject_id)
         wid = (worker_id or "").strip()
@@ -240,6 +255,10 @@ def _write_snapshot(
             badge_worker_name = None
             badge_object_id = subject_id
 
+        conf = badge_confidence
+        if conf is None:
+            conf = min(0.99, max(0.01, float(score) / 2.0 if score > 1 else float(score or 0.5)))
+
         draw_snapshot_roi_badge(
             out,
             bx1,
@@ -248,7 +267,7 @@ def _write_snapshot(
             by2,
             color,
             scenario_id=None,
-            confidence=0.9,
+            confidence=float(conf),
             behavior="person",
             worker_id=badge_worker_id,
             worker_name=badge_worker_name,
@@ -263,7 +282,7 @@ def _write_snapshot(
 
         ts = float(capture_ts if capture_ts is not None else time.time())
         date = db.today_vn(ts)
-        folder = SNAPSHOT_DIR / date
+        folder = Path(SNAPSHOT_DIR) / date
         folder.mkdir(parents=True, exist_ok=True)
         name = _snapshot_filename(subject_id, luot_key, ts)
         out_path = folder / name
@@ -396,7 +415,13 @@ def lookup_bound_pers_for_tk(tk_id: str) -> str | None:
     return found
 
 
-def _ensure_profile_for_tk(tk_id: str, *, now: float) -> str:
+def _ensure_profile_for_tk(
+    tk_id: str,
+    *,
+    now: float,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
+) -> str:
     from ..patrol_ids import normalize_track_id
 
     tk = normalize_track_id(tk_id)
@@ -404,7 +429,9 @@ def _ensure_profile_for_tk(tk_id: str, *, now: float) -> str:
     if existing:
         identity.touch_person(existing, now=now)
         return existing
-    pers_id = identity.ensure_draft_for_tk(tk, now=now)
+    pers_id = identity.ensure_draft_for_tk(
+        tk, now=now, gps_lat=gps_lat, gps_lng=gps_lng,
+    )
     _bind_tk_profile(tk, pers_id)
     return pers_id
 

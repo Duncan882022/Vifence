@@ -1324,11 +1324,8 @@ class PromotedCardSnapshotRepairTests(unittest.TestCase):
         pers_id, session = self._promoted_person_session(ts)
 
         stale = self._card(ts, pers_id)
-        self.assertEqual(stale["snapshot_path"], "2026-09-03/obj-back.jpg")
-        self.assertLess(
-            float(stale["snapshot_score"]),
-            daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
-        )
+        self.assertIsNone(stale["snapshot_path"])
+        self.assertLessEqual(float(stale["snapshot_score"] or 0), 0.0)
 
         # Người ngoảnh mặt lại ở giây thứ 30 — ngoài cửa sổ tích lũy 2s.
         face_obs = ObservationInput(
@@ -1413,7 +1410,7 @@ class PromotedCardSnapshotRepairTests(unittest.TestCase):
 
         write_mock.assert_not_called()
         card = self._card(ts, pers_id)
-        self.assertEqual(card["snapshot_path"], "2026-09-03/obj-back.jpg")
+        self.assertIsNone(card["snapshot_path"])
 
 
 if __name__ == "__main__":

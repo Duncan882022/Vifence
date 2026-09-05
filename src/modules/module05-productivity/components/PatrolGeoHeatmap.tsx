@@ -123,23 +123,36 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   }
 }
 
-/** Fill rất nhạt theo màu khu khi được chọn — viền giữ màu zone. */
+/** Fill nhạt theo màu khu khi hover/chọn — lớp mỏng khi idle để Leaflet bắt click. */
 function zoneInteractiveStyle(
   feature?: Feature<GeoJsonPolygon, ZoneProperties>,
   selectedZoneId?: string | null,
   hoveredZoneId?: string | null,
 ) {
   if (!feature) return {}
-  const { visited, borderColor, tier, id: zoneId } = feature.properties
+  const zoneId = feature.properties.id
+  const { borderColor, tier } = feature.properties
   const selected = zoneId === selectedZoneId
   const hovered = zoneId === hoveredZoneId && !selected
 
+  if (selected || hovered) {
+    return {
+      fillColor: borderColor,
+      fillOpacity: selected ? 0.14 : 0.09,
+      color: borderColor,
+      weight: selected ? 2.5 : (tier === 'primary' ? 2.5 : 2),
+      opacity: selected ? 0.98 : 0.85,
+      dashArray: undefined,
+    }
+  }
+
   return {
     fillColor: borderColor,
-    fillOpacity: selected ? 0.14 : hovered ? 0.09 : (visited ? 0.08 : 0.05),
+    /* Leaflet không bắt click khi fillOpacity = 0 — giữ lớp vô hình mỏng. */
+    fillOpacity: 0.01,
     color: borderColor,
-    weight: selected ? 2.5 : (tier === 'primary' ? 2.5 : 2),
-    opacity: selected ? 0.98 : 0.85,
+    weight: 2,
+    opacity: 0.55,
   }
 }
 
@@ -803,7 +816,7 @@ export function PatrolGeoHeatmap({
             openId={openHelmetTipId}
             onDismiss={() => setOpenHelmetTipId(null)}
             onBackgroundClick={
-              onZoneSelect
+              interactiveZones && onZoneSelect
                 ? () => onZoneSelect(null)
                 : undefined
             }
@@ -918,7 +931,7 @@ export function PatrolGeoHeatmap({
                         layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, null))
                       },
                       click: (e) => {
-                        L.DomEvent.stop(e)
+                        L.DomEvent.stopPropagation(e)
                         onZoneSelect(selectedZoneId === props.id ? null : props.id)
                       },
                     })

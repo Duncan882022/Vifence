@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { startWhepSubscriber, type WhepSubscriber } from '@/services/webrtc/whepClient'
 import { useHlsVideoSource, type VideoClockSource } from './useHlsVideoSource'
+import { getPatrolWhepDisplayWallclockMs } from '@/services/patrolRuntimeBridge'
 import {
   createPlaybackStallChecker,
   PLAYBACK_STALL_CHECK_MS,
@@ -20,6 +21,15 @@ import {
 } from './videoPlaybackStall'
 
 const WHEP_NO_FRAME_FALLBACK_MS = 2500
+
+/** Wallclock ước lượng khung WHEP — backend cần at_ms để trả overlay_sync aligned. */
+export function getWhepDisplayWallclockMs(nowMs: number = Date.now()): number {
+  return getPatrolWhepDisplayWallclockMs(nowMs)
+}
+
+const whepVideoClock: VideoClockSource = {
+  getDisplayWallclockMs: () => getWhepDisplayWallclockMs(),
+}
 
 export type VideoSourceMode = 'whep' | 'hls'
 
@@ -236,9 +246,9 @@ export function useLowLatencyVideoSource(
   return useMemo(() => ({
     mode,
     whepConnected,
-    clock: mode === 'hls'
-      ? hlsSource.clock
-      : { getDisplayWallclockMs: () => null },
+    // WHEP không có PDT — ước lượng wallclock thay vì null (null → backend trả
+    // overlay_sync latest → bbox lệch vài giây so với khung video ~300ms).
+    clock: mode === 'hls' ? hlsSource.clock : whepVideoClock,
     recoverStream,
   }), [mode, whepConnected, hlsSource, recoverStream])
 }

@@ -31,6 +31,10 @@ export interface MobileAiDetection {
   track_id?: string
   /** BE đã thấy mặt rõ trong bbox — quyết định tab Người / ghi sự kiện. */
   face_eligible?: boolean
+  /** Thẻ vốn là obj-*, lên hạng khi bắt mặt — nhãn ROI thêm ↑. */
+  promoted_from_object?: boolean
+  /** Mã obj-* gốc — ROI hiển thị mã thay nhãn chung Người. */
+  promoted_from?: string[]
   /** Tầng đã ổn định của track: object | person | identity. */
   tier?: 'object' | 'person' | 'identity'
   /** px/giây theo hệ toạ độ frame AI — mồi vận tốc cho ROI khỏi trễ một nhịp. */
@@ -39,6 +43,8 @@ export interface MobileAiDetection {
   peak_group?: boolean
   peak_group_index?: number
   peak_group_size?: number
+  /** Contract tầng thống nhất từ BE — SSOT cho ROI live. */
+  tier_snapshot?: import('@/modules/module05-productivity/types/patrolTierSnapshot').PatrolTierSnapshot
 }
 
 export interface MobileAiViolationEvent {

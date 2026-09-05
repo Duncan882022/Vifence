@@ -444,7 +444,7 @@ def _match_sqlite_patrol_face(face_emb: np.ndarray) -> tuple[str, str] | None:
     from .patrol_identity_store import patrol_gallery_worker_id
 
     vec = face_emb.tolist() if hasattr(face_emb, "tolist") else list(face_emb)
-    matched, _sim = patrol_identity.match_face(vec)
+    matched, _sim = patrol_identity.match_face_for_observe(vec)
     if not matched:
         return None
     person = patrol_identity.get_person(matched)
@@ -803,6 +803,34 @@ def resolve_patrol_person_identity(
                 _remember_track_meta(state, key, final_id, pb, face_emb)
                 _save(state)
                 return _finalize_identity_pair(final_id, final_name)
+
+            from .patrol import identity as patrol_identity
+            from .patrol_ids import is_anonymous_track_id, normalize_track_id
+
+            matched_pers, _sim = patrol_identity.match_face_for_observe(
+                query_emb.tolist(),
+            )
+            if matched_pers:
+                pid = patrol_identity.resolve_alias(matched_pers)
+                reuse_tk = (
+                    normalize_track_id(pid)
+                    if is_anonymous_track_id(pid)
+                    else patrol_identity.lookup_primary_tk_for_pers(pid)
+                )
+                if reuse_tk:
+                    state["tracks"][key] = reuse_tk
+                    _remember_track_meta(state, key, reuse_tk, pb, face_emb)
+                    _save(state)
+                    return _finalize_identity_pair(reuse_tk, reuse_tk)
+
+            dup_tk, _dup_sim = patrol_identity.find_duplicate_tk_today(
+                query_emb.tolist(),
+            )
+            if dup_tk:
+                state["tracks"][key] = dup_tk
+                _remember_track_meta(state, key, dup_tk, pb, face_emb)
+                _save(state)
+                return _finalize_identity_pair(dup_tk, dup_tk)
 
         seq = max(int(state.get("next_seq") or 1), 1)
         tk_id = _format_tk(seq)

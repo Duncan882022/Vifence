@@ -12,8 +12,8 @@ import {
 import type { VmsDetectionFeed } from '../context/VmsDetectionContext'
 import { isPatrolMetricsCameraId } from '@/modules/module05-productivity/data/patrolHelmetScope'
 
-/** HC-* / DR-* — poll nhanh hơn demo cam để ROI bám chuyển động. */
-const PATROL_VMS_DETECTIONS_POLL_MS = 280
+/** HC-* / DR-* — poll nhanh để ROI bám người di chuyển trên WHEP live. */
+const PATROL_VMS_DETECTIONS_POLL_MS = 150
 const DEFAULT_VMS_DETECTIONS_POLL_MS = 450
 
 export interface VmsDetectionFeedOptions {

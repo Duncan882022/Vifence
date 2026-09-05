@@ -202,7 +202,15 @@ def patrol_bbox_rejects_static_fp(
     return False
 
 
-MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.55
+MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.48
+MIN_PARTIAL_FACE_DETECT_SCORE = 0.55
+
+
+def patrol_face_promotion_quality(quality: float, *, face_eligible: bool) -> float:
+    """Ngưỡng chất lượng mặt cho thăng hạng Người — nới khi đã eligible (mặt nghiêng)."""
+    if face_eligible and quality >= MIN_PARTIAL_FACE_DETECT_SCORE:
+        return max(float(quality), MIN_ANONYMOUS_IDENTITY_FACE_QUALITY)
+    return float(quality)
 
 
 def _face_center_belongs_to_person_box(
@@ -233,9 +241,14 @@ def patrol_anonymous_identity_allowed(
     frame_h: int,
     *,
     face_quality: float = 0.0,
+    face_eligible: bool = False,
 ) -> bool:
     """Chặn gán tk-* cho YOLO FP (xe, biển, giàn) dù YuNet trả pseudo-face."""
-    if face_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
+    effective_quality = patrol_face_promotion_quality(
+        face_quality,
+        face_eligible=face_eligible,
+    )
+    if effective_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
         return False
@@ -292,9 +305,18 @@ def vertical_structure_fp_box(
     aspect = ph / pw
     bw_ratio = pw / max(float(frame_w), 1.0)
     bh_ratio = ph / max(float(frame_h), 1.0)
+    cx_ratio = ((x1 + x2) / 2.0) / max(float(frame_w), 1.0)
     if aspect > 2.6 and bw_ratio < 0.075 and bh_ratio > 0.10:
         return True
     if aspect < 0.30 and bh_ratio < 0.055 and bw_ratio > 0.20:
+        return True
+    # Trụ/thùng điện sát vỉa hè — YOLO FP tĩnh (obj0077: hộp vuông mép khung).
+    if (
+        0.85 <= aspect <= 2.4
+        and bw_ratio < 0.11
+        and 0.08 <= bh_ratio <= 0.38
+        and (cx_ratio > 0.68 or cx_ratio < 0.20)
+    ):
         return True
     return False
 
@@ -443,6 +465,7 @@ def patrol_snapshot_draw_bbox(
     face_box: tuple[float, float, float, float] | None = None,
     max_area_ratio: float = 0.38,
     max_height_ratio: float = 0.55,
+    anchor_from_center: bool = False,
 ) -> tuple[float, float, float, float]:
     """BBox vẽ lên JPG snapshot — không để YOLO crowd phủ 60–80% khung."""
     box = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
@@ -477,6 +500,17 @@ def patrol_snapshot_draw_bbox(
     # Thu quanh tâm sẽ cắt đầu: người đứng gần bodycam luôn cao hơn 55% khung,
     # nên mọi thẻ đều mất phần đầu — đúng cái phần chứng minh đây là người và
     # là căn cứ để thăng tầng Người. Chân thì không mang thông tin ấy.
+    #
+    # Thẻ Đối tượng (không mặt): neo quanh tâm bbox — YOLO hay lệch mép trên,
+    # giữ mép trên khiến ROI trượt khỏi vật thể (obj-* đếm sai).
+    if anchor_from_center:
+        cy = (y1 + y2) / 2.0
+        ny1 = max(y1, cy - target_h / 2.0)
+        ny2 = min(y2, ny1 + target_h)
+        nx1 = cx - target_w / 2.0
+        nx2 = cx + target_w / 2.0
+        return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+
     nx1 = cx - target_w / 2.0
     nx2 = cx + target_w / 2.0
     return _clip_box_to_frame((nx1, y1, nx2, y1 + target_h), frame_w, frame_h)
@@ -489,6 +523,7 @@ def patrol_person_meets_display_gate(
     *,
     flycam: bool = False,
     proximity_flycam: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> bool:
     """Gate vẽ ROI — rộng hơn hẳn gate ghi sự kiện.
 
@@ -521,6 +556,12 @@ def patrol_person_meets_display_gate(
     # Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
     if speck_person_box(person_box, frame_w, frame_h):
         return False
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        return False
+    if person_box_overlaps_vehicle_fp(
+        person_box, vehicle_boxes or [], frame_w, frame_h,
+    ):
+        return False
     if wide_crowd_rider_box(person_box, frame_w, frame_h):
         return True
     if not plausible_person_silhouette(
@@ -545,6 +586,107 @@ def background_clutter_person_box(
     if cy < frame_h * 0.44 and area_ratio < 0.11 and aspect < 1.20:
         return True
     if y1 < frame_h * 0.10 and area_ratio < 0.07:
+        return True
+    return False
+
+
+def _bbox_intersection_area(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    ix1 = max(a[0], b[0])
+    iy1 = max(a[1], b[1])
+    ix2 = min(a[2], b[2])
+    iy2 = min(a[3], b[3])
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    return (ix2 - ix1) * (iy2 - iy1)
+
+
+def _bbox_containment_ratio(
+    inner: tuple[float, float, float, float],
+    outer: tuple[float, float, float, float],
+) -> float:
+    inter = _bbox_intersection_area(inner, outer)
+    inner_area = max((inner[2] - inner[0]) * (inner[3] - inner[1]), 1.0)
+    return inter / inner_area
+
+
+def motorcycle_seat_like_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """YOLO person nhầm yên/gương/thân xe đỗ — HC-01 vỉa hè.
+
+    Đo live: yên xe conf 0.46, aspect ~0.5–1.2; người đứng aspect ~1.8–2.4.
+    Ngưỡng conf không tách được — lọc theo hình học.
+    """
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    fw = max(float(frame_w), 1.0)
+    fh = max(float(frame_h), 1.0)
+    bw_ratio = pw / fw
+    bh_ratio = ph / fh
+    area_ratio = (pw * ph) / (fw * fh)
+    cy_ratio = ((y1 + y2) / 2.0) / fh
+
+    # Yên / thân xe ngang — thấp, rộng (HC-01: bh thường 15–25% khung)
+    if aspect < 1.12 and bh_ratio < 0.26 and bw_ratio >= 0.08:
+        if 0.18 <= cy_ratio <= 0.88:
+            return True
+    # Gương / đèn pha — rất ngang, mỏng
+    if aspect < 0.82 and bh_ratio < 0.22 and bw_ratio >= 0.10:
+        if cy_ratio < 0.55:
+            return True
+    # Cả xe một khối — YOLO trùm xe đỗ
+    if area_ratio > 0.14 and aspect < 0.95 and bh_ratio < 0.42:
+        return True
+    return False
+
+
+def person_box_likely_rider_on_vehicle(
+    person_box: tuple[float, float, float, float],
+    vehicle_box: tuple[float, float, float, float],
+) -> bool:
+    """Giữ người đang cưỡi / đứng cạnh xe — chỉ loại FP nằm gọn trên yên."""
+    x1, y1, x2, y2 = person_box
+    vx1, vy1, vx2, vy2 = vehicle_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    if aspect >= 1.42:
+        return True
+    veh_h = vy2 - vy1
+    # Vai/đầu nhô rõ phía trên thân xe
+    if y1 < vy1 + veh_h * 0.20 and aspect >= 1.05:
+        return True
+    # Phần lớn bbox nằm phía trên xe (đi bộ sát xe)
+    if y2 < vy1 + veh_h * 0.30:
+        return True
+    return False
+
+
+def person_box_overlaps_vehicle_fp(
+    person_box: tuple[float, float, float, float],
+    vehicle_boxes: list[tuple[float, float, float, float]],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """True khi bbox person chồng xe COCO và không giống người cưỡi."""
+    if not vehicle_boxes:
+        return False
+    from .track_matching import bbox_iou
+
+    for vb in vehicle_boxes:
+        iou = bbox_iou(list(person_box), list(vb))
+        contain = _bbox_containment_ratio(person_box, vb)
+        if iou < 0.12 and contain < 0.42:
+            continue
+        if person_box_likely_rider_on_vehicle(person_box, vb):
+            continue
         return True
     return False
 

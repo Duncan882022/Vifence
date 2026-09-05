@@ -2,6 +2,7 @@
  * Runtime config từ backend — ROI lag, server clock.
  */
 import { fetchPatrol } from '@/services/patrolApiClient'
+import { WHEP_DISPLAY_WALLCLOCK_LAG_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
 
 export interface PatrolRuntimeSnapshot {
   liveRoiDelayMs: number
@@ -81,6 +82,60 @@ export function updatePatrolClientServerSkew(serverEmitMs: number | undefined): 
 export function getPatrolClientServerSkewMs(): number {
   return clientServerSkewMs
 }
+
+/** EMA độ trễ AI (server_emit − frame_wallclock) — ước lượng at_ms WHEP. */
+let aiPipelineLagMs = 400
+
+export function updatePatrolAiPipelineLag(
+  frameWallclockMs: number | undefined,
+  serverEmitMs: number | undefined,
+): void {
+  if (
+    frameWallclockMs == null
+    || serverEmitMs == null
+    || !Number.isFinite(frameWallclockMs)
+    || !Number.isFinite(serverEmitMs)
+    || frameWallclockMs <= 0
+    || serverEmitMs <= 0
+  ) {
+    return
+  }
+  const instant = serverEmitMs - frameWallclockMs
+  if (instant <= 0 || instant > 15_000) return
+  aiPipelineLagMs = aiPipelineLagMs * 0.82 + instant * 0.18
+}
+
+export function getPatrolAiPipelineLagMs(): number {
+  return aiPipelineLagMs
+}
+
+/** EMA lag WHEP — học từ frame_wallclock aligned để at_ms khớp overlay. */
+let whepDisplayLagEmaMs = WHEP_DISPLAY_WALLCLOCK_LAG_MS
+
+export function updatePatrolWhepDisplayLag(
+  frameWallclockMs: number | undefined,
+  overlaySync?: string,
+): void {
+  if (overlaySync !== 'aligned') return
+  if (frameWallclockMs == null || !Number.isFinite(frameWallclockMs) || frameWallclockMs <= 0) return
+  const instant = Date.now() - getPatrolClientServerSkewMs() - frameWallclockMs
+  if (instant < 80 || instant > 4000) return
+  whepDisplayLagEmaMs = whepDisplayLagEmaMs * 0.86 + instant * 0.14
+}
+
+export function getPatrolWhepDisplayLagMs(): number {
+  const aiLag = getPatrolAiPipelineLagMs()
+  const blended = Math.max(whepDisplayLagEmaMs, aiLag * 0.85)
+  return Math.min(1500, Math.max(220, blended))
+}
+
+/** Wallclock khung WHEP ≈ now − playback lag (adaptive) − skew. */
+export function getPatrolWhepDisplayWallclockMs(nowMs: number = Date.now()): number {
+  return nowMs - getPatrolClientServerSkewMs() - getPatrolWhepDisplayLagMs()
+}
+
+/** Playback lag WHEP/WebRTC (~300ms) — tách khỏi buffer HLS 5s. */
+export const WHEP_PLAYBACK_LAG_MS = WHEP_DISPLAY_WALLCLOCK_LAG_MS
 
 export function resolvePatrolSubjectAlias(subjectId: string): string {
   const key = subjectId.trim()

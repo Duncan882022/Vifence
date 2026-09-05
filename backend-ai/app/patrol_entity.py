@@ -172,31 +172,45 @@ def format_patrol_person_snapshot_label(
     worker_name: str | None,
     object_id: str | None = None,
 ) -> str:
-    """Nhãn ROI snapshot PERS-001 — Đối tượng / Người / tên định danh."""
+    """Nhãn snapshot — mã ID (+ tên định danh), không chỉ loại chung."""
     wid = (worker_id or "").strip()
     wname = (worker_name or "").strip()
+    oid = (object_id or "").strip()
+
     if is_patrol_gallery_id(wid):
-        return resolve_patrol_worker_display_name(wid, wname)
+        display = resolve_patrol_worker_display_name(wid, wname)
+        code = wid
+        if display and display != code and not is_technical_patrol_worker_label(display):
+            return f"{code} {display}"
+        return code or display
+
     tk = normalize_track_id(wid)
     if tk and is_anonymous_track_id(tk):
-        return "Người"
-    oid = (object_id or "").strip()
+        return tk
+
+    if oid.upper().startswith("OBJ-"):
+        return oid
+
     if oid and not oid.upper().startswith("OBJ-"):
         try:
             from .patrol import identity as patrol_identity
 
             person = patrol_identity.get_person(oid)
             if person and person.get("status") == patrol_identity.STATUS_IDENTIFIED:
-                return resolve_patrol_worker_display_name(
-                    str(person.get("employee_code") or oid),
-                    str(person.get("full_name") or ""),
-                )
+                code = str(person.get("employee_code") or oid).strip()
+                name = str(person.get("full_name") or "").strip()
+                if name and not is_technical_patrol_worker_label(name):
+                    return f"{code} {name}"
+                return code
             if person:
-                return "Người"
+                return oid
         except Exception:  # noqa: BLE001
             pass
-    if oid.upper().startswith("OBJ-"):
-        return "Đối tượng"
+
+    if wid:
+        return wid
+    if oid:
+        return oid
     return "Đối tượng"
 
 

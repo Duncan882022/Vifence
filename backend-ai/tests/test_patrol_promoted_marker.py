@@ -77,6 +77,15 @@ class PromotedMarkerTests(unittest.TestCase):
         pid = self._promote(obj_id)
         promoted_registry.reset()
         self.assertTrue(promoted_registry.was_promoted(pid, self.date))
+        self.assertEqual(promoted_registry.promoted_object_ids(pid, self.date), [obj_id])
+
+    def test_registry_object_ids_on_mark(self) -> None:
+        pid = identity.allocate_tk_profile()
+        promoted_registry.mark_promoted(pid, self.date, "obj-20260904-0009")
+        self.assertEqual(
+            promoted_registry.promoted_object_ids(pid, self.date),
+            ["obj-20260904-0009"],
+        )
 
     def test_registry_ignores_blank(self) -> None:
         self.assertFalse(promoted_registry.was_promoted("", self.date))
