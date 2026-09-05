@@ -9,7 +9,8 @@
  * mỗi snapshot, đồng thời playlist HLS có EXT-X-PROGRAM-DATE-TIME. FE đọc wallclock
  * của khung hình đang phát rồi lấy snapshot khớp thời điểm đó.
  *
- * WebRTC (WHEP) không có PDT nhưng độ trễ chỉ ~300ms nên dùng snapshot mới nhất.
+ * WebRTC (WHEP) không có PDT — FE ước lượng wallclock (~400ms) gửi at_ms cho backend;
+ * fallback buffer FE chỉ dùng khi backend chưa aligned.
  */
 import type { VmsDetectionSnapshot } from '../services/vmsDetections.service'
 
