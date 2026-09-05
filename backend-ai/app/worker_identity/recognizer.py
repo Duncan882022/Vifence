@@ -174,6 +174,11 @@ def patrol_face_bbox_in_frame(
             continue
         if score <= best_score:
             continue
+        x1, y1 = max(0, int(x)), max(0, int(y))
+        x2 = min(crop_w, int(x + fw))
+        y2 = min(crop_h, int(y + fh))
+        if x2 - x1 < 8 or y2 - y1 < 8:
+            continue
         full_face = (
             px1 + x1,
             py1 + y1,
@@ -186,11 +191,6 @@ def patrol_face_bbox_in_frame(
             full_face,
             (px1, py1, px2, py2),
         ):
-            continue
-        x1, y1 = max(0, int(x)), max(0, int(y))
-        x2 = min(crop_w, int(x + fw))
-        y2 = min(crop_h, int(y + fh))
-        if x2 - x1 < 8 or y2 - y1 < 8:
             continue
         best_score = score
         best = full_face
