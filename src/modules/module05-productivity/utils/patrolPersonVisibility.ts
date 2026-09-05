@@ -143,6 +143,86 @@ function speckPersonBox(bbox: Bbox4, frameH: number): boolean {
   return ph / Math.max(frameH, 1) < SPECK_BOX_MAX_HEIGHT_RATIO
 }
 
+/** YOLO person nhầm yên/gương/thân xe — mirror `motorcycle_seat_like_fp_box` (BE). */
+export function patrolMotorcycleSeatLikeFpBox(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  const fw = Math.max(frameW, 1)
+  const fh = Math.max(frameH, 1)
+  const bwRatio = pw / fw
+  const bhRatio = ph / fh
+  const areaRatio = (pw * ph) / (fw * fh)
+  const cyRatio = ((y1 + y2) / 2) / fh
+
+  if (aspect < 1.12 && bhRatio < 0.26 && bwRatio >= 0.08) {
+    if (cyRatio >= 0.18 && cyRatio <= 0.88) return true
+  }
+  if (aspect < 0.82 && bhRatio < 0.22 && bwRatio >= 0.10) {
+    if (cyRatio < 0.55) return true
+  }
+  if (areaRatio > 0.14 && aspect < 0.95 && bhRatio < 0.42) return true
+  return false
+}
+
+function bboxIntersectionArea(a: Bbox4, b: Bbox4): number {
+  const ix1 = Math.max(a[0], b[0])
+  const iy1 = Math.max(a[1], b[1])
+  const ix2 = Math.min(a[2], b[2])
+  const iy2 = Math.min(a[3], b[3])
+  if (ix2 <= ix1 || iy2 <= iy1) return 0
+  return (ix2 - ix1) * (iy2 - iy1)
+}
+
+function bboxContainmentRatio(inner: Bbox4, outer: Bbox4): number {
+  const inter = bboxIntersectionArea(inner, outer)
+  const innerArea = Math.max((inner[2] - inner[0]) * (inner[3] - inner[1]), 1)
+  return inter / innerArea
+}
+
+function bboxIouSimple(a: Bbox4, b: Bbox4): number {
+  const inter = bboxIntersectionArea(a, b)
+  const areaA = Math.max(0, a[2] - a[0]) * Math.max(0, a[3] - a[1])
+  const areaB = Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1])
+  const union = areaA + areaB - inter
+  return union > 0 ? inter / union : 0
+}
+
+export function patrolPersonLikelyRiderOnVehicle(person: Bbox4, vehicle: Bbox4): boolean {
+  const [x1, y1, x2, y2] = person
+  const [vx1, vy1, vx2, vy2] = vehicle
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  if (aspect >= 1.42) return true
+  const vehH = vy2 - vy1
+  if (y1 < vy1 + vehH * 0.20 && aspect >= 1.05) return true
+  if (y2 < vy1 + vehH * 0.30) return true
+  return false
+}
+
+export function patrolPersonOverlapsVehicleFp(
+  personBox: Bbox4,
+  vehicleBoxes: Bbox4[],
+  _frameW: number,
+  _frameH: number,
+): boolean {
+  if (vehicleBoxes.length === 0) return false
+  for (const vb of vehicleBoxes) {
+    const iou = bboxIouSimple(personBox, vb)
+    const contain = bboxContainmentRatio(personBox, vb)
+    if (iou < 0.12 && contain < 0.42) continue
+    if (patrolPersonLikelyRiderOnVehicle(personBox, vb)) continue
+    return true
+  }
+  return false
+}
+
 function wideCrowdRiderBox(bbox: Bbox4, frameW: number, frameH: number): boolean {
   if (patrolPersonLegsOnlyBbox(bbox, frameW, frameH)) return false
   const [x1, y1, x2, y2] = bbox
@@ -292,6 +372,8 @@ export interface PatrolPersonDetectionGateInput {
   flycam?: boolean
   /** DR-* flycam tầm thấp — gate rộng như mũ */
   proximityFlycam?: boolean
+  /** Bbox xe COCO (pixel) — lọc person FP chồng xe máy đỗ */
+  vehicleBoxes?: Bbox4[]
 }
 
 /**
@@ -302,7 +384,14 @@ export interface PatrolPersonDetectionGateInput {
  * Ở đây chỉ loại mảnh chân/tay và khung không thể là người.
  */
 export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
-  const { bbox, frameW, frameH, flycam = false, proximityFlycam = false } = input
+  const {
+    bbox,
+    frameW,
+    frameH,
+    flycam = false,
+    proximityFlycam = false,
+    vehicleBoxes = [],
+  } = input
   if (frameW <= 0 || frameH <= 0) return false
   if (verticalStructureFpBox(bbox, frameW, frameH)) return false
   if (signboardLikeFpBox(bbox, frameW, frameH)) return false
@@ -314,9 +403,10 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
     if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
     return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
   }
-  // Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
   if (speckPersonBox(bbox, frameH)) return false
   if (patrolPersonOversizedDisplayBbox(bbox, frameW, frameH)) return false
+  if (patrolMotorcycleSeatLikeFpBox(bbox, frameW, frameH)) return false
+  if (patrolPersonOverlapsVehicleFp(bbox, vehicleBoxes, frameW, frameH)) return false
   if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
   return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
