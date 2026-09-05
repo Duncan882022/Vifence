@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { startWhepSubscriber, type WhepSubscriber } from '@/services/webrtc/whepClient'
 import { useHlsVideoSource, type VideoClockSource } from './useHlsVideoSource'
-import { WHEP_DISPLAY_WALLCLOCK_LAG_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
+import { getPatrolWhepDisplayWallclockMs } from '@/services/patrolRuntimeBridge'
 import {
   createPlaybackStallChecker,
   PLAYBACK_STALL_CHECK_MS,
@@ -24,7 +24,7 @@ const WHEP_NO_FRAME_FALLBACK_MS = 2500
 
 /** Wallclock ước lượng khung WHEP — backend cần at_ms để trả overlay_sync aligned. */
 export function getWhepDisplayWallclockMs(nowMs: number = Date.now()): number {
-  return nowMs - WHEP_DISPLAY_WALLCLOCK_LAG_MS
+  return getPatrolWhepDisplayWallclockMs(nowMs)
 }
 
 const whepVideoClock: VideoClockSource = {

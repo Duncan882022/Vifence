@@ -2,6 +2,7 @@
  * Runtime config từ backend — ROI lag, server clock.
  */
 import { fetchPatrol } from '@/services/patrolApiClient'
+import { WHEP_DISPLAY_WALLCLOCK_LAG_MS } from '@/modules/module05-productivity/data/patrolHelmetScope'
 
 export interface PatrolRuntimeSnapshot {
   liveRoiDelayMs: number
@@ -81,6 +82,40 @@ export function updatePatrolClientServerSkew(serverEmitMs: number | undefined): 
 export function getPatrolClientServerSkewMs(): number {
   return clientServerSkewMs
 }
+
+/** EMA độ trễ AI (server_emit − frame_wallclock) — ước lượng at_ms WHEP. */
+let aiPipelineLagMs = 400
+
+export function updatePatrolAiPipelineLag(
+  frameWallclockMs: number | undefined,
+  serverEmitMs: number | undefined,
+): void {
+  if (
+    frameWallclockMs == null
+    || serverEmitMs == null
+    || !Number.isFinite(frameWallclockMs)
+    || !Number.isFinite(serverEmitMs)
+    || frameWallclockMs <= 0
+    || serverEmitMs <= 0
+  ) {
+    return
+  }
+  const instant = serverEmitMs - frameWallclockMs
+  if (instant <= 0 || instant > 15_000) return
+  aiPipelineLagMs = aiPipelineLagMs * 0.82 + instant * 0.18
+}
+
+export function getPatrolAiPipelineLagMs(): number {
+  return aiPipelineLagMs
+}
+
+/** Wallclock khung WHEP ≈ now − playback lag − skew. Không cộng thêm AI lag. */
+export function getPatrolWhepDisplayWallclockMs(nowMs: number = Date.now()): number {
+  return nowMs - getPatrolClientServerSkewMs() - WHEP_PLAYBACK_LAG_MS
+}
+
+/** Playback lag WHEP/WebRTC (~300ms) — tách khỏi buffer HLS 5s. */
+export const WHEP_PLAYBACK_LAG_MS = WHEP_DISPLAY_WALLCLOCK_LAG_MS
 
 export function resolvePatrolSubjectAlias(subjectId: string): string {
   const key = subjectId.trim()

@@ -149,11 +149,13 @@ export function MobileCameraFeed({
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
       gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
+      vmsFeed.snapshot.frame_wallclock_ms,
     )
   }, [
     vmsPatrolRoiActive,
     cameraId,
     vmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.frame_wallclock_ms,
     vmsFeed.snapshot?.width,
     vmsFeed.snapshot?.height,
     vmsFeed.snapshot?.metrics,

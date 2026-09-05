@@ -1,9 +1,41 @@
 /** Patrol — gate hiển thị person HC-* (thân trên / cận mặt / đã có mã). */
 
+import { isNormalizedBbox } from '@/modules/module02-training/utils/videoOverlayCoords'
 import { isPatrolGalleryWorkerId } from './patrolIdentityEntity'
 import { PATROL_TIER_RANK, type PatrolTier } from './patrolTierTokens'
 
 export type Bbox4 = [number, number, number, number]
+
+/** Mirror `patrol_snapshot_bbox_needs_shrink` — YOLO crowd trả bbox phủ 60–80% khung. */
+export function patrolPersonOversizedDisplayBbox(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+  maxAreaRatio = 0.38,
+  minCrowdAreaRatio = 0.20,
+  minCrowdHeightRatio = 0.70,
+): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const normalized = isNormalizedBbox(bbox)
+  const minDim = normalized ? 1e-6 : 1
+  const pw = Math.max(x2 - x1, minDim)
+  const ph = Math.max(y2 - y1, minDim)
+  if (normalized) {
+    const areaRatio = pw * ph
+    const bhRatio = ph
+    if (areaRatio > maxAreaRatio) return true
+    // HC-01 live: bbox nhảy [0.7,0.2,0.8,0.5] → [0.6,0.1,0.9,0.9] — area ~0.24, cao 80%.
+    if (areaRatio > minCrowdAreaRatio && bhRatio > minCrowdHeightRatio) return true
+    return false
+  }
+  const fw = Math.max(frameW, 1)
+  const fh = Math.max(frameH, 1)
+  const areaRatio = (pw * ph) / (fw * fh)
+  const bhRatio = ph / fh
+  if (areaRatio > maxAreaRatio) return true
+  if (areaRatio > minCrowdAreaRatio && bhRatio > minCrowdHeightRatio) return true
+  return false
+}
 
 function clipBoxToFrame(box: Bbox4, frameW: number, frameH: number): Bbox4 {
   const [x1, y1, x2, y2] = box
@@ -284,6 +316,7 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
   }
   // Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
   if (speckPersonBox(bbox, frameH)) return false
+  if (patrolPersonOversizedDisplayBbox(bbox, frameW, frameH)) return false
   if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
   return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)

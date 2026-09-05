@@ -127,6 +127,28 @@ export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
   matchIouMin: 0.10,
   matchCenterRatio: 1.30,
   matchSizeRatioMin: 0.28,
+  /**
+   * VMS poll ~280ms + YOLO dao động — EMA=1 snap mỗi nhịp gây bbox nhảy loạn.
+   * Local publisher (HC-02 /phat-song) dùng profile riêng mượt hơn nữa.
+   */
+  displayEmaAlpha: 0.78,
+  displayEmaGlideAlpha: 0.86,
+  maxPredictMs: 520,
+  minMeasureGain: 0.90,
+  anchoredMinMeasureGain: 0.88,
+}
+
+/**
+ * HC-02 publish từ chính máy — analyze JPEG ~280–450ms sau khi chụp khung.
+ * Snap EMA=1 gây bbox nhảy loạn mỗi nhịp response; làm mượt + hạn chế predict.
+ */
+export const PATROL_PERSON_ROI_PROFILE_LOCAL: PatrolPersonRoiConfig = {
+  ...PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  displayEmaAlpha: 0.72,
+  displayEmaGlideAlpha: 0.82,
+  maxPredictMs: 480,
+  minMeasureGain: 0.88,
+  anchoredMinMeasureGain: 0.92,
 }
 
 /**
@@ -153,7 +175,11 @@ export const PATROL_PERSON_ROI_PROFILE_FLYCAM: PatrolPersonRoiConfig = {
 export function resolvePatrolPersonRoiConfig(
   cameraId: string,
   flightMode?: PatrolFlightMode | null,
+  options?: { localPublisher?: boolean },
 ): PatrolPersonRoiConfig {
+  if (options?.localPublisher && cameraId.startsWith('HC-')) {
+    return PATROL_PERSON_ROI_PROFILE_LOCAL
+  }
   if (cameraId.startsWith('DR-')) {
     return flightMode === 'proximity'
       ? PATROL_PERSON_ROI_PROFILE_BODYCAM
