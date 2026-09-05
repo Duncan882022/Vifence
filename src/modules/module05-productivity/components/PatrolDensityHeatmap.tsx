@@ -254,7 +254,7 @@ export function PatrolDensityHeatmap({
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
-  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
 
   const hc02Helmet = workforce.helmets['HC-02']
 
@@ -417,7 +417,7 @@ export function PatrolDensityHeatmap({
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
   useEffect(() => {
-    if (!layers.polygon) setHoveredZoneId(null)
+    if (!layers.polygon) setSelectedZoneId(null)
   }, [layers.polygon])
 
   const heatmapStats = useMemo(
@@ -431,16 +431,16 @@ export function PatrolDensityHeatmap({
   )
 
   const displayStats = useMemo(
-    () => (hoveredZoneId
-      ? buildPatrolHeatmapStatsForZone(statsPresences, hoveredZoneId)
+    () => (selectedZoneId
+      ? buildPatrolHeatmapStatsForZone(statsPresences, selectedZoneId)
       : heatmapStats),
-    [hoveredZoneId, statsPresences, heatmapStats],
+    [selectedZoneId, statsPresences, heatmapStats],
   )
 
   const statsTitle = useMemo(() => {
-    if (!hoveredZoneId) return PATROL_SITE_NAME
-    return PATROL_GPS_ZONES.find(z => z.zone_id === hoveredZoneId)?.name ?? PATROL_SITE_NAME
-  }, [hoveredZoneId])
+    if (!selectedZoneId) return PATROL_SITE_NAME
+    return PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)?.name ?? PATROL_SITE_NAME
+  }, [selectedZoneId])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -564,8 +564,8 @@ export function PatrolDensityHeatmap({
           showZoneDividers={false}
           showZonePolygons={layers.polygon}
           interactiveZones={layers.polygon}
-          onZoneHover={setHoveredZoneId}
-          onZoneSelect={() => setHoveredZoneId(null)}
+          selectedZoneId={selectedZoneId}
+          onZoneSelect={setSelectedZoneId}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
           followLiveGps={showFlymap

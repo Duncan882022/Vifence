@@ -123,21 +123,23 @@ function zoneTierStyle(feature?: Feature<GeoJsonPolygon, ZoneProperties>) {
   }
 }
 
-/** Fill nhẹ theo màu khu khi hover — viền giữ màu zone. */
+/** Fill rất nhạt theo màu khu khi được chọn — viền giữ màu zone. */
 function zoneInteractiveStyle(
   feature?: Feature<GeoJsonPolygon, ZoneProperties>,
+  selectedZoneId?: string | null,
   hoveredZoneId?: string | null,
 ) {
   if (!feature) return {}
   const { visited, borderColor, tier, id: zoneId } = feature.properties
-  const hovered = zoneId === hoveredZoneId
+  const selected = zoneId === selectedZoneId
+  const hovered = zoneId === hoveredZoneId && !selected
 
   return {
     fillColor: borderColor,
-    fillOpacity: hovered ? 0.2 : (visited ? 0.12 : 0.08),
+    fillOpacity: selected ? 0.14 : hovered ? 0.09 : (visited ? 0.08 : 0.05),
     color: borderColor,
-    weight: hovered ? 2.5 : (tier === 'primary' ? 2.5 : 2),
-    opacity: hovered ? 0.98 : 0.85,
+    weight: selected ? 2.5 : (tier === 'primary' ? 2.5 : 2),
+    opacity: selected ? 0.98 : 0.85,
   }
 }
 
@@ -560,10 +562,9 @@ export interface PatrolGeoHeatmapProps {
   routeDeviceIds?: string[]
   /** Chế độ bay flycam — accent pin/route tầm cao sky. */
   flightModeByCamera?: Record<string, PatrolFlightMode>
-  /** Hover khu — fill nhẹ + callback stats overlay. */
+  /** Click chọn khu — fill nhạt + stats overlay theo khu. */
   interactiveZones?: boolean
-  onZoneHover?: (zoneId: string | null) => void
-  /** Click nền bản đồ (ngoài khu) — thường reset về stats toàn site. */
+  selectedZoneId?: string | null
   onZoneSelect?: (zoneId: string | null) => void
 }
 
@@ -601,7 +602,7 @@ export function PatrolGeoHeatmap({
   routeDeviceIds,
   flightModeByCamera,
   interactiveZones = false,
-  onZoneHover,
+  selectedZoneId = null,
   onZoneSelect,
 }: PatrolGeoHeatmapProps) {
   const [expandedZoneId, setExpandedZoneId] = useState<string | null>(null)
@@ -640,9 +641,9 @@ export function PatrolGeoHeatmap({
     geoJsonRef.current.eachLayer(layer => {
       const path = layer as L.Path & { feature?: Feature<GeoJsonPolygon, ZoneProperties> }
       if (!path.feature) return
-      path.setStyle(zoneInteractiveStyle(path.feature, hoveredZoneId))
+      path.setStyle(zoneInteractiveStyle(path.feature, selectedZoneId, hoveredZoneId))
     })
-  }, [interactiveZones, hoveredZoneId, geoJsonKey])
+  }, [interactiveZones, selectedZoneId, hoveredZoneId, geoJsonKey])
 
   const zoneMap = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
 
@@ -801,12 +802,8 @@ export function PatrolGeoHeatmap({
             openId={openHelmetTipId}
             onDismiss={() => setOpenHelmetTipId(null)}
             onBackgroundClick={
-              interactiveZones
-                ? () => {
-                    setHoveredZoneId(null)
-                    onZoneHover?.(null)
-                    onZoneSelect?.(null)
-                  }
+              interactiveZones && onZoneSelect
+                ? () => onZoneSelect(null)
                 : undefined
             }
           />
@@ -897,6 +894,7 @@ export function PatrolGeoHeatmap({
                   (interactiveZones
                     ? (feature) => zoneInteractiveStyle(
                       feature as Feature<GeoJsonPolygon, ZoneProperties>,
+                      selectedZoneId,
                       hoveredZoneId,
                     )
                     : zoneTierStyle) as Parameters<typeof GeoJSON>[0]['style']
@@ -904,21 +902,23 @@ export function PatrolGeoHeatmap({
                 onEachFeature={(feature, lyr) => {
                   const zoneFeature = feature as Feature<GeoJsonPolygon, ZoneProperties>
                   const props = zoneFeature.properties
-                  if (interactiveZones) {
+                  if (interactiveZones && onZoneSelect) {
                     ;(lyr as L.Path).options.interactive = true
                     lyr.on({
                       mouseover: (e) => {
                         setHoveredZoneId(props.id)
-                        onZoneHover?.(props.id)
                         const layer = e.target as L.Path
-                        layer.setStyle(zoneInteractiveStyle(zoneFeature, props.id))
+                        layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, props.id))
                         layer.bringToFront()
                       },
                       mouseout: (e) => {
                         setHoveredZoneId(null)
-                        onZoneHover?.(null)
                         const layer = e.target as L.Path
-                        layer.setStyle(zoneInteractiveStyle(zoneFeature, null))
+                        layer.setStyle(zoneInteractiveStyle(zoneFeature, selectedZoneId, null))
+                      },
+                      click: (e) => {
+                        L.DomEvent.stopPropagation(e)
+                        onZoneSelect(props.id)
                       },
                     })
                     return
