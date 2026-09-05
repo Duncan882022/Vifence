@@ -407,6 +407,25 @@ def _assign_patrol_person_identity(
     if resolved.worker_id:
         _attach_promoted_object_fields(person_det, resolved.worker_id)
 
+    from .tier_snapshot import attach_tier_snapshot_to_detection
+
+    promoted_from = list(person_det.promoted_from or [])
+    attach_tier_snapshot_to_detection(
+        person_det,
+        tier=display_tier,
+        tier_since=resolved.tier_since,
+        camera_id=camera_id,
+        track_id=track_id,
+        worker_id=resolved.worker_id or worker_id,
+        worker_name=resolved.worker_name,
+        face_eligible=bool(person_det.face_eligible),
+        confidence=float(person_det.confidence or 0.0),
+        face_quality=float(_face_score or 0.0),
+        face_match_confidence=getattr(person_det, "face_match_confidence", None),
+        promoted_from=promoted_from,
+        bbox=list(person_det.bbox or []),
+    )
+
     # Ghi vào kho tuần tra (SQLite).
     # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được
     # serialize thẳng xuống trình duyệt.

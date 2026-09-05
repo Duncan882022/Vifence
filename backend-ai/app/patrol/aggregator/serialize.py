@@ -16,6 +16,7 @@ def build_event_payload(
     session: TrackSession,
     *,
     tier_at_observation: str | None = None,
+    tier_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     event_id = f"evt-{session.camera_id}-{session.track_id}-{int(session.started_at)}"
     payload: dict[str, Any] = {
@@ -31,7 +32,13 @@ def build_event_payload(
             "duration_seconds": int(round(session.duration_seconds)),
         },
     }
-    tier = (tier_at_observation or "").strip()
-    if tier:
-        payload["tier_at_observation"] = tier
+    if tier_snapshot:
+        payload["tier_snapshot"] = tier_snapshot
+        tier = str(tier_snapshot.get("tier") or "").strip()
+        if tier:
+            payload["tier_at_observation"] = tier
+    else:
+        tier = (tier_at_observation or "").strip()
+        if tier:
+            payload["tier_at_observation"] = tier
     return payload

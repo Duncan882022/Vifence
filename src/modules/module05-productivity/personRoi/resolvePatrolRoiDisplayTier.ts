@@ -1,12 +1,9 @@
-import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
-import { resolvePatrolRoiObjectCode } from './resolvePatrolRoiDisplayLabel'
 import type { PersonRoiTier } from './types'
+import { resolvePatrolTier } from '../utils/resolvePatrolTier'
+import type { PatrolTierSnapshot } from '../types/patrolTierSnapshot'
 
 /**
- * Tier hiển thị trên ROI — đồng bộ tab Sự kiện (Người cần face_eligible).
- *
- * Đã ghi hồ sơ từ obj-*: ROI hiển thị tầng Đối tượng + mã obj gốc, không badge "Người".
- * Định danh gallery luôn hiển thị tím dù quay lưng.
+ * Tier hiển thị trên ROI — đọc tier_snapshot, không hạ person→object.
  */
 export function resolvePatrolRoiDisplayTier(
   tier: PersonRoiTier,
@@ -14,22 +11,15 @@ export function resolvePatrolRoiDisplayTier(
     faceEligible?: boolean
     workerId?: string | null
     promotedFrom?: string[]
+    tierSnapshot?: PatrolTierSnapshot | null
   },
 ): PersonRoiTier {
-  if (tier === 'identity') return 'identity'
-
-  const objectCode = resolvePatrolRoiObjectCode({
+  return resolvePatrolTier({
+    tierSnapshot: opts?.tierSnapshot ?? undefined,
+    tier,
+    workerId: opts?.workerId,
     promotedFrom: opts?.promotedFrom,
-    workerId: opts?.workerId ?? undefined,
+    faceEligible: opts?.faceEligible,
+    surface: 'live-roi',
   })
-  if (objectCode && tier === 'person') {
-    return 'object'
-  }
-
-  if (tier === 'person') {
-    if (opts?.faceEligible) return 'person'
-    if (isPatrolGalleryWorkerId(opts?.workerId)) return 'person'
-    return 'object'
-  }
-  return 'object'
 }

@@ -54,6 +54,65 @@ def _person_card_eligible(
     return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
 
 
+def _tier_rank_value(tier: str | None) -> int:
+    return {"object": 0, "person": 1, "identity": 2}.get((tier or "").strip(), 0)
+
+
+def _merge_tier_ever(current: str | None, new_tier: str) -> str:
+    cur = (current or "object").strip() or "object"
+    nt = (new_tier or "object").strip() or "object"
+    return nt if _tier_rank_value(nt) >= _tier_rank_value(cur) else cur
+
+
+def _upsert_event_tier_ever(
+    conn: Any,
+    date: str,
+    pers_id: str,
+    tier: str,
+    tier_snapshot_json: str | None = None,
+) -> None:
+    row = conn.execute(
+        "SELECT tier_ever FROM daily_events WHERE event_date = ? AND pers_id = ?",
+        (date, pers_id),
+    ).fetchone()
+    if row is None:
+        return
+    merged = _merge_tier_ever(row["tier_ever"] if row else None, tier)
+    if tier_snapshot_json:
+        conn.execute(
+            "UPDATE daily_events SET tier_ever = ?, tier_snapshot_json = ?"
+            " WHERE event_date = ? AND pers_id = ?",
+            (merged, tier_snapshot_json, date, pers_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE daily_events SET tier_ever = ? WHERE event_date = ? AND pers_id = ?",
+            (merged, date, pers_id),
+        )
+
+
+def _split_appearance_at_promote(
+    conn: Any,
+    date: str,
+    obj_id: str,
+    pers_id: str,
+    ts: float,
+) -> None:
+    """Đóng segment object-phase tại thời điểm thăng hạng — không ghi đè tier."""
+    row = conn.execute(
+        "SELECT * FROM appearances WHERE event_date = ? AND subject_id = ?"
+        " AND started_at <= ? AND ended_at >= ?"
+        " ORDER BY started_at DESC LIMIT 1",
+        (date, obj_id, ts, ts),
+    ).fetchone()
+    if row is None:
+        return
+    conn.execute(
+        "UPDATE appearances SET ended_at = ? WHERE id = ?",
+        (ts, row["id"]),
+    )
+
+
 def _should_refresh_presence(
     row,
     ts: float,
@@ -323,6 +382,8 @@ def touch_person_event(
                 snapshot_path=appearance_snapshot,
                 new_encounter=seen_since is not None,
             )
+        tier = "identity" if is_identified else "person"
+        _upsert_event_tier_ever(conn, date, pid, tier)
 
 
 def _appearance_time_overlap_ratio(a: dict[str, Any], b: dict[str, Any]) -> float:
@@ -583,6 +644,7 @@ def promote_object(
                 ),
             )
 
+        _split_appearance_at_promote(conn, date, obj_id, pid, ts)
         conn.execute(
             "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
             (pid, date, obj_id),
@@ -596,6 +658,19 @@ def promote_object(
             " WHERE event_date = ? AND obj_id = ?",
             (pid, ts, date, obj_id),
         )
+        import json
+
+        from .tier_snapshot import build_tier_snapshot
+
+        tier_snap = build_tier_snapshot(
+            tier="person",
+            tier_since=ts,
+            subject_id=pid,
+            promoted_from=[obj_id],
+            promoted_at=ts,
+            tier_source="promote",
+        )
+        _upsert_event_tier_ever(conn, date, pid, "person", json.dumps(tier_snap.to_payload_dict()))
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
             " WHERE pers_id = ?",
@@ -613,7 +688,7 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
     d = date or db.today_vn()
     rows = db.query(
         "SELECT e.event_date, e.pers_id, e.first_seen, e.last_seen,"
-        "       e.snapshot_path, e.snapshot_score,"
+        "       e.snapshot_path, e.snapshot_score, e.tier_ever, e.tier_snapshot_json,"
         "       p.status, p.full_name, p.employee_code, p.contractor,"
         # Thẻ này vốn là Đối tượng nào — để giao diện đánh dấu "vừa thăng hạng".
         # Không có mốc này thì người xem không phân biệt được thẻ Người mang ảnh
@@ -808,6 +883,11 @@ def _tier_from_payload(raw: str | None) -> str | None:
 
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
+            snap = parsed.get("tier_snapshot")
+            if isinstance(snap, dict):
+                tier = str(snap.get("tier") or "").strip()
+                if tier in ("object", "person", "identity"):
+                    return tier
             tier = str(parsed.get("tier_at_observation") or "").strip()
             if tier in ("object", "person", "identity"):
                 return tier

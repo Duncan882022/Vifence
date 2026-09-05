@@ -238,7 +238,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
       return
     }
     const stage = resolvePatrolPersonStage(event)
-    if (stage !== 'person' && stage !== 'profile' && stage !== 'object') {
+    if (stage !== 'person' && stage !== 'profile') {
       setAppearanceSegments([])
       setAppearancesLoading(false)
       return
@@ -412,9 +412,9 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
   const modalTitle = (stage === 'person' || stage === 'profile')
     ? summary.cardDisplay.title
     : event.violationLabel
-  const hasAppearanceHistory = appearanceSegments.length > 0
-  const showAppearanceHistory = (stage === 'person' || stage === 'profile' || stage === 'object')
-    && (appearancesLoading || hasAppearanceHistory)
+  const showAppearanceHistory = (stage === 'person' || stage === 'profile')
+    && appearanceSegments.length >= 2
+    && (appearancesLoading || appearanceSegments.length > 0)
   const historySectionTitle = 'Lịch sử xuất hiện'
   const showSnapshotHero = Boolean(faceGalleryOpen && selectedFaceUrl)
     || Boolean(activeSnapshotUrl)
@@ -571,7 +571,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                   {historySectionTitle}
                 </span>
               </div>
-              {appearancesLoading && !hasAppearanceHistory ? (
+              {appearancesLoading && appearanceSegments.length === 0 ? (
                 <p className="text-[9px] text-muted-foreground/70">Đang tải…</p>
               ) : (
                 <div className="space-y-1.5 max-h-[min(42vh,320px)] overflow-y-auto overscroll-y-contain pr-0.5">

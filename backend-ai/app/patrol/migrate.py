@@ -296,3 +296,23 @@ def migrate_to_v10(conn: sqlite3.Connection) -> None:
 
     conn.execute("PRAGMA user_version=10")
     conn.commit()
+
+
+def migrate_to_v11(conn: sqlite3.Connection) -> None:
+    """TierSnapshot frozen trên thẻ sự kiện — tier_ever monotonic."""
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version >= 11:
+        return
+
+    ev_cols = {
+        str(r[1]) for r in conn.execute("PRAGMA table_info(daily_events)").fetchall()
+    }
+    for name, typedef in (
+        ("tier_ever", "TEXT"),
+        ("tier_snapshot_json", "TEXT"),
+    ):
+        if name not in ev_cols:
+            conn.execute(f"ALTER TABLE daily_events ADD COLUMN {name} {typedef}")
+
+    conn.execute("PRAGMA user_version=11")
+    conn.commit()

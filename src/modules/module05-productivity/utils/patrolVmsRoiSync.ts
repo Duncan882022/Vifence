@@ -58,6 +58,7 @@ export function gateVmsPatrolPersonDetections(
       face_eligible: d.face_eligible,
       promoted_from_object: d.promoted_from_object,
       promoted_from: d.promoted_from,
+      tier_snapshot: (d as { tier_snapshot?: unknown }).tier_snapshot,
     }))
     .filter(d => {
       if (d.behavior !== 'person') return false

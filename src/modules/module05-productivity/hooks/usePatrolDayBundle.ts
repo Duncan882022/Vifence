@@ -8,11 +8,11 @@ import {
   type PatrolDayBundle,
   type PatrolDayStats,
 } from '../services/patrolDayEvents.service'
+import { tierEverFromPersonRow } from '../utils/resolvePatrolTier'
 import {
   dedupePatrolEventsStrictByEntity,
   filterPatrolDayObjectsForDisplay,
   filterPatrolObjectEventsWithLinkedPerson,
-  PATROL_OBJECT_FACE_SNAPSHOT_SCORE,
 } from '../utils/patrolDayObjectFilter'
 import { patrolGalleryWorkerIdFromEmployeeCode } from '../utils/patrolIdentityEntity'
 import { applyManualIdentityToPatrolEvents } from '../utils/patrolManualIdentityUi'
@@ -54,6 +54,8 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
   const displayObjects = filterPatrolDayObjectsForDisplay(bundle.objects, bundle.persons)
   const personEvents: PatrolEvent[] = bundle.persons.map(row => {
     const identified = row.status === 'identified'
+    const tier = tierEverFromPersonRow(row)
+    const stage = tier === 'identity' ? 'profile' : tier === 'person' ? 'person' : 'object'
     const camera = resolvePatrolSubjectCameraRef(cameraBySubject, row.persId)
     const trackWorkerId = row.trackWorkerId?.trim()
       || (isPatrolTrackWorkerId(row.persId) ? row.persId : undefined)
@@ -85,11 +87,9 @@ function bundleToEvents(bundle: PatrolDayBundle): PatrolEvent[] {
       gps,
       snapshotUrl: row.snapshotUrl,
       snapshotScore: row.snapshotScore,
-      stage: identified
-        ? 'profile'
-        : (row.snapshotScore ?? 0) >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE
-          ? 'person'
-          : 'object',
+      stage,
+      tierEver: row.tierEver,
+      tierSnapshot: row.tierSnapshot,
       employeeCode: row.employeeCode,
       trackWorkerId,
       promotedFrom: row.promotedFrom,

@@ -367,6 +367,18 @@ def day_appearances(
     return {"ok": True, "subject_id": sid, "date": date or db.today_vn(), **result}
 
 
+def _parse_tier_snapshot_json(raw: Any) -> dict[str, Any] | None:
+    if not raw:
+        return None
+    try:
+        import json
+
+        parsed = json.loads(str(raw))
+        return parsed if isinstance(parsed, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 @router.get("/day/bundle")
 def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Gộp stats + events + objects + presences — một transaction chỉ đọc.
@@ -403,6 +415,8 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "gps_lng": gps_map.get(str(r["pers_id"]), (None, None))[1],
             "promoted_from": r.get("promoted_from") or [],
             "promoted_at": r.get("promoted_at"),
+            "tier_ever": r.get("tier_ever"),
+            "tier_snapshot": _parse_tier_snapshot_json(r.get("tier_snapshot_json")),
         }
         for r in events
     ]

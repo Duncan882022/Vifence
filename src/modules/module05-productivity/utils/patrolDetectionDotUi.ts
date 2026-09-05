@@ -6,7 +6,7 @@ import { isPatrolObjectId, isPatrolPersId, isPatrolTrackWorkerId } from './patro
 /** Flymap — một màu, không phân đối tượng / người / định danh. */
 export const PATROL_FLYMAP_DOT_HEX = '#38bdf8'
 
-/** Màu chấm heatmap — lấy từ PATROL_TIER_TOKENS (green / sky / violet). */
+/** Màu chấm heatmap — lấy từ PATROL_TIER_TOKENS (stone / orange / green). */
 export const PATROL_HEATMAP_DOT_HEX: Record<PatrolTier, string> = {
   object: PATROL_TIER_TOKENS.object.heatmapDotHex,
   person: PATROL_TIER_TOKENS.person.heatmapDotHex,
