@@ -244,6 +244,10 @@ export function advancePersonRoiTracks(
   const applyMeasurement = (track: PersonRoiTrack, det: PersonRoiDetection) => {
     const anchorKey = personRoiAnchorKey(det) ?? track.anchorKey
     const gainOverride = anchorKey ? cfg.anchoredMinMeasureGain : undefined
+    // SORT: predict tới thời điểm đo rồi mới update — bám người đi ngang giữa poll.
+    if (dtMs > 16) {
+      track.kalman.predict(dtMs)
+    }
     track.kalman.update(det.bbox, dtMs, gainOverride)
     // Backend ước lượng vận tốc trên chuỗi frame liên tục với dt đều; FE chỉ có
     // nhịp snapshot tới nơi, vốn dao động theo mạng. Có số của backend thì dùng.
