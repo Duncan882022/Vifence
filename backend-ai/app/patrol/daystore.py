@@ -293,12 +293,14 @@ def touch_person_event(
             )
             if write:
                 if keep_new and card_eligible:
+                    prev_snap = str(row["snapshot_path"] or "").strip() or None
+                    merged_snap = keep_snapshot_for_luot(prev_snap, snapshot_path)
                     conn.execute(
                         "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
                         " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
-                        (ts, snapshot_path, snapshot_score, date, pid),
+                        (ts, merged_snap, snapshot_score, date, pid),
                     )
-                    appearance_snapshot = snapshot_path
+                    appearance_snapshot = merged_snap
                 else:
                     conn.execute(
                         "UPDATE daily_events SET last_seen = ?"
@@ -448,19 +450,17 @@ def merge_pers_event_cards(
             "SELECT * FROM daily_events WHERE event_date = ? AND pers_id = ?",
             (date, src),
         ).fetchone()
-        if src_row is None:
-            return
         dst_row = conn.execute(
             "SELECT * FROM daily_events WHERE event_date = ? AND pers_id = ?",
             (date, dst),
         ).fetchone()
-        if dst_row is None:
+        if dst_row is None and src_row is not None:
             conn.execute(
                 "UPDATE daily_events SET pers_id = ?"
                 " WHERE event_date = ? AND pers_id = ?",
                 (dst, date, src),
             )
-        else:
+        elif src_row is not None and dst_row is not None:
             better = float(src_row["snapshot_score"]) > float(dst_row["snapshot_score"])
             conn.execute(
                 "UPDATE daily_events SET first_seen = ?, last_seen = ?,"
@@ -484,6 +484,40 @@ def merge_pers_event_cards(
             " WHERE event_date = ? AND subject_id = ?",
             (dst, date, src),
         )
+        conn.execute(
+            "UPDATE track_profile_bindings SET pers_id = ? WHERE pers_id = ?",
+            (dst, src),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO person_aliases(old_pers_id, pers_id, merged_at)"
+            " VALUES(?,?,?)",
+            (src, dst, ts),
+        )
+        from ..patrol_ids import is_anonymous_track_id
+
+        if is_anonymous_track_id(src):
+            identity.bind_tk_profile(src, dst, now=ts)
+        _renumber_presence_seq(conn, date, dst)
+
+    coalesce_subject_appearances(dst, date)
+
+
+def _snapshot_basename(path: str | None) -> str:
+    return (path or "").rsplit("/", 1)[-1]
+
+
+def _is_object_snapshot_path(path: str | None) -> bool:
+    name = _snapshot_basename(path)
+    return bool(name.startswith("obj-"))
+
+
+def _person_card_snap_from_object(obj_row: dict[str, Any]) -> tuple[str | None, float]:
+    """Không gắn JPG obj-* lên thẻ Người — chờ reshoot tk cùng lượt."""
+    path = str(obj_row.get("snapshot_path") or "").strip() or None
+    score = float(obj_row.get("snapshot_score") or 0)
+    if _is_object_snapshot_path(path):
+        return None, 0.0
+    return path, score
 
 
 def promote_object(
@@ -492,12 +526,7 @@ def promote_object(
     *,
     now: float | None = None,
 ) -> None:
-    """Đối tượng bắt được mặt → dồn sang thẻ của Người.
-
-    Người này có thể đã có thẻ hôm nay (gặp ở camera khác lúc trước). Khi đó
-    phải **gộp** chứ không thể dời: khoá chính chặn hai thẻ cùng ngày. Đúng
-    nghiệp vụ — gặp lại thì vào lịch sử, không đẻ thẻ mới.
-    """
+    """Đối tượng bắt được mặt → dồn sang thẻ của Người."""
     ts = now or time.time()
     date = db.today_vn(ts)
     pid = identity.resolve_alias(pers_id)
@@ -515,6 +544,8 @@ def promote_object(
             (date, pid),
         ).fetchone()
 
+        obj_snap, obj_score = _person_card_snap_from_object(dict(obj))
+
         if existing is None:
             conn.execute(
                 "INSERT INTO daily_events"
@@ -525,12 +556,19 @@ def promote_object(
                     pid,
                     obj["first_seen"],
                     max(float(obj["last_seen"]), ts),
-                    obj["snapshot_path"],
-                    obj["snapshot_score"],
+                    obj_snap,
+                    obj_score,
                 ),
             )
         else:
-            better = float(obj["snapshot_score"]) > float(existing["snapshot_score"])
+            better = obj_score > float(existing["snapshot_score"] or 0)
+            incoming = obj_snap if better else existing["snapshot_path"]
+            merged = keep_snapshot_for_luot(existing["snapshot_path"], incoming)
+            if _is_object_snapshot_path(merged):
+                merged = existing["snapshot_path"]
+            merged_score = max(float(existing["snapshot_score"] or 0), obj_score)
+            if not merged or _is_object_snapshot_path(merged):
+                merged_score = float(existing["snapshot_score"] or 0)
             conn.execute(
                 "UPDATE daily_events SET first_seen = ?, last_seen = ?,"
                 " snapshot_path = ?, snapshot_score = ?"
@@ -538,25 +576,21 @@ def promote_object(
                 (
                     min(float(existing["first_seen"]), float(obj["first_seen"])),
                     max(float(existing["last_seen"]), float(obj["last_seen"]), ts),
-                    obj["snapshot_path"] if better else existing["snapshot_path"],
-                    max(float(obj["snapshot_score"]), float(existing["snapshot_score"])),
+                    merged,
+                    merged_score,
                     date,
                     pid,
                 ),
             )
 
-        # Lịch sử xuất hiện của Đối tượng thuộc về Người kể từ giờ.
         conn.execute(
             "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
             (pid, date, obj_id),
         )
         _renumber_presence_seq(conn, date, pid)
-        # Nhãn ROI trên camera cần biết ngay thẻ này vừa lên hạng.
         from .promoted_registry import mark_promoted
 
         mark_promoted(pid, date)
-        # Đánh dấu chứ không xoá: mã obj-* đã đi vào ảnh chụp và báo cáo xuất ra
-        # trước lúc thăng hạng, xoá dòng là những chỗ đó trỏ vào khoảng không.
         conn.execute(
             "UPDATE daily_objects SET promoted_to = ?, promoted_at = ?"
             " WHERE event_date = ? AND obj_id = ?",

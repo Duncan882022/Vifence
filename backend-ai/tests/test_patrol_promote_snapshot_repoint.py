@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import unittest
 
-from app.patrol.daystore import keep_snapshot_for_luot
+from app.patrol.daystore import (
+    _person_card_snap_from_object,
+    keep_snapshot_for_luot,
+)
 
 DATE = "2026-09-04"
 
@@ -74,6 +77,25 @@ class KeepSnapshotForLuotTests(unittest.TestCase):
             f"{DATE}/tk-0000001-2.jpg",
         )
         self.assertIsNone(keep_snapshot_for_luot(None, None))
+
+
+class PersonCardSnapFromObjectTests(unittest.TestCase):
+    def test_skips_obj_jpg_on_person_card(self) -> None:
+        snap, score = _person_card_snap_from_object({
+            "snapshot_path": f"{DATE}/obj-20260904-0007-1.jpg",
+            "snapshot_score": 0.78,
+        })
+        self.assertIsNone(snap)
+        self.assertEqual(score, 0.0)
+
+    def test_keeps_tk_jpg(self) -> None:
+        path = f"{DATE}/tk-0000071-5.jpg"
+        snap, score = _person_card_snap_from_object({
+            "snapshot_path": path,
+            "snapshot_score": 2.1,
+        })
+        self.assertEqual(snap, path)
+        self.assertEqual(score, 2.1)
 
     def test_legacy_names_without_luot_stay_frozen(self) -> None:
         """Ảnh cũ đặt tên `{subject}.jpg` không có khoá lượt — không suy đoán."""

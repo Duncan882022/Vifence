@@ -305,9 +305,18 @@ def vertical_structure_fp_box(
     aspect = ph / pw
     bw_ratio = pw / max(float(frame_w), 1.0)
     bh_ratio = ph / max(float(frame_h), 1.0)
+    cx_ratio = ((x1 + x2) / 2.0) / max(float(frame_w), 1.0)
     if aspect > 2.6 and bw_ratio < 0.075 and bh_ratio > 0.10:
         return True
     if aspect < 0.30 and bh_ratio < 0.055 and bw_ratio > 0.20:
+        return True
+    # Trụ/thùng điện sát vỉa hè — YOLO FP tĩnh (obj0077: hộp vuông mép khung).
+    if (
+        0.85 <= aspect <= 2.4
+        and bw_ratio < 0.11
+        and 0.08 <= bh_ratio <= 0.38
+        and (cx_ratio > 0.68 or cx_ratio < 0.20)
+    ):
         return True
     return False
 

@@ -19,6 +19,7 @@ from app.patrol_person_visibility import (
     resolve_patrol_person_snapshot_bbox,
     signboard_like_fp_box,
     upper_body_third_with_head_visible,
+    vertical_structure_fp_box,
     _is_edge_sliver_person_box,
 )  # noqa: E402
 
@@ -147,6 +148,13 @@ class TestPatrolPersonVisibility(unittest.TestCase):
                 person, fw, fh, face_quality=0.52, face_eligible=True,
             ),
         )
+
+    def test_utility_pedestal_edge_rejected(self):
+        """Trụ/thùng điện sát mép — FP obj0077."""
+        fw, fh = 1290, 658
+        pole = (fw * 0.82, fh * 0.35, fw * 0.92, fh * 0.72)
+        self.assertTrue(vertical_structure_fp_box(pole, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(pole, fw, fh))
 
 
 if __name__ == "__main__":

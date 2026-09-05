@@ -37,6 +37,41 @@ def _frame_size_from_obs(obs: ObservationInput) -> tuple[int, int]:
     return 1280, 720
 
 
+def _resolve_tier_at_observation(
+    subject_id: str,
+    *,
+    tier_at: str | None,
+    shot_face_eligible: bool,
+    worker_id: str | None,
+) -> str:
+    """Tier tại thời điểm gặm — fallback khi lifecycle_tier rỗng (popup lịch sử)."""
+    known = (tier_at or "").strip()
+    if known in ("object", "person", "identity"):
+        return known
+
+    sid = (subject_id or "").strip()
+    if sid.startswith("obj-"):
+        return "object"
+
+    from ...patrol_ids import is_person_subject_id
+
+    if is_person_subject_id(sid):
+        from .. import identity
+
+        person = identity.get_person(identity.resolve_alias(sid))
+        if person and person.get("status") == identity.STATUS_IDENTIFIED:
+            return "identity"
+        if worker_id:
+            from ...patrol_identity_lifecycle import tier_for_worker_id
+
+            inferred = tier_for_worker_id(worker_id)
+            if inferred == "identity":
+                return "identity"
+        return "person" if shot_face_eligible else "object"
+
+    return "object"
+
+
 def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
     """Chặn ghi thẻ Đối tượng cho biển hiệu / vật tĩnh YOLO nhầm."""
     if obs.person_bbox is None:
@@ -309,9 +344,10 @@ def flush_session(
             # của bộ phát hiện chứ không phản ánh công trường. Track quá ngắn
             # vẫn vào sổ cái ở dạng chưa chốt được, không mất dấu vết.
             return
-        if (
-            obs.person_bbox is not None
-            and not _object_commit_allowed(obs, has_face=has_face)
+        if not has_face and obs.person_bbox is None:
+            return
+        if obs.person_bbox is not None and not _object_commit_allowed(
+            obs, has_face=has_face,
         ):
             return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
@@ -362,8 +398,6 @@ def flush_session(
         if inferred != "object":
             tier_at = inferred
 
-    payload = build_event_payload(session, tier_at_observation=tier_at)
-    payload_json = json.dumps(payload, ensure_ascii=False)
     interactions_json = json.dumps(
         [i.to_dict() for i in session.interactions],
         ensure_ascii=False,
@@ -479,6 +513,15 @@ def flush_session(
         if not at_win_end:
             session.dirty = False
             return
+
+    tier_at = _resolve_tier_at_observation(
+        subject_id,
+        tier_at=tier_at,
+        shot_face_eligible=shot_face_eligible,
+        worker_id=worker_id,
+    )
+    payload = build_event_payload(session, tier_at_observation=tier_at)
+    payload_json = json.dumps(payload, ensure_ascii=False)
 
     row_id = daystore.upsert_track_appearance(
         appearance_id=session.appearance_row_id,
