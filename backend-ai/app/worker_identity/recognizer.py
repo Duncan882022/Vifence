@@ -174,18 +174,26 @@ def patrol_face_bbox_in_frame(
             continue
         if score <= best_score:
             continue
+        full_face = (
+            px1 + x1,
+            py1 + y1,
+            px1 + x2,
+            py1 + y2,
+        )
+        from ..patrol_person_visibility import _face_center_belongs_to_person_box
+
+        if not _face_center_belongs_to_person_box(
+            full_face,
+            (px1, py1, px2, py2),
+        ):
+            continue
         x1, y1 = max(0, int(x)), max(0, int(y))
         x2 = min(crop_w, int(x + fw))
         y2 = min(crop_h, int(y + fh))
         if x2 - x1 < 8 or y2 - y1 < 8:
             continue
         best_score = score
-        best = (
-            px1 + x1,
-            py1 + y1,
-            px1 + x2,
-            py1 + y2,
-        )
+        best = full_face
     return best
 
 
@@ -313,29 +321,42 @@ def _assess_patrol_face_crop(
     best_row = None
     best_face: np.ndarray | None = None
     best_det_score = 0.0
+    partial_row = None
+    partial_face: np.ndarray | None = None
+    partial_score = 0.0
+    partial_min = max(0.55, detect_min - 0.08)
     search_h = search.shape[0]
     min_face_h = max(16.0, search_h * 0.08)
+    min_face_h_partial = max(12.0, search_h * 0.06)
     for face in faces:
         x, y, fw, fh = face[:4]
         score = float(face[14]) if len(face) > 14 else float(face[4] if len(face) > 4 else 0.0)
-        if score < detect_min:
-            continue
-        if fh < min_face_h:
+        if score < partial_min or fh < min_face_h_partial:
             continue
         aspect = fw / max(fh, 1.0)
-        if aspect < 0.55 or aspect > 1.85:
+        if aspect < 0.50 or aspect > 1.95:
             continue
         face_cy = y + fh / 2.0
         if face_cy > search_h * max_cy_frac:
             continue
-        if score > best_det_score:
-            x1, y1 = max(0, int(x)), max(0, int(y))
-            x2 = min(crop_w, int(x + fw))
-            y2 = min(crop_h, int(y + fh))
-            if x2 - x1 >= 8 and y2 - y1 >= 8:
-                best_det_score = score
-                best_row = face
-                best_face = crop[y1:y2, x1:x2]
+        x1, y1 = max(0, int(x)), max(0, int(y))
+        x2 = min(crop_w, int(x + fw))
+        y2 = min(crop_h, int(y + fh))
+        if x2 - x1 < 8 or y2 - y1 < 8:
+            continue
+        if score >= detect_min and fh >= min_face_h and score > best_det_score:
+            best_det_score = score
+            best_row = face
+            best_face = crop[y1:y2, x1:x2]
+        elif score > partial_score:
+            partial_score = score
+            partial_row = face
+            partial_face = crop[y1:y2, x1:x2]
+
+    if best_face is None and partial_face is not None and partial_row is not None:
+        best_face = partial_face
+        best_row = partial_row
+        best_det_score = partial_score
 
     if best_face is None:
         return None, best_det_score, False

@@ -606,6 +606,25 @@ def bind_tk_profile(tk_id: str, pers_id: str, *, now: float | None = None) -> No
         )
 
 
+def lookup_primary_tk_for_pers(pers_id: str) -> str | None:
+    """Tra tk canonical của pers — tránh cấp tk-025/026 khi đã có tk-024 cùng người."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    pid = resolve_alias((pers_id or "").strip())
+    if not pid:
+        return None
+    if is_anonymous_track_id(pid):
+        return normalize_track_id(pid)
+    row = db.query_one(
+        "SELECT tk_id FROM track_profile_bindings WHERE pers_id = ?"
+        " ORDER BY bound_at ASC LIMIT 1",
+        (pid,),
+    )
+    if row is not None:
+        return normalize_track_id(str(row["tk_id"]))
+    return None
+
+
 def lookup_bound_profile_for_tk(tk_id: str) -> str | None:
     """Tra pers_id đã gắn tk — binding table, persons draft, hoặc alias."""
     from ..patrol_ids import is_anonymous_track_id, normalize_track_id
@@ -1063,6 +1082,14 @@ def observe_face(
     matched, _sim = match_face_for_observe(embedding)
     if matched:
         pid = resolve_alias(matched)
+        pref = (preferred_tk or "").strip()
+        from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+        norm_pref = normalize_track_id(pref) if pref else ""
+        if norm_pref and is_anonymous_track_id(norm_pref) and norm_pref != pid:
+            from . import daystore
+
+            daystore.merge_pers_event_cards(norm_pref, pid, now=ts)
         with db.tx() as c:
             c.execute(
                 "UPDATE persons SET last_seen = ? WHERE pers_id = ?", (ts, pid)

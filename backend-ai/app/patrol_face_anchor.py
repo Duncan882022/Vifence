@@ -335,6 +335,53 @@ def _box_area_ratio(
     return max(0.0, x2 - x1) * max(0.0, y2 - y1) / max(float(frame_w * frame_h), 1.0)
 
 
+def _split_wide_silhouette_box(
+    box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> list[tuple[float, float, float, float]]:
+    """YOLO gom hai đối tượng sát nhau — tách theo chiều ngang khi không có mặt."""
+    x1, y1, x2, y2 = box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    bw_ratio = pw / max(float(frame_w), 1.0)
+    aspect = ph / pw
+    # Chỉ tách khi YOLO thật sự rộng (≥2 silhouette) — một người quay lưng aspect ~2.0
+    # vẫn hẹp hơn ngưỡng này.
+    if bw_ratio < 0.30 or aspect > 1.75:
+        return [box]
+    mid = x1 + pw * 0.5
+    halves = (
+        (x1, y1, mid, y2),
+        (mid, y1, x2, y2),
+    )
+    min_pw = max(12.0, frame_w * 0.035)
+    min_ph = max(14.0, frame_h * 0.04)
+    valid = [
+        half
+        for half in halves
+        if (half[2] - half[0]) >= min_pw and (half[3] - half[1]) >= min_ph
+    ]
+    return valid if len(valid) == 2 else [box]
+
+
+def _expand_adjacent_silhouette_boxes(
+    person_boxes: list[tuple[tuple[float, float, float, float], float]],
+    *,
+    frame_w: int,
+    frame_h: int,
+    faces: list[_FrameFace],
+) -> list[tuple[tuple[float, float, float, float], float]]:
+    expanded: list[tuple[tuple[float, float, float, float], float]] = []
+    for box, conf in person_boxes:
+        if any(_face_center_in_box(face, box) for face in faces):
+            expanded.append((box, conf))
+            continue
+        for part in _split_wide_silhouette_box(box, frame_w, frame_h):
+            expanded.append((part, conf))
+    return expanded
+
+
 def anchor_patrol_person_boxes_to_faces(
     frame: np.ndarray,
     person_boxes: list[tuple[tuple[float, float, float, float], float]],
@@ -345,8 +392,14 @@ def anchor_patrol_person_boxes_to_faces(
     if not (camera_id.startswith("HC-") or camera_id.startswith("DR-")):
         return person_boxes
 
-    faces = _list_frame_faces(frame)
     h, w = frame.shape[:2]
+    faces = _list_frame_faces(frame)
+    person_boxes = _expand_adjacent_silhouette_boxes(
+        person_boxes,
+        frame_w=w,
+        frame_h=h,
+        faces=faces,
+    )
     if not faces:
         return [
             (box, conf)

@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 from app.patrol_person_visibility import (
     legs_only_person_box,
     mid_frame_torso_sliver,
+    patrol_anonymous_identity_allowed,
     patrol_object_commit_allowed,
     patrol_person_meets_detection_gate,
     patrol_person_meets_display_gate,
@@ -121,6 +122,31 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         person = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
         self.assertFalse(signboard_like_fp_box(person, fw, fh))
         self.assertTrue(patrol_object_commit_allowed(person, fw, fh))
+
+    def test_sign_fp_blocked_from_anonymous_identity(self):
+        fw, fh = 1280, 720
+        sign = (fw * 0.15, fh * 0.05, fw * 0.85, fh * 0.28)
+        self.assertFalse(
+            patrol_anonymous_identity_allowed(sign, fw, fh, face_quality=0.9),
+        )
+
+    def test_standing_person_allowed_anonymous_identity(self):
+        fw, fh = 1280, 720
+        person = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
+        self.assertTrue(
+            patrol_anonymous_identity_allowed(
+                person, fw, fh, face_quality=0.9, face_eligible=True,
+            ),
+        )
+
+    def test_partial_face_turning_allowed(self):
+        fw, fh = 1280, 720
+        person = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
+        self.assertTrue(
+            patrol_anonymous_identity_allowed(
+                person, fw, fh, face_quality=0.52, face_eligible=True,
+            ),
+        )
 
 
 if __name__ == "__main__":

@@ -25,32 +25,15 @@ def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
     """Chặn FP cây/kệ — chỉ thăng Người khi bbox giống người thật."""
     if obs.person_bbox is None:
         return False
-    if float(obs.face_quality or 0.0) < MIN_QUALITY_FOR_SEARCH:
-        return False
     frame_w, frame_h = _frame_size(obs)
-    box = obs.person_bbox
-    from ...patrol_person_visibility import (
-        background_clutter_person_box,
-        patrol_person_meets_detection_gate,
-        signboard_like_fp_box,
-        vertical_structure_fp_box,
-    )
+    from ...patrol_person_visibility import patrol_anonymous_identity_allowed
 
-    if signboard_like_fp_box(box, frame_w, frame_h):
-        return False
-    if background_clutter_person_box(box, frame_w, frame_h):
-        pw = max(float(box[2]) - float(box[0]), 1.0)
-        ph = max(float(box[3]) - float(box[1]), 1.0)
-        # Chậu cây / kệ ngang — không chặn người đứng (aspect cao) gần mép khung.
-        if ph / pw < 1.35:
-            return False
-    if vertical_structure_fp_box(box, frame_w, frame_h):
-        return False
-    return patrol_person_meets_detection_gate(
-        box,
+    return patrol_anonymous_identity_allowed(
+        tuple(obs.person_bbox),
         frame_w,
         frame_h,
-        face_eligible=True,
+        face_quality=float(obs.face_quality or 0.0),
+        face_eligible=bool(obs.face_eligible),
     )
 
 

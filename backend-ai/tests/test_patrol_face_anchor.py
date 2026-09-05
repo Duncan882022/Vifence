@@ -16,6 +16,7 @@ from app.patrol_face_anchor import (  # noqa: E402
     BACK_TURN_MIN_CONF,
     _FrameFace,
     anchor_patrol_person_boxes_to_faces,
+    _split_wide_silhouette_box,
 )
 
 
@@ -367,6 +368,34 @@ class TestFaceSeededPersonBox(unittest.TestCase):
                 frame, [(person, 0.72)], camera_id="HC-01",
             )
         self.assertEqual(len(out), 1)
+
+
+class TestWideSilhouetteSplit(unittest.TestCase):
+    FW, FH = 1280, 720
+
+    def test_wide_box_splits_into_two(self):
+        wide = (220.0, 120.0, 880.0, 640.0)
+        parts = _split_wide_silhouette_box(wide, self.FW, self.FH)
+        self.assertEqual(len(parts), 2)
+        centers = sorted((p[0] + p[2]) / 2 for p in parts)
+        self.assertLess(centers[0], 400.0)
+        self.assertGreater(centers[1], 700.0)
+
+    def test_narrow_box_not_split(self):
+        single = (420.0, 120.0, 560.0, 640.0)
+        parts = _split_wide_silhouette_box(single, self.FW, self.FH)
+        self.assertEqual(parts, [single])
+
+    def test_anchor_expands_wide_yolo_without_faces(self):
+        frame = np.zeros((self.FH, self.FW, 3), dtype=np.uint8)
+        wide = (220.0, 120.0, 880.0, 640.0)
+        with patch("app.patrol_face_anchor._list_frame_faces", return_value=[]):
+            out = anchor_patrol_person_boxes_to_faces(
+                frame,
+                [(wide, 0.72)],
+                camera_id="HC-02",
+            )
+        self.assertEqual(len(out), 2)
 
 
 class TestFabricRejectedByAppearance(unittest.TestCase):

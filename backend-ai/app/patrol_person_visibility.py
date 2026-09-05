@@ -202,6 +202,64 @@ def patrol_bbox_rejects_static_fp(
     return False
 
 
+MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.48
+MIN_PARTIAL_FACE_DETECT_SCORE = 0.55
+
+
+def patrol_face_promotion_quality(quality: float, *, face_eligible: bool) -> float:
+    """Ngưỡng chất lượng mặt cho thăng hạng Người — nới khi đã eligible (mặt nghiêng)."""
+    if face_eligible and quality >= MIN_PARTIAL_FACE_DETECT_SCORE:
+        return max(float(quality), MIN_ANONYMOUS_IDENTITY_FACE_QUALITY)
+    return float(quality)
+
+
+def _face_center_belongs_to_person_box(
+    face_box: tuple[float, float, float, float],
+    person_box: tuple[float, float, float, float],
+    *,
+    max_horizontal_offset: float = 0.38,
+    min_vertical_ratio: float = 0.08,
+    max_vertical_ratio: float = 0.78,
+) -> bool:
+    """Mặt phải nằm gần trung tâm bbox — tránh neo ROI vào mặt người khác trong YOLO đám."""
+    fx1, fy1, fx2, fy2 = face_box
+    px1, py1, px2, py2 = person_box
+    fcx = (fx1 + fx2) / 2.0
+    fcy = (fy1 + fy2) / 2.0
+    pcx = (px1 + px2) / 2.0
+    pw = max(px2 - px1, 1.0)
+    ph = max(py2 - py1, 1.0)
+    if abs(fcx - pcx) > pw * max_horizontal_offset:
+        return False
+    fcy_ratio = (fcy - py1) / ph
+    return min_vertical_ratio <= fcy_ratio <= max_vertical_ratio
+
+
+def patrol_anonymous_identity_allowed(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    face_quality: float = 0.0,
+    face_eligible: bool = False,
+) -> bool:
+    """Chặn gán tk-* cho YOLO FP (xe, biển, giàn) dù YuNet trả pseudo-face."""
+    effective_quality = patrol_face_promotion_quality(
+        face_quality,
+        face_eligible=face_eligible,
+    )
+    if effective_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
+        return False
+    if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    return patrol_person_meets_detection_gate(
+        person_box,
+        frame_w,
+        frame_h,
+        face_eligible=True,
+    )
+
+
 def patrol_object_commit_allowed(
     person_box: tuple[float, float, float, float] | None,
     frame_w: int,
@@ -374,6 +432,8 @@ def _face_anchored_draw_box(
     # Mặt phải nằm trong bbox người, nếu không thì đó là mặt của người khác.
     if min(fx2, px2) - max(fx1, px1) <= 0 or min(fy2, py2) - max(fy1, py1) <= 0:
         return None
+    if not _face_center_belongs_to_person_box(face_box, person_box):
+        return None
 
     cx = (fx1 + fx2) / 2.0
     half_w = face_w * 1.30
@@ -396,6 +456,7 @@ def patrol_snapshot_draw_bbox(
     face_box: tuple[float, float, float, float] | None = None,
     max_area_ratio: float = 0.38,
     max_height_ratio: float = 0.55,
+    anchor_from_center: bool = False,
 ) -> tuple[float, float, float, float]:
     """BBox vẽ lên JPG snapshot — không để YOLO crowd phủ 60–80% khung."""
     box = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
@@ -430,6 +491,17 @@ def patrol_snapshot_draw_bbox(
     # Thu quanh tâm sẽ cắt đầu: người đứng gần bodycam luôn cao hơn 55% khung,
     # nên mọi thẻ đều mất phần đầu — đúng cái phần chứng minh đây là người và
     # là căn cứ để thăng tầng Người. Chân thì không mang thông tin ấy.
+    #
+    # Thẻ Đối tượng (không mặt): neo quanh tâm bbox — YOLO hay lệch mép trên,
+    # giữ mép trên khiến ROI trượt khỏi vật thể (obj-* đếm sai).
+    if anchor_from_center:
+        cy = (y1 + y2) / 2.0
+        ny1 = max(y1, cy - target_h / 2.0)
+        ny2 = min(y2, ny1 + target_h)
+        nx1 = cx - target_w / 2.0
+        nx2 = cx + target_w / 2.0
+        return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+
     nx1 = cx - target_w / 2.0
     nx2 = cx + target_w / 2.0
     return _clip_box_to_frame((nx1, y1, nx2, y1 + target_h), frame_w, frame_h)
