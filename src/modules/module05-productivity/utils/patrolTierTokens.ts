@@ -29,7 +29,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
   object: {
     label: 'Đối tượng',
     color: 'text-stone-400',
-    badge: 'bg-stone-500/10 text-stone-400 border-stone-500/30',
+    badge: 'bg-stone-400/10 text-stone-400 border-stone-400/30',
     borderAccent: 'border-l-stone-400',
     headerUnderline: 'border-b-stone-400/45',
     tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / che mặt / khẩu trang',
@@ -41,7 +41,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
   person: {
     label: 'Người',
     color: 'text-orange-400',
-    badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+    badge: 'bg-orange-400/10 text-orange-400 border-orange-400/30',
     borderAccent: 'border-l-orange-400',
     headerUnderline: 'border-b-orange-400/45',
     tooltip: 'Đã phân biệt A≠B — chưa có trong gallery',
@@ -53,7 +53,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
   identity: {
     label: 'Định danh',
     color: 'text-green-400',
-    badge: 'bg-green-500/10 text-green-400 border-green-500/30',
+    badge: 'bg-green-400/10 text-green-400 border-green-400/30',
     borderAccent: 'border-l-green-400',
     headerUnderline: 'border-b-green-400/45',
     tooltip: 'Đã xác minh danh tính (gallery / gán tên)',

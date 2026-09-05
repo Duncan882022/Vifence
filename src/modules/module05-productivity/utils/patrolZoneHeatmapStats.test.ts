@@ -7,10 +7,11 @@ import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
 import { PATROL_SITE_ZONE_ID } from '../data/patrolSiteMap'
 
 function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 'subjectId' | 'tier'>): PatrolDayPresence {
+  const { subjectId, tier, ...rest } = partial
   return {
     id: 1,
-    subjectId: partial.subjectId,
-    tier: partial.tier,
+    subjectId,
+    tier,
     cameraId: 'HC-01',
     sourceCameras: ['HC-01'],
     startedAt: 1,
@@ -23,7 +24,7 @@ function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 
     presenceSeq: partial.presenceSeq ?? 1,
     displayName: '',
     counted: true,
-    ...partial,
+    ...rest,
   }
 }
 

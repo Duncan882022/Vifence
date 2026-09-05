@@ -441,7 +441,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         )}>
           <div className="flex items-center gap-2 min-w-0">
             <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border', meta.badge)}>
-              <TypeIcon className={cn('w-3.5 h-3.5', meta.color)} aria-hidden />
+              <TypeIcon className="w-3.5 h-3.5" aria-hidden />
             </div>
             <div className="min-w-0">
               <p id="patrol-event-detail-title" className={cn('text-[13px] font-semibold leading-snug line-clamp-2', meta.color)}>
