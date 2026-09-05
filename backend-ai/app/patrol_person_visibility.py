@@ -202,7 +202,15 @@ def patrol_bbox_rejects_static_fp(
     return False
 
 
-MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.55
+MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.48
+MIN_PARTIAL_FACE_DETECT_SCORE = 0.55
+
+
+def patrol_face_promotion_quality(quality: float, *, face_eligible: bool) -> float:
+    """Ngưỡng chất lượng mặt cho thăng hạng Người — nới khi đã eligible (mặt nghiêng)."""
+    if face_eligible and quality >= MIN_PARTIAL_FACE_DETECT_SCORE:
+        return max(float(quality), MIN_ANONYMOUS_IDENTITY_FACE_QUALITY)
+    return float(quality)
 
 
 def _face_center_belongs_to_person_box(
@@ -233,9 +241,14 @@ def patrol_anonymous_identity_allowed(
     frame_h: int,
     *,
     face_quality: float = 0.0,
+    face_eligible: bool = False,
 ) -> bool:
     """Chặn gán tk-* cho YOLO FP (xe, biển, giàn) dù YuNet trả pseudo-face."""
-    if face_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
+    effective_quality = patrol_face_promotion_quality(
+        face_quality,
+        face_eligible=face_eligible,
+    )
+    if effective_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
         return False
@@ -443,6 +456,7 @@ def patrol_snapshot_draw_bbox(
     face_box: tuple[float, float, float, float] | None = None,
     max_area_ratio: float = 0.38,
     max_height_ratio: float = 0.55,
+    anchor_from_center: bool = False,
 ) -> tuple[float, float, float, float]:
     """BBox vẽ lên JPG snapshot — không để YOLO crowd phủ 60–80% khung."""
     box = patrol_person_overlay_bbox(person_box, frame_w, frame_h)
@@ -477,6 +491,17 @@ def patrol_snapshot_draw_bbox(
     # Thu quanh tâm sẽ cắt đầu: người đứng gần bodycam luôn cao hơn 55% khung,
     # nên mọi thẻ đều mất phần đầu — đúng cái phần chứng minh đây là người và
     # là căn cứ để thăng tầng Người. Chân thì không mang thông tin ấy.
+    #
+    # Thẻ Đối tượng (không mặt): neo quanh tâm bbox — YOLO hay lệch mép trên,
+    # giữ mép trên khiến ROI trượt khỏi vật thể (obj-* đếm sai).
+    if anchor_from_center:
+        cy = (y1 + y2) / 2.0
+        ny1 = max(y1, cy - target_h / 2.0)
+        ny2 = min(y2, ny1 + target_h)
+        nx1 = cx - target_w / 2.0
+        nx2 = cx + target_w / 2.0
+        return _clip_box_to_frame((nx1, ny1, nx2, ny2), frame_w, frame_h)
+
     nx1 = cx - target_w / 2.0
     nx2 = cx + target_w / 2.0
     return _clip_box_to_frame((nx1, y1, nx2, y1 + target_h), frame_w, frame_h)

@@ -228,10 +228,7 @@ def _assign_patrol_person_identity(
     )
     face_emb = face_vec.tolist() if face_vec is not None else None
 
-    # JPEG nhỏ / góc drone — assess fail trong khi recover selfie vẫn lấy được embedding.
-    from ..patrol_flight_mode import is_patrol_helmet_like
-
-    if not face_eligible and is_patrol_helmet_like(camera_id):
+    if not face_eligible:
         from ..worker_identity.recognizer import recover_patrol_face_embedding
 
         recovered = recover_patrol_face_embedding(frame, person_bbox, camera_id=camera_id)
@@ -287,6 +284,7 @@ def _assign_patrol_person_identity(
             frame_w,
             frame_h,
             face_quality=float(_face_score or 0.0),
+            face_eligible=bool(face_eligible),
         ):
             face_eligible = False
             face_emb = None
