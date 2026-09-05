@@ -61,12 +61,15 @@ const PATROL_MAP_CAMERA_IDS: readonly string[] = [
 
 function HeatmapSiteStatsOverlay({
   title,
+  siteScope,
   objectCount,
   personCount,
   identityCount,
   compactChrome,
 }: {
   title: string
+  /** true = toàn công trường (Cầu Sông Hốt), false = một khu. */
+  siteScope: boolean
   objectCount: number
   personCount: number
   identityCount: number
@@ -87,11 +90,14 @@ function HeatmapSiteStatsOverlay({
         'pr-[env(safe-area-inset-right,0px)] pb-[env(safe-area-inset-bottom,0px)]',
       )}
     >
-      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[108px]">
+      <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[120px]">
         <div
           className={cn(
-            'px-2.5 py-1 border-b border-[#334155] text-[#94a3b8] font-medium truncate',
-            compactChrome ? 'text-[8px]' : 'text-[9px]',
+            'px-2.5 py-1.5 border-b border-[#334155] truncate',
+            siteScope
+              ? 'text-[#e2e8f0] font-semibold'
+              : 'text-[#94a3b8] font-medium',
+            compactChrome ? 'text-[9px]' : 'text-[10px]',
           )}
         >
           {title}
@@ -440,6 +446,16 @@ export function PatrolDensityHeatmap({
   const statsTitle = selectedZoneId
     ? (PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)?.name ?? PATROL_SITE_NAME)
     : PATROL_SITE_NAME
+  const statsSiteScope = selectedZoneId == null
+
+  useEffect(() => {
+    if (showFlymap) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedZoneId) setSelectedZoneId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showFlymap, selectedZoneId])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -605,6 +621,7 @@ export function PatrolDensityHeatmap({
         ) : (
           <HeatmapSiteStatsOverlay
             title={statsTitle}
+            siteScope={statsSiteScope}
             objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}

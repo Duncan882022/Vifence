@@ -315,8 +315,7 @@ function DismissDeviceTooltipOnMapClick({
   useMapEvents({
     click(e) {
       if (openId) onDismiss()
-      const target = e.originalEvent.target as HTMLElement | null
-      if (target?.closest('.patrol-zone-interactive')) return
+      if (e.propagatedFrom) return
       onBackgroundClick?.()
     },
   })
@@ -804,7 +803,7 @@ export function PatrolGeoHeatmap({
             openId={openHelmetTipId}
             onDismiss={() => setOpenHelmetTipId(null)}
             onBackgroundClick={
-              interactiveZones && onZoneSelect
+              onZoneSelect
                 ? () => onZoneSelect(null)
                 : undefined
             }
