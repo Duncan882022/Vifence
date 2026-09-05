@@ -188,7 +188,7 @@ function PatrolEventCard({
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <SubjectIcon className={EVENT_CARD_META_ICON} aria-hidden />
-              <p className="text-[8px] min-w-0 truncate text-foreground/90 font-medium">
+              <p className={cn('text-[8px] min-w-0 truncate font-medium', displayMeta.color)}>
                 {cardDisplay.subjectLabel}
               </p>
             </div>

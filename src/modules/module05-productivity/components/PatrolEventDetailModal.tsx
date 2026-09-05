@@ -29,7 +29,7 @@ import {
   type PatrolGalleryFacePose,
 } from '../services/patrolGalleryFaces.service'
 import { resolveEventObjectDisplay, resolvePatrolPersonCardDisplay } from '../utils/patrolManualIdentityUi'
-import { appearanceObservationStageLabel } from '../utils/patrolAppearanceTier'
+import { appearanceObservationStageLabel, appearanceObservationStageMeta } from '../utils/patrolAppearanceTier'
 import { resolveEventGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import {
   resolvePatrolAppearanceSubjectId,
@@ -436,13 +436,16 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
         aria-modal="true"
         aria-labelledby="patrol-event-detail-title"
       >
-        <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-3 border-b border-[#1e2433] shrink-0">
+        <div className={cn(
+          'flex items-center justify-between gap-2 px-3 sm:px-4 py-3 border-b shrink-0',
+          meta.headerUnderline,
+        )}>
           <div className="flex items-center gap-2 min-w-0">
             <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border', meta.badge)}>
               <TypeIcon className={cn('w-3.5 h-3.5', meta.color)} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p id="patrol-event-detail-title" className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2">
+              <p id="patrol-event-detail-title" className={cn('text-[13px] font-semibold leading-snug line-clamp-2', meta.color)}>
                 {modalTitle}
               </p>
               {stage === 'profile' ? (
@@ -582,6 +585,7 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                     const gps = resolveAppearanceGps(segment)
                     const camLabel = resolveAppearanceCameraLabel(segment)
                     const observationTierLabel = appearanceObservationStageLabel(segment)
+                    const observationTierMeta = appearanceObservationStageMeta(segment)
 
                     const selectRow = () => {
                       if (thumbUrl) preloadPatrolEventSnapshot(thumbUrl)
@@ -656,8 +660,11 @@ export function PatrolEventDetailModal({ event, viewDate, onClose }: PatrolEvent
                                 Đã đếm
                               </span>
                             )}
-                            {observationTierLabel && (
-                              <span className="text-[8px] px-1 py-0.5 rounded bg-[#1a2235] text-muted-foreground font-semibold shrink-0">
+                            {observationTierLabel && observationTierMeta && (
+                              <span className={cn(
+                                'text-[8px] px-1 py-0.5 rounded border font-semibold shrink-0',
+                                observationTierMeta.badge,
+                              )}>
                                 {observationTierLabel}
                               </span>
                             )}

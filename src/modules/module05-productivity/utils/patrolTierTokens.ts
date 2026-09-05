@@ -16,6 +16,8 @@ export interface PatrolTierToken {
   color: string
   badge: string
   borderAccent: string
+  /** Viền dưới header popup / section tiêu đề sự kiện */
+  headerUnderline: string
   tooltip: string
   roiBorder: string
   roiLabelBg: string
@@ -29,6 +31,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     color: 'text-stone-400',
     badge: 'bg-stone-500/10 text-stone-400 border-stone-500/30',
     borderAccent: 'border-l-stone-400',
+    headerUnderline: 'border-b-stone-400/45',
     tooltip: 'Chưa đủ tiêu chí nhận diện — bán thân / che mặt / khẩu trang',
     roiBorder: 'border-2 border-solid border-stone-400/95',
     roiLabelBg: 'bg-stone-950/95',
@@ -40,6 +43,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     color: 'text-orange-400',
     badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
     borderAccent: 'border-l-orange-400',
+    headerUnderline: 'border-b-orange-400/45',
     tooltip: 'Đã phân biệt A≠B — chưa có trong gallery',
     roiBorder: 'border-2 border-solid border-orange-400/95',
     roiLabelBg: 'bg-orange-950/95',
@@ -51,6 +55,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     color: 'text-green-400',
     badge: 'bg-green-500/10 text-green-400 border-green-500/30',
     borderAccent: 'border-l-green-400',
+    headerUnderline: 'border-b-green-400/45',
     tooltip: 'Đã xác minh danh tính (gallery / gán tên)',
     roiBorder: 'border-2 border-solid border-green-400/95',
     roiLabelBg: 'bg-green-950/95',
