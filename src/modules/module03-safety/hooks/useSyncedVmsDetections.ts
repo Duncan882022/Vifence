@@ -13,6 +13,7 @@ import {
   getPatrolClientServerSkewMs,
   getPatrolLiveRoiDelayMs,
   updatePatrolClientServerSkew,
+  updatePatrolAiPipelineLag,
 } from '@/services/patrolRuntimeBridge'
 import { useCameraOverlayReady } from '@/modules/module02-training/hooks/useCameraBufferReadiness'
 import { getCameraBufferedAheadMs } from '@/services/cameraBufferReadiness'
@@ -60,6 +61,7 @@ export function useSyncedVmsDetections(
     if (feed.snapshot) {
       bufferRef.current.push(feed.snapshot)
       updatePatrolClientServerSkew(feed.snapshot.server_emit_ms)
+      updatePatrolAiPipelineLag(feed.snapshot.frame_wallclock_ms, feed.snapshot.server_emit_ms)
     }
   }, [feed.snapshot])
 
@@ -73,12 +75,15 @@ export function useSyncedVmsDetections(
       // sẽ lùi thêm một quãng lag nữa và bbox tụt lại phía sau người.
       if (snapshot?.overlay_sync === 'aligned') {
         const driftMs = snapshot.overlay_drift_ms ?? 0
-        setResolved(prev => (
-          prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
-            ? prev
-            : { snapshot, timeAligned: true, driftMs }
-        ))
-        return
+        // aligned nhưng lệch >800ms = at_ms sai (WHEP/HLS) — đừng snap bbox nhảy loạn.
+        if (driftMs <= 800) {
+          setResolved(prev => (
+            prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
+              ? prev
+              : { snapshot, timeAligned: true, driftMs }
+          ))
+          return
+        }
       }
 
       const displayMs = clock?.getDisplayWallclockMs() ?? null

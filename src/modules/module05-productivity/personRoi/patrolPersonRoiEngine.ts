@@ -19,8 +19,14 @@ export class PatrolPersonRoiEngine {
   private lastIngestAt = 0
   private displayCache: PersonRoiDisplay[] = []
   private displaySmoother = new BboxDisplaySmoother()
+  /** HC-02 publish từ chính máy — analyze JPEG trễ so với khung video. */
+  private localPublisher = false
 
   constructor(readonly cameraId: string) {}
+
+  setLocalPublisherMode(enabled: boolean): void {
+    this.localPublisher = enabled
+  }
 
   /**
    * Profile ghép của camera này. DR-* đổi được giữa tầm cao và tầm thấp giữa
@@ -30,6 +36,7 @@ export class PatrolPersonRoiEngine {
     return resolvePatrolPersonRoiConfig(
       this.cameraId,
       resolveEffectivePatrolFlightMode(this.cameraId),
+      { localPublisher: this.localPublisher },
     )
   }
 
@@ -146,6 +153,10 @@ export function getPatrolPersonRoiEngine(cameraId: string): PatrolPersonRoiEngin
  */
 export function clearPatrolPersonRoiTracks(cameraId: string): void {
   engines.get(cameraId)?.clear()
+}
+
+export function setPatrolPersonRoiLocalPublisher(cameraId: string, enabled: boolean): void {
+  getPatrolPersonRoiEngine(cameraId).setLocalPublisherMode(enabled)
 }
 
 export function clearPatrolPersonRoiEngine(cameraId?: string): void {

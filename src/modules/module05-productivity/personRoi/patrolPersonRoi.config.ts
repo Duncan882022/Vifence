@@ -130,6 +130,19 @@ export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
 }
 
 /**
+ * HC-02 publish từ chính máy — analyze JPEG ~280–450ms sau khi chụp khung.
+ * Snap EMA=1 gây bbox nhảy loạn mỗi nhịp response; làm mượt + hạn chế predict.
+ */
+export const PATROL_PERSON_ROI_PROFILE_LOCAL: PatrolPersonRoiConfig = {
+  ...PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  displayEmaAlpha: 0.72,
+  displayEmaGlideAlpha: 0.82,
+  maxPredictMs: 480,
+  minMeasureGain: 0.88,
+  anchoredMinMeasureGain: 0.92,
+}
+
+/**
  * Flycam tầm cao (DR-* aerial) — người cao 1–2% khung hình. IoU giữa hai nhịp
  * thường bằng 0 ngay cả khi người đứng yên vì drone tự trôi, nên phải cho ghép
  * thuần theo khoảng cách tâm; bù lại siết tỉ lệ diện tích để không gộp nhầm hai
@@ -153,7 +166,11 @@ export const PATROL_PERSON_ROI_PROFILE_FLYCAM: PatrolPersonRoiConfig = {
 export function resolvePatrolPersonRoiConfig(
   cameraId: string,
   flightMode?: PatrolFlightMode | null,
+  options?: { localPublisher?: boolean },
 ): PatrolPersonRoiConfig {
+  if (options?.localPublisher && cameraId.startsWith('HC-')) {
+    return PATROL_PERSON_ROI_PROFILE_LOCAL
+  }
   if (cameraId.startsWith('DR-')) {
     return flightMode === 'proximity'
       ? PATROL_PERSON_ROI_PROFILE_BODYCAM

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolvePatrolPersonRoiConfig } from '../personRoi/patrolPersonRoi.config'
 import {
   isPatrolMetricsCameraId,
   PATROL_LIVE_ROI_DELAY_MS,
@@ -19,5 +20,12 @@ describe('patrolHelmetScope ROI buffer', () => {
     expect(isPatrolMetricsCameraId('HC-02')).toBe(true)
     expect(isPatrolMetricsCameraId('DR-03')).toBe(true)
     expect(isPatrolMetricsCameraId('A-03')).toBe(false)
+  })
+
+  it('HC-02 local publisher — profile mượt hơn bodycam VMS', () => {
+    const local = resolvePatrolPersonRoiConfig('HC-02', null, { localPublisher: true })
+    const vms = resolvePatrolPersonRoiConfig('HC-02', null)
+    expect(local.displayEmaAlpha).toBeLessThan(vms.displayEmaAlpha)
+    expect(local.maxPredictMs).toBeLessThan(vms.maxPredictMs)
   })
 })
