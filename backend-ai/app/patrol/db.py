@@ -19,7 +19,7 @@ from typing import Any, Iterator
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DB_FILE = DATA_DIR / "patrol.db"
 
-_SCHEMA_VERSION = 10
+_SCHEMA_VERSION = 11
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
