@@ -117,6 +117,28 @@ class DetectorNormalizeTests(unittest.TestCase):
         self.assertEqual(det["peak_group_index"], 2)
         self.assertEqual(det["peak_group_size"], 5)
 
+    def test_format_preserves_tier_snapshot(self) -> None:
+        row = {
+            "behavior": "person",
+            "worker_id": "tk-00000042",
+            "confidence": 0.82,
+            "bbox": [100.0, 100.0, 200.0, 400.0],
+            "track_id": "ptk0001:person",
+            "tier": "person",
+            "tier_snapshot": {
+                "tier": "person",
+                "tier_rank": 1,
+                "subject_id": "tk-00000042",
+                "worker_id": "tk-00000042",
+                "face_eligible": True,
+                "confidence": 0.75,
+            },
+        }
+        det = format_module05_detection(row, self.FW, self.FH)
+        self.assertIn("tier_snapshot", det)
+        self.assertEqual(det["tier_snapshot"]["tier"], "person")
+        self.assertEqual(det["tier_snapshot"]["subject_id"], "tk-00000042")
+
 
 if __name__ == "__main__":
     unittest.main()

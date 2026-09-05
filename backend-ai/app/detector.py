@@ -138,6 +138,12 @@ def format_module05_detection(
             out["peak_group_index"] = int(row["peak_group_index"])
         if row.get("peak_group_size") is not None:
             out["peak_group_size"] = int(row["peak_group_size"])
+    tier_snapshot = row.get("tier_snapshot")
+    if tier_snapshot is not None:
+        if hasattr(tier_snapshot, "model_dump"):
+            out["tier_snapshot"] = tier_snapshot.model_dump()
+        elif isinstance(tier_snapshot, dict):
+            out["tier_snapshot"] = dict(tier_snapshot)
     return out
 
 
