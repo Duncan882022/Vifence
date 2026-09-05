@@ -40,11 +40,13 @@ export class PatrolPersonRoiEngine {
     )
   }
 
-  private polishDisplay(raw: PersonRoiDisplay[], predicting: boolean): PersonRoiDisplay[] {
+  private polishDisplay(
+    raw: PersonRoiDisplay[],
+    predicting: boolean,
+    cfg: PatrolPersonRoiConfig,
+  ): PersonRoiDisplay[] {
     const active = new Set<string>()
-    const alpha = predicting
-      ? PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha
-      : PATROL_PERSON_ROI_CONFIG.displayEmaAlpha
+    const alpha = predicting ? cfg.displayEmaGlideAlpha : cfg.displayEmaAlpha
     const snapDiagonalRatio = predicting ? 0.14 : 0.06
     const polished = raw.map(track => {
       active.add(track.trackId)
@@ -67,7 +69,7 @@ export class PatrolPersonRoiEngine {
     const dtMs = this.lastIngestAt > 0 ? Math.max(16, now - this.lastIngestAt) : 450
     this.lastIngestAt = now
     this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now(), cfg)
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0, cfg), false)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0, cfg), false, cfg)
     this.notify()
   }
 
@@ -96,7 +98,7 @@ export class PatrolPersonRoiEngine {
     }
 
     if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
-    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true)
+    this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true, cfg)
     return this.displayCache
   }
 

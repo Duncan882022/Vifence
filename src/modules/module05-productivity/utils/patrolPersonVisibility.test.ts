@@ -7,9 +7,11 @@ import {
   patrolPersonLimbFragmentBbox,
   patrolPersonMeetsDetectionGate,
   patrolPersonMeetsDisplayGate,
+  patrolPersonOversizedDisplayBbox,
   suppressPatrolObjectOverlappingIdentified,
   type Bbox4,
 } from './patrolPersonVisibility'
+import { bboxToPixelSpace } from '@/modules/module02-training/utils/videoOverlayCoords'
 
 const FRAME_W = 1280
 const FRAME_H = 720
@@ -70,7 +72,6 @@ describe('gate hiển thị ROI', () => {
     const samples: Bbox4[] = [
       [520, 140, 700, 660],
       [500, 300, 800, 520],
-      [200, 80, 1100, 700],
       [900, 200, 1000, 500],
       [40, 60, 300, 690],
     ]
@@ -85,6 +86,29 @@ describe('gate hiển thị ROI', () => {
     const { display, event } = gates(bbox)
     expect(display).toBe(false)
     expect(event).toBe(false)
+  })
+
+  it('bbox YOLO crowd gần full-frame (normalized) bị loại khỏi ROI', () => {
+    const normalized: Bbox4 = [0.6, 0.1, 0.9, 0.9]
+    expect(patrolPersonOversizedDisplayBbox(normalized, FRAME_W, FRAME_H)).toBe(true)
+    expect(
+      patrolPersonMeetsDisplayGate({ bbox: normalized, frameW: FRAME_W, frameH: FRAME_H }),
+    ).toBe(false)
+  })
+
+  it('bbox bodycam cận cảnh hợp lệ (normalized) vẫn vẽ sau chuyển pixel', () => {
+    const normalized: Bbox4 = [0.7, 0.2, 0.8, 0.5]
+    expect(patrolPersonOversizedDisplayBbox(normalized, FRAME_W, FRAME_H)).toBe(false)
+    const pixel = bboxToPixelSpace(normalized, FRAME_W, FRAME_H)
+    expect(
+      patrolPersonMeetsDisplayGate({ bbox: pixel, frameW: FRAME_W, frameH: FRAME_H }),
+    ).toBe(true)
+  })
+
+  it('người cận cảnh pixel cao >55% khung vẫn vẽ (không nhầm với crowd)', () => {
+    const bbox: Bbox4 = [520, 140, 700, 660]
+    expect(patrolPersonOversizedDisplayBbox(bbox, FRAME_W, FRAME_H)).toBe(false)
+    expect(gates(bbox).display).toBe(true)
   })
 })
 

@@ -4,6 +4,7 @@ import {
   isPatrolMetricsCameraId,
   PATROL_LIVE_ROI_DELAY_MS,
   WHEP_DISPLAY_WALLCLOCK_LAG_MS,
+  WHEP_MAX_ALIGNED_DRIFT_MS,
 } from './patrolHelmetScope'
 
 describe('patrolHelmetScope ROI buffer', () => {
@@ -20,6 +21,10 @@ describe('patrolHelmetScope ROI buffer', () => {
     expect(isPatrolMetricsCameraId('HC-02')).toBe(true)
     expect(isPatrolMetricsCameraId('DR-03')).toBe(true)
     expect(isPatrolMetricsCameraId('A-03')).toBe(false)
+  })
+
+  it('WHEP_MAX_ALIGNED_DRIFT_MS ~400ms cho sync guard', () => {
+    expect(WHEP_MAX_ALIGNED_DRIFT_MS).toBe(400)
   })
 
   it('HC-02 local publisher — profile mượt hơn bodycam VMS', () => {

@@ -127,6 +127,15 @@ export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
   matchIouMin: 0.10,
   matchCenterRatio: 1.30,
   matchSizeRatioMin: 0.28,
+  /**
+   * VMS poll ~280ms + YOLO dao động — EMA=1 snap mỗi nhịp gây bbox nhảy loạn.
+   * Local publisher (HC-02 /phat-song) dùng profile riêng mượt hơn nữa.
+   */
+  displayEmaAlpha: 0.78,
+  displayEmaGlideAlpha: 0.86,
+  maxPredictMs: 520,
+  minMeasureGain: 0.90,
+  anchoredMinMeasureGain: 0.88,
 }
 
 /**

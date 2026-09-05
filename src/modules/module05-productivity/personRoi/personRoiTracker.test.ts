@@ -34,6 +34,28 @@ function empty(): Map<string, PersonRoiTrack> {
   return new Map<string, PersonRoiTrack>()
 }
 
+describe('khoá track id — chặn bbox crowd', () => {
+  it('cùng track_id nhưng bbox phình gấp nhiều lần thì bỏ qua đo mới', () => {
+    let tracks = advance(
+      empty(),
+      [person([896, 144, 1024, 360], { track_id: 'ptk0132:person' })],
+      1_000,
+    )
+    expect(tracks.size).toBe(1)
+    const before = [...tracks.values()][0].kalman.getBbox()
+
+    // YOLO crowd normalized ~80% chiều cao khung (live HC-01).
+    tracks = advance(
+      tracks,
+      [person([768, 72, 1152, 648], { track_id: 'ptk0132:person' })],
+      1_280,
+    )
+    const after = [...tracks.values()][0].kalman.getBbox()
+    expect(after[0]).toBeCloseTo(before[0], 0)
+    expect(after[3]).toBeCloseTo(before[3], 0)
+  })
+})
+
 describe('ingest bbox', () => {
   it('ưu tiên bbox display từ BE (đã mở rộng) thay subject_bbox YOLO thô', () => {
     const raw: Bbox = [100, 100, 200, 280]

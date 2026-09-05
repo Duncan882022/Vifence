@@ -30,14 +30,22 @@ export interface SyncedVmsDetectionFeed extends VmsDetectionFeed {
   waitingForBuffer: boolean
 }
 
+const DEFAULT_MAX_ALIGNED_DRIFT_MS = 800
+
 export function useSyncedVmsDetections(
   feed: VmsDetectionFeed,
   clock: VideoClockSource | null,
-  options?: { cameraId?: string; fallbackLagMs?: number; useRuntimeLagHint?: boolean },
+  options?: {
+    cameraId?: string
+    fallbackLagMs?: number
+    useRuntimeLagHint?: boolean
+    maxAlignedDriftMs?: number
+  },
 ): SyncedVmsDetectionFeed {
   const bufferRef = useRef(new OverlayTimeBuffer())
   const configuredLagMs = options?.fallbackLagMs
   const useRuntimeLagHint = options?.useRuntimeLagHint ?? false
+  const maxAlignedDriftMs = options?.maxAlignedDriftMs ?? DEFAULT_MAX_ALIGNED_DRIFT_MS
   const bufferReady = useCameraOverlayReady(options?.cameraId ?? '')
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
@@ -75,8 +83,8 @@ export function useSyncedVmsDetections(
       // sẽ lùi thêm một quãng lag nữa và bbox tụt lại phía sau người.
       if (snapshot?.overlay_sync === 'aligned') {
         const driftMs = snapshot.overlay_drift_ms ?? 0
-        // aligned nhưng lệch >800ms = at_ms sai (WHEP/HLS) — đừng snap bbox nhảy loạn.
-        if (driftMs <= 800) {
+        // aligned nhưng lệch quá ngưỡng = at_ms sai (WHEP/HLS) — đừng snap bbox nhảy loạn.
+        if (driftMs <= maxAlignedDriftMs) {
           setResolved(prev => (
             prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
               ? prev
@@ -123,7 +131,7 @@ export function useSyncedVmsDetections(
     tick()
     const timer = window.setInterval(tick, RESOLVE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint])
+  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint, maxAlignedDriftMs])
 
   return useMemo(
     () => ({
