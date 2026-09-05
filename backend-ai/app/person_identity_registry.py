@@ -823,6 +823,15 @@ def resolve_patrol_person_identity(
                     _save(state)
                     return _finalize_identity_pair(reuse_tk, reuse_tk)
 
+            dup_tk, _dup_sim = patrol_identity.find_duplicate_tk_today(
+                query_emb.tolist(),
+            )
+            if dup_tk:
+                state["tracks"][key] = dup_tk
+                _remember_track_meta(state, key, dup_tk, pb, face_emb)
+                _save(state)
+                return _finalize_identity_pair(dup_tk, dup_tk)
+
         seq = max(int(state.get("next_seq") or 1), 1)
         tk_id = _format_tk(seq)
         state["next_seq"] = seq + 1

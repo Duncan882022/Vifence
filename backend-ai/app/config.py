@@ -159,9 +159,9 @@ class Settings(BaseSettings):
 
     # Patrol HC-* — tiêu chí mặt cho 1 người / 1 ID (sgc hoặc gallery).
     # Thang histogram (chỉ dùng khi thiếu model SFace) — xem worker_identity/face_thresholds.py.
-    patrol_face_reuse_min_similarity: float = 0.76
+    patrol_face_reuse_min_similarity: float = 0.70
     patrol_face_split_max_similarity: float = 0.62
-    patrol_face_reuse_min_margin: float = 0.07
+    patrol_face_reuse_min_margin: float = 0.04
     patrol_face_cross_camera_min_similarity: float = 0.84
     patrol_gallery_min_confidence: float = 0.74
     patrol_gallery_min_margin: float = 0.12
