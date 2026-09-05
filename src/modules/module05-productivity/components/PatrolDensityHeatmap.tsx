@@ -437,10 +437,9 @@ export function PatrolDensityHeatmap({
     [selectedZoneId, statsPresences, heatmapStats],
   )
 
-  const statsTitle = useMemo(() => {
-    if (!selectedZoneId) return PATROL_SITE_NAME
-    return PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)?.name ?? PATROL_SITE_NAME
-  }, [selectedZoneId])
+  const statsTitle = selectedZoneId
+    ? (PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)?.name ?? PATROL_SITE_NAME)
+    : PATROL_SITE_NAME
 
   const headingDeg = hc02Helmet?.heading
 
