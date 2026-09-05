@@ -358,7 +358,7 @@ def touch_person_event(
 
     with db.tx() as conn:
         row = conn.execute(
-            "SELECT snapshot_score, last_seen FROM daily_events"
+            "SELECT snapshot_score, last_seen, snapshot_path FROM daily_events"
             " WHERE event_date = ? AND pers_id = ?",
             (date, pid),
         ).fetchone()
@@ -606,6 +606,68 @@ def _is_object_snapshot_path(path: str | None) -> bool:
     return bool(name.startswith("obj-"))
 
 
+def _snapshot_path_kind(path: str | None) -> str:
+    name = _snapshot_basename(path)
+    if name.startswith("obj-"):
+        return "object"
+    if name.startswith("tk-") or name.startswith("pers-"):
+        return "person"
+    return "unknown"
+
+
+def _apply_payload_tier(
+    raw: str | None,
+    tier: str,
+    *,
+    promoted_from: str | None = None,
+) -> str:
+    import json
+
+    payload: dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+    payload["tier_at_observation"] = tier
+    if promoted_from:
+        payload["promoted_from_object"] = promoted_from
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _transfer_promoted_object_appearances(
+    conn: Any,
+    date: str,
+    obj_id: str,
+    pid: str,
+    ts: float,
+    obj_snapshot: str | None,
+) -> None:
+    """Chuyển lịch sử obj → pers — giữ JPG lưng + tier Đối tượng trước khi chụp mặt."""
+    rows = conn.execute(
+        "SELECT id, started_at, ended_at, snapshot_path, event_payload_json"
+        " FROM appearances WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY started_at ASC, id ASC",
+        (date, obj_id),
+    ).fetchall()
+    obj_snap = (obj_snapshot or "").strip() or None
+    for row in rows:
+        snap = str(row["snapshot_path"] or "").strip() or obj_snap
+        end_at = max(float(row["started_at"]), min(float(row["ended_at"]), ts))
+        payload = _apply_payload_tier(
+            row["event_payload_json"],
+            "object",
+            promoted_from=obj_id,
+        )
+        conn.execute(
+            "UPDATE appearances SET subject_id = ?, ended_at = ?, snapshot_path = ?,"
+            " event_payload_json = ? WHERE id = ?",
+            (pid, end_at, snap or None, payload, int(row["id"])),
+        )
+
+
 def _person_card_snap_from_object(obj_row: dict[str, Any]) -> tuple[str | None, float]:
     """Không gắn JPG obj-* lên thẻ Người — chờ reshoot tk cùng lượt."""
     path = str(obj_row.get("snapshot_path") or "").strip() or None
@@ -678,9 +740,9 @@ def promote_object(
                 ),
             )
 
-        conn.execute(
-            "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
-            (pid, date, obj_id),
+        obj_snapshot_path = str(obj["snapshot_path"] or "").strip() or None
+        _transfer_promoted_object_appearances(
+            conn, date, obj_id, pid, ts, obj_snapshot_path,
         )
         _renumber_presence_seq(conn, date, pid)
         from .promoted_registry import mark_promoted
@@ -696,6 +758,9 @@ def promote_object(
             " WHERE pers_id = ?",
             (ts, float(obj["first_seen"]), pid),
         )
+
+    # Không gộp dòng Đối tượng (lưng) với dòng Người (mặt) vừa tách.
+    coalesce_subject_appearances(pid, date)
 
 
 def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
@@ -916,6 +981,19 @@ def _tier_from_payload(raw: str | None) -> str | None:
 
 def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     """Chỉ gộp appearance cùng track/session — tránh trộn hai lượt gặp."""
+    tier_a = _tier_from_payload(str(a["event_payload_json"] or ""))
+    tier_b = _tier_from_payload(str(b["event_payload_json"] or ""))
+    if tier_a == "object" and tier_b in ("person", "identity"):
+        return False
+    if tier_b == "object" and tier_a in ("person", "identity"):
+        return False
+    kind_a = _snapshot_path_kind(str(a["snapshot_path"] or ""))
+    kind_b = _snapshot_path_kind(str(b["snapshot_path"] or ""))
+    if kind_a == "object" and kind_b == "person":
+        return False
+    if kind_b == "object" and kind_a == "person":
+        return False
+
     ta = str(a["track_id"] or "").strip()
     tb = str(b["track_id"] or "").strip()
     sa = str(a["session_id"] or "").strip()

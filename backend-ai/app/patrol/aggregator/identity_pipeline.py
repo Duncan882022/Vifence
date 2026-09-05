@@ -332,6 +332,9 @@ def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> 
     obj_id = (session.subject_id or "").strip()
     if obj_id.startswith("obj-"):
         daystore.promote_object(obj_id, pers_id, now=now)
+        # Tách lịch sử: dòng Đối tượng (lưng) đã đóng — flush tiếp tạo dòng Người (mặt).
+        session.appearance_row_id = None
+        session.luot_snapshot_captured = False
         logger.info(
             "aggregator promote %s -> %s track %s",
             obj_id,

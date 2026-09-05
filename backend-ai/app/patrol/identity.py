@@ -664,10 +664,10 @@ def ensure_draft_for_tk(
 
     date = db.today_vn(ts)
     nearby = daystore.find_nearby_person_pers_id(
-        date, gps_lat, gps_lng, ts, exclude=tk,
+        date, gps_lat, gps_lng, ts, exclude_pers=tk,
     )
     if not nearby:
-        nearby = daystore.find_same_site_person_today(date, gps_lat, gps_lng, exclude=tk)
+        nearby = daystore.find_same_site_person_today(date, gps_lat, gps_lng, exclude_pers=tk)
     if nearby:
         bind_tk_profile(tk, nearby, now=ts)
         touch_person(nearby, now=ts)
@@ -1193,7 +1193,7 @@ def observe_face(
     nearby = daystore.find_nearby_person_pers_id(date, gps_lat, gps_lng, ts)
     if not nearby:
         nearby = daystore.find_same_site_person_today(
-            date, gps_lat, gps_lng, exclude=pref or None,
+            date, gps_lat, gps_lng, exclude_pers=pref or None,
         )
     if nearby:
         pref = normalize_track_id((preferred_tk or "").strip())

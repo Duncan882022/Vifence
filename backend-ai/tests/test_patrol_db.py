@@ -502,10 +502,13 @@ class ObjectTests(PatrolDbTestCase):
 
         date = db.today_vn(1_000.0)
         self.assertEqual(daystore.list_objects(date), [])
-        cards = daystore.list_person_events(date)
-        self.assertEqual(len(cards), 1)
-        # Quãng thời gian quan sát lúc còn là Đối tượng không bị mất.
-        self.assertEqual(cards[0]["first_seen"], 1_000.0)
+        # Chưa có JPG mặt — tab Người ẩn thẻ; daily_events vẫn giữ mốc obj.
+        row = db.query_one(
+            "SELECT first_seen FROM daily_events WHERE event_date = ? AND pers_id = ?",
+            (date, pers_id),
+        )
+        self.assertIsNotNone(row)
+        self.assertEqual(float(row["first_seen"]), 1_000.0)
         hist = daystore.list_appearances(pers_id, date)
         self.assertEqual(len(hist["segments"]), 1)
 
@@ -520,6 +523,48 @@ class ObjectTests(PatrolDbTestCase):
         cards = daystore.list_person_events(date)
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["first_seen"], 500.0)
+
+    def test_promote_keeps_object_and_person_snapshots_separate(self) -> None:
+        """Thăng hạng: lịch sử giữ JPG lưng (Đối tượng) rồi JPG mặt (Người) — không gộp."""
+        import json
+
+        ts_obj = 1_700_000_000.0
+        ts_promote = ts_obj + 30.0
+        ts_face = ts_promote + 5.0
+        date = db.today_vn(ts_obj)
+        obj_snap = f"{date}/obj-0000123-1.jpg"
+
+        pers_id, _ = identity.observe_face(_vec(40), quality=0.9, now=ts_obj - 60.0)
+        face_snap = f"{date}/{pers_id}-2.jpg"
+        obj_id = daystore.touch_object(
+            None,
+            camera_id="HC-01",
+            snapshot_path=obj_snap,
+            snapshot_score=1.5,
+            now=ts_obj,
+        )
+        daystore.promote_object(obj_id, pers_id, now=ts_promote)
+        daystore.touch_person_event(
+            pers_id,
+            camera_id="HC-01",
+            snapshot_path=face_snap,
+            snapshot_score=2.0,
+            face_eligible=True,
+            now=ts_face,
+            seen_since=ts_face,
+        )
+
+        cards = daystore.list_person_events(date)
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["pers_id"], pers_id)
+
+        segments = daystore.list_appearances(pers_id, date)["segments"]
+        self.assertEqual(len(segments), 2)
+        self.assertIn("obj-", str(segments[0]["snapshot_path"]))
+        self.assertIn("tk-", str(segments[1]["snapshot_path"]))
+        obj_payload = json.loads(str(segments[0].get("event_payload_json") or "{}"))
+        self.assertEqual(obj_payload.get("tier_at_observation"), "object")
+        self.assertEqual(obj_payload.get("promoted_from_object"), obj_id)
 
     def test_promote_from_two_objects_renumbers_presence_seq(self) -> None:
         """Thăng hạng từ hai Đối tượng: hai lượt gặp phải mang số khác nhau.
