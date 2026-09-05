@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   PATROL_SITE_BOUNDARY_RING,
-  PATROL_SITE_QUAD,
   PATROL_SURVEY_PIN,
+  PATROL_ZONE_1_QUAD,
+  PATROL_ZONE_2_QUAD,
   isPointInSiteBoundary,
   patrolSitePoint,
 } from '../data/patrolSiteGeometry'
@@ -14,6 +15,7 @@ import {
   PATROL_MAP_ACTIVE_DRONE_PINS,
   PATROL_MAP_ACTIVE_HELMET_PINS,
   PATROL_SITE_CENTER,
+  PATROL_SITE_ZONE_2_ID,
   PATROL_SITE_ZONE_ID,
   PATROL_ZONE_DIVIDER_LINES,
   buildPatrolZoneDividerLines,
@@ -31,28 +33,35 @@ function isPointInPolygon(lat: number, lng: number, polygon: [number, number][])
   return inside
 }
 
-describe('patrolSiteGeometry — quad Cầu Sông Hốt', () => {
-  it('boundary ring = 4 đỉnh khảo sát', () => {
-    expect(PATROL_SITE_BOUNDARY_RING).toEqual(PATROL_SITE_QUAD)
-    expect(PATROL_SITE_BOUNDARY_RING).toHaveLength(4)
+describe('patrolSiteGeometry — hai khu Cầu Sông Hốt', () => {
+  it('boundary ring gộp 7 đỉnh hai quad', () => {
+    expect(PATROL_SITE_BOUNDARY_RING).toHaveLength(7)
+    expect(PATROL_SITE_BOUNDARY_RING[0]).toEqual(PATROL_ZONE_1_QUAD[0])
+    expect(PATROL_SITE_BOUNDARY_RING[1]).toEqual(PATROL_ZONE_1_QUAD[1])
+    expect(PATROL_SITE_BOUNDARY_RING[2]).toEqual(PATROL_ZONE_2_QUAD[1])
   })
 
-  it('centroid nằm trong polygon', () => {
+  it('centroid nằm trong một trong hai khu', () => {
     const [lat, lng] = PATROL_SURVEY_PIN
     expect(isPointInSiteBoundary(lat, lng)).toBe(true)
     expect(PATROL_SITE_CENTER).toEqual(PATROL_SURVEY_PIN)
   })
 
-  it('patrolSitePoint nội suy trong quad', () => {
-    const center = patrolSitePoint(0.5, 0.5)
-    expect(isPointInPolygon(center[0], center[1], PATROL_SITE_QUAD)).toBe(true)
+  it('patrolSitePoint nội suy trong từng khu', () => {
+    const k1 = patrolSitePoint(0.25, 0.5)
+    const k2 = patrolSitePoint(0.75, 0.5)
+    expect(isPointInPolygon(k1[0], k1[1], PATROL_ZONE_1_QUAD)).toBe(true)
+    expect(isPointInPolygon(k2[0], k2[1], PATROL_ZONE_2_QUAD)).toBe(true)
   })
 
-  it('một zone duy nhất trùng viền đỏ', () => {
-    expect(PATROL_GPS_ZONES).toHaveLength(1)
+  it('hai zone GPS — đỏ KV1, xanh KV2', () => {
+    expect(PATROL_GPS_ZONES).toHaveLength(2)
     expect(PATROL_GPS_ZONES[0]?.zone_id).toBe(PATROL_SITE_ZONE_ID)
-    expect(PATROL_GPS_ZONES[0]?.name).toBe('Cầu Sông Hốt')
-    expect(PATROL_GPS_ZONES[0]?.polygon).toEqual(PATROL_SITE_QUAD)
+    expect(PATROL_GPS_ZONES[0]?.polygon).toEqual(PATROL_ZONE_1_QUAD)
+    expect(PATROL_GPS_ZONES[0]?.borderColor).toBe('#ef4444')
+    expect(PATROL_GPS_ZONES[1]?.zone_id).toBe(PATROL_SITE_ZONE_2_ID)
+    expect(PATROL_GPS_ZONES[1]?.polygon).toEqual(PATROL_ZONE_2_QUAD)
+    expect(PATROL_GPS_ZONES[1]?.borderColor).toBe('#22c55e')
   })
 
   it('không còn nét đứt chia khu', () => {
@@ -60,10 +69,12 @@ describe('patrolSiteGeometry — quad Cầu Sông Hốt', () => {
     expect(buildPatrolZoneDividerLines()).toHaveLength(0)
   })
 
-  it('pin thiết bị — mọi mũ/drone thuộc ZONE_1', () => {
-    expect(PATROL_HELMET_ZONE_ASSIGNMENTS.every(a => a.zoneId === 'ZONE_1')).toBe(true)
-    expect(PATROL_MAP_ACTIVE_HELMET_PINS.every(p => p.zoneId === 'ZONE_1')).toBe(true)
-    expect(PATROL_MAP_ACTIVE_DRONE_PINS[0]?.zoneId).toBe('ZONE_1')
+  it('pin thiết bị — HC-01/KV1, HC-02/DR-03/KV2', () => {
+    expect(PATROL_HELMET_ZONE_ASSIGNMENTS.find(a => a.helmetId === 'HC-01')?.zoneId).toBe('ZONE_1')
+    expect(PATROL_HELMET_ZONE_ASSIGNMENTS.find(a => a.helmetId === 'HC-02')?.zoneId).toBe('ZONE_2')
+    expect(PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === 'HC-01')?.zoneId).toBe('ZONE_1')
+    expect(PATROL_MAP_ACTIVE_HELMET_PINS.find(p => p.id === 'HC-02')?.zoneId).toBe('ZONE_2')
+    expect(PATROL_MAP_ACTIVE_DRONE_PINS[0]?.zoneId).toBe('ZONE_2')
     for (const pin of [...PATROL_MAP_ACTIVE_HELMET_PINS, ...PATROL_MAP_ACTIVE_DRONE_PINS]) {
       expect(isPointInSiteBoundary(pin.position[0], pin.position[1])).toBe(true)
     }

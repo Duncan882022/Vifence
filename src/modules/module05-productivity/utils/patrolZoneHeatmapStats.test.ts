@@ -25,7 +25,7 @@ function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 
   }
 }
 
-describe('patrolZoneHeatmapStats — single zone', () => {
+describe('patrolZoneHeatmapStats — hai khu', () => {
   it('resolvePatrolPresenceZoneId — mặc định ZONE_1', () => {
     const p = presence({ subjectId: 'a', tier: 'person', zoneId: PATROL_SITE_ZONE_ID })
     expect(resolvePatrolPresenceZoneId(p)).toBe(PATROL_SITE_ZONE_ID)

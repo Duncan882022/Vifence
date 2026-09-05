@@ -19,7 +19,8 @@ import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { findPatrolIdentityByWorkerId } from '../services/patrolManualIdentity.service'
 
 const ZONE_LABELS: Record<string, string> = {
-  ZONE_1: 'Cầu Sông Hốt',
+  ZONE_1: 'Khu vực 1',
+  ZONE_2: 'Khu vực 2',
 }
 
 const TUNNEL_HEADERS: Record<string, string> = {

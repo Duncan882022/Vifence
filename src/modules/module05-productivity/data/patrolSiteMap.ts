@@ -1,20 +1,22 @@
 /** Module 05 — Site Map: GPS zone, helmet pins, patrol trail.
  *  Coordinate system: [lat, lng] throughout (Leaflet convention).
  *
- *  Dự án Cầu Sông Hốt — một zone duy nhất trùng polygon khảo sát.
+ *  Dự án Cầu Sông Hốt — hai khu vực khảo sát (đỏ + xanh).
  */
 
 import {
   PATROL_SITE_BOUNDARY_RING,
-  PATROL_SITE_QUAD,
   PATROL_SURVEY_PIN,
+  PATROL_ZONE_1_QUAD,
+  PATROL_ZONE_2_QUAD,
 } from './patrolSiteGeometry'
 import type { PatrolZone } from './patrolTypes'
 
 export const PATROL_SITE_NAME = 'Cầu Sông Hốt'
 export const PATROL_SITE_ZONE_ID = 'ZONE_1'
+export const PATROL_SITE_ZONE_2_ID = 'ZONE_2'
 
-/** Map centre — centroid polygon công trường. */
+/** Map centre — centroid toàn công trường. */
 export const PATROL_SITE_CENTER: [number, number] = [...PATROL_SURVEY_PIN]
 
 function polygonCenter(polygon: [number, number][]): [number, number] {
@@ -24,9 +26,12 @@ function polygonCenter(polygon: [number, number][]): [number, number] {
   return [parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6))]
 }
 
-/** @deprecated Chỉ còn 1 zone — luôn trả tâm công trường. */
-export function patrolZoneCenter(_zoneIndex = 1, _v = 0.5): [number, number] {
-  return PATROL_SITE_CENTER
+export const PATROL_ZONE_1_CENTER = polygonCenter(PATROL_ZONE_1_QUAD)
+export const PATROL_ZONE_2_CENTER = polygonCenter(PATROL_ZONE_2_QUAD)
+
+export function patrolZoneCenter(zoneIndex = 1, _v = 0.5): [number, number] {
+  if (zoneIndex === 2) return PATROL_ZONE_2_CENTER
+  return PATROL_ZONE_1_CENTER
 }
 
 /** Không còn chia khu — không vẽ nét đứt. */
@@ -67,16 +72,16 @@ function offsetSitePoint(lat: number, lng: number, dLat: number, dLng: number): 
 }
 
 export const PATROL_HELMET_01_FALLBACK: [number, number] = offsetSitePoint(
-  PATROL_SITE_CENTER[0],
-  PATROL_SITE_CENTER[1],
-  0.00035,
-  -0.0025,
+  PATROL_ZONE_1_CENTER[0],
+  PATROL_ZONE_1_CENTER[1],
+  0.00015,
+  -0.0012,
 )
 export const PATROL_HELMET_02_FALLBACK: [number, number] = offsetSitePoint(
-  PATROL_SITE_CENTER[0],
-  PATROL_SITE_CENTER[1],
-  -0.00025,
-  0.0025,
+  PATROL_ZONE_2_CENTER[0],
+  PATROL_ZONE_2_CENTER[1],
+  -0.00012,
+  0.0015,
 )
 export const PATROL_DRONE_03_FALLBACK: [number, number] = [...PATROL_SITE_CENTER]
 
@@ -113,21 +118,33 @@ function estimateQuadAreaM2(polygon: readonly [number, number][]): number {
   return Math.round(Math.abs(sum) / 2)
 }
 
-const SITE_POLYGON: [number, number][] = [...PATROL_SITE_QUAD]
-const SITE_AREA_M2 = estimateQuadAreaM2(SITE_POLYGON)
+const ZONE_1_POLYGON: [number, number][] = [...PATROL_ZONE_1_QUAD]
+const ZONE_2_POLYGON: [number, number][] = [...PATROL_ZONE_2_QUAD]
+const ZONE_1_AREA_M2 = estimateQuadAreaM2(ZONE_1_POLYGON)
+const ZONE_2_AREA_M2 = estimateQuadAreaM2(ZONE_2_POLYGON)
 
-export const PATROL_SITE_AREA_M2 = SITE_AREA_M2
+export const PATROL_SITE_AREA_M2 = ZONE_1_AREA_M2 + ZONE_2_AREA_M2
 
 export const PATROL_GPS_ZONES: PatrolGpsZone[] = [
   {
     zone_id: PATROL_SITE_ZONE_ID,
-    name: PATROL_SITE_NAME,
-    shortName: 'CSH',
-    polygon: SITE_POLYGON,
-    area_m2: SITE_AREA_M2,
+    name: 'Khu vực 1',
+    shortName: 'KV1',
+    polygon: ZONE_1_POLYGON,
+    area_m2: ZONE_1_AREA_M2,
     tier: 'primary',
     borderColor: '#ef4444',
-    center: PATROL_SITE_CENTER,
+    center: PATROL_ZONE_1_CENTER,
+  },
+  {
+    zone_id: PATROL_SITE_ZONE_2_ID,
+    name: 'Khu vực 2',
+    shortName: 'KV2',
+    polygon: ZONE_2_POLYGON,
+    area_m2: ZONE_2_AREA_M2,
+    tier: 'secondary',
+    borderColor: '#22c55e',
+    center: PATROL_ZONE_2_CENTER,
   },
 ]
 
@@ -158,12 +175,12 @@ export const PATROL_HELMET_ZONE_ASSIGNMENTS: readonly {
   zoneId: string
 }[] = [
   { helmetId: 'HC-01', zoneId: PATROL_SITE_ZONE_ID },
-  { helmetId: 'HC-02', zoneId: PATROL_SITE_ZONE_ID },
+  { helmetId: 'HC-02', zoneId: PATROL_SITE_ZONE_2_ID },
 ] as const
 
 function buildHelmetPins(): PatrolHelmetPin[] {
-  const zone = PATROL_GPS_ZONES[0]
   return (PATROL_HELMET_ZONE_ASSIGNMENTS as readonly { helmetId: string; zoneId: string }[]).map(({ helmetId, zoneId }) => {
+    const zone = PATROL_GPS_ZONES.find(z => z.zone_id === zoneId)!
     const num = helmetId.replace('HC-', '')
     const position = helmetId === 'HC-01'
       ? PATROL_HELMET_01_FALLBACK
@@ -198,8 +215,8 @@ export const PATROL_MAP_ACTIVE_DRONE_PINS: PatrolDronePin[] = [
   {
     id: 'DR-03',
     label: 'Drone 03',
-    zoneId: PATROL_SITE_ZONE_ID,
-    color: PATROL_GPS_ZONES[0]?.borderColor ?? '#ef4444',
+    zoneId: PATROL_SITE_ZONE_2_ID,
+    color: PATROL_GPS_ZONES[1]?.borderColor ?? '#22c55e',
     position: [...PATROL_DRONE_03_FALLBACK],
   },
 ]
@@ -295,6 +312,8 @@ export {
   PATROL_SITE_CORNERS,
   PATROL_SITE_QUAD,
   PATROL_SURVEY_PIN,
+  PATROL_ZONE_1_QUAD,
+  PATROL_ZONE_2_QUAD,
   isPointInSiteBoundary,
   clampPointToSiteBoundary,
   clipPolygonToSiteBoundary,

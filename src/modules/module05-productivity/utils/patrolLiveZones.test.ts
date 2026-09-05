@@ -29,22 +29,24 @@ describe('buildPatrolLiveZonesFromWorkforce', () => {
     expect(siteZone?.coverage).toBe('VISITED')
     expect(siteZone?.peopleCurrent).toBe(5)
     expect(siteZone?.uniquePeople).toBe(7)
-    expect(zones.length).toBe(1)
+    expect(zones.length).toBe(2)
   })
 
   it('visitedByZoneId override — phủ khu theo thiết bị', () => {
     const zones = buildPatrolLiveZonesFromWorkforce(
       EMPTY_WORKFORCE_SNAPSHOT,
-      { ZONE_1: true },
+      { ZONE_1: true, ZONE_2: false },
     )
-    const zone = zones.find(z => z.id === 'ZONE_1')
-    expect(zone?.coverage).toBe('VISITED')
+    const zone1 = zones.find(z => z.id === 'ZONE_1')
+    const zone2 = zones.find(z => z.id === 'ZONE_2')
+    expect(zone1?.coverage).toBe('VISITED')
+    expect(zone2?.coverage).toBe('NOT_VISITED')
   })
 
   it('chưa quan sát → NOT_VISITED', () => {
     const zones = buildPatrolLiveZonesFromWorkforce(EMPTY_WORKFORCE_SNAPSHOT)
     expect(zones.every(z => z.coverage === 'NOT_VISITED')).toBe(true)
     expect(zones.every(z => z.peopleCurrent === 0)).toBe(true)
-    expect(zones.length).toBe(1)
+    expect(zones.length).toBe(2)
   })
 })
