@@ -7,20 +7,36 @@
 
 const M_PER_DEG_LAT = 111_320
 
+/** Đỉnh nam-đông K1 — nối sát cạnh K2 (đỉnh 4). */
+export const PATROL_ZONE_K1_SOUTH_EAST: [number, number] = [20.951242, 106.931298]
+
 /** Khu vực 1 — đỏ (lat, lng). */
 export const PATROL_ZONE_1_QUAD: [number, number][] = [
   [20.956611, 106.924918],
   [20.956808, 106.931088],
-  [20.951242, 106.931298],
+  PATROL_ZONE_K1_SOUTH_EAST,
   [20.950849, 106.924707],
 ]
 
-/** Khu vực 2 — xanh (lat, lng). Chung đỉnh B với K1 + đỉnh D với K1. */
+/**
+ * Khu vực 2 — xanh (lat, lng).
+ * Pentagon: cạnh 3→4 nối đỉnh SW khảo sát vào điểm chung K1;
+ * cạnh 4→0 là ranh giới chia hai khu.
+ */
 export const PATROL_ZONE_2_QUAD: [number, number][] = [
   [20.956808, 106.931088],
   [20.958527, 106.939064],
   [20.952224, 106.939801],
-  PATROL_ZONE_1_QUAD[2],
+  [20.950538, 106.932420],
+  PATROL_ZONE_K1_SOUTH_EAST,
+]
+
+/** Quad nội suy K2 (bỏ đỉnh 3 — chỉ dùng trail / patrolSitePoint). */
+export const PATROL_ZONE_2_BILINEAR_QUAD: [number, number][] = [
+  PATROL_ZONE_2_QUAD[0],
+  PATROL_ZONE_2_QUAD[1],
+  PATROL_ZONE_2_QUAD[2],
+  PATROL_ZONE_2_QUAD[4],
 ]
 
 /** Viền ngoài gộp hai khu — clip detection / trail. */
@@ -29,7 +45,8 @@ export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
   PATROL_ZONE_1_QUAD[1],
   PATROL_ZONE_2_QUAD[1],
   PATROL_ZONE_2_QUAD[2],
-  PATROL_ZONE_1_QUAD[2],
+  PATROL_ZONE_2_QUAD[3],
+  PATROL_ZONE_K1_SOUTH_EAST,
   PATROL_ZONE_1_QUAD[3],
 ]
 
@@ -173,7 +190,7 @@ export function patrolSitePoint(u: number, v: number): [number, number] {
   if (uClamped <= 0.5) {
     return bilinearInQuad(PATROL_ZONE_1_QUAD, uClamped * 2, vClamped)
   }
-  return bilinearInQuad(PATROL_ZONE_2_QUAD, (uClamped - 0.5) * 2, vClamped)
+  return bilinearInQuad(PATROL_ZONE_2_BILINEAR_QUAD, (uClamped - 0.5) * 2, vClamped)
 }
 
 /**

@@ -43,16 +43,19 @@ export function buildPatrolZoneDividerLines(_samples = 24): [number, number][][]
 
 export const PATROL_ZONE_DIVIDER_LINES: [number, number][][] = []
 
-/** Nội suy điểm trong quad zone (u/v ∈ [0,1]). */
+/** Nội suy điểm trong quad zone (u/v ∈ [0,1]). Pentagon K2 → quad 0-1-2-4. */
 export function patrolZoneInteriorPoint(
   polygon: [number, number][],
   u: number,
   v: number,
 ): [number, number] {
-  if (polygon.length < 4) {
-    return polygonCenter(polygon)
+  const corners = polygon.length >= 5
+    ? [polygon[0], polygon[1], polygon[2], polygon[4]] as [number, number][]
+    : polygon
+  if (corners.length < 4) {
+    return polygonCenter(corners)
   }
-  const [tl, tr, br, bl] = polygon
+  const [tl, tr, br, bl] = corners
   const lat =
     (1 - u) * (1 - v) * tl[0]
     + u * (1 - v) * tr[0]
