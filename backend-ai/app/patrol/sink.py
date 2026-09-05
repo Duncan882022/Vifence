@@ -213,7 +213,10 @@ def _write_snapshot(
             is_person_subject_id(subject_id)
             and float(score) >= daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE
         )
-        if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR:
+        if (
+            explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR
+            and explicit != "object"
+        ):
             resolved_tier = explicit
         elif _snapshot_meets_person_evidence_gate(
             face_eligible=face_eligible,
@@ -279,7 +282,7 @@ def _write_snapshot(
 
         ts = float(capture_ts if capture_ts is not None else time.time())
         date = db.today_vn(ts)
-        folder = SNAPSHOT_DIR / date
+        folder = Path(SNAPSHOT_DIR) / date
         folder.mkdir(parents=True, exist_ok=True)
         name = _snapshot_filename(subject_id, luot_key, ts)
         out_path = folder / name

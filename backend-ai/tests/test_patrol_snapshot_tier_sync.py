@@ -33,12 +33,14 @@ class PatrolSnapshotTierSyncTests(unittest.TestCase):
         self.assertIsNotNone(self._out)
         import cv2
 
-        img = cv2.imread(self._tmpdir.name + "/" + self._out.split("/")[-1])
+        img_path = self._tmpdir.name + "/" + self._out
+        img = cv2.imread(img_path)
         self.assertIsNotNone(img)
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        cyan = cv2.inRange(hsv, (85, 50, 80), (105, 255, 255))
+        # person tier = orange-400 (#fb923c), không phải xanh identity
+        orange = cv2.inRange(hsv, (5, 50, 80), (28, 255, 255))
         green = cv2.inRange(hsv, (35, 40, 80), (90, 255, 255))
-        self.assertGreater(int(cyan.sum()), int(green.sum()))
+        self.assertGreater(int(orange.sum()), int(green.sum()))
 
 
 if __name__ == "__main__":
