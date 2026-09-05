@@ -195,7 +195,7 @@ function bboxIouSimple(a: Bbox4, b: Bbox4): number {
 
 export function patrolPersonLikelyRiderOnVehicle(person: Bbox4, vehicle: Bbox4): boolean {
   const [x1, y1, x2, y2] = person
-  const [vx1, vy1, vx2, vy2] = vehicle
+  const [, vy1, , vy2] = vehicle
   const pw = Math.max(x2 - x1, 1)
   const ph = Math.max(y2 - y1, 1)
   const aspect = ph / pw
