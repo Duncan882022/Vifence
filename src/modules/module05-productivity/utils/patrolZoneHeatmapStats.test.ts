@@ -9,6 +9,8 @@ import { PATROL_SITE_ZONE_ID } from '../data/patrolSiteMap'
 function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 'subjectId' | 'tier'>): PatrolDayPresence {
   return {
     id: 1,
+    subjectId: partial.subjectId,
+    tier: partial.tier,
     cameraId: 'HC-01',
     sourceCameras: ['HC-01'],
     startedAt: 1,
@@ -25,7 +27,7 @@ function presence(partial: Partial<PatrolDayPresence> & Pick<PatrolDayPresence, 
   }
 }
 
-describe('patrolZoneHeatmapStats — single zone', () => {
+describe('patrolZoneHeatmapStats — hai khu', () => {
   it('resolvePatrolPresenceZoneId — mặc định ZONE_1', () => {
     const p = presence({ subjectId: 'a', tier: 'person', zoneId: PATROL_SITE_ZONE_ID })
     expect(resolvePatrolPresenceZoneId(p)).toBe(PATROL_SITE_ZONE_ID)
