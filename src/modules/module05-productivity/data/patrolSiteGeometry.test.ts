@@ -34,11 +34,12 @@ function isPointInPolygon(lat: number, lng: number, polygon: [number, number][])
 }
 
 describe('patrolSiteGeometry — hai khu Cầu Sông Hốt', () => {
-  it('boundary ring gộp 7 đỉnh hai quad', () => {
-    expect(PATROL_SITE_BOUNDARY_RING).toHaveLength(7)
+  it('boundary ring gộp 6 đỉnh — K1/K2 nối sát tại đỉnh nam chung', () => {
+    expect(PATROL_SITE_BOUNDARY_RING).toHaveLength(6)
     expect(PATROL_SITE_BOUNDARY_RING[0]).toEqual(PATROL_ZONE_1_QUAD[0])
     expect(PATROL_SITE_BOUNDARY_RING[1]).toEqual(PATROL_ZONE_1_QUAD[1])
     expect(PATROL_SITE_BOUNDARY_RING[2]).toEqual(PATROL_ZONE_2_QUAD[1])
+    expect(PATROL_ZONE_2_QUAD[3]).toEqual(PATROL_ZONE_1_QUAD[2])
   })
 
   it('centroid nằm trong một trong hai khu', () => {

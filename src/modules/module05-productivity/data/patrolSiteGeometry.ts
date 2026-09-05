@@ -15,12 +15,12 @@ export const PATROL_ZONE_1_QUAD: [number, number][] = [
   [20.950849, 106.924707],
 ]
 
-/** Khu vực 2 — xanh (lat, lng). Cạnh B–C chung với K1. */
+/** Khu vực 2 — xanh (lat, lng). Chung đỉnh B với K1 + đỉnh D với K1. */
 export const PATROL_ZONE_2_QUAD: [number, number][] = [
   [20.956808, 106.931088],
   [20.958527, 106.939064],
   [20.952224, 106.939801],
-  [20.950538, 106.932420],
+  PATROL_ZONE_1_QUAD[2],
 ]
 
 /** Viền ngoài gộp hai khu — clip detection / trail. */
@@ -29,7 +29,6 @@ export const PATROL_SITE_BOUNDARY_RING: [number, number][] = [
   PATROL_ZONE_1_QUAD[1],
   PATROL_ZONE_2_QUAD[1],
   PATROL_ZONE_2_QUAD[2],
-  PATROL_ZONE_2_QUAD[3],
   PATROL_ZONE_1_QUAD[2],
   PATROL_ZONE_1_QUAD[3],
 ]
