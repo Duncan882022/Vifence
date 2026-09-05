@@ -21,11 +21,17 @@ export class PatrolPersonRoiEngine {
   private displaySmoother = new BboxDisplaySmoother()
   /** HC-02 publish từ chính máy — analyze JPEG trễ so với khung video. */
   private localPublisher = false
+  /** WHEP/WebRTC live — ưu tiên bám người di chuyển. */
+  private lowLatencyLive = false
 
   constructor(readonly cameraId: string) {}
 
   setLocalPublisherMode(enabled: boolean): void {
     this.localPublisher = enabled
+  }
+
+  setLowLatencyLiveMode(enabled: boolean): void {
+    this.lowLatencyLive = enabled
   }
 
   /**
@@ -36,7 +42,7 @@ export class PatrolPersonRoiEngine {
     return resolvePatrolPersonRoiConfig(
       this.cameraId,
       resolveEffectivePatrolFlightMode(this.cameraId),
-      { localPublisher: this.localPublisher },
+      { localPublisher: this.localPublisher, lowLatencyLive: this.lowLatencyLive },
     )
   }
 
@@ -159,6 +165,10 @@ export function clearPatrolPersonRoiTracks(cameraId: string): void {
 
 export function setPatrolPersonRoiLocalPublisher(cameraId: string, enabled: boolean): void {
   getPatrolPersonRoiEngine(cameraId).setLocalPublisherMode(enabled)
+}
+
+export function setPatrolPersonRoiLowLatencyLive(cameraId: string, enabled: boolean): void {
+  getPatrolPersonRoiEngine(cameraId).setLowLatencyLiveMode(enabled)
 }
 
 export function clearPatrolPersonRoiEngine(cameraId?: string): void {

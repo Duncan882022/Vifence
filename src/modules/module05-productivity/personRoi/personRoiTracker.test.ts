@@ -6,6 +6,7 @@ import { advancePersonRoiTracks, predictPersonRoiTracks, resetPersonRoiTrackSeq 
 import {
   PATROL_PERSON_ROI_CONFIG,
   PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP,
   PATROL_PERSON_ROI_PROFILE_FLYCAM,
   resolvePatrolPersonRoiConfig,
 } from './patrolPersonRoi.config'
@@ -213,6 +214,8 @@ describe('profile flycam', () => {
     expect(resolvePatrolPersonRoiConfig('DR-03', 'aerial')).toBe(PATROL_PERSON_ROI_PROFILE_FLYCAM)
     expect(resolvePatrolPersonRoiConfig('DR-03', 'proximity')).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
     expect(resolvePatrolPersonRoiConfig('HC-01', null)).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
+    expect(resolvePatrolPersonRoiConfig('HC-01', null, { lowLatencyLive: true }))
+      .toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP)
     expect(resolvePatrolPersonRoiConfig('HC-02', null)).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
   })
 })
@@ -355,6 +358,22 @@ describe('mồi vận tốc từ backend', () => {
     const kalman = [...tracks.values()][0].kalman
     const maxSpeed = Math.max(kalman.w, kalman.h) * PATROL_PERSON_ROI_CONFIG.maxSpeedBoxPerSec
     expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
+  })
+
+  it('predict trước update — bbox rAF bám người đi ngang giữa hai poll', () => {
+    let tracks = advance(
+      empty(),
+      [person([100, 100, 200, 400], { track_id: 'p1', velocity: [120, 0] })],
+      280,
+    )
+    tracks = advance(
+      tracks,
+      [person([130, 100, 230, 400], { track_id: 'p1', velocity: [120, 0] })],
+      280,
+    )
+    const mid = predictPersonRoiTracks(tracks, 140, PATROL_PERSON_ROI_CONFIG)[0].bbox
+    expect(mid[0]).toBeGreaterThan(115)
+    expect(mid[0]).toBeLessThan(160)
   })
 })
 
