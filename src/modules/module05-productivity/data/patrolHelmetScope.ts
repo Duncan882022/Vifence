@@ -24,6 +24,12 @@ export const PATROL_LIVE_ROI_DELAY_MS = 5000
  */
 export const WHEP_DISPLAY_WALLCLOCK_LAG_MS = 400
 
+/**
+ * `overlay_sync=aligned` nhưng drift vượt ngưỡng → at_ms ước lượng sai, bbox nhảy loạn.
+ * HLS buffer dùng 800ms; WHEP ~200–500ms nên siết ~400ms.
+ */
+export const WHEP_MAX_ALIGNED_DRIFT_MS = 400
+
 /** Camera vẽ ROI người tuần tra (bodycam + flycam) — khi bbox toggle bật. */
 export function isPatrolPersonRoiCameraId(cameraId: string): boolean {
   return isPatrolMetricsCameraId(cameraId)

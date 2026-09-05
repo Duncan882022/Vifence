@@ -34,6 +34,7 @@ import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
 import {
   isPatrolPersonRoiCameraId,
   isPatrolMetricsCameraId,
+  WHEP_MAX_ALIGNED_DRIFT_MS,
 } from '@/modules/module05-productivity/data/patrolHelmetScope'
 import { getPatrolLiveRoiDelayMs } from '@/services/patrolRuntimeBridge'
 import { resolveOverlayAnalyzeFrameSize } from '@/modules/module02-training/utils/videoOverlayCoords'
@@ -172,6 +173,7 @@ export function CameraVideoFeed({
     cameraId,
     fallbackLagMs: patrolRoiFallbackLagMs,
     useRuntimeLagHint: patrolRoiUsesBufferLag,
+    maxAlignedDriftMs: patrolRoiUsesBufferLag ? 800 : WHEP_MAX_ALIGNED_DRIFT_MS,
   })
 
   const patrolRoiFrameSize = useMemo(() => {
@@ -216,11 +218,13 @@ export function CameraVideoFeed({
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
       gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
+      vmsFeed.snapshot.frame_wallclock_ms,
     )
   }, [
     runPatrolHeatmapAnalyze,
     cameraId,
     vmsFeed.snapshot?.updated_at,
+    vmsFeed.snapshot?.frame_wallclock_ms,
     vmsFeed.snapshot?.width,
     vmsFeed.snapshot?.height,
     vmsFeed.snapshot?.metrics,

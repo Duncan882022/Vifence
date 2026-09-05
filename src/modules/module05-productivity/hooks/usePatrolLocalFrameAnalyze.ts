@@ -7,14 +7,14 @@ import {
 import { getLastDeviceHeading } from '@/modules/module02-training/services/deviceHeading.service'
 import { getPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
-import { getPatrolPersonRoiEngine } from '../personRoi'
+import { getPatrolPersonRoiEngine, setPatrolPersonRoiLocalPublisher } from '../personRoi'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '../utils/patrolHeatmapLiveSync'
 import { patrolPersonMeetsDisplayGate } from '../utils/patrolPersonVisibility'
 
 /**
- * Nhịp gửi khung — thưa hơn trang Phát sóng vì máy này còn đang tải luồng WHIP lên.
+ * Nhịp gửi khung — khớp round-trip analyze (~280–450ms) để bbox không snap lệch khung.
  */
-const LOCAL_ANALYZE_INTERVAL_MS = 90
+const LOCAL_ANALYZE_INTERVAL_MS = 300
 
 export interface PatrolLocalFrameSize {
   width: number
@@ -66,6 +66,7 @@ export function usePatrolLocalFrameAnalyze(
     // nhỏ — giữ lại track cũ thì chúng bị vẽ sai tỉ lệ cho tới lúc hết hạn.
     const engine = getPatrolPersonRoiEngine(cameraId)
     engine.clear()
+    setPatrolPersonRoiLocalPublisher(cameraId, true)
 
     const syncVideoFrameSize = () => {
       if (video.videoWidth > 0 && video.videoHeight > 0) {
@@ -112,6 +113,7 @@ export function usePatrolLocalFrameAnalyze(
       video.removeEventListener('loadeddata', syncVideoFrameSize)
       client.stop()
       engine.clear()
+      setPatrolPersonRoiLocalPublisher(cameraId, false)
       setFrameSize({ width: 0, height: 0 })
     }
   }, [cameraId, enabled, videoRef])

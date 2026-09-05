@@ -279,6 +279,11 @@ export function advancePersonRoiTracks(
     if (!key) continue
     const track = byAnchor.get(key)
     if (!track || next.has(track.id)) continue
+    // Backend đôi khi gán cùng track_id cho bbox YOLO crowd phủ gần hết khung —
+    // IoU bị bỏ qua ở nhánh khoá id nên phải siết tỉ lệ diện tích trước khi đo.
+    if (track.hits >= 1 && sizeRatio(track.kalman.getBbox(), det.bbox) < cfg.matchSizeRatioMin) {
+      continue
+    }
     applyMeasurement(track, det)
     matchedDets.add(globalIndex)
     next.set(track.id, track)
