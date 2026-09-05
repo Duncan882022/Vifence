@@ -56,6 +56,8 @@ def _resolve_tier_at_observation(
     from ...patrol_ids import is_person_subject_id
 
     if is_person_subject_id(sid):
+        if not shot_face_eligible:
+            return "object"
         from .. import identity
 
         person = identity.get_person(identity.resolve_alias(sid))
@@ -374,12 +376,24 @@ def flush_session(
             # của bộ phát hiện chứ không phản ánh công trường. Track quá ngắn
             # vẫn vào sổ cái ở dạng chưa chốt được, không mất dấu vết.
             return
-        if not has_face and obs.person_bbox is None:
-            return
-        if obs.person_bbox is not None and not _object_commit_allowed(
-            obs, has_face=has_face,
-        ):
-            return
+        effective_bbox = obs.person_bbox if obs.person_bbox is not None else session.bbox
+        if not has_face and effective_bbox is not None:
+            gate_obs = obs
+            if obs.person_bbox is None and session.bbox is not None:
+                gate_obs = ObservationInput(
+                    camera_id=obs.camera_id,
+                    track_id=obs.track_id,
+                    ts=obs.ts,
+                    person_bbox=session.bbox,
+                    zone_id=obs.zone_id,
+                    face_eligible=obs.face_eligible,
+                    confidence=obs.confidence,
+                    frame=obs.frame,
+                    lifecycle_tier=obs.lifecycle_tier,
+                    lifecycle_worker_id=obs.lifecycle_worker_id,
+                )
+            if not _object_commit_allowed(gate_obs, has_face=has_face):
+                return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
         from .session_store import link_subject_session
 

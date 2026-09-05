@@ -51,10 +51,19 @@ def _person_card_eligible(
     snapshot_path: str | None,
     snapshot_score: float,
 ) -> bool:
-    """Tab Người / popup — chỉ khi mặt đủ rõ (đồng bộ FE ≥1.05)."""
-    if not face_eligible or not snapshot_path:
-        return False
-    return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
+    """Cho phép ghi/cập nhật thẻ daily_events.
+
+    Tab Người trên FE và KPI ``day_stats`` vẫn lọc snapshot ≥1.05 — thẻ draft
+    (chưa có JPG) giữ last_seen và tier cho đến khi flush chụp được mặt.
+    """
+    if face_eligible:
+        return True
+    if snapshot_path and float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE:
+        return True
+    # Aggregator chốt pers/tk trước khi có ảnh — vẫn cần một dòng thẻ ngày.
+    if not (snapshot_path or "").strip():
+        return True
+    return False
 
 
 def _gps_bucket(lat: float, lng: float) -> tuple[int, int]:
@@ -427,7 +436,10 @@ def touch_person_event(
             if write:
                 if keep_new and card_eligible:
                     prev_snap = str(row["snapshot_path"] or "").strip() or None
-                    merged_snap = keep_snapshot_for_luot(prev_snap, snapshot_path)
+                    if is_identified:
+                        merged_snap = snapshot_path
+                    else:
+                        merged_snap = keep_snapshot_for_luot(prev_snap, snapshot_path)
                     conn.execute(
                         "UPDATE daily_events SET last_seen = ?, snapshot_path = ?,"
                         " snapshot_score = ? WHERE event_date = ? AND pers_id = ?",
@@ -839,10 +851,8 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
         "        AS promoted_at"
         "  FROM daily_events e JOIN persons p ON p.pers_id = e.pers_id"
         " WHERE e.event_date = ?"
-        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
-        " AND e.snapshot_score >= ?"
         " ORDER BY e.last_seen DESC",
-        (d, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+        (d,),
     )
     out: list[dict[str, Any]] = []
     for r in rows:

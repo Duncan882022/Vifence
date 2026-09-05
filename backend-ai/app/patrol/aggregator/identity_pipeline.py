@@ -29,6 +29,8 @@ def _observation_gps(obs: ObservationInput) -> tuple[float | None, float | None]
 
 def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
     """Chặn FP cây/kệ — chỉ thăng Người khi bbox giống người thật."""
+    if not obs.face_eligible:
+        return False
     if obs.person_bbox is None:
         return False
     frame_w, frame_h = _frame_size(obs)
@@ -623,7 +625,7 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                         )
                 except Exception:  # noqa: BLE001
                     logger.exception("aggregator observe_face tk failed")
-            elif _existing_tk_profile_for_worker(wid):
+            elif _existing_tk_profile_for_worker(wid) and _may_promote_to_person(session, obs):
                 gps_lat, gps_lng = _observation_gps(obs)
                 pers_id = _ensure_pers_for_worker(
                     wid, tier=obs.lifecycle_tier, now=obs.ts,

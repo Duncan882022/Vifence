@@ -38,6 +38,9 @@ def _maybe_split_encounter(session, ts: float) -> None:
         current_session=session,
     ):
         return
+    # Chưa chốt lượt đầu — gap lớn vẫn cùng track ByteTrack, giữ mốc first_seen.
+    if not session.committed:
+        return
     if session.last_seen_at <= 0 or ts <= session.last_seen_at + 1e-6:
         return
     from ..presence import GAP_FALLBACK_SEC
