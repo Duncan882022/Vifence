@@ -6,16 +6,13 @@ import type {
   Bbox,
   PersonRoiDetection,
   PersonRoiDisplay,
-  PersonRoiTier,
   PersonRoiTrack,
   PersonRoiTrackState,
 } from './types'
 
-const TIER_RANK: Record<PersonRoiTier, number> = {
-  object: 0,
-  person: 1,
-  identity: 2,
-}
+import { PATROL_TIER_RANK } from '../utils/patrolTierTokens'
+
+const TIER_RANK = PATROL_TIER_RANK
 
 let trackSeq = 0
 
@@ -201,10 +198,20 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
       track.workerName = name
     }
   }
-  // Tầng do backend giữ (state machine chỉ tiến không lùi). FE chỉ chấp nhận
-  // giá trị cao hơn để một payload trễ nhịp không kéo nhãn tụt xuống.
-  if (det.tier && TIER_RANK[det.tier] > TIER_RANK[track.tier]) {
-    track.tier = det.tier
+  // Tầng do backend giữ (state machine chỉ tiến không lùi).
+  const snapTier = det.tier_snapshot?.tier
+  const incomingTier = snapTier ?? det.tier
+  if (incomingTier && TIER_RANK[incomingTier] > TIER_RANK[track.tier]) {
+    track.tier = incomingTier
+  }
+  if (det.tier_snapshot) {
+    track.tierSnapshot = det.tier_snapshot
+  } else if (incomingTier && track.tierSnapshot) {
+    track.tierSnapshot = {
+      ...track.tierSnapshot,
+      tier: track.tier,
+      confidence: Math.max(track.tierSnapshot.confidence, det.confidence),
+    }
   }
   if (det.peak_group) {
     track.peakGroup = true
@@ -459,6 +466,7 @@ export function predictPersonRoiTracks(
         faceEligible: track.faceEligible,
         workerId: track.workerId,
         promotedFrom: track.promotedFrom,
+        tierSnapshot: track.tierSnapshot,
       }),
       displayOpacity,
       peakGroup: track.peakGroup,

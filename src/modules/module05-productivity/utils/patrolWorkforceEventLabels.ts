@@ -9,12 +9,12 @@ import { resolvePatrolSubjectAlias } from '@/services/patrolRuntimeBridge'
 import { getPatrolManualIdentity } from '../services/patrolManualIdentity.service'
 import { isVerifiedWorkerLabel } from './workforceHeatmapUi'
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
-import { PATROL_OBJECT_FACE_SNAPSHOT_SCORE } from './patrolDayObjectFilter'
 import {
   isPatrolGalleryWorkerId,
   resolvePatrolCanonicalEntityKey,
   resolvePatrolProfileEntityKey,
 } from './patrolIdentityEntity'
+import { resolvePatrolPersonStage as resolvePatrolPersonStageFromTier } from './resolvePatrolTier'
 
 /** 3 giai đoạn nhận diện người — dùng cho tab panel sự kiện và KPI. */
 export type PatrolPersonStage = 'object' | 'person' | 'profile'
@@ -143,29 +143,7 @@ export function isPatrolPersId(id?: string | null): boolean {
  * - object:  quay lưng / không thấy mặt, chỉ đủ đầu + 1/3 thân trên
  */
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
-  if (event.stage === 'profile') return 'profile'
-  if (event.stage === 'person') {
-    // Một phần mặt / chân-đùi có thể mang stage person từ BE — chặn bằng snapshot score.
-    const score = event.snapshotScore ?? 0
-    if (score > 0 && score < PATROL_OBJECT_FACE_SNAPSHOT_SCORE) return 'object'
-    return 'person'
-  }
-  if (event.stage === 'object') return 'object'
-
-  const objectId = event.objectId?.trim() ?? ''
-  const trackWorkerId = event.trackWorkerId?.trim() ?? ''
-  const snapshotScore = event.snapshotScore ?? 0
-  const hasFaceEvidence = snapshotScore >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE
-
-  if (isPatrolGalleryWorkerId(objectId)) return 'profile'
-  if (isPatrolPersId(objectId) || isPatrolTrackWorkerId(objectId)) {
-    return hasFaceEvidence || snapshotScore <= 0 ? 'person' : 'object'
-  }
-  if (isPatrolTrackWorkerId(trackWorkerId)) {
-    return hasFaceEvidence || snapshotScore <= 0 ? 'person' : 'object'
-  }
-
-  return 'object'
+  return resolvePatrolPersonStageFromTier(event)
 }
 
 /** Tiêu đề card theo giai đoạn. */

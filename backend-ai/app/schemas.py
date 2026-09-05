@@ -60,6 +60,26 @@ class CraneProximityDetection(BaseModel):
     face_match_source: Optional[str] = None
 
 
+class TierSnapshotPayload(BaseModel):
+    """Contract tầng thống nhất — ROI live, snapshot JPG, bundle, lịch sử."""
+
+    tier: str = "object"
+    tier_rank: int = 0
+    tier_since: float = 0.0
+    subject_id: str = ""
+    worker_id: Optional[str] = None
+    worker_name: Optional[str] = None
+    face_eligible: bool = False
+    confidence: float = 0.0
+    snapshot_score: float = 0.0
+    promoted_from: list[str] = Field(default_factory=list)
+    promoted_at: Optional[float] = None
+    bbox: list[float] = Field(default_factory=list)
+    track_id: str = ""
+    camera_id: str = ""
+    tier_source: str = "lifecycle"
+
+
 class PpeDetection(BaseModel):
     behavior: str  # person | hard_hat | no_helmet | safety_vest | no_vest | safety_shoes | no_shoes
     label: str
@@ -90,6 +110,8 @@ class PpeDetection(BaseModel):
     peak_group: Optional[bool] = None
     peak_group_index: Optional[int] = None
     peak_group_size: Optional[int] = None
+    # Contract tầng thống nhất — FE đọc trực tiếp, không suy lại từ worker_id.
+    tier_snapshot: Optional[TierSnapshotPayload] = None
 
 
 class MobileAiConfigPayload(BaseModel):

@@ -109,7 +109,7 @@ describe('ba tầng nhận diện HC-02', () => {
     expect(resolvePatrolPersonStage(event)).toBe('object')
   })
 
-  it('mặt chưa đủ (snapshot < 1.05) — vẫn Đối tượng dù BE gửi stage person', () => {
+  it('mặt chưa đủ (snapshot < 1.05) — vẫn Người khi BE gửi stage person (monotonic)', () => {
     const event = makeEvent({
       id: 'pers:tk-12',
       objectId: 'tk-12',
@@ -117,7 +117,7 @@ describe('ba tầng nhận diện HC-02', () => {
       stage: 'person',
       snapshotScore: 0.82,
     })
-    expect(resolvePatrolPersonStage(event)).toBe('object')
+    expect(resolvePatrolPersonStage(event)).toBe('person')
   })
 })
 

@@ -12,6 +12,11 @@ const TIER_PAYLOAD_MAP: Record<string, PatrolPersonStage> = {
 export function resolveAppearanceObservationStage(
   segment: PatrolAppearanceSegment,
 ): PatrolPersonStage | null {
+  const snap = segment.eventPayload?.tier_snapshot
+  if (snap && typeof snap === 'object' && snap !== null) {
+    const tier = String((snap as Record<string, unknown>).tier ?? '').trim()
+    if (tier in TIER_PAYLOAD_MAP) return TIER_PAYLOAD_MAP[tier]
+  }
   const raw = segment.eventPayload?.tier_at_observation
   if (typeof raw !== 'string' || !raw.trim()) return null
   return TIER_PAYLOAD_MAP[raw.trim().toLowerCase()] ?? null

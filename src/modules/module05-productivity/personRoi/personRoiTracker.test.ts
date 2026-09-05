@@ -305,13 +305,13 @@ describe('tầng định danh từ backend', () => {
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
   })
 
-  it('tier person từ BE nhưng chưa face_eligible — ROI vẫn Đối tượng', () => {
+  it('tier person từ BE — ROI giữ Người dù chưa face_eligible (no downtier)', () => {
     let tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'tk-0000001' })],
       1_000,
     )
-    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
 
     tracks = advance(
       tracks,

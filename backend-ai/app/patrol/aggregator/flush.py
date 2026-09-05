@@ -44,7 +44,7 @@ def _resolve_tier_at_observation(
     shot_face_eligible: bool,
     worker_id: str | None,
 ) -> str:
-    """Tier tại thời điểm gặm — fallback khi lifecycle_tier rỗng (popup lịch sử)."""
+    """Tier tại thời điểm gặm — ưu tiên lifecycle, không hạ person→object."""
     known = (tier_at or "").strip()
     if known in ("object", "person", "identity"):
         return known
@@ -67,9 +67,39 @@ def _resolve_tier_at_observation(
             inferred = tier_for_worker_id(worker_id)
             if inferred == "identity":
                 return "identity"
-        return "person" if shot_face_eligible else "object"
+        return "person"
 
     return "object"
+
+
+def _build_flush_tier_snapshot(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    subject_id: str,
+    tier: str,
+    shot_score: float,
+    shot_face_eligible: bool,
+) -> dict[str, Any]:
+    from ..tier_snapshot import build_tier_snapshot
+
+    snap = build_tier_snapshot(
+        tier=tier,
+        tier_since=session.started_at,
+        subject_id=subject_id,
+        worker_id=obs.lifecycle_worker_id,
+        worker_name=obs.worker_name,
+        face_eligible=shot_face_eligible,
+        confidence=float(obs.confidence or 0.0),
+        face_quality=float(obs.face_quality or 0.0),
+        bbox=list(obs.person_bbox) if obs.person_bbox else [],
+        track_id=session.track_id,
+        camera_id=session.camera_id,
+        tier_source="flush",
+    )
+    if shot_score > 0:
+        snap = snap.model_copy(update={"snapshot_score": shot_score})
+    return snap.to_payload_dict()
 
 
 def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
@@ -520,7 +550,19 @@ def flush_session(
         shot_face_eligible=shot_face_eligible,
         worker_id=worker_id,
     )
-    payload = build_event_payload(session, tier_at_observation=tier_at)
+    tier_payload = _build_flush_tier_snapshot(
+        session,
+        obs,
+        subject_id=subject_id,
+        tier=tier_at,
+        shot_score=shot_score,
+        shot_face_eligible=shot_face_eligible,
+    )
+    payload = build_event_payload(
+        session,
+        tier_at_observation=tier_at,
+        tier_snapshot=tier_payload,
+    )
     payload_json = json.dumps(payload, ensure_ascii=False)
 
     row_id = daystore.upsert_track_appearance(

@@ -240,6 +240,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         migrate_to_v8,
         migrate_to_v9,
         migrate_to_v10,
+        migrate_to_v11,
     )
 
     migrate_to_v3(conn)
@@ -250,6 +251,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     migrate_to_v8(conn)
     migrate_to_v9(conn)
     migrate_to_v10(conn)
+    migrate_to_v11(conn)
 
 
 def _connect() -> sqlite3.Connection:
