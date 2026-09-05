@@ -110,7 +110,7 @@ function PatrolStageBadge({ event }: { event: PatrolEvent }) {
         'inline-flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-semibold',
         meta.badge,
       )}>
-        <Icon className={cn('w-2.5 h-2.5 shrink-0', meta.color)} aria-hidden />
+        <Icon className="w-2.5 h-2.5 shrink-0" aria-hidden />
         {meta.label}
       </span>
     </TagTooltip>
