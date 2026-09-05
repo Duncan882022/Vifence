@@ -173,6 +173,20 @@ def assign_peak_crowd_detection_fields(
         det.peak_group_index = idx
         det.peak_group_size = size
         det.label = f"#{idx}"
+        from ..patrol.tier_snapshot import attach_tier_snapshot_to_detection
+
+        attach_tier_snapshot_to_detection(
+            det,
+            tier="object",
+            tier_since=0.0,
+            camera_id=str(getattr(det, "camera_id", "") or ""),
+            track_id=tid,
+            worker_id=crowd_object_id,
+            subject_id=crowd_object_id,
+            confidence=float(getattr(det, "confidence", 0.0) or 0.0),
+            bbox=list(getattr(det, "bbox", []) or []),
+            tier_source="peak_crowd",
+        )
 
 
 def _rank_crowd_indices(members: list[PeakCrowdMember]) -> dict[str, int]:

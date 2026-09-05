@@ -56,8 +56,6 @@ def _resolve_tier_at_observation(
     from ...patrol_ids import is_person_subject_id
 
     if is_person_subject_id(sid):
-        if not shot_face_eligible:
-            return "object"
         from .. import identity
 
         person = identity.get_person(identity.resolve_alias(sid))
@@ -475,10 +473,27 @@ def flush_session(
     )
     subject_id = session.subject_id or subject_id
 
+    tier_at_resolved = _resolve_tier_at_observation(
+        subject_id,
+        tier_at=tier_at,
+        shot_face_eligible=shot_face_eligible,
+        worker_id=worker_id,
+    )
+    tier_payload = _build_flush_tier_snapshot(
+        session,
+        obs,
+        subject_id=subject_id,
+        tier=tier_at_resolved,
+        shot_score=shot_score,
+        shot_face_eligible=shot_face_eligible,
+    )
+
     skip_appearance = True
     from ...patrol_ids import is_person_subject_id
 
     if is_person_subject_id(subject_id):
+        import json as _json
+
         daystore.touch_person_event(
             subject_id,
             camera_id=session.camera_id,
@@ -491,6 +506,7 @@ def flush_session(
             gps_lat=gps_lat,
             gps_lng=gps_lng,
             skip_appearance=skip_appearance,
+            tier_snapshot_json=_json.dumps(tier_payload, ensure_ascii=False),
         )
     else:
         daystore.touch_object(
@@ -558,20 +574,7 @@ def flush_session(
             session.dirty = False
             return
 
-    tier_at = _resolve_tier_at_observation(
-        subject_id,
-        tier_at=tier_at,
-        shot_face_eligible=shot_face_eligible,
-        worker_id=worker_id,
-    )
-    tier_payload = _build_flush_tier_snapshot(
-        session,
-        obs,
-        subject_id=subject_id,
-        tier=tier_at,
-        shot_score=shot_score,
-        shot_face_eligible=shot_face_eligible,
-    )
+    tier_at = tier_at_resolved
     payload = build_event_payload(
         session,
         tier_at_observation=tier_at,

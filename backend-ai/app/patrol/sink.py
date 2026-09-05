@@ -134,42 +134,40 @@ def _resolve_snapshot_tier(
     tier: str | None = None,
     worker_id: str | None = None,
 ) -> str:
-    """Tier khung/badge snapshot — đồng bộ tab sự kiện (Người = xanh, Định danh = tím)."""
-    from ..patrol_entity import patrol_tier_label
-    from ..patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON, tier_for_worker_id
+    """Tier khung/badge snapshot — lifecycle + monotonic; obj-* không nhận identity giả."""
+    from ..patrol_identity_lifecycle import TIER_OBJECT, TIER_PERSON, tier_for_worker_id
+    from .tier_snapshot import higher_tier
 
-    wid = (worker_id or "").strip()
     explicit = (tier or "").strip()
-    inferred = tier_for_worker_id(wid) if wid else "object"
+    wid = (worker_id or "").strip()
+    lifecycle_tier = tier_for_worker_id(wid) if wid else TIER_OBJECT
+    sid = (subject_id or "").strip()
 
-    if subject_id.startswith("obj-"):
-        if _snapshot_tier_rank(inferred) > 0:
-            return inferred
-        return "object"
-
-    # lifecycle_tier từ ROI live là nguồn sự thật — không thăng lên identity
-    # chỉ vì pers-* đã từng identify trong SQLite (tab Người ≠ khung tím).
-    if explicit == TIER_PERSON:
-        return TIER_PERSON
-    if explicit == TIER_IDENTITY:
-        if wid and not patrol_tier_label(wid) == TIER_IDENTITY:
+    if sid.startswith("obj-"):
+        if explicit == TIER_PERSON:
             return TIER_PERSON
-        return TIER_IDENTITY
+        if _snapshot_tier_rank(lifecycle_tier) > 0:
+            return lifecycle_tier
+        return TIER_OBJECT
 
-    candidates: list[str] = []
-    if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR and explicit != "object":
-        candidates.append(explicit)
-    if _snapshot_tier_rank(inferred) > 0:
-        candidates.append(inferred)
-    if identity.get_person(subject_id):
-        candidates.append(_snapshot_tier(subject_id))
+    from ..patrol_ids import is_person_subject_id
 
-    if candidates:
-        return max(candidates, key=_snapshot_tier_rank)
+    if is_person_subject_id(sid):
+        if explicit == TIER_PERSON:
+            return TIER_PERSON
+        if explicit == "identity":
+            return "identity"
+        person = identity.get_person(identity.resolve_alias(sid))
+        if person and person.get("status") == identity.STATUS_IDENTIFIED:
+            if _snapshot_tier_rank(lifecycle_tier) >= _snapshot_tier_rank("identity"):
+                return "identity"
+            if explicit != TIER_PERSON:
+                return "identity"
+        if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR:
+            return explicit
+        return higher_tier(TIER_PERSON, lifecycle_tier)
 
-    if explicit == "object":
-        return "object"
-    return patrol_tier_label(wid or subject_id)
+    return TIER_OBJECT
 
 
 def _write_snapshot(

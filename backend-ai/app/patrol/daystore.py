@@ -385,6 +385,7 @@ def touch_person_event(
     gps_lat: float | None = None,
     gps_lng: float | None = None,
     skip_appearance: bool = False,
+    tier_snapshot_json: str | None = None,
 ) -> None:
     ts = now or time.time()
     first = float(seen_since) if seen_since is not None else ts
@@ -469,7 +470,64 @@ def touch_person_event(
                 new_encounter=seen_since is not None,
             )
         tier = "identity" if is_identified else "person"
-        _upsert_event_tier_ever(conn, date, pid, tier)
+        _upsert_event_tier_ever(conn, date, pid, tier, tier_snapshot_json)
+
+
+def _insert_person_phase_after_promote(
+    conn: Any,
+    date: str,
+    pid: str,
+    ts: float,
+    *,
+    tier_snapshot_json: str,
+) -> None:
+    """Mở segment person-phase tại promoted_at — không ghi đè tier object-phase."""
+    row = conn.execute(
+        "SELECT id, camera_id, zone_id, started_at, ended_at, track_id, session_id,"
+        " gps_lat, gps_lng, snapshot_path"
+        " FROM appearances WHERE event_date = ? AND subject_id = ?"
+        " AND qualified = 1 AND ended_at <= ? + 0.05"
+        " ORDER BY ended_at DESC, id DESC LIMIT 1",
+        (date, pid, ts),
+    ).fetchone()
+    if row is None:
+        return
+    if float(row["started_at"]) >= ts - 0.05:
+        return
+    if float(row["ended_at"]) < ts - 0.05:
+        return
+    exists = conn.execute(
+        "SELECT id FROM appearances WHERE event_date = ? AND subject_id = ?"
+        " AND started_at >= ? - 0.05 AND started_at <= ? + 0.05",
+        (date, pid, ts, ts),
+    ).fetchone()
+    if exists is not None:
+        return
+    conn.execute(
+        "INSERT INTO appearances"
+        "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
+        " gps_lat, gps_lng, qualified, track_id, session_id, snapshot_path,"
+        " event_payload_json, presence_seq)"
+        " VALUES(?,?,?,?,?,?,?,?,1,?,?,?,?,"
+        " (SELECT COALESCE(MAX(presence_seq), 0) + 1 FROM appearances"
+        "  WHERE event_date = ? AND subject_id = ?))",
+        (
+            date,
+            pid,
+            row["camera_id"],
+            row["zone_id"],
+            ts,
+            ts,
+            row["gps_lat"],
+            row["gps_lng"],
+            row["track_id"],
+            row["session_id"],
+            row["snapshot_path"],
+            tier_snapshot_json,
+            date,
+            pid,
+        ),
+    )
 
 
 def _appearance_time_overlap_ratio(a: dict[str, Any], b: dict[str, Any]) -> float:
@@ -672,6 +730,7 @@ def _apply_payload_tier(
     tier: str,
     *,
     promoted_from: str | None = None,
+    tier_snapshot: dict[str, Any] | None = None,
 ) -> str:
     import json
 
@@ -684,6 +743,19 @@ def _apply_payload_tier(
         except (json.JSONDecodeError, TypeError):
             payload = {}
     payload["tier_at_observation"] = tier
+    if tier_snapshot:
+        payload["tier_snapshot"] = tier_snapshot
+    elif tier and not payload.get("tier_snapshot"):
+        from .tier_snapshot import build_tier_snapshot
+
+        snap = build_tier_snapshot(
+            tier=tier,
+            tier_since=0.0,
+            subject_id=str(payload.get("subject_id") or promoted_from or ""),
+            promoted_from=[promoted_from] if promoted_from else None,
+            tier_source="inferred",
+        )
+        payload["tier_snapshot"] = snap.to_payload_dict()
     if promoted_from:
         payload["promoted_from_object"] = promoted_from
     return json.dumps(payload, ensure_ascii=False)
@@ -708,10 +780,21 @@ def _transfer_promoted_object_appearances(
     for row in rows:
         snap = str(row["snapshot_path"] or "").strip() or obj_snap
         end_at = max(float(row["started_at"]), min(float(row["ended_at"]), ts))
+        from .tier_snapshot import build_tier_snapshot
+
+        obj_tier_snap = build_tier_snapshot(
+            tier="object",
+            tier_since=float(row["started_at"]),
+            subject_id=obj_id,
+            promoted_from=[obj_id],
+            promoted_at=ts,
+            tier_source="promote",
+        ).to_payload_dict()
         payload = _apply_payload_tier(
             row["event_payload_json"],
             "object",
             promoted_from=obj_id,
+            tier_snapshot=obj_tier_snap,
         )
         conn.execute(
             "UPDATE appearances SET subject_id = ?, ended_at = ?, snapshot_path = ?,"
@@ -818,6 +901,13 @@ def promote_object(
             tier_source="promote",
         )
         _upsert_event_tier_ever(conn, date, pid, "person", json.dumps(tier_snap.to_payload_dict()))
+        _insert_person_phase_after_promote(
+            conn,
+            date,
+            pid,
+            ts,
+            tier_snapshot_json=json.dumps(tier_snap.to_payload_dict()),
+        )
         conn.execute(
             "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
             " WHERE pers_id = ?",
