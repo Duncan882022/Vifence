@@ -133,9 +133,28 @@ export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
    */
   displayEmaAlpha: 0.78,
   displayEmaGlideAlpha: 0.86,
-  maxPredictMs: 520,
-  minMeasureGain: 0.90,
-  anchoredMinMeasureGain: 0.88,
+  /** VMS poll ~280ms — cho phép miss 2 nhịp mà vẫn predict bám người đi chậm. */
+  displayCoastMaxMiss: 2,
+  maxPredictMs: 680,
+  minMeasureGain: 0.96,
+  anchoredMinMeasureGain: 0.98,
+}
+
+/**
+ * WHEP / live HC-* — poll ~150–280ms, người di chuyển: EMA cao + predict dài hơn.
+ * Khác profile local (HC-02 publish): ưu tiên bám chuyển động hơn làm mượt jitter.
+ */
+export const PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP: PatrolPersonRoiConfig = {
+  ...PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  displayEmaAlpha: 0.94,
+  displayEmaGlideAlpha: 0.97,
+  maxPredictMs: 720,
+  minMeasureGain: 0.97,
+  anchoredMinMeasureGain: 0.98,
+  matchCenterRatio: 1.55,
+  velocitySmoothing: 0.12,
+  maxSpeedBoxPerSec: 10.5,
+  displayCoastMaxMiss: 1,
 }
 
 /**
@@ -175,7 +194,7 @@ export const PATROL_PERSON_ROI_PROFILE_FLYCAM: PatrolPersonRoiConfig = {
 export function resolvePatrolPersonRoiConfig(
   cameraId: string,
   flightMode?: PatrolFlightMode | null,
-  options?: { localPublisher?: boolean },
+  options?: { localPublisher?: boolean; lowLatencyLive?: boolean },
 ): PatrolPersonRoiConfig {
   if (options?.localPublisher && cameraId.startsWith('HC-')) {
     return PATROL_PERSON_ROI_PROFILE_LOCAL
@@ -185,6 +204,10 @@ export function resolvePatrolPersonRoiConfig(
       ? PATROL_PERSON_ROI_PROFILE_BODYCAM
       : PATROL_PERSON_ROI_PROFILE_FLYCAM
   }
-  if (cameraId.startsWith('HC-')) return PATROL_PERSON_ROI_PROFILE_BODYCAM
+  if (cameraId.startsWith('HC-')) {
+    return options?.lowLatencyLive
+      ? PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP
+      : PATROL_PERSON_ROI_PROFILE_BODYCAM
+  }
   return PATROL_PERSON_ROI_CONFIG
 }

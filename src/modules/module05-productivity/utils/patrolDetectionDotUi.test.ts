@@ -3,23 +3,23 @@ import { PATROL_HEATMAP_DOT_HEX, resolveDetectionDotTier } from './patrolDetecti
 import { PATROL_TIER_TOKENS } from './patrolTierTokens'
 
 describe('resolveDetectionDotTier', () => {
-  it('object tier → xanh lá', () => {
+  it('object tier → xám', () => {
     expect(resolveDetectionDotTier({ tier: 'object', objectId: 'obj-1' })).toBe('object')
   })
 
-  it('person tier → xanh', () => {
+  it('person tier → cam', () => {
     expect(resolveDetectionDotTier({ tier: 'person', objectId: 'pers-0001' })).toBe('person')
   })
 
-  it('identity tier + verified → tím', () => {
+  it('identity tier + verified → xanh lá', () => {
     expect(resolveDetectionDotTier({ tier: 'identity', verified: true, objectId: 'p-102' })).toBe('identity')
   })
 
-  it('identity tier không cần verified (mũ) → tím', () => {
+  it('identity tier không cần verified (mũ) → xanh lá', () => {
     expect(resolveDetectionDotTier({ tier: 'identity', objectId: 'pers-0001' })).toBe('identity')
   })
 
-  it('identity tier nhưng chưa verified (flycam tầm cao) → xanh person', () => {
+  it('identity tier nhưng chưa verified (flycam tầm cao) → cam person', () => {
     expect(resolveDetectionDotTier({ tier: 'identity', verified: false, objectId: 'pers-0099' })).toBe('person')
   })
 
@@ -32,8 +32,8 @@ describe('resolveDetectionDotTier', () => {
     expect(PATROL_HEATMAP_DOT_HEX.person).toBe(PATROL_TIER_TOKENS.person.heatmapDotHex)
     expect(PATROL_HEATMAP_DOT_HEX.identity).toBe(PATROL_TIER_TOKENS.identity.heatmapDotHex)
     expect(PATROL_HEATMAP_DOT_HEX.object).toBe(PATROL_TIER_TOKENS.object.heatmapDotHex)
-    expect(PATROL_HEATMAP_DOT_HEX.person).toBe('#38bdf8')
-    expect(PATROL_HEATMAP_DOT_HEX.identity).toBe('#a78bfa')
-    expect(PATROL_HEATMAP_DOT_HEX.object).toBe('#4ade80')
+    expect(PATROL_HEATMAP_DOT_HEX.person).toBe('#fb923c')
+    expect(PATROL_HEATMAP_DOT_HEX.identity).toBe('#4ade80')
+    expect(PATROL_HEATMAP_DOT_HEX.object).toBe('#a8a29e')
   })
 })

@@ -125,6 +125,25 @@ def format_module05_detection(
             out["velocity"] = [round(vx, 2), round(vy, 2)]
     if row.get("subject_bbox") and len(row["subject_bbox"]) >= 4:
         out["subject_bbox"] = normalize_bbox(row["subject_bbox"], orig_w, orig_h)
+    if row.get("face_eligible") is True:
+        out["face_eligible"] = True
+    if row.get("promoted_from_object") is True:
+        out["promoted_from_object"] = True
+    promoted_from = row.get("promoted_from")
+    if isinstance(promoted_from, list) and promoted_from:
+        out["promoted_from"] = [str(item).strip() for item in promoted_from if str(item).strip()]
+    if row.get("peak_group") is True:
+        out["peak_group"] = True
+        if row.get("peak_group_index") is not None:
+            out["peak_group_index"] = int(row["peak_group_index"])
+        if row.get("peak_group_size") is not None:
+            out["peak_group_size"] = int(row["peak_group_size"])
+    tier_snapshot = row.get("tier_snapshot")
+    if tier_snapshot is not None:
+        if hasattr(tier_snapshot, "model_dump"):
+            out["tier_snapshot"] = tier_snapshot.model_dump()
+        elif isinstance(tier_snapshot, dict):
+            out["tier_snapshot"] = dict(tier_snapshot)
     return out
 
 

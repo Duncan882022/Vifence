@@ -6,6 +6,7 @@ import { advancePersonRoiTracks, predictPersonRoiTracks, resetPersonRoiTrackSeq 
 import {
   PATROL_PERSON_ROI_CONFIG,
   PATROL_PERSON_ROI_PROFILE_BODYCAM,
+  PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP,
   PATROL_PERSON_ROI_PROFILE_FLYCAM,
   resolvePatrolPersonRoiConfig,
 } from './patrolPersonRoi.config'
@@ -34,8 +35,8 @@ function empty(): Map<string, PersonRoiTrack> {
   return new Map<string, PersonRoiTrack>()
 }
 
-describe('khoá track id — chặn bbox crowd', () => {
-  it('cùng track_id nhưng bbox phình gấp nhiều lần thì bỏ qua đo mới', () => {
+describe('khoá track id — bám backend', () => {
+  it('cùng track_id — cập nhật bbox kể cả khi YOLO crowd phình to (ưu tiên bám người)', () => {
     let tracks = advance(
       empty(),
       [person([896, 144, 1024, 360], { track_id: 'ptk0132:person' })],
@@ -44,15 +45,15 @@ describe('khoá track id — chặn bbox crowd', () => {
     expect(tracks.size).toBe(1)
     const before = [...tracks.values()][0].kalman.getBbox()
 
-    // YOLO crowd normalized ~80% chiều cao khung (live HC-01).
     tracks = advance(
       tracks,
       [person([768, 72, 1152, 648], { track_id: 'ptk0132:person' })],
       1_280,
     )
-    const after = [...tracks.values()][0].kalman.getBbox()
-    expect(after[0]).toBeCloseTo(before[0], 0)
-    expect(after[3]).toBeCloseTo(before[3], 0)
+    const track = [...tracks.values()][0]
+    expect(track.missStreak).toBe(0)
+    const after = track.kalman.getBbox()
+    expect(after[3] - after[1]).toBeGreaterThan(before[3] - before[1])
   })
 })
 
@@ -155,6 +156,16 @@ describe('khoá đối tượng theo track id backend', () => {
     expect(p2!.workerId).toBeUndefined()
   })
 
+  it('cùng track id backend — cập nhật bbox dù đổi cỡ hộp (rung/zoom)', () => {
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
+    const id = [...tracks.keys()][0]
+    // Hộp nhỏ hơn nhiều nhưng cùng track id — ROI phải bám vị trí mới.
+    tracks = advance(tracks, [person([320, 120, 380, 280], { track_id: 'p1' })], 1_200)
+    const t = tracks.get(id)!
+    expect(t.missStreak).toBe(0)
+    expect(t.kalman.getBbox()[0]).toBeGreaterThan(200)
+  })
+
   it('người cận cảnh không nuốt detection của người phía xa', () => {
     // Track cao 300px, detection cao 40px cùng tâm — tỉ lệ diện tích ~1.8%.
     let tracks = advance(empty(), [person([100, 100, 200, 400])], 1_000)
@@ -213,6 +224,8 @@ describe('profile flycam', () => {
     expect(resolvePatrolPersonRoiConfig('DR-03', 'aerial')).toBe(PATROL_PERSON_ROI_PROFILE_FLYCAM)
     expect(resolvePatrolPersonRoiConfig('DR-03', 'proximity')).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
     expect(resolvePatrolPersonRoiConfig('HC-01', null)).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
+    expect(resolvePatrolPersonRoiConfig('HC-01', null, { lowLatencyLive: true }))
+      .toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP)
     expect(resolvePatrolPersonRoiConfig('HC-02', null)).toBe(PATROL_PERSON_ROI_PROFILE_BODYCAM)
   })
 })
@@ -302,13 +315,13 @@ describe('tầng định danh từ backend', () => {
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
   })
 
-  it('tier person từ BE nhưng chưa face_eligible — ROI vẫn Đối tượng', () => {
+  it('tier person từ BE — ROI giữ Người dù chưa face_eligible (no downtier)', () => {
     let tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'tk-0000001' })],
       1_000,
     )
-    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
 
     tracks = advance(
       tracks,
@@ -355,6 +368,22 @@ describe('mồi vận tốc từ backend', () => {
     const kalman = [...tracks.values()][0].kalman
     const maxSpeed = Math.max(kalman.w, kalman.h) * PATROL_PERSON_ROI_CONFIG.maxSpeedBoxPerSec
     expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
+  })
+
+  it('predict trước update — bbox rAF bám người đi ngang giữa hai poll', () => {
+    let tracks = advance(
+      empty(),
+      [person([100, 100, 200, 400], { track_id: 'p1', velocity: [120, 0] })],
+      280,
+    )
+    tracks = advance(
+      tracks,
+      [person([130, 100, 230, 400], { track_id: 'p1', velocity: [120, 0] })],
+      280,
+    )
+    const mid = predictPersonRoiTracks(tracks, 140, PATROL_PERSON_ROI_CONFIG)[0].bbox
+    expect(mid[0]).toBeGreaterThan(115)
+    expect(mid[0]).toBeLessThan(160)
   })
 })
 

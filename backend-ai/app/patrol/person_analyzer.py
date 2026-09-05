@@ -190,6 +190,22 @@ def _sink_overlay_bbox(
     return [float(v) for v in target]
 
 
+def _attach_promoted_object_fields(person_det: PpeDetection, worker_id: str) -> None:
+    """Gắn mã obj-* gốc lên detection — dùng cho thẻ sự kiện / bundle, không nhãn ROI live."""
+    wid = (worker_id or "").strip()
+    if not wid:
+        return
+    from . import db
+    from .promoted_registry import promoted_object_ids, was_promoted
+
+    obj_ids = promoted_object_ids(wid, db.today_vn())
+    if obj_ids:
+        person_det.promoted_from = obj_ids
+        person_det.promoted_from_object = True
+    else:
+        person_det.promoted_from_object = was_promoted(wid, db.today_vn())
+
+
 def _record_patrol_density_encounter(
     person_det: PpeDetection,
     *,
@@ -389,12 +405,28 @@ def _assign_patrol_person_identity(
     person_det.tier = display_tier
     person_det.face_eligible = face_eligible and face_emb is not None
     if resolved.worker_id:
-        from . import db
-        from .promoted_registry import was_promoted
+        _attach_promoted_object_fields(person_det, resolved.worker_id)
 
-        person_det.promoted_from_object = was_promoted(resolved.worker_id, db.today_vn())
+    from .tier_snapshot import attach_tier_snapshot_to_detection
 
-    # Ghi vào kho tuần tra (SQLite). Vector khuôn mặt chỉ tồn tại ở đúng chỗ
+    promoted_from = list(person_det.promoted_from or [])
+    attach_tier_snapshot_to_detection(
+        person_det,
+        tier=display_tier,
+        tier_since=resolved.tier_since,
+        camera_id=camera_id,
+        track_id=track_id,
+        worker_id=resolved.worker_id or worker_id,
+        worker_name=resolved.worker_name,
+        face_eligible=bool(person_det.face_eligible),
+        confidence=float(person_det.confidence or 0.0),
+        face_quality=float(_face_score or 0.0),
+        face_match_confidence=getattr(person_det, "face_match_confidence", None),
+        promoted_from=promoted_from,
+        bbox=list(person_det.bbox or []),
+    )
+
+    # Ghi vào kho tuần tra (SQLite).
     # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được
     # serialize thẳng xuống trình duyệt.
     try:
@@ -506,11 +538,13 @@ def _assign_patrol_person_display_only(
     from ..patrol_identity_lifecycle import peek as peek_track_identity, tier_for_worker_id
 
     person_det.track_id = track_id
+    tier_since = 0.0
     cached = peek_track_identity(camera_id, track_id)
     if cached is not None:
         person_det.worker_id = cached.worker_id
         person_det.worker_name = cached.worker_name
         person_det.tier = cached.tier
+        tier_since = float(cached.tier_since or 0.0)
     else:
         from ..patrol_entity import resolve_patrol_worker_display_name
         from ..person_identity_registry import peek_patrol_track_identity
@@ -531,6 +565,7 @@ def _assign_patrol_person_display_only(
             person_det.worker_id = resolved.worker_id
             person_det.worker_name = resolved.worker_name
             person_det.tier = resolved.tier
+            tier_since = float(resolved.tier_since or 0.0)
         else:
             person_det.tier = "object"
 
@@ -540,6 +575,39 @@ def _assign_patrol_person_display_only(
     if tier_rank.get(inferred, 0) > tier_rank.get(display_tier, 0):
         display_tier = inferred
     person_det.tier = display_tier
+
+    # ROI live: FE chỉ lên màu Người khi có face_eligible. Nhánh display-only
+    # trước đây không gắn cờ này dù lifecycle đã thăng person/identity.
+    if tier_rank.get(display_tier, 0) >= tier_rank["person"]:
+        person_det.face_eligible = True
+    elif frame is not None and person_box is not None:
+        from ..worker_identity.recognizer import assess_patrol_face
+
+        _vec, _score, eligible = assess_patrol_face(
+            frame, [float(v) for v in person_box], camera_id=camera_id,
+        )
+        person_det.face_eligible = bool(eligible)
+    else:
+        person_det.face_eligible = False
+
+    if person_det.worker_id:
+        _attach_promoted_object_fields(person_det, person_det.worker_id)
+
+    from .tier_snapshot import attach_tier_snapshot_to_detection
+
+    attach_tier_snapshot_to_detection(
+        person_det,
+        tier=display_tier,
+        tier_since=tier_since or time.time(),
+        camera_id=camera_id,
+        track_id=track_id,
+        worker_id=person_det.worker_id or None,
+        worker_name=person_det.worker_name,
+        face_eligible=bool(person_det.face_eligible),
+        confidence=float(person_det.confidence or 0.0),
+        promoted_from=list(person_det.promoted_from or []),
+        bbox=list(person_det.bbox or []),
+    )
 
     try:
         from .sink import record_observation

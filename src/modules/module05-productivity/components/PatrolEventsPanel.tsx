@@ -10,6 +10,7 @@ import { getPatrolEventLocationLabel } from '../utils/patrolEventsUi'
 import {
   PATROL_EVENTS_TAB_META,
   resolvePatrolEventDisplayMeta,
+  resolvePatrolPersonStage,
 } from '../utils/patrolWorkforceEventLabels'
 import { listPatrolEventsForTab, type PatrolTabCounts } from '../utils/patrolEventsTabList'
 import type { PatrolDayPresence } from '../services/patrolDayEvents.service'
@@ -203,7 +204,8 @@ function PatrolEventCard({
                 {eventPlace}
               </p>
             </div>
-            {appearanceHistoryCount != null && appearanceHistoryCount > 0 && (
+            {appearanceHistoryCount != null && appearanceHistoryCount > 1
+              && resolvePatrolPersonStage(event) !== 'object' && (
               <div className="flex items-center gap-1.5 min-w-0">
                 <History className={EVENT_CARD_META_ICON} aria-hidden />
                 <p className="text-[8px] tabular-nums text-foreground/75 truncate">

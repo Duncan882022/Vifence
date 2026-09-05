@@ -72,6 +72,8 @@ export interface VmsOverlayDetection {
   tier?: 'object' | 'person' | 'identity'
   /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
   promoted_from_object?: boolean
+  /** Mã obj-* gốc đã ghi hồ sơ — nhãn ROI ưu tiên mã này thay "Người". */
+  promoted_from?: string[]
   /** px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect. */
   velocity?: [number, number]
   peak_group?: boolean
@@ -79,6 +81,8 @@ export interface VmsOverlayDetection {
   peak_group_size?: number
   /** Backend assess mặt — gate hiển thị tier Người trên ROI (đồng bộ tab Sự kiện). */
   face_eligible?: boolean
+  /** Contract tầng thống nhất — SSOT cho ROI live sau revamp tier. */
+  tier_snapshot?: import('@/modules/module05-productivity/types/patrolTierSnapshot').PatrolTierSnapshot
 }
 
 export interface VmsDetectionSnapshot {
@@ -237,6 +241,13 @@ function mapDetection(
     peak_group_index: raw.peak_group_index != null ? Number(raw.peak_group_index) : undefined,
     peak_group_size: raw.peak_group_size != null ? Number(raw.peak_group_size) : undefined,
     face_eligible: raw.face_eligible === true,
+    promoted_from_object: raw.promoted_from_object === true,
+    promoted_from: Array.isArray(raw.promoted_from)
+      ? raw.promoted_from.map(String).filter(Boolean)
+      : undefined,
+    tier_snapshot: raw.tier_snapshot && typeof raw.tier_snapshot === 'object'
+      ? raw.tier_snapshot as VmsOverlayDetection['tier_snapshot']
+      : undefined,
   }
 }
 

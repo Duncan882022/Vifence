@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { getWhepDisplayWallclockMs } from './useLowLatencyVideoSource'
-import { WHEP_PLAYBACK_LAG_MS } from '@/services/patrolRuntimeBridge'
+import { getPatrolWhepDisplayLagMs } from '@/services/patrolRuntimeBridge'
 
 describe('getWhepDisplayWallclockMs', () => {
-  it('trừ lag WHEP khỏi wallclock hiện tại', () => {
+  it('trừ lag WHEP adaptive khỏi wallclock hiện tại', () => {
     const now = 1_788_594_328_920
-    expect(getWhepDisplayWallclockMs(now)).toBe(now - WHEP_PLAYBACK_LAG_MS)
+    expect(getWhepDisplayWallclockMs(now)).toBe(now - getPatrolWhepDisplayLagMs())
   })
 
   it('lag WHEP nhỏ hơn buffer HLS patrol', () => {
-    expect(WHEP_PLAYBACK_LAG_MS).toBeLessThan(5000)
+    expect(getPatrolWhepDisplayLagMs()).toBeLessThan(5000)
   })
 })

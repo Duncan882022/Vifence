@@ -12,6 +12,22 @@ import {
   type PatrolFlightMode,
 } from './patrolFlightMode'
 
+/** VMS API chuẩn hoá vận tốc theo cạnh khung/giây; Kalman FE cần px/giây. */
+export function patrolVmsVelocityToPixelsPerSec(
+  velocity: [number, number] | undefined,
+  frameW: number,
+  frameH: number,
+): [number, number] | undefined {
+  if (!velocity || velocity.length < 2 || frameW <= 0 || frameH <= 0) return undefined
+  const [vx, vy] = velocity
+  if (!Number.isFinite(vx) || !Number.isFinite(vy)) return undefined
+  // Payload legacy / local analyze có thể đã là px/giây.
+  if (Math.abs(vx) > 4 || Math.abs(vy) > 4) {
+    return [vx, vy]
+  }
+  return [vx * frameW, vy * frameH]
+}
+
 /** Map + gate detections VMS → payload ROI engine (một nguồn/cam). */
 export function gateVmsPatrolPersonDetections(
   snapshot: VmsDetectionSnapshot,
@@ -35,11 +51,14 @@ export function gateVmsPatrolPersonDetections(
       worker_name: d.worker_name,
       track_id: d.track_id,
       tier: d.tier,
-      velocity: d.velocity,
+      velocity: patrolVmsVelocityToPixelsPerSec(d.velocity, frameW, frameH),
       peak_group: d.peak_group,
       peak_group_index: d.peak_group_index,
       peak_group_size: d.peak_group_size,
       face_eligible: d.face_eligible,
+      promoted_from_object: d.promoted_from_object,
+      promoted_from: d.promoted_from,
+      tier_snapshot: d.tier_snapshot,
     }))
     .filter(d => {
       if (d.behavior !== 'person') return false

@@ -82,6 +82,10 @@ export interface PatrolEvent {
   promotedFrom?: string[]
   /** Thời điểm thăng hạng gần nhất (epoch giây). */
   promotedAt?: number | null
+  /** Tầng cao nhất đạt được trong ngày — monotonic. */
+  tierEver?: string | null
+  /** Contract tầng từ BE. */
+  tierSnapshot?: import('../types/patrolTierSnapshot').PatrolTierSnapshot
 }
 
 export interface PatrolDashboard {

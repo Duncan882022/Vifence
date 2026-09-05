@@ -14,6 +14,7 @@ import {
   getPatrolLiveRoiDelayMs,
   updatePatrolClientServerSkew,
   updatePatrolAiPipelineLag,
+  updatePatrolWhepDisplayLag,
 } from '@/services/patrolRuntimeBridge'
 import { useCameraOverlayReady } from '@/modules/module02-training/hooks/useCameraBufferReadiness'
 import { getCameraBufferedAheadMs } from '@/services/cameraBufferReadiness'
@@ -40,12 +41,15 @@ export function useSyncedVmsDetections(
     fallbackLagMs?: number
     useRuntimeLagHint?: boolean
     maxAlignedDriftMs?: number
+    /** WHEP: giữ snapshot aligned dù drift cao — buffer FE gây trễ/giật hơn. */
+    trustAlignedSnapshot?: boolean
   },
 ): SyncedVmsDetectionFeed {
   const bufferRef = useRef(new OverlayTimeBuffer())
   const configuredLagMs = options?.fallbackLagMs
   const useRuntimeLagHint = options?.useRuntimeLagHint ?? false
   const maxAlignedDriftMs = options?.maxAlignedDriftMs ?? DEFAULT_MAX_ALIGNED_DRIFT_MS
+  const trustAlignedSnapshot = options?.trustAlignedSnapshot ?? false
   const bufferReady = useCameraOverlayReady(options?.cameraId ?? '')
   const [resolved, setResolved] = useState<{
     snapshot: VmsDetectionFeed['snapshot']
@@ -83,8 +87,11 @@ export function useSyncedVmsDetections(
       // sẽ lùi thêm một quãng lag nữa và bbox tụt lại phía sau người.
       if (snapshot?.overlay_sync === 'aligned') {
         const driftMs = snapshot.overlay_drift_ms ?? 0
-        // aligned nhưng lệch quá ngưỡng = at_ms sai (WHEP/HLS) — đừng snap bbox nhảy loạn.
-        if (driftMs <= maxAlignedDriftMs) {
+        if (trustAlignedSnapshot) {
+          updatePatrolWhepDisplayLag(snapshot.frame_wallclock_ms, snapshot.overlay_sync)
+        }
+        // WHEP: backend đã chọn khung — buffer FE chỉ làm trễ thêm.
+        if (trustAlignedSnapshot || driftMs <= maxAlignedDriftMs) {
           setResolved(prev => (
             prev.snapshot === snapshot && prev.timeAligned && prev.driftMs === driftMs
               ? prev
@@ -131,7 +138,7 @@ export function useSyncedVmsDetections(
     tick()
     const timer = window.setInterval(tick, RESOLVE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint, maxAlignedDriftMs])
+  }, [feed.active, clock, configuredLagMs, useRuntimeLagHint, maxAlignedDriftMs, trustAlignedSnapshot])
 
   return useMemo(
     () => ({

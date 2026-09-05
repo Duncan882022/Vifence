@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { PatrolEvent } from '../data/patrolTypes'
+import { PatrolSnapshotEvidence } from './PatrolSnapshotEvidence'
 
 interface PatrolEventSnapshotProps {
   event: PatrolEvent
@@ -109,19 +110,22 @@ export function PatrolEventSnapshot({
         </div>
       )}
       {renderUrl === displayUrl && (
-        <img
-          key={displayUrl}
-          src={displayUrl}
-          alt={isDetail ? 'Ảnh evidence sự kiện' : ''}
-          className={cn(
-            isDetail
-              ? 'block w-full h-full object-contain mx-auto bg-black'
-              : 'absolute inset-0 h-full w-full object-cover',
-          )}
-          loading={isDetail ? 'eager' : 'lazy'}
-          decoding="async"
-          fetchPriority={isDetail ? 'high' : 'auto'}
-        />
+        isDetail ? (
+          <PatrolSnapshotEvidence
+            src={displayUrl}
+            alt="Ảnh evidence sự kiện"
+            tierSnapshot={event.tierSnapshot}
+            confidence={event.tierSnapshot?.confidence ?? event.confidence}
+            className="block w-full h-full max-h-[min(36dvh,280px)] aspect-video bg-black rounded-lg"
+          />
+        ) : (
+          <PatrolSnapshotEvidence
+            src={displayUrl}
+            tierSnapshot={event.tierSnapshot}
+            confidence={event.tierSnapshot?.confidence ?? event.confidence}
+            className="absolute inset-0 h-full w-full"
+          />
+        )
       )}
       {failed && (
         <div

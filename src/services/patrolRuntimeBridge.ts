@@ -109,9 +109,29 @@ export function getPatrolAiPipelineLagMs(): number {
   return aiPipelineLagMs
 }
 
-/** Wallclock khung WHEP ≈ now − playback lag − skew. Không cộng thêm AI lag. */
+/** EMA lag WHEP — học từ frame_wallclock aligned để at_ms khớp overlay. */
+let whepDisplayLagEmaMs = WHEP_DISPLAY_WALLCLOCK_LAG_MS
+
+export function updatePatrolWhepDisplayLag(
+  frameWallclockMs: number | undefined,
+  overlaySync?: string,
+): void {
+  if (overlaySync !== 'aligned') return
+  if (frameWallclockMs == null || !Number.isFinite(frameWallclockMs) || frameWallclockMs <= 0) return
+  const instant = Date.now() - getPatrolClientServerSkewMs() - frameWallclockMs
+  if (instant < 80 || instant > 4000) return
+  whepDisplayLagEmaMs = whepDisplayLagEmaMs * 0.86 + instant * 0.14
+}
+
+export function getPatrolWhepDisplayLagMs(): number {
+  const aiLag = getPatrolAiPipelineLagMs()
+  const blended = Math.max(whepDisplayLagEmaMs, aiLag * 0.85)
+  return Math.min(1500, Math.max(220, blended))
+}
+
+/** Wallclock khung WHEP ≈ now − playback lag (adaptive) − skew. */
 export function getPatrolWhepDisplayWallclockMs(nowMs: number = Date.now()): number {
-  return nowMs - getPatrolClientServerSkewMs() - WHEP_PLAYBACK_LAG_MS
+  return nowMs - getPatrolClientServerSkewMs() - getPatrolWhepDisplayLagMs()
 }
 
 /** Playback lag WHEP/WebRTC (~300ms) — tách khỏi buffer HLS 5s. */

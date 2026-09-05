@@ -27,7 +27,7 @@ import {
   isPatrolPersonCamera,
 } from '../data/cameraAiRuntime'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '@/modules/module05-productivity/utils/patrolHeatmapLiveSync'
-import { clearPatrolPersonRoiTracks, PatrolPersonRoiOverlay } from '@/modules/module05-productivity/personRoi'
+import { clearPatrolPersonRoiTracks, PatrolPersonRoiOverlay, setPatrolPersonRoiLowLatencyLive } from '@/modules/module05-productivity/personRoi'
 import { resolveEffectivePatrolFlightMode, readPatrolFlightModeFromMetrics } from '@/modules/module05-productivity/utils/patrolFlightMode'
 import { gateVmsPatrolPersonDetections } from '@/modules/module05-productivity/utils/patrolVmsRoiSync'
 import { setPatrolFlightMode } from '@/services/patrolFlightModeBridge'
@@ -157,6 +157,12 @@ export function CameraVideoFeed({
     return () => setPatrolCameraFramesLive(cameraId, false)
   }, [cameraId, framesReady])
 
+  useEffect(() => {
+    if (!isPatrolPersonRoiCameraId(cameraId)) return
+    setPatrolPersonRoiLowLatencyLive(cameraId, videoTransportMode === 'whep')
+    return () => setPatrolPersonRoiLowLatencyLive(cameraId, false)
+  }, [cameraId, videoTransportMode])
+
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
     Boolean((overlayActive || runPatrolAnalyze) && isVmsLiveCamera(cameraId)),
@@ -174,6 +180,7 @@ export function CameraVideoFeed({
     fallbackLagMs: patrolRoiFallbackLagMs,
     useRuntimeLagHint: patrolRoiUsesBufferLag,
     maxAlignedDriftMs: patrolRoiUsesBufferLag ? 800 : WHEP_MAX_ALIGNED_DRIFT_MS,
+    trustAlignedSnapshot: videoTransportMode === 'whep',
   })
 
   const patrolRoiFrameSize = useMemo(() => {
