@@ -27,9 +27,8 @@ export function resolvePatrolRoiObjectCode(track: Pick<PersonRoiDisplay, 'promot
 }
 
 /**
- * Nhãn ROI live — tier `identity` luôn ưu tiên tên người, không mã tk/p-*.
- *
- * Đã ghi hồ sơ (obj-* → tk-*): hiển thị mã object gốc, không để nhãn chung "Người".
+ * Nhãn ROI live — tier `identity` ưu tiên tên; tier `person` hiện mã tk-*;
+ * chỉ tier `object` mới hiện mã obj-* (thẻ sự kiện vẫn giữ obj gốc qua promotedFrom).
  */
 export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
   if (track.peakGroup && track.peakGroupIndex) {
@@ -58,9 +57,9 @@ export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
     return '—'
   }
 
-  const objectCode = resolvePatrolRoiObjectCode(track)
-  if (objectCode) {
-    return objectCode
+  if (track.tier === 'object') {
+    const objectCode = resolvePatrolRoiObjectCode(track)
+    if (objectCode) return objectCode
   }
 
   if (track.tier === 'person') {

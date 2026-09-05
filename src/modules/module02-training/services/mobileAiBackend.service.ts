@@ -43,6 +43,8 @@ export interface MobileAiDetection {
   peak_group?: boolean
   peak_group_index?: number
   peak_group_size?: number
+  /** Contract tầng thống nhất từ BE — SSOT cho ROI live. */
+  tier_snapshot?: import('@/modules/module05-productivity/types/patrolTierSnapshot').PatrolTierSnapshot
 }
 
 export interface MobileAiViolationEvent {

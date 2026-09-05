@@ -53,20 +53,19 @@ describe('resolvePatrolRoiDisplayLabel', () => {
     }))).toBe('tk-00000042')
   })
 
-  it('đã ghi hồ sơ — hiện mã obj-* thay "Người"', () => {
+  it('person tier đã promote — live ROI hiện mã tk, không obj-*', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
       tier: 'person',
       workerId: 'tk-00000042',
       workerName: 'Người',
       promotedFrom: ['obj-20260904-0002'],
-    }))).toBe('obj-20260904-0002')
+    }))).toBe('tk-00000042')
   })
 
-  it('không hiện nhãn chung Người khi BE gửi worker_name generic', () => {
+  it('object tier — hiện mã obj-*', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
-      tier: 'person',
-      workerId: 'tk-0000019',
-      workerName: 'Người',
+      tier: 'object',
+      workerId: '',
       promotedFrom: ['obj-20260905-0011'],
     }))).toBe('obj-20260905-0011')
   })

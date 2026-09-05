@@ -81,6 +81,8 @@ export interface VmsOverlayDetection {
   peak_group_size?: number
   /** Backend assess mặt — gate hiển thị tier Người trên ROI (đồng bộ tab Sự kiện). */
   face_eligible?: boolean
+  /** Contract tầng thống nhất — SSOT cho ROI live sau revamp tier. */
+  tier_snapshot?: import('@/modules/module05-productivity/types/patrolTierSnapshot').PatrolTierSnapshot
 }
 
 export interface VmsDetectionSnapshot {
@@ -242,6 +244,9 @@ function mapDetection(
     promoted_from_object: raw.promoted_from_object === true,
     promoted_from: Array.isArray(raw.promoted_from)
       ? raw.promoted_from.map(String).filter(Boolean)
+      : undefined,
+    tier_snapshot: raw.tier_snapshot && typeof raw.tier_snapshot === 'object'
+      ? raw.tier_snapshot as VmsOverlayDetection['tier_snapshot']
       : undefined,
   }
 }

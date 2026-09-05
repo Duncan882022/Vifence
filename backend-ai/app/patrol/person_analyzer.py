@@ -191,7 +191,7 @@ def _sink_overlay_bbox(
 
 
 def _attach_promoted_object_fields(person_det: PpeDetection, worker_id: str) -> None:
-    """Gắn mã obj-* gốc lên detection live — ROI hiển thị mã thay nhãn "Người"."""
+    """Gắn mã obj-* gốc lên detection — dùng cho thẻ sự kiện / bundle, không nhãn ROI live."""
     wid = (worker_id or "").strip()
     if not wid:
         return
@@ -538,11 +538,13 @@ def _assign_patrol_person_display_only(
     from ..patrol_identity_lifecycle import peek as peek_track_identity, tier_for_worker_id
 
     person_det.track_id = track_id
+    tier_since = 0.0
     cached = peek_track_identity(camera_id, track_id)
     if cached is not None:
         person_det.worker_id = cached.worker_id
         person_det.worker_name = cached.worker_name
         person_det.tier = cached.tier
+        tier_since = float(cached.tier_since or 0.0)
     else:
         from ..patrol_entity import resolve_patrol_worker_display_name
         from ..person_identity_registry import peek_patrol_track_identity
@@ -563,6 +565,7 @@ def _assign_patrol_person_display_only(
             person_det.worker_id = resolved.worker_id
             person_det.worker_name = resolved.worker_name
             person_det.tier = resolved.tier
+            tier_since = float(resolved.tier_since or 0.0)
         else:
             person_det.tier = "object"
 
@@ -589,6 +592,22 @@ def _assign_patrol_person_display_only(
 
     if person_det.worker_id:
         _attach_promoted_object_fields(person_det, person_det.worker_id)
+
+    from .tier_snapshot import attach_tier_snapshot_to_detection
+
+    attach_tier_snapshot_to_detection(
+        person_det,
+        tier=display_tier,
+        tier_since=tier_since or time.time(),
+        camera_id=camera_id,
+        track_id=track_id,
+        worker_id=person_det.worker_id or None,
+        worker_name=person_det.worker_name,
+        face_eligible=bool(person_det.face_eligible),
+        confidence=float(person_det.confidence or 0.0),
+        promoted_from=list(person_det.promoted_from or []),
+        bbox=list(person_det.bbox or []),
+    )
 
     try:
         from .sink import record_observation
