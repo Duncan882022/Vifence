@@ -60,16 +60,11 @@ const PATROL_MAP_CAMERA_IDS: readonly string[] = [
 ]
 
 function HeatmapSiteStatsOverlay({
-  title,
-  siteScope,
   objectCount,
   personCount,
   identityCount,
   compactChrome,
 }: {
-  title: string
-  /** true = toàn công trường (Cầu Sông Hốt), false = một khu. */
-  siteScope: boolean
   objectCount: number
   personCount: number
   identityCount: number
@@ -94,13 +89,11 @@ function HeatmapSiteStatsOverlay({
         <div
           className={cn(
             'px-2.5 py-1.5 border-b border-[#334155] truncate',
-            siteScope
-              ? 'text-[#e2e8f0] font-semibold'
-              : 'text-[#94a3b8] font-medium',
+            'text-[#e2e8f0] font-semibold',
             compactChrome ? 'text-[9px]' : 'text-[10px]',
           )}
         >
-          {title}
+          {PATROL_SITE_NAME}
         </div>
         {rows.map((row, index) => (
           <div
@@ -443,11 +436,6 @@ export function PatrolDensityHeatmap({
     [selectedZoneId, statsPresences, heatmapStats],
   )
 
-  const statsTitle = selectedZoneId
-    ? (PATROL_GPS_ZONES.find(z => z.zone_id === selectedZoneId)?.name ?? PATROL_SITE_NAME)
-    : PATROL_SITE_NAME
-  const statsSiteScope = selectedZoneId == null
-
   useEffect(() => {
     if (showFlymap) return
     const onKey = (e: KeyboardEvent) => {
@@ -620,8 +608,6 @@ export function PatrolDensityHeatmap({
           />
         ) : (
           <HeatmapSiteStatsOverlay
-            title={statsTitle}
-            siteScope={statsSiteScope}
             objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}
