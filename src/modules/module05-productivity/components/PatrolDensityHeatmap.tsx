@@ -14,9 +14,10 @@ import {
   DETECTION_DOT_OPACITY_OUT_OF_VIEW,
 } from '../data/patrolDetectionData'
 import {
+  buildPatrolHeatmapStatsForZone,
   buildPatrolSiteHeatmapStats,
 } from '../utils/patrolZoneHeatmapStats'
-import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK } from '../data/patrolSiteMap'
+import { PATROL_GPS_ZONES, PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
@@ -59,11 +60,13 @@ const PATROL_MAP_CAMERA_IDS: readonly string[] = [
 ]
 
 function HeatmapSiteStatsOverlay({
+  title,
   objectCount,
   personCount,
   identityCount,
   compactChrome,
 }: {
+  title: string
   objectCount: number
   personCount: number
   identityCount: number
@@ -85,6 +88,14 @@ function HeatmapSiteStatsOverlay({
       )}
     >
       <div className="overflow-hidden rounded border border-[#334155] bg-[#111827] shadow-sm min-w-[108px]">
+        <div
+          className={cn(
+            'px-2.5 py-1 border-b border-[#334155] text-[#94a3b8] font-medium truncate',
+            compactChrome ? 'text-[8px]' : 'text-[9px]',
+          )}
+        >
+          {title}
+        </div>
         {rows.map((row, index) => (
           <div
             key={row.label}
@@ -243,6 +254,7 @@ export function PatrolDensityHeatmap({
   })
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
 
   const hc02Helmet = workforce.helmets['HC-02']
 
@@ -404,10 +416,31 @@ export function PatrolDensityHeatmap({
   const toggleLayer = (k: keyof typeof layers) =>
     setLayers(prev => ({ ...prev, [k]: !prev[k] }))
 
+  useEffect(() => {
+    if (!layers.polygon) setHoveredZoneId(null)
+  }, [layers.polygon])
+
   const heatmapStats = useMemo(
     () => buildPatrolSiteHeatmapStats(dayStats),
     [dayStats],
   )
+
+  const statsPresences = useMemo(
+    () => filterPatrolPresencesForHeatmap(presences, flycamFlightModes),
+    [presences, flycamFlightModes],
+  )
+
+  const displayStats = useMemo(
+    () => (hoveredZoneId
+      ? buildPatrolHeatmapStatsForZone(statsPresences, hoveredZoneId)
+      : heatmapStats),
+    [hoveredZoneId, statsPresences, heatmapStats],
+  )
+
+  const statsTitle = useMemo(() => {
+    if (!hoveredZoneId) return PATROL_SITE_NAME
+    return PATROL_GPS_ZONES.find(z => z.zone_id === hoveredZoneId)?.name ?? PATROL_SITE_NAME
+  }, [hoveredZoneId])
 
   const headingDeg = hc02Helmet?.heading
 
@@ -494,9 +527,9 @@ export function PatrolDensityHeatmap({
     if (obj) setSelectedObject(obj)
   }
 
-  const personCount = heatmapStats.personCount
-  const identifiedCount = heatmapStats.identityCount
-  const objectEncounterCount = heatmapStats.objectCount
+  const personCount = displayStats.personCount
+  const identifiedCount = displayStats.identityCount
+  const objectEncounterCount = displayStats.objectCount
 
   useEffect(() => {
     if (!expanded) return
@@ -530,6 +563,9 @@ export function PatrolDensityHeatmap({
           showSiteBoundary={false}
           showZoneDividers={false}
           showZonePolygons={layers.polygon}
+          interactiveZones={layers.polygon}
+          onZoneHover={setHoveredZoneId}
+          onZoneSelect={() => setHoveredZoneId(null)}
           showDetections={layers.density}
           liveDetectionDots={filteredDots}
           followLiveGps={showFlymap
@@ -569,6 +605,7 @@ export function PatrolDensityHeatmap({
           />
         ) : (
           <HeatmapSiteStatsOverlay
+            title={statsTitle}
             objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}
