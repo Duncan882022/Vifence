@@ -1574,6 +1574,7 @@ def _plausible_person_box(
     flycam: bool = False,
     proximity_flycam: bool = False,
     for_display: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> bool:
     """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng.
 
@@ -1590,6 +1591,7 @@ def _plausible_person_box(
             frame_h,
             flycam=flycam and not proximity_flycam,
             proximity_flycam=proximity_flycam,
+            vehicle_boxes=vehicle_boxes,
         )
     if proximity_flycam:
         close_ok = _plausible_flycam_proximity(box, frame_w, frame_h)
@@ -1641,6 +1643,7 @@ def _filter_persons(
     strict: bool = False,
     min_conf: float | None = None,
     for_display: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> list[_PersonPpe]:
     h, w = frame.shape[:2]
     from .patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
@@ -1683,6 +1686,7 @@ def _filter_persons(
             flycam=aerial_flycam,
             proximity_flycam=proximity_flycam,
             for_display=for_display,
+            vehicle_boxes=vehicle_boxes,
         ):
             continue
         out.append(_PersonPpe(box, p.confidence))

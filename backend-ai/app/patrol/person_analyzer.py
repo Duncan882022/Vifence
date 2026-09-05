@@ -9,6 +9,7 @@ import time
 import numpy as np
 
 from ..detectors.person_detector import PersonDetector
+from ..detectors.vehicle_detector import VehicleDetector
 from ..schemas import PpeDetection
 
 from ..patrol.camera_scope import is_patrol_flycam, is_patrol_helmet_bodycam
@@ -29,6 +30,9 @@ from ..ppe_analyzer import (
 )
 
 _person_detector: PersonDetector | None = None
+_patrol_vehicle_detector: VehicleDetector | None = None
+
+_PATROL_VEHICLE_CONF = 0.32
 
 
 _PATROL_PERSON_MODEL_DEFAULT = "yolov8n.pt"
@@ -59,6 +63,54 @@ def _get_person_detector() -> PersonDetector:
         _person_detector = PersonDetector(conf_threshold=_PERSON_CONF, weights=weights)
         _person_detector.load()
     return _person_detector
+
+def _get_patrol_vehicle_detector() -> VehicleDetector:
+    """COCO vehicle — lọc person FP chồng xe máy đỗ trên HC-* bodycam."""
+    global _patrol_vehicle_detector
+    if _patrol_vehicle_detector is None:
+        _patrol_vehicle_detector = VehicleDetector(conf_threshold=_PATROL_VEHICLE_CONF)
+        _patrol_vehicle_detector.load()
+    return _patrol_vehicle_detector
+
+
+def _patrol_bodycam_vehicle_boxes(
+    frame: np.ndarray,
+    camera_id: str,
+) -> list[tuple[float, float, float, float]]:
+    if not _is_helmet_bodycam(camera_id):
+        return []
+    detector = _get_patrol_vehicle_detector()
+    if not detector.ready:
+        return []
+    return [
+        (float(d.bbox[0]), float(d.bbox[1]), float(d.bbox[2]), float(d.bbox[3]))
+        for d in detector.predict(frame)
+    ]
+
+
+def _filter_bodycam_vehicle_fp(
+    persons: list[_PersonPpe],
+    frame_w: int,
+    frame_h: int,
+    vehicle_boxes: list[tuple[float, float, float, float]],
+) -> list[_PersonPpe]:
+    """Lớp an toàn sau anchor — synth box / box lọt gate vẫn chồng xe."""
+    if not vehicle_boxes and not persons:
+        return persons
+    from ..patrol_person_visibility import (
+        motorcycle_seat_like_fp_box,
+        person_box_overlaps_vehicle_fp,
+    )
+
+    kept: list[_PersonPpe] = []
+    for p in persons:
+        box = p.person_box
+        if motorcycle_seat_like_fp_box(box, frame_w, frame_h):
+            continue
+        if person_box_overlaps_vehicle_fp(box, vehicle_boxes, frame_w, frame_h):
+            continue
+        kept.append(p)
+    return kept
 
 def _is_helmet_bodycam(camera_id: str) -> bool:
     return is_patrol_helmet_bodycam(camera_id)
@@ -518,6 +570,7 @@ def _build_patrol_bodycam_result(
     """
     detector = _get_person_detector()
     h, w = frame.shape[:2]
+    vehicle_boxes = _patrol_bodycam_vehicle_boxes(frame, camera_id)
     raw_persons = _dedupe_person_boxes(
         _filter_persons(
             frame,
@@ -527,6 +580,7 @@ def _build_patrol_bodycam_result(
             strict=False,
             min_conf=_PERSON_CONF_BODYCAM,
             for_display=True,
+            vehicle_boxes=vehicle_boxes,
         ),
         camera_id=camera_id,
     )
@@ -543,6 +597,7 @@ def _build_patrol_bodycam_result(
         frame_w=w,
         frame_h=h,
     )
+    persons = _filter_bodycam_vehicle_fp(persons, w, h, vehicle_boxes)
 
     detections = _build_patrol_person_detections(
         frame,
