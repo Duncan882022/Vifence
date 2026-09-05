@@ -27,6 +27,9 @@ from .presence import (
 APPEARANCE_GAP_SEC = 45.0
 # Tab Người / Định danh — điểm tối thiểu (face_quality×2 + confidence), đồng bộ FE.
 PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
+# Gộp tk trùng người — cùng ô GPS + cửa sổ thời gian (đồng bộ audit duplicate).
+NEARBY_PERSON_MERGE_SEC = 120.0
+GPS_BUCKET_EPS = 0.00015
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
 TOUCH_MIN_INTERVAL_SEC = 10.0
@@ -52,6 +55,53 @@ def _person_card_eligible(
     if not face_eligible or not snapshot_path:
         return False
     return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
+
+
+def _gps_bucket(lat: float, lng: float) -> tuple[int, int]:
+    return (round(float(lat) / GPS_BUCKET_EPS), round(float(lng) / GPS_BUCKET_EPS))
+
+
+def find_nearby_person_pers_id(
+    date: str,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    now: float,
+    *,
+    exclude_pers: str | None = None,
+    within_sec: float = NEARBY_PERSON_MERGE_SEC,
+) -> str | None:
+    """Tra pers_id thẻ Người gần đây cùng ô GPS — tránh tk-024/025 song song."""
+    if gps_lat is None or gps_lng is None:
+        return None
+    bucket = _gps_bucket(gps_lat, gps_lng)
+    exclude = identity.resolve_alias((exclude_pers or "").strip()) if exclude_pers else ""
+
+    rows = db.query(
+        "SELECT a.subject_id, e.snapshot_score, a.gps_lat, a.gps_lng"
+        " FROM appearances a"
+        " INNER JOIN daily_events e"
+        "  ON e.event_date = a.event_date AND e.pers_id = a.subject_id"
+        " WHERE a.event_date = ? AND a.qualified = 1"
+        " AND a.subject_id NOT LIKE 'obj-%'"
+        " AND a.gps_lat IS NOT NULL AND a.gps_lng IS NOT NULL"
+        " AND ABS(a.started_at - ?) <= ?"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " ORDER BY e.snapshot_score DESC, a.started_at DESC",
+        (date, now, within_sec),
+    )
+    best_id: str | None = None
+    best_score = -1.0
+    for row in rows:
+        sid = identity.resolve_alias(str(row["subject_id"]))
+        if exclude and sid == exclude:
+            continue
+        if _gps_bucket(float(row["gps_lat"]), float(row["gps_lng"])) != bucket:
+            continue
+        score = float(row["snapshot_score"] or 0)
+        if score > best_score:
+            best_score = score
+            best_id = sid
+    return best_id
 
 
 def _should_refresh_presence(
@@ -273,14 +323,19 @@ def touch_person_event(
             (date, pid),
         ).fetchone()
         if row is None:
-            card_snap = snapshot_path if card_eligible else None
-            card_score = snapshot_score if card_eligible else 0.0
-            appearance_snapshot = card_snap
+            if not card_eligible:
+                conn.execute(
+                    "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
+                    " WHERE pers_id = ?",
+                    (ts, first, pid),
+                )
+                return
+            appearance_snapshot = snapshot_path
             conn.execute(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, pid, first, ts, card_snap, card_score),
+                (date, pid, first, ts, snapshot_path, snapshot_score),
             )
         else:
             write, keep_new = _should_refresh_person_snapshot(
@@ -625,8 +680,11 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
         "         WHERE o.event_date = e.event_date AND o.promoted_to = e.pers_id)"
         "        AS promoted_at"
         "  FROM daily_events e JOIN persons p ON p.pers_id = e.pers_id"
-        " WHERE e.event_date = ? ORDER BY e.last_seen DESC",
-        (d,),
+        " WHERE e.event_date = ?"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?"
+        " ORDER BY e.last_seen DESC",
+        (d, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
     out: list[dict[str, Any]] = []
     for r in rows:

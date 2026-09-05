@@ -102,8 +102,17 @@ def _detect_roi_and_label(img: np.ndarray) -> tuple[str | None, float | None, fl
 
     # Xanh lá — Đối tượng (dashed border + label bg)
     green_mask = cv2.inRange(hsv, (35, 40, 80), (90, 255, 255))
-    # Sky/cyan — Người
+    # Sky/cyan — Người (BGR sky-400 #38bdf8)
     cyan_mask = cv2.inRange(hsv, (85, 50, 80), (105, 255, 255))
+    # BGR trực tiếp — khung mỏng 2px đôi khi rơi khỏi dải HSV
+    sky_bgr = cv2.inRange(img, (240, 175, 50), (255, 200, 70))
+    cyan_mask = cv2.bitwise_or(cyan_mask, sky_bgr)
+
+    kernel = np.ones((5, 5), np.uint8)
+    green_mask = cv2.dilate(green_mask, kernel, iterations=2)
+    cyan_mask = cv2.dilate(cyan_mask, kernel, iterations=2)
+
+    min_area_ratio = 0.004
 
     def largest_box(mask: np.ndarray) -> tuple[float, float, float] | None:
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -112,7 +121,7 @@ def _detect_roi_and_label(img: np.ndarray) -> tuple[str | None, float | None, fl
         for cnt in contours:
             x, y, bw, bh = cv2.boundingRect(cnt)
             area = bw * bh
-            if area < (w * h) * 0.02:
+            if area < (w * h) * min_area_ratio:
                 continue
             if area > best_area:
                 best_area = area
