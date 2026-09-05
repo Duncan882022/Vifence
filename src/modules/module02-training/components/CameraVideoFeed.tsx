@@ -174,6 +174,7 @@ export function CameraVideoFeed({
     fallbackLagMs: patrolRoiFallbackLagMs,
     useRuntimeLagHint: patrolRoiUsesBufferLag,
     maxAlignedDriftMs: patrolRoiUsesBufferLag ? 800 : WHEP_MAX_ALIGNED_DRIFT_MS,
+    trustAlignedSnapshot: videoTransportMode === 'whep',
   })
 
   const patrolRoiFrameSize = useMemo(() => {

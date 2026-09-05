@@ -94,6 +94,27 @@ class DetectorNormalizeTests(unittest.TestCase):
         self.assertEqual(det["worker_id"], "sgc-00000042")
         self.assertEqual(det["track_id"], "ptk0007:person")
 
+    def test_format_preserves_uptier_fields_for_roi(self) -> None:
+        row = {
+            "behavior": "person",
+            "worker_id": "tk-00000430",
+            "confidence": 0.82,
+            "bbox": [100.0, 100.0, 200.0, 400.0],
+            "track_id": "ptk0001",
+            "tier": "person",
+            "face_eligible": True,
+            "promoted_from_object": True,
+            "peak_group": True,
+            "peak_group_index": 2,
+            "peak_group_size": 5,
+        }
+        det = format_module05_detection(row, self.FW, self.FH)
+        self.assertTrue(det["face_eligible"])
+        self.assertTrue(det["promoted_from_object"])
+        self.assertTrue(det["peak_group"])
+        self.assertEqual(det["peak_group_index"], 2)
+        self.assertEqual(det["peak_group_size"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()
