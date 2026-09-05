@@ -23,4 +23,14 @@ describe('resolvePatrolRoiDisplayTier', () => {
       }),
     ).toBe('person')
   })
+
+  it('đã ghi hồ sơ obj-* — ROI hiển thị tầng Đối tượng', () => {
+    expect(
+      resolvePatrolRoiDisplayTier('person', {
+        faceEligible: true,
+        workerId: 'tk-00000042',
+        promotedFrom: ['obj-20260904-0002'],
+      }),
+    ).toBe('object')
+  })
 })

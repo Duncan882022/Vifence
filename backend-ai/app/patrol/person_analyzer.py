@@ -190,6 +190,22 @@ def _sink_overlay_bbox(
     return [float(v) for v in target]
 
 
+def _attach_promoted_object_fields(person_det: PpeDetection, worker_id: str) -> None:
+    """Gắn mã obj-* gốc lên detection live — ROI hiển thị mã thay nhãn "Người"."""
+    wid = (worker_id or "").strip()
+    if not wid:
+        return
+    from . import db
+    from .promoted_registry import promoted_object_ids, was_promoted
+
+    obj_ids = promoted_object_ids(wid, db.today_vn())
+    if obj_ids:
+        person_det.promoted_from = obj_ids
+        person_det.promoted_from_object = True
+    else:
+        person_det.promoted_from_object = was_promoted(wid, db.today_vn())
+
+
 def _record_patrol_density_encounter(
     person_det: PpeDetection,
     *,
@@ -389,12 +405,9 @@ def _assign_patrol_person_identity(
     person_det.tier = display_tier
     person_det.face_eligible = face_eligible and face_emb is not None
     if resolved.worker_id:
-        from . import db
-        from .promoted_registry import was_promoted
+        _attach_promoted_object_fields(person_det, resolved.worker_id)
 
-        person_det.promoted_from_object = was_promoted(resolved.worker_id, db.today_vn())
-
-    # Ghi vào kho tuần tra (SQLite). Vector khuôn mặt chỉ tồn tại ở đúng chỗ
+    # Ghi vào kho tuần tra (SQLite).
     # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được
     # serialize thẳng xuống trình duyệt.
     try:
@@ -556,11 +569,7 @@ def _assign_patrol_person_display_only(
         person_det.face_eligible = False
 
     if person_det.worker_id:
-        from . import db
-        from .promoted_registry import was_promoted
-
-        if was_promoted(person_det.worker_id, db.today_vn()):
-            person_det.promoted_from_object = True
+        _attach_promoted_object_fields(person_det, person_det.worker_id)
 
     try:
         from .sink import record_observation

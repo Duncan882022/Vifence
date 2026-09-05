@@ -133,12 +133,14 @@ describe('gateVmsPatrolPersonDetections', () => {
           tier: 'person',
           face_eligible: true,
           promoted_from_object: true,
+          promoted_from: ['obj-20260904-0002'],
         },
       ]),
       'HC-01',
     )
     expect(result[0]?.face_eligible).toBe(true)
     expect(result[0]?.promoted_from_object).toBe(true)
+    expect(result[0]?.promoted_from).toEqual(['obj-20260904-0002'])
     expect(result[0]?.tier).toBe('person')
   })
 })

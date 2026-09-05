@@ -82,6 +82,8 @@ class PpeDetection(BaseModel):
     # Thẻ này vốn là `obj-*`, lên hạng khi bắt được mặt. FE đánh dấu trên nhãn
     # ROI để người xem hiểu vì sao một thẻ Người còn giữ ảnh badge "Đối tượng".
     promoted_from_object: Optional[bool] = None
+    # Mã obj-* gốc đã dồn vào thẻ Người — ROI live hiển thị mã này thay "Người".
+    promoted_from: Optional[list[str]] = None
     # px/giây trên hệ toạ độ frame AI — FE nội suy ROI giữa hai lần detect.
     velocity: Optional[list[float]] = None
     # Peak time — silhouette gom nhóm 1 obj-*; ROI vẫn đánh số từng người.
