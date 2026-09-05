@@ -1,0 +1,11 @@
+{
+  "name": "Vifence Phát sóng",
+  "short_name": "Phát sóng",
+  "description": "Tuần tra — video WHIP + GPS, không lưu clip trên máy",
+  "start_url": "phat-song/",
+  "scope": "phat-song/",
+  "display": "standalone",
+  "background_color": "#0a0f16",
+  "theme_color": "#0a0f16",
+  "orientation": "portrait"
+}
