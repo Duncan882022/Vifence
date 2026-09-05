@@ -327,7 +327,7 @@ def touch_person_event(
 
     with db.tx() as conn:
         row = conn.execute(
-            "SELECT snapshot_score, last_seen FROM daily_events"
+            "SELECT snapshot_score, last_seen, snapshot_path FROM daily_events"
             " WHERE event_date = ? AND pers_id = ?",
             (date, pid),
         ).fetchone()
