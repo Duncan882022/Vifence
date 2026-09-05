@@ -25,6 +25,7 @@ export const PATROL_PERSON_STAGE_META: Record<PatrolPersonStage, {
   color: string
   badge: string
   borderAccent: string
+  headerUnderline: string
   tooltip: string
 }> = {
   object: { ...PATROL_TIER_TOKENS.object, icon: UserRound },
@@ -55,33 +56,33 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     countTooltip: 'Thẻ có snapshot evidence trong ngày',
   },
   object: {
-    label: 'Đối tượng',
+    label: PATROL_TIER_TOKENS.object.label,
     icon: PATROL_PERSON_STAGE_META.object.icon,
-    color: PATROL_PERSON_STAGE_META.object.color,
-    inactiveColor: 'text-green-500/70',
-    activeBorder: 'border-green-400',
-    activeText: 'text-green-400',
-    activeBadge: 'bg-green-500/20 text-green-400',
+    color: PATROL_TIER_TOKENS.object.color,
+    inactiveColor: 'text-stone-500/70',
+    activeBorder: 'border-stone-400',
+    activeText: PATROL_TIER_TOKENS.object.color,
+    activeBadge: 'bg-stone-500/20 text-stone-400',
     countTooltip: 'Số thẻ Đối tượng (snapshot) — KPI «Lượt gặm · ĐT» đếm lượt gặm',
   },
   person: {
-    label: 'Người',
+    label: PATROL_TIER_TOKENS.person.label,
     icon: PATROL_PERSON_STAGE_META.person.icon,
-    color: PATROL_PERSON_STAGE_META.person.color,
-    inactiveColor: 'text-sky-500/70',
-    activeBorder: 'border-sky-400',
-    activeText: 'text-sky-400',
-    activeBadge: 'bg-sky-500/20 text-sky-400',
+    color: PATROL_TIER_TOKENS.person.color,
+    inactiveColor: 'text-orange-500/70',
+    activeBorder: 'border-orange-400',
+    activeText: PATROL_TIER_TOKENS.person.color,
+    activeBadge: 'bg-orange-500/20 text-orange-400',
     countTooltip: 'Thẻ Người có mặt đủ rõ (snapshot ≥ ngưỡng)',
   },
   identity: {
-    label: 'Định danh',
+    label: PATROL_TIER_TOKENS.identity.label,
     icon: PATROL_PERSON_STAGE_META.profile.icon,
-    color: PATROL_PERSON_STAGE_META.profile.color,
-    inactiveColor: 'text-violet-500/70',
-    activeBorder: 'border-violet-400',
-    activeText: 'text-violet-400',
-    activeBadge: 'bg-violet-500/20 text-violet-400',
+    color: PATROL_TIER_TOKENS.identity.color,
+    inactiveColor: 'text-green-500/70',
+    activeBorder: 'border-green-400',
+    activeText: PATROL_TIER_TOKENS.identity.color,
+    activeBadge: 'bg-green-500/20 text-green-400',
     countTooltip: 'Thẻ đã identify trong gallery / HR',
   },
 }
@@ -93,6 +94,7 @@ export function resolvePatrolEventDisplayMeta(event: PatrolEvent): {
   color: string
   badge: string
   borderAccent: string
+  headerUnderline: string
   tooltip: string
 } {
   if (event.type === 'IDENTITY_VERIFIED') {
@@ -104,9 +106,10 @@ export function resolvePatrolEventDisplayMeta(event: PatrolEvent): {
   return {
     label: event.type,
     icon: Users,
-    color: 'text-sky-400',
-    badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
-    borderAccent: 'border-l-sky-400',
+    color: PATROL_TIER_TOKENS.person.color,
+    badge: PATROL_TIER_TOKENS.person.badge,
+    borderAccent: PATROL_TIER_TOKENS.person.borderAccent,
+    headerUnderline: PATROL_TIER_TOKENS.person.headerUnderline,
     tooltip: event.type,
   }
 }

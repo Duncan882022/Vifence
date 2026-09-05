@@ -29,3 +29,12 @@ export function appearanceObservationStageLabel(
   if (!stage) return null
   return PATROL_PERSON_STAGE_META[stage].label
 }
+
+/** Badge màu tier cho dòng lịch sử — đồng bộ header popup. */
+export function appearanceObservationStageMeta(
+  segment: PatrolAppearanceSegment,
+): (typeof PATROL_PERSON_STAGE_META)[PatrolPersonStage] | null {
+  const stage = resolveAppearanceObservationStage(segment)
+  if (!stage) return null
+  return PATROL_PERSON_STAGE_META[stage]
+}
