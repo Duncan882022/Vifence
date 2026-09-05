@@ -17,7 +17,7 @@ import {
   buildPatrolHeatmapStatsForZone,
   buildPatrolSiteHeatmapStats,
 } from '../utils/patrolZoneHeatmapStats'
-import { PATROL_GPS_ZONES, PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, PATROL_SITE_NAME } from '../data/patrolSiteMap'
+import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, PATROL_SITE_NAME } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
@@ -162,7 +162,8 @@ function HeatmapLayerControls({
               type="button"
               onClick={() => onToggle(item.key)}
               className={cn(
-                'inline-flex items-center px-1.5 py-0.5 text-[8px] leading-none font-medium transition-colors',
+                'inline-flex items-center leading-none font-medium transition-colors',
+                compactChrome ? 'px-2 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
                 index > 0 && 'border-l border-[#334155]',
                 active ? 'text-[#e2e8f0]' : 'text-[#64748b] hover:text-[#94a3b8]',
               )}
