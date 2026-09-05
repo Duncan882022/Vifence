@@ -280,18 +280,29 @@ def _assign_patrol_person_identity(
     worker_name = ""
 
     if face_eligible and face_emb is not None:
-        worker_id, worker_name = resolve_patrol_person_identity(
-            person_det,
-            camera_id,
-            track_id,
-            person_bbox=person_bbox,
-            face_emb=face_emb,
-            frame_face_assignments=frame_faces,
-            frame_w=frame_w,
-            frame_h=frame_h,
-        )
-        if worker_id:
-            frame_faces[worker_id] = face_emb
+        from ..patrol_person_visibility import patrol_anonymous_identity_allowed
+
+        if not patrol_anonymous_identity_allowed(
+            person_box,
+            frame_w,
+            frame_h,
+            face_quality=float(_face_score or 0.0),
+        ):
+            face_eligible = False
+            face_emb = None
+        else:
+            worker_id, worker_name = resolve_patrol_person_identity(
+                person_det,
+                camera_id,
+                track_id,
+                person_bbox=person_bbox,
+                face_emb=face_emb,
+                frame_face_assignments=frame_faces,
+                frame_w=frame_w,
+                frame_h=frame_h,
+            )
+            if worker_id:
+                frame_faces[worker_id] = face_emb
     else:
         cached = peek_track_lifecycle(camera_id, track_id)
         worker_id = peek_patrol_track_identity(camera_id, track_id)
@@ -689,7 +700,9 @@ def _build_patrol_person_detections(
             raw_boxes = [b for b in raw_boxes if b != raw_pb]
         else:
             raw_pb = pb
-        overlay_pb = patrol_person_overlay_bbox(raw_pb, frame_w, frame_h)
+        # ROI live + snapshot bám box sau face-anchor — không vẽ lại bbox YOLO đám
+        # to (gây lệch vị trí trên thẻ sự kiện so với đối tượng thật).
+        overlay_pb = patrol_person_overlay_bbox(pb, frame_w, frame_h)
         person_det = PpeDetection(
             behavior="person",
             label=PPE_LABELS["person"],

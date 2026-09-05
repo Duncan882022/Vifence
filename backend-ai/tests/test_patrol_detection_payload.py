@@ -132,6 +132,23 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
         vx, _vy = persons[0]["velocity"]
         self.assertGreater(vx, 0.0, "đi sang phải thì vận tốc ngang phải dương")
 
+    def test_overlay_uses_anchored_box_not_crowd_yolo(self) -> None:
+        """ROI trả FE phải bám synth mặt — không vẽ lại bbox YOLO gom đám."""
+        crowd = (80.0, 80.0, 1180.0, 680.0)
+        synth = (360.0, 140.0, 540.0, 420.0)
+        with patch(
+            "app.patrol_face_anchor.anchor_patrol_person_boxes_to_faces",
+            return_value=[(synth, 0.88)],
+        ):
+            self.detector.next_boxes = [_FakeDetection(crowd, 0.74)]
+            result = person_analyzer._build_patrol_bodycam_result(self.frame, "HC-02")
+        persons = [d for d in result["detections"] if d.behavior == "person"]
+        self.assertEqual(len(persons), 1)
+        det = persons[0]
+        self.assertAlmostEqual(det.bbox[0], synth[0], delta=2.0)
+        self.assertAlmostEqual(det.bbox[2], synth[2], delta=2.0)
+        self.assertAlmostEqual(det.subject_bbox[0], crowd[0], delta=2.0)
+
 
 if __name__ == "__main__":
     unittest.main()
