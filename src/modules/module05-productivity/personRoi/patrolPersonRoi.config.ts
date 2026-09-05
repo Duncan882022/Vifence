@@ -133,6 +133,8 @@ export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
    */
   displayEmaAlpha: 0.78,
   displayEmaGlideAlpha: 0.86,
+  /** VMS poll ~280ms — cho phép miss 1 nhịp mà vẫn predict bám người. */
+  displayCoastMaxMiss: 1,
   maxPredictMs: 520,
   minMeasureGain: 0.90,
   anchoredMinMeasureGain: 0.88,
