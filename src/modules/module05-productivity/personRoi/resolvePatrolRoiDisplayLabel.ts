@@ -1,4 +1,5 @@
 import { getPatrolManualIdentity, getPatrolManualIdentityForTk, findPatrolIdentityByWorkerId, resolvePatrolObjectLabel } from '../services/patrolManualIdentity.service'
+import { getPatrolObjectIdForTk } from '../services/patrolTkObjectLink.service'
 import { isPatrolGalleryWorkerId } from '../utils/patrolIdentityEntity'
 import { isPatrolTkWorkerId, isPatrolAnonymousTrackId } from '../utils/patrolWorkforceEventLabels'
 import { formatPersonOverlayLabel } from '@/modules/module03-safety/utils/personOverlayLabel'
@@ -11,24 +12,24 @@ export function isTechnicalPatrolWorkerLabel(label?: string | null): boolean {
   return /^(tk-|p-|pers-|iden-|obj-|ptk)/i.test(s)
 }
 
-/**
- * Dấu thăng hạng trên nhãn ROI.
- *
- * Một thẻ Người có thể mang ảnh chụp badge "Đối tượng" vì lượt gặp bắt đầu khi
- * chưa thấy mặt. Không có dấu này thì người xem không phân biệt được đó là hệ
- * quả của thăng hạng hay nhận dạng sai. Dùng mũi tên chứ không dùng chữ vì
- * nhãn ROI nằm trên khung video, chỗ rất hẹp.
- */
-const PROMOTED_ROI_SUFFIX = ' ↑'
+function isGenericPersonLabel(label?: string | null): boolean {
+  const s = (label ?? '').trim().toLowerCase()
+  return !s || s === 'người' || s === 'cn' || s === 'person' || s === 'unknown'
+}
 
-function withPromotedMark(label: string, track: PersonRoiDisplay): string {
-  if (!track.promotedFromObject) return label
-  if (!label || label === '—') return label
-  return `${label}${PROMOTED_ROI_SUFFIX}`
+/** Mã obj-* gốc — ưu tiên BE, fallback liên kết tk↔obj trên FE. */
+export function resolvePatrolRoiObjectCode(track: Pick<PersonRoiDisplay, 'promotedFrom' | 'workerId'>): string | null {
+  const fromPayload = track.promotedFrom?.map(id => id.trim()).find(id => /^obj-/i.test(id))
+  if (fromPayload) return fromPayload
+  const wid = track.workerId?.trim() ?? ''
+  if (!wid) return null
+  return getPatrolObjectIdForTk(wid)
 }
 
 /**
  * Nhãn ROI live — tier `identity` luôn ưu tiên tên người, không mã tk/p-*.
+ *
+ * Đã ghi hồ sơ (obj-* → tk-*): hiển thị mã object gốc, không để nhãn chung "Người".
  */
 export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
   if (track.peakGroup && track.peakGroupIndex) {
@@ -38,38 +39,41 @@ export function resolvePatrolRoiDisplayLabel(track: PersonRoiDisplay): string {
 
   const wid = track.workerId?.trim() ?? ''
   const manual = getPatrolManualIdentity(wid) ?? getPatrolManualIdentityForTk(wid)
-  if (manual?.workerName) return withPromotedMark(manual.workerName, track)
+  if (manual?.workerName) return manual.workerName
 
   if (track.tier === 'identity') {
     const bound = findPatrolIdentityByWorkerId(wid)
-    if (bound?.workerName) return withPromotedMark(bound.workerName, track)
+    if (bound?.workerName) return bound.workerName
 
     const raw = track.workerName?.trim()
-    if (raw && !isTechnicalPatrolWorkerLabel(raw)) return withPromotedMark(raw, track)
+    if (raw && !isTechnicalPatrolWorkerLabel(raw)) return raw
 
     if (isPatrolGalleryWorkerId(wid)) {
       const fromKey = resolvePatrolObjectLabel(wid, raw ?? '')
       if (fromKey && !isTechnicalPatrolWorkerLabel(fromKey)) {
-        return withPromotedMark(fromKey, track)
+        return fromKey
       }
     }
 
     return '—'
   }
 
+  const objectCode = resolvePatrolRoiObjectCode(track)
+  if (objectCode && track.tier !== 'identity') {
+    return objectCode
+  }
+
   if (track.tier === 'person') {
     const raw = track.workerName?.trim() ?? wid
     if (isPatrolTkWorkerId(wid) || isPatrolAnonymousTrackId(wid)) {
-      return withPromotedMark(raw || wid, track)
+      if (!isGenericPersonLabel(raw)) return raw
+      return wid || raw
     }
   }
 
-  return withPromotedMark(
-    formatPersonOverlayLabel(track.workerName, {
-      workerId: track.workerId,
-      workerName: track.workerName,
-      manualDisplayName: manual?.workerName,
-    }),
-    track,
-  )
+  return formatPersonOverlayLabel(track.workerName, {
+    workerId: track.workerId,
+    workerName: track.workerName,
+    manualDisplayName: manual?.workerName,
+  })
 }

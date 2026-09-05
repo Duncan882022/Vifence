@@ -590,7 +590,7 @@ def promote_object(
         _renumber_presence_seq(conn, date, pid)
         from .promoted_registry import mark_promoted
 
-        mark_promoted(pid, date)
+        mark_promoted(pid, date, obj_id)
         conn.execute(
             "UPDATE daily_objects SET promoted_to = ?, promoted_at = ?"
             " WHERE event_date = ? AND obj_id = ?",

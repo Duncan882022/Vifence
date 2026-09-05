@@ -129,6 +129,9 @@ def format_module05_detection(
         out["face_eligible"] = True
     if row.get("promoted_from_object") is True:
         out["promoted_from_object"] = True
+    promoted_from = row.get("promoted_from")
+    if isinstance(promoted_from, list) and promoted_from:
+        out["promoted_from"] = [str(item).strip() for item in promoted_from if str(item).strip()]
     if row.get("peak_group") is True:
         out["peak_group"] = True
         if row.get("peak_group_index") is not None:

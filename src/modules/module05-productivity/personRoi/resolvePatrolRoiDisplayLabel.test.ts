@@ -35,15 +35,6 @@ describe('resolvePatrolRoiDisplayLabel', () => {
     expect(label).toBe('—')
   })
 
-  it('identity tier — ẩn mã tk kỹ thuật', () => {
-    const label = resolvePatrolRoiDisplayLabel(track({
-      tier: 'identity',
-      workerId: 'tk-00000042',
-      workerName: 'tk-00000042',
-    }))
-    expect(label).toBe('—')
-  })
-
   it('peak group — hiện số thứ tự và cỡ nhóm', () => {
     const label = resolvePatrolRoiDisplayLabel(track({
       tier: 'object',
@@ -54,52 +45,29 @@ describe('resolvePatrolRoiDisplayLabel', () => {
     expect(label).toBe('#3 · Nhóm 12')
   })
 
-  it('person tier — vẫn hiện mã tk', () => {
+  it('person tier chưa ghi hồ sơ — vẫn hiện mã tk', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
       tier: 'person',
       workerId: 'tk-00000042',
       workerName: 'tk-00000042',
     }))).toBe('tk-00000042')
   })
-})
 
-/**
- * Thẻ Người mang ảnh badge "Đối tượng" là hệ quả của thăng hạng giữa lượt.
- * Dấu này để người xem không nhầm sang lỗi nhận dạng.
- */
-describe('dấu thăng hạng trên nhãn ROI', () => {
-  it('person tier — thêm mũi tên sau mã tk', () => {
+  it('đã ghi hồ sơ — hiện mã obj-* thay "Người"', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
       tier: 'person',
       workerId: 'tk-00000042',
-      workerName: 'tk-00000042',
-      promotedFromObject: true,
-    }))).toBe('tk-00000042 ↑')
+      workerName: 'Người',
+      promotedFrom: ['obj-20260904-0002'],
+    }))).toBe('obj-20260904-0002')
   })
 
-  it('identity tier — thêm mũi tên sau tên thật', () => {
-    expect(resolvePatrolRoiDisplayLabel(track({
-      tier: 'identity',
-      workerId: 'p-SGC-6688',
-      workerName: 'Duncan',
-      promotedFromObject: true,
-    }))).toBe('Duncan ↑')
-  })
-
-  it('không đánh dấu khi chưa resolve được tên — tránh nhãn "— ↑" vô nghĩa', () => {
-    expect(resolvePatrolRoiDisplayLabel(track({
-      tier: 'identity',
-      workerId: 'tk-00000042',
-      workerName: 'tk-00000042',
-      promotedFromObject: true,
-    }))).toBe('—')
-  })
-
-  it('không thăng hạng thì nhãn giữ nguyên', () => {
+  it('không hiện nhãn chung Người khi BE gửi worker_name generic', () => {
     expect(resolvePatrolRoiDisplayLabel(track({
       tier: 'person',
-      workerId: 'tk-00000042',
-      workerName: 'tk-00000042',
-    }))).toBe('tk-00000042')
+      workerId: 'tk-0000019',
+      workerName: 'Người',
+      promotedFrom: ['obj-20260905-0011'],
+    }))).toBe('obj-20260905-0011')
   })
 })

@@ -104,6 +104,7 @@ class DetectorNormalizeTests(unittest.TestCase):
             "tier": "person",
             "face_eligible": True,
             "promoted_from_object": True,
+            "promoted_from": ["obj-20260904-0002"],
             "peak_group": True,
             "peak_group_index": 2,
             "peak_group_size": 5,
@@ -111,6 +112,7 @@ class DetectorNormalizeTests(unittest.TestCase):
         det = format_module05_detection(row, self.FW, self.FH)
         self.assertTrue(det["face_eligible"])
         self.assertTrue(det["promoted_from_object"])
+        self.assertEqual(det["promoted_from"], ["obj-20260904-0002"])
         self.assertTrue(det["peak_group"])
         self.assertEqual(det["peak_group_index"], 2)
         self.assertEqual(det["peak_group_size"], 5)

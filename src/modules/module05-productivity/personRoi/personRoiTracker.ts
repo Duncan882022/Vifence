@@ -182,6 +182,15 @@ function greedyAssign(
   return assignment
 }
 
+function mergePromotedFrom(track: PersonRoiTrack, det: PersonRoiDetection): void {
+  if (det.promoted_from_object) track.promotedFromObject = true
+  const incoming = det.promoted_from?.map(id => id.trim()).filter(id => /^obj-/i.test(id)) ?? []
+  if (incoming.length === 0) return
+  const merged = new Set(track.promotedFrom ?? [])
+  for (const id of incoming) merged.add(id)
+  track.promotedFrom = [...merged]
+}
+
 function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   const anchor = personRoiAnchorKey(det)
   if (anchor) track.anchorKey = anchor
@@ -203,7 +212,7 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
     if (det.peak_group_size != null) track.peakGroupSize = det.peak_group_size
   }
   // Chỉ bật, không tắt: một payload thiếu cờ không được xoá dấu đã thăng hạng.
-  if (det.promoted_from_object) track.promotedFromObject = true
+  mergePromotedFrom(track, det)
   const detLabel = det.label?.trim()
   if (det.peak_group && detLabel?.startsWith('#')) {
     track.label = detLabel
@@ -372,6 +381,7 @@ export function advancePersonRoiTracks(
       peakGroupIndex: det.peak_group_index,
       peakGroupSize: det.peak_group_size,
       promotedFromObject: det.promoted_from_object,
+      promotedFrom: det.promoted_from?.filter(id => /^obj-/i.test(id.trim())),
     }
     applyIdentity(track, det)
     next.set(id, track)
@@ -444,12 +454,14 @@ export function predictPersonRoiTracks(
       tier: resolvePatrolRoiDisplayTier(track.tier, {
         faceEligible: track.faceEligible,
         workerId: track.workerId,
+        promotedFrom: track.promotedFrom,
       }),
       displayOpacity,
       peakGroup: track.peakGroup,
       peakGroupIndex: track.peakGroupIndex,
       peakGroupSize: track.peakGroupSize,
       promotedFromObject: track.promotedFromObject,
+      promotedFrom: track.promotedFrom,
     })
   }
 

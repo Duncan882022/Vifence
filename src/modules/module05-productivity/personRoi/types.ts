@@ -31,6 +31,8 @@ export interface PersonRoiDetection {
   peak_group_size?: number
   /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
   promoted_from_object?: boolean
+  /** Mã obj-* gốc đã ghi hồ sơ. */
+  promoted_from?: string[]
 }
 
 /** Track nội bộ — Kalman + lifecycle. */
@@ -56,6 +58,8 @@ export interface PersonRoiTrack {
   faceEligible?: boolean
   /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
   promotedFromObject?: boolean
+  /** Mã obj-* gốc đã ghi hồ sơ. */
+  promotedFrom?: string[]
 }
 export interface PersonRoiDisplay {
   trackId: string
@@ -75,4 +79,6 @@ export interface PersonRoiDisplay {
   peakGroupSize?: number
   /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
   promotedFromObject?: boolean
+  /** Mã obj-* gốc — nhãn ROI ưu tiên mã này. */
+  promotedFrom?: string[]
 }
