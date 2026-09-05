@@ -71,6 +71,8 @@ class PatrolTkDedupTests(unittest.TestCase):
             "tk-0000001",
             camera_id="HC-01",
             snapshot_path="2026-09-05/tk.jpg",
+            snapshot_score=1.2,
+            face_eligible=True,
             now=1_000.0,
         )
 
@@ -90,6 +92,8 @@ class PatrolTkDedupTests(unittest.TestCase):
             "tk-0000001",
             camera_id="HC-01",
             snapshot_path="2026-09-05/tk1.jpg",
+            snapshot_score=1.2,
+            face_eligible=True,
             now=1_000.0,
         )
         identity.ensure_draft_for_tk("tk-0000002", now=1_050.0)
@@ -97,6 +101,8 @@ class PatrolTkDedupTests(unittest.TestCase):
             "tk-0000002",
             camera_id="HC-02",
             snapshot_path="2026-09-05/tk2.jpg",
+            snapshot_score=1.2,
+            face_eligible=True,
             now=1_050.0,
         )
 
@@ -121,6 +127,8 @@ class PatrolTkDedupTests(unittest.TestCase):
             "tk-0000001",
             camera_id="HC-01",
             snapshot_path="2026-09-05/tk.jpg",
+            snapshot_score=1.2,
+            face_eligible=True,
             now=1_000.0,
         )
 

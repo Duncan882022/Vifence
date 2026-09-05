@@ -724,7 +724,13 @@ def lookup_bound_profile_for_tk(tk_id: str) -> str | None:
     return lookup_profile_by_tk(tk)
 
 
-def ensure_draft_for_tk(tk_id: str, *, now: float | None = None) -> str:
+def ensure_draft_for_tk(
+    tk_id: str,
+    *,
+    now: float | None = None,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
+) -> str:
     """Đủ điều kiện nhận diện (tk-*) → hồ sơ bản nháp, pers_id = tk normalized."""
     from ..patrol_ids import is_anonymous_track_id, normalize_track_id
 
@@ -737,6 +743,19 @@ def ensure_draft_for_tk(tk_id: str, *, now: float | None = None) -> str:
     if existing:
         touch_person(existing, now=ts)
         return existing
+
+    from . import daystore
+
+    date = db.today_vn(ts)
+    nearby = daystore.find_nearby_person_pers_id(
+        date, gps_lat, gps_lng, ts, exclude_pers=tk,
+    )
+    if not nearby:
+        nearby = daystore.find_same_site_person_today(date, gps_lat, gps_lng, exclude_pers=tk)
+    if nearby:
+        bind_tk_profile(tk, nearby, now=ts)
+        touch_person(nearby, now=ts)
+        return nearby
 
     with db.tx() as c:
         c.execute(
@@ -1153,6 +1172,8 @@ def observe_face(
     frame: Any = None,
     person_bbox: Sequence[float] | None = None,
     preferred_tk: str | None = None,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
 ) -> tuple[str, bool]:
     """Thấy một khuôn mặt của track **chưa biết là ai** → `(pers_id, vừa tạo)`.
 
@@ -1252,7 +1273,9 @@ def observe_face(
                 person_bbox=person_bbox,
             )
             return dup_tk, False
-        pers_id = ensure_draft_for_tk(pref, now=ts)
+        pers_id = ensure_draft_for_tk(
+            pref, now=ts, gps_lat=gps_lat, gps_lng=gps_lng,
+        )
         bind_tk_profile(pref, pers_id, now=ts)
         add_face_angle(
             pers_id,
@@ -1264,6 +1287,31 @@ def observe_face(
             person_bbox=person_bbox,
         )
         return pers_id, had is None
+
+    from . import daystore
+
+    date = db.today_vn(ts)
+    nearby = daystore.find_nearby_person_pers_id(date, gps_lat, gps_lng, ts)
+    if not nearby:
+        nearby = daystore.find_same_site_person_today(
+            date, gps_lat, gps_lng, exclude_pers=pref or None,
+        )
+    if nearby:
+        pref = normalize_track_id((preferred_tk or "").strip())
+        if pref and is_anonymous_track_id(pref) and pref != nearby:
+            daystore.merge_pers_event_cards(pref, nearby, now=ts)
+        if pref:
+            bind_tk_profile(pref, nearby, now=ts)
+        add_face_angle(
+            nearby,
+            embedding,
+            quality=quality,
+            camera_id=camera_id,
+            now=ts,
+            frame=frame,
+            person_bbox=person_bbox,
+        )
+        return nearby, False
 
     dup_tk, _dup_sim = find_duplicate_tk_today(embedding, now=ts)
     if dup_tk:
@@ -1278,8 +1326,6 @@ def observe_face(
         )
         pref = normalize_track_id((preferred_tk or "").strip())
         if pref and is_anonymous_track_id(pref) and pref != dup_tk:
-            from . import daystore
-
             daystore.merge_pers_event_cards(pref, dup_tk, now=ts)
             bind_tk_profile(pref, dup_tk, now=ts)
         return dup_tk, False

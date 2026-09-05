@@ -206,15 +206,31 @@ def _write_snapshot(
             return None
 
         out = frame.copy()
+        from ..patrol_ids import is_person_subject_id
+
         explicit = (tier or "").strip()
+        person_tab_qualified = (
+            is_person_subject_id(subject_id)
+            and float(score) >= daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE
+        )
         if explicit in PATROL_SNAPSHOT_TIER_COLORS_BGR:
             resolved_tier = explicit
-        else:
+        elif _snapshot_meets_person_evidence_gate(
+            face_eligible=face_eligible,
+            snapshot_score=score,
+        ) or person_tab_qualified:
+            tier_hint = tier
+            if person_tab_qualified and explicit not in ("person", "identity"):
+                from ..patrol_identity_lifecycle import TIER_PERSON
+
+                tier_hint = TIER_PERSON
             resolved_tier = _resolve_snapshot_tier(
                 subject_id,
-                tier=tier,
+                tier=tier_hint,
                 worker_id=worker_id,
             )
+        else:
+            resolved_tier = "object"
         color = PATROL_SNAPSHOT_TIER_COLORS_BGR.get(resolved_tier, PATROL_SNAPSHOT_TIER_COLORS_BGR["object"])
         cv2.rectangle(out, (bx1, by1), (bx2, by2), color, 2, cv2.LINE_AA)
 
@@ -396,7 +412,13 @@ def lookup_bound_pers_for_tk(tk_id: str) -> str | None:
     return found
 
 
-def _ensure_profile_for_tk(tk_id: str, *, now: float) -> str:
+def _ensure_profile_for_tk(
+    tk_id: str,
+    *,
+    now: float,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
+) -> str:
     from ..patrol_ids import normalize_track_id
 
     tk = normalize_track_id(tk_id)
@@ -404,7 +426,9 @@ def _ensure_profile_for_tk(tk_id: str, *, now: float) -> str:
     if existing:
         identity.touch_person(existing, now=now)
         return existing
-    pers_id = identity.ensure_draft_for_tk(tk, now=now)
+    pers_id = identity.ensure_draft_for_tk(
+        tk, now=now, gps_lat=gps_lat, gps_lng=gps_lng,
+    )
     _bind_tk_profile(tk, pers_id)
     return pers_id
 

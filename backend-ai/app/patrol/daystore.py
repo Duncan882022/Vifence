@@ -27,6 +27,9 @@ from .presence import (
 APPEARANCE_GAP_SEC = 45.0
 # Tab Người / Định danh — điểm tối thiểu (face_quality×2 + confidence), đồng bộ FE.
 PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
+# Gộp tk trùng người — cùng ô GPS + cửa sổ thời gian (đồng bộ audit duplicate).
+NEARBY_PERSON_MERGE_SEC = 120.0
+GPS_BUCKET_EPS = 0.00015
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
 TOUCH_MIN_INTERVAL_SEC = 10.0
@@ -52,6 +55,93 @@ def _person_card_eligible(
     if not face_eligible or not snapshot_path:
         return False
     return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
+
+
+def _gps_bucket(lat: float, lng: float) -> tuple[int, int]:
+    return (round(float(lat) / GPS_BUCKET_EPS), round(float(lng) / GPS_BUCKET_EPS))
+
+
+def find_same_site_person_today(
+    date: str,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    *,
+    exclude_pers: str | None = None,
+) -> str | None:
+    """Cùng ô GPS trong ngày — lần vào lại sau khi rời khỏi camera (không giới hạn 120s)."""
+    if gps_lat is None or gps_lng is None:
+        return None
+    bucket = _gps_bucket(gps_lat, gps_lng)
+    exclude = identity.resolve_alias((exclude_pers or "").strip()) if exclude_pers else ""
+
+    rows = db.query(
+        "SELECT e.pers_id, e.snapshot_score, a.gps_lat, a.gps_lng"
+        " FROM daily_events e"
+        " INNER JOIN appearances a"
+        "  ON a.event_date = e.event_date AND a.subject_id = e.pers_id"
+        " WHERE e.event_date = ? AND a.qualified = 1"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?"
+        " AND a.gps_lat IS NOT NULL AND a.gps_lng IS NOT NULL"
+        " ORDER BY e.snapshot_score DESC, e.last_seen DESC",
+        (date, PERSON_LIST_MIN_SNAPSHOT_SCORE),
+    )
+    best_id: str | None = None
+    best_score = -1.0
+    for row in rows:
+        sid = identity.resolve_alias(str(row["pers_id"]))
+        if exclude and sid == exclude:
+            continue
+        if _gps_bucket(float(row["gps_lat"]), float(row["gps_lng"])) != bucket:
+            continue
+        score = float(row["snapshot_score"] or 0)
+        if score > best_score:
+            best_score = score
+            best_id = sid
+    return best_id
+
+
+def find_nearby_person_pers_id(
+    date: str,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    now: float,
+    *,
+    exclude_pers: str | None = None,
+    within_sec: float = NEARBY_PERSON_MERGE_SEC,
+) -> str | None:
+    """Tra pers_id thẻ Người gần đây cùng ô GPS — tránh tk-024/025 song song."""
+    if gps_lat is None or gps_lng is None:
+        return None
+    bucket = _gps_bucket(gps_lat, gps_lng)
+    exclude = identity.resolve_alias((exclude_pers or "").strip()) if exclude_pers else ""
+
+    rows = db.query(
+        "SELECT a.subject_id, e.snapshot_score, a.gps_lat, a.gps_lng"
+        " FROM appearances a"
+        " INNER JOIN daily_events e"
+        "  ON e.event_date = a.event_date AND e.pers_id = a.subject_id"
+        " WHERE a.event_date = ? AND a.qualified = 1"
+        " AND a.subject_id NOT LIKE 'obj-%'"
+        " AND a.gps_lat IS NOT NULL AND a.gps_lng IS NOT NULL"
+        " AND ABS(a.started_at - ?) <= ?"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " ORDER BY e.snapshot_score DESC, a.started_at DESC",
+        (date, now, within_sec),
+    )
+    best_id: str | None = None
+    best_score = -1.0
+    for row in rows:
+        sid = identity.resolve_alias(str(row["subject_id"]))
+        if exclude and sid == exclude:
+            continue
+        if _gps_bucket(float(row["gps_lat"]), float(row["gps_lng"])) != bucket:
+            continue
+        score = float(row["snapshot_score"] or 0)
+        if score > best_score:
+            best_score = score
+            best_id = sid
+    return best_id
 
 
 def _tier_rank_value(tier: str | None) -> int:
@@ -90,27 +180,6 @@ def _upsert_event_tier_ever(
             (merged, date, pers_id),
         )
 
-
-def _split_appearance_at_promote(
-    conn: Any,
-    date: str,
-    obj_id: str,
-    pers_id: str,
-    ts: float,
-) -> None:
-    """Đóng segment object-phase tại thời điểm thăng hạng — không ghi đè tier."""
-    row = conn.execute(
-        "SELECT * FROM appearances WHERE event_date = ? AND subject_id = ?"
-        " AND started_at <= ? AND ended_at >= ?"
-        " ORDER BY started_at DESC LIMIT 1",
-        (date, obj_id, ts, ts),
-    ).fetchone()
-    if row is None:
-        return
-    conn.execute(
-        "UPDATE appearances SET ended_at = ? WHERE id = ?",
-        (ts, row["id"]),
-    )
 
 
 def _should_refresh_presence(
@@ -332,14 +401,19 @@ def touch_person_event(
             (date, pid),
         ).fetchone()
         if row is None:
-            card_snap = snapshot_path if card_eligible else None
-            card_score = snapshot_score if card_eligible else 0.0
-            appearance_snapshot = card_snap
+            if not card_eligible:
+                conn.execute(
+                    "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
+                    " WHERE pers_id = ?",
+                    (ts, first, pid),
+                )
+                return
+            appearance_snapshot = snapshot_path
             conn.execute(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, pid, first, ts, card_snap, card_score),
+                (date, pid, first, ts, snapshot_path, snapshot_score),
             )
         else:
             write, keep_new = _should_refresh_person_snapshot(
@@ -572,6 +646,68 @@ def _is_object_snapshot_path(path: str | None) -> bool:
     return bool(name.startswith("obj-"))
 
 
+def _snapshot_path_kind(path: str | None) -> str:
+    name = _snapshot_basename(path)
+    if name.startswith("obj-"):
+        return "object"
+    if name.startswith("tk-") or name.startswith("pers-"):
+        return "person"
+    return "unknown"
+
+
+def _apply_payload_tier(
+    raw: str | None,
+    tier: str,
+    *,
+    promoted_from: str | None = None,
+) -> str:
+    import json
+
+    payload: dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+    payload["tier_at_observation"] = tier
+    if promoted_from:
+        payload["promoted_from_object"] = promoted_from
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _transfer_promoted_object_appearances(
+    conn: Any,
+    date: str,
+    obj_id: str,
+    pid: str,
+    ts: float,
+    obj_snapshot: str | None,
+) -> None:
+    """Chuyển lịch sử obj → pers — giữ JPG lưng + tier Đối tượng trước khi chụp mặt."""
+    rows = conn.execute(
+        "SELECT id, started_at, ended_at, snapshot_path, event_payload_json"
+        " FROM appearances WHERE event_date = ? AND subject_id = ? AND qualified = 1"
+        " ORDER BY started_at ASC, id ASC",
+        (date, obj_id),
+    ).fetchall()
+    obj_snap = (obj_snapshot or "").strip() or None
+    for row in rows:
+        snap = str(row["snapshot_path"] or "").strip() or obj_snap
+        end_at = max(float(row["started_at"]), min(float(row["ended_at"]), ts))
+        payload = _apply_payload_tier(
+            row["event_payload_json"],
+            "object",
+            promoted_from=obj_id,
+        )
+        conn.execute(
+            "UPDATE appearances SET subject_id = ?, ended_at = ?, snapshot_path = ?,"
+            " event_payload_json = ? WHERE id = ?",
+            (pid, end_at, snap or None, payload, int(row["id"])),
+        )
+
+
 def _person_card_snap_from_object(obj_row: dict[str, Any]) -> tuple[str | None, float]:
     """Không gắn JPG obj-* lên thẻ Người — chờ reshoot tk cùng lượt."""
     path = str(obj_row.get("snapshot_path") or "").strip() or None
@@ -644,10 +780,9 @@ def promote_object(
                 ),
             )
 
-        _split_appearance_at_promote(conn, date, obj_id, pid, ts)
-        conn.execute(
-            "UPDATE appearances SET subject_id = ? WHERE event_date = ? AND subject_id = ?",
-            (pid, date, obj_id),
+        obj_snapshot_path = str(obj["snapshot_path"] or "").strip() or None
+        _transfer_promoted_object_appearances(
+            conn, date, obj_id, pid, ts, obj_snapshot_path,
         )
         _renumber_presence_seq(conn, date, pid)
         from .promoted_registry import mark_promoted
@@ -677,6 +812,9 @@ def promote_object(
             (ts, float(obj["first_seen"]), pid),
         )
 
+    # Không gộp dòng Đối tượng (lưng) với dòng Người (mặt) vừa tách.
+    coalesce_subject_appearances(pid, date)
+
 
 def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
     """Thẻ Người + Định danh trong ngày.
@@ -700,8 +838,11 @@ def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
         "         WHERE o.event_date = e.event_date AND o.promoted_to = e.pers_id)"
         "        AS promoted_at"
         "  FROM daily_events e JOIN persons p ON p.pers_id = e.pers_id"
-        " WHERE e.event_date = ? ORDER BY e.last_seen DESC",
-        (d,),
+        " WHERE e.event_date = ?"
+        " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?"
+        " ORDER BY e.last_seen DESC",
+        (d, PERSON_LIST_MIN_SNAPSHOT_SCORE),
     )
     out: list[dict[str, Any]] = []
     for r in rows:
@@ -898,6 +1039,19 @@ def _tier_from_payload(raw: str | None) -> str | None:
 
 def _same_coalesce_visit(a: Any, b: Any, *, subject_id: str = "") -> bool:
     """Chỉ gộp appearance cùng track/session — tránh trộn hai lượt gặp."""
+    tier_a = _tier_from_payload(str(a["event_payload_json"] or ""))
+    tier_b = _tier_from_payload(str(b["event_payload_json"] or ""))
+    if tier_a == "object" and tier_b in ("person", "identity"):
+        return False
+    if tier_b == "object" and tier_a in ("person", "identity"):
+        return False
+    kind_a = _snapshot_path_kind(str(a["snapshot_path"] or ""))
+    kind_b = _snapshot_path_kind(str(b["snapshot_path"] or ""))
+    if kind_a == "object" and kind_b == "person":
+        return False
+    if kind_b == "object" and kind_a == "person":
+        return False
+
     ta = str(a["track_id"] or "").strip()
     tb = str(b["track_id"] or "").strip()
     sa = str(a["session_id"] or "").strip()
