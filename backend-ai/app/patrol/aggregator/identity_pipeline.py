@@ -33,6 +33,7 @@ def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
         frame_w,
         frame_h,
         face_quality=float(obs.face_quality or 0.0),
+        face_eligible=bool(obs.face_eligible),
     )
 
 

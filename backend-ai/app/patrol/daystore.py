@@ -429,6 +429,63 @@ def find_overlapping_appearance_row(
     return None
 
 
+def merge_pers_event_cards(
+    from_pers: str,
+    to_pers: str,
+    *,
+    now: float | None = None,
+) -> None:
+    """Gộp thẻ sự kiện trùng người — tk-024/025/026 cùng một pers."""
+    ts = now or time.time()
+    date = db.today_vn(ts)
+    src = identity.resolve_alias((from_pers or "").strip())
+    dst = identity.resolve_alias((to_pers or "").strip())
+    if not src or not dst or src == dst:
+        return
+
+    with db.tx() as conn:
+        src_row = conn.execute(
+            "SELECT * FROM daily_events WHERE event_date = ? AND pers_id = ?",
+            (date, src),
+        ).fetchone()
+        if src_row is None:
+            return
+        dst_row = conn.execute(
+            "SELECT * FROM daily_events WHERE event_date = ? AND pers_id = ?",
+            (date, dst),
+        ).fetchone()
+        if dst_row is None:
+            conn.execute(
+                "UPDATE daily_events SET pers_id = ?"
+                " WHERE event_date = ? AND pers_id = ?",
+                (dst, date, src),
+            )
+        else:
+            better = float(src_row["snapshot_score"]) > float(dst_row["snapshot_score"])
+            conn.execute(
+                "UPDATE daily_events SET first_seen = ?, last_seen = ?,"
+                " snapshot_path = ?, snapshot_score = ?"
+                " WHERE event_date = ? AND pers_id = ?",
+                (
+                    min(float(dst_row["first_seen"]), float(src_row["first_seen"])),
+                    max(float(dst_row["last_seen"]), float(src_row["last_seen"]), ts),
+                    src_row["snapshot_path"] if better else dst_row["snapshot_path"],
+                    max(float(dst_row["snapshot_score"]), float(src_row["snapshot_score"])),
+                    date,
+                    dst,
+                ),
+            )
+            conn.execute(
+                "DELETE FROM daily_events WHERE event_date = ? AND pers_id = ?",
+                (date, src),
+            )
+        conn.execute(
+            "UPDATE appearances SET subject_id = ?"
+            " WHERE event_date = ? AND subject_id = ?",
+            (dst, date, src),
+        )
+
+
 def promote_object(
     obj_id: str,
     pers_id: str,

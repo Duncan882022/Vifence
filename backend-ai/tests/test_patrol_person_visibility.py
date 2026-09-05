@@ -134,7 +134,18 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         fw, fh = 1280, 720
         person = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
         self.assertTrue(
-            patrol_anonymous_identity_allowed(person, fw, fh, face_quality=0.9),
+            patrol_anonymous_identity_allowed(
+                person, fw, fh, face_quality=0.9, face_eligible=True,
+            ),
+        )
+
+    def test_partial_face_turning_allowed(self):
+        fw, fh = 1280, 720
+        person = (fw * 0.40, fh * 0.20, fw * 0.60, fh * 0.55)
+        self.assertTrue(
+            patrol_anonymous_identity_allowed(
+                person, fw, fh, face_quality=0.52, face_eligible=True,
+            ),
         )
 
 

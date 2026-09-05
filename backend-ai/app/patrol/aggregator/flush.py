@@ -227,6 +227,10 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         frame_w,
         frame_h,
         face_box=_snapshot_face_box(shot_obs, frame_w, frame_h),
+        anchor_from_center=(
+            not shot_obs.face_eligible
+            and (shot_obs.lifecycle_tier or "").strip() == "object"
+        ),
     )
 
     score = snapshot_score(
