@@ -17,7 +17,7 @@ import {
   buildPatrolHeatmapStatsForZone,
   buildPatrolSiteHeatmapStats,
 } from '../utils/patrolZoneHeatmapStats'
-import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, PATROL_SITE_NAME } from '../data/patrolSiteMap'
+import { PATROL_HELMET_01_FALLBACK, PATROL_HELMET_02_FALLBACK, PATROL_MAP_ACTIVE_HELMET_PINS, PATROL_MAP_ACTIVE_DRONE_PINS, PATROL_DRONE_03_FALLBACK, resolvePatrolHeatmapZoneTitle } from '../data/patrolSiteMap'
 import { enforcePatrolHelmetPinSeparation, resolvePatrolHelmetMapPosition } from '../utils/patrolHeatmapGps'
 import { usePatrolHelmetGpsLive } from '../hooks/usePatrolHelmetGpsLive'
 import { usePatrolLiveMapState } from '../hooks/usePatrolLiveMapState'
@@ -60,11 +60,13 @@ const PATROL_MAP_CAMERA_IDS: readonly string[] = [
 ]
 
 function HeatmapSiteStatsOverlay({
+  title,
   objectCount,
   personCount,
   identityCount,
   compactChrome,
 }: {
+  title: string
   objectCount: number
   personCount: number
   identityCount: number
@@ -93,7 +95,7 @@ function HeatmapSiteStatsOverlay({
             compactChrome ? 'text-[9px]' : 'text-[10px]',
           )}
         >
-          {PATROL_SITE_NAME}
+          {title}
         </div>
         {rows.map((row, index) => (
           <div
@@ -539,6 +541,7 @@ export function PatrolDensityHeatmap({
   const personCount = displayStats.personCount
   const identifiedCount = displayStats.identityCount
   const objectEncounterCount = displayStats.objectCount
+  const statsOverlayTitle = resolvePatrolHeatmapZoneTitle(selectedZoneId)
 
   useEffect(() => {
     if (!expanded) return
@@ -614,6 +617,7 @@ export function PatrolDensityHeatmap({
           />
         ) : (
           <HeatmapSiteStatsOverlay
+            title={statsOverlayTitle}
             objectCount={objectEncounterCount}
             personCount={personCount}
             identityCount={identifiedCount}

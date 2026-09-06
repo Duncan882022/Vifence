@@ -16,6 +16,14 @@ export const PATROL_SITE_NAME = 'Cầu Sông Hốt'
 export const PATROL_SITE_ZONE_ID = 'ZONE_1'
 export const PATROL_SITE_ZONE_2_ID = 'ZONE_2'
 
+/** Tiêu đề overlay thống kê heatmap — click khu → «Khu 1» / «Khu 2». */
+export function resolvePatrolHeatmapZoneTitle(zoneId: string | null | undefined): string {
+  if (!zoneId) return PATROL_SITE_NAME
+  if (zoneId === PATROL_SITE_ZONE_ID) return 'Khu 1'
+  if (zoneId === PATROL_SITE_ZONE_2_ID) return 'Khu 2'
+  return PATROL_GPS_ZONES.find(z => z.zone_id === zoneId)?.name ?? PATROL_SITE_NAME
+}
+
 /** Map centre — centroid toàn công trường. */
 export const PATROL_SITE_CENTER: [number, number] = [...PATROL_SURVEY_PIN]
 

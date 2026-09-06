@@ -18,8 +18,10 @@ import {
   PATROL_SITE_CENTER,
   PATROL_SITE_ZONE_2_ID,
   PATROL_SITE_ZONE_ID,
+  PATROL_SITE_NAME,
   PATROL_ZONE_DIVIDER_LINES,
   buildPatrolZoneDividerLines,
+  resolvePatrolHeatmapZoneTitle,
 } from '../data/patrolSiteMap'
 
 function isPointInPolygon(lat: number, lng: number, polygon: [number, number][]): boolean {
@@ -76,6 +78,12 @@ describe('patrolSiteGeometry — hai khu Cầu Sông Hốt', () => {
   it('không còn nét đứt chia khu', () => {
     expect(PATROL_ZONE_DIVIDER_LINES).toHaveLength(0)
     expect(buildPatrolZoneDividerLines()).toHaveLength(0)
+  })
+
+  it('resolvePatrolHeatmapZoneTitle — click khu trên heatmap', () => {
+    expect(resolvePatrolHeatmapZoneTitle(null)).toBe(PATROL_SITE_NAME)
+    expect(resolvePatrolHeatmapZoneTitle(PATROL_SITE_ZONE_ID)).toBe('Khu 1')
+    expect(resolvePatrolHeatmapZoneTitle(PATROL_SITE_ZONE_2_ID)).toBe('Khu 2')
   })
 
   it('pin thiết bị — HC-01/KV1, HC-02/DR-03/KV2', () => {
