@@ -54,8 +54,9 @@ const FILTER_TABS: {
   { key: 'identity', ...PATROL_EVENTS_TAB_META.identity },
 ]
 
-/** Icon meta card — tên / giờ / địa điểm: cùng xám, cùng kích cỡ. */
+/** Icon meta card — giờ / địa điểm / lịch sử: cùng xám, cùng kích cỡ. */
 const EVENT_CARD_META_ICON = 'w-2.5 h-2.5 shrink-0 text-muted-foreground/45'
+const EVENT_CARD_SUBJECT_ICON = 'w-2.5 h-2.5 shrink-0'
 
 function filterByTab(events: PatrolEvent[], tab: PatrolFilterTab): PatrolEvent[] {
   return listPatrolEventsForTab(events, tab)
@@ -109,7 +110,7 @@ function PatrolStageBadge({ event }: { event: PatrolEvent }) {
         'inline-flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-semibold',
         meta.badge,
       )}>
-        <Icon className={cn('w-2.5 h-2.5 shrink-0', meta.color)} aria-hidden />
+        <Icon className="w-2.5 h-2.5 shrink-0" aria-hidden />
         {meta.label}
       </span>
     </TagTooltip>
@@ -187,7 +188,7 @@ function PatrolEventCard({
 
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <SubjectIcon className={EVENT_CARD_META_ICON} aria-hidden />
+              <SubjectIcon className={cn(EVENT_CARD_SUBJECT_ICON, displayMeta.color)} aria-hidden />
               <p className={cn('text-[8px] min-w-0 truncate font-medium', displayMeta.color)}>
                 {cardDisplay.subjectLabel}
               </p>

@@ -3,7 +3,7 @@
  *   Đối tượng (chưa đủ định danh) → Người (mã tạm ổn định, re-id) → Định danh (có Tên + Đơn vị)
  */
 import type { LucideIcon } from 'lucide-react'
-import { LayoutGrid, UserCheck, UserRound, Users } from 'lucide-react'
+import { LayoutGrid, User, UserCheck, UserRound } from 'lucide-react'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { resolvePatrolSubjectAlias } from '@/services/patrolRuntimeBridge'
 import { getPatrolManualIdentity } from '../services/patrolManualIdentity.service'
@@ -29,7 +29,7 @@ export const PATROL_PERSON_STAGE_META: Record<PatrolPersonStage, {
   tooltip: string
 }> = {
   object: { ...PATROL_TIER_TOKENS.object, icon: UserRound },
-  person: { ...PATROL_TIER_TOKENS.person, icon: Users },
+  person: { ...PATROL_TIER_TOKENS.person, icon: User },
   // `profile` là tên cũ của tầng thứ ba trong panel; token dùng chung với ROI.
   profile: { ...PATROL_TIER_TOKENS.identity, icon: UserCheck },
 }
@@ -59,30 +59,42 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     label: PATROL_TIER_TOKENS.object.label,
     icon: PATROL_PERSON_STAGE_META.object.icon,
     color: PATROL_TIER_TOKENS.object.color,
-    inactiveColor: 'text-stone-500/70',
+    inactiveColor: 'text-stone-400/70',
     activeBorder: 'border-stone-400',
     activeText: PATROL_TIER_TOKENS.object.color,
+<<<<<<< HEAD
     activeBadge: PATROL_TIER_TOKENS.object.badge,
+=======
+    activeBadge: 'bg-stone-400/20 text-stone-400',
+>>>>>>> origin/cursor/fix-person-header-icon-color-0a8d
     countTooltip: 'Số thẻ Đối tượng (snapshot) — KPI «Lượt gặm · ĐT» đếm lượt gặm',
   },
   person: {
     label: PATROL_TIER_TOKENS.person.label,
     icon: PATROL_PERSON_STAGE_META.person.icon,
     color: PATROL_TIER_TOKENS.person.color,
-    inactiveColor: 'text-orange-500/70',
+    inactiveColor: 'text-orange-400/70',
     activeBorder: 'border-orange-400',
     activeText: PATROL_TIER_TOKENS.person.color,
+<<<<<<< HEAD
     activeBadge: PATROL_TIER_TOKENS.person.badge,
+=======
+    activeBadge: 'bg-orange-400/20 text-orange-400',
+>>>>>>> origin/cursor/fix-person-header-icon-color-0a8d
     countTooltip: 'Thẻ Người có mặt đủ rõ (snapshot ≥ ngưỡng)',
   },
   identity: {
     label: PATROL_TIER_TOKENS.identity.label,
     icon: PATROL_PERSON_STAGE_META.profile.icon,
     color: PATROL_TIER_TOKENS.identity.color,
-    inactiveColor: 'text-green-500/70',
+    inactiveColor: 'text-green-400/70',
     activeBorder: 'border-green-400',
     activeText: PATROL_TIER_TOKENS.identity.color,
+<<<<<<< HEAD
     activeBadge: PATROL_TIER_TOKENS.identity.badge,
+=======
+    activeBadge: 'bg-green-400/20 text-green-400',
+>>>>>>> origin/cursor/fix-person-header-icon-color-0a8d
     countTooltip: 'Thẻ đã identify trong gallery / HR',
   },
 }
@@ -105,7 +117,7 @@ export function resolvePatrolEventDisplayMeta(event: PatrolEvent): {
   }
   return {
     label: event.type,
-    icon: Users,
+    icon: User,
     color: PATROL_TIER_TOKENS.person.color,
     badge: PATROL_TIER_TOKENS.person.badge,
     borderAccent: PATROL_TIER_TOKENS.person.borderAccent,

@@ -255,7 +255,6 @@ export function PatrolDensityHeatmap({
   const [selectedObject, setSelectedObject] = useState<ObjectState | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [identityRevision, setIdentityRevision] = useState(0)
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
 
   const hc02Helmet = workforce.helmets['HC-02']
 
