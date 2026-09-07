@@ -336,3 +336,134 @@ def maybe_commit_person(
         session.camera_id,
     )
     return pers_id
+
+
+def _commit_returning_person_card(
+    session: TrackSession,
+    obs: ObservationInput,
+    pers_id: str,
+    *,
+    known_reason: str,
+    finalize: bool = False,
+    finalize_at: float | None = None,
+) -> str:
+    """Ghi thẻ Người cho lượt gặp lại — không tạo obj-*."""
+    from ...patrol_ids import is_person_subject_id
+    from .flush import write_person_card
+    from .session_store import link_pers_session
+
+    pid = identity.resolve_alias(pers_id)
+    if not is_person_subject_id(pid):
+        return pid
+
+    session.subject_id = pid
+    session.identity_resolved = True
+    was_committed = session.person_committed
+
+    if should_attempt_person_commit(session, obs):
+        picked = _best_commit_embedding(session, obs)
+        if picked is not None:
+            emb, quality, commit_obs = picked
+            try:
+                pid = commit_person_from_evidence(session, commit_obs, emb, quality)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "returning person observe_face failed track %s", session.track_id,
+                )
+            else:
+                session.mark_person_committed(pid)
+                write_person_card(
+                    session,
+                    commit_obs,
+                    first_commit=True,
+                    finalize=finalize,
+                    finalize_at=finalize_at,
+                )
+                link_pers_session(session)
+                logger.info(
+                    "returning person commit %s track %s via %s+face",
+                    pid,
+                    session.track_id,
+                    known_reason,
+                )
+                return pid
+
+    if not was_committed:
+        session.mark_person_committed(pid)
+    write_person_card(
+        session,
+        obs,
+        first_commit=not was_committed,
+        finalize=finalize,
+        finalize_at=finalize_at,
+    )
+    link_pers_session(session)
+    logger.info(
+        "returning person commit %s track %s via %s",
+        pid,
+        session.track_id,
+        known_reason,
+    )
+    return pid
+
+
+def maybe_commit_returning_person(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> str | None:
+    """Quy tắc giám đốc: gặp lại mặt quen → cùng Người, thêm dòng lịch sử."""
+    if session.person_committed or session.is_abandoned():
+        return session.subject_id
+
+    from ...patrol_ids import is_person_subject_id
+    from .identity_pipeline import (
+        _known_face_match,
+        resolve_subject_from_face_match,
+        resolve_subject_from_known_tk,
+    )
+
+    known, _sim = _known_face_match(session, obs)
+    if known:
+        return _commit_returning_person_card(
+            session, obs, known, known_reason="face_match",
+        )
+
+    sid = (session.subject_id or "").strip()
+    if not is_person_subject_id(sid):
+        pers = resolve_subject_from_face_match(session, obs, now=obs.ts)
+        if not pers:
+            pers = resolve_subject_from_known_tk(session, obs, now=obs.ts)
+        if pers:
+            return _commit_returning_person_card(
+                session, obs, pers, known_reason="resolve",
+            )
+        return None
+
+    if session.identity_resolved and (session.best_faces or obs.face_eligible):
+        return _commit_returning_person_card(
+            session, obs, sid, known_reason="reclaim",
+        )
+    return None
+
+
+def finalize_returning_person_card(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    finalize_at: float | None = None,
+) -> bool:
+    """Đóng lượt gặp lại — không hạ xuống obj-* dù chưa đủ cổng mặt mới."""
+    from ...patrol_ids import is_person_subject_id
+
+    sid = (session.subject_id or "").strip()
+    if not is_person_subject_id(sid):
+        return False
+    _commit_returning_person_card(
+        session,
+        obs,
+        sid,
+        known_reason="finalize",
+        finalize=True,
+        finalize_at=finalize_at,
+    )
+    return True

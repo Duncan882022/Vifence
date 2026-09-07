@@ -600,6 +600,72 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertEqual(len(closed), 2)
         self.assertTrue(all(str(r["end_reason"] or "") for r in closed))
 
+    def test_reclaimed_return_without_face_never_creates_object(self) -> None:
+        """Reclaim tk rồi rời khung (chưa mặt frame mới) — không sinh thẻ obj-*."""
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol_tracker import END_REASON_LOST
+
+        ts = 6_200.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 11 else 0.0) for i in range(128))
+        bbox = (100.0, 80.0, 220.0, 400.0)
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000004.jpg",
+        ):
+            identity.ensure_draft_for_tk("tk-0000004", now=ts, camera_id="HC-01")
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-r1",
+                    now=ts + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000004",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-r1",
+                now=ts + 2.0,
+                end_reason=END_REASON_LOST,
+            )
+            # Quay lại — chỉ bbox tương tự (IoU reclaim), chưa mặt frame mới
+            for i in range(4):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-r2",
+                    now=ts + 5.0 + i * 0.2,
+                    person_bbox=bbox,
+                    confidence=0.85,
+                    face_eligible=False,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-r2",
+                now=ts + 6.0,
+                end_reason=END_REASON_LOST,
+            )
+
+        date = db.today_vn(ts)
+        self.assertEqual(len(daystore.list_objects(date)), 0)
+        self.assertEqual(len(daystore.list_person_events(date)), 1)
+        self.assertEqual(len(daystore.list_day_presences(date)), 2)
+
     def test_dwell_gate_retries_until_committed(self) -> None:
         """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được (legacy flush)."""
         from unittest.mock import patch

@@ -576,8 +576,14 @@ def touch_person_event(
                     )
                     if card_eligible and snapshot_path:
                         appearance_snapshot = snapshot_path
-            elif card_eligible and snapshot_path:
-                appearance_snapshot = snapshot_path
+            else:
+                conn.execute(
+                    "UPDATE daily_events SET last_seen = ?"
+                    " WHERE event_date = ? AND pers_id = ?",
+                    (ts, date, pid),
+                )
+                if card_eligible and snapshot_path:
+                    appearance_snapshot = snapshot_path
         tier = "identity" if is_identified else "person"
         if wrote_card:
             conn.execute(
