@@ -11,6 +11,7 @@ logger = logging.getLogger("patrol.aggregator.identity")
 
 MAX_BEST_FRAMES = 3
 MIN_QUALITY_FOR_SEARCH = 0.55
+MIN_QUALITY_FOR_NEW_IDENTITY = 0.62
 
 
 def _frame_size(obs: ObservationInput) -> tuple[int, int]:
@@ -28,13 +29,13 @@ def _observation_gps(obs: ObservationInput) -> tuple[float | None, float | None]
 
 
 def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
-    """Chặn FP cây/kệ — chỉ thăng Người khi bbox giống người thật."""
+    """Chặn FP + mặt partial — chỉ thăng Người khi đủ định danh lại."""
     if not obs.face_eligible:
         return False
     if obs.person_bbox is None:
         return False
     frame_w, frame_h = _frame_size(obs)
-    from ...patrol_person_visibility import patrol_anonymous_identity_allowed
+    from ...patrol_person_visibility import patrol_reidentifiable_face_allowed
 
     vehicle_boxes: list[tuple[float, float, float, float]] = []
     if obs.frame is not None:
@@ -44,12 +45,13 @@ def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
         if is_patrol_helmet_like(obs.camera_id):
             vehicle_boxes = _patrol_bodycam_vehicle_boxes(obs.frame, obs.camera_id)
 
-    return patrol_anonymous_identity_allowed(
+    return patrol_reidentifiable_face_allowed(
         tuple(obs.person_bbox),
         frame_w,
         frame_h,
-        face_quality=float(obs.face_quality or 0.0),
+        face_detect_score=float(obs.face_quality or 0.0),
         face_eligible=bool(obs.face_eligible),
+        camera_id=obs.camera_id,
         vehicle_boxes=vehicle_boxes,
     )
 
@@ -155,6 +157,15 @@ def _existing_tk_profile_for_worker(worker_id: str | None) -> str | None:
     return identity.resolve_alias(found)
 
 
+def _existing_reidentifiable_tk_profile(
+    worker_id: str | None,
+    *,
+    now: float | None = None,
+) -> str | None:
+    """tk đã có mặt lưu hoặc thẻ Người hôm nay — gặp lại không cần mặt frame hiện tại."""
+    return identity.lookup_reidentifiable_tk_profile(worker_id, now=now)
+
+
 def resolve_subject_from_face_match(
     session: TrackSession,
     obs: ObservationInput,
@@ -226,7 +237,7 @@ def resolve_subject_from_known_tk(
         if is_person_subject_id(session.subject_id):
             return session.subject_id
 
-    pers_id = _existing_tk_profile_for_worker(obs.lifecycle_worker_id)
+    pers_id = _existing_reidentifiable_tk_profile(obs.lifecycle_worker_id, now=now)
     if not pers_id:
         return None
 
@@ -272,9 +283,11 @@ def _ensure_pers_for_worker(
     from ...person_identity_registry import is_sgc_worker_id
 
     if is_sgc_worker_id(wid):
-        return _ensure_profile_for_tk(
-            wid, now=now, gps_lat=gps_lat, gps_lng=gps_lng,
-        )
+        from ...patrol_ids import normalize_track_id
+
+        tk = normalize_track_id(wid)
+        found = identity.lookup_bound_profile_for_tk(tk) or identity.lookup_profile_by_tk(tk)
+        return identity.resolve_alias(found) if found else None
 
     from ...patrol_entity import is_patrol_gallery_id, resolve_patrol_gallery_id_for_worker
     from ...patrol_identity_store import lookup_patrol_identity_any
@@ -304,39 +317,68 @@ def _ensure_pers_for_worker(
     return None
 
 
-def _has_face_promotion_evidence(session: TrackSession, obs: ObservationInput) -> bool:
-    """Có embedding mặt đã lưu — khung hiện tại hoặc best_faces trong session."""
-    if obs.face_eligible:
+def _has_reidentifiable_face_evidence(session: TrackSession, obs: ObservationInput) -> bool:
+    """Embedding + điểm YuNet đủ ngưỡng camera — không chỉ partial A≠B."""
+    if obs.face_eligible and obs.face_embedding is not None and _human_face_promotion_allowed(obs):
         return True
     if not session.best_faces:
         return False
     best = session.best_faces[0]
-    return best.embedding is not None and best.quality >= MIN_QUALITY_FOR_SEARCH
+    if best.embedding is None or best.quality < MIN_QUALITY_FOR_NEW_IDENTITY:
+        return False
+    if obs.person_bbox is None:
+        return False
+    frame_w, frame_h = _frame_size(obs)
+    from ...patrol_person_visibility import patrol_reidentifiable_face_allowed
+
+    vehicle_boxes: list[tuple[float, float, float, float]] = []
+    if obs.frame is not None:
+        from ...patrol_flight_mode import is_patrol_helmet_like
+        from ...patrol.person_analyzer import _patrol_bodycam_vehicle_boxes
+
+        if is_patrol_helmet_like(obs.camera_id):
+            vehicle_boxes = _patrol_bodycam_vehicle_boxes(obs.frame, obs.camera_id)
+    return patrol_reidentifiable_face_allowed(
+        tuple(obs.person_bbox),
+        frame_w,
+        frame_h,
+        face_detect_score=float(best.quality),
+        face_eligible=True,
+        camera_id=obs.camera_id,
+        vehicle_boxes=vehicle_boxes,
+    )
+
+
+def _has_face_promotion_evidence(session: TrackSession, obs: ObservationInput) -> bool:
+    """Alias — giữ call site cũ."""
+    return _has_reidentifiable_face_evidence(session, obs)
 
 
 def _may_assign_pers_subject(session: TrackSession, obs: ObservationInput) -> bool:
-    """Chỉ gán pers-* khi có mặt hoặc session đã thăng từ face trước đó."""
+    """Chỉ gán pers-* khi có mặt định danh lại hoặc tk đã có embedding."""
     current = (session.subject_id or "").strip()
     from ...patrol_ids import is_person_subject_id
 
     if is_person_subject_id(current):
         return True
-    if _existing_tk_profile_for_worker(obs.lifecycle_worker_id):
+    if _existing_reidentifiable_tk_profile(obs.lifecycle_worker_id, now=obs.ts):
         return True
-    return _has_face_promotion_evidence(session, obs)
+    if _known_face_match(session, obs)[0]:
+        return True
+    return _has_reidentifiable_face_evidence(session, obs)
 
 
 def _may_promote_to_person(session: TrackSession, obs: ObservationInput) -> bool:
-    """obj-* → tk/pers: bằng chứng mặt + bbox người thật (nới khi đã khớp gallery/SQLite)."""
+    """obj-* → tk/pers: bằng chứng mặt định danh lại hoặc tk đã có embedding."""
     if not _may_assign_pers_subject(session, obs):
         return False
     if _known_face_match(session, obs)[0]:
         return True
-    if obs.face_eligible:
-        if obs.face_embedding is not None:
-            return _human_face_promotion_allowed(obs)
+    if _existing_reidentifiable_tk_profile(obs.lifecycle_worker_id, now=obs.ts):
         return True
-    return bool(session.best_faces)
+    if obs.face_eligible and obs.face_embedding is not None:
+        return _human_face_promotion_allowed(obs)
+    return _has_reidentifiable_face_evidence(session, obs)
 
 
 def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> None:
@@ -418,15 +460,9 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
             _bind_tk_profile(pref_tk, pers_id)
         return True
 
-    # Không có embedding — chỉ gán nếu tk đã bind hồ sơ cũ (không cấp tk mới).
-    if pref_tk and _existing_tk_profile_for_worker(wid):
-        pers_id = _ensure_pers_for_worker(
-            wid,
-            tier=obs.lifecycle_tier or "person",
-            now=obs.ts,
-            gps_lat=gps_lat,
-            gps_lng=gps_lng,
-        )
+    # Không có embedding — chỉ gán nếu tk đã có mặt lưu / thẻ Người hôm nay.
+    if pref_tk:
+        pers_id = _existing_reidentifiable_tk_profile(wid, now=obs.ts)
         if pers_id:
             _assign_pers_subject(session, pers_id, now=obs.ts)
             session.identity_resolved = True
@@ -468,17 +504,12 @@ def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) 
                 resolved_tier = inferred
         if resolved_tier not in (TIER_PERSON, "identity"):
             continue
-        pers_id = _ensure_pers_for_worker(
-            worker_id,
-            tier=resolved_tier or None,
-            now=obs.ts,
-            gps_lat=_observation_gps(obs)[0],
-            gps_lng=_observation_gps(obs)[1],
-        )
-        if pers_id:
-            _assign_pers_subject(session, pers_id, now=obs.ts)
-            session.identity_resolved = True
-            return
+        pers_id = _existing_reidentifiable_tk_profile(worker_id, now=obs.ts)
+        if not pers_id:
+            continue
+        _assign_pers_subject(session, pers_id, now=obs.ts)
+        session.identity_resolved = True
+        return
 
 
 def _maybe_upgrade_pers_subject(session: TrackSession, obs: ObservationInput) -> None:
@@ -736,14 +767,9 @@ def process_identity(session: TrackSession, obs: ObservationInput) -> str | None
                         logger.exception("aggregator observe_face lifecycle tk failed")
 
                 if not pers_id:
-                    session.identity = _map_worker_to_identity(lwid, obs.confidence)
-                    pers_id = _ensure_pers_for_worker(
-                        lwid,
-                        tier=inferred,
-                        now=obs.ts,
-                        gps_lat=_observation_gps(obs)[0],
-                        gps_lng=_observation_gps(obs)[1],
-                    )
+                    pers_id = _existing_reidentifiable_tk_profile(lwid, now=obs.ts)
+                    if pers_id:
+                        session.identity = _map_worker_to_identity(lwid, obs.confidence)
                 if pers_id:
                     _assign_pers_subject(session, pers_id, now=obs.ts)
                     session.identity_resolved = True

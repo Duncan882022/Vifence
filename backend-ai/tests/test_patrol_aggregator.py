@@ -239,13 +239,13 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 1_000.0
-        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts, camera_id="HC-01")
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-promote", ts=ts)
         session.subject_id = obj_id
         session.identity_resolved = True
         session.identity = PersonIdentity(
-            person_id="sgc-6688",
+            person_id="tk-0000042",
             identity_type=IdentityType.ANONYMOUS,
             confidence=0.85,
         )
@@ -255,15 +255,11 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             track_id="ptk-promote",
             ts=ts + 5,
             lifecycle_tier="person",
-            lifecycle_worker_id="sgc-6688",
+            lifecycle_worker_id="tk-0000042",
             confidence=0.85,
             face_eligible=True,
         )
-        with patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value=pers_id,
-        ):
-            result = process_identity(session, obs)
+        result = process_identity(session, obs)
         self.assertIsNotNone(result)
         assert result is not None
         self.assertTrue(result.startswith("tk-"))
@@ -277,7 +273,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 2_000.0
-        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts, camera_id="HC-01")
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-first", ts=ts)
         session.subject_id = obj_id
@@ -287,20 +283,17 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             track_id="ptk-first",
             ts=ts + 2,
             lifecycle_tier="person",
-            lifecycle_worker_id="sgc-9901",
+            lifecycle_worker_id="tk-0000042",
             confidence=0.9,
             face_eligible=True,
         )
         with patch(
             "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
             return_value=PersonIdentity(
-                person_id="sgc-9901",
+                person_id="tk-0000042",
                 identity_type=IdentityType.ANONYMOUS,
                 confidence=0.9,
             ),
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value=pers_id,
         ):
             result = process_identity(session, obs)
         self.assertIsNotNone(result)

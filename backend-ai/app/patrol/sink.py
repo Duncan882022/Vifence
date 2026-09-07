@@ -478,7 +478,11 @@ def _pers_id_for_lifecycle(
                 return str(hr["pers_id"])
 
     if is_sgc_worker_id(wid):
-        return _ensure_profile_for_tk(wid, now=now)
+        from ..patrol_ids import normalize_track_id
+
+        tk = normalize_track_id(wid)
+        found = identity.lookup_bound_profile_for_tk(tk) or identity.lookup_profile_by_tk(tk)
+        return identity.resolve_alias(found) if found else None
 
     return None
 
