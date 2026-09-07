@@ -62,6 +62,15 @@ def _maybe_update_best_observation(session, obs: ObservationInput) -> None:
     from ..sink import snapshot_score
 
     score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
+    # Lifecycle: đã có mặt re-ID — không để khung lưng (YOLO conf cao) thay thế.
+    if not obs.face_eligible:
+        if session.best_face_observation is not None:
+            return
+        if (
+            session.best_observation is not None
+            and session.best_observation.face_eligible
+        ):
+            return
     if session.best_observation is None or score >= session.best_observation_score:
         session.best_observation = obs
         session.best_observation_score = score

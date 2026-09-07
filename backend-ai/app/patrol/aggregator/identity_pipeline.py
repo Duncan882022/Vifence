@@ -92,8 +92,9 @@ def _map_worker_to_identity(
 def _note_best_frame(session: TrackSession, obs: ObservationInput) -> None:
     if not obs.face_eligible or obs.face_embedding is None:
         return
+    quality = float(obs.face_quality)
     frame = BestFaceFrame(
-        quality=float(obs.face_quality),
+        quality=quality,
         captured_at=obs.ts,
         embedding=obs.face_embedding,
     )
@@ -101,6 +102,14 @@ def _note_best_frame(session: TrackSession, obs: ObservationInput) -> None:
     session.best_faces.sort(key=lambda f: f.quality, reverse=True)
     if len(session.best_faces) > MAX_BEST_FRAMES:
         session.best_faces = session.best_faces[:MAX_BEST_FRAMES]
+    if (
+        obs.frame is not None
+        and obs.person_bbox is not None
+        and _human_face_promotion_allowed(obs)
+        and quality >= float(session.best_face_observation_quality or 0.0)
+    ):
+        session.best_face_observation = obs
+        session.best_face_observation_quality = quality
 
 
 def _pick_search_embedding(session: TrackSession) -> tuple[tuple[float, ...], float] | None:
