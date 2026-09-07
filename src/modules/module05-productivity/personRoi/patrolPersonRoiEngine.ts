@@ -103,7 +103,7 @@ export class PatrolPersonRoiEngine {
       return this.displayCache
     }
 
-    if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
+    if (elapsed < 1 || this.tracks.size === 0) return this.displayCache
     this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true, cfg)
     return this.displayCache
   }

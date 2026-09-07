@@ -155,11 +155,12 @@ class TrackerProfile:
 
 # Bodycam: người to, nhưng camera đội đầu rung và xoay nhanh nên vẫn cần gate rộng.
 PROFILE_BODYCAM = TrackerProfile(
-    iou_min=0.10,
-    center_ratio_max=1.30,
-    size_ratio_min=0.28,
-    confirm_hits=2,
+    iou_min=0.08,
+    center_ratio_max=1.75,
+    size_ratio_min=0.22,
+    confirm_hits=1,
     lost_keep_sec=_LOST_KEEP_SEC_BODYCAM,
+    max_speed_box_per_sec=14.0,
 )
 
 # Flycam: người chiếm 1–2% chiều cao khung. IoU thường bằng 0 giữa hai frame kể

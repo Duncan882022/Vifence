@@ -12,7 +12,7 @@ export interface PatrolRuntimeSnapshot {
   fetchedAtMs: number
 }
 
-const DEFAULT_DELAY_MS = 5000
+const DEFAULT_DELAY_MS = 350
 
 let snapshot: PatrolRuntimeSnapshot = {
   liveRoiDelayMs: DEFAULT_DELAY_MS,

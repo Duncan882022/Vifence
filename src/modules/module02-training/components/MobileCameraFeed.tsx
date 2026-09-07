@@ -232,7 +232,7 @@ export function MobileCameraFeed({
       backendUrl: url,
       /** Patrol ROI do local analyze — client này chỉ KPI/sự kiện, thưa hơn tránh 2× infer. */
       intervalMs: usePatrolPersonRoi
-        ? 420
+        ? 220
         : (isPatrolCam && cameraId.startsWith('HC-') ? 120 : 450),
       getGps: cameraId === 'HC-02'
         ? () => {

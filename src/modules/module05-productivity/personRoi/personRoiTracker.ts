@@ -437,7 +437,7 @@ export function predictPersonRoiTracks(
       ? (cfg.maxPredictMsLost ?? 0)
       : cfg.maxPredictMs
     const dt = Math.min(Math.max(elapsedMs, 0), predictCap)
-    const bbox = !isCoasting && dt > 0
+    const bbox = dt > 0 && predictCap > 0
       ? track.kalman.getPredictedBbox(dt)
       : track.kalman.getBbox()
     const personId = canonicalPersonId(track)
