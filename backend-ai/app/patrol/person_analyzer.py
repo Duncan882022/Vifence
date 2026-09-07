@@ -235,21 +235,7 @@ def _record_patrol_density_encounter(
     person_det.track_id = track_id
     person_det.tier = "object"
     person_det.face_eligible = False
-    try:
-        from .sink import record_observation
-
-        record_observation(
-            camera_id=camera_id,
-            track_id=track_id,
-            face_embedding=None,
-            face_quality=0.0,
-            confidence=float(confidence),
-            frame=frame,
-            person_bbox=person_bbox,
-            density_only=True,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("[patrol] density encounter — không ghi được quan sát")
+    # Peak/aerial density — counter nội bộ, không ghi thẻ SQLite (deferred lifecycle).
 
 
 def _assign_patrol_person_identity(
@@ -351,14 +337,36 @@ def _assign_patrol_person_identity(
     worker_name = ""
 
     if face_eligible and face_emb is not None:
-        from ..patrol_person_visibility import patrol_anonymous_identity_allowed
+        from ..patrol_person_visibility import (
+            patrol_anonymous_identity_allowed,
+            patrol_reidentifiable_face_allowed,
+        )
 
-        if not patrol_anonymous_identity_allowed(
+        vehicle_boxes = (
+            _patrol_bodycam_vehicle_boxes(frame, camera_id)
+            if _is_helmet_bodycam(camera_id)
+            else []
+        )
+        face_detect_score = float(_face_score or 0.0)
+        reidentifiable = patrol_reidentifiable_face_allowed(
             person_box,
             frame_w,
             frame_h,
-            face_quality=float(_face_score or 0.0),
-            face_eligible=bool(face_eligible),
+            face_detect_score=face_detect_score,
+            face_eligible=True,
+            camera_id=camera_id,
+            vehicle_boxes=vehicle_boxes,
+        )
+        if not reidentifiable:
+            face_eligible = False
+            face_emb = None
+        elif not patrol_anonymous_identity_allowed(
+            person_box,
+            frame_w,
+            frame_h,
+            face_quality=face_detect_score,
+            face_eligible=True,
+            vehicle_boxes=vehicle_boxes,
         ):
             face_eligible = False
             face_emb = None
@@ -387,6 +395,15 @@ def _assign_patrol_person_identity(
             from ..patrol_entity import resolve_patrol_worker_display_name
 
             worker_name = resolve_patrol_worker_display_name(worker_id, "")
+        if worker_id:
+            from ..patrol.identity import lookup_reidentifiable_tk_profile
+
+            lc = peek_track_lifecycle(camera_id, track_id)
+            if not lookup_reidentifiable_tk_profile(worker_id) and (
+                not lc or lc.tier == "object"
+            ):
+                worker_id = ""
+                worker_name = ""
 
     # Tầng lấy từ state machine chứ không suy lại mỗi frame: track đã lên Người /
     # Định danh thì giữ nguyên nhãn kể cả khung hình này quay lưng.
@@ -452,7 +469,6 @@ def _assign_patrol_person_identity(
             worker_name=resolved.worker_name,
         )
     except Exception:  # noqa: BLE001
-        # Kho tuần tra hỏng không được kéo sập luồng live.
         logger.exception("[patrol] Không ghi được quan sát vào SQLite")
 
 
@@ -491,7 +507,9 @@ def _patrol_person_should_run_identity(
         return False
     if limb_fragment_person_box(person_box, frame_w, frame_h):
         return False
-    if _patrol_person_passes_display_gate(person_box, frame_w, frame_h, camera_id=camera_id):
+    if _patrol_person_passes_display_gate(
+        person_box, frame_w, frame_h, camera_id=camera_id, frame=frame,
+    ):
         return True
     if frame is None:
         return False
@@ -516,12 +534,19 @@ def _patrol_person_passes_display_gate(
     frame_h: int,
     *,
     camera_id: str,
+    frame: np.ndarray | None = None,
 ) -> bool:
     from ..patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
     from ..patrol_person_visibility import patrol_person_meets_display_gate
 
+    vehicle_boxes: list[tuple[float, float, float, float]] = []
+    if frame is not None and is_patrol_helmet_like(camera_id):
+        vehicle_boxes = _patrol_bodycam_vehicle_boxes(frame, camera_id)
+
     if is_patrol_helmet_like(camera_id):
-        return patrol_person_meets_display_gate(person_box, frame_w, frame_h)
+        return patrol_person_meets_display_gate(
+            person_box, frame_w, frame_h, vehicle_boxes=vehicle_boxes,
+        )
     if is_patrol_flycam_aerial(camera_id):
         return patrol_person_meets_display_gate(
             person_box, frame_w, frame_h, flycam=True,

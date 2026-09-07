@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.patrol_person_visibility import (
+    headless_body_fragment_box,
     legs_only_person_box,
     mid_frame_torso_sliver,
     patrol_anonymous_identity_allowed,
@@ -174,6 +175,50 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         fw, fh = 1280, 720
         moto = (619.59, 200.67, 667.58, 273.77)
         self.assertFalse(patrol_object_commit_allowed(moto, fw, fh))
+
+    def test_headless_shoulder_chip_not_committed(self):
+        """YOLO chỉ bắt vai/ngực cận — không ghi thẻ Đối tượng."""
+        fw, fh = 960, 540
+        shoulder = (400.0, 50.0, 550.0, 180.0)
+        self.assertTrue(headless_body_fragment_box(shoulder, fw, fh))
+        self.assertFalse(upper_body_third_with_head_visible(shoulder, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(shoulder, fw, fh))
+
+    def test_headless_arm_strip_not_committed(self):
+        fw, fh = 960, 540
+        arm = (800.0, 100.0, 880.0, 350.0)
+        self.assertTrue(headless_body_fragment_box(arm, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(arm, fw, fh))
+
+    def test_headless_small_fragment_not_committed(self):
+        fw, fh = 960, 540
+        fragment = (200.0, 150.0, 280.0, 220.0)
+        self.assertTrue(headless_body_fragment_box(fragment, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(fragment, fw, fh))
+
+    def test_narrow_full_body_still_commits(self):
+        """Người hẹp nhưng cao gần hết khung — vẫn là bằng chứng hợp lệ."""
+        fw, fh = 1280, 720
+        passing = (400.0, 80.0, 520.0, 520.0)
+        back = (100.0, 50.0, 200.0, 400.0)
+        self.assertFalse(headless_body_fragment_box(passing, fw, fh))
+        self.assertFalse(headless_body_fragment_box(back, fw, fh))
+        self.assertTrue(patrol_object_commit_allowed(passing, fw, fh))
+        self.assertTrue(patrol_object_commit_allowed(back, fw, fh))
+
+    def test_headless_fragment_with_weak_face_not_committed(self):
+        fw, fh = 960, 540
+        shoulder = (400.0, 50.0, 550.0, 180.0)
+        self.assertFalse(
+            patrol_object_commit_allowed(
+                shoulder,
+                fw,
+                fh,
+                face_eligible=True,
+                face_quality=0.52,
+                camera_id="HC-01",
+            ),
+        )
 
 
 if __name__ == "__main__":

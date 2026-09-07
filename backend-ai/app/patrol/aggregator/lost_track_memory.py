@@ -141,12 +141,13 @@ def try_reclaim(
 
 
 def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None = None) -> None:
-    ts = float(now if now is not None else session.last_seen_at or slot.last_seen)
-    gap = ts - float(slot.last_seen)
-    from ..presence import GAP_FALLBACK_SEC
+    """Nối lại định danh từ slot đã finalize — luôn mở phiên + dòng lịch sử mới.
 
-    cross_camera = (session.camera_id or "").strip() != (slot.camera_id or "").strip()
-    same_encounter = gap <= GAP_FALLBACK_SEC and not cross_camera
+    `stash_session` chỉ gọi sau `finalize_track`, tức lượt trước đã đóng trong DB.
+    Không kế thừa `session_id` / `appearance_row_id` / `luot_key`: quay lại camera
+    phải append lịch sử, không UPDATE dòng đã chốt.
+    """
+    _ = now
     session.subject_id = slot.subject_id
     session.identity_resolved = slot.identity_resolved
     session.identity = slot.identity
@@ -154,24 +155,14 @@ def apply_reclaim(session: TrackSession, slot: _LostSlot, *, now: float | None =
     session.was_inside_site = slot.was_inside_site
     if slot.zone_id:
         session.zone_id = slot.zone_id
-    if same_encounter:
-        session.session_id = slot.session_id
-    else:
-        # Phiên stream mới — không kế thừa trạng thái flush/appearance đã chốt.
-        session.committed = False
-        session.last_flush_at = 0.0
-        from .session_store import _new_session_id
+    session.committed = False
+    session.last_flush_at = 0.0
+    from .session_store import _new_session_id
 
-        session.session_id = _new_session_id(session.camera_id, session.track_id)
-    if same_encounter and slot.appearance_row_id is not None:
-        session.appearance_row_id = slot.appearance_row_id
-        session.luot_snapshot_captured = True
-        session.luot_key = slot.luot_key
-    else:
-        session.appearance_row_id = None
-        session.luot_snapshot_captured = False
-        # Lượt gặp khác → file JPG khác, không ghi đè ảnh của lượt trước.
-        session.luot_key = None
+    session.session_id = _new_session_id(session.camera_id, session.track_id)
+    session.appearance_row_id = None
+    session.luot_snapshot_captured = False
+    session.luot_key = None
     session.dirty = True
 
 

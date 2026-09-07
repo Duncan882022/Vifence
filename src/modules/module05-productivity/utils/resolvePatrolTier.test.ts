@@ -27,7 +27,26 @@ describe('resolvePatrolTier', () => {
     expect(resolvePatrolPersonStage(event)).toBe('person')
   })
 
-  it('tierEverFromPersonRow ưu tiên tier_ever', () => {
+  it('tierEverFromPersonRow ưu tiên tier_ever hơn tier_snapshot thấp hơn', () => {
+    expect(
+      tierEverFromPersonRow({
+        status: 'person',
+        tierEver: 'person',
+        tierSnapshot: {
+          tier: 'object',
+          tier_rank: 0,
+          tier_since: 0,
+          subject_id: 'tk-0000001',
+          face_eligible: true,
+          confidence: 0.9,
+          snapshot_score: 2.6,
+        },
+        snapshotScore: 2.6,
+      }),
+    ).toBe('person')
+  })
+
+  it('tierEverFromPersonRow ưu tiên tier_ever identity', () => {
     expect(
       tierEverFromPersonRow({
         status: 'person',
@@ -35,5 +54,24 @@ describe('resolvePatrolTier', () => {
         snapshotScore: 0.5,
       }),
     ).toBe('identity')
+  })
+
+  it('resolvePatrolPersonStage — tier_ever person thắng snapshot object', () => {
+    const event = {
+      tierEver: 'person',
+      tierSnapshot: {
+        tier: 'object',
+        tier_rank: 0,
+        tier_since: 0,
+        subject_id: 'tk-0000001',
+        face_eligible: true,
+        confidence: 0.9,
+        snapshot_score: 2.6,
+      },
+      trackWorkerId: 'tk-0000001',
+      objectId: 'tk-0000001',
+      snapshotScore: 2.6,
+    } as PatrolEvent
+    expect(resolvePatrolPersonStage(event)).toBe('person')
   })
 })

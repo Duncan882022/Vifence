@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from app.patrol import daystore, db, sink
+from app.config import settings
 from app.patrol.aggregator.engine import finalize_track, ingest_observation
 from app.patrol.aggregator.flush import APPEARANCE_WRITE_MIN_INTERVAL_SEC, flush_session
 from app.patrol.aggregator.session_store import get_or_create, reset
@@ -28,8 +29,11 @@ class PatrolSnapshotFlushIntegrationTests(unittest.TestCase):
         db.get_conn()
         reset()
         sink.reset()
+        self._legacy_patch = patch.object(settings, "patrol_deferred_object", False)
+        self._legacy_patch.start()
 
     def tearDown(self) -> None:
+        self._legacy_patch.stop()
         reset()
         sink.reset()
         db.close()

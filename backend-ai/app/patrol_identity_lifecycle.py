@@ -4,8 +4,8 @@ Quy ước nghiệp vụ Module 05 có ba tầng:
 
 * **Đối tượng** — YOLO chắc chắn đây là người, nhưng chưa lần nào thấy đủ mặt để
   nhận diện. Chưa có mã.
-* **Người** — đã thấy mặt, đã cấp mã ẩn danh `sgc-*` ổn định (re-id), nhưng người
-  này không có trong gallery nhân sự.
+* **Người** — đã thấy mặt đủ chất lượng định danh lại (khớp được lần sau),
+  đã cấp mã ẩn danh `tk-*` ổn định, nhưng người này không có trong gallery nhân sự.
 * **Định danh** — mặt khớp gallery, có mã nhân sự và tên thật.
 
 Trước đây tầng được suy lại **từng frame** từ `worker_id`, nên chỉ cần một khung

@@ -213,6 +213,14 @@ class Settings(BaseSettings):
     patrol_peak_time_enter_count: int = 30
     patrol_peak_time_exit_count: int = 25
 
+    # Lifecycle refactor — person commit sớm, object chỉ lúc finalize track.
+    patrol_deferred_object: bool = True
+    patrol_face_assess_interval_sec: float = 0.3
+    patrol_person_commit_min_quality: float = 0.62
+    patrol_person_commit_fast_quality: float = 0.75
+    patrol_object_finalize_min_track_sec: float = 0.75
+    patrol_pre_object_match_enabled: bool = True
+
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True
     atgt_demo_confirm_seconds: float = 0.0

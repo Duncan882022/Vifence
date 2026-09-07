@@ -135,8 +135,8 @@ class AggregatorReIdTest(unittest.TestCase):
 
         s2 = get_or_create("HC-02", "ptk-b", ts=140.0, face_embedding=emb)
         apply_reclaim(s2, reclaimed, now=140.0)
-        self.assertEqual(s2.session_id, "sess-merge-1")
         self.assertEqual(s2.subject_id, "pers-0001")
+        self.assertNotEqual(s2.session_id, "sess-merge-1")
         self.assertIsNone(s2.appearance_row_id)
         reset()
 
@@ -214,8 +214,13 @@ class AggregatorDaystoreTest(unittest.TestCase):
 
 class AggregatorIdentityPromoteTest(unittest.TestCase):
     def setUp(self) -> None:
+        from unittest.mock import patch
+
+        from app.config import settings
         from app.patrol import db, sink
 
+        self._legacy_patch = patch.object(settings, "patrol_deferred_object", False)
+        self._legacy_patch.start()
         self._tmp = tempfile.TemporaryDirectory()
         db.close()
         db.DATA_DIR = Path(self._tmp.name)
@@ -227,6 +232,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
     def tearDown(self) -> None:
         from app.patrol import db
 
+        self._legacy_patch.stop()
         reset()
         db.close()
         self._tmp.cleanup()
@@ -239,13 +245,13 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 1_000.0
-        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts, camera_id="HC-01")
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-promote", ts=ts)
         session.subject_id = obj_id
         session.identity_resolved = True
         session.identity = PersonIdentity(
-            person_id="sgc-6688",
+            person_id="tk-0000042",
             identity_type=IdentityType.ANONYMOUS,
             confidence=0.85,
         )
@@ -255,15 +261,11 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             track_id="ptk-promote",
             ts=ts + 5,
             lifecycle_tier="person",
-            lifecycle_worker_id="sgc-6688",
+            lifecycle_worker_id="tk-0000042",
             confidence=0.85,
             face_eligible=True,
         )
-        with patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value=pers_id,
-        ):
-            result = process_identity(session, obs)
+        result = process_identity(session, obs)
         self.assertIsNotNone(result)
         assert result is not None
         self.assertTrue(result.startswith("tk-"))
@@ -277,7 +279,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 2_000.0
-        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts, camera_id="HC-01")
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-first", ts=ts)
         session.subject_id = obj_id
@@ -287,20 +289,17 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             track_id="ptk-first",
             ts=ts + 2,
             lifecycle_tier="person",
-            lifecycle_worker_id="sgc-9901",
+            lifecycle_worker_id="tk-0000042",
             confidence=0.9,
             face_eligible=True,
         )
         with patch(
             "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
             return_value=PersonIdentity(
-                person_id="sgc-9901",
+                person_id="tk-0000042",
                 identity_type=IdentityType.ANONYMOUS,
                 confidence=0.9,
             ),
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value=pers_id,
         ):
             result = process_identity(session, obs)
         self.assertIsNotNone(result)
@@ -377,6 +376,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
                 camera_id="HC-01",
                 track_id="ptk-back",
                 now=ts,
+                person_bbox=(100.0, 50.0, 200.0, 400.0),
                 lifecycle_tier="person",
                 lifecycle_worker_id="sgc-8800",
                 confidence=0.85,
@@ -419,20 +419,13 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         from app.patrol.aggregator.engine import ingest_observation, finalize_track
 
         ts = 5_000.0
+        bbox = (100.0, 50.0, 200.0, 400.0)
+        emb = tuple(float(x) for x in __import__("numpy").random.default_rng(7).normal(size=128))
+        import numpy as np
+        emb = tuple((np.random.default_rng(7).normal(size=128).astype(np.float32) / 1.0).tolist())
+        norm = np.linalg.norm(list(emb))
+        emb = tuple(float(x / norm) for x in emb)
         with patch(
-            "app.patrol.aggregator.flush._gate_observation_commit",
-            return_value=(True, ts),
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="tk-0000001",
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
-            return_value=PersonIdentity(
-                person_id="sgc-7001",
-                identity_type=IdentityType.ANONYMOUS,
-                confidence=0.9,
-            ),
-        ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=(None, 0.0),
         ):
@@ -444,10 +437,15 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
                     camera_id="HC-01",
                     track_id="ptk-stand",
                     now=ts + i * 0.5,
+                    person_bbox=bbox,
+                    face_embedding=emb,
+                    face_quality=0.9,
+                    face_eligible=True,
                     lifecycle_tier="person",
                     lifecycle_worker_id="sgc-7001",
                     confidence=0.9,
                 )
+            finalize_track("HC-01", "ptk-stand", now=ts + 20.0)
 
         rows = daystore.list_day_presences(db.today_vn(ts))
         self.assertEqual(len(rows), 1)
@@ -459,7 +457,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 14.5, places=3)
 
     def test_standing_person_does_not_overwrite_card_snapshot(self) -> None:
-        """Còn trong khung — upsert last_seen, không ghi đè ảnh thẻ mỗi flush."""
+        """Còn trong khung — không upsert last_seen thẻ; không ghi đè ảnh mỗi flush."""
         from unittest.mock import patch
 
         import numpy as np
@@ -469,34 +467,27 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
 
         ts = 5_500.0
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 7 else 0.0) for i in range(128))
         with patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
             return_value=(True, ts),
         ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="tk-0000002",
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
-            return_value=PersonIdentity(
-                person_id="sgc-7003",
-                identity_type=IdentityType.ANONYMOUS,
-                confidence=0.9,
-            ),
-        ), patch(
             "app.patrol.sink._write_snapshot",
             return_value="2026-09-03/tk-0000002.jpg",
         ) as write_mock:
-            identity.ensure_draft_for_tk("tk-0000002", now=ts)
+            identity.ensure_draft_for_tk("tk-0000002", now=ts, camera_id="HC-01")
             for i in range(40):
                 ingest_observation(
                     camera_id="HC-01",
                     track_id="ptk-stand-face",
                     now=ts + i * 0.5,
                     lifecycle_tier="person",
-                    lifecycle_worker_id="sgc-7003",
+                    lifecycle_worker_id="tk-0000002",
                     confidence=0.9,
                     face_eligible=True,
                     face_quality=0.85,
+                    face_embedding=emb,
                     frame=frame,
                     person_bbox=(100.0, 80.0, 220.0, 400.0),
                 )
@@ -513,15 +504,173 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             float(card["snapshot_score"]),
             daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
         )
-        self.assertGreater(float(card["last_seen"]), ts)
+        self.assertEqual(float(card["last_seen"]), ts)
         # Một lượt, một JPG — không chụp lại sau khi thẻ đã có ảnh mặt.
         self.assertEqual(write_mock.call_count, 1)
-        self.assertEqual(len(daystore.list_day_presences(db.today_vn(ts))), 1)
+        presences = daystore.list_day_presences(db.today_vn(ts))
+        self.assertEqual(len(presences), 1)
+        self.assertGreater(float(presences[0]["ended_at"]), ts)
 
-    def test_dwell_gate_retries_until_committed(self) -> None:
-        """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được."""
+    def test_person_return_after_finalize_appends_history(self) -> None:
+        """Ra khỏi khung rồi quay lại — append dòng lịch sử + JPG mới, giữ lượt cũ."""
         from unittest.mock import patch
 
+        import numpy as np
+
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol_tracker import END_REASON_LOST
+
+        ts = 6_100.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 3 else 0.0) for i in range(128))
+        bbox = (100.0, 80.0, 220.0, 400.0)
+        snap_paths: list[str] = []
+
+        def _snap(*_a, **_k):  # noqa: ANN002
+            path = f"2026-09-03/tk-0000003-visit{len(snap_paths) + 1}.jpg"
+            snap_paths.append(path)
+            return path
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            side_effect=_snap,
+        ):
+            identity.ensure_draft_for_tk("tk-0000003", now=ts, camera_id="HC-01")
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-visit1",
+                    now=ts + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000003",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-visit1",
+                now=ts + 2.0,
+                end_reason=END_REASON_LOST,
+            )
+
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-visit2",
+                    now=ts + 5.0 + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000003",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-visit2",
+                now=ts + 8.0,
+                end_reason=END_REASON_LOST,
+            )
+
+        date = db.today_vn(ts)
+        presences = daystore.list_day_presences(date)
+        self.assertEqual(len(presences), 2)
+        hist = daystore.list_appearances("tk-0000003", date)["segments"]
+        self.assertEqual(len(hist), 2)
+        snaps = sorted(
+            str(seg.get("snapshot_path") or "") for seg in hist if seg.get("snapshot_path")
+        )
+        self.assertEqual(len(snaps), 2)
+        self.assertNotEqual(snaps[0], snaps[1])
+        closed = db.query(
+            "SELECT end_reason FROM appearances WHERE event_date = ? AND subject_id = ?",
+            (date, "tk-0000003"),
+        )
+        self.assertEqual(len(closed), 2)
+        self.assertTrue(all(str(r["end_reason"] or "") for r in closed))
+
+    def test_reclaimed_return_without_face_never_creates_object(self) -> None:
+        """Reclaim tk rồi rời khung (chưa mặt frame mới) — không sinh thẻ obj-*."""
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol_tracker import END_REASON_LOST
+
+        ts = 6_200.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 11 else 0.0) for i in range(128))
+        bbox = (100.0, 80.0, 220.0, 400.0)
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000004.jpg",
+        ):
+            identity.ensure_draft_for_tk("tk-0000004", now=ts, camera_id="HC-01")
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-r1",
+                    now=ts + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000004",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-r1",
+                now=ts + 2.0,
+                end_reason=END_REASON_LOST,
+            )
+            # Quay lại — chỉ bbox tương tự (IoU reclaim), chưa mặt frame mới
+            for i in range(4):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-r2",
+                    now=ts + 5.0 + i * 0.2,
+                    person_bbox=bbox,
+                    confidence=0.85,
+                    face_eligible=False,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-r2",
+                now=ts + 6.0,
+                end_reason=END_REASON_LOST,
+            )
+
+        date = db.today_vn(ts)
+        self.assertEqual(len(daystore.list_objects(date)), 0)
+        self.assertEqual(len(daystore.list_person_events(date)), 1)
+        self.assertEqual(len(daystore.list_day_presences(date)), 2)
+
+    def test_dwell_gate_retries_until_committed(self) -> None:
+        """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được (legacy flush)."""
+        from unittest.mock import patch
+
+        from app.config import settings
         from app.patrol import daystore, db
         from app.patrol.aggregator.engine import ingest_observation
 
@@ -532,7 +681,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             gate_calls["n"] += 1
             return gate_calls["n"] >= 3, ts
 
-        with patch(
+        with patch.object(settings, "patrol_deferred_object", False), patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
             side_effect=_gate,
         ), patch(
@@ -1057,8 +1206,13 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
 
 class ObjectFacePromoteTests(unittest.TestCase):
     def setUp(self) -> None:
+        from unittest.mock import patch
+
+        from app.config import settings
         from app.patrol import db, sink
 
+        self._legacy_patch = patch.object(settings, "patrol_deferred_object", False)
+        self._legacy_patch.start()
         self._tmp = tempfile.TemporaryDirectory()
         db.close()
         db.DATA_DIR = Path(self._tmp.name)
@@ -1070,6 +1224,7 @@ class ObjectFacePromoteTests(unittest.TestCase):
     def tearDown(self) -> None:
         from app.patrol import db
 
+        self._legacy_patch.stop()
         reset()
         db.close()
         self._tmp.cleanup()
@@ -1212,7 +1367,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
         self.assertNotIn("score-0.20", snap)
 
     def test_fast_passing_object_commits_before_accumulation_window(self) -> None:
-        """Xe/người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
+        """Người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
         import numpy as np
         from unittest.mock import patch
 
@@ -1221,38 +1376,40 @@ class BestObservationFinalizeTests(unittest.TestCase):
 
         ts = 20_000.0
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        bbox = (400.0, 280.0, 520.0, 520.0)
+        bbox = (400.0, 80.0, 520.0, 520.0)
         window = track_accumulation_window_seconds()
 
         with patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=("2026-08-30/pass.jpg", 0.88),
         ):
-            oid = ingest_observation(
-                camera_id="DR-03",
-                track_id="ptk-pass",
-                now=ts,
-                person_bbox=bbox,
-                frame=frame,
-                confidence=0.88,
+            self.assertIsNone(
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-pass",
+                    now=ts,
+                    person_bbox=bbox,
+                    frame=frame,
+                    confidence=0.88,
+                ),
             )
-            self.assertIsNone(oid)
-            oid = ingest_observation(
-                camera_id="DR-03",
-                track_id="ptk-pass",
-                now=ts + 0.76,
-                person_bbox=bbox,
-                frame=frame,
-                confidence=0.88,
+            self.assertIsNone(
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-pass",
+                    now=ts + 0.85,
+                    person_bbox=bbox,
+                    frame=frame,
+                    confidence=0.88,
+                ),
             )
-            self.assertTrue(str(oid or "").startswith("obj-"))
-            finalize_track("DR-03", "ptk-pass", now=ts + 0.9)
+            finalize_track("HC-01", "ptk-pass", now=ts + 1.0)
 
         from app.patrol import daystore, db
 
         objs = daystore.list_objects(db.today_vn(ts))
         self.assertEqual(len(objs), 1)
-        self.assertLess(ts + 0.76 - ts, window)
+        self.assertLess(ts + 0.85 - ts, window)
 
 
 class PromotedCardSnapshotRepairTests(unittest.TestCase):

@@ -724,14 +724,51 @@ def lookup_bound_profile_for_tk(tk_id: str) -> str | None:
     return lookup_profile_by_tk(tk)
 
 
+def has_stored_face_embeddings(pers_id: str) -> bool:
+    """Có ít nhất một vector mặt — đủ cơ sở khớp lại lần sau."""
+    pid = resolve_alias((pers_id or "").strip())
+    if not pid:
+        return False
+    row = db.query_one(
+        "SELECT 1 FROM person_faces WHERE pers_id = ? LIMIT 1",
+        (pid,),
+    )
+    return row is not None
+
+
+def lookup_reidentifiable_tk_profile(worker_id: str | None, *, now: float | None = None) -> str | None:
+    """tk/sgc đã có hồ sơ + (mặt đã lưu hoặc thẻ Người hôm nay) — gặp lại được."""
+    from ..patrol_ids import is_anonymous_track_id, normalize_track_id
+
+    wid = normalize_track_id((worker_id or "").strip())
+    if not wid or not is_anonymous_track_id(wid):
+        return None
+    found = lookup_bound_profile_for_tk(wid) or lookup_profile_by_tk(wid)
+    if not found:
+        return None
+    pid = resolve_alias(found)
+    if has_stored_face_embeddings(pid):
+        return pid
+    ts = now or time.time()
+    row = db.query_one(
+        "SELECT 1 FROM daily_events WHERE event_date = ? AND pers_id = ? LIMIT 1",
+        (db.today_vn(ts), pid),
+    )
+    return pid if row is not None else None
+
+
 def ensure_draft_for_tk(
     tk_id: str,
     *,
     now: float | None = None,
     gps_lat: float | None = None,
     gps_lng: float | None = None,
+    camera_id: str | None = None,
+    face_eligible: bool = False,
+    snapshot_path: str | None = None,
+    snapshot_score: float = 0.0,
 ) -> str:
-    """Đủ điều kiện nhận diện (tk-*) → hồ sơ bản nháp, pers_id = tk normalized."""
+    """Đủ điều kiện nhận diện (tk-*) → hồ sơ bản nháp + thẻ Người trong ngày."""
     from ..patrol_ids import is_anonymous_track_id, normalize_track_id
 
     ts = now or time.time()
@@ -741,8 +778,19 @@ def ensure_draft_for_tk(
 
     existing = lookup_profile_by_tk(tk)
     if existing:
-        touch_person(existing, now=ts)
-        return existing
+        pers_id = resolve_alias(existing)
+        touch_person(pers_id, now=ts)
+        _sync_draft_person_event(
+            pers_id,
+            now=ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            camera_id=camera_id,
+            face_eligible=face_eligible,
+            snapshot_path=snapshot_path,
+            snapshot_score=snapshot_score,
+        )
+        return pers_id
 
     from . import daystore
 
@@ -754,8 +802,19 @@ def ensure_draft_for_tk(
         nearby = daystore.find_same_site_person_today(date, gps_lat, gps_lng, exclude_pers=tk)
     if nearby:
         bind_tk_profile(tk, nearby, now=ts)
-        touch_person(nearby, now=ts)
-        return nearby
+        pers_id = resolve_alias(nearby)
+        touch_person(pers_id, now=ts)
+        _sync_draft_person_event(
+            pers_id,
+            now=ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            camera_id=camera_id,
+            face_eligible=face_eligible,
+            snapshot_path=snapshot_path,
+            snapshot_score=snapshot_score,
+        )
+        return pers_id
 
     with db.tx() as c:
         c.execute(
@@ -764,7 +823,45 @@ def ensure_draft_for_tk(
             ") VALUES(?,?,?,?,?,?,?)",
             (tk, STATUS_DRAFT, tk, "tk", ts, ts, ts),
         )
+    _sync_draft_person_event(
+        tk,
+        now=ts,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+        camera_id=camera_id,
+        face_eligible=face_eligible,
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+    )
     return tk
+
+
+def _sync_draft_person_event(
+    pers_id: str,
+    *,
+    now: float,
+    gps_lat: float | None,
+    gps_lng: float | None,
+    camera_id: str | None,
+    face_eligible: bool,
+    snapshot_path: str | None,
+    snapshot_score: float,
+) -> None:
+    """Mọi hồ sơ draft phải có dòng daily_events tương ứng trong ngày."""
+    from . import daystore
+
+    cam = (camera_id or "HC-01").strip() or "HC-01"
+    daystore.touch_person_event(
+        pers_id,
+        camera_id=cam,
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+        face_eligible=face_eligible,
+        now=now,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+        skip_appearance=True,
+    )
 
 
 def ensure_identified_for_gallery(
@@ -1274,7 +1371,12 @@ def observe_face(
             )
             return dup_tk, False
         pers_id = ensure_draft_for_tk(
-            pref, now=ts, gps_lat=gps_lat, gps_lng=gps_lng,
+            pref,
+            now=ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            camera_id=camera_id,
+            face_eligible=True,
         )
         bind_tk_profile(pref, pers_id, now=ts)
         add_face_angle(

@@ -68,6 +68,53 @@ def mid_frame_torso_sliver(
     return y1 / max(float(frame_h), 1.0) > 0.35 and ph / pw < 1.0
 
 
+def headless_body_fragment_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Mảnh cơ thể YOLO không có đầu thật — vai/ngực cận, cánh tay, vụn tracker.
+
+    Gate ``upper_body_third_with_head_visible`` suy vùng đầu từ mép trên bbox;
+    khi YOLO chỉ bắt vai/tay, hình học vẫn báo "đủ đầu" dù không có mặt.
+    """
+    x1, y1, x2, y2 = person_box
+    fw = max(float(frame_w), 1.0)
+    fh = max(float(frame_h), 1.0)
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    bh_ratio = ph / fh
+    bw_ratio = pw / fw
+    area_ratio = (pw * ph) / (fw * fh)
+    y1_ratio = y1 / fh
+
+    if bh_ratio < 0.22:
+        return True
+    if area_ratio < 0.045 and bh_ratio < 0.32:
+        return True
+    if aspect < 0.72 and bh_ratio < 0.38 and y1_ratio < 0.42:
+        return True
+    # Dải dọc hẹp nhưng cao gần hết khung — người đi/xa, không phải cánh tay.
+    if (
+        bw_ratio < 0.09
+        and aspect > 1.75
+        and 0.12 <= bh_ratio < 0.42
+    ):
+        return True
+    if bw_ratio < 0.12 and aspect > 2.8 and bh_ratio < 0.45:
+        return True
+    # Mảnh cánh tay/vai giữa khung — hẹp, không bắt đầu từ đỉnh đầu.
+    if (
+        bw_ratio < 0.10
+        and aspect > 2.5
+        and y1_ratio > 0.14
+        and bh_ratio < 0.52
+    ):
+        return True
+    return False
+
+
 def upper_body_third_with_head_visible(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -80,6 +127,8 @@ def upper_body_third_with_head_visible(
     min_head_px_frac: float = 0.04,
 ) -> bool:
     """Đối tượng patrol — ≥30% thân trên + vùng đầu còn trong khung (không chân/tay)."""
+    if headless_body_fragment_box(person_box, frame_w, frame_h):
+        return False
     if legs_only_person_box(person_box, frame_w, frame_h):
         return False
     x1, y1, x2, y2 = person_box
@@ -265,6 +314,45 @@ MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.48
 MIN_PARTIAL_FACE_DETECT_SCORE = 0.55
 
 
+def _patrol_face_detect_min_for_camera(camera_id: str = "") -> float:
+    from .config import settings
+
+    cam = (camera_id or "").strip().upper()
+    if cam.startswith("HC-") or cam.startswith("DR-"):
+        return float(settings.patrol_face_detect_min_score_bodycam)
+    return float(settings.patrol_face_detect_min_score)
+
+
+def patrol_reidentifiable_face_allowed(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    face_detect_score: float = 0.0,
+    face_eligible: bool = False,
+    camera_id: str = "",
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
+) -> bool:
+    """Mặt đủ chất lượng lưu embedding và khớp lại lần sau — không chỉ cấp mã A≠B.
+
+    Partial YuNet (0.55–0.61 trên bodycam) đủ cho overlay thử nhưng không đủ
+    định danh lại; bắt buộc điểm detect đầy đủ theo ngưỡng camera.
+    """
+    if not face_eligible:
+        return False
+    min_detect = _patrol_face_detect_min_for_camera(camera_id)
+    if float(face_detect_score) < min_detect:
+        return False
+    return patrol_anonymous_identity_allowed(
+        person_box,
+        frame_w,
+        frame_h,
+        face_quality=float(face_detect_score),
+        face_eligible=True,
+        vehicle_boxes=vehicle_boxes,
+    )
+
+
 def patrol_face_promotion_quality(quality: float, *, face_eligible: bool) -> float:
     """Ngưỡng chất lượng mặt cho thăng hạng Người — nới khi đã eligible (mặt nghiêng)."""
     if face_eligible and quality >= MIN_PARTIAL_FACE_DETECT_SCORE:
@@ -301,6 +389,7 @@ def patrol_anonymous_identity_allowed(
     *,
     face_quality: float = 0.0,
     face_eligible: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> bool:
     """Chặn gán tk-* cho YOLO FP (xe, biển, giàn) dù YuNet trả pseudo-face."""
     effective_quality = patrol_face_promotion_quality(
@@ -310,6 +399,12 @@ def patrol_anonymous_identity_allowed(
     if effective_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        return False
+    if person_box_overlaps_vehicle_fp(
+        person_box, vehicle_boxes or [], frame_w, frame_h,
+    ):
         return False
     return patrol_person_meets_detection_gate(
         person_box,
@@ -325,6 +420,8 @@ def patrol_object_commit_allowed(
     frame_h: int,
     *,
     face_eligible: bool = False,
+    face_quality: float = 0.0,
+    camera_id: str = "",
     flycam: bool = False,
     proximity_flycam: bool = False,
     vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
@@ -337,6 +434,19 @@ def patrol_object_commit_allowed(
     """
     if person_box is None or frame_w <= 0 or frame_h <= 0:
         return False
+    if headless_body_fragment_box(person_box, frame_w, frame_h):
+        if not face_eligible:
+            return False
+        if not patrol_reidentifiable_face_allowed(
+            person_box,
+            frame_w,
+            frame_h,
+            face_detect_score=float(face_quality or 0.0),
+            face_eligible=True,
+            camera_id=camera_id,
+            vehicle_boxes=vehicle_boxes,
+        ):
+            return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
         return False
     if vehicle_boxes and person_box_overlaps_vehicle_fp(
@@ -354,8 +464,25 @@ def patrol_object_commit_allowed(
         and speck_person_box(person_box, frame_w, frame_h)
     ):
         return False
-    if face_eligible:
-        return True
+    # YuNet đôi khi trả pseudo-face trên biển/xe — không được bypass bằng face_eligible.
+    if not flycam and not proximity_flycam:
+        if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+            return False
+        if person_box_overlaps_vehicle_fp(
+            person_box, vehicle_boxes or [], frame_w, frame_h,
+        ):
+            return False
+    if face_eligible and float(face_quality or 0.0) > 0.0:
+        if patrol_reidentifiable_face_allowed(
+            person_box,
+            frame_w,
+            frame_h,
+            face_detect_score=float(face_quality),
+            face_eligible=True,
+            camera_id=camera_id,
+            vehicle_boxes=vehicle_boxes,
+        ):
+            return True
     if flycam or proximity_flycam:
         return patrol_person_meets_display_gate(
             person_box,
