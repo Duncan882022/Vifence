@@ -1226,19 +1226,19 @@ class BestObservationFinalizeTests(unittest.TestCase):
             oid = ingest_observation(
                 camera_id="DR-03",
                 track_id="ptk-pass",
-                now=ts + 0.76,
+                now=ts + 0.85,
                 person_bbox=bbox,
                 frame=frame,
                 confidence=0.88,
             )
             self.assertTrue(str(oid or "").startswith("obj-"))
-            finalize_track("DR-03", "ptk-pass", now=ts + 0.9)
+            finalize_track("DR-03", "ptk-pass", now=ts + 1.0)
 
         from app.patrol import daystore, db
 
         objs = daystore.list_objects(db.today_vn(ts))
         self.assertEqual(len(objs), 1)
-        self.assertLess(ts + 0.76 - ts, window)
+        self.assertLess(ts + 0.85 - ts, window)
 
 
 class PromotedCardSnapshotRepairTests(unittest.TestCase):
