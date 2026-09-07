@@ -44,29 +44,46 @@ function inferTierFromIds(input: ResolvePatrolTierInput): PatrolTier {
   return 'object'
 }
 
-export function resolvePatrolTier(input: ResolvePatrolTierInput): PatrolTier {
-  const snap = input.tierSnapshot
-  if (snap?.tier) {
-    let tier = snap.tier
-    if (input.surface === 'heatmap-dot' && input.verified === false && tier === 'identity') {
-      tier = 'person'
-    }
-    return tier
-  }
+/**
+ * Tầng hiển thị chỉ tiến không lùi — lấy max(tier_snapshot, tier_ever, suy từ mã).
+ * Không để tier_snapshot lúc flush (object) che tier_ever person trên thẻ tk-*.
+ */
+function coalescePatrolTierSignals(input: ResolvePatrolTierInput): PatrolTier {
+  let tier: PatrolTier = 'object'
 
-  const fromTier =
+  const snapTier = normalizeTierInput(input.tierSnapshot?.tier)
+  const everTier =
     normalizeTierInput(input.tier)
     ?? normalizeTierInput(input.stage)
-    ?? null
 
-  if (fromTier === 'identity') return 'identity'
-  if (fromTier === 'person') return 'person'
-  if (fromTier === 'object') return 'object'
+  if (snapTier) tier = higherPatrolTierLevel(tier, snapTier)
+  if (everTier) tier = higherPatrolTierLevel(tier, everTier)
 
   const inferred = inferTierFromIds(input)
-  if (inferred === 'identity') return 'identity'
-  if (inferred === 'person') return 'person'
-  return 'object'
+  tier = higherPatrolTierLevel(tier, inferred)
+
+  if ((input.snapshotScore ?? 0) >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE) {
+    const personCard =
+      everTier === 'person'
+      || everTier === 'identity'
+      || inferred === 'person'
+      || inferred === 'identity'
+    if (personCard) {
+      tier = higherPatrolTierLevel(tier, 'person')
+    }
+  }
+
+  return tier
+}
+
+export function resolvePatrolTier(input: ResolvePatrolTierInput): PatrolTier {
+  let tier = coalescePatrolTierSignals(input)
+
+  if (input.surface === 'heatmap-dot' && input.verified === false && tier === 'identity') {
+    tier = 'person'
+  }
+
+  return tier
 }
 
 export function resolvePatrolPersonStage(event: PatrolEvent): PatrolPersonStage {
@@ -96,13 +113,19 @@ export function tierEverFromPersonRow(row: {
   tierSnapshot?: PatrolTierSnapshot | null
   snapshotScore?: number
 }): PatrolTier {
-  const snapTier = row.tierSnapshot?.tier
-  if (snapTier) return snapTier
+  let tier: PatrolTier = 'object'
+
+  const snapTier = normalizeTierInput(row.tierSnapshot?.tier)
   const ever = normalizeTierInput(row.tierEver)
-  if (ever) return ever
-  if (row.status === 'identified') return 'identity'
-  if ((row.snapshotScore ?? 0) >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE) return 'person'
-  return 'object'
+
+  if (snapTier) tier = higherPatrolTierLevel(tier, snapTier)
+  if (ever) tier = higherPatrolTierLevel(tier, ever)
+  if (row.status === 'identified') tier = higherPatrolTierLevel(tier, 'identity')
+  if ((row.snapshotScore ?? 0) >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE) {
+    tier = higherPatrolTierLevel(tier, 'person')
+  }
+
+  return tier
 }
 
 export { higherPatrolTierLevel as higherPatrolTier, PATROL_TIER_LEVEL_RANK as PATROL_TIER_RANK }

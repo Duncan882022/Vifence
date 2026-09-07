@@ -44,14 +44,33 @@ def _resolve_tier_at_observation(
     shot_face_eligible: bool,
     worker_id: str | None,
 ) -> str:
-    """Tier tại thời điểm gặm — ưu tiên lifecycle, không hạ person→object."""
-    known = (tier_at or "").strip()
-    if known in ("object", "person", "identity"):
-        return known
+    """Tier tại thời điểm gặm — monotonic; thẻ tk/p không snapshot object."""
+    from ..tier_snapshot import higher_tier
 
     sid = (subject_id or "").strip()
-    if sid.startswith("obj-"):
-        return "object"
+    known = (tier_at or "").strip()
+    if known in ("object", "person", "identity"):
+        resolved = known
+    elif sid.startswith("obj-"):
+        resolved = "object"
+    else:
+        from ...patrol_ids import is_person_subject_id
+
+        if is_person_subject_id(sid):
+            from .. import identity
+
+            person = identity.get_person(identity.resolve_alias(sid))
+            if person and person.get("status") == identity.STATUS_IDENTIFIED:
+                resolved = "identity"
+            elif worker_id:
+                from ...patrol_identity_lifecycle import tier_for_worker_id
+
+                inferred = tier_for_worker_id(worker_id)
+                resolved = "identity" if inferred == "identity" else "person"
+            else:
+                resolved = "person"
+        else:
+            resolved = "object"
 
     from ...patrol_ids import is_person_subject_id
 
@@ -59,17 +78,14 @@ def _resolve_tier_at_observation(
         from .. import identity
 
         person = identity.get_person(identity.resolve_alias(sid))
-        if person and person.get("status") == identity.STATUS_IDENTIFIED:
-            return "identity"
-        if worker_id:
-            from ...patrol_identity_lifecycle import tier_for_worker_id
+        floor = (
+            "identity"
+            if person and person.get("status") == identity.STATUS_IDENTIFIED
+            else "person"
+        )
+        resolved = higher_tier(resolved, floor)
 
-            inferred = tier_for_worker_id(worker_id)
-            if inferred == "identity":
-                return "identity"
-        return "person"
-
-    return "object"
+    return resolved
 
 
 def _build_flush_tier_snapshot(
@@ -126,6 +142,8 @@ def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
         frame_w,
         frame_h,
         face_eligible=bool(obs.face_eligible or has_face),
+        face_quality=float(obs.face_quality or 0.0),
+        camera_id=obs.camera_id,
         flycam=flycam,
         proximity_flycam=proximity,
         vehicle_boxes=vehicle_boxes,
@@ -177,13 +195,38 @@ def _within_accumulation_window(session: TrackSession, now: float) -> bool:
 
 
 def _snapshot_observation(session: TrackSession, obs: ObservationInput) -> ObservationInput:
-    """Trong cửa sổ tích lũy — chốt frame score cao nhất, không frame cuối."""
+    """Chốt frame snapshot — Người ưu tiên best face lifecycle, không khung lưng cuối."""
+    face_obs = _lifecycle_best_face_observation(session)
+    if face_obs is not None:
+        return face_obs
     if not _within_accumulation_window(session, obs.ts):
         return obs
     best = session.best_observation
     if best is not None and best.frame is not None and best.person_bbox is not None:
         return best
     return obs
+
+
+def _lifecycle_best_face_observation(session: TrackSession) -> ObservationInput | None:
+    """Mặt re-ID tốt nhất đã thấy trong track — nguồn snapshot thẻ Người."""
+    bfo = session.best_face_observation
+    if bfo is None or bfo.frame is None or bfo.person_bbox is None:
+        return None
+    if not bfo.face_eligible:
+        return None
+    from ...patrol_person_visibility import patrol_reidentifiable_face_allowed
+
+    frame_w, frame_h = _frame_size_from_obs(bfo)
+    if not patrol_reidentifiable_face_allowed(
+        tuple(bfo.person_bbox),
+        frame_w,
+        frame_h,
+        face_detect_score=float(bfo.face_quality or 0.0),
+        face_eligible=True,
+        camera_id=bfo.camera_id,
+    ):
+        return None
+    return bfo
 
 
 def _card_lacks_person_evidence(subject_id: str, ts: float) -> bool:
@@ -229,9 +272,10 @@ def _luot_needs_snapshot(
 
     sid = session.subject_id or ""
     if is_person_subject_id(sid):
-        # Mở lại đúng một lần chụp khi đã thấy mặt mà thẻ còn giữ ảnh Đối tượng.
-        if obs.face_eligible and _card_lacks_person_evidence(sid, now):
-            return True
+        # Mở lại chụp khi thẻ còn ảnh lưng / chưa đủ mặt — dùng best face lifecycle.
+        if _card_lacks_person_evidence(sid, now):
+            if obs.face_eligible or _lifecycle_best_face_observation(session) is not None:
+                return True
         # Thẻ đã có ảnh mặt đủ điểm — còn trong khung thì không chụp lại.
         if not _card_lacks_person_evidence(sid, now):
             return False
@@ -789,6 +833,7 @@ def flush_session(
             encounter_started_at=session.started_at,
             gps_lat=gps_lat,
             gps_lng=gps_lng,
+            flush_tier=tier_at_resolved,
         )
         if extend_id is not None:
             session.appearance_row_id = extend_id
@@ -801,9 +846,18 @@ def flush_session(
                 session.last_seen_at,
                 session_id=session.session_id,
                 track_id=session.track_id,
+                flush_tier=tier_at_resolved,
             )
             if overlap_id is not None:
                 session.appearance_row_id = overlap_id
+
+    appearance_started_at = session.started_at
+    if (
+        session.promoted_at is not None
+        and tier_at_resolved in ("person", "identity")
+        and session.appearance_row_id is None
+    ):
+        appearance_started_at = max(session.started_at, session.promoted_at)
 
     if (
         session.committed
@@ -839,7 +893,7 @@ def flush_session(
         zone_id=session.zone_id,
         track_id=session.track_id,
         session_id=session.session_id or "",
-        started_at=session.started_at,
+        started_at=appearance_started_at,
         ended_at=session.last_seen_at,
         gps_lat=gps_lat,
         gps_lng=gps_lng,
@@ -894,6 +948,44 @@ def _record_sighting(session: TrackSession) -> None:
     )
 
 
+def _remember_lifecycle(session: TrackSession, obs: ObservationInput) -> None:
+    wid = (obs.lifecycle_worker_id or "").strip()
+    tier = (obs.lifecycle_tier or "").strip()
+    if wid:
+        session.last_lifecycle_worker_id = wid
+    if tier:
+        session.last_lifecycle_tier = tier
+    if obs.worker_name:
+        session.last_worker_name = obs.worker_name
+
+
+def _observation_with_session_lifecycle(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> ObservationInput:
+    if (obs.lifecycle_worker_id or obs.lifecycle_tier):
+        return obs
+    if not (session.last_lifecycle_worker_id or session.last_lifecycle_tier):
+        return obs
+    return ObservationInput(
+        camera_id=obs.camera_id,
+        track_id=obs.track_id,
+        ts=obs.ts,
+        person_bbox=obs.person_bbox,
+        zone_id=obs.zone_id,
+        face_embedding=obs.face_embedding,
+        face_quality=obs.face_quality,
+        face_eligible=obs.face_eligible,
+        confidence=obs.confidence,
+        frame=obs.frame,
+        lifecycle_tier=session.last_lifecycle_tier,
+        lifecycle_worker_id=session.last_lifecycle_worker_id,
+        worker_name=session.last_worker_name or obs.worker_name,
+        touched_object_id=obs.touched_object_id,
+        density_only=obs.density_only,
+    )
+
+
 def finalize_session(session: TrackSession, *, finalize_at: float | None = None) -> None:
     """Đóng session khi ByteTrack mất track."""
     from ...config import settings
@@ -909,6 +1001,11 @@ def finalize_session(session: TrackSession, *, finalize_at: float | None = None)
         session.best_observation is not None
         and session.best_observation.frame is not None
     ) else fallback
+    face_obs = _lifecycle_best_face_observation(session)
+    if face_obs is not None:
+        obs = face_obs
+    obs = _observation_with_session_lifecycle(session, obs)
+
 
     if getattr(settings, "patrol_deferred_object", True):
         session.dirty = True

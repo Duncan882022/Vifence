@@ -276,7 +276,7 @@ class DailyEventTests(PatrolDbTestCase):
         )
         card = daystore.list_person_events(db.today_vn(100.0))[0]
         self.assertEqual(card["snapshot_path"], "mặt.jpg")
-        self.assertEqual(card["last_seen"], 110.0)
+        self.assertEqual(card["last_seen"], 100.0)
 
     def test_person_card_created_without_face_snapshot(self) -> None:
         """Aggregator có thể chốt pers trước khi có ảnh — vẫn phải có thẻ tab Người."""
@@ -335,7 +335,7 @@ class DailyEventTests(PatrolDbTestCase):
         )
         card = daystore.list_person_events(db.today_vn(1_000.0))[0]
         self.assertEqual(card["snapshot_path"], "a.jpg")
-        self.assertEqual(card["last_seen"], 1_011.0)
+        self.assertEqual(card["last_seen"], 1_000.0)
 
         hist = daystore.list_appearances(pers_id, db.today_vn(1_000.0))
         snaps = [s for s in hist["segments"] if s.get("snapshot_path")]

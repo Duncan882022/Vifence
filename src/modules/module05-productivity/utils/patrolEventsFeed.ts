@@ -3,6 +3,7 @@
  */
 import type { PatrolEvent } from '../data/patrolTypes'
 import { PATROL_OBJECT_FACE_SNAPSHOT_SCORE } from './patrolDayObjectFilter'
+import { patrolPersonSnapshotProvesReId } from './patrolPersonFaceEvidence'
 import { resolvePatrolPersonStage } from './patrolWorkforceEventLabels'
 
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000
@@ -41,15 +42,24 @@ function meetsPatrolSnapshotScoreGate(event: PatrolEvent): boolean {
     return score < PATROL_OBJECT_FACE_SNAPSHOT_SCORE
   }
   if (stage === 'person' || stage === 'profile') {
-    return score >= PATROL_OBJECT_FACE_SNAPSHOT_SCORE
+    return patrolPersonSnapshotProvesReId({
+      snapshotUrl: event.snapshotUrl,
+      snapshotScore: score,
+      tierSnapshot: event.tierSnapshot,
+    })
   }
   return true
 }
 
-/** Sự kiện vòng đời người (3 tab) — thời gian hợp lệ; snapshot tùy chọn. */
+/** Sự kiện vòng đời người (3 tab) — thời gian hợp lệ; Người cần snapshot chứng minh mặt. */
 export function isPatrolPersonLifecycleEvent(event: PatrolEvent): boolean {
   if (event.type !== 'PERSON_DETECTED' && event.type !== 'IDENTITY_VERIFIED') return false
   if (!isValidPatrolEventTime(event.lockedAt)) return false
+  const stage = resolvePatrolPersonStage(event)
+  if (stage === 'person' || stage === 'profile') {
+    if (!hasPatrolEventSnapshot(event)) return false
+    return meetsPatrolSnapshotScoreGate(event)
+  }
   if (!hasPatrolEventSnapshot(event)) return true
   return meetsPatrolSnapshotScoreGate(event)
 }

@@ -58,12 +58,11 @@ class LuotSnapshotKeyTests(unittest.TestCase):
         for _ in range(5):
             self.assertNotEqual(_session_luot_key(_session()), sink.CARD_SNAPSHOT_LUOT)
 
-    def test_reclaimed_same_encounter_keeps_file(self) -> None:
-        """Track mất rồi bắt lại trong cùng lượt vẫn ghi vào ảnh của lượt đó."""
+    def test_reclaimed_after_finalize_gets_new_luot_file(self) -> None:
+        """Track đã finalize rồi bắt lại — lượt mới, file JPG mới (append lịch sử)."""
         from app.patrol.aggregator import lost_track_memory
 
         lost_track_memory.reset()
-        # Thẻ `obj-*` cố tình không được nối lại bằng IoU — phải dùng thẻ Người.
         s = _session(bbox=(10.0, 10.0, 60.0, 160.0), subject_id="tk-0000001")
         key = _session_luot_key(s)
         s.appearance_row_id = 7
@@ -73,7 +72,9 @@ class LuotSnapshotKeyTests(unittest.TestCase):
         slot = lost_track_memory.try_reclaim("HC-01", bbox=s.bbox, embedding=None, now=1002.0)
         self.assertIsNotNone(slot)
         lost_track_memory.apply_reclaim(revived, slot, now=1002.0)
-        self.assertEqual(revived.luot_key, key)
+        self.assertIsNone(revived.appearance_row_id)
+        self.assertNotEqual(revived.luot_key, key)
+        self.assertNotEqual(revived.session_id, s.session_id)
 
     def test_next_luot_key_is_monotonic(self) -> None:
         a = session_store.next_luot_key()

@@ -75,6 +75,9 @@ class TrackSession:
     subject_id: str | None = None  # pers-* hoặc obj-* sau promote
 
     best_faces: list[BestFaceFrame] = field(default_factory=list)
+    # Khung mặt re-ID tốt nhất suốt lifecycle — snapshot Người luôn dùng cái này.
+    best_face_observation: ObservationInput | None = None
+    best_face_observation_quality: float = 0.0
     # Frame tốt nhất đã thấy — monotonic score; finalize luôn flush cái này.
     best_observation: ObservationInput | None = None
     best_observation_score: float = 0.0
@@ -86,6 +89,8 @@ class TrackSession:
     end_reason: str | None = None
 
     appearance_row_id: int | None = None
+    # Thời điểm obj-* → tk/pers — flush person-phase không gộp lên object-phase.
+    promoted_at: float | None = None
     # Một lượt trong khung = một JPG — không chụp lại mỗi flush/track frame.
     luot_snapshot_captured: bool = False
     # Số thứ tự lượt gặp, cấp một lần khi lượt bắt đầu và đi vào tên file JPG.
@@ -101,6 +106,9 @@ class TrackSession:
     person_committed: bool = False
     face_checks_disabled: bool = False
     last_face_assess_at: float = 0.0
+    last_lifecycle_tier: str | None = None
+    last_lifecycle_worker_id: str | None = None
+    last_worker_name: str | None = None
 
     @property
     def session_key(self) -> str:

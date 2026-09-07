@@ -36,8 +36,27 @@ def finalize_object_if_needed(
     if session.person_committed:
         return None
 
+    from ...patrol_ids import is_person_subject_id
+    from .person_commit import (
+        finalize_returning_person_card,
+        maybe_commit_returning_person,
+    )
+
+    if is_person_subject_id(session.subject_id or ""):
+        finalize_returning_person_card(session, obs, finalize_at=finalize_at)
+        return None
+
+    maybe_commit_returning_person(session, obs)
+    if session.person_committed:
+        return None
+
     late_pers = maybe_commit_person(session, obs, allow_recover=True)
     if late_pers:
+        return None
+
+    from .person_commit import maybe_commit_person_from_lifecycle
+
+    if maybe_commit_person_from_lifecycle(session, obs, finalize=True):
         return None
 
     now = float(finalize_at if finalize_at is not None else obs.ts)

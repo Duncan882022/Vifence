@@ -9,7 +9,11 @@ from .behavior_pipeline import process_behavior
 from .face_assess import enrich_observation_face
 from .flush import finalize_session, flush_session, write_person_card
 from .identity_pipeline import process_identity
-from .person_commit import maybe_commit_person
+from .person_commit import (
+    maybe_commit_person,
+    maybe_commit_person_from_lifecycle,
+    maybe_commit_returning_person,
+)
 from .session_store import get_or_create, pop_session, reset
 from .tripwire import site_entry_counted
 from .types import ObservationInput
@@ -62,6 +66,15 @@ def _maybe_update_best_observation(session, obs: ObservationInput) -> None:
     from ..sink import snapshot_score
 
     score = snapshot_score(face_quality=obs.face_quality, confidence=obs.confidence)
+    # Lifecycle: đã có mặt re-ID — không để khung lưng (YOLO conf cao) thay thế.
+    if not obs.face_eligible:
+        if session.best_face_observation is not None:
+            return
+        if (
+            session.best_observation is not None
+            and session.best_observation.face_eligible
+        ):
+            return
     if session.best_observation is None or score >= session.best_observation_score:
         session.best_observation = obs
         session.best_observation_score = score
@@ -87,6 +100,17 @@ def _flush_due(session, obs: ObservationInput) -> bool:
     ):
         return True
     return False
+
+
+def _remember_lifecycle(session, obs: ObservationInput) -> None:
+    wid = (obs.lifecycle_worker_id or "").strip()
+    tier = (obs.lifecycle_tier or "").strip()
+    if wid:
+        session.last_lifecycle_worker_id = wid
+    if tier:
+        session.last_lifecycle_tier = tier
+    if obs.worker_name:
+        session.last_worker_name = obs.worker_name
 
 
 def _ingest_deferred(**kwargs) -> str | None:
@@ -125,6 +149,7 @@ def _ingest_deferred(**kwargs) -> str | None:
     _maybe_split_encounter(session, obs.ts)
     session.touch(obs.ts, obs.person_bbox)
     _maybe_update_best_observation(session, obs)
+    _remember_lifecycle(session, obs)
 
     if not session.is_abandoned():
         if obs.face_embedding and obs.face_eligible:
@@ -133,7 +158,12 @@ def _ingest_deferred(**kwargs) -> str | None:
             _note_best_frame(session, obs)
         obs = enrich_observation_face(session, obs)
         _maybe_update_best_observation(session, obs)
-        maybe_commit_person(session, obs)
+        _remember_lifecycle(session, obs)
+        maybe_commit_returning_person(session, obs)
+        if not session.person_committed:
+            maybe_commit_person(session, obs)
+        if not session.person_committed:
+            maybe_commit_person_from_lifecycle(session, obs, finalize=False)
 
     if session.person_committed:
         if obs.touched_object_id:

@@ -3,6 +3,8 @@ import { Camera, ImageOff, Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { PatrolEvent } from '../data/patrolTypes'
 import { PatrolSnapshotEvidence } from './PatrolSnapshotEvidence'
+import { patrolEventSnapshotProvesReId } from '../utils/patrolPersonFaceEvidence'
+import { resolvePatrolPersonStage } from '../utils/patrolWorkforceEventLabels'
 
 interface PatrolEventSnapshotProps {
   event: PatrolEvent
@@ -31,7 +33,12 @@ export function PatrolEventSnapshot({
   onClick,
 }: PatrolEventSnapshotProps) {
   const isDetail = variant === 'detail'
-  const displayUrl = (snapshotUrlOverride ?? event.snapshotUrl)?.trim()
+  const stage = resolvePatrolPersonStage(event)
+  const needsFaceProof = stage === 'person' || stage === 'profile'
+  const rawUrl = (snapshotUrlOverride ?? event.snapshotUrl)?.trim()
+  const displayUrl = needsFaceProof && rawUrl && !patrolEventSnapshotProvesReId(event)
+    ? undefined
+    : rawUrl
   const [renderUrl, setRenderUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -89,7 +96,7 @@ export function PatrolEventSnapshot({
         >
           <Camera className={cn('opacity-40', isDetail ? 'w-8 h-8' : 'w-4 h-4')} />
           <span className={isDetail ? 'text-[10px] opacity-60' : 'text-[6px] opacity-60'}>
-            Chờ ảnh
+            {needsFaceProof ? 'Chờ bằng chứng mặt' : 'Chờ ảnh'}
           </span>
         </div>
       </div>

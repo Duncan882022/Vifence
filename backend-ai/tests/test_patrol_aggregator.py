@@ -135,8 +135,8 @@ class AggregatorReIdTest(unittest.TestCase):
 
         s2 = get_or_create("HC-02", "ptk-b", ts=140.0, face_embedding=emb)
         apply_reclaim(s2, reclaimed, now=140.0)
-        self.assertEqual(s2.session_id, "sess-merge-1")
         self.assertEqual(s2.subject_id, "pers-0001")
+        self.assertNotEqual(s2.session_id, "sess-merge-1")
         self.assertIsNone(s2.appearance_row_id)
         reset()
 
@@ -457,7 +457,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 14.5, places=3)
 
     def test_standing_person_does_not_overwrite_card_snapshot(self) -> None:
-        """Còn trong khung — upsert last_seen, không ghi đè ảnh thẻ mỗi flush."""
+        """Còn trong khung — không upsert last_seen thẻ; không ghi đè ảnh mỗi flush."""
         from unittest.mock import patch
 
         import numpy as np
@@ -504,10 +504,168 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             float(card["snapshot_score"]),
             daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
         )
-        self.assertGreater(float(card["last_seen"]), ts)
+        self.assertEqual(float(card["last_seen"]), ts)
         # Một lượt, một JPG — không chụp lại sau khi thẻ đã có ảnh mặt.
         self.assertEqual(write_mock.call_count, 1)
-        self.assertEqual(len(daystore.list_day_presences(db.today_vn(ts))), 1)
+        presences = daystore.list_day_presences(db.today_vn(ts))
+        self.assertEqual(len(presences), 1)
+        self.assertGreater(float(presences[0]["ended_at"]), ts)
+
+
+    def test_person_return_after_finalize_appends_history(self) -> None:
+        """Ra khỏi khung rồi quay lại — append dòng lịch sử + JPG mới, giữ lượt cũ."""
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol_tracker import END_REASON_LOST
+
+        ts = 6_100.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 3 else 0.0) for i in range(128))
+        bbox = (100.0, 80.0, 220.0, 400.0)
+        snap_paths: list[str] = []
+
+        def _snap(*_a, **_k):  # noqa: ANN002
+            path = f"2026-09-03/tk-0000003-visit{len(snap_paths) + 1}.jpg"
+            snap_paths.append(path)
+            return path
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            side_effect=_snap,
+        ):
+            identity.ensure_draft_for_tk("tk-0000003", now=ts, camera_id="HC-01")
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-visit1",
+                    now=ts + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000003",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-visit1",
+                now=ts + 2.0,
+                end_reason=END_REASON_LOST,
+            )
+
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-visit2",
+                    now=ts + 5.0 + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000003",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-visit2",
+                now=ts + 8.0,
+                end_reason=END_REASON_LOST,
+            )
+
+        date = db.today_vn(ts)
+        presences = daystore.list_day_presences(date)
+        self.assertEqual(len(presences), 2)
+        hist = daystore.list_appearances("tk-0000003", date)["segments"]
+        self.assertEqual(len(hist), 2)
+        snaps = sorted(
+            str(seg.get("snapshot_path") or "") for seg in hist if seg.get("snapshot_path")
+        )
+        self.assertEqual(len(snaps), 2)
+        self.assertNotEqual(snaps[0], snaps[1])
+        closed = db.query(
+            "SELECT end_reason FROM appearances WHERE event_date = ? AND subject_id = ?",
+            (date, "tk-0000003"),
+        )
+        self.assertEqual(len(closed), 2)
+        self.assertTrue(all(str(r["end_reason"] or "") for r in closed))
+
+    def test_reclaimed_return_without_face_never_creates_object(self) -> None:
+        """Reclaim tk rồi rời khung (chưa mặt frame mới) — không sinh thẻ obj-*."""
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from app.patrol import daystore, db, identity
+        from app.patrol.aggregator.engine import finalize_track, ingest_observation
+        from app.patrol_tracker import END_REASON_LOST
+
+        ts = 6_200.0
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 11 else 0.0) for i in range(128))
+        bbox = (100.0, 80.0, 220.0, 400.0)
+
+        with patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.sink._write_snapshot",
+            return_value="2026-09-03/tk-0000004.jpg",
+        ):
+            identity.ensure_draft_for_tk("tk-0000004", now=ts, camera_id="HC-01")
+            for i in range(6):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-r1",
+                    now=ts + i * 0.3,
+                    lifecycle_tier="person",
+                    lifecycle_worker_id="tk-0000004",
+                    confidence=0.9,
+                    face_eligible=True,
+                    face_quality=0.85,
+                    face_embedding=emb,
+                    frame=frame,
+                    person_bbox=bbox,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-r1",
+                now=ts + 2.0,
+                end_reason=END_REASON_LOST,
+            )
+            # Quay lại — chỉ bbox tương tự (IoU reclaim), chưa mặt frame mới
+            for i in range(4):
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-r2",
+                    now=ts + 5.0 + i * 0.2,
+                    person_bbox=bbox,
+                    confidence=0.85,
+                    face_eligible=False,
+                )
+            finalize_track(
+                "HC-01",
+                "ptk-r2",
+                now=ts + 6.0,
+                end_reason=END_REASON_LOST,
+            )
+
+        date = db.today_vn(ts)
+        self.assertEqual(len(daystore.list_objects(date)), 0)
+        self.assertEqual(len(daystore.list_person_events(date)), 1)
+        self.assertEqual(len(daystore.list_day_presences(date)), 2)
 
     def test_dwell_gate_retries_until_committed(self) -> None:
         """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được (legacy flush)."""
