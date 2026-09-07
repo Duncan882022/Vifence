@@ -1210,12 +1210,20 @@ class BestObservationFinalizeTests(unittest.TestCase):
         bbox = (400.0, 80.0, 520.0, 520.0)
         window = track_accumulation_window_seconds()
 
+        gate_calls = {"n": 0}
+
+        def _gate(*_a, **_k):
+            gate_calls["n"] += 1
+            if gate_calls["n"] < 2:
+                return (False, ts)
+            return (True, ts)
+
         with patch(
             "app.patrol.sink._gate_observation_commit",
-            return_value=(True, ts),
+            side_effect=_gate,
         ), patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
-            return_value=(True, ts),
+            side_effect=_gate,
         ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=("2026-08-30/pass.jpg", 0.88),
