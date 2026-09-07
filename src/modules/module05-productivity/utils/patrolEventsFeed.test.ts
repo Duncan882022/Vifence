@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { PatrolEvent } from '../data/patrolTypes'
 import {
   isPatrolPersonLifecycleEvent,
-  isPatrolPersonLifecycleWithSnapshot,
 } from './patrolEventsFeed'
 
 function baseEvent(overrides: Partial<PatrolEvent> = {}): PatrolEvent {
