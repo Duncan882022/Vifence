@@ -29,6 +29,8 @@ APPEARANCE_GAP_SEC = 45.0
 PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Gộp tk trùng người — cùng ô GPS + cửa sổ thời gian (đồng bộ audit duplicate).
 NEARBY_PERSON_MERGE_SEC = 120.0
+# Gộp track YOLO nhấp nháy — tái dùng thẻ Đối tượng mở cùng camera/zone.
+NEARBY_OBJECT_REUSE_SEC = 90.0
 GPS_BUCKET_EPS = 0.00015
 # Camera quay liên tục (~6 FPS): đứng yên hàng giờ không được ghi SQLite mỗi khung.
 # Refresh last_seen / appearance tối đa mỗi khoảng này, trừ khi ảnh rõ hơn.
@@ -150,6 +152,60 @@ def find_nearby_person_pers_id(
         if score > best_score:
             best_score = score
             best_id = sid
+    return best_id
+
+
+def find_recent_open_object_id(
+    date: str,
+    camera_id: str,
+    zone_id: str | None,
+    now: float,
+    *,
+    gps_lat: float | None = None,
+    gps_lng: float | None = None,
+    within_sec: float = NEARBY_OBJECT_REUSE_SEC,
+) -> str | None:
+    """Tái dùng thẻ Đối tượng chưa promote — tránh mỗi track YOLO một obj-*."""
+    cam = (camera_id or "").strip()
+    if not cam:
+        return None
+    zid = (zone_id or "").strip() or None
+    bucket: tuple[int, int] | None = None
+    if gps_lat is not None and gps_lng is not None:
+        bucket = _gps_bucket(gps_lat, gps_lng)
+
+    rows = db.query(
+        "SELECT o.obj_id, o.snapshot_score, o.last_seen, a.gps_lat, a.gps_lng"
+        " FROM daily_objects o"
+        " INNER JOIN appearances a"
+        "  ON a.event_date = o.event_date AND a.subject_id = o.obj_id AND a.qualified = 1"
+        " WHERE o.event_date = ? AND o.promoted_to IS NULL"
+        " AND a.camera_id = ?"
+        " AND a.ended_at >= ? - ?"
+        " ORDER BY o.last_seen DESC, o.snapshot_score DESC",
+        (date, cam, now, within_sec),
+    )
+    best_id: str | None = None
+    best_score = -1.0
+    for row in rows:
+        oid = str(row["obj_id"])
+        if zid is not None:
+            # zone_id chỉ có trên appearance — lọc thêm nếu caller truyền zone.
+            zrow = db.query_one(
+                "SELECT zone_id FROM appearances"
+                " WHERE event_date = ? AND subject_id = ? AND camera_id = ?"
+                " ORDER BY ended_at DESC LIMIT 1",
+                (date, oid, cam),
+            )
+            if zrow and zrow["zone_id"] and str(zrow["zone_id"]) != zid:
+                continue
+        if bucket is not None and row["gps_lat"] is not None and row["gps_lng"] is not None:
+            if _gps_bucket(float(row["gps_lat"]), float(row["gps_lng"])) != bucket:
+                continue
+        score = float(row["snapshot_score"] or 0)
+        if score > best_score:
+            best_score = score
+            best_id = oid
     return best_id
 
 

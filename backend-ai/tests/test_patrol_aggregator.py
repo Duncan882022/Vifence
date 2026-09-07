@@ -1201,7 +1201,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
             session = get_or_create("HC-02", "ptk-best", ts=ts + 0.4)
             self.assertIsNotNone(session.best_observation)
             self.assertAlmostEqual(session.best_observation_score, 0.9, places=2)
-            finalize_track("HC-02", "ptk-best", now=ts + 0.5)
+            finalize_track("HC-02", "ptk-best", now=ts + 0.85)
 
         from app.patrol import daystore, db
 
@@ -1240,7 +1240,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
             oid = ingest_observation(
                 camera_id="DR-03",
                 track_id="ptk-pass",
-                now=ts + 0.36,
+                now=ts + 0.76,
                 person_bbox=bbox,
                 frame=frame,
                 confidence=0.88,
@@ -1252,7 +1252,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
 
         objs = daystore.list_objects(db.today_vn(ts))
         self.assertEqual(len(objs), 1)
-        self.assertLess(ts + 0.36 - ts, window)
+        self.assertLess(ts + 0.76 - ts, window)
 
 
 class PromotedCardSnapshotRepairTests(unittest.TestCase):

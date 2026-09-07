@@ -114,6 +114,36 @@ class PatrolNearbyMergeTests(unittest.TestCase):
         )
         self.assertIsNone(row)
 
+    def test_find_recent_open_object_reuses_same_camera(self) -> None:
+        date = "2026-09-05"
+        ts = 1_700_000_200.0
+        lat, lng = 20.928444, 106.873611
+
+        with db.tx() as conn:
+            conn.execute(
+                "INSERT INTO daily_objects"
+                "(event_date, obj_id, first_seen, last_seen, snapshot_path, snapshot_score)"
+                " VALUES(?,?,?,?,?,?)",
+                (date, "obj-0000042", ts - 20, ts - 5, f"{date}/obj-0000042-1.jpg", 0.88),
+            )
+            conn.execute(
+                "INSERT INTO appearances"
+                "(event_date, subject_id, camera_id, started_at, ended_at,"
+                " gps_lat, gps_lng, qualified, presence_seq, source_cameras)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (date, "obj-0000042", "HC-01", ts - 20, ts - 5, lat, lng, 1, 1, "HC-01"),
+            )
+
+        found = daystore.find_recent_open_object_id(
+            date, "HC-01", None, ts, gps_lat=lat, gps_lng=lng,
+        )
+        self.assertEqual(found, "obj-0000042")
+
+        stale = daystore.find_recent_open_object_id(
+            date, "HC-01", None, ts + 200, gps_lat=lat, gps_lng=lng,
+        )
+        self.assertIsNone(stale)
+
 
 if __name__ == "__main__":
     unittest.main()

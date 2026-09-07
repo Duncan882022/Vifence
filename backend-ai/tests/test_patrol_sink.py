@@ -11,7 +11,7 @@ import numpy as np
 from app.patrol import daystore, db, identity, sink
 
 # Đồng bộ config.py — min-commit ngắn; 2s là cửa sổ frame đẹp.
-_MIN_OBJECT_COMMIT = 0.35
+_MIN_OBJECT_COMMIT = 0.75
 _FACE_CONFIRM = 0.15
 _PERSON_BOX = [85.0, 62.0, 225.0, 425.0]
 

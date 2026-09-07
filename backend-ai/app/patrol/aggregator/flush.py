@@ -116,8 +116,8 @@ def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
         and not flycam
         and obs.camera_id.startswith("DR-")
     )
-    vehicle_boxes: list[tuple[float, float, float, float]] = []
-    if obs.frame is not None and is_patrol_helmet_like(obs.camera_id) and not proximity:
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None
+    if obs.frame is not None and is_patrol_helmet_like(obs.camera_id):
         from ...patrol.person_analyzer import _patrol_bodycam_vehicle_boxes
 
         vehicle_boxes = _patrol_bodycam_vehicle_boxes(obs.frame, obs.camera_id)
@@ -289,6 +289,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         return None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
+    from ...patrol_ids import is_person_subject_id
     from ...patrol_person_visibility import patrol_snapshot_draw_bbox
 
     shot_obs = _snapshot_observation(session, obs)
@@ -300,7 +301,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         face_box=_snapshot_face_box(shot_obs, frame_w, frame_h),
         anchor_from_center=(
             not shot_obs.face_eligible
-            and (shot_obs.lifecycle_tier or "").strip() == "object"
+            and not is_person_subject_id(session.subject_id or "")
         ),
     )
 
@@ -354,6 +355,7 @@ def flush_session(
     obs: ObservationInput,
     *,
     finalize: bool = False,
+    finalize_at: float | None = None,
 ) -> None:
     """INSERT/UPDATE aggregated appearance + card ngoài (throttled)."""
     from .session_store import link_subject_session
@@ -361,6 +363,11 @@ def flush_session(
     if not _needs_flush(session, finalize=finalize):
         return
     now = obs.ts
+    gate_now = now
+    if finalize:
+        gate_now = float(finalize_at if finalize_at is not None else session.last_seen_at or now)
+        if gate_now < now:
+            gate_now = now
     if (
         not finalize
         and not session.committed
@@ -372,7 +379,7 @@ def flush_session(
     key = session.session_key
     if session.subject_id is None:
         has_face = bool(session.best_faces) or obs.face_eligible
-        ok, _anchor = _gate_observation_commit(key, has_face=has_face, now=now)
+        ok, _anchor = _gate_observation_commit(key, has_face=has_face, now=gate_now)
         if not ok:
             # Trước đây finalize được miễn cổng dwell. Khi một track là một lượt
             # gặp thì miễn ở đây nghĩa là mọi hộp nhấp nháy vài trăm mili giây
@@ -381,7 +388,7 @@ def flush_session(
             # vẫn vào sổ cái ở dạng chưa chốt được, không mất dấu vết.
             return
         effective_bbox = obs.person_bbox if obs.person_bbox is not None else session.bbox
-        if not has_face and effective_bbox is not None:
+        if not has_face and effective_bbox is not None and not obs.density_only:
             gate_obs = obs
             if obs.person_bbox is None and session.bbox is not None:
                 gate_obs = ObservationInput(
@@ -651,7 +658,7 @@ def _record_sighting(session: TrackSession) -> None:
     )
 
 
-def finalize_session(session: TrackSession) -> None:
+def finalize_session(session: TrackSession, *, finalize_at: float | None = None) -> None:
     """Đóng session khi ByteTrack mất track."""
     # Mang theo bbox cuối cùng: thiếu nó thì cổng chặn vật tĩnh không có gì để
     # xét, và một cái cột giàn giáo bị YOLO gọi là người suốt buổi — bị chặn ở
@@ -668,7 +675,7 @@ def finalize_session(session: TrackSession) -> None:
         and session.best_observation.frame is not None
     ) else fallback
     session.dirty = True
-    flush_session(session, obs, finalize=True)
+    flush_session(session, obs, finalize=True, finalize_at=finalize_at)
     try:
         _record_sighting(session)
     except Exception:  # noqa: BLE001

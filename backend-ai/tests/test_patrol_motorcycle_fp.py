@@ -30,6 +30,25 @@ class TestMotorcycleSeatHeuristic(unittest.TestCase):
         self.assertTrue(motorcycle_seat_like_fp_box(seat, FW, FH))
         self.assertFalse(patrol_person_meets_display_gate(seat, FW, FH))
 
+    def test_parked_motorcycle_row_is_fp(self):
+        """HC-01 live obj-0014/0015 — YOLO person trên xe đỗ."""
+        from app.patrol_person_visibility import (
+            parked_motorcycle_row_fp_box,
+            patrol_object_commit_allowed,
+            upper_canopy_fp_box,
+        )
+
+        w, h = 960, 540
+        moto_a = (461.0, 134.0, 531.0, 284.0)
+        moto_b = (463.0, 139.0, 536.0, 295.0)
+        tree = (241.0, 89.0, 327.0, 241.0)
+        self.assertTrue(parked_motorcycle_row_fp_box(moto_a, w, h))
+        self.assertTrue(parked_motorcycle_row_fp_box(moto_b, w, h))
+        self.assertFalse(patrol_object_commit_allowed(moto_a, w, h))
+        self.assertFalse(patrol_object_commit_allowed(moto_b, w, h))
+        self.assertTrue(upper_canopy_fp_box(tree, w, h))
+        self.assertFalse(patrol_object_commit_allowed(tree, w, h))
+
     def test_standing_person_not_fp(self):
         person = _box(0.40, 0.20, 0.58, 0.72)
         self.assertFalse(motorcycle_seat_like_fp_box(person, FW, FH))
