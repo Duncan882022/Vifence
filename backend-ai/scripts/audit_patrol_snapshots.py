@@ -281,12 +281,12 @@ def audit_pytest_snapshot_suite() -> CaseResult:
 
 
 AUDITS = [
+    audit_pytest_snapshot_suite,
     audit_dr03_multi_person,
     audit_snapshot_roi_clamp,
     audit_jpg_one_file_per_luot,
     audit_appearance_extend_same_obj,
     audit_parallel_obj_keeps_two_rows,
-    audit_pytest_snapshot_suite,
 ]
 
 
