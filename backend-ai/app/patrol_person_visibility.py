@@ -301,6 +301,7 @@ def patrol_anonymous_identity_allowed(
     *,
     face_quality: float = 0.0,
     face_eligible: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> bool:
     """Chặn gán tk-* cho YOLO FP (xe, biển, giàn) dù YuNet trả pseudo-face."""
     effective_quality = patrol_face_promotion_quality(
@@ -310,6 +311,12 @@ def patrol_anonymous_identity_allowed(
     if effective_quality < MIN_ANONYMOUS_IDENTITY_FACE_QUALITY:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
+        return False
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        return False
+    if person_box_overlaps_vehicle_fp(
+        person_box, vehicle_boxes or [], frame_w, frame_h,
+    ):
         return False
     return patrol_person_meets_detection_gate(
         person_box,
@@ -354,6 +361,14 @@ def patrol_object_commit_allowed(
         and speck_person_box(person_box, frame_w, frame_h)
     ):
         return False
+    # YuNet đôi khi trả pseudo-face trên biển/xe — không được bypass bằng face_eligible.
+    if not flycam and not proximity_flycam:
+        if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+            return False
+        if person_box_overlaps_vehicle_fp(
+            person_box, vehicle_boxes or [], frame_w, frame_h,
+        ):
+            return False
     if face_eligible:
         return True
     if flycam or proximity_flycam:

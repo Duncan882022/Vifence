@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.patrol_person_visibility import (  # noqa: E402
     motorcycle_seat_like_fp_box,
+    patrol_object_commit_allowed,
     patrol_person_meets_display_gate,
     person_box_likely_rider_on_vehicle,
     person_box_overlaps_vehicle_fp,
@@ -84,6 +85,29 @@ class TestVehicleOverlapFilter(unittest.TestCase):
             patrol_person_meets_display_gate(
                 rider, FW, FH, vehicle_boxes=[motorcycle],
             ),
+        )
+
+
+class TestObjectCommitVehicleGate(unittest.TestCase):
+    """Ghi thẻ obj-* — không bypass lọc xe khi face_eligible (pseudo-face trên xe)."""
+
+    def test_seat_on_motorcycle_rejected_even_with_face_eligible(self):
+        motorcycle = _box(0.30, 0.45, 0.70, 0.75)
+        seat_fp = _box(0.38, 0.52, 0.58, 0.68)
+        self.assertFalse(
+            patrol_object_commit_allowed(
+                seat_fp,
+                FW,
+                FH,
+                face_eligible=True,
+                vehicle_boxes=[motorcycle],
+            ),
+        )
+
+    def test_standing_person_commit_allowed(self):
+        person = _box(0.40, 0.20, 0.58, 0.72)
+        self.assertTrue(
+            patrol_object_commit_allowed(person, FW, FH, face_eligible=False),
         )
 
 
