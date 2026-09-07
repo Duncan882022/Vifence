@@ -462,34 +462,27 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
 
         ts = 5_500.0
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 7 else 0.0) for i in range(128))
         with patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
             return_value=(True, ts),
         ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="tk-0000002",
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
-            return_value=PersonIdentity(
-                person_id="sgc-7003",
-                identity_type=IdentityType.ANONYMOUS,
-                confidence=0.9,
-            ),
-        ), patch(
             "app.patrol.sink._write_snapshot",
             return_value="2026-09-03/tk-0000002.jpg",
         ) as write_mock:
-            identity.ensure_draft_for_tk("tk-0000002", now=ts)
+            identity.ensure_draft_for_tk("tk-0000002", now=ts, camera_id="HC-01")
             for i in range(40):
                 ingest_observation(
                     camera_id="HC-01",
                     track_id="ptk-stand-face",
                     now=ts + i * 0.5,
                     lifecycle_tier="person",
-                    lifecycle_worker_id="sgc-7003",
+                    lifecycle_worker_id="tk-0000002",
                     confidence=0.9,
                     face_eligible=True,
                     face_quality=0.85,
+                    face_embedding=emb,
                     frame=frame,
                     person_bbox=(100.0, 80.0, 220.0, 400.0),
                 )
