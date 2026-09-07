@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
+
+LifecycleState = Literal["ACTIVE", "PERSON_COMMITTED", "FINALIZED"]
 
 
 class IdentityType(str, Enum):
@@ -94,6 +96,12 @@ class TrackSession:
     dirty: bool = False
     committed: bool = False
 
+    # Deferred lifecycle — person commit sớm, object chỉ lúc finalize.
+    lifecycle_state: LifecycleState = "ACTIVE"
+    person_committed: bool = False
+    face_checks_disabled: bool = False
+    last_face_assess_at: float = 0.0
+
     @property
     def session_key(self) -> str:
         return f"{self.camera_id}|{self.track_id}"
@@ -101,6 +109,25 @@ class TrackSession:
     @property
     def duration_seconds(self) -> float:
         return max(0.0, self.last_seen_at - self.started_at)
+
+    def is_abandoned(self) -> bool:
+        """Đã ghi Người/Định danh — dừng pipeline mặt trên track này."""
+        return self.face_checks_disabled or self.person_committed
+
+    def can_assess_face(self, ts: float, interval_sec: float) -> bool:
+        if self.face_checks_disabled:
+            return False
+        if self.last_face_assess_at <= 0:
+            return True
+        return (ts - self.last_face_assess_at) >= interval_sec
+
+    def mark_person_committed(self, pers_id: str) -> None:
+        self.subject_id = pers_id
+        self.person_committed = True
+        self.face_checks_disabled = True
+        self.lifecycle_state = "PERSON_COMMITTED"
+        self.committed = True
+        self.identity_resolved = True
 
     def touch(self, ts: float, bbox: tuple[float, float, float, float] | None) -> None:
         if self.started_at <= 0:

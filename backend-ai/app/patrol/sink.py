@@ -1,16 +1,9 @@
 """Cầu nối luồng AI → SQLite tuần tra.
 
 Luồng phân tích gọi `record_observation` mỗi khi phát hiện một người trong
-khung. **Ghi thẻ sớm** sau `patrol_object_min_commit_seconds` (Đối tượng) hoặc
-`patrol_person_confirm_seconds` (có mặt). `patrol_object_confirm_seconds` là cửa sổ
-chọn frame đẹp nhất / thăng tier — không chặn xe hay người chạy qua; mất track → finalize ngay.
-Chỉ thăng Người khi analyzer đã đánh dấu `face_eligible`; sink không tự recover embedding.
-Sau đó quyết định Đối tượng (chưa thấy mặt) hay Người/Định danh (có khuôn mặt),
-rồi ghi thẻ sự kiện và lịch sử xuất hiện.
-
-Tách khỏi `ppe_engine` có chủ ý: engine kia lo vòng đời sự kiện ATLĐ, còn đây
-là mô hình nghiệp vụ của Module 05. Trộn hai thứ vào nhau chính là cái đã làm
-Module 05 rối tới mức phải viết lại.
+khung. **Người/Định danh** — commit sớm khi mặt đủ tốt (lục hồ sơ → upsert).
+**Đối tượng** — chỉ ghi lúc finalize track (rời khung), sau vét cạn mặt.
+``patrol_deferred_object`` (mặc định bật) bật mô hình lifecycle mới.
 """
 
 from __future__ import annotations

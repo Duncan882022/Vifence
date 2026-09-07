@@ -94,24 +94,16 @@ class PatrolPeakTimeTest(unittest.TestCase):
         self.assertEqual(stats["object_card_count"], 1)
 
     def test_density_encounters_increment_unassigned_by_member_count(self) -> None:
+        """Peak density_only — không ghi thẻ obj (deferred lifecycle)."""
         from app.patrol.aggregator.engine import finalize_track, ingest_observation
 
         import numpy as np
 
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        with patch(
-            "app.patrol.aggregator.flush._gate_observation_commit",
-            return_value=(True, 2_000.0),
-        ), patch(
-            "app.patrol.aggregator.tripwire.site_entry_counted",
-            return_value=True,
-        ), patch(
-            "app.patrol.aggregator.flush._write_snapshot",
-            return_value=(None, 0.0),
-        ):
-            for i in range(3):
-                ts = 2_000.0 + i * 10
-                bbox = [10.0 + i * 80.0, 10.0, 50.0 + i * 80.0, 80.0]
+        for i in range(3):
+            ts = 2_000.0 + i * 10
+            bbox = [10.0 + i * 80.0, 10.0, 50.0 + i * 80.0, 80.0]
+            self.assertIsNone(
                 ingest_observation(
                     camera_id="HC-01",
                     track_id=f"ptk-crowd-{i}",
@@ -120,10 +112,14 @@ class PatrolPeakTimeTest(unittest.TestCase):
                     density_only=True,
                     now=ts,
                     confidence=0.8,
-                )
-                finalize_track("HC-01", f"ptk-crowd-{i}", now=ts + 5.0)
-        stats = daystore.day_stats(db.today_vn(2_000.0))
-        self.assertEqual(stats["unassigned_observations"], 3)
+                ),
+            )
+            finalize_track("HC-01", f"ptk-crowd-{i}", now=ts + 5.0)
+        date = db.today_vn(2_000.0)
+        self.assertEqual(daystore.list_objects(date), [])
+        stats = daystore.day_stats(date)
+        self.assertEqual(stats["object_sighting_count"], 0)
+        self.assertEqual(stats["unassigned_observations"], 0)
 
     def test_assign_peak_crowd_numbering(self) -> None:
         members = [

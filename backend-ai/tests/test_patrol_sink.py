@@ -16,6 +16,43 @@ _FACE_CONFIRM = 0.15
 _PERSON_BOX = [85.0, 62.0, 225.0, 425.0]
 
 
+def _finalize_track(
+    camera_id: str,
+    track_id: str,
+    t0: float,
+    *,
+    offset: float = 0.5,
+) -> None:
+    sink.forget_track(camera_id, track_id, now=t0 + offset)
+
+
+def _commit_object_track(
+    track_id: str,
+    t0: float,
+    *,
+    camera_id: str = "HC-01",
+    person_bbox: list[float] | None = None,
+) -> str:
+    """Deferred lifecycle: object chỉ ghi lúc finalize."""
+    bbox = person_bbox or _PERSON_BOX
+    date = db.today_vn(t0)
+    before = {str(o["obj_id"]) for o in daystore.list_objects(date)}
+    sink.record_observation(
+        camera_id=camera_id, track_id=track_id, person_bbox=bbox, now=t0,
+    )
+    sink.record_observation(
+        camera_id=camera_id, track_id=track_id, person_bbox=bbox,
+        now=t0 + _MIN_OBJECT_COMMIT,
+    )
+    _finalize_track(camera_id, track_id, t0 + _MIN_OBJECT_COMMIT, offset=0.25)
+    created = [
+        o for o in daystore.list_objects(date)
+        if str(o["obj_id"]) not in before
+    ]
+    assert len(created) == 1, daystore.list_objects(date)
+    return str(created[0]["obj_id"])
+
+
 def _vec(seed: int, dim: int = 128) -> list[float]:
     rng = np.random.default_rng(seed)
     v = rng.normal(size=dim).astype(np.float32)
@@ -38,45 +75,25 @@ class PatrolSinkTests(unittest.TestCase):
 
     def test_no_face_creates_object(self) -> None:
         t0 = 1_000.0
-        self.assertIsNone(
-            sink.record_observation(
-                camera_id="HC-01", track_id="ptk0001:person", now=t0,
-            )
-        )
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", now=t0 + 1.0,
-        )
-        oid = sink.record_observation(
-            camera_id="HC-01",
-            track_id="ptk0001:person",
-            now=t0 + _MIN_OBJECT_COMMIT,
-        )
+        oid = _commit_object_track("ptk0001:person", t0)
         self.assertTrue(str(oid).startswith("obj-"))
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
         self.assertEqual(daystore.list_person_events(db.today_vn(t0)), [])
 
     def test_object_dwell_blocks_fleeting_detection(self) -> None:
         t0 = 1_000.0
-        self.assertIsNone(
-            sink.record_observation(
-                camera_id="HC-01", track_id="ptk0001:person", now=t0,
-            )
+        sink.record_observation(
+            camera_id="HC-01", track_id="ptk0001:person", now=t0,
         )
+        _finalize_track("HC-01", "ptk0001:person", t0, offset=0.2)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 0)
 
     def test_same_track_reuses_object(self) -> None:
         t0 = 1_000.0
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", now=t0,
-        )
-        a = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", now=t0 + _MIN_OBJECT_COMMIT,
-        )
-        b = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", now=t0 + _MIN_OBJECT_COMMIT + 7,
-        )
-        self.assertEqual(a, b)
-        self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 1)
+        a = _commit_object_track("ptk0001:person", t0)
+        objs = daystore.list_objects(db.today_vn(t0))
+        self.assertEqual(len(objs), 1)
+        self.assertEqual(a, objs[0]["obj_id"])
 
     def test_face_promotes_object_and_keeps_history(self) -> None:
         """Quãng quan sát lúc còn là Đối tượng không được mất khi thăng tầng."""
@@ -279,23 +296,11 @@ class PatrolSinkTests(unittest.TestCase):
         """
         t0 = 1_000.0
         box = [80.0, 60.0, 220.0, 420.0]
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person",
-            person_bbox=box, now=t0,
-        )
-        first = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person",
-            person_bbox=box, now=t0 + _MIN_OBJECT_COMMIT,
-        )
-        sink.forget_track("HC-01", "ptk0001:person", now=t0 + 4.0)
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0008:person",
-            person_bbox=[85.0, 62.0, 225.0, 425.0], now=t0 + 5.0,
-        )
-        again = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0008:person",
+        first = _commit_object_track("ptk0001:person", t0, person_bbox=box)
+        again = _commit_object_track(
+            "ptk0008:person",
+            t0 + 5.0,
             person_bbox=[85.0, 62.0, 225.0, 425.0],
-            now=t0 + 5.0 + _MIN_OBJECT_COMMIT,
         )
         self.assertNotEqual(again, first)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 2)
@@ -304,20 +309,8 @@ class PatrolSinkTests(unittest.TestCase):
         t0 = 1_000.0
         left = [40.0, 50.0, 160.0, 400.0]
         right = [400.0, 50.0, 540.0, 400.0]
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person", person_bbox=left, now=t0,
-        )
-        a = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0001:person",
-            person_bbox=left, now=t0 + _MIN_OBJECT_COMMIT,
-        )
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0002:person", person_bbox=right, now=t0,
-        )
-        b = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0002:person",
-            person_bbox=right, now=t0 + _MIN_OBJECT_COMMIT,
-        )
+        a = _commit_object_track("ptk0001:person", t0, person_bbox=left)
+        b = _commit_object_track("ptk0002:person", t0, person_bbox=right)
         self.assertNotEqual(a, b)
         self.assertEqual(len(daystore.list_objects(db.today_vn(t0))), 2)
 
@@ -337,14 +330,7 @@ class PatrolSinkTests(unittest.TestCase):
             face_eligible=True,
             now=t0 + _FACE_CONFIRM,
         )
-        sink.record_observation(
-            camera_id="HC-01", track_id="ptk0002:person",
-            person_bbox=back_box, now=t0,
-        )
-        obj = sink.record_observation(
-            camera_id="HC-01", track_id="ptk0002:person",
-            person_bbox=back_box, now=t0 + _MIN_OBJECT_COMMIT,
-        )
+        obj = _commit_object_track("ptk0002:person", t0, person_bbox=back_box)
         self.assertTrue(str(pers).startswith("tk-"))
         self.assertTrue(str(obj).startswith("obj-"))
         self.assertNotEqual(pers, obj)

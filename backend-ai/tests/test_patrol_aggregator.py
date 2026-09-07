@@ -214,8 +214,13 @@ class AggregatorDaystoreTest(unittest.TestCase):
 
 class AggregatorIdentityPromoteTest(unittest.TestCase):
     def setUp(self) -> None:
+        from unittest.mock import patch
+
+        from app.config import settings
         from app.patrol import db, sink
 
+        self._legacy_patch = patch.object(settings, "patrol_deferred_object", False)
+        self._legacy_patch.start()
         self._tmp = tempfile.TemporaryDirectory()
         db.close()
         db.DATA_DIR = Path(self._tmp.name)
@@ -227,6 +232,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
     def tearDown(self) -> None:
         from app.patrol import db
 
+        self._legacy_patch.stop()
         reset()
         db.close()
         self._tmp.cleanup()
@@ -370,6 +376,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
                 camera_id="HC-01",
                 track_id="ptk-back",
                 now=ts,
+                person_bbox=(100.0, 50.0, 200.0, 400.0),
                 lifecycle_tier="person",
                 lifecycle_worker_id="sgc-8800",
                 confidence=0.85,
@@ -412,20 +419,13 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         from app.patrol.aggregator.engine import ingest_observation, finalize_track
 
         ts = 5_000.0
+        bbox = (100.0, 50.0, 200.0, 400.0)
+        emb = tuple(float(x) for x in __import__("numpy").random.default_rng(7).normal(size=128))
+        import numpy as np
+        emb = tuple((np.random.default_rng(7).normal(size=128).astype(np.float32) / 1.0).tolist())
+        norm = np.linalg.norm(list(emb))
+        emb = tuple(float(x / norm) for x in emb)
         with patch(
-            "app.patrol.aggregator.flush._gate_observation_commit",
-            return_value=(True, ts),
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="tk-0000001",
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
-            return_value=PersonIdentity(
-                person_id="sgc-7001",
-                identity_type=IdentityType.ANONYMOUS,
-                confidence=0.9,
-            ),
-        ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=(None, 0.0),
         ):
@@ -437,10 +437,15 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
                     camera_id="HC-01",
                     track_id="ptk-stand",
                     now=ts + i * 0.5,
+                    person_bbox=bbox,
+                    face_embedding=emb,
+                    face_quality=0.9,
+                    face_eligible=True,
                     lifecycle_tier="person",
                     lifecycle_worker_id="sgc-7001",
                     confidence=0.9,
                 )
+            finalize_track("HC-01", "ptk-stand", now=ts + 20.0)
 
         rows = daystore.list_day_presences(db.today_vn(ts))
         self.assertEqual(len(rows), 1)
@@ -505,9 +510,10 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertEqual(len(daystore.list_day_presences(db.today_vn(ts))), 1)
 
     def test_dwell_gate_retries_until_committed(self) -> None:
-        """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được."""
+        """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được (legacy flush)."""
         from unittest.mock import patch
 
+        from app.config import settings
         from app.patrol import daystore, db
         from app.patrol.aggregator.engine import ingest_observation
 
@@ -518,7 +524,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             gate_calls["n"] += 1
             return gate_calls["n"] >= 3, ts
 
-        with patch(
+        with patch.object(settings, "patrol_deferred_object", False), patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
             side_effect=_gate,
         ), patch(
@@ -1043,8 +1049,13 @@ class AggregatorSnapshotFlushTest(unittest.TestCase):
 
 class ObjectFacePromoteTests(unittest.TestCase):
     def setUp(self) -> None:
+        from unittest.mock import patch
+
+        from app.config import settings
         from app.patrol import db, sink
 
+        self._legacy_patch = patch.object(settings, "patrol_deferred_object", False)
+        self._legacy_patch.start()
         self._tmp = tempfile.TemporaryDirectory()
         db.close()
         db.DATA_DIR = Path(self._tmp.name)
@@ -1056,6 +1067,7 @@ class ObjectFacePromoteTests(unittest.TestCase):
     def tearDown(self) -> None:
         from app.patrol import db
 
+        self._legacy_patch.stop()
         reset()
         db.close()
         self._tmp.cleanup()
@@ -1210,42 +1222,30 @@ class BestObservationFinalizeTests(unittest.TestCase):
         bbox = (400.0, 80.0, 520.0, 520.0)
         window = track_accumulation_window_seconds()
 
-        gate_calls = {"n": 0}
-
-        def _gate(*_a, **_k):
-            gate_calls["n"] += 1
-            if gate_calls["n"] < 2:
-                return (False, ts)
-            return (True, ts)
-
         with patch(
-            "app.patrol.sink._gate_observation_commit",
-            side_effect=_gate,
-        ), patch(
-            "app.patrol.aggregator.flush._gate_observation_commit",
-            side_effect=_gate,
-        ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=("2026-08-30/pass.jpg", 0.88),
         ):
-            oid = ingest_observation(
-                camera_id="HC-01",
-                track_id="ptk-pass",
-                now=ts,
-                person_bbox=bbox,
-                frame=frame,
-                confidence=0.88,
+            self.assertIsNone(
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-pass",
+                    now=ts,
+                    person_bbox=bbox,
+                    frame=frame,
+                    confidence=0.88,
+                ),
             )
-            self.assertIsNone(oid)
-            oid = ingest_observation(
-                camera_id="HC-01",
-                track_id="ptk-pass",
-                now=ts + 0.85,
-                person_bbox=bbox,
-                frame=frame,
-                confidence=0.88,
+            self.assertIsNone(
+                ingest_observation(
+                    camera_id="HC-01",
+                    track_id="ptk-pass",
+                    now=ts + 0.85,
+                    person_bbox=bbox,
+                    frame=frame,
+                    confidence=0.88,
+                ),
             )
-            self.assertTrue(str(oid or "").startswith("obj-"))
             finalize_track("HC-01", "ptk-pass", now=ts + 1.0)
 
         from app.patrol import daystore, db

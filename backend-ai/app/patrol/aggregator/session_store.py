@@ -145,6 +145,49 @@ def link_subject_session(session: TrackSession) -> None:
                     other.last_flush_at = max(other.last_flush_at, canonical.last_flush_at)
 
 
+def link_pers_session(session: TrackSession) -> None:
+    """Cùng pers_id + camera — chia sẻ appearance/luot_key giữa track song song."""
+    subject_id = (session.subject_id or "").strip()
+    if not subject_id:
+        return
+    from ...patrol_ids import is_person_subject_id
+
+    if not is_person_subject_id(subject_id):
+        return
+    with _lock:
+        canonical: TrackSession | None = None
+        for other in _sessions.values():
+            if other.camera_id != session.camera_id:
+                continue
+            if (other.subject_id or "").strip() != subject_id:
+                continue
+            if other.appearance_row_id is not None:
+                canonical = other
+                break
+        if canonical is None:
+            return
+        session.appearance_row_id = canonical.appearance_row_id
+        session.luot_snapshot_captured = canonical.luot_snapshot_captured
+        session.session_id = canonical.session_id
+        session.luot_key = canonical.luot_key
+        if canonical.committed:
+            session.committed = True
+            session.last_flush_at = max(session.last_flush_at, canonical.last_flush_at)
+        for other in _sessions.values():
+            if other.camera_id != session.camera_id:
+                continue
+            if (other.subject_id or "").strip() != subject_id:
+                continue
+            if other.appearance_row_id is None and canonical.appearance_row_id is not None:
+                other.appearance_row_id = canonical.appearance_row_id
+                other.luot_snapshot_captured = canonical.luot_snapshot_captured
+                other.session_id = canonical.session_id
+                other.luot_key = canonical.luot_key
+                if canonical.committed:
+                    other.committed = True
+                    other.last_flush_at = max(other.last_flush_at, canonical.last_flush_at)
+
+
 def session_keys_for_camera(camera_id: str) -> list[str]:
     prefix = f"{camera_id}|"
     with _lock:
