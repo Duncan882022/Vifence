@@ -40,6 +40,11 @@ def finalize_object_if_needed(
     if late_pers:
         return None
 
+    from .person_commit import maybe_commit_person_from_lifecycle
+
+    if maybe_commit_person_from_lifecycle(session, obs, finalize=True):
+        return None
+
     now = float(finalize_at if finalize_at is not None else obs.ts)
     duration = max(0.0, now - session.started_at) if session.started_at > 0 else 0.0
     if duration < _min_track_sec():

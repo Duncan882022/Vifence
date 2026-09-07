@@ -103,6 +103,9 @@ class TrackSession:
     person_committed: bool = False
     face_checks_disabled: bool = False
     last_face_assess_at: float = 0.0
+    last_lifecycle_tier: str | None = None
+    last_lifecycle_worker_id: str | None = None
+    last_worker_name: str | None = None
 
     @property
     def session_key(self) -> str:

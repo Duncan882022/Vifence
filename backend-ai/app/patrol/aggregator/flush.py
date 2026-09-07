@@ -904,6 +904,44 @@ def _record_sighting(session: TrackSession) -> None:
     )
 
 
+def _remember_lifecycle(session: TrackSession, obs: ObservationInput) -> None:
+    wid = (obs.lifecycle_worker_id or "").strip()
+    tier = (obs.lifecycle_tier or "").strip()
+    if wid:
+        session.last_lifecycle_worker_id = wid
+    if tier:
+        session.last_lifecycle_tier = tier
+    if obs.worker_name:
+        session.last_worker_name = obs.worker_name
+
+
+def _observation_with_session_lifecycle(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> ObservationInput:
+    if (obs.lifecycle_worker_id or obs.lifecycle_tier):
+        return obs
+    if not (session.last_lifecycle_worker_id or session.last_lifecycle_tier):
+        return obs
+    return ObservationInput(
+        camera_id=obs.camera_id,
+        track_id=obs.track_id,
+        ts=obs.ts,
+        person_bbox=obs.person_bbox,
+        zone_id=obs.zone_id,
+        face_embedding=obs.face_embedding,
+        face_quality=obs.face_quality,
+        face_eligible=obs.face_eligible,
+        confidence=obs.confidence,
+        frame=obs.frame,
+        lifecycle_tier=session.last_lifecycle_tier,
+        lifecycle_worker_id=session.last_lifecycle_worker_id,
+        worker_name=session.last_worker_name or obs.worker_name,
+        touched_object_id=obs.touched_object_id,
+        density_only=obs.density_only,
+    )
+
+
 def finalize_session(session: TrackSession, *, finalize_at: float | None = None) -> None:
     """Đóng session khi ByteTrack mất track."""
     from ...config import settings
@@ -919,6 +957,7 @@ def finalize_session(session: TrackSession, *, finalize_at: float | None = None)
         session.best_observation is not None
         and session.best_observation.frame is not None
     ) else fallback
+    obs = _observation_with_session_lifecycle(session, obs)
 
     if getattr(settings, "patrol_deferred_object", True):
         session.dirty = True
