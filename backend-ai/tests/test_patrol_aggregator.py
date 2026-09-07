@@ -1198,7 +1198,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
         self.assertNotIn("score-0.20", snap)
 
     def test_fast_passing_object_commits_before_accumulation_window(self) -> None:
-        """Xe/người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
+        """Người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
         import numpy as np
         from unittest.mock import patch
 
@@ -1207,15 +1207,21 @@ class BestObservationFinalizeTests(unittest.TestCase):
 
         ts = 20_000.0
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        bbox = (400.0, 280.0, 520.0, 520.0)
+        bbox = (400.0, 80.0, 520.0, 520.0)
         window = track_accumulation_window_seconds()
 
         with patch(
+            "app.patrol.sink._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            return_value=(True, ts),
+        ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=("2026-08-30/pass.jpg", 0.88),
         ):
             oid = ingest_observation(
-                camera_id="DR-03",
+                camera_id="HC-01",
                 track_id="ptk-pass",
                 now=ts,
                 person_bbox=bbox,
@@ -1224,7 +1230,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
             )
             self.assertIsNone(oid)
             oid = ingest_observation(
-                camera_id="DR-03",
+                camera_id="HC-01",
                 track_id="ptk-pass",
                 now=ts + 0.85,
                 person_bbox=bbox,
@@ -1232,7 +1238,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
                 confidence=0.88,
             )
             self.assertTrue(str(oid or "").startswith("obj-"))
-            finalize_track("DR-03", "ptk-pass", now=ts + 1.0)
+            finalize_track("HC-01", "ptk-pass", now=ts + 1.0)
 
         from app.patrol import daystore, db
 
