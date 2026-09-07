@@ -47,6 +47,20 @@ def _person_snapshot_score_floor() -> float:
     return float(settings.patrol_face_detect_min_score_bodycam) * 2.0 + 0.4
 
 
+def person_snapshot_proves_reid(
+    *,
+    snapshot_path: str | None,
+    snapshot_score: float,
+    face_eligible: bool = False,
+) -> bool:
+    """Snapshot trên thẻ Người phải có mặt đủ re-ID — không gắn lưng lên thẻ tk-*."""
+    if not (snapshot_path or "").strip():
+        return False
+    if not face_eligible:
+        return False
+    return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
+
+
 def _person_card_eligible(
     *,
     face_eligible: bool,
@@ -55,17 +69,16 @@ def _person_card_eligible(
 ) -> bool:
     """Cho phép ghi/cập nhật thẻ daily_events.
 
-    Tab Người trên FE và KPI ``day_stats`` vẫn lọc snapshot ≥1.05 — thẻ draft
-    (chưa có JPG) giữ last_seen và tier cho đến khi flush chụp được mặt.
+    Thẻ có thể tồn tại không JPG (chờ mặt). Mọi JPG trên thẻ Người phải qua
+    ``person_snapshot_proves_reid`` — tab FE và KPI cùng tiêu chí.
     """
-    if face_eligible:
-        return True
-    if snapshot_path and float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE:
-        return True
-    # Aggregator chốt pers/tk trước khi có ảnh — vẫn cần một dòng thẻ ngày.
     if not (snapshot_path or "").strip():
         return True
-    return False
+    return person_snapshot_proves_reid(
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+        face_eligible=face_eligible,
+    )
 
 
 def _gps_bucket(lat: float, lng: float) -> tuple[int, int]:
@@ -504,12 +517,21 @@ def touch_person_event(
                     (ts, first, pid),
                 )
                 return
-            appearance_snapshot = snapshot_path
+            eff_path = snapshot_path
+            eff_score = snapshot_score
+            if eff_path and not person_snapshot_proves_reid(
+                snapshot_path=eff_path,
+                snapshot_score=eff_score,
+                face_eligible=face_eligible,
+            ):
+                eff_path = None
+                eff_score = 0.0
+            appearance_snapshot = eff_path
             conn.execute(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, pid, first, ts, snapshot_path, snapshot_score),
+                (date, pid, first, ts, eff_path, eff_score),
             )
             wrote_card = True
         else:

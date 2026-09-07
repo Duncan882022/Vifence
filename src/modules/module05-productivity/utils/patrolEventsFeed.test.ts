@@ -31,10 +31,45 @@ function baseEvent(overrides: Partial<PatrolEvent> = {}): PatrolEvent {
 }
 
 describe('isPatrolPersonLifecycleEvent', () => {
-  it('shows events without snapshot (pending evidence)', () => {
+  it('hides person tab until face-evidence snapshot exists', () => {
     const event = baseEvent({ snapshotUrl: undefined, snapshotScore: 0, stage: 'profile' })
+    expect(isPatrolPersonLifecycleEvent(event)).toBe(false)
+  })
+
+  it('hides người card when snapshot score high but no face_eligible', () => {
+    const event = baseEvent({
+      snapshotUrl: 'https://example.com/snap.jpg',
+      snapshotScore: 1.5,
+      stage: 'person',
+      tierSnapshot: {
+        tier: 'person',
+        tier_rank: 1,
+        tier_since: 0,
+        subject_id: 'tk-1',
+        face_eligible: false,
+        confidence: 0.9,
+        snapshot_score: 1.5,
+      },
+    })
+    expect(isPatrolPersonLifecycleEvent(event)).toBe(false)
+  })
+
+  it('keeps person events when snapshot proves re-id', () => {
+    const event = baseEvent({
+      snapshotUrl: 'https://example.com/snap.jpg',
+      snapshotScore: 1.2,
+      stage: 'person',
+      tierSnapshot: {
+        tier: 'person',
+        tier_rank: 1,
+        tier_since: 0,
+        subject_id: 'tk-1',
+        face_eligible: true,
+        confidence: 0.85,
+        snapshot_score: 1.2,
+      },
+    })
     expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
-    expect(isPatrolPersonLifecycleWithSnapshot(event)).toBe(true)
   })
 
   it('shows object events with low score and no snapshot', () => {
@@ -65,6 +100,15 @@ describe('isPatrolPersonLifecycleEvent', () => {
       snapshotUrl: 'https://example.com/snap.jpg',
       snapshotScore: 1.2,
       stage: 'person',
+      tierSnapshot: {
+        tier: 'person',
+        tier_rank: 1,
+        tier_since: 0,
+        subject_id: 'tk-1',
+        face_eligible: true,
+        confidence: 0.85,
+        snapshot_score: 1.2,
+      },
     })
     expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
   })
@@ -86,7 +130,7 @@ describe('isPatrolPersonLifecycleEvent', () => {
       },
       snapshotUrl: 'https://example.com/snap.jpg',
       snapshotScore: 2.6,
-      stage: 'object',
+      stage: 'person',
     })
     expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
   })
