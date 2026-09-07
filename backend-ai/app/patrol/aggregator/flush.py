@@ -142,6 +142,8 @@ def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
         frame_w,
         frame_h,
         face_eligible=bool(obs.face_eligible or has_face),
+        face_quality=float(obs.face_quality or 0.0),
+        camera_id=obs.camera_id,
         flycam=flycam,
         proximity_flycam=proximity,
         vehicle_boxes=vehicle_boxes,
