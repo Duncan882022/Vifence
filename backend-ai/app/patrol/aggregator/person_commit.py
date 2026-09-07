@@ -168,6 +168,109 @@ def commit_person_from_evidence(
     return pers_id
 
 
+def _remember_lifecycle(session: TrackSession, obs: ObservationInput) -> None:
+    wid = (obs.lifecycle_worker_id or "").strip()
+    tier = (obs.lifecycle_tier or "").strip()
+    if wid:
+        session.last_lifecycle_worker_id = wid
+    if tier:
+        session.last_lifecycle_tier = tier
+    if obs.worker_name:
+        session.last_worker_name = obs.worker_name
+
+
+def _observation_with_session_lifecycle(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> ObservationInput:
+    """Finalize fallback — bổ sung tk tier từ session nếu obs thiếu."""
+    if (obs.lifecycle_worker_id or obs.lifecycle_tier):
+        return obs
+    if not (session.last_lifecycle_worker_id or session.last_lifecycle_tier):
+        return obs
+    return ObservationInput(
+        camera_id=obs.camera_id,
+        track_id=obs.track_id,
+        ts=obs.ts,
+        person_bbox=obs.person_bbox,
+        zone_id=obs.zone_id,
+        face_embedding=obs.face_embedding,
+        face_quality=obs.face_quality,
+        face_eligible=obs.face_eligible,
+        confidence=obs.confidence,
+        frame=obs.frame,
+        lifecycle_tier=session.last_lifecycle_tier,
+        lifecycle_worker_id=session.last_lifecycle_worker_id,
+        worker_name=session.last_worker_name or obs.worker_name,
+        touched_object_id=obs.touched_object_id,
+        density_only=obs.density_only,
+    )
+
+
+def maybe_commit_person_from_lifecycle(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    finalize: bool = False,
+) -> str | None:
+    """Bridge tier Người live (tk-*) → daily_events khi chưa commit qua mặt."""
+    if session.person_committed or session.is_abandoned():
+        return session.subject_id
+
+    wid = (obs.lifecycle_worker_id or "").strip()
+    tier = (obs.lifecycle_tier or "").strip()
+    if not wid:
+        return None
+
+    from ...patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON, tier_for_worker_id
+    from ...person_identity_registry import is_sgc_worker_id
+
+    if not tier:
+        tier = tier_for_worker_id(wid)
+    if tier not in (TIER_PERSON, TIER_IDENTITY):
+        return None
+
+    gps_lat, gps_lng = _observation_gps(obs)
+
+    if tier == TIER_IDENTITY or not is_sgc_worker_id(wid):
+        from ..sink import _pers_id_for_lifecycle
+
+        pers_id = _pers_id_for_lifecycle(tier, wid, now=obs.ts)
+        if not pers_id:
+            return None
+        pers_id = identity.resolve_alias(pers_id)
+    else:
+        from ...patrol_ids import normalize_track_id
+
+        tk = normalize_track_id(wid)
+        if not tk:
+            return None
+        pers_id = identity.ensure_draft_for_tk(
+            tk,
+            now=obs.ts,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+            camera_id=obs.camera_id,
+            face_eligible=obs.face_eligible,
+        )
+
+    session.mark_person_committed(pers_id)
+    from .flush import write_person_card
+
+    write_person_card(session, obs, first_commit=True, finalize=finalize)
+    from .session_store import link_pers_session
+
+    link_pers_session(session)
+    logger.info(
+        "lifecycle person commit %s track %s tier %s finalize=%s",
+        pers_id,
+        session.track_id,
+        tier,
+        finalize,
+    )
+    return pers_id
+
+
 def maybe_commit_person(
     session: TrackSession,
     obs: ObservationInput,

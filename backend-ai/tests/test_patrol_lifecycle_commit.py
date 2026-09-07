@@ -169,5 +169,33 @@ class PatrolLifecycleCommitTests(unittest.TestCase):
         self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
 
 
+    def test_lifecycle_tk_without_face_records_event_on_finalize(self) -> None:
+        """Live tier Người (tk-*) nhưng chưa đủ mặt commit — vẫn ghi thẻ khi rời khung."""
+        t0 = 6_500.0
+        sink.record_observation(
+            camera_id="HC-01",
+            track_id="ptk-lifecycle-tk",
+            person_bbox=_PERSON_BOX,
+            now=t0,
+            lifecycle_tier="person",
+            lifecycle_worker_id="tk-0000001",
+        )
+        sink.record_observation(
+            camera_id="HC-01",
+            track_id="ptk-lifecycle-tk",
+            person_bbox=_PERSON_BOX,
+            now=t0 + _MIN_TRACK,
+            lifecycle_tier="person",
+            lifecycle_worker_id="tk-0000001",
+        )
+        self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
+
+        sink.forget_track("HC-01", "ptk-lifecycle-tk", now=t0 + 2.0)
+        cards = daystore.list_person_events(db.today_vn(t0))
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["pers_id"], "tk-0000001")
+        self.assertEqual(daystore.list_objects(db.today_vn(t0)), [])
+
+
 if __name__ == "__main__":
     unittest.main()
