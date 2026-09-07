@@ -27,10 +27,12 @@ describe('patrolHelmetScope ROI buffer', () => {
     expect(WHEP_MAX_ALIGNED_DRIFT_MS).toBe(320)
   })
 
-  it('HC-02 local publisher — profile mượt hơn bodycam VMS', () => {
+  it('HC-02 local publisher — cùng profile cover-or-hide bodycam VMS', () => {
     const local = resolvePatrolPersonRoiConfig('HC-02', null, { localPublisher: true })
     const vms = resolvePatrolPersonRoiConfig('HC-02', null)
-    expect(local.displayEmaAlpha).toBeLessThan(vms.displayEmaAlpha)
-    expect(local.maxPredictMs).toBeLessThan(vms.maxPredictMs)
+    expect(local.displayCoastMaxMiss).toBe(0)
+    expect(vms.displayCoastMaxMiss).toBe(0)
+    expect(local.maxPredictMs).toBe(0)
+    expect(vms.maxPredictMs).toBe(0)
   })
 })

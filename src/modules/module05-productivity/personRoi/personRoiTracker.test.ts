@@ -279,12 +279,12 @@ describe('bbox mượt', () => {
     expect(plainLag).toBeLessThan(35)
   })
 
-  it('extrapolate giới hạn trong một nhịp analyze', () => {
+  it('extrapolate tắt — bbox giữ nguyên dù elapsed lớn', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeGreaterThanOrEqual(400)
+    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBe(0)
     const far = predictPersonRoiTracks(tracks, 5_000)
-    const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs)
-    expect(far[0].bbox).toEqual(capped[0].bbox)
+    const now = predictPersonRoiTracks(tracks, 0)
+    expect(far[0].bbox).toEqual(now[0].bbox)
   })
 
 })
@@ -344,7 +344,7 @@ describe('tầng định danh từ backend', () => {
 })
 
 describe('mồi vận tốc từ backend', () => {
-  it('track mới đã có vận tốc nên không trễ một nhịp analyze', () => {
+  it('track mới đã có vận tốc — display vẫn dùng bbox đo, không predict rAF', () => {
     const tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', velocity: [240, 0] })],
@@ -357,7 +357,7 @@ describe('mồi vận tốc từ backend', () => {
       predictPersonRoiTracks(tracks, 0)[0].bbox,
       predictPersonRoiTracks(tracks, 200)[0].bbox,
     ]
-    expect(moved[0]).toBeGreaterThan(still[0])
+    expect(moved).toEqual(still)
   })
 
   it('vận tốc backend vẫn bị chặn theo trần tốc độ', () => {
@@ -371,7 +371,7 @@ describe('mồi vận tốc từ backend', () => {
     expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
   })
 
-  it('predict trước update — bbox rAF bám người đi ngang giữa hai poll', () => {
+  it('cover-or-hide — bbox rAF không trượt giữa hai poll', () => {
     let tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', velocity: [120, 0] })],
@@ -383,8 +383,8 @@ describe('mồi vận tốc từ backend', () => {
       280,
     )
     const mid = predictPersonRoiTracks(tracks, 140, PATROL_PERSON_ROI_CONFIG)[0].bbox
-    expect(mid[0]).toBeGreaterThan(115)
-    expect(mid[0]).toBeLessThan(160)
+    const measured = predictPersonRoiTracks(tracks, 0)[0].bbox
+    expect(mid).toEqual(measured)
   })
 
   it('HC-01 bodycam — display không tụt quá xa measurement khi người đi', () => {
@@ -415,15 +415,13 @@ describe('mồi vận tốc từ backend', () => {
 })
 
 describe('vòng đời track', () => {
-  it('miss một nhịp — coast ngắn giữ ROI (YOLO miss tạm thời)', () => {
+  it('miss một nhịp — ẩn ngay, không coast (cover-or-hide)', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
     tracks = advance(tracks, [], 1_180)
     expect([...tracks.values()][0].state).toBe('lost')
-    const coasting = predictPersonRoiTracks(tracks, 120)
-    expect(coasting).toHaveLength(1)
-    expect(coasting[0].displayOpacity).toBeLessThan(1)
+    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(0)
   })
 
   it('track mất dấu vẫn nằm trong bộ nhớ để nhận lại sau lúc bị che', () => {
@@ -431,7 +429,7 @@ describe('vòng đời track', () => {
     const firstId = [...tracks.keys()][0]
 
     tracks = advance(tracks, [], 1_180)
-    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(1)
+    expect(predictPersonRoiTracks(tracks, 120)).toHaveLength(0)
 
     tracks = advance(tracks, [person([120, 110, 220, 410], { track_id: 'p1' })], 1_360)
     expect([...tracks.keys()][0]).toBe(firstId)
@@ -459,12 +457,9 @@ describe('vòng đời track', () => {
     expect([...tracks.values()][0].state).toBe('confirmed')
   })
 
-  it('ẩn ROI sau khi miss vượt coast — người rời khỏi cam', () => {
+  it('ẩn ROI ngay khi miss — người rời khỏi cam', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    const coastLimit = PATROL_PERSON_ROI_CONFIG.displayCoastMaxMiss
-    for (let i = 0; i <= coastLimit; i += 1) {
-      tracks = advance(tracks, [], 1_180 + i * 180)
-    }
+    tracks = advance(tracks, [], 1_180)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })
 })

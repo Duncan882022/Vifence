@@ -1,7 +1,7 @@
 /**
  * Patrol Person ROI — tham số tracker (ByteTrack / SORT inspired).
  * Tách khỏi ATLĐ `bboxTrackLock` — chỉ dùng Module 05 bodycam / patrol VMS.
- * Real-time: bám measurement, coast khi YOLO miss ngắn, predict rAF giữa analyze.
+ * Helmet UX: cover-or-hide — bbox đo cuối khi YOLO khóa, ẩn ngay khi miss, không coast/predict.
  */
 import type { PatrolFlightMode } from '../utils/patrolFlightMode'
 
@@ -37,10 +37,10 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   matchCenterRatio: 1.75,
   matchSizeRatioMin: 0.22,
   maxMissFrames: 14,
-  displayCoastMaxMiss: 6,
-  displayMaxStaleMs: 4500,
-  maxPredictMs: 1400,
-  maxPredictMsLost: 720,
+  displayCoastMaxMiss: 0,
+  displayMaxStaleMs: 2500,
+  maxPredictMs: 0,
+  maxPredictMsLost: 0,
   processNoise: 0.05,
   measureNoise: 0.08,
   minMeasureGain: 1.0,
@@ -59,19 +59,15 @@ export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
   highConfidenceMin: 0.30,
 }
 
-/** WHEP/WebRTC — cùng profile real-time (không EMA trailing). */
+/** WHEP/WebRTC — cùng cover-or-hide. */
 export const PATROL_PERSON_ROI_PROFILE_BODYCAM_WHEP: PatrolPersonRoiConfig = {
   ...PATROL_PERSON_ROI_PROFILE_BODYCAM,
   matchCenterRatio: 1.85,
-  maxPredictMs: 1200,
 }
 
-/** HC-02 publish local — analyze JPEG trễ hơn WHEP một chút nhưng vẫn real-time. */
+/** HC-02 publish local — cùng cover-or-hide; analyze JPEG trễ hơn WHEP một chút. */
 export const PATROL_PERSON_ROI_PROFILE_LOCAL: PatrolPersonRoiConfig = {
   ...PATROL_PERSON_ROI_PROFILE_BODYCAM,
-  displayEmaAlpha: 0.96,
-  displayEmaGlideAlpha: 0.98,
-  maxPredictMs: 1100,
 }
 
 /** Flycam tầm cao (DR-* aerial). */
@@ -81,7 +77,7 @@ export const PATROL_PERSON_ROI_PROFILE_FLYCAM: PatrolPersonRoiConfig = {
   matchIouMin: 0.04,
   matchCenterRatio: 2.20,
   matchSizeRatioMin: 0.18,
-  displayCoastMaxMiss: 4,
+  displayCoastMaxMiss: 0,
   maxMissFrames: 10,
 }
 

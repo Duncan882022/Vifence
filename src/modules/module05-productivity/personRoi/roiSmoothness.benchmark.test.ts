@@ -71,7 +71,7 @@ describe('ROI smoothness self-check', () => {
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })
 
-  it('EMA benchmark — nhảy bbox giữa các frame rAF', () => {
+  it('EMA benchmark — nhảy bbox chỉ tại nhịp analyze (không glide rAF)', () => {
     const engine = new PatrolPersonRoiEngine('HC-02-bench')
     let t = 0
     let lastCx = 0
@@ -97,8 +97,8 @@ describe('ROI smoothness self-check', () => {
     }
 
     const avgJump = jumps.length ? jumps.reduce((a, b) => a + b, 0) / jumps.length : 0
-    expect(maxJump).toBeLessThanOrEqual(30)
-    expect(avgJump).toBeLessThanOrEqual(8)
-    expect(PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha).toBeGreaterThanOrEqual(0.9)
+    expect(maxJump).toBeLessThanOrEqual(95)
+    expect(avgJump).toBeLessThanOrEqual(25)
+    expect(PATROL_PERSON_ROI_CONFIG.displayEmaGlideAlpha).toBe(1)
   })
 })
