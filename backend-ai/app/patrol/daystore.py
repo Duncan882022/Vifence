@@ -284,7 +284,10 @@ def _should_refresh_person_snapshot(
     interval_ok = (ts - last) >= TOUCH_MIN_INTERVAL_SEC
 
     if not face_eligible or not snapshot_path:
-        return interval_ok, False
+        if is_identified:
+            return interval_ok, False
+        # Người (draft/tk) quay lưng / chưa mặt — không upsert thẻ khi vẫn trong khung.
+        return False, False
 
     old_score = float(row["snapshot_score"] or 0)
     floor = _person_snapshot_score_floor()
@@ -295,12 +298,12 @@ def _should_refresh_person_snapshot(
         # Định danh: luôn dùng khung mặt mới nhất đủ rõ — đồng bộ thẻ ↔ popup.
         return True, True
 
-    # Người (draft/tk): đứng trong khung — upsert last_seen, không ghi đè ảnh
-    # mỗi flush khi score ngang/bằng; chỉ thay khi rõ hơn.
+    # Người (draft/tk): đứng trong khung — chỉ upsert khi ảnh rõ hơn; lịch sử kéo
+    # ended_at qua appearances/aggregator, không ghi đè thẻ mỗi flush.
     keep_new = snapshot_score > old_score
     if keep_new:
         return True, True
-    return interval_ok, False
+    return False, False
 
 
 def _fmt_obj(date: str, seq: int) -> str:
@@ -453,12 +456,13 @@ def touch_person_event(
     is_identified = bool(
         person and person.get("status") == identity.STATUS_IDENTIFIED
     )
-    appearance_snapshot: str | None = None
     card_eligible = _person_card_eligible(
         face_eligible=face_eligible,
         snapshot_path=snapshot_path,
         snapshot_score=snapshot_score,
     )
+    appearance_snapshot: str | None = None
+    wrote_card = False
 
     with db.tx() as conn:
         row = conn.execute(
@@ -481,6 +485,7 @@ def touch_person_event(
                 " VALUES(?,?,?,?,?,?)",
                 (date, pid, first, ts, snapshot_path, snapshot_score),
             )
+            wrote_card = True
         else:
             write, keep_new = _should_refresh_person_snapshot(
                 row,
@@ -491,6 +496,7 @@ def touch_person_event(
                 is_identified=is_identified,
             )
             if write:
+                wrote_card = True
                 if keep_new and card_eligible:
                     prev_snap = str(row["snapshot_path"] or "").strip() or None
                     if is_identified:
@@ -513,11 +519,14 @@ def touch_person_event(
                         appearance_snapshot = snapshot_path
             elif card_eligible and snapshot_path:
                 appearance_snapshot = snapshot_path
-        conn.execute(
-            "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
-            " WHERE pers_id = ?",
-            (ts, first, pid),
-        )
+        if wrote_card:
+            conn.execute(
+                "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
+                " WHERE pers_id = ?",
+                (ts, first, pid),
+            )
+            tier = "identity" if is_identified else "person"
+            _upsert_event_tier_ever(conn, date, pid, tier, tier_snapshot_json)
         if not skip_appearance:
             _touch_appearance(
                 conn, date, pid, camera_id, zone_id, ts,
@@ -525,8 +534,6 @@ def touch_person_event(
                 snapshot_path=appearance_snapshot,
                 new_encounter=seen_since is not None,
             )
-        tier = "identity" if is_identified else "person"
-        _upsert_event_tier_ever(conn, date, pid, tier, tier_snapshot_json)
 
 
 def _insert_person_phase_after_promote(
@@ -536,7 +543,7 @@ def _insert_person_phase_after_promote(
     ts: float,
     *,
     tier_snapshot_json: str,
-) -> None:
+) -> int | None:
     """Mở segment person-phase tại promoted_at — không ghi đè tier object-phase."""
     row = conn.execute(
         "SELECT id, camera_id, zone_id, started_at, ended_at, track_id, session_id,"
@@ -547,19 +554,19 @@ def _insert_person_phase_after_promote(
         (date, pid, ts),
     ).fetchone()
     if row is None:
-        return
+        return None
     if float(row["started_at"]) >= ts - 0.05:
-        return
+        return None
     if float(row["ended_at"]) < ts - 0.05:
-        return
+        return None
     exists = conn.execute(
         "SELECT id FROM appearances WHERE event_date = ? AND subject_id = ?"
         " AND started_at >= ? - 0.05 AND started_at <= ? + 0.05",
         (date, pid, ts, ts),
     ).fetchone()
     if exists is not None:
-        return
-    conn.execute(
+        return int(exists["id"])
+    cur = conn.execute(
         "INSERT INTO appearances"
         "(event_date, subject_id, camera_id, zone_id, started_at, ended_at,"
         " gps_lat, gps_lng, qualified, track_id, session_id, snapshot_path,"
@@ -584,6 +591,7 @@ def _insert_person_phase_after_promote(
             pid,
         ),
     )
+    return int(cur.lastrowid)
 
 
 def _appearance_time_overlap_ratio(a: dict[str, Any], b: dict[str, Any]) -> float:
@@ -651,6 +659,7 @@ def find_overlapping_appearance_row(
     *,
     session_id: str | None = None,
     track_id: str | None = None,
+    flush_tier: str | None = None,
 ) -> int | None:
     """Row của **chính** session/track này, khi lượt hiện tại vẫn là lượt cũ.
 
@@ -668,13 +677,18 @@ def find_overlapping_appearance_row(
     if not sess and not tid:
         return None
     rows = db.query(
-        "SELECT id, started_at, ended_at, track_id, session_id FROM appearances"
+        "SELECT id, started_at, ended_at, track_id, session_id, event_payload_json"
+        " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC",
         (event_date, sid, cam),
     )
     for row in rows:
         row_dict = dict(row)
+        if flush_tier in ("person", "identity"):
+            row_tier = _tier_from_payload(str(row_dict.get("event_payload_json") or ""))
+            if row_tier == "object":
+                continue
         row_sess = str(row_dict.get("session_id") or "").strip()
         row_tid = str(row_dict.get("track_id") or "").strip()
         same_session = bool(sess and row_sess and sess == row_sess)
@@ -873,11 +887,16 @@ def promote_object(
     pers_id: str,
     *,
     now: float | None = None,
-) -> None:
-    """Đối tượng bắt được mặt → dồn sang thẻ của Người."""
+) -> int | None:
+    """Đối tượng bắt được mặt → dồn sang thẻ của Người.
+
+    Trả về id dòng appearance person-phase (nếu có) để flush tiếp mở rộng đúng
+    segment — không gộp nhầm lên dòng object-phase vừa chuyển.
+    """
     ts = now or time.time()
     date = db.today_vn(ts)
     pid = identity.resolve_alias(pers_id)
+    person_phase_row_id: int | None = None
 
     with db.tx() as conn:
         obj = conn.execute(
@@ -885,7 +904,7 @@ def promote_object(
             (date, obj_id),
         ).fetchone()
         if obj is None or obj["promoted_to"]:
-            return
+            return None
 
         existing = conn.execute(
             "SELECT * FROM daily_events WHERE event_date = ? AND pers_id = ?",
@@ -957,7 +976,7 @@ def promote_object(
             tier_source="promote",
         )
         _upsert_event_tier_ever(conn, date, pid, "person", json.dumps(tier_snap.to_payload_dict()))
-        _insert_person_phase_after_promote(
+        person_phase_row_id = _insert_person_phase_after_promote(
             conn,
             date,
             pid,
@@ -972,6 +991,7 @@ def promote_object(
 
     # Không gộp dòng Đối tượng (lưng) với dòng Người (mặt) vừa tách.
     coalesce_subject_appearances(pid, date)
+    return person_phase_row_id
 
 
 def list_person_events(date: str | None = None) -> list[dict[str, Any]]:
@@ -1450,28 +1470,34 @@ def find_extendable_track_appearance_row(
     encounter_started_at: float | None = None,
     gps_lat: float | None = None,
     gps_lng: float | None = None,
+    flush_tier: str | None = None,
 ) -> int | None:
     """Track mới cùng pers + camera trong gap — UPDATE row cũ thay vì INSERT."""
-    row = db.query_one(
-        "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end"
+    rows = db.query(
+        "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
+        " event_payload_json"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
-        " ORDER BY ended_at DESC LIMIT 1",
+        " ORDER BY ended_at DESC, id DESC",
         (event_date, subject_id, camera_id),
     )
-    if row is None:
-        return None
     from .presence import GAP_FALLBACK_SEC
 
-    ended = float(row["ended_at"])
     ref = float(encounter_started_at) if encounter_started_at is not None else ts
-    if ref - ended > GAP_FALLBACK_SEC:
-        return None
-    if not should_extend_presence(
-        row, ts, gps_lat, gps_lng, camera_id=camera_id,
-    ):
-        return None
-    return int(row["id"])
+    for row in rows:
+        if flush_tier in ("person", "identity"):
+            row_tier = _tier_from_payload(str(row["event_payload_json"] or ""))
+            if row_tier == "object":
+                continue
+        ended = float(row["ended_at"])
+        if ref - ended > GAP_FALLBACK_SEC:
+            continue
+        if not should_extend_presence(
+            row, ts, gps_lat, gps_lng, camera_id=camera_id,
+        ):
+            continue
+        return int(row["id"])
+    return None
 
 
 def upsert_track_appearance(
