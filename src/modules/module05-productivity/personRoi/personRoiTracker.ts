@@ -411,7 +411,7 @@ export function advancePersonRoiTracks(
 
 export function predictPersonRoiTracks(
   tracks: Map<string, PersonRoiTrack>,
-  elapsedMs: number,
+  _elapsedMs: number,
   cfg: PatrolPersonRoiConfig = PATROL_PERSON_ROI_CONFIG,
 ): PersonRoiDisplay[] {
   const out: PersonRoiDisplay[] = []
