@@ -156,6 +156,19 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         self.assertTrue(vertical_structure_fp_box(pole, fw, fh))
         self.assertFalse(patrol_object_commit_allowed(pole, fw, fh))
 
+    def test_seated_person_display_only_not_committed(self):
+        """Người ngồi — vẽ ROI được nhưng không ghi thẻ Đối tượng."""
+        fw, fh = 1280, 720
+        seated = (fw * 0.38, fh * 0.55, fw * 0.62, fh * 0.88)
+        self.assertTrue(patrol_person_meets_display_gate(seated, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(seated, fw, fh))
+
+    def test_mid_torso_display_only_not_committed(self):
+        fw, fh = 1280, 720
+        torso = (fw * 0.35, fh * 0.42, fw * 0.65, fh * 0.72)
+        self.assertTrue(patrol_person_meets_display_gate(torso, fw, fh))
+        self.assertFalse(patrol_object_commit_allowed(torso, fw, fh))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -165,7 +165,7 @@ def finalize_track(
         session.last_seen_at = float(now)
     if end_reason:
         session.end_reason = str(end_reason)
-    finalize_session(session)
+    finalize_session(session, finalize_at=now)
     emb = session.best_faces[0].embedding if session.best_faces else None
     stash_session(session, embedding=emb)
 

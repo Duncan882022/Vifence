@@ -269,7 +269,12 @@ def patrol_object_commit_allowed(
     flycam: bool = False,
     proximity_flycam: bool = False,
 ) -> bool:
-    """Gate ghi thẻ Đối tượng — chặn biển hiệu/vật tĩnh; cho phép silhouette hợp lệ."""
+    """Gate ghi thẻ Đối tượng — cùng tiêu chí ghi sự kiện, không dùng gate vẽ ROI.
+
+    Trước đây fallback `patrol_person_meets_display_gate` khiến người ngồi / bụng
+    giữa khung / vệt YOLO xa vẫn sinh thẻ Đối tượng (score ~confidence, không mặt).
+    Gate hiển thị chỉ dành overlay live — ghi SQLite phải qua detection hoặc mặt.
+    """
     if person_box is None or frame_w <= 0 or frame_h <= 0:
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
@@ -282,15 +287,21 @@ def patrol_object_commit_allowed(
         return False
     if face_eligible:
         return True
+    if flycam or proximity_flycam:
+        return patrol_person_meets_display_gate(
+            person_box,
+            frame_w,
+            frame_h,
+            flycam=flycam,
+            proximity_flycam=proximity_flycam,
+        )
     if patrol_person_meets_detection_gate(person_box, frame_w, frame_h):
         return True
-    return patrol_person_meets_display_gate(
-        person_box,
-        frame_w,
-        frame_h,
-        flycam=flycam,
-        proximity_flycam=proximity_flycam,
-    )
+    if wide_crowd_rider_box(person_box, frame_w, frame_h):
+        return plausible_person_silhouette(
+            person_box, frame_w, frame_h, patrol_display=True,
+        ) and not limb_fragment_person_box(person_box, frame_w, frame_h)
+    return False
 
 
 def vertical_structure_fp_box(
