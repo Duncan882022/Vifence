@@ -52,6 +52,18 @@ class ResolveTierAtObservationTests(unittest.TestCase):
             "identity",
         )
 
+    def test_lifecycle_object_does_not_downgrade_tk_card(self) -> None:
+        """ROI lifecycle còn object nhưng thẻ đã là tk-* — snapshot phải person."""
+        self.assertEqual(
+            _resolve_tier_at_observation(
+                "tk-0000001",
+                tier_at="object",
+                shot_face_eligible=True,
+                worker_id=None,
+            ),
+            "person",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

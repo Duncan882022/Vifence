@@ -379,6 +379,29 @@ def _parse_tier_snapshot_json(raw: Any) -> dict[str, Any] | None:
         return None
 
 
+def _coalesce_tier_snapshot_with_ever(
+    tier_ever: str | None,
+    tier_snapshot: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Đọc bundle — tier_snapshot không được thấp hơn tier_ever đã chốt."""
+    ever = (tier_ever or "").strip()
+    if not ever and not tier_snapshot:
+        return tier_snapshot
+    from .tier_snapshot import higher_tier
+    from ..patrol_identity_lifecycle import TIER_LABEL_VI
+
+    snap = dict(tier_snapshot) if tier_snapshot else {}
+    snap_tier = str(snap.get("tier") or snap.get("tier_at_observation") or "object")
+    merged = higher_tier(snap_tier, ever or "object")
+    if merged != snap_tier or not tier_snapshot:
+        snap["tier"] = merged
+        snap["tier_at_observation"] = merged
+        snap["tier_rank"] = {"object": 0, "person": 1, "identity": 2}.get(merged, 0)
+        snap["tier_label_vi"] = TIER_LABEL_VI.get(merged, merged)
+        return snap
+    return tier_snapshot
+
+
 @router.get("/day/bundle")
 def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict[str, Any]:  # noqa: ARG001
     """Gộp stats + events + objects + presences — một transaction chỉ đọc.
@@ -416,7 +439,10 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
             "promoted_from": r.get("promoted_from") or [],
             "promoted_at": r.get("promoted_at"),
             "tier_ever": r.get("tier_ever"),
-            "tier_snapshot": _parse_tier_snapshot_json(r.get("tier_snapshot_json")),
+            "tier_snapshot": _coalesce_tier_snapshot_with_ever(
+                r.get("tier_ever"),
+                _parse_tier_snapshot_json(r.get("tier_snapshot_json")),
+            ),
         }
         for r in events
     ]

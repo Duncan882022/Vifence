@@ -219,6 +219,31 @@ def _merge_tier_ever(current: str | None, new_tier: str) -> str:
     return nt if _tier_rank_value(nt) >= _tier_rank_value(cur) else cur
 
 
+def _upgrade_tier_snapshot_json(tier_snapshot_json: str | None, merged_tier: str) -> str | None:
+    """Đồng bộ tier trong JSON với tier_ever — tránh lệch object vs person trên bundle."""
+    if not tier_snapshot_json or not merged_tier:
+        return tier_snapshot_json
+    import json
+
+    from ..patrol_identity_lifecycle import TIER_LABEL_VI
+
+    try:
+        payload = json.loads(tier_snapshot_json)
+    except (json.JSONDecodeError, TypeError):
+        return tier_snapshot_json
+    if not isinstance(payload, dict):
+        return tier_snapshot_json
+    cur = str(payload.get("tier") or payload.get("tier_at_observation") or "object")
+    new_tier = _merge_tier_ever(cur, merged_tier)
+    if new_tier != cur:
+        payload["tier"] = new_tier
+        payload["tier_at_observation"] = new_tier
+        payload["tier_rank"] = _tier_rank_value(new_tier)
+        payload["tier_label_vi"] = TIER_LABEL_VI.get(new_tier, new_tier)
+        return json.dumps(payload, ensure_ascii=False)
+    return tier_snapshot_json
+
+
 def _upsert_event_tier_ever(
     conn: Any,
     date: str,
@@ -233,11 +258,12 @@ def _upsert_event_tier_ever(
     if row is None:
         return
     merged = _merge_tier_ever(row["tier_ever"] if row else None, tier)
-    if tier_snapshot_json:
+    snapshot_json = _upgrade_tier_snapshot_json(tier_snapshot_json, merged)
+    if snapshot_json:
         conn.execute(
             "UPDATE daily_events SET tier_ever = ?, tier_snapshot_json = ?"
             " WHERE event_date = ? AND pers_id = ?",
-            (merged, tier_snapshot_json, date, pers_id),
+            (merged, snapshot_json, date, pers_id),
         )
     else:
         conn.execute(
@@ -519,13 +545,14 @@ def touch_person_event(
                         appearance_snapshot = snapshot_path
             elif card_eligible and snapshot_path:
                 appearance_snapshot = snapshot_path
+        tier = "identity" if is_identified else "person"
         if wrote_card:
             conn.execute(
                 "UPDATE persons SET last_seen = ?, first_seen = COALESCE(first_seen, ?)"
                 " WHERE pers_id = ?",
                 (ts, first, pid),
             )
-            tier = "identity" if is_identified else "person"
+        if wrote_card or row is not None:
             _upsert_event_tier_ever(conn, date, pid, tier, tier_snapshot_json)
         if not skip_appearance:
             _touch_appearance(

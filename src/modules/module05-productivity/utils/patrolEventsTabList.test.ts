@@ -84,4 +84,28 @@ describe('listPatrolEventsForTab', () => {
     expect(counts.person).toBe(listPatrolEventsForTab(events, 'person').length)
     expect(counts.identity).toBe(listPatrolEventsForTab(events, 'identity').length)
   })
+
+  it('tk card tier_ever person hiện tab Người dù tier_snapshot object', () => {
+    const events = [
+      makeEvent({
+        id: 'pers:tk-0000001',
+        objectId: 'tk-0000001',
+        trackWorkerId: 'tk-0000001',
+        tierEver: 'person',
+        tierSnapshot: {
+          tier: 'object',
+          tier_rank: 0,
+          tier_since: 0,
+          subject_id: 'tk-0000001',
+          face_eligible: true,
+          confidence: 0.9,
+          snapshot_score: 2.6,
+        },
+        snapshotScore: 2.6,
+        stage: 'object',
+      }),
+    ]
+    expect(listPatrolEventsForTab(events, 'person')).toHaveLength(1)
+    expect(computePatrolTabCounts(events).person).toBe(1)
+  })
 })

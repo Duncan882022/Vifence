@@ -68,4 +68,26 @@ describe('isPatrolPersonLifecycleEvent', () => {
     })
     expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
   })
+
+  it('shows tk card when tier_ever person but tier_snapshot object', () => {
+    const event = baseEvent({
+      id: 'pers:tk-0000001',
+      objectId: 'tk-0000001',
+      trackWorkerId: 'tk-0000001',
+      tierEver: 'person',
+      tierSnapshot: {
+        tier: 'object',
+        tier_rank: 0,
+        tier_since: 0,
+        subject_id: 'tk-0000001',
+        face_eligible: true,
+        confidence: 0.9,
+        snapshot_score: 2.6,
+      },
+      snapshotUrl: 'https://example.com/snap.jpg',
+      snapshotScore: 2.6,
+      stage: 'object',
+    })
+    expect(isPatrolPersonLifecycleEvent(event)).toBe(true)
+  })
 })

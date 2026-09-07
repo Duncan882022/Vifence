@@ -44,14 +44,33 @@ def _resolve_tier_at_observation(
     shot_face_eligible: bool,
     worker_id: str | None,
 ) -> str:
-    """Tier tại thời điểm gặm — ưu tiên lifecycle, không hạ person→object."""
-    known = (tier_at or "").strip()
-    if known in ("object", "person", "identity"):
-        return known
+    """Tier tại thời điểm gặm — monotonic; thẻ tk/p không snapshot object."""
+    from ..tier_snapshot import higher_tier
 
     sid = (subject_id or "").strip()
-    if sid.startswith("obj-"):
-        return "object"
+    known = (tier_at or "").strip()
+    if known in ("object", "person", "identity"):
+        resolved = known
+    elif sid.startswith("obj-"):
+        resolved = "object"
+    else:
+        from ...patrol_ids import is_person_subject_id
+
+        if is_person_subject_id(sid):
+            from .. import identity
+
+            person = identity.get_person(identity.resolve_alias(sid))
+            if person and person.get("status") == identity.STATUS_IDENTIFIED:
+                resolved = "identity"
+            elif worker_id:
+                from ...patrol_identity_lifecycle import tier_for_worker_id
+
+                inferred = tier_for_worker_id(worker_id)
+                resolved = "identity" if inferred == "identity" else "person"
+            else:
+                resolved = "person"
+        else:
+            resolved = "object"
 
     from ...patrol_ids import is_person_subject_id
 
@@ -59,17 +78,14 @@ def _resolve_tier_at_observation(
         from .. import identity
 
         person = identity.get_person(identity.resolve_alias(sid))
-        if person and person.get("status") == identity.STATUS_IDENTIFIED:
-            return "identity"
-        if worker_id:
-            from ...patrol_identity_lifecycle import tier_for_worker_id
+        floor = (
+            "identity"
+            if person and person.get("status") == identity.STATUS_IDENTIFIED
+            else "person"
+        )
+        resolved = higher_tier(resolved, floor)
 
-            inferred = tier_for_worker_id(worker_id)
-            if inferred == "identity":
-                return "identity"
-        return "person"
-
-    return "object"
+    return resolved
 
 
 def _build_flush_tier_snapshot(
