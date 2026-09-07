@@ -51,6 +51,44 @@ class PatrolNearbyMergeTests(unittest.TestCase):
         )
         self.assertEqual(found, "tk-0000025")
 
+    def test_find_nearby_person_filters_by_camera(self) -> None:
+        date = "2026-09-05"
+        ts = 1_700_000_000.0
+        lat, lng = 20.928444, 106.873611
+
+        with db.tx() as conn:
+            conn.execute(
+                "INSERT INTO persons(pers_id, status, employee_code, origin,"
+                " first_seen, last_seen, created_at)"
+                " VALUES(?,?,?,?,?,?,?)",
+                ("tk-0000001", identity.STATUS_DRAFT, "tk-0000001", "tk", ts, ts, ts),
+            )
+            conn.execute(
+                "INSERT INTO daily_events"
+                "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
+                " VALUES(?,?,?,?,?,?)",
+                (date, "tk-0000001", ts - 10, ts, f"{date}/tk-0000001-1.jpg", 2.0),
+            )
+            conn.execute(
+                "INSERT INTO appearances"
+                "(event_date, subject_id, camera_id, started_at, ended_at,"
+                " gps_lat, gps_lng, qualified, presence_seq, source_cameras)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (date, "tk-0000001", "HC-01", ts - 10, ts, lat, lng, 1, 1, "HC-01"),
+            )
+
+        self.assertEqual(
+            daystore.find_nearby_person_pers_id(
+                date, lat, lng, ts + 20, camera_id="HC-01",
+            ),
+            "tk-0000001",
+        )
+        self.assertIsNone(
+            daystore.find_nearby_person_pers_id(
+                date, lat, lng, ts + 20, camera_id="HC-02",
+            ),
+        )
+
     def test_find_same_site_person_after_long_gap(self) -> None:
         """Vào lại cùng GPS sau khi rời — không bị giới hạn 120s."""
         date = "2026-09-05"

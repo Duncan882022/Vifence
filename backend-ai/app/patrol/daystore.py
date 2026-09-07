@@ -120,12 +120,15 @@ def find_nearby_person_pers_id(
     *,
     exclude_pers: str | None = None,
     within_sec: float = NEARBY_PERSON_MERGE_SEC,
+    camera_id: str | None = None,
+    min_snapshot_score: float = PERSON_LIST_MIN_SNAPSHOT_SCORE,
 ) -> str | None:
     """Tra pers_id thẻ Người gần đây cùng ô GPS — tránh tk-024/025 song song."""
     if gps_lat is None or gps_lng is None:
         return None
     bucket = _gps_bucket(gps_lat, gps_lng)
     exclude = identity.resolve_alias((exclude_pers or "").strip()) if exclude_pers else ""
+    cam = (camera_id or "").strip() or None
 
     rows = db.query(
         "SELECT a.subject_id, e.snapshot_score, a.gps_lat, a.gps_lng"
@@ -135,10 +138,12 @@ def find_nearby_person_pers_id(
         " WHERE a.event_date = ? AND a.qualified = 1"
         " AND a.subject_id NOT LIKE 'obj-%'"
         " AND a.gps_lat IS NOT NULL AND a.gps_lng IS NOT NULL"
-        " AND ABS(a.started_at - ?) <= ?"
+        " AND (a.ended_at >= ? - ? OR ABS(a.started_at - ?) <= ?)"
         " AND e.snapshot_path IS NOT NULL AND e.snapshot_path != ''"
+        " AND e.snapshot_score >= ?"
+        " AND (? IS NULL OR a.camera_id = ?)"
         " ORDER BY e.snapshot_score DESC, a.started_at DESC",
-        (date, now, within_sec),
+        (date, now, within_sec, now, within_sec, min_snapshot_score, cam, cam),
     )
     best_id: str | None = None
     best_score = -1.0

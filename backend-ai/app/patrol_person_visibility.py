@@ -713,6 +713,14 @@ def motorcycle_seat_like_fp_box(
     if aspect < 1.12 and bh_ratio < 0.26 and bw_ratio >= 0.08:
         if 0.18 <= cy_ratio <= 0.88:
             return True
+    # Cả thân xe đỗ một khối — aspect ~1.0, hẹp (obj-20260907-0001 live)
+    if (
+        aspect < 1.08
+        and 0.26 <= bh_ratio < 0.36
+        and 0.12 <= bw_ratio <= 0.22
+        and 0.25 <= cy_ratio <= 0.65
+    ):
+        return True
     # Gương / đèn pha — rất ngang, mỏng
     if aspect < 0.82 and bh_ratio < 0.22 and bw_ratio >= 0.10:
         if cy_ratio < 0.55:
@@ -759,7 +767,7 @@ def person_box_overlaps_vehicle_fp(
     for vb in vehicle_boxes:
         iou = bbox_iou(list(person_box), list(vb))
         contain = _bbox_containment_ratio(person_box, vb)
-        if iou < 0.12 and contain < 0.42:
+        if iou < 0.08 and contain < 0.18:
             continue
         if person_box_likely_rider_on_vehicle(person_box, vb):
             continue
