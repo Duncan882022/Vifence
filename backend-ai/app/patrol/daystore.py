@@ -25,6 +25,17 @@ from .presence import (
 
 # Legacy alias — không GPS thì fallback trong should_extend_presence.
 APPEARANCE_GAP_SEC = 45.0
+
+
+def _appearance_visit_closed(row: Any) -> bool:
+    """Dòng appearance đã finalize — không gộp / không UPDATE khi quay lại."""
+    if row is None:
+        return False
+    try:
+        reason = row["end_reason"]
+    except (KeyError, IndexError, TypeError):
+        reason = None
+    return bool(str(reason or "").strip())
 # Tab Người / Định danh — điểm tối thiểu (face_quality×2 + confidence), đồng bộ FE.
 PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Gộp tk trùng người — cùng ô GPS + cửa sổ thời gian (đồng bộ audit duplicate).
@@ -684,10 +695,12 @@ def coerce_appearance_id_for_encounter_gap(
     if appearance_id is None:
         return None
     row = db.query_one(
-        "SELECT ended_at FROM appearances WHERE id = ?",
+        "SELECT ended_at, end_reason FROM appearances WHERE id = ?",
         (int(appearance_id),),
     )
     if row is None:
+        return None
+    if _appearance_visit_closed(row):
         return None
     from .presence import GAP_FALLBACK_SEC
 
@@ -726,7 +739,8 @@ def find_overlapping_appearance_row(
     if not sess and not tid:
         return None
     rows = db.query(
-        "SELECT id, started_at, ended_at, track_id, session_id, event_payload_json"
+        "SELECT id, started_at, ended_at, track_id, session_id, event_payload_json,"
+        " end_reason"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC",
@@ -734,6 +748,8 @@ def find_overlapping_appearance_row(
     )
     for row in rows:
         row_dict = dict(row)
+        if _appearance_visit_closed(row_dict):
+            continue
         if flush_tier in ("person", "identity"):
             row_tier = _tier_from_payload(str(row_dict.get("event_payload_json") or ""))
             if row_tier == "object":
@@ -1524,7 +1540,7 @@ def find_extendable_track_appearance_row(
     """Track mới cùng pers + camera trong gap — UPDATE row cũ thay vì INSERT."""
     rows = db.query(
         "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
-        " event_payload_json"
+        " event_payload_json, end_reason"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC, id DESC",
@@ -1534,6 +1550,8 @@ def find_extendable_track_appearance_row(
 
     ref = float(encounter_started_at) if encounter_started_at is not None else ts
     for row in rows:
+        if _appearance_visit_closed(row):
+            continue
         if flush_tier in ("person", "identity"):
             row_tier = _tier_from_payload(str(row["event_payload_json"] or ""))
             if row_tier == "object":
