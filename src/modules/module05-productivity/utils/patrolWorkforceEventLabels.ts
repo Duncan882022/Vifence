@@ -73,7 +73,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     activeBorder: 'border-orange-400',
     activeText: PATROL_TIER_TOKENS.person.color,
     activeBadge: PATROL_TIER_TOKENS.person.badge,
-    countTooltip: 'Thẻ Người có mặt đủ rõ (snapshot ≥ ngưỡng)',
+    countTooltip: 'Thẻ Người có ảnh mặt đủ re-ID (snapshot ≥ ngưỡng + face)',
   },
   identity: {
     label: PATROL_TIER_TOKENS.identity.label,

@@ -420,32 +420,44 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
     pers_ids = [str(r["pers_id"]) for r in events]
     tk_map = tk_bindings_for_pers_ids(pers_ids)
     gps_map = gps_lookup_from_presences(presences)
-    event_items = [
-        {
-            "event_date": r["event_date"],
-            "pers_id": r["pers_id"],
-            "status": r["status"],
-            "display_name": identity.display_name(r),
-            "full_name": r.get("full_name"),
-            "employee_code": r.get("employee_code"),
-            "contractor": r.get("contractor"),
-            "first_seen": r["first_seen"],
-            "last_seen": r["last_seen"],
-            "snapshot_path": r.get("snapshot_path"),
-            "snapshot_score": float(r.get("snapshot_score") or 0),
-            "track_worker_id": resolve_track_worker_id(str(r["pers_id"]), tk_map),
-            "gps_lat": gps_map.get(str(r["pers_id"]), (None, None))[0],
-            "gps_lng": gps_map.get(str(r["pers_id"]), (None, None))[1],
-            "promoted_from": r.get("promoted_from") or [],
-            "promoted_at": r.get("promoted_at"),
-            "tier_ever": r.get("tier_ever"),
-            "tier_snapshot": _coalesce_tier_snapshot_with_ever(
-                r.get("tier_ever"),
-                _parse_tier_snapshot_json(r.get("tier_snapshot_json")),
-            ),
-        }
-        for r in events
-    ]
+    event_items = []
+    for r in events:
+        tier_snap = _coalesce_tier_snapshot_with_ever(
+            r.get("tier_ever"),
+            _parse_tier_snapshot_json(r.get("tier_snapshot_json")),
+        )
+        snap_path = str(r.get("snapshot_path") or "").strip() or None
+        snap_score = float(r.get("snapshot_score") or 0)
+        face_ok = bool(tier_snap.get("face_eligible")) if tier_snap else False
+        if not daystore.person_snapshot_proves_reid(
+            snapshot_path=snap_path,
+            snapshot_score=snap_score,
+            face_eligible=face_ok,
+        ):
+            snap_path = None
+            snap_score = 0.0
+        event_items.append(
+            {
+                "event_date": r["event_date"],
+                "pers_id": r["pers_id"],
+                "status": r["status"],
+                "display_name": identity.display_name(r),
+                "full_name": r.get("full_name"),
+                "employee_code": r.get("employee_code"),
+                "contractor": r.get("contractor"),
+                "first_seen": r["first_seen"],
+                "last_seen": r["last_seen"],
+                "snapshot_path": snap_path,
+                "snapshot_score": snap_score,
+                "track_worker_id": resolve_track_worker_id(str(r["pers_id"]), tk_map),
+                "gps_lat": gps_map.get(str(r["pers_id"]), (None, None))[0],
+                "gps_lng": gps_map.get(str(r["pers_id"]), (None, None))[1],
+                "promoted_from": r.get("promoted_from") or [],
+                "promoted_at": r.get("promoted_at"),
+                "tier_ever": r.get("tier_ever"),
+                "tier_snapshot": tier_snap,
+            }
+        )
     object_items = []
     for row in objects:
         oid = str(row.get("obj_id") or "")

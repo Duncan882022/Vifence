@@ -193,13 +193,38 @@ def _within_accumulation_window(session: TrackSession, now: float) -> bool:
 
 
 def _snapshot_observation(session: TrackSession, obs: ObservationInput) -> ObservationInput:
-    """Trong cửa sổ tích lũy — chốt frame score cao nhất, không frame cuối."""
+    """Chốt frame snapshot — Người ưu tiên best face lifecycle, không khung lưng cuối."""
+    face_obs = _lifecycle_best_face_observation(session)
+    if face_obs is not None:
+        return face_obs
     if not _within_accumulation_window(session, obs.ts):
         return obs
     best = session.best_observation
     if best is not None and best.frame is not None and best.person_bbox is not None:
         return best
     return obs
+
+
+def _lifecycle_best_face_observation(session: TrackSession) -> ObservationInput | None:
+    """Mặt re-ID tốt nhất đã thấy trong track — nguồn snapshot thẻ Người."""
+    bfo = session.best_face_observation
+    if bfo is None or bfo.frame is None or bfo.person_bbox is None:
+        return None
+    if not bfo.face_eligible:
+        return None
+    from ...patrol_person_visibility import patrol_reidentifiable_face_allowed
+
+    frame_w, frame_h = _frame_size_from_obs(bfo)
+    if not patrol_reidentifiable_face_allowed(
+        tuple(bfo.person_bbox),
+        frame_w,
+        frame_h,
+        face_detect_score=float(bfo.face_quality or 0.0),
+        face_eligible=True,
+        camera_id=bfo.camera_id,
+    ):
+        return None
+    return bfo
 
 
 def _card_lacks_person_evidence(subject_id: str, ts: float) -> bool:
@@ -245,9 +270,10 @@ def _luot_needs_snapshot(
 
     sid = session.subject_id or ""
     if is_person_subject_id(sid):
-        # Mở lại đúng một lần chụp khi đã thấy mặt mà thẻ còn giữ ảnh Đối tượng.
-        if obs.face_eligible and _card_lacks_person_evidence(sid, now):
-            return True
+        # Mở lại chụp khi thẻ còn ảnh lưng / chưa đủ mặt — dùng best face lifecycle.
+        if _card_lacks_person_evidence(sid, now):
+            if obs.face_eligible or _lifecycle_best_face_observation(session) is not None:
+                return True
         # Thẻ đã có ảnh mặt đủ điểm — còn trong khung thì không chụp lại.
         if not _card_lacks_person_evidence(sid, now):
             return False
@@ -973,6 +999,9 @@ def finalize_session(session: TrackSession, *, finalize_at: float | None = None)
         session.best_observation is not None
         and session.best_observation.frame is not None
     ) else fallback
+    face_obs = _lifecycle_best_face_observation(session)
+    if face_obs is not None:
+        obs = face_obs
     obs = _observation_with_session_lifecycle(session, obs)
 
     if getattr(settings, "patrol_deferred_object", True):

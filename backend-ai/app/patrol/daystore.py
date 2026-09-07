@@ -25,6 +25,17 @@ from .presence import (
 
 # Legacy alias — không GPS thì fallback trong should_extend_presence.
 APPEARANCE_GAP_SEC = 45.0
+
+
+def _appearance_visit_closed(row: Any) -> bool:
+    """Dòng appearance đã finalize — không gộp / không UPDATE khi quay lại."""
+    if row is None:
+        return False
+    try:
+        reason = row["end_reason"]
+    except (KeyError, IndexError, TypeError):
+        reason = None
+    return bool(str(reason or "").strip())
 # Tab Người / Định danh — điểm tối thiểu (face_quality×2 + confidence), đồng bộ FE.
 PERSON_LIST_MIN_SNAPSHOT_SCORE = 1.05
 # Gộp tk trùng người — cùng ô GPS + cửa sổ thời gian (đồng bộ audit duplicate).
@@ -47,6 +58,20 @@ def _person_snapshot_score_floor() -> float:
     return float(settings.patrol_face_detect_min_score_bodycam) * 2.0 + 0.4
 
 
+def person_snapshot_proves_reid(
+    *,
+    snapshot_path: str | None,
+    snapshot_score: float,
+    face_eligible: bool = False,
+) -> bool:
+    """Snapshot trên thẻ Người phải có mặt đủ re-ID — không gắn lưng lên thẻ tk-*."""
+    if not (snapshot_path or "").strip():
+        return False
+    if not face_eligible:
+        return False
+    return float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE
+
+
 def _person_card_eligible(
     *,
     face_eligible: bool,
@@ -55,17 +80,16 @@ def _person_card_eligible(
 ) -> bool:
     """Cho phép ghi/cập nhật thẻ daily_events.
 
-    Tab Người trên FE và KPI ``day_stats`` vẫn lọc snapshot ≥1.05 — thẻ draft
-    (chưa có JPG) giữ last_seen và tier cho đến khi flush chụp được mặt.
+    Thẻ có thể tồn tại không JPG (chờ mặt). Mọi JPG trên thẻ Người phải qua
+    ``person_snapshot_proves_reid`` — tab FE và KPI cùng tiêu chí.
     """
-    if face_eligible:
-        return True
-    if snapshot_path and float(snapshot_score) >= PERSON_LIST_MIN_SNAPSHOT_SCORE:
-        return True
-    # Aggregator chốt pers/tk trước khi có ảnh — vẫn cần một dòng thẻ ngày.
     if not (snapshot_path or "").strip():
         return True
-    return False
+    return person_snapshot_proves_reid(
+        snapshot_path=snapshot_path,
+        snapshot_score=snapshot_score,
+        face_eligible=face_eligible,
+    )
 
 
 def _gps_bucket(lat: float, lng: float) -> tuple[int, int]:
@@ -504,12 +528,21 @@ def touch_person_event(
                     (ts, first, pid),
                 )
                 return
-            appearance_snapshot = snapshot_path
+            eff_path = snapshot_path
+            eff_score = snapshot_score
+            if eff_path and not person_snapshot_proves_reid(
+                snapshot_path=eff_path,
+                snapshot_score=eff_score,
+                face_eligible=face_eligible,
+            ):
+                eff_path = None
+                eff_score = 0.0
+            appearance_snapshot = eff_path
             conn.execute(
                 "INSERT INTO daily_events"
                 "(event_date, pers_id, first_seen, last_seen, snapshot_path, snapshot_score)"
                 " VALUES(?,?,?,?,?,?)",
-                (date, pid, first, ts, snapshot_path, snapshot_score),
+                (date, pid, first, ts, eff_path, eff_score),
             )
             wrote_card = True
         else:
@@ -543,8 +576,14 @@ def touch_person_event(
                     )
                     if card_eligible and snapshot_path:
                         appearance_snapshot = snapshot_path
-            elif card_eligible and snapshot_path:
-                appearance_snapshot = snapshot_path
+            else:
+                conn.execute(
+                    "UPDATE daily_events SET last_seen = ?"
+                    " WHERE event_date = ? AND pers_id = ?",
+                    (ts, date, pid),
+                )
+                if card_eligible and snapshot_path:
+                    appearance_snapshot = snapshot_path
         tier = "identity" if is_identified else "person"
         if wrote_card:
             conn.execute(
@@ -662,10 +701,12 @@ def coerce_appearance_id_for_encounter_gap(
     if appearance_id is None:
         return None
     row = db.query_one(
-        "SELECT ended_at FROM appearances WHERE id = ?",
+        "SELECT ended_at, end_reason FROM appearances WHERE id = ?",
         (int(appearance_id),),
     )
     if row is None:
+        return None
+    if _appearance_visit_closed(row):
         return None
     from .presence import GAP_FALLBACK_SEC
 
@@ -704,7 +745,8 @@ def find_overlapping_appearance_row(
     if not sess and not tid:
         return None
     rows = db.query(
-        "SELECT id, started_at, ended_at, track_id, session_id, event_payload_json"
+        "SELECT id, started_at, ended_at, track_id, session_id, event_payload_json,"
+        " end_reason"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC",
@@ -712,6 +754,8 @@ def find_overlapping_appearance_row(
     )
     for row in rows:
         row_dict = dict(row)
+        if _appearance_visit_closed(row_dict):
+            continue
         if flush_tier in ("person", "identity"):
             row_tier = _tier_from_payload(str(row_dict.get("event_payload_json") or ""))
             if row_tier == "object":
@@ -1502,7 +1546,7 @@ def find_extendable_track_appearance_row(
     """Track mới cùng pers + camera trong gap — UPDATE row cũ thay vì INSERT."""
     rows = db.query(
         "SELECT id, ended_at, camera_id, gps_lat, gps_lng, gps_lat_end, gps_lng_end,"
-        " event_payload_json"
+        " event_payload_json, end_reason"
         " FROM appearances"
         " WHERE event_date = ? AND subject_id = ? AND camera_id = ? AND qualified = 1"
         " ORDER BY ended_at DESC, id DESC",
@@ -1512,6 +1556,8 @@ def find_extendable_track_appearance_row(
 
     ref = float(encounter_started_at) if encounter_started_at is not None else ts
     for row in rows:
+        if _appearance_visit_closed(row):
+            continue
         if flush_tier in ("person", "identity"):
             row_tier = _tier_from_payload(str(row["event_payload_json"] or ""))
             if row_tier == "object":
