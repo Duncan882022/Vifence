@@ -12,7 +12,7 @@ from typing import Any, Mapping, Sequence
 _NORM_BBOX_MAX = 1.5
 
 # ByteTrack — số frame miss liên tiếp trước khi bỏ track khỏi danh sách.
-MODULE05_BYTETRACK_MAX_AGE = 5
+MODULE05_BYTETRACK_MAX_AGE = 24
 
 
 def is_normalized_bbox(bbox: Sequence[float]) -> bool:

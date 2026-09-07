@@ -417,13 +417,10 @@ export function predictPersonRoiTracks(
   const out: PersonRoiDisplay[] = []
 
   for (const track of tracks.values()) {
-    const coastLimit = cfg.displayCoastMaxMiss
-    if (track.missStreak > coastLimit) {
+    // Cover-or-hide: chỉ vẽ khi có đo tươi (missStreak === 0).
+    if (track.missStreak > cfg.displayCoastMaxMiss) {
       continue
     }
-    // Conf thấp, backend chưa cấp id, và mới chỉ thấy đúng một lần: gần như luôn
-    // là một mảng nhiễu. Chờ thêm một nhịp rẻ hơn nhiều so với một cái hộp chớp
-    // lên rồi tắt giữa cảnh đông. Người rõ mặt (conf cao) vẫn vẽ ngay.
     if (
       !track.anchorKey
       && track.hits < cfg.confirmHits
@@ -432,22 +429,11 @@ export function predictPersonRoiTracks(
       continue
     }
 
-    const isCoasting = track.missStreak > 0
-    const predictCap = isCoasting
-      ? (cfg.maxPredictMsLost ?? 0)
-      : cfg.maxPredictMs
-    const dt = Math.min(Math.max(elapsedMs, 0), predictCap)
-    const bbox = !isCoasting && dt > 0
-      ? track.kalman.getPredictedBbox(dt)
-      : track.kalman.getBbox()
+    // Không nội suy rAF — bbox = đo cuối, không follow/coast.
+    const bbox = track.kalman.getBbox()
     const personId = canonicalPersonId(track)
 
-    let displayOpacity = 1
-    if (track.missStreak > 0) {
-      displayOpacity = Math.max(0.35, 1 - track.missStreak / (coastLimit + 1))
-    } else if (track.state === 'tentative') {
-      displayOpacity = 0.62
-    }
+    const displayOpacity = track.state === 'tentative' ? 0.85 : 1
 
     out.push({
       trackId: track.id,

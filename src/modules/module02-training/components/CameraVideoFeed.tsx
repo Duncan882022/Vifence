@@ -138,7 +138,8 @@ export function CameraVideoFeed({
   // của cả grid phải chờ nó.
   useCameraBufferReadiness(videoRef, cameraId, {
     playing: Boolean(playing && overlayActive),
-    needsBuffer: videoTransportMode === 'hls',
+    // Patrol HC/DR dùng lag ~350ms — không chờ đệm 5s trước khi vẽ ROI.
+    needsBuffer: videoTransportMode === 'hls' && !isPatrolMetricsCameraId(cameraId),
   })
   const roiLayoutTick = useOverlayLayoutTick(videoRef)
   const remoteWaiting = Boolean(playing && (isHls || Boolean(whepUrl)))
@@ -159,9 +160,10 @@ export function CameraVideoFeed({
 
   useEffect(() => {
     if (!isPatrolPersonRoiCameraId(cameraId)) return
-    setPatrolPersonRoiLowLatencyLive(cameraId, videoTransportMode === 'whep')
+    // Real-time ROI: luôn profile WHEP/low-lag cho HC-* khi live (HLS hay WHEP).
+    setPatrolPersonRoiLowLatencyLive(cameraId, Boolean(playing))
     return () => setPatrolPersonRoiLowLatencyLive(cameraId, false)
-  }, [cameraId, videoTransportMode])
+  }, [cameraId, playing])
 
   const rawVmsFeed = useVmsDetectionFeed(
     cameraId,
@@ -179,8 +181,8 @@ export function CameraVideoFeed({
     cameraId,
     fallbackLagMs: patrolRoiFallbackLagMs,
     useRuntimeLagHint: patrolRoiUsesBufferLag,
-    maxAlignedDriftMs: patrolRoiUsesBufferLag ? 800 : WHEP_MAX_ALIGNED_DRIFT_MS,
-    trustAlignedSnapshot: videoTransportMode === 'whep',
+    maxAlignedDriftMs: patrolRoiUsesBufferLag ? 450 : WHEP_MAX_ALIGNED_DRIFT_MS,
+    trustAlignedSnapshot: true,
   })
 
   const patrolRoiFrameSize = useMemo(() => {

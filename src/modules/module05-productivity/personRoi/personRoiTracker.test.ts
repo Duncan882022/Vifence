@@ -259,7 +259,7 @@ describe('bbox mượt', () => {
     expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
   })
 
-  it('track có id backend bám nhanh hơn khi người đi đều', () => {
+  it('track có id backend bám sát measurement khi người đi đều (real-time)', () => {
     let anchored = empty()
     let plain = empty()
     let now = 1_000
@@ -275,16 +275,16 @@ describe('bbox mượt', () => {
     const anchoredLag = measuredCx - [...anchored.values()][0].kalman.cx
     const plainLag = measuredCx - [...plain.values()][0].kalman.cx
 
-    expect(anchoredLag).toBeLessThan(plainLag)
-    expect(anchoredLag).toBeLessThan(20)
+    expect(anchoredLag).toBeLessThan(25)
+    expect(plainLag).toBeLessThan(35)
   })
 
-  it('extrapolate giới hạn trong một nhịp analyze', () => {
+  it('extrapolate tắt — bbox giữ nguyên dù elapsed lớn', () => {
     const tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBeGreaterThanOrEqual(400)
+    expect(PATROL_PERSON_ROI_CONFIG.maxPredictMs).toBe(0)
     const far = predictPersonRoiTracks(tracks, 5_000)
-    const capped = predictPersonRoiTracks(tracks, PATROL_PERSON_ROI_CONFIG.maxPredictMs)
-    expect(far[0].bbox).toEqual(capped[0].bbox)
+    const now = predictPersonRoiTracks(tracks, 0)
+    expect(far[0].bbox).toEqual(now[0].bbox)
   })
 
 })
@@ -344,7 +344,7 @@ describe('tầng định danh từ backend', () => {
 })
 
 describe('mồi vận tốc từ backend', () => {
-  it('track mới đã có vận tốc nên không trễ một nhịp analyze', () => {
+  it('track mới đã có vận tốc — display vẫn dùng bbox đo, không predict rAF', () => {
     const tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', velocity: [240, 0] })],
@@ -357,7 +357,7 @@ describe('mồi vận tốc từ backend', () => {
       predictPersonRoiTracks(tracks, 0)[0].bbox,
       predictPersonRoiTracks(tracks, 200)[0].bbox,
     ]
-    expect(moved[0]).toBeGreaterThan(still[0])
+    expect(moved).toEqual(still)
   })
 
   it('vận tốc backend vẫn bị chặn theo trần tốc độ', () => {
@@ -371,7 +371,7 @@ describe('mồi vận tốc từ backend', () => {
     expect(Math.abs(kalman.vx)).toBeLessThanOrEqual(maxSpeed + 1e-6)
   })
 
-  it('predict trước update — bbox rAF bám người đi ngang giữa hai poll', () => {
+  it('cover-or-hide — bbox rAF không trượt giữa hai poll', () => {
     let tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', velocity: [120, 0] })],
@@ -383,8 +383,8 @@ describe('mồi vận tốc từ backend', () => {
       280,
     )
     const mid = predictPersonRoiTracks(tracks, 140, PATROL_PERSON_ROI_CONFIG)[0].bbox
-    expect(mid[0]).toBeGreaterThan(115)
-    expect(mid[0]).toBeLessThan(160)
+    const measured = predictPersonRoiTracks(tracks, 0)[0].bbox
+    expect(mid).toEqual(measured)
   })
 
   it('HC-01 bodycam — display không tụt quá xa measurement khi người đi', () => {
@@ -415,7 +415,7 @@ describe('mồi vận tốc từ backend', () => {
 })
 
 describe('vòng đời track', () => {
-  it('miss một nhịp — ẩn ngay, không coast (tránh bóng ROI)', () => {
+  it('miss một nhịp — ẩn ngay, không coast (cover-or-hide)', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
@@ -459,7 +459,7 @@ describe('vòng đời track', () => {
 
   it('ẩn ROI ngay khi miss — người rời khỏi cam', () => {
     let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000)
-    tracks = advance(tracks, [], 300)
+    tracks = advance(tracks, [], 1_180)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })
 })

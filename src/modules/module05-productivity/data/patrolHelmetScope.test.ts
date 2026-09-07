@@ -8,12 +8,12 @@ import {
 } from './patrolHelmetScope'
 
 describe('patrolHelmetScope ROI buffer', () => {
-  it('PATROL_LIVE_ROI_DELAY_MS = 5s cho backend xử lý ROI', () => {
-    expect(PATROL_LIVE_ROI_DELAY_MS).toBe(5000)
+  it('PATROL_LIVE_ROI_DELAY_MS ~350ms cho ROI real-time', () => {
+    expect(PATROL_LIVE_ROI_DELAY_MS).toBe(350)
   })
 
-  it('WHEP_DISPLAY_WALLCLOCK_LAG_MS ~400ms cho at_ms backend', () => {
-    expect(WHEP_DISPLAY_WALLCLOCK_LAG_MS).toBe(400)
+  it('WHEP_DISPLAY_WALLCLOCK_LAG_MS ~280ms cho at_ms backend', () => {
+    expect(WHEP_DISPLAY_WALLCLOCK_LAG_MS).toBe(280)
   })
 
   it('HC-01, HC-02, DR-* đều là camera metrics tuần tra', () => {
@@ -23,14 +23,16 @@ describe('patrolHelmetScope ROI buffer', () => {
     expect(isPatrolMetricsCameraId('A-03')).toBe(false)
   })
 
-  it('WHEP_MAX_ALIGNED_DRIFT_MS ~400ms cho sync guard', () => {
-    expect(WHEP_MAX_ALIGNED_DRIFT_MS).toBe(400)
+  it('WHEP_MAX_ALIGNED_DRIFT_MS ~320ms cho sync guard', () => {
+    expect(WHEP_MAX_ALIGNED_DRIFT_MS).toBe(320)
   })
 
-  it('HC-02 local publisher — profile mượt hơn bodycam VMS', () => {
+  it('HC-02 local publisher — cùng profile cover-or-hide bodycam VMS', () => {
     const local = resolvePatrolPersonRoiConfig('HC-02', null, { localPublisher: true })
     const vms = resolvePatrolPersonRoiConfig('HC-02', null)
-    expect(local.displayEmaAlpha).toBeLessThan(vms.displayEmaAlpha)
-    expect(local.maxPredictMs).toBeLessThan(vms.maxPredictMs)
+    expect(local.displayCoastMaxMiss).toBe(0)
+    expect(vms.displayCoastMaxMiss).toBe(0)
+    expect(local.maxPredictMs).toBe(0)
+    expect(vms.maxPredictMs).toBe(0)
   })
 })

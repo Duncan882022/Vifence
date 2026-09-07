@@ -11,7 +11,7 @@ import { resolveEffectivePatrolFlightMode } from '../utils/patrolFlightMode'
 
 /**
  * Engine singleton per camera — overlay + heatmap dùng chung track state.
- * Pattern: detection @ low FPS → Kalman predict @ 60 FPS + EMA 4 góc (SORT demo).
+ * Helmet UX: cover-or-hide — vẽ bbox đo YOLO, ẩn khi miss, không follow rAF.
  */
 export class PatrolPersonRoiEngine {
   private tracks = new Map<string, PersonRoiTrack>()
@@ -79,21 +79,11 @@ export class PatrolPersonRoiEngine {
     this.notify()
   }
 
-  /** rAF — extrapolate bbox giữa các lần analyze. */
+  /** rAF — cover-or-hide: giữ cache đo cuối, không nội suy bbox. */
   predictDisplay(now = performance.now()): PersonRoiDisplay[] {
     const elapsed = this.lastIngestAt > 0 ? now - this.lastIngestAt : 0
     const cfg = this.config()
 
-    /**
-     * Luồng detections đứt hẳn — WebSocket rớt, worker VMS chết, tile chuyển
-     * sang nền. `missStreak` chỉ tăng khi có nhịp ingest mới, nên không còn gì
-     * đếm và lứa hộp cuối cùng đứng nguyên trên video vô thời hạn. Đó chính là
-     * loại "ROI ảo" khó chịu nhất: nó trông y hệt một ROI thật.
-     *
-     * Bỏ luôn track chứ không chỉ ẩn: sau vài giây, vị trí đo cuối đã quá cũ để
-     * ghép lại: giữ chúng chỉ khiến nhịp ingest đầu tiên sau khi nối lại bám vào
-     * chỗ người đã đứng từ lâu.
-     */
     if (this.lastIngestAt > 0 && elapsed > cfg.displayMaxStaleMs) {
       if (this.tracks.size > 0 || this.displayCache.length > 0) {
         this.tracks.clear()
@@ -103,7 +93,12 @@ export class PatrolPersonRoiEngine {
       return this.displayCache
     }
 
-    if (elapsed < 4 || this.tracks.size === 0) return this.displayCache
+    // maxPredictMs=0 → không slide bbox giữa các nhịp analyze.
+    if (cfg.maxPredictMs <= 0) {
+      return this.displayCache
+    }
+
+    if (elapsed < 1 || this.tracks.size === 0) return this.displayCache
     this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, elapsed, cfg), true, cfg)
     return this.displayCache
   }

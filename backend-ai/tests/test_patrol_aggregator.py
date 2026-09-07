@@ -511,6 +511,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertEqual(len(presences), 1)
         self.assertGreater(float(presences[0]["ended_at"]), ts)
 
+
     def test_person_return_after_finalize_appends_history(self) -> None:
         """Ra khỏi khung rồi quay lại — append dòng lịch sử + JPG mới, giữ lượt cũ."""
         from unittest.mock import patch

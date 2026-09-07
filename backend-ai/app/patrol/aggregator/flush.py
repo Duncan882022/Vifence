@@ -1053,6 +1053,7 @@ def finalize_session(session: TrackSession, *, finalize_at: float | None = None)
         obs = face_obs
     obs = _observation_with_session_lifecycle(session, obs)
 
+
     if getattr(settings, "patrol_deferred_object", True):
         session.dirty = True
         if session.person_committed:
