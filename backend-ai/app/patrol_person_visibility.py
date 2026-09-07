@@ -183,6 +183,63 @@ def speck_person_box(
     return ph / max(float(frame_h), 1.0) < SPECK_BOX_MAX_HEIGHT_RATIO
 
 
+def parked_motorcycle_row_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """YOLO gán person lên thân/yên xe máy đỗ — HC-01 vỉa hè (obj-0014/0015 live).
+
+    Khác người đứng: bbox hẹp (bw ~6–8% khung), cao vừa (bh ~22–32%),
+    aspect ~2.0 — YOLO bám yên/baga xe máy trong hàng đỗ.
+    """
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    fw = max(float(frame_w), 1.0)
+    fh = max(float(frame_h), 1.0)
+    bw_ratio = pw / fw
+    bh_ratio = ph / fh
+    cy_ratio = ((y1 + y2) / 2.0) / fh
+    y1_ratio = y1 / fh
+    if (
+        1.85 <= aspect <= 2.55
+        and 0.050 <= bw_ratio <= 0.100
+        and 0.20 <= bh_ratio <= 0.36
+        and 0.28 <= cy_ratio <= 0.58
+        and 0.16 <= y1_ratio <= 0.42
+    ):
+        return True
+    return False
+
+
+def upper_canopy_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Tán cây/bụi nền phía trên — YOLO FP trên lá (obj-0018 live)."""
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    fw = max(float(frame_w), 1.0)
+    fh = max(float(frame_h), 1.0)
+    bw_ratio = pw / fw
+    y1_ratio = y1 / fh
+    cy_ratio = ((y1 + y2) / 2.0) / fh
+    if (
+        y1_ratio < 0.20
+        and cy_ratio < 0.38
+        and 1.35 <= aspect <= 2.6
+        and bw_ratio < 0.12
+        and ph / fh < 0.34
+    ):
+        return True
+    return False
+
+
 def patrol_bbox_rejects_static_fp(
     person_box: tuple[float, float, float, float],
     frame_w: int,
@@ -192,6 +249,8 @@ def patrol_bbox_rejects_static_fp(
     if vertical_structure_fp_box(person_box, frame_w, frame_h):
         return True
     if signboard_like_fp_box(person_box, frame_w, frame_h):
+        return True
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
         return True
     if background_clutter_person_box(person_box, frame_w, frame_h):
         pw = max(float(person_box[2]) - float(person_box[0]), 1.0)
@@ -268,6 +327,7 @@ def patrol_object_commit_allowed(
     face_eligible: bool = False,
     flycam: bool = False,
     proximity_flycam: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> bool:
     """Gate ghi thẻ Đối tượng — cùng tiêu chí ghi sự kiện, không dùng gate vẽ ROI.
 
@@ -279,6 +339,15 @@ def patrol_object_commit_allowed(
         return False
     if patrol_bbox_rejects_static_fp(person_box, frame_w, frame_h):
         return False
+    if vehicle_boxes and person_box_overlaps_vehicle_fp(
+        person_box, vehicle_boxes, frame_w, frame_h,
+    ):
+        return False
+    if not flycam and not proximity_flycam:
+        if parked_motorcycle_row_fp_box(person_box, frame_w, frame_h):
+            return False
+        if upper_canopy_fp_box(person_box, frame_w, frame_h):
+            return False
     if (
         not flycam
         and not proximity_flycam

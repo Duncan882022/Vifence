@@ -116,6 +116,11 @@ def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
         and not flycam
         and obs.camera_id.startswith("DR-")
     )
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None
+    if obs.frame is not None and is_patrol_helmet_like(obs.camera_id):
+        from ...patrol.person_analyzer import _patrol_bodycam_vehicle_boxes
+
+        vehicle_boxes = _patrol_bodycam_vehicle_boxes(obs.frame, obs.camera_id)
     return patrol_object_commit_allowed(
         obs.person_bbox,
         frame_w,
@@ -123,6 +128,7 @@ def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
         face_eligible=bool(obs.face_eligible or has_face),
         flycam=flycam,
         proximity_flycam=proximity,
+        vehicle_boxes=vehicle_boxes,
     )
 
 
