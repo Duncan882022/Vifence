@@ -86,6 +86,8 @@ class TrackSession:
     end_reason: str | None = None
 
     appearance_row_id: int | None = None
+    # Thời điểm obj-* → tk/pers — flush person-phase không gộp lên object-phase.
+    promoted_at: float | None = None
     # Một lượt trong khung = một JPG — không chụp lại mỗi flush/track frame.
     luot_snapshot_captured: bool = False
     # Số thứ tự lượt gặp, cấp một lần khi lượt bắt đầu và đi vào tên file JPG.

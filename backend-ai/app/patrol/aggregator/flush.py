@@ -789,6 +789,7 @@ def flush_session(
             encounter_started_at=session.started_at,
             gps_lat=gps_lat,
             gps_lng=gps_lng,
+            flush_tier=tier_at_resolved,
         )
         if extend_id is not None:
             session.appearance_row_id = extend_id
@@ -801,9 +802,18 @@ def flush_session(
                 session.last_seen_at,
                 session_id=session.session_id,
                 track_id=session.track_id,
+                flush_tier=tier_at_resolved,
             )
             if overlap_id is not None:
                 session.appearance_row_id = overlap_id
+
+    appearance_started_at = session.started_at
+    if (
+        session.promoted_at is not None
+        and tier_at_resolved in ("person", "identity")
+        and session.appearance_row_id is None
+    ):
+        appearance_started_at = max(session.started_at, session.promoted_at)
 
     if (
         session.committed
@@ -839,7 +849,7 @@ def flush_session(
         zone_id=session.zone_id,
         track_id=session.track_id,
         session_id=session.session_id or "",
-        started_at=session.started_at,
+        started_at=appearance_started_at,
         ended_at=session.last_seen_at,
         gps_lat=gps_lat,
         gps_lng=gps_lng,
