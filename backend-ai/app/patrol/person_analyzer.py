@@ -353,6 +353,9 @@ def _assign_patrol_person_identity(
             frame_h,
             face_quality=float(_face_score or 0.0),
             face_eligible=bool(face_eligible),
+            vehicle_boxes=_patrol_bodycam_vehicle_boxes(frame, camera_id)
+            if _is_helmet_bodycam(camera_id)
+            else [],
         ):
             face_eligible = False
             face_emb = None
@@ -485,7 +488,9 @@ def _patrol_person_should_run_identity(
         return False
     if limb_fragment_person_box(person_box, frame_w, frame_h):
         return False
-    if _patrol_person_passes_display_gate(person_box, frame_w, frame_h, camera_id=camera_id):
+    if _patrol_person_passes_display_gate(
+        person_box, frame_w, frame_h, camera_id=camera_id, frame=frame,
+    ):
         return True
     if frame is None:
         return False
@@ -510,12 +515,19 @@ def _patrol_person_passes_display_gate(
     frame_h: int,
     *,
     camera_id: str,
+    frame: np.ndarray | None = None,
 ) -> bool:
     from ..patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
     from ..patrol_person_visibility import patrol_person_meets_display_gate
 
+    vehicle_boxes: list[tuple[float, float, float, float]] = []
+    if frame is not None and is_patrol_helmet_like(camera_id):
+        vehicle_boxes = _patrol_bodycam_vehicle_boxes(frame, camera_id)
+
     if is_patrol_helmet_like(camera_id):
-        return patrol_person_meets_display_gate(person_box, frame_w, frame_h)
+        return patrol_person_meets_display_gate(
+            person_box, frame_w, frame_h, vehicle_boxes=vehicle_boxes,
+        )
     if is_patrol_flycam_aerial(camera_id):
         return patrol_person_meets_display_gate(
             person_box, frame_w, frame_h, flycam=True,

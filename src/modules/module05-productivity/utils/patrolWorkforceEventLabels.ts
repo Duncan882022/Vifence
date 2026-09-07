@@ -62,11 +62,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     inactiveColor: 'text-stone-400/70',
     activeBorder: 'border-stone-400',
     activeText: PATROL_TIER_TOKENS.object.color,
-<<<<<<< HEAD
     activeBadge: PATROL_TIER_TOKENS.object.badge,
-=======
-    activeBadge: 'bg-stone-400/20 text-stone-400',
->>>>>>> origin/cursor/fix-person-header-icon-color-0a8d
     countTooltip: 'Số thẻ Đối tượng (snapshot) — KPI «Lượt gặm · ĐT» đếm lượt gặm',
   },
   person: {
@@ -76,11 +72,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     inactiveColor: 'text-orange-400/70',
     activeBorder: 'border-orange-400',
     activeText: PATROL_TIER_TOKENS.person.color,
-<<<<<<< HEAD
     activeBadge: PATROL_TIER_TOKENS.person.badge,
-=======
-    activeBadge: 'bg-orange-400/20 text-orange-400',
->>>>>>> origin/cursor/fix-person-header-icon-color-0a8d
     countTooltip: 'Thẻ Người có mặt đủ rõ (snapshot ≥ ngưỡng)',
   },
   identity: {
@@ -90,11 +82,7 @@ export const PATROL_EVENTS_TAB_META: Record<'all' | 'object' | 'person' | 'ident
     inactiveColor: 'text-green-400/70',
     activeBorder: 'border-green-400',
     activeText: PATROL_TIER_TOKENS.identity.color,
-<<<<<<< HEAD
     activeBadge: PATROL_TIER_TOKENS.identity.badge,
-=======
-    activeBadge: 'bg-green-400/20 text-green-400',
->>>>>>> origin/cursor/fix-person-header-icon-color-0a8d
     countTooltip: 'Thẻ đã identify trong gallery / HR',
   },
 }

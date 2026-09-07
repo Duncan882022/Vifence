@@ -36,12 +36,21 @@ def _human_face_promotion_allowed(obs: ObservationInput) -> bool:
     frame_w, frame_h = _frame_size(obs)
     from ...patrol_person_visibility import patrol_anonymous_identity_allowed
 
+    vehicle_boxes: list[tuple[float, float, float, float]] = []
+    if obs.frame is not None:
+        from ...patrol_flight_mode import is_patrol_helmet_like
+        from ...patrol.person_analyzer import _patrol_bodycam_vehicle_boxes
+
+        if is_patrol_helmet_like(obs.camera_id):
+            vehicle_boxes = _patrol_bodycam_vehicle_boxes(obs.frame, obs.camera_id)
+
     return patrol_anonymous_identity_allowed(
         tuple(obs.person_bbox),
         frame_w,
         frame_h,
         face_quality=float(obs.face_quality or 0.0),
         face_eligible=bool(obs.face_eligible),
+        vehicle_boxes=vehicle_boxes,
     )
 
 
