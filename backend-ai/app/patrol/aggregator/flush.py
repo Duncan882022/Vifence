@@ -350,6 +350,242 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
     return path, score if path else 0.0
 
 
+def write_person_card(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    first_commit: bool = False,
+    finalize: bool = False,
+    finalize_at: float | None = None,
+) -> None:
+    """Ghi/refresh thẻ Người/Định danh — tách khỏi luồng obj."""
+    from .session_store import link_pers_session
+
+    subject_id = session.subject_id
+    if not subject_id:
+        return
+
+    now = obs.ts
+    gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
+    if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
+        session.counted = True
+
+    worker_id = (obs.lifecycle_worker_id or "").strip() or None
+    tier_at = (obs.lifecycle_tier or "").strip() or None
+    if not tier_at and worker_id:
+        from ...patrol_identity_lifecycle import tier_for_worker_id
+
+        inferred = tier_for_worker_id(worker_id)
+        if inferred != "object":
+            tier_at = inferred
+
+    path, shot_score = (None, 0.0)
+    shot_face_eligible = obs.face_eligible
+    if (
+        obs.frame is not None
+        and obs.person_bbox is not None
+        and _luot_needs_snapshot(session, obs, now=now)
+    ):
+        shot_obs = _snapshot_observation(session, obs)
+        path, shot_score = _write_snapshot(session, shot_obs)
+        if path:
+            shot_face_eligible = shot_obs.face_eligible
+            session.luot_snapshot_captured = not _within_accumulation_window(session, now)
+
+    tier_at_resolved = _resolve_tier_at_observation(
+        subject_id,
+        tier_at=tier_at,
+        shot_face_eligible=shot_face_eligible,
+        worker_id=worker_id,
+    )
+    tier_payload = _build_flush_tier_snapshot(
+        session,
+        obs,
+        subject_id=subject_id,
+        tier=tier_at_resolved,
+        shot_score=shot_score,
+        shot_face_eligible=shot_face_eligible,
+    )
+
+    import json as _json
+
+    daystore.touch_person_event(
+        subject_id,
+        camera_id=session.camera_id,
+        zone_id=session.zone_id,
+        snapshot_path=path,
+        snapshot_score=shot_score,
+        face_eligible=shot_face_eligible,
+        now=now,
+        seen_since=session.started_at if first_commit or session.last_flush_at <= 0 else None,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+        skip_appearance=True,
+        tier_snapshot_json=_json.dumps(tier_payload, ensure_ascii=False),
+    )
+
+    link_pers_session(session)
+
+    session.appearance_row_id = daystore.coerce_appearance_id_for_encounter_gap(
+        session.appearance_row_id,
+        session.camera_id,
+        now,
+        encounter_started_at=session.started_at,
+    )
+
+    if session.appearance_row_id is None:
+        extend_id = daystore.find_extendable_track_appearance_row(
+            db.today_vn(now),
+            subject_id,
+            session.camera_id,
+            session.last_seen_at,
+            encounter_started_at=session.started_at,
+            gps_lat=gps_lat,
+            gps_lng=gps_lng,
+        )
+        if extend_id is not None:
+            session.appearance_row_id = extend_id
+        else:
+            overlap_id = daystore.find_overlapping_appearance_row(
+                db.today_vn(now),
+                subject_id,
+                session.camera_id,
+                session.started_at,
+                session.last_seen_at,
+                session_id=session.session_id,
+                track_id=session.track_id,
+            )
+            if overlap_id is not None:
+                session.appearance_row_id = overlap_id
+
+    interactions_json = json.dumps(
+        [i.to_dict() for i in session.interactions],
+        ensure_ascii=False,
+    )
+    payload = build_event_payload(
+        session,
+        tier_at_observation=tier_at_resolved,
+        tier_snapshot=tier_payload,
+    )
+    payload_json = json.dumps(payload, ensure_ascii=False)
+
+    row_id = daystore.upsert_track_appearance(
+        appearance_id=session.appearance_row_id,
+        event_date=db.today_vn(now),
+        subject_id=subject_id,
+        camera_id=session.camera_id,
+        zone_id=session.zone_id,
+        track_id=session.track_id,
+        session_id=session.session_id or "",
+        started_at=session.started_at,
+        ended_at=session.last_seen_at,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+        payload_json=payload_json,
+        interactions_json=interactions_json,
+        snapshot_path=path,
+        counted=session.counted,
+        end_reason=session.end_reason if finalize else None,
+        finalize=finalize,
+    )
+    session.appearance_row_id = row_id
+    session.last_flush_at = now
+    session.committed = True
+    session.dirty = False
+    daystore.coalesce_subject_appearances(
+        subject_id,
+        db.today_vn(now),
+        camera_id=session.camera_id,
+    )
+
+
+def write_object_card(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    finalize: bool = False,
+    finalize_at: float | None = None,
+) -> None:
+    """Ghi thẻ Đối tượng + appearance — chỉ gọi lúc finalize."""
+    from .session_store import link_subject_session
+
+    subject_id = session.subject_id
+    if not subject_id or not subject_id.startswith("obj-"):
+        return
+
+    now = obs.ts
+    gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
+
+    path, shot_score = (None, 0.0)
+    if obs.frame is not None and obs.person_bbox is not None:
+        shot_obs = _snapshot_observation(session, obs)
+        path, shot_score = _write_snapshot(session, shot_obs)
+
+    daystore.touch_object(
+        subject_id,
+        camera_id=session.camera_id,
+        zone_id=session.zone_id,
+        snapshot_path=path,
+        snapshot_score=shot_score,
+        now=now,
+        seen_since=session.started_at,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+        skip_appearance=True,
+    )
+
+    link_subject_session(session)
+
+    tier_at = "object"
+    tier_payload = _build_flush_tier_snapshot(
+        session,
+        obs,
+        subject_id=subject_id,
+        tier=tier_at,
+        shot_score=shot_score,
+        shot_face_eligible=False,
+    )
+    interactions_json = json.dumps(
+        [i.to_dict() for i in session.interactions],
+        ensure_ascii=False,
+    )
+    payload = build_event_payload(
+        session,
+        tier_at_observation=tier_at,
+        tier_snapshot=tier_payload,
+    )
+    payload_json = json.dumps(payload, ensure_ascii=False)
+
+    row_id = daystore.upsert_track_appearance(
+        appearance_id=session.appearance_row_id,
+        event_date=db.today_vn(now),
+        subject_id=subject_id,
+        camera_id=session.camera_id,
+        zone_id=session.zone_id,
+        track_id=session.track_id,
+        session_id=session.session_id or "",
+        started_at=session.started_at,
+        ended_at=session.last_seen_at,
+        gps_lat=gps_lat,
+        gps_lng=gps_lng,
+        payload_json=payload_json,
+        interactions_json=interactions_json,
+        snapshot_path=path,
+        counted=session.counted,
+        end_reason=session.end_reason if finalize else None,
+        finalize=finalize,
+    )
+    session.appearance_row_id = row_id
+    session.last_flush_at = now
+    session.committed = True
+    session.dirty = False
+    daystore.coalesce_subject_appearances(
+        subject_id,
+        db.today_vn(now),
+        camera_id=session.camera_id,
+    )
+
+
 def flush_session(
     session: TrackSession,
     obs: ObservationInput,
@@ -660,9 +896,8 @@ def _record_sighting(session: TrackSession) -> None:
 
 def finalize_session(session: TrackSession, *, finalize_at: float | None = None) -> None:
     """Đóng session khi ByteTrack mất track."""
-    # Mang theo bbox cuối cùng: thiếu nó thì cổng chặn vật tĩnh không có gì để
-    # xét, và một cái cột giàn giáo bị YOLO gọi là người suốt buổi — bị chặn ở
-    # mọi lần ghi trước đó — lại lọt thành thẻ đúng lúc chốt track.
+    from ...config import settings
+
     fallback = ObservationInput(
         camera_id=session.camera_id,
         track_id=session.track_id,
@@ -674,13 +909,35 @@ def finalize_session(session: TrackSession, *, finalize_at: float | None = None)
         session.best_observation is not None
         and session.best_observation.frame is not None
     ) else fallback
-    session.dirty = True
-    flush_session(session, obs, finalize=True, finalize_at=finalize_at)
+
+    if getattr(settings, "patrol_deferred_object", True):
+        session.dirty = True
+        if session.person_committed:
+            write_person_card(
+                session,
+                obs,
+                finalize=True,
+                finalize_at=finalize_at,
+            )
+            session.lifecycle_state = "FINALIZED"
+        else:
+            from .object_finalize import finalize_object_if_needed
+
+            obj_id = finalize_object_if_needed(
+                session, obs, finalize_at=finalize_at,
+            )
+            if session.person_committed:
+                write_person_card(session, obs, first_commit=True, finalize=True)
+            elif obj_id:
+                write_object_card(session, obs, finalize=True, finalize_at=finalize_at)
+            session.lifecycle_state = "FINALIZED"
+    else:
+        session.dirty = True
+        flush_session(session, obs, finalize=True, finalize_at=finalize_at)
+
     try:
         _record_sighting(session)
     except Exception:  # noqa: BLE001
-        # Sổ cái là số liệu, không phải đường ghi sự kiện. Hỏng ở đây không
-        # được kéo theo việc chốt track.
         logger.exception("[patrol] không ghi được lượt gặp %s", session.session_id)
     logger.debug(
         "finalized track %s subject %s duration %.1fs interactions %d",

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 
+from ...config import settings
 from .behavior_pipeline import process_behavior
-from .flush import finalize_session, flush_session
+from .face_assess import enrich_observation_face
+from .flush import finalize_session, flush_session, write_person_card
 from .identity_pipeline import process_identity
+from .person_commit import maybe_commit_person
 from .session_store import get_or_create, pop_session, reset
 from .tripwire import site_entry_counted
 from .types import ObservationInput
@@ -17,11 +20,14 @@ logger = logging.getLogger("patrol.aggregator.engine")
 def _apply_encounter_split(session, ts: float) -> None:
     session.appearance_row_id = None
     session.luot_snapshot_captured = False
-    # Lượt mới → file JPG mới. Giữ khoá cũ là lượt sau ghi đè ảnh lượt trước.
     session.luot_key = None
     session.started_at = ts
     session.committed = False
+    session.person_committed = False
+    session.face_checks_disabled = False
+    session.lifecycle_state = "ACTIVE"
     session.last_flush_at = 0.0
+    session.last_face_assess_at = 0.0
     from .session_store import _new_session_id
 
     session.session_id = _new_session_id(session.camera_id, session.track_id)
@@ -38,7 +44,6 @@ def _maybe_split_encounter(session, ts: float) -> None:
         current_session=session,
     ):
         return
-    # Chưa chốt lượt đầu — gap lớn vẫn cùng track ByteTrack, giữ mốc first_seen.
     if not session.committed:
         return
     if session.last_seen_at <= 0 or ts <= session.last_seen_at + 1e-6:
@@ -84,8 +89,75 @@ def _flush_due(session, obs: ObservationInput) -> bool:
     return False
 
 
+def _ingest_deferred(**kwargs) -> str | None:
+    """Luồng mới: person commit sớm, object chỉ finalize."""
+    obs = ObservationInput(
+        camera_id=str(kwargs.get("camera_id") or ""),
+        track_id=str(kwargs.get("track_id") or ""),
+        ts=float(kwargs.get("now") or __import__("time").time()),
+        person_bbox=tuple(kwargs["person_bbox"]) if kwargs.get("person_bbox") else None,
+        zone_id=kwargs.get("zone_id"),
+        face_embedding=tuple(kwargs["face_embedding"]) if kwargs.get("face_embedding") else None,
+        face_quality=float(kwargs.get("face_quality") or 0.0),
+        face_eligible=bool(kwargs.get("face_eligible")),
+        confidence=float(kwargs.get("confidence") or 0.0),
+        frame=kwargs.get("frame"),
+        lifecycle_tier=kwargs.get("lifecycle_tier"),
+        lifecycle_worker_id=kwargs.get("lifecycle_worker_id"),
+        worker_name=kwargs.get("worker_name"),
+        touched_object_id=kwargs.get("touched_object_id"),
+        density_only=bool(kwargs.get("density_only")),
+    )
+    if not obs.camera_id or not obs.track_id:
+        return None
+
+    if obs.density_only:
+        return None
+
+    session = get_or_create(
+        obs.camera_id,
+        obs.track_id,
+        ts=obs.ts,
+        zone_id=obs.zone_id,
+        bbox=obs.person_bbox,
+        face_embedding=obs.face_embedding,
+    )
+    _maybe_split_encounter(session, obs.ts)
+    session.touch(obs.ts, obs.person_bbox)
+    _maybe_update_best_observation(session, obs)
+
+    if not session.is_abandoned():
+        if obs.face_embedding and obs.face_eligible:
+            from .identity_pipeline import _note_best_frame
+
+            _note_best_frame(session, obs)
+        obs = enrich_observation_face(session, obs)
+        _maybe_update_best_observation(session, obs)
+        maybe_commit_person(session, obs)
+
+    if session.person_committed:
+        if obs.touched_object_id:
+            process_behavior(session, obs)
+        if not session.counted:
+            from ..sink import _resolve_observation_gps
+
+            gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=obs.ts)
+            if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
+                session.dirty = True
+        if _flush_due(session, obs):
+            write_person_card(session, obs, first_commit=False)
+        return session.subject_id
+
+    if obs.touched_object_id:
+        process_behavior(session, obs)
+    return session.subject_id
+
+
 def ingest_observation(**kwargs) -> str | None:
     """Điểm vào thay ``record_observation`` khi ``PATROL_USE_AGGREGATOR=1``."""
+    if getattr(settings, "patrol_deferred_object", True):
+        return _ingest_deferred(**kwargs)
+
     obs = ObservationInput(
         camera_id=str(kwargs.get("camera_id") or ""),
         track_id=str(kwargs.get("track_id") or ""),
@@ -147,6 +219,10 @@ def ingest_observation(**kwargs) -> str | None:
     return session.subject_id
 
 
+def reset_sessions(camera_id: str | None = None) -> None:
+    reset(camera_id)
+
+
 def finalize_track(
     camera_id: str,
     track_id: str,
@@ -159,8 +235,6 @@ def finalize_track(
     session = pop_session(camera_id, track_id)
     if session is None:
         return
-    # Giữ last_seen_at = lần quan sát cuối (touch). Không kéo ended_at tới lúc
-    # drop muộn khi cam tắt lâu rồi mới finalize lúc bật lại.
     if now is not None and session.last_seen_at <= 0:
         session.last_seen_at = float(now)
     if end_reason:
@@ -181,7 +255,3 @@ def finalize_orphan_sessions(camera_id: str, *, end_reason: str | None = None) -
         finalize_session(session)
         closed += 1
     return closed
-
-
-def reset_sessions(camera_id: str | None = None) -> None:
-    reset(camera_id)

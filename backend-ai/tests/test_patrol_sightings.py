@@ -33,27 +33,47 @@ class PatrolSightingsTests(unittest.TestCase):
         db.close()
         self._tmp.cleanup()
 
-    def _see_object(self, track_id: str, *, t0: float, camera_id: str = "HC-01") -> str:
+    def _see_object(
+        self,
+        track_id: str,
+        *,
+        t0: float,
+        camera_id: str = "HC-01",
+        end_reason: str | None = None,
+        finalize_at: float | None = None,
+    ) -> str:
+        date = db.today_vn(t0)
+        before = {str(o["obj_id"]) for o in daystore.list_objects(date)}
         sink.record_observation(
             camera_id=camera_id,
             track_id=track_id,
             person_bbox=_PERSON_BOX,
             now=t0,
         )
-        return str(
-            sink.record_observation(
-                camera_id=camera_id,
-                track_id=track_id,
-                person_bbox=_PERSON_BOX,
-                now=t0 + _MIN_OBJECT_COMMIT + 0.15,
-            )
+        sink.record_observation(
+            camera_id=camera_id,
+            track_id=track_id,
+            person_bbox=_PERSON_BOX,
+            now=t0 + _MIN_OBJECT_COMMIT + 0.15,
         )
+        fin = finalize_at if finalize_at is not None else t0 + _MIN_OBJECT_COMMIT + 0.5
+        sink.forget_track(
+            camera_id, track_id, now=fin, end_reason=end_reason,
+        )
+        created = [
+            o for o in daystore.list_objects(date)
+            if str(o["obj_id"]) not in before
+        ]
+        assert len(created) == 1, daystore.list_objects(date)
+        return str(created[0]["obj_id"])
 
     def test_finalized_track_writes_one_sighting(self) -> None:
         t0 = 1_000.0
-        obj_id = self._see_object("ptk0001:person", t0=t0)
-        sink.forget_track(
-            "HC-01", "ptk0001:person", now=t0 + 3.0, end_reason=END_REASON_EXIT_EDGE,
+        obj_id = self._see_object(
+            "ptk0001:person",
+            t0=t0,
+            end_reason=END_REASON_EXIT_EDGE,
+            finalize_at=t0 + 3.0,
         )
 
         rows = daystore.list_sightings(db.today_vn(t0))
@@ -66,13 +86,17 @@ class PatrolSightingsTests(unittest.TestCase):
     def test_each_track_is_its_own_sighting(self) -> None:
         """Gặp lại sau khi ra khỏi khung là lượt mới — đúng đặc tả nghiệp vụ."""
         t0 = 1_000.0
-        first = self._see_object("ptk0001:person", t0=t0)
-        sink.forget_track(
-            "HC-01", "ptk0001:person", now=t0 + 3.0, end_reason=END_REASON_EXIT_EDGE,
+        first = self._see_object(
+            "ptk0001:person",
+            t0=t0,
+            end_reason=END_REASON_EXIT_EDGE,
+            finalize_at=t0 + 3.0,
         )
-        second = self._see_object("ptk0002:person", t0=t0 + 60.0)
-        sink.forget_track(
-            "HC-01", "ptk0002:person", now=t0 + 63.0, end_reason=END_REASON_EXIT_EDGE,
+        second = self._see_object(
+            "ptk0002:person",
+            t0=t0 + 60.0,
+            end_reason=END_REASON_EXIT_EDGE,
+            finalize_at=t0 + 63.0,
         )
 
         self.assertNotEqual(first, second)
@@ -83,10 +107,8 @@ class PatrolSightingsTests(unittest.TestCase):
     def test_two_cameras_seeing_one_person_are_two_sightings(self) -> None:
         """Nhiều mũ cùng thấy một người vẫn là nhiều lượt — không có dedup Đối tượng."""
         t0 = 1_000.0
-        self._see_object("ptk0001:person", t0=t0, camera_id="HC-01")
-        self._see_object("ptk0001:person", t0=t0, camera_id="HC-02")
-        sink.forget_track("HC-01", "ptk0001:person", now=t0 + 3.0)
-        sink.forget_track("HC-02", "ptk0001:person", now=t0 + 3.0)
+        self._see_object("ptk0001:person", t0=t0, camera_id="HC-01", finalize_at=t0 + 3.0)
+        self._see_object("ptk0001:person", t0=t0, camera_id="HC-02", finalize_at=t0 + 3.0)
 
         stats = daystore.day_stats(db.today_vn(t0))
         self.assertEqual(stats["object_sighting_count"], 2)
@@ -94,8 +116,7 @@ class PatrolSightingsTests(unittest.TestCase):
     def test_finalizing_the_same_session_twice_keeps_one_row(self) -> None:
         """Cam tắt gọi forget_track rồi quét nốt session mồ côi — vẫn một lượt."""
         t0 = 1_000.0
-        self._see_object("ptk0001:person", t0=t0)
-        sink.forget_track("HC-01", "ptk0001:person", now=t0 + 3.0)
+        self._see_object("ptk0001:person", t0=t0, finalize_at=t0 + 3.0)
 
         from app.patrol.aggregator.engine import finalize_orphan_sessions
 
@@ -106,16 +127,17 @@ class PatrolSightingsTests(unittest.TestCase):
     def test_stream_offline_sightings_are_reported_apart(self) -> None:
         """Lượt đóng vì mất tín hiệu không nói lên điều gì về công trường."""
         t0 = 1_000.0
-        self._see_object("ptk0001:person", t0=t0)
-        sink.forget_track(
-            "HC-01",
+        self._see_object(
             "ptk0001:person",
-            now=t0 + 3.0,
+            t0=t0,
             end_reason=END_REASON_STREAM_OFFLINE,
+            finalize_at=t0 + 3.0,
         )
-        self._see_object("ptk0002:person", t0=t0 + 60.0)
-        sink.forget_track(
-            "HC-01", "ptk0002:person", now=t0 + 63.0, end_reason=END_REASON_EXIT_EDGE,
+        self._see_object(
+            "ptk0002:person",
+            t0=t0 + 60.0,
+            end_reason=END_REASON_EXIT_EDGE,
+            finalize_at=t0 + 63.0,
         )
 
         stats = daystore.day_stats(db.today_vn(t0))
@@ -159,8 +181,7 @@ class PatrolSightingsTests(unittest.TestCase):
 
     def test_end_reason_defaults_when_the_caller_does_not_say(self) -> None:
         t0 = 1_000.0
-        self._see_object("ptk0001:person", t0=t0)
-        sink.forget_track("HC-01", "ptk0001:person", now=t0 + 3.0)
+        self._see_object("ptk0001:person", t0=t0, finalize_at=t0 + 3.0)
 
         rows = daystore.list_sightings(db.today_vn(t0))
         self.assertEqual(rows[0]["end_reason"], END_REASON_LOST)
@@ -213,7 +234,12 @@ class PatrolObjectPromotionTests(unittest.TestCase):
             (date, obj_id),
         )
         self.assertEqual(row["promoted_to"], "tk-0000001")
-        self.assertEqual(len(daystore.list_person_events(date)), 1)
+        promoted = [
+            c for c in daystore.list_person_events(date)
+            if c.get("promoted_from")
+        ]
+        self.assertEqual(len(promoted), 1)
+        self.assertEqual(promoted[0]["pers_id"], "tk-0000001")
 
     def test_promoted_card_no_longer_counts_as_an_object(self) -> None:
         t0 = 1_000.0

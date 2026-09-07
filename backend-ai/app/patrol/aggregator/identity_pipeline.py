@@ -1,4 +1,9 @@
-"""Luồng định danh — cache ptk-* → bỏ re-gallery khi đã resolve."""
+"""Luồng định danh — cache ptk-* → bỏ re-gallery khi đã resolve.
+
+Khi ``patrol_deferred_object`` bật (mặc định), promote obj→person chạy qua
+``person_commit`` / ``object_finalize`` — các hàm promote ở đây chỉ phục vụ
+legacy ``flush_session`` khi flag tắt.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,12 @@ logger = logging.getLogger("patrol.aggregator.identity")
 MAX_BEST_FRAMES = 3
 MIN_QUALITY_FOR_SEARCH = 0.55
 MIN_QUALITY_FOR_NEW_IDENTITY = 0.62
+
+
+def _legacy_promote_enabled() -> bool:
+    from ...config import settings
+
+    return not getattr(settings, "patrol_deferred_object", True)
 
 
 def _frame_size(obs: ObservationInput) -> tuple[int, int]:
@@ -382,6 +393,10 @@ def _may_promote_to_person(session: TrackSession, obs: ObservationInput) -> bool
 
 
 def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> None:
+    if not _legacy_promote_enabled():
+        session.subject_id = pers_id
+        session.dirty = True
+        return
     obj_id = (session.subject_id or "").strip()
     if obj_id.startswith("obj-"):
         daystore.promote_object(obj_id, pers_id, now=now)
@@ -403,6 +418,8 @@ def _assign_pers_subject(session: TrackSession, pers_id: str, *, now: float) -> 
 
 def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationInput) -> bool:
     """Đối tượng đã thấy mặt (face_eligible) → thẻ Người pers-*."""
+    if not _legacy_promote_enabled():
+        return False
     if not (session.subject_id or "").startswith("obj-"):
         return False
 
@@ -472,6 +489,8 @@ def _promote_object_with_face_evidence(session: TrackSession, obs: ObservationIn
 
 
 def _maybe_promote_object_subject(session: TrackSession, obs: ObservationInput) -> None:
+    if not _legacy_promote_enabled():
+        return
     if not (session.subject_id or "").startswith("obj-"):
         return
     if not _may_promote_to_person(session, obs):
@@ -793,6 +812,8 @@ def try_promote_object_after_snapshot(
     snapshot_score: float,
 ) -> None:
     """obj có JPG mặt đủ điểm nhưng chưa lên Người — repair trước khi ghi thẻ."""
+    if not _legacy_promote_enabled():
+        return
     sid = (session.subject_id or "").strip()
     if not sid.startswith("obj-"):
         return

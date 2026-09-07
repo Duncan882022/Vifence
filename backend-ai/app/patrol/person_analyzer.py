@@ -235,21 +235,7 @@ def _record_patrol_density_encounter(
     person_det.track_id = track_id
     person_det.tier = "object"
     person_det.face_eligible = False
-    try:
-        from .sink import record_observation
-
-        record_observation(
-            camera_id=camera_id,
-            track_id=track_id,
-            face_embedding=None,
-            face_quality=0.0,
-            confidence=float(confidence),
-            frame=frame,
-            person_bbox=person_bbox,
-            density_only=True,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("[patrol] density encounter — không ghi được quan sát")
+    # Peak/aerial density — counter nội bộ, không ghi thẻ SQLite (deferred lifecycle).
 
 
 def _assign_patrol_person_identity(
@@ -467,14 +453,16 @@ def _assign_patrol_person_identity(
     # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được
     # serialize thẳng xuống trình duyệt.
     try:
+        from ...config import settings
         from .sink import record_observation
 
+        deferred = getattr(settings, "patrol_deferred_object", True)
         record_observation(
             camera_id=camera_id,
             track_id=track_id,
-            face_embedding=face_emb if person_det.face_eligible else None,
-            face_quality=float(_face_score or 0.0),
-            face_eligible=bool(person_det.face_eligible),
+            face_embedding=face_emb if person_det.face_eligible and not deferred else None,
+            face_quality=float(_face_score or 0.0) if not deferred else 0.0,
+            face_eligible=bool(person_det.face_eligible) if not deferred else False,
             confidence=float(person_det.confidence or 0.0),
             frame=frame,
             person_bbox=sink_bbox,
@@ -483,7 +471,6 @@ def _assign_patrol_person_identity(
             worker_name=resolved.worker_name,
         )
     except Exception:  # noqa: BLE001
-        # Kho tuần tra hỏng không được kéo sập luồng live.
         logger.exception("[patrol] Không ghi được quan sát vào SQLite")
 
 
