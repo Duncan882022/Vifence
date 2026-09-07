@@ -457,7 +457,7 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
         self.assertAlmostEqual(float(rows_after[0]["ended_at"]), ts + 14.5, places=3)
 
     def test_standing_person_does_not_overwrite_card_snapshot(self) -> None:
-        """Còn trong khung — upsert last_seen, không ghi đè ảnh thẻ mỗi flush."""
+        """Còn trong khung — không upsert last_seen thẻ; không ghi đè ảnh mỗi flush."""
         from unittest.mock import patch
 
         import numpy as np
@@ -504,10 +504,12 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
             float(card["snapshot_score"]),
             daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE,
         )
-        self.assertGreater(float(card["last_seen"]), ts)
+        self.assertEqual(float(card["last_seen"]), ts)
         # Một lượt, một JPG — không chụp lại sau khi thẻ đã có ảnh mặt.
         self.assertEqual(write_mock.call_count, 1)
-        self.assertEqual(len(daystore.list_day_presences(db.today_vn(ts))), 1)
+        presences = daystore.list_day_presences(db.today_vn(ts))
+        self.assertEqual(len(presences), 1)
+        self.assertGreater(float(presences[0]["ended_at"]), ts)
 
     def test_dwell_gate_retries_until_committed(self) -> None:
         """Frame đầu chưa đủ dwell — ingest tiếp vẫn phải chốt được (legacy flush)."""
