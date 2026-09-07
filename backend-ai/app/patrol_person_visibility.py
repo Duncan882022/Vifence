@@ -265,6 +265,45 @@ MIN_ANONYMOUS_IDENTITY_FACE_QUALITY = 0.48
 MIN_PARTIAL_FACE_DETECT_SCORE = 0.55
 
 
+def _patrol_face_detect_min_for_camera(camera_id: str = "") -> float:
+    from .config import settings
+
+    cam = (camera_id or "").strip().upper()
+    if cam.startswith("HC-") or cam.startswith("DR-"):
+        return float(settings.patrol_face_detect_min_score_bodycam)
+    return float(settings.patrol_face_detect_min_score)
+
+
+def patrol_reidentifiable_face_allowed(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    face_detect_score: float = 0.0,
+    face_eligible: bool = False,
+    camera_id: str = "",
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
+) -> bool:
+    """Mặt đủ chất lượng lưu embedding và khớp lại lần sau — không chỉ cấp mã A≠B.
+
+    Partial YuNet (0.55–0.61 trên bodycam) đủ cho overlay thử nhưng không đủ
+    định danh lại; bắt buộc điểm detect đầy đủ theo ngưỡng camera.
+    """
+    if not face_eligible:
+        return False
+    min_detect = _patrol_face_detect_min_for_camera(camera_id)
+    if float(face_detect_score) < min_detect:
+        return False
+    return patrol_anonymous_identity_allowed(
+        person_box,
+        frame_w,
+        frame_h,
+        face_quality=float(face_detect_score),
+        face_eligible=True,
+        vehicle_boxes=vehicle_boxes,
+    )
+
+
 def patrol_face_promotion_quality(quality: float, *, face_eligible: bool) -> float:
     """Ngưỡng chất lượng mặt cho thăng hạng Người — nới khi đã eligible (mặt nghiêng)."""
     if face_eligible and quality >= MIN_PARTIAL_FACE_DETECT_SCORE:

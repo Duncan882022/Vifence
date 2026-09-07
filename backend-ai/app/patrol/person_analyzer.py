@@ -351,17 +351,36 @@ def _assign_patrol_person_identity(
     worker_name = ""
 
     if face_eligible and face_emb is not None:
-        from ..patrol_person_visibility import patrol_anonymous_identity_allowed
+        from ..patrol_person_visibility import (
+            patrol_anonymous_identity_allowed,
+            patrol_reidentifiable_face_allowed,
+        )
 
-        if not patrol_anonymous_identity_allowed(
+        vehicle_boxes = (
+            _patrol_bodycam_vehicle_boxes(frame, camera_id)
+            if _is_helmet_bodycam(camera_id)
+            else []
+        )
+        face_detect_score = float(_face_score or 0.0)
+        reidentifiable = patrol_reidentifiable_face_allowed(
             person_box,
             frame_w,
             frame_h,
-            face_quality=float(_face_score or 0.0),
-            face_eligible=bool(face_eligible),
-            vehicle_boxes=_patrol_bodycam_vehicle_boxes(frame, camera_id)
-            if _is_helmet_bodycam(camera_id)
-            else [],
+            face_detect_score=face_detect_score,
+            face_eligible=True,
+            camera_id=camera_id,
+            vehicle_boxes=vehicle_boxes,
+        )
+        if not reidentifiable:
+            face_eligible = False
+            face_emb = None
+        elif not patrol_anonymous_identity_allowed(
+            person_box,
+            frame_w,
+            frame_h,
+            face_quality=face_detect_score,
+            face_eligible=True,
+            vehicle_boxes=vehicle_boxes,
         ):
             face_eligible = False
             face_emb = None
@@ -390,6 +409,15 @@ def _assign_patrol_person_identity(
             from ..patrol_entity import resolve_patrol_worker_display_name
 
             worker_name = resolve_patrol_worker_display_name(worker_id, "")
+        if worker_id:
+            from ..patrol.identity import lookup_reidentifiable_tk_profile
+
+            lc = peek_track_lifecycle(camera_id, track_id)
+            if not lookup_reidentifiable_tk_profile(worker_id) and (
+                not lc or lc.tier == "object"
+            ):
+                worker_id = ""
+                worker_name = ""
 
     # Tầng lấy từ state machine chứ không suy lại mỗi frame: track đã lên Người /
     # Định danh thì giữ nguyên nhãn kể cả khung hình này quay lưng.

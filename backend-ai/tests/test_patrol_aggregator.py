@@ -239,13 +239,13 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 1_000.0
-        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts, camera_id="HC-01")
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-promote", ts=ts)
         session.subject_id = obj_id
         session.identity_resolved = True
         session.identity = PersonIdentity(
-            person_id="sgc-6688",
+            person_id="tk-0000042",
             identity_type=IdentityType.ANONYMOUS,
             confidence=0.85,
         )
@@ -255,15 +255,11 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             track_id="ptk-promote",
             ts=ts + 5,
             lifecycle_tier="person",
-            lifecycle_worker_id="sgc-6688",
+            lifecycle_worker_id="tk-0000042",
             confidence=0.85,
             face_eligible=True,
         )
-        with patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value=pers_id,
-        ):
-            result = process_identity(session, obs)
+        result = process_identity(session, obs)
         self.assertIsNotNone(result)
         assert result is not None
         self.assertTrue(result.startswith("tk-"))
@@ -277,7 +273,7 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
         from app.patrol.aggregator.types import IdentityType, ObservationInput, PersonIdentity
 
         ts = 2_000.0
-        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts)
+        pers_id = identity.ensure_draft_for_tk("tk-0000042", now=ts, camera_id="HC-01")
         obj_id = daystore.touch_object(None, camera_id="HC-01", now=ts)
         session = get_or_create("HC-01", "ptk-first", ts=ts)
         session.subject_id = obj_id
@@ -287,20 +283,17 @@ class AggregatorIdentityPromoteTest(unittest.TestCase):
             track_id="ptk-first",
             ts=ts + 2,
             lifecycle_tier="person",
-            lifecycle_worker_id="sgc-9901",
+            lifecycle_worker_id="tk-0000042",
             confidence=0.9,
             face_eligible=True,
         )
         with patch(
             "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
             return_value=PersonIdentity(
-                person_id="sgc-9901",
+                person_id="tk-0000042",
                 identity_type=IdentityType.ANONYMOUS,
                 confidence=0.9,
             ),
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value=pers_id,
         ):
             result = process_identity(session, obs)
         self.assertIsNotNone(result)
@@ -469,34 +462,27 @@ class AggregatorContinuousPresenceTest(unittest.TestCase):
 
         ts = 5_500.0
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        emb = tuple(float(x) for x in np.zeros(128, dtype=np.float32))
+        emb = tuple(emb[i] + (1.0 if i == 7 else 0.0) for i in range(128))
         with patch(
             "app.patrol.aggregator.flush._gate_observation_commit",
             return_value=(True, ts),
         ), patch(
-            "app.patrol.aggregator.identity_pipeline._ensure_pers_for_worker",
-            return_value="tk-0000002",
-        ), patch(
-            "app.patrol.aggregator.identity_pipeline._map_worker_to_identity",
-            return_value=PersonIdentity(
-                person_id="sgc-7003",
-                identity_type=IdentityType.ANONYMOUS,
-                confidence=0.9,
-            ),
-        ), patch(
             "app.patrol.sink._write_snapshot",
             return_value="2026-09-03/tk-0000002.jpg",
         ) as write_mock:
-            identity.ensure_draft_for_tk("tk-0000002", now=ts)
+            identity.ensure_draft_for_tk("tk-0000002", now=ts, camera_id="HC-01")
             for i in range(40):
                 ingest_observation(
                     camera_id="HC-01",
                     track_id="ptk-stand-face",
                     now=ts + i * 0.5,
                     lifecycle_tier="person",
-                    lifecycle_worker_id="sgc-7003",
+                    lifecycle_worker_id="tk-0000002",
                     confidence=0.9,
                     face_eligible=True,
                     face_quality=0.85,
+                    face_embedding=emb,
                     frame=frame,
                     person_bbox=(100.0, 80.0, 220.0, 400.0),
                 )
@@ -1212,7 +1198,7 @@ class BestObservationFinalizeTests(unittest.TestCase):
         self.assertNotIn("score-0.20", snap)
 
     def test_fast_passing_object_commits_before_accumulation_window(self) -> None:
-        """Xe/người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
+        """Người chạy qua — ghi thẻ trước 2s (min-commit), không chờ cửa sổ frame đẹp."""
         import numpy as np
         from unittest.mock import patch
 
@@ -1221,15 +1207,29 @@ class BestObservationFinalizeTests(unittest.TestCase):
 
         ts = 20_000.0
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        bbox = (400.0, 280.0, 520.0, 520.0)
+        bbox = (400.0, 80.0, 520.0, 520.0)
         window = track_accumulation_window_seconds()
 
+        gate_calls = {"n": 0}
+
+        def _gate(*_a, **_k):
+            gate_calls["n"] += 1
+            if gate_calls["n"] < 2:
+                return (False, ts)
+            return (True, ts)
+
         with patch(
+            "app.patrol.sink._gate_observation_commit",
+            side_effect=_gate,
+        ), patch(
+            "app.patrol.aggregator.flush._gate_observation_commit",
+            side_effect=_gate,
+        ), patch(
             "app.patrol.aggregator.flush._write_snapshot",
             return_value=("2026-08-30/pass.jpg", 0.88),
         ):
             oid = ingest_observation(
-                camera_id="DR-03",
+                camera_id="HC-01",
                 track_id="ptk-pass",
                 now=ts,
                 person_bbox=bbox,
@@ -1238,21 +1238,21 @@ class BestObservationFinalizeTests(unittest.TestCase):
             )
             self.assertIsNone(oid)
             oid = ingest_observation(
-                camera_id="DR-03",
+                camera_id="HC-01",
                 track_id="ptk-pass",
-                now=ts + 0.76,
+                now=ts + 0.85,
                 person_bbox=bbox,
                 frame=frame,
                 confidence=0.88,
             )
             self.assertTrue(str(oid or "").startswith("obj-"))
-            finalize_track("DR-03", "ptk-pass", now=ts + 0.9)
+            finalize_track("HC-01", "ptk-pass", now=ts + 1.0)
 
         from app.patrol import daystore, db
 
         objs = daystore.list_objects(db.today_vn(ts))
         self.assertEqual(len(objs), 1)
-        self.assertLess(ts + 0.76 - ts, window)
+        self.assertLess(ts + 0.85 - ts, window)
 
 
 class PromotedCardSnapshotRepairTests(unittest.TestCase):
