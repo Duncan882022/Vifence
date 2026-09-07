@@ -283,6 +283,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         return None, 0.0
     from .. import sink
     from ...patrol_identity_lifecycle import tier_for_worker_id
+    from ...patrol_ids import is_person_subject_id
     from ...patrol_person_visibility import patrol_snapshot_draw_bbox
 
     shot_obs = _snapshot_observation(session, obs)
@@ -294,7 +295,7 @@ def _write_snapshot(session: TrackSession, obs: ObservationInput) -> tuple[str |
         face_box=_snapshot_face_box(shot_obs, frame_w, frame_h),
         anchor_from_center=(
             not shot_obs.face_eligible
-            and (shot_obs.lifecycle_tier or "").strip() == "object"
+            and not is_person_subject_id(session.subject_id or "")
         ),
     )
 

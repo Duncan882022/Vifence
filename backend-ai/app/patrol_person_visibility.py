@@ -297,10 +297,6 @@ def patrol_object_commit_allowed(
         )
     if patrol_person_meets_detection_gate(person_box, frame_w, frame_h):
         return True
-    if wide_crowd_rider_box(person_box, frame_w, frame_h):
-        return plausible_person_silhouette(
-            person_box, frame_w, frame_h, patrol_display=True,
-        ) and not limb_fragment_person_box(person_box, frame_w, frame_h)
     return False
 
 

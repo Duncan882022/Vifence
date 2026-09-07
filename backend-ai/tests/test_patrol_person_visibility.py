@@ -169,6 +169,12 @@ class TestPatrolPersonVisibility(unittest.TestCase):
         self.assertTrue(patrol_person_meets_display_gate(torso, fw, fh))
         self.assertFalse(patrol_object_commit_allowed(torso, fw, fh))
 
+    def test_small_box_on_parked_vehicle_not_committed(self):
+        """YOLO FP trên xe đỗ — wide_crowd cũ lọt commit, ROI khoanh xe."""
+        fw, fh = 1280, 720
+        moto = (619.59, 200.67, 667.58, 273.77)
+        self.assertFalse(patrol_object_commit_allowed(moto, fw, fh))
+
 
 if __name__ == "__main__":
     unittest.main()

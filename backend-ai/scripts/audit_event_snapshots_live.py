@@ -96,17 +96,22 @@ def _download_snapshot(base: str, token: str, path: str, dest: Path) -> bool:
 
 
 def _detect_roi_and_label(img: np.ndarray) -> tuple[str | None, float | None, float | None, float | None]:
-    """Trả (tier_label, area_ratio, cx, cy) từ overlay xanh lá / sky trên JPG."""
+    """Trả (tier_label, area_ratio, cx, cy) từ overlay trên JPG."""
     h, w = img.shape[:2]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-    # Xanh lá — Đối tượng (dashed border + label bg)
+    # Xanh lá legacy — một số bản cũ
     green_mask = cv2.inRange(hsv, (35, 40, 80), (90, 255, 255))
     # Sky/cyan — Người (BGR sky-400 #38bdf8)
     cyan_mask = cv2.inRange(hsv, (85, 50, 80), (105, 255, 255))
-    # BGR trực tiếp — khung mỏng 2px đôi khi rơi khỏi dải HSV
     sky_bgr = cv2.inRange(img, (240, 175, 50), (255, 200, 70))
     cyan_mask = cv2.bitwise_or(cyan_mask, sky_bgr)
+    # Cam — Người (BGR orange-400 #fb923c → 60,146,251)
+    orange_bgr = cv2.inRange(img, (50, 130, 50), (90, 170, 90))
+    cyan_mask = cv2.bitwise_or(cyan_mask, orange_bgr)
+    # Stone — Đối tượng (BGR stone-400 #a8a29e → 158,162,168)
+    stone_bgr = cv2.inRange(img, (145, 150, 145), (175, 178, 175))
+    green_mask = cv2.bitwise_or(green_mask, stone_bgr)
 
     kernel = np.ones((5, 5), np.uint8)
     green_mask = cv2.dilate(green_mask, kernel, iterations=2)
