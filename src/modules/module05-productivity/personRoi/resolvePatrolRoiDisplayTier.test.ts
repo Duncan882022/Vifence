@@ -2,41 +2,46 @@ import { describe, expect, it } from 'vitest'
 import { resolvePatrolRoiDisplayTier } from './resolvePatrolRoiDisplayTier'
 
 describe('resolvePatrolRoiDisplayTier', () => {
-  it('person không downtier khi chưa face_eligible', () => {
-    expect(resolvePatrolRoiDisplayTier('person', { faceEligible: false })).toBe('person')
-    expect(resolvePatrolRoiDisplayTier('person', {})).toBe('person')
+  it('person + quay lưng (faceEligibleNow false) → viền xám object', () => {
+    expect(resolvePatrolRoiDisplayTier('person', { faceEligibleNow: false })).toBe('object')
+    expect(resolvePatrolRoiDisplayTier('person', { faceEligible: false })).toBe('object')
   })
 
-  it('person khi face_eligible', () => {
-    expect(resolvePatrolRoiDisplayTier('person', { faceEligible: true })).toBe('person')
+  it('person + thấy mặt frame này → cam Người', () => {
+    expect(resolvePatrolRoiDisplayTier('person', { faceEligibleNow: true })).toBe('person')
   })
 
-  it('identity luôn hiển thị dù quay lưng', () => {
-    expect(resolvePatrolRoiDisplayTier('identity', { faceEligible: false })).toBe('identity')
+  it('identity + quay lưng → viền xám (chưa thấy mặt frame này)', () => {
+    expect(resolvePatrolRoiDisplayTier('identity', { faceEligibleNow: false })).toBe('object')
   })
 
-  it('gallery id trên tier person', () => {
+  it('identity + thấy mặt → xanh Định danh', () => {
+    expect(resolvePatrolRoiDisplayTier('identity', { faceEligibleNow: true })).toBe('identity')
+  })
+
+  it('gallery id trên tier person — mặt frame này → identity', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: false,
+        faceEligibleNow: true,
         workerId: 'p-SGC-6688',
       }),
-    ).toBe('person')
+    ).toBe('identity')
   })
 
-  it('promotedFrom không hạ tier — chỉ nhãn phụ', () => {
+  it('promotedFrom không hạ tier nội bộ — chỉ nhãn phụ', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: true,
+        faceEligibleNow: true,
         workerId: 'tk-00000042',
         promotedFrom: ['obj-20260904-0002'],
       }),
     ).toBe('person')
   })
 
-  it('ưu tiên tier_snapshot từ BE', () => {
+  it('ưu tiên tier_snapshot từ BE khi có mặt', () => {
     expect(
       resolvePatrolRoiDisplayTier('object', {
+        faceEligibleNow: true,
         tierSnapshot: {
           tier: 'person',
           tier_rank: 1,
