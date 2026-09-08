@@ -18,8 +18,11 @@ export function syncLivePatrolPersonDetectionsToHeatmap(
   if (!isPatrolMetricsCameraId(cameraId)) return
   if (frameWallclockMs != null && Number.isFinite(frameWallclockMs) && frameWallclockMs > 0) {
     const prev = lastIngestFrameWallclockMs.get(cameraId)
-    if (prev === frameWallclockMs) return
-    lastIngestFrameWallclockMs.set(cameraId, frameWallclockMs)
+    // Tránh nhịp trùng wallclock gửi detections rỗng → missStreak tăng oan.
+    if (prev === frameWallclockMs && detections.length === 0) return
+    if (prev !== frameWallclockMs) {
+      lastIngestFrameWallclockMs.set(cameraId, frameWallclockMs)
+    }
   }
   getPatrolPersonRoiEngine(cameraId).ingest(detections)
 }

@@ -72,7 +72,17 @@ export class PatrolPersonRoiEngine {
   /** Gọi mỗi lần backend trả detections mới. */
   ingest(detections: PersonRoiDetection[], now = performance.now()): void {
     const cfg = this.config()
-    const dtMs = this.lastIngestAt > 0 ? Math.max(16, now - this.lastIngestAt) : 450
+    const prevIngest = this.lastIngestAt
+    const dtMs = prevIngest > 0 ? Math.max(16, now - prevIngest) : 450
+    // Tránh hai nhịp rỗng sát nhau xoá hết ROI oan (WS duplicate / gate flicker).
+    if (
+      detections.length === 0
+      && this.displayCache.length > 0
+      && prevIngest > 0
+      && now - prevIngest < 150
+    ) {
+      return
+    }
     this.lastIngestAt = now
     this.tracks = advancePersonRoiTracks(this.tracks, detections, dtMs, Date.now(), cfg)
     this.displayCache = this.polishDisplay(predictPersonRoiTracks(this.tracks, 0, cfg), false, cfg)

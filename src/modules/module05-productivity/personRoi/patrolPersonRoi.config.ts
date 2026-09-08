@@ -37,8 +37,8 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   matchCenterRatio: 1.75,
   matchSizeRatioMin: 0.22,
   maxMissFrames: 14,
-  displayCoastMaxMiss: 0,
-  displayMaxStaleMs: 2500,
+  displayCoastMaxMiss: 1,
+  displayMaxStaleMs: 4500,
   maxPredictMs: 0,
   maxPredictMsLost: 0,
   processNoise: 0.05,
@@ -53,10 +53,10 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   maxSpeedBoxPerSec: 14,
 }
 
-/** Bodycam HC-* — real-time bám người đi / camera rung. */
+/** Bodycam HC-* — cover-or-hide; conf thấp hơn vẫn vẽ khi có track_id BE. */
 export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
   ...PATROL_PERSON_ROI_CONFIG,
-  highConfidenceMin: 0.30,
+  highConfidenceMin: 0.26,
 }
 
 /** WHEP/WebRTC — cùng cover-or-hide. */
@@ -77,7 +77,7 @@ export const PATROL_PERSON_ROI_PROFILE_FLYCAM: PatrolPersonRoiConfig = {
   matchIouMin: 0.04,
   matchCenterRatio: 2.20,
   matchSizeRatioMin: 0.18,
-  displayCoastMaxMiss: 0,
+  displayCoastMaxMiss: 1,
   maxMissFrames: 10,
 }
 

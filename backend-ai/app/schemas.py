@@ -78,6 +78,7 @@ class TierSnapshotPayload(BaseModel):
     track_id: str = ""
     camera_id: str = ""
     tier_source: str = "lifecycle"
+    profile_status: Optional[str] = None
 
 
 class PpeDetection(BaseModel):

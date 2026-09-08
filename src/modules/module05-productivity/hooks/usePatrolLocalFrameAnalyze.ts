@@ -9,7 +9,7 @@ import { getPatrolHelmetGps } from '@/services/patrolHelmetGpsBridge'
 import { isPatrolHelmetCameraId } from '../data/patrolHelmetScope'
 import { getPatrolPersonRoiEngine, setPatrolPersonRoiLocalPublisher } from '../personRoi'
 import { syncLivePatrolPersonDetectionsToHeatmap } from '../utils/patrolHeatmapLiveSync'
-import { patrolPersonMeetsDisplayGate } from '../utils/patrolPersonVisibility'
+import { patrolPersonMeetsRoiOverlayGate } from '../utils/patrolPersonVisibility'
 
 /**
  * Nhịp gửi khung — khớp round-trip analyze (~280–450ms) để bbox không snap lệch khung.
@@ -31,7 +31,7 @@ function gatePatrolPersons(
     if (d.behavior !== 'person') return true
     const box = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
     if (!box || box.length < 4) return false
-    return patrolPersonMeetsDisplayGate({
+    return patrolPersonMeetsRoiOverlayGate({
       bbox: [box[0], box[1], box[2], box[3]],
       frameW,
       frameH,

@@ -451,6 +451,8 @@ export function predictPersonRoiTracks(
         faceEligible: track.faceEligible,
         workerId: track.workerId,
         promotedFrom: track.promotedFrom,
+        profileStatus: track.tierSnapshot?.profile_status,
+        snapshotScore: track.tierSnapshot?.snapshot_score,
         tierSnapshot: track.tierSnapshot,
       }),
       displayOpacity,

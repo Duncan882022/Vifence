@@ -3,6 +3,8 @@ import type { MobileAiDetection } from '@/modules/module02-training/services/mob
 import {
   patrolPersonMeetsDisplayGate,
   patrolPersonMeetsDrFlycamDisplayGate,
+  patrolPersonMeetsDrFlycamRoiOverlayGate,
+  patrolPersonMeetsRoiOverlayGate,
   suppressPatrolObjectOverlappingIdentified,
 } from './patrolPersonVisibility'
 import { bboxToPixelSpace } from '@/modules/module02-training/utils/videoOverlayCoords'
@@ -33,6 +35,7 @@ export function gateVmsPatrolPersonDetections(
   snapshot: VmsDetectionSnapshot,
   cameraId: string,
   flightMode?: PatrolFlightMode | null,
+  options?: { forLiveRoi?: boolean },
 ): MobileAiDetection[] {
   const frameW = snapshot.width ?? 0
   const frameH = snapshot.height ?? 0
@@ -76,13 +79,21 @@ export function gateVmsPatrolPersonDetections(
         workerId: d.worker_id,
       }
       if (isDrFlycam) {
-        return patrolPersonMeetsDrFlycamDisplayGate(gateInput)
+        return options?.forLiveRoi
+          ? patrolPersonMeetsDrFlycamRoiOverlayGate(gateInput)
+          : patrolPersonMeetsDrFlycamDisplayGate(gateInput)
       }
-      return patrolPersonMeetsDisplayGate({
-        ...gateInput,
-        flycam: flycamGates.flycam,
-        proximityFlycam: flycamGates.proximityFlycam,
-      })
+      return options?.forLiveRoi
+        ? patrolPersonMeetsRoiOverlayGate({
+          ...gateInput,
+          flycam: flycamGates.flycam,
+          proximityFlycam: flycamGates.proximityFlycam,
+        })
+        : patrolPersonMeetsDisplayGate({
+          ...gateInput,
+          flycam: flycamGates.flycam,
+          proximityFlycam: flycamGates.proximityFlycam,
+        })
     })
 
   return suppressPatrolObjectOverlappingIdentified(mapped, frameW, frameH)

@@ -18,6 +18,8 @@ export interface PatrolTierSnapshot {
   track_id?: string
   camera_id?: string
   tier_source?: string
+  /** Trạng thái hồ sơ nhân sự — draft giữ cam ROI kể cả quay lưng. */
+  profile_status?: 'draft' | 'identified' | string | null
   /** Alias deprecated — tier frozen lúc ghi appearance */
   tier_at_observation?: PatrolTierLevel
   tier_label_vi?: string

@@ -57,7 +57,7 @@ describe('ROI smoothness self-check', () => {
     expect(uptime).toBeGreaterThanOrEqual(0.92)
   })
 
-  it('miss frame — ẩn ngay, không coast ghost', () => {
+  it('miss frame — ẩn sau coast=1, không ghost dài', () => {
     resetPersonRoiTrackSeq()
     let tracks = advancePersonRoiTracks(
       new Map(),
@@ -68,6 +68,9 @@ describe('ROI smoothness self-check', () => {
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
 
     tracks = advancePersonRoiTracks(tracks, [], ANALYZE_MS, 1_300)
+    expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(1)
+
+    tracks = advancePersonRoiTracks(tracks, [], ANALYZE_MS, 1_600)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
   })
 

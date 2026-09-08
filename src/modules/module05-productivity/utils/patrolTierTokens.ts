@@ -44,7 +44,7 @@ export const PATROL_TIER_TOKENS: Record<PatrolTier, PatrolTierToken> = {
     badge: 'bg-orange-400/10 text-orange-400 border-orange-400/30',
     borderAccent: 'border-l-orange-400',
     headerUnderline: 'border-b-orange-400/45',
-    tooltip: 'Đã phân biệt A≠B — chưa có trong gallery',
+    tooltip: 'Hồ sơ bản nháp hoặc mặt đủ rõ để nhận diện lại',
     roiBorder: 'border-2 border-solid border-orange-400/95',
     roiLabelBg: 'bg-orange-950/95',
     roiLabelText: 'text-orange-50',
