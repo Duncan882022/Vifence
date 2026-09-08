@@ -226,7 +226,7 @@ export function CameraVideoFeed({
     const flightMode = resolveEffectivePatrolFlightMode(cameraId, vmsFeed.snapshot.metrics)
     syncLivePatrolPersonDetectionsToHeatmap(
       cameraId,
-      gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode),
+      gateVmsPatrolPersonDetections(vmsFeed.snapshot, cameraId, flightMode, { forLiveRoi: true }),
       vmsFeed.snapshot.frame_wallclock_ms,
     )
   }, [

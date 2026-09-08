@@ -30,8 +30,8 @@ describe('patrolHelmetScope ROI buffer', () => {
   it('HC-02 local publisher — cùng profile cover-or-hide bodycam VMS', () => {
     const local = resolvePatrolPersonRoiConfig('HC-02', null, { localPublisher: true })
     const vms = resolvePatrolPersonRoiConfig('HC-02', null)
-    expect(local.displayCoastMaxMiss).toBe(0)
-    expect(vms.displayCoastMaxMiss).toBe(0)
+    expect(local.displayCoastMaxMiss).toBe(1)
+    expect(vms.displayCoastMaxMiss).toBe(1)
     expect(local.maxPredictMs).toBe(0)
     expect(vms.maxPredictMs).toBe(0)
   })

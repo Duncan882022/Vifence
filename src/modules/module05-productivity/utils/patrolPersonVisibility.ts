@@ -377,12 +377,41 @@ export interface PatrolPersonDetectionGateInput {
 }
 
 /**
- * Gate vẽ ROI — rộng hơn gate ghi sự kiện.
- * Yêu cầu nghiệp vụ: khoanh mọi thứ có dấu hiệu là người, kể cả người ngồi, bị
- * che một phần hay quay lưng. Ràng buộc "đầu + 30% thân" chỉ quyết định có ghi
- * sự kiện hay không.
- * Ở đây chỉ loại mảnh chân/tay và khung không thể là người.
+ * Gate ROI overlay live — rộng hơn gate ghi sự kiện / display gate thường.
+ * Bỏ lọc oversized crowd blob (YOLO đôi khi trả bbox lớn nhưng vẫn là người).
  */
+export function patrolPersonMeetsRoiOverlayGate(input: PatrolPersonDetectionGateInput): boolean {
+  const {
+    bbox,
+    frameW,
+    frameH,
+    flycam = false,
+    proximityFlycam = false,
+    vehicleBoxes = [],
+  } = input
+  if (frameW <= 0 || frameH <= 0) return false
+  if (verticalStructureFpBox(bbox, frameW, frameH)) return false
+  if (signboardLikeFpBox(bbox, frameW, frameH)) return false
+  if (flycam || proximityFlycam) {
+    return patrolPersonMeetsDisplayGate(input)
+  }
+  if (speckPersonBox(bbox, frameH)) return false
+  if (patrolMotorcycleSeatLikeFpBox(bbox, frameW, frameH)) return false
+  if (patrolPersonOverlapsVehicleFp(bbox, vehicleBoxes, frameW, frameH)) return false
+  if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
+  if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
+  return !patrolPersonLimbFragmentBbox(bbox, frameW, frameH)
+}
+
+export function patrolPersonMeetsDrFlycamRoiOverlayGate(
+  input: Omit<PatrolPersonDetectionGateInput, 'flycam' | 'proximityFlycam'>,
+): boolean {
+  return (
+    patrolPersonMeetsRoiOverlayGate({ ...input, flycam: true })
+    || patrolPersonMeetsRoiOverlayGate({ ...input, proximityFlycam: true })
+  )
+}
+
 export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInput): boolean {
   const {
     bbox,
