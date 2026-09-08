@@ -230,6 +230,7 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
   if (det.face_eligible === true) {
     track.faceEligible = true
   }
+  track.faceEligibleNow = det.face_eligible === true
   // Suy giảm rồi mới lấy max, giống backend. Dùng thẳng `Math.max` thì con số
   // trên nhãn là **đỉnh của cả đời track** và không bao giờ hạ: người rời khung
   // rồi mà ROI vẫn khoe 93% của mấy giây trước, khiến một track đang yếu trông
@@ -446,6 +447,7 @@ export function predictPersonRoiTracks(
       workerId: track.workerId,
       workerName: track.workerName,
       tier: resolvePatrolRoiDisplayTier(track.tier, {
+        faceEligibleNow: track.faceEligibleNow,
         faceEligible: track.faceEligible,
         workerId: track.workerId,
         promotedFrom: track.promotedFrom,
