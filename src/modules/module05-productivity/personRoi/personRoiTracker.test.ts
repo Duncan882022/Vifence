@@ -295,7 +295,7 @@ describe('tầng định danh từ backend', () => {
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
   })
 
-  it('đi lên theo backend: Đối tượng → Người → Định danh', () => {
+  it('đi lên theo backend: Đối tượng → Người (cam) → Định danh', () => {
     let tracks = advance(
       empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'object' })], 1_000,
     )
@@ -303,7 +303,20 @@ describe('tầng định danh từ backend', () => {
 
     tracks = advance(
       tracks,
-      [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person', face_eligible: true })],
+      [person([104, 102, 204, 402], {
+        track_id: 'p1',
+        tier: 'person',
+        face_eligible: true,
+        tier_snapshot: {
+          tier: 'person',
+          tier_rank: 1,
+          tier_since: 0,
+          subject_id: 'tk-1',
+          face_eligible: true,
+          confidence: 0.9,
+          snapshot_score: 1.2,
+        },
+      })],
       1_180,
     )
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
@@ -316,20 +329,77 @@ describe('tầng định danh từ backend', () => {
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
   })
 
-  it('tier person từ BE — ROI giữ Người dù chưa face_eligible (no downtier)', () => {
+  it('quy tắc cam — lưng xám; mặt mạnh hoặc draft mới cam', () => {
     let tracks = advance(
       empty(),
       [person([100, 100, 200, 400], { track_id: 'p1', tier: 'person', worker_id: 'tk-0000001' })],
       1_000,
     )
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
+
+    tracks = advance(
+      tracks,
+      [person([104, 102, 204, 402], {
+        track_id: 'p1',
+        tier: 'person',
+        worker_id: 'tk-0000001',
+        face_eligible: true,
+        tier_snapshot: {
+          tier: 'person',
+          tier_rank: 1,
+          tier_since: 0,
+          subject_id: 'tk-0000001',
+          face_eligible: true,
+          confidence: 0.9,
+          snapshot_score: 1.2,
+        },
+      })],
+      1_180,
+    )
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
 
     tracks = advance(
       tracks,
-      [person([104, 102, 204, 402], { track_id: 'p1', tier: 'person', worker_id: 'tk-0000001', face_eligible: true })],
-      1_180,
+      [person([108, 104, 208, 404], {
+        track_id: 'p1',
+        tier: 'person',
+        worker_id: 'tk-0000001',
+        face_eligible: false,
+        tier_snapshot: {
+          tier: 'person',
+          tier_rank: 1,
+          tier_since: 0,
+          subject_id: 'tk-0000001',
+          face_eligible: false,
+          confidence: 0.9,
+          snapshot_score: 0.4,
+          profile_status: 'draft',
+        },
+      })],
+      1_360,
     )
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('person')
+
+    tracks = advance(
+      tracks,
+      [person([112, 106, 212, 406], {
+        track_id: 'p1',
+        tier: 'person',
+        worker_id: 'tk-0000001',
+        face_eligible: false,
+        tier_snapshot: {
+          tier: 'person',
+          tier_rank: 1,
+          tier_since: 0,
+          subject_id: 'tk-0000001',
+          face_eligible: false,
+          confidence: 0.9,
+          snapshot_score: 0.4,
+        },
+      })],
+      1_540,
+    )
+    expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
   })
 
   it('payload trễ nhịp không kéo nhãn tụt xuống', () => {

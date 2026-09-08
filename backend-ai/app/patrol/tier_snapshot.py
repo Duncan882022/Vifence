@@ -42,6 +42,7 @@ class TierSnapshot(BaseModel):
     track_id: str = ""
     camera_id: str = ""
     tier_source: str = "lifecycle"
+    profile_status: str | None = None
 
     @property
     def tier_label_vi(self) -> str:
@@ -110,6 +111,32 @@ def resolve_subject_id(
     return (object_id or "").strip()
 
 
+def _lookup_profile_status(worker_id: str | None) -> str | None:
+    wid = (worker_id or "").strip()
+    if not wid or wid == "unknown":
+        return None
+    try:
+        from . import identity
+        from ..patrol_ids import normalize_track_id
+
+        tk = normalize_track_id(wid)
+        pers_id = tk or (wid if wid.startswith("tk-") else None)
+        if not pers_id:
+            lookup = identity.lookup_profile_by_tk(tk) if tk else None
+            pers_id = lookup
+        if not pers_id and wid.startswith("tk-"):
+            pers_id = wid
+        if not pers_id:
+            return None
+        row = identity.get_person(pers_id)
+        if not row:
+            return None
+        status = str(row.get("status") or "").strip()
+        return status or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_tier_snapshot(
     *,
     tier: str,
@@ -141,6 +168,7 @@ def build_tier_snapshot(
         tier=t,
     )
     snap_score = compute_snapshot_score(face_quality=face_quality, confidence=confidence)
+    profile_status = _lookup_profile_status(worker_id)
 
     return TierSnapshot(
         tier=t,
@@ -158,6 +186,7 @@ def build_tier_snapshot(
         track_id=(track_id or "").strip(),
         camera_id=(camera_id or "").strip(),
         tier_source=tier_source,
+        profile_status=profile_status,
     )
 
 
