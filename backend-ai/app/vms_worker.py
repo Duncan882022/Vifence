@@ -772,13 +772,13 @@ class CameraVmsWorker:
                                 merged_zones = self._merge_roi_zones(merged_zones, zone_rows)
                             if result.get("metrics"):
                                 merged_metrics[engine_name] = result["metrics"]
-                                if engine_name == "ppe":
-                                    ppe_m = result["metrics"]
-                                    if isinstance(ppe_m, dict):
-                                        if ppe_m.get("overlay_gate"):
-                                            merged_metrics["overlay_gate"] = ppe_m["overlay_gate"]
-                                        if ppe_m.get("vehicle_boxes"):
-                                            merged_metrics["vehicle_boxes"] = ppe_m["vehicle_boxes"]
+                                if engine_name in ("ppe", "patrol"):
+                                    engine_m = result["metrics"]
+                                    if isinstance(engine_m, dict):
+                                        if engine_m.get("overlay_gate"):
+                                            merged_metrics["overlay_gate"] = engine_m["overlay_gate"]
+                                        if engine_m.get("vehicle_boxes"):
+                                            merged_metrics["vehicle_boxes"] = engine_m["vehicle_boxes"]
                             frame_w = int(result.get("width") or frame_w)
                             frame_h = int(result.get("height") or frame_h)
                             try:

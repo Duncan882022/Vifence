@@ -95,7 +95,7 @@ def build_detections_ws_payload(
 
     metrics = payload.get("metrics") or {}
     if isinstance(metrics, dict):
-        patrol_metrics = metrics.get("ppe") or metrics
+        patrol_metrics = metrics.get("patrol") or metrics.get("ppe") or metrics
         if isinstance(patrol_metrics, dict):
             if patrol_metrics.get("overlay_gate") and "overlay_gate" not in payload:
                 payload["overlay_gate"] = str(patrol_metrics["overlay_gate"])

@@ -254,7 +254,7 @@ export function Module05Page() {
     [],
   )
   const patrolStreamMetricsIds = useMemo(
-    () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
+    () => DEFAULT_PATROL_GRID_CAMERA_IDS,
     [],
   )
   const { liveMetrics, workforceSnap } = usePatrolLivePoll(
@@ -322,7 +322,7 @@ export function Module05Page() {
     [patrolEventsLive, dayBundle.stats],
   )
   const patrolMapCameraIds = useMemo(
-    () => [...DEFAULT_PATROL_CAMERA_IDS, ...PATROL_DRONE_IDS] as const,
+    () => DEFAULT_PATROL_GRID_CAMERA_IDS,
     [],
   )
 

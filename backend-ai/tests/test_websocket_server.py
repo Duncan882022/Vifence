@@ -47,6 +47,25 @@ class WebSocketPayloadTests(unittest.TestCase):
         self.assertEqual(det["id"], "sgc-00000007")
         self.assertAlmostEqual(det["bbox"][0], 0.5, places=2)
 
+    def test_patrol_engine_metrics_hoist_overlay_gate(self) -> None:
+        overlay = {
+            "width": 1280,
+            "height": 720,
+            "updated_at": 1_700_000_000.0,
+            "detections": [],
+            "roi_zones": [],
+            "metrics": {
+                "patrol": {
+                    "overlay_gate": "be_roi",
+                    "vehicle_boxes": [[0.1, 0.2, 0.3, 0.4]],
+                    "display_person_count": 0,
+                },
+            },
+        }
+        payload = build_detections_ws_payload("HC-01", overlay, stream_online=True)
+        self.assertEqual(payload["overlay_gate"], "be_roi")
+        self.assertEqual(payload["vehicle_boxes"], [[0.1, 0.2, 0.3, 0.4]])
+
     def test_non_patrol_keeps_raw_detections(self) -> None:
         overlay = {
             "width": 1024,

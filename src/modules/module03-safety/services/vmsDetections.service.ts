@@ -282,6 +282,48 @@ interface RawVmsDetectionPayload {
   vehicle_boxes?: [number, number, number, number][]
 }
 
+function isNormVehicleBox(row: unknown): row is [number, number, number, number] {
+  return Array.isArray(row) && row.length >= 4
+}
+
+/** Top-level hoặc metrics.patrol / metrics.ppe — HC-01 dùng engine patrol. */
+function resolveOverlayGateFromPayload(data: RawVmsDetectionPayload): string | undefined {
+  if (typeof data.overlay_gate === 'string') return data.overlay_gate
+  const metrics = data.metrics
+  if (!metrics || typeof metrics !== 'object') return undefined
+  for (const key of ['patrol', 'ppe'] as const) {
+    const nested = metrics[key]
+    if (
+      nested
+      && typeof nested === 'object'
+      && typeof (nested as Record<string, unknown>).overlay_gate === 'string'
+    ) {
+      return (nested as Record<string, unknown>).overlay_gate as string
+    }
+  }
+  return undefined
+}
+
+function resolveVehicleBoxesFromPayload(
+  data: RawVmsDetectionPayload,
+): [number, number, number, number][] | undefined {
+  const fromTop = data.vehicle_boxes?.filter(isNormVehicleBox)
+  if (fromTop?.length) return fromTop
+  const metrics = data.metrics
+  if (!metrics || typeof metrics !== 'object') return undefined
+  for (const key of ['patrol', 'ppe'] as const) {
+    const nested = metrics[key]
+    if (nested && typeof nested === 'object') {
+      const vb = (nested as Record<string, unknown>).vehicle_boxes
+      if (Array.isArray(vb)) {
+        const filtered = vb.filter(isNormVehicleBox)
+        if (filtered.length) return filtered
+      }
+    }
+  }
+  return undefined
+}
+
 /** Chuẩn hoá payload backend — dùng chung cho HTTP poll và WebSocket push. */
 export function normalizeVmsDetectionSnapshot(
   raw: unknown,
@@ -320,13 +362,8 @@ export function normalizeVmsDetectionSnapshot(
     detections,
     roi_zones: data.roi_zones ?? [],
     metrics: data.metrics ?? {},
-    overlay_gate: typeof data.overlay_gate === 'string' ? data.overlay_gate : undefined,
-    vehicle_boxes: Array.isArray(data.vehicle_boxes)
-      ? data.vehicle_boxes.filter(
-        (row): row is [number, number, number, number] =>
-          Array.isArray(row) && row.length >= 4,
-      )
-      : undefined,
+    overlay_gate: resolveOverlayGateFromPayload(data),
+    vehicle_boxes: resolveVehicleBoxesFromPayload(data),
   }
 }
 

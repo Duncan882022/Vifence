@@ -143,4 +143,29 @@ describe('gateVmsPatrolPersonDetections', () => {
     expect(result[0]?.promoted_from).toEqual(['obj-20260904-0002'])
     expect(result[0]?.tier).toBe('person')
   })
+
+  it('tin tưởng BE overlay khi overlay_gate=be_roi — giữ bbox canopy FE display gate loại', () => {
+    const result = gateVmsPatrolPersonDetections(
+      {
+        ...snapshot([
+          {
+            behavior: 'person',
+            label: 'person',
+            bbox: [241, 89, 327, 241],
+            subject_bbox: [241, 89, 327, 241],
+            confidence: 0.55,
+            track_id: 'ptk-canopy',
+            tier: 'object',
+          },
+        ]),
+        overlay_gate: 'be_roi',
+        vehicle_boxes: [[0.05, 0.1, 0.15, 0.25]],
+      },
+      'HC-01',
+      null,
+      { forLiveRoi: true },
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0]?.track_id).toBe('ptk-canopy')
+  })
 })
