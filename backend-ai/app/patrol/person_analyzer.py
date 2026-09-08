@@ -98,8 +98,7 @@ def _filter_bodycam_vehicle_fp(
     if not vehicle_boxes and not persons:
         return persons
     from ..patrol_person_visibility import (
-        motorcycle_seat_like_fp_box,
-        parked_motorcycle_row_fp_box,
+        patrol_bodycam_motorcycle_fp_box,
         person_box_overlaps_vehicle_fp,
         upper_canopy_fp_box,
     )
@@ -107,9 +106,7 @@ def _filter_bodycam_vehicle_fp(
     kept: list[_PersonPpe] = []
     for p in persons:
         box = p.person_box
-        if motorcycle_seat_like_fp_box(box, frame_w, frame_h):
-            continue
-        if parked_motorcycle_row_fp_box(box, frame_w, frame_h):
+        if patrol_bodycam_motorcycle_fp_box(box, frame_w, frame_h):
             continue
         if upper_canopy_fp_box(box, frame_w, frame_h):
             continue

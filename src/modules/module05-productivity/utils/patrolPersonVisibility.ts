@@ -163,11 +163,95 @@ export function patrolMotorcycleSeatLikeFpBox(
   if (aspect < 1.12 && bhRatio < 0.26 && bwRatio >= 0.08) {
     if (cyRatio >= 0.18 && cyRatio <= 0.88) return true
   }
+  if (
+    aspect < 1.08
+    && bhRatio >= 0.26
+    && bhRatio < 0.36
+    && bwRatio >= 0.12
+    && bwRatio <= 0.22
+    && cyRatio >= 0.25
+    && cyRatio <= 0.65
+    && y1 / fh >= 0.27
+  ) {
+    return true
+  }
   if (aspect < 0.82 && bhRatio < 0.22 && bwRatio >= 0.10) {
     if (cyRatio < 0.55) return true
   }
   if (areaRatio > 0.14 && aspect < 0.95 && bhRatio < 0.42) return true
   return false
+}
+
+/** YOLO person trên hàng xe đỗ — mirror `parked_motorcycle_row_fp_box` (BE). */
+export function patrolParkedMotorcycleRowFpBox(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  const fw = Math.max(frameW, 1)
+  const fh = Math.max(frameH, 1)
+  const bwRatio = pw / fw
+  const bhRatio = ph / fh
+  const cyRatio = ((y1 + y2) / 2) / fh
+  const y1Ratio = y1 / fh
+  return (
+    aspect >= 1.55
+    && aspect <= 2.55
+    && bwRatio >= 0.05
+    && bwRatio <= 0.10
+    && bhRatio >= 0.20
+    && bhRatio <= 0.36
+    && cyRatio >= 0.28
+    && cyRatio <= 0.58
+    && y1Ratio >= 0.24
+    && y1Ratio <= 0.42
+  )
+}
+
+/** YOLO person trên cụm đầu / tay ga xe đỗ — mirror `parked_motorcycle_front_fp_box` (BE). */
+export function patrolParkedMotorcycleFrontFpBox(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+): boolean {
+  const [x1, y1, x2, y2] = bbox
+  const pw = Math.max(x2 - x1, 1)
+  const ph = Math.max(y2 - y1, 1)
+  const aspect = ph / pw
+  const fw = Math.max(frameW, 1)
+  const fh = Math.max(frameH, 1)
+  const bwRatio = pw / fw
+  const bhRatio = ph / fh
+  const cyRatio = ((y1 + y2) / 2) / fh
+  const y1Ratio = y1 / fh
+  return (
+    aspect >= 1.05
+    && aspect <= 1.85
+    && bwRatio >= 0.055
+    && bwRatio <= 0.145
+    && bhRatio >= 0.16
+    && bhRatio <= 0.40
+    && cyRatio >= 0.30
+    && cyRatio <= 0.72
+    && y1Ratio >= 0.27
+    && y1Ratio <= 0.52
+  )
+}
+
+export function patrolBodycamMotorcycleFpBox(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+): boolean {
+  return (
+    patrolMotorcycleSeatLikeFpBox(bbox, frameW, frameH)
+    || patrolParkedMotorcycleRowFpBox(bbox, frameW, frameH)
+    || patrolParkedMotorcycleFrontFpBox(bbox, frameW, frameH)
+  )
 }
 
 function bboxIntersectionArea(a: Bbox4, b: Bbox4): number {
@@ -405,7 +489,7 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
   }
   if (speckPersonBox(bbox, frameH)) return false
   if (patrolPersonOversizedDisplayBbox(bbox, frameW, frameH)) return false
-  if (patrolMotorcycleSeatLikeFpBox(bbox, frameW, frameH)) return false
+  if (patrolBodycamMotorcycleFpBox(bbox, frameW, frameH)) return false
   if (patrolPersonOverlapsVehicleFp(bbox, vehicleBoxes, frameW, frameH)) return false
   if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false

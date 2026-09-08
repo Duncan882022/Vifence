@@ -56,6 +56,16 @@ class TestMotorcycleSeatHeuristic(unittest.TestCase):
         self.assertTrue(upper_canopy_fp_box(tree, w, h))
         self.assertFalse(patrol_object_commit_allowed(tree, w, h))
 
+    def test_parked_scooter_front_hc01_live(self):
+        """HC-01 live — YOLO person trên đầu xe trắng đỗ vỉa hè."""
+        from app.patrol_person_visibility import parked_motorcycle_front_fp_box
+
+        w, h = 1280, 720
+        front = (96.0, 280.0, 216.0, 480.0)
+        self.assertTrue(parked_motorcycle_front_fp_box(front, w, h))
+        self.assertFalse(patrol_person_meets_display_gate(front, w, h))
+        self.assertFalse(patrol_object_commit_allowed(front, w, h))
+
     def test_standing_person_not_fp(self):
         person = _box(0.40, 0.20, 0.58, 0.72)
         self.assertFalse(motorcycle_seat_like_fp_box(person, FW, FH))
