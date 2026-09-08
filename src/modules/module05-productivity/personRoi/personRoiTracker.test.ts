@@ -27,8 +27,9 @@ function advance(
   tracks: Map<string, PersonRoiTrack>,
   detections: PersonRoiDetection[],
   now: number,
+  cfg = PATROL_PERSON_ROI_CONFIG,
 ): Map<string, PersonRoiTrack> {
-  return advancePersonRoiTracks(tracks, detections, 180, now)
+  return advancePersonRoiTracks(tracks, detections, 180, now, cfg)
 }
 
 function empty(): Map<string, PersonRoiTrack> {
@@ -497,6 +498,21 @@ describe('vòng đời track', () => {
 
     tracks = advance(tracks, [], 1_360)
     expect(predictPersonRoiTracks(tracks, 0)).toHaveLength(0)
+  })
+
+  it('bodycam — giữ ROI qua 2 nhịp miss rồi mới ẩn', () => {
+    const cfg = PATROL_PERSON_ROI_PROFILE_BODYCAM
+    let tracks = advance(empty(), [person([100, 100, 200, 400], { track_id: 'p1' })], 1_000, cfg)
+    expect(predictPersonRoiTracks(tracks, 0, cfg)).toHaveLength(1)
+
+    tracks = advance(tracks, [], 1_180, cfg)
+    expect(predictPersonRoiTracks(tracks, 120, cfg)).toHaveLength(1)
+
+    tracks = advance(tracks, [], 1_360, cfg)
+    expect(predictPersonRoiTracks(tracks, 120, cfg)).toHaveLength(1)
+
+    tracks = advance(tracks, [], 1_540, cfg)
+    expect(predictPersonRoiTracks(tracks, 120, cfg)).toHaveLength(0)
   })
 
   it('track mất dấu vẫn nằm trong bộ nhớ để nhận lại sau lúc bị che', () => {

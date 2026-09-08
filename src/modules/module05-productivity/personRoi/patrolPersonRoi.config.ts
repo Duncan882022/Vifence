@@ -53,10 +53,12 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   maxSpeedBoxPerSec: 14,
 }
 
-/** Bodycam HC-* — cover-or-hide; conf thấp hơn vẫn vẽ khi có track_id BE. */
+/** Bodycam HC-* — giữ ROI ~2 nhịp analyze khi YOLO miss; không nội suy bbox (không trượt). */
 export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
   ...PATROL_PERSON_ROI_CONFIG,
   highConfidenceMin: 0.26,
+  displayCoastMaxMiss: 2,
+  displayMaxStaleMs: 4500,
 }
 
 /** WHEP/WebRTC — cùng cover-or-hide. */

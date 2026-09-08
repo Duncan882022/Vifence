@@ -449,7 +449,7 @@ def _assign_patrol_person_identity(
     # này trong cả vòng phân tích — không đẩy qua PpeDetection vì nó được
     # serialize thẳng xuống trình duyệt.
     try:
-        from ...config import settings
+        from ..config import settings
         from .sink import record_observation
 
         deferred = getattr(settings, "patrol_deferred_object", True)
