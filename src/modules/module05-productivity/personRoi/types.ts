@@ -58,6 +58,8 @@ export interface PersonRoiTrack {
   peakGroupSize?: number
   /** Nhịp đo cuối — mặt đủ tiêu chí hiển thị tier Người trên ROI. */
   faceEligible?: boolean
+  /** Frame đo cuối — false khi quay lưng; dùng cho màu ROI (không sticky). */
+  faceEligibleNow?: boolean
   /** Thẻ vốn là `obj-*`, lên hạng khi bắt được mặt — đánh dấu trên nhãn ROI. */
   promotedFromObject?: boolean
   /** Mã obj-* gốc đã ghi hồ sơ. */

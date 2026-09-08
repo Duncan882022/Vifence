@@ -402,13 +402,15 @@ describe('tầng định danh từ backend', () => {
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('object')
   })
 
-  it('payload trễ nhịp không kéo nhãn tụt xuống', () => {
+  it('payload trễ nhịp — tier nội bộ không tụt; identity ROI vẫn xanh', () => {
     let tracks = advance(
-      empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'identity' })], 1_000,
+      empty(), [person([100, 100, 200, 400], { track_id: 'p1', tier: 'identity', face_eligible: true })], 1_000,
     )
     tracks = advance(
       tracks, [person([104, 102, 204, 402], { track_id: 'p1', tier: 'object' })], 1_180,
     )
+    const track = [...tracks.values()][0]
+    expect(track.tier).toBe('identity')
     expect(predictPersonRoiTracks(tracks, 0)[0].tier).toBe('identity')
   })
 })

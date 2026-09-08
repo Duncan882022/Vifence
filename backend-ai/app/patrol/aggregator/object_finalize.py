@@ -75,7 +75,7 @@ def finalize_object_if_needed(
 
     from .flush import _object_commit_allowed
 
-    if not _object_commit_allowed(obs, has_face=bool(session.best_faces)):
+    if not _object_commit_allowed(session, obs, has_face=bool(session.best_faces)):
         return None
 
     from ..sink import _resolve_observation_gps

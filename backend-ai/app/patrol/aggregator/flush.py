@@ -118,32 +118,51 @@ def _build_flush_tier_snapshot(
     return snap.to_payload_dict()
 
 
-def _object_commit_allowed(obs: ObservationInput, *, has_face: bool) -> bool:
+def _observation_for_object_gate(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> ObservationInput:
+    """Cổng ghi Đối tượng cần frame + bbox — fallback best_observation nếu flush thiếu frame."""
+    if obs.frame is not None and obs.person_bbox is not None:
+        return obs
+    best = session.best_observation
+    if best is not None and best.frame is not None and best.person_bbox is not None:
+        return best
+    return obs
+
+
+def _object_commit_allowed(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    has_face: bool,
+) -> bool:
     """Chặn ghi thẻ Đối tượng cho biển hiệu / vật tĩnh YOLO nhầm."""
-    if obs.person_bbox is None:
+    gate_obs = _observation_for_object_gate(session, obs)
+    if gate_obs.person_bbox is None:
         return False
     from ...patrol_flight_mode import is_patrol_flycam_aerial, is_patrol_helmet_like
     from ...patrol_person_visibility import patrol_object_commit_allowed
 
-    frame_w, frame_h = _frame_size_from_obs(obs)
-    flycam = is_patrol_flycam_aerial(obs.camera_id)
+    frame_w, frame_h = _frame_size_from_obs(gate_obs)
+    flycam = is_patrol_flycam_aerial(gate_obs.camera_id)
     proximity = (
-        not is_patrol_helmet_like(obs.camera_id)
+        not is_patrol_helmet_like(gate_obs.camera_id)
         and not flycam
-        and obs.camera_id.startswith("DR-")
+        and gate_obs.camera_id.startswith("DR-")
     )
     vehicle_boxes: list[tuple[float, float, float, float]] | None = None
-    if obs.frame is not None and is_patrol_helmet_like(obs.camera_id):
+    if gate_obs.frame is not None and is_patrol_helmet_like(gate_obs.camera_id):
         from ...patrol.person_analyzer import _patrol_bodycam_vehicle_boxes
 
-        vehicle_boxes = _patrol_bodycam_vehicle_boxes(obs.frame, obs.camera_id)
+        vehicle_boxes = _patrol_bodycam_vehicle_boxes(gate_obs.frame, gate_obs.camera_id)
     return patrol_object_commit_allowed(
-        obs.person_bbox,
+        gate_obs.person_bbox,
         frame_w,
         frame_h,
-        face_eligible=bool(obs.face_eligible or has_face),
-        face_quality=float(obs.face_quality or 0.0),
-        camera_id=obs.camera_id,
+        face_eligible=bool(gate_obs.face_eligible or has_face),
+        face_quality=float(gate_obs.face_quality or 0.0),
+        camera_id=gate_obs.camera_id,
         flycam=flycam,
         proximity_flycam=proximity,
         vehicle_boxes=vehicle_boxes,
@@ -683,14 +702,13 @@ def flush_session(
                     lifecycle_tier=obs.lifecycle_tier,
                     lifecycle_worker_id=obs.lifecycle_worker_id,
                 )
-            if not _object_commit_allowed(gate_obs, has_face=has_face):
+            if not _object_commit_allowed(session, gate_obs, has_face=has_face):
                 return
         gps_lat, gps_lng = _resolve_observation_gps(session.camera_id, at_ts=now)
         from .session_store import link_subject_session
 
-        # Một track = một lượt gặp = một thẻ. Khớp mặt trước khi tạo obj-* mới
+        # Một track = một lượt gặm = một thẻ. Khớp mặt trước khi tạo obj-* mới
         # để không sinh thẻ Đối tượng trùng tk-* đã có trong gallery/SQLite.
-        # Không mượn thẻ track song song — suy đoán bbox/thời gian dễ gộp nhầm hai người.
         from .identity_pipeline import (
             resolve_subject_from_face_match,
             resolve_subject_from_known_tk,
@@ -703,18 +721,47 @@ def flush_session(
             session.subject_id = face_pers
             link_subject_session(session)
         else:
-            obj_id = daystore.touch_object(
-                None,
-                camera_id=session.camera_id,
-                zone_id=session.zone_id,
-                now=now,
-                seen_since=session.started_at if session.last_flush_at <= 0 else None,
+            date = db.today_vn(now)
+            if not has_face:
+                nearby_pers = daystore.find_nearby_person_pers_id(
+                    date,
+                    gps_lat,
+                    gps_lng,
+                    now,
+                    camera_id=session.camera_id,
+                )
+                if nearby_pers:
+                    logger.info(
+                        "skip obj create — nearby person %s track %s cam %s",
+                        nearby_pers,
+                        session.track_id,
+                        session.camera_id,
+                    )
+                    return
+            reuse_obj = daystore.find_recent_open_object_id(
+                date,
+                session.camera_id,
+                session.zone_id,
+                now,
                 gps_lat=gps_lat,
                 gps_lng=gps_lng,
-                skip_appearance=True,
             )
-            session.subject_id = obj_id
-            link_subject_session(session)
+            if reuse_obj:
+                session.subject_id = reuse_obj
+                link_subject_session(session)
+            else:
+                obj_id = daystore.touch_object(
+                    None,
+                    camera_id=session.camera_id,
+                    zone_id=session.zone_id,
+                    now=now,
+                    seen_since=session.started_at if session.last_flush_at <= 0 else None,
+                    gps_lat=gps_lat,
+                    gps_lng=gps_lng,
+                    skip_appearance=True,
+                )
+                session.subject_id = obj_id
+                link_subject_session(session)
 
     subject_id = session.subject_id
     if not subject_id:

@@ -227,8 +227,10 @@ function applyIdentity(track: PersonRoiTrack, det: PersonRoiDetection): void {
     track.label = track.workerName?.trim()
       || (isKnownWorker(track.workerId) ? track.workerId! : track.label)
   }
-  // Cam ROI: chỉ frame hiện tại — quay lưng không giữ cam từ frame trước.
-  track.faceEligible = det.face_eligible === true
+  if (det.face_eligible === true) {
+    track.faceEligible = true
+  }
+  track.faceEligibleNow = det.face_eligible === true
   // Suy giảm rồi mới lấy max, giống backend. Dùng thẳng `Math.max` thì con số
   // trên nhãn là **đỉnh của cả đời track** và không bao giờ hạ: người rời khung
   // rồi mà ROI vẫn khoe 93% của mấy giây trước, khiến một track đang yếu trông
@@ -410,7 +412,7 @@ export function advancePersonRoiTracks(
 
 export function predictPersonRoiTracks(
   tracks: Map<string, PersonRoiTrack>,
-  elapsedMs: number,
+  _elapsedMs: number,
   cfg: PatrolPersonRoiConfig = PATROL_PERSON_ROI_CONFIG,
 ): PersonRoiDisplay[] {
   const out: PersonRoiDisplay[] = []
@@ -445,6 +447,7 @@ export function predictPersonRoiTracks(
       workerId: track.workerId,
       workerName: track.workerName,
       tier: resolvePatrolRoiDisplayTier(track.tier, {
+        faceEligibleNow: track.faceEligibleNow,
         faceEligible: track.faceEligible,
         workerId: track.workerId,
         promotedFrom: track.promotedFrom,

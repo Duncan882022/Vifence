@@ -11,6 +11,8 @@ sys.path.insert(0, str(ROOT))
 
 from app.patrol_person_visibility import (  # noqa: E402
     motorcycle_seat_like_fp_box,
+    parked_motorcycle_row_fp_box,
+    patrol_bodycam_motorcycle_display_fp_box,
     patrol_object_commit_allowed,
     patrol_person_meets_display_gate,
     person_box_likely_rider_on_vehicle,
@@ -30,6 +32,13 @@ class TestMotorcycleSeatHeuristic(unittest.TestCase):
         self.assertTrue(motorcycle_seat_like_fp_box(seat, FW, FH))
         self.assertFalse(patrol_person_meets_display_gate(seat, FW, FH))
 
+    def test_parked_scooter_body_hc01_live(self):
+        """HC-01 live obj-20260907-0001 — YOLO person trên thân xe đỗ."""
+        w, h = 960, 540
+        scooter = (609.0, 150.0, 760.0, 305.0)
+        self.assertTrue(motorcycle_seat_like_fp_box(scooter, w, h))
+        self.assertFalse(patrol_object_commit_allowed(scooter, w, h))
+
     def test_parked_motorcycle_row_is_fp(self):
         """HC-01 live obj-0014/0015 — YOLO person trên xe đỗ."""
         from app.patrol_person_visibility import (
@@ -48,6 +57,24 @@ class TestMotorcycleSeatHeuristic(unittest.TestCase):
         self.assertFalse(patrol_object_commit_allowed(moto_b, w, h))
         self.assertTrue(upper_canopy_fp_box(tree, w, h))
         self.assertFalse(patrol_object_commit_allowed(tree, w, h))
+
+    def test_parked_scooter_front_hc01_live(self):
+        """HC-01 live — YOLO person trên đầu xe trắng đỗ vỉa hè."""
+        from app.patrol_person_visibility import parked_motorcycle_front_fp_box
+
+        w, h = 1280, 720
+        front = (96.0, 280.0, 216.0, 480.0)
+        self.assertTrue(parked_motorcycle_front_fp_box(front, w, h))
+        self.assertFalse(patrol_person_meets_display_gate(front, w, h))
+        self.assertFalse(patrol_object_commit_allowed(front, w, h))
+
+    def test_distant_standing_person_passes_display_gate(self):
+        """Người đứng xa vỉa hè — aspect ~2, không được nhầm hàng xe máy."""
+        w, h = 1280, 720
+        person = (220.0, 180.0, 300.0, 380.0)
+        self.assertTrue(parked_motorcycle_row_fp_box(person, w, h))
+        self.assertTrue(patrol_person_meets_display_gate(person, w, h))
+        self.assertFalse(patrol_bodycam_motorcycle_display_fp_box(person, w, h))
 
     def test_standing_person_not_fp(self):
         person = _box(0.40, 0.20, 0.58, 0.72)

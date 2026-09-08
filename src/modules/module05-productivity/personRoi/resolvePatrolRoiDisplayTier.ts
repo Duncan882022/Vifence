@@ -36,10 +36,13 @@ export function patrolLiveRoiQualifiesOrange(input: {
 
 /**
  * Tier hiển thị trên ROI live — xanh gallery; cam chỉ draft hoặc mặt mạnh; còn lại xám.
+ * Tier nội bộ track vẫn chỉ tiến không lùi; chỉ màu ROI phản ánh frame hiện tại.
  */
 export function resolvePatrolRoiDisplayTier(
   tier: PersonRoiTier,
   opts?: {
+    /** Mặt đủ tiêu chí trên frame đo cuối — không sticky cả track. */
+    faceEligibleNow?: boolean
     faceEligible?: boolean
     workerId?: string | null
     promotedFrom?: string[]
@@ -48,19 +51,28 @@ export function resolvePatrolRoiDisplayTier(
     tierSnapshot?: PatrolTierSnapshot | null
   },
 ): PersonRoiTier {
+  const faceNow = opts?.faceEligibleNow ?? opts?.faceEligible
+
   const base = resolvePatrolTier({
     tierSnapshot: opts?.tierSnapshot ?? undefined,
     tier,
     workerId: opts?.workerId,
     promotedFrom: opts?.promotedFrom,
-    faceEligible: opts?.faceEligible,
+    faceEligible: faceNow,
     snapshotScore: opts?.snapshotScore ?? opts?.tierSnapshot?.snapshot_score,
     surface: 'live-roi',
   })
 
   if (base === 'identity') return 'identity'
 
-  if (patrolLiveRoiQualifiesOrange(opts ?? {})) return 'person'
+  if (patrolLiveRoiQualifiesOrange({
+    profileStatus: opts?.profileStatus ?? opts?.tierSnapshot?.profile_status,
+    faceEligible: faceNow,
+    snapshotScore: opts?.snapshotScore ?? opts?.tierSnapshot?.snapshot_score,
+    tierSnapshot: opts?.tierSnapshot,
+  })) {
+    return 'person'
+  }
 
   return 'object'
 }

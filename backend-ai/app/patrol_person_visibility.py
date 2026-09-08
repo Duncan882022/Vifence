@@ -253,13 +253,80 @@ def parked_motorcycle_row_fp_box(
     cy_ratio = ((y1 + y2) / 2.0) / fh
     y1_ratio = y1 / fh
     if (
-        1.85 <= aspect <= 2.55
+        1.55 <= aspect <= 2.55
         and 0.050 <= bw_ratio <= 0.100
         and 0.20 <= bh_ratio <= 0.36
         and 0.28 <= cy_ratio <= 0.58
-        and 0.16 <= y1_ratio <= 0.42
+        and 0.24 <= y1_ratio <= 0.42
     ):
         return True
+    return False
+
+
+def parked_motorcycle_front_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """YOLO person trên cụm đầu / tay ga xe máy đỗ — HC-01 vỉa hè (live white scooter).
+
+    Khác hàng đỗ (aspect ~2): bbox bám đầu xe, aspect ~1.1–1.8, cao vừa.
+    """
+    x1, y1, x2, y2 = person_box
+    pw = max(x2 - x1, 1.0)
+    ph = max(y2 - y1, 1.0)
+    aspect = ph / pw
+    fw = max(float(frame_w), 1.0)
+    fh = max(float(frame_h), 1.0)
+    bw_ratio = pw / fw
+    bh_ratio = ph / fh
+    cy_ratio = ((y1 + y2) / 2.0) / fh
+    y1_ratio = y1 / fh
+    if (
+        1.05 <= aspect <= 1.85
+        and 0.055 <= bw_ratio <= 0.145
+        and 0.16 <= bh_ratio <= 0.40
+        and 0.30 <= cy_ratio <= 0.72
+        and 0.27 <= y1_ratio <= 0.52
+    ):
+        return True
+    return False
+
+
+def patrol_bodycam_motorcycle_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+) -> bool:
+    """Gom heuristic xe máy đỗ — gate ghi thẻ / lọc sau anchor."""
+    return (
+        motorcycle_seat_like_fp_box(person_box, frame_w, frame_h)
+        or parked_motorcycle_row_fp_box(person_box, frame_w, frame_h)
+        or parked_motorcycle_front_fp_box(person_box, frame_w, frame_h)
+    )
+
+
+def patrol_bodycam_motorcycle_display_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
+) -> bool:
+    """Gate vẽ ROI — không dùng parked_motorcycle_row thuần hình học.
+
+    Hàng xe đỗ và người đứng xa có cùng aspect hẹp/cao (~2.0) — row heuristic
+    trên display gate từng xoá sạch ROI người (HC-01 vỉa hè). Chỉ lọc row khi
+    chồng bbox xe COCO; seat/front vẫn chặn FP yên/đầu xe.
+    """
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        return True
+    if parked_motorcycle_front_fp_box(person_box, frame_w, frame_h):
+        return True
+    if vehicle_boxes and parked_motorcycle_row_fp_box(person_box, frame_w, frame_h):
+        return person_box_overlaps_vehicle_fp(
+            person_box, vehicle_boxes, frame_w, frame_h,
+        )
     return False
 
 
@@ -299,7 +366,7 @@ def patrol_bbox_rejects_static_fp(
         return True
     if signboard_like_fp_box(person_box, frame_w, frame_h):
         return True
-    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+    if patrol_bodycam_motorcycle_fp_box(person_box, frame_w, frame_h):
         return True
     if background_clutter_person_box(person_box, frame_w, frame_h):
         pw = max(float(person_box[2]) - float(person_box[0]), 1.0)
@@ -454,7 +521,7 @@ def patrol_object_commit_allowed(
     ):
         return False
     if not flycam and not proximity_flycam:
-        if parked_motorcycle_row_fp_box(person_box, frame_w, frame_h):
+        if patrol_bodycam_motorcycle_fp_box(person_box, frame_w, frame_h):
             return False
         if upper_canopy_fp_box(person_box, frame_w, frame_h):
             return False
@@ -466,7 +533,7 @@ def patrol_object_commit_allowed(
         return False
     # YuNet đôi khi trả pseudo-face trên biển/xe — không được bypass bằng face_eligible.
     if not flycam and not proximity_flycam:
-        if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        if patrol_bodycam_motorcycle_fp_box(person_box, frame_w, frame_h):
             return False
         if person_box_overlaps_vehicle_fp(
             person_box, vehicle_boxes or [], frame_w, frame_h,
@@ -759,7 +826,11 @@ def patrol_person_meets_display_gate(
     # Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
     if speck_person_box(person_box, frame_w, frame_h):
         return False
-    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+    if patrol_bodycam_motorcycle_display_fp_box(
+        person_box, frame_w, frame_h, vehicle_boxes=vehicle_boxes,
+    ):
+        return False
+    if upper_canopy_fp_box(person_box, frame_w, frame_h):
         return False
     if person_box_overlaps_vehicle_fp(
         person_box, vehicle_boxes or [], frame_w, frame_h,
@@ -840,6 +911,15 @@ def motorcycle_seat_like_fp_box(
     if aspect < 1.12 and bh_ratio < 0.26 and bw_ratio >= 0.08:
         if 0.18 <= cy_ratio <= 0.88:
             return True
+    # Cả thân xe đỗ một khối — aspect ~1.0, hẹp (obj-20260907-0001 live)
+    if (
+        aspect < 1.08
+        and 0.26 <= bh_ratio < 0.36
+        and 0.12 <= bw_ratio <= 0.22
+        and 0.25 <= cy_ratio <= 0.65
+        and y1 / fh >= 0.27
+    ):
+        return True
     # Gương / đèn pha — rất ngang, mỏng
     if aspect < 0.82 and bh_ratio < 0.22 and bw_ratio >= 0.10:
         if cy_ratio < 0.55:
@@ -886,7 +966,7 @@ def person_box_overlaps_vehicle_fp(
     for vb in vehicle_boxes:
         iou = bbox_iou(list(person_box), list(vb))
         contain = _bbox_containment_ratio(person_box, vb)
-        if iou < 0.12 and contain < 0.42:
+        if iou < 0.08 and contain < 0.18:
             continue
         if person_box_likely_rider_on_vehicle(person_box, vb):
             continue

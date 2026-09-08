@@ -6,6 +6,7 @@ import {
 
 describe('resolvePatrolRoiDisplayTier', () => {
   it('person quay lưng không cam — chỉ xám', () => {
+    expect(resolvePatrolRoiDisplayTier('person', { faceEligibleNow: false })).toBe('object')
     expect(resolvePatrolRoiDisplayTier('person', { faceEligible: false })).toBe('object')
     expect(resolvePatrolRoiDisplayTier('person', {})).toBe('object')
   })
@@ -13,7 +14,7 @@ describe('resolvePatrolRoiDisplayTier', () => {
   it('person mặt mạnh frame này — cam', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: true,
+        faceEligibleNow: true,
         snapshotScore: 1.2,
       }),
     ).toBe('person')
@@ -22,7 +23,7 @@ describe('resolvePatrolRoiDisplayTier', () => {
   it('person hồ sơ draft — cam kể cả quay lưng', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: false,
+        faceEligibleNow: false,
         profileStatus: 'draft',
         workerId: 'tk-00000042',
       }),
@@ -30,13 +31,22 @@ describe('resolvePatrolRoiDisplayTier', () => {
   })
 
   it('identity luôn xanh dù quay lưng', () => {
-    expect(resolvePatrolRoiDisplayTier('identity', { faceEligible: false })).toBe('identity')
+    expect(resolvePatrolRoiDisplayTier('identity', { faceEligibleNow: false })).toBe('identity')
   })
 
   it('gallery id luôn xanh khi quay lưng', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: false,
+        faceEligibleNow: false,
+        workerId: 'p-SGC-6688',
+      }),
+    ).toBe('identity')
+  })
+
+  it('gallery id + thấy mặt → xanh Định danh', () => {
+    expect(
+      resolvePatrolRoiDisplayTier('person', {
+        faceEligibleNow: true,
         workerId: 'p-SGC-6688',
       }),
     ).toBe('identity')
@@ -45,7 +55,7 @@ describe('resolvePatrolRoiDisplayTier', () => {
   it('tk-* quay lưng không draft — xám', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: false,
+        faceEligibleNow: false,
         workerId: 'tk-00000042',
       }),
     ).toBe('object')
@@ -54,7 +64,7 @@ describe('resolvePatrolRoiDisplayTier', () => {
   it('object + mặt mạnh — cam (người mới trên camera)', () => {
     expect(
       resolvePatrolRoiDisplayTier('object', {
-        faceEligible: true,
+        faceEligibleNow: true,
         snapshotScore: 1.15,
       }),
     ).toBe('person')
@@ -63,7 +73,7 @@ describe('resolvePatrolRoiDisplayTier', () => {
   it('promotedFrom không tự cam khi quay lưng', () => {
     expect(
       resolvePatrolRoiDisplayTier('person', {
-        faceEligible: false,
+        faceEligibleNow: false,
         workerId: 'tk-00000042',
         promotedFrom: ['obj-20260904-0002'],
       }),
@@ -99,7 +109,7 @@ describe('resolvePatrolRoiDisplayTier', () => {
           confidence: 0.9,
           snapshot_score: 1.2,
         },
-        faceEligible: false,
+        faceEligibleNow: false,
         snapshotScore: 0.3,
       }),
     ).toBe('object')
