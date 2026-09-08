@@ -19,6 +19,7 @@ from app.patrol_person_visibility import (  # noqa: E402
     limb_fragment_person_box,
     patrol_person_meets_detection_gate,
     patrol_person_meets_display_gate,
+    patrol_person_meets_roi_overlay_gate,
     plausible_person_silhouette,
     signboard_like_fp_box,
 )
@@ -48,6 +49,12 @@ class TestBodycamDisplayGate(unittest.TestCase):
         person = _box(0.40, 0.20, 0.60, 0.55)
         self.assertTrue(patrol_person_meets_display_gate(person, FW, FH))
         self.assertTrue(patrol_person_meets_detection_gate(person, FW, FH))
+
+    def test_upper_canopy_roi_overlay_wider_than_display(self):
+        """Tán cây FP — display gate loại, ROI overlay vẫn cho (không upper_canopy)."""
+        tree = (241.0, 89.0, 327.0, 241.0)
+        self.assertFalse(patrol_person_meets_display_gate(tree, 960, 540))
+        self.assertTrue(patrol_person_meets_roi_overlay_gate(tree, 960, 540))
 
     def test_shin_fragment_rejected_by_both(self):
         """Cẳng chân: dài, hẹp, nằm hẳn nửa dưới — mảnh vỡ của box khác."""

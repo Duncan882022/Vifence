@@ -43,12 +43,13 @@ def _resolve_tier_at_observation(
     tier_at: str | None,
     shot_face_eligible: bool,
     worker_id: str | None,
+    lifecycle_tier: str | None = None,
 ) -> str:
     """Tier tại thời điểm gặm — monotonic; thẻ tk/p không snapshot object."""
     from ..tier_snapshot import higher_tier
 
     sid = (subject_id or "").strip()
-    known = (tier_at or "").strip()
+    known = (tier_at or lifecycle_tier or "").strip()
     if known in ("object", "person", "identity"):
         resolved = known
     elif sid.startswith("obj-"):
@@ -71,6 +72,13 @@ def _resolve_tier_at_observation(
                 resolved = "person"
         else:
             resolved = "object"
+
+    if worker_id:
+        from ...patrol_identity_lifecycle import tier_for_worker_id
+
+        inferred = tier_for_worker_id(worker_id)
+        if inferred in ("person", "identity"):
+            resolved = higher_tier(resolved, inferred)
 
     from ...patrol_ids import is_person_subject_id
 
@@ -96,19 +104,26 @@ def _build_flush_tier_snapshot(
     tier: str,
     shot_score: float,
     shot_face_eligible: bool,
+    shot_obs: ObservationInput | None = None,
 ) -> dict[str, Any]:
     from ..tier_snapshot import build_tier_snapshot
+
+    src = shot_obs or obs
+    worker_id = (
+        (src.lifecycle_worker_id or session.last_lifecycle_worker_id or "").strip() or None
+    )
+    worker_name = src.worker_name or session.last_worker_name
 
     snap = build_tier_snapshot(
         tier=tier,
         tier_since=session.started_at,
         subject_id=subject_id,
-        worker_id=obs.lifecycle_worker_id,
-        worker_name=obs.worker_name,
+        worker_id=worker_id,
+        worker_name=worker_name,
         face_eligible=shot_face_eligible,
-        confidence=float(obs.confidence or 0.0),
-        face_quality=float(obs.face_quality or 0.0),
-        bbox=list(obs.person_bbox) if obs.person_bbox else [],
+        confidence=float(src.confidence or obs.confidence or 0.0),
+        face_quality=float(src.face_quality or obs.face_quality or 0.0),
+        bbox=list(src.person_bbox) if src.person_bbox else [],
         track_id=session.track_id,
         camera_id=session.camera_id,
         tier_source="flush",
@@ -433,8 +448,12 @@ def write_person_card(
     if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
         session.counted = True
 
-    worker_id = (obs.lifecycle_worker_id or "").strip() or None
-    tier_at = (obs.lifecycle_tier or "").strip() or None
+    worker_id = (
+        (obs.lifecycle_worker_id or session.last_lifecycle_worker_id or "").strip() or None
+    )
+    tier_at = (
+        (obs.lifecycle_tier or session.last_lifecycle_tier or "").strip() or None
+    )
     if not tier_at and worker_id:
         from ...patrol_identity_lifecycle import tier_for_worker_id
 
@@ -444,6 +463,7 @@ def write_person_card(
 
     path, shot_score = (None, 0.0)
     shot_face_eligible = obs.face_eligible
+    shot_obs: ObservationInput | None = None
     if (
         obs.frame is not None
         and obs.person_bbox is not None
@@ -460,6 +480,7 @@ def write_person_card(
         tier_at=tier_at,
         shot_face_eligible=shot_face_eligible,
         worker_id=worker_id,
+        lifecycle_tier=session.last_lifecycle_tier,
     )
     tier_payload = _build_flush_tier_snapshot(
         session,
@@ -468,6 +489,7 @@ def write_person_card(
         tier=tier_at_resolved,
         shot_score=shot_score,
         shot_face_eligible=shot_face_eligible,
+        shot_obs=shot_obs,
     )
 
     import json as _json
@@ -771,8 +793,12 @@ def flush_session(
     if site_entry_counted(session, gps_lat=gps_lat, gps_lng=gps_lng):
         session.counted = True
 
-    worker_id = (obs.lifecycle_worker_id or "").strip() or None
-    tier_at = (obs.lifecycle_tier or "").strip() or None
+    worker_id = (
+        (obs.lifecycle_worker_id or session.last_lifecycle_worker_id or "").strip() or None
+    )
+    tier_at = (
+        (obs.lifecycle_tier or session.last_lifecycle_tier or "").strip() or None
+    )
     if not tier_at and worker_id:
         from ...patrol_identity_lifecycle import tier_for_worker_id
 
@@ -790,6 +816,7 @@ def flush_session(
     # ảnh chốt là frame đẹp nhất, thường không phải frame hiện tại — lấy
     # `obs.face_eligible` thì một tấm mặt rõ vẫn bị coi là ảnh không mặt.
     shot_face_eligible = obs.face_eligible
+    shot_obs_for_tier: ObservationInput | None = None
 
     if (
         subject_id
@@ -797,17 +824,17 @@ def flush_session(
         and obs.person_bbox is not None
         and _luot_needs_snapshot(session, obs, now=now)
     ):
-        shot_obs = _snapshot_observation(session, obs)
-        path, shot_score = _write_snapshot(session, shot_obs)
+        shot_obs_for_tier = _snapshot_observation(session, obs)
+        path, shot_score = _write_snapshot(session, shot_obs_for_tier)
         if path:
-            shot_face_eligible = shot_obs.face_eligible
+            shot_face_eligible = shot_obs_for_tier.face_eligible
             session.luot_snapshot_captured = not _within_accumulation_window(session, now)
 
     from .identity_pipeline import try_promote_object_after_snapshot
 
     try_promote_object_after_snapshot(
         session,
-        _snapshot_observation(session, obs),
+        shot_obs_for_tier or _snapshot_observation(session, obs),
         snapshot_path=path,
         snapshot_score=shot_score,
     )
@@ -818,6 +845,7 @@ def flush_session(
         tier_at=tier_at,
         shot_face_eligible=shot_face_eligible,
         worker_id=worker_id,
+        lifecycle_tier=session.last_lifecycle_tier,
     )
     tier_payload = _build_flush_tier_snapshot(
         session,
@@ -826,6 +854,7 @@ def flush_session(
         tier=tier_at_resolved,
         shot_score=shot_score,
         shot_face_eligible=shot_face_eligible,
+        shot_obs=shot_obs_for_tier,
     )
 
     skip_appearance = True

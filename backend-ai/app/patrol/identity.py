@@ -790,6 +790,16 @@ def ensure_draft_for_tk(
             snapshot_path=snapshot_path,
             snapshot_score=snapshot_score,
         )
+        bind_tk_profile(tk, pers_id, now=ts)
+        return pers_id
+
+    from .sink import lookup_bound_pers_for_tk
+
+    bound = lookup_bound_pers_for_tk(tk)
+    if bound:
+        pers_id = resolve_alias(bound)
+        touch_person(pers_id, now=ts)
+        bind_tk_profile(tk, pers_id, now=ts)
         return pers_id
 
     from . import daystore

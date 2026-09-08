@@ -239,6 +239,13 @@ def maybe_commit_person_from_lifecycle(
         if not pers_id:
             return None
         pers_id = identity.resolve_alias(pers_id)
+        from ...patrol_ids import normalize_track_id
+
+        tk = normalize_track_id(wid)
+        if tk and is_sgc_worker_id(tk):
+            from ..sink import _bind_tk_profile
+
+            _bind_tk_profile(tk, pers_id)
     else:
         from ...patrol_ids import normalize_track_id
 
@@ -253,6 +260,9 @@ def maybe_commit_person_from_lifecycle(
             camera_id=obs.camera_id,
             face_eligible=obs.face_eligible,
         )
+        from ..sink import _bind_tk_profile
+
+        _bind_tk_profile(tk, pers_id)
 
     session.mark_person_committed(pers_id)
     from .flush import write_person_card
@@ -405,6 +415,38 @@ def _commit_returning_person_card(
         known_reason,
     )
     return pid
+
+
+def maybe_promote_deferred_object_session(
+    session: TrackSession,
+    obs: ObservationInput,
+) -> str | None:
+    """Deferred mode — thăng obj-* lên Người khi lifecycle/mặt đủ trước finalize."""
+    if session.person_committed or session.is_abandoned():
+        return session.subject_id
+
+    sid = (session.subject_id or "").strip()
+    if not sid.startswith("obj-"):
+        return None
+
+    from ...patrol_identity_lifecycle import TIER_IDENTITY, TIER_PERSON, tier_for_worker_id
+
+    wid = (obs.lifecycle_worker_id or session.last_lifecycle_worker_id or "").strip()
+    tier = (obs.lifecycle_tier or session.last_lifecycle_tier or "").strip()
+    if not tier and wid:
+        tier = tier_for_worker_id(wid)
+
+    if tier in (TIER_PERSON, TIER_IDENTITY):
+        promoted = maybe_commit_person_from_lifecycle(session, obs, finalize=False)
+        if promoted:
+            return promoted
+
+    if should_attempt_person_commit(session, obs):
+        promoted = maybe_commit_person(session, obs, allow_recover=True)
+        if promoted:
+            return promoted
+
+    return None
 
 
 def maybe_commit_returning_person(

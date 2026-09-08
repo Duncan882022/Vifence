@@ -30,6 +30,20 @@ export function patrolVmsVelocityToPixelsPerSec(
   return [vx * frameW, vy * frameH]
 }
 
+function resolveSnapshotVehicleBoxes(
+  snapshot: VmsDetectionSnapshot,
+  frameW: number,
+  frameH: number,
+): [number, number, number, number][] {
+  const raw = snapshot.vehicle_boxes
+  if (!raw?.length || frameW <= 0 || frameH <= 0) return []
+  return raw.map(box => bboxToPixelSpace(box, frameW, frameH))
+}
+
+function backendOverlayTrusted(snapshot: VmsDetectionSnapshot): boolean {
+  return snapshot.overlay_gate === 'be_roi'
+}
+
 /** Map + gate detections VMS → payload ROI engine (một nguồn/cam). */
 export function gateVmsPatrolPersonDetections(
   snapshot: VmsDetectionSnapshot,
@@ -42,6 +56,8 @@ export function gateVmsPatrolPersonDetections(
   const effectiveMode = flightMode ?? resolveEffectivePatrolFlightMode(cameraId, snapshot.metrics)
   const flycamGates = resolvePatrolFlycamGateFlags(cameraId, effectiveMode)
   const isDrFlycam = cameraId.startsWith('DR-')
+  const vehicleBoxes = resolveSnapshotVehicleBoxes(snapshot, frameW, frameH)
+  const trustBackendOverlay = options?.forLiveRoi === true && backendOverlayTrusted(snapshot)
 
   const mapped = snapshot.detections
     .map(d => ({
@@ -67,6 +83,7 @@ export function gateVmsPatrolPersonDetections(
       if (d.behavior !== 'person') return false
       const raw = d.subject_bbox?.length === 4 ? d.subject_bbox : d.bbox
       if (!raw || raw.length < 4 || frameW <= 0 || frameH <= 0) return false
+      if (trustBackendOverlay) return true
       const bbox = bboxToPixelSpace(
         [raw[0], raw[1], raw[2], raw[3]] as [number, number, number, number],
         frameW,
@@ -77,6 +94,7 @@ export function gateVmsPatrolPersonDetections(
         frameW,
         frameH,
         workerId: d.worker_id,
+        vehicleBoxes,
       }
       if (isDrFlycam) {
         return options?.forLiveRoi

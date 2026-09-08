@@ -50,6 +50,11 @@ def finalize_object_if_needed(
     if session.person_committed:
         return None
 
+    from .person_commit import maybe_promote_deferred_object_session
+
+    if maybe_promote_deferred_object_session(session, obs):
+        return None
+
     late_pers = maybe_commit_person(session, obs, allow_recover=True)
     if late_pers:
         return None

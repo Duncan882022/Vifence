@@ -119,6 +119,10 @@ export interface VmsDetectionSnapshot {
   detections: VmsOverlayDetection[]
   roi_zones: RoadAnalysisRoiZone[]
   metrics: Record<string, unknown>
+  /** BE đã lọc ROI overlay — FE không re-gate. */
+  overlay_gate?: 'be_roi' | string
+  /** Bbox xe COCO chuẩn hoá 0–1 — lọc FP chồng xe (pixel khi map). */
+  vehicle_boxes?: [number, number, number, number][]
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -274,6 +278,8 @@ interface RawVmsDetectionPayload {
   detections?: Record<string, unknown>[]
   roi_zones?: RoadAnalysisRoiZone[]
   metrics?: Record<string, unknown>
+  overlay_gate?: string
+  vehicle_boxes?: [number, number, number, number][]
 }
 
 /** Chuẩn hoá payload backend — dùng chung cho HTTP poll và WebSocket push. */
@@ -314,6 +320,13 @@ export function normalizeVmsDetectionSnapshot(
     detections,
     roi_zones: data.roi_zones ?? [],
     metrics: data.metrics ?? {},
+    overlay_gate: typeof data.overlay_gate === 'string' ? data.overlay_gate : undefined,
+    vehicle_boxes: Array.isArray(data.vehicle_boxes)
+      ? data.vehicle_boxes.filter(
+        (row): row is [number, number, number, number] =>
+          Array.isArray(row) && row.length >= 4,
+      )
+      : undefined,
   }
 }
 

@@ -1574,14 +1574,25 @@ def _plausible_person_box(
     flycam: bool = False,
     proximity_flycam: bool = False,
     for_display: bool = False,
+    for_overlay: bool = False,
     vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> bool:
     """Loại bbox giả — HC patrol: chấp nhận cận cảnh HOẶC góc rộng.
 
-    `for_display=True` là đường vẽ ROI: chỉ loại khung không thể là người. Đường
-    ghi sự kiện vẫn siết lại bằng gate riêng trong `ppe_engine`, nên nới ở đây
-    không kéo theo sự kiện rác.
+    `for_overlay=True` là đường vẽ ROI live (rộng nhất).
+    `for_display=True` là KPI / display count.
     """
+    if for_overlay and (bodycam or flycam or proximity_flycam):
+        from .patrol_person_visibility import patrol_person_meets_roi_overlay_gate
+
+        return patrol_person_meets_roi_overlay_gate(
+            box,
+            frame_w,
+            frame_h,
+            flycam=flycam and not proximity_flycam,
+            proximity_flycam=proximity_flycam,
+            vehicle_boxes=vehicle_boxes,
+        )
     if for_display and (bodycam or flycam or proximity_flycam):
         from .patrol_person_visibility import patrol_person_meets_display_gate
 
@@ -1643,6 +1654,7 @@ def _filter_persons(
     strict: bool = False,
     min_conf: float | None = None,
     for_display: bool = False,
+    for_overlay: bool = False,
     vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
 ) -> list[_PersonPpe]:
     h, w = frame.shape[:2]
@@ -1686,6 +1698,7 @@ def _filter_persons(
             flycam=aerial_flycam,
             proximity_flycam=proximity_flycam,
             for_display=for_display,
+            for_overlay=for_overlay,
             vehicle_boxes=vehicle_boxes,
         ):
             continue

@@ -845,6 +845,52 @@ def patrol_person_meets_display_gate(
     return not limb_fragment_person_box(person_box, frame_w, frame_h)
 
 
+def patrol_person_meets_roi_overlay_gate(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    flycam: bool = False,
+    proximity_flycam: bool = False,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
+) -> bool:
+    """Gate ROI live overlay — rộng hơn display gate (bỏ oversized blob / upper canopy).
+
+    Mirror ``patrolPersonMeetsRoiOverlayGate`` bên FE: giữ speck + xe + silhouette,
+    không lọc crowd blob lớn để không mất người đứng xa / quay lưng.
+    """
+    if frame_w <= 0 or frame_h <= 0:
+        return False
+    if vertical_structure_fp_box(person_box, frame_w, frame_h):
+        return False
+    if signboard_like_fp_box(person_box, frame_w, frame_h):
+        return False
+    if flycam or proximity_flycam:
+        return patrol_person_meets_display_gate(
+            person_box,
+            frame_w,
+            frame_h,
+            flycam=flycam and not proximity_flycam,
+            proximity_flycam=proximity_flycam,
+            vehicle_boxes=vehicle_boxes,
+        )
+    if speck_person_box(person_box, frame_w, frame_h):
+        return False
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        return False
+    if person_box_overlaps_vehicle_fp(
+        person_box, vehicle_boxes or [], frame_w, frame_h,
+    ):
+        return False
+    if wide_crowd_rider_box(person_box, frame_w, frame_h):
+        return True
+    if not plausible_person_silhouette(
+        person_box, frame_w, frame_h, patrol_display=True,
+    ):
+        return False
+    return not limb_fragment_person_box(person_box, frame_w, frame_h)
+
+
 def background_clutter_person_box(
     person_box: tuple[float, float, float, float],
     frame_w: int,

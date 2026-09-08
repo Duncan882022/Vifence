@@ -397,6 +397,10 @@ class CameraVmsWorker:
         if at_ms is not None:
             base["requested_at_ms"] = float(at_ms)
             base["overlay_drift_ms"] = drift_ms
+        if chosen.get("overlay_gate"):
+            base["overlay_gate"] = chosen["overlay_gate"]
+        if chosen.get("vehicle_boxes"):
+            base["vehicle_boxes"] = list(chosen["vehicle_boxes"])
         if not stream_online:
             # Camera mất tín hiệu: giữ lại polygon ROI cũ là vẽ vùng của cảnh đã
             # trôi qua lên khung hình đen — xoá cùng detections.
@@ -761,13 +765,20 @@ class CameraVmsWorker:
                         if engine_name in ("atgt", "mesh", "ppe", "pccc", "crane", "wah"):
                             engine_kwargs["source_pts_sec"] = source_pts_sec
                         result, events = fn(frame, self.camera_id, **engine_kwargs)
-                        if isinstance(result, dict):
-                            merged_detections.extend(result.get("detections") or [])
-                            zone_rows = result.get("roi_zones") or []
-                            if zone_rows:
-                                merged_zones = self._merge_roi_zones(merged_zones, zone_rows)
-                            if result.get("metrics"):
-                                merged_metrics[engine_name] = result["metrics"]
+                if isinstance(result, dict):
+                    merged_detections.extend(result.get("detections") or [])
+                    zone_rows = result.get("roi_zones") or []
+                    if zone_rows:
+                        merged_zones = self._merge_roi_zones(merged_zones, zone_rows)
+                    if result.get("metrics"):
+                        merged_metrics[engine_name] = result["metrics"]
+                        if engine_name == "ppe":
+                            ppe_m = result["metrics"]
+                            if isinstance(ppe_m, dict):
+                                if ppe_m.get("overlay_gate"):
+                                    merged_metrics["overlay_gate"] = ppe_m["overlay_gate"]
+                                if ppe_m.get("vehicle_boxes"):
+                                    merged_metrics["vehicle_boxes"] = ppe_m["vehicle_boxes"]
                             frame_w = int(result.get("width") or frame_w)
                             frame_h = int(result.get("height") or frame_h)
                             try:
@@ -809,6 +820,10 @@ class CameraVmsWorker:
                     # EXT-X-PROGRAM-DATE-TIME của HLS để FE đồng bộ bbox.
                     "frame_wallclock_ms": round(frame_received_at * 1000.0),
                 }
+                if merged_metrics.get("overlay_gate"):
+                    overlay_entry["overlay_gate"] = merged_metrics["overlay_gate"]
+                if merged_metrics.get("vehicle_boxes"):
+                    overlay_entry["vehicle_boxes"] = merged_metrics["vehicle_boxes"]
                 with self._overlay_lock:
                     self._latest_overlay = overlay_entry
                     self._overlay_history.append(overlay_entry)

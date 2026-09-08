@@ -315,7 +315,7 @@ export function patrolPersonOverlapsVehicleFp(
   for (const vb of vehicleBoxes) {
     const iou = bboxIouSimple(personBox, vb)
     const contain = bboxContainmentRatio(personBox, vb)
-    if (iou < 0.12 && contain < 0.42) continue
+    if (iou < 0.08 && contain < 0.18) continue
     if (patrolPersonLikelyRiderOnVehicle(personBox, vb)) continue
     return true
   }

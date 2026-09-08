@@ -164,6 +164,10 @@ def _ingest_deferred(**kwargs) -> str | None:
             maybe_commit_person(session, obs)
         if not session.person_committed:
             maybe_commit_person_from_lifecycle(session, obs, finalize=False)
+        if not session.person_committed:
+            from .person_commit import maybe_promote_deferred_object_session
+
+            maybe_promote_deferred_object_session(session, obs)
 
     if session.person_committed:
         if obs.touched_object_id:

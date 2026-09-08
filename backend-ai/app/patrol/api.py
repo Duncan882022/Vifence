@@ -428,11 +428,18 @@ def day_bundle(date: str | None = None, _user: RequirePatrolRead = None) -> dict
         )
         snap_path = str(r.get("snapshot_path") or "").strip() or None
         snap_score = float(r.get("snapshot_score") or 0)
+        tier_ever = str(r.get("tier_ever") or "").strip()
         face_ok = bool(tier_snap.get("face_eligible")) if tier_snap else False
-        if not daystore.person_snapshot_proves_reid(
+        person_card = tier_ever in ("person", "identity")
+        proves_reid = daystore.person_snapshot_proves_reid(
             snapshot_path=snap_path,
             snapshot_score=snap_score,
             face_eligible=face_ok,
+        )
+        if not proves_reid and not (
+            person_card
+            and snap_path
+            and snap_score >= daystore.PERSON_LIST_MIN_SNAPSHOT_SCORE
         ):
             snap_path = None
             snap_score = 0.0

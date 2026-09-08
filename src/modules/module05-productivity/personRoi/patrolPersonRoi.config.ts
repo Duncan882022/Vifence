@@ -53,12 +53,15 @@ export const PATROL_PERSON_ROI_CONFIG: PatrolPersonRoiConfig = {
   maxSpeedBoxPerSec: 14,
 }
 
-/** Bodycam HC-* — giữ ROI ~2 nhịp analyze khi YOLO miss; không nội suy bbox (không trượt). */
+/** Bodycam HC-* — giữ ROI ~4 nhịp analyze khi YOLO miss; glide ngắn giữa các lần detect. */
 export const PATROL_PERSON_ROI_PROFILE_BODYCAM: PatrolPersonRoiConfig = {
   ...PATROL_PERSON_ROI_CONFIG,
   highConfidenceMin: 0.26,
-  displayCoastMaxMiss: 2,
+  displayCoastMaxMiss: 4,
   displayMaxStaleMs: 4500,
+  maxPredictMs: 300,
+  maxPredictMsLost: 300,
+  displayEmaGlideAlpha: 0.35,
 }
 
 /** WHEP/WebRTC — cùng cover-or-hide. */

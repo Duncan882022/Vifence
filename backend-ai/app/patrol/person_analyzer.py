@@ -31,6 +31,8 @@ from ..ppe_analyzer import (
 
 _person_detector: PersonDetector | None = None
 _patrol_vehicle_detector: VehicleDetector | None = None
+_patrol_vehicle_boxes_cache: dict[str, tuple[list[tuple[float, float, float, float]], int]] = {}
+_patrol_vehicle_frame_counter: dict[str, int] = {}
 
 _PATROL_VEHICLE_CONF = 0.32
 
@@ -85,6 +87,26 @@ def _patrol_bodycam_vehicle_boxes(
         (float(d.bbox[0]), float(d.bbox[1]), float(d.bbox[2]), float(d.bbox[3]))
         for d in detector.predict(frame)
     ]
+
+
+def _patrol_bodycam_vehicle_boxes_cached(
+    frame: np.ndarray,
+    camera_id: str,
+) -> list[tuple[float, float, float, float]]:
+    """COCO vehicle — cache mỗi N frame để tiết kiệm CPU trên VPS."""
+    if not _is_helmet_bodycam(camera_id):
+        return []
+    from ..config import settings
+
+    interval = max(1, int(getattr(settings, "patrol_vehicle_detect_interval", 3) or 3))
+    counter = _patrol_vehicle_frame_counter.get(camera_id, 0) + 1
+    _patrol_vehicle_frame_counter[camera_id] = counter
+    cached = _patrol_vehicle_boxes_cache.get(camera_id)
+    if cached is not None and counter % interval != 0:
+        return list(cached[0])
+    boxes = _patrol_bodycam_vehicle_boxes(frame, camera_id)
+    _patrol_vehicle_boxes_cache[camera_id] = (boxes, counter)
+    return boxes
 
 
 def _filter_bodycam_vehicle_fp(
@@ -339,7 +361,7 @@ def _assign_patrol_person_identity(
         )
 
         vehicle_boxes = (
-            _patrol_bodycam_vehicle_boxes(frame, camera_id)
+            _patrol_bodycam_vehicle_boxes_cached(frame, camera_id)
             if _is_helmet_bodycam(camera_id)
             else []
         )
@@ -539,7 +561,7 @@ def _patrol_person_passes_display_gate(
 
     vehicle_boxes: list[tuple[float, float, float, float]] = []
     if frame is not None and is_patrol_helmet_like(camera_id):
-        vehicle_boxes = _patrol_bodycam_vehicle_boxes(frame, camera_id)
+        vehicle_boxes = _patrol_bodycam_vehicle_boxes_cached(frame, camera_id)
 
     if is_patrol_helmet_like(camera_id):
         return patrol_person_meets_display_gate(
@@ -667,7 +689,7 @@ def _build_patrol_bodycam_result(
     """
     detector = _get_person_detector()
     h, w = frame.shape[:2]
-    vehicle_boxes = _patrol_bodycam_vehicle_boxes(frame, camera_id)
+    vehicle_boxes = _patrol_bodycam_vehicle_boxes_cached(frame, camera_id)
     raw_persons = _dedupe_person_boxes(
         _filter_persons(
             frame,
@@ -676,7 +698,7 @@ def _build_patrol_bodycam_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_BODYCAM,
-            for_display=True,
+            for_overlay=True,
             vehicle_boxes=vehicle_boxes,
         ),
         camera_id=camera_id,
@@ -720,6 +742,16 @@ def _build_patrol_bodycam_result(
             ),
             "peak_time_active": is_peak_time(camera_id),
             "ppe_violations": 0,
+            "overlay_gate": "be_roi",
+            "vehicle_boxes": [
+                [
+                    round(float(b[0]) / max(w, 1), 6),
+                    round(float(b[1]) / max(h, 1), 6),
+                    round(float(b[2]) / max(w, 1), 6),
+                    round(float(b[3]) / max(h, 1), 6),
+                ]
+                for b in vehicle_boxes
+            ],
         },
         "detections": [d.model_dump() for d in detections],
         "events": [],
@@ -957,7 +989,7 @@ def _build_patrol_flycam_aerial_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_FLYCAM,
-            for_display=True,
+            for_overlay=True,
         ),
         camera_id=camera_id,
     )
@@ -1008,7 +1040,7 @@ def _build_patrol_flycam_proximity_result(
             source_pts_sec=source_pts_sec,
             strict=False,
             min_conf=_PERSON_CONF_BODYCAM,
-            for_display=True,
+            for_overlay=True,
         ),
         camera_id=camera_id,
     )

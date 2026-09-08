@@ -200,7 +200,7 @@ class Settings(BaseSettings):
     # Ghi thẻ Đối tượng lần đầu — ~1–2 frame @320ms; xe/người chạy qua vẫn kịp.
     patrol_object_min_commit_seconds: float = 0.75
     # Phase 2 — ROI live sync với buffer (giây).
-    patrol_live_roi_delay_seconds: float = 0.35
+    patrol_live_roi_delay_seconds: float = 0.25
     # Tab Người / Định danh — xác nhận nhanh khi mặt đủ tiêu chí (sink dùng trực tiếp).
     patrol_person_confirm_seconds: float = 0.15
     # Dwell legacy — giữ tương thích env cũ; sink ưu tiên patrol_person_confirm_seconds.
@@ -222,6 +222,8 @@ class Settings(BaseSettings):
     patrol_person_commit_fast_quality: float = 0.75
     patrol_object_finalize_min_track_sec: float = 0.75
     patrol_pre_object_match_enabled: bool = True
+    # COCO vehicle trên bodycam — chạy mỗi N frame analyze (1 = mỗi frame).
+    patrol_vehicle_detect_interval: int = 3
 
     # ATGT demo — detect xe → log ATGT-002 + snapshot + biển số.
     atgt_demo_enabled: bool = True

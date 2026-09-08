@@ -93,4 +93,18 @@ def build_detections_ws_payload(
     if revision is not None:
         payload["revision"] = revision
 
+    metrics = payload.get("metrics") or {}
+    if isinstance(metrics, dict):
+        patrol_metrics = metrics.get("ppe") or metrics
+        if isinstance(patrol_metrics, dict):
+            if patrol_metrics.get("overlay_gate") and "overlay_gate" not in payload:
+                payload["overlay_gate"] = str(patrol_metrics["overlay_gate"])
+            vb = patrol_metrics.get("vehicle_boxes")
+            if isinstance(vb, list) and vb and "vehicle_boxes" not in payload:
+                payload["vehicle_boxes"] = vb
+    if overlay.get("overlay_gate") and "overlay_gate" not in payload:
+        payload["overlay_gate"] = str(overlay["overlay_gate"])
+    if overlay.get("vehicle_boxes") and "vehicle_boxes" not in payload:
+        payload["vehicle_boxes"] = list(overlay["vehicle_boxes"])
+
     return payload

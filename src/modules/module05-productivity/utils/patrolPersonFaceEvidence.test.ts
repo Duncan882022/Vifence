@@ -24,6 +24,26 @@ describe('patrolPersonSnapshotProvesReId', () => {
     ).toBe(false)
   })
 
+  it('passes person-tier card with score even without face_eligible flag', () => {
+    expect(
+      patrolPersonSnapshotProvesReId({
+        snapshotUrl: 'https://example.com/a.jpg',
+        snapshotScore: 1.4,
+        tierEver: 'person',
+        persId: 'tk-0001',
+        tierSnapshot: {
+          tier: 'person',
+          tier_rank: 1,
+          tier_since: 0,
+          subject_id: 'tk-1',
+          face_eligible: false,
+          confidence: 0.9,
+          snapshot_score: 1.4,
+        },
+      }),
+    ).toBe(true)
+  })
+
   it('passes when face evidence meets gate', () => {
     expect(
       patrolPersonSnapshotProvesReId({

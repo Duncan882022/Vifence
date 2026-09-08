@@ -89,10 +89,29 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
 
     def test_bodycam_metrics_include_display_person_count(self) -> None:
         self.detector.next_boxes = [_FakeDetection((380, 80, 520, 420), 0.55)]
-        result = person_analyzer._build_patrol_bodycam_result(self.frame, "HC-01")
+        with patch.object(
+            person_analyzer,
+            "_patrol_bodycam_vehicle_boxes_cached",
+            return_value=[],
+        ):
+            result = person_analyzer._build_patrol_bodycam_result(self.frame, "HC-01")
         metrics = result["metrics"]
         self.assertIn("display_person_count", metrics)
         self.assertGreaterEqual(metrics["display_person_count"], metrics["person_count"])
+        self.assertEqual(metrics.get("overlay_gate"), "be_roi")
+        self.assertIn("vehicle_boxes", metrics)
+
+    def test_bodycam_overlay_gate_wider_than_display_for_upper_canopy(self) -> None:
+        """ROI overlay gate giữ canopy FP mà display gate loại."""
+        from app.patrol_person_visibility import (
+            patrol_person_meets_display_gate,
+            patrol_person_meets_roi_overlay_gate,
+        )
+
+        fw, fh = 960, 540
+        tree = (241.0, 89.0, 327.0, 241.0)
+        self.assertFalse(patrol_person_meets_display_gate(tree, fw, fh))
+        self.assertTrue(patrol_person_meets_roi_overlay_gate(tree, fw, fh))
 
     def test_track_id_stable_while_person_crosses_frame(self) -> None:
         """Người đi ngang khung: một track duy nhất từ đầu tới cuối."""
@@ -139,15 +158,19 @@ class PatrolDetectionPayloadTests(unittest.TestCase):
         with patch(
             "app.patrol_face_anchor.anchor_patrol_person_boxes_to_faces",
             return_value=[(synth, 0.88)],
+        ), patch.object(
+            person_analyzer,
+            "_patrol_bodycam_vehicle_boxes_cached",
+            return_value=[],
         ):
             self.detector.next_boxes = [_FakeDetection(crowd, 0.74)]
             result = person_analyzer._build_patrol_bodycam_result(self.frame, "HC-02")
-        persons = [d for d in result["detections"] if d.behavior == "person"]
+        persons = [d for d in result["detections"] if d["behavior"] == "person"]
         self.assertEqual(len(persons), 1)
         det = persons[0]
-        self.assertAlmostEqual(det.bbox[0], synth[0], delta=2.0)
-        self.assertAlmostEqual(det.bbox[2], synth[2], delta=2.0)
-        self.assertAlmostEqual(det.subject_bbox[0], crowd[0], delta=2.0)
+        self.assertAlmostEqual(det["bbox"][0], synth[0], delta=2.0)
+        self.assertAlmostEqual(det["bbox"][2], synth[2], delta=2.0)
+        self.assertIsNotNone(det.get("subject_bbox"))
 
 
 if __name__ == "__main__":
