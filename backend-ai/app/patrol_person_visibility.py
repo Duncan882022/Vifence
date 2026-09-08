@@ -298,12 +298,36 @@ def patrol_bodycam_motorcycle_fp_box(
     frame_w: int,
     frame_h: int,
 ) -> bool:
-    """Gom heuristic xe máy đỗ — dùng chung gate ROI + ghi thẻ."""
+    """Gom heuristic xe máy đỗ — gate ghi thẻ / lọc sau anchor."""
     return (
         motorcycle_seat_like_fp_box(person_box, frame_w, frame_h)
         or parked_motorcycle_row_fp_box(person_box, frame_w, frame_h)
         or parked_motorcycle_front_fp_box(person_box, frame_w, frame_h)
     )
+
+
+def patrol_bodycam_motorcycle_display_fp_box(
+    person_box: tuple[float, float, float, float],
+    frame_w: int,
+    frame_h: int,
+    *,
+    vehicle_boxes: list[tuple[float, float, float, float]] | None = None,
+) -> bool:
+    """Gate vẽ ROI — không dùng parked_motorcycle_row thuần hình học.
+
+    Hàng xe đỗ và người đứng xa có cùng aspect hẹp/cao (~2.0) — row heuristic
+    trên display gate từng xoá sạch ROI người (HC-01 vỉa hè). Chỉ lọc row khi
+    chồng bbox xe COCO; seat/front vẫn chặn FP yên/đầu xe.
+    """
+    if motorcycle_seat_like_fp_box(person_box, frame_w, frame_h):
+        return True
+    if parked_motorcycle_front_fp_box(person_box, frame_w, frame_h):
+        return True
+    if vehicle_boxes and parked_motorcycle_row_fp_box(person_box, frame_w, frame_h):
+        return person_box_overlaps_vehicle_fp(
+            person_box, vehicle_boxes, frame_w, frame_h,
+        )
+    return False
 
 
 def upper_canopy_fp_box(
@@ -802,7 +826,9 @@ def patrol_person_meets_display_gate(
     # Chỉ góc mặt đất: vệt vuông vài chục pixel bên kia đường không phải người.
     if speck_person_box(person_box, frame_w, frame_h):
         return False
-    if patrol_bodycam_motorcycle_fp_box(person_box, frame_w, frame_h):
+    if patrol_bodycam_motorcycle_display_fp_box(
+        person_box, frame_w, frame_h, vehicle_boxes=vehicle_boxes,
+    ):
         return False
     if upper_canopy_fp_box(person_box, frame_w, frame_h):
         return False

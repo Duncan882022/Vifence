@@ -254,6 +254,21 @@ export function patrolBodycamMotorcycleFpBox(
   )
 }
 
+/** Gate ROI — không lọc row thuần hình học (người đứng xa trùng aspect hàng xe). */
+export function patrolBodycamMotorcycleDisplayFpBox(
+  bbox: Bbox4,
+  frameW: number,
+  frameH: number,
+  vehicleBoxes: Bbox4[] = [],
+): boolean {
+  if (patrolMotorcycleSeatLikeFpBox(bbox, frameW, frameH)) return true
+  if (patrolParkedMotorcycleFrontFpBox(bbox, frameW, frameH)) return true
+  if (vehicleBoxes.length > 0 && patrolParkedMotorcycleRowFpBox(bbox, frameW, frameH)) {
+    return patrolPersonOverlapsVehicleFp(bbox, vehicleBoxes, frameW, frameH)
+  }
+  return false
+}
+
 function bboxIntersectionArea(a: Bbox4, b: Bbox4): number {
   const ix1 = Math.max(a[0], b[0])
   const iy1 = Math.max(a[1], b[1])
@@ -489,7 +504,7 @@ export function patrolPersonMeetsDisplayGate(input: PatrolPersonDetectionGateInp
   }
   if (speckPersonBox(bbox, frameH)) return false
   if (patrolPersonOversizedDisplayBbox(bbox, frameW, frameH)) return false
-  if (patrolBodycamMotorcycleFpBox(bbox, frameW, frameH)) return false
+  if (patrolBodycamMotorcycleDisplayFpBox(bbox, frameW, frameH, vehicleBoxes)) return false
   if (patrolPersonOverlapsVehicleFp(bbox, vehicleBoxes, frameW, frameH)) return false
   if (wideCrowdRiderBox(bbox, frameW, frameH)) return true
   if (!plausiblePersonSilhouette(bbox, frameW, frameH, false, true)) return false
