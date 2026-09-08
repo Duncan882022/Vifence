@@ -1339,7 +1339,7 @@ PATROL_LIVE_WS_HEARTBEAT_S = 10.0
 
 
 @app.websocket("/ws/patrol/live")
-async def ws_patrol_live(websocket: WebSocket, cameras: str = "HC-01,HC-02", token: str | None = None):
+async def ws_patrol_live(websocket: WebSocket, cameras: str = "HC-01", token: str | None = None):
     """Push live/bundle (metrics + workforce) — thay poll HTTP Module 05."""
     if not settings.patrol_auth_disabled:
         if not token or decode_access_token(token) is None:

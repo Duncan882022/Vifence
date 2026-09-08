@@ -351,10 +351,11 @@ if [[ -n "${VPS_HC01_FALLBACK_MP4:-}" && -f "$LOCAL_HC01_FALLBACK" ]]; then
 fi
 
 echo "→ .env production…"
-# Chế độ ưu tiên Module 05: VPS 6 vCPU không gánh nổi 5 camera × 7 engine cùng
-# OWLv2. Mặc định chỉ chạy bodycam/flycam tuần tra; đặt PRIORITIZE_MODULE05=0 để
-# bật lại reel demo A-03/A-04 của Module 03/04.
+# Chế độ ưu tiên Module 05: VPS 6 vCPU — mặc định chỉ HC-01 (Helmet 01),
+# yolov8s, không HC-02/DR-03/A-03/A-04. Đặt VPS_HC01_ONLY=0 để bật lại cả
+# HC-02 + DR-03; PRIORITIZE_MODULE05=0 để bật reel demo Module 03/04.
 PRIORITIZE_MODULE05="${PRIORITIZE_MODULE05:-1}"
+VPS_HC01_ONLY="${VPS_HC01_ONLY:-1}"
 VPS_VMS_ENABLED="${VPS_VMS_ENABLED:-true}"
 VPS_VIDEO_A03="${VPS_VIDEO_A03:-${VPS_VIDEO_DIR}/cam03.mp4}"
 VPS_VIDEO_A04="${VPS_VIDEO_A04:-${VPS_VIDEO_DIR}/cam04.mp4}"
@@ -367,22 +368,31 @@ VPS_DR03_RTSP="${VPS_DR03_RTSP:-rtsp://127.0.0.1:8554/dr03}"
 # MediaMTX là client duy nhất của nguồn gốc; worker và CMS đều đọc lại từ nó.
 VPS_HC01_RTSP="${VPS_HC01_RTSP:-rtsp://127.0.0.1:8554/hc-01}"
 VPS_PATROL_SOURCES="HC-01:${VPS_HC01_RTSP},HC-02:rtsp://127.0.0.1:8554/hc-02,DR-03:${VPS_DR03_RTSP}"
+VPS_HC01_ONLY_SOURCES="HC-01:${VPS_HC01_RTSP}"
 
 if [[ "$PRIORITIZE_MODULE05" == "1" ]]; then
-  VPS_CAMERA_SOURCES="${VPS_PATROL_SOURCES}"
+  if [[ "$VPS_HC01_ONLY" == "1" ]]; then
+    VPS_CAMERA_SOURCES="${VPS_HC01_ONLY_SOURCES}"
+    VPS_AI_FPS="${VPS_AI_FPS:-10.0}"
+    VPS_AI_MAX_WIDTH="${VPS_AI_MAX_WIDTH:-1024}"
+    VPS_PATROL_PERSON_MODEL="${VPS_PATROL_PERSON_MODEL:-yolov8s.pt}"
+    echo "   Module 05 — chỉ HC-01 (Helmet 01), ${VPS_PATROL_PERSON_MODEL} @ ${VPS_AI_FPS} FPS, ${VPS_AI_MAX_WIDTH}px"
+  else
+    VPS_CAMERA_SOURCES="${VPS_PATROL_SOURCES}"
+    VPS_AI_FPS="${VPS_AI_FPS:-6.0}"
+    VPS_AI_MAX_WIDTH="${VPS_AI_MAX_WIDTH:-960}"
+    VPS_PATROL_PERSON_MODEL="${VPS_PATROL_PERSON_MODEL:-yolov8n.pt}"
+    echo "   Module 05: HC-01, HC-02, DR-03 (bỏ reel A-03/A-04, OWLv2, auto-train)"
+  fi
   VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-false}"
   VPS_MACHINERY_ENABLED="${VPS_MACHINERY_ENABLED:-false}"
-  # Đo trên VPS: mỗi camera tốn ~1.3 lõi cho YOLO ở 960px. Ba camera cùng phát ở
-  # 8 FPS là chạm trần 6 vCPU, mà quá tải thì hỏng cả luồng live lẫn AI. Tracker
-  # mới ghép được cả ở nhịp thưa (test có người chạy ~720 px/s ở 8 FPS vẫn giữ
-  # nguyên ID), nên nhịp dày không còn là thứ quyết định chất lượng bám.
-  VPS_AI_FPS="${VPS_AI_FPS:-6.0}"
-  echo "   Ưu tiên Module 05: chỉ HC-01, HC-02, DR-03 (bỏ reel A-03/A-04, OWLv2, auto-train)"
 else
   VPS_CAMERA_SOURCES="A-03:${VPS_VIDEO_A03},A-04:${VPS_VIDEO_A04},${VPS_PATROL_SOURCES}"
   VPS_AUTO_TRAIN_ENABLED="${VPS_AUTO_TRAIN_ENABLED:-true}"
   VPS_MACHINERY_ENABLED="${VPS_MACHINERY_ENABLED:-true}"
   VPS_AI_FPS="${VPS_AI_FPS:-10.0}"
+  VPS_AI_MAX_WIDTH="${VPS_AI_MAX_WIDTH:-960}"
+  VPS_PATROL_PERSON_MODEL="${VPS_PATROL_PERSON_MODEL:-yolov8n.pt}"
   echo "   Chạy đủ camera (A-03, A-04 + tuần tra)"
 fi
 ssh_cmd "bash -s" <<REMOTE_ENV
@@ -411,7 +421,8 @@ VMS_MODE_ENABLED=${VPS_VMS_ENABLED}
 VMS_CAMERA_SOURCES=${VPS_CAMERA_SOURCES}
 VMS_AI_FPS=${VPS_AI_FPS}
 VMS_HLS_RELAY_SKIP_PREFIXES=HC-,DR-
-VMS_AI_MAX_WIDTH=960
+VMS_AI_MAX_WIDTH=${VPS_AI_MAX_WIDTH:-960}
+PATROL_PERSON_MODEL=${VPS_PATROL_PERSON_MODEL:-yolov8s.pt}
 MEDIAMTX_HLS_PUBLIC_BASE=/mediamtx/hls
 MEDIAMTX_PATH_OVERRIDES=DR-03:dr03
 MACHINERY_DETECTOR_ENABLED=${VPS_MACHINERY_ENABLED}
