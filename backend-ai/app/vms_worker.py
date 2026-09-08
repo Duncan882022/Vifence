@@ -765,20 +765,20 @@ class CameraVmsWorker:
                         if engine_name in ("atgt", "mesh", "ppe", "pccc", "crane", "wah"):
                             engine_kwargs["source_pts_sec"] = source_pts_sec
                         result, events = fn(frame, self.camera_id, **engine_kwargs)
-                if isinstance(result, dict):
-                    merged_detections.extend(result.get("detections") or [])
-                    zone_rows = result.get("roi_zones") or []
-                    if zone_rows:
-                        merged_zones = self._merge_roi_zones(merged_zones, zone_rows)
-                    if result.get("metrics"):
-                        merged_metrics[engine_name] = result["metrics"]
-                        if engine_name == "ppe":
-                            ppe_m = result["metrics"]
-                            if isinstance(ppe_m, dict):
-                                if ppe_m.get("overlay_gate"):
-                                    merged_metrics["overlay_gate"] = ppe_m["overlay_gate"]
-                                if ppe_m.get("vehicle_boxes"):
-                                    merged_metrics["vehicle_boxes"] = ppe_m["vehicle_boxes"]
+                        if isinstance(result, dict):
+                            merged_detections.extend(result.get("detections") or [])
+                            zone_rows = result.get("roi_zones") or []
+                            if zone_rows:
+                                merged_zones = self._merge_roi_zones(merged_zones, zone_rows)
+                            if result.get("metrics"):
+                                merged_metrics[engine_name] = result["metrics"]
+                                if engine_name == "ppe":
+                                    ppe_m = result["metrics"]
+                                    if isinstance(ppe_m, dict):
+                                        if ppe_m.get("overlay_gate"):
+                                            merged_metrics["overlay_gate"] = ppe_m["overlay_gate"]
+                                        if ppe_m.get("vehicle_boxes"):
+                                            merged_metrics["vehicle_boxes"] = ppe_m["vehicle_boxes"]
                             frame_w = int(result.get("width") or frame_w)
                             frame_h = int(result.get("height") or frame_h)
                             try:
