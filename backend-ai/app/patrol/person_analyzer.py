@@ -35,9 +35,6 @@ _patrol_vehicle_detector: VehicleDetector | None = None
 _PATROL_VEHICLE_CONF = 0.32
 
 
-_PATROL_PERSON_MODEL_DEFAULT = "yolov8n.pt"
-
-
 def _get_person_detector() -> PersonDetector:
     """YOLO person — singleton riêng Module 05, không phụ thuộc state ppe_analyzer.
 
@@ -53,13 +50,15 @@ def _get_person_detector() -> PersonDetector:
     thật). Đây là cách chữa duy nhất đo được: ngưỡng conf **không** tách được, vì
     người đi xe máy thật cũng chỉ chấm 0.28 trong khi yên xe chấm tới 0.46.
 
-    Mặc định vẫn để yolov8n: VPS 6 vCPU đang chạy load average 7.6, nhân 1.7 lần
-    chi phí YOLO sẽ ăn vào luồng phát sóng. Bật yolov8s khi đã thêm lõi hoặc đã hạ
-    `VMS_AI_FPS` (ROI giữa các khung đã có nội suy theo vận tốc track bù lại).
+    Mặc định `patrol_person_model=yolov8s.pt` (config / PATROL_PERSON_MODEL).
+    Chỉ HC-01 trên VPS — một worker VMS, không chia CPU với HC-02/DR-03.
     """
     global _person_detector
     if _person_detector is None:
-        weights = os.getenv("PATROL_PERSON_MODEL", "").strip() or _PATROL_PERSON_MODEL_DEFAULT
+        from ..config import settings
+
+        env_override = os.getenv("PATROL_PERSON_MODEL", "").strip()
+        weights = env_override or settings.patrol_person_model.strip() or "yolov8s.pt"
         _person_detector = PersonDetector(conf_threshold=_PERSON_CONF, weights=weights)
         _person_detector.load()
     return _person_detector

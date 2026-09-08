@@ -37,7 +37,7 @@ class PatrolPersonDetectorTests(unittest.TestCase):
         self.assertIs(d1, d2)
         mock_det.load.assert_called_once()
 
-    def test_patrol_detector_defaults_to_yolov8n(self) -> None:
+    def test_patrol_detector_defaults_to_yolov8s(self) -> None:
         import app.patrol.person_analyzer as pa
 
         pa._person_detector = None
@@ -48,7 +48,7 @@ class PatrolPersonDetectorTests(unittest.TestCase):
 
             os.environ.pop("PATROL_PERSON_MODEL", None)
             pa._get_person_detector()
-        self.assertEqual(ctor.call_args.kwargs["weights"], "yolov8n.pt")
+        self.assertEqual(ctor.call_args.kwargs["weights"], "yolov8s.pt")
 
     def test_patrol_detector_weights_overridable(self) -> None:
         """Đổi được sang model lớn hơn — cách duy nhất đo được để bớt nhầm xe thành người."""

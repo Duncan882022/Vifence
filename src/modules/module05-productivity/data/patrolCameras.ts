@@ -20,6 +20,33 @@ const PATROL_BODY_CAMERAS: readonly { id: string; assignee: string }[] = [
   { id: 'HC-02', assignee: 'Helmet 02' },
 ]
 
+const ALL_PATROL_BODYCAM_IDS = PATROL_BODY_CAMERAS.map(row => row.id)
+
+/** Build-time: `VITE_PATROL_CAMERA_IDS=HC-01` — chỉ Helmet 01, bỏ HC-02/DR-03 khỏi UI. */
+function readPatrolCameraIdsFromEnv(): readonly string[] | null {
+  const raw = import.meta.env.VITE_PATROL_CAMERA_IDS?.trim()
+  if (!raw) return null
+  const ids = raw.split(',').map((part: string) => part.trim()).filter(Boolean)
+  return ids.length > 0 ? ids : null
+}
+
+const ENV_PATROL_CAMERA_IDS = readPatrolCameraIdsFromEnv()
+
+/** Bodycam ids đang bật — mặc định cả hai mũ; production Helmet 01 only qua env. */
+export const DEFAULT_PATROL_CAMERA_IDS: readonly string[] =
+  ENV_PATROL_CAMERA_IDS?.filter(id => ALL_PATROL_BODYCAM_IDS.includes(id))
+  ?? ALL_PATROL_BODYCAM_IDS
+
+const INCLUDE_PATROL_DRONES =
+  import.meta.env.VITE_PATROL_INCLUDE_DRONES !== '0'
+  && (ENV_PATROL_CAMERA_IDS == null || ENV_PATROL_CAMERA_IDS.some(id => id.startsWith('DR-')))
+
+/** Camera mở sẵn trên lưới — mặc định gồm flycam trừ khi tắt bằng env. */
+export const DEFAULT_PATROL_GRID_CAMERA_IDS: readonly string[] = [
+  ...DEFAULT_PATROL_CAMERA_IDS,
+  ...(INCLUDE_PATROL_DRONES ? PATROL_DRONE_IDS : []),
+]
+
 /**
  * `streamType` suy ra từ cấu hình ingest, không hardcode theo id.
  * Mũ nào cũng là bodycam trừ khi còn phải chạy luồng cũ (chưa có MediaMTX).
@@ -68,10 +95,24 @@ function buildPatrolDroneCamera(id: string): TrainingCamera {
   }
 }
 
-/** Helmet 01 + Helmet 02 + Drone 03 — khu Cầu Sông Hốt. */
+/** Helmet 01 (+ tuỳ chọn HC-02, DR-03) — khu Cầu Sông Hốt. */
+function activePatrolBodyCameras(): readonly { id: string; assignee: string }[] {
+  if (!ENV_PATROL_CAMERA_IDS) return PATROL_BODY_CAMERAS
+  const allowed = new Set(
+    ENV_PATROL_CAMERA_IDS.filter(id => ALL_PATROL_BODYCAM_IDS.includes(id)),
+  )
+  return PATROL_BODY_CAMERAS.filter(row => allowed.has(row.id))
+}
+
+function activePatrolDroneIds(): readonly string[] {
+  if (!INCLUDE_PATROL_DRONES) return []
+  if (!ENV_PATROL_CAMERA_IDS) return PATROL_DRONE_IDS
+  return PATROL_DRONE_IDS.filter(id => ENV_PATROL_CAMERA_IDS!.includes(id))
+}
+
 export const PATROL_CAMERAS: TrainingCamera[] = [
-  ...PATROL_BODY_CAMERAS.map(({ id, assignee }) => buildPatrolCamera(id, assignee)),
-  ...PATROL_DRONE_IDS.map(id => buildPatrolDroneCamera(id)),
+  ...activePatrolBodyCameras().map(({ id, assignee }) => buildPatrolCamera(id, assignee)),
+  ...activePatrolDroneIds().map(id => buildPatrolDroneCamera(id)),
 ]
 
 export const PATROL_BODYCAM_LABELS: Record<string, string> = {
@@ -86,14 +127,7 @@ export function resolvePatrolCameraDisplayName(cameraId: string): string {
   return PATROL_BODYCAM_LABELS[id] ?? PATROL_DRONE_LABELS[id] ?? id
 }
 
-/** Mũ tuần tra — danh sách dùng cho KPI, sự kiện và workforce (backend chỉ nhận HC-*). */
-export const DEFAULT_PATROL_CAMERA_IDS = ['HC-01', 'HC-02'] as const
-
-/** Camera mở sẵn trên lưới — gồm cả flycam. */
-export const DEFAULT_PATROL_GRID_CAMERA_IDS: readonly string[] = [
-  ...DEFAULT_PATROL_CAMERA_IDS,
-  ...PATROL_DRONE_IDS,
-]
+/** Mũ tuần tra — danh sách KPI / workforce (backend chỉ nhận HC-*). */
 
 export const PATROL_CAMERA_FILTER_TABS: PatrolCameraFilterTab[] = ['Bodycam', 'Flycam']
 

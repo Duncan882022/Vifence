@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     patrol_drone_altitude_overrides: str = ""
     patrol_drone_default_altitude_m: float | None = None
     hc01_rtsp_url: str = ""
+    # Module 05 person YOLO — yolov8s đo trên HC-01 bớt ~86% FP yên/xe vs yolov8n.
+    patrol_person_model: str = "yolov8s.pt"
     whip_user: str = ""
     whip_pass: str = ""
     analyze_max_b64_len: int = 5_000_000
