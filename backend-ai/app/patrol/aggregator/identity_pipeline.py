@@ -14,7 +14,7 @@ from .types import BestFaceFrame, IdentityType, ObservationInput, PersonIdentity
 
 logger = logging.getLogger("patrol.aggregator.identity")
 
-MAX_BEST_FRAMES = 3
+MAX_BEST_FRAMES = 6
 MIN_QUALITY_FOR_SEARCH = 0.55
 MIN_QUALITY_FOR_NEW_IDENTITY = 0.62
 

@@ -217,7 +217,7 @@ class Settings(BaseSettings):
 
     # Lifecycle refactor — person commit sớm, object chỉ lúc finalize track.
     patrol_deferred_object: bool = True
-    patrol_face_assess_interval_sec: float = 0.3
+    patrol_face_assess_interval_sec: float = 0.15
     patrol_person_commit_min_quality: float = 0.62
     patrol_person_commit_fast_quality: float = 0.75
     patrol_object_finalize_min_track_sec: float = 0.75

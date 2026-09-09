@@ -1156,6 +1156,15 @@ def _dedupe_person_boxes(
     if camera_id.startswith("HC-"):
         iou_threshold = 0.34
         containment_threshold = 0.46
+        try:
+            from .patrol.peak_time import is_peak_time
+
+            if is_peak_time(camera_id):
+                iou_threshold = 0.42
+                containment_threshold = 0.54
+                min_center_distance = 0.038
+        except Exception:  # noqa: BLE001
+            pass
     if len(persons) <= 1:
         return persons
 

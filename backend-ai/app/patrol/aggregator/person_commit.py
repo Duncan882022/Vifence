@@ -35,6 +35,8 @@ def _observation_gps(obs: ObservationInput) -> tuple[float | None, float | None]
 def _best_commit_embedding(
     session: TrackSession,
     obs: ObservationInput,
+    *,
+    finalize: bool = False,
 ) -> tuple[tuple[float, ...], float, ObservationInput] | None:
     """Embedding + obs nguồn tốt nhất cho commit."""
     work_obs = obs
@@ -45,7 +47,8 @@ def _best_commit_embedding(
         p_emb, p_q = picked
         if emb is None or p_q > quality:
             emb, quality = p_emb, p_q
-    if emb is None or quality < MIN_QUALITY_FOR_SEARCH:
+    min_search = 0.50 if finalize else MIN_QUALITY_FOR_SEARCH
+    if emb is None or quality < min_search:
         return None
     if not obs.face_eligible and picked is None:
         return None
@@ -86,19 +89,32 @@ def _observation_from_best_face(
     )
 
 
-def should_attempt_person_commit(session: TrackSession, obs: ObservationInput) -> bool:
+def should_attempt_person_commit(
+    session: TrackSession,
+    obs: ObservationInput,
+    *,
+    finalize: bool = False,
+) -> bool:
     if session.person_committed or session.is_abandoned():
         return False
-    picked = _best_commit_embedding(session, obs)
+    picked = _best_commit_embedding(session, obs, finalize=finalize)
     if picked is None:
+        if finalize and session.best_faces and session.best_faces[0].embedding is not None:
+            bf = session.best_faces[0]
+            if float(bf.quality) >= 0.50:
+                return True
         return False
     _emb, quality, _work = picked
     min_q = _commit_min_quality()
+    if finalize and quality >= 0.52:
+        return True
     if quality >= min_q:
         return True
     duration = session.duration_seconds
     min_track = float(getattr(settings, "patrol_object_finalize_min_track_sec", 0.75) or 0.75)
     if duration < min_track and quality >= _commit_fast_quality():
+        return True
+    if finalize and duration >= min_track and quality >= 0.50:
         return True
     return False
 
@@ -286,6 +302,7 @@ def maybe_commit_person(
     obs: ObservationInput,
     *,
     allow_recover: bool = False,
+    finalize: bool = False,
 ) -> str | None:
     """Thử commit person card; trả pers_id nếu thành công."""
     if session.person_committed:
@@ -318,13 +335,22 @@ def maybe_commit_person(
             )
             _note_best_frame(session, work_obs)
 
-    if not should_attempt_person_commit(session, work_obs):
+    if not should_attempt_person_commit(session, work_obs, finalize=finalize):
         return None
 
-    picked = _best_commit_embedding(session, work_obs)
+    picked = _best_commit_embedding(session, work_obs, finalize=finalize)
     if picked is None:
-        return None
-    emb, quality, commit_obs = picked
+        if finalize and session.best_faces and session.best_faces[0].embedding is not None:
+            bf = session.best_faces[0]
+            emb = bf.embedding
+            quality = float(bf.quality)
+            commit_obs = _observation_from_best_face(session, work_obs) or work_obs
+            if emb is None:
+                return None
+        else:
+            return None
+    else:
+        emb, quality, commit_obs = picked
 
     try:
         pers_id = commit_person_from_evidence(session, commit_obs, emb, quality)
