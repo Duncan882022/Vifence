@@ -74,7 +74,7 @@ def build_document() -> Document:
 
     meta = doc.add_paragraph()
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = meta.add_run("Route: /module05  |  Cập nhật: 2026-09-16")
+    r = meta.add_run("Route: /module05  |  Cập nhật: 2026-09-16 (rev.2 — danh sách tính năng)")
     r.font.size = Pt(10)
     r.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
@@ -116,6 +116,137 @@ def build_document() -> Document:
     add_bullet(doc, "Ngày sự kiện, playback, SQLite event_date = ngày lịch Việt Nam (cắt 0h).")
     add_bullet(doc, "Không dùng ca/kíp 06:00 như Module 02/03.")
     add_bullet(doc, "Tab 「Ca」 trên heatmap (nếu có) chỉ là cửa sổ lọc thời gian, không đổi mốc ngày.")
+
+    doc.add_page_break()
+
+    # Feature list — top to bottom
+    add_heading(doc, "Danh sách tính năng theo bố cục màn hình (trên → dưới)", 1)
+    add_para(
+        doc,
+        "Liệt kê theo thứ tự người vận hành nhìn thấy trên /module05 — từ header xuống Tier3. "
+        "Mỗi mục mô tả theo góc nghiệp vụ (người dùng làm gì, hệ thống trả lời gì).",
+    )
+
+    add_heading(doc, "A. Header trang", 2)
+    features_header = [
+        "Tiêu đề module: Hiệu Quả Công Việc",
+        "Mô tả phụ: Giám sát tuần tra helmet camera & mật độ lao động",
+    ]
+    for f in features_header:
+        add_bullet(doc, f)
+
+    add_heading(doc, "B. Tier 1 — Panel Tổng Quan (KPI)", 2)
+    add_para(doc, "Thu gọn / mở rộng panel; hiển thị 4 thẻ chỉ số realtime + thống kê ngày:", bold=True)
+    features_kpi = [
+        "Khu vực tuần tra — theo dõi bao nhiêu khu GPS site đã có thiết bị online đang phủ (visited/total, % phủ)",
+        "Nhân sự — tổng headcount ngày (Người + Định danh); chi tiết tách icon cam / xanh lá khi có dữ liệu",
+        "Lượt gặp · ĐT — đếm lần silhouette chưa định danh vào khung (mỗi lần = 1 lượt, không gộp người)",
+        "Mật độ flymap — số người/khung từ drone tầm cao (YOLO); tách biệt KPI Nhân sự",
+        "Trạng thái chờ: thiết bị online nhưng chưa phát hiện / chưa có dữ liệu / flycam offline",
+        "Peak time: detail KPI lượt gặm phản ánh giờ cao điểm (không gộp lượt)",
+    ]
+    for f in features_kpi:
+        add_bullet(doc, f)
+
+    add_heading(doc, "C. Tier 2 — Panel Camera", 2)
+    add_para(doc, "Chuyển Live ↔ Playback; thu gọn panel (header hiện số luồng active khi thu gọn).", bold=True)
+
+    add_heading(doc, "C.1. Chế độ Live", 3)
+    features_live = [
+        "Lưới 3 thiết bị: Helmet 01 (HC-01), Helmet 02 (HC-02), Drone 03 (DR-03)",
+        "Mặc định chọn HC-02; click tile để focus camera",
+        "Lọc tab Bodycam (HC-01, HC-02) / Flycam (DR-03)",
+        "Badge LIVE + pulse dot khi stream online; retry khi offline",
+        "Badge chế độ bay DR-03: Tầm cao / Tầm thấp",
+        "Xem luồng WHEP/HLS qua MediaMTX; poll WS live bundle (~2.5s), fallback HTTP",
+        "Overlay bbox người (ROI) theo tier xám / cam / xanh lá — bật/tắt trên toolbar",
+        "Overlay thời gian + GPS trên tile HC-02 và drone",
+        "HC-02 mobile bridge: coi online khi có frames dù backend báo offline",
+        "Phóng to tier Camera fullscreen (desktop)",
+        "Sidebar thumbnail camera — nhóm Bodycam / Flycam",
+    ]
+    for f in features_live:
+        add_bullet(doc, f)
+
+    add_heading(doc, "C.2. Chế độ Playback", 3)
+    features_playback = [
+        "Xem lại băng ghi MediaMTX theo ngày lịch VN (0h, retain 7 ngày)",
+        "Date picker đồng bộ với panel Sự kiện (patrolViewDate shared)",
+        "Timeline marker sự kiện — click phát clip 30 giây quanh thời điểm lockedAt",
+        "Click thẻ sự kiện → tự chuyển ngày playback + sync timeline",
+        "Lọc Bodycam / Flycam trên playback",
+        "Không rollover ca 06:00 (khác Module 02/03)",
+    ]
+    for f in features_playback:
+        add_bullet(doc, f)
+
+    add_heading(doc, "D. Tier 3 trái — Panel HEATMAP / FLYMAP", 2)
+    add_para(doc, "Bản đồ satellite site Cầu Sông Hốt; toggle Flymap; phóng to fullscreen.", bold=True)
+
+    add_heading(doc, "D.1. Chế độ HEATMAP (site)", 3)
+    features_heatmap = [
+        "Layer Khu vực — polygon ranh giới site",
+        "Layer Mật độ — chấm presences theo tier (xám ĐT / cam Người / xanh lá Định danh)",
+        "Layer Mũ — marker + lộ trình HC-01, HC-02",
+        "Layer Flycam — marker/route DR-03 (proximity hoặc có GPS)",
+        "Overlay stats góc map: đếm ĐT / Người / Định danh (đồng bộ KPI)",
+        "Follow GPS live HC-02 — map tự pan theo vị trí mũ",
+        "Click chấm → bottom sheet chi tiết đối tượng (Unknown / Verified)",
+        "Gán định danh thủ công từ sheet (PatrolManualIdentityPanel)",
+        "Dedupe 1 chấm/entity; lọc chấm DR aerial khỏi heatmap site",
+        "DR proximity: chấm hiện như helmet",
+    ]
+    for f in features_heatmap:
+        add_bullet(doc, f)
+
+    add_heading(doc, "D.2. Chế độ FLYMAP (drone tầm cao)", 3)
+    features_flymap = [
+        "Layer Khu vực · Mật độ · Drone",
+        "Chấm phát hiện một màu uniform — overlay Phát hiện: N",
+        "Follow GPS live DR-03",
+        "Route chỉ drone; không mở object sheet khi click chấm",
+    ]
+    for f in features_flymap:
+        add_bullet(doc, f)
+
+    add_heading(doc, "E. Tier 3 phải — Panel SỰ KIỆN", 2)
+    features_events = [
+        "Date picker compact — 7 ngày gần nhất, đồng bộ playback/heatmap",
+        "Hint Đang xem ngày trước khi xem lịch sử",
+        "Header label chế độ flycam: Tầm thấp · AI / Tầm cao · Mật độ",
+        "4 tab filter: Tất cả · Đối tượng · Người · Định danh (badge count mỗi tab)",
+        "Tìm kiếm tên, mã NV, pers_id (debounce 300ms)",
+        "Thẻ sự kiện có snapshot evidence — badge tier + thời gian + vị trí camera/khu",
+        "Badge thăng tần (promoted) khi entity được nâng tier trong ngày",
+        "Hiển thị số lượt xuất hiện (≥2) cho Người / Định danh",
+        "Cuộn vô hạn — load thêm 4 thẻ/lần",
+        "Click thẻ → chọn + mở popup chi tiết + sync ngày playback",
+        "Lọc sự kiện person/profile từ DR-03 aerial (chỉ giữ object)",
+        "Peak time: thẻ nhóm 1 snapshot; ledger vẫn đếm đủ N lượt gặm",
+        "Empty state: chờ backend / không có sự kiện ngày",
+    ]
+    for f in features_events:
+        add_bullet(doc, f)
+
+    add_heading(doc, "F. Popup & hành động phát sinh từ màn chính", 2)
+    features_modal = [
+        "PatrolEventDetailModal — snapshot lớn, tier, tên/alias, camera, GPS, thời gian",
+        "Lịch sử xuất hiện trong ngày (appearance segments) theo subject",
+        "Gallery mặt đối chiếu (khi đã định danh)",
+        "PatrolCameraAiConfigModal — cấu hình AI patrol_person cho HC-* / DR-*",
+        "PatrolDevicePermissionGate — xin quyền camera/mic (legacy mobile helmet only)",
+    ]
+    for f in features_modal:
+        add_bullet(doc, f)
+
+    add_heading(doc, "G. Trang con liên quan (ngoài layout chính)", 2)
+    features_sub = [
+        "/module05/ho-so — Quản lý hồ sơ công nhân: bản nháp, xác minh, import Excel",
+        "/module05/quet-mat — Quét mặt bổ sung vector / tạo hồ sơ mới 3 góc",
+        "/module05/phat-song (publisher) — phát luồng WHIP từ thiết bị đeo mũ",
+    ]
+    for f in features_sub:
+        add_bullet(doc, f)
 
     doc.add_page_break()
 
