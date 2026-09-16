@@ -91,6 +91,27 @@ def build_document() -> Document:
     add_bullet(doc, "Tier1 — Panel Tổng quan (KPI)")
     add_bullet(doc, "Tier2 — Panel Camera | Heatmap + Panel Sự kiện")
 
+    add_heading(doc, "Bảng màu 3 tầng nhận diện (token hiện tại)", 2)
+    add_para(
+        doc,
+        "Nguồn sự thật: src/modules/module05-productivity/utils/patrolTierTokens.ts — "
+        "dùng chung cho ROI live, thẻ sự kiện, chấm heatmap.",
+    )
+    add_table(
+        doc,
+        ["Tier", "Label", "Màu UI", "Hex heatmap", "Ý nghĩa"],
+        [
+            ["object", "Đối tượng", "xám (stone-400)", "#a8a29e", "Silhouette — chưa đủ tiêu chí nhận diện"],
+            ["person", "Người", "cam (orange-400)", "#fb923c", "Mặt đủ rõ / hồ sơ bản nháp, re-ID"],
+            ["identity", "Định danh", "xanh lá (green-400)", "#4ade80", "Đã xác minh gallery / gán tên"],
+        ],
+    )
+    add_para(
+        doc,
+        "Lưu ý: Palette cũ (xanh lá Đối tượng / sky Người / tím Định danh) đã bỏ — không còn dùng trong UI.",
+        italic=True,
+    )
+
     add_para(doc, "Quy ước ngày (quan trọng):", bold=True)
     add_bullet(doc, "Ngày sự kiện, playback, SQLite event_date = ngày lịch Việt Nam (cắt 0h).")
     add_bullet(doc, "Không dùng ca/kíp 06:00 như Module 02/03.")
@@ -144,7 +165,7 @@ def build_document() -> Document:
 
     add_heading(doc, "1.3. Nhân sự", 2)
     add_bullet(doc, "Value: personCount + identityCount")
-    add_bullet(doc, "Detail khi có dữ liệu: icon tách Người (sky) và Định danh (violet).")
+    add_bullet(doc, "Detail khi có dữ liệu: icon tách Người (cam) và Định danh (xanh lá).")
     add_bullet(doc, 'Cam online + có stream → "Đang tuần tra — chờ phát hiện"')
     add_bullet(doc, 'Không cam online → "Chưa có dữ liệu hôm nay"')
 
@@ -173,7 +194,7 @@ def build_document() -> Document:
             ["Nhân sự", "day_stats backend", "Đếm thẻ có snapshot, dedupe entity"],
             [
                 "Lượt gặp · ĐT",
-                "Tổng lượt gặm (N chấm xanh)",
+                "Tổng lượt gặm (N chấm xám Đối tượng)",
                 "Số thẻ snapshot (peak time có thể gom 1 thẻ nhóm)",
             ],
         ],
@@ -199,9 +220,9 @@ def build_document() -> Document:
         doc,
         ["Bằng chứng", "Tier", "Badge", "Màu token"],
         [
-            ["Silhouette người", "Đối tượng", "Đối tượng", "green"],
-            ["+ mặt đủ rõ (face_eligible, score ≥ 1.05)", "Người", "Người", "sky"],
-            ["+ khớp gallery / HR", "Định danh", "Định danh", "violet"],
+            ["Silhouette người", "Đối tượng", "Đối tượng", "xám (stone-400)"],
+            ["+ mặt đủ rõ (face_eligible, score ≥ 1.05)", "Người", "Người", "cam (orange-400)"],
+            ["+ khớp gallery / HR", "Định danh", "Định danh", "xanh lá (green-400)"],
         ],
     )
     add_bullet(doc, "Chỉ thăng tầng, không hạ tầng khi tiếp tục bám track.")
@@ -248,7 +269,7 @@ def build_document() -> Document:
 
     add_heading(doc, "2.7. Peak time — gom snapshot, không gom lượt", 2)
     add_bullet(doc, "Thẻ UI: 1 snapshot nhóm Nhóm N (gom hiển thị).")
-    add_bullet(doc, "Ledger lượt gặm: vẫn N lượt, N chấm xanh trên map, KPI Lượt gặp · ĐT += N.")
+    add_bullet(doc, "Ledger lượt gặm: vẫn N lượt, N chấm xám trên map, KPI Lượt gặp · ĐT += N.")
     add_bullet(doc, "ROI video: vẫn N bbox #1…#N.")
 
     add_heading(doc, "2.8. Popup chi tiết & loại ẩn", 2)
@@ -272,14 +293,14 @@ def build_document() -> Document:
     )
 
     add_heading(doc, "3.2. Ba loại chấm = ba chỉ số KPI", 2)
-    add_para(doc, "Nguồn sự thật: Presences (SQLite appearances). Quy tắc vàng: Số chấm xanh = số lượt gặm, không phải số entity obj-* duy nhất hay số thẻ card.")
+    add_para(doc, "Nguồn sự thật: Presences (SQLite appearances). Quy tắc vàng: Số chấm xám Đối tượng = số lượt gặm, không phải số entity obj-* duy nhất hay số thẻ card.")
     add_table(
         doc,
-        ["Chấm map", "Màu", "KPI", "Ý nghĩa"],
+        ["Chấm map", "Màu", "Hex", "KPI", "Ý nghĩa"],
         [
-            ["Định danh", "violet", "identity_count", "NV đã verify"],
-            ["Người", "sky", "person_count", "pers-* draft, chưa gallery"],
-            ["Đối tượng", "green", "unassigned_observations", "Mỗi chấm = 1 lượt gặm"],
+            ["Đối tượng", "xám", "#a8a29e", "unassigned_observations", "Mỗi chấm = 1 lượt gặm"],
+            ["Người", "cam", "#fb923c", "person_count", "pers-* draft, chưa gallery"],
+            ["Định danh", "xanh lá", "#4ade80", "identity_count", "NV đã verify"],
         ],
     )
 
