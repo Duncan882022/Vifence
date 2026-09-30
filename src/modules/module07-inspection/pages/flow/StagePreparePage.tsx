@@ -157,17 +157,17 @@ export function StagePreparePage() {
           { label: `${def.code} ${def.label}` },
         ]} />
         <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
-          <ol className="flex lg:flex-col gap-1.5 self-start">
+          <ol className="flex flex-row lg:flex-col gap-1.5 self-stretch lg:self-start overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
             {STEPS.map((s, i) => {
               const enabled = canGo(s.id)
               return (
-                <li key={s.id} className="flex-1 lg:flex-none">
+                <li key={s.id} className="flex-none min-w-[9.5rem] lg:min-w-0 lg:flex-none lg:w-full">
                   <button
                     type="button"
                     disabled={!enabled}
                     onClick={() => setStep(s.id)}
                     className={cn(
-                      'w-full flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[12px] font-semibold',
+                      'w-full flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[11px] sm:text-[12px] font-semibold whitespace-nowrap lg:whitespace-normal',
                       step === s.id ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/5 text-muted-foreground',
                       !enabled && 'opacity-40',
                     )}

@@ -52,7 +52,7 @@ function BriefBody({ brief }: { brief: InspectionBrief }) {
   const comp = COMPONENTS[brief.component]
 
   return (
-    <div className="grid gap-2 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+    <div className="grid gap-2 grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="flex flex-col gap-2 min-w-0">
         <Section n={1} title="HẠNG MỤC">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-[11px]">
@@ -72,19 +72,21 @@ function BriefBody({ brief }: { brief: InspectionBrief }) {
         <Section n={2} title="YÊU CẦU CHÍNH">
           <ul className="flex flex-col divide-y divide-white/5">
             {brief.requirements.map(r => (
-              <li key={r.id} className="py-1.5 flex items-start gap-2 min-w-0">
+              <li key={r.id} className="py-1.5 flex flex-wrap items-start gap-x-2 gap-y-1 min-w-0">
                 <span className={cn('mt-1.5 w-1.5 h-1.5 rounded-full shrink-0', r.priority === 'high' ? 'bg-amber-400' : 'bg-white/20')} aria-hidden />
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[min(100%,12rem)]">
                   <p className="text-[12px] text-foreground">
                     <span className="font-semibold">{r.title}:</span>{' '}
                     <span className={cn(r.value && r.sourceKind !== 'MOCK' ? 'text-foreground' : 'text-foreground/70')}>{requirementText(r)}</span>
                   </p>
-                  <p className="text-[9px] text-muted-foreground truncate">
+                  <p className="text-[9px] text-muted-foreground break-words">
                     {r.sourceType} {r.sourceDocument} {r.sourceRevision} · {r.sourceReference}
                   </p>
                 </div>
-                <SourceBadge source={r.sourceKind} />
-                <TokenBadge token={VERIFICATION_METHOD_META[r.method]} size="small" />
+                <div className="flex flex-wrap items-center gap-1 shrink-0">
+                  <SourceBadge source={r.sourceKind} />
+                  <TokenBadge token={VERIFICATION_METHOD_META[r.method]} size="small" />
+                </div>
               </li>
             ))}
           </ul>
@@ -170,9 +172,12 @@ export const InspectionBriefDialog = memo(function InspectionBriefDialog({
   return (
     <>
       <Sheet open={open} onOpenChange={o => { if (!o) setView('brief'); onOpenChange(o) }}>
-        <SheetContent side="center" className="p-4 gap-3 w-[min(1080px,calc(100vw-2rem))]">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2 flex-wrap">
+        <SheetContent
+          side="center"
+          className="p-3 sm:p-4 gap-2 sm:gap-3 w-[min(1080px,calc(100vw-1rem))] max-lg:inset-0 max-lg:left-0 max-lg:top-0 max-lg:translate-x-0 max-lg:translate-y-0 max-lg:w-full max-lg:max-h-[100dvh] max-lg:rounded-none"
+        >
+          <SheetHeader className="pr-8">
+            <SheetTitle className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
               <ClipboardList className="w-4 h-4 text-primary" />
               LƯU Ý NGHIỆM THU
               <span className="text-muted-foreground font-semibold text-[13px]">· {def.code} {def.label} · {COMPONENTS[component].label}</span>
@@ -200,23 +205,25 @@ export const InspectionBriefDialog = memo(function InspectionBriefDialog({
             {view === 'brief' ? <BriefBody brief={brief} /> : <ChecklistBody stage={stage} component={component} />}
           </div>
           <PocMockBanner />
-          <footer className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setBimOpen(true)} className={cn(btn, 'border-white/10 text-foreground')}>
-              <BookOpen className="w-4 h-4" /> XEM AFC/BIM
-            </button>
-            <button type="button" onClick={() => setView(v => (v === 'brief' ? 'checklist' : 'brief'))} className={cn(btn, 'border-white/10 text-foreground')}>
-              <ClipboardList className="w-4 h-4" /> {view === 'brief' ? 'XEM CHECKLIST' : 'XEM LƯU Ý'}
-            </button>
+          <footer className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 shrink-0">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <button type="button" onClick={() => setBimOpen(true)} className={cn(btn, 'border-white/10 text-foreground w-full sm:w-auto')}>
+                <BookOpen className="w-4 h-4 shrink-0" /> XEM AFC/BIM
+              </button>
+              <button type="button" onClick={() => setView(v => (v === 'brief' ? 'checklist' : 'brief'))} className={cn(btn, 'border-white/10 text-foreground w-full sm:w-auto')}>
+                <ClipboardList className="w-4 h-4 shrink-0" /> {view === 'brief' ? 'XEM CHECKLIST' : 'XEM LƯU Ý'}
+              </button>
+            </div>
             {onStart && (
-              <div className="ml-auto flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:ml-auto w-full sm:w-auto">
                 {startDisabledHint && <span className="text-[10px] text-muted-foreground">{startDisabledHint}</span>}
                 <button
                   type="button"
                   disabled={Boolean(startDisabledHint)}
                   onClick={() => onStart(brief)}
-                  className={cn(btn, 'px-6 border-green-500/60 bg-green-500/15 text-green-300 hover:bg-green-500/25 disabled:opacity-40')}
+                  className={cn(btn, 'w-full sm:w-auto sm:px-6 border-green-500/60 bg-green-500/15 text-green-300 hover:bg-green-500/25 disabled:opacity-40')}
                 >
-                  <Play className="w-4 h-4" /> {startLabel}
+                  <Play className="w-4 h-4 shrink-0" /> {startLabel}
                 </button>
               </div>
             )}

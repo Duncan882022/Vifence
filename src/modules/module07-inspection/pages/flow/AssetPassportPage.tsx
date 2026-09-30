@@ -88,7 +88,7 @@ export function AssetPassportPage() {
           </div>
         </div>
 
-        <section className="rounded-lg border border-[#1e2433] bg-[#0b0f1a] p-4 grid gap-4 lg:grid-cols-[auto_1fr_auto] items-center">
+        <section className="rounded-lg border border-[#1e2433] bg-[#0b0f1a] p-4 grid gap-4 grid-cols-1 lg:grid-cols-[auto_1fr_auto] items-start lg:items-center min-w-0">
           <div className="w-16 h-16 rounded-lg border border-sky-500/30 bg-sky-500/5 flex flex-col items-center justify-center">
             <QrCode className="w-7 h-7 text-sky-300" />
             <span className="text-[9px] font-mono font-bold text-sky-300 mt-1">{asset.qrId}</span>
@@ -119,7 +119,7 @@ export function AssetPassportPage() {
           {next?.action.to && (
             <Link
               to={next.action.to}
-              className="rounded-xl bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25 px-5 py-3 text-center"
+              className="rounded-xl bg-green-500/15 border border-green-500/40 text-green-300 hover:bg-green-500/25 px-5 py-3 text-center w-full lg:w-auto justify-self-stretch lg:justify-self-auto"
             >
               <p className="text-[13px] font-bold">{next.action.label}</p>
               <p className="text-[10px] text-green-300/70">{STAGES[next.stage].code} {STAGES[next.stage].label} · {next.action.hint}</p>

@@ -199,7 +199,7 @@ export function LiveInspectionPage() {
   }
 
   const recent = evidence.filter(e => e.ctx.criterionId === active?.id).slice(-4)
-  const actionBtn = 'h-12 flex-1 min-w-0 rounded-xl border flex items-center justify-center gap-1.5 text-[12px] font-bold'
+  const actionBtn = 'h-11 sm:h-12 min-w-0 rounded-xl border flex items-center justify-center gap-1 sm:gap-1.5 text-[10px] sm:text-[12px] font-bold px-1 sm:px-2'
 
   return (
     <>
@@ -207,19 +207,21 @@ export function LiveInspectionPage() {
         title={`${ctx.asset.name} · ${def.code} ${def.label}`}
         subtitle={session.id}
         headerRight={(
-          <div className="flex items-center gap-2 text-[11px]">
-            <TokenBadge token={camMeta} pulse={camMeta.pulse} size="large" />
-            {paused && <TokenBadge token={{ label: 'PAUSED', className: 'bg-amber-500/15 text-amber-300 border-amber-500/40' }} size="large" />}
-            <span className="font-mono text-foreground text-[13px] font-bold">{formatClock(elapsed)}</span>
-            <span className="hidden md:inline-flex items-center gap-1 text-muted-foreground"><HardHat className="w-3.5 h-3.5" />{session.helmetId}{session.simulatedH1 ? ' (mô phỏng)' : ''}</span>
-            {live === 'live' ? <Wifi className="w-4 h-4 text-green-400" /> : <WifiOff className="w-4 h-4 text-amber-400" />}
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] max-w-[52vw] sm:max-w-none justify-end">
+            <span className="font-mono text-foreground text-[12px] sm:text-[13px] font-bold shrink-0">{formatClock(elapsed)}</span>
+            {live === 'live' ? <Wifi className="w-4 h-4 text-green-400 shrink-0" /> : <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />}
+            <div className="hidden sm:flex items-center gap-1.5 min-w-0">
+              <TokenBadge token={camMeta} pulse={camMeta.pulse} size="large" />
+              {paused && <TokenBadge token={{ label: 'PAUSED', className: 'bg-amber-500/15 text-amber-300 border-amber-500/40' }} size="large" />}
+            </div>
+            <span className="hidden lg:inline-flex items-center gap-1 text-muted-foreground truncate"><HardHat className="w-3.5 h-3.5 shrink-0" />{session.helmetId}{session.simulatedH1 ? ' (mô phỏng)' : ''}</span>
           </div>
         )}
       />
-      <PageLayout className="gap-2 p-2 sm:p-2">
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 flex-1 min-h-0">
-          <section className="flex flex-col gap-2 min-h-0">
-            <div className="relative flex-1 min-h-[220px] rounded-lg overflow-hidden border border-[#1e2433] bg-black">
+      <PageLayout className="gap-2 p-2 max-lg:min-h-[calc(100dvh-64px)] max-lg:h-auto max-lg:overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 lg:flex-1 lg:min-h-0">
+          <section className="flex flex-col gap-2 min-h-0 min-w-0">
+            <div className="relative w-full min-h-[200px] sm:min-h-[240px] lg:flex-1 lg:min-h-[220px] aspect-video lg:aspect-auto rounded-lg overflow-hidden border border-[#1e2433] bg-black">
               <H1LiveFeed
                 helmetId={session.helmetId}
                 simulated={session.simulatedH1}
@@ -229,16 +231,18 @@ export function LiveInspectionPage() {
                 onLiveAxis={setLive}
               />
               {flash && <div className="absolute inset-0 bg-white/70 pointer-events-none" />}
-              <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                <span className="bg-black/60 rounded px-2 py-1 text-[10px] text-white inline-flex items-center gap-1">
-                  <Radio className="w-3 h-3 text-red-400" /> {ctx.asset.code} · {def.code} · {COMPONENTS[component].label}
+              <div className="absolute top-2 left-2 right-2 flex flex-wrap items-center gap-1 max-w-full">
+                <span className="bg-black/60 rounded px-2 py-1 text-[9px] sm:text-[10px] text-white inline-flex items-center gap-1 max-w-full truncate">
+                  <Radio className="w-3 h-3 text-red-400 shrink-0" /> {ctx.asset.code} · {def.code} · {COMPONENTS[component].label}
                 </span>
-                {active && <span className="bg-black/60 rounded px-2 py-1 text-[10px] text-white">{active.code} {active.title}</span>}
+                {active && <span className="hidden sm:inline bg-black/60 rounded px-2 py-1 text-[10px] text-white truncate max-w-[min(100%,280px)]">{active.code} {active.title}</span>}
               </div>
               {live === 'lost' && (
                 <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 mx-6 rounded-xl border border-amber-500/50 bg-black/80 p-4 text-center">
-                  <p className="text-[15px] font-black tracking-wider text-amber-300 flex items-center justify-center gap-2">
-                    <AlertTriangle className="w-5 h-5" /> LIVE VIEW LOST — H1 IS STILL RECORDING LOCALLY
+                  <p className="text-[12px] sm:text-[15px] font-black tracking-wider text-amber-300 flex items-center justify-center gap-2 text-center">
+                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                    <span className="sm:hidden">MẤT LIVE · H1 VẪN GHI CỤC BỘ</span>
+                    <span className="hidden sm:inline">LIVE VIEW LOST — H1 IS STILL RECORDING LOCALLY</span>
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">Bằng chứng video sẽ đồng bộ khi có mạng trở lại. Checklist vẫn tiếp tục được.</p>
                 </div>
@@ -266,33 +270,33 @@ export function LiveInspectionPage() {
                 ))}
               </div>
             )}
-            <div className="flex gap-1.5 shrink-0">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-1.5 shrink-0">
               <button type="button" disabled={paused} onClick={() => void snapshot()} className={cn(actionBtn, 'border-sky-500/40 bg-sky-500/10 text-sky-300 disabled:opacity-40')}>
-                <Camera className="w-4 h-4" /> SNAPSHOT
+                <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> SNAPSHOT
               </button>
               <button type="button" disabled={paused} onClick={() => void toggleVoice()} className={cn(actionBtn, voice ? 'border-red-500/60 bg-red-500/20 text-red-300' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300', 'disabled:opacity-40')}>
-                <Mic className="w-4 h-4" /> {voice ? 'DỪNG GHI' : 'RECORD COMMENT'}
+                <Mic className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> <span className="truncate">{voice ? 'DỪNG GHI' : 'GHI ÂM'}</span>
               </button>
               <button type="button" onClick={() => setMeasureOpen(true)} className={cn(actionBtn, 'border-white/10 text-foreground')}>
-                <Ruler className="w-4 h-4" /> ĐO / TN
+                <Ruler className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> ĐO / TN
               </button>
               <button type="button" onClick={() => setBimOpen(true)} className={cn(actionBtn, 'border-white/10 text-foreground')}>
-                <BookOpen className="w-4 h-4" /> VIEW BIM
+                <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> BIM
               </button>
               <button
                 type="button"
                 onClick={() => (paused ? resumeSession(session.id) : pauseSession(session.id))}
                 className={cn(actionBtn, 'border-amber-500/40 text-amber-300')}
               >
-                {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />} {paused ? 'RESUME' : 'PAUSE'}
+                {paused ? <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> : <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />} {paused ? 'RESUME' : 'PAUSE'}
               </button>
-              <button type="button" onClick={() => navigate(flowPaths.finish(session.id))} className={cn(actionBtn, 'border-red-500/50 bg-red-500/10 text-red-300')}>
-                <CircleStop className="w-4 h-4" /> FINISH
+              <button type="button" onClick={() => navigate(flowPaths.finish(session.id))} className={cn(actionBtn, 'col-span-2 sm:col-span-1 border-red-500/50 bg-red-500/10 text-red-300')}>
+                <CircleStop className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> FINISH
               </button>
             </div>
           </section>
 
-          <section className="flex flex-col min-h-0 rounded-lg border border-[#1e2433] bg-[#0b0f1a]">
+          <section className="flex flex-col min-h-[min(52vh,520px)] lg:min-h-0 min-w-0 rounded-lg border border-[#1e2433] bg-[#0b0f1a]">
             <div className="flex gap-1 p-2 border-b border-[#1e2433] overflow-x-auto shrink-0">
               {def.components.map(cid => {
                 const list = criteria.filter(c => c.component === cid)

@@ -80,7 +80,7 @@ export const CriterionRow = memo(function CriterionRow({ criterion: c, result, e
               className="h-9 rounded-lg bg-white/5 border border-white/10 px-2 text-[12px] text-foreground"
             />
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
             {CRITERION_STATUS_ORDER.map(s => (
               <button
                 key={s}

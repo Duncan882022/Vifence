@@ -76,7 +76,7 @@ const ReviewItem = memo(function ReviewItem({ session, criterion: c, finding, ev
           <TokenBadge token={CRITERION_STATUS_META[final]} />
         </div>
       </div>
-      <ol className="grid grid-cols-3 lg:grid-cols-6 gap-1 text-[10px]">
+      <ol className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 text-[10px]">
         <li className="rounded bg-white/[0.03] px-1.5 py-1"><p className="text-muted-foreground">Design</p><p className="text-foreground font-semibold truncate">{c.design}</p><SourceBadge source={c.source} /></li>
         <li className="rounded bg-white/[0.03] px-1.5 py-1"><p className="text-muted-foreground">Observed</p><p className="text-foreground font-semibold truncate">{finding?.observed ?? live?.observed ?? '—'}</p>{live?.observed && finding && <p className="text-muted-foreground truncate">KS: {live.observed}</p>}</li>
         <li className="rounded bg-white/[0.03] px-1.5 py-1"><p className="text-muted-foreground">Snapshot</p>{snaps[0] ? <EvidenceMedia evidence={snaps[0]} className="w-full h-8" /> : <p className="text-muted-foreground/60">—</p>}</li>
@@ -293,8 +293,9 @@ export function ReviewPage() {
             { label: `${def.code} ${def.label}` },
             { label: session.id },
           ]} />
-          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
-            <Lock className="w-3 h-3" /> AFC {session.revisions.afc} · BIM {session.revisions.bim} · {session.revisions.checklist} · khoá lúc {formatDateTimeVn(session.revisions.lockedAt)}
+          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1 max-w-full min-w-0">
+            <Lock className="w-3 h-3 shrink-0" />
+            <span className="truncate">AFC {session.revisions.afc} · BIM {session.revisions.bim} · {session.revisions.checklist} · khoá {formatDateTimeVn(session.revisions.lockedAt)}</span>
           </span>
         </div>
 
@@ -377,14 +378,14 @@ export function ReviewPage() {
                     <li className={gate.failsWithoutIssue.length ? 'text-red-300' : 'text-green-400'}>{gate.failsWithoutIssue.length ? `${gate.failsWithoutIssue.length} FAIL chưa tạo issue` : `✓ ${gate.fails.length} FAIL đều có issue`}</li>
                     <li className={gate.uncheckedMandatory.length ? 'text-amber-300' : 'text-green-400'}>{gate.uncheckedMandatory.length ? `${gate.uncheckedMandatory.length} tiêu chí bắt buộc NOT CHECKED — chưa thể PASS (Override kèm lý do hoặc RE-INSPECTION)` : '✓ Mọi tiêu chí bắt buộc đã có kết quả'}</li>
                   </ul>
-                  <div className="flex gap-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                     {(['pass', 'require_rectification', 'reinspection'] as const).map(r => (
                       <button
                         key={r}
                         type="button"
                         disabled={!gate.allowed.includes(r)}
                         onClick={() => setResult(r)}
-                        className={cn('flex-1 h-10 rounded-lg border text-[10px] font-black tracking-wider disabled:opacity-30', result === r ? SIGNOFF_META[r].className : 'border-white/10 text-muted-foreground')}
+                        className={cn('h-10 rounded-lg border text-[9px] sm:text-[10px] font-black tracking-wider disabled:opacity-30 px-1', result === r ? SIGNOFF_META[r].className : 'border-white/10 text-muted-foreground')}
                       >
                         {SIGNOFF_META[r].label}
                       </button>

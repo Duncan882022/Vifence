@@ -30,7 +30,7 @@ cp -a "${DOCS}/assets" "${ROOT}/assets"
 # Deep-link folders (HTML nhẹ, tránh 404 console khi mở /Vifence/module05/)
 ROUTES=(
   module01 module03 module04 module05 module06 module07 module08
-  dttt equipment profile scanner phat-song
+  inspection dttt equipment profile scanner phat-song
   module05/ho-so module05/quet-mat
 )
 for route in "${ROUTES[@]}"; do

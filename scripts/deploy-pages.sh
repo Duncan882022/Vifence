@@ -23,7 +23,7 @@ bash scripts/sync-pages-to-root.sh
 echo "→ Commit docs/ + root SPA lên main (nếu có thay đổi)…"
 git add docs/ index.html 404.html .nojekyll assets/ favicon.ico favicon.png apple-touch-icon.png logo-512.png \
   module01 module03 module04 module05 module06 module07 module08 \
-  dttt equipment profile scanner phat-song 2>/dev/null || true
+  inspection dttt equipment profile scanner phat-song 2>/dev/null || true
 git add docs/
 if git diff --staged --quiet; then
   echo "   docs/ không đổi"
