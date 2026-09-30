@@ -16,7 +16,7 @@ import { OverlayCycleProvider } from '@/modules/module03-safety/hooks/useOverlay
 import { useOverlayLayoutTick } from '@/modules/module03-safety/hooks/useOverlayLayoutTick'
 import { OVERLAY_CYCLE_DEFAULTS } from '@/modules/module03-safety/utils/overlayScanOrder'
 import { RoadAnalysisOverlay } from '@/modules/module04-housekeeping/components/RoadAnalysisOverlay'
-import { isHlsStreamUrl, useStreamSignalPhase, useVideoFramesReady } from '../hooks/useHlsVideoSource'
+import { isHlsStreamUrl, useStreamSignalPhase, useVideoFramesReady, type StreamSignalPhase } from '../hooks/useHlsVideoSource'
 import { useCameraBufferReadiness } from '../hooks/useCameraBufferReadiness'
 import { setPatrolCameraFramesLive } from '@/services/patrolCameraFrameBridge'
 import { useLowLatencyVideoSource } from '../hooks/useLowLatencyVideoSource'
@@ -65,6 +65,9 @@ interface CameraVideoFeedProps {
   analyzeThrottle?: boolean
   /** Thứ tự luồng trong grid — mobile phát lệch nhau tránh iOS chặn decode song song. */
   streamIndex?: number
+  /** Trả thẻ video đang phát — để chụp khung hình / ghi lại luồng. */
+  onVideoElement?: (video: HTMLVideoElement | null) => void
+  onSignalPhase?: (phase: StreamSignalPhase) => void
 }
 
 export function CameraVideoFeed({
@@ -78,6 +81,8 @@ export function CameraVideoFeed({
   compact,
   analyzeThrottle,
   streamIndex = 0,
+  onVideoElement,
+  onSignalPhase,
 }: CameraVideoFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [bboxVisible] = useCameraBboxVisible(cameraId)
@@ -150,6 +155,16 @@ export function CameraVideoFeed({
     `${cameraId}:${src}:${hlsFallbackSrc ?? ''}:${whepUrl ?? ''}`,
   )
   const waitingForSignal = signalPhase === 'waiting'
+
+  useEffect(() => {
+    onSignalPhase?.(signalPhase)
+  }, [onSignalPhase, signalPhase])
+
+  useEffect(() => {
+    if (!onVideoElement) return
+    onVideoElement(videoRef.current)
+    return () => onVideoElement(null)
+  }, [onVideoElement])
   const showSignalOffline = signalPhase === 'offline'
 
   useEffect(() => {

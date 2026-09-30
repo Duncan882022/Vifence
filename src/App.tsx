@@ -69,6 +69,7 @@ function AppRoutes() {
           )}
         />
         <Route path="/module06/*" element={<Module06Page />} />
+        <Route path="/inspection/*" element={<Module07Page />} />
         <Route path="/module07/*" element={<Module07Page />} />
         <Route path="/module08/*" element={<Module08Page />} />
         <Route path="/profile" element={<ProfilePage />} />

@@ -18,6 +18,12 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true,
   },
   plugins: [react()],
+  worker: {
+    format: 'es',
+  },
+  optimizeDeps: {
+    exclude: ['web-ifc'],
+  },
   resolve: {
     dedupe: ['react', 'react-dom'],
     alias: {

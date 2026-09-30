@@ -11,14 +11,14 @@ interface LayoutProps {
   scrollable?: boolean
 }
 
-/** Root wrapper — fills viewport below the header */
+/** Root wrapper — fills viewport below the header, never under the left nav. */
 export function PageLayout({ children, className, scrollable = false }: LayoutProps) {
   const { sidebarInset } = useShellLayout()
 
   return (
     <main
-      className={cn('pt-header bg-[#060b14] transition-all duration-200', className)}
-      style={{ paddingLeft: sidebarInset }}
+      className="relative z-0 overflow-x-hidden pt-header bg-[#060b14] transition-[margin] duration-200"
+      style={{ marginLeft: sidebarInset }}
     >
       <div
         className={cn(
@@ -26,6 +26,7 @@ export function PageLayout({ children, className, scrollable = false }: LayoutPr
           scrollable
             ? 'min-h-[calc(100dvh-64px)] overflow-y-auto lg:min-h-[calc(100vh-64px)]'
             : 'h-[calc(100dvh-64px)] overflow-hidden',
+          className,
         )}
       >
         {children}

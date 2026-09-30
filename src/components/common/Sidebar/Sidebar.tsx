@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
     ],
   },
   { path: '/module06', label: 'Vật tư thiết bị',      icon: Package,        available: false },
-  { path: '/module07', label: 'Nghiệm thu',            icon: ClipboardCheck, available: false },
+  { path: '/inspection', label: 'Nghiệm thu',            icon: ClipboardCheck, available: true },
   { path: '/module08', label: 'Báo cáo điều hành',    icon: BarChart3,      available: false },
 ]
 

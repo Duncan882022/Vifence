@@ -1,6 +1,6 @@
 export type EventStatus = 'pending' | 'processed' | 'dismissed'
 export type EventSeverity = 'critical' | 'warning' | 'info'
-export type EventModule = 'access-control' | 'training' | 'safety' | 'housekeeping' | 'productivity'
+export type EventModule = 'access-control' | 'training' | 'safety' | 'housekeeping' | 'productivity' | 'inspection'
 
 export interface Event {
   id: string
