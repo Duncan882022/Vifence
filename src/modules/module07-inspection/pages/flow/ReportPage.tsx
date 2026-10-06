@@ -4,7 +4,7 @@ import { ChevronLeft, Download } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout } from '@/components/common/PageLayout/PageLayout'
 import { criteriaForStage } from '../../data/workflow/criteria'
-import { COMPONENTS, POC_MOCK_LABEL, STAGES } from '../../data/workflow/hnqnProject'
+import { COMPONENTS, STAGES } from '../../data/workflow/hnqnProject'
 import { AI_VERDICT_META, CRITERION_STATUS_META, ISSUE_STATUS_META, SIGNOFF_META } from '../../data/workflow/meta'
 import { useEvidence, useIssues, useSession } from '../../hooks/useInspectionFlow'
 import { flowPaths, resolveAsset } from '../../services/workflow/flowNav'
@@ -39,13 +39,12 @@ export function ReportPage() {
   const voices = evidence.filter(e => e.type === 'voice')
   const measures = evidence.filter(e => e.type === 'measurement' || e.type === 'test' || e.type === 'document')
   const findings = session.ai?.findings ?? []
-  const mockCount = criteria.filter(c => c.source.kind === 'MOCK').length
 
   const table = (group: 'quantity' | 'quality') => (
     <table className="w-full text-[10px] border-collapse">
       <thead>
         <tr className="text-left text-muted-foreground print:text-gray-500 border-b border-white/10 print:border-gray-300">
-          <th className="py-1">Mã</th><th>Tiêu chí</th><th>Component</th><th>Design</th><th>Observed</th><th>Dung sai</th><th>Nguồn</th><th>Kết quả</th>
+          <th className="py-1">Mã</th><th>Tiêu chí</th><th>Cấu phần</th><th>Thiết kế</th><th>Thực tế</th><th>Dung sai</th><th>Kết quả</th>
         </tr>
       </thead>
       <tbody>
@@ -60,7 +59,6 @@ export function ReportPage() {
               <td>{c.design}</td>
               <td>{session.results[c.id]?.observed ?? f?.observed ?? '—'}</td>
               <td>{c.tolerance}</td>
-              <td>{c.source.kind}</td>
               <td><TokenBadge token={CRITERION_STATUS_META[st]} size="small" /></td>
             </tr>
           )
@@ -154,21 +152,21 @@ export function ReportPage() {
             </ul>
           </section>
 
-          <section>
-            <h2 className="text-[12px] font-black tracking-wider mb-1">AI FINDINGS (hỗ trợ — không ký nghiệm thu)</h2>
-            <ul className="text-[10px] flex flex-col gap-0.5">
-              {findings.filter(f => f.verdict !== 'pass_candidate').map(f => (
-                <li key={f.id} className="flex items-center gap-2">
-                  <TokenBadge token={AI_VERDICT_META[f.verdict]} size="small" /> {f.summary} · video {formatClock(f.videoFrom)}–{formatClock(f.videoTo)}
-                  {session.reviews[f.id] && <span className="text-muted-foreground">→ {session.reviews[f.id].action.toUpperCase()} {session.reviews[f.id].finalStatus.toUpperCase()} ({session.reviews[f.id].by})</span>}
-                </li>
-              ))}
-              <li className="text-muted-foreground">{findings.filter(f => f.verdict === 'pass_candidate').length} PASS CANDIDATE</li>
-            </ul>
-          </section>
+          {findings.filter(f => f.verdict !== 'pass_candidate').length > 0 && (
+            <section>
+              <h2 className="text-[12px] font-black tracking-wider mb-1">Cảnh báo</h2>
+              <ul className="text-[10px] flex flex-col gap-0.5">
+                {findings.filter(f => f.verdict !== 'pass_candidate').map(f => (
+                  <li key={f.id} className="flex items-center gap-2">
+                    <TokenBadge token={AI_VERDICT_META[f.verdict]} size="small" /> {f.summary} · video {formatClock(f.videoFrom)}–{formatClock(f.videoTo)}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section>
-            <h2 className="text-[12px] font-black tracking-wider mb-1">ISSUE · {sessionIssues.length}</h2>
+            <h2 className="text-[12px] font-black tracking-wider mb-1">Lỗi · {sessionIssues.length}</h2>
             <ul className="text-[10px] flex flex-col gap-0.5">
               {sessionIssues.map(i => (
                 <li key={i.id} className="flex items-center gap-2">
@@ -193,7 +191,6 @@ export function ReportPage() {
               <p className="text-[10px] text-muted-foreground">{formatDateTimeVn(session.signOff?.at)} · {session.signOff?.revision}</p>
             </div>
           </footer>
-          {mockCount > 0 && <p className="text-[9px] font-bold tracking-wider text-fuchsia-400">{POC_MOCK_LABEL} · {mockCount}/{criteria.length} tiêu chí dùng dữ liệu MOCK</p>}
         </article>
       </PageLayout>
     </>

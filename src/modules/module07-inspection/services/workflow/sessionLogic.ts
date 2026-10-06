@@ -77,6 +77,5 @@ export function openIssues(issues: Issue[], assetId: string, stage?: StageCode):
 export function sessionResumeStep(session: InspectionSession): 'live' | 'finish' | 'review' | 'report' {
   if (session.status === 'in_progress' || session.status === 'paused') return 'live'
   if (session.status === 'signed') return 'report'
-  if (session.sync !== 'synced') return 'finish'
   return 'review'
 }

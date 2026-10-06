@@ -101,6 +101,10 @@ export function criteriaForStage(stage: StageCode): CriterionDef[] {
   return CRITERIA.filter(c => c.stage === stage)
 }
 
+export function criteriaForComponent(stage: StageCode, component: ComponentId): CriterionDef[] {
+  return CRITERIA.filter(c => c.stage === stage && c.component === component)
+}
+
 export function findCriterion(id: string): CriterionDef | undefined {
   return CRITERIA.find(c => c.id === id)
 }

@@ -57,11 +57,6 @@ function SimulatedFeed({ overlayText, onVideoElement }: Pick<Props, 'overlayText
         ctx.lineTo(1220 + drift, y + 20)
         ctx.stroke()
       }
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'
-      ctx.fillRect(0, 0, 1280, 56)
-      ctx.fillStyle = '#f0abfc'
-      ctx.font = 'bold 24px sans-serif'
-      ctx.fillText('H1 MÔ PHỎNG · POC MOCK — NOT FOR CONSTRUCTION', 24, 36)
       ctx.fillStyle = '#fff'
       ctx.font = '20px monospace'
       ctx.fillText(`${textRef.current ?? ''}  ${new Date().toLocaleTimeString('vi-VN', { hour12: false })}`, 24, 700)

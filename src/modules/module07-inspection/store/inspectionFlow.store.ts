@@ -144,7 +144,7 @@ export const useInspectionFlowStore = create<FlowState>()(
         set({ sessions: { ...state.sessions, [id]: session } })
         const scopeNote = partial ? ` · chỉ mục chưa đạt (kế thừa ${Object.keys(results).length} PASS từ ${last.id})` : ''
         get().log('session.start', assetId, `${STAGES[stage].code} ${STAGES[stage].label} · lần ${attempt} · khoá AFC ${asset.afc.revision} / ${STAGES[stage].checklistRevision}${scopeNote}`, id)
-        if (simulatedH1) get().log('h1.simulated', assetId, 'H1 offline — dùng luồng mô phỏng POC', id)
+        if (simulatedH1) get().log('h1.simulated', assetId, 'H1 offline — dùng camera thiết bị', id)
         return id
       },
 
