@@ -38,4 +38,13 @@ for route in "${ROUTES[@]}"; do
   cp "${DOCS}/index.html" "${ROOT}/${route}/index.html"
 done
 
-echo "   ✓ index.html + assets/ + route folders"
+# Pages đang trỏ main/(root) — IFC/wasm phải nằm tại /inspection/models|wasm, không chỉ docs/.
+for extra in inspection/models inspection/wasm; do
+  if [[ -d "${DOCS}/${extra}" ]]; then
+    mkdir -p "${ROOT}/$(dirname "${extra}")"
+    rm -rf "${ROOT}/${extra}"
+    cp -a "${DOCS}/${extra}" "${ROOT}/${extra}"
+  fi
+done
+
+echo "   ✓ index.html + assets/ + route folders + inspection IFC/wasm"
