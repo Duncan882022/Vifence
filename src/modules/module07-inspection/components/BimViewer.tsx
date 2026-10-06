@@ -10,6 +10,7 @@ import {
   type ObjectKind,
   type Provenance,
 } from '../types'
+import { fitDistance } from '../services/bimCamera'
 import { MAX_VIEWER_RADIUS } from '../services/ifcSweptTube'
 import type { IfcCatalogItem, IfcWorkerEvent, IfcWorkerLoadMessage, MeshStyle } from '../workers/ifcParse.types'
 
@@ -57,13 +58,15 @@ function fitCamera(camera: THREE.PerspectiveCamera, controls: OrbitControls, box
   if (box.isEmpty()) return
   const size = box.getSize(new THREE.Vector3())
   const center = box.getCenter(new THREE.Vector3())
-  const radius = Math.max(size.x, size.y, size.z, 2)
-  camera.near = Math.max(radius / 800, 0.05)
-  camera.far = Math.max(radius * 24, 80)
-  camera.position.set(center.x + radius * 0.75, center.y + radius * 0.45, center.z + radius * 0.8)
+  const radius = Math.max(size.length() * 0.5, 0.8)
+  const dist = fitDistance(radius, camera.fov, camera.aspect)
+  const dir = new THREE.Vector3(0.72, 0.42, 0.82).normalize()
+  camera.near = Math.max(dist / 250, 0.05)
+  camera.far = Math.max(dist * 10, 80)
+  camera.position.copy(center).addScaledVector(dir, dist)
   controls.target.copy(center)
-  controls.maxDistance = radius * 10
-  controls.minDistance = Math.max(radius * 0.04, 0.4)
+  controls.maxDistance = dist * 8
+  controls.minDistance = Math.max(dist * 0.05, 0.3)
   camera.updateProjectionMatrix()
   controls.update()
 }
@@ -93,6 +96,7 @@ export const BimViewer = memo(function BimViewer({
   const controlsRef = useRef<OrbitControls | null>(null)
   const rayRef = useRef(new THREE.Raycaster())
   const mouseRef = useRef(new THREE.Vector2())
+  const fitVisibleRef = useRef<() => void>(() => {})
   const callbacks = useRef({ onSelect, onHover, onCatalog, onProgress, onReady, onError, assetId })
   callbacks.current = { onSelect, onHover, onCatalog, onProgress, onReady, onError, assetId }
   const visibilityRef = useRef({ visibleIds, isolatedIds })
@@ -183,7 +187,13 @@ export const BimViewer = memo(function BimViewer({
       renderer.domElement.style.cursor = id ? 'pointer' : 'grab'
     }
 
+    const pointerDown = { x: 0, y: 0 }
+    const onPointerDown = (e: PointerEvent) => {
+      pointerDown.x = e.clientX
+      pointerDown.y = e.clientY
+    }
     const onClick = (e: MouseEvent) => {
+      if (Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y) > 8) return
       const id = pick(e.clientX, e.clientY)
       if (!id) {
         if (!e.shiftKey) callbacks.current.onSelect('', false)
@@ -192,9 +202,23 @@ export const BimViewer = memo(function BimViewer({
       callbacks.current.onSelect(id, e.shiftKey)
     }
 
+    renderer.domElement.addEventListener('pointerdown', onPointerDown)
     renderer.domElement.addEventListener('pointermove', onMove)
     renderer.domElement.addEventListener('click', onClick)
 
+    const fitVisible = () => {
+      const box = new THREE.Box3()
+      mapRef.current.forEach(mesh => {
+        if (!mesh.visible) return
+        mesh.updateMatrixWorld(true)
+        box.expandByObject(mesh)
+      })
+      if (!box.isEmpty()) fitCamera(camera, controls, box)
+    }
+    fitVisibleRef.current = fitVisible
+
+    let lastAspect = 0
+    let lastArea = 0
     const resize = () => {
       const w = el.clientWidth
       const h = el.clientHeight
@@ -202,6 +226,12 @@ export const BimViewer = memo(function BimViewer({
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       renderer.setSize(w, h)
+      const area = w * h
+      const aspectDelta = Math.abs(camera.aspect - lastAspect)
+      const areaDelta = lastArea > 0 ? Math.abs(area - lastArea) / lastArea : 0
+      lastAspect = camera.aspect
+      lastArea = area
+      if (aspectDelta > 0.12 || areaDelta > 0.18) fitVisible()
     }
     const ro = new ResizeObserver(resize)
     ro.observe(el)
@@ -298,6 +328,7 @@ export const BimViewer = memo(function BimViewer({
       cancelAnimationFrame(raf)
       ro.disconnect()
       worker.terminate()
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointermove', onMove)
       renderer.domElement.removeEventListener('click', onClick)
       controls.dispose()
@@ -342,18 +373,8 @@ export const BimViewer = memo(function BimViewer({
   }, [visibleIds, selectedIds, hoveredId, highlightIds, isolatedIds, stageFilter, stageOf])
 
   useEffect(() => {
-    const map = mapRef.current
-    const camera = cameraRef.current
-    const controls = controlsRef.current
-    if (!camera || !controls || map.size === 0) return
-    const box = new THREE.Box3()
-    map.forEach(mesh => {
-      if (!mesh.visible) return
-      mesh.updateMatrixWorld(true)
-      box.expandByObject(mesh)
-    })
-    if (!box.isEmpty()) fitCamera(camera, controls, box)
+    fitVisibleRef.current()
   }, [visibleIds, isolatedIds])
 
-  return <div ref={wrapRef} className="absolute inset-0" />
+  return <div ref={wrapRef} className="absolute inset-0 touch-none overscroll-none" />
 })

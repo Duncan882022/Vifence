@@ -243,7 +243,7 @@ export function InspectionWorkspacePage() {
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground shrink-0 px-1 pb-1 flex-wrap">
           <Link to={flowPaths.home()} className="hover:text-foreground">Nghiệm thu số</Link>
           <ChevronRight className="w-3 h-3" />
-          <Link to={flowPaths.asset(flowAssetId, 'bim')} className="hover:text-foreground">{flowAsset?.asset.name ?? asset.code}</Link>
+          <Link to={flowPaths.bim(flowAssetId)} className="hover:text-foreground">{flowAsset?.asset.name ?? asset.code}</Link>
           <ChevronRight className="w-3 h-3" />
           <span className="text-foreground font-medium">Engineering Mode · {asset.code}</span>
           <span className="text-[#2a3855]">/</span>
