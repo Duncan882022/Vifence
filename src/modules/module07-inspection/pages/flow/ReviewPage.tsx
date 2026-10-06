@@ -104,16 +104,16 @@ const ReviewItem = memo(function ReviewItem({ session, criterion: c, finding, ev
               key={m}
               type="button"
               onClick={() => setMode(mode === m ? null : m)}
-              className={cn('h-8 px-2.5 rounded-lg border text-[11px] font-semibold', mode === m ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/10 text-muted-foreground')}
+              className={cn('h-9 px-2.5 rounded-lg border text-[11px] font-semibold', mode === m ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/10 text-muted-foreground')}
             >
-              {m === 'accept' ? 'Accept' : m === 'reject' ? 'Reject' : m === 'override' ? 'Override' : 'Comment'}
+              {m === 'accept' ? 'Chấp nhận' : m === 'reject' ? 'Bác bỏ' : m === 'override' ? 'Ghi đè' : 'Nhận xét'}
             </button>
           ))}
-          <button type="button" onClick={() => onAddEvidence(c, videoTs ?? 0)} className="h-8 px-2.5 rounded-lg border border-white/10 text-[11px] text-muted-foreground inline-flex items-center gap-1">
-            <Plus className="w-3 h-3" /> Add Evidence
+          <button type="button" onClick={() => onAddEvidence(c, videoTs ?? 0)} className="h-9 px-2.5 rounded-lg border border-white/10 text-[11px] text-muted-foreground inline-flex items-center gap-1">
+            <Plus className="w-3 h-3" /> Bổ sung bằng chứng
           </button>
           {final === 'fail' && !hasIssue && (
-            <button type="button" onClick={() => onCreateIssue(c, finding)} className="h-8 px-2.5 rounded-lg border border-red-500/50 bg-red-500/10 text-[11px] text-red-300 font-semibold inline-flex items-center gap-1">
+            <button type="button" onClick={() => onCreateIssue(c, finding)} className="h-9 px-2.5 rounded-lg border border-red-500/50 bg-red-500/10 text-[11px] text-red-300 font-semibold inline-flex items-center gap-1">
               <AlertTriangle className="w-3 h-3" /> Tạo issue
             </button>
           )}
@@ -131,7 +131,7 @@ const ReviewItem = memo(function ReviewItem({ session, criterion: c, finding, ev
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder={mode === 'accept' ? 'Ghi chú (tuỳ chọn)' : mode === 'comment' ? 'Nhận xét' : 'Lý do (bắt buộc, ghi audit)'}
-            className="flex-1 min-w-[200px] h-9 rounded-lg bg-white/5 border border-white/10 px-2 text-[11px] text-foreground"
+            className="flex-1 min-w-0 basis-48 h-9 rounded-lg bg-white/5 border border-white/10 px-2 text-[11px] text-foreground"
           />
           <button type="button" disabled={needsText && !text.trim()} onClick={submit} className="h-9 px-3 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-300 text-[11px] font-bold disabled:opacity-40">
             Xác nhận
@@ -203,6 +203,7 @@ export function ReviewPage() {
   const addEvidence = useInspectionFlowStore(s => s.addEvidence)
   const signOff = useInspectionFlowStore(s => s.signOff)
   const decide = useInspectionFlowStore(s => s.decide)
+  const setActor = useInspectionFlowStore(s => s.setActor)
   const [seek, setSeek] = useState<{ sec: number; nonce: number } | null>(null)
   const [evidenceFor, setEvidenceFor] = useState<{ criterion: CriterionDef; videoTs: number } | null>(null)
   const [issueFor, setIssueFor] = useState<{ criterion: CriterionDef; finding?: AiFinding } | null>(null)
@@ -223,7 +224,7 @@ export function ReviewPage() {
 
   const def = STAGES[session.stage]
   const locked = Boolean(session.signOff)
-  const gate = signOffGate(session, criteria, issues)
+  const gate = signOffGate(session, criteria, issues, actor)
   const sessionIssues = issues.filter(i => i.sessionId === session.id)
   const findingOf = (id: string) => findings.find(f => f.criterionId === id)
   const count = (group: 'quantity' | 'quality', verdict: AiFinding['verdict']) => findings.filter(f => f.group === group && f.verdict === verdict).length
@@ -233,29 +234,51 @@ export function ReviewPage() {
     pendingCandidates.forEach(f => decide(session.id, { findingId: f.id, action: 'accept', finalStatus: statusFromVerdict(f.verdict), comment: 'Chấp nhận hàng loạt PASS CANDIDATE' }))
   }
 
+  /** Ngoại lệ cần người duyệt: AI gắn cờ, chưa quyết định, kết quả không phải PASS/NA, hoặc KS và AI chấm khác nhau. */
+  const needsAttention = (c: CriterionDef) => {
+    if (session.results[c.id]?.carriedFrom) return false
+    const f = findingOf(c.id)
+    const final = finalStatus(session, c.id)
+    if (final !== 'pass' && final !== 'na') return true
+    if (f && f.verdict !== 'pass_candidate') return true
+    if (f && !session.reviews[f.id]) return true
+    const live = session.results[c.id]?.status
+    return Boolean(f && live && live !== 'pass' && live !== 'na')
+  }
+
+  const renderItem = (c: CriterionDef) => (
+    <ReviewItem
+      key={c.id}
+      session={session}
+      criterion={c}
+      finding={findingOf(c.id)}
+      evidence={evidence.filter(e => e.ctx.criterionId === c.id)}
+      locked={locked}
+      onSeek={onSeek}
+      onAddEvidence={onAddEvidence}
+      onCreateIssue={onCreateIssue}
+      hasIssue={sessionIssues.some(i => i.criterionId === c.id)}
+    />
+  )
+
   const renderGroup = (group: 'quantity' | 'quality') => {
-    const list = criteria.filter(c => c.group === group).sort((a, b) => {
-      const fa = findingOf(a.id)
-      const fb = findingOf(b.id)
-      return Number(fa?.verdict === 'pass_candidate' || !fa) - Number(fb?.verdict === 'pass_candidate' || !fb)
-    })
+    const list = criteria.filter(c => c.group === group)
+    const attention = list.filter(needsAttention)
+    const ok = list.filter(c => !needsAttention(c))
     return (
-      <ul className="flex flex-col gap-1.5">
-        {list.map(c => (
-          <ReviewItem
-            key={c.id}
-            session={session}
-            criterion={c}
-            finding={findingOf(c.id)}
-            evidence={evidence.filter(e => e.ctx.criterionId === c.id)}
-            locked={locked}
-            onSeek={onSeek}
-            onAddEvidence={onAddEvidence}
-            onCreateIssue={onCreateIssue}
-            hasIssue={sessionIssues.some(i => i.criterionId === c.id)}
-          />
-        ))}
-      </ul>
+      <div className="flex flex-col gap-1.5">
+        {attention.length > 0
+          ? <ul className="flex flex-col gap-1.5">{attention.map(renderItem)}</ul>
+          : <p className="text-[11px] text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Không có ngoại lệ cần xử lý.</p>}
+        {ok.length > 0 && (
+          <details className="rounded-lg border border-white/5 px-2.5 py-2">
+            <summary className="text-[11px] text-muted-foreground cursor-pointer">
+              {ok.length} tiêu chí đạt{ok.some(c => session.results[c.id]?.carriedFrom) ? ' (gồm mục kế thừa)' : ''} — xem chi tiết
+            </summary>
+            <ul className="mt-2 flex flex-col gap-1.5">{ok.map(renderItem)}</ul>
+          </details>
+        )}
+      </div>
     )
   }
 
@@ -319,11 +342,20 @@ export function ReviewPage() {
         </div>
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-[10px] text-purple-300/80 flex items-center gap-1"><Bot className="w-3 h-3" /> AI chỉ hỗ trợ (POC — kết quả dựng sẵn, chưa chạy model). Người duyệt quyết định; mọi Override ghi audit.</p>
-          {pendingCandidates.length > 0 && (
-            <button type="button" onClick={acceptCandidates} className="h-9 px-3 rounded-lg bg-green-500/10 border border-green-500/40 text-green-300 text-[11px] font-bold inline-flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Chấp nhận {pendingCandidates.length} PASS CANDIDATE
+          <div className="flex items-center gap-2 flex-wrap">
+            {pendingCandidates.length > 0 && (
+              <button type="button" onClick={acceptCandidates} className="h-9 px-3 rounded-lg bg-green-500/10 border border-green-500/40 text-green-300 text-[11px] font-bold inline-flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Chấp nhận {pendingCandidates.length} PASS CANDIDATE
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => document.getElementById('signoff')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="lg:hidden h-9 px-3 rounded-lg border border-white/10 text-[11px] text-foreground inline-flex items-center gap-1.5"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> {locked ? 'Xem kết quả ký' : gate.canSign ? 'Đến phần ký' : 'Điều kiện ký'}
             </button>
-          )}
+          </div>
         </div>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -358,7 +390,7 @@ export function ReviewPage() {
               )}
             </Card>
 
-            <Card title="Final Sign-off" icon={<ShieldCheck className="w-3.5 h-3.5 text-primary" />} bodyClassName="flex flex-col gap-2">
+            <Card title="Ký nghiệm thu" icon={<ShieldCheck className="w-3.5 h-3.5 text-primary" />} bodyClassName="flex flex-col gap-2" className="scroll-mt-20" id="signoff">
               {session.signOff ? (
                 <>
                   <TokenBadge token={SIGNOFF_META[session.signOff.result]} size="large" className="self-start" />
@@ -393,6 +425,20 @@ export function ReviewPage() {
                   </div>
                   <input value={note} onChange={e => setNote(e.target.value)} placeholder="Ghi chú nghiệm thu" className="h-9 rounded-lg bg-white/5 border border-white/10 px-2 text-[11px] text-foreground" />
                   <p className="text-[10px] text-muted-foreground">Người ký: {actor.name} · {session.revisions.afc} · {session.revisions.checklist}</p>
+                  {gate.signerBlock && (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5 flex flex-col gap-2">
+                      <p className="text-[11px] text-amber-300 flex items-start gap-1.5"><Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />{gate.signerBlock} · phiên do {session.inspector.name} thực hiện.</p>
+                      {actor.role !== 'senior_inspector' && (
+                        <button
+                          type="button"
+                          onClick={() => setActor('senior_inspector')}
+                          className="self-start h-9 px-3 rounded-lg border border-white/10 text-[11px] text-foreground inline-flex items-center gap-1"
+                        >
+                          <User className="w-3.5 h-3.5" /> Chuyển sang Trưởng TVGS (demo)
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <SignaturePad onChange={setSignature} />
                   <button
                     type="button"

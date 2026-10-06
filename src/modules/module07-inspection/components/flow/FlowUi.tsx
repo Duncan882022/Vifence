@@ -70,16 +70,17 @@ export function Breadcrumbs({ items, className }: { items: Crumb[]; className?: 
   )
 }
 
-export function Card({ title, icon, right, children, className, bodyClassName }: {
+export function Card({ title, icon, right, children, className, bodyClassName, id }: {
   title?: ReactNode
   icon?: ReactNode
   right?: ReactNode
   children: ReactNode
   className?: string
   bodyClassName?: string
+  id?: string
 }) {
   return (
-    <section className={cn('rounded-lg border border-[#1e2433] bg-[#0b0f1a] flex flex-col min-h-0', className)}>
+    <section id={id} className={cn('rounded-lg border border-[#1e2433] bg-[#0b0f1a] flex flex-col min-h-0', className)}>
       {(title || right) && (
         <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#1e2433] shrink-0">
           <h3 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-foreground/90 min-w-0">
