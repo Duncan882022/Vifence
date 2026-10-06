@@ -9,6 +9,13 @@ export const flowPaths = {
   structure: (projectId: string, structureId: string) => `/inspection/p/${projectId}/s/${structureId}`,
   asset: (assetId: string, tab?: PassportTab) => `/inspection/asset/${assetId}${tab && tab !== 'overview' ? `?tab=${tab}` : ''}`,
   prepare: (assetId: string, stage: StageCode) => `/inspection/asset/${assetId}/stage/${stage}/prepare`,
+  bim: (assetId: string, stage?: StageCode, component?: string) => {
+    const q = new URLSearchParams()
+    if (stage) q.set('stage', stage)
+    if (component) q.set('c', component)
+    const qs = q.toString()
+    return `/inspection/asset/${assetId}/bim${qs ? `?${qs}` : ''}`
+  },
   engineering: (assetId: string) => `/inspection/asset/${assetId}/engineering`,
   inspect: (sessionId: string, component?: string) =>
     `/inspection/session/${sessionId}/inspect${component ? `?c=${component}` : ''}`,
@@ -41,5 +48,5 @@ const LEGACY_SEGMENTS = new Set(['sgc-dsct'])
 
 /** URL cũ `/inspection/sgc-dsct/...` (BIM workspace) → Engineering Mode của S002. */
 export function legacyFlowRedirect(segment: string): string | null {
-  return LEGACY_SEGMENTS.has(segment) ? flowPaths.engineering('s002') : null
+  return LEGACY_SEGMENTS.has(segment) ? flowPaths.bim('s002') : null
 }

@@ -42,11 +42,10 @@ export default function BimComponentSheet({ open, onOpenChange, assetId, stage, 
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-primary" />
-            VIEW BIM · {def.code} {def.label} · {comp.label}
+            Bản vẽ BIM · {def.label} · {comp.label}
           </SheetTitle>
           <p className="text-[11px] text-muted-foreground">
-            Mô hình tham chiếu (IFC {packageId === 'dam-hop' ? 'DUL + SUON' : packageId}) — tự cô lập component đang kiểm.
-            {' '}{sets.focusIds.length} đối tượng{sets.barCount ? ` · ${sets.barCount} đoạn thanh IFC` : ''}.
+            {sets.focusIds.length} cấu kiện{sets.barCount ? ` · ${sets.barCount} thanh` : ''}
           </p>
         </SheetHeader>
         <div className="flex flex-wrap gap-1.5">
@@ -63,8 +62,8 @@ export default function BimComponentSheet({ open, onOpenChange, assetId, stage, 
               {COMPONENTS[c].label}
             </button>
           ))}
-          <Link to={flowPaths.engineering(assetId)} className="ml-auto h-8 inline-flex items-center px-3 rounded-lg border border-white/10 text-[11px] text-muted-foreground hover:text-foreground">
-            Engineering Mode (IFC Tree)
+          <Link to={flowPaths.bim(assetId, stage, component)} className="ml-auto h-8 inline-flex items-center px-3 rounded-lg border border-white/10 text-[11px] text-muted-foreground hover:text-foreground">
+            Phóng to
           </Link>
         </div>
         <div className="relative flex-1 min-h-0 rounded-lg overflow-hidden border border-[#1e2433] bg-[#070b12]">

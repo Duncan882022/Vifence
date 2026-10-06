@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Camera, CircleStop, Mic, Pause, Play, Radio, Ruler } from 'lucide-react'
+import { BookOpen, Camera, CircleStop, Mic, Pause, Play, Radio, Ruler } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -29,6 +29,8 @@ import { EvidenceMedia } from '../../components/flow/EvidenceMedia'
 import { H1LiveFeed } from '../../components/flow/H1LiveFeed'
 import { MeasurementSheet, type MeasurementInput } from '../../components/flow/MeasurementSheet'
 
+const BimComponentSheet = lazy(() => import('../../components/flow/BimComponentSheet'))
+
 export function InspectPage() {
   const { sessionId = '' } = useParams()
   const [params] = useSearchParams()
@@ -50,6 +52,7 @@ export function InspectPage() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [live, setLive] = useState<LiveAxis>('connecting')
   const [measureOpen, setMeasureOpen] = useState(false)
+  const [bimOpen, setBimOpen] = useState(false)
   const [voice, setVoice] = useState<{ rec: VoiceSession; startedAt: number } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [flash, setFlash] = useState(false)
@@ -243,7 +246,7 @@ export function InspectPage() {
                 ))}
               </div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 shrink-0">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 shrink-0">
               <button type="button" disabled={paused} onClick={() => void snapshot()} className={cn(actionBtn, 'border-sky-500/40 bg-sky-500/10 text-sky-300 disabled:opacity-40')}>
                 <Camera className="w-4 h-4" /> Ảnh
               </button>
@@ -252,6 +255,9 @@ export function InspectPage() {
               </button>
               <button type="button" onClick={() => setMeasureOpen(true)} className={cn(actionBtn, 'border-white/10 text-foreground')}>
                 <Ruler className="w-4 h-4" /> Số đo
+              </button>
+              <button type="button" onClick={() => setBimOpen(true)} className={cn(actionBtn, 'border-white/10 text-foreground')}>
+                <BookOpen className="w-4 h-4" /> BIM
               </button>
               <button type="button" onClick={() => (paused ? resumeSession(session.id) : pauseSession(session.id))} className={cn(actionBtn, 'border-amber-500/40 text-amber-300')}>
                 {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />} {paused ? 'Tiếp tục' : 'Tạm dừng'}
@@ -312,6 +318,21 @@ export function InspectPage() {
         </div>
       </PageLayout>
       <MeasurementSheet open={measureOpen} criterion={active} onOpenChange={setMeasureOpen} onSave={saveMeasurement} />
+      {bimOpen && (
+        <Suspense fallback={null}>
+          <BimComponentSheet
+            open
+            onOpenChange={setBimOpen}
+            assetId={session.assetId}
+            stage={session.stage}
+            component={component}
+            onComponentChange={cid => {
+              setComponent(cid)
+              setActiveId(null)
+            }}
+          />
+        </Suspense>
+      )}
     </>
   )
 }

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, QrCode, RefreshCw, ScanLine, User } from 'lucide-react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { AlertTriangle, BookOpen, QrCode, RefreshCw, ScanLine, User } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout } from '@/components/common/PageLayout/PageLayout'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -114,6 +114,12 @@ export function MatrixPage() {
                 <option value="senior_inspector">Trưởng TVGS</option>
               </select>
             </label>
+            <Link
+              to={flowPaths.bim(asset.id)}
+              className="h-8 inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[11px] font-bold text-foreground hover:border-primary/50"
+            >
+              <BookOpen className="w-3.5 h-3.5" /> Xem BIM
+            </Link>
             <button
               type="button"
               onClick={() => setQrOpen(true)}

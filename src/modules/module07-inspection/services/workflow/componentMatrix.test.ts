@@ -3,6 +3,7 @@ import { ASSETS, INSPECTORS } from '../../data/workflow/hnqnProject'
 import { SEED_SESSIONS } from '../../data/workflow/seedHistory'
 import type { InspectionSession } from '../../workflow.types'
 import { inspectionOpenPlan, matrixCell } from './componentMatrix'
+import { flowPaths, legacyFlowRedirect } from './flowNav'
 
 const S002 = ASSETS[0]
 
@@ -59,5 +60,17 @@ describe('component matrix', () => {
     expect(cell.kind).toBe('fail')
     expect(cell.fail).toBe(1)
     expect(cell.checked).toBe(2)
+  })
+})
+
+describe('flow BIM routes', () => {
+  it('opens the dedicated BIM page for an asset and stage', () => {
+    expect(flowPaths.bim('s002')).toBe('/inspection/asset/s002/bim')
+    expect(flowPaths.bim('s002', 'GD02', 'web-left')).toBe('/inspection/asset/s002/bim?stage=GD02&c=web-left')
+  })
+
+  it('rewrites the old BIM workspace URL onto the BIM page', () => {
+    expect(legacyFlowRedirect('sgc-dsct')).toBe('/inspection/asset/s002/bim')
+    expect(legacyFlowRedirect('unknown')).toBeNull()
   })
 })

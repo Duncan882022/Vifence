@@ -6,6 +6,7 @@ import { SignPage } from './pages/flow/SignPage'
 import { flowPaths, legacyFlowRedirect } from './services/workflow/flowNav'
 
 const ReportPage = lazy(() => import('./pages/flow/ReportPage').then(m => ({ default: m.ReportPage })))
+const BimViewPage = lazy(() => import('./pages/flow/BimViewPage').then(m => ({ default: m.BimViewPage })))
 const EngineeringPage = lazy(() => import('./pages/InspectionWorkspacePage').then(m => ({ default: m.InspectionWorkspacePage })))
 
 function LegacyGate() {
@@ -29,6 +30,7 @@ export function Module07Page() {
       <Routes>
         <Route index element={<MatrixPage />} />
         <Route path="asset/:assetId" element={<MatrixPage />} />
+        <Route path="asset/:assetId/bim" element={<BimViewPage />} />
         <Route path="asset/:assetId/engineering" element={<EngineeringPage />} />
         <Route path="asset/:assetId/stage/:stageId/prepare" element={<AssetRedirect />} />
         <Route path="session/:sessionId/inspect" element={<InspectPage />} />
