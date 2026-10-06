@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/utils/cn'
+import { evaluateMeasurement, toleranceRange } from '../../services/workflow/measurementEval'
 import type { CriterionDef, EvidenceType } from '../../workflow.types'
 
 export interface MeasurementInput {
@@ -39,18 +40,20 @@ export function MeasurementSheet({ open, criterion, onOpenChange, onSave }: Prop
     setNote('')
   }, [open, criterion])
 
-  const field = 'h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-[13px] text-foreground'
+  const field = 'h-11 min-w-0 rounded-lg bg-white/5 border border-white/10 px-3 text-[14px] text-foreground'
+  const verdict = criterion && type !== 'document' && value.trim() ? evaluateMeasurement(criterion, value, unit) : null
+  const judgeable = criterion && type !== 'document' ? toleranceRange(criterion) != null : false
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="center" className="p-5 max-w-lg">
+      <SheetContent side="center" className="p-4 sm:p-5 max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Đo đạc / Thí nghiệm</SheetTitle>
           <p className="text-[11px] text-muted-foreground">
             {criterion ? `${criterion.code} ${criterion.title} · Design ${criterion.design} · Dung sai ${criterion.tolerance}` : 'Chọn tiêu chí trước'}
           </p>
         </SheetHeader>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {KINDS.map(k => (
             <button
               key={k.id}
@@ -68,11 +71,21 @@ export function MeasurementSheet({ open, criterion, onOpenChange, onSave }: Prop
             value={value}
             onChange={e => setValue(e.target.value)}
             inputMode={type === 'document' ? 'text' : 'decimal'}
-            placeholder={type === 'document' ? 'Mã / tên tài liệu (VD: TN-NEN-S002)' : 'Giá trị (VD: 148, 176)'}
+            placeholder={type === 'document' ? 'Mã / tên tài liệu (VD: TN-NEN-S002)' : 'Giá trị (VD: 148; 176)'}
             className={field}
           />
           <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="Đơn vị" className={field} disabled={type === 'document'} />
         </div>
+        {judgeable && (
+          <p className={cn(
+            'text-[12px] rounded-lg border px-3 py-2',
+            !verdict ? 'border-white/10 text-muted-foreground' : verdict.status === 'pass' ? 'border-green-500/40 bg-green-500/10 text-green-300' : 'border-red-500/40 bg-red-500/10 text-red-300',
+          )}>
+            {!verdict
+              ? `Nhập giá trị (nhiều điểm đo cách nhau bằng “;”) — hệ thống tự chấm theo dung sai ${criterion?.tolerance}`
+              : `${verdict.status === 'pass' ? 'PASS' : 'FAIL'} · ${verdict.summary}`}
+          </p>
+        )}
         <input value={note} onChange={e => setNote(e.target.value)} placeholder="Ghi chú (vị trí đo, thiết bị, số mẫu...)" className={field} />
         <div className="flex justify-end gap-2">
           <button type="button" onClick={() => onOpenChange(false)} className="h-10 px-4 rounded-lg border border-white/10 text-[12px] text-muted-foreground">Huỷ</button>

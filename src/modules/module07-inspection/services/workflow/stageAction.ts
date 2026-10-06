@@ -1,5 +1,5 @@
 import { STAGES } from '../../data/workflow/hnqnProject'
-import type { InspectionSession, Issue, StageCode } from '../../workflow.types'
+import type { AssetRecord, InspectionSession, Issue, StageCode } from '../../workflow.types'
 import { flowPaths } from './flowNav'
 import { latestSession, openIssues, sessionResumeStep, stageProgress } from './sessionLogic'
 
@@ -21,7 +21,7 @@ export function stageAction(assetId: string, stage: StageCode, sessions: Inspect
     return { label: 'Chưa sẵn sàng', hint: prev ? `Chờ ${prev.code} ${prev.label} PASS` : 'Chờ điều kiện', primary: false }
   }
   if (progress === 'ready') {
-    return { label: `Nghiệm thu ${def.code}`, to: flowPaths.prepare(assetId, stage), hint: 'Readiness → Lưu ý → QR → H1 → Start', primary: true }
+    return { label: `Nghiệm thu ${def.code}`, to: flowPaths.prepare(assetId, stage), hint: 'Kiểm tra trước → Bắt đầu', primary: true }
   }
   if (last && (progress === 'in_progress' || progress === 'in_review')) {
     const step = sessionResumeStep(last)
@@ -37,5 +37,35 @@ export function stageAction(assetId: string, stage: StageCode, sessions: Inspect
   if (blocking.length) {
     return { label: 'Xử lý issue', to: flowPaths.asset(assetId, 'issues'), hint: `${blocking.length} issue chưa khắc phục xong`, primary: true }
   }
-  return { label: 'Nghiệm thu lại', to: flowPaths.prepare(assetId, stage), hint: `Tạo phiên lần ${(last?.attempt ?? 0) + 1}`, primary: true }
+  return { label: 'Nghiệm thu lại', to: flowPaths.prepare(assetId, stage), hint: `Tạo phiên lần ${(last?.attempt ?? 0) + 1} · chỉ mục chưa đạt`, primary: true }
+}
+
+/** Việc cần làm tiếp theo của hạng mục (giai đoạn đầu tiên có hành động chính). */
+export function nextAssetAction(
+  asset: AssetRecord,
+  sessions: InspectionSession[],
+  issues: Issue[],
+): { stage: StageCode; action: StageAction } | null {
+  for (const st of asset.stages) {
+    const action = stageAction(asset.id, st, sessions, issues)
+    if (action.primary) return { stage: st, action }
+  }
+  return null
+}
+
+/**
+ * Đích sau khi quét QR ở trang chủ: đi thẳng vào bước kế tiếp; nếu là chuẩn bị nghiệm thu
+ * thì mang theo mã QR đã quét để không phải quét lại.
+ */
+export function qrEntryTarget(
+  asset: AssetRecord,
+  sessions: InspectionSession[],
+  issues: Issue[],
+  qr: { value: string; method: 'camera' | 'manual' },
+): string {
+  const next = nextAssetAction(asset, sessions, issues)
+  const to = next?.action.to
+  if (!to) return flowPaths.asset(asset.id)
+  if (to !== flowPaths.prepare(asset.id, next.stage)) return to
+  return `${to}?qr=${encodeURIComponent(qr.value)}&qrm=${qr.method}`
 }

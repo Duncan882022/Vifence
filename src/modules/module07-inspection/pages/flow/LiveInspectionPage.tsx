@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, BookOpen, Camera, CircleStop, ClipboardList, HardHat, Mic, Pause, Play, Radio, Ruler, Wifi, WifiOff } from 'lucide-react'
+import { AlertTriangle, BookOpen, Camera, CheckCircle2, CircleStop, ClipboardList, HardHat, Mic, Pause, Play, Radio, Ruler, Wifi, WifiOff } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout } from '@/components/common/PageLayout/PageLayout'
 import { cn } from '@/utils/cn'
@@ -22,6 +22,8 @@ import {
   startSessionCapture,
 } from '../../services/workflow/sessionRecorder'
 import { isSpeechToTextSupported, startVoiceComment, type VoiceSession } from '../../services/workflow/voiceRecorder'
+import { evaluateMeasurement } from '../../services/workflow/measurementEval'
+import { validateBeforeFinish } from '../../services/workflow/validation'
 import { briefAck } from '../../data/workflow/requirements'
 import type { ComponentId, CriterionResult, CriterionStatus, Evidence, EvidenceContext, InspectionBrief, LiveAxis, RecordAxis } from '../../workflow.types'
 import { CriterionRow } from '../../components/flow/CriterionRow'
@@ -94,7 +96,16 @@ export function LiveInspectionPage() {
   }, [toast])
 
   const componentCriteria = useMemo(() => criteria.filter(c => c.component === component), [criteria, component])
-  const active = criteria.find(c => c.id === activeId) ?? componentCriteria[0]
+  const validation = useMemo(() => (session ? validateBeforeFinish(session, criteria, evidence) : null), [session, criteria, evidence])
+  const openByComponent = useMemo(() => {
+    const out: Partial<Record<ComponentId, number>> = {}
+    for (const p of validation?.problems ?? []) {
+      const c = criteria.find(x => x.id === p.criterionId)
+      if (c) out[c.component] = (out[c.component] ?? 0) + 1
+    }
+    return out
+  }, [validation, criteria])
+  const active = criteria.find(c => c.id === activeId) ?? componentCriteria.find(c => !session?.results[c.id]?.carriedFrom) ?? componentCriteria[0]
 
   const makeCtx = useCallback((criterionId?: string): EvidenceContext | null => {
     if (!session || !ctx) return null
@@ -115,8 +126,20 @@ export function LiveInspectionPage() {
 
   const onStatus = useCallback((id: string, status: CriterionStatus) => {
     if (!session) return
-    setCriterion(session.id, id, { status, videoTs: Math.round(elapsedRef.current) })
+    const r = session.results[id]
+    const same = r?.status === status
+    setCriterion(session.id, id, {
+      status,
+      videoTs: Math.round(elapsedRef.current),
+      autoVerdict: same ? r?.autoVerdict : undefined,
+      carriedFrom: same ? r?.carriedFrom : undefined,
+    })
   }, [session, setCriterion])
+
+  const onMeasure = useCallback((id: string) => {
+    setActiveId(id)
+    setMeasureOpen(true)
+  }, [])
 
   const onText = useCallback((id: string, patch: Pick<CriterionResult, 'observed' | 'comment'>) => {
     if (session) setCriterion(session.id, id, patch)
@@ -192,13 +215,27 @@ export function LiveInspectionPage() {
     const c = makeCtx(active?.id)
     if (!c || !active) return
     addEvidence({ id: uid('meas'), type: m.type, label: m.label, ctx: c, value: m.value, unit: m.unit, note: m.note })
-    if (!session.results[active.id]?.observed) {
-      setCriterion(session.id, active.id, { observed: `${m.value}${m.unit ? ` ${m.unit}` : ''}` })
+    const observed = `${m.value}${m.unit ? ` ${m.unit}` : ''}`
+    const verdict = m.type === 'document' ? null : evaluateMeasurement(active, m.value, m.unit)
+    const current = session.results[active.id]
+    if (verdict) {
+      setCriterion(session.id, active.id, {
+        status: verdict.status,
+        observed,
+        autoVerdict: verdict.summary,
+        comment: verdict.status === 'fail' && !current?.comment?.trim() ? verdict.summary : current?.comment,
+        videoTs: c.videoTs,
+      })
+      setToast(verdict.status === 'pass' ? `Tự chấm PASS · ${verdict.summary}` : `Tự chấm FAIL · ${verdict.summary}`)
+      return
     }
-    setToast('Đã lưu kết quả đo / thí nghiệm')
+    if (!current?.observed) setCriterion(session.id, active.id, { observed })
+    setToast('Đã lưu kết quả đo / thí nghiệm — chấm PASS/FAIL thủ công')
   }
 
   const recent = evidence.filter(e => e.ctx.criterionId === active?.id).slice(-4)
+  const carried = componentCriteria.filter(c => session.results[c.id]?.carriedFrom)
+  const remaining = validation?.problems.length ?? 0
   const actionBtn = 'h-11 sm:h-12 min-w-0 rounded-xl border flex items-center justify-center gap-1 sm:gap-1.5 text-[10px] sm:text-[12px] font-bold px-1 sm:px-2'
 
   return (
@@ -292,6 +329,7 @@ export function LiveInspectionPage() {
               </button>
               <button type="button" onClick={() => navigate(flowPaths.finish(session.id))} className={cn(actionBtn, 'col-span-2 sm:col-span-1 border-red-500/50 bg-red-500/10 text-red-300')}>
                 <CircleStop className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> FINISH
+                {remaining > 0 ? <span className="text-[9px] font-semibold text-amber-300">· còn {remaining}</span> : <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />}
               </button>
             </div>
           </section>
@@ -301,18 +339,24 @@ export function LiveInspectionPage() {
               {def.components.map(cid => {
                 const list = criteria.filter(c => c.component === cid)
                 const n = list.filter(c => (session.results[c.id]?.status ?? 'not_checked') !== 'not_checked').length
+                const open = openByComponent[cid] ?? 0
                 return (
                   <button
                     key={cid}
                     type="button"
                     onClick={() => selectComponent(cid)}
                     className={cn(
-                      'h-10 px-3 rounded-lg border text-[11px] font-semibold whitespace-nowrap',
+                      'relative h-10 px-3 rounded-lg border text-[11px] font-semibold whitespace-nowrap shrink-0',
                       cid === component ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/10 text-muted-foreground',
                     )}
                   >
                     {COMPONENTS[cid].label}
-                    <span className={cn('ml-1 text-[10px]', n === list.length ? 'text-green-400' : 'text-muted-foreground')}>{n}/{list.length}</span>
+                    <span className={cn('ml-1 text-[10px]', open === 0 ? 'text-green-400' : 'text-muted-foreground')}>{n}/{list.length}</span>
+                    {open > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-[9px] font-black text-black flex items-center justify-center" title={`${open} mục còn thiếu`}>
+                        {open}
+                      </span>
+                    )}
                   </button>
                 )
               })}
@@ -326,7 +370,7 @@ export function LiveInspectionPage() {
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 flex flex-col gap-3">
               {(['quantity', 'quality'] as const).map(group => {
-                const list = componentCriteria.filter(c => c.group === group)
+                const list = componentCriteria.filter(c => c.group === group && !session.results[c.id]?.carriedFrom)
                 if (!list.length) return null
                 return (
                   <div key={group}>
@@ -345,12 +389,39 @@ export function LiveInspectionPage() {
                           onActivate={setActiveId}
                           onStatus={onStatus}
                           onText={onText}
+                          onMeasure={onMeasure}
                         />
                       ))}
                     </ul>
                   </div>
                 )
               })}
+              {carried.length > 0 && (
+                <details className="rounded-lg border border-white/5 bg-white/[0.02] px-2.5 py-2">
+                  <summary className="text-[11px] text-green-400 font-semibold cursor-pointer">
+                    {carried.length} tiêu chí đã PASS ở {session.previousSessionId} — kế thừa, không phải kiểm lại
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {carried.map(c => (
+                      <CriterionRow
+                        key={c.id}
+                        criterion={c}
+                        result={session.results[c.id]}
+                        evidence={evidence.filter(e => e.ctx.criterionId === c.id)}
+                        active={active?.id === c.id}
+                        locked={false}
+                        onActivate={setActiveId}
+                        onStatus={onStatus}
+                        onText={onText}
+                        onMeasure={onMeasure}
+                      />
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {componentCriteria.length > carried.length && (openByComponent[component] ?? 0) === 0 && (
+                <p className="text-[11px] text-green-400 flex items-center gap-1 px-1"><CheckCircle2 className="w-3.5 h-3.5" /> {COMPONENTS[component].label} đã đủ — chuyển cấu kiện tiếp theo.</p>
+              )}
             </div>
           </section>
         </div>

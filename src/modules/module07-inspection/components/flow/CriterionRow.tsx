@@ -14,6 +14,8 @@ interface Props {
   onActivate: (id: string) => void
   onStatus: (id: string, status: CriterionStatus) => void
   onText: (id: string, patch: Pick<CriterionResult, 'observed' | 'comment'>) => void
+  /** Mở form nhập số đo / thí nghiệm cho tiêu chí đo đạc. */
+  onMeasure?: (id: string) => void
 }
 
 const METHOD_LABEL: Record<CriterionDef['method'], string> = {
@@ -24,7 +26,7 @@ const METHOD_LABEL: Record<CriterionDef['method'], string> = {
 }
 
 /** §10 Criterion: Design · Observed · Tolerance · Source · Result · Evidence · Comment. */
-export const CriterionRow = memo(function CriterionRow({ criterion: c, result, evidence, active, locked, onActivate, onStatus, onText }: Props) {
+export const CriterionRow = memo(function CriterionRow({ criterion: c, result, evidence, active, locked, onActivate, onStatus, onText, onMeasure }: Props) {
   const status = result?.status ?? 'not_checked'
   const [observed, setObserved] = useState(result?.observed ?? '')
   const [comment, setComment] = useState(result?.comment ?? '')
@@ -57,12 +59,30 @@ export const CriterionRow = memo(function CriterionRow({ criterion: c, result, e
             <SourceBadge source={c.source} />
           </p>
         </div>
-        <TokenBadge token={CRITERION_STATUS_META[status]} size="small" />
+        <div className="flex flex-col items-end gap-0.5 shrink-0">
+          <TokenBadge token={CRITERION_STATUS_META[status]} size="small" />
+          {result?.autoVerdict && <span className="text-[8px] font-bold text-sky-300">TỰ CHẤM</span>}
+          {result?.carriedFrom && <span className="text-[8px] font-bold text-green-400">KẾ THỪA</span>}
+        </div>
       </div>
+      {result?.autoVerdict && (
+        <p className={cn('text-[10px]', status === 'fail' ? 'text-red-300' : 'text-sky-300')}>
+          <Ruler className="w-3 h-3 inline mr-0.5" />{result.autoVerdict}
+        </p>
+      )}
       {active && (
         <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
           <p className="text-[9px] text-muted-foreground truncate">Nguồn: {c.source.ref}</p>
-          <div className="grid grid-cols-2 gap-1.5">
+          {onMeasure && (c.method === 'measurement' || c.method === 'test') && !locked && (
+            <button
+              type="button"
+              onClick={() => onMeasure(c.id)}
+              className="h-10 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-300 text-[12px] font-bold inline-flex items-center justify-center gap-1.5"
+            >
+              <Ruler className="w-4 h-4" /> {c.method === 'test' ? 'Nhập kết quả thí nghiệm' : 'Nhập số đo'}{c.designValue != null ? ' → tự chấm theo dung sai' : ''}
+            </button>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             <input
               value={observed}
               disabled={locked}

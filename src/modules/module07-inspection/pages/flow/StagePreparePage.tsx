@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Camera, CheckCircle2, ChevronRight, Circle, ClipboardList, HardHat, Lock, QrCode, RefreshCw, XCircle } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCircle2, ChevronDown, ChevronUp, Circle, ClipboardList, HardHat, Play, QrCode, RefreshCw, RotateCcw, XCircle } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout } from '@/components/common/PageLayout/PageLayout'
+import { useShellLayout } from '@/hooks/useShellLayout'
 import { cn } from '@/utils/cn'
 import { criteriaForStage } from '../../data/workflow/criteria'
 import { COMPONENTS, DOCUMENTS, H1_HELMET_ID, STAGES } from '../../data/workflow/hnqnProject'
@@ -13,26 +14,27 @@ import { useInspectionFlowStore } from '../../store/inspectionFlow.store'
 import { findAssetByQr, flowPaths, resolveAsset } from '../../services/workflow/flowNav'
 import { readH1Status, type H1DeviceStatus } from '../../services/workflow/h1Device'
 import { computeReadiness } from '../../services/workflow/readiness'
-import type { BriefAck, ComponentId, InspectionBrief, LiveAxis, ReadinessState, StageCode } from '../../workflow.types'
+import { canReinspectFailedOnly, carryOverResults } from '../../services/workflow/reinspection'
+import { latestSession } from '../../services/workflow/sessionLogic'
+import type { BriefAck, ComponentId, InspectionBrief, LiveAxis, ReadinessState, SessionScope, StageCode } from '../../workflow.types'
 import { Breadcrumbs, Card, formatDateTimeVn, SourceBadge } from '../../components/flow/FlowUi'
 import { H1LiveFeed } from '../../components/flow/H1LiveFeed'
 import { InspectionBriefDialog } from '../../components/flow/InspectionBriefDialog'
 import { QrScannerPanel } from '../../components/flow/QrScannerPanel'
 
-type Step = 'readiness' | 'brief' | 'qr' | 'h1' | 'start'
-
-const STEPS: { id: Step; label: string }[] = [
-  { id: 'readiness', label: 'Inspection Readiness' },
-  { id: 'brief', label: 'Lưu ý nghiệm thu' },
-  { id: 'qr', label: 'Scan QR' },
-  { id: 'h1', label: 'H1 Camera Preview' },
-  { id: 'start', label: 'Start Inspection' },
-]
-
 function StateIcon({ state }: { state: ReadinessState }) {
   if (state === 'ok') return <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
   if (state === 'warn') return <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
   return <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+}
+
+function SectionStatus({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-[10px] font-bold', ok ? 'text-green-400' : 'text-amber-300')}>
+      {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
+      {label}
+    </span>
+  )
 }
 
 interface QrOutcome {
@@ -42,6 +44,10 @@ interface QrOutcome {
   matchedName?: string
 }
 
+/**
+ * Pre-check một màn hình: điều kiện, lưu ý cấu kiện, QR, mũ H1 kiểm tra song song;
+ * thanh START cố định cho biết còn thiếu gì.
+ */
 export function StagePreparePage() {
   const { assetId = '', stageId = '' } = useParams()
   const navigate = useNavigate()
@@ -52,15 +58,23 @@ export function StagePreparePage() {
   const issues = useIssues(assetId)
   const log = useInspectionFlowStore(s => s.log)
   const startSession = useInspectionFlowStore(s => s.startSession)
-  const [step, setStep] = useState<Step>('readiness')
+  const actorName = useInspectionFlowStore(s => s.actor.name)
+  const [searchParams] = useSearchParams()
+  const { sidebarInset } = useShellLayout()
+
   const [warnAck, setWarnAck] = useState(false)
-  const [qr, setQr] = useState<QrOutcome | null>(null)
+  const [showOk, setShowOk] = useState(false)
+  const [qr, setQr] = useState<QrOutcome | null>(() => {
+    const value = searchParams.get('qr')
+    if (!value || !ctx) return null
+    const method = searchParams.get('qrm') === 'manual' ? 'manual' : 'camera'
+    return { value, method, ok: value.toUpperCase() === ctx.asset.qrId.toUpperCase() }
+  })
+  const [scanning, setScanning] = useState(false)
   const [h1, setH1] = useState<H1DeviceStatus | null>(null)
   const [checking, setChecking] = useState(false)
   const [live, setLive] = useState<LiveAxis>('connecting')
   const [simulated, setSimulated] = useState(false)
-  const [searchParams] = useSearchParams()
-  const actorName = useInspectionFlowStore(s => s.actor.name)
   const [acks, setAcks] = useState<BriefAck[]>(() => {
     const pre = searchParams.get('brief') as ComponentId | null
     const brief = pre && def?.components.includes(pre) ? briefFor(assetId, stage, pre) : null
@@ -68,6 +82,7 @@ export function StagePreparePage() {
   })
   const [focus, setFocus] = useState<ComponentId | undefined>(() => acks[0]?.component)
   const [briefOpen, setBriefOpen] = useState<ComponentId | null>(null)
+  const [scope, setScope] = useState<SessionScope>('failed_only')
 
   const onBriefStart = useCallback((brief: InspectionBrief) => {
     if (!acks.some(a => a.briefId === brief.id)) {
@@ -76,12 +91,18 @@ export function StagePreparePage() {
     }
     setFocus(brief.component)
     setBriefOpen(null)
-    setStep('qr')
   }, [acks, actorName, assetId, log])
 
   const readiness = useMemo(
     () => (ctx && def ? computeReadiness({ asset: ctx.asset, stage, sessions, issues, documents: DOCUMENTS }) : null),
     [ctx, def, stage, sessions, issues],
+  )
+  const criteria = useMemo(() => (def ? criteriaForStage(stage) : []), [def, stage])
+  const last = ctx && def ? latestSession(sessions, ctx.asset.id, stage) : undefined
+  const partialAllowed = canReinspectFailedOnly(last)
+  const carriedCount = useMemo(
+    () => (partialAllowed && last ? Object.keys(carryOverResults(last, criteria, '')).length : 0),
+    [partialAllowed, last, criteria],
   )
 
   const recheckH1 = useCallback(() => {
@@ -93,8 +114,8 @@ export function StagePreparePage() {
   }, [])
 
   useEffect(() => {
-    if (step === 'h1' && !h1) recheckH1()
-  }, [step, h1, recheckH1])
+    recheckH1()
+  }, [recheckH1])
 
   if (!ctx || !def || !readiness) return <Navigate to={flowPaths.home()} replace />
   const { asset, structure, project } = ctx
@@ -103,38 +124,34 @@ export function StagePreparePage() {
     const matched = findAssetByQr(value)
     const ok = value.toUpperCase() === asset.qrId.toUpperCase()
     setQr({ value, method, ok, matchedName: matched?.name })
+    setScanning(false)
     log(ok ? 'qr.verify' : 'qr.mismatch', asset.id, `${value} (${method === 'manual' ? 'nhập tay' : 'camera'}) ${ok ? '= ' : '≠ '}${asset.qrId}`)
   }
 
   const h1Checks: { label: string; ok: boolean; detail: string; mock?: boolean }[] = h1 ? [
     { label: 'Helmet ID', ok: h1.configured, detail: `${h1.helmetId}${h1.configured ? '' : ' · chưa cấu hình MediaMTX'}` },
     { label: 'Online', ok: h1.online || simulated, detail: h1.online ? 'Đang publish lên MediaMTX' : simulated ? 'Mô phỏng (POC)' : 'Không có luồng từ mũ' },
-    { label: 'Battery', ok: h1.batteryPct > 20, detail: `${h1.batteryPct}%`, mock: true },
-    { label: 'Recording ready', ok: h1.recordingReady, detail: 'Sẵn sàng ghi', mock: true },
-    { label: 'Storage', ok: h1.storageFreeGb > 4, detail: `${h1.storageFreeGb} GB trống`, mock: true },
+    { label: 'Pin', ok: h1.batteryPct > 20, detail: `${h1.batteryPct}%`, mock: true },
+    { label: 'Sẵn sàng ghi', ok: h1.recordingReady, detail: 'Sẵn sàng ghi', mock: true },
+    { label: 'Bộ nhớ', ok: h1.storageFreeGb > 4, detail: `${h1.storageFreeGb} GB trống`, mock: true },
     { label: 'Live stream', ok: live === 'live', detail: live === 'live' ? (simulated ? 'Luồng mô phỏng (POC)' : 'WHEP / LL-HLS') : live === 'connecting' ? 'Đang kết nối...' : 'Mất tín hiệu' },
-    { label: 'Camera preview', ok: live === 'live', detail: live === 'live' ? 'Có khung hình' : 'Chưa có hình' },
   ] : []
   const h1Ok = h1Checks.length > 0 && h1Checks.every(c => c.ok)
-  const criteria = criteriaForStage(stage)
-  const readinessPass = !readiness.blocked && (readiness.warnings === 0 || warnAck)
-  const stepDone: Record<Step, boolean> = { readiness: readinessPass, brief: acks.length > 0, qr: Boolean(qr?.ok), h1: h1Ok, start: false }
-  const canGo = (s: Step) => {
-    const idx = STEPS.findIndex(x => x.id === s)
-    return STEPS.slice(0, idx).every(x => stepDone[x.id])
-  }
+  const readinessOk = !readiness.blocked && (readiness.warnings === 0 || warnAck)
+  const blockers = readiness.checks.filter(c => c.state !== 'ok')
+  const passedChecks = readiness.checks.filter(c => c.state === 'ok')
 
-  const summary = [
-    { label: `Lưu ý ${acks.length}/${def.components.length} cấu kiện`, ok: acks.length > 0 },
-    { label: `QR ${asset.qrId}`, ok: Boolean(qr?.ok) },
-    { label: `H1 ${H1_HELMET_ID}${simulated ? ' (mô phỏng)' : ''}`, ok: h1Ok },
-    { label: 'Camera Preview', ok: live === 'live' },
-    { label: `Checklist ${def.checklistRevision}`, ok: criteria.length > 0 },
-    { label: `AFC ${asset.afc.revision}`, ok: !readiness.checks.some(c => c.id === 'afc-bim' && c.state === 'block') },
-  ]
+  const missing = [
+    !readinessOk && (readiness.blocked ? 'Điều kiện bị CHẶN' : 'Xác nhận cảnh báo'),
+    acks.length === 0 && 'Xem lưu ý ≥ 1 cấu kiện',
+    !qr?.ok && 'Quét QR hạng mục',
+    !h1Ok && 'Mũ H1 sẵn sàng',
+  ].filter((x): x is string => Boolean(x))
+  const ready = missing.length === 0
+  const toInspect = partialAllowed && scope === 'failed_only' ? criteria.length - carriedCount : criteria.length
 
   const start = () => {
-    if (!qr?.ok) return
+    if (!ready || !qr?.ok) return
     const id = startSession({
       assetId: asset.id,
       stage,
@@ -142,6 +159,7 @@ export function StagePreparePage() {
       simulatedH1: simulated,
       focusComponent: focus,
       briefs: acks,
+      scope: partialAllowed ? scope : 'full',
     })
     navigate(flowPaths.live(id))
   }
@@ -156,33 +174,15 @@ export function StagePreparePage() {
           { label: asset.name, to: flowPaths.asset(asset.id) },
           { label: `${def.code} ${def.label}` },
         ]} />
-        <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
-          <ol className="flex flex-row lg:flex-col gap-1.5 self-stretch lg:self-start overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-            {STEPS.map((s, i) => {
-              const enabled = canGo(s.id)
-              return (
-                <li key={s.id} className="flex-none min-w-[9.5rem] lg:min-w-0 lg:flex-none lg:w-full">
-                  <button
-                    type="button"
-                    disabled={!enabled}
-                    onClick={() => setStep(s.id)}
-                    className={cn(
-                      'w-full flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[11px] sm:text-[12px] font-semibold whitespace-nowrap lg:whitespace-normal',
-                      step === s.id ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/5 text-muted-foreground',
-                      !enabled && 'opacity-40',
-                    )}
-                  >
-                    {stepDone[s.id] ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : enabled ? <Circle className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                    <span className="text-muted-foreground">{i + 1}</span> {s.label}
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
 
-          {step === 'readiness' && (
-            <Card title={`Inspection Readiness · ${def.code} ${def.label}`} bodyClassName="flex flex-col gap-2">
-              {readiness.checks.map(c => (
+        <div className="grid gap-3 lg:grid-cols-2 items-start">
+          <div className="flex flex-col gap-3 min-w-0">
+            <Card
+              title={`1 · Điều kiện · ${def.code} ${def.label}`}
+              right={<SectionStatus ok={readinessOk} label={readiness.blocked ? 'CHẶN' : readinessOk ? 'Đạt' : `${readiness.warnings} cảnh báo`} />}
+              bodyClassName="flex flex-col gap-1.5"
+            >
+              {blockers.map(c => (
                 <div key={c.id} className="flex items-start gap-2 rounded-lg border border-white/5 px-3 py-2">
                   <StateIcon state={c.state} />
                   <div className="flex-1 min-w-0">
@@ -192,27 +192,62 @@ export function StagePreparePage() {
                   <span className={cn('text-[9px] font-bold', READINESS_META[c.state].className)}>{READINESS_META[c.state].label}</span>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={() => setShowOk(v => !v)}
+                className="flex items-center gap-1.5 text-[11px] text-green-400 px-1 py-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" /> {passedChecks.length} điều kiện đạt
+                {showOk ? <ChevronUp className="w-3.5 h-3.5 ml-auto" /> : <ChevronDown className="w-3.5 h-3.5 ml-auto" />}
+              </button>
+              {showOk && passedChecks.map(c => (
+                <div key={c.id} className="flex items-start gap-2 px-3 py-1">
+                  <StateIcon state={c.state} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-foreground">{c.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{c.detail}</p>
+                  </div>
+                </div>
+              ))}
               {readiness.blocked && (
                 <p className="text-[11px] text-red-400">Có điều kiện CHẶN — chưa được bắt đầu nghiệm thu giai đoạn này.</p>
               )}
               {!readiness.blocked && readiness.warnings > 0 && (
-                <label className="flex items-center gap-2 text-[11px] text-amber-300">
-                  <input type="checkbox" checked={warnAck} onChange={e => setWarnAck(e.target.checked)} />
+                <label className="flex items-center gap-2 text-[12px] text-amber-300 py-1">
+                  <input type="checkbox" className="w-4 h-4" checked={warnAck} onChange={e => setWarnAck(e.target.checked)} />
                   Đã xem {readiness.warnings} cảnh báo, vẫn tiếp tục (ghi nhận vào báo cáo)
                 </label>
               )}
-              <div className="flex justify-end">
-                <button type="button" disabled={!readinessPass} onClick={() => setStep('brief')} className="h-10 px-5 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-300 text-[12px] font-bold disabled:opacity-40 inline-flex items-center gap-1">
-                  Tiếp tục · Lưu ý nghiệm thu <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </Card>
-          )}
 
-          {step === 'brief' && (
-            <Card title={`Lưu ý nghiệm thu · ${def.code} ${def.label}`} icon={<ClipboardList className="w-3.5 h-3.5 text-primary" />} bodyClassName="flex flex-col gap-3">
-              <p className="text-[11px] text-muted-foreground">Chọn cấu kiện sẽ nghiệm thu để xem tóm tắt yêu cầu, điểm cần chú ý và phần phải kiểm tra ngoài video.</p>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {partialAllowed && last && (
+              <Card title="Phạm vi nghiệm thu lại" icon={<RotateCcw className="w-3.5 h-3.5 text-primary" />} bodyClassName="flex flex-col gap-1.5">
+                {([
+                  { id: 'failed_only', label: `Chỉ mục chưa đạt · ${criteria.length - carriedCount} tiêu chí`, hint: `Kế thừa ${carriedCount} PASS đã duyệt từ ${last.id}` },
+                  { id: 'full', label: `Toàn bộ checklist · ${criteria.length} tiêu chí`, hint: 'Kiểm lại tất cả từ đầu' },
+                ] as const).map(o => (
+                  <label
+                    key={o.id}
+                    className={cn('flex items-start gap-2 rounded-lg border px-3 py-2.5 cursor-pointer', scope === o.id ? 'border-primary/60 bg-primary/10' : 'border-white/10')}
+                  >
+                    <input type="radio" name="scope" className="mt-0.5 w-4 h-4" checked={scope === o.id} onChange={() => setScope(o.id)} />
+                    <span className="min-w-0">
+                      <span className="block text-[12px] font-semibold text-foreground">{o.label}</span>
+                      <span className="block text-[10px] text-muted-foreground">{o.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </Card>
+            )}
+
+            <Card
+              title="2 · Lưu ý cấu kiện"
+              icon={<ClipboardList className="w-3.5 h-3.5 text-primary" />}
+              right={<SectionStatus ok={acks.length > 0} label={`${acks.length}/${def.components.length} đã xem`} />}
+              bodyClassName="flex flex-col gap-2"
+            >
+              <p className="text-[11px] text-muted-foreground">Chạm cấu kiện sẽ nghiệm thu để xem yêu cầu, điểm cần chú ý và phần kiểm tra ngoài video.</p>
+              <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
                 {def.components.map(cid => {
                   const brief = briefFor(asset.id, stage, cid)
                   const ack = acks.find(a => a.component === cid)
@@ -222,7 +257,7 @@ export function StagePreparePage() {
                       type="button"
                       onClick={() => setBriefOpen(cid)}
                       className={cn(
-                        'rounded-xl border p-3 text-left flex flex-col gap-1 min-w-0',
+                        'rounded-xl border p-3 text-left flex flex-col gap-0.5 min-w-0',
                         focus === cid ? 'border-primary/60 bg-primary/10' : 'border-white/10 hover:border-white/20',
                       )}
                     >
@@ -231,10 +266,7 @@ export function StagePreparePage() {
                         {ack ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 ml-auto" /> : <Circle className="w-4 h-4 text-muted-foreground shrink-0 ml-auto" />}
                       </span>
                       <span className="text-[10px] text-muted-foreground truncate">
-                        {COMPONENTS[cid].labelEn} · {brief ? VISUAL_CONTEXT_LABEL[brief.visualContext] : '—'}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {brief?.requirements.length ?? 0} yêu cầu · {criteria.filter(c => c.component === cid).length} tiêu chí
+                        {brief ? VISUAL_CONTEXT_LABEL[brief.visualContext] : '—'} · {brief?.requirements.length ?? 0} yêu cầu · {criteria.filter(c => c.component === cid).length} tiêu chí
                       </span>
                       <span className={cn('text-[10px] font-semibold', ack ? 'text-green-400' : 'text-amber-300')}>
                         {ack ? `Đã xem ${formatDateTimeVn(ack.viewedAt)}` : 'Chưa xem lưu ý'}
@@ -243,110 +275,110 @@ export function StagePreparePage() {
                   )
                 })}
               </div>
-              <div className="flex justify-end">
-                <button type="button" disabled={acks.length === 0} onClick={() => setStep('qr')} className="h-10 px-5 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-300 text-[12px] font-bold disabled:opacity-40 inline-flex items-center gap-1">
-                  Tiếp tục · Quét QR <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </Card>
-          )}
+          </div>
 
-          {step === 'qr' && (
-            <Card title="Scan QR hạng mục" icon={<QrCode className="w-3.5 h-3.5 text-primary" />} bodyClassName="flex flex-col gap-3">
-              {qr ? (
-                <div className={cn('rounded-xl border p-5 text-center', qr.ok ? 'border-green-500/40 bg-green-500/10' : 'border-red-500/40 bg-red-500/10')}>
-                  <p className={cn('text-xl font-black tracking-wider', qr.ok ? 'text-green-300' : 'text-red-300')}>
-                    {qr.ok ? `QR VERIFIED — ${asset.name}` : 'QR DOES NOT MATCH'}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Đọc được <b className="font-mono text-foreground">{qr.value}</b> ({qr.method === 'manual' ? 'nhập tay' : 'camera'})
-                    {!qr.ok && ` · mong đợi ${asset.qrId}${qr.matchedName ? ` — mã này thuộc ${qr.matchedName}` : ''}`}
-                  </p>
-                  <div className="flex justify-center gap-2 mt-4">
-                    <button type="button" onClick={() => setQr(null)} className="h-9 px-4 rounded-lg border border-white/10 text-[12px] text-foreground inline-flex items-center gap-1">
-                      <RefreshCw className="w-3.5 h-3.5" /> Quét lại
-                    </button>
-                    {qr.ok && (
-                      <button type="button" onClick={() => setStep('h1')} className="h-9 px-4 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-300 text-[12px] font-bold">
-                        Tiếp tục · Kiểm tra H1
-                      </button>
-                    )}
+          <div className="flex flex-col gap-3 min-w-0">
+            <Card
+              title="3 · QR hạng mục"
+              icon={<QrCode className="w-3.5 h-3.5 text-primary" />}
+              right={<SectionStatus ok={Boolean(qr?.ok)} label={qr?.ok ? 'Đã xác minh' : 'Chưa quét'} />}
+              bodyClassName="flex flex-col gap-2"
+            >
+              {qr && !scanning ? (
+                <div className={cn('rounded-xl border p-3 flex items-center gap-3', qr.ok ? 'border-green-500/40 bg-green-500/10' : 'border-red-500/40 bg-red-500/10')}>
+                  {qr.ok ? <CheckCircle2 className="w-6 h-6 text-green-300 shrink-0" /> : <XCircle className="w-6 h-6 text-red-300 shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <p className={cn('text-[13px] font-black tracking-wide', qr.ok ? 'text-green-300' : 'text-red-300')}>
+                      {qr.ok ? `QR ĐÚNG — ${asset.name}` : 'QR KHÔNG KHỚP'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      <b className="font-mono text-foreground">{qr.value}</b> ({qr.method === 'manual' ? 'nhập tay' : 'camera'})
+                      {!qr.ok && ` · cần ${asset.qrId}${qr.matchedName ? ` — mã này thuộc ${qr.matchedName}` : ''}`}
+                    </p>
                   </div>
-                </div>
-              ) : (
-                <QrScannerPanel expected={asset.qrId} onResult={handleQr} />
-              )}
-              <p className="text-[10px] text-muted-foreground">QR chỉ xác định hạng mục ({asset.qrId} → {asset.name}); cấu kiện đã chọn ở bước Lưu ý nghiệm thu.</p>
-            </Card>
-          )}
-
-          {step === 'h1' && (
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-              <Card title={`H1 Camera Preview · ${H1_HELMET_ID}`} icon={<Camera className="w-3.5 h-3.5 text-primary" />} bodyClassName="p-0">
-                <div className="relative aspect-video">
-                  <H1LiveFeed helmetId={H1_HELMET_ID} simulated={simulated} overlayText={`${asset.code} · ${def.code} · preview`} onLiveAxis={setLive} />
-                </div>
-              </Card>
-              <Card
-                title="H1 Pre-check"
-                icon={<HardHat className="w-3.5 h-3.5 text-primary" />}
-                right={(
-                  <button type="button" onClick={recheckH1} className="text-[10px] text-primary inline-flex items-center gap-1">
-                    <RefreshCw className={cn('w-3 h-3', checking && 'animate-spin')} /> Kiểm tra lại
+                  <button type="button" onClick={() => setScanning(true)} className="h-9 px-3 rounded-lg border border-white/10 text-[11px] text-foreground inline-flex items-center gap-1 shrink-0">
+                    <RefreshCw className="w-3.5 h-3.5" /> Quét lại
                   </button>
-                )}
-                bodyClassName="flex flex-col gap-1.5"
-              >
+                </div>
+              ) : scanning ? (
+                <QrScannerPanel expected={asset.qrId} onResult={handleQr} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setScanning(true)}
+                  className="h-12 rounded-xl border-2 border-dashed border-sky-500/40 text-sky-300 text-[13px] font-bold inline-flex items-center justify-center gap-2"
+                >
+                  <Camera className="w-4 h-4" /> Quét QR {asset.qrId}
+                </button>
+              )}
+              <p className="text-[10px] text-muted-foreground">QR chỉ xác định hạng mục ({asset.qrId} → {asset.name}); cấu kiện chọn ở mục Lưu ý.</p>
+            </Card>
+
+            <Card
+              title={`4 · Mũ H1 · ${H1_HELMET_ID}`}
+              icon={<HardHat className="w-3.5 h-3.5 text-primary" />}
+              right={(
+                <span className="flex items-center gap-2">
+                  <SectionStatus ok={h1Ok} label={h1Ok ? 'Sẵn sàng' : checking ? 'Đang kiểm tra' : 'Chưa sẵn sàng'} />
+                  <button type="button" onClick={recheckH1} aria-label="Kiểm tra lại H1" className="p-1 text-primary">
+                    <RefreshCw className={cn('w-3.5 h-3.5', checking && 'animate-spin')} />
+                  </button>
+                </span>
+              )}
+              bodyClassName="p-0"
+            >
+              <div className="relative aspect-video">
+                <H1LiveFeed helmetId={H1_HELMET_ID} simulated={simulated} overlayText={`${asset.code} · ${def.code} · preview`} onLiveAxis={setLive} />
+              </div>
+              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
                 {h1Checks.map(c => (
-                  <div key={c.label} className="flex items-center gap-2 text-[12px]">
-                    {c.ok ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
-                    <span className="text-foreground font-semibold w-32">{c.label}</span>
-                    <span className="text-muted-foreground flex-1 truncate">{c.detail}</span>
+                  <div key={c.label} className="flex items-center gap-1.5 text-[11px] min-w-0">
+                    {c.ok ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+                    <span className="text-foreground font-semibold shrink-0">{c.label}</span>
+                    <span className="text-muted-foreground truncate">{c.detail}</span>
                     {c.mock && <SourceBadge source="MOCK" />}
                   </div>
                 ))}
-                {h1 && !h1.online && !simulated && (
-                  <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 flex flex-col gap-2">
-                    <p className="text-[11px] text-amber-300">
-                      {H1_HELMET_ID} chưa phát luồng. Bật mũ và phát sóng, rồi bấm Kiểm tra lại.
-                    </p>
-                    <button type="button" onClick={() => setSimulated(true)} className="self-start h-8 px-3 rounded-lg border border-fuchsia-500/40 text-fuchsia-300 text-[11px] font-semibold">
-                      Dùng H1 mô phỏng (POC) — ghi vào audit
-                    </button>
-                  </div>
-                )}
-                <div className="flex justify-end mt-2">
-                  <button type="button" disabled={!h1Ok} onClick={() => setStep('start')} className="h-10 px-5 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-300 text-[12px] font-bold disabled:opacity-40">
-                    Tiếp tục
+              </div>
+              {h1 && !h1.online && !simulated && (
+                <div className="mx-3 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 flex flex-col gap-2">
+                  <p className="text-[11px] text-amber-300">
+                    {H1_HELMET_ID} chưa phát luồng. Bật mũ và phát sóng, rồi bấm kiểm tra lại.
+                  </p>
+                  <button type="button" onClick={() => setSimulated(true)} className="self-start h-9 px-3 rounded-lg border border-fuchsia-500/40 text-fuchsia-300 text-[11px] font-semibold">
+                    Dùng H1 mô phỏng (POC) — ghi vào audit
                   </button>
                 </div>
-              </Card>
-            </div>
-          )}
-
-          {step === 'start' && (
-            <Card title="Sẵn sàng nghiệm thu" bodyClassName="flex flex-col items-center gap-4 py-8">
-              <p className="text-2xl font-black text-foreground">{asset.code} · {def.code} {def.label}</p>
-              <ul className="flex flex-wrap justify-center gap-3">
-                {summary.map(s => (
-                  <li key={s.label} className={cn('inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-semibold', s.ok ? 'border-green-500/40 text-green-300' : 'border-red-500/40 text-red-300')}>
-                    {s.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />} {s.label}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[11px] text-muted-foreground text-center max-w-lg">
-                Bắt đầu sẽ tạo phiên mới, khoá revision AFC {asset.afc.revision} · BIM {asset.bim.revision} · {def.checklistRevision}, bật ghi hình và live stream {H1_HELMET_ID}.
-              </p>
-              <button
-                type="button"
-                disabled={!summary.every(s => s.ok)}
-                onClick={start}
-                className="h-14 px-10 rounded-2xl bg-green-500/20 border-2 border-green-500/60 text-green-300 text-lg font-black tracking-wider hover:bg-green-500/30 disabled:opacity-40"
-              >
-                START INSPECTION
-              </button>
+              )}
             </Card>
-          )}
+          </div>
+        </div>
+
+        <div aria-hidden className="h-32 sm:h-20 shrink-0" />
+        <div
+          className="fixed bottom-0 right-0 z-30 border-t border-[#1e2433] bg-[#060b14]/95 backdrop-blur px-3 sm:px-4 pt-3 flex flex-col sm:flex-row sm:items-center gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-[left] duration-200"
+          style={{ left: sidebarInset }}
+        >
+          <div className="min-w-0 flex-1">
+            {ready ? (
+              <p className="text-[12px] text-green-300 font-semibold">
+                Sẵn sàng · {toInspect} tiêu chí · khoá AFC {asset.afc.revision} · BIM {asset.bim.revision} · {def.checklistRevision}
+              </p>
+            ) : (
+              <p className="text-[11px] text-amber-300">
+                Còn thiếu: {missing.join(' · ')}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={!ready}
+            onClick={start}
+            className="h-12 px-8 rounded-xl bg-green-500/20 border-2 border-green-500/60 text-green-300 text-[15px] font-black tracking-wider hover:bg-green-500/30 disabled:opacity-40 inline-flex items-center justify-center gap-2 w-full sm:w-auto"
+          >
+            <Play className="w-4 h-4" /> BẮT ĐẦU NGHIỆM THU
+          </button>
         </div>
       </PageLayout>
       {briefOpen && (
@@ -358,6 +390,7 @@ export function StagePreparePage() {
           component={briefOpen}
           onComponentChange={setBriefOpen}
           onStart={onBriefStart}
+          startLabel="ĐÃ XEM LƯU Ý"
         />
       )}
     </>

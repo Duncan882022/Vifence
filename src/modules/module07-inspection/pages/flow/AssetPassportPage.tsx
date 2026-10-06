@@ -10,7 +10,7 @@ import { useIssues, useSessions } from '../../hooks/useInspectionFlow'
 import { useInspectionFlowStore } from '../../store/inspectionFlow.store'
 import { flowPaths, resolveAsset, type PassportTab } from '../../services/workflow/flowNav'
 import { openIssues, stageProgress } from '../../services/workflow/sessionLogic'
-import { stageAction } from '../../services/workflow/stageAction'
+import { nextAssetAction } from '../../services/workflow/stageAction'
 import { Breadcrumbs, Meta, PocMockBanner, TokenBadge } from '../../components/flow/FlowUi'
 import { OverviewTab, StagesTab, DocumentsTab } from '../../components/flow/passport/PassportTabs'
 import { BimTab } from '../../components/flow/passport/BimTab'
@@ -39,14 +39,7 @@ export function AssetPassportPage() {
   const resetDemo = useInspectionFlowStore(s => s.resetDemo)
   const tab = (TABS.some(t => t.id === params.get('tab')) ? params.get('tab') : 'overview') as PassportTab
 
-  const next = useMemo(() => {
-    if (!ctx) return null
-    for (const st of ctx.asset.stages) {
-      const a = stageAction(ctx.asset.id, st, sessions, issues)
-      if (a.primary) return { stage: st, action: a }
-    }
-    return null
-  }, [ctx, sessions, issues])
+  const next = useMemo(() => (ctx ? nextAssetAction(ctx.asset, sessions, issues) : null), [ctx, sessions, issues])
 
   if (!ctx) return <Navigate to={flowPaths.home()} replace />
   const { asset, structure, project } = ctx

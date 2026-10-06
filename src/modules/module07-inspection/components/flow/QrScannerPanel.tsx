@@ -3,7 +3,7 @@ import QrScanner from 'qr-scanner'
 import { Keyboard, QrCode, RefreshCw } from 'lucide-react'
 
 interface Props {
-  expected: string
+  expected?: string
   onResult: (value: string, method: 'camera' | 'manual') => void
 }
 
@@ -50,7 +50,7 @@ export const QrScannerPanel = memo(function QrScannerPanel({ expected, onResult 
       <div className="relative aspect-video max-h-[46vh] rounded-lg overflow-hidden bg-black border border-[#1e2433]">
         <video ref={videoRef} muted playsInline className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute top-2 left-2 bg-black/60 rounded px-2 py-1 text-[10px] text-white flex items-center gap-1">
-          <QrCode className="w-3 h-3" /> Hướng camera sau vào tem QR trên hạng mục · mong đợi <b className="font-mono">{expected}</b>
+          <QrCode className="w-3 h-3" /> Hướng camera sau vào tem QR trên hạng mục{expected && <> · mong đợi <b className="font-mono">{expected}</b></>}
         </div>
         {error && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 text-center px-6">
@@ -62,7 +62,7 @@ export const QrScannerPanel = memo(function QrScannerPanel({ expected, onResult 
         )}
       </div>
       <form
-        className="flex items-center gap-2"
+        className="flex flex-wrap sm:flex-nowrap items-center gap-2"
         onSubmit={e => {
           e.preventDefault()
           if (manual.trim()) onResult(manual.trim().toUpperCase(), 'manual')
@@ -73,9 +73,9 @@ export const QrScannerPanel = memo(function QrScannerPanel({ expected, onResult 
           value={manual}
           onChange={e => setManual(e.target.value)}
           placeholder="Nhập mã QR khi tem hỏng / không quét được"
-          className="flex-1 h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-[12px] font-mono text-foreground"
+          className="flex-1 min-w-0 h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-[12px] font-mono text-foreground"
         />
-        <button type="submit" disabled={!manual.trim()} className="h-9 px-4 rounded-lg border border-white/10 text-[12px] text-foreground disabled:opacity-40">
+        <button type="submit" disabled={!manual.trim()} className="h-10 px-4 rounded-lg border border-white/10 text-[12px] text-foreground disabled:opacity-40 w-full sm:w-auto">
           Xác nhận mã
         </button>
       </form>
