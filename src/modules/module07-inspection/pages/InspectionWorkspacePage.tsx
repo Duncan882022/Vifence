@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronRight, Save, ScanLine, Tablet } from 'lucide-react'
+import { ChevronRight, Filter, ListTree, Save, ScanLine, Tablet } from 'lucide-react'
 import { Header } from '@/components/common/Header/Header'
 import { PageLayout } from '@/components/common/PageLayout/PageLayout'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { cn } from '@/utils/cn'
 import { DAM_HOP_ASSET_ID, INSPECTION_PROJECT } from '../data/inspectionProject'
 import {
@@ -84,7 +85,10 @@ export function InspectionWorkspacePage() {
   const assignStage = useInspectionWorkspace(s => s.assignStage)
 
   const [supplementOpen, setSupplementOpen] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
   const [stagePreview, setStagePreview] = useState<InspectionStageId | null>(null)
+  /** 3 cột chỉ khi đủ rộng; iPad / mobile dùng bố cục xếp chồng + cây cấu kiện dạng drawer. */
+  const wide = useMediaQuery('(min-width: 1280px)')
 
   useEffect(() => {
     if (asset) setAsset(asset.id)
@@ -181,6 +185,53 @@ export function InspectionWorkspacePage() {
   const loading = workspaceIsLoading(loadPhase)
   const field = mode === 'field'
   const gaps = missingPlanGaps(allObjects, allChecklists)
+  const activeFilters = kindFilters.length + originFilters.length + (stageFilter === 'all' ? 0 : 1)
+
+  const filters = (
+    <div className="space-y-1.5">
+      <p className="text-[9px] text-muted-foreground">Giai đoạn</p>
+      <FilterChips
+        options={(['gd1', 'gd2', 'gd3'] as const).map(id => ({ id, label: STAGE_META[id].short }))}
+        value={stageFilter}
+        onToggle={id => setStage(id)}
+        onAll={() => setStage('all')}
+      />
+      <p className="text-[9px] text-muted-foreground pt-1">Đối tượng</p>
+      <FilterChips
+        options={KIND_OPTIONS}
+        value={kindFilters}
+        multiple
+        counts={kindCounts}
+        onToggle={toggleKind}
+        onAll={clearKinds}
+      />
+      <p className="text-[9px] text-muted-foreground pt-1">Nguồn</p>
+      <FilterChips
+        options={ORIGIN_OPTIONS}
+        value={originFilters}
+        multiple
+        counts={originCounts}
+        onToggle={toggleOrigin}
+        onAll={clearOrigins}
+      />
+    </div>
+  )
+
+  const tree = (onPick: (id: string, additive: boolean) => void) => (
+    <ComponentTree
+      objects={allObjects}
+      visibleIds={visibleIds}
+      selectedIds={selectedIds}
+      hoveredId={hoveredId}
+      onSelect={onPick}
+      onHover={setHovered}
+    />
+  )
+
+  const pickFromSheet = (id: string, additive: boolean) => {
+    handleSelect(id, additive)
+    if (!additive) setTreeOpen(false)
+  }
 
   return (
     <>
@@ -188,7 +239,7 @@ export function InspectionWorkspacePage() {
         title={asset.code}
         subtitle={`${asset.name} · ${fileLabel}`}
       />
-      <PageLayout className="!p-2 sm:!p-3">
+      <PageLayout className="!p-2 sm:!p-3" scrollable={!wide}>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground shrink-0 px-1 pb-1 flex-wrap">
           <Link to={flowPaths.home()} className="hover:text-foreground">Nghiệm thu số</Link>
           <ChevronRight className="w-3 h-3" />
@@ -214,52 +265,43 @@ export function InspectionWorkspacePage() {
           />
         </div>
 
+        {!wide && !field && (
+          <div className="shrink-0 flex items-center gap-2 px-1 pb-2">
+            <button
+              type="button"
+              onClick={() => setTreeOpen(true)}
+              className="h-10 px-3 rounded-lg border border-primary/50 bg-primary/10 text-[12px] font-semibold text-foreground inline-flex items-center gap-1.5"
+            >
+              <ListTree className="w-4 h-4 text-primary" />
+              Cây cấu kiện
+              <span className="tabular-nums text-muted-foreground">{visibleObjects.length}</span>
+              {activeFilters > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-primary"><Filter className="w-3 h-3" />{activeFilters}</span>
+              )}
+            </button>
+            <span className="text-[11px] text-muted-foreground truncate min-w-0">
+              {selected.length === 0 ? 'Chạm cấu kiện trên mô hình hoặc trong cây' : selected.length === 1 ? selected[0].name : `${selected.length} cấu kiện đã chọn`}
+            </span>
+          </div>
+        )}
+
         <div className={cn(
-          'flex-1 min-h-0 grid gap-2',
-          field ? 'grid-cols-1 lg:grid-cols-[1fr_320px]' : 'grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(260px,300px)]',
+          'grid gap-2',
+          wide ? 'flex-1 min-h-0' : '',
+          !wide ? 'grid-cols-1' : field ? 'grid-cols-[1fr_320px]' : 'grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(260px,300px)]',
         )}>
-          {!field && (
-            <aside className="min-h-0 rounded-lg border border-[#1e2433] bg-[#0d1117] p-2.5 flex flex-col">
+          {wide && !field && (
+            <aside className="min-h-0 rounded-lg border border-[#1e2433] bg-[#0d1117] p-2.5 flex flex-col overflow-hidden">
               <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-2">Component tree</p>
-              <div className="mb-2 space-y-1.5">
-                <p className="text-[9px] text-muted-foreground">Giai đoạn</p>
-                <FilterChips
-                  options={(['gd1', 'gd2', 'gd3'] as const).map(id => ({ id, label: STAGE_META[id].short }))}
-                  value={stageFilter}
-                  onToggle={id => setStage(id)}
-                  onAll={() => setStage('all')}
-                />
-                <p className="text-[9px] text-muted-foreground pt-1">Đối tượng</p>
-                <FilterChips
-                  options={KIND_OPTIONS}
-                  value={kindFilters}
-                  multiple
-                  counts={kindCounts}
-                  onToggle={toggleKind}
-                  onAll={clearKinds}
-                />
-                <p className="text-[9px] text-muted-foreground pt-1">Nguồn</p>
-                <FilterChips
-                  options={ORIGIN_OPTIONS}
-                  value={originFilters}
-                  multiple
-                  counts={originCounts}
-                  onToggle={toggleOrigin}
-                  onAll={clearOrigins}
-                />
-              </div>
-              <ComponentTree
-                objects={allObjects}
-                visibleIds={visibleIds}
-                selectedIds={selectedIds}
-                hoveredId={hoveredId}
-                onSelect={handleSelect}
-                onHover={setHovered}
-              />
+              <div className="mb-2 shrink-0">{filters}</div>
+              {tree(handleSelect)}
             </aside>
           )}
 
-          <section className="relative min-h-[320px] lg:min-h-0 rounded-lg border border-[#1e2433] bg-[#070b12] overflow-hidden">
+          <section className={cn(
+            'relative rounded-lg border border-[#1e2433] bg-[#070b12] overflow-hidden touch-none',
+            wide ? 'min-h-0' : 'h-[52dvh] min-h-[280px] max-h-[640px]',
+          )}>
             <BimViewer
               assetId={asset.id}
               objects={allObjects}
@@ -314,7 +356,7 @@ export function InspectionWorkspacePage() {
               3D BIM · {fileLabel} (gộp)
             </div>
             {allObjects.length > 0 && (
-              <div className="absolute right-2 top-2 flex items-center gap-2 text-[9px] text-muted-foreground bg-black/40 px-1.5 py-0.5 rounded">
+              <div className="absolute right-2 top-2 hidden sm:flex items-center gap-2 text-[9px] text-muted-foreground bg-black/40 px-1.5 py-0.5 rounded">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#fb923c]" />IFC</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#fb923c]/50" />Đề xuất (nhạt)</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border border-[#38bdf8]/60" />Ống gen</span>
@@ -323,7 +365,8 @@ export function InspectionWorkspacePage() {
           </section>
 
           <aside className={cn(
-            'min-h-0 rounded-lg border border-[#1e2433] bg-[#0d1117] p-2.5 overflow-y-auto',
+            'rounded-lg border border-[#1e2433] bg-[#0d1117] p-2.5',
+            wide && 'min-h-0 overflow-y-auto',
             field && 'text-[13px] [&_button]:py-2.5 [&_button]:text-xs',
           )}>
             <InspectionPanel
@@ -389,6 +432,23 @@ export function InspectionWorkspacePage() {
           </div>
         </div>
       </PageLayout>
+
+      {!wide && (
+        <Sheet open={treeOpen} onOpenChange={setTreeOpen}>
+          <SheetContent side="bottom" className="h-[85dvh] max-h-[85dvh] bg-[#0d1117] border-[#1e2433] p-3 gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <SheetHeader>
+              <SheetTitle>Cây cấu kiện · {visibleObjects.length}</SheetTitle>
+            </SheetHeader>
+            <details className="shrink-0 rounded-lg border border-[#1e2433] px-2.5 py-2" open={activeFilters > 0}>
+              <summary className="text-[12px] font-semibold text-foreground cursor-pointer inline-flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-primary" /> Bộ lọc{activeFilters > 0 ? ` · ${activeFilters} đang bật` : ''}
+              </summary>
+              <div className="pt-2">{filters}</div>
+            </details>
+            <div className="flex-1 min-h-0">{tree(pickFromSheet)}</div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <Sheet open={supplementOpen} onOpenChange={setSupplementOpen}>
         <SheetContent side="right" className="bg-[#0d1117] border-[#1e2433]">

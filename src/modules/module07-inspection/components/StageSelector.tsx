@@ -42,8 +42,8 @@ export function StageSelector({ value, onChange, counts, statuses, onHover }: St
             )}
             <button
               type="button"
-              onMouseEnter={() => onHover?.(stage)}
-              onMouseLeave={() => onHover?.(null)}
+              onPointerEnter={e => { if (e.pointerType === 'mouse') onHover?.(stage) }}
+              onPointerLeave={e => { if (e.pointerType === 'mouse') onHover?.(null) }}
               onClick={() => onChange(active ? 'all' : stage)}
               className={cn(
                 'flex-1 min-w-0 rounded-lg border px-2 py-1.5 text-left transition-colors',
@@ -88,7 +88,7 @@ export function FilterChips<T extends string>({
           type="button"
           onClick={onAll}
           className={cn(
-            'px-2 py-0.5 rounded text-[9px] font-semibold border transition-colors',
+            'px-2.5 py-1.5 lg:px-2 lg:py-0.5 rounded text-[10px] lg:text-[9px] font-semibold border transition-colors',
             allOn ? 'border-primary bg-primary/15 text-primary' : 'border-[#1e2433] text-muted-foreground hover:text-foreground',
           )}
         >
@@ -107,7 +107,7 @@ export function FilterChips<T extends string>({
             title={empty ? 'Không có trong file IFC đang mở' : undefined}
             onClick={() => { if (!empty) onToggle(opt.id) }}
             className={cn(
-              'px-2 py-0.5 rounded text-[9px] font-semibold border transition-colors',
+              'px-2.5 py-1.5 lg:px-2 lg:py-0.5 rounded text-[10px] lg:text-[9px] font-semibold border transition-colors',
               empty
                 ? 'border-[#1e2433] text-muted-foreground/40 cursor-not-allowed'
                 : on ? 'border-primary bg-primary/15 text-primary' : 'border-[#1e2433] text-muted-foreground hover:text-foreground',
