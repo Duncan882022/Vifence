@@ -5,6 +5,8 @@ import { ASSETS, H1_HELMET_ID, INSPECTORS, STAGES } from '../data/workflow/hnqnP
 import { SEED_AUDIT, SEED_SESSIONS } from '../data/workflow/seedHistory'
 import { clearBlobs } from '../services/workflow/evidenceBlobs'
 import { issueIdFor, sessionIdFor, uid } from '../services/workflow/ids'
+import { canReinspectFailedOnly, carryOverResults } from '../services/workflow/reinspection'
+import { signerBlockReason } from '../services/workflow/reviewLogic'
 import { isPaused, sessionsFor } from '../services/workflow/sessionLogic'
 import type {
   AiFinding,
@@ -20,6 +22,7 @@ import type {
   Issue,
   IssueStatus,
   ReviewDecision,
+  SessionScope,
   SessionVideo,
   SignOff,
   StageCode,
@@ -33,6 +36,7 @@ export interface StartSessionInput {
   simulatedH1: boolean
   focusComponent?: ComponentId
   briefs?: BriefAck[]
+  scope?: SessionScope
 }
 
 export type NewIssueInput = Omit<Issue, 'id' | 'status' | 'history'>
@@ -97,14 +101,17 @@ export const useInspectionFlowStore = create<FlowState>()(
         audit: [...state.audit, { id: uid('audit'), at: now(), by: state.actor.name, assetId, sessionId, action, detail }],
       })),
 
-      startSession: ({ assetId, stage, qr, simulatedH1, focusComponent, briefs }) => {
+      startSession: ({ assetId, stage, qr, simulatedH1, focusComponent, briefs, scope = 'full' }) => {
         const state = get()
         const asset = ASSETS.find(a => a.id === assetId)
         if (!asset) throw new Error(`Không tìm thấy hạng mục ${assetId}`)
         const previous = sessionsFor(Object.values(state.sessions), assetId, stage)
+        const last = previous[previous.length - 1]
         const attempt = previous.length + 1
         const id = sessionIdFor(asset.code, stage, attempt)
         const at = now()
+        const partial = scope === 'failed_only' && canReinspectFailedOnly(last)
+        const results = partial ? carryOverResults(last, criteriaForStage(stage), at) : {}
         const session: InspectionSession = {
           id,
           assetId,
@@ -125,16 +132,18 @@ export const useInspectionFlowStore = create<FlowState>()(
           },
           startedAt: at,
           pauses: [],
-          results: {},
+          results,
           sync: 'pending',
           syncProgress: 0,
           reviews: {},
-          previousSessionId: previous[previous.length - 1]?.id,
+          previousSessionId: last?.id,
+          scope: partial ? 'failed_only' : 'full',
           focusComponent,
           briefs: briefs ?? [],
         }
         set({ sessions: { ...state.sessions, [id]: session } })
-        get().log('session.start', assetId, `${STAGES[stage].code} ${STAGES[stage].label} · lần ${attempt} · khoá AFC ${asset.afc.revision} / ${STAGES[stage].checklistRevision}`, id)
+        const scopeNote = partial ? ` · chỉ mục chưa đạt (kế thừa ${Object.keys(results).length} PASS từ ${last.id})` : ''
+        get().log('session.start', assetId, `${STAGES[stage].code} ${STAGES[stage].label} · lần ${attempt} · khoá AFC ${asset.afc.revision} / ${STAGES[stage].checklistRevision}${scopeNote}`, id)
         if (simulatedH1) get().log('h1.simulated', assetId, 'H1 offline — dùng luồng mô phỏng POC', id)
         return id
       },
@@ -259,7 +268,7 @@ export const useInspectionFlowStore = create<FlowState>()(
 
       signOff: (sessionId, input) => {
         const s = get().sessions[sessionId]
-        if (!s || s.signOff) return
+        if (!s || s.signOff || signerBlockReason(s, get().actor)) return
         const at = now()
         const full: SignOff = { ...input, inspector: get().actor, at, sessionId }
         set(state => patchSession(state, sessionId, x => ({ ...x, status: 'signed', signOff: full })))

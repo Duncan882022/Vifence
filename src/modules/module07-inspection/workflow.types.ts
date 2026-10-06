@@ -262,7 +262,14 @@ export interface CriterionResult {
   comment?: string
   updatedAt: string
   videoTs?: number
+  /** Kết quả do hệ thống chấm theo dung sai từ số đo — KS vẫn có thể đổi. */
+  autoVerdict?: string
+  /** Kết quả PASS kế thừa từ phiên trước khi nghiệm thu lại một phần. */
+  carriedFrom?: string
 }
+
+/** Phạm vi phiên nghiệm thu lại: chỉ mục chưa đạt hoặc toàn bộ checklist. */
+export type SessionScope = 'full' | 'failed_only'
 
 export type LiveAxis = 'connecting' | 'live' | 'lost' | 'off'
 export type RecordAxis = 'off' | 'recording' | 'local'
@@ -380,6 +387,7 @@ export interface InspectionSession {
   reviews: Record<string, ReviewDecision>
   signOff?: SignOff
   previousSessionId?: string
+  scope?: SessionScope
   /** Component Inspector chọn khi đọc Brief — tab mở đầu tiên khi live. */
   focusComponent?: ComponentId
   briefs?: BriefAck[]

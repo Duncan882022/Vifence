@@ -55,7 +55,7 @@ export function runMockAiAnalysis(
   criteria: CriterionDef[],
   evidence: Evidence[],
 ): AiFinding[] {
-  const capable = criteria.filter(c => c.aiCapable)
+  const capable = criteria.filter(c => c.aiCapable && !session.results[c.id]?.carriedFrom)
   const duration = Math.max(sessionElapsedSec(session), capable.length * CLIP_SEC)
   const span = duration / Math.max(capable.length, 1)
   return capable.map((c, idx) => {

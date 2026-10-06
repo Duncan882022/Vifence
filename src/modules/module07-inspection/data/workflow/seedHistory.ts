@@ -39,7 +39,7 @@ export const SEED_SESSIONS: InspectionSession[] = [
     reviews: {},
     signOff: {
       result: 'pass',
-      inspector: { ...INSPECTORS.inspector },
+      inspector: { ...INSPECTORS.senior },
       at: '2026-09-26T02:05:00.000Z',
       signatureDataUrl: '',
       revision: 'AFC Rev.C · CL-DH-GD01 v1.2',
@@ -53,5 +53,5 @@ export const SEED_SESSIONS: InspectionSession[] = [
 export const SEED_AUDIT: AuditEvent[] = [
   { id: 'seed-a1', at: GD01_START, by: INSPECTORS.inspector.name, assetId: S002.id, sessionId: 'INS-S002-G01-0001', action: 'session.start', detail: 'Bắt đầu GĐ01 Ván khuôn · QR SH-S002' },
   { id: 'seed-a2', at: GD01_END, by: INSPECTORS.inspector.name, assetId: S002.id, sessionId: 'INS-S002-G01-0001', action: 'session.finish', detail: '9/9 tiêu chí hoàn thành' },
-  { id: 'seed-a3', at: '2026-09-26T02:05:00.000Z', by: INSPECTORS.inspector.name, assetId: S002.id, sessionId: 'INS-S002-G01-0001', action: 'signoff', detail: 'PASS · AFC Rev.C' },
+  { id: 'seed-a3', at: '2026-09-26T02:05:00.000Z', by: INSPECTORS.senior.name, assetId: S002.id, sessionId: 'INS-S002-G01-0001', action: 'signoff', detail: 'PASS · AFC Rev.C' },
 ]

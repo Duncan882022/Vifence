@@ -45,6 +45,7 @@ export function validateBeforeFinish(
     const status = r?.status ?? 'not_checked'
     const ev = bySession.filter(e => e.ctx.criterionId === c.id)
     if (status !== 'not_checked') completed += 1
+    if (r?.carriedFrom) continue
 
     if (status === 'not_checked') {
       problems.push({ kind: c.mandatory ? 'mandatory_incomplete' : 'not_checked', criterionId: c.id, message: `${c.code} ${c.title}` })
