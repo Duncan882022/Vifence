@@ -129,7 +129,7 @@ export function StagePreparePage() {
   }
 
   const h1Checks: { label: string; ok: boolean; detail: string; mock?: boolean }[] = h1 ? [
-    { label: 'Helmet ID', ok: h1.configured, detail: `${h1.helmetId}${h1.configured ? '' : ' · chưa cấu hình MediaMTX'}` },
+    { label: 'Helmet ID', ok: h1.configured || simulated, detail: `${h1.helmetId}${h1.configured ? '' : simulated ? ' · mô phỏng (POC)' : ' · chưa cấu hình MediaMTX'}` },
     { label: 'Online', ok: h1.online || simulated, detail: h1.online ? 'Đang publish lên MediaMTX' : simulated ? 'Mô phỏng (POC)' : 'Không có luồng từ mũ' },
     { label: 'Pin', ok: h1.batteryPct > 20, detail: `${h1.batteryPct}%`, mock: true },
     { label: 'Sẵn sàng ghi', ok: h1.recordingReady, detail: 'Sẵn sàng ghi', mock: true },

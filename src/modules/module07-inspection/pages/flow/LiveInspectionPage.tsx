@@ -335,7 +335,7 @@ export function LiveInspectionPage() {
           </section>
 
           <section className="flex flex-col min-h-[min(52vh,520px)] lg:min-h-0 min-w-0 rounded-lg border border-[#1e2433] bg-[#0b0f1a]">
-            <div className="flex gap-1 p-2 border-b border-[#1e2433] overflow-x-auto shrink-0">
+            <div className="flex gap-1.5 px-2 pt-3 pb-2 pr-3 border-b border-[#1e2433] overflow-x-auto shrink-0">
               {def.components.map(cid => {
                 const list = criteria.filter(c => c.component === cid)
                 const n = list.filter(c => (session.results[c.id]?.status ?? 'not_checked') !== 'not_checked').length
