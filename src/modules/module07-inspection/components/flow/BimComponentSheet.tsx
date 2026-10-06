@@ -7,6 +7,7 @@ import { BimViewer } from '../BimViewer'
 import { BIM_PACKAGE_FOR_ASSET, COMPONENTS, STAGES } from '../../data/workflow/hnqnProject'
 import { flowPaths } from '../../services/workflow/flowNav'
 import { componentObjectSets } from '../../services/workflow/componentBim'
+import { KIND_LABEL_VI } from '../../services/workflow/bimView'
 import type { BimObject } from '../../types'
 import type { ComponentId, StageCode } from '../../workflow.types'
 
@@ -19,22 +20,23 @@ interface Props {
   onComponentChange?: (component: ComponentId) => void
 }
 
-const noop = () => {}
-
-/** VIEW BIM — mô hình tham chiếu, tự cô lập + highlight component đang kiểm. Không có IFC Tree. */
+/** VIEW BIM — mô hình tham chiếu, tự cô lập + highlight component đang kiểm. */
 export default function BimComponentSheet({ open, onOpenChange, assetId, stage, component, onComponentChange }: Props) {
   const [objects, setObjects] = useState<BimObject[]>([])
   const [progress, setProgress] = useState<{ pct: number; message: string } | null>({ pct: 0, message: 'Đang tải mô hình...' })
   const [error, setError] = useState<string | null>(null)
+  const [pickedId, setPickedId] = useState<string | null>(null)
   const def = STAGES[stage]
   const comp = COMPONENTS[component]
   const packageId = BIM_PACKAGE_FOR_ASSET[assetId] ?? assetId
 
   const sets = useMemo(() => componentObjectSets(objects, comp, def.bimKinds), [objects, comp, def.bimKinds])
   const visibleIds = useMemo(() => new Set([...sets.focusIds, ...sets.contextIds]), [sets])
+  const picked = pickedId ? objects.find(o => o.id === pickedId) : undefined
   const onCatalog = useCallback((items: BimObject[]) => setObjects(items), [])
   const onProgress = useCallback((pct: number, message: string) => setProgress({ pct, message }), [])
   const onReady = useCallback(() => setProgress(null), [])
+  const onSelect = useCallback((id: string) => setPickedId(id || null), [])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -48,21 +50,21 @@ export default function BimComponentSheet({ open, onOpenChange, assetId, stage, 
             {sets.focusIds.length} cấu kiện{sets.barCount ? ` · ${sets.barCount} thanh` : ''}
           </p>
         </SheetHeader>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
           {def.components.map(c => (
             <button
               key={c}
               type="button"
-              onClick={() => onComponentChange?.(c)}
+              onClick={() => { onComponentChange?.(c); setPickedId(null) }}
               className={cn(
-                'h-8 px-3 rounded-lg border text-[11px] font-semibold',
+                'h-8 px-3 rounded-lg border text-[11px] font-semibold whitespace-nowrap shrink-0',
                 c === component ? 'bg-primary/15 border-primary/50 text-foreground' : 'border-white/10 text-muted-foreground hover:text-foreground',
               )}
             >
               {COMPONENTS[c].label}
             </button>
           ))}
-          <Link to={flowPaths.bim(assetId, stage, component)} className="ml-auto h-8 inline-flex items-center px-3 rounded-lg border border-white/10 text-[11px] text-muted-foreground hover:text-foreground">
+          <Link to={flowPaths.bim(assetId, stage, component)} className="ml-auto h-8 inline-flex items-center px-3 rounded-lg border border-white/10 text-[11px] text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0">
             Phóng to
           </Link>
         </div>
@@ -72,13 +74,13 @@ export default function BimComponentSheet({ open, onOpenChange, assetId, stage, 
               assetId={packageId}
               objects={objects}
               visibleIds={visibleIds}
-              selectedIds={[]}
+              selectedIds={pickedId ? [pickedId] : []}
               hoveredId={null}
               highlightIds={sets.focusIds}
               isolatedIds={null}
               stageFilter="all"
-              onSelect={noop}
-              onHover={noop}
+              onSelect={onSelect}
+              onHover={() => {}}
               onCatalog={onCatalog}
               onProgress={onProgress}
               onReady={onReady}
@@ -93,6 +95,12 @@ export default function BimComponentSheet({ open, onOpenChange, assetId, stage, 
                   {progress?.message} {progress ? `${Math.round(progress.pct)}%` : ''}
                 </>
               )}
+            </div>
+          )}
+          {picked && (
+            <div className="absolute bottom-2 left-2 right-2 rounded-lg border border-white/15 bg-[#070b12]/90 px-3 py-2">
+              <p className="text-[12px] font-semibold text-foreground truncate">{picked.name || picked.ifcClass}</p>
+              <p className="text-[10px] text-muted-foreground">{KIND_LABEL_VI[picked.kind]}</p>
             </div>
           )}
         </div>

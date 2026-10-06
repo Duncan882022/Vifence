@@ -35,3 +35,16 @@ export function componentObjectSets(
   }
   return { focusIds, contextIds, barCount }
 }
+
+export function mergeComponentSets(parts: ComponentBimSets[]): ComponentBimSets {
+  const focus = new Set<string>()
+  const context = new Set<string>()
+  let barCount = 0
+  for (const part of parts) {
+    part.focusIds.forEach(id => focus.add(id))
+    part.contextIds.forEach(id => context.add(id))
+    barCount += part.barCount
+  }
+  for (const id of focus) context.delete(id)
+  return { focusIds: [...focus], contextIds: [...context], barCount }
+}
