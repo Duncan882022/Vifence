@@ -21,20 +21,20 @@ interface Token {
 }
 
 export const CRITERION_STATUS_META: Record<CriterionStatus, Token> = {
-  not_checked: { label: 'NOT CHECKED', className: 'bg-gray-500/10 text-gray-400 border-gray-500/25' },
-  pass: { label: 'PASS', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
-  fail: { label: 'FAIL', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
-  review: { label: 'REVIEW', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-  na: { label: 'N/A', className: 'bg-slate-500/10 text-slate-400 border-slate-500/25' },
+  not_checked: { label: 'Chưa chấm', className: 'bg-gray-500/10 text-gray-400 border-gray-500/25' },
+  pass: { label: 'Đạt', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
+  fail: { label: 'Không đạt', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
+  review: { label: 'Cần xem', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  na: { label: 'Không áp dụng', className: 'bg-slate-500/10 text-slate-400 border-slate-500/25' },
 }
 
-export const CRITERION_STATUS_ORDER: CriterionStatus[] = ['pass', 'fail', 'review', 'na']
+export const CRITERION_STATUS_ORDER: CriterionStatus[] = ['pass', 'fail', 'na']
 
 export const AI_VERDICT_META: Record<AiVerdict, Token> = {
-  pass_candidate: { label: 'PASS CANDIDATE', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
-  review: { label: 'REVIEW', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-  not_confirmed: { label: 'NOT CONFIRMED', className: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
-  possible_deviation: { label: 'POSSIBLE DEVIATION', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
+  pass_candidate: { label: 'Đạt (gợi ý)', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
+  review: { label: 'Cần xem', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  not_confirmed: { label: 'Chưa xác nhận', className: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+  possible_deviation: { label: 'Có thể lệch', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
 }
 
 export const SYNC_META: Record<SyncState, Token> = {
@@ -54,28 +54,28 @@ export const CAMERA_STATE_META: Record<CameraDisplayState, Token & { pulse: bool
 }
 
 export const ISSUE_STATUS_META: Record<IssueStatus, Token> = {
-  open: { label: 'OPEN', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
-  rectified: { label: 'RECTIFIED', className: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
-  waiting_reinspection: { label: 'WAITING RE-INSPECTION', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-  closed: { label: 'CLOSED', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
+  open: { label: 'Mở', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
+  rectified: { label: 'Đã sửa', className: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
+  waiting_reinspection: { label: 'Chờ nghiệm thu lại', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  closed: { label: 'Đóng', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
 }
 
 export const ISSUE_FLOW: IssueStatus[] = ['open', 'rectified', 'waiting_reinspection', 'closed']
 
 export const SIGNOFF_META: Record<SignOffResult, Token> = {
-  pass: { label: 'PASS', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
-  require_rectification: { label: 'REQUIRE RECTIFICATION', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
-  reinspection: { label: 'RE-INSPECTION', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  pass: { label: 'Đạt', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
+  require_rectification: { label: 'Yêu cầu khắc phục', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
+  reinspection: { label: 'Nghiệm thu lại', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
 }
 
 export const STAGE_PROGRESS_META: Record<StageProgress, Token> = {
-  pending: { label: 'PENDING', className: 'bg-gray-500/10 text-gray-400 border-gray-500/25' },
-  ready: { label: 'READY', className: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
-  in_progress: { label: 'IN PROGRESS', className: 'bg-sky-500/10 text-sky-300 border-sky-500/40' },
-  in_review: { label: 'IN REVIEW', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-  pass: { label: 'PASS', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
-  require_rectification: { label: 'REQUIRE RECTIFICATION', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
-  reinspection: { label: 'RE-INSPECTION', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  pending: { label: 'Chưa tới', className: 'bg-gray-500/10 text-gray-400 border-gray-500/25' },
+  ready: { label: 'Chờ', className: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
+  in_progress: { label: 'Đang làm', className: 'bg-sky-500/10 text-sky-300 border-sky-500/40' },
+  in_review: { label: 'Chờ ký', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  pass: { label: 'Đạt', className: 'bg-green-500/10 text-green-400 border-green-500/30' },
+  require_rectification: { label: 'Không đạt', className: 'bg-red-500/10 text-red-400 border-red-500/30' },
+  reinspection: { label: 'Nghiệm thu lại', className: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
 }
 
 export const SOURCE_META: Record<SourceKind, Token> = {

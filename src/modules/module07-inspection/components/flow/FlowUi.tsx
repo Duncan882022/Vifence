@@ -2,8 +2,6 @@ import { Fragment, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { POC_MOCK_LABEL } from '../../data/workflow/hnqnProject'
-import { SOURCE_META } from '../../data/workflow/meta'
 import type { SourceKind, SourceRef } from '../../workflow.types'
 
 export function TokenBadge({ token, size = 'normal', pulse, className }: {
@@ -29,23 +27,12 @@ export function TokenBadge({ token, size = 'normal', pulse, className }: {
   )
 }
 
-export function SourceBadge({ source, showRef = false }: { source: SourceRef | SourceKind; showRef?: boolean }) {
-  const kind = typeof source === 'string' ? source : source.kind
-  const ref = typeof source === 'string' ? undefined : source.ref
-  return (
-    <span className="inline-flex items-center gap-1 min-w-0" title={kind === 'MOCK' ? POC_MOCK_LABEL : ref}>
-      <TokenBadge token={SOURCE_META[kind]} size="small" />
-      {showRef && ref && <span className="text-[9px] text-muted-foreground truncate">{ref}</span>}
-    </span>
-  )
+export function SourceBadge(_props: { source: SourceRef | SourceKind; showRef?: boolean }) {
+  return null
 }
 
-export function PocMockBanner({ className }: { className?: string }) {
-  return (
-    <p className={cn('text-[9px] font-bold tracking-wider text-fuchsia-300/80 border border-dashed border-fuchsia-500/30 rounded px-2 py-1', className)}>
-      {POC_MOCK_LABEL} · dữ liệu gắn nhãn MOCK không phải từ IFC/AFC thật
-    </p>
-  )
+export function PocMockBanner(_props: { className?: string }) {
+  return null
 }
 
 export interface Crumb {

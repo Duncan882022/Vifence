@@ -119,6 +119,17 @@ export const STAGES: Record<StageCode, StageDef> = {
 
 export const STAGE_ORDER: StageCode[] = ['GD01', 'GD02', 'GD03', 'GD04']
 
+export const MATRIX_ROWS: ComponentId[] = [
+  'bottom',
+  'web-left',
+  'web-right',
+  'deck',
+  'diaphragm',
+  'cable-bottom',
+  'cable-web',
+  'anchors',
+]
+
 export const DOCUMENTS: InspectionDocument[] = [
   { id: 'doc-afc', kind: 'AFC', code: 'SH-BG-RB-101', title: 'Bản vẽ thi công dầm hộp S002', revision: 'Rev.C', status: 'approved', source: 'MOCK', date: '2026-09-02' },
   { id: 'doc-bbs', kind: 'BBS', code: 'BBS-S002', title: 'Bảng thống kê cốt thép dầm S002', revision: 'Rev.B', status: 'approved', source: 'MOCK', stage: 'GD02', date: '2026-09-04' },

@@ -56,12 +56,7 @@ export function validateBeforeFinish(
       problems.push({ kind: 'unresolved_review', criterionId: c.id, message: `${c.code} đang REVIEW` })
     }
     if (status === 'fail' && (!r?.comment?.trim() || ev.length === 0)) {
-      problems.push({ kind: 'fail_without_support', criterionId: c.id, message: `${c.code} FAIL cần comment + bằng chứng` })
-    }
-    if ((c.method === 'measurement' || c.method === 'test') && !ev.some(e => e.type === 'measurement' || e.type === 'test')) {
-      problems.push({ kind: 'missing_measurement', criterionId: c.id, message: `${c.code} chưa nhập ${c.method === 'test' ? 'kết quả thí nghiệm' : 'số đo'}` })
-    } else if (c.evidenceRequired && c.method === 'camera' && ev.length === 0) {
-      problems.push({ kind: 'missing_evidence', criterionId: c.id, message: `${c.code} chưa có snapshot / ghi âm` })
+      problems.push({ kind: 'fail_without_support', criterionId: c.id, message: `${c.title}: cần ghi chú và bằng chứng` })
     }
   }
 

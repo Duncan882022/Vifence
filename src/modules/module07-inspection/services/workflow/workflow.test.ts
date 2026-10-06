@@ -114,7 +114,7 @@ describe('pre-finish validation', () => {
     const kinds = new Set(v.problems.map(p => p.kind))
     expect(kinds.has('mandatory_incomplete')).toBe(true)
     expect(kinds.has('fail_without_support')).toBe(true)
-    expect(v.problems.some(p => p.kind === 'missing_measurement' && p.criterionId === 'GD02-2.05')).toBe(true)
+    expect(v.problems.some(p => p.criterionId === 'GD02-2.05')).toBe(false)
     expect(v.ok).toBe(false)
   })
 })

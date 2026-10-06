@@ -136,7 +136,6 @@ export const StagesTab = memo(function StagesTab({ asset }: { asset: AssetRecord
       {asset.stages.map(st => {
         const def = STAGES[st]
         const criteria = criteriaForStage(st)
-        const ifc = criteria.filter(c => c.source.kind === 'IFC').length
         const list = sessionsFor(sessions, asset.id, st)
         return (
           <Card
@@ -147,9 +146,7 @@ export const StagesTab = memo(function StagesTab({ asset }: { asset: AssetRecord
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-muted-foreground">
               <span>Checklist {def.checklistRevision}</span>
               <span>{criteria.filter(c => c.group === 'quantity').length} khối lượng · {criteria.filter(c => c.group === 'quality').length} chất lượng</span>
-              <span className="inline-flex items-center gap-1"><SourceBadge source="IFC" /> {ifc}</span>
-              <span className="inline-flex items-center gap-1"><SourceBadge source="MOCK" /> {criteria.length - ifc}</span>
-              {def.dependsOn && <span>Phụ thuộc {STAGES[def.dependsOn].code}</span>}
+              {def.dependsOn && <span>Phụ thuộc {STAGES[def.dependsOn].label}</span>}
             </div>
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1"><ClipboardList className="w-3 h-3" /> Lưu ý nghiệm thu:</span>

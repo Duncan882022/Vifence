@@ -10,9 +10,12 @@ export const flowPaths = {
   asset: (assetId: string, tab?: PassportTab) => `/inspection/asset/${assetId}${tab && tab !== 'overview' ? `?tab=${tab}` : ''}`,
   prepare: (assetId: string, stage: StageCode) => `/inspection/asset/${assetId}/stage/${stage}/prepare`,
   engineering: (assetId: string) => `/inspection/asset/${assetId}/engineering`,
-  live: (sessionId: string) => `/inspection/session/${sessionId}/live`,
-  finish: (sessionId: string) => `/inspection/session/${sessionId}/finish`,
-  review: (sessionId: string) => `/inspection/session/${sessionId}/review`,
+  inspect: (sessionId: string, component?: string) =>
+    `/inspection/session/${sessionId}/inspect${component ? `?c=${component}` : ''}`,
+  sign: (sessionId: string) => `/inspection/session/${sessionId}/sign`,
+  live: (sessionId: string) => `/inspection/session/${sessionId}/inspect`,
+  finish: (sessionId: string) => `/inspection/session/${sessionId}/sign`,
+  review: (sessionId: string) => `/inspection/session/${sessionId}/sign`,
   report: (sessionId: string) => `/inspection/session/${sessionId}/report`,
 }
 

@@ -21,23 +21,23 @@ export function stageAction(assetId: string, stage: StageCode, sessions: Inspect
     return { label: 'Chưa sẵn sàng', hint: prev ? `Chờ ${prev.code} ${prev.label} PASS` : 'Chờ điều kiện', primary: false }
   }
   if (progress === 'ready') {
-    return { label: `Nghiệm thu ${def.code}`, to: flowPaths.prepare(assetId, stage), hint: 'Kiểm tra trước → Bắt đầu', primary: true }
+    return { label: `Nghiệm thu ${def.label}`, to: flowPaths.asset(assetId), hint: 'Mở ma trận cấu phần', primary: true }
   }
   if (last && (progress === 'in_progress' || progress === 'in_review')) {
     const step = sessionResumeStep(last)
-    const label = step === 'live' ? 'Tiếp tục phiên' : step === 'finish' ? 'Đồng bộ video' : 'Xem xét kết quả'
-    const to = step === 'live' ? flowPaths.live(last.id) : step === 'finish' ? flowPaths.finish(last.id) : flowPaths.review(last.id)
+    const label = step === 'live' ? 'Tiếp tục nghiệm thu' : 'Ký nghiệm thu'
+    const to = step === 'live' ? flowPaths.inspect(last.id) : flowPaths.sign(last.id)
     return { label, to, hint: last.id, primary: true }
   }
   if (progress === 'pass' && last) {
-    return { label: 'Xem báo cáo', to: flowPaths.report(last.id), hint: `${last.id} · PASS`, primary: false }
+    return { label: 'Xem biên bản', to: flowPaths.sign(last.id), hint: `${last.id} · Đạt`, primary: false }
   }
   const pending = openIssues(issues, assetId, stage)
   const blocking = pending.filter(i => i.status !== 'waiting_reinspection')
   if (blocking.length) {
-    return { label: 'Xử lý issue', to: flowPaths.asset(assetId, 'issues'), hint: `${blocking.length} issue chưa khắc phục xong`, primary: true }
+    return { label: 'Xử lý lỗi', to: flowPaths.asset(assetId), hint: `${blocking.length} lỗi chưa khắc phục`, primary: true }
   }
-  return { label: 'Nghiệm thu lại', to: flowPaths.prepare(assetId, stage), hint: `Tạo phiên lần ${(last?.attempt ?? 0) + 1} · chỉ mục chưa đạt`, primary: true }
+  return { label: 'Nghiệm thu lại', to: flowPaths.asset(assetId), hint: `Tạo phiên lần ${(last?.attempt ?? 0) + 1}`, primary: true }
 }
 
 /** Việc cần làm tiếp theo của hạng mục (giai đoạn đầu tiên có hành động chính). */
@@ -63,9 +63,8 @@ export function qrEntryTarget(
   issues: Issue[],
   qr: { value: string; method: 'camera' | 'manual' },
 ): string {
-  const next = nextAssetAction(asset, sessions, issues)
-  const to = next?.action.to
-  if (!to) return flowPaths.asset(asset.id)
-  if (to !== flowPaths.prepare(asset.id, next.stage)) return to
-  return `${to}?qr=${encodeURIComponent(qr.value)}&qrm=${qr.method}`
+  void sessions
+  void issues
+  void qr
+  return flowPaths.asset(asset.id)
 }
