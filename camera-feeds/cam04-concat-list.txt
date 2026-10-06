@@ -1,0 +1,7 @@
+# Manifest ghép ttdv-a-cam04-test.mp4 — CHỈ ảnh demo (scripts/build-cam04-test-mp4.sh)
+# 0–3.5s   backend-ai/data/cam04_demo/0355.png
+# 3.5–7s   backend-ai/data/cam04_demo/0359.png
+# 7–10s    backend-ai/data/cam04_demo/0360.png
+# 10–15s   cam04-ppe-workers.jpg
+# 15–20s   cam04-pccc-scene.jpg
+# 20–25s   cam04-wah-scene.jpg
