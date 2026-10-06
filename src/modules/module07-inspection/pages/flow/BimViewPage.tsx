@@ -95,6 +95,7 @@ export function BimViewPage() {
             <button
               key={st}
               type="button"
+              data-bim="stage"
               onClick={() => setStage(st)}
               className={cn(chip, st === stage ? 'bg-primary/15 border-primary/50 text-foreground' : 'border-white/10 text-muted-foreground')}
             >
@@ -105,6 +106,7 @@ export function BimViewPage() {
         <div className={chipRow}>
           <button
             type="button"
+            data-bim="all"
             onClick={onAll}
             className={cn(chip, allComponents ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/10 text-muted-foreground')}
           >
@@ -114,6 +116,8 @@ export function BimViewPage() {
             <button
               key={c}
               type="button"
+              data-bim="part"
+              data-id={c}
               onClick={() => onComponent(c)}
               className={cn(
                 chip,
@@ -127,10 +131,13 @@ export function BimViewPage() {
           ))}
         </div>
         <div className={chipRow}>
+          <span className="text-[10px] text-muted-foreground shrink-0 self-center pl-1">Lớp</span>
           {ALL_KINDS.map(k => (
             <button
               key={k}
               type="button"
+              data-bim="kind"
+              data-id={k}
               onClick={() => onKind(k)}
               className={cn(chip, kinds.includes(k) ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-white/10 text-muted-foreground')}
             >

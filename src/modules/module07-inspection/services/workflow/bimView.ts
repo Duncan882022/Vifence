@@ -4,9 +4,9 @@ import type { ComponentId } from '../../workflow.types'
 export const ALL_KINDS: ObjectKind[] = ['concrete', 'rebar', 'dul', 'anchor', 'embed']
 
 export const KIND_LABEL_VI: Record<ObjectKind, string> = {
-  concrete: 'Bê tông',
-  rebar: 'Cốt thép',
-  dul: 'DƯL',
+  concrete: 'Khối BT',
+  rebar: 'Thép',
+  dul: 'Cáp DƯL',
   anchor: 'Neo',
   embed: 'Chi tiết chôn',
 }
